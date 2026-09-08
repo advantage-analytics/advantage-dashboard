@@ -4,11 +4,16 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { generateToken, hashToken, INVITE_TTL_HOURS } from "@/lib/services/programs/tokens";
-import { programInviteEmail, sendEmail } from "@/lib/services/email";
+import {
+  ownershipTransferredEmail,
+  programInviteEmail,
+  sendEmail,
+} from "@/lib/services/email";
+import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import { programDisplayName } from "@/lib/data/programs-server";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
 import type { MemberRole } from "@/lib/data/team-settings-server";
-import type { Workspace } from "@/lib/workspace/types";
+import type { UploadPolicy, Viewer, Workspace } from "@/lib/workspace/types";
 
 /**
  * The writes Settings › Team performs.
@@ -25,16 +30,25 @@ import type { Workspace } from "@/lib/workspace/types";
  * client component and a token that reaches the browser has been handed to
  * whoever is looking at the screen rather than to the person invited.
  *
- * None of these take a program id. Which program is being edited is server
- * state — a cookie-backed workspace the context already resolves — so accepting
- * it from the form meant every caller relaying a value back that the server was
- * about to look up anyway, and a parameter that had to be treated as untrusted
- * on arrival. `revokeInvite` never took one; the rest now match it.
+ * ── Which program ───────────────────────────────────────────────────────────
+ * The roster's actions (`inviteMember`, `removeMember`, `setPlayersCanUpload`)
+ * take no program id: the roster is a page of the ACTIVE workspace, so the
+ * program is server state the context already resolves. Settings › Teams is
+ * not — it shows every program the viewer belongs to, so its actions carry the
+ * id. It is checked against `available` on arrival (a forged id becomes a
+ * clean refusal rather than a PostgREST error string, and the match yields
+ * the `Workspace` the email needs) and then again, for real, in SQL.
  */
 
-const SETTINGS_PATH = "/dashboard/settings/team";
+const SETTINGS_PATH = "/dashboard/settings/teams";
 const TEAM_HOME_PATH = "/dashboard/team";
 const ROSTER_PATH = "/dashboard/team/roster";
+
+/** Settings › Teams and every program page beneath it. */
+function revalidateTeams(): void {
+  revalidatePath(SETTINGS_PATH, "layout");
+  revalidatePath(TEAM_HOME_PATH);
+}
 
 /** The program the caller is currently in, or null if they are not in one. */
 async function activeProgramId(): Promise<string | null> {
@@ -44,6 +58,23 @@ async function activeProgramId(): Promise<string | null> {
 }
 
 const NOT_IN_PROGRAM = "Switch to your team workspace to change it.";
+const NOT_A_MEMBER = "You're not on that program.";
+
+/**
+ * The team workspace a Settings › Teams action names, if the viewer belongs
+ * to it. Null is a refusal: an id that is not in `available` is not one this
+ * person may act on, whatever the RPC would go on to say.
+ */
+async function memberWorkspace(
+  programId: string
+): Promise<{ program: Workspace; viewer: Viewer } | null> {
+  const context = await getWorkspaceContext();
+  if (!context) return null;
+  const program = context.available.find(
+    (workspace) => workspace.kind === "team" && workspace.id === programId
+  );
+  return program ? { program, viewer: context.viewer } : null;
+}
 
 /** Postgres RAISE messages are written for people; pass them straight through. */
 function toMessage(error: { message: string } | null, fallback: string): string {
@@ -81,33 +112,273 @@ export interface TeamSettingsInput {
   homeVenue: string;
   defaultSurface: string | null;
   season: string;
-  playersCanUpload: boolean;
+  /** The whole ladder; `players_can_upload` is derived from it in SQL. */
+  uploadPolicy: UploadPolicy;
 }
 
+/**
+ * One save for identity and policy — they are one row in `programs`.
+ *
+ * The RPC is where the rules live: any staff may change venue, surface and
+ * season; only the owner may change name, squad or conference, and it says so
+ * in words the form can show. `/dashboard` is revalidated as a layout because
+ * a rename changes the switcher's label, which lives nowhere under settings.
+ */
 export async function saveTeamSettings(
-  input: TeamSettingsInput
+  input: TeamSettingsInput & { programId: string }
 ): Promise<ActionResult> {
-  const programId = await activeProgramId();
-  if (!programId) return { ok: false, error: NOT_IN_PROGRAM };
+  const member = await memberWorkspace(input.programId);
+  if (!member) return { ok: false, error: NOT_A_MEMBER };
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("update_program_settings", {
-    p_program_id: programId,
+    p_program_id: input.programId,
     p_school_name: input.schoolName,
     p_team: input.team,
     p_conference: input.conference,
     p_home_venue: input.homeVenue,
     p_default_surface: input.defaultSurface,
     p_season: input.season,
-    p_players_can_upload: input.playersCanUpload,
+    p_players_can_upload: input.uploadPolicy === "everyone",
+    p_upload_policy: input.uploadPolicy,
   });
 
   if (error) {
     return { ok: false, error: toMessage(error, "Couldn't save team settings.") };
   }
 
-  revalidatePath(SETTINGS_PATH);
-  revalidatePath(TEAM_HOME_PATH);
+  revalidateTeams();
+  revalidatePath("/dashboard", "layout");
+  return { ok: true };
+}
+
+/**
+ * Change one member's standing. Immediate — a role is not part of the
+ * identity draft, and a coach who has just been promoted should not be
+ * waiting on a Save button two cards down.
+ *
+ * The RPC holds every rule (owner sets anyone but themselves; a coach moves
+ * people between staff and player only; `owner` is never assignable; nobody
+ * edits their own row) and says each refusal in words the card shows.
+ */
+export async function setProgramMemberRole(input: {
+  programId: string;
+  userId: string;
+  role: Exclude<MemberRole, "owner">;
+}): Promise<ActionResult> {
+  const member = await memberWorkspace(input.programId);
+  if (!member) return { ok: false, error: NOT_A_MEMBER };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_program_member_role", {
+    p_program_id: input.programId,
+    p_user_id: input.userId,
+    p_role: input.role,
+  });
+
+  if (error) {
+    return { ok: false, error: toMessage(error, "Couldn't change that role.") };
+  }
+
+  revalidateTeams();
+  revalidatePath(ROSTER_PATH);
+  // Their `Workspace.role` changed, and with it every staff gate they see.
+  revalidatePath("/dashboard", "layout");
+  return { ok: true };
+}
+
+export type TransferResult =
+  | { ok: true; warning?: string }
+  | { ok: false; error: string };
+
+/**
+ * Hand the program to a coach or staff member. The caller stays on as a coach.
+ *
+ * `transfer_program_ownership` is the authority — it refuses a non-owner, a
+ * player, a stranger and the caller themselves, and moves both the member
+ * rows and `programs.owner_user_id` under one lock. The email is a courtesy
+ * sent afterwards, the same shape as an invite: the row is the truth, a
+ * failed send is a warning, never a failed transfer. The recipient's address
+ * is read from the roster here, never taken from the form.
+ *
+ * `/dashboard` as a layout: the caller's `Workspace.role` just changed, and
+ * that drives every `isProgramStaff(active)` gate in the product.
+ */
+export async function transferProgramOwnership(input: {
+  programId: string;
+  newOwnerUserId: string;
+}): Promise<TransferResult> {
+  const member = await memberWorkspace(input.programId);
+  if (!member) return { ok: false, error: NOT_A_MEMBER };
+  if (member.program.role !== "owner") {
+    return { ok: false, error: "Only the owner can transfer this program." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("transfer_program_ownership", {
+    p_program_id: input.programId,
+    p_new_owner: input.newOwnerUserId,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't transfer ownership."),
+    };
+  }
+
+  revalidateTeams();
+  revalidatePath(ROSTER_PATH);
+  revalidatePath("/dashboard", "layout");
+
+  const { data: roster } = await supabase.rpc("program_roster", {
+    p_program_id: input.programId,
+  });
+  const recipient = (
+    (roster ?? []) as { user_id: string; display_name: string | null; email: string }[]
+  ).find((row) => row.user_id === input.newOwnerUserId);
+
+  if (!recipient) {
+    return {
+      ok: true,
+      warning: "Ownership moved, but we couldn't find an address to notify.",
+    };
+  }
+
+  const sent = await sendEmail(
+    ownershipTransferredEmail({
+      to: recipient.email,
+      recipientName: recipient.display_name,
+      programName: programLabel(member.program),
+      programId: input.programId,
+      previousOwnerName: member.viewer.name,
+    })
+  );
+
+  if (!sent.ok) {
+    const reason = sent.error.replace(/\.$/, "");
+    return {
+      ok: true,
+      warning: `Ownership moved, but we couldn't email ${recipient.display_name ?? recipient.email} (${reason}). Let them know yourself.`,
+    };
+  }
+
+  return { ok: true };
+}
+
+const CREST_TYPES: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/svg+xml": "svg",
+};
+
+/** The bucket's own limit, restated so the refusal is a sentence, not a 413. */
+const CREST_MAX_BYTES = 524_288;
+
+/**
+ * Replace the program's crest.
+ *
+ * A `FormData` action because the input is a file. Validated here first — the
+ * bucket's `allowed_mime_types` and `file_size_limit` are the second fence,
+ * not the first. The key carries a stamp rather than reusing `crest.png`: a
+ * fixed key behind the CDN shows the old image for the cache's lifetime, and
+ * a png→svg swap would orphan the old object. So: upload the new one, point
+ * the row at it, then remove whatever it replaced.
+ */
+export async function uploadProgramCrest(
+  formData: FormData
+): Promise<ActionResult> {
+  const programId = String(formData.get("programId") ?? "");
+  const file = formData.get("file");
+
+  const member = await memberWorkspace(programId);
+  if (!member) return { ok: false, error: NOT_A_MEMBER };
+  if (member.program.role === "player") {
+    return { ok: false, error: "Only the coaching staff can change the crest." };
+  }
+
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "Choose an image first." };
+  }
+  const ext = CREST_TYPES[file.type];
+  if (!ext) {
+    return { ok: false, error: "Use a PNG, JPG, WebP or SVG." };
+  }
+  if (file.size > CREST_MAX_BYTES) {
+    return { ok: false, error: "Keep the crest under 512 KB." };
+  }
+
+  const supabase = await createClient();
+  const { data: current } = await supabase
+    .from("programs")
+    .select("crest_path")
+    .eq("id", programId)
+    .maybeSingle();
+  const previous = (current?.crest_path as string | null | undefined) ?? null;
+
+  const path = `${programId}/crest-${Date.now()}.${ext}`;
+  const { error: uploadError } = await supabase.storage
+    .from(PROGRAM_CRESTS_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: false });
+
+  if (uploadError) {
+    return { ok: false, error: `Couldn't upload the crest: ${uploadError.message}` };
+  }
+
+  const { error } = await supabase.rpc("set_program_crest", {
+    p_program_id: programId,
+    p_crest_path: path,
+  });
+
+  if (error) {
+    // The object is up but the row does not point at it. Take it back down so
+    // a failed save does not leave a stray file under the program's prefix.
+    await supabase.storage.from(PROGRAM_CRESTS_BUCKET).remove([path]);
+    return { ok: false, error: toMessage(error, "Couldn't save the crest.") };
+  }
+
+  if (previous && previous !== path) {
+    await supabase.storage.from(PROGRAM_CRESTS_BUCKET).remove([previous]);
+  }
+
+  revalidateTeams();
+  revalidatePath("/dashboard", "layout");
+  return { ok: true };
+}
+
+/** Back to the initials mark. Row first, then the object it pointed at. */
+export async function removeProgramCrest(
+  programId: string
+): Promise<ActionResult> {
+  const member = await memberWorkspace(programId);
+  if (!member) return { ok: false, error: NOT_A_MEMBER };
+  if (member.program.role === "player") {
+    return { ok: false, error: "Only the coaching staff can change the crest." };
+  }
+
+  const supabase = await createClient();
+  const { data: current } = await supabase
+    .from("programs")
+    .select("crest_path")
+    .eq("id", programId)
+    .maybeSingle();
+  const previous = (current?.crest_path as string | null | undefined) ?? null;
+
+  const { error } = await supabase.rpc("set_program_crest", {
+    p_program_id: programId,
+    p_crest_path: null,
+  });
+  if (error) {
+    return { ok: false, error: toMessage(error, "Couldn't remove the crest.") };
+  }
+
+  if (previous) {
+    await supabase.storage.from(PROGRAM_CRESTS_BUCKET).remove([previous]);
+  }
+
+  revalidateTeams();
+  revalidatePath("/dashboard", "layout");
   return { ok: true };
 }
 

@@ -27,7 +27,9 @@ The canonical source of truth for all UI across the app. Read this before buildi
 > v3 ships 36 primitives against v2's 21: `DataTable`, `Score`, `Delta`,
 > `ResultMark`, `InsightCard`+`EngineChip`, `Notice`, `Avatar`+`StatePill`,
 > `Radio`, `EntitySelect`, `ActivityTray`, `SlotLine`, `ScoreGrid`, `FieldRow`,
-> `StepBar`, `InlineFacts`.
+> `StepBar`, `InlineFacts`. Two more were added in-repo on 2026-09-07 and are
+> not in the project yet: `FloatMenu` and `MenuSelect` (`ui/float-menu.tsx`,
+> `ui/menu-select.tsx`) — see *Dropdown / Menu*.
 >
 > In the project, `readme.md` is the current-state rulebook and `CHANGELOG.md`
 > the decision trail (the v2→v3 diff, then Rounds 10–20 and a platform audit;
@@ -40,7 +42,8 @@ The canonical source of truth for all UI across the app. Read this before buildi
 > a drawer and carry no chevron; "New" is the one blue-tinted state pill;
 > status pills carry no counts; the page title is the first thing in the
 > scroll body with no eyebrow above it; the selected-row check is Signal Blue
-> site-wide. Where the shipped code still draws the old pattern, the section
+> site-wide. "New" is joined by exactly one further blue-tinted pill — `You` —
+> ruled on in *Settings Pages* below; nothing else may take a third. Where the shipped code still draws the old pattern, the section
 > says so under *Shipped:* — that is drift to migrate, not a second style.
 
 ---
@@ -462,7 +465,8 @@ tags, never a CTA.
 > adding one.
 >
 > The same principle governs elsewhere: nav active state is a neutral wash, not
-> blue; people-state chips are grey, never blue.
+> blue; people-state chips are grey, never blue — with one sanctioned exception,
+> the **`You` pill**, see *Settings Pages › Person row in a card* below.
 
 ### Button (Primary, CTA)
 
@@ -584,7 +588,7 @@ no longer says.
 
 **(v3)** The last five results as bars, not lettered squares: 2.5×12px, 3px
 gap, 1px radius, oldest left, `--viz-good` / `--viz-bad`. Shipped as
-`FormTicks` in `team/roster-table.tsx`; pair with a muted summary ("5–2 last
+`FormTicks` in `shared/form-ticks.tsx` (the roster table and the player profile's line history both draw it); pair with a muted summary ("5–2 last
 7") where there is room. The pre-v3 treatment — a 20px `rounded-[3px]` square
 with a 9px semibold letter on the 15% tint — is retired.
 
@@ -878,12 +882,20 @@ where the clipped string is the only copy on screen and nothing can open it
 Header icon (Lucide `activity`, 15px ink-700 in a 28px radius-8 square) + 6px
 Signal-Blue dot at top 3px / right 3px — presence, not arithmetic: **no numeric badges anywhere in the chrome**, the
 count lives only in the tooltip ("2 in flight") and matching `aria-label`.
-Opens a 326px "Notifications" panel: unread-dot rows, 3px progress tracks
-(live sheen only while something is actually running), settled
-"Report ready — {match}" rows. No "mark all read" control — the badge counts
-moving work and clears itself when nothing is in flight. Only the upload
-shows a measured ETA; queued work says "In line" — never an invented number.
-Empty state: "Nothing in flight."
+Opens a 360px "Activity" panel on the popover primitive's own 14px hairline
+surface, named for the trigger that opens it. One job: what is happening and
+what is waiting on you. Rows: invitations (Accept as a two-step text action,
+plus Details), in-flight work (3px progress track, live sheen only while
+something is actually running, no ETA line — the bar is the estimate),
+failures (loss-red circle-x, bordered "Start over" — `analysisAction`'s
+word; there is no retry). Settled successes are not rows; the footer
+"Everything that finished" opens the matches list. A grey workspace chip in
+the header (`WorkspaceScopeChip`, shared with the search palette) names the
+scope; a tail row per other workspace says "N uploads running in X" behind a
+hairline. The 14px leading column carries state, never air. Trigger: solid
+dot = something here is moving or waiting; hollow ring = only elsewhere;
+nothing = quiet. No "mark all read" — the mark clears itself.
+Empty state: "Nothing running here."
 
 ### Header (v3)
 
@@ -906,7 +918,8 @@ what it searches; naming it does.
 
 **Account**: 26px initials avatar (the chrome's one circle — icon buttons
 elsewhere are 8px-radius squares) + 12px chevron rotating 180° on open, pill
-hover wash, 260px menu. The profile menu carries quiet role/plan capsules
+hover wash, 288px menu on the popover primitive's own 14px hairline surface
+(`MENU_ROW_CLASS`, 9px rhythm). The profile menu carries quiet role/plan capsules
 (grey — neither is an action) and the workspace list again.
 
 **On Home the breadcrumb slot carries the greeting:** "Good morning, Jordan"
@@ -961,20 +974,29 @@ Focus → "The underline opt-out").
 
 ## Dropdown / Menu
 
-```
-// Container (p-1 gives inset gap for rounded item highlights)
-absolute right-0 top-full mt-1.5 w-44 rounded-xl
-overflow-hidden border border-[#E5E5EA] bg-white p-1
-shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]
+**Primitives, not a class recipe** (2026-09-07, in-repo): every dropdown is
+built from `ui/float-menu.tsx` — `FloatMenu` (the surface, anchored to the
+trigger it wraps, 10px radius, 5px inset, `--shadow-dropdown`),
+`FloatMenuItem` (a 7px-radius row: 12px label, optional 11px `--ink-500`
+second line saying what the choice means, `--surface-subtle` on hover and on
+the chosen row, a 12px Signal Blue check — the one colour that means
+"chosen"), `FloatMenuNote` (the closing sentence under a hairline for the
+thing the menu will not do) and `FloatMenuDivider`. **Every select is
+`MenuSelect`** (`ui/menu-select.tsx`), composed from those with two triggers:
+`underline` for a form field (full width, the caption's hairline, no radius)
+and `pill` for the control beside a `SettingsCardRow` label (30px, bordered);
+both turn their edge blue while open, and the menu matches the trigger's
+width under a field.
 
-// Item (inset rounded — matches sidebar nav highlight pattern)
-flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-[#1D1D1F]
-hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[#EBEBEB]
-transition-colors duration-100
+**No native `<select>` in product UI.** It cannot carry a second line per
+option, its popup is the browser's not ours, and drawn as an underline on a
+6px-radius box its rule curled at both ends — the bug that retired
+`SettingsInlineSelect`. Give an option its second line when the label alone
+would not tell a coach what they are choosing ("Staff", "Owner and coaches"),
+and leave it off when it would ("Clay").
 
-// Divider
-h-px bg-[#E5E5EA] mx-2 my-1
-```
+The header's account menu predates the primitives and still carries its own
+classes; migrate it to `FloatMenu` rather than copying them.
 
 **EntitySelect (v3)** — the "For" field, picking a person or someone new.
 Float menu radius 12, 6px padding; rows 38px (radius 8, hover surface-subtle,
@@ -1705,29 +1727,40 @@ evidence run, and one line saying what arrives. A quoted example claim,
 labelled **Example** in the header, was built and rejected: it demonstrated
 more, but it made this the only card in the column carrying finished prose
 and the largest prose in the tail, and the card sat visibly apart from its
-neighbours. Serve placement — the hairline half court at the widget's own geometry; it is the
-one region here that is not a placeholder, since an empty court is the object
-in its empty state. Activity — the real 52×7 grid, all 364 cells empty,
-because a year with no sessions genuinely is 364 empty cells.
+neighbours. Serve placement — the quiet strip's own anatomy: a rule where the
+claim goes, the two labelled 14px tracks holding no serves ("— serves"), the
+legend at 0.6, and the caption slot carrying the one line that says what
+fills it. (The hairline half court held this slot until Platform Audit Pa2 was
+matched in full on 2026-09-07; it was the one region whose empty state was a
+different object from its populated one, and the populated card is bars.)
+Activity — the real 52×7 grid, all 364 cells empty, because a year with no
+sessions genuinely is 364 empty cells; its footer reads "0 sessions · 12
+months" from real data. Matches and Focus keep the populated card's hairline
+footer with a true zero or the arrival line in it.
 
-*One header grammar across the column.* Eyebrow left, one quiet `text-micro`
-run right where the card has meta to show, then the card's own mark if it has
-one: "All matches" on matches, "0 sessions · last 12 months" on Activity,
-"last 4 matches" on serve placement, nothing but the engine mark on Focus.
+*One header grammar across the column (Pa2).* Eyebrow left — or, on the
+Focus card, the 16px engine mark beside "Advantage Intelligence" in 12px
+ink-700, since that card is named by who wrote it — then the card's one 11px
+blue link right: "All matches" on matches, "Session log" on Activity,
+"Placement view" on serve placement, "Open Statistics" on Focus. Counts leave
+the header for a hairline footer under the body: "Latest 3 shown · 12 matches
+· 8 won", "24 sessions · 12 months", the legend row's "Last 4 · 89 in", and
+Focus's caption naming the metric the evidence used ("1st serve won · 2nd
+serve won") beside "12 matches". Every Home card runs `--pad-card` (20px
+all round) — the matches card too, its rows bleeding 12px for the 8px hover
+inset rather than the table-card 24/16 pair. The rail is 400px; the grid runs
+`items-start` and the columns bottom out where their content does — nothing
+is stretched to level them. (The earlier `items-stretch` grid, whose day-zero
+court grew to level the columns, went with the court.)
 
-*The court levels the columns.* It is the only continuous dimension on the
-page — every other region's height is set by its content — so it is the one
-region that can absorb the difference between the columns without trapping
-empty surface: a bigger court is still a court. **It fills, it is not capped.**
-The grid runs `items-stretch`, the day-zero serve card takes `flex-1` in its
-column, and the court sits absolutely inside a `flex-1 min-h-0` slot sized by
-height (`h-full w-auto`), so it never contributes its own intrinsic size to
-the row. A fixed width cap was tried first and failed: the left column's
-height moves with the sidebar, because the heatmap's cells scale with its
-width, so a cap that levelled the 64px rail hung 23px low with the 232px
-panel open. Measured after: 0px between the columns' bottoms at 1440 with the
-rail, 1440 and 1280 and 1920 with the panel, and 1024 with the rail; the court
-runs from 156 to 253px across those.
+*Claims are 14px/300 on Home, evidence 12px/1.7 ink-600 with its figures in
+ink-900* — Pa2's "quiet body" setting. The claim is a size step over the
+evidence, not display type, so the largest type on the first screen stays the
+KPI numbers; the evidence is something you lean in for. *Shipped:*
+`home/focus-card.tsx` (header + footer shell), `home/home-ai-insight.tsx`,
+`home/serve-placement-quiet-strip.tsx` (legend, caption from
+`lib/ui/serve-placement-caption.ts` — first serves only, since the played
+serve is the second when there was one).
 
 **Next fixture card** — the claimed player's one forward-looking object.
 Eyebrow middot-joins the stakes ("Next · B1G Conference" only when it's
@@ -1783,6 +1816,169 @@ sublines ("Friday's dual is in your team workspace") and KPI subtexts
 match block in the report's context column — identity → details → claim, from
 the top, never `margin-top:auto`. `InsightCard` is the engine's one card on
 Home; on a report the evidence stats are bare type (`InsightStatChip`).
+
+---
+
+## Settings Pages
+
+> **Provenance.** Unlike the **(v3)** rules above, this section is not
+> transcribed from the Claude Design project — it was decided in-repo while
+> designing Settings › Teams (2026-09-06) and generalizes to every settings
+> page and every card that lists people or meters a quota. It has no round
+> number, because round numbers belong to that project's changelog. When the
+> project next moves, reconcile this section rather than assuming it agrees.
+
+### Quota widgets — a meter or a row of boxes
+
+The form follows the quantity, not the habit:
+
+- **Continuous quota → meter.** Analysis hours are a duration, so they get the
+  6px/3px bar. The **track is a light step of the fill's own hue**
+  (`#E4EEFD` under Signal Blue), never neutral `--ink-100`: a grey track only
+  colours the part already spent, so state has to be re-read at the boundary
+  instead of across the whole bar.
+- **Countable quota, small N → unit boxes.** Seats are 25 discrete things, so
+  they are 25 8px squares on 2px radius (the DS keeps circles for avatars).
+  You can see "three left" without reading a number, which a bar at 20% cannot
+  say. Filled = taken, **outlined = reserved but not yet taken**, `--ink-100`
+  = free. That middle state is the reason the form is worth it: a held invite
+  is a real thing the data tracks and a sentence buries.
+- **Never both on one card.** Two quota visuals stacked read as one measure
+  drawn twice; the second becomes a count in the title slot.
+
+**Lead with what is left, and say when it renews.** `11h 48m left of 20h`
+above `8h 12m / 20h` — the second makes the reader subtract to answer the
+question they actually have. The figure is 24px/300 with **proportional**
+figures (`tabular-nums` loosens a standalone number at display sizes; reserve
+it for columns), and it stays `--ink-900` until there is something to say.
+
+**Severity rides the fill, not the figure**: Signal Blue → `--viz-key` amber at
+80% → `--danger` at 100%, each with a short label and a triangle glyph beside
+it (*Running low*, *Spent — uploads pause until Oct 1*). Never colour alone.
+At amber and red the figure takes the same colour, because then it *is* the
+message.
+
+**Detail unfolds in place.** A per-person breakdown is a disclosure inside the
+card, not a link to the page that owns the ledger — those pages are scoped to
+the **active workspace**, so a link from a record you have not switched into
+shows a different program's numbers. Rows carry an 88px share bar, ordered by
+magnitude, plus the in-flight total the meter includes but the list otherwise
+omits (*Reserved but not yet finished*).
+
+### Person row in a card
+
+One shape for every person a card lists — members, invitees, usage lines:
+
+```
+[22px avatar] [name 12/500] [You] ……… [action or date 11px] [state pill 62px]
+```
+
+- **The state pill is a right-aligned column**, `width:62px`, centred text.
+  Placed straight after the name it lands at a different x on every row, and a
+  long email drags it further than a short name — the column is what makes the
+  list scan.
+- **Meta is not a biography.** Role is the pill; a position and a joining date
+  beneath the name are a second, softer answer to the question the pill already
+  answered. Slot the row's one useful variable there instead — a date on an
+  invitation, an action on a member.
+- **The role is a menu on the rows the viewer may change**, in the pill's
+  column: a 28px bordered trigger (`Coach ▾`), a 212px float menu with one
+  line per option saying what it lets you do, the current one carrying the
+  blue check, and a closing note — *Ownership moves by transfer, not from
+  this menu.* Owner is never an option. What the viewer may set mirrors
+  `set_program_member_role`: an owner sees coach / staff / player on every
+  row but their own; a coach sees staff / player on staff and player rows
+  only. A row that is not theirs keeps the flat pill — with a lock glyph
+  before it when the viewer is staff, and nothing extra for a player, for
+  whom no row was ever a control. Picking commits at once.
+- **Pending → outlined pill + dashed-ring avatar.** An `Invited` row is a state
+  of the same list, not a different kind of row. The outlined pill deliberately
+  matches the outlined seat box representing that same invite.
+- **The `You` pill is the one sanctioned blue-tinted pill besides "New"**
+  (design owner's call, 2026-09-06, overriding *people-state chips are grey*).
+  It marks identity, not standing, so it sits **beside the name** and the role
+  stays in the pill column. 18px, `--blue-tint-08` on `--blue`. A third blue
+  pill costs both of these their meaning — do not add one.
+
+### Selects on a settings page are `MenuSelect`
+
+The product's own menu (see *Dropdown / Menu* above for the primitives):
+`underline` under a `SettingsField` caption, `pill` beside a
+`SettingsCardRow` label. Options with something to explain — a role, an
+upload policy — get the second line; plain values (a surface) do not. There
+is no native select left in settings, and none is to be added.
+
+**Who can upload team matches** is a four-rung ladder, not a switch: *Owner
+only · Owner and coaches · All staff · Everyone on the team*
+(`programs.upload_policy`; `players_can_upload` is derived from it and keeps
+the roster's own switch working).
+
+### A field the viewer may not change
+
+Never a `disabled` input: it still looks like an input, so it reads as broken
+rather than as not-yours. The recipe is the field, quieted, plus a reason:
+
+- value on a faint `--ink-100` rule (not `--border-field`, which says *editable*)
+- a 11px lock glyph before it, value at `--ink-600`
+- **the reason in `SettingsField`'s existing `hint` slot, naming the person**:
+  *"Ask Alina Fischer, the owner, to change it."* A lock that does not say who
+  holds the key sends the reader to support.
+
+The caption stays plain — no `· owner only` tag, which restates the hint. Note
+the cost: the hint makes a locked field taller than its editable neighbours, so
+a two-column grid loses its shared baseline. Reserve the hint's line height on
+every field in the grid where that matters.
+
+**Field-level gating is presentation only.** The RPC behind the form must
+re-check per group, the way `program_invites_role_check` fences `owner` out of
+invitations. A greyed field stops nobody with a console.
+
+### Card footnotes and their rule
+
+`SettingsCardFootnote`'s `border-top` earns its place only when the content
+above it is **not already hairline-delimited**. Above a field grid, or below a
+list whose last row already drew a rule, it is a second line two pixels from
+the first. Drop it there and let 14px of space do the work; keep it where the
+note closes a figure, a meter, or a paragraph.
+
+### One action, one surface
+
+A settings card must not grow its own copy of an action another page owns. The
+Members card carries no invite field: the roster's dialog can bind an
+invitation to a player already listed — so their matches and video stay put —
+and a second, thinner control produces orphan logins beside existing rows.
+Summarize, then hand off. The split is by *what the act is*, not by page:
+adding and removing people is roster admin and lives on the Roster; what a
+person **is** — their role, and ownership — is decided on their row here,
+because that is where the person is.
+
+**A control that leaves the page wears `↗`, not `›`.** The chevron means
+*expands* or *next step* and is already spoken for by disclosures; on the same
+page as one, an outbound chevron is the same glyph with two meanings. Keep the
+outline button and the title slot — only the glyph changes.
+
+### Confirmation is a changed state, not a tick
+
+`--success` is fenced to win/loss (`colors.css`), and a confirmation tick is
+exactly the mood use that fence excludes — spend green there and it stops
+meaning *won a match* on a match card. A completed action shows **the rows it
+changed**, in the vocabulary of the surface behind the dialog:
+
+```
+MR  Marcus Reyes          was Coach   [ Owner ]
+CG  Cj Gimena  [You]      was Owner   [ Coach ]
+```
+
+Closing the dialog then confirms what was just shown, instead of asking the
+reader to trust an assertion.
+
+### Dialog steps
+
+**A step that re-asks what the entry point already answered must not exist.**
+*Make owner* on a member row names the person; a picker step after it opened a
+second copy of the member list to choose them again. Where an action can start
+from the row that is its subject, start it there and let the dialog begin at
+the consequence.
 
 ---
 
@@ -1964,9 +2160,8 @@ email chip carried a remove `<button>`, and focusing one drew the wrapper's
 neutral ring and the button's own blue ring at the same time — two indicators,
 two colours, the larger one on an element that was not focused. Keying on
 `input:focus-visible` scopes the wrapper ring to the case it exists for.
-(`settings/settings-inline-select.tsx` is a third case that stays on
-`focus-within`: its `<select>` is `opacity-0`, so there is no second ring to
-collide with and no opt-out to set.)
+(The native-select-over-a-pill that was the third case is gone — every
+select is `MenuSelect` now, whose trigger is a plain button and rings itself.)
 
 **The underline opt-out is the second exception to "write nothing."** A field
 whose own rule visibly changes on focus — thickens, recolours, or both — needs

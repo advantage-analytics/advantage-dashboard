@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useHeaderStatus } from "@/components/dashboard/header-status";
+import { useHeaderSlot } from "@/components/dashboard/header-slot";
 import {
   ChevronRight,
   ChevronDown,
@@ -37,6 +38,7 @@ import { workspaceTitle } from "@/lib/workspace/types";
 import { WorkspaceOptionList } from "@/components/dashboard/workspace-switcher";
 import { useRequestLogout } from "@/components/dashboard/logout-dialog";
 import { HeaderGreeting } from "@/components/dashboard/header-greeting";
+import { MENU_ROW_CLASS, MENU_RULE_CLASS } from "@/lib/ui/menu";
 
 interface MatchCrumb {
   tournamentName: string;
@@ -61,10 +63,23 @@ const MATCHES_CRUMB = { label: "Matches", href: "/dashboard/matches" };
  * that no longer lists the route at all.
  */
 const SCHEDULE_HREF = "/dashboard/team/schedule";
+
+/** `/dashboard/settings/teams/<id>` — the one settings page nested a level deeper. */
+const TEAM_SETTINGS_PAGE = /^\/dashboard\/settings\/teams\/([^/]+)/;
+const TEAMS_CRUMB = { label: "Teams", href: "/dashboard/settings/teams" };
 const SCHEDULE_CRUMB = {
   label: navLabel(SCHEDULE_HREF) ?? "Schedule",
   href: SCHEDULE_HREF,
 };
+
+/**
+ * `/dashboard/team/roster/<playerId>` — the player profile. The page publishes
+ * its own leading slot (a name, or "Roster › name ⌄ n / N" with a switcher);
+ * until that lands the slot stays empty rather than showing the "Roster"
+ * crumb `navLabel` would prefix-match, which would flash and then be replaced
+ * by a trail that starts with the same word.
+ */
+const ROSTER_PROFILE_PAGE = /^\/dashboard\/team\/roster\/[^/]+$/;
 
 /**
  * The crumb for any page that is simply a navigation destination.
@@ -123,8 +138,7 @@ function Chip({ children }: { children: React.ReactNode }) {
   );
 }
 
-const MENU_ITEM_CLASS =
-  "flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-[7px] text-[12px] text-[var(--ink-900)] transition-colors duration-100 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none cursor-pointer";
+
 
 export function Header({
   activitySlot,
@@ -136,7 +150,18 @@ export function Header({
 }) {
   const pathname = usePathname();
   const headerStatus = useHeaderStatus();
-  const { active, viewer } = useWorkspace();
+  const headerSlot = useHeaderSlot();
+  const { active, available, viewer } = useWorkspace();
+
+  // A program's own settings page names the program as the third crumb —
+  // resolved from the workspaces the client already holds, like the settings
+  // layout's title, so the trail and the title cannot disagree.
+  const teamSettingsId = pathname.match(TEAM_SETTINGS_PAGE)?.[1] ?? null;
+  const teamSettingsProgram = teamSettingsId
+    ? available.find(
+        (workspace) => workspace.kind === "team" && workspace.id === teamSettingsId
+      )
+    : undefined;
   const requestLogout = useRequestLogout();
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -198,6 +223,11 @@ export function Header({
   // branch: its home is /dashboard/team, which greets in its own body.
   const showGreeting = pathname === "/dashboard" && active.kind === "personal";
 
+  // A page that publishes its own leading slot outranks every treatment below
+  // — see `header-slot.tsx`. The profile route is the one that does, and it
+  // also holds the slot empty while the page is still on its way.
+  const pageOwnsSlot = headerSlot !== null || ROSTER_PROFILE_PAGE.test(pathname);
+
   /**
    * The leading slot answers "where am I" once, never twice.
    *
@@ -231,10 +261,24 @@ export function Header({
    * click away. Platform Audit Pa2 then promoted that page's greeting into
    * this slot ("Good morning, Jordan", with "Personal · Monday, Aug 24"
    * beside it), so the personal Home has a third treatment that outranks the
-   * title. It is the only per-path exception left in here; keep it that way.
+   * title.
+   *
+   * ── The two per-path exceptions, and why there are two ──────────────────
+   * `showGreeting` above, and `ROSTER_PROFILE_PAGE` in `pageOwnsSlot`. The
+   * second exists because a page that fills this slot itself
+   * (`header-slot.tsx`) can only publish from an effect, so between the
+   * route resolving and that effect there is a frame where the slot is empty
+   * and the fallback below would draw "Roster" — the crumb the page is about
+   * to replace with a person's name. Suppressing it needs an answer during
+   * render, and the path is the only one available then.
+   *
+   * A `claimed` flag on the slot context was weighed as the general form and
+   * rejected: a claim is also an effect, so it would move the flash rather
+   * than remove it. Keep the count at two — a third path here means the slot
+   * mechanism needs a render-time signal, not another regex.
    */
   const title =
-    !showGreeting && isDestination(pathname)
+    !showGreeting && !pageOwnsSlot && isDestination(pathname)
       ? workspaceTitle(active, viewer)
       : null;
 
@@ -243,13 +287,19 @@ export function Header({
   // that used to be built here for insights/performance/statistics/video/visuals
   // matched routes that cannot be reached.
   const breadcrumbs: { label: string; href?: string }[] =
-    title || showGreeting
+    title || showGreeting || pageOwnsSlot
       ? []
       : isMatchDetailPage && matchCrumb
       ? [
           MATCHES_CRUMB,
           { label: matchCrumb.tournamentName },
           { label: `${matchCrumb.player1Name} vs ${matchCrumb.player2Name}` },
+        ]
+      : teamSettingsProgram
+      ? [
+          { label: "Settings", href: "/dashboard/settings" },
+          TEAMS_CRUMB,
+          { label: teamSettingsProgram.name },
         ]
       : getStaticBreadcrumbs(pathname);
 
@@ -312,6 +362,8 @@ export function Header({
             both. The collapse toggle moved into the sidebar's bottom group,
             where it never shifts relative to Settings and Help. */}
         <div className="flex min-w-0 flex-1 items-center">
+          {headerSlot}
+
           {showGreeting && (
             <HeaderGreeting
               greeting={greeting}
@@ -491,84 +543,105 @@ export function Header({
                 </button>
               </PopoverTrigger>
 
+              {/* 288px on the popover primitive's own surface. This used to
+                  override the primitive to a 12px radius and the medium border,
+                  as the activity tray did; both now take the 14px hairline the
+                  primitive draws, so the two menus that open 6px apart are one
+                  object. Two rules, not four: identity | workspaces | everything
+                  else, with Sign out in the last run rather than behind a third
+                  hairline of its own. */}
               <PopoverContent
                 align="end"
                 sideOffset={6}
-                className="w-[260px] rounded-[12px] border-[var(--border-medium)] p-1.5"
+                className="w-[288px] p-2"
               >
-                {/* Identity */}
-                <div className="flex items-center gap-2.5 px-2.5 pb-2 pt-2.5">
+                {/* Identity. Role and plan ride the name's line rather than
+                    claiming a padded band beneath it — the chips are facts about
+                    the person, and a row of their own read as a third section. */}
+                <div className="flex items-center gap-3 px-3 py-2.5">
                   <span
                     aria-hidden="true"
-                    className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[10px] font-medium text-[var(--ink-700)]"
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[11px] font-medium text-[var(--ink-700)]"
                   >
                     {viewer.initials}
                   </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] font-medium text-[var(--ink-900)]">
-                      {viewer.name}
-                    </p>
-                    <p className="truncate text-[11px] text-[var(--ink-500)]">
+                  <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
+                        {viewer.name}
+                      </span>
+                      {/* Role is a program standing — a personal workspace has
+                          no one to have standing over, so it carries only the
+                          plan. */}
+                      {active.kind === "team" && (
+                        <Chip>{capitalize(active.role)}</Chip>
+                      )}
+                      <Chip>{capitalize(viewer.plan)}</Chip>
+                    </div>
+                    <span className="truncate text-[11px] text-[var(--ink-500)]">
                       {viewer.email}
-                    </p>
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex gap-1.5 px-2.5 pb-2.5">
-                  {/* Role is a program standing — a personal workspace has no one
-                      to have standing over, so it carries only the plan. */}
-                  {active.kind === "team" && <Chip>{capitalize(active.role)}</Chip>}
-                  <Chip>{capitalize(viewer.plan)}</Chip>
-                </div>
+                <div className={cn(MENU_RULE_CLASS, "mt-1")} />
 
-                <div className="-mx-1.5 h-px bg-[var(--border-hairline)]" />
+                {/* Absent, not a list of one. A viewer holding a single
+                    workspace has nothing to switch to, and a lone row with a
+                    tick beside it is chrome that answers nothing. The block
+                    appears the moment a second workspace does. */}
+                {available.length > 1 && (
+                  <>
+                    <p className="eyebrow px-3 pb-1 pt-3">
+                      Workspace
+                    </p>
+                    {/* Scrolls at four rows rather than growing the menu — a
+                        coach on five programs still gets a menu that fits. */}
+                    <div className="max-h-[140px] overflow-y-auto">
+                      <WorkspaceOptionList
+                        onSwitched={() => setIsProfileOpen(false)}
+                      />
+                    </div>
+                    <div className={cn(MENU_RULE_CLASS, "my-2")} />
+                  </>
+                )}
 
-                <p className="px-2.5 pb-1 pt-2.5 text-[10px] font-medium uppercase tracking-[1.5px] text-[var(--ink-500)]">
-                  Workspace
-                </p>
-                <WorkspaceOptionList onSwitched={() => setIsProfileOpen(false)} />
-
-                <div className="-mx-1.5 my-1.5 h-px bg-[var(--border-hairline)]" />
-
-                <Link href="/dashboard/settings/profile" className={MENU_ITEM_CLASS}>
+                <Link href="/dashboard/settings/preferences" className={MENU_ROW_CLASS}>
                   <SlidersHorizontal
-                    className="size-[13px] text-[var(--ink-600)]"
+                    className="size-[14px] text-[var(--ink-600)]"
                     strokeWidth={1.5}
                     aria-hidden="true"
                   />
                   Preferences
                 </Link>
                 <Link
-                  href="/dashboard/settings/plan"
-                  className={MENU_ITEM_CLASS}
+                  href="/dashboard/settings/usage"
+                  className={MENU_ROW_CLASS}
                 >
                   <Timer
-                    className="size-[13px] text-[var(--ink-600)]"
+                    className="size-[14px] text-[var(--ink-600)]"
                     strokeWidth={1.5}
                     aria-hidden="true"
                   />
                   Usage &amp; quota
                 </Link>
-                <Link href="/dashboard/help" className={MENU_ITEM_CLASS}>
+                <Link href="/dashboard/help" className={MENU_ROW_CLASS}>
                   <CircleHelp
-                    className="size-[13px] text-[var(--ink-600)]"
+                    className="size-[14px] text-[var(--ink-600)]"
                     strokeWidth={1.5}
                     aria-hidden="true"
                   />
                   Help
                 </Link>
-
-                <div className="-mx-1.5 my-1.5 h-px bg-[var(--border-hairline)]" />
-
                 <button
                   onClick={() => {
                     setIsProfileOpen(false);
                     requestLogout();
                   }}
-                  className={cn(MENU_ITEM_CLASS, "text-[var(--ink-700)]")}
+                  className={cn(MENU_ROW_CLASS, "text-[var(--ink-700)]")}
                 >
                   <LogOut
-                    className="size-[13px] text-[var(--ink-600)]"
+                    className="size-[14px] text-[var(--ink-600)]"
                     strokeWidth={1.5}
                     aria-hidden="true"
                   />

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { PersonalActivity } from "@/lib/data/personal-activity-server";
 import { ActivityHeatmap } from "@/components/dashboard/home/activity-heatmap";
 
@@ -23,18 +24,29 @@ export function ActivityWidget({ activity }: { activity: PersonalActivity }) {
       // `@container/activity` so the grid's gap below can scale with this
       // card's width (`cqi`) rather than the viewport's.
       className="surface-card @container/activity"
-      style={{ padding: "18px 24px", display: "flex", flexDirection: "column", gap: "10px" }}
+      style={{ padding: "var(--pad-card)", display: "flex", flexDirection: "column", gap: "6px" }}
     >
-      <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+      {/* Pa2's header grammar: eyebrow left, the card's one link right. The
+          session count moved out of the header and into the footer under the
+          grid, where the frame states it as the grid's own reading. */}
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
         <span className="eyebrow">Activity</span>
         <div style={{ flex: 1 }} />
-        <span className="text-micro">
-          <span className="tabular">{sessionCount}</span>{" "}
-          {sessionCount === 1 ? "session" : "sessions"} · last 12 months
-        </span>
+        {/* The matches list IS the session log — every cell here is a day
+            on that list, so the link opens the list rather than a page of
+            its own. */}
+        <Link
+          href="/dashboard/matches"
+          className="whitespace-nowrap text-[11px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+        >
+          Session log
+        </Link>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 0, paddingLeft: "2px" }} aria-hidden>
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 0, paddingLeft: "2px", marginTop: "6px" }}
+        aria-hidden
+      >
         {monthLabels.map((m, i) => (
           <span key={i} className="text-micro" style={{ flex: 1 }}>
             {m}
@@ -43,6 +55,11 @@ export function ActivityWidget({ activity }: { activity: PersonalActivity }) {
       </div>
 
       <ActivityHeatmap days={days} sessionCount={sessionCount} />
+
+      <span className="text-[11px] text-[var(--ink-600)]" style={{ marginTop: "6px" }}>
+        <span className="tabular">{sessionCount}</span>{" "}
+        {sessionCount === 1 ? "session" : "sessions"} · <span className="tabular">12</span> months
+      </span>
     </div>
   );
 }

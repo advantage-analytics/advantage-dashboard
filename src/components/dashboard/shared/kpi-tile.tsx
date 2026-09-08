@@ -15,6 +15,7 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import type { KpiFormat } from "@/lib/data/performance-server";
+import { PlaceholderSparkline } from "./placeholder-sparkline";
 
 // Lazy-loaded so Recharts is only pulled in when a tile actually renders a
 // detail popover (home KPI strip) — keeps the shared tile light elsewhere.
@@ -170,6 +171,14 @@ export interface KpiTileProps {
   detail?: { value: number; date: string; opponent: string }[];
   /** Value formatting hint passed to the detail chart's tooltip/axis. */
   format?: KpiFormat;
+  /**
+   * Draw the grey placeholder curve while `sparkline` has fewer than two
+   * points — a tile holding its first value, with "1 more match for a
+   * trend" beneath. Keeps the tile's silhouette the same at zero, one and
+   * many matches; the day-zero strip draws the same curve. Off by default so
+   * a tile that simply has no series (match detail) stays blank.
+   */
+  ghostSparkline?: boolean;
 }
 
 const MotionLink = motion.create(Link);
@@ -187,6 +196,7 @@ export function KpiTile({
   href,
   detail,
   format,
+  ghostSparkline = false,
 }: KpiTileProps) {
   const hasDetail = !!detail && detail.length > 0;
   const [detailOpen, setDetailOpen] = useState(false);
@@ -271,7 +281,7 @@ export function KpiTile({
         >
           {value}
         </ValueTransition>
-        {sparkline && sparkline.length >= 2 && (
+        {sparkline && sparkline.length >= 2 ? (
           <>
             {/* Uncapped: the DS's `.adv-kpi-spark{margin-left:auto}` pushes the
                 sparkline to the tile's right edge. A 48px cap used to hold it
@@ -280,7 +290,12 @@ export function KpiTile({
             <div aria-hidden className="flex-1" />
             <Sparkline data={sparkline} positive={isGood} />
           </>
-        )}
+        ) : ghostSparkline ? (
+          <>
+            <div aria-hidden className="flex-1" />
+            <PlaceholderSparkline index={index} />
+          </>
+        ) : null}
       </div>
       {trend ? (
         <div className="flex items-center gap-1.5 overflow-hidden">

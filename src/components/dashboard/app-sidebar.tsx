@@ -5,6 +5,7 @@ import Link from "next/link";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import type { Workspace } from "@/lib/workspace/types";
 import { WorkspaceRow } from "@/components/dashboard/sidebar/workspace-row";
 import { RailItem } from "@/components/dashboard/sidebar/rail-item";
 import {
@@ -41,7 +42,16 @@ export function AppSidebar() {
   const isTeam = active.kind === "team";
   const mainLinks = isTeam ? TEAM_NAV : PERSONAL_NAV;
   const bottomLinks = isTeam ? TEAM_BOTTOM : PERSONAL_BOTTOM;
-  const current = activeHref(pathname, [...mainLinks, ...bottomLinks]);
+
+  // A player's own profile is the footer's destination, not the Roster's
+  // (Platform Audit `Te`: "a personal destination kept out of the
+  // team-content list"). Longest-prefix matching would light Roster for it,
+  // so the footer wins when the page is the one it links to.
+  const footerHref = viewerFooterHref(active);
+  const onOwnProfile = pathname === footerHref;
+  const current = onOwnProfile
+    ? null
+    : activeHref(pathname, [...mainLinks, ...bottomLinks]);
 
   return (
     <nav
@@ -104,25 +114,48 @@ export function AppSidebar() {
         />
       </div>
 
-      <ViewerFooter expanded={expanded} />
+      <ViewerFooter expanded={expanded} href={footerHref} active={onOwnProfile} />
     </nav>
   );
 }
 
 /**
- * The footer is a single profile link to Settings → Account; only its label
- * fades on collapse, same as the rail items above it. Sign-out lives
- * elsewhere — Settings → Account and the header profile menu — not in the
- * sidebar chrome.
+ * The footer is a single profile link; only its label fades on collapse, same
+ * as the rail items above it. Sign-out lives elsewhere — Settings → Account
+ * and the header profile menu — not in the sidebar chrome.
+ *
+ * Where it goes depends on who is standing here. A player inside their team
+ * workspace has a page of their own — the roster's profile, Platform Audit
+ * `Te` — and their name at the foot of the rail is how they reach it: "a
+ * personal destination, not team-content nav", so it is this row rather than
+ * an item in the list above. Everyone else (staff, and anyone in a personal
+ * workspace) still lands on Settings → Profile. The row lights like a rail
+ * item when its page is the one on screen, which only ever happens on the
+ * profile: Settings has its own row above.
  */
-function ViewerFooter({ expanded }: { expanded: boolean }) {
+function viewerFooterHref(active: Workspace): string {
+  return active.kind === "team" && active.role === "player" && active.myPlayerId
+    ? `/dashboard/team/roster/${active.myPlayerId}`
+    : "/dashboard/settings/profile";
+}
+
+function ViewerFooter({
+  expanded,
+  href,
+  active: isActive,
+}: {
+  expanded: boolean;
+  href: string;
+  active: boolean;
+}) {
   const { viewer } = useWorkspace();
 
   return (
     <div className="mt-2 flex items-center overflow-hidden border-t border-[var(--border-hairline)] pt-2.5">
       <Link
-        href="/dashboard/settings/profile"
+        href={href}
         aria-label={viewer.name}
+        aria-current={isActive ? "page" : undefined}
         className="flex min-w-0 flex-1 items-center rounded-[8px] transition-opacity duration-150 hover:opacity-80 focus-visible:outline-none"
       >
         <span className="flex size-10 shrink-0 items-center justify-center">
@@ -135,7 +168,10 @@ function ViewerFooter({ expanded }: { expanded: boolean }) {
         </span>
         <span
           className={cn(
-            "min-w-0 truncate text-[12px] text-[var(--ink-700)] transition-opacity ease-[var(--ease-primary)]",
+            "min-w-0 truncate text-[12px] transition-opacity ease-[var(--ease-primary)]",
+            isActive
+              ? "font-medium text-[var(--ink-900)]"
+              : "text-[var(--ink-700)]",
             expanded
               ? "opacity-100 delay-[80ms] duration-[120ms]"
               : "opacity-0 delay-0 duration-[80ms]"

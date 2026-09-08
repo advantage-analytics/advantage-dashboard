@@ -8,7 +8,12 @@ import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { setActiveWorkspace } from "@/lib/workspace/actions";
-import { teamLabel, workspaceSubtitle, type Workspace } from "@/lib/workspace/types";
+import {
+  squadDisambiguator,
+  teamLabel,
+  workspaceSubtitle,
+  type Workspace,
+} from "@/lib/workspace/types";
 import { PANEL_WIDTH } from "./sidebar-state";
 import { RailTooltip } from "./rail-tooltip";
 
@@ -71,8 +76,13 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
     rowRefs.current.get(available[next].id)?.focus();
   }
 
-  const squad = teamLabel(active.team);
+  // The squad lives on the subtitle line now — `workspaceSubtitle` returns
+  // "Men's team workspace" — so the name above it gets the full width. A
+  // collegiate name truncates in a 232px rail long before a trailing
+  // possessive would have been read.
   const subLabel = hovered || open ? "Switch workspace" : workspaceSubtitle(active);
+  // Only the rows that share a school name still spend width on the squad.
+  const squadFor = squadDisambiguator(available);
 
   function switchTo(workspace: Workspace) {
     if (workspace.id === active.id) {
@@ -128,9 +138,6 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
       >
         <span className="block truncate text-[13px] font-medium leading-tight text-[var(--ink-900)]">
           {active.name}
-          {squad && (
-            <span className="font-normal text-[var(--ink-500)]"> · {squad}</span>
-          )}
         </span>
         <span className="block truncate text-[10px] leading-tight text-[var(--ink-500)]">
           {subLabel}
@@ -173,33 +180,35 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
         onOpenAutoFocus={focusActiveRow}
         onKeyDown={handleMenuKeyDown}
       >
-        {/* Squad in, role out — every row here is one line, so they are all
-            the same height and the list reads as a list.
+        {/* Role out, squad out except where it disambiguates — every row
+            here is one line, so they are all the same height and the list
+            reads as a list.
 
-            The squad stays because it is the only thing separating two rows
-            that both say "Meridian State". The role moves to the row's dark
-            tooltip: it is the same word on both of a coach's rows, so it
-            never decides which one to click, and carrying it inline cost a
-            stacked second line on team rows only. The tooltip is where a row
-            says the rest of its story — "Men's team · Coach" — without
-            spending a line on it. */}
+            The role lives in the row's dark tooltip: it is the same word on
+            both of a coach's rows, so it never decides which one to click,
+            and carrying it inline cost a stacked second line on team rows
+            only. The squad is there too, and on the name line only where
+            `squadDisambiguator` says two rows share a school name.
+
+            The tooltip names the squad ONCE, in `detail`. Hanging it off
+            `label` as well is the bug this shape prevents — a two-line
+            tooltip that said "Men's" in both lines. */}
         {available.map((workspace) => {
           const isActive = workspace.id === active.id;
-          const squadLabel = teamLabel(workspace.team);
+          // Two questions, not one: the tooltip always names the squad, the
+          // name line only when it is what tells two rows apart.
+          const squad = teamLabel(workspace.team);
+          const squadLabel = squadFor(workspace);
           const roleWord =
             workspace.role.charAt(0).toUpperCase() + workspace.role.slice(1);
           const tipDetail =
             workspace.kind === "team"
-              ? [squadLabel && `${squadLabel} team`, roleWord]
-                  .filter(Boolean)
-                  .join(" · ")
+              ? [squad && `${squad} team`, roleWord].filter(Boolean).join(" · ")
               : "Personal workspace";
           return (
             <ChromeTooltip
               key={workspace.id}
-              label={
-                squadLabel ? `${workspace.name} · ${squadLabel}` : workspace.name
-              }
+              label={workspace.name}
               detail={tipDetail}
               side="right"
               align="start"

@@ -19,6 +19,36 @@
 /** A member's standing inside a team workspace. Personal is always `owner`. */
 export type ProgramRole = 'owner' | 'coach' | 'staff' | 'player';
 
+/**
+ * `programs.upload_policy` — who may send team video. A ladder, top to bottom:
+ * the owner alone; the owner and coaches; anyone on the coaching staff; or
+ * everyone, players included (each player still subject to their own row's
+ * `upload_enabled`). `players_can_upload` is derived from it — true exactly
+ * at `everyone` — so the boolean readers keep their meaning.
+ */
+export type UploadPolicy = 'owner' | 'owner_coaches' | 'staff' | 'everyone';
+
+export const UPLOAD_POLICIES: readonly UploadPolicy[] = [
+  'owner',
+  'owner_coaches',
+  'staff',
+  'everyone',
+];
+
+/** The policy as a settings row reads it. */
+export function uploadPolicyLabel(policy: UploadPolicy): string {
+  switch (policy) {
+    case 'owner':
+      return 'Owner only';
+    case 'owner_coaches':
+      return 'Owner and coaches';
+    case 'staff':
+      return 'All staff';
+    case 'everyone':
+      return 'Everyone on the team';
+  }
+}
+
 export type WorkspaceKind = 'personal' | 'team';
 
 /**
@@ -156,6 +186,26 @@ export interface Workspace {
    * answer with only a `Workspace` in hand.
    */
   memberUploadEnabled: boolean;
+  /**
+   * `programs.upload_policy` — the ladder `playersCanUpload` is the bottom
+   * rung of. Read by `canUploadForProgram()` for the levels the boolean
+   * cannot express (owner only; owner and coaches). `'everyone'` for a
+   * personal workspace, where the question does not arise.
+   */
+  uploadPolicy: UploadPolicy;
+  /**
+   * The id this viewer's matches carry inside this program, when they are a
+   * player here — the `program_players.id` they have claimed, else their own
+   * user id for a player-role membership with no live profile (arm 3 of
+   * `program_roster_full`). Null for staff and for a personal workspace.
+   *
+   * On the workspace rather than fetched by the rail, because the rail is a
+   * client component and this id comes from `program_players`, which only a
+   * server read can resolve. It is what the sidebar's footer links to on a
+   * player's own team workspace (Platform Audit `Te`): their name at the foot
+   * of the rail opens their profile, not Settings.
+   */
+  myPlayerId: string | null;
 }
 
 /** Everything the dashboard shell needs to render, resolved once per request. */
@@ -246,8 +296,18 @@ export function isProgramStaff(workspace: Workspace): boolean {
  */
 export function canUploadForProgram(workspace: Workspace): boolean {
   if (workspace.kind !== 'team') return false;
-  if (isProgramStaff(workspace)) return true;
-  return workspace.playersCanUpload && workspace.memberUploadEnabled;
+  switch (workspace.uploadPolicy) {
+    case 'owner':
+      return workspace.role === 'owner';
+    case 'owner_coaches':
+      return workspace.role === 'owner' || workspace.role === 'coach';
+    case 'staff':
+      return isProgramStaff(workspace);
+    case 'everyone':
+      // Staff always; a player only with their own row's grant as well —
+      // see `memberUploadEnabled` for why the grant narrows nobody else.
+      return isProgramStaff(workspace) || workspace.memberUploadEnabled;
+  }
 }
 
 /**
@@ -343,13 +403,24 @@ export function explainVideoRefusal(workspace: Workspace): string | null {
 
   if (canUploadForProgram(workspace)) return null;
 
-  // Only a player reaches here, and only having failed one of the two flags.
-  // Which one decides who can fix it, so they are not one message.
-  if (!workspace.playersCanUpload) {
+  // Staff turned away by a policy above their standing. Only the owner can
+  // widen it, and the message says so rather than pointing at a switch they
+  // cannot reach.
+  if (isProgramStaff(workspace)) {
     return (
-      `${workspace.name} has video uploads set to coaches only, so this match ` +
-      `can't be sent for analysis from your account. A coach can send it, or ` +
-      `open uploads to players in Team settings.`
+      `${workspace.name} limits video uploads to ${uploadPolicyLabel(workspace.uploadPolicy).toLowerCase()}, ` +
+      `so this match can't be sent for analysis from your account. The owner ` +
+      `can widen it in Team settings.`
+    );
+  }
+
+  // A player, having failed one of the two flags. Which one decides who can
+  // fix it, so they are not one message.
+  if (workspace.uploadPolicy !== 'everyone') {
+    return (
+      `${workspace.name} limits video uploads to ${uploadPolicyLabel(workspace.uploadPolicy).toLowerCase()}, ` +
+      `so this match can't be sent for analysis from your account. A coach ` +
+      `can send it, or the program can open uploads to players in Team settings.`
     );
   }
 
@@ -359,9 +430,62 @@ export function explainVideoRefusal(workspace: Workspace): string | null {
   );
 }
 
-/** The label under the workspace name in the switcher. */
+/**
+ * The label under the workspace name in the switcher.
+ *
+ * The squad rides here rather than on the name line above it. A collegiate
+ * name is long enough on its own — "University of California, Los Angeles"
+ * truncates in a 232px rail before the possessive is even reached — and the
+ * squad is a qualifier, not part of what the program is called. On the quiet
+ * second line it costs nothing and still answers which half of the program
+ * you are looking at.
+ */
 export function workspaceSubtitle(workspace: Workspace): string {
-  return workspace.kind === 'team' ? 'Team workspace' : 'Personal workspace';
+  if (workspace.kind !== 'team') return 'Personal workspace';
+  const squad = teamLabel(workspace.team);
+  return squad ? `${squad} team workspace` : 'Team workspace';
+}
+
+/**
+ * The squad a switcher row must carry on its NAME line, given the list it sits
+ * in — `teamLabel` where a school name alone is a coin flip, null everywhere
+ * else. Bind it once per list, then ask it per row.
+ *
+ * Two rows both reading "Meridian State" need the possessive; it is the only
+ * thing separating them. A list of three different schools does not, and
+ * appending "· Men's" to all three made every row longer to solve a problem
+ * that list does not have. So the label appears exactly where it works.
+ *
+ * It disambiguates by SCHOOL NAME, which is the case that exists: a program
+ * fields at most one men's and one women's squad. It does NOT rescue two
+ * workspaces sharing a name *and* a squad — duplicate program rows for the
+ * same school, which the claim flow is not proven to prevent. Those render
+ * identically here, as they did when every row carried its squad
+ * unconditionally, and nothing short of a second distinguishing field on
+ * `Workspace` would separate them: the mark is the name's first letter and
+ * the role is the same word on both. Fix that upstream by not creating the
+ * duplicate, not with a longer label.
+ *
+ * A row that drops it has not lost the squad — the sidebar menu's dark tooltip
+ * says "Men's team · Coach" either way, and the row a switcher is *sitting in*
+ * says it on the subtitle line (`workspaceSubtitle`).
+ *
+ * It returns the label rather than a set of ids so the rule and the wording
+ * stay in one place: two call sites holding a bare "is this one ambiguous"
+ * answer would each have to reach for `teamLabel` again and write the same
+ * ternary, which is how the two lists start disagreeing.
+ */
+export function squadDisambiguator(
+  available: Workspace[]
+): (workspace: Workspace) => string | null {
+  const counts = new Map<string, number>();
+  for (const workspace of available) {
+    counts.set(workspace.name, (counts.get(workspace.name) ?? 0) + 1);
+  }
+  // No `team` guard: `teamLabel` already answers null for a workspace that
+  // fields no squad, so a shared name between two such rows adds nothing.
+  return (workspace) =>
+    (counts.get(workspace.name) ?? 0) > 1 ? teamLabel(workspace.team) : null;
 }
 
 /**

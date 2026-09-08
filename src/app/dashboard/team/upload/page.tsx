@@ -11,8 +11,6 @@ import {
 import { loadMatchDraft } from "@/lib/wizard/actions";
 import { presetFor, lineupChoices } from "@/lib/schedule/line-choices";
 import { getTeamSingleMatch } from "@/lib/data/single-match-server";
-import { getLadder } from "@/lib/data/roster-server";
-import { getTeamSettings } from "@/lib/data/team-settings-server";
 import { supportsVideo } from "@/lib/schedule/entry-state";
 import { formatEventSpan, siteLabel } from "@/lib/schedule/format";
 import { UploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard";
@@ -31,10 +29,6 @@ import type { EventPreset } from "@/components/dashboard/matches/new-match-wizar
  * `job-request.ts`, and collecting them in two components is how those two
  * drift — silently, because the page still renders.
  *
- * `?player=` is the roster row's upload shortcut. It presets whose match this
- * is and leaves the rest of step 1 to be filled in — the coach knows the player
- * before they know the opponent, which is the order the roster puts them in.
- *
  * Without `?entry=` there is nothing to preset, so staff get the lines that have
  * no video and hand off to the pinned flow. A player gets the wizard itself —
  * see `staff` below for why they are never offered a line.
@@ -42,9 +36,9 @@ import type { EventPreset } from "@/components/dashboard/matches/new-match-wizar
 export default async function TeamUploadPage({
   searchParams,
 }: {
-  searchParams: Promise<{ entry?: string; match?: string; player?: string; draft?: string }>;
+  searchParams: Promise<{ entry?: string; match?: string; draft?: string }>;
 }) {
-  const { entry: entryId, match: matchId, player: playerId, draft: draftId } = await searchParams;
+  const { entry: entryId, match: matchId, draft: draftId } = await searchParams;
 
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
@@ -125,7 +119,6 @@ export default async function TeamUploadPage({
     if (!single) redirect("/dashboard/team/upload");
 
     const preset: EventPreset = {
-      kind: "line",
       entryId: null,
       eventId: null,
       eventName: single.context,
@@ -153,47 +146,14 @@ export default async function TeamUploadPage({
     return <UploadMatchFlow preset={preset} />;
   }
 
-  // `?player=` from a roster row. Nothing about the match is known yet, so this
-  // is the single-match preset with the player already chosen. The id comes
-  // from `program_roster_full`, so it is the same `player_id` the match will be
-  // recorded against — a coach-managed athlete included, which is the point.
-  if (!entryId && !matchId && playerId) {
-    const [roster, settings] = await Promise.all([
-      getLadder(active.id),
-      getTeamSettings(active.id),
-    ]);
-    const picked = roster.find((p) => p.userId === playerId);
-    // An id that names nobody on this roster falls through to the queue rather
-    // than presetting a stranger. It arrives from a URL, so it is untrusted.
-    if (picked) {
-      const preset: EventPreset = {
-        kind: "single",
-        entryId: null,
-        eventId: null,
-        eventName: null,
-        matchId: null,
-        round: null,
-        roster,
-        playerName: picked.name,
-        playerUserId: picked.userId,
-        opponentName: "",
-        date: new Date().toISOString().slice(0, 10),
-        surface: settings?.program.defaultSurface ?? null,
-        bestOf: 3,
-        // Null, not false: nothing has declared a format for a match that does
-        // not exist yet, and the pipeline refuses a job without a real answer.
-        adScoring: null,
-        score: null,
-        supportsVideo: true,
-        eventHref: "/dashboard/team/roster",
-        site: null,
-        eventKind: null,
-        opponentProgramKey: null,
-        opponentSchool: null,
-      };
-      return <UploadMatchFlow preset={preset} />;
-    }
-  }
+  // The `?player=` roster shortcut is NOT here. It was, and it never once
+  // fired: the roster links send a `program_players.id` and this looked it up
+  // by `userId`, so every visit fell through to the queue below. Repairing the
+  // lookup would have re-lit the source lock `EventPreset` documents — a
+  // preset answers every question on step 1, so a coach with a SwingVision
+  // export was offered no way to say so. It now lives on
+  // `/dashboard/matches/new?player=`, which seeds the For field alone and
+  // still asks for the source.
 
   if (entryId) {
     const groups = await getUploadQueue(active.id);

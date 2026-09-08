@@ -33,7 +33,6 @@ export function presetFor(
   programs: Map<string, { key: string; school: string }>
 ): EventPreset {
   return {
-    kind: "line",
     entryId: entry.id,
     eventId: event.id,
     eventName: event.name,

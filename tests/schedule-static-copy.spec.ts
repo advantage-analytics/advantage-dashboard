@@ -440,8 +440,12 @@ test.describe('/dashboard/team/schedule · Tc2 Tc2c', () => {
     //   card…', asserted above). It is fine print now, not the page's sentence.
     // RETIRED 'One-off match in Matches' — the label named a destination that
     //   was never where the link went: it opened `/new/single`, the wizard
-    //   under the schedule, and a team workspace's rail has no Matches entry
+    //   under the schedule, and a team workspace's rail had no Matches entry
     //   to arrive at. 'Add a one-off match' says what the link does.
+    //   Both halves of that have since changed and the label still holds:
+    //   `/new/single` is retired (it forced every one-off match to video) and
+    //   the link now opens `/dashboard/matches/new`, which TEAM_NAV does carry
+    //   a Matches entry for.
     // RETIRED the '·' separator between the empty-state links — there are no
     //   longer three blue words in a row to separate. Two buttons carry the
     //   paths and the third rides the conditions sentence.

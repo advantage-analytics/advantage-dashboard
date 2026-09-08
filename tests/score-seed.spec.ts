@@ -16,7 +16,6 @@ import type { EventPreset } from '@/components/dashboard/matches/new-match-wizar
 
 function preset(overrides: Partial<EventPreset> = {}): EventPreset {
   return {
-    kind: 'line',
     entryId: 'entry-1',
     eventId: 'event-1',
     eventName: 'Rival State',

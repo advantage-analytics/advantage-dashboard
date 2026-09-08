@@ -87,7 +87,6 @@ test.describe('the create screens still answer', () => {
     ['/dashboard/team/schedule/new', 'New event'],
     ['/dashboard/team/schedule/new/dual', 'New dual'],
     ['/dashboard/team/schedule/new/tournament', 'New tournament'],
-    ['/dashboard/team/schedule/new/single', 'New single'],
   ];
 
   for (const [path, label] of exact) {
@@ -98,6 +97,14 @@ test.describe('the create screens still answer', () => {
 
   test('the schedule root is a destination, not a leaf', () => {
     expect(scheduleLeaf('/dashboard/team/schedule')).toBeNull();
+  });
+
+  test('the retired one-off match rail names nothing', () => {
+    // `/schedule/new/single` was the one-off match rail, retired on
+    // `splitstep-integration` (f8814ee) — the roster's player profile seeds
+    // the ordinary wizard instead. Asserted rather than deleted so the label
+    // cannot quietly come back without the route.
+    expect(scheduleLeaf('/dashboard/team/schedule/new/single')).toBeNull();
   });
 
   test('a path outside the schedule gets nothing', () => {

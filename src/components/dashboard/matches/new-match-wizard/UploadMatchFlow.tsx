@@ -24,6 +24,7 @@ import {
 } from "./types";
 import {
   useUploadMatchWizard,
+  type RosterSubject,
   type VideoUploadEvent,
   type VideoUploadProgress,
 } from "./useUploadMatchWizard";
@@ -45,7 +46,6 @@ import { usePublishHeaderStatus } from "@/components/dashboard/header-status";
 import { WizardShell, CONTENT_CLS } from "./WizardShell";
 import { useWizardKeys } from "./useWizardKeys";
 import { SourceStepContent } from "./SourceStepContent";
-import { PinnedMatchContent } from "./PinnedMatchContent";
 import { FileStepContent } from "./FileStepContent";
 import { TrimStepContent } from "./TrimStepContent";
 import { DetailsStepContent } from "./DetailsStepContent";
@@ -115,11 +115,14 @@ export function UploadMatchFlow({
   preset: initialPreset,
   draft,
   initialProvider,
+  initialSubject,
 }: {
   preset?: EventPreset | null;
   draft?: MatchDraft | null;
   /** A source named by the link that opened the wizard — see the hook. */
   initialProvider?: ProviderId | null;
+  /** A roster player named by the link that opened the wizard — see the hook. */
+  initialSubject?: RosterSubject | null;
 } = {}) {
   // The line this flow is filling. State rather than the prop because the
   // pinned bar's Change menu swaps it for another line of the same event
@@ -190,11 +193,7 @@ export function UploadMatchFlow({
     return (
       <UploadMatchSuccess
         uploads={active}
-        exitHref={
-          preset?.kind === "single"
-            ? `/dashboard/team/schedule/single/${createdMatchId}`
-            : EXIT_HREF
-        }
+        exitHref={EXIT_HREF}
         preset={preset ?? null}
         onUploadAnother={() => {
           setCreatedMatchId(null);
@@ -213,7 +212,14 @@ export function UploadMatchFlow({
 
   return (
     <UploadMatchWizard
-      key={runId}
+      // The seeded player is part of the identity, not just the run: the hook
+      // installs it as initial state, and `/dashboard/matches/new?player=A` →
+      // `?player=B` is one route with new search params, which re-renders the
+      // wizard rather than remounting it. Without this the second visit would
+      // show B's name over A's id — the name/id mismatch the For field exists
+      // to prevent. No linked path does that today; the key is what keeps it
+      // from mattering if one is ever added.
+      key={`${runId}:${initialSubject?.playerId ?? ""}`}
       onCreated={setCreatedMatchId}
       onVideoUpload={handleVideoUpload}
       exitHref={EXIT_HREF}
@@ -221,6 +227,7 @@ export function UploadMatchFlow({
       onSwitchPreset={setPreset}
       draft={draft ?? null}
       initialProvider={initialProvider ?? null}
+      initialSubject={initialSubject ?? null}
     />
   );
 }
@@ -256,7 +263,7 @@ function UploadMatchSuccess({
    *
    * The current URL rather than a hardcoded `/dashboard/matches/new`, because a
    * team upload's preset lives entirely in its own route and query string
-   * (`/dashboard/team/upload?entry=…`, `/dashboard/team/schedule/new/single?match=…`).
+   * (`/dashboard/team/upload?entry=…`, `/dashboard/team/upload?match=…`).
    * Hardcoding the personal route would silently drop the pinned line.
    *
    * Read during render rather than through `usePathname`/`useSearchParams`:
@@ -419,11 +426,7 @@ function UploadMatchSuccess({
             </button>
           )}
           <Link href={exitHref} className={advButton("primary", "md")}>
-            {preset?.kind === "single"
-              ? "Open the match"
-              : preset
-                ? "Back to the event"
-                : "Back to matches"}
+            {preset ? "Back to the event" : "Back to matches"}
           </Link>
         </div>
 
@@ -544,6 +547,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   onSwitchPreset,
   draft,
   initialProvider,
+  initialSubject,
 }: {
   onCreated: (matchId: string) => void;
   onVideoUpload: (event: VideoUploadEvent) => void;
@@ -552,6 +556,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   onSwitchPreset: (next: EventPreset) => void;
   draft: MatchDraft | null;
   initialProvider: ProviderId | null;
+  initialSubject: RosterSubject | null;
 }) {
   const router = useRouter();
   // Which workspace this match will be created in, and billed against.
@@ -603,7 +608,6 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     handleFileChange,
     handleRemoveFile,
     handleInputChange,
-    setPickedPlayerUserId,
     whoPlayed,
     handleScoreChange,
     handleTiebreakChange,
@@ -630,6 +634,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     preset,
     draft,
     initialProvider,
+    initialSubject,
   });
 
   const contentRef = useRef<HTMLDivElement>(null);
@@ -729,19 +734,12 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     : handleCreateMatch;
 
   const currentStepIndex = stepOrder.indexOf(step);
-  const line = preset?.kind === "line" ? preset : null;
+  // A preset IS the line it came from; the name is what reads at the use
+  // sites, several of which pair it with `attachedLine`.
+  const line = preset;
   const { title, description } = {
     ...STEP_CONFIG[step],
     ...(isProcessingProvider ? STEP_CONFIG_PROCESSING[step] : undefined),
-    // A single match in a team workspace changes what step 1 asks, so it has
-    // to change what step 1 is called.
-    ...(preset?.kind === "single" && step === "provider"
-      ? {
-          title: "Whose match is this?",
-          description:
-            "The one question the personal wizard can't answer in a team workspace. Everything else — opponent, date, surface, score — is the details step, unchanged.",
-        }
-      : undefined),
     // When the slot was the starting point there is nothing to offer, so the
     // title tells the truth of the step: the score is the only thing left to
     // type, and the subline credits the lineup (design 7c).
@@ -847,13 +845,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
 
   const stepBusy = busyLabel[step];
   const gatedByMissing = step === "match" && missing.labels.length > 0;
-  // Step 1 on the single rail waits for a player. It is the one fact the
-  // workspace cannot supply, and a match created without it belongs to nobody.
-  const awaitingPlayer =
-    preset?.kind === "single" &&
-    step === "provider" &&
-    !formData.playerName.trim();
-  const continueDisabled = stepBusy !== null || gatedByMissing || awaitingPlayer;
+  const continueDisabled = stepBusy !== null || gatedByMissing;
 
   useWizardKeys({
     contentRef,
@@ -949,32 +941,27 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
       onContinue={continueHandler}
       continueDisabled={continueDisabled}
     >
-      {step === "provider" &&
-        (preset ? (
-          // Same step, different question. In a team workspace "where do
-          // the numbers come from?" has one answer, so this slot confirms
-          // the destination instead of asking for a source.
-          <PinnedMatchContent
-            preset={preset}
-            playerName={formData.playerName}
-            onPickPlayer={(name, pickedUserId) => {
-              handleInputChange("playerName", name);
-              setPickedPlayerUserId(pickedUserId);
-            }}
-          />
-        ) : (
-          // Workspace · For · Source. In a personal workspace For is the
-          // uploader; in a team workspace it is the one thing the
-          // workspace cannot infer — whose match this is — and the hook
-          // refuses Continue until it is answered. The preset flows never
-          // reach this branch: a line already knows, and the single rail
-          // asks via PinnedMatchContent above.
-          <SourceStepContent
-            selectedProvider={selectedProvider}
-            onProviderSelect={handleProviderSelect}
-            whoPlayed={whoPlayed}
-          />
-        ))}
+      {/* Workspace · For · Source. In a personal workspace For is the
+          uploader; in a team workspace it is the one thing the workspace
+          cannot infer — whose match this is — and the hook refuses Continue
+          until it is answered.
+
+          A preset never reaches this step: a line arrives with all three
+          answered and opens on the file step (`firstStep`). That is the bar a
+          preset has to clear — it may replace step 1 only by answering every
+          question on it, never by defaulting one.
+
+          The `PinnedMatchContent` branch that used to sit here belonged to the
+          one-off match rail, retired on `splitstep-integration` (f8814ee); the
+          roster's "upload for this player" shortcut now seeds the ordinary
+          wizard through `initialSubject` instead. */}
+      {step === "provider" && (
+        <SourceStepContent
+          selectedProvider={selectedProvider}
+          onProviderSelect={handleProviderSelect}
+          whoPlayed={whoPlayed}
+        />
+      )}
 
       {/* Step 2 asks for one thing. The same component for both kinds;
           the handlers differ because a video is probed locally and an

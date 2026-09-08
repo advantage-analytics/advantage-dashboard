@@ -203,11 +203,12 @@ export type SettingsSection = {
   /** The line under the heading. A node, because Plan's carries a link. */
   subtitle: string;
   /**
-   * Team only exists inside a program, and only for the people who run it. A
-   * player switching into their team workspace never sees the item — the page
-   * itself re-checks, because a hidden nav item is not authorization.
+   * Teams lists every program the viewer belongs to, so it exists only for
+   * someone who belongs to at least one — at any standing, including player.
+   * What a player may *do* on a team is the detail page's question, re-asked
+   * on the server; a hidden nav item is not authorization.
    */
-  teamStaffOnly?: boolean;
+  teamMemberOnly?: boolean;
 };
 
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
@@ -243,11 +244,12 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     subtitle: "What your account is entitled to.",
   },
   {
-    id: "team",
-    label: "Team",
-    href: "/dashboard/settings/team",
-    subtitle: "Members, invites, and how the roster shares.",
-    teamStaffOnly: true,
+    id: "teams",
+    label: "Teams",
+    href: "/dashboard/settings/teams",
+    subtitle:
+      "Programs you own, coach or play for. Open one for its hours, roster and settings.",
+    teamMemberOnly: true,
   },
 ];
 
@@ -280,7 +282,6 @@ const SCHEDULE_LEAF_LABELS: Record<string, string> = {
   "/dashboard/team/schedule/new": "New event",
   "/dashboard/team/schedule/new/dual": "New dual",
   "/dashboard/team/schedule/new/tournament": "New tournament",
-  "/dashboard/team/schedule/new/single": "New single",
 };
 
 /**

@@ -66,3 +66,56 @@ export function usageFraction(used: number, cap: number): number {
   if (cap <= 0) return 0;
   return Math.min(1, Math.max(0, used / cap));
 }
+
+/**
+ * Seconds as `8h 12m` — the form a sentence or a figure wants.
+ *
+ * `formatAnalysisTime`'s `H:MM` is a ledger column: it lines up. Beside the
+ * word "left" it reads as a clock time, and "11:48 left" is a question. Whole
+ * hours drop the minutes ("75h", not "75h 00m"); under a minute rounds to
+ * "0m" rather than inventing seconds nobody plans around.
+ */
+export function formatHoursLong(seconds: number): string {
+  const safe = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  if (hours === 0) return `${minutes}m`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+}
+
+/**
+ * Whole days until the allowance renews, from `now` — never negative.
+ *
+ * UTC both sides, because the billing month is a UTC key and the reset is the
+ * first instant of the next one. Counted in whole days from the calendar date,
+ * so "in 1 day" the evening before rather than "in 0 days".
+ */
+export function daysUntilReset(
+  billingMonth: string,
+  now: Date = new Date()
+): number {
+  const reset = new Date(`${billingMonth}T00:00:00Z`);
+  reset.setUTCMonth(reset.getUTCMonth() + 1);
+  const today = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate()
+  );
+  return Math.max(0, Math.round((reset.getTime() - today) / 86_400_000));
+}
+
+/**
+ * How loudly a quota meter should speak.
+ *
+ * Three states and two thresholds, chosen so the warning arrives while there
+ * is still something to do about it: at 80% a coach can hold the last two
+ * uploads for the matches that matter; at 100% the only move is to wait.
+ */
+export type HoursSeverity = "ok" | "low" | "spent";
+
+export function hoursSeverity(fraction: number): HoursSeverity {
+  if (fraction >= 1) return "spent";
+  if (fraction >= 0.8) return "low";
+  return "ok";
+}

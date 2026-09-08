@@ -240,7 +240,9 @@ async function main(): Promise<void> {
     mark: 'T',
     canSubmitVideo: true,
     playersCanUpload: false,
+    uploadPolicy: 'everyone',
     memberUploadEnabled: true,
+    myPlayerId: null,
   };
 
   const failedFields = {

@@ -212,7 +212,7 @@ export default function AccountPage() {
                 <div className="mt-0.5 text-[11px] leading-[1.5] text-[var(--ink-600)]">
                   Deletion is blocked until you transfer ownership.{" "}
                   <Link
-                    href="/dashboard/settings/team"
+                    href="/dashboard/settings/teams"
                     className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
                   >
                     Team settings
