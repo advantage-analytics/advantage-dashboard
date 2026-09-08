@@ -20,7 +20,10 @@ export function EventShell({
    * fixed rail and a scrolling pane split the space edge to edge. The default
    * body is one padded, scrolling column, and that column is itself a flex
    * column — a caller with content shorter than the viewport can pin it with
-   * `my-auto` instead of leaving it stuck at the top.
+   * `my-auto` instead of leaving it stuck at the top. A flex item's minimum
+   * size is its content's, so a body taller than the frame still overflows
+   * and scrolls exactly as the block layout did; measured with a
+   * forty-paragraph child in a 400px frame (T22), not assumed.
    */
   flush?: boolean;
   children: React.ReactNode;

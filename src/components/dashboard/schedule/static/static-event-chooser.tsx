@@ -185,16 +185,11 @@ export function StaticEventChooser() {
           the remaining 10px rather than reaching into the shared shell — three
           other screens in this run sit in the same frame.
 
-          The artboard's own layout is top-left, but that was drawn at the
-          artboard's own width; at dashboard widths the 820px grid stranded a
-          wide gutter on the right and a gap below. `EventShell`'s body is a
-          flex column (T22), so `my-auto` centres this column on the vertical
-          axis the same way `mx-auto` already centres it on the horizontal —
-          the column sits in the middle of the scroll area rather than pinned
-          to its top. Below the height where the column plus its padding no
-          longer fits, `my-auto` collapses to 0 and the body's own
-          `overflow-y-auto` takes over, so short viewports still scroll
-          instead of clipping. */}
+          Centred on both axes — the header's point 2 says why. One fact
+          lives only here: below the height where the column plus its padding
+          no longer fits, `my-auto` collapses to 0 and the body's own
+          `overflow-y-auto` takes over, so short viewports scroll instead of
+          clipping. */}
       <div className="mx-auto my-auto w-full max-w-[820px] pt-[10px]">
         <h1 className="text-[30px] font-light leading-[34px] tracking-[-0.6px] text-[var(--ink-900)]">
           {COPY.heading}

@@ -83,7 +83,10 @@ export function MenuSelect<T extends string>({
         "flex cursor-pointer items-center justify-between gap-2 text-left transition-colors duration-150",
         "focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60",
         variant === "underline"
-          ? "h-8 w-full rounded-none border-b bg-transparent text-[13px] text-[var(--ink-900)] focus-visible:border-b-2 focus-visible:border-[var(--blue)]"
+          ? // 34px, the underline family's one height (`advField("underline")`,
+            // `SettingsUnderlineInput`): this trigger sat at 32 and read as a
+            // 2px mistake beside any underline input in the same row.
+            "h-[34px] w-full rounded-none border-b bg-transparent text-[13px] text-[var(--ink-900)] focus-visible:border-b-2 focus-visible:border-[var(--blue)]"
           : "h-[30px] shrink-0 rounded-[6px] border bg-[var(--surface-card)] px-3 text-[12px] text-[var(--ink-900)] hover:bg-[var(--surface-subtle)]",
         open
           ? variant === "underline"

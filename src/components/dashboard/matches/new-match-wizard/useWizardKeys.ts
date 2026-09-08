@@ -25,7 +25,16 @@ export function isFormControl(el: EventTarget | null): boolean {
     tag === "TEXTAREA" ||
     tag === "SELECT" ||
     node.isContentEditable ||
-    node.getAttribute("role") === "combobox"
+    node.getAttribute("role") === "combobox" ||
+    // A closed popup trigger — `MenuSelect`'s button, or anything else that
+    // declares `aria-haspopup` — owns its Enter the way a native `<select>`
+    // does: Enter opens it. Without this the dual builder's Site cell
+    // advanced the whole step on Enter (the capture-phase handler below
+    // called `onContinue()` and then prevented the click that would have
+    // opened the menu), a regression from the native select this replaced,
+    // which the `SELECT` branch above had always covered. An OPEN one is
+    // already handled below by `aria-expanded="true"`.
+    node.hasAttribute("aria-haspopup")
   );
 }
 

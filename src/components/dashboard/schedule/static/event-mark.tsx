@@ -1,4 +1,5 @@
 import type { EventKind } from "@/lib/schedule/types";
+import { cn } from "@/lib/utils";
 
 /**
  * The square mark beside an event's name — design `Tc2`'s legend row.
@@ -13,6 +14,9 @@ import type { EventKind } from "@/lib/schedule/types";
  * `radius-button` on all three — the legend says "6px radius" in as many
  * words.
  */
+/** The box each size draws — the legend's three, and nothing in between. */
+const BOX = { 26: "size-[26px]", 32: "size-8", 48: "size-12" } as const;
+
 export function EventMark({
   kind,
   name,
@@ -26,11 +30,12 @@ export function EventMark({
   return (
     <span
       aria-hidden="true"
-      className={
-        large
-          ? "flex size-12 shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] text-[14px] font-medium tracking-[0.2px] text-[var(--ink-700)]"
-          : `flex shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] text-[9px] font-medium text-[var(--ink-700)] ${size === 32 ? "size-8" : "size-[26px]"}`
-      }
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] font-medium text-[var(--ink-700)]",
+        BOX[size],
+        // Type scale follows the branch, not the pixel: 26 and 32 share one.
+        large ? "text-[14px] tracking-[0.2px]" : "text-[9px]"
+      )}
     >
       {kind === "tournament" ? (
         // eslint-disable-next-line @next/next/no-img-element -- a static SVG in /public, no optimisation to do

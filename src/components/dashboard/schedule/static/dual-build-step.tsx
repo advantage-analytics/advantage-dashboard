@@ -77,13 +77,11 @@ export type ChosenSchool =
  * this dual is.
  */
 export interface DualFormat {
-  /** The `<select>` option's value — matched against, never split. */
+  /** The option's name — matched against, never split. */
   value: EventFormatValue;
-  /** What the dropdown lists, once open. */
-  label: string;
-  /** What the closed cell prints. */
+  /** What the closed cell prints, and the menu row's first line. */
   sets: string;
-  /** What prints under the underline. */
+  /** What prints under the cell, and the menu row's second line. */
   scoring: string;
   bestOf: number;
   adScoring: boolean;
@@ -108,25 +106,21 @@ export interface DualFormat {
  */
 const FORMAT_WORDS: Record<
   EventFormatValue,
-  { label: string; sets: string; scoring: string }
+  { sets: string; scoring: string }
 > = {
   "bo3-no-ad": {
-    label: "Best of 3 sets · no-ad",
     sets: "Best of 3 sets",
     scoring: "No-ad scoring",
   },
   "bo3-ad": {
-    label: "Best of 3 sets · ad",
     sets: "Best of 3 sets",
     scoring: "Ad scoring",
   },
   "one-set-no-ad": {
-    label: "One set · no-ad",
     sets: "One set",
     scoring: "No-ad scoring",
   },
   "one-set-ad": {
-    label: "One set · ad",
     sets: "One set",
     scoring: "Ad scoring",
   },
@@ -161,17 +155,6 @@ export function formatOptions(
 
 /** Built once: `FORMATS` is a module constant, so its options are too. */
 const FORMAT_OPTIONS = formatOptions(FORMATS);
-
-/**
- * The height the three menu cells take.
- *
- * `MenuSelect`'s underline trigger is 32px; `FieldCell`'s ruled row is 34 —
- * `pt-1.5 pb-[7px]` plus its hairline, the artboard's own numbers, recorded
- * again in `static-tournament-builder.tsx`. Two rules 2px apart in one four-up
- * read as a mistake, so the trigger takes the row's height rather than the row
- * taking the trigger's.
- */
-const MENU_TRIGGER = "h-[34px]";
 
 /** What `2b` draws: best of 3, no-ad. Explicit — never a default standing in
  *  for a null. */
@@ -931,7 +914,6 @@ export function DualFactsStep({
         <MenuSelect
           label="Site"
           variant="underline"
-          className={MENU_TRIGGER}
           value={draft.site}
           options={SITES}
           onChange={(site) => onEdit({ site })}
@@ -942,7 +924,6 @@ export function DualFactsStep({
         <MenuSelect
           label="Surface"
           variant="underline"
-          className={MENU_TRIGGER}
           value={draft.surface}
           options={SURFACES}
           onChange={(surface) => onEdit({ surface })}
@@ -956,7 +937,6 @@ export function DualFactsStep({
         <MenuSelect
           label="Format"
           variant="underline"
-          className={MENU_TRIGGER}
           value={draft.format.value}
           options={FORMAT_OPTIONS}
           onChange={(value) => {
@@ -1156,7 +1136,7 @@ function FieldCell({
 
   if (chrome === "none") {
     return (
-      <div className="block">
+      <div>
         {eyebrow}
         {children}
         {footnote}
