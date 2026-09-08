@@ -5,9 +5,13 @@ import type { EventKind } from "@/lib/schedule/types";
  *
  * A dual carries the opponent program's initials on `--surface-subtle`; a
  * tournament carries the DS tournament glyph, because there is no program to
- * show. Two sizes, drawn on two surfaces: 26px in the table's Event cell and
- * 48px at the head of the drawer. `radius-button` on both — the legend says
- * "6px radius" in as many words.
+ * show. Three sizes, drawn on three surfaces: 26px in the schedule table's
+ * Event cell (`schedule-table.tsx`), 32px in the new-dual picker's directory
+ * rows (`dual-school-step.tsx`'s `SchoolRow` — its one user), and 48px at the
+ * head of the drawer (`event-drawer.tsx`). 32 takes the same type scale as
+ * 26 — both are the "small" branch below, `large` stays reserved for 48.
+ * `radius-button` on all three — the legend says "6px radius" in as many
+ * words.
  */
 export function EventMark({
   kind,
@@ -16,7 +20,7 @@ export function EventMark({
 }: {
   kind: EventKind;
   name: string;
-  size: 26 | 48;
+  size: 26 | 32 | 48;
 }) {
   const large = size === 48;
   return (
@@ -25,7 +29,7 @@ export function EventMark({
       className={
         large
           ? "flex size-12 shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] text-[14px] font-medium tracking-[0.2px] text-[var(--ink-700)]"
-          : "flex size-[26px] shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] text-[9px] font-medium text-[var(--ink-700)]"
+          : `flex shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] text-[9px] font-medium text-[var(--ink-700)] ${size === 32 ? "size-8" : "size-[26px]"}`
       }
     >
       {kind === "tournament" ? (

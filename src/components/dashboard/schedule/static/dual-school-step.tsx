@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ChevronRight, Plus, Search } from "lucide-react";
+import { Check, ChevronRight, Plus, Search } from "lucide-react";
 import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
 import { cn } from "@/lib/utils";
 import {
@@ -532,20 +532,27 @@ function SchoolRow({
       onClick={onSelect}
       aria-pressed={selected}
       className={cn(
-        "-mx-3 grid cursor-pointer grid-cols-[26px_minmax(0,1fr)_96px_13px] items-center gap-4",
+        "-mx-3 grid cursor-pointer grid-cols-[32px_minmax(0,1fr)_96px_13px] items-center gap-4",
         "rounded-[var(--radius-element)] px-3 py-2.5 text-left",
         "transition-colors duration-[var(--duration-hover)]",
+        // `--surface-muted` (#FAFAFA) measured invisible against the white
+        // card this row sits on — a wash that leaves the selected row
+        // indistinguishable from the rest of the list. `--surface-subtle`
+        // (#F5F5F5) is the same wash the mark itself sits on, and is the one
+        // that actually reads at rest.
         selected
-          ? "bg-[var(--surface-muted)]"
-          : "hover:bg-[var(--surface-muted)]"
+          ? "bg-[var(--surface-subtle)]"
+          : "hover:bg-[var(--surface-subtle)]"
       )}
     >
       {/* The same mark the schedule table draws for the same opponent
-          (`schedule-table.tsx`), at the same 26px. Picking a school here and
-          finding it on the schedule afterwards should be recognising one
-          thing, not reading two names — which is the whole job a monogram
-          does in a product with no crests to draw. */}
-      <EventMark kind="dual" name={program.schoolName} size={26} />
+          (`schedule-table.tsx`), one size up from its 26px — this row's
+          denser three-line subline needs the extra weight the table's
+          single-line cell does not. Picking a school here and finding it on
+          the schedule afterwards should still be recognising one thing, not
+          reading two names — which is the whole job a monogram does in a
+          product with no crests to draw. */}
+      <EventMark kind="dual" name={program.schoolName} size={32} />
       <span className="min-w-0">
         <span
           className={cn(
@@ -571,11 +578,24 @@ function SchoolRow({
             off rather than formatted. */}
         {history.lastPlayedOn ? history.lastPlayedOn.slice(5) : "—"}
       </span>
-      <ChevronRight
-        size={13}
-        strokeWidth={1.5}
-        className="text-[var(--ink-300)]"
-      />
+      {/* Selected-row check is Signal Blue, site-wide (design system SKILL.md)
+          — the same 13px Lucide `check` every menu and card uses for "chosen".
+          The chevron is what an unselected row draws instead; the two never
+          show together. */}
+      {selected ? (
+        <Check
+          size={13}
+          strokeWidth={2}
+          aria-hidden="true"
+          className="text-[var(--blue)]"
+        />
+      ) : (
+        <ChevronRight
+          size={13}
+          strokeWidth={1.5}
+          className="text-[var(--ink-300)]"
+        />
+      )}
     </button>
   );
 }

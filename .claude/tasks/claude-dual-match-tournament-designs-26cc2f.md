@@ -286,7 +286,7 @@ need it.
 - **notes:** From `work/add-event-polish/03_plan/output/plan.md` step 1. Harness: `src/app/dev-preview/chooser/page.tsx` (untracked — a fresh worktree will not have it; copy it in from the main checkout, dev server `npx next dev -p 3131`). Non-goals: no `centered` prop on the shell unless the invariant check fails; no change to the other two callers.
 
 ## T23 · School rows: 32px mark, subtle wash, Signal Blue check
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/schedule/static/event-mark.tsx, src/components/dashboard/schedule/static/dual-school-step.tsx
 - **done when:**
