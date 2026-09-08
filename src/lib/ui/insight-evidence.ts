@@ -1,4 +1,18 @@
-import type { KpiCardData } from "@/lib/data/performance-server";
+/**
+ * What the evidence line actually reads off a tile.
+ *
+ * Structural on purpose: the personal Home passes `EvidenceCard` from the
+ * performance model and Team Home passes its season tiles adapted, and
+ * neither needs to know about the other's type. Widening the reader beat
+ * fattening one of the data types into the other's shape.
+ */
+export interface EvidenceCard {
+  label: string;
+  value: string;
+  change: number;
+  changeLabel: string;
+  lowerIsBetter?: boolean;
+}
 
 /**
  * The Focus card's evidence line, composed from real computed stats.
@@ -48,7 +62,7 @@ function inSentence(label: string): string {
 }
 
 /** A card carrying a value we can actually print. */
-function isReportable(card: KpiCardData): boolean {
+function isReportable(card: EvidenceCard): boolean {
   return card.value !== "—" && card.value.trim() !== "";
 }
 
@@ -58,8 +72,8 @@ function isReportable(card: KpiCardData): boolean {
  * substantial numbers lead.
  */
 function pickEvidenceCards(
-  kpiCards: KpiCardData[]
-): { first: KpiCardData; second: KpiCardData | undefined; withDeltas: boolean } | null {
+  kpiCards: EvidenceCard[]
+): { first: EvidenceCard; second: EvidenceCard | undefined; withDeltas: boolean } | null {
   const reportable = kpiCards.filter(isReportable);
   if (reportable.length === 0) return null;
 
@@ -85,7 +99,7 @@ export interface InsightEvidence {
 
 /** The evidence line and the caption that names what it measured. */
 export function buildInsightEvidenceWithCaption(
-  kpiCards: KpiCardData[],
+  kpiCards: EvidenceCard[],
   matchCount: number
 ): InsightEvidence | null {
   if (matchCount === 0) return null;

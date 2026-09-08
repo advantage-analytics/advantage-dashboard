@@ -29,6 +29,8 @@ const VALUE_RULE = "mb-1.5 h-0.5 w-[34px] shrink-0 rounded-[1px] bg-[var(--ink-2
 export function KpiStripEmpty({
   awaitingReport = false,
   labels = SEASON_KPI_LABELS,
+  hint: hintOverride,
+  ariaLabel,
 }: {
   /**
    * A match is filed but nothing has been analysed yet. "After your first
@@ -41,11 +43,21 @@ export function KpiStripEmpty({
    * five by default — the same five on Home and on a player's profile.
    */
   labels?: readonly string[];
+  /**
+   * A sentence the page owns, for a state the boolean cannot name — Team
+   * Home's "reports are back, none of them on a dual lineup". Wins over both
+   * defaults; the title row there counts those reports, so the strip has to
+   * say why it does not.
+   */
+  hint?: string;
+  /** See `KpiTileStrip`. */
+  ariaLabel?: string;
 }) {
-  const hint = awaitingReport ? "When the report lands" : "After your first match";
+  const hint =
+    hintOverride ?? (awaitingReport ? "When the report lands" : "After your first match");
 
   return (
-    <KpiTileStrip collapse>
+    <KpiTileStrip collapse ariaLabel={ariaLabel}>
       {labels.map((label, index) => (
         <div
           key={label}

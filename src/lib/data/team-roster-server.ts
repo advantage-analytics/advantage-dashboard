@@ -265,10 +265,10 @@ interface DbStatRow {
  * Used to take neither argument: it read `new Date()` directly and compared
  * with the `Date` object's own local getters, which is the SERVER's zone —
  * UTC on Vercel — regardless of which program's "today" was being asked
- * about. Team Home reads this through `claimedTodayNames()` below with the
- * program's own zone and the one `now` its whole read is built on; a second
- * clock here is exactly the failure `getTeamHomeData`'s single-clock comment
- * exists to prevent. See `zonedDayString`.
+ * about. `getRosterData` reads it with the program's own zone and the one
+ * `now` its whole read is built on; a second clock here is exactly the
+ * failure `getTeamHomeData`'s single-clock comment exists to prevent. See
+ * `zonedDayString`.
  */
 function isToday(iso: string | null, now: Date, timeZone: string): boolean {
   if (!iso) return false;
@@ -315,35 +315,6 @@ function emptyValues(): Record<string, number | null> {
 function fallbackName(email: string | null): string {
   if (!email) return "Unnamed member";
   return email.split("@")[0] || email;
-}
-
-/**
- * Everyone on the roster who bound a login to a profile today, by name.
- *
- * Team Home's roster card reads this over the rows it has already fetched from
- * the same `program_roster_full` RPC — so "claimed today" means one thing on
- * both surfaces, resolved on one clock, with one answer for a row whose name is
- * missing. A second definition of "today" is a pill that shows on one page and
- * not the other for the same person on the same afternoon.
- *
- * `now` and `timeZone` come from the caller rather than being read in here —
- * `getTeamHomeData` hands over the one `now` its whole read is built on and
- * the program's own zone, the same two arguments `localDay`/`weekBounds`
- * already take, so the weekend dual sheet and this pill cannot disagree about
- * what day it is.
- */
-export function claimedTodayNames(
-  rows: {
-    display_name: string | null;
-    email: string | null;
-    claimed_at: string | null;
-  }[],
-  now: Date,
-  timeZone: string
-): string[] {
-  return rows
-    .filter((row) => isToday(row.claimed_at, now, timeZone))
-    .map((row) => row.display_name?.trim() || fallbackName(row.email));
 }
 
 export const getRosterData = cache(async function getRosterData(

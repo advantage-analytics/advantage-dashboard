@@ -190,7 +190,7 @@ async function fetchPlayerStatRows(
  * One row per match — the side the player actually occupied — out of the
  * both-seat rows the fetch hands over.
  *
- * Pure — no query, no Supabase import — the split `team-kpi.ts` keeps, and for
+ * Pure — no query, no Supabase import — the split `aggregate.ts` keeps, and for
  * the same reason: the rule that decides which row is a player's OWN is the part
  * worth pinning, and it should be testable with plain objects rather than a
  * database.
@@ -410,7 +410,7 @@ function rowTime(row: PlayerStatRow): number {
 /**
  * The two figures behind one match's KPI tiles, from one player's stat rows.
  *
- * Pure — no query, no Supabase import — the same split `team-kpi.ts` keeps, and
+ * Pure — no query, no Supabase import — the same split `aggregate.ts` keeps, and
  * for the same reason: the rules that decide what a figure may CLAIM are the
  * part worth testing, and they should be testable without a database.
  *

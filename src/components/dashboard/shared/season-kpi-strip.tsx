@@ -132,11 +132,31 @@ export function SeasonKpiStrip({
   kpis,
   hasStats,
   matchesPlayed,
+  awaitingReport,
+  emptyHint,
+  ariaLabel = "Season summary",
 }: {
   /** Every tile in catalogue order; this component shows the chosen ones. */
   kpis: ProfileKpi[];
   hasStats: boolean;
   matchesPlayed: number;
+  /**
+   * A match is filed and nothing has come back yet — the empty strip's
+   * "When the report lands".
+   *
+   * Stated by the page, not inferred from `matchesPlayed`, because that
+   * number does not mean the same thing to both callers: the personal Home
+   * counts every own match analyzed or not, while Team Home counts only the
+   * analyzed dual matches its strip averages — which is zero in exactly the
+   * state this names. Inferring it told a program with a match in the
+   * pipeline "After your first match" while the title row said a report was
+   * on its way.
+   */
+  awaitingReport?: boolean;
+  /** Passed through to the empty strip — see `KpiStripEmpty`'s `hint`. */
+  emptyHint?: string;
+  /** Names the region — see `KpiTileStrip`. Team Home says "Program summary". */
+  ariaLabel?: string;
 }) {
   const shouldReduceMotion = useReducedMotion();
   const skipAnimation = shouldReduceMotion || hasAnimatedOnce;
@@ -179,7 +199,9 @@ export function SeasonKpiStrip({
     // report, and naming five they did not choose would break that promise.
     return (
       <KpiStripEmpty
-        awaitingReport={matchesPlayed > 0}
+        awaitingReport={awaitingReport ?? matchesPlayed > 0}
+        hint={emptyHint}
+        ariaLabel={ariaLabel}
         labels={visibleKeys.map((key) => SEASON_KPI_BY_KEY.get(key)?.label ?? key)}
       />
     );
@@ -207,7 +229,7 @@ export function SeasonKpiStrip({
           width — the rail takes 64px or 232px of the window, so the same
           monitor holds five tiles with one and four with the other. Without
           it "Break points saved" wraps and the whole strip grows a row. */}
-      <KpiTileStrip collapse>
+      <KpiTileStrip collapse ariaLabel={ariaLabel}>
         {shown.map((kpi, index) => (
           <KpiTile
             key={kpi.key}

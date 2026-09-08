@@ -4,13 +4,11 @@ import { getPersonalMatchData } from "@/lib/data/personal-matches-server";
 import { statKey } from "@/lib/data/aggregate";
 import { getMyPlayerIds, playerSide } from "@/lib/data/player-identity-server";
 import {
-  seasonKpis,
-  toStatRow,
-
+  seasonStrip,
+  statRowsByKey,
   type DbStatRow,
-  type ProfileKpi,
   type ProfileResult,
-  type ProfileStatRow,
+  type SeasonStrip,
 } from "@/lib/data/player-profile";
 
 /**
@@ -26,14 +24,15 @@ import {
  * and no tile mentions a team average: a personal workspace has neither, and
  * the strip is built so it never has to pretend otherwise.
  */
-export interface PersonalSeasonKpis {
-  kpis: ProfileKpi[];
-  /** Any stats row on the viewer's side — what turns the empty strip real. */
-  hasStats: boolean;
-  matchesPlayed: number;
-}
+export type PersonalSeasonKpis = SeasonStrip;
 
-const EMPTY: PersonalSeasonKpis = { kpis: [], hasStats: false, matchesPlayed: 0 };
+const EMPTY: PersonalSeasonKpis = {
+  kpis: [],
+  hasStats: false,
+  matchesPlayed: 0,
+  wins: 0,
+  losses: 0,
+};
 
 export const getPersonalSeasonKpis = cache(async function getPersonalSeasonKpis(
   userId: string
@@ -51,10 +50,7 @@ export const getPersonalSeasonKpis = cache(async function getPersonalSeasonKpis(
   });
   if (own.length === 0) return EMPTY;
 
-  const statsByKey = new Map<string, ProfileStatRow>();
-  for (const stat of statRows as unknown as DbStatRow[]) {
-    statsByKey.set(statKey(stat.match_id, stat.is_player1), toStatRow(stat));
-  }
+  const statsByKey = statRowsByKey(statRows as unknown as DbStatRow[]);
 
   const results: ProfileResult[] = own.map(({ match, isPlayer1 }) => ({
     id: match.id,
@@ -72,16 +68,5 @@ export const getPersonalSeasonKpis = cache(async function getPersonalSeasonKpis(
     stats: statsByKey.get(statKey(match.id, isPlayer1)) ?? null,
   }));
 
-  let wins = 0;
-  let losses = 0;
-  for (const result of results) {
-    if (result.won === true) wins++;
-    else if (result.won === false) losses++;
-  }
-
-  return {
-    kpis: seasonKpis(results, { wins, losses, duals: { wins: 0, losses: 0 } }),
-    hasStats: results.some((r) => r.stats !== null),
-    matchesPlayed: results.length,
-  };
+  return seasonStrip(results);
 });

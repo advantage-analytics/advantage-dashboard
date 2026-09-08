@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { Gauge } from "lucide-react";
-import { formatHoursShort, formatResetDate } from "@/lib/data/usage-format";
+import {
+  dualWeekendsLeft,
+  formatHoursShort,
+  formatResetDate,
+  secondsLeft,
+} from "@/lib/data/usage-format";
 
 /**
  * The workspace's budget, as the last line on a Home page.
@@ -29,6 +34,7 @@ export function UsageFooter({
   capSeconds,
   billingMonth,
   note,
+  dualWeekends = false,
 }: {
   usedSeconds: number;
   capSeconds: number;
@@ -41,10 +47,21 @@ export function UsageFooter({
   billingMonth: string;
   /** A trailing clause, e.g. "free through Dec 31, 2026". Omitted when absent. */
   note?: string;
+  /**
+   * Say what the hours buy, after a dash: "— about 3 dual weekends" (Platform
+   * Audit Ta3, Team Home). A flag rather than a formatted string, because the
+   * refusal that goes with it belongs here too: at fewer than one weekend's
+   * worth the clause is dropped entirely, since "about 0 dual weekends" reads
+   * as a verdict on the program rather than a figure. Off on the personal
+   * Home, where a dual is not the unit anybody plans in.
+   */
+  dualWeekends?: boolean;
 }) {
   // Clamped: an over-spend is a quota bug, and "-2 of 75 hours left" would
-  // report it to the viewer as if it were their problem.
-  const leftSeconds = Math.max(0, capSeconds - usedSeconds);
+  // report it to the viewer as if it were their problem. `secondsLeft` is that
+  // clamp, shared with every other surface that prints what is left.
+  const left = secondsLeft(usedSeconds, capSeconds);
+  const weekends = dualWeekends ? dualWeekendsLeft(left) : 0;
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-[var(--border-hairline)] pt-3">
@@ -55,9 +72,13 @@ export function UsageFooter({
       />
 
       <p className="text-[11px] text-[var(--ink-600)]">
-        <span className="tabular">{formatHoursShort(leftSeconds)}</span> of{" "}
+        <span className="tabular">{formatHoursShort(left)}</span> of{" "}
         <span className="tabular">{formatHoursShort(capSeconds)}</span> hours
-        left this month{note ? ` · ${note}` : ""}
+        left this month
+        {weekends > 0
+          ? ` — about ${weekends} dual ${weekends === 1 ? "weekend" : "weekends"}`
+          : ""}
+        {note ? ` · ${note}` : ""}
       </p>
 
       <span className="text-micro tabular ml-auto">

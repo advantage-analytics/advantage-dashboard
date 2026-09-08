@@ -23,8 +23,8 @@ import {
   lineHistoryFrom,
   resolveLine,
   resolveSchool,
-  seasonKpis,
-  toStatRow,
+  seasonStrip,
+  statRowsByKey,
   RECENT_WINDOW,
   STAT_COLUMNS,
   type DbStatRow,
@@ -366,11 +366,7 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
         "match_id",
         own.map((r) => r.match.id)
       );
-    const byKey = new Map<string, ProfileStatRow>();
-    for (const stat of (data ?? []) as unknown as DbStatRow[]) {
-      byKey.set(statKey(stat.match_id, stat.is_player1), toStatRow(stat));
-    }
-    return byKey;
+    return statRowsByKey((data ?? []) as unknown as DbStatRow[]);
   })();
 
   const entriesPromise = (async () => {
@@ -454,13 +450,9 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
     stats: statsByKey.get(statKey(match.id, isPlayer1)) ?? null,
   }));
 
-  let wins = 0;
-  let losses = 0;
-  for (const result of results) {
-    if (result.won === true) wins++;
-    else if (result.won === false) losses++;
-  }
   const duals = dualRecordFrom(results, entries, events);
+  const strip = seasonStrip(results, duals);
+  const { wins, losses } = strip;
 
   const toRow = (result: ProfileResult): ProfileMatchRow => {
     const entry = result.entryId ? entries.get(result.entryId) : null;
@@ -516,8 +508,8 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
       .slice(0, RECENT_WINDOW)
       .reverse()
       .map((r) => (r.won ? ("win" as const) : ("loss" as const))),
-    kpis: seasonKpis(results, { wins, losses, duals }),
-    hasStats: results.some((r) => r.stats !== null),
+    kpis: strip.kpis,
+    hasStats: strip.hasStats,
     lastMatch,
     history: results.map(toRow),
     lines: lineHistoryFrom(results, entries),
