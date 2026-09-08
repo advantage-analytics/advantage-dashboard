@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { DateField } from "@/components/ui/date-field";
 import type { SelectableMatch } from "@/lib/data/statistics-server";
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
@@ -97,20 +98,20 @@ export function MatchSelector({
                   Filter by date
                 </span>
                 <div className="flex items-center gap-2">
-                  <input
-                    type="date"
+                  <DateField
+                    label="From date"
+                    variant="boxed"
                     value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    className="text-[12px] text-[#0D0D0D] bg-[#F7F7F7] border border-[#F3F3F3] rounded-lg px-2.5 py-1.5 focus-visible:outline-none"
-                    aria-label="From date"
+                    onChange={setFromDate}
+                    max={toDate || undefined}
                   />
                   <span className="text-[12px] text-[#AAAAAA]">&rarr;</span>
-                  <input
-                    type="date"
+                  <DateField
+                    label="To date"
+                    variant="boxed"
                     value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    className="text-[12px] text-[#0D0D0D] bg-[#F7F7F7] border border-[#F3F3F3] rounded-lg px-2.5 py-1.5 focus-visible:outline-none"
-                    aria-label="To date"
+                    onChange={setToDate}
+                    min={fromDate || undefined}
                   />
                 </div>
                 {(fromDate || toDate) && (

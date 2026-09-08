@@ -48,7 +48,7 @@ ready).
 - **notes:** Plan step 2. The segment opt-out is earned by the blue fill being a real on-focus change, not by the field looking like an underline — see `focus.css` and the design skill's "underline opt-out". `tests/generate-map.spec.ts` fails on any route not in `MAP.md`, which is why the preview route must go before the gate.
 
 ## T28 · Migrate the statistics from/to dates
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T27
 - **files:** `src/components/dashboard/statistics/match-selector.tsx`
