@@ -971,7 +971,11 @@ function FieldCell({
   return (
     <div>
       <span className="eyebrow">{label}</span>
-      <span className="flex items-center border-b border-[var(--border-hairline)] pb-[7px] pt-1.5 transition-colors focus-within:border-b-2 focus-within:border-[var(--blue)] focus-within:pb-[6px]">
+      {/* 34px, the underline family's one height — the same reason the dual
+          builder's cell carries it: a row sized by its content stopped
+          matching its neighbours once the date brought a calendar button.
+          Borders are inside the box, so the 2px focus rule moves nothing. */}
+      <span className="flex h-[34px] items-center border-b border-[var(--border-hairline)] transition-colors focus-within:border-b-2 focus-within:border-[var(--blue)]">
         {children}
       </span>
     </div>

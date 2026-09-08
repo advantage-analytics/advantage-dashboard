@@ -1128,11 +1128,18 @@ function FieldCell({
     <div>
       {eyebrow}
       {/* `focus-within`, not `focus-visible`: the rule belongs to the row and
-          what it answers is focus landing on the control inside it. The 2px
-          rule takes a pixel back off the padding so the row does not grow as
-          it thickens, and the control inside opts out of the ring — the rule
-          going blue IS the one mark (`styles/design-system/focus.css`). */}
-      <span className="relative flex items-center border-b border-[var(--border-hairline)] pb-[7px] pt-1.5 focus-within:border-b-2 focus-within:border-[var(--blue)] focus-within:pb-[6px]">
+          what it answers is focus landing on the control inside it. The
+          control inside opts out of the ring — the rule going blue IS the one
+          mark (`styles/design-system/focus.css`).
+
+          34px, not padding around the content: this row sits in a four-up
+          beside three `MenuSelect` underline triggers, which are 34px, and a
+          rule whose height is whatever its content happens to be does not
+          line up with them. It did while the content was bare text; the date
+          brought a 28px calendar button with it and the row grew, leaving the
+          Date rule sitting ~7px below the other three. Borders are inside the
+          box, so thickening to 2px on focus moves nothing. */}
+      <span className="relative flex h-[34px] items-center border-b border-[var(--border-hairline)] focus-within:border-b-2 focus-within:border-[var(--blue)]">
         {children}
       </span>
       {footnote}
