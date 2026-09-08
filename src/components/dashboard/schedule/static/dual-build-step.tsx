@@ -1138,8 +1138,17 @@ function FieldCell({
           line up with them. It did while the content was bare text; the date
           brought a 28px calendar button with it and the row grew, leaving the
           Date rule sitting ~7px below the other three. Borders are inside the
-          box, so thickening to 2px on focus moves nothing. */}
-      <span className="relative flex h-[34px] items-center border-b border-[var(--border-hairline)] focus-within:border-b-2 focus-within:border-[var(--blue)]">
+          box, so thickening to 2px on focus moves nothing.
+
+          `--border-field`, not `--border-hairline`: this rule IS a field's
+          underline, and the field family draws it in that token —
+          `MenuSelect`'s underline trigger in the three cells beside this one,
+          `SettingsUnderlineInput`, `DateField`'s own `underline` variant. The
+          two are not interchangeable greys (#E5E5EA against #F3F3F3), so the
+          hairline read visibly fainter than its neighbours in the same row.
+          `--border-hairline` is for a divider between things, which is what
+          the rest of this file uses it for. */}
+      <span className="relative flex h-[34px] items-center border-b border-[var(--border-field)] focus-within:border-b-2 focus-within:border-[var(--blue)]">
         {children}
       </span>
       {footnote}

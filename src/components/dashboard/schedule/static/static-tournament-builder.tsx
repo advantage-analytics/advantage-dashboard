@@ -974,8 +974,11 @@ function FieldCell({
       {/* 34px, the underline family's one height — the same reason the dual
           builder's cell carries it: a row sized by its content stopped
           matching its neighbours once the date brought a calendar button.
-          Borders are inside the box, so the 2px focus rule moves nothing. */}
-      <span className="flex h-[34px] items-center border-b border-[var(--border-hairline)] transition-colors focus-within:border-b-2 focus-within:border-[var(--blue)]">
+          Borders are inside the box, so the 2px focus rule moves nothing.
+          `--border-field` is the field family's token — the same one
+          `MenuSelect` and `SettingsUnderlineInput` draw; `--border-hairline`
+          is a divider grey and read faintly against them. */}
+      <span className="flex h-[34px] items-center border-b border-[var(--border-field)] transition-colors focus-within:border-b-2 focus-within:border-[var(--blue)]">
         {children}
       </span>
     </div>
