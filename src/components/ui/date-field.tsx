@@ -1,6 +1,6 @@
 "use client";
 
-import { useImperativeHandle, useMemo, useRef } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import {
   Button,
   Calendar,
@@ -85,6 +85,7 @@ export function DateField({
   className,
   handleRef,
   emphasis = false,
+  onIncompleteChange,
 }: {
   /** Accessible name — the visible eyebrow or row label sits outside. */
   label: string;
@@ -111,6 +112,22 @@ export function DateField({
    * bound the caller to which element happens to draw it.
    */
   emphasis?: boolean;
+  /**
+   * Fires when the field starts or stops showing a blank segment.
+   *
+   * **A call site that saves a date needs this.** `onChange` reports complete
+   * dates only: clear one segment of `03/21/2026` and react-stately updates
+   * what is drawn without calling `setDate`, so the field reads `03/21/yyyy`
+   * while `value` still holds the old date. A form that trusts `value` alone
+   * then writes the date the person was in the middle of replacing, and
+   * nothing on screen says so. The native `<input type="date">` this replaced
+   * reported `""` the moment a component went missing, so `required` caught
+   * it; nothing catches it here.
+   *
+   * Refuse the submit while this is true. Do NOT respond by clearing `value` —
+   * the field is controlled, so that would blank the segments the person kept.
+   */
+  onIncompleteChange?: (incomplete: boolean) => void;
 }) {
   const groupRef = useRef<HTMLDivElement>(null);
 
@@ -136,6 +153,47 @@ export function DateField({
   // each render made every one of those memos miss and rebuilt the segments
   // through `Intl.DateTimeFormat` on a parent's every keystroke. Measured on
   // `useDateFieldState`, not assumed.
+  // Blank segments are watched in the DOM rather than in React state, and the
+  // reason is structural: `DateInput` creates the field state *below* this
+  // component and provides it on `DateFieldStateContext` inside its own
+  // subtree, so clearing a segment re-renders that subtree and never this one.
+  // An effect here would not run. `data-placeholder` is the attribute
+  // react-aria puts on a blank segment, and the same one the segment styling
+  // below already keys on — so if it ever changed, the placeholder colour
+  // would break in the same release, visibly, rather than this going quiet.
+  // Held in a ref so the observer below is built once. Call sites pass an
+  // inline arrow, so keying the effect on the callback itself would tear the
+  // observer down and rebuild it on every render of the form around it. The
+  // assignment is an effect rather than a line in the render body because
+  // writing a ref during render is a React 19 lint error, and this effect is
+  // declared first so it has already run when the observer's first report
+  // fires on mount.
+  const notifyIncomplete = useRef(onIncompleteChange);
+  useEffect(() => {
+    notifyIncomplete.current = onIncompleteChange;
+  }, [onIncompleteChange]);
+
+  useEffect(() => {
+    const group = groupRef.current;
+    if (!group) return;
+    let last: boolean | null = null;
+    const report = () => {
+      const incomplete = group.querySelector("[data-placeholder]") !== null;
+      if (incomplete === last) return;
+      last = incomplete;
+      notifyIncomplete.current?.(incomplete);
+    };
+    report();
+    const observer = new MutationObserver(report);
+    observer.observe(group, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["data-placeholder"],
+    });
+    return () => observer.disconnect();
+  }, []);
+
   const dateValue = useMemo(() => parseIsoDate(value), [value]);
   const minValue = useMemo(() => (min ? (parseIsoDate(min) ?? undefined) : undefined), [min]);
   const maxValue = useMemo(() => (max ? (parseIsoDate(max) ?? undefined) : undefined), [max]);

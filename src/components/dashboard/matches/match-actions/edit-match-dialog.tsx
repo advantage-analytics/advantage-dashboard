@@ -103,6 +103,11 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
   // segment inside its group. `DateFieldHandle` is the one method
   // focus-first-invalid needs.
   const dateRef = useRef<DateFieldHandle | null>(null);
+  // True while the date field is showing a blank segment. It is not derivable
+  // from `date`: react-stately reports complete dates only, so a half-cleared
+  // field leaves `date` holding the value being replaced. See the prop's own
+  // comment on `DateField`.
+  const [dateIncomplete, setDateIncomplete] = useState(false);
   const saveRef = useRef<HTMLButtonElement>(null);
   const p1ScoreRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const p2ScoreRefs = useRef<Record<number, HTMLInputElement | null>>({});
@@ -309,6 +314,16 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
     // focus move the server's `field: "date"` reply already produces.
     if (!date) {
       setFieldErrors({ date: "Date is required." });
+      focusField("date");
+      return;
+    }
+    // A half-cleared date is the dangerous one, and `!date` cannot see it.
+    // Clear the year of `03/21/2026` and the field draws `03/21/yyyy` while
+    // `date` still holds `2026-03-21` — so without this the dialog would
+    // quietly save the date the person was replacing and report success. The
+    // native input it replaced could not reach this state.
+    if (dateIncomplete) {
+      setFieldErrors({ date: "Finish the date." });
       focusField("date");
       return;
     }
@@ -610,6 +625,17 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
                     onChange={(next) => {
                       setDate(next);
                       if (fieldErrors.date) {
+                        const cleared = { ...fieldErrors };
+                        delete cleared.date;
+                        setFieldErrors(cleared);
+                      }
+                    }}
+                    onIncompleteChange={(incomplete) => {
+                      setDateIncomplete(incomplete);
+                      // Filling the last blank segment clears the complaint
+                      // the way typing into an empty field clears the required
+                      // one — the error should not outlive the state it named.
+                      if (!incomplete && fieldErrors.date) {
                         const cleared = { ...fieldErrors };
                         delete cleared.date;
                         setFieldErrors(cleared);
