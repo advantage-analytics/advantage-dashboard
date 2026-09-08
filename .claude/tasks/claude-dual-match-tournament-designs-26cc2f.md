@@ -34,7 +34,7 @@ ready).
 - **notes:** Plan step 1. The module is deliberately React-free so a server-side caller can normalise a date string without pulling react-aria into a Server Component.
 
 ## T27 · Build the `DateField` primitive
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T26
 - **files:** `src/components/ui/date-field.tsx` (new)
