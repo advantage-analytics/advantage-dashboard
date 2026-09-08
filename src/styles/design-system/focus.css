@@ -86,17 +86,43 @@
   [tabindex]:not([tabindex="-1"])
 ):focus-visible {
   outline: none;
+}
+
+/* The same `data-focus-ring="none"` opt-out the fields have, for the one
+   actionable that is drawn AS a field: `MenuSelect`'s underline trigger is a
+   <button> with a hairline beneath it, sitting in a row of underline inputs.
+   Its rule goes 2px blue on focus exactly as theirs do, so the ring on top of
+   it was the same stacked second mark the field opt-out exists to remove.
+   Split from `outline: none` above for the reason given under the field rule
+   below: an opt-out must never hand the control back to the browser's own
+   outline. */
+:where(
+  :is(a[href], button, [role="button"], summary, [tabindex]:not([tabindex="-1"])):not([data-focus-ring="none"])
+):focus-visible {
   box-shadow: var(--focus-ring);
 }
 
-/* `data-focus-ring="none"` opts one control out. It exists for composite
-   fields — an input inside a bordered box, where the box is what reads as the
-   field — so the wrapper can draw the ring and the inner control does not draw
-   a second one inset within it. Everything stays inside :where(), so this is
-   still specificity 0. Scoping the opt-out to :focus-visible matters: an
-   inline `style={{boxShadow:"none"}}` would suppress the focus ring AND any
-   shadow the component ever sets for its own reasons, silently. */
-:where(:is(input, select, textarea):not([data-focus-ring="none"])):focus-visible {
+/* The browser's own outline goes for EVERY field, opted out or not. Split
+   from the ring rule below on purpose: when the two lived in one rule, opting
+   out of the ring also opted out of `outline: none`, and a native `<select>`
+   under `data-focus-ring="none"` fell back to the UA's `outline: auto` — a
+   grey box drawn around the exact control whose blue rule had just earned the
+   right to be the only mark. Measured on `AdvSelect` (`outlineStyle: "auto"`
+   while focused, ring correctly gone). An `<input>` hid the same gap only
+   where its own classes happened to carry `outline-none`. */
+:where(input, select, textarea):focus-visible {
   outline: none;
+}
+
+/* `data-focus-ring="none"` opts one control out of the RING only. It exists
+   for composite fields — an input inside a bordered box, where the box is what
+   reads as the field — so the wrapper can draw the ring and the inner control
+   does not draw a second one inset within it, and for underline fields whose
+   own rule visibly changes at focus (see the note above). Everything stays
+   inside :where(), so this is still specificity 0. Scoping the opt-out to
+   :focus-visible matters: an inline `style={{boxShadow:"none"}}` would
+   suppress the focus ring AND any shadow the component ever sets for its own
+   reasons, silently. */
+:where(:is(input, select, textarea):not([data-focus-ring="none"])):focus-visible {
   box-shadow: var(--focus-ring-field);
 }
