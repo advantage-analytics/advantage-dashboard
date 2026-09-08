@@ -274,16 +274,16 @@ need it.
 - **notes:** This is the regression net for T18–T20's riskiest behaviour: a coach opening an event and pressing Save must never be told a line they did not touch has changed. Non-goals: no change to `entry-plan.ts`, no UI change.
 
 ## T22 · Chooser centred on the vertical axis too
-- **status:** blocked
+- **status:** todo
 - **model:** sonnet
 - **files:** src/components/dashboard/schedule/event-shell.tsx, src/components/dashboard/schedule/static/static-event-chooser.tsx
 - **done when:**
   - [ ] `EventShell`'s default (non-`flush`) body carries `flex flex-col` beside its existing `min-h-0 flex-1 overflow-y-auto px-12 pb-8 pt-[26px]`, and nothing else on the shell changes; its header comment gains one sentence saying the body is a flex column so a caller may centre with `my-auto`
   - [ ] The chooser's column wrapper reads `mx-auto my-auto w-full max-w-[820px] pt-[10px]`, and the two header-comment passages that describe the body as top-aligned / the artboard's `padding:36px 48px 0` are rewritten to say the column centres on both axes and why
-  - [ ] Measured on `/dev-preview/chooser` at 1440×900 and at 1200×800: the column's centre (`h1.left`→`[role=radiogroup].right`, `h1.top`→the aside's bottom) is within 1px of `[data-content-area]`'s centre on both axes — the numbers are written into the task log
-  - [ ] At a short viewport (1200×420) the column top-aligns at `26+10px` and the body scrolls (`scrollHeight > clientHeight`); a throwaway preview mounting `EventShell` with a tall block child in a 400px box shows the child's `top` = body `top + 26` and the body scrolling — the block-layout invariant `single-detail.tsx` and `match-detail-shell.tsx` rely on. If that does not hold, stop and report rather than adjusting either caller
+  - [ ] Measured on `/dev-preview/chooser` at 1440×900 and at 1200×800: the column's centre (`h1.left`→`[role=radiogroup].right`, `h1.top`→the aside's bottom) is within 2px of the centre of `EventShell`'s BODY — the `overflow-y-auto` div the column sits in, i.e. the region between the header and the footer, NOT `[data-content-area]`, which includes the ~75px footer — on both axes; the numbers are written into the task log (amended 2026-09-08: the body is the right box, approved on the harness by the author)
+  - [ ] At a short viewport (1200×420) the column top-aligns at `26+10px` and the body scrolls (`scrollHeight > clientHeight`); a throwaway preview mounting `EventShell` with a child holding ~40 lines of real text (NOT an empty box with an explicit height — a flex item's minimum size is min(content, specified), so an empty box shrinks to fit and proves nothing) in a 400px box shows the child's `top` = body `top + 26` and the body scrolling (amended 2026-09-08) — the block-layout invariant `single-detail.tsx` and `match-detail-shell.tsx` rely on. If that does not hold, stop and report rather than adjusting either caller
   - [ ] `npx tsc --noEmit` clean, `npm run lint` clean (the harness routes are untracked and `npm test` is not expected to pass until T25)
-- **notes:** From `work/add-event-polish/03_plan/output/plan.md` step 1. Harness: `src/app/dev-preview/chooser/page.tsx` (untracked — a fresh worktree will not have it; copy it in from the main checkout, dev server `npx next dev -p 3131`). Non-goals: no `centered` prop on the shell unless the invariant check fails; no change to the other two callers.
+- **notes:** Re-run: the first attempt's diff is stashed at 6b05d9dba4b870ef09cfe9a3ebb6aa04d7c81851 and was approved visually; `git stash apply <sha>` on a clean tree restores it, then re-measure. From `work/add-event-polish/03_plan/output/plan.md` step 1. Harness: `src/app/dev-preview/chooser/page.tsx` (untracked — a fresh worktree will not have it; copy it in from the main checkout, dev server `npx next dev -p 3131`). Non-goals: no `centered` prop on the shell unless the invariant check fails; no change to the other two callers.
 
 ## T23 · School rows: 32px mark, subtle wash, Signal Blue check
 - **status:** done
