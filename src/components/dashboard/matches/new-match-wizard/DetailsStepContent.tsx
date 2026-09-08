@@ -67,7 +67,7 @@ import { StatePill } from "@/components/ui/state-pill";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/data/match-utils";
 import { normalizedPersonName } from "@/lib/data/person-name";
-import { siteLabel } from "@/lib/schedule/format";
+import { siteLabel, todayISO } from "@/lib/schedule/format";
 import { saveOpponentPlayer } from "@/lib/schedule/actions";
 import {
   findLineOffers,
@@ -142,23 +142,13 @@ const ROUND_OPTIONS: readonly { value: string; label: string; short: string }[] 
   { value: "Finals", label: "Finals", short: "F" },
 ];
 
-/**
- * Today as `YYYY-MM-DD` in the browser's own calendar — the local day, not
- * the UTC one `toISOString()` would give, which is tomorrow for anyone west
- * of Greenwich after their evening begins. Same shape `useUploadMatchWizard`
- * defaults the date with.
- */
-function localIsoToday(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
 // `useSyncExternalStore` needs a subscription; the clock has nothing to push,
 // so this one never fires. Both are module-level so their identity is stable
-// across renders.
+// across renders. The snapshot is `todayISO` — the shared local-day helper,
+// whose own comment is the standing warning against reaching for the UTC
+// `toISOString()` form here. The server snapshot is `undefined` (no bound at
+// all) rather than a date, because a server-rendered "today" is the server's
+// day and would hydrate into a mismatch.
 const subscribeToNothing = () => () => {};
 const serverHasNoToday = () => undefined;
 
@@ -432,7 +422,7 @@ function DateCell({
   // on the field's invalid state. So the bound is a client-only read: the
   // server snapshot is "no bound", and React swaps in the browser's day on
   // the first client render, before anyone can type.
-  const today = useSyncExternalStore(subscribeToNothing, localIsoToday, serverHasNoToday);
+  const today = useSyncExternalStore(subscribeToNothing, todayISO, serverHasNoToday);
 
   return (
     <Cell label="Date" required tag={tag}>

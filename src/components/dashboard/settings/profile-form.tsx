@@ -14,6 +14,7 @@ import { saveProfile } from "@/components/dashboard/settings/actions";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { AdvSelect } from "@/components/ui/adv-select";
 import { DateField } from "@/components/ui/date-field";
+import { todayISO } from "@/lib/schedule/format";
 import { cn } from "@/lib/utils";
 
 /**
@@ -355,13 +356,7 @@ function ProfileField({
   // disabled-future-dates state has no reason to shift while the form is
   // open, and a value recomputed inline on every render would do exactly
   // that across a midnight boundary.
-  const maxDate = useMemo(() => {
-    const now = new Date();
-    const year = String(now.getFullYear()).padStart(4, "0");
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }, []);
+  const maxDate = useMemo(() => todayISO(), []);
 
   return (
     <SettingsField
@@ -383,23 +378,17 @@ function ProfileField({
       }
     >
       {isDate ? (
-        // `DateField` draws its own on-focus emphasis (the underline family's
-        // focus-visible exception in focus.css), but has no `emphasis` prop
-        // for a static "this is missing" state the way `SettingsUnderlineInput`
-        // does. The `[role=group]` selector reaches the same wrapper that
-        // draws the hairline/rule, at higher specificity than its own
-        // `border-b` class, so the two branches stay visually identical
-        // without stacking a second indicator on top of the focus rule.
+        // `emphasis` is the same prop name `SettingsUnderlineInput` takes
+        // below, and means the same thing: draw the rule 2px blue at rest
+        // because the page is asking for this field. The two branches stay
+        // visually identical, and neither restyles the other's internals.
         <DateField
           label={label}
           variant="underline"
           value={value}
           onChange={onChange}
           max={maxDate}
-          className={cn(
-            missing &&
-              "[&_[role=group]]:border-b-2 [&_[role=group]]:border-[var(--blue)]"
-          )}
+          emphasis={missing}
         />
       ) : (
         <SettingsUnderlineInput

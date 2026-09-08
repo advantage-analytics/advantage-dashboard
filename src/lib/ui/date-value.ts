@@ -1,4 +1,4 @@
-import { CalendarDate } from '@internationalized/date';
+import { CalendarDate, parseDate } from '@internationalized/date';
 
 /**
  * The two functions that know the product's date wire format: `YYYY-MM-DD`,
@@ -10,41 +10,34 @@ import { CalendarDate } from '@internationalized/date';
  * bundle to do it.
  */
 
-const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
-
 /**
  * `""`, a malformed string and an impossible date (`2026-02-30`) all return
  * `null` — never a throw. A bad value in the database has to render an empty
  * field, because a throw here happens inside a render and takes the page with
  * it.
  *
- * The library is not trusted to do the rejecting: `parseDate` throws on
- * `2026-02-30`, but `new CalendarDate(2026, 2, 30)` silently clamps to the
- * 28th. Confirming the parsed fields round-trip to the numbers we were handed
- * catches both the clamp and any future change of heart about which inputs the
- * library tolerates.
+ * `parseDate` is strict, which is the whole reason this wraps it rather than
+ * validating by hand. Measured on the library, not assumed: it rejects
+ * `2026-02-30` and `2025-02-29` as out of range, `2026-13-01` on the month,
+ * and `""`, `2026-2-3` and `2026-09-26T10:00` as malformed, while accepting
+ * `2024-02-29`. What must NOT be used is the `CalendarDate` constructor —
+ * `new CalendarDate(2026, 2, 30)` silently clamps to the 28th, and an earlier
+ * draft of this file hand-rolled a field round-trip to catch exactly that.
+ * Not calling the constructor removes the need for the check.
  */
 export function parseIsoDate(value: string): CalendarDate | null {
-  const match = ISO_DATE.exec(value);
-  if (!match) return null;
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-
-  const date = new CalendarDate(year, month, day);
-  if (date.year !== year || date.month !== month || date.day !== day) return null;
-
-  return date;
+  try {
+    return parseDate(value);
+  } catch {
+    return null;
+  }
 }
 
-/** The inverse. `null` — an empty field — is the empty string, not `"null"`. */
+/**
+ * The inverse. `null` — an empty field — is the empty string, not `"null"`.
+ * `CalendarDate.toString()` is already the ISO form and already pads, year
+ * included (`new CalendarDate(26, 9, 6)` prints `0026-09-06`).
+ */
 export function formatIsoDate(value: CalendarDate | null): string {
-  if (!value) return '';
-
-  const year = String(value.year).padStart(4, '0');
-  const month = String(value.month).padStart(2, '0');
-  const day = String(value.day).padStart(2, '0');
-
-  return `${year}-${month}-${day}`;
+  return value ? value.toString() : '';
 }

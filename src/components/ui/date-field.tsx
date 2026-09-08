@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useImperativeHandle, useMemo, useRef } from "react";
 import {
   Button,
   Calendar,
@@ -84,6 +84,7 @@ export function DateField({
   required = false,
   className,
   handleRef,
+  emphasis = false,
 }: {
   /** Accessible name — the visible eyebrow or row label sits outside. */
   label: string;
@@ -102,37 +103,50 @@ export function DateField({
   className?: string;
   /** Filled with `{ focus() }` so a dialog can send focus here as the first invalid field. */
   handleRef?: React.RefObject<DateFieldHandle | null>;
+  /**
+   * Draw the `underline` rule 2px blue at rest — a field the page is asking
+   * for, matching `SettingsUnderlineInput`'s prop of the same name. It exists
+   * so a call site can say what it wants rather than reach through this
+   * component with a descendant selector to restyle the rule itself; that
+   * bound the caller to which element happens to draw it.
+   */
+  emphasis?: boolean;
 }) {
   const groupRef = useRef<HTMLDivElement>(null);
 
   // The first tabbable thing in the group is the first segment; the calendar
-  // button comes after it in document order.
-  const focus = useCallback(() => {
-    groupRef.current?.querySelector<HTMLElement>('[tabindex="0"]')?.focus();
-  }, []);
-
-  useEffect(() => {
-    if (!handleRef) return;
-    handleRef.current = { focus };
-    return () => {
-      handleRef.current = null;
-    };
-  }, [handleRef, focus]);
+  // button comes after it in document order. `useImperativeHandle` is the API
+  // for filling a caller's ref — it also clears it on unmount, which the
+  // hand-rolled effect had to remember to do.
+  useImperativeHandle(
+    handleRef,
+    () => ({
+      focus: () => groupRef.current?.querySelector<HTMLElement>('[tabindex="0"]')?.focus(),
+    }),
+    []
+  );
 
   // The one translation in each direction. A `null` from the library — the
   // field cleared — becomes `""`, never a dropped update.
-  const handleChange = useCallback(
-    (next: CalendarDate | null) => onChange(formatIsoDate(next)),
-    [onChange]
-  );
+  const handleChange = (next: CalendarDate | null) => onChange(formatIsoDate(next));
+
+  // Memoised on the ISO strings, not recomputed per render. `react-stately`
+  // memoises the segment list, the formatted parts and the bound validation on
+  // the identity of these `CalendarDate` objects — so handing it a fresh one
+  // each render made every one of those memos miss and rebuilt the segments
+  // through `Intl.DateTimeFormat` on a parent's every keystroke. Measured on
+  // `useDateFieldState`, not assumed.
+  const dateValue = useMemo(() => parseIsoDate(value), [value]);
+  const minValue = useMemo(() => (min ? (parseIsoDate(min) ?? undefined) : undefined), [min]);
+  const maxValue = useMemo(() => (max ? (parseIsoDate(max) ?? undefined) : undefined), [max]);
 
   return (
     <DatePicker
       aria-label={label}
-      value={parseIsoDate(value)}
+      value={dateValue}
       onChange={handleChange}
-      minValue={min ? (parseIsoDate(min) ?? undefined) : undefined}
-      maxValue={max ? (parseIsoDate(max) ?? undefined) : undefined}
+      minValue={minValue}
+      maxValue={maxValue}
       isDisabled={disabled}
       isRequired={required}
       // "native" (the default) only reports a bound violation on form submit;
@@ -161,7 +175,10 @@ export function DateField({
             // are not focused then, but the field is still the thing being
             // edited. Error owns the colour; focus owns the weight.
             cn(
-              "h-[34px] w-full border-b border-[var(--border-field)]",
+              "h-[34px] w-full border-b",
+              emphasis
+                ? "border-b-2 border-[var(--blue)]"
+                : "border-[var(--border-field)]",
               "focus-within:border-b-2 focus-within:border-[var(--blue)]",
               "group-data-[open]/date:border-b-2 group-data-[open]/date:border-[var(--blue)]",
               "data-[invalid]:border-[var(--error)] data-[invalid]:focus-within:border-[var(--error)]"

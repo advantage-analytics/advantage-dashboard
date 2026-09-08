@@ -15,6 +15,16 @@ const nextConfig: NextConfig = {
     'openai',
     '@azure/storage-blob',
   ],
+  // `react-aria-components` is a 60-component barrel: importing `DatePicker`
+  // from it pulls the whole export graph — 106 modules against the 25 the
+  // date field actually reaches. Next optimises a built-in list of packages
+  // this way (lucide-react, recharts) but not this one, and dev never
+  // tree-shakes at all, so every route holding a `DateField` paid for the
+  // barrel. The package publishes per-component subpaths, which is what makes
+  // the rewrite resolve.
+  experimental: {
+    optimizePackageImports: ['react-aria-components'],
+  },
   // Turbopack configuration (Next.js 16+ uses Turbopack by default)
   turbopack: {
     // Turbopack will handle the dynamic imports correctly
