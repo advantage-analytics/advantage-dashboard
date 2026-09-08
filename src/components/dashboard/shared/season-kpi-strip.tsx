@@ -132,11 +132,14 @@ export function SeasonKpiStrip({
   kpis,
   hasStats,
   matchesPlayed,
+  emptyHint,
 }: {
   /** Every tile in catalogue order; this component shows the chosen ones. */
   kpis: ProfileKpi[];
   hasStats: boolean;
   matchesPlayed: number;
+  /** Passed through to the empty strip — see `KpiStripEmpty`'s `hint`. */
+  emptyHint?: string;
 }) {
   const shouldReduceMotion = useReducedMotion();
   const skipAnimation = shouldReduceMotion || hasAnimatedOnce;
@@ -180,6 +183,7 @@ export function SeasonKpiStrip({
     return (
       <KpiStripEmpty
         awaitingReport={matchesPlayed > 0}
+        hint={emptyHint}
         labels={visibleKeys.map((key) => SEASON_KPI_BY_KEY.get(key)?.label ?? key)}
       />
     );

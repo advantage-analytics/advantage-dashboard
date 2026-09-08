@@ -14,10 +14,19 @@ import { EmptyMark } from "@/components/ui/empty-mark";
  *
  * No `"use client"`: it has no state, so a server-rendered card can draw it.
  */
-export function FormTicks({ form }: { form: readonly ("win" | "loss")[] }) {
-  if (form.length === 0) {
-    return <EmptyMark label="No form yet" />;
-  }
+export function FormTicks({
+  form,
+  empty = <EmptyMark label="No form yet" />,
+}: {
+  form: readonly ("win" | "loss")[];
+  /**
+   * What to draw for no results at all. The roster's em dash by default;
+   * Team Home's cards pass `null`, where the strip sits inside a line that
+   * already says there is nothing yet and a second mark would be noise.
+   */
+  empty?: React.ReactNode;
+}) {
+  if (form.length === 0) return <>{empty}</>;
   return (
     <>
       <span className="sr-only">

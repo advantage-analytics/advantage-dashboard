@@ -10,6 +10,10 @@ import {
   ResponsiveContainer,
   Dot,
 } from "recharts";
+import {
+  DARK_READOUT_CLASS,
+  DARK_READOUT_STYLE,
+} from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { useReducedMotion } from "framer-motion";
 import type { KpiFormat } from "@/lib/data/performance-server";
 
@@ -52,20 +56,19 @@ function CustomTooltip({ active, payload, format }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
   const dateLabel = formatDate(d.date);
+  // The report page's dark chart readout, by decision — every chart mark in
+  // the product opens the same black box, and this draws its skin from
+  // `chart-tooltip.tsx` rather than restating it.
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-xl px-3 py-2.5 shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
-      <p className="text-[12px] font-medium text-[#0D0D0D] leading-none truncate max-w-[180px]">
+    <div className={`flex flex-col gap-1 px-3 py-2.5 ${DARK_READOUT_CLASS}`} style={DARK_READOUT_STYLE}>
+      <p className="max-w-[180px] truncate text-[12px] font-medium leading-none text-white">
         {d.opponent}
       </p>
       {dateLabel && (
-        <p className="text-[11px] font-normal text-[#AAAAAA] mt-1 leading-none">
-          {dateLabel}
-        </p>
+        <p className="tabular text-[11px] leading-none text-white/[0.64]">{dateLabel}</p>
       )}
-      <p className="text-[11px] font-normal text-[#71717A] mt-1.5 leading-none">
-        <span className="font-medium text-[#3B82F6] tabular-nums">
-          {formatValue(d.value, format)}
-        </span>
+      <p className="tabular pt-0.5 text-[11px] font-medium leading-none text-white">
+        {formatValue(d.value, format)}
       </p>
     </div>
   );

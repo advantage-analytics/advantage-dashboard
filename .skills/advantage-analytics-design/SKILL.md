@@ -614,6 +614,8 @@ w-px h-10 rounded-full shrink-0
 
 Tooltips over visualizations (court dots, heatmap cells, serve zones) use a consistent floating box — no caret/arrow. This is the chart-hover box only: every icon-only *control* answers hover with the dark `Tooltip` (Navigation → Dark Tooltip), never this one.
 
+**Ratified 2026-09-07 (design owner), supersedes the white box below for chart marks:** a hovered chart mark — a bar segment, a heatmap or mosaic cell, a sparkline point — opens the **dark readout** the report page's chart cards draw (`matches/match-detail/chart-tooltip.tsx`: `--ink-900`, 12px radius, `--shadow-dropdown`, `px-3 py-2.5`, a 12px white medium title over 11px lines at 64% white; export `DARK_READOUT_CLASS` / `DARK_READOUT_STYLE` for a box that positions itself). *Shipped:* Team Home's court record, the KPI detail chart. *Still white, to be brought in line:* the court-dot and radar tooltips on match detail. The white box below remains the spec for a popover that carries controls or a legend, not for a hover readout.
+
 ```
 bg-white border border-[#F3F3F3] rounded-xl
 shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]

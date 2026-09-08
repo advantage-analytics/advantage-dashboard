@@ -43,6 +43,33 @@ export function formatEventSpan(startsOn: string, endsOn: string): string {
   return `${start.getDate()} ${startMonth} – ${end.getDate()} ${endMonth}`;
 }
 
+/**
+ * "Aug 8" — a schedule date in the matches list's own short form.
+ *
+ * Parsed as a local calendar day, like everything else in this file. Not
+ * `shortDate()` from `match-utils.ts`: that takes an instant, and a bare
+ * YYYY-MM-DD handed to it is read as UTC midnight, which west of Greenwich is
+ * the evening before — Team Home's dual history printed every dual a day
+ * early until this existed.
+ */
+export function formatEventShortDay(iso: string): string {
+  const date = localDate(iso);
+  return `${MONTHS[date.getMonth()]} ${date.getDate()}`;
+}
+
+/**
+ * "3/14" — a column header on Team Home's court-record mosaic.
+ *
+ * The narrowest true date: 9px is the type scale's floor and "Mar 14" at 9px
+ * is wider than the 24px column it heads, so the month goes numeric. Month
+ * first because the program is a US collegiate one, and every other date on
+ * the page ("Aug 8", "Sat, Aug 8") already leads with the month.
+ */
+export function formatEventNumericDay(iso: string): string {
+  const date = localDate(iso);
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
 /** "Fri 26 Sep" — the hero's longer form. */
 export function formatEventDay(iso: string): string {
   const date = localDate(iso);

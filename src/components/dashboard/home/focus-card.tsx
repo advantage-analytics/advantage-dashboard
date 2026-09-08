@@ -60,7 +60,7 @@ export function FocusCard({
         <div className="flex-1" />
         <Link
           href="/dashboard/statistics"
-          className="whitespace-nowrap text-[11px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+          className="whitespace-nowrap text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
         >
           Open Statistics
         </Link>

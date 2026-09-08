@@ -28,17 +28,25 @@ interface HomeAiInsightProps {
    * cached insight is invalidated and a fresh one is generated.
    */
   cacheSignature?: string;
+  /**
+   * Which route writes the claim. The personal Home's by default; Team Home
+   * passes `/api/team-insight`, which reads the program rather than the
+   * viewer. The cache is keyed by it too, so a coach's personal claim and
+   * their program's never overwrite each other in the same session.
+   */
+  endpoint?: "/api/home-insight" | "/api/team-insight";
 }
 
 export default function HomeAiInsight({
   evidence,
   cacheSignature = "",
+  endpoint = "/api/home-insight",
 }: HomeAiInsightProps) {
   const [claim, setClaim] = useState("");
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    const cacheKey = `${CACHE_KEY}:${cacheSignature}`;
+    const cacheKey = `${CACHE_KEY}:${endpoint}:${cacheSignature}`;
     const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
       setClaim(cached);
@@ -53,7 +61,7 @@ export default function HomeAiInsight({
 
     async function load() {
       try {
-        const res = await fetch("/api/home-insight", {
+        const res = await fetch(endpoint, {
           method: "POST",
           signal: controller.signal,
         });
@@ -91,7 +99,7 @@ export default function HomeAiInsight({
     load();
 
     return () => controller.abort();
-  }, [cacheSignature]);
+  }, [cacheSignature, endpoint]);
 
   // Pa2's "quiet body" setting: the claim at 14px/300 — a size step over the
   // evidence rather than display type, so the page's largest type stays the
@@ -101,13 +109,19 @@ export default function HomeAiInsight({
   // size) belongs to `FocusCard`, which draws it for the empty card too.
   return (
     <div className="flex flex-col gap-3">
-      {/* Claim — one falsifiable sentence, the card's only title-weight text. */}
+      {/* Claim — one falsifiable sentence, the card's only title-weight text.
+
+          No measure cap on it. Pa2 drew the claim at ~30ch, and at 14px in a
+          360px card that cap sat 130px short of the edge — "Squad's serving is
+          improving, returns / are not." broke on the word before the card
+          did. The card's width is the measure; `pretty` still keeps the last
+          word off a line of its own. */}
       {error ? (
         <p className="text-body-sm">
           Couldn&apos;t load your insight right now. Try again in a moment.
         </p>
       ) : claim ? (
-        <span className={HOME_CLAIM_CLASS} style={{ maxWidth: "30ch", textWrap: "pretty" }}>
+        <span className={HOME_CLAIM_CLASS} style={{ textWrap: "pretty" }}>
           {claim}
         </span>
       ) : (
