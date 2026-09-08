@@ -377,8 +377,16 @@ export function KpiTile({
 export function KpiTileStrip({
   children,
   collapse = false,
+  ariaLabel,
 }: {
   children: ReactNode;
+  /**
+   * Names the region for a screen reader — "Season summary", "Program
+   * summary". Without it the strip is a run of unlabelled tile groups with
+   * nothing saying what they are a summary OF, which is most of the meaning
+   * on a page whose first screen is this strip.
+   */
+  ariaLabel?: string;
   /**
    * Show fewer tiles rather than narrower ones as the strip loses width.
    *
@@ -405,6 +413,8 @@ export function KpiTileStrip({
 }) {
   return (
     <div
+      role={ariaLabel ? "group" : undefined}
+      aria-label={ariaLabel}
       className={`${collapse ? "adv-kpi-strip " : ""}bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden`}
     >
       <div className="flex flex-wrap sm:flex-nowrap">{children}</div>

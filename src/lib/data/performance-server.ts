@@ -1,4 +1,5 @@
 import { meanOfPresent, num, pct, presentPairs } from "./aggregate";
+import type { EvidenceCard } from "@/lib/ui/insight-evidence";
 import { createClient } from "@/lib/supabase/server";
 import { getPersonalMatchData } from "@/lib/data/personal-matches-server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
@@ -52,10 +53,10 @@ export interface PerformanceProfileDimension {
  * home AI-insight card (which renders them as deterministic evidence chips), so the
  * prose and the chips always reflect the same underlying stats.
  */
-export function getTopKpiMovers(
-  kpiCards: KpiCardData[],
+export function getTopKpiMovers<T extends EvidenceCard>(
+  kpiCards: readonly T[],
   n: number,
-): KpiCardData[] {
+): T[] {
   return kpiCards
     .filter((k) => k.change !== 0 && k.value !== "—")
     .sort((a, b) => Math.abs(b.change) - Math.abs(a.change))

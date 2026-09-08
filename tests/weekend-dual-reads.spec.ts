@@ -24,7 +24,7 @@ import type {
  * is no narrower read left to guard against and no `resultsScope()` left to
  * hold. What remains worth pinning is the shape these two readers produce —
  * `buildWeekendDual`'s tally arithmetic and line structure, and
- * `scheduleRowsFrom` / `teamKpiCards` reading off the same entries — because nothing
+ * `scheduleRowsFrom` / `teamSeasonKpis` reading off the same entries — because nothing
  * about a wrong tally looks broken on screen; the card renders full
  * `--ink-900` numbers either way.
  */
@@ -226,7 +226,7 @@ test.describe('scheduleRowsFrom · the schedule list agrees with the dual sheet'
 });
 
 test.describe('teamSeasonKpis · the strip over a full read', () => {
-  test('averages the program side of every analyzed match', () => {
+  test('averages the program side of every analyzed dual match', () => {
     const { kpis } = teamSeasonKpis(
       SEASON,
       JOBS,

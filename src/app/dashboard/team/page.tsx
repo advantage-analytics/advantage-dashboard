@@ -145,16 +145,21 @@ export default async function TeamHomePage() {
           kpis={kpiCards}
           hasStats={kpiHasStats}
           matchesPlayed={kpiMatchCount}
-          /* Three states, three sentences: the shell's "When the report
-             lands" while a match is in and no report is back, its "After your
-             first match" on day zero, and this one where reports ARE back but
-             none sits on a dual lineup — the title row above counts those, so
-             the strip has to say why it does not. */
+          /* Three states, three sentences, and the page owns all three: "When
+             the report lands" while a match is in and nothing is back (the
+             strip cannot infer this — `kpiMatchCount` counts only the
+             analyzed dual matches it averages, which is zero here), "After
+             your first dual match" where reports ARE back but none sits on a
+             dual lineup — the title row above counts those, so the strip has
+             to say why it does not — and the shell's own "After your first
+             match" on day zero. */
+          awaitingReport={awaitingReport}
           emptyHint={
-            analyzedCount > 0 && kpiMatchCount === 0
+            analyzedCount > 0 && !awaitingReport
               ? "After your first dual match"
               : undefined
           }
+          ariaLabel="Program summary"
         />
 
         {/* Pa2's grid: 400px rail, 24px gutter, `items-start` so each column

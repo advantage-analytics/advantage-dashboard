@@ -1,4 +1,4 @@
-import { meanOfPresent, num, pct, presentPairs } from "@/lib/data/aggregate";
+import { meanOfPresent, num, pct, presentPairs, statKey } from "@/lib/data/aggregate";
 import { PLAYER_MEASURES } from "@/lib/data/player-measures";
 import type { KpiFormat } from "@/lib/data/performance-server";
 import type { MatchScore } from "@/lib/data/match-utils";
@@ -79,7 +79,7 @@ export interface DbStatRow {
   [measure: string]: unknown;
 }
 
-export function toStatRow(row: DbStatRow): ProfileStatRow {
+function toStatRow(row: DbStatRow): ProfileStatRow {
   return {
     rates: Object.fromEntries(
       PLAYER_MEASURES.map((m) => [m.key, pct(row[m.key] as string | number | null)])
@@ -486,6 +486,80 @@ export function clipText(text: string, max: number): string {
   const head = trimmed.slice(0, max - 1);
   const cut = head.lastIndexOf(" ");
   return `${(cut > max / 2 ? head.slice(0, cut) : head).replace(/[\s,;:—-]+$/, "")}…`;
+}
+
+/**
+ * The stats rows of a read, keyed the way a `ProfileResult` looks them up.
+ *
+ * Every caller of `seasonKpis` builds this same map before it can build its
+ * results, and each was writing the same three lines. `statKey` is the one
+ * spelling of "this match, this side" the aggregate layer already owns.
+ */
+export function statRowsByKey(rows: readonly DbStatRow[]): Map<string, ProfileStatRow> {
+  const byKey = new Map<string, ProfileStatRow>();
+  for (const row of rows) {
+    byKey.set(statKey(row.match_id, row.is_player1), toStatRow(row));
+  }
+  return byKey;
+}
+
+/** What a season strip needs to render, off the results behind it. */
+export interface SeasonStrip {
+  kpis: ProfileKpi[];
+  /** How many matches the strip read. */
+  matchesPlayed: number;
+  /**
+   * Whether any RATE tile holds a figure — what turns the empty strip real.
+   *
+   * Not "a stats row exists": a row whose measured columns are all null is a
+   * real state (a score-only import, a half-written report), and gating on
+   * its existence draws a strip of dashes under a title row claiming N
+   * matches analyzed. Record is excluded because it always has a value, so
+   * counting it would make this always true.
+   */
+  hasStats: boolean;
+  wins: number;
+  losses: number;
+}
+
+/**
+ * The strip, from a season already attributed to one side.
+ *
+ *
+ * Three loaders reach `seasonKpis` — the personal Home, a team player's
+ * profile and Team Home's squad — and what genuinely differs between them is
+ * which matches are theirs and what to call the other side. Everything after
+ * that was written out three times: tally the decided results, ask whether
+ * anything measured, count what was read. A change to any of those rules
+ * (what a retirement counts as, say) had to be found in three files.
+ */
+export function seasonStrip(
+  results: readonly ProfileResult[],
+  duals: { wins: number; losses: number } = { wins: 0, losses: 0 },
+  /**
+   * What the Record tile should read, where the results are not the record.
+   *
+   * Team Home is that case: its results are the analyzed dual matches the
+   * strip averages, so tallying them would headline "3–1" for a squad that
+   * is 6–2 in duals — the denominator being "matches we filmed" with nothing
+   * on the tile saying so. It passes the program's dual record instead.
+   */
+  record?: { wins: number; losses: number }
+): SeasonStrip {
+  let wins = 0;
+  let losses = 0;
+  for (const result of results) {
+    if (result.won === true) wins++;
+    else if (result.won === false) losses++;
+  }
+  const kpis = seasonKpis(results, { wins: record?.wins ?? wins, losses: record?.losses ?? losses, duals });
+  return {
+    kpis,
+    matchesPlayed: results.length,
+    hasStats: kpis.some((kpi) => kpi.key !== "record" && kpi.value !== "—"),
+    wins,
+    losses,
+  };
 }
 
 /**
