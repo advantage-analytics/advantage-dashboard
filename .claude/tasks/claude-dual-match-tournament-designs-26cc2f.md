@@ -85,7 +85,7 @@ ready).
 - **notes:** Plan step 5. This task is the last caller of `FieldCell`'s `glyph`, so the prop dies here rather than lingering with no callers.
 
 ## T31 · Migrate the tournament builder's Starts and Ends
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T27
 - **files:** `src/components/dashboard/schedule/static/static-tournament-builder.tsx`

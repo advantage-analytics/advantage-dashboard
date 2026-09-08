@@ -53,9 +53,10 @@
    field case below uses — same attribute, same specificity-0 rule, different
    reason for being safe: auth's `form-field.tsx`, `SettingsUnderlineInput`,
    the schedule lineup editor's `NameField`, the match-edit dialog's
-   `UnderlineField` children and `PlayerRow` name input, and the dual
-   builder's Date cell — whose `FieldCell` row answers `focus-within` with the
-   same 2px blue rule.
+   `UnderlineField` children and `PlayerRow` name input, the dual
+   builder's Date cell, and the tournament builder's four-up row (its two
+   `DateField` cells and the two `FieldSelect`s beside them) — each of whose
+   `FieldCell` rows answers `focus-within` with the same 2px blue rule.
 
    `ui/adv-select.tsx` is where that judgement is made once for the selects it
    owns, rather than at each call site: it sets the attribute from its `kind`
@@ -63,9 +64,9 @@
    because the rule under them thickens to 2px `--blue` on focus, and `boxed`
    keeps the ring because its border does not change.
 
-   It is NOT yet every native `<select>` in the product. Five still draw their
-   own — two in `schedule/static/static-tournament-builder.tsx`, two in
-   `schedule/add-result-dialog.tsx` and one in `schedule/add-result-row.tsx`
+   It is NOT yet every native `<select>` in the product. Three still draw their
+   own — two in `schedule/add-result-dialog.tsx` and one in
+   `schedule/add-result-row.tsx`
    (plus the deliberately `opacity-0` one in
    `settings/settings-inline-select.tsx`, which is a different pattern). Those
    all KEEP the ring, correctly: each sits under a hairline that never changes,

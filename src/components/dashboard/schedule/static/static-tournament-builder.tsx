@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DateField } from "@/components/ui/date-field";
 import {
   createTournament,
   updateTournament,
@@ -547,23 +548,30 @@ export function TournamentWeekendStep({
       {/* `repeat(4, 1fr)`, `gap:24px`, `margin-top:16px` — the artboard's. */}
       <div className="mt-4 grid grid-cols-4 gap-6">
         <FieldCell label="Starts">
-          <input
-            type="date"
+          <DateField
+            label="Starts"
+            variant="bare"
             value={draft.startsOn}
-            onChange={(event) => onEdit({ startsOn: event.target.value })}
-            className="mono w-full bg-transparent text-[13px] text-[var(--ink-900)] outline-none"
+            onChange={(startsOn) => onEdit({ startsOn })}
+            className="w-full"
           />
         </FieldCell>
         <FieldCell label="Ends">
-          <input
-            type="date"
+          <DateField
+            label="Ends"
+            variant="bare"
             value={draft.endsOn}
-            onChange={(event) => onEdit({ endsOn: event.target.value })}
-            className="mono w-full bg-transparent text-[13px] text-[var(--ink-900)] outline-none"
+            onChange={(endsOn) => onEdit({ endsOn })}
+            // A weekend cannot end before it starts. `undefined` while Starts
+            // is empty — `""` would be parsed as a bound and thrown away, and
+            // an empty Starts constrains nothing.
+            min={draft.startsOn || undefined}
+            className="w-full"
           />
         </FieldCell>
         <FieldCell label="Site">
           <FieldSelect
+            label="Site"
             value={draft.site}
             options={SITES}
             onChange={(value) => {
@@ -574,6 +582,7 @@ export function TournamentWeekendStep({
         </FieldCell>
         <FieldCell label="Format">
           <FieldSelect
+            label="Format"
             value={draft.format.value}
             options={FORMATS}
             onChange={(value) => {
@@ -934,9 +943,23 @@ const DRAWS: readonly string[] = [MAIN_DRAW, QUALIFYING];
 /**
  * One cell of the four-up row: `padding:6px 0 7px` under a hairline.
  *
- * A `<label>` rather than a `<div>`, because every cell holds a real control:
- * the eyebrow is the control's name, so it labels it rather than sitting beside
- * it, and no cell needs an `aria-label` repeating what is already on screen.
+ * A `<div>`, not a `<label>`, and the eyebrow is only the visible caption —
+ * every control inside names itself with the same string. It was a `<label>`
+ * while all four cells held a native control. Two of them now hold `DateField`,
+ * whose segments are `[tabindex]` divs (not labelable) sitting beside a real
+ * `<button>` for the calendar: a `<label>` wrapper forwards every click on a
+ * segment to that button, and the month segment becomes impossible to click
+ * into. So the wrapper stops labelling, and `FieldSelect` — which had no name
+ * of its own — takes a `label` and sets it as its `aria-label`. Dropping the
+ * wrapper without that would have left both selects unnamed with nothing
+ * visibly wrong.
+ *
+ * The rule answers focus, exactly as the dual builder's `FieldCell` does: 2px
+ * blue on `focus-within`, a pixel off the padding so the row does not grow.
+ * That change is what earns every control in here the right to drop the focus
+ * ring — see `styles/design-system/focus.css`. It is a pair, not a decoration:
+ * `DateField`'s segments opt out unconditionally, so a cell that did not answer
+ * focus would show no indicator at all.
  */
 function FieldCell({
   label,
@@ -946,12 +969,12 @@ function FieldCell({
   children: React.ReactNode;
 }) {
   return (
-    <label className="block">
+    <div>
       <span className="eyebrow">{label}</span>
-      <span className="flex items-center border-b border-[var(--border-hairline)] pb-[7px] pt-1.5">
+      <span className="flex items-center border-b border-[var(--border-hairline)] pb-[7px] pt-1.5 transition-colors focus-within:border-b-2 focus-within:border-[var(--blue)] focus-within:pb-[6px]">
         {children}
       </span>
-    </label>
+    </div>
   );
 }
 
@@ -962,12 +985,19 @@ function FieldCell({
  * value the app will store is in the document rather than implied by a label.
  * The chevron is the artboard's; `appearance-none` is what stops the platform
  * drawing a second one.
+ *
+ * `label` is the cell's eyebrow, repeated here as the `aria-label`. It is not
+ * duplication for its own sake: `FieldCell` is no longer a `<label>` (see
+ * there), so this is the only name the select has.
  */
 function FieldSelect({
+  label,
   value,
   options,
   onChange,
 }: {
+  /** The cell's eyebrow. The select's only accessible name. */
+  label: string;
   value: string;
   options: readonly { value: string; label: string }[];
   onChange: (value: string) => void;
@@ -975,8 +1005,14 @@ function FieldSelect({
   return (
     <>
       <select
+        aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        // The cell's rule now goes 2px blue on focus, so the neutral field
+        // ring inset inside it would be a second mark on a field that has
+        // already answered — the same opt-out the underline family takes
+        // (`styles/design-system/focus.css`).
+        data-focus-ring="none"
         className="w-full cursor-pointer appearance-none bg-transparent text-[13px] text-[var(--ink-900)] outline-none"
       >
         {options.map((option) => (
