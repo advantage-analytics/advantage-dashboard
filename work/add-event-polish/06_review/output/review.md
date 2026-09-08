@@ -1,6 +1,6 @@
 # Review — add-event-polish
 
-**Sign-off:** pending
+**Sign-off:** approved — by the author in chat ("looks good"), 2026-09-08, recorded here by the runner
 
 Target reviewed: the feature's own commit range, `01a6b92..2a86f09`
 (the four tasks, their scaffold and bookkeeping), plus the fixes this stage
