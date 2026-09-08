@@ -72,7 +72,7 @@ ready).
 - **notes:** Plan step 4. `mono` stops being meaningful on this branch — segments are `tabular-nums` already — so don't forward it; the prop stays for the other fields.
 
 ## T30 · Migrate the dual facts Date cell
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T27
 - **files:** `src/components/dashboard/schedule/static/dual-build-step.tsx`
