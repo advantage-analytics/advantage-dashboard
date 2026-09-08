@@ -274,7 +274,7 @@ need it.
 - **notes:** This is the regression net for T18–T20's riskiest behaviour: a coach opening an event and pressing Save must never be told a line they did not touch has changed. Non-goals: no change to `entry-plan.ts`, no UI change.
 
 ## T22 · Chooser centred on the vertical axis too
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **files:** src/components/dashboard/schedule/event-shell.tsx, src/components/dashboard/schedule/static/static-event-chooser.tsx
 - **done when:**
