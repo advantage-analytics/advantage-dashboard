@@ -74,7 +74,12 @@ next-env.d.ts
 !.claude/skills/task-add/
 !.claude/skills/feature-new/
 !.claude/skills/feature-next/
-.mcp.json
+
+# .mcp.json IS tracked. It used to be ignored because the Figma server embedded
+# an API key inline as a CLI argument; that server has been removed and the file
+# now names only keyless/hosted servers, so every teammate can get identical MCP
+# config from a clone. If you ever add a server that needs a secret, use
+# ${ENV_VAR} expansion rather than re-ignoring this file.
 
 # Agent scratch: SDD ledgers, review packages, task briefs and reports. Never
 # committed — but /task-next commits with `git add -A`, so an un-ignored
@@ -82,7 +87,13 @@ next-env.d.ts
 .superpowers/
 
 # lock files
-package-lock.json
+#
+# package-lock.json is deliberately NOT ignored. It has been tracked since
+# before this rule existed — .gitignore has no effect on an already-tracked
+# file, so the old entry never did anything except mislead. `npm ci` (CI, and
+# the instruction bootstrap-worktree.sh prints in a fresh worktree) requires it.
+#
+# The other two stay ignored so a second, competing lockfile cannot appear.
 yarn.lock
 pnpm-lock.yaml
 
@@ -120,13 +131,15 @@ supabase/.temp/
 
 # codex
 #
-# `AGENTS.md` and `.codex/` are the Codex mirror of this repo's Claude setup —
+# `.codex/` is the Codex mirror of this repo's Claude setup —
 # the same repo guidance and the same three reviewer subagents, in Codex's own
 # file conventions. A Codex session writes them into whatever worktree it runs
-# in, so they turn up mid-run in a tree that has to be clean before a task
-# commits, and `/task-next`'s `git add -A` would otherwise sweep them into an
-# unrelated task's commit. Ignored rather than tracked: use `git add -f` if a
-# version of either is ever meant to be shared.
+# in, so it turns up mid-run in a tree that has to be clean before a task
+# commits, and `/task-next`'s `git add -A` would otherwise sweep it into an
+# unrelated task's commit. Ignored rather than tracked.
+#
+# NOTE: `AGENTS.md` itself IS tracked (commit 9a58e98) — it is the guidance
+# Codex and Gemini read, and only the machine-specific `.codex/` dir is not.
 .codex/
 
 # analysis output

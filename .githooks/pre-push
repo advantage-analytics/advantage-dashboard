@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# The expensive checks, moved off the commit path so committing stays instant.
+# Everything here also runs in CI; this is the fast local copy that saves a
+# round-trip through a red pipeline.
+#
+# Skipped when there is nothing to push (a delete, or an up-to-date branch).
+set -uo pipefail
+
+# Nothing local to push? Deleting a remote branch sends an all-zero local sha.
+read_stdin=$(cat)
+printf '%s' "$read_stdin" | grep -qvE '^\S+ 0{40} ' 2>/dev/null || exit 0
+[ -n "$read_stdin" ] || exit 0
+
+root=$(git rev-parse --show-toplevel) || exit 0
+cd "$root" || exit 0
+
+[ -d node_modules ] || { printf 'pre-push: node_modules absent — run `npm ci`. Skipping checks.\n' >&2; exit 0; }
+
+fail=0
+step() {
+  printf '\033[1;34mpre-push:\033[0m %s ... ' "$1"
+  if out=$(eval "$2" 2>&1); then printf 'ok\n'
+  else printf '\033[1;31mFAILED\033[0m\n%s\n' "$out" >&2; fail=1; fi
+}
+
+step "typecheck"     "npx --no-install tsc --noEmit"
+step "format:check"  "npx --no-install prettier --check ."
+step "lint"          "npx --no-install eslint ."
+
+[ "$fail" -eq 0 ] || { printf '\npush aborted. Use --no-verify to override.\n' >&2; exit 1; }
+exit 0

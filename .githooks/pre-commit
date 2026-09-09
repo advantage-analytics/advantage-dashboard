@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Runs for EVERY tool and every human: Claude, Codex, Gemini, a plain
+# `git commit`, an IDE's commit button. Installed by the `prepare` script in
+# package.json (`git config core.hooksPath .githooks`), so `npm install` is the
+# only setup step anyone has to remember.
+#
+# NOTE: Claude Code's agent worktrees pin core.hooksPath per-worktree, so this
+# does NOT run there. That is the harness isolating agent worktrees on purpose.
+# CI (.github/workflows/ci.yml) is the gate that cannot be bypassed; this hook
+# is the fast local pass that keeps CI green.
+#
+# Three jobs, cheapest first. Kept under a second on a normal commit —
+# typechecking and linting the whole project belong in pre-push, not here.
+set -uo pipefail
+
+fail=0
+say() { printf '\n\033[1;31mpre-commit:\033[0m %s\n' "$1" >&2; fail=1; }
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -n "$staged" ] || exit 0
+
+# 1 -------------------------------------------------------------- secrets
+# The file-level rule mirrors .gitignore and guard-secrets.sh: a .env file is
+# nothing but credentials. .env.example is the committed template and is safe.
+while IFS= read -r f; do
+  case "$(basename -- "$f")" in
+    .env.example) ;;
+    .env|.env.*) say "refusing to commit '$f' — .env files hold live secrets. Use .env.example for documentation." ;;
+  esac
+done <<< "$staged"
+
+# Content-level: catch a key pasted into an ordinary source file, which the
+# filename rule above cannot see.
+#
+# The bare word `service_role` is deliberately NOT matched: it is a Postgres
+# ROLE NAME, not a secret. 16 tracked migrations legitimately say
+# `grant ... to service_role`, so matching it would block every future
+# migration. The real secret is the service-role KEY — a JWT — and the eyJ…
+# pattern catches that. The dot is required: without it the pattern also hits
+# base64 integrity hashes in package-lock.json.
+if git diff --cached -U0 | grep -nE '^\+' | \
+     grep -qE '(sk_live_|rk_live_|ghp_|gho_|github_pat_|xox[baprs]-|AKIA[0-9A-Z]{16}|sbp_|eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{10,})'; then
+  say "a staged line looks like a live credential (Stripe/GitHub/Slack/AWS key, or a JWT)."
+  git diff --cached -U0 | grep -E '^\+' | \
+    grep -nE '(sk_live_|rk_live_|ghp_|gho_|github_pat_|xox[baprs]-|AKIA[0-9A-Z]{16}|sbp_|eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{10,})' | \
+    sed 's/^/    /' | cut -c1-140 >&2
+  printf '    If this is a false positive, commit with --no-verify and say why in the message.\n' >&2
+fi
+
+# 2 ------------------------------------------------------------- formatting
+# Format in place and re-stage, rather than rejecting the commit. A hook that
+# fixes the problem is one people leave enabled; one that only scolds gets
+# --no-verify'd. Routing per language lives in scripts/format-file.sh.
+if [ -x scripts/format-file.sh ]; then
+  # Built with a read loop, not `mapfile`: macOS ships bash 3.2, where mapfile
+  # does not exist. Every hook here must run on a stock Mac with no brew bash.
+  files=()
+  while IFS= read -r f; do
+    [ -n "$f" ] && files+=("$f")
+  done <<< "$staged"
+  [ ${#files[@]} -gt 0 ] && ./scripts/format-file.sh "${files[@]}" || true
+  # Re-stage only paths that were already staged AND still exist, so this
+  # never picks up unrelated working-tree edits or a file staged for deletion.
+  while IFS= read -r f; do
+    [ -f "$f" ] && ! git diff --quiet -- "$f" 2>/dev/null && git add -- "$f"
+  done <<< "$staged"
+fi
+
+# 3 ----------------------------------------------------------- generated MAP
+# MAP.md's route table is generated, and tests/generate-map.spec.ts asserts the
+# committed file is byte-for-byte the generator's output. Regenerating here
+# means a route change can never land with a stale map and a red test.
+if printf '%s\n' "$staged" | grep -qE '^src/app/.*/(page|route|layout)\.tsx?$'; then
+  if npm run --silent map >/dev/null 2>&1 && ! git diff --quiet -- MAP.md; then
+    git add -- MAP.md
+    printf '\npre-commit: routes changed — regenerated MAP.md and staged it.\n' >&2
+  fi
+fi
+
+[ "$fail" -eq 0 ] || { printf '\ncommit aborted.\n' >&2; exit 1; }
+exit 0
