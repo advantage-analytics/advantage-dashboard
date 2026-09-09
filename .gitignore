@@ -74,6 +74,8 @@ next-env.d.ts
 !.claude/skills/task-add/
 !.claude/skills/feature-new/
 !.claude/skills/feature-next/
+!.claude/skills/azure-storage/
+!.claude/skills/stripe-cli/
 
 # .mcp.json IS tracked. It used to be ignored because the Figma server embedded
 # an API key inline as a CLI argument; that server has been removed and the file
