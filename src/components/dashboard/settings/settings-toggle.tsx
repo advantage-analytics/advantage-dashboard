@@ -38,14 +38,14 @@ export function SettingsToggle({
         "relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200",
         "focus-visible:outline-none",
         disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
-        checked ? "bg-[var(--blue)]" : "bg-[var(--ink-200)]"
+        checked ? "bg-[var(--blue)]" : "bg-[var(--ink-200)]",
       )}
     >
       <span
         aria-hidden="true"
         className={cn(
-          "absolute left-[2px] top-[2px] size-4 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.15)] transition-transform duration-200",
-          checked ? "translate-x-4" : "translate-x-0"
+          "absolute top-[2px] left-[2px] size-4 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.15)] transition-transform duration-200",
+          checked ? "translate-x-4" : "translate-x-0",
         )}
       />
     </button>
@@ -88,22 +88,20 @@ export function SettingsRadioGroup<T extends string>({
             className={cn(
               "flex items-center gap-2 rounded-[6px] text-left text-[12px] text-[var(--ink-900)]",
               "focus-visible:outline-none",
-              disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+              disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
             )}
           >
             <span
               aria-hidden="true"
               className={cn(
                 "inline-flex size-[13px] shrink-0 items-center justify-center rounded-full border transition-colors duration-150",
-                isSelected
-                  ? "border-[var(--blue)]"
-                  : "border-[var(--ink-300)]"
+                isSelected ? "border-[var(--blue)]" : "border-[var(--ink-300)]",
               )}
             >
               <span
                 className={cn(
                   "size-[6px] rounded-full transition-colors duration-150",
-                  isSelected ? "bg-[var(--blue)]" : "bg-transparent"
+                  isSelected ? "bg-[var(--blue)]" : "bg-transparent",
                 )}
               />
             </span>

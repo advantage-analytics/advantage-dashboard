@@ -18,9 +18,9 @@
  * do, on the grounds that we hold a better copy of the same match.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { deleteVideoBlob, trimmedCopyStatus } from './video-url';
+import { deleteVideoBlob, trimmedCopyStatus } from "./video-url";
 
 export interface ReclaimOutcome {
   /** Jobs holding both a source key and a trimmed key. */
@@ -67,10 +67,10 @@ export async function reclaimSupersededSources(params: {
   };
 
   const { data, error } = await supabase
-    .from('processing_jobs')
-    .select('id, video_object_key, trimmed_object_key')
-    .not('video_object_key', 'is', null)
-    .not('trimmed_object_key', 'is', null);
+    .from("processing_jobs")
+    .select("id, video_object_key, trimmed_object_key")
+    .not("video_object_key", "is", null)
+    .not("trimmed_object_key", "is", null);
 
   if (error) {
     // Not thrown: the caller is a cron or a sweep script, and neither should
@@ -91,9 +91,11 @@ export async function reclaimSupersededSources(params: {
     // Per job rather than batched: Azure reports copy state only on the
     // destination blob itself. The candidate set is jobs that completed, which
     // is dozens even in a busy month.
-    const status = await trimmedCopyStatus({ blobName: job.trimmed_object_key });
+    const status = await trimmedCopyStatus({
+      blobName: job.trimmed_object_key,
+    });
 
-    if (status === 'failed' || status === 'aborted') {
+    if (status === "failed" || status === "aborted") {
       outcome.broken.push({
         jobId: job.id,
         blobName: job.trimmed_object_key,
@@ -102,7 +104,7 @@ export async function reclaimSupersededSources(params: {
       continue;
     }
 
-    if (status !== 'success') {
+    if (status !== "success") {
       outcome.pending++;
       continue;
     }
@@ -126,15 +128,15 @@ export async function reclaimSupersededSources(params: {
       // the submit route refuses a job in any status but `uploaded` long before
       // it reads this column.
       const { error: clearError } = await supabase
-        .from('processing_jobs')
+        .from("processing_jobs")
         .update({ video_object_key: null })
-        .eq('id', job.id);
+        .eq("id", job.id);
 
       if (clearError) {
         // The bytes are gone but the row still points at them. Harmless except
         // that the next run repeats the no-op delete.
         log(
-          `deleted ${job.video_object_key} but could not clear the key: ${clearError.message}`
+          `deleted ${job.video_object_key} but could not clear the key: ${clearError.message}`,
         );
       }
 
@@ -144,7 +146,7 @@ export async function reclaimSupersededSources(params: {
       log(
         `could not delete ${job.video_object_key}: ${
           err instanceof Error ? err.message : String(err)
-        }`
+        }`,
       );
     }
   }

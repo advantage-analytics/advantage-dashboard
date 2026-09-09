@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
-import { type SupabaseClient } from '@supabase/supabase-js';
+import { expect, test } from "@playwright/test";
+import { type SupabaseClient } from "@supabase/supabase-js";
 
 import {
   HAVE_ENV,
@@ -10,7 +10,7 @@ import {
   createLogins,
   deleteAuthUsers,
   runMarker,
-} from './fixtures/live-db';
+} from "./fixtures/live-db";
 
 /**
  * Cross-program match isolation, proven against the live database.
@@ -44,11 +44,11 @@ import {
 
 /** A crashed run is findable by hand:
  *  `select * from programs where program_key like 'rls-iso-%'`. */
-const { mark: MARK, password: PASSWORD } = runMarker('rls-iso');
+const { mark: MARK, password: PASSWORD } = runMarker("rls-iso");
 
-test.describe('cross-program match isolation (live RLS)', () => {
+test.describe("cross-program match isolation (live RLS)", () => {
   // One worker, in order: every test reads the beforeAll fixture.
-  test.describe.configure({ mode: 'serial', timeout: 60_000 });
+  test.describe.configure({ mode: "serial", timeout: 60_000 });
   test.skip(!HAVE_ENV, SKIP_REASON);
 
   let admin: SupabaseClient;
@@ -75,13 +75,13 @@ test.describe('cross-program match isolation (live RLS)', () => {
 
     [aOwner, athlete, bStaff, bPlayer] = await createLogins(
       admin,
-      ['a-owner', 'athlete', 'b-staff', 'b-player'],
-      { mark: MARK, password: PASSWORD, authUserIds }
+      ["a-owner", "athlete", "b-staff", "b-player"],
+      { mark: MARK, password: PASSWORD, authUserIds },
     );
 
     // Two programs. The assertion is that B's read stops at B's edge.
     const programs = await admin
-      .from('programs')
+      .from("programs")
       .insert([
         // school_group must differ: programs_group_team_key is unique on
         // (school_group, team).
@@ -89,42 +89,42 @@ test.describe('cross-program match isolation (live RLS)', () => {
           program_key: `${MARK}-a`,
           school_group: `${MARK}-a`,
           school_name: `RLS Test School A ${MARK}`,
-          team: 'mens',
+          team: "mens",
         },
         {
           program_key: `${MARK}-b`,
           school_group: `${MARK}-b`,
           school_name: `RLS Test School B ${MARK}`,
-          team: 'mens',
+          team: "mens",
         },
       ])
-      .select('id, program_key');
+      .select("id, program_key");
     if (programs.error) throw new Error(`programs: ${programs.error.message}`);
     programA = programs.data.find((p) => p.program_key === `${MARK}-a`)!.id;
     programB = programs.data.find((p) => p.program_key === `${MARK}-b`)!.id;
     programIds.push(programA, programB);
 
-    const members = await admin.from('program_members').insert([
-      { program_id: programA, user_id: aOwner.userId, role: 'owner' },
-      { program_id: programA, user_id: athlete.userId, role: 'player' },
-      { program_id: programB, user_id: athlete.userId, role: 'player' },
-      { program_id: programB, user_id: bStaff.userId, role: 'coach' },
-      { program_id: programB, user_id: bPlayer.userId, role: 'player' },
+    const members = await admin.from("program_members").insert([
+      { program_id: programA, user_id: aOwner.userId, role: "owner" },
+      { program_id: programA, user_id: athlete.userId, role: "player" },
+      { program_id: programB, user_id: athlete.userId, role: "player" },
+      { program_id: programB, user_id: bStaff.userId, role: "coach" },
+      { program_id: programB, user_id: bPlayer.userId, role: "player" },
     ]);
     if (members.error) throw new Error(`members: ${members.error.message}`);
 
     // The A-filed match, with one row in every table the policy tree covers.
     const match = await admin
-      .from('matches')
+      .from("matches")
       .insert({
         created_by: aOwner.userId,
         program_id: programA,
         player1_id: athlete.userId,
-        player1_name: 'RLS Test Athlete',
-        player2_name: 'RLS Test Opponent',
+        player1_name: "RLS Test Athlete",
+        player2_name: "RLS Test Opponent",
         date: new Date().toISOString(),
       })
-      .select('id')
+      .select("id")
       .single();
     if (match.error) throw new Error(`match: ${match.error.message}`);
     matchId = match.data.id;
@@ -132,7 +132,7 @@ test.describe('cross-program match isolation (live RLS)', () => {
     // Only shots needs the point id — stats and files hang off the match.
     const [point, stats, files] = await Promise.all([
       admin
-        .from('points')
+        .from("points")
         .insert({
           match_id: matchId,
           point_number: 1,
@@ -141,13 +141,13 @@ test.describe('cross-program match isolation (live RLS)', () => {
           server_is_player1: true,
           won_by_player1: true,
         })
-        .select('id')
+        .select("id")
         .single(),
-      admin.from('match_stats').insert({ match_id: matchId, is_player1: true }),
-      admin.from('match_files').insert({
+      admin.from("match_stats").insert({ match_id: matchId, is_player1: true }),
+      admin.from("match_files").insert({
         match_id: matchId,
         uploaded_by: aOwner.userId,
-        provider_id: 'swingvision',
+        provider_id: "swingvision",
       }),
     ]);
     if (point.error) throw new Error(`point: ${point.error.message}`);
@@ -156,7 +156,7 @@ test.describe('cross-program match isolation (live RLS)', () => {
     pointId = point.data.id;
 
     const shots = await admin
-      .from('shots')
+      .from("shots")
       .insert({ point_id: pointId, shot_number: 1, is_player1: true });
     if (shots.error) throw new Error(`shots: ${shots.error.message}`);
   });
@@ -168,10 +168,10 @@ test.describe('cross-program match isolation (live RLS)', () => {
     // Matches first: created_by has no ON DELETE, and the write-side tests
     // may have left bStaff a personal match. Everything under a match cascades.
     if (authUserIds.length > 0) {
-      await admin.from('matches').delete().in('created_by', authUserIds);
+      await admin.from("matches").delete().in("created_by", authUserIds);
     }
     if (programIds.length > 0) {
-      await admin.from('programs').delete().in('id', programIds);
+      await admin.from("programs").delete().in("id", programIds);
     }
     await deleteAuthUsers(admin, authUserIds);
   });
@@ -180,14 +180,14 @@ test.describe('cross-program match isolation (live RLS)', () => {
   // Fixture sanity — zero rows below must mean "withheld", never "not there".
   // -------------------------------------------------------------------------
 
-  test('program A reads its own match whole (fixture is real)', async () => {
+  test("program A reads its own match whole (fixture is real)", async () => {
     const c = aOwner.client;
     const [m, s, p, sh, f] = await Promise.all([
-      c.from('matches').select('id').eq('id', matchId),
-      c.from('match_stats').select('id').eq('match_id', matchId),
-      c.from('points').select('id').eq('match_id', matchId),
-      c.from('shots').select('id').eq('point_id', pointId),
-      c.from('match_files').select('id').eq('match_id', matchId),
+      c.from("matches").select("id").eq("id", matchId),
+      c.from("match_stats").select("id").eq("match_id", matchId),
+      c.from("points").select("id").eq("match_id", matchId),
+      c.from("shots").select("id").eq("point_id", pointId),
+      c.from("match_files").select("id").eq("match_id", matchId),
     ]);
     expect(m.data).toHaveLength(1);
     expect(s.data).toHaveLength(1);
@@ -197,7 +197,10 @@ test.describe('cross-program match isolation (live RLS)', () => {
 
     // The athlete reads their own match too — the player route, which is the
     // route a leak into B would have piggybacked on.
-    const own = await athlete.client.from('matches').select('id').eq('id', matchId);
+    const own = await athlete.client
+      .from("matches")
+      .select("id")
+      .eq("id", matchId);
     expect(own.data).toHaveLength(1);
   });
 
@@ -206,17 +209,17 @@ test.describe('cross-program match isolation (live RLS)', () => {
   // -------------------------------------------------------------------------
 
   for (const [who, session] of [
-    ['B staff (coach)', () => bStaff],
-    ['B player', () => bPlayer],
+    ["B staff (coach)", () => bStaff],
+    ["B player", () => bPlayer],
   ] as const) {
     test(`${who} reads zero rows for the A-filed match`, async () => {
       const c = session().client;
       const [m, s, p, sh, f] = await Promise.all([
-        c.from('matches').select('id').eq('id', matchId),
-        c.from('match_stats').select('id').eq('match_id', matchId),
-        c.from('points').select('id').eq('match_id', matchId),
-        c.from('shots').select('id').eq('point_id', pointId),
-        c.from('match_files').select('id').eq('match_id', matchId),
+        c.from("matches").select("id").eq("id", matchId),
+        c.from("match_stats").select("id").eq("match_id", matchId),
+        c.from("points").select("id").eq("match_id", matchId),
+        c.from("shots").select("id").eq("point_id", pointId),
+        c.from("match_files").select("id").eq("match_id", matchId),
       ]);
       expect(m.error).toBeNull();
       expect(m.data).toEqual([]);
@@ -235,23 +238,23 @@ test.describe('cross-program match isolation (live RLS)', () => {
   // Write side — a non-member can neither file into A nor regraft onto A.
   // -------------------------------------------------------------------------
 
-  test('a non-member cannot INSERT a match filed under program A', async () => {
+  test("a non-member cannot INSERT a match filed under program A", async () => {
     const { data, error } = await bStaff.client
-      .from('matches')
+      .from("matches")
       .insert({
         created_by: bStaff.userId, // passes the RLS with_check on purpose —
         program_id: programA, //      the refusal must come from the trigger
-        player1_name: 'RLS Intruder',
-        player2_name: 'RLS Opponent',
+        player1_name: "RLS Intruder",
+        player2_name: "RLS Opponent",
         date: new Date().toISOString(),
       })
-      .select('id');
+      .select("id");
 
     expect(data).toBeNull();
     expect(error).not.toBeNull();
     expect(error!.code).toBe(INSUFFICIENT_PRIVILEGE);
     expect(error!.message).toContain(
-      'a match can only be filed under a program you belong to'
+      "a match can only be filed under a program you belong to",
     );
   });
 
@@ -259,57 +262,57 @@ test.describe('cross-program match isolation (live RLS)', () => {
     // RLS's UPDATE `using` clause hides the row entirely: no error, no rows —
     // the intruder cannot even learn the match exists.
     const { data, error } = await bStaff.client
-      .from('matches')
+      .from("matches")
       .update({ program_id: null })
-      .eq('id', matchId)
-      .select('id');
+      .eq("id", matchId)
+      .select("id");
     expect(error).toBeNull();
     expect(data).toEqual([]);
 
     // And the row is untouched, on the service role's authority.
     const check = await admin
-      .from('matches')
-      .select('program_id')
-      .eq('id', matchId)
+      .from("matches")
+      .select("program_id")
+      .eq("id", matchId)
       .single();
     expect(check.data?.program_id).toBe(programA);
   });
 
-  test('the regraft trigger blocks moving an own match into program A', async () => {
+  test("the regraft trigger blocks moving an own match into program A", async () => {
     // The one write RLS alone would allow: bStaff owns this row outright, so
     // both the UPDATE using and with_check clauses pass. The refusal is
     // matches_block_client_regraft's — asserted on as the expected failure.
     const personal = await bStaff.client
-      .from('matches')
+      .from("matches")
       .insert({
         created_by: bStaff.userId,
-        player1_name: 'RLS B Staff',
-        player2_name: 'RLS Opponent',
+        player1_name: "RLS B Staff",
+        player2_name: "RLS Opponent",
         date: new Date().toISOString(),
       })
-      .select('id')
+      .select("id")
       .single();
     expect(personal.error).toBeNull();
 
     const regraft = await bStaff.client
-      .from('matches')
+      .from("matches")
       .update({ program_id: programA })
-      .eq('id', personal.data!.id)
-      .select('id');
+      .eq("id", personal.data!.id)
+      .select("id");
 
     expect(regraft.error).not.toBeNull();
     expect(regraft.error!.code).toBe(INSUFFICIENT_PRIVILEGE);
     expect(regraft.error!.message).toContain(
-      'which program and line a match belongs to is set when it is created'
+      "which program and line a match belongs to is set when it is created",
     );
 
     // Not even into a program they DO belong to: where a match is filed is
     // decided at creation, which is what keeps every historic match pinned.
     const intoOwn = await bStaff.client
-      .from('matches')
+      .from("matches")
       .update({ program_id: programB })
-      .eq('id', personal.data!.id)
-      .select('id');
+      .eq("id", personal.data!.id)
+      .select("id");
     expect(intoOwn.error).not.toBeNull();
     expect(intoOwn.error!.code).toBe(INSUFFICIENT_PRIVILEGE);
   });

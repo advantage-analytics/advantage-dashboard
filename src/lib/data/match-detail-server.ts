@@ -41,8 +41,16 @@ interface DbMatch {
   opponent_backhand: string | null;
   key_moments: Array<{ moment: string; description: string }> | null;
   insights: {
-    player1?: { summary?: string; strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
-    player2?: { summary?: string; strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
+    player1?: {
+      summary?: string;
+      strengths?: Array<{ name: string; value: number; description: string }>;
+      weaknesses?: Array<{ name: string; value: number; description: string }>;
+    };
+    player2?: {
+      summary?: string;
+      strengths?: Array<{ name: string; value: number; description: string }>;
+      weaknesses?: Array<{ name: string; value: number; description: string }>;
+    };
   } | null;
 }
 
@@ -189,25 +197,79 @@ const FILLER_INSIGHTS: NonNullable<DbMatch["insights"]> = {
     summary:
       "Your second serve and baseline endurance are carrying you right now — keep leaning on those strengths under pressure. To take the next step, tighten up your backhand to cut down on unforced errors and look for more chances to finish points at the net.",
     strengths: [
-      { name: "Reliable Second Serve", value: 75, description: "Your second serve was a consistent weapon, putting pressure on your opponent and preventing easy returns. The high placement accuracy forced defensive returns on the majority of second-serve points." },
-      { name: "Strong Baseline Endurance", value: 67, description: "You consistently outlasted your opponent in longer rallies, showcasing your fitness and consistency under pressure." },
-      { name: "Effective Return Pressure", value: 56, description: "Your ability to win return games and convert break points kept your opponent on the defensive throughout the match." },
+      {
+        name: "Reliable Second Serve",
+        value: 75,
+        description:
+          "Your second serve was a consistent weapon, putting pressure on your opponent and preventing easy returns. The high placement accuracy forced defensive returns on the majority of second-serve points.",
+      },
+      {
+        name: "Strong Baseline Endurance",
+        value: 67,
+        description:
+          "You consistently outlasted your opponent in longer rallies, showcasing your fitness and consistency under pressure.",
+      },
+      {
+        name: "Effective Return Pressure",
+        value: 56,
+        description:
+          "Your ability to win return games and convert break points kept your opponent on the defensive throughout the match.",
+      },
     ],
     weaknesses: [
-      { name: "Backhand Error Rate", value: 71, description: "Focus on reducing unforced errors on your backhand to turn more defensive shots into offensive opportunities." },
-      { name: "Net Play Integration", value: 12, description: "Look for opportunities to come to the net and finish points proactively, adding variety to your game plan." },
-      { name: "First Serve Point Conversion", value: 68, description: "While your first serve percentage is solid, aim to win a higher percentage of those points to gain an even greater advantage." },
+      {
+        name: "Backhand Error Rate",
+        value: 71,
+        description:
+          "Focus on reducing unforced errors on your backhand to turn more defensive shots into offensive opportunities.",
+      },
+      {
+        name: "Net Play Integration",
+        value: 12,
+        description:
+          "Look for opportunities to come to the net and finish points proactively, adding variety to your game plan.",
+      },
+      {
+        name: "First Serve Point Conversion",
+        value: 68,
+        description:
+          "While your first serve percentage is solid, aim to win a higher percentage of those points to gain an even greater advantage.",
+      },
     ],
   },
 };
 
 const FILLER_KEY_MOMENTS = [
-  { moment: "Early Break", description: "Broke serve in the opening game with an aggressive return winner down the line, setting the tone for the first set." },
-  { moment: "Momentum Shift", description: "After dropping serve at 4-3, you responded immediately with a break back, demonstrating strong mental resilience under pressure." },
-  { moment: "Clutch Serving", description: "Saved three break points at 5-4 in the second set with consecutive first-serve winners to close out the match." },
-  { moment: "Rally Dominance", description: "Won 8 of 10 rallies lasting longer than 9 shots, wearing down your opponent physically in the second set." },
-  { moment: "Set Point Conversion", description: "Closed out the first set with a forehand winner up the line on your second set point, refusing to let the opportunity slip." },
-  { moment: "Strong Finish", description: "Won the final four games in a row to seal the match, mixing aggressive returning with high first-serve percentage on the closing hold." },
+  {
+    moment: "Early Break",
+    description:
+      "Broke serve in the opening game with an aggressive return winner down the line, setting the tone for the first set.",
+  },
+  {
+    moment: "Momentum Shift",
+    description:
+      "After dropping serve at 4-3, you responded immediately with a break back, demonstrating strong mental resilience under pressure.",
+  },
+  {
+    moment: "Clutch Serving",
+    description:
+      "Saved three break points at 5-4 in the second set with consecutive first-serve winners to close out the match.",
+  },
+  {
+    moment: "Rally Dominance",
+    description:
+      "Won 8 of 10 rallies lasting longer than 9 shots, wearing down your opponent physically in the second set.",
+  },
+  {
+    moment: "Set Point Conversion",
+    description:
+      "Closed out the first set with a forehand winner up the line on your second set point, refusing to let the opportunity slip.",
+  },
+  {
+    moment: "Strong Finish",
+    description:
+      "Won the final four games in a row to seal the match, mixing aggressive returning with high first-serve percentage on the closing hold.",
+  },
 ];
 
 /**
@@ -284,7 +346,9 @@ async function resolveUploadedBy(
   // The login behind whoever this match is attributed to. An id the roster
   // does not know — an archived or merged profile, or a member id written by
   // the ordinary wizard — stands for itself rather than resolving to nobody.
-  const attributed = roster.find((member) => member.player_id === row.player1_id);
+  const attributed = roster.find(
+    (member) => member.player_id === row.player1_id,
+  );
   if ((attributed?.user_id ?? row.player1_id) === row.created_by) return null;
 
   const uploader = roster.find((member) => member.user_id === row.created_by);
@@ -380,29 +444,33 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     }
   }
 
-  const [statsResult, points, playerAverages, kpiHistory, eventId, uploadedBy] = await Promise.all([
-    getMatchStatisticsFromSupabase(matchId),
-    getMatchPointsFromSupabase(matchId),
-    // The averages need to know which ids mean "me" — a coach may have recorded
-    // this athlete's earlier matches against a roster profile they only claimed
-    // later. Chained inside the batch rather than awaited in front of it, so
-    // only this branch waits on the lookup.
-    (async () =>
-      getPlayerAverageStats(user?.id ? await getMyPlayerIds() : [], matchId))(),
-    // The history hangs off the same lookup, one step further: which seat on
-    // the row is "you" — and so whose baseline this is — is decided from the
-    // viewer's ids. Chained for the same reason as the averages.
-    (async () =>
-      resolveKpiHistory(dbRow, user?.id ? await getMyPlayerIds() : []))(),
-    // The entry lookup rides this wave rather than following it: it needs only
-    // `dbRow`, which is already in hand, and nothing else here reads its answer.
-    // It resolves to null for every match with no line behind it, which is every
-    // personal match and every challenge or practice a program records.
-    getEventIdForEntry(supabase, dbRow.event_entry_id),
-    // Same wave, same reason: it needs only `dbRow`, and it resolves to null
-    // without a round trip for every personal match.
-    resolveUploadedBy(supabase, dbRow),
-  ]);
+  const [statsResult, points, playerAverages, kpiHistory, eventId, uploadedBy] =
+    await Promise.all([
+      getMatchStatisticsFromSupabase(matchId),
+      getMatchPointsFromSupabase(matchId),
+      // The averages need to know which ids mean "me" — a coach may have recorded
+      // this athlete's earlier matches against a roster profile they only claimed
+      // later. Chained inside the batch rather than awaited in front of it, so
+      // only this branch waits on the lookup.
+      (async () =>
+        getPlayerAverageStats(
+          user?.id ? await getMyPlayerIds() : [],
+          matchId,
+        ))(),
+      // The history hangs off the same lookup, one step further: which seat on
+      // the row is "you" — and so whose baseline this is — is decided from the
+      // viewer's ids. Chained for the same reason as the averages.
+      (async () =>
+        resolveKpiHistory(dbRow, user?.id ? await getMyPlayerIds() : []))(),
+      // The entry lookup rides this wave rather than following it: it needs only
+      // `dbRow`, which is already in hand, and nothing else here reads its answer.
+      // It resolves to null for every match with no line behind it, which is every
+      // personal match and every challenge or practice a program records.
+      getEventIdForEntry(supabase, dbRow.event_entry_id),
+      // Same wave, same reason: it needs only `dbRow`, and it resolves to null
+      // without a round trip for every personal match.
+      resolveUploadedBy(supabase, dbRow),
+    ]);
 
   // `getMyPlayerIds` is `cache()`d and already resolved inside the batch above,
   // so this is a map lookup rather than a second round trip.
@@ -415,7 +483,9 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     match,
     statsResult,
     points,
-    keyMoments: dbRow.key_moments?.length ? dbRow.key_moments : FILLER_KEY_MOMENTS,
+    keyMoments: dbRow.key_moments?.length
+      ? dbRow.key_moments
+      : FILLER_KEY_MOMENTS,
     insights: dbRow.insights ?? FILLER_INSIGHTS,
     playerAverages,
     kpiHistory,

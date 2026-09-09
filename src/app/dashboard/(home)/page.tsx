@@ -34,11 +34,7 @@ export default async function Home() {
     // The name used to ride along here for the page's greeting; that greeting
     // now lives in the header (Platform Audit Pa2), which reads the viewer the
     // layout already resolved.
-    supabase
-      .from("users")
-      .select("hand, backhand")
-      .eq("id", userId)
-      .single(),
+    supabase.from("users").select("hand, backhand").eq("id", userId).single(),
     getOverallPerformance(),
     // Which ids mean "me" on a match row. `cache()`d, so the several readers on
     // this page share one round trip.
@@ -65,14 +61,8 @@ export default async function Home() {
     getPersonalSeasonKpis(userId),
   ]);
 
-  const {
-    kpiCards,
-    winRate,
-    form,
-    matchCount,
-    analyzedMatchCount,
-    wonCount,
-  } = performanceData;
+  const { kpiCards, winRate, form, matchCount, analyzedMatchCount, wonCount } =
+    performanceData;
   const hasMatches = matchCount > 0;
 
   // The Focus card's evidence line, composed here from the same computed KPI
@@ -98,7 +88,7 @@ export default async function Home() {
   };
 
   return (
-    <div className="flex flex-1 w-full flex-col bg-white">
+    <div className="flex w-full flex-1 flex-col bg-white">
       {/* `w-full` alongside `mx-auto`: auto side margins on a column flex item
           switch off the stretch that would otherwise size it, so without an
           explicit width the container would shrink to fit its content.

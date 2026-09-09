@@ -7,7 +7,7 @@ import { X } from "lucide-react";
 
 export default function AuthNav() {
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-sm md:bg-transparent md:backdrop-blur-none">
+    <header className="fixed top-0 right-0 left-0 z-50 bg-white/80 backdrop-blur-sm md:bg-transparent md:backdrop-blur-none">
       <nav className="mx-auto flex items-center justify-between px-10 py-9 md:px-20">
         {/* Logo */}
         <Link href="/" aria-label="Advantage — Home">
@@ -27,7 +27,7 @@ export default function AuthNav() {
             asChild
             variant="ghost"
             size="icon"
-            className="h-8 w-8 rounded-full text-black hover:text-white bg-gray-500/10 hover:bg-black/80"
+            className="h-8 w-8 rounded-full bg-gray-500/10 text-black hover:bg-black/80 hover:text-white"
           >
             <Link href="/">
               <X className="h-4 w-4" />

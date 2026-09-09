@@ -25,9 +25,16 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { StatePill } from "@/components/ui/state-pill";
-import { deleteMatchDraft, type DraftRow as DraftRowData } from "@/lib/wizard/actions";
+import {
+  deleteMatchDraft,
+  type DraftRow as DraftRowData,
+} from "@/lib/wizard/actions";
 import { formatShortDate } from "@/lib/ui/date-format";
-import { ACTIONS_LANE, LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-card-list";
+import {
+  ACTIONS_LANE,
+  LIST_GRID_COLS,
+  LIST_ROW_FRAME,
+} from "./match-card-list";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 
@@ -59,13 +66,16 @@ export function DraftRow({
   return (
     <div
       className={`${LIST_ROW_FRAME} group relative -mx-4 h-[52px] rounded-[var(--radius-element)] bg-[var(--surface-muted)] px-4 transition-opacity duration-200${
-        pending ? " opacity-50" : ""
+        pending ? "opacity-50" : ""
       }`}
       style={LIST_GRID_COLS}
       role="row"
     >
       {/* Date — when the draft was last touched. */}
-      <span className="tabular whitespace-nowrap text-[12px]" style={{ color: "var(--ink-700)" }}>
+      <span
+        className="tabular text-[12px] whitespace-nowrap"
+        style={{ color: "var(--ink-700)" }}
+      >
         {formatShortDate(draft.updatedAt)}
       </span>
 
@@ -112,7 +122,11 @@ export function DraftRow({
             onClick={(e) => e.stopPropagation()}
             className="inline-flex size-7 items-center justify-center rounded-[var(--radius-element)] bg-[var(--surface-subtle)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)] focus-visible:outline-none data-[state=open]:text-[var(--ink-900)]"
           >
-            <MoreHorizontal className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+            <MoreHorizontal
+              className="size-3.5"
+              strokeWidth={1.75}
+              aria-hidden="true"
+            />
           </PopoverTrigger>
           <PopoverContent
             align="end"
@@ -131,8 +145,12 @@ export function DraftRow({
               onClick={discard}
               className="flex h-[38px] cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-2.5 text-left transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]"
             >
-              <span className="text-[12px] font-medium text-[var(--danger)]">Discard</span>
-              <span className="text-[11px] text-[var(--ink-500)]">the answers go; a video already sent stays</span>
+              <span className="text-[12px] font-medium text-[var(--danger)]">
+                Discard
+              </span>
+              <span className="text-[11px] text-[var(--ink-500)]">
+                the answers go; a video already sent stays
+              </span>
             </button>
           </PopoverContent>
         </Popover>

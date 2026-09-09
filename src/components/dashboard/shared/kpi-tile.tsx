@@ -26,13 +26,7 @@ const KpiDetailChart = dynamic(() => import("./kpi-detail-chart"), {
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
-function Sparkline({
-  data,
-  positive,
-}: {
-  data: number[];
-  positive: boolean;
-}) {
+function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
   const id = useId();
   const shouldReduceMotion = useReducedMotion();
   const width = 80;
@@ -88,7 +82,11 @@ function Sparkline({
         fill={`url(#${areaId})`}
         initial={shouldReduceMotion ? false : { opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.8, ease: EASE_OUT, delay: 0.2 }}
+        transition={
+          shouldReduceMotion
+            ? { duration: 0 }
+            : { duration: 0.8, ease: EASE_OUT, delay: 0.2 }
+        }
       />
       <motion.polyline
         points={polylinePoints}
@@ -99,7 +97,9 @@ function Sparkline({
         strokeLinejoin="round"
         initial={shouldReduceMotion ? false : { pathLength: 0 }}
         animate={{ pathLength: 1 }}
-        transition={shouldReduceMotion ? { duration: 0 } : { duration: 1, ease: EASE_OUT }}
+        transition={
+          shouldReduceMotion ? { duration: 0 } : { duration: 1, ease: EASE_OUT }
+        }
       />
     </svg>
   );
@@ -122,12 +122,21 @@ function ValueTransition({
     <AnimatePresence mode="popLayout" initial={false}>
       <motion.span
         key={valueKey}
-        initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 6, filter: "blur(2px)" }}
+        initial={
+          shouldReduceMotion
+            ? { opacity: 1 }
+            : { opacity: 0, y: 6, filter: "blur(2px)" }
+        }
         animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
         exit={
           shouldReduceMotion
             ? { opacity: 0, transition: { duration: 0.1 } }
-            : { opacity: 0, y: -6, filter: "blur(2px)", transition: { duration: 0.2, ease: EASE_OUT } }
+            : {
+                opacity: 0,
+                y: -6,
+                filter: "blur(2px)",
+                transition: { duration: 0.2, ease: EASE_OUT },
+              }
         }
         transition={{ duration: 0.5, ease: EASE_OUT, delay }}
         className={className}
@@ -243,7 +252,8 @@ export function KpiTile({
   } as const;
 
   // `.adv-kpi`: flex:1, min-width 0, 12px gap, 20px padding, overflow hidden.
-  const baseClass = "flex-1 flex flex-col gap-3 px-5 py-5 min-w-0 overflow-hidden";
+  const baseClass =
+    "flex-1 flex flex-col gap-3 px-5 py-5 min-w-0 overflow-hidden";
   const linkClass = href
     ? "cursor-pointer hover:bg-[#FAFAFA] transition-colors duration-200 focus-visible:outline-none"
     : hasDetail
@@ -262,7 +272,7 @@ export function KpiTile({
               "SERVICE GAMES WON" to "SERVICE GAME", which read as a different
               statistic. */}
           <p
-            className={`text-[9px] font-normal text-[var(--color-text-dim)] uppercase tracking-[2.5px] max-w-full truncate focus-visible:outline-none rounded-sm ${description ? "cursor-help" : ""}`}
+            className={`max-w-full truncate rounded-sm text-[9px] font-normal tracking-[2.5px] text-[var(--color-text-dim)] uppercase focus-visible:outline-none ${description ? "cursor-help" : ""}`}
             tabIndex={description ? 0 : undefined}
           >
             {label}
@@ -277,7 +287,7 @@ export function KpiTile({
       <div className="flex items-end overflow-hidden">
         <ValueTransition
           valueKey={value}
-          className="text-[28px] font-light text-[var(--color-text-primary)] tracking-[-0.5px] leading-none tabular-nums inline-block"
+          className="inline-block text-[28px] leading-none font-light tracking-[-0.5px] text-[var(--color-text-primary)] tabular-nums"
         >
           {value}
         </ValueTransition>
@@ -303,14 +313,14 @@ export function KpiTile({
               the glyph was a separate 10px/600 weight before. */}
           <ValueTransition
             valueKey={arrow}
-            className={`text-[11px] font-medium inline-block ${trendColor}`}
+            className={`inline-block text-[11px] font-medium ${trendColor}`}
             delay={0.1}
           >
             {arrow}
           </ValueTransition>
           <ValueTransition
             valueKey={`${trend.change}`}
-            className={`text-[11px] font-medium inline-block ${trendColor}`}
+            className={`inline-block text-[11px] font-medium ${trendColor}`}
             delay={0.1}
           >
             {Math.abs(trend.change)}
@@ -320,11 +330,13 @@ export function KpiTile({
           </span>
         </div>
       ) : subtext ? (
-        <p className="text-[10px] font-normal text-[var(--color-text-muted)] truncate tabular-nums">
+        <p className="truncate text-[10px] font-normal text-[var(--color-text-muted)] tabular-nums">
           {subtext}
         </p>
       ) : hintText ? (
-        <p className="text-[10px] font-normal text-[var(--color-text-dim)]">{hintText}</p>
+        <p className="text-[10px] font-normal text-[var(--color-text-dim)]">
+          {hintText}
+        </p>
       ) : (
         <div aria-hidden className="h-[15px]" />
       )}
@@ -415,7 +427,7 @@ export function KpiTileStrip({
     <div
       role={ariaLabel ? "group" : undefined}
       aria-label={ariaLabel}
-      className={`${collapse ? "adv-kpi-strip " : ""}bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden`}
+      className={`${collapse ? "adv-kpi-strip" : ""}bg-white overflow-hidden rounded-[14px] border border-[#F3F3F3] shadow-card`}
     >
       <div className="flex flex-wrap sm:flex-nowrap">{children}</div>
     </div>

@@ -9,7 +9,11 @@ import FormField from "./form-field";
 import AuthButton from "./auth-button";
 import AuthFooter, { AUTH_LINK } from "./auth-footer";
 import FormError from "./form-error";
-import { toAuthError, validateEmail, type AuthError } from "@/lib/auth/error-messages";
+import {
+  toAuthError,
+  validateEmail,
+  type AuthError,
+} from "@/lib/auth/error-messages";
 import {
   AUTH_NEXT_COOKIE,
   AUTH_NEXT_MAX_AGE_SECONDS,

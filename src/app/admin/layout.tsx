@@ -45,11 +45,16 @@ export default async function AdminLayout({
         </Link>
         <span className="text-[11px] text-[var(--ink-400)]">Admin</span>
         <div className="flex-1" />
-        <Link href="/dashboard" className="text-[12px] text-[var(--ink-500)] hover:text-[var(--ink-900)]">
+        <Link
+          href="/dashboard"
+          className="text-[12px] text-[var(--ink-500)] hover:text-[var(--ink-900)]"
+        >
           Back to the dashboard
         </Link>
       </header>
-      <main className="mx-auto w-full max-w-[900px] px-6 py-10">{children}</main>
+      <main className="mx-auto w-full max-w-[900px] px-6 py-10">
+        {children}
+      </main>
     </div>
   );
 }

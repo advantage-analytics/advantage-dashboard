@@ -6,7 +6,11 @@ import { Check, RotateCcw, Settings2 } from "lucide-react";
 import { KpiTile, KpiTileStrip } from "./kpi-tile";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { KpiStripEmpty } from "@/components/dashboard/home/kpi-strip-empty";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   SEASON_KPI_BY_KEY,
   SEASON_KPI_DEFAULT_KEYS,
@@ -69,7 +73,7 @@ function parseVisible(raw: string | null): string[] {
     // Filtered against the catalogue, so a key from a retired statistic list
     // cannot leave the strip a tile short.
     const valid = parsed.filter(
-      (k): k is string => typeof k === "string" && SEASON_KPI_BY_KEY.has(k)
+      (k): k is string => typeof k === "string" && SEASON_KPI_BY_KEY.has(k),
     );
     if (valid.length < SEASON_KPI_MIN) return DEFAULTS;
     return valid.slice(0, SEASON_KPI_MAX);
@@ -161,7 +165,11 @@ export function SeasonKpiStrip({
   const shouldReduceMotion = useReducedMotion();
   const skipAnimation = shouldReduceMotion || hasAnimatedOnce;
 
-  const visibleKeys = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const visibleKeys = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getServerSnapshot,
+  );
 
   useEffect(() => {
     hasAnimatedOnce = true;
@@ -187,8 +195,8 @@ export function SeasonKpiStrip({
       // reading order rather than at the end of the strip.
       persist(
         SEASON_KPI_SPECS.map((spec) => spec.key).filter(
-          (k) => visibleKeys.includes(k) || k === key
-        )
+          (k) => visibleKeys.includes(k) || k === key,
+        ),
       );
     }
   };
@@ -202,7 +210,9 @@ export function SeasonKpiStrip({
         awaitingReport={awaitingReport ?? matchesPlayed > 0}
         hint={emptyHint}
         ariaLabel={ariaLabel}
-        labels={visibleKeys.map((key) => SEASON_KPI_BY_KEY.get(key)?.label ?? key)}
+        labels={visibleKeys.map(
+          (key) => SEASON_KPI_BY_KEY.get(key)?.label ?? key,
+        )}
       />
     );
   }
@@ -260,7 +270,7 @@ export function SeasonKpiStrip({
             <button
               type="button"
               aria-label="Customize season tiles"
-              className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-lg text-[#8A8A8E] opacity-0 transition-[opacity,color,background-color] duration-200 hover:bg-[#F5F5F5] hover:text-[#3C3C43] focus-visible:opacity-100 focus-visible:outline-none group-hover:opacity-100 data-[state=open]:bg-[#F5F5F5] data-[state=open]:text-[#0D0D0D] data-[state=open]:opacity-100"
+              className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-lg text-[#8A8A8E] opacity-0 transition-[opacity,color,background-color] duration-200 group-hover:opacity-100 hover:bg-[#F5F5F5] hover:text-[#3C3C43] focus-visible:opacity-100 focus-visible:outline-none data-[state=open]:bg-[#F5F5F5] data-[state=open]:text-[#0D0D0D] data-[state=open]:opacity-100"
             >
               <Settings2 className="size-3.5" strokeWidth={1.5} />
             </button>
@@ -277,12 +287,18 @@ export function SeasonKpiStrip({
                 Customize tiles
               </p>
               <p className="tabular text-[11px] leading-none text-[#AAAAAA]">
-                <span className="font-medium text-[#0D0D0D]">{visibleKeys.length}</span>
+                <span className="font-medium text-[#0D0D0D]">
+                  {visibleKeys.length}
+                </span>
                 <span className="mx-0.5">of</span>
                 {SEASON_KPI_MAX}
               </p>
             </div>
-            <div className="mt-2.5 flex items-center gap-1" role="presentation" aria-hidden="true">
+            <div
+              className="mt-2.5 flex items-center gap-1"
+              role="presentation"
+              aria-hidden="true"
+            >
               {Array.from({ length: SEASON_KPI_MAX }).map((_, i) => (
                 <span
                   key={i}
@@ -334,10 +350,15 @@ export function SeasonKpiStrip({
                         className="flex size-3.5 shrink-0 items-center justify-center"
                       >
                         {checked && (
-                          <Check className="size-3.5 text-[#3B82F6]" strokeWidth={2.25} />
+                          <Check
+                            className="size-3.5 text-[#3B82F6]"
+                            strokeWidth={2.25}
+                          />
                         )}
                       </span>
-                      <span className="flex-1 truncate leading-none">{spec.label}</span>
+                      <span className="flex-1 truncate leading-none">
+                        {spec.label}
+                      </span>
                     </button>
                   );
                 })}

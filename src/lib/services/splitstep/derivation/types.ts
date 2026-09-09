@@ -73,10 +73,10 @@ export interface RawSplitStepStroke {
 }
 
 /** The three stroke categories the vendor emits. Nothing finer exists. */
-export type StrokeType = 'serve' | 'groundstroke' | 'volley';
+export type StrokeType = "serve" | "groundstroke" | "volley";
 
 /** The three stroke sides the vendor emits. */
-export type StrokeSide = 'forehand' | 'backhand' | 'overhead';
+export type StrokeSide = "forehand" | "backhand" | "overhead";
 
 /**
  * A stroke after normalization: sentinels nulled, geometry sanity-checked,

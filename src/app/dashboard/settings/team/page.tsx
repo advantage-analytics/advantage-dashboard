@@ -14,6 +14,6 @@ export default async function TeamSettingsRedirect() {
   redirect(
     active.kind === "team"
       ? `/dashboard/settings/teams/${active.id}`
-      : "/dashboard/settings/teams"
+      : "/dashboard/settings/teams",
   );
 }

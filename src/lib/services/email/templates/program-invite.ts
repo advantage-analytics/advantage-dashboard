@@ -36,8 +36,7 @@ const ROLE_LABEL: Record<InviteRole, string> = {
 const ROLE_NOTE: Record<InviteRole, string> = {
   coach:
     "As a coach you'll see every match the program logs, and you can invite the rest of the team.",
-  staff:
-    "As staff you'll see every match the program logs.",
+  staff: "As staff you'll see every match the program logs.",
   player:
     "As a player you'll see your own matches, and the coaching staff will see them too.",
 };

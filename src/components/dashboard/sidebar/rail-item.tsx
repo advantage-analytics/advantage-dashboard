@@ -42,7 +42,9 @@ export function RailItem({
 }: {
   href?: string;
   label: string;
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { strokeWidth?: number }>;
+  icon: React.ComponentType<
+    React.SVGProps<SVGSVGElement> & { strokeWidth?: number }
+  >;
   active?: boolean;
   expanded: boolean;
   shortcut?: string;
@@ -67,7 +69,7 @@ export function RailItem({
         aria-hidden={!expanded}
         className={cn(
           "min-w-0 flex-1 truncate text-left text-[13px] transition-opacity ease-[var(--ease-primary)]",
-          fade
+          fade,
         )}
       >
         {label}
@@ -78,7 +80,7 @@ export function RailItem({
           className={cn(
             "mr-2.5 shrink-0 font-mono text-[10px] text-[var(--ink-400)] transition-opacity ease-[var(--ease-primary)]",
             "group-hover/row:text-[var(--ink-600)]",
-            fade
+            fade,
           )}
         >
           {shortcut}
@@ -88,13 +90,13 @@ export function RailItem({
   );
 
   const className = cn(
-    "group/row flex h-10 w-full items-center overflow-hidden rounded-[8px] text-left transition-colors duration-200 ease-[var(--ease-primary)] focus-visible:outline-none cursor-pointer",
+    "group/row flex h-10 w-full cursor-pointer items-center overflow-hidden rounded-[8px] text-left transition-colors duration-200 ease-[var(--ease-primary)] focus-visible:outline-none",
     // The press is the only transform in this component, and it sits out
     // under reduced motion.
     "active:scale-[0.998] motion-reduce:active:scale-100",
     active
       ? "bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
-      : "text-[var(--nav-fg)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
+      : "text-[var(--nav-fg)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]",
   );
 
   /** The marker is invisible in the expanded panel, so the name carries it. */

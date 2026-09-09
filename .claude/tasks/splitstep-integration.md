@@ -27,6 +27,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T3 · Add a docs-freshness reviewer
+
 - **status:** later
 - **files:** .claude/agents/docs-freshness-reviewer.md
 - **done when:**
@@ -38,6 +39,7 @@ ready).
   drifting silently is worse than no doc; this enforces it.
 
 ## T4 · Vitest over the pure logic layer
+
 - **status:** later
 - **files:** package.json, vitest.config.ts, src/lib/services/upload/, src/lib/data/
 - **done when:**
@@ -51,6 +53,7 @@ ready).
   and the cost/benefit does not hold. Target the logic that fails silently.
 
 ## T5 · Notion task ingestion
+
 - **status:** later
 - **files:** .claude/skills/task-import/
 - **done when:**
@@ -62,6 +65,7 @@ ready).
   matches page" has no criteria, and a task without criteria cannot be gated.
 
 ## T7 · Stop a refused upload stranding its blob and job
+
 - **status:** todo
 - **files:** src/lib/services/splitstep/submit-match-video.ts,
   src/app/api/splitstep/jobs/route.ts (guess)
@@ -81,6 +85,7 @@ ready).
   but self-resolves when the claim is approved; a permission refusal does not.
 
 ## T8 · Tell "cannot resolve your workspace" apart from "you are not a member"
+
 - **status:** todo
 - **files:** src/app/api/splitstep/upload-url/route.ts (guess)
 - **done when:**
@@ -95,9 +100,10 @@ ready).
 - **notes:** The route calls `getWorkspaceContext()` a second time (after its own
   `getUser()`); any transient GoTrue failure collapses `available` to `[]`, and
   `billingWorkspaceFor([], null)` returns undefined — reported as "no access" to
-  the user's *own* personal workspace.
+  the user's _own_ personal workspace.
 
 ## T9 · Name every remedy a refused uploader actually needs
+
 - **status:** todo
 - **files:** src/lib/workspace/types.ts (guess — `explainVideoRefusal`)
 - **done when:**
@@ -113,6 +119,7 @@ ready).
   different message pointing at the roster row. Two round trips for one refusal.
 
 ## T10 · Catch a roster email that belongs to an account, not a roster row
+
 - **status:** todo
 - **files:** src/components/dashboard/team/roster-actions.ts,
   supabase/migrations/ (one migration, likely a check inside
@@ -133,12 +140,12 @@ ready).
         direct RPC call from a staff session cannot bypass it
 - **notes:** `program_players_email_key` is
   `(program_id, lower(email)) where email is not null and merged_into_id is
-  null and archived_at is null` — it is scoped to **`program_players` rows**
+null and archived_at is null` — it is scoped to **`program_players` rows**
   (`supabase/migrations/20260822090000_program_players.sql:96`). An address
   that lives in `users.email` and on no live roster row in that program passes
   it and saves. That is the reverse of the collision the tripwire was built
   for: `program_roster_full` coalesces `pp.email` with `u.email`, so the
-  roster already *displays* account addresses, and a coach retyping one has no
+  roster already _displays_ account addresses, and a coach retyping one has no
   signal that it binds a personal login address into the program's own column.
   Deferred from the roster-edit work on `claude/roster-edit-player` (branch
   merged and deleted); the finding is written up in
@@ -150,11 +157,12 @@ ready).
   the natural home for the last one).
 
 ## T11 · Collapse whitespace in process-match's is_player1 comparison
+
 - **status:** todo
-- **files:** supabase/functions/process-match/index.ts *(guess)*
+- **files:** supabase/functions/process-match/index.ts _(guess)_
 - **done when:**
   - [ ] Both sides of the `is_player1` comparison collapse internal whitespace as
-        well as trimming and lowercasing, so a `Player` of "Rudy  Quan" against a
+        well as trimming and lowercasing, so a `Player` of "Rudy Quan" against a
         `Host Team` of "Rudy Quan" yields `is_player1 = true`
   - [ ] The rule is a local copy with a comment naming the two it must stay in
         step with — `normalizedPersonName` in src/lib/data/person-name.ts and SQL
@@ -191,6 +199,7 @@ T32, T34 — see git history of the deleted
 `.claude/tasks/claude-coach-surfaces-design-rounds-t93v6b.md` for those).
 
 ## T21 · One managed profile can hold any number of open invitations
+
 - **status:** todo
 - **files:** a new migration under `supabase/migrations/`; possibly `src/components/dashboard/settings/team-actions.ts` for the error mapping
 - **done when:**
@@ -202,6 +211,7 @@ T32, T34 — see git history of the deleted
 - **notes:** Confirmed by `rls-boundary-reviewer` during T18's gate, reading `20260822120000_invites_target_a_player.sql` and `20260822120100_accept_invite_claims_profile.sql` directly. `create_program_invite` validates the player belongs to the program and is unclaimed, but never checks whether another open invite already names it; the upsert conflict target is `(program_id, lower(email)) where accepted_at is null`, keyed on the ADDRESS, and there is no unique index on `program_invites.player_id`. T18 closed the UI path that produced this by accident, but a client guard is not a security boundary — the RPC still accepts it. Consequence traced by the reviewer: `accept_program_invite` returns `already_claimed` for every invitee after the first BEFORE stamping `accepted_at`, so their row stays open, which is exactly the state the seat-reservation count treats as reserved. The seat is held with no path to release short of the coach deleting the row by hand. Reviewer's suggested shape: a partial unique index on `(program_id, player_id) where accepted_at is null and player_id is not null`, or an explicit existence check inside the RPC. Authorization is NOT the issue — `is_program_staff` is checked before any write and the player is validated against the program, so this is same-program only. Schema work: only `query_logs` was exposed in this session, so if `execute_sql`/`list_tables` are still unavailable, mark this `blocked` rather than writing a migration against an unverified schema.
 
 ## T23 · Team Home reads `processing_jobs` twice, and one read is on the critical path
+
 - **status:** todo
 - **files:** `src/lib/data/schedule-server.ts` (`readSchedule`, `getProgramSchedule`); `src/lib/data/team-home-server.ts` (`getTeamHomeData`'s second `Promise.all`)
 - **done when:**
@@ -212,6 +222,7 @@ T32, T34 — see git history of the deleted
 - **notes:** Found by `/simplify` during `/pr-check` after T19 landed. `readSchedule` ends by calling `loadMatchAnalysis` for every entry-linked match; `getTeamHomeData` then calls it again for the union of the six recent rows and the whole season. The second set CONTAINS the first — `recordResult` writes `program_id` and `event_entry_id` onto the same row, so every match `readSchedule` resolves is already in the unbounded season read. The framing that matters: wave 1's wall-clock is set by the schedule chain's 4 SERIALIZED hops (events → entries → matches → jobs) while everything else in that `Promise.all` is 1 hop, so this duplicate is one of 5 hops on the critical path — roughly 20% of the page's DB latency, not 7% of its query count. Suggested shape: have `readSchedule` return matches with a `jobIds` list and add `withAnalysis(schedule, jobs)`, or let `getProgramSchedule` take an optional pre-resolved map; Team Home resolves once and passes it in, the other two pages let the loader resolve its own. **Deeper alternative worth considering instead:** PostgREST can express the whole chain as one embedded select (`program_events?select=…,program_event_entries(…,matches(…,processing_jobs(…)))`), taking it from 4 hops to 1 and the page from 5 to 2 — that would speed the schedule and upload pages too, and would make this task moot.
 
 ## T24 · Two Team Home reads return rows the page already has
+
 - **status:** todo
 - **files:** `src/lib/data/team-home-server.ts` (`getTeamHomeData`'s first `Promise.all`); `src/lib/data/team-settings-server.ts` (a narrower reader)
 - **done when:**
@@ -223,6 +234,7 @@ T32, T34 — see git history of the deleted
 - **notes:** Two independent findings from `/simplify`, both pure waste, both 1 of 14 round trips and neither on the critical path — so this is DB work and connection contention rather than latency. (1) The recent query and the season query are both `.from("matches").eq("program_id", programId).order("date", desc)`; the season one is unbounded, so it already returns every row the six-row one does. The code acknowledges the containment and declines to use it ("the union is taken rather than assumed"). (2) `getTeamSettings` is three parallel reads — `programs`, the `program_roster` RPC, `program_invites` — and **T13 removed the last consumer of `team.members`** when it switched `rosterProgress` onto `program_roster_full` rows. Team Home now runs that RPC, maps its rows into `TeamMember[]`, and throws them away, while separately paying for `program_roster_full`, which supersedes it. The same waste exists at `team/upload/page.tsx` and the three `schedule/new/*` pages, which use only `program.defaultSurface` — one narrow reader fixes all five, but only Team Home's call site is this task's to own.
 
 ## T25 · `team-home-server.ts` is 1600 lines and seven exports exist only for tests
+
 - **status:** later
 - **files:** `src/lib/data/team-home-server.ts`; new modules under `src/lib/data/`
 - **done when:**
@@ -233,6 +245,7 @@ T32, T34 — see git history of the deleted
 - **notes:** Raised independently by the simplification and altitude reviewers during `/pr-check`. Marked `later` deliberately: it is a pure move with no behavioural intent, it touches the file every other queued task also touches, and doing it before T23/T24 would rebase both onto a moved target. Promote it once those have landed. Two specifics worth keeping: the **dual-sheet seam is the only clean one** — the simplification reviewer checked the KPI block and found `analysisOf` and `DbSeasonMatch` shared across the boundary, so cutting there splits a type and a helper; and `scheduleRowsFrom`/`eventDetailFrom` should NOT move, because they have a real production caller and their testability is a consequence rather than the reason. The altitude reviewer's stronger claim is worth weighing when this runs: the seven test-only exports currently work by accident of the whole transitive graph under `@/lib/supabase/server` being side-effect-free at module scope, and one module-scope `createClient()` anywhere in it breaks five specs for reasons unrelated to the code under test. `team-kpi.ts` is the in-repo precedent for the split, and `teamKpis` itself still living in the server module while its helpers sit in the pure one is the tell.
 
 ## T26 · Make the invite dialog's bad state unrepresentable rather than guarded
+
 - **status:** todo
 - **files:** `src/components/dashboard/team/roster-invite-dialog.tsx`
 - **done when:**
@@ -243,6 +256,7 @@ T32, T34 — see git history of the deleted
 - **notes:** Raised by the altitude reviewer during `/pr-check`, as the deeper form of T18's fix. The invariant "`linked` and `listed` are never both true" is stated in the module docblock and maintained by FIVE different mechanisms at five writers of `target`: nothing at all (`useState`, safe because `emails` starts empty), a `setEmails([])` on the next line (`reset`), a render gate (`InviteTargetPicker`), a blanked `normalized` (the on-screen tripwire), and now T18's explicit `&& !listed` (the submit path). One rule, five techniques — and the next writer has to know it and pick one. Note this file's own docblock argues against a `mode` enum because "the picker and the tripwire would each get their own idea of whether an invitation is linked"; that argument is about a second source of truth, and deriving `target` from `listed` is the opposite — one source, read consistently. The consequence when a writer is missed is what T18's comment spends fifteen lines describing, and T21's open schema hole means the client guard is currently the only thing in front of it. **The former T22 (dialog reset-path state) landed as done** — its reset path was another way `target` outlived the state it belongs to; check the current file before assuming its shape.
 
 ## T28 · Four smaller findings from the branch pre-merge check
+
 - **status:** todo
 - **files:** `src/lib/data/team-home-server.ts`; `src/app/dashboard/team/page.tsx`; `src/components/dashboard/team/roster-invite-dialog.tsx`; `src/components/dashboard/team/roster-card.tsx`
 - **done when:**
@@ -253,6 +267,7 @@ T32, T34 — see git history of the deleted
 - **notes:** All four from `code-review` during `/pr-check` over the whole branch range. None blocks the merge on its own; grouped because each is a few lines and they touch four files that other queued tasks also touch. The invite-dedupe one is the most user-visible: a coach pasting a squad list with inconsistent capitalisation is told they sent more invitations than exist, and the earlier token silently stops working.
 
 ## T29 · A claimed player's pre-claim matches are missing from their own profile
+
 - **status:** todo
 - **files:** `src/lib/data/player-profile-server.ts` (~line 130); `src/lib/data/roster-ids.ts` (the helper T27 extracted)
 - **done when:**
@@ -263,6 +278,7 @@ T32, T34 — see git history of the deleted
 - **notes:** Found by the T27 subagent while fixing the Team Home half, and correctly left alone — no `done when:` line of T27's covered it. `player-profile-server.ts:130` fetches with `.or('player1_id.eq.${playerId},player2_id.eq.${playerId}')` and then computes `isPlayer1` as `match.player1_id === playerId` — one id in both halves. So a claimed player's matches from before the `program_players` backfill, which carry their user id, are absent from their own profile page. Note the second criterion is the sharper half: once the fetch widens, siding against a single `playerId` would find a row and then attribute it to the wrong player, which is worse than not finding it. That page already reads `program_roster_full` and has the `user_id` in hand. Same class as T27; the helper now exists.
 
 ## T30 · Two writers disagree about how a tiebreak is stored
+
 - **status:** todo
 - **files:** `src/components/dashboard/schedule/single-score-entry.tsx`; `src/components/dashboard/schedule/score-entry.tsx`; `src/components/dashboard/matches/new-match-wizard/DetailsContent.tsx`; `src/components/dashboard/matches/match-actions/edit-match-dialog.tsx`; `src/lib/services/upload/parsers/swingvision-parser.ts`
 - **done when:**
@@ -276,6 +292,7 @@ T32, T34 — see git history of the deleted
 - **notes:** Found by the two production queries that unblocked T15. `single-score-entry.tsx` comments that "the tiebreak belongs to whoever LOST the set — the winner took it 7-x", and `tiebreakOf`'s doc quotes that as the encoding rule. But the only three real tiebreaks in the database — `1-0 (10,5)`, `0-1 (9,11)`, `8-9 (3,7)` — all carry **both** players' own points in their own slots. Either a different writer produced them, or the comment describes the UI's input affordance rather than the storage. Also: 41 sets carry `tb1=0, tb2=0` on shapes no tiebreak can decide, so something is zero-filling the arrays rather than leaving them null. T15's guard makes those harmless to render, which is why this is not a blocker — but a column with two conventions and a zero-fill is a trap for the next person who reads it. Do NOT let this task change `tiebreakOf`'s side selection: it prints the right digit under both conventions today, verified against all three rows.
 
 ## T31 · Four Team Home specs, three row builders, two job builders
+
 - **status:** todo
 - **files:** a new `tests/fixtures/team-home.ts`; `tests/team-kpi.spec.ts`; `tests/team-first-report.spec.ts`; `tests/team-roster-ids.spec.ts`
 - **done when:**
@@ -287,6 +304,7 @@ T32, T34 — see git history of the deleted
 - **notes:** Found by `/simplify` across two `/pr-check` runs. `team-kpi.spec.ts` and `team-first-report.spec.ts` each grew a `seasonMatch` (flagged on the first run), and T27's `team-roster-ids.spec.ts` made it three with a third signature, plus a `jobsFor` that is `team-first-report.spec.ts`'s minus `startedAt`. The three already differ in what they default (`score: null` vs a real score, and how `verified` is derived), which is the drift starting. Concrete cost: T16 had to edit two fixture files when `DbSeasonMatch` gained `player1_name`/`player2_name`, and a spec that forgets one silently tests a row shape the loader cannot produce. Deliberately NOT done inside `/pr-check` — it is test churn touching four files at the end of a branch, and every one of them is a file other queued tasks also touch. Purely additive when it runs: the shared module can land before any spec migrates.
 
 ## T33 · T18's invite guard has no test, and every merge has to re-prove it by hand
+
 - **status:** todo
 - **files:** `src/components/dashboard/team/roster-invite-dialog.tsx`; a new spec, or a new extracted module plus a spec
 - **done when:**
@@ -299,6 +317,7 @@ T32, T34 — see git history of the deleted
   Two shapes worth weighing. **Extract the decision** — the `linked`/`listed` derivation and "which `playerId` does address N get" are pure given the form's state, so lifting them into a testable function beside the component gets a real spec with no harness; T26 (make the bad state unrepresentable by deriving `target` from `listed`) would create exactly that seam, so doing T26 first may make this nearly free. **Or add the harness** — honest, larger, and it would serve `roster-table.tsx` and the wizard too, but it is a change to how this repo tests and should be decided on its own merits rather than smuggled in under a guard fix.
 
 ## T35 · Resend unbinds a player-targeted invitation
+
 - **status:** todo
 - **files:** `src/components/dashboard/team/resend-invite.tsx` (~54); `src/components/dashboard/team/roster-table.tsx` (~700); `src/lib/data/team-settings-server.ts` (~63, the select); `src/lib/data/team-roster-server.ts` (~112, ~252); `src/components/dashboard/settings/team-actions.ts` (`inviteMember`)
 - **done when:**
@@ -311,6 +330,7 @@ T32, T34 — see git history of the deleted
   **Partly inherited, partly newly propagated.** The `roster-table.tsx` call site and the missing `player_id` in the read layer predate this branch. `resend-invite.tsx` is NEW here and reproduces the identical bug on a second surface — and this branch's diff touches the old call site (extracting `resendRole`/`RESEND_LABEL`) without noticing.
 
 ## T36 · `teamAttention` reads the six-row window, not the season
+
 - **status:** todo
 - **files:** `src/lib/data/team-home-server.ts` (~1664, the `teamAttention` call site)
 - **done when:**
@@ -320,6 +340,7 @@ T32, T34 — see git history of the deleted
 - **notes:** Found by `code-review` during `/pr-check`. This is **the same window mistake T16 already fixed for `teamFirstReport`**, still present in its sibling: `teamAttention` is handed `matches`, the six-row `TeamMatchRow[]`, and asks a whole-program question of it. A program whose failed upload has scrolled past six more recent matches is never told. Low frequency on a young program; certain on an established one, which is exactly when a coach stops watching the list.
 
 ## T37 · The onboarding checklist comes back on an established program
+
 - **status:** todo
 - **files:** `src/components/dashboard/team/first-steps.tsx` (~128, `scheduleVariant`); possibly `src/app/dashboard/team/page.tsx`'s render gate
 - **done when:**

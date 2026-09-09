@@ -113,9 +113,17 @@ export function InviteTargetPicker({
         )}
         <span className="flex-1" />
         {open ? (
-          <ChevronUp className="size-3 text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden />
+          <ChevronUp
+            className="size-3 text-[var(--ink-400)]"
+            strokeWidth={1.5}
+            aria-hidden
+          />
         ) : (
-          <ChevronDown className="size-3 text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden />
+          <ChevronDown
+            className="size-3 text-[var(--ink-400)]"
+            strokeWidth={1.5}
+            aria-hidden
+          />
         )}
       </button>
 
@@ -141,9 +149,14 @@ export function InviteTargetPicker({
               aria-hidden
               className="flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--ink-300)]"
             >
-              <Plus className="size-3 text-[var(--ink-500)]" strokeWidth={1.5} />
+              <Plus
+                className="size-3 text-[var(--ink-500)]"
+                strokeWidth={1.5}
+              />
             </span>
-            <span className="text-[12px] text-[var(--ink-900)]">Someone new</span>
+            <span className="text-[12px] text-[var(--ink-900)]">
+              Someone new
+            </span>
             <span className="text-[11px] text-[var(--ink-500)]">
               creates a profile when they accept
             </span>
@@ -175,7 +188,9 @@ export function InviteTargetPicker({
                 onMouseEnter={() => setActiveIndex(optionIndex)}
                 onClick={() => choose(optionIndex)}
                 className={`flex h-[38px] cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-2.5 ${
-                  activeIndex === optionIndex ? "bg-[var(--surface-subtle)]" : ""
+                  activeIndex === optionIndex
+                    ? "bg-[var(--surface-subtle)]"
+                    : ""
                 }`}
               >
                 <span

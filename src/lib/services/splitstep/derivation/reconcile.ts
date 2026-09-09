@@ -20,7 +20,7 @@
  * court geometry instead of from the fold. The refusal above is what to restore.
  */
 
-import type { PointWinner } from './winners';
+import type { PointWinner } from "./winners";
 
 /**
  * TEMPORARY — accept the vendor's data as truth even when the fold does not
@@ -75,7 +75,7 @@ export interface Reconciliation {
    * when the wizard's top-player input plus court position named it;
    * `distance` when the closer of the two folds did. Null when refused.
    */
-  player1Source: 'fold' | 'geometry' | 'distance' | null;
+  player1Source: "fold" | "geometry" | "distance" | null;
   /** Per-set game counts the fold produced, keyed by label. */
   foldedSets: Array<Record<string, number>>;
   games: FoldedGame[];
@@ -121,7 +121,7 @@ export function scoreIsSelfMirroring(score: MatchScore): boolean {
 export function foldGames(
   winners: PointWinner[],
   gameKeyOf: (rallyId: number) => string,
-  setKeyOf: (rallyId: number) => string
+  setKeyOf: (rallyId: number) => string,
 ): { games: FoldedGame[]; sets: Array<Record<string, number>> } {
   const games: FoldedGame[] = [];
   const sets: Array<Record<string, number>> = [];
@@ -173,7 +173,7 @@ export function foldGames(
 /** Per-set counts for one label, in set order. */
 function setCounts(
   sets: Array<Record<string, number>>,
-  label: string
+  label: string,
 ): number[] {
   return sets.map((s) => s[label] ?? 0);
 }
@@ -191,13 +191,13 @@ function sameCounts(a: number[], b: number[]): boolean {
 function scoreDistance(
   p1Counts: number[],
   p2Counts: number[],
-  score: MatchScore
+  score: MatchScore,
 ): number {
   const n = Math.max(
     p1Counts.length,
     p2Counts.length,
     score.player1.length,
-    score.player2.length
+    score.player2.length,
   );
   let d = 0;
   for (let i = 0; i < n; i += 1) {
@@ -216,11 +216,14 @@ function scoreDistance(
 function player1FromGeometry(
   geometryTopLabel: string | null | undefined,
   initialTopIsPlayer1: boolean | null | undefined,
-  labels: string[]
+  labels: string[],
 ): string | null {
   if (!geometryTopLabel) return null;
-  if (initialTopIsPlayer1 === null || initialTopIsPlayer1 === undefined) return null;
-  return initialTopIsPlayer1 ? geometryTopLabel : otherOf(geometryTopLabel, labels);
+  if (initialTopIsPlayer1 === null || initialTopIsPlayer1 === undefined)
+    return null;
+  return initialTopIsPlayer1
+    ? geometryTopLabel
+    : otherOf(geometryTopLabel, labels);
 }
 
 /**
@@ -262,7 +265,7 @@ export function reconcile(params: {
   };
 
   if (labels.length !== 2) {
-    return { ...empty, reason: 'expected exactly two player labels' };
+    return { ...empty, reason: "expected exactly two player labels" };
   }
 
   // Every point must resolve. The final rally is the one legitimate exception:
@@ -294,9 +297,11 @@ export function reconcile(params: {
       aCounts,
       bCounts,
       aIsPlayer1:
-        sameCounts(aCounts, score.player1) && sameCounts(bCounts, score.player2),
+        sameCounts(aCounts, score.player1) &&
+        sameCounts(bCounts, score.player2),
       bIsPlayer1:
-        sameCounts(bCounts, score.player1) && sameCounts(aCounts, score.player2),
+        sameCounts(bCounts, score.player1) &&
+        sameCounts(aCounts, score.player2),
     };
   };
 
@@ -322,7 +327,9 @@ export function reconcile(params: {
   const attempts = (
     trailingUnresolved
       ? labels.map((label) =>
-          winners.map((w, i) => (i === lastIndex ? { ...w, winner: label } : w))
+          winners.map((w, i) =>
+            i === lastIndex ? { ...w, winner: label } : w,
+          ),
         )
       : [winners]
   ).map(attempt);
@@ -346,8 +353,14 @@ export function reconcile(params: {
       // 1. Geometry + the wizard's top-player input. Independent of the fold
       //    that just proved itself wrong, and the only signal that identifies
       //    the human directly.
-      let player1Label = player1FromGeometry(geometryTopLabel, initialTopIsPlayer1, labels);
-      let source: 'geometry' | 'distance' | null = player1Label ? 'geometry' : null;
+      let player1Label = player1FromGeometry(
+        geometryTopLabel,
+        initialTopIsPlayer1,
+        labels,
+      );
+      let source: "geometry" | "distance" | null = player1Label
+        ? "geometry"
+        : null;
 
       // Distance of every (attempt, mapping) pair from the entered score.
       // The mapping is judged on the SUM over every trailing-point attempt:
@@ -370,7 +383,7 @@ export function reconcile(params: {
         const totalB = total(b);
         if (totalA !== totalB) {
           player1Label = totalA < totalB ? a : b;
-          source = 'distance';
+          source = "distance";
         }
       }
 
@@ -380,9 +393,10 @@ export function reconcile(params: {
         // that lands closest to the entered score, as the reconciled path
         // would have done.
         const chosen = attempts.reduce((best, r) =>
-          distanceFor(player1Label as string, r) < distanceFor(player1Label as string, best)
+          distanceFor(player1Label as string, r) <
+          distanceFor(player1Label as string, best)
             ? r
-            : best
+            : best,
         );
         return {
           ok: false,
@@ -411,13 +425,17 @@ export function reconcile(params: {
   // geometry, and refuse when geometry was indecisive too, rather than pick.
   if (aIsPlayer1 && bIsPlayer1) {
     const { geometryTopLabel, initialTopIsPlayer1 } = params;
-    if (!geometryTopLabel || initialTopIsPlayer1 === null || initialTopIsPlayer1 === undefined) {
+    if (
+      !geometryTopLabel ||
+      initialTopIsPlayer1 === null ||
+      initialTopIsPlayer1 === undefined
+    ) {
       return {
         ...empty,
         foldedSets: sets,
         games,
         reason:
-          'entered score is its own mirror and geometry was indecisive, so player1 cannot be identified',
+          "entered score is its own mirror and geometry was indecisive, so player1 cannot be identified",
       };
     }
     const player1Label = initialTopIsPlayer1
@@ -426,7 +444,7 @@ export function reconcile(params: {
     return {
       ok: true,
       player1Label,
-      player1Source: 'fold',
+      player1Source: "fold",
       foldedSets: sets,
       games,
       reason: null,
@@ -438,7 +456,7 @@ export function reconcile(params: {
   return {
     ok: true,
     player1Label: aIsPlayer1 ? a : b,
-    player1Source: 'fold',
+    player1Source: "fold",
     foldedSets: sets,
     games,
     reason: null,

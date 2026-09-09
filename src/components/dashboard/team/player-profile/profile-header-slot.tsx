@@ -33,7 +33,12 @@ export interface SwitcherPlayer {
 export function ProfileHeaderSlot(
   props:
     | { mode: "self"; name: string }
-    | { mode: "staff"; name: string; playerId: string; players: SwitcherPlayer[] }
+    | {
+        mode: "staff";
+        name: string;
+        playerId: string;
+        players: SwitcherPlayer[];
+      },
 ) {
   const node = useMemo(
     () =>
@@ -42,11 +47,20 @@ export function ProfileHeaderSlot(
           {props.name}
         </span>
       ) : (
-        <StaffTrail name={props.name} playerId={props.playerId} players={props.players} />
+        <StaffTrail
+          name={props.name}
+          playerId={props.playerId}
+          players={props.players}
+        />
       ),
     // Each field is listed so a switch to the next player republishes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [props.mode, props.name, props.mode === "staff" ? props.playerId : null, props.mode === "staff" ? props.players : null]
+    [
+      props.mode,
+      props.name,
+      props.mode === "staff" ? props.playerId : null,
+      props.mode === "staff" ? props.players : null,
+    ],
   );
   usePublishHeaderSlot(node);
   return null;
@@ -67,14 +81,21 @@ function StaffTrail({
   const inWalk = position >= 0;
 
   return (
-    <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-0.5 text-[11px]">
+    <nav
+      aria-label="Breadcrumb"
+      className="flex min-w-0 items-center gap-0.5 text-[11px]"
+    >
       <Link
         href="/dashboard/team/roster"
         className="shrink-0 text-[#888888] transition-colors duration-200 hover:text-[#525252]"
       >
         Roster
       </Link>
-      <ChevronRight className="h-3 w-3 shrink-0 text-[#CCCCCC]" strokeWidth={1.5} aria-hidden="true" />
+      <ChevronRight
+        className="h-3 w-3 shrink-0 text-[#CCCCCC]"
+        strokeWidth={1.5}
+        aria-hidden="true"
+      />
 
       {inWalk ? (
         <>
@@ -90,8 +111,14 @@ function StaffTrail({
                 aria-label={`${name}. Switch player`}
                 className="-mx-1 flex h-[26px] cursor-pointer items-center gap-[5px] rounded-[var(--radius-element)] pr-1 pl-2 transition-colors duration-150 hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
               >
-                <span className="truncate text-[12px] font-medium text-[var(--ink-900)]">{name}</span>
-                <ChevronsUpDown className="h-3 w-3 shrink-0 text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
+                <span className="truncate text-[12px] font-medium text-[var(--ink-900)]">
+                  {name}
+                </span>
+                <ChevronsUpDown
+                  className="h-3 w-3 shrink-0 text-[var(--ink-400)]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
               </button>
             }
           >
@@ -99,21 +126,29 @@ function StaffTrail({
               <FloatMenuItem
                 key={player.id}
                 label={player.name}
-                description={player.lineupSpot !== null ? `Singles ${player.lineupSpot}` : undefined}
+                description={
+                  player.lineupSpot !== null
+                    ? `Singles ${player.lineupSpot}`
+                    : undefined
+                }
                 chosen={player.id === playerId}
                 onSelect={() => {
                   setOpen(false);
-                  if (player.id !== playerId) router.push(profileHref(player.id));
+                  if (player.id !== playerId)
+                    router.push(profileHref(player.id));
                 }}
               />
             ))}
           </FloatMenu>
           <span className="ml-1.5 shrink-0 text-[11px] text-[var(--ink-400)]">
-            <span className="tabular">{position + 1}</span> / <span className="tabular">{players.length}</span>
+            <span className="tabular">{position + 1}</span> /{" "}
+            <span className="tabular">{players.length}</span>
           </span>
         </>
       ) : (
-        <span className="truncate text-[12px] font-medium text-[var(--ink-900)]">{name}</span>
+        <span className="truncate text-[12px] font-medium text-[var(--ink-900)]">
+          {name}
+        </span>
       )}
     </nav>
   );

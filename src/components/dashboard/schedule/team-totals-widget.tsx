@@ -24,7 +24,7 @@ export function TeamTotalsWidget({
   coverage: { analyzed: number; total: number };
 }) {
   return (
-    <div className="surface-card min-w-0 px-5 pb-4 pt-4">
+    <div className="surface-card min-w-0 px-5 pt-4 pb-4">
       <div className="flex items-baseline justify-between gap-2">
         <span className="eyebrow">Team totals</span>
         <span className="text-[12px]" style={{ color: "var(--ink-500)" }}>
@@ -85,7 +85,7 @@ function TotalRow({
     <div className="flex flex-col gap-1">
       <div className="flex items-baseline justify-between gap-2 text-[13px]">
         <span style={{ color: "var(--ink-700)" }}>{label}</span>
-        <span className="flex items-baseline gap-2 tabular">
+        <span className="tabular flex items-baseline gap-2">
           <span className="font-medium" style={{ color: "var(--ink-900)" }}>
             {ours === null ? "—" : format(ours)}
           </span>
@@ -110,7 +110,7 @@ function BreakPointRow({
     <div className="flex flex-col gap-1">
       <div className="flex items-baseline justify-between gap-2 text-[13px]">
         <span style={{ color: "var(--ink-700)" }}>Break points</span>
-        <span className="flex items-baseline gap-2 tabular">
+        <span className="tabular flex items-baseline gap-2">
           <span className="font-medium" style={{ color: "var(--ink-900)" }}>
             {ours === null ? "—" : `${ours.converted}/${ours.opportunities}`}
           </span>
@@ -143,12 +143,10 @@ function SplitBar({
   theirs: number | null;
 }) {
   const total = (ours ?? 0) + (theirs ?? 0);
-  const oursPct = ours !== null && theirs !== null && total > 0
-    ? (ours / total) * 100
-    : 0;
-  const theirsPct = ours !== null && theirs !== null && total > 0
-    ? (theirs / total) * 100
-    : 0;
+  const oursPct =
+    ours !== null && theirs !== null && total > 0 ? (ours / total) * 100 : 0;
+  const theirsPct =
+    ours !== null && theirs !== null && total > 0 ? (theirs / total) * 100 : 0;
 
   return (
     <div

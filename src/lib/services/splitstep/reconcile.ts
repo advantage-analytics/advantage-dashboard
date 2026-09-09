@@ -24,16 +24,16 @@
  * unparseable body) never mutates job state — only the stamp.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { normaliseKey, parseWebhookPayload } from './webhook-payload';
-import { releaseQuota } from './quota';
-import { isDownloadFailure, resubmitJob } from './resubmit-job';
-import { resolveSplitstepVendorApiConfig } from './deployment-config';
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { normaliseKey, parseWebhookPayload } from "./webhook-payload";
+import { releaseQuota } from "./quota";
+import { isDownloadFailure, resubmitJob } from "./resubmit-job";
+import { resolveSplitstepVendorApiConfig } from "./deployment-config";
 
-const LOG = '[splitstep-reconcile]';
+const LOG = "[splitstep-reconcile]";
 
 /** Only these statuses can be waiting on a vendor transition. */
-const POLLABLE_STATUSES = ['submitting', 'queued', 'processing'] as const;
+const POLLABLE_STATUSES = ["submitting", "queued", "processing"] as const;
 
 /** Nothing younger than this is considered stuck. */
 const STALE_AFTER_MS = 30 * 60 * 1000;
@@ -83,25 +83,27 @@ export async function reconcileVendorJobs(params: {
   const polledBefore = new Date(now.getTime() - POLL_GAP_MS).toISOString();
 
   let query = supabase
-    .from('processing_jobs')
-    .select('id, external_job_id, status, updated_at, last_polled_at')
-    .in('status', [...POLLABLE_STATUSES])
-    .not('external_job_id', 'is', null)
-    .lt('updated_at', staleBefore)
+    .from("processing_jobs")
+    .select("id, external_job_id, status, updated_at, last_polled_at")
+    .in("status", [...POLLABLE_STATUSES])
+    .not("external_job_id", "is", null)
+    .lt("updated_at", staleBefore)
     .or(`last_polled_at.is.null,last_polled_at.lt.${polledBefore}`)
     // Oldest first: the job that has waited longest is the one most likely to
     // be genuinely lost rather than merely slow.
-    .order('updated_at', { ascending: true })
+    .order("updated_at", { ascending: true })
     .limit(cap);
 
   if (matchIds !== undefined) {
     if (matchIds.length === 0) return outcome;
-    query = query.in('match_id', matchIds);
+    query = query.in("match_id", matchIds);
   }
 
   const { data, error } = await query;
   if (error) {
-    console.warn(`${LOG} could not list pollable jobs`, { error: error.message });
+    console.warn(`${LOG} could not list pollable jobs`, {
+      error: error.message,
+    });
     return outcome;
   }
 
@@ -118,9 +120,12 @@ export async function reconcileVendorJobs(params: {
   // happened and the 10-minute gap holds — and one UPDATE beats one per job
   // on a path that runs inside a page render.
   await supabase
-    .from('processing_jobs')
+    .from("processing_jobs")
     .update({ last_polled_at: now.toISOString() })
-    .in('id', jobs.map((j) => j.id));
+    .in(
+      "id",
+      jobs.map((j) => j.id),
+    );
   outcome.polled = jobs.length;
 
   // The FETCHES run concurrently — they target different jobs, they don't
@@ -135,11 +140,11 @@ export async function reconcileVendorJobs(params: {
       let httpStatus: number;
       try {
         const response = await fetch(
-          `${apiUrl.replace(/\/$/, '')}/${encodeURIComponent(job.external_job_id)}`,
+          `${apiUrl.replace(/\/$/, "")}/${encodeURIComponent(job.external_job_id)}`,
           {
-            headers: { 'X-Api-Key': apiKey },
+            headers: { "X-Api-Key": apiKey },
             signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
-          }
+          },
         );
         httpStatus = response.status;
         raw = await response.text();
@@ -153,7 +158,7 @@ export async function reconcileVendorJobs(params: {
 
       let parsedJson: unknown = null;
       try {
-        parsedJson = raw.trim() === '' ? null : JSON.parse(raw);
+        parsedJson = raw.trim() === "" ? null : JSON.parse(raw);
       } catch {
         /* handled below as unparseable */
       }
@@ -182,10 +187,10 @@ export async function reconcileVendorJobs(params: {
       // filename must not fail a job.
       const statusText = statusFieldOf(parsedJson);
       const isStale =
-        parsed.errorCode === 'JOB_STALE' ||
+        parsed.errorCode === "JOB_STALE" ||
         (statusText !== null && /stale/i.test(statusText));
 
-      if (parsed.nextStatus === 'failed' || isStale) {
+      if (parsed.nextStatus === "failed" || isStale) {
         return {
           jobId: job.id,
           // isStale wins over whatever error object happened to be present —
@@ -193,16 +198,16 @@ export async function reconcileVendorJobs(params: {
           // leftover, unrelated error.code (e.g. a stray VIDEO_UNREACHABLE
           // from a different field) must never override that classification
           // and risk isDownloadFailure() misreading a stale job as retryable.
-          errorCode: isStale ? 'JOB_STALE' : parsed.errorCode,
-          errorCategory: isStale ? 'internal' : parsed.errorCategory,
+          errorCode: isStale ? "JOB_STALE" : parsed.errorCode,
+          errorCategory: isStale ? "internal" : parsed.errorCategory,
           errorStep: isStale ? null : parsed.errorStep,
           errorMessage:
             parsed.errorMessage ??
-            'The analysis could not be completed. You can retry it.',
+            "The analysis could not be completed. You can retry it.",
         };
       }
 
-      if (parsed.nextStatus === 'completed') {
+      if (parsed.nextStatus === "completed") {
         // Their half finished but our row never heard: the delivery is lost,
         // and with it the results SAS — the status response cannot hand it
         // back. Do not pretend otherwise: the only path to statistics is a
@@ -212,18 +217,18 @@ export async function reconcileVendorJobs(params: {
           jobId: job.id,
           // OUR code, not a vendor one — vendor codes come from their error
           // object, and this failure is the delivery's, not the job's.
-          errorCode: 'RESULTS_DELIVERY_LOST',
-          errorCategory: 'internal',
+          errorCode: "RESULTS_DELIVERY_LOST",
+          errorCategory: "internal",
           errorStep: null,
           errorMessage:
-            'The analysis finished, but its results never arrived. Retry the analysis.',
+            "The analysis finished, but its results never arrived. Retry the analysis.",
         };
       }
 
       // queued/processing or anything unrecognised: their answer matches (or
       // does not contradict) ours. The stamp is the only write.
       return null;
-    })
+    }),
   );
 
   for (const failure of polls) {
@@ -253,10 +258,10 @@ interface PolledFailure {
  */
 export async function reconcileBeforePageRead(
   matchIds: string[],
-  pageTag: string
+  pageTag: string,
 ): Promise<void> {
   try {
-    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const { createAdminClient } = await import("@/lib/supabase/admin");
     await reconcileVendorJobs({ supabase: createAdminClient(), matchIds });
   } catch (err) {
     // Never fatal — the page is more useful slightly stale than not at all.
@@ -268,12 +273,15 @@ export async function reconcileBeforePageRead(
 
 /** The top-level `status`/`state` string of a parsed body, if one exists. */
 function statusFieldOf(body: unknown): string | null {
-  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
     return null;
   }
   for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
     const normalised = normaliseKey(key);
-    if ((normalised === 'status' || normalised === 'state') && typeof value === 'string') {
+    if (
+      (normalised === "status" || normalised === "state") &&
+      typeof value === "string"
+    ) {
       return value;
     }
   }
@@ -303,18 +311,18 @@ async function applyPolledFailure(params: {
   // Conditional on still being pollable: if a webhook landed between our read
   // and this write, its answer is fresher and this update matches zero rows.
   const { data, error } = await supabase
-    .from('processing_jobs')
+    .from("processing_jobs")
     .update({
-      status: 'failed',
+      status: "failed",
       error_message: errorMessage,
       error_code: errorCode,
       error_category: errorCategory,
       error_step: errorStep,
       completed_at: new Date().toISOString(),
     })
-    .eq('id', jobId)
-    .in('status', [...POLLABLE_STATUSES])
-    .select('id');
+    .eq("id", jobId)
+    .in("status", [...POLLABLE_STATUSES])
+    .select("id");
 
   if (error) {
     console.error(`${LOG} could not apply polled failure`, {

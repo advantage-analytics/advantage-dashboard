@@ -29,17 +29,17 @@ export function num(value: number | null | undefined): number | null {
 /** A percentage column, which the view returns as a numeric string. */
 export function pct(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined) return null;
-  const parsed = typeof value === 'number' ? value : parseFloat(value);
+  const parsed = typeof value === "number" ? value : parseFloat(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
 /** Mean of the values that are actually present, or null if none are. */
 export function meanOfPresent(
   values: (number | null | undefined)[],
-  decimals = 1
+  decimals = 1,
 ): number | null {
   const present = values.filter(
-    (v): v is number => v !== null && v !== undefined && Number.isFinite(v)
+    (v): v is number => v !== null && v !== undefined && Number.isFinite(v),
   );
   if (present.length === 0) return null;
   const mean = present.reduce((a, b) => a + b, 0) / present.length;
@@ -56,11 +56,12 @@ export function meanOfPresent(
  */
 export function presentPairs<T>(
   values: (number | null | undefined)[],
-  meta: T[]
+  meta: T[],
 ): { value: number; meta: T }[] {
   const out: { value: number; meta: T }[] = [];
   values.forEach((value, i) => {
-    if (value === null || value === undefined || !Number.isFinite(value)) return;
+    if (value === null || value === undefined || !Number.isFinite(value))
+      return;
     out.push({ value, meta: meta[i] });
   });
   return out;

@@ -98,14 +98,22 @@ export async function compressVideo({
     // -movflags +faststart → metadata at file start for streaming
     const exitCode = await ffmpeg.exec(
       [
-        "-i", inputName,
-        "-vf", "scale=-2:720",
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "28",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
+        "-i",
+        inputName,
+        "-vf",
+        "scale=-2:720",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "28",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-movflags",
+        "+faststart",
         outputName,
       ],
       undefined,
@@ -122,7 +130,9 @@ export async function compressVideo({
       throw new Error("Unexpected string output from FFmpeg");
     }
 
-    const compressedBlob = new Blob([data as unknown as BlobPart], { type: "video/mp4" });
+    const compressedBlob = new Blob([data as unknown as BlobPart], {
+      type: "video/mp4",
+    });
     const compressedFile = new File(
       [compressedBlob],
       file.name.replace(/\.[^.]+$/, ".mp4"),
@@ -139,8 +149,16 @@ export async function compressVideo({
     signal?.removeEventListener("abort", abortHandler);
 
     // Clean up virtual filesystem
-    try { await ffmpeg.deleteFile(inputName); } catch { /* ignore */ }
-    try { await ffmpeg.deleteFile(outputName); } catch { /* ignore */ }
+    try {
+      await ffmpeg.deleteFile(inputName);
+    } catch {
+      /* ignore */
+    }
+    try {
+      await ffmpeg.deleteFile(outputName);
+    } catch {
+      /* ignore */
+    }
   }
 }
 

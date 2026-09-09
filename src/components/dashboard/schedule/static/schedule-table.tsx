@@ -59,11 +59,11 @@ export function ScheduleTable({
   onSelect: (eventId: string, viaKeyboard: boolean) => void;
 }) {
   return (
-    <div className="surface-card min-w-0 px-6 pb-1.5 pt-0.5">
+    <div className="surface-card min-w-0 px-6 pt-0.5 pb-1.5">
       <div
         className={cn(
-          "grid items-center gap-4 border-b border-[var(--border-hairline)] pb-2.5 pt-3.5",
-          SCHEDULE_GRID
+          "grid items-center gap-4 border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
+          SCHEDULE_GRID,
         )}
       >
         {SCHEDULE_COLUMNS.map((label) => (
@@ -146,12 +146,12 @@ function EventRow({
         "-mx-4 grid h-[52px] w-[calc(100%+32px)] cursor-pointer items-center gap-4 rounded-[var(--radius-element)] px-4 text-left",
         "transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)]",
         "outline-none focus-visible:shadow-[var(--focus-ring)]",
-        SCHEDULE_GRID
+        SCHEDULE_GRID,
       )}
       style={{ background: isSelected ? "var(--surface-muted)" : undefined }}
     >
       <span
-        className="tabular whitespace-nowrap text-[12px]"
+        className="tabular text-[12px] whitespace-nowrap"
         style={{ color: "var(--ink-700)" }}
       >
         {formatEventDay(row.startsOn)}
@@ -176,7 +176,7 @@ function EventRow({
           about that. A tournament we host, or travel to, still says so. */}
       <span className="text-[12px]" style={{ color: "var(--ink-600)" }}>
         {!isDual && row.site === "neutral" ? (
-<EmptyMark label="Neutral site" />
+          <EmptyMark label="Neutral site" />
         ) : (
           siteTitle(row.site)
         )}
@@ -190,7 +190,7 @@ function EventRow({
           isDual ? (
             "Not set"
           ) : (
-<EmptyMark label="No entries yet" />
+            <EmptyMark label="No entries yet" />
           )
         ) : (
           `${row.playedCount} / ${row.entryCount}`
@@ -214,12 +214,7 @@ function EventRow({
 }
 
 type RowResult =
-  | "won"
-  | "lost"
-  | "level"
-  | "in-progress"
-  | "not-played"
-  | "none";
+  "won" | "lost" | "level" | "in-progress" | "not-played" | "none";
 
 /**
  * The two right-hand cells, decided once so they cannot disagree: a score
@@ -227,7 +222,7 @@ type RowResult =
  */
 function rowOutcome(
   row: ScheduleRow,
-  detail: EventDetail | null
+  detail: EventDetail | null,
 ): { score: string | null; result: RowResult } {
   if (row.kind !== "dual") {
     return { score: null, result: row.playedCount > 0 ? "none" : "not-played" };
@@ -269,9 +264,7 @@ function ResultCell({ result }: { result: RowResult }) {
     );
   }
   if (result === "none") {
-    return (
-      <EmptyMark label="No result" />
-    );
+    return <EmptyMark label="No result" />;
   }
   return (
     <span

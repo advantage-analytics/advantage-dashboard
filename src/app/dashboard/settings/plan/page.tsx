@@ -176,16 +176,16 @@ function PlanContent() {
               index === 0
                 ? "pr-6"
                 : "sm:border-l sm:border-[var(--ink-100)] sm:px-6",
-              index === facts.length - 1 && "sm:pr-0"
+              index === facts.length - 1 && "sm:pr-0",
             )}
           >
             <span className="eyebrow">{fact.label}</span>
             <span
               className={cn(
-                "tabular text-[22px] font-light leading-[1.15] tracking-[-0.4px]",
+                "tabular text-[22px] leading-[1.15] font-light tracking-[-0.4px]",
                 "muted" in fact && fact.muted
                   ? "text-[var(--ink-400)]"
-                  : "text-[var(--ink-900)]"
+                  : "text-[var(--ink-900)]",
               )}
             >
               {fact.value}
@@ -231,86 +231,86 @@ function PlanContent() {
         </section>
       ) : (
         <>
-        <section className="flex flex-col gap-5">
-          <SettingsSectionHeading number="01" title="Choose your plan" />
+          <section className="flex flex-col gap-5">
+            <SettingsSectionHeading number="01" title="Choose your plan" />
 
-          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-            {PLANS.map((plan) => {
-              const isCurrent = plan.id === (isPro ? "pro" : "free");
-              const isSelected = plan.id === selectedPlan;
-              return (
-                <button
-                  key={plan.id}
-                  type="button"
-                  onClick={() => setSelectedPlan(plan.id)}
-                  aria-pressed={isSelected}
-                  className={cn(
-                    "flex cursor-pointer flex-col gap-2.5 rounded-[14px] border p-[18px] text-left transition-colors duration-200",
-                    "focus-visible:outline-none",
-                    isSelected
-                      ? "border-[var(--blue)] shadow-[var(--shadow-card-emphasis)]"
-                      : "border-[var(--border-card)] hover:border-[var(--ink-300)]"
-                  )}
-                >
-                  <span className="flex items-center gap-2">
-                    <span className="text-[13px] font-medium text-[var(--ink-900)]">
-                      {plan.name}
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              {PLANS.map((plan) => {
+                const isCurrent = plan.id === (isPro ? "pro" : "free");
+                const isSelected = plan.id === selectedPlan;
+                return (
+                  <button
+                    key={plan.id}
+                    type="button"
+                    onClick={() => setSelectedPlan(plan.id)}
+                    aria-pressed={isSelected}
+                    className={cn(
+                      "flex cursor-pointer flex-col gap-2.5 rounded-[14px] border p-[18px] text-left transition-colors duration-200",
+                      "focus-visible:outline-none",
+                      isSelected
+                        ? "border-[var(--blue)] shadow-[var(--shadow-card-emphasis)]"
+                        : "border-[var(--border-card)] hover:border-[var(--ink-300)]",
+                    )}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="text-[13px] font-medium text-[var(--ink-900)]">
+                        {plan.name}
+                      </span>
+                      {isCurrent && (
+                        <span className="text-[10px] font-medium tracking-[1.5px] text-[var(--blue)] uppercase">
+                          Current
+                        </span>
+                      )}
                     </span>
-                    {isCurrent && (
-                      <span className="text-[10px] font-medium uppercase tracking-[1.5px] text-[var(--blue)]">
-                        Current
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-[26px] font-light text-[var(--ink-900)]">
-                    {plan.price}
-                    {plan.note && (
-                      <span className="ml-1 text-[12px] text-[var(--ink-500)]">
-                        {plan.note}
-                      </span>
-                    )}
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="h-px bg-[var(--border-hairline)]"
-                  />
-                  <span className="text-[11px] leading-[1.6] text-[var(--ink-600)]">
-                    {plan.summary}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          <p className="text-[11px] text-[var(--ink-500)]">
-            Changing plan never changes your role. Pro is a one-time payment —
-            there is no subscription to cancel.
-          </p>
-        </section>
-
-        <section className="flex items-center gap-4 border-t border-[var(--border-hairline)] pt-5">
-          <div className="min-w-0 flex-1">
-            <div className="text-[12px] text-[var(--ink-900)]">
-              Billing is handled by Stripe.
+                    <span className="text-[26px] font-light text-[var(--ink-900)]">
+                      {plan.price}
+                      {plan.note && (
+                        <span className="ml-1 text-[12px] text-[var(--ink-500)]">
+                          {plan.note}
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="h-px bg-[var(--border-hairline)]"
+                    />
+                    <span className="text-[11px] leading-[1.6] text-[var(--ink-600)]">
+                      {plan.summary}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
-            <div className="mt-0.5 text-[11px] text-[var(--ink-500)]">
-              Receipts and card details live there.{" "}
-              <Link
-                href="/dashboard/help#support"
-                className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
-              >
-                Questions about billing?
-              </Link>
+
+            <p className="text-[11px] text-[var(--ink-500)]">
+              Changing plan never changes your role. Pro is a one-time payment —
+              there is no subscription to cancel.
+            </p>
+          </section>
+
+          <section className="flex items-center gap-4 border-t border-[var(--border-hairline)] pt-5">
+            <div className="min-w-0 flex-1">
+              <div className="text-[12px] text-[var(--ink-900)]">
+                Billing is handled by Stripe.
+              </div>
+              <div className="mt-0.5 text-[11px] text-[var(--ink-500)]">
+                Receipts and card details live there.{" "}
+                <Link
+                  href="/dashboard/help#support"
+                  className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                >
+                  Questions about billing?
+                </Link>
+              </div>
             </div>
-          </div>
-          <SettingsButton
-            onClick={handleUpgrade}
-            disabled={isPro || selectedPlan === "free"}
-            loading={isLoading}
-          >
-            {isPro ? "You're on Pro" : "Upgrade to Pro"}
-          </SettingsButton>
-        </section>
+            <SettingsButton
+              onClick={handleUpgrade}
+              disabled={isPro || selectedPlan === "free"}
+              loading={isLoading}
+            >
+              {isPro ? "You're on Pro" : "Upgrade to Pro"}
+            </SettingsButton>
+          </section>
         </>
       )}
     </div>

@@ -312,7 +312,10 @@ export default async function RosterPage({
           )}
         </p>
       )}
-      <p key="quota" className="text-[11px] leading-[1.6] text-[var(--ink-500)]">
+      <p
+        key="quota"
+        className="text-[11px] leading-[1.6] text-[var(--ink-500)]"
+      >
         {UPLOAD_COPY[roster.uploadPolicy]}
         {" — analysis time resets "}
         {formatResetDate(currentBillingMonth())}.

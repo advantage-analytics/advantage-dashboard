@@ -85,7 +85,10 @@ export const REAL_COURT_LENGTH = 23.77;
  * REAL_NET_Y and lx is mirrored. Flip both so every serve plots in the same
  * canonical half-court [SERVICE_Y .. NET].
  */
-export function normalizeLanding(lx: number, ly: number): { lx: number; ly: number } {
+export function normalizeLanding(
+  lx: number,
+  ly: number,
+): { lx: number; ly: number } {
   if (ly > REAL_NET_Y) {
     return { lx: -lx, ly: REAL_COURT_LENGTH - ly };
   }
@@ -119,14 +122,24 @@ export function mapRealCoordsToServeDot(
   };
 }
 
-const SCORE_MAP: Record<string, number> = { "0": 0, "15": 1, "30": 2, "40": 3, A: 3, AD: 3 };
+const SCORE_MAP: Record<string, number> = {
+  "0": 0,
+  "15": 1,
+  "30": 2,
+  "40": 3,
+  A: 3,
+  AD: 3,
+};
 
 export function getPointSide(p: ServePointInput): "deuce" | "ad" {
   const s = (p.pointScore ?? "").toUpperCase().trim();
   if (s === "DEUCE" || s === "40-40") return "deuce";
   if (/^AD?-|-AD?$/.test(s)) return "ad";
   const parts = s.split("-");
-  return ((SCORE_MAP[parts[0]?.trim() ?? ""] ?? 0) + (SCORE_MAP[parts[1]?.trim() ?? ""] ?? 0)) % 2 === 0
+  return ((SCORE_MAP[parts[0]?.trim() ?? ""] ?? 0) +
+    (SCORE_MAP[parts[1]?.trim() ?? ""] ?? 0)) %
+    2 ===
+    0
     ? "deuce"
     : "ad";
 }
@@ -140,7 +153,9 @@ export type PointResult = "ace" | "doubleFault" | "won" | "lost";
 export function classifyPointResult(p: ServePointInput): PointResult {
   if (p.resultType === "Double Fault") return "doubleFault";
   if (p.resultType === "Ace") return "ace";
-  const won = (p.wonByPlayer1 && p.serverIsPlayer1) || (!p.wonByPlayer1 && !p.serverIsPlayer1);
+  const won =
+    (p.wonByPlayer1 && p.serverIsPlayer1) ||
+    (!p.wonByPlayer1 && !p.serverIsPlayer1);
   return won ? "won" : "lost";
 }
 
@@ -149,16 +164,23 @@ export function deriveZoneFromX(lx: number): string {
   return a >= 2.74 ? "wide" : a >= 1.37 ? "body" : "t";
 }
 
-export type ZoneKey = "deuce-wide" | "deuce-body" | "deuce-t" | "ad-t" | "ad-body" | "ad-wide";
+export type ZoneKey =
+  "deuce-wide" | "deuce-body" | "deuce-t" | "ad-t" | "ad-body" | "ad-wide";
 
-export const ZONES: { key: ZoneKey; label: string; x1: number; x2: number }[] = [
-  { key: "deuce-wide", label: "Wide", x1: SINGLES_LEFT, x2: ZONE_LINES_X[0] },
-  { key: "deuce-body", label: "Body", x1: ZONE_LINES_X[0], x2: ZONE_LINES_X[1] },
-  { key: "deuce-t", label: "T", x1: ZONE_LINES_X[1], x2: CENTER_X },
-  { key: "ad-t", label: "T", x1: CENTER_X, x2: ZONE_LINES_X[2] },
-  { key: "ad-body", label: "Body", x1: ZONE_LINES_X[2], x2: ZONE_LINES_X[3] },
-  { key: "ad-wide", label: "Wide", x1: ZONE_LINES_X[3], x2: SINGLES_RIGHT },
-];
+export const ZONES: { key: ZoneKey; label: string; x1: number; x2: number }[] =
+  [
+    { key: "deuce-wide", label: "Wide", x1: SINGLES_LEFT, x2: ZONE_LINES_X[0] },
+    {
+      key: "deuce-body",
+      label: "Body",
+      x1: ZONE_LINES_X[0],
+      x2: ZONE_LINES_X[1],
+    },
+    { key: "deuce-t", label: "T", x1: ZONE_LINES_X[1], x2: CENTER_X },
+    { key: "ad-t", label: "T", x1: CENTER_X, x2: ZONE_LINES_X[2] },
+    { key: "ad-body", label: "Body", x1: ZONE_LINES_X[2], x2: ZONE_LINES_X[3] },
+    { key: "ad-wide", label: "Wide", x1: ZONE_LINES_X[3], x2: SINGLES_RIGHT },
+  ];
 
 export function classifyZone(x: number): ZoneKey {
   const cx = SINGLES_LEFT + x * (SINGLES_RIGHT - SINGLES_LEFT);
@@ -179,10 +201,22 @@ export interface ZoneStats {
 }
 
 function emptyZoneStats(): ZoneStats {
-  return { count: 0, pct: 0, first: 0, second: 0, won: 0, lost: 0, ace: 0, doubleFault: 0, winPct: 0 };
+  return {
+    count: 0,
+    pct: 0,
+    first: 0,
+    second: 0,
+    won: 0,
+    lost: 0,
+    ace: 0,
+    doubleFault: 0,
+    winPct: 0,
+  };
 }
 
-export function computeZoneStats(dots: ServeDot[]): Record<ZoneKey, ZoneStats> | null {
+export function computeZoneStats(
+  dots: ServeDot[],
+): Record<ZoneKey, ZoneStats> | null {
   if (dots.length === 0) return null;
   const result: Record<ZoneKey, ZoneStats> = {
     "deuce-wide": emptyZoneStats(),
@@ -205,7 +239,8 @@ export function computeZoneStats(dots: ServeDot[]): Record<ZoneKey, ZoneStats> |
     const zs = result[key];
     zs.pct = Math.round((zs.count / total) * 100);
     const resolved = zs.won + zs.lost + zs.ace + zs.doubleFault;
-    zs.winPct = resolved > 0 ? Math.round(((zs.won + zs.ace) / resolved) * 100) : 0;
+    zs.winPct =
+      resolved > 0 ? Math.round(((zs.won + zs.ace) / resolved) * 100) : 0;
   }
   return result;
 }

@@ -13,7 +13,10 @@ import {
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
-import { shortMonthDate, formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
+import {
+  shortMonthDate,
+  formatClock,
+} from "@/components/dashboard/matches/match-detail/format-clock";
 import { advButton } from "@/lib/ui/adv-button";
 import {
   Tooltip,
@@ -96,7 +99,9 @@ function InertGlyph({
           {children}
         </button>
       </TooltipTrigger>
-      <TooltipContent side="top">{label} isn&rsquo;t wired up yet</TooltipContent>
+      <TooltipContent side="top">
+        {label} isn&rsquo;t wired up yet
+      </TooltipContent>
     </Tooltip>
   );
 }
@@ -119,7 +124,10 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       (seconds: number) => {
         const el = videoRef.current;
         if (!el) return;
-        const max = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : undefined;
+        const max =
+          Number.isFinite(el.duration) && el.duration > 0
+            ? el.duration
+            : undefined;
         const target = Math.max(0, max ? Math.min(seconds, max) : seconds);
         el.currentTime = target;
         setCurrentTime(target);
@@ -194,7 +202,10 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
         if (rect.width === 0) return;
         const total = Number.isFinite(el.duration) ? el.duration : duration;
         if (!total) return;
-        const fraction = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+        const fraction = Math.min(
+          1,
+          Math.max(0, (clientX - rect.left) / rect.width),
+        );
         seekTo(fraction * total);
       },
       [duration, seekTo],
@@ -335,7 +346,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
                   seekTo(currentTime - 5);
                 }
               }}
-              className="pointer-events-auto relative my-2 mb-2.5 h-0.5 cursor-pointer bg-white/[0.22] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
+              className="pointer-events-auto relative my-2 mb-2.5 h-0.5 cursor-pointer bg-white/[0.22] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
             >
               <span
                 className="absolute inset-y-0 left-0 bg-[var(--blue)]"
@@ -350,11 +361,27 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
                 aria-label={playing ? "Pause" : "Play"}
                 className={GLYPH}
               >
-                <svg viewBox="0 0 24 24" aria-hidden="true" className="block h-full w-full">
+                <svg
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  className="block h-full w-full"
+                >
                   {playing ? (
                     <>
-                      <rect x="7" y="4" width="4" height="16" fill="currentColor" />
-                      <rect x="14" y="4" width="4" height="16" fill="currentColor" />
+                      <rect
+                        x="7"
+                        y="4"
+                        width="4"
+                        height="16"
+                        fill="currentColor"
+                      />
+                      <rect
+                        x="14"
+                        y="4"
+                        width="4"
+                        height="16"
+                        fill="currentColor"
+                      />
                     </>
                   ) : (
                     <polygon points="7 4 20 12 7 20" fill="currentColor" />
@@ -367,7 +394,10 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
                 onClick={() => step(-1)}
                 disabled={stops.length === 0}
                 aria-label="Previous point"
-                className={cn(GLYPH, "disabled:cursor-default disabled:opacity-35")}
+                className={cn(
+                  GLYPH,
+                  "disabled:cursor-default disabled:opacity-35",
+                )}
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -379,7 +409,11 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
                   aria-hidden="true"
                   className="block h-full w-full"
                 >
-                  <polygon points="18 5 8 12 18 19" fill="currentColor" stroke="none" />
+                  <polygon
+                    points="18 5 8 12 18 19"
+                    fill="currentColor"
+                    stroke="none"
+                  />
                   <line x1="5" y1="5" x2="5" y2="19" />
                 </svg>
               </button>
@@ -389,7 +423,10 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
                 onClick={() => step(1)}
                 disabled={stops.length === 0}
                 aria-label="Next point"
-                className={cn(GLYPH, "disabled:cursor-default disabled:opacity-35")}
+                className={cn(
+                  GLYPH,
+                  "disabled:cursor-default disabled:opacity-35",
+                )}
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -401,7 +438,11 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
                   aria-hidden="true"
                   className="block h-full w-full"
                 >
-                  <polygon points="6 5 16 12 6 19" fill="currentColor" stroke="none" />
+                  <polygon
+                    points="6 5 16 12 6 19"
+                    fill="currentColor"
+                    stroke="none"
+                  />
                   <line x1="19" y1="5" x2="19" y2="19" />
                 </svg>
               </button>
@@ -513,9 +554,24 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
                   aria-hidden="true"
                   className="block"
                 >
-                  <circle cx="12" cy="5" r="1.4" fill="rgba(255,255,255,0.85)" />
-                  <circle cx="12" cy="12" r="1.4" fill="rgba(255,255,255,0.85)" />
-                  <circle cx="12" cy="19" r="1.4" fill="rgba(255,255,255,0.85)" />
+                  <circle
+                    cx="12"
+                    cy="5"
+                    r="1.4"
+                    fill="rgba(255,255,255,0.85)"
+                  />
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="1.4"
+                    fill="rgba(255,255,255,0.85)"
+                  />
+                  <circle
+                    cx="12"
+                    cy="19"
+                    r="1.4"
+                    fill="rgba(255,255,255,0.85)"
+                  />
                 </svg>
               </InertGlyph>
             </div>

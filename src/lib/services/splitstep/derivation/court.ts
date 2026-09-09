@@ -94,7 +94,7 @@ export interface CourtPosition {
  */
 export function metersToCourtFrame(
   xMeters: number,
-  yMeters: number
+  yMeters: number,
 ): CourtPosition {
   return { x: xMeters, y: yMeters + BASELINE_M };
 }
@@ -116,12 +116,12 @@ export function kmhToMph(kmh: number): number {
  */
 export function serveCourtSide(
   playerX: number | null,
-  playerY: number | null
-): 'deuce' | 'ad' | null {
+  playerY: number | null,
+): "deuce" | "ad" | null {
   if (playerX === null || playerY === null) return null;
   // Serving from the negative-y end means hitting toward +y, and vice versa.
   const hittingToward = playerY < 0 ? 1 : -1;
-  return playerX * hittingToward > 0 ? 'deuce' : 'ad';
+  return playerX * hittingToward > 0 ? "deuce" : "ad";
 }
 
 /**
@@ -133,12 +133,16 @@ export function serveCourtSide(
 export function isInServiceBox(
   bounceX: number | null,
   bounceY: number | null,
-  serverY: number | null
+  serverY: number | null,
 ): boolean | null {
   if (bounceX === null || bounceY === null || serverY === null) return null;
   const hittingToward = serverY < 0 ? 1 : -1;
   const depth = bounceY * hittingToward;
-  return depth > 0 && depth <= SERVICE_LINE_M && Math.abs(bounceX) <= SINGLES_HALF_WIDTH_M;
+  return (
+    depth > 0 &&
+    depth <= SERVICE_LINE_M &&
+    Math.abs(bounceX) <= SINGLES_HALF_WIDTH_M
+  );
 }
 
 /**
@@ -154,12 +158,14 @@ export function isInServiceBox(
  * Returns a value from the `shots_zone_check` constraint, or null when the
  * landing is unknown.
  */
-export function serveZone(landingX: number | null): 'T' | 'Body' | 'Wide' | null {
+export function serveZone(
+  landingX: number | null,
+): "T" | "Body" | "Wide" | null {
   if (landingX === null) return null;
   const from = Math.abs(landingX);
-  if (from < 1.37) return 'T';
-  if (from < 2.74) return 'Body';
-  return 'Wide';
+  if (from < 1.37) return "T";
+  if (from < 2.74) return "Body";
+  return "Wide";
 }
 
 /**
@@ -171,12 +177,12 @@ export function serveZone(landingX: number | null): 'T' | 'Body' | 'Wide' | null
  */
 export function directionZone(
   landingX: number | null,
-  serveLandingX: number | null
-): 'Crosscourt' | 'Middle' | 'Down the Line' | null {
+  serveLandingX: number | null,
+): "Crosscourt" | "Middle" | "Down the Line" | null {
   if (landingX === null) return null;
-  if (Math.abs(landingX) <= 1.0) return 'Middle';
+  if (Math.abs(landingX) <= 1.0) return "Middle";
   if (serveLandingX === null) return null;
   return Math.sign(serveLandingX) !== Math.sign(landingX)
-    ? 'Crosscourt'
-    : 'Down the Line';
+    ? "Crosscourt"
+    : "Down the Line";
 }

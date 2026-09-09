@@ -72,8 +72,7 @@ export const DATE_COL_WITH_YEAR = "84px";
  * gives the same mark and header. Score is 116px at one precision.
  */
 export const LIST_GRID_COLS = {
-  gridTemplateColumns:
-    `var(--date-col, ${DATE_COL}) minmax(186px,276px) minmax(150px,260px) 116px 64px minmax(96px,1fr) 28px 13px`,
+  gridTemplateColumns: `var(--date-col, ${DATE_COL}) minmax(186px,276px) minmax(150px,260px) 116px 64px minmax(96px,1fr) 28px 13px`,
 } as const;
 
 /**
@@ -109,19 +108,26 @@ interface MatchCardListProps {
   unseen?: boolean;
 }
 
-export function MatchCardList({ match, isNew, unseen }: MatchCardListProps): React.JSX.Element {
+export function MatchCardList({
+  match,
+  isNew,
+  unseen,
+}: MatchCardListProps): React.JSX.Element {
   const isWin = match.score.winner === "player1";
 
   return (
     <div
       className={`${LIST_ROW_FRAME} group relative -mx-4 h-[52px] rounded-[var(--radius-element)] px-4 transition-colors duration-200 hover:bg-[var(--surface-muted)]${
-        isNew ? " animate-[highlight-new-match_1.5s_ease-out_0.4s_both]" : ""
+        isNew ? "animate-[highlight-new-match_1.5s_ease-out_0.4s_both]" : ""
       }`}
       style={LIST_GRID_COLS}
       role="row"
     >
       {/* Date — the key column, tabular, matching Schedule and the roster card. */}
-      <span className="tabular whitespace-nowrap text-[12px]" style={{ color: "var(--ink-700)" }}>
+      <span
+        className="tabular text-[12px] whitespace-nowrap"
+        style={{ color: "var(--ink-700)" }}
+      >
         {formatShortDate(match.date)}
       </span>
 
@@ -143,10 +149,16 @@ export function MatchCardList({ match, isNew, unseen }: MatchCardListProps): Rea
           it qualifies trailing it in mono. The round never truncates: it is two
           or three characters, and a tournament losing its tail is a smaller
           loss than a stage nobody can read. */}
-      <span className="flex min-w-0 items-baseline gap-1 text-[12px]" style={{ color: "var(--ink-500)" }}>
+      <span
+        className="flex min-w-0 items-baseline gap-1 text-[12px]"
+        style={{ color: "var(--ink-500)" }}
+      >
         <span className="min-w-0 truncate">{match.tournamentName}</span>
         {match.round && (
-          <span className="mono shrink-0 text-[11px]" style={{ color: "var(--ink-400)" }}>
+          <span
+            className="mono shrink-0 text-[11px]"
+            style={{ color: "var(--ink-400)" }}
+          >
             · {match.round}
           </span>
         )}

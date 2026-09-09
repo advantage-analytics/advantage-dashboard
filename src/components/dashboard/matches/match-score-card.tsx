@@ -13,13 +13,13 @@ interface MatchScoreCardProps {
 export function MatchScoreCard({ match }: MatchScoreCardProps) {
   return (
     <motion.div
-      className="w-[320px] flex flex-col gap-4 px-6 py-4 bg-white rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]"
+      className="flex w-[320px] flex-col gap-4 rounded-[16px] border border-[#E7E7E7] bg-white px-6 py-4 shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: [...EASE_CURVE] }}
     >
       <motion.div
-        className="flex flex-row justify-between items-center gap-12"
+        className="flex flex-row items-center justify-between gap-12"
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, delay: 0.03, ease: [...EASE_CURVE] }}
@@ -27,7 +27,7 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
         <span className="text-xs font-medium text-[#888888]">
           {match.matchContext}
         </span>
-        <span className="px-1.5 py-0.5 rounded-[10px] bg-[#F3F3F3] text-xs font-medium text-[#888888]">
+        <span className="rounded-[10px] bg-[#F3F3F3] px-1.5 py-0.5 text-xs font-medium text-[#888888]">
           {match.duration ?? "—"}
         </span>
       </motion.div>
@@ -35,19 +35,19 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
       <div className="flex flex-col gap-4">
         {/* Player 1 */}
         <motion.div
-          className="flex flex-row justify-between items-center gap-[52px]"
+          className="flex flex-row items-center justify-between gap-[52px]"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, delay: 0.1, ease: [...EASE_CURVE] }}
         >
           <div className="flex flex-row items-center gap-4">
-            <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-[#F2F2F2]">
               <span className="text-xs font-medium text-[#BFBFBF]">
                 {getInitials(match.player1.name)}
               </span>
             </div>
             <span
-              className={`text-sm font-semibold truncate ${
+              className={`truncate text-sm font-semibold ${
                 match.score.winner === "player1"
                   ? "text-[#0D0D0D]"
                   : "text-[#888888]"
@@ -74,19 +74,19 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
 
         {/* Player 2 */}
         <motion.div
-          className="flex flex-row justify-between items-center gap-[52px]"
+          className="flex flex-row items-center justify-between gap-[52px]"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, delay: 0.17, ease: [...EASE_CURVE] }}
         >
           <div className="flex flex-row items-center gap-4">
-            <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-[#F2F2F2]">
               <span className="text-xs font-medium text-[#BFBFBF]">
                 {getInitials(match.player2.name)}
               </span>
             </div>
             <span
-              className={`text-sm font-semibold truncate ${
+              className={`truncate text-sm font-semibold ${
                 match.score.winner === "player2"
                   ? "text-[#0D0D0D]"
                   : "text-[#888888]"
@@ -114,4 +114,3 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
     </motion.div>
   );
 }
-

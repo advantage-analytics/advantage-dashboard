@@ -33,14 +33,14 @@ export function AdvSwitch({
       aria-label={label}
       disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
-      className="group relative h-5 w-9 shrink-0 cursor-pointer rounded-[var(--radius-pill)] outline-none transition-colors duration-[var(--duration-hover)] focus-visible:shadow-[var(--focus-ring)] disabled:pointer-events-none disabled:opacity-50"
+      className="group relative h-5 w-9 shrink-0 cursor-pointer rounded-[var(--radius-pill)] transition-colors duration-[var(--duration-hover)] outline-none focus-visible:shadow-[var(--focus-ring)] disabled:pointer-events-none disabled:opacity-50"
       style={{
         background: checked ? "var(--blue)" : "var(--ink-200)",
       }}
     >
       <span
         aria-hidden="true"
-        className="absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.15)] transition-transform duration-[var(--duration-hover)] ease-[var(--ease-primary)] motion-reduce:transition-none"
+        className="absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.15)] transition-transform duration-[var(--duration-hover)] ease-[var(--ease-primary)] motion-reduce:transition-none"
         style={{ transform: checked ? "translateX(16px)" : "translateX(0)" }}
       />
     </button>

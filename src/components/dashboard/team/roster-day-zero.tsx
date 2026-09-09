@@ -47,8 +47,7 @@ import type { RosterMember, SeatUsage } from "@/lib/data/team-roster-server";
  * right-hand cells sit under the wrong headings.
  */
 const ROW_RULES: readonly (
-  | { spacer: true }
-  | ({ col: string } & React.ComponentProps<typeof GhostRule>)
+  { spacer: true } | ({ col: string } & React.ComponentProps<typeof GhostRule>)
 )[] = [
   { col: COL.spot, width: "10px" }, // # — a line number's footprint
   { col: COL.player, width: "58%", tone: "200", shape: "tall" }, // Player — the name
@@ -68,7 +67,7 @@ function GhostRow({ opacity }: { opacity: number }) {
           <span key={i} className={`${rule.col} flex items-center`}>
             <GhostRule {...rule} />
           </span>
-        )
+        ),
       )}
     </div>
   );
@@ -120,7 +119,9 @@ export function RosterDayZero({
                 come from the real header by import, so a renamed column cannot
                 leave the ghost saying the old word. Set lineup does not ride
                 this header: it needs two players to have anything to order. */}
-            <div className={`${ROW} border-b border-[var(--border-hairline)] pt-3.5 pb-2.5`}>
+            <div
+              className={`${ROW} border-b border-[var(--border-hairline)] pt-3.5 pb-2.5`}
+            >
               {ROSTER_COLUMNS.map((column) =>
                 "spacer" in column ? (
                   <span key="spacer" className="flex-1" />
@@ -128,12 +129,12 @@ export function RosterDayZero({
                   <span
                     key={column.label}
                     className={`${column.col} eyebrow-sm${
-                      column.center ? " text-center" : ""
+                      column.center ? "text-center" : ""
                     }`}
                   >
                     {column.label}
                   </span>
-                )
+                ),
               )}
             </div>
             {GHOST_OPACITY.map((opacity) => (

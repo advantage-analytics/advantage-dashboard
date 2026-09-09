@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 type ClaimAction = (
   claimId: string,
   notes?: string,
-  claimantMessage?: string
+  claimantMessage?: string,
 ) => Promise<AdminOutcome>;
 
 const CARD =
@@ -33,7 +33,14 @@ const BTN =
 
 /** Shape the queries return. Loose on purpose — PostgREST embeds vary. */
 type Row = Record<string, unknown>;
-type Embedded = { school_name?: string; team?: string; division?: string; state?: string; staff_page_url?: string; review_reasons?: string } | null;
+type Embedded = {
+  school_name?: string;
+  team?: string;
+  division?: string;
+  state?: string;
+  staff_page_url?: string;
+  review_reasons?: string;
+} | null;
 
 function embedded(row: Row): Embedded {
   const p = row.programs;
@@ -85,7 +92,9 @@ export function ClaimRow({ claim }: { claim: Row }) {
         </span>
         <span className="text-[12px] text-[var(--ink-500)]">
           {program?.team ? teamLabel(program.team) : ""}
-          {program?.division ? ` \u00b7 ${divisionLabel(program.division)}` : ""}
+          {program?.division
+            ? ` \u00b7 ${divisionLabel(program.division)}`
+            : ""}
           {program?.state ? ` \u00b7 ${program.state}` : ""}
         </span>
         <div className="flex-1" />
@@ -112,7 +121,7 @@ export function ClaimRow({ claim }: { claim: Row }) {
             "rounded-full px-2 py-0.5 text-[10px]",
             contactMatched || lowRisk
               ? "bg-[rgba(93,185,85,0.12)] text-[#3F8A39]"
-              : "bg-[var(--surface-subtle)] text-[var(--ink-600)]"
+              : "bg-[var(--surface-subtle)] text-[var(--ink-600)]",
           )}
         >
           {contactMatched
@@ -171,7 +180,8 @@ export function ClaimRow({ claim }: { claim: Row }) {
             htmlFor={`claimant-msg-${String(claim.id)}`}
             className="mb-1 block text-[11px] text-[var(--ink-500)]"
           >
-            Message to claimant &mdash; they&rsquo;ll see this in the decline email
+            Message to claimant &mdash; they&rsquo;ll see this in the decline
+            email
           </label>
           <input
             id={`claimant-msg-${String(claim.id)}`}
@@ -189,15 +199,25 @@ export function ClaimRow({ claim }: { claim: Row }) {
             type="button"
             disabled={pending}
             onClick={() => act(approveClaim)}
-            className={cn(BTN, "bg-[var(--ink-900)] text-white hover:opacity-90")}
+            className={cn(
+              BTN,
+              "bg-[var(--ink-900)] text-white hover:opacity-90",
+            )}
           >
-            {pending ? <Loader2 className="size-3 animate-spin" aria-hidden="true" /> : "Approve"}
+            {pending ? (
+              <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+            ) : (
+              "Approve"
+            )}
           </button>
           <button
             type="button"
             disabled={pending}
             onClick={() => act(rejectClaim)}
-            className={cn(BTN, "border border-[var(--border-medium)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]")}
+            className={cn(
+              BTN,
+              "border border-[var(--border-medium)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",
+            )}
           >
             Reject
           </button>
@@ -215,9 +235,16 @@ export function ClaimRow({ claim }: { claim: Row }) {
             type="button"
             disabled={pending}
             onClick={() => act(handBackClaim)}
-            className={cn(BTN, "border border-[var(--border-medium)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]")}
+            className={cn(
+              BTN,
+              "border border-[var(--border-medium)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",
+            )}
           >
-            {pending ? <Loader2 className="size-3 animate-spin" aria-hidden="true" /> : "Hand it back"}
+            {pending ? (
+              <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+            ) : (
+              "Hand it back"
+            )}
           </button>
           <span className="text-[11px] text-[var(--ink-400)]">
             Already live — nothing to approve
@@ -231,9 +258,16 @@ export function ClaimRow({ claim }: { claim: Row }) {
             type="button"
             disabled={pending}
             onClick={() => act(reopenClaim)}
-            className={cn(BTN, "border border-[var(--border-medium)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]")}
+            className={cn(
+              BTN,
+              "border border-[var(--border-medium)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",
+            )}
           >
-            {pending ? <Loader2 className="size-3 animate-spin" aria-hidden="true" /> : "Put back in the queue"}
+            {pending ? (
+              <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+            ) : (
+              "Put back in the queue"
+            )}
           </button>
           <span className="text-[11px] text-[var(--ink-400)]">
             Returns the program to them, still needing your approval
@@ -279,7 +313,9 @@ export function RequestRow({ request }: { request: Row }) {
       <div className="flex flex-wrap items-baseline gap-x-2">
         <span className="text-[13px] text-[var(--ink-900)]">{school}</span>
         {team && (
-          <span className="text-[12px] text-[var(--ink-500)]">{teamLabel(team)}</span>
+          <span className="text-[12px] text-[var(--ink-500)]">
+            {teamLabel(team)}
+          </span>
         )}
         <div className="flex-1" />
         <span className="text-[11px] text-[var(--ink-400)]">
@@ -317,13 +353,20 @@ export function RequestRow({ request }: { request: Row }) {
           onClick={() => act("resolved")}
           className={cn(BTN, "bg-[var(--ink-900)] text-white hover:opacity-90")}
         >
-          {pending ? <Loader2 className="size-3 animate-spin" aria-hidden="true" /> : "Done"}
+          {pending ? (
+            <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+          ) : (
+            "Done"
+          )}
         </button>
         <button
           type="button"
           disabled={pending}
           onClick={() => act("dismissed")}
-          className={cn(BTN, "border border-[var(--border-medium)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]")}
+          className={cn(
+            BTN,
+            "border border-[var(--border-medium)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",
+          )}
         >
           Dismiss
         </button>

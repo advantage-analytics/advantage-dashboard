@@ -5,7 +5,7 @@
  * Follows Single Responsibility Principle - only handles upload orchestration.
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient } from "@supabase/supabase-js";
 import {
   IUploadService,
   IProviderUploadStrategy,
@@ -15,9 +15,9 @@ import {
   StoragePath,
   MatchFileRecord,
   ProviderId,
-} from './types';
-import { getProviderStrategy, getImportProviderStrategy } from './providers';
-import { createStorageService } from './storage.service';
+} from "./types";
+import { getProviderStrategy, getImportProviderStrategy } from "./providers";
+import { createStorageService } from "./storage.service";
 
 /**
  * Upload Service Implementation
@@ -83,13 +83,13 @@ export class UploadService implements IUploadService {
       file_size: file.size,
       storage_path: storagePath,
       uploaded_by: userId,
-      status: 'uploaded',
+      status: "uploaded",
     };
 
     const { data, error: dbError } = await this.supabase
-      .from('match_files')
+      .from("match_files")
       .insert(fileRecord)
-      .select('id')
+      .select("id")
       .single();
 
     if (dbError) {

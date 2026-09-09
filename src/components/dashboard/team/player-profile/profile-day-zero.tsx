@@ -54,7 +54,11 @@ function GhostRow({
   gap: string;
 }) {
   return (
-    <div className={`grid ${grid} h-11 items-center ${gap}`} style={{ opacity }} aria-hidden="true">
+    <div
+      className={`grid ${grid} h-11 items-center ${gap}`}
+      style={{ opacity }}
+      aria-hidden="true"
+    >
       {rules.map((rule, i) => (
         <span key={i} className="flex items-center">
           <GhostRule {...rule} />
@@ -118,7 +122,10 @@ export function ProfileDayZero({
 
         <div className="grid items-start gap-4 lg:grid-cols-[1.9fr_1fr]">
           <div className="flex flex-col gap-4">
-            <div className="surface-card flex flex-col gap-3.5" style={{ padding: "18px 20px" }}>
+            <div
+              className="surface-card flex flex-col gap-3.5"
+              style={{ padding: "18px 20px" }}
+            >
               <span className="eyebrow">Last match</span>
               <div className="grid grid-cols-[32px_minmax(0,1fr)_15px_auto] items-center gap-3">
                 <span className="size-8 rounded-[var(--radius-button)] bg-[var(--ink-100)]" />
@@ -131,7 +138,10 @@ export function ProfileDayZero({
               </div>
             </div>
 
-            <div className="surface-card flex flex-col gap-0.5" style={{ padding: 20 }}>
+            <div
+              className="surface-card flex flex-col gap-0.5"
+              style={{ padding: 20 }}
+            >
               <div className="flex items-center pb-3">
                 <span className="eyebrow">Match history</span>
               </div>
@@ -149,7 +159,10 @@ export function ProfileDayZero({
           </div>
 
           <div className="flex flex-col gap-4">
-            <div className="surface-card flex flex-col gap-0.5" style={{ padding: 20 }}>
+            <div
+              className="surface-card flex flex-col gap-0.5"
+              style={{ padding: 20 }}
+            >
               <div className="flex items-center pb-3">
                 <span className="eyebrow">Line history</span>
               </div>
@@ -157,7 +170,11 @@ export function ProfileDayZero({
               <LineHistoryGhostRows opacities={GHOST_OPACITY.slice(0, 3)} />
             </div>
 
-            <ServePlacementCard serve={serve} matchesPlayed={0} isSelf={mode === "self"} />
+            <ServePlacementCard
+              serve={serve}
+              matchesPlayed={0}
+              isSelf={mode === "self"}
+            />
           </div>
         </div>
       </DayZeroShape>

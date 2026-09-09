@@ -14,13 +14,17 @@ const OPTIONS: { value: Period; label: string; minMatches: number }[] = [
   { value: "last5", label: "Last 5", minMatches: 3 },
 ];
 
-export function PeriodToggle({ value, onChange, matchCount }: PeriodToggleProps) {
+export function PeriodToggle({
+  value,
+  onChange,
+  matchCount,
+}: PeriodToggleProps) {
   const visible = OPTIONS.filter((o) => matchCount >= o.minMatches);
   if (visible.length <= 1) return null;
 
   return (
     <div
-      className="flex items-center bg-[#F7F7F7] rounded-full p-0.5"
+      className="flex items-center rounded-full bg-[#F7F7F7] p-0.5"
       role="radiogroup"
       aria-label="Time period"
     >
@@ -33,7 +37,7 @@ export function PeriodToggle({ value, onChange, matchCount }: PeriodToggleProps)
             role="radio"
             aria-checked={isActive}
             onClick={() => onChange(option.value)}
-            className={`px-3.5 py-1.5 text-[11px] font-medium rounded-full transition-all duration-200 focus-visible:outline-none ${
+            className={`rounded-full px-3.5 py-1.5 text-[11px] font-medium transition-all duration-200 focus-visible:outline-none ${
               isActive
                 ? "bg-white text-[#0D0D0D] shadow-[0px_1px_3px_rgba(0,0,0,0.08)]"
                 : "text-[#888888] hover:text-[#525252]"

@@ -118,7 +118,11 @@ export function RowLifecycle({
   // live chip would keep claiming work is under way; nothing is, and nothing
   // will move until someone retries from the match page.
   if (isSubmitStalled(analysis)) {
-    return <StatusChip dot={false} tone="neutral">Not sent</StatusChip>;
+    return (
+      <StatusChip dot={false} tone="neutral">
+        Not sent
+      </StatusChip>
+    );
   }
 
   if (isInFlight(status)) {
@@ -149,7 +153,11 @@ export function RowLifecycle({
             /* The sheen is what separates a moving upload from a stalled one:
                the percentage is written at most every two points, so the number
                alone sits still for a minute at a time. */
-            <AnalysisProgressTrack percent={percent} live label={`Uploading ${label}`} />
+            <AnalysisProgressTrack
+              percent={percent}
+              live
+              label={`Uploading ${label}`}
+            />
           )}
         </span>
       );
@@ -180,7 +188,11 @@ export function RowLifecycle({
     // The word, not the action. "Start over" used to be a link in the row; the
     // row now opens the match page, which is where the retry lives and where
     // the failure is explained. A row states, a page acts.
-    return <StatusChip dot={false} tone="loss">{ANALYSIS_LABEL[status]}</StatusChip>;
+    return (
+      <StatusChip dot={false} tone="loss">
+        {ANALYSIS_LABEL[status]}
+      </StatusChip>
+    );
   }
 
   if (status === "manual") {
@@ -189,7 +201,11 @@ export function RowLifecycle({
     // plainer fact; the match page keeps "Stats unavailable" because there the
     // question is why the charts are empty. The one deliberate divergence from
     // the shared vocabulary.
-    return <StatusChip dot={false} tone="neutral">No video</StatusChip>;
+    return (
+      <StatusChip dot={false} tone="neutral">
+        No video
+      </StatusChip>
+    );
   }
 
   return null;

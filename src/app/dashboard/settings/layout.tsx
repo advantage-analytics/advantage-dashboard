@@ -36,7 +36,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
   const detailId = pathname?.match(TEAM_DETAIL)?.[1] ?? null;
   const program = detailId
     ? available.find(
-        (workspace) => workspace.kind === "team" && workspace.id === detailId
+        (workspace) => workspace.kind === "team" && workspace.id === detailId,
       )
     : undefined;
   const squad = program ? teamLabel(program.team) : null;
@@ -66,9 +66,13 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
                   crumb above already says that. */}
               <Link
                 href="/dashboard/settings/teams"
-                className="-ml-2 inline-flex h-7 items-center gap-1.5 self-start rounded-[6px] pl-2 pr-2.5 text-[12px] font-medium text-[var(--ink-600)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:outline-none"
+                className="-ml-2 inline-flex h-7 items-center gap-1.5 self-start rounded-[6px] pr-2.5 pl-2 text-[12px] font-medium text-[var(--ink-600)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:outline-none"
               >
-                <ArrowLeft className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+                <ArrowLeft
+                  className="size-3.5"
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                />
                 Teams
               </Link>
               <h1 className="text-display">{program.name}</h1>
@@ -108,7 +112,9 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
               <motion.div
                 // Teams has pages beneath it; keying on the path lets the
                 // drill-down fade like every other section change does.
-                key={section.id === "teams" ? (pathname ?? section.id) : section.id}
+                key={
+                  section.id === "teams" ? (pathname ?? section.id) : section.id
+                }
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}

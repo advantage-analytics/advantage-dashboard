@@ -32,9 +32,9 @@
  * make the existing fallback do this for free. Worth asking for.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { parseWebhookPayload } from './webhook-payload';
+import { parseWebhookPayload } from "./webhook-payload";
 
 export interface AdoptionResult {
   /** Deliveries newly linked to the job. */
@@ -89,14 +89,14 @@ export async function adoptOrphanedDeliveries(params: {
   const { supabase, jobId, externalJobId } = params;
 
   const { data, error } = await supabase
-    .from('splitstep_webhook_deliveries')
-    .select('id, fingerprint, raw_body, parsed, headers, signature_verified')
-    .eq('external_job_id', externalJobId)
-    .is('job_id', null)
+    .from("splitstep_webhook_deliveries")
+    .select("id, fingerprint, raw_body, parsed, headers, signature_verified")
+    .eq("external_job_id", externalJobId)
+    .is("job_id", null)
     // Oldest first, so statuses replay in the order they were sent. The rank
     // guard would stop a backwards move anyway; this keeps queued_ack_at and
     // the payload array in the order they actually happened.
-    .order('received_at', { ascending: true });
+    .order("received_at", { ascending: true });
 
   if (error) {
     throw new Error(`Could not read orphaned deliveries: ${error.message}`);
@@ -126,7 +126,7 @@ export async function adoptOrphanedDeliveries(params: {
     const payload = parseWebhookPayload(orphan.parsed);
 
     const { data: recorded, error: recordError } = await supabase
-      .rpc('record_splitstep_webhook', {
+      .rpc("record_splitstep_webhook", {
         p_fingerprint: orphan.fingerprint,
         p_raw_body: orphan.raw_body,
         p_parsed: orphan.parsed,
@@ -151,7 +151,7 @@ export async function adoptOrphanedDeliveries(params: {
 
     if (recordError || !recorded) {
       throw new Error(
-        `Could not adopt delivery ${orphan.id}: ${recordError?.message ?? 'no row returned'}`
+        `Could not adopt delivery ${orphan.id}: ${recordError?.message ?? "no row returned"}`,
       );
     }
 
@@ -166,7 +166,7 @@ export async function adoptOrphanedDeliveries(params: {
     // delivery would corrupt exactly the forensic record this table exists for.
     if (record.matched_job_id && record.matched_job_id !== jobId) {
       throw new Error(
-        `Delivery ${orphan.id} matched job ${record.matched_job_id}, not ${jobId}`
+        `Delivery ${orphan.id} matched job ${record.matched_job_id}, not ${jobId}`,
       );
     }
 
@@ -178,7 +178,8 @@ export async function adoptOrphanedDeliveries(params: {
       // recent state, matching what a live-delivered job_failed would carry.
       errorCode = payload.errorCode;
       errorStep = payload.errorStep;
-      if (payload.strokesUrl && !record.already_stored) owedResultsDownload = true;
+      if (payload.strokesUrl && !record.already_stored)
+        owedResultsDownload = true;
     }
   }
 

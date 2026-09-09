@@ -71,7 +71,7 @@ export function EventPageFrame({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pb-8 pt-5">
+    <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pt-5 pb-8">
       <div>
         <div className="flex items-start justify-between gap-6">
           <h1 className="text-display min-w-0">{title}</h1>
@@ -257,7 +257,7 @@ export function EventFacts({
 export function FormatCapsule({ format }: { format: EventFormat }) {
   return (
     <span
-      className="inline-flex h-[22px] items-center whitespace-nowrap rounded-full border border-[var(--border-field)] px-2 text-[11px]"
+      className="inline-flex h-[22px] items-center rounded-full border border-[var(--border-field)] px-2 text-[11px] whitespace-nowrap"
       style={{ color: "var(--ink-700)" }}
     >
       {formatLabel(format)}
@@ -305,7 +305,7 @@ export function DetailLine({
   counts?: DetailCount[];
 }) {
   const shown = counts.filter(
-    (count) => !(count.kind === "action" && count.n === 0)
+    (count) => !(count.kind === "action" && count.n === 0),
   );
 
   return (
@@ -320,7 +320,7 @@ export function DetailLine({
           not a row of parts. */}
       {state ? (
         <span
-          className="inline-block h-[20px] whitespace-nowrap rounded-full bg-[var(--surface-subtle)] px-2 text-[11px] leading-[20px]"
+          className="inline-block h-[20px] rounded-full bg-[var(--surface-subtle)] px-2 text-[11px] leading-[20px] whitespace-nowrap"
           style={{ color: "var(--ink-600)" }}
         >
           {state}
@@ -336,7 +336,10 @@ export function DetailLine({
           />
           <span className="flex flex-wrap items-center gap-2">
             {shown.map((count, index) => (
-              <span key={`${count.kind}-${count.label}`} className="flex items-center gap-2">
+              <span
+                key={`${count.kind}-${count.label}`}
+                className="flex items-center gap-2"
+              >
                 {index > 0 ? (
                   <span aria-hidden="true" style={{ color: "var(--ink-300)" }}>
                     ·
@@ -365,7 +368,7 @@ function CountItem({ count }: { count: DetailCount }) {
   if (count.kind === "done") {
     return (
       <span
-        className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12px]"
+        className="inline-flex items-center gap-1.5 text-[12px] whitespace-nowrap"
         style={{ color: "var(--ink-600)" }}
       >
         <Check
@@ -439,11 +442,11 @@ export function TableCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="surface-card min-w-0 px-6 pb-1.5 pt-0.5">
+    <div className="surface-card min-w-0 px-6 pt-0.5 pb-1.5">
       <div
         className={cn(
-          "grid items-center gap-4 border-b border-[var(--border-hairline)] pb-2.5 pt-3.5",
-          columns
+          "grid items-center gap-4 border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
+          columns,
         )}
       >
         {headers.map((label) => (
@@ -491,7 +494,7 @@ export function GroupHead({
 }) {
   if (name) {
     return (
-      <div className="flex items-start gap-2.5 pb-1.5 pt-4">
+      <div className="flex items-start gap-2.5 pt-4 pb-1.5">
         <div className="min-w-0">
           <div
             className="truncate text-[13px] font-medium"
@@ -500,7 +503,10 @@ export function GroupHead({
             {label}
           </div>
           {note ? (
-            <div className="mt-0.5 text-[12px]" style={{ color: "var(--ink-600)" }}>
+            <div
+              className="mt-0.5 text-[12px]"
+              style={{ color: "var(--ink-600)" }}
+            >
               {note}
             </div>
           ) : null}
@@ -518,7 +524,7 @@ export function GroupHead({
   }
 
   return (
-    <div className="flex items-baseline gap-2.5 pb-1.5 pt-4">
+    <div className="flex items-baseline gap-2.5 pt-4 pb-1.5">
       <span className="eyebrow">{label}</span>
       {note ? <span className="text-micro">{note}</span> : null}
       {right ? (

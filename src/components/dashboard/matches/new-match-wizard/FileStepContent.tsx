@@ -40,11 +40,7 @@ import type {
   VideoProbeSummary,
 } from "./types";
 import { noteStripCls } from "./styles";
-import {
-  formatResolution,
-  formatTimecode,
-  getNumberOfSets,
-} from "./utils";
+import { formatResolution, formatTimecode, getNumberOfSets } from "./utils";
 
 export interface FileStepContentProps {
   kind: ProviderKind;
@@ -148,7 +144,13 @@ function extensionList(acceptString: string): string {
  * player mounts, two steps from here. A few seconds in rather than frame zero,
  * which on a phone recording is usually the ground.
  */
-function VideoStill({ file, durationSeconds }: { file: File; durationSeconds: number }) {
+function VideoStill({
+  file,
+  durationSeconds,
+}: {
+  file: File;
+  durationSeconds: number;
+}) {
   const ref = useRef<HTMLVideoElement>(null);
   // URL created and revoked in the same effect, src set from it — see the
   // same note in TrimStepContent: a memoised URL revoked from a cleanup is
@@ -196,25 +198,36 @@ function tiebreakFor(
   a: number,
   b: number,
   aTiebreak: number | null | undefined,
-  bTiebreak: number | null | undefined
+  bTiebreak: number | null | undefined,
 ): number | null {
   const high = Math.max(a, b);
   const low = Math.min(a, b);
-  const wentToTiebreak = (high >= 7 && high - low === 1) || (high === 1 && low === 0);
+  const wentToTiebreak =
+    (high >= 7 && high - low === 1) || (high === 1 && low === 0);
   if (!wentToTiebreak) return null;
   const points = [aTiebreak, bTiebreak].filter(
-    (n): n is number => typeof n === "number" && n > 0
+    (n): n is number => typeof n === "number" && n > 0,
   );
   return points.length > 0 ? Math.min(...points) : null;
 }
 
 /** One set from the winner's side, tiebreak as a superscript. */
-function SetScore({ a, b, tiebreak }: { a: number; b: number; tiebreak: number | null }) {
+function SetScore({
+  a,
+  b,
+  tiebreak,
+}: {
+  a: number;
+  b: number;
+  tiebreak: number | null;
+}) {
   return (
     <span>
       {a}-{b}
       {tiebreak !== null && (
-        <sup className="relative -top-[0.45em] ml-px text-[0.6em] leading-[0]">{tiebreak}</sup>
+        <sup className="relative -top-[0.45em] ml-px text-[0.6em] leading-[0]">
+          {tiebreak}
+        </sup>
       )}
     </span>
   );
@@ -240,15 +253,27 @@ function FoundInExport({ formData }: { formData: FormData }) {
   for (let i = 0; i < count; i++) {
     const p = formData.playerScores[i];
     const o = formData.opponentScores[i];
-    if (p === null || p === undefined || o === null || o === undefined) continue;
-    const tiebreak = tiebreakFor(p, o, formData.playerTiebreaks[i], formData.opponentTiebreaks[i]);
-    sets.push(opponentWon ? { a: o, b: p, tiebreak } : { a: p, b: o, tiebreak });
+    if (p === null || p === undefined || o === null || o === undefined)
+      continue;
+    const tiebreak = tiebreakFor(
+      p,
+      o,
+      formData.playerTiebreaks[i],
+      formData.opponentTiebreaks[i],
+    );
+    sets.push(
+      opponentWon ? { a: o, b: p, tiebreak } : { a: p, b: o, tiebreak },
+    );
   }
 
   const facts = [
     `${sets.length} ${sets.length === 1 ? "set" : "sets"}`,
     `Best of ${formData.bestOf}`,
-    formData.adScoring === undefined ? null : formData.adScoring ? "Ad scoring" : "No-ad scoring",
+    formData.adScoring === undefined
+      ? null
+      : formData.adScoring
+        ? "Ad scoring"
+        : "No-ad scoring",
   ].filter(Boolean);
   const durationSeconds = (formData.duration ?? 0) / 1000;
 
@@ -256,16 +281,22 @@ function FoundInExport({ formData }: { formData: FormData }) {
     <div className="flex flex-col gap-3.5">
       <div className="flex flex-col gap-[5px]">
         <span className="eyebrow">Found in the export</span>
-        <span className="text-micro">Details opens with these filled — fix anything wrong there</span>
+        <span className="text-micro">
+          Details opens with these filled — fix anything wrong there
+        </span>
       </div>
       <div className="flex items-center gap-4 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-4 py-3.5">
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="truncate text-[13px] leading-[18px] text-[var(--ink-900)]">
             <span className="font-medium">{first || "Player"}</span>{" "}
-            <span className="text-[var(--ink-600)]">{decided ? "def." : "vs."}</span>{" "}
+            <span className="text-[var(--ink-600)]">
+              {decided ? "def." : "vs."}
+            </span>{" "}
             <span className="font-medium">{second || "Opponent"}</span>
           </span>
-          <span className="mono tabular text-micro leading-[14px]">{facts.join(" · ")}</span>
+          <span className="mono tabular text-micro leading-[14px]">
+            {facts.join(" · ")}
+          </span>
         </span>
         {sets.length > 0 && (
           <span className="tabular inline-flex shrink-0 gap-3 text-[16px] font-light text-[var(--ink-900)]">
@@ -276,8 +307,11 @@ function FoundInExport({ formData }: { formData: FormData }) {
         )}
         {durationSeconds > 0 && (
           <>
-            <span className="mx-1 h-5 w-px bg-[var(--border-medium)]" aria-hidden="true" />
-            <span className="mono tabular shrink-0 whitespace-nowrap text-[11px] text-[var(--ink-500)]">
+            <span
+              className="mx-1 h-5 w-px bg-[var(--border-medium)]"
+              aria-hidden="true"
+            />
+            <span className="mono tabular shrink-0 text-[11px] whitespace-nowrap text-[var(--ink-500)]">
               {formatTimecode(durationSeconds)}
             </span>
           </>
@@ -387,12 +421,20 @@ function FileStepContentImpl({
                 aria-hidden="true"
               />
             ) : (
-              <Glyph className="size-7 text-[var(--ink-300)]" strokeWidth={1.5} aria-hidden="true" />
+              <Glyph
+                className="size-7 text-[var(--ink-300)]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
             )}
             <span className="flex flex-col items-center gap-1.5">
               <span className="text-[13px] font-medium text-[var(--ink-900)]">
                 {busy ? (
-                  isVideo ? "Checking the video…" : "Reading the export…"
+                  isVideo ? (
+                    "Checking the video…"
+                  ) : (
+                    "Reading the export…"
+                  )
                 ) : (
                   <>
                     Drop {whose} {noun} here, or{" "}
@@ -420,7 +462,9 @@ function FileStepContentImpl({
               />
               <span>
                 <b className="font-medium text-[var(--ink-900)]">
-                  {isVideo ? "This video can't be analysed" : "This export couldn't be read"}
+                  {isVideo
+                    ? "This video can't be analysed"
+                    : "This export couldn't be read"}
                 </b>
                 {" — "}
                 {error}
@@ -443,15 +487,30 @@ function FileStepContentImpl({
             >
               {isVideo ? (
                 uploadedFile?.file ? (
-                  <VideoStill file={uploadedFile.file} durationSeconds={probe?.durationSeconds ?? 0} />
+                  <VideoStill
+                    file={uploadedFile.file}
+                    durationSeconds={probe?.durationSeconds ?? 0}
+                  />
                 ) : (
-                  <Film className="size-4 text-white/70" strokeWidth={1.5} aria-hidden="true" />
+                  <Film
+                    className="size-4 text-white/70"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
                 )
               ) : selectedProvider === "swing-vision" ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src="/providers/swingvision-icon.png" alt="" className="size-10" />
+                <img
+                  src="/providers/swingvision-icon.png"
+                  alt=""
+                  className="size-10"
+                />
               ) : (
-                <FileSpreadsheet className="size-5 text-[var(--ink-500)]" strokeWidth={1.5} aria-hidden="true" />
+                <FileSpreadsheet
+                  className="size-5 text-[var(--ink-500)]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
               )}
             </span>
             <span className="flex min-w-0 flex-1 flex-col gap-1">
@@ -460,7 +519,7 @@ function FileStepContentImpl({
               </span>
               <span className="mono tabular text-micro leading-4">
                 {isVideo
-                  ? videoFacts ?? `${uploadedFile?.size} · checked`
+                  ? (videoFacts ?? `${uploadedFile?.size} · checked`)
                   : `${extension} · ${uploadedFile?.size} · ${exportStatus}`}
               </span>
             </span>
@@ -477,7 +536,11 @@ function FileStepContentImpl({
               aria-label={isVideo ? "Remove video" : "Remove export"}
               className="inline-flex size-7 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-colors duration-150 hover:bg-[var(--surface-subtle)]"
             >
-              <X className="size-3.5 text-[var(--ink-500)]" strokeWidth={1.5} aria-hidden="true" />
+              <X
+                className="size-3.5 text-[var(--ink-500)]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
             </button>
             {input}
           </div>
@@ -491,8 +554,8 @@ function FileStepContentImpl({
                 aria-hidden="true"
               />
               <span>
-                Nothing is uploading yet. The upload starts when the match is saved — trimming
-                and details come first.
+                Nothing is uploading yet. The upload starts when the match is
+                saved — trimming and details come first.
               </span>
             </div>
           )}
@@ -527,9 +590,12 @@ function FileStepContentImpl({
                 aria-hidden="true"
               />
               <span>
-                <b className="font-medium text-[var(--ink-900)]">Couldn&apos;t read this export</b>
+                <b className="font-medium text-[var(--ink-900)]">
+                  Couldn&apos;t read this export
+                </b>
                 {" — "}
-                {parsingState.parseError} You can still enter the details by hand on the next step.
+                {parsingState.parseError} You can still enter the details by
+                hand on the next step.
               </span>
             </div>
           )}
@@ -543,7 +609,9 @@ function FileStepContentImpl({
         <FoundInExport formData={formData} />
       ) : (
         <div className="flex flex-col gap-3.5">
-          <span className="eyebrow">{isVideo ? "What the analysis needs" : "What the export needs"}</span>
+          <span className="eyebrow">
+            {isVideo ? "What the analysis needs" : "What the export needs"}
+          </span>
           <div className="flex flex-col gap-2.5">
             {requirements.map(({ icon: Icon, lead, rest }) => (
               <div key={lead} className="flex items-start gap-3">

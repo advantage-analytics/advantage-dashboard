@@ -22,10 +22,10 @@
  * number is shown to a user at all. Spec §4.4.
  */
 
-import { serveBracket } from './serves';
-import type { SplitStepRally, SplitStepStroke } from './types';
+import { serveBracket } from "./serves";
+import type { SplitStepRally, SplitStepStroke } from "./types";
 
-export type QualityGrade = 'high' | 'medium' | 'low';
+export type QualityGrade = "high" | "medium" | "low";
 
 /**
  * `insufficient` is distinct from `fail` on purpose: it means the check had
@@ -33,7 +33,7 @@ export type QualityGrade = 'high' | 'medium' | 'low';
  * made a payload with no usable score fields look exactly like one whose
  * every transition was broken.
  */
-export type CheckVerdict = 'pass' | 'warn' | 'fail' | 'insufficient';
+export type CheckVerdict = "pass" | "warn" | "fail" | "insufficient";
 
 export interface QualityCheck {
   id: CheckId;
@@ -78,7 +78,11 @@ interface Threshold {
 const THRESHOLDS = {
   unusable_bounce: { warn: 0.05, fail: 0.15, higherIsBetter: false },
   serve_net_hit_mid_rally: { warn: 0.05, fail: 0.2, higherIsBetter: false },
-  illegal_same_player_sequence: { warn: 0.005, fail: 0.02, higherIsBetter: false },
+  illegal_same_player_sequence: {
+    warn: 0.005,
+    fail: 0.02,
+    higherIsBetter: false,
+  },
   unusable_player_position: { warn: 0.01, fail: 0.03, higherIsBetter: false },
   game_transition_valid: { warn: 0.98, fail: 0.92, higherIsBetter: true },
   point_transition_clean: { warn: 0.98, fail: 0.92, higherIsBetter: true },
@@ -98,27 +102,27 @@ function verdictFor(id: CheckId, value: number): CheckVerdict {
   // Unreachable while CheckId is derived from THRESHOLDS. Fails rather than
   // passes so that if it ever does happen — a threshold deleted at runtime,
   // a cast — the effect is a match held back, not one published unchecked.
-  if (!t) return 'fail';
+  if (!t) return "fail";
   if (t.higherIsBetter) {
-    if (value < t.fail) return 'fail';
-    if (value < t.warn) return 'warn';
-    return 'pass';
+    if (value < t.fail) return "fail";
+    if (value < t.warn) return "warn";
+    return "pass";
   }
-  if (value > t.fail) return 'fail';
-  if (value > t.warn) return 'warn';
-  return 'pass';
+  if (value > t.fail) return "fail";
+  if (value > t.warn) return "warn";
+  return "pass";
 }
 
 function check(
   id: CheckId,
   label: string,
   observed: number,
-  total: number
+  total: number,
 ): QualityCheck {
   // Nothing to divide by means nothing to judge. Reporting 0 here made every
   // higherIsBetter check read as a total failure on an empty denominator.
   if (total === 0) {
-    return { id, label, value: 0, observed, total, verdict: 'insufficient' };
+    return { id, label, value: 0, observed, total, verdict: "insufficient" };
   }
   const value = observed / total;
   return { id, label, value, observed, total, verdict: verdictFor(id, value) };
@@ -138,7 +142,7 @@ function check(
 /** "1-2" or "1.0-2.0" → [1, 2] sorted. Null for "nan-nan" and other junk. */
 function pairOf(score: string | null): [number, number] | null {
   if (!score) return null;
-  const parts = score.split('-');
+  const parts = score.split("-");
   if (parts.length !== 2) return null;
   const a = Number(parts[0]);
   const b = Number(parts[1]);
@@ -146,16 +150,24 @@ function pairOf(score: string | null): [number, number] | null {
   return a <= b ? [a, b] : [b, a];
 }
 
-function samePair(a: [number, number] | null, b: [number, number] | null): boolean {
+function samePair(
+  a: [number, number] | null,
+  b: [number, number] | null,
+): boolean {
   return a !== null && b !== null && a[0] === b[0] && a[1] === b[1];
 }
 
 /** Rungs of a standard game. There is no AD rung — the vendor never emits one. */
-const POINT_LADDER: Record<string, number> = { '0': 0, '15': 1, '30': 2, '40': 3 };
+const POINT_LADDER: Record<string, number> = {
+  "0": 0,
+  "15": 1,
+  "30": 2,
+  "40": 3,
+};
 
 function ladderPair(score: string | null): [number, number] | null {
   if (!score) return null;
-  const parts = score.split('-');
+  const parts = score.split("-");
   if (parts.length !== 2) return null;
   const a = POINT_LADDER[parts[0]];
   const b = POINT_LADDER[parts[1]];
@@ -170,10 +182,10 @@ function ladderPair(score: string | null): [number, number] | null {
 function unusableBounces(strokes: SplitStepStroke[]): QualityCheck {
   const bad = strokes.filter((s) => s.bounceX === null).length;
   return check(
-    'unusable_bounce',
-    'Strokes with a missing or physically impossible bounce location',
+    "unusable_bounce",
+    "Strokes with a missing or physically impossible bounce location",
     bad,
-    strokes.length
+    strokes.length,
   );
 }
 
@@ -204,10 +216,10 @@ function serveNetHitMidRally(rallies: SplitStepRally[]): QualityCheck {
     }
   }
   return check(
-    'serve_net_hit_mid_rally',
-    'Serves flagged as net contact that the rally continued past',
+    "serve_net_hit_mid_rally",
+    "Serves flagged as net contact that the rally continued past",
     offenders,
-    serves
+    serves,
   );
 }
 
@@ -226,15 +238,15 @@ function illegalSameplayerSequences(rallies: SplitStepRally[]): QualityCheck {
       const a = rally.strokes[i];
       const b = rally.strokes[i + 1];
       transitions += 1;
-      const bothServes = a.strokeType === 'serve' && b.strokeType === 'serve';
+      const bothServes = a.strokeType === "serve" && b.strokeType === "serve";
       if (a.playerLabel === b.playerLabel && !bothServes) offenders += 1;
     }
   }
   return check(
-    'illegal_same_player_sequence',
-    'Consecutive strokes credited to the same player (excluding 1st/2nd serve)',
+    "illegal_same_player_sequence",
+    "Consecutive strokes credited to the same player (excluding 1st/2nd serve)",
     offenders,
-    transitions
+    transitions,
   );
 }
 
@@ -254,13 +266,13 @@ function illegalSameplayerSequences(rallies: SplitStepRally[]): QualityCheck {
  */
 function unusablePlayerPositions(strokes: SplitStepStroke[]): QualityCheck {
   const bad = strokes.filter(
-    (s) => s.playerX === null || s.opponentX === null
+    (s) => s.playerX === null || s.opponentX === null,
   ).length;
   return check(
-    'unusable_player_position',
-    'Strokes with a missing or physically impossible player position',
+    "unusable_player_position",
+    "Strokes with a missing or physically impossible player position",
     bad,
-    strokes.length
+    strokes.length,
   );
 }
 
@@ -305,10 +317,10 @@ function gameTransitions(rallies: SplitStepRally[]): QualityCheck {
   }
 
   return check(
-    'game_transition_valid',
-    'Game-score transitions consistent with one player winning one game',
+    "game_transition_valid",
+    "Game-score transitions consistent with one player winning one game",
     valid,
-    total
+    total,
   );
 }
 
@@ -348,25 +360,25 @@ function pointTransitions(rallies: SplitStepRally[]): QualityCheck {
   }
 
   return check(
-    'point_transition_clean',
-    'In-game point transitions where exactly one player gained one point',
+    "point_transition_clean",
+    "In-game point transitions where exactly one player gained one point",
     clean,
-    total
+    total,
   );
 }
 
 /** Spread between the two irreconcilable readings of first-serve percentage. */
 function serveSpread(rallies: SplitStepRally[]): QualityCheck {
   const bracket = serveBracket(rallies);
-  const c = check('first_serve_spread', '', 0, 1);
+  const c = check("first_serve_spread", "", 0, 1);
   return {
     ...c,
     label:
-      'Gap between the two readings of first-serve percentage (rally structure vs in flag)',
+      "Gap between the two readings of first-serve percentage (rally structure vs in flag)",
     value: bracket.firstServeSpread,
     observed: Math.round(bracket.firstServeSpread * 1000) / 10,
     total: 100,
-    verdict: verdictFor('first_serve_spread', bracket.firstServeSpread),
+    verdict: verdictFor("first_serve_spread", bracket.firstServeSpread),
   };
 }
 
@@ -414,7 +426,7 @@ function collapseToGames(rallies: SplitStepRally[]): GameBlock[] {
  */
 export function scoreQuality(
   strokes: SplitStepStroke[],
-  rallies: SplitStepRally[]
+  rallies: SplitStepRally[],
 ): QualityReport {
   const checks: QualityCheck[] = [
     unusableBounces(strokes),
@@ -426,22 +438,22 @@ export function scoreQuality(
     serveSpread(rallies),
   ];
 
-  const failures = checks.filter((c) => c.verdict === 'fail').map((c) => c.id);
-  const warnings = checks.filter((c) => c.verdict === 'warn').map((c) => c.id);
+  const failures = checks.filter((c) => c.verdict === "fail").map((c) => c.id);
+  const warnings = checks.filter((c) => c.verdict === "warn").map((c) => c.id);
   // A check with no data neither condemns a match nor clears it. It cannot
   // reach 'low' on its own, but it does block 'high', because 'high' is the
   // grade that lets numbers reach a coach and we did not actually verify this
   // one.
   const unmeasured = checks
-    .filter((c) => c.verdict === 'insufficient')
+    .filter((c) => c.verdict === "insufficient")
     .map((c) => c.id);
 
   const grade: QualityGrade =
     failures.length > 0
-      ? 'low'
+      ? "low"
       : warnings.length > 0 || unmeasured.length > 0
-        ? 'medium'
-        : 'high';
+        ? "medium"
+        : "high";
 
   return {
     grade,

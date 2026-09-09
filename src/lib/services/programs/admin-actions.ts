@@ -105,7 +105,7 @@ async function notifyClaimant(
     claimantMessage: string | null;
     /** Set only on the approval path, and the value written to the row. */
     windowEndsAt: Date | null;
-  }
+  },
 ): Promise<void> {
   const { data: program } = await db
     .from("programs")
@@ -117,7 +117,7 @@ async function notifyClaimant(
 
   const programName = programDisplayName(
     program.school_name as string,
-    (program.team as string | null) ?? null
+    (program.team as string | null) ?? null,
   );
 
   let message;
@@ -183,7 +183,7 @@ async function transition(
      * email below. Null on the approval path.
      */
     claimantMessage: string | null;
-  }
+  },
 ): Promise<AdminOutcome> {
   const admin = await requireAdmin();
   if (!admin) return { ok: false, error: "Not authorized." };
@@ -192,7 +192,7 @@ async function transition(
   const { data: claim } = await db
     .from("program_claims")
     .select(
-      "id, status, program_id, claimant_user_id, claimed_email, claimant_role"
+      "id, status, program_id, claimant_user_id, claimed_email, claimant_role",
     )
     .eq("id", claimId)
     .maybeSingle();
@@ -201,7 +201,10 @@ async function transition(
 
   const next = nextClaimStatus(claim.status as ClaimStatus, event);
   if (!next) {
-    return { ok: false, error: `A ${claim.status} claim cannot be ${event.type}ed.` };
+    return {
+      ok: false,
+      error: `A ${claim.status} claim cannot be ${event.type}ed.`,
+    };
   }
 
   // An approval opens the objection window, and the approval email states the
@@ -281,11 +284,18 @@ async function transition(
  * loop /claim/review opened with "we'll email you either way". No claimant-
  * facing message: the approval copy is fixed and carries no reviewer line.
  */
-export async function approveClaim(claimId: string, notes?: string): Promise<AdminOutcome> {
-  return transition(claimId, { type: "approve" }, {
-    notes: notes?.trim() || null,
-    claimantMessage: null,
-  });
+export async function approveClaim(
+  claimId: string,
+  notes?: string,
+): Promise<AdminOutcome> {
+  return transition(
+    claimId,
+    { type: "approve" },
+    {
+      notes: notes?.trim() || null,
+      claimantMessage: null,
+    },
+  );
 }
 
 /**
@@ -299,12 +309,16 @@ export async function approveClaim(claimId: string, notes?: string): Promise<Adm
 export async function rejectClaim(
   claimId: string,
   notes?: string,
-  claimantMessage?: string
+  claimantMessage?: string,
 ): Promise<AdminOutcome> {
-  return transition(claimId, { type: "reject" }, {
-    notes: notes?.trim() || null,
-    claimantMessage: claimantMessage?.trim() || null,
-  });
+  return transition(
+    claimId,
+    { type: "reject" },
+    {
+      notes: notes?.trim() || null,
+      claimantMessage: claimantMessage?.trim() || null,
+    },
+  );
 }
 
 /**
@@ -326,12 +340,16 @@ export async function rejectClaim(
 export async function handBackClaim(
   claimId: string,
   notes?: string,
-  claimantMessage?: string
+  claimantMessage?: string,
 ): Promise<AdminOutcome> {
-  return transition(claimId, { type: "object" }, {
-    notes: notes?.trim() || null,
-    claimantMessage: claimantMessage?.trim() || null,
-  });
+  return transition(
+    claimId,
+    { type: "object" },
+    {
+      notes: notes?.trim() || null,
+      claimantMessage: claimantMessage?.trim() || null,
+    },
+  );
 }
 
 /**
@@ -348,7 +366,10 @@ export async function handBackClaim(
  * `nextClaimStatus`. The admin still has to approve, which is the same decision
  * they would make on any other claim in the queue.
  */
-export async function reopenClaim(claimId: string, notes?: string): Promise<AdminOutcome> {
+export async function reopenClaim(
+  claimId: string,
+  notes?: string,
+): Promise<AdminOutcome> {
   const admin = await requireAdmin();
   if (!admin) return { ok: false, error: "Not authorized." };
 
@@ -379,7 +400,8 @@ export async function reopenClaim(claimId: string, notes?: string): Promise<Admi
   if (program.status !== "unclaimed") {
     return {
       ok: false,
-      error: "Someone else has set this program up since. Reopening would take it from them.",
+      error:
+        "Someone else has set this program up since. Reopening would take it from them.",
     };
   }
 
@@ -391,7 +413,10 @@ export async function reopenClaim(claimId: string, notes?: string): Promise<Admi
     .neq("id", claim.id);
 
   if ((liveClaims ?? 0) > 0) {
-    return { ok: false, error: "Another claim on this program is already open." };
+    return {
+      ok: false,
+      error: "Another claim on this program is already open.",
+    };
   }
 
   // The claimant. `program_claims.claimant_user_id` is ON DELETE SET NULL, so a
@@ -420,7 +445,8 @@ export async function reopenClaim(claimId: string, notes?: string): Promise<Admi
   if (!ownerId) {
     return {
       ok: false,
-      error: "That claimant no longer has an account, so there is nobody to give the program back to.",
+      error:
+        "That claimant no longer has an account, so there is nobody to give the program back to.",
     };
   }
 
@@ -456,12 +482,15 @@ export async function reopenClaim(claimId: string, notes?: string): Promise<Admi
   // Rebuilt because the rejection deleted it. `pending_review` withholds video
   // submission on its own, so this restores the workspace without restoring the
   // budget.
-  await db
-    .from("program_members")
-    .upsert(
-      { program_id: claim.program_id, user_id: ownerId, role: "owner", upload_enabled: true },
-      { onConflict: "program_id,user_id" }
-    );
+  await db.from("program_members").upsert(
+    {
+      program_id: claim.program_id,
+      user_id: ownerId,
+      role: "owner",
+      upload_enabled: true,
+    },
+    { onConflict: "program_id,user_id" },
+  );
 
   revalidatePath("/admin/claims");
   return { ok: true };
@@ -480,7 +509,7 @@ export async function reopenClaim(claimId: string, notes?: string): Promise<Admi
  */
 async function notifyRequestDeclined(
   db: AdminDb,
-  request: { requestId: string; to: string; programId: string | null }
+  request: { requestId: string; to: string; programId: string | null },
 ): Promise<void> {
   if (!request.programId) return;
 
@@ -497,14 +526,14 @@ async function notifyRequestDeclined(
       to: request.to,
       programName: programDisplayName(
         program.school_name as string,
-        (program.team as string | null) ?? null
+        (program.team as string | null) ?? null,
       ),
       // Null on purpose. `program_requests.note` is the REQUESTER's OWN words,
       // and there is no admin-authored reviewer note on a request — printing
       // the requester's sentence back to them under "What they said" would
       // misattribute it to the coaching staff. No internal text is emailed.
       reason: null,
-    })
+    }),
   );
 
   if (!sent.ok) {
@@ -517,7 +546,7 @@ async function notifyRequestDeclined(
 /** Close an invite request, dispute, or unlisted-program submission. */
 export async function resolveRequest(
   requestId: string,
-  status: "resolved" | "dismissed"
+  status: "resolved" | "dismissed",
 ): Promise<AdminOutcome> {
   const admin = await requireAdmin();
   if (!admin) return { ok: false, error: "Not authorized." };
@@ -530,14 +559,20 @@ export async function resolveRequest(
   // already closed, which is what the admin was asking for.
   const { data: resolved, error } = await db
     .from("program_requests")
-    .update({ status, resolved_by: admin.id, resolved_at: new Date().toISOString() })
+    .update({
+      status,
+      resolved_by: admin.id,
+      resolved_at: new Date().toISOString(),
+    })
     .eq("id", requestId)
     .eq("status", "open")
     .select("id, kind, email, program_id")
     .maybeSingle();
 
   if (error) {
-    console.error("[admin] could not resolve request", { error: error.message });
+    console.error("[admin] could not resolve request", {
+      error: error.message,
+    });
     return { ok: false, error: "Could not update that request." };
   }
 
@@ -547,7 +582,11 @@ export async function resolveRequest(
   // is Done, which means they were dealt with, usually by being invited. The
   // recipient is the address recorded on the request the reviewer just closed,
   // never anything a caller supplies here.
-  if (resolved && status === "dismissed" && resolved.kind === "invite_request") {
+  if (
+    resolved &&
+    status === "dismissed" &&
+    resolved.kind === "invite_request"
+  ) {
     await notifyRequestDeclined(db, {
       requestId: resolved.id as string,
       to: resolved.email as string,

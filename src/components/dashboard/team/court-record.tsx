@@ -1,8 +1,14 @@
 import { DayZeroShape } from "@/components/dashboard/home/day-zero-shape";
 import { CardFooter } from "@/components/dashboard/shared/card-footer";
 import { CourtRecordMosaic } from "@/components/dashboard/team/court-record-mosaic";
-import { COURT_RECORD_COLS, EmptyCell } from "@/components/dashboard/team/court-record-shell";
-import { COURT_RECORD_WINDOW, type CourtRecord } from "@/lib/data/team-court-record";
+import {
+  COURT_RECORD_COLS,
+  EmptyCell,
+} from "@/components/dashboard/team/court-record-shell";
+import {
+  COURT_RECORD_WINDOW,
+  type CourtRecord,
+} from "@/lib/data/team-court-record";
 
 /**
  * Court record — the season's singles results as a mosaic, in Team Home's
@@ -35,10 +41,7 @@ export function CourtRecord({ record }: { record: CourtRecord }) {
   const hasResults = columns.length > 0;
 
   return (
-    <section
-      aria-label="Court record"
-      className="surface-card p-5"
-    >
+    <section aria-label="Court record" className="surface-card p-5">
       {/* No header link. The Focus card directly above already says "Open
           Statistics", and the only other true destination — the schedule —
           is the history card's "All duals" directly below. A third link that

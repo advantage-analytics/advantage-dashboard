@@ -27,28 +27,29 @@
  */
 
 export type ClaimStatus =
-  | 'pending_email'
-  | 'pending_review'
-  | 'objection_window'
-  | 'approved'
-  | 'rejected'
-  | 'objected';
+  | "pending_email"
+  | "pending_review"
+  | "objection_window"
+  | "approved"
+  | "rejected"
+  | "objected";
 
-export type ProgramStatus = 'unclaimed' | 'claim_pending' | 'active' | 'suspended';
+export type ProgramStatus =
+  "unclaimed" | "claim_pending" | "active" | "suspended";
 
 export type ClaimEvent =
   /** The magic link was clicked. Routing depends on the domain check. */
-  | { type: 'verify_email'; domainMatched: boolean }
+  | { type: "verify_email"; domainMatched: boolean }
   /** An admin approved a claim that failed the domain check. */
-  | { type: 'approve' }
+  | { type: "approve" }
   /** An admin rejected it. */
-  | { type: 'reject' }
+  | { type: "reject" }
   /** Somebody at the school objected. */
-  | { type: 'object' }
+  | { type: "object" }
   /** The objection window elapsed with no objection. */
-  | { type: 'settle' }
+  | { type: "settle" }
   /** The magic link expired unused. */
-  | { type: 'expire' }
+  | { type: "expire" }
   /**
    * An admin puts a settled claim back in the queue.
    *
@@ -59,7 +60,7 @@ export type ClaimEvent =
    * decides these claims, so letting them undo their own mistake adds no
    * authority they did not have.
    */
-  | { type: 'reopen' };
+  | { type: "reopen" };
 
 /**
  * Apply an event. Returns the next status, or null if the move is illegal.
@@ -70,30 +71,30 @@ export type ClaimEvent =
  */
 export function nextClaimStatus(
   current: ClaimStatus,
-  event: ClaimEvent
+  event: ClaimEvent,
 ): ClaimStatus | null {
   switch (current) {
-    case 'pending_email':
-      if (event.type === 'verify_email') {
+    case "pending_email":
+      if (event.type === "verify_email") {
         // The only place domain matching changes anything: whether a human
         // has to look. Both branches are live claims either way.
-        return event.domainMatched ? 'objection_window' : 'pending_review';
+        return event.domainMatched ? "objection_window" : "pending_review";
       }
-      if (event.type === 'expire') return 'rejected';
+      if (event.type === "expire") return "rejected";
       return null;
 
-    case 'pending_review':
+    case "pending_review":
       // An approved claim still gets announced and still serves its window.
       // Review answers "does this person work there", which is a different
       // question from "does anyone on staff dispute this".
-      if (event.type === 'approve') return 'objection_window';
-      if (event.type === 'reject') return 'rejected';
-      if (event.type === 'object') return 'objected';
+      if (event.type === "approve") return "objection_window";
+      if (event.type === "reject") return "rejected";
+      if (event.type === "object") return "objected";
       return null;
 
-    case 'objection_window':
-      if (event.type === 'object') return 'objected';
-      if (event.type === 'settle') return 'approved';
+    case "objection_window":
+      if (event.type === "object") return "objected";
+      if (event.type === "settle") return "approved";
       return null;
 
     // A settled decision can be undone by an admin, and lands back in the
@@ -102,15 +103,15 @@ export function nextClaimStatus(
     // would make on any new claim. Restoring straight to `objection_window`
     // would silently re-grant a program that a claim from `pending_review`
     // never had.
-    case 'rejected':
-    case 'objected':
-      if (event.type === 'reopen') return 'pending_review';
+    case "rejected":
+    case "objected":
+      if (event.type === "reopen") return "pending_review";
       return null;
 
     // Approved is not undone, it is objected to — the transition already
     // exists, and an approved claim is live rather than a mistake sitting in a
     // queue.
-    case 'approved':
+    case "approved":
       return null;
   }
 }
@@ -122,7 +123,9 @@ export function nextClaimStatus(
  * "person getting involved" this describes.
  */
 export function isTerminal(status: ClaimStatus): boolean {
-  return status === 'approved' || status === 'rejected' || status === 'objected';
+  return (
+    status === "approved" || status === "rejected" || status === "objected"
+  );
 }
 
 /**
@@ -131,30 +134,30 @@ export function isTerminal(status: ClaimStatus): boolean {
  * Two columns that must agree is two columns that eventually will not.
  */
 export function programStatusFor(claim: ClaimStatus | null): ProgramStatus {
-  if (claim === null) return 'unclaimed';
+  if (claim === null) return "unclaimed";
 
   switch (claim) {
-    case 'pending_email':
-    case 'pending_review':
-      return 'claim_pending';
+    case "pending_email":
+    case "pending_review":
+      return "claim_pending";
     // Usable immediately — see the header.
-    case 'objection_window':
-    case 'approved':
-      return 'active';
-    case 'rejected':
-    case 'objected':
-      return 'unclaimed';
+    case "objection_window":
+    case "approved":
+      return "active";
+    case "rejected":
+    case "objected":
+      return "unclaimed";
   }
 }
 
 /** Can this program have video submitted against its budget yet? */
 export function canSubmitVideo(claim: ClaimStatus | null): boolean {
-  return claim === 'objection_window' || claim === 'approved';
+  return claim === "objection_window" || claim === "approved";
 }
 
 /** Does a claim in this state need a human to look at it? */
 export function needsReview(status: ClaimStatus): boolean {
-  return status === 'pending_review' || status === 'objected';
+  return status === "pending_review" || status === "objected";
 }
 
 // ---------------------------------------------------------------------------
@@ -186,10 +189,10 @@ export function reviewReason(claim: {
   announcedRecipients: number;
   status: ClaimStatus;
 }): string {
-  if (claim.status === 'objected') return 'Someone objected to this claim';
+  if (claim.status === "objected") return "Someone objected to this claim";
   if (claim.announcedRecipients === 0) {
-    return 'No other contacts on record — the claim went unannounced';
+    return "No other contacts on record — the claim went unannounced";
   }
-  if (!claim.domainMatched) return 'Email domain did not match the school';
-  return 'Manual review requested';
+  if (!claim.domainMatched) return "Email domain did not match the school";
+  return "Manual review requested";
 }

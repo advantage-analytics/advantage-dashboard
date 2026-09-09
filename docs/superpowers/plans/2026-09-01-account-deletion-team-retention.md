@@ -26,34 +26,38 @@
 
 ## File structure
 
-| Path | Responsibility |
-|---|---|
-| `tests/account-deletion-retention.spec.ts` (create) | Live-DB proof of the RPC, the trigger, idempotency, and the owner guard. Domain fixtures inline, session plumbing from `tests/fixtures/live-db.ts`. |
-| `supabase/migrations/<stamp>_account_deletion_retains_program_data.sql` (create) | Nullable uploader columns, `match_files` FK to SET NULL, paired-null trigger, partial index, the RPC and its grants. |
-| `src/components/dashboard/settings/actions.ts` (modify, `deleteAccount` at lines 119–214) | Sequence: RPC as user → personal purge → stragglers → auth delete. |
-| `src/app/dashboard/settings/account/page.tsx` (modify, lines 30–31, 79–80, 179–206) | Copy, and the owner box computed from every workspace. |
-| `src/app/api/splitstep/jobs/route.ts:142`, `src/app/api/splitstep/jobs/[jobId]/resubmit/route.ts:78`, `src/lib/services/splitstep/resubmit-job.ts:104–156` (modify) | Uploader may be null on a job row; resubmit refuses when it is. |
-| `docs/ui-revamp-guardrails.md` §2 (modify, after line 77) | Second reviewed exception. |
-| `docs/README.md` (modify) | Index row for the spec. |
+| Path                                                                                                                                                                | Responsibility                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tests/account-deletion-retention.spec.ts` (create)                                                                                                                 | Live-DB proof of the RPC, the trigger, idempotency, and the owner guard. Domain fixtures inline, session plumbing from `tests/fixtures/live-db.ts`. |
+| `supabase/migrations/<stamp>_account_deletion_retains_program_data.sql` (create)                                                                                    | Nullable uploader columns, `match_files` FK to SET NULL, paired-null trigger, partial index, the RPC and its grants.                                |
+| `src/components/dashboard/settings/actions.ts` (modify, `deleteAccount` at lines 119–214)                                                                           | Sequence: RPC as user → personal purge → stragglers → auth delete.                                                                                  |
+| `src/app/dashboard/settings/account/page.tsx` (modify, lines 30–31, 79–80, 179–206)                                                                                 | Copy, and the owner box computed from every workspace.                                                                                              |
+| `src/app/api/splitstep/jobs/route.ts:142`, `src/app/api/splitstep/jobs/[jobId]/resubmit/route.ts:78`, `src/lib/services/splitstep/resubmit-job.ts:104–156` (modify) | Uploader may be null on a job row; resubmit refuses when it is.                                                                                     |
+| `docs/ui-revamp-guardrails.md` §2 (modify, after line 77)                                                                                                           | Second reviewed exception.                                                                                                                          |
+| `docs/README.md` (modify)                                                                                                                                           | Index row for the spec.                                                                                                                             |
 
 ---
 
 ### Task 1: The failing live-database spec
 
 **Files:**
+
 - Create: `tests/account-deletion-retention.spec.ts`
 - Read for patterns: `tests/rls-workspace-isolation.spec.ts`, `tests/fixtures/live-db.ts`
 
 **Interfaces:**
+
 - Consumes: `runMarker`, `createAdminClient`, `createLogins`, `deleteAuthUsers`, `HAVE_ENV`, `SKIP_REASON`, `INSUFFICIENT_PRIVILEGE`, `type Session` from `./fixtures/live-db`.
 - Produces: the contract Task 2's migration must satisfy — RPC name `release_my_account_from_programs` (no arguments) returning rows `{ program_id, profile_id, retained, repointed }`; audit action string `member.account_deleted`; trigger behaviour on `program_players`.
 
 - [ ] **Step 1: Install dependencies**
 
 Run:
+
 ```bash
 npm ci
 ```
+
 Expected: completes without error; `node_modules/` exists.
 
 - [ ] **Step 2: Write the spec**
@@ -433,14 +437,17 @@ test.describe('account deletion retains program data (live DB)', () => {
 - [ ] **Step 3: Run it and confirm it fails for the right reasons**
 
 Run:
+
 ```bash
 npx playwright test tests/account-deletion-retention.spec.ts
 ```
+
 Expected: the fixture builds; "an owner is refused" and "the player is released" fail with a PostgREST error naming a missing function (`Could not find the function public.release_my_account_from_programs`); the dependent assertions fail; "deleting a login through auth un-claims" fails with `removed.error` set to the `program_players_claim_check` violation. `afterAll` cleans up: confirm with
 
 ```sql
 select count(*) from programs where program_key like 'acct-del-%';
 ```
+
 via `mcp__supabase__execute_sql` — expected `0`.
 
 - [ ] **Step 4: Commit the red spec**
@@ -460,10 +467,12 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ### Task 2: The migration
 
 **Files:**
+
 - Create: `supabase/migrations/<stamp>_account_deletion_retains_program_data.sql`
 - Test: `tests/account-deletion-retention.spec.ts` (from Task 1)
 
 **Interfaces:**
+
 - Consumes: nothing from earlier tasks besides the spec's contract.
 - Produces: `public.release_my_account_from_programs()` → `table(program_id uuid, profile_id uuid, retained integer, repointed integer)`, callable by `authenticated`; trigger `program_players_clear_claimed_at`; nullable `processing_jobs.created_by`, `processing_usage.created_by`; `match_files_uploaded_by_fkey` with `on delete set null`; index `program_players_claimed_by_idx`. Task 3 calls the RPC by this exact name.
 
@@ -483,14 +492,17 @@ select
     where n.nspname='public' and p.proname='release_my_account_from_programs') as rpc_count,
   (select count(*) from pg_indexes where indexname='program_players_claimed_by_idx') as index_count;
 ```
+
 Expected: `NO, NO, c, 0, 0, 0`.
 
 - [ ] **Step 2: Write the migration file**
 
 Get the stamp:
+
 ```bash
 date -u +%Y%m%d%H%M%S
 ```
+
 It must sort after `20260830140001_drop_roster_visible.sql`. Create
 `supabase/migrations/<stamp>_account_deletion_retains_program_data.sql`:
 
@@ -709,11 +721,13 @@ Call `mcp__supabase__apply_migration` with `name` = the filename without `.sql` 
 Re-run the Step 1 query. Expected: `YES, YES, n, 1, 1, 1`.
 
 Then confirm the grants:
+
 ```sql
 select grantee, privilege_type from information_schema.routine_privileges
  where routine_schema='public' and routine_name='release_my_account_from_programs'
  order by grantee;
 ```
+
 Expected: rows for `authenticated`, `postgres`, `service_role`; **no** `anon`, **no** `PUBLIC`.
 
 - [ ] **Step 5: Run the advisors**
@@ -725,6 +739,7 @@ Call `mcp__supabase__get_advisors` with `type: "security"` and again with `type:
 ```bash
 npx playwright test tests/account-deletion-retention.spec.ts
 ```
+
 Expected: 9 passed. If the first RPC test reports the function still missing, PostgREST's schema cache has not reloaded; run `notify pgrst, 'reload schema';` via `execute_sql` and retry once.
 
 - [ ] **Step 7: Commit**
@@ -747,9 +762,11 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ### Task 3: `deleteAccount()` calls the release first
 
 **Files:**
+
 - Modify: `src/components/dashboard/settings/actions.ts:119-214`
 
 **Interfaces:**
+
 - Consumes: `release_my_account_from_programs` (Task 2) via `supabase.rpc(...)` on the **user's** client; returns `ReleasedProgram[]`.
 - Produces: `deleteAccount(): Promise<ActionResult>` unchanged in signature; two new error sentences the page shows verbatim.
 
@@ -797,14 +814,17 @@ export async function deleteAccount(): Promise<ActionResult> {
   } = await supabase.auth.getUser();
 
   if (userError || !user) {
-    return { ok: false, error: "Your session expired. Sign in again to delete your account." };
+    return {
+      ok: false,
+      error: "Your session expired. Sign in again to delete your account.",
+    };
   }
 
   // 1. Programs first, and as the user: the RPC derives its subject from
   //    auth.uid(), so the admin client would have nobody to act for. Failing
   //    here changes nothing, which is the point of doing it first.
   const { data: released, error: releaseError } = await supabase.rpc(
-    "release_my_account_from_programs"
+    "release_my_account_from_programs",
   );
 
   if (releaseError) {
@@ -815,17 +835,21 @@ export async function deleteAccount(): Promise<ActionResult> {
           "You still own a program. Transfer ownership in Team settings, then delete your account.",
       };
     }
-    console.error("[account delete] program release failed:", releaseError.message);
+    console.error(
+      "[account delete] program release failed:",
+      releaseError.message,
+    );
     return {
       ok: false,
-      error: "We could not release your team data, so nothing was deleted. Try again.",
+      error:
+        "We could not release your team data, so nothing was deleted. Try again.",
     };
   }
 
   for (const row of (released ?? []) as ReleasedProgram[]) {
     console.log(
       `[account delete] released from program ${row.program_id}: ` +
-        `${row.retained} match(es) retained, ${row.repointed} re-pointed`
+        `${row.retained} match(es) retained, ${row.repointed} re-pointed`,
     );
   }
 
@@ -844,10 +868,14 @@ export async function deleteAccount(): Promise<ActionResult> {
     .is("program_id", null);
 
   if (matchesError) {
-    console.error("[account delete] could not list matches:", matchesError.message);
+    console.error(
+      "[account delete] could not list matches:",
+      matchesError.message,
+    );
     return {
       ok: false,
-      error: "We could not read your matches, so nothing was deleted. Try again.",
+      error:
+        "We could not read your matches, so nothing was deleted. Try again.",
     };
   }
 
@@ -864,10 +892,14 @@ export async function deleteAccount(): Promise<ActionResult> {
       .in("id", matchIds);
 
     if (matchDeleteError) {
-      console.error("[account delete] match delete failed:", matchDeleteError.message);
+      console.error(
+        "[account delete] match delete failed:",
+        matchDeleteError.message,
+      );
       return {
         ok: false,
-        error: "We could not delete your matches, so your account is unchanged. Try again.",
+        error:
+          "We could not delete your matches, so your account is unchanged. Try again.",
       };
     }
   }
@@ -881,10 +913,15 @@ export async function deleteAccount(): Promise<ActionResult> {
   await adminClient.from("processing_usage").delete().eq("created_by", user.id);
 
   // 4. The login, last.
-  const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(user.id);
+  const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(
+    user.id,
+  );
 
   if (deleteAuthError) {
-    console.error("[account delete] auth delete failed:", deleteAuthError.message);
+    console.error(
+      "[account delete] auth delete failed:",
+      deleteAuthError.message,
+    );
     return {
       ok: false,
       error:
@@ -911,6 +948,7 @@ type ReleasedProgram = {
 ```bash
 npx tsc --noEmit
 ```
+
 Expected: no errors. If `releaseError.code` is flagged, the `PostgrestError` type has `code: string`; check the import chain rather than casting.
 
 - [ ] **Step 3: Commit**
@@ -930,64 +968,77 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ### Task 4: Account page copy and the owner box
 
 **Files:**
+
 - Modify: `src/app/dashboard/settings/account/page.tsx:30-31, 79-80, 179-206`
 
 **Interfaces:**
+
 - Consumes: `useWorkspace()` → `{ active, available, viewer }` (`src/lib/workspace/types.ts:151`), `Workspace.kind`, `Workspace.role`, `Workspace.name`.
 - Produces: nothing other tasks use.
 
 - [ ] **Step 1: Read `available` from the workspace context**
 
 Line 31, replace
+
 ```tsx
-  const { active, viewer } = useWorkspace();
+const { active, viewer } = useWorkspace();
 ```
+
 with
+
 ```tsx
-  const { available, viewer } = useWorkspace();
+const { available, viewer } = useWorkspace();
 ```
+
 (`active` is no longer read anywhere in this file after Step 2.)
 
 - [ ] **Step 2: Compute ownership across every workspace**
 
 Lines 79–80, replace
+
 ```tsx
-  const canDelete = confirmText === viewer.email;
-  const ownsProgram = active.kind === "team" && active.role === "owner";
+const canDelete = confirmText === viewer.email;
+const ownsProgram = active.kind === "team" && active.role === "owner";
 ```
+
 with
+
 ```tsx
-  const canDelete = confirmText === viewer.email;
-  // Every workspace, not the active one: the guard in the database refuses
-  // deletion while this account owns ANY program, and the box has to warn
-  // about the same set or someone reading their personal workspace is
-  // refused without ever having been told why.
-  const ownedPrograms = available.filter(
-    (workspace) => workspace.kind === "team" && workspace.role === "owner"
-  );
-  const ownsProgram = ownedPrograms.length > 0;
-  const ownedNames = ownedPrograms.map((workspace) => workspace.name).join(", ");
+const canDelete = confirmText === viewer.email;
+// Every workspace, not the active one: the guard in the database refuses
+// deletion while this account owns ANY program, and the box has to warn
+// about the same set or someone reading their personal workspace is
+// refused without ever having been told why.
+const ownedPrograms = available.filter(
+  (workspace) => workspace.kind === "team" && workspace.role === "owner",
+);
+const ownsProgram = ownedPrograms.length > 0;
+const ownedNames = ownedPrograms.map((workspace) => workspace.name).join(", ");
 ```
 
 - [ ] **Step 3: Rewrite the deletion sentence and the owner box**
 
 Lines 179–182, replace
+
 ```tsx
-          <span className="text-[12px] leading-[1.55] text-[var(--ink-600)]">
-            Removes match data, statistics, reports, and your account record.
-            This cannot be undone.
-          </span>
+<span className="text-[12px] leading-[1.55] text-[var(--ink-600)]">
+  Removes match data, statistics, reports, and your account record. This cannot
+  be undone.
+</span>
 ```
+
 with
+
 ```tsx
-          <span className="text-[12px] leading-[1.55] text-[var(--ink-600)]">
-            Removes your personal matches, statistics, reports, and your
-            account record. Matches you filed under a team stay with that
-            team, as a profile its coaches manage. This cannot be undone.
-          </span>
+<span className="text-[12px] leading-[1.55] text-[var(--ink-600)]">
+  Removes your personal matches, statistics, reports, and your account record.
+  Matches you filed under a team stay with that team, as a profile its coaches
+  manage. This cannot be undone.
+</span>
 ```
 
 Lines 192–204 (inside the `ownsProgram &&` block), replace
+
 ```tsx
                 <div className="text-[12px] text-[var(--ink-900)]">
                   You own {active.name}
@@ -1002,7 +1053,9 @@ Lines 192–204 (inside the `ownsProgram &&` block), replace
                   </Link>
                 </div>
 ```
+
 with
+
 ```tsx
                 <div className="text-[12px] text-[var(--ink-900)]">
                   You own {ownedNames}
@@ -1023,6 +1076,7 @@ with
 ```bash
 npx tsc --noEmit && npm run lint
 ```
+
 Expected: no errors; the lint warning count equals the count before this task (note it in the summary).
 
 - [ ] **Step 5: Commit**
@@ -1039,33 +1093,42 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ### Task 5: A job row's uploader may be null
 
 **Files:**
+
 - Modify: `src/app/api/splitstep/jobs/route.ts:142`
 - Modify: `src/app/api/splitstep/jobs/[jobId]/resubmit/route.ts:78`
 - Modify: `src/lib/services/splitstep/resubmit-job.ts:104-156`
 
 **Interfaces:**
+
 - Consumes: nothing from earlier tasks (the column is nullable after Task 2, which is why these types change).
 - Produces: `resubmitJob()` returns `{ ok: false, reason: 'not_found', ... }` for a job whose uploader is gone; no signature change.
 
 - [ ] **Step 1: The submit route's cast**
 
 `src/app/api/splitstep/jobs/route.ts:142`, replace
+
 ```ts
-    created_by: string;
+created_by: string;
 ```
+
 with
+
 ```ts
-    created_by: string | null;
+created_by: string | null;
 ```
+
 (The guard at line 135 already compares it to `user.id` before the cast, and nothing after the cast reads it.)
 
 - [ ] **Step 2: The resubmit route's cast**
 
 `src/app/api/splitstep/jobs/[jobId]/resubmit/route.ts:78`, replace
+
 ```ts
   if (!jobRow || (jobRow as { created_by: string }).created_by !== user.id) {
 ```
+
 with
+
 ```ts
   if (!jobRow || (jobRow as { created_by: string | null }).created_by !== user.id) {
 ```
@@ -1075,32 +1138,36 @@ with
 `src/lib/services/splitstep/resubmit-job.ts`. Leave `ParentJob.created_by: string` at line 106 — a resubmittable parent has an uploader, and that type feeds an insert and two billing calls that require one. Change how the row becomes a `ParentJob`. Replace lines 153–156:
 
 ```ts
-  if (parentError || !parentRow) {
-    return { ok: false, reason: 'not_found', message: 'Job not found.' };
-  }
-  const parent = parentRow as ParentJob;
+if (parentError || !parentRow) {
+  return { ok: false, reason: "not_found", message: "Job not found." };
+}
+const parent = parentRow as ParentJob;
 ```
-with
-```ts
-  if (parentError || !parentRow) {
-    return { ok: false, reason: 'not_found', message: 'Job not found.' };
-  }
 
-  // `created_by` is nullable since the uploader may have deleted their
-  // account (release_my_account_from_programs). The match stayed with its
-  // program, but nothing may spend quota on a departed person's behalf, so
-  // the job reads as not found — the same answer the route gives for
-  // "not yours".
-  const raw = parentRow as Omit<ParentJob, 'created_by'> & { created_by: string | null };
-  if (!raw.created_by) {
-    return {
-      ok: false,
-      reason: 'not_found',
-      message:
-        'The account that uploaded this analysis no longer exists, so it cannot be retried.',
-    };
-  }
-  const parent: ParentJob = { ...raw, created_by: raw.created_by };
+with
+
+```ts
+if (parentError || !parentRow) {
+  return { ok: false, reason: "not_found", message: "Job not found." };
+}
+
+// `created_by` is nullable since the uploader may have deleted their
+// account (release_my_account_from_programs). The match stayed with its
+// program, but nothing may spend quota on a departed person's behalf, so
+// the job reads as not found — the same answer the route gives for
+// "not yours".
+const raw = parentRow as Omit<ParentJob, "created_by"> & {
+  created_by: string | null;
+};
+if (!raw.created_by) {
+  return {
+    ok: false,
+    reason: "not_found",
+    message:
+      "The account that uploaded this analysis no longer exists, so it cannot be retried.",
+  };
+}
+const parent: ParentJob = { ...raw, created_by: raw.created_by };
 ```
 
 - [ ] **Step 4: Type-check**
@@ -1108,6 +1175,7 @@ with
 ```bash
 npx tsc --noEmit
 ```
+
 Expected: no errors.
 
 - [ ] **Step 5: Commit**
@@ -1124,15 +1192,18 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ### Task 6: Docs — the second guardrail exception and the index row
 
 **Files:**
+
 - Modify: `docs/ui-revamp-guardrails.md` (insert after line 77, the last line of the merge exception blockquote)
 - Modify: `docs/README.md` (add a table row)
 
 - [ ] **Step 1: Add the exception to §2**
 
 In `docs/ui-revamp-guardrails.md`, directly after the blockquote line
+
 ```
 > `match_id` + `is_player1`, never on a player id.
 ```
+
 insert a blank line and then:
 
 ```markdown
@@ -1181,6 +1252,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```bash
 npx tsc --noEmit && npm run lint && npm test
 ```
+
 Expected: tsc clean; lint at the pre-existing warning count with 0 errors; every spec passes, including `tests/account-deletion-retention.spec.ts` (9 passed) and `tests/rls-workspace-isolation.spec.ts` (its `afterAll` deletes matches by `created_by` and still works because nothing in it calls the release).
 
 - [ ] **Step 2: Click-through on the live app as a player**
@@ -1197,10 +1269,13 @@ Take a screenshot of steps 1 and 4 for the summary.
 - [ ] **Step 3: Update the spec's status line and commit**
 
 In `docs/superpowers/specs/2026-09-01-account-deletion-team-retention-design.md`, change
+
 ```
 Status: approved in brainstorm (2026-09-01), awaiting written review
 ```
+
 to
+
 ```
 Status: approved 2026-09-01; implemented on `claude/delete-cjgimena-email-d017fe`
 ```
@@ -1216,16 +1291,16 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ## Self-review against the spec
 
-| Spec section | Task |
-|---|---|
-| §1 Behaviour (retention per `program_id`, coach-managed profile, seat released, owner refused) | Task 2 (RPC), proven by Task 1's spec |
-| §2 Deletion sequence, error contract | Task 3 |
-| §3 Migration (nullable columns, `match_files` FK, trigger, index) | Task 2 steps 2–4 |
-| §4 Function body, grants, regraft trigger compatibility | Task 2 step 2; spec's "team matches are re-pointed" test exercises the trigger path |
-| §5 Code changes: actions, page, row types, guardrails, README | Tasks 3, 4, 5, 6 |
-| §6 Error handling sentences | Task 3 step 1 |
-| §7 Testing (nine assertions, gates, click-through) | Task 1 (nine tests), Task 7 |
-| §8 Out of scope | not implemented, by design |
-| §9 Best-practices review | Task 2 step 5 (`get_advisors`) plus the function shape in step 2 |
+| Spec section                                                                                   | Task                                                                                |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| §1 Behaviour (retention per `program_id`, coach-managed profile, seat released, owner refused) | Task 2 (RPC), proven by Task 1's spec                                               |
+| §2 Deletion sequence, error contract                                                           | Task 3                                                                              |
+| §3 Migration (nullable columns, `match_files` FK, trigger, index)                              | Task 2 steps 2–4                                                                    |
+| §4 Function body, grants, regraft trigger compatibility                                        | Task 2 step 2; spec's "team matches are re-pointed" test exercises the trigger path |
+| §5 Code changes: actions, page, row types, guardrails, README                                  | Tasks 3, 4, 5, 6                                                                    |
+| §6 Error handling sentences                                                                    | Task 3 step 1                                                                       |
+| §7 Testing (nine assertions, gates, click-through)                                             | Task 1 (nine tests), Task 7                                                         |
+| §8 Out of scope                                                                                | not implemented, by design                                                          |
+| §9 Best-practices review                                                                       | Task 2 step 5 (`get_advisors`) plus the function shape in step 2                    |
 
 Type consistency: `ReleasedProgram` (Task 3) matches the RPC's `returns table` (Task 2) column for column; the audit action string `member.account_deleted` is identical in Task 1, Task 2 and Task 6; the RPC name is identical in Tasks 1, 2, 3 and 6.

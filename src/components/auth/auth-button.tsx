@@ -34,7 +34,7 @@ export default function AuthButton({
         transition:
           "background-color var(--duration-hover), color var(--duration-hover), border-color var(--duration-hover), box-shadow var(--duration-hover), transform 80ms ease-out",
       }}
-      className="inline-flex h-[44px] w-full items-center justify-center gap-[8px] rounded-[var(--radius-button)] border border-transparent bg-[var(--blue)] px-[20px] text-[13px] font-medium whitespace-nowrap text-white outline-none hover:bg-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] active:scale-[0.97] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-50"
+      className="inline-flex h-[44px] w-full items-center justify-center gap-[8px] rounded-[var(--radius-button)] border border-transparent bg-[var(--blue)] px-[20px] text-[13px] font-medium whitespace-nowrap text-white outline-none hover:bg-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:active:scale-100"
     >
       {children}
     </button>

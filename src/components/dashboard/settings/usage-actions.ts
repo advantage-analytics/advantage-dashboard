@@ -19,7 +19,7 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
  * one fewer identifier crossing the boundary for the server to look up anyway.
  */
 export async function loadProgramUsage(
-  billingMonth: string
+  billingMonth: string,
 ): Promise<ProgramUsage> {
   const workspace = await getWorkspaceContext();
   if (!workspace || workspace.active.kind !== "team") {
@@ -28,6 +28,6 @@ export async function loadProgramUsage(
   return getProgramUsage(
     workspace.active.id,
     billingMonth,
-    workspace.active.orgType
+    workspace.active.orgType,
   );
 }

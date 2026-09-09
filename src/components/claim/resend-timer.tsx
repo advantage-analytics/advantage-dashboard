@@ -63,7 +63,7 @@ export function ResendTimer({
         onClick={onResend}
         disabled={pending}
         aria-busy={pending}
-        className="cursor-pointer rounded-sm text-[11px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
+        className="cursor-pointer rounded-sm text-[11px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
       >
         {pending ? "Sending…" : `Resend the link to ${email}`}
       </button>

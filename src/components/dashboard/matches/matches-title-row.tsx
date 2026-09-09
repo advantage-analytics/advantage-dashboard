@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { advButton } from "@/lib/ui/adv-button";
 import { useUnseenReportIds } from "@/lib/ui/seen-reports";
-import { isAnalysisReady, type AnalysisStatus } from "@/lib/data/match-analysis";
+import {
+  isAnalysisReady,
+  type AnalysisStatus,
+} from "@/lib/data/match-analysis";
 
 /**
  * The page-level header — title, subline/date row and primary. Round 1's
@@ -23,7 +26,11 @@ export function MatchesTitleRow({
   useEffect(() => {
     setDateText(
       // "Monday, Aug 24" — the frame's short month (Platform Audit Pb2).
-      new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })
+      new Date().toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+      }),
     );
   }, []);
 
@@ -47,13 +54,18 @@ export function MatchesTitleRow({
         <h1 className="text-display">Matches</h1>
         <div className="mt-[9px] flex items-baseline gap-3">
           <span className="text-body-sm">{subline}</span>
-          <span className={`text-micro tabular transition-opacity duration-300 ${dateText ? "opacity-100" : "opacity-0"}`}>
+          <span
+            className={`text-micro tabular transition-opacity duration-300 ${dateText ? "opacity-100" : "opacity-0"}`}
+          >
             {dateText || " "}
           </span>
         </div>
       </div>
       <div className="flex-1" />
-      <Link href="/dashboard/matches/new" className={advButton("primary", "md")}>
+      <Link
+        href="/dashboard/matches/new"
+        className={advButton("primary", "md")}
+      >
         New match
       </Link>
     </div>

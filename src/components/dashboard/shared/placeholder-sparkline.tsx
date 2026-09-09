@@ -38,7 +38,13 @@ export function PlaceholderSparkline({
   const area = `kpi-empty-area-${index}`;
 
   return (
-    <svg width="80" height="28" viewBox="0 0 80 28" className={className} aria-hidden="true">
+    <svg
+      width="80"
+      height="28"
+      viewBox="0 0 80 28"
+      className={className}
+      aria-hidden="true"
+    >
       <defs>
         <linearGradient id={line} x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor="#AAAAAA" stopOpacity={0.18} />

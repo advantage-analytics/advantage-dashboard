@@ -55,11 +55,7 @@ export const SUBTLE_PILL =
   "inline-flex h-5 items-center whitespace-nowrap rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 text-[10px] font-medium text-[var(--ink-700)]";
 
 export function ClaimedTodayPill() {
-  return (
-    <span className={cn(SUBTLE_PILL, "shrink-0")}>
-      Claimed today
-    </span>
-  );
+  return <span className={cn(SUBTLE_PILL, "shrink-0")}>Claimed today</span>;
 }
 
 /** "Invited Aug 4 as player" — what an outstanding invitation says about itself. */
@@ -184,4 +180,3 @@ export function playersLabel(count: number): string {
 export function invitesPendingLabel(count: number): string {
   return `${count} ${count === 1 ? "invite" : "invites"} pending`;
 }
-

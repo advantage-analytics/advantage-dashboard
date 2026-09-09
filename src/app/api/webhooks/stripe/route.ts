@@ -8,7 +8,7 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
 if (!webhookSecret) {
   throw new Error(
-    "STRIPE_WEBHOOK_SECRET is not defined in environment variables"
+    "STRIPE_WEBHOOK_SECRET is not defined in environment variables",
   );
 }
 
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     console.error("Webhook signature verification failed:", message);
     return NextResponse.json(
       { error: `Webhook Error: ${message}` },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       });
       return NextResponse.json(
         { error: "User not found", details: fetchError?.message },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     if (!result.success) {
       return NextResponse.json(
         { error: "Failed to update user plan", details: result.error },
-        { status: 500 }
+        { status: 500 },
       );
     }
   }

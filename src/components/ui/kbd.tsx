@@ -40,12 +40,12 @@ export function Kbd({
     <kbd
       className={cn(
         "inline-flex shrink-0 items-center justify-center",
-        "font-medium leading-none",
+        "leading-none font-medium",
         mono ? "font-mono" : "font-sans",
         "shadow-[0_1px_0_var(--color-shadow-keycap)]",
         VARIANT_CLASSES[variant],
         SIZE_CLASSES[size],
-        className
+        className,
       )}
     >
       {children}

@@ -42,10 +42,18 @@ export interface VideoFilmstrip {
   unavailable: boolean;
 }
 
-const EMPTY: VideoFilmstrip = { frames: [], isExtracting: false, unavailable: false };
+const EMPTY: VideoFilmstrip = {
+  frames: [],
+  isExtracting: false,
+  unavailable: false,
+};
 
 /** Reported for a file whose extraction job hasn't published anything yet. */
-const PENDING: VideoFilmstrip = { frames: [], isExtracting: true, unavailable: false };
+const PENDING: VideoFilmstrip = {
+  frames: [],
+  isExtracting: true,
+  unavailable: false,
+};
 
 /** Published frames, tagged with the file they came from. */
 interface StripState extends VideoFilmstrip {
@@ -61,7 +69,7 @@ interface StripState extends VideoFilmstrip {
 function nextEvent(
   target: HTMLVideoElement,
   event: "loadeddata" | "seeked",
-  timeoutMs: number
+  timeoutMs: number,
 ): Promise<boolean> {
   return new Promise((resolve) => {
     const settle = (ok: boolean) => {
@@ -82,7 +90,7 @@ function nextEvent(
 export function useVideoFilmstrip(
   file: File | null,
   durationSeconds: number,
-  frameCount: number = DEFAULT_FRAME_COUNT
+  frameCount: number = DEFAULT_FRAME_COUNT,
 ): VideoFilmstrip {
   const [state, setState] = useState<StripState>({ source: null, ...EMPTY });
   const active = !!file && durationSeconds > 0 && frameCount > 0;
@@ -145,7 +153,10 @@ export function useVideoFilmstrip(
 
           // Sample at slot centres so the first thumb isn't frame zero, which
           // is a fade-in or a lens cap more often than it is the court.
-          video.currentTime = Math.min(((i + 0.5) / frameCount) * durationSeconds, lastSeekable);
+          video.currentTime = Math.min(
+            ((i + 0.5) / frameCount) * durationSeconds,
+            lastSeekable,
+          );
           if (!(await nextEvent(video, "seeked", SEEK_TIMEOUT_MS))) continue;
           if (cancelled) return;
 
@@ -159,7 +170,11 @@ export function useVideoFilmstrip(
         // upload. The probe has already accepted the file.
       } finally {
         if (!cancelled) {
-          setState((prev) => ({ ...prev, isExtracting: false, unavailable: decoded === 0 }));
+          setState((prev) => ({
+            ...prev,
+            isExtracting: false,
+            unavailable: decoded === 0,
+          }));
         }
       }
     })();

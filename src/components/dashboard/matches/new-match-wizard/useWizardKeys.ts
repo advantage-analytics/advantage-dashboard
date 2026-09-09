@@ -86,9 +86,11 @@ export function useWizardKeys({
       // there, on nothing visible, and needed a second press to move on.
       const list = Array.from(
         root.querySelectorAll<HTMLElement>(
-          'a:not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])'
-        )
-      ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+          'a:not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter(
+        (el) => el.offsetParent !== null || el === document.activeElement,
+      );
       const idx = list.indexOf(document.activeElement as HTMLElement);
       if (idx === -1) return;
       const inFieldNext = list[idx + 1];
@@ -106,7 +108,9 @@ export function useWizardKeys({
       }
       // Walked past the last field — hand focus to Continue with a one-shot
       // ring pulse so the chord-to-submit handoff isn't silent.
-      const cta = document.querySelector<HTMLElement>('[data-wizard-continue]:not([disabled])');
+      const cta = document.querySelector<HTMLElement>(
+        "[data-wizard-continue]:not([disabled])",
+      );
       if (!cta) return;
       cta.focus();
       cta.classList.remove("animate-chord-pulse");

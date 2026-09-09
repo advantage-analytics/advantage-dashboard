@@ -10,10 +10,10 @@
  */
 
 /** User-facing provider name. Never surface the vendor's name in the UI. */
-export const PROVIDER_DISPLAY_NAME = 'Advantage Intelligence';
+export const PROVIDER_DISPLAY_NAME = "Advantage Intelligence";
 
 /** Internal provider identifier — matches `matches.source_provider`. */
-export const PROVIDER_ID = 'splitstep' as const;
+export const PROVIDER_ID = "splitstep" as const;
 
 // ---------------------------------------------------------------------------
 // Video requirements
@@ -54,10 +54,10 @@ export const MIN_VIDEO_FPS = 30;
 export const RECOMMENDED_VIDEO_FPS = 60;
 
 /** Accepted containers. MP4 (H.264) is the vendor's preferred format. */
-export const ACCEPTED_VIDEO_EXTENSIONS = ['.mp4', '.mov'] as const;
+export const ACCEPTED_VIDEO_EXTENSIONS = [".mp4", ".mov"] as const;
 export const ACCEPTED_VIDEO_MIME_TYPES = [
-  'video/mp4',
-  'video/quicktime',
+  "video/mp4",
+  "video/quicktime",
 ] as const;
 
 /**
@@ -116,7 +116,7 @@ export const VENDOR_DOWNLOAD_STALL_SECONDS = 72 * 60 * 60;
  * Callers must go through getMonthlyCapSeconds() rather than reading these
  * directly — that keeps the collegiate tier a code change, not a migration.
  */
-export type AccountType = 'individual' | 'program';
+export type AccountType = "individual" | "program";
 
 const MONTHLY_CAP_HOURS: Record<AccountType, number> = {
   individual: 2,
@@ -131,7 +131,7 @@ export function getMonthlyCapSeconds(accountType: AccountType): number {
 /** First of the current month, UTC — the `processing_usage.billing_month` key. */
 export function currentBillingMonth(now: Date = new Date()): string {
   const year = now.getUTCFullYear();
-  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
   return `${year}-${month}-01`;
 }
 
@@ -143,10 +143,10 @@ export function currentBillingMonth(now: Date = new Date()): string {
  * human enforcing it. Same failure shape as the R2 bucket name in §2.3 of the
  * handoff: one string, two systems, silent drift.
  */
-export const RESULTS_BUCKET = 'match-results';
+export const RESULTS_BUCKET = "match-results";
 
 /** Path the vendor POSTs job status to. */
-export const WEBHOOK_PATH = '/api/webhooks/splitstep';
+export const WEBHOOK_PATH = "/api/webhooks/splitstep";
 
 /**
  * Absolute URL the vendor POSTs results to, or null when this deployment
@@ -169,12 +169,12 @@ export const WEBHOOK_PATH = '/api/webhooks/splitstep';
  * refuses with 503, a script prints a readable message.
  */
 export function resolveWebhookUrl(
-  siteUrl: string | undefined = process.env.NEXT_PUBLIC_SITE_URL
+  siteUrl: string | undefined = process.env.NEXT_PUBLIC_SITE_URL,
 ): string | null {
   if (!siteUrl) return null;
 
-  const origin = siteUrl.replace(/\/+$/, '');
-  if (origin.includes('localhost') || origin.includes('127.0.0.1')) return null;
+  const origin = siteUrl.replace(/\/+$/, "");
+  if (origin.includes("localhost") || origin.includes("127.0.0.1")) return null;
 
   return `${origin}${WEBHOOK_PATH}`;
 }

@@ -1,6 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
-import { canonicalRosterIds, rosterMatchIds } from '@/lib/data/roster-ids';
+import { canonicalRosterIds, rosterMatchIds } from "@/lib/data/roster-ids";
 import {
   teamAttention,
   teamFirstReport,
@@ -9,11 +9,11 @@ import {
   type DbRecentMatch,
   type DbSeasonMatch,
   type RosterProgress,
-} from '@/lib/data/team-home-server';
-import type { AnalysisStatus, MatchAnalysis } from '@/lib/data/match-analysis';
-import type { DbStatRow } from '@/lib/data/player-profile';
-import type { MatchScore } from '@/lib/data/match-utils';
-import type { EventEntry, ProgramEvent } from '@/lib/schedule/types';
+} from "@/lib/data/team-home-server";
+import type { AnalysisStatus, MatchAnalysis } from "@/lib/data/match-analysis";
+import type { DbStatRow } from "@/lib/data/player-profile";
+import type { MatchScore } from "@/lib/data/match-utils";
+import type { EventEntry, ProgramEvent } from "@/lib/schedule/types";
 
 /**
  * The strip reads dual matches only, so a season row reaches a card through
@@ -21,35 +21,38 @@ import type { EventEntry, ProgramEvent } from '@/lib/schedule/types';
  * reads the event's kind and name and the entry's labels, nothing else.
  */
 const DUAL_EVENT: ProgramEvent = {
-  id: 'e-dual',
-  programId: 'p-1',
-  kind: 'dual',
-  name: 'Rival State',
-  startsOn: '2026-03-20',
-  endsOn: '2026-03-20',
-  site: 'home',
+  id: "e-dual",
+  programId: "p-1",
+  kind: "dual",
+  name: "Rival State",
+  startsOn: "2026-03-20",
+  endsOn: "2026-03-20",
+  site: "home",
   surface: null,
   host: null,
   format: { bestOf: 3, adScoring: true },
 };
 const S1: EventEntry = {
-  id: 'entry-S1',
+  id: "entry-S1",
   eventId: DUAL_EVENT.id,
-  discipline: 'singles',
-  slot: 'S1',
+  discipline: "singles",
+  slot: "S1",
   position: 0,
   draw: null,
   seed: null,
   playerUserIds: [],
-  playerLabels: ['Ana Vasquez'],
-  opponentLabels: ['Rival One'],
-  opponentSchool: 'Rival State',
+  playerLabels: ["Ana Vasquez"],
+  opponentLabels: ["Rival One"],
+  opponentSchool: "Rival State",
   forfeit: null,
   matches: [],
 };
 const ON_DUAL = new Map([[S1.id, { event: DUAL_EVENT, entry: S1 }]]);
 /** The season row as the schedule writes it: on S1 of the dual, ours in `player1`. */
-const onDual = (row: DbSeasonMatch): DbSeasonMatch => ({ ...row, event_entry_id: S1.id });
+const onDual = (row: DbSeasonMatch): DbSeasonMatch => ({
+  ...row,
+  event_entry_id: S1.id,
+});
 
 /**
  * A claimed player's pre-claim match, on Team Home.
@@ -71,14 +74,14 @@ const onDual = (row: DbSeasonMatch): DbSeasonMatch => ({ ...row, event_entry_id:
  */
 
 /** A claimed player: the profile id their matches carry NOW, and their login. */
-const ANA_PROFILE = 'profile-ana';
-const ANA_USER = 'user-ana';
+const ANA_PROFILE = "profile-ana";
+const ANA_USER = "user-ana";
 
 /** A staff seat: one person, one id, in both columns. This must not regress. */
-const COACH = 'user-coach';
+const COACH = "user-coach";
 
 /** A coach-managed player who has never claimed: no login at all. */
-const BEN_PROFILE = 'profile-ben';
+const BEN_PROFILE = "profile-ben";
 
 const ROSTER_ROWS = [
   { player_id: ANA_PROFILE, user_id: ANA_USER },
@@ -101,7 +104,11 @@ const NO_JOBS = new Map<string, MatchAnalysis>();
  * printing 20 under the program's name is the misattribution the guardrails
  * exist for.
  */
-function statFor(matchId: string, isPlayer1: boolean, firstServe: number): DbStatRow {
+function statFor(
+  matchId: string,
+  isPlayer1: boolean,
+  firstServe: number,
+): DbStatRow {
   return {
     match_id: matchId,
     is_player1: isPlayer1,
@@ -119,13 +126,16 @@ function statFor(matchId: string, isPlayer1: boolean, firstServe: number): DbSta
 
 /** Both sides of one match: ours 60, theirs 20, on the columns the caller says. */
 function bothSides(matchId: string, oursIsPlayer1: boolean): DbStatRow[] {
-  return [statFor(matchId, oursIsPlayer1, 60), statFor(matchId, !oursIsPlayer1, 20)];
+  return [
+    statFor(matchId, oursIsPlayer1, 60),
+    statFor(matchId, !oursIsPlayer1, 20),
+  ];
 }
 
 const NO_DUALS = { wins: 0, losses: 0 };
 
 const firstServe = ({ kpis }: ReturnType<typeof teamSeasonKpis>) =>
-  kpis.find((kpi) => kpi.key === 'first_serve_pct');
+  kpis.find((kpi) => kpi.key === "first_serve_pct");
 
 /**
  * The list's row, carrying `ourId` in whichever column the caller names.
@@ -138,23 +148,24 @@ const firstServe = ({ kpis }: ReturnType<typeof teamSeasonKpis>) =>
 function recentMatch(opts: {
   id?: string;
   ourId: string;
-  column?: 'player1' | 'player2';
+  column?: "player1" | "player2";
   provider?: string | null;
 }): DbRecentMatch {
-  const column = opts.column ?? 'player1';
+  const column = opts.column ?? "player1";
   return {
-    id: opts.id ?? 'pre-claim',
-    player1_id: column === 'player1' ? opts.ourId : 'stranger-1',
-    player2_id: column === 'player2' ? opts.ourId : 'stranger-2',
+    id: opts.id ?? "pre-claim",
+    player1_id: column === "player1" ? opts.ourId : "stranger-1",
+    player2_id: column === "player2" ? opts.ourId : "stranger-2",
     event_entry_id: null,
-    player1_name: column === 'player1' ? 'Ana Vasquez' : 'Rival One',
-    player2_name: column === 'player2' ? 'Ana Vasquez' : 'Rival Two',
+    player1_name: column === "player1" ? "Ana Vasquez" : "Rival One",
+    player2_name: column === "player2" ? "Ana Vasquez" : "Rival Two",
     score: P1_WON,
-    tournament_name: 'Spring Invitational',
-    round: 'QF',
-    date: '2026-03-20',
-    match_type: 'singles',
-    source_provider: opts.provider === undefined ? 'swingvision' : opts.provider,
+    tournament_name: "Spring Invitational",
+    round: "QF",
+    date: "2026-03-20",
+    match_type: "singles",
+    source_provider:
+      opts.provider === undefined ? "swingvision" : opts.provider,
     verified: true,
   };
 }
@@ -172,19 +183,19 @@ function recentMatch(opts: {
 function seasonMatch(opts: {
   id?: string;
   ourId: string;
-  column?: 'player1' | 'player2';
+  column?: "player1" | "player2";
 }): DbSeasonMatch {
   return recentMatch(opts);
 }
 
 function jobsFor(
-  entries: { id: string; status: AnalysisStatus }[]
+  entries: { id: string; status: AnalysisStatus }[],
 ): Map<string, MatchAnalysis> {
   return new Map(
     entries.map((entry) => [
       entry.id,
-      { status: entry.status, providerId: 'splitstep' } as MatchAnalysis,
-    ])
+      { status: entry.status, providerId: "splitstep" } as MatchAnalysis,
+    ]),
   );
 }
 
@@ -196,15 +207,15 @@ const NO_INVITES: RosterProgress = {
   expiringInDays: null,
 };
 
-test.describe('the roster id rule', () => {
-  test('a claimed player is BOTH of their ids', () => {
+test.describe("the roster id rule", () => {
+  test("a claimed player is BOTH of their ids", () => {
     // The whole bug in one assertion. `user_id` is not display data: it is the
     // id every match recorded before this player claimed their profile carries.
     expect(ROSTER_IDS.has(ANA_PROFILE)).toBe(true);
     expect(ROSTER_IDS.has(ANA_USER)).toBe(true);
   });
 
-  test('a staff seat and an unclaimed player contribute exactly one id', () => {
+  test("a staff seat and an unclaimed player contribute exactly one id", () => {
     // Both columns hold one value on a staff seat, so the rule must not double
     // count it — and an unclaimed player has no login to add.
     expect(ROSTER_IDS.has(COACH)).toBe(true);
@@ -212,12 +223,12 @@ test.describe('the roster id rule', () => {
     expect(ROSTER_IDS.size).toBe(4);
   });
 
-  test('an id belonging to nobody on this roster is not ours', () => {
-    expect(ROSTER_IDS.has('stranger-1')).toBe(false);
-    expect(ROSTER_IDS.has('stranger-2')).toBe(false);
+  test("an id belonging to nobody on this roster is not ours", () => {
+    expect(ROSTER_IDS.has("stranger-1")).toBe(false);
+    expect(ROSTER_IDS.has("stranger-2")).toBe(false);
   });
 
-  test('the membership set is the resolution map, not a second reading of it', () => {
+  test("the membership set is the resolution map, not a second reading of it", () => {
     // Criterion 2 in one assertion: `rosterMatchIds` is a view of
     // `canonicalRosterIds`, so the Roster page and Team Home cannot disagree
     // about who is on this team without the shared builder changing under both.
@@ -231,14 +242,18 @@ test.describe('the roster id rule', () => {
   });
 });
 
-test.describe('a match carrying the pre-claim user id', () => {
-  test('the list row draws its outcome mark', () => {
+test.describe("a match carrying the pre-claim user id", () => {
+  test("the list row draws its outcome mark", () => {
     // `won` IS the mark. Null is the empty slot the row printed before: right
     // names, right score, nothing saying the program won it.
-    const row = teamMatchRow(recentMatch({ ourId: ANA_USER }), NO_JOBS, ROSTER_IDS);
+    const row = teamMatchRow(
+      recentMatch({ ourId: ANA_USER }),
+      NO_JOBS,
+      ROSTER_IDS,
+    );
 
     expect(row.won).toBe(true);
-    expect(row.title).toBe('Ana Vasquez vs Rival Two');
+    expect(row.title).toBe("Ana Vasquez vs Rival Two");
     // Ours first in the games too — the flip and the title travel together.
     expect(row.sets.map((set) => [set.player1, set.player2])).toEqual([
       [6, 4],
@@ -246,42 +261,42 @@ test.describe('a match carrying the pre-claim user id', () => {
     ]);
   });
 
-  test('it counts toward the first-serve card, on our side', () => {
+  test("it counts toward the first-serve card, on our side", () => {
     const card = firstServe(
       teamSeasonKpis(
         [onDual(seasonMatch({ ourId: ANA_USER }))],
         NO_JOBS,
-        bothSides('pre-claim', true),
+        bothSides("pre-claim", true),
         ROSTER_IDS,
         ON_DUAL,
-        NO_DUALS
-      )
+        NO_DUALS,
+      ),
     );
 
     // The card reads OUR row of the two: the figure exists at all only because
     // the match was attributed, and it is 60 rather than 20 because it was
     // attributed to the right side. An unattributed match contributes nothing.
     expect(card?.sparkline).toEqual([60]);
-    expect(card?.value).toBe('60%');
+    expect(card?.value).toBe("60%");
   });
 
-  test('the checklist receipt names it, our side first', () => {
+  test("the checklist receipt names it, our side first", () => {
     // Stored `player2`, deliberately: a receipt built from an UNATTRIBUTED row
     // keeps the stored order, so a fixture with Ana already in `player1` would
     // print the right title for the wrong reason and pass either way. Only a
     // row whose side was established reverses it.
     const report = teamFirstReport(
-      [seasonMatch({ ourId: ANA_USER, column: 'player2' })],
+      [seasonMatch({ ourId: ANA_USER, column: "player2" })],
       NO_JOBS,
-      ROSTER_IDS
+      ROSTER_IDS,
     );
 
-    expect(report?.state).toBe('done');
-    if (report?.state !== 'done') return;
-    expect(report.title).toBe('Ana Vasquez vs Rival One');
+    expect(report?.state).toBe("done");
+    if (report?.state !== "done") return;
+    expect(report.title).toBe("Ana Vasquez vs Rival One");
   });
 
-  test('a failed one is named our side first in the alert list', () => {
+  test("a failed one is named our side first in the alert list", () => {
     // `teamAttention` takes the built rows rather than `rosterIds`, so its
     // attribution is the row's title — which is `oursFirst`, which is
     // `programSide`. A row nothing attributes reads "Rival One vs Ana Vasquez"
@@ -289,34 +304,38 @@ test.describe('a match carrying the pre-claim user id', () => {
     // Stored `player2` for the same reason as the receipt above: the stored
     // order already names Ana first, so only a row that was attributed flips.
     const failed = teamMatchRow(
-      recentMatch({ id: 'broken', ourId: ANA_USER, column: 'player2' }),
-      jobsFor([{ id: 'broken', status: 'failed' }]),
-      ROSTER_IDS
+      recentMatch({ id: "broken", ourId: ANA_USER, column: "player2" }),
+      jobsFor([{ id: "broken", status: "failed" }]),
+      ROSTER_IDS,
     );
 
-    const alerts = teamAttention([failed], NO_INVITES, Date.parse('2026-03-21T00:00:00.000Z'));
+    const alerts = teamAttention(
+      [failed],
+      NO_INVITES,
+      Date.parse("2026-03-21T00:00:00.000Z"),
+    );
 
     expect(alerts).toHaveLength(1);
-    expect(alerts[0].kind).toBe('match-failed');
-    expect(alerts[0].subject).toBe('Ana Vasquez vs Rival One');
+    expect(alerts[0].kind).toBe("match-failed");
+    expect(alerts[0].subject).toBe("Ana Vasquez vs Rival One");
   });
 });
 
-test.describe('which side, not merely whose match', () => {
-  test('the user id in player2_id attributes player2 — the losing side here', () => {
+test.describe("which side, not merely whose match", () => {
+  test("the user id in player2_id attributes player2 — the losing side here", () => {
     // Worse than not attributing at all: `P1_WON` is two sets to nil for
     // `player1`, so an id recognised on the wrong side prints a win under a
     // player who lost. `programSide` reads the column the id sits in, so the
     // membership fix must not touch the side — this is the assertion that says
     // so.
     const row = teamMatchRow(
-      recentMatch({ ourId: ANA_USER, column: 'player2' }),
+      recentMatch({ ourId: ANA_USER, column: "player2" }),
       NO_JOBS,
-      ROSTER_IDS
+      ROSTER_IDS,
     );
 
     expect(row.won).toBe(false);
-    expect(row.title).toBe('Ana Vasquez vs Rival One');
+    expect(row.title).toBe("Ana Vasquez vs Rival One");
     // Games flipped to our perspective as well.
     expect(row.sets.map((set) => [set.player1, set.player2])).toEqual([
       [4, 6],
@@ -329,37 +348,42 @@ test.describe('which side, not merely whose match', () => {
     // list's business above, and contributes nothing to the average.
     const card = firstServe(
       teamSeasonKpis(
-        [seasonMatch({ ourId: ANA_USER, column: 'player2' })],
+        [seasonMatch({ ourId: ANA_USER, column: "player2" })],
         NO_JOBS,
-        bothSides('pre-claim', false),
+        bothSides("pre-claim", false),
         ROSTER_IDS,
         ON_DUAL,
-        NO_DUALS
-      )
+        NO_DUALS,
+      ),
     );
-    expect(card?.value).toBe('—');
+    expect(card?.value).toBe("—");
   });
 
-  test('the profile id keeps working on both sides', () => {
+  test("the profile id keeps working on both sides", () => {
     // The era the loader already handled. Nothing about the fix may change it.
     expect(
-      teamMatchRow(recentMatch({ ourId: ANA_PROFILE }), NO_JOBS, ROSTER_IDS).won
+      teamMatchRow(recentMatch({ ourId: ANA_PROFILE }), NO_JOBS, ROSTER_IDS)
+        .won,
     ).toBe(true);
     expect(
       teamMatchRow(
-        recentMatch({ ourId: ANA_PROFILE, column: 'player2' }),
+        recentMatch({ ourId: ANA_PROFILE, column: "player2" }),
         NO_JOBS,
-        ROSTER_IDS
-      ).won
+        ROSTER_IDS,
+      ).won,
     ).toBe(false);
   });
 });
 
-test.describe('staff seats keep working exactly as they do now', () => {
-  test('a coach uploading without a schedule preset is still our side', () => {
+test.describe("staff seats keep working exactly as they do now", () => {
+  test("a coach uploading without a schedule preset is still our side", () => {
     // The case the old `player_id`-only rule got right, and the reason it hid:
     // a staff seat has the same value in both columns.
-    const row = teamMatchRow(recentMatch({ ourId: COACH }), NO_JOBS, ROSTER_IDS);
+    const row = teamMatchRow(
+      recentMatch({ ourId: COACH }),
+      NO_JOBS,
+      ROSTER_IDS,
+    );
     expect(row.won).toBe(true);
 
     // On the strip, the same upload counts once it is on a dual's lineup.
@@ -367,28 +391,29 @@ test.describe('staff seats keep working exactly as they do now', () => {
       teamSeasonKpis(
         [onDual(seasonMatch({ ourId: COACH }))],
         NO_JOBS,
-        bothSides('pre-claim', true),
+        bothSides("pre-claim", true),
         ROSTER_IDS,
         ON_DUAL,
-        NO_DUALS
-      )
+        NO_DUALS,
+      ),
     );
     expect(card?.sparkline).toEqual([60]);
   });
 
-  test('an unclaimed coach-managed player is still our side', () => {
+  test("an unclaimed coach-managed player is still our side", () => {
     expect(
-      teamMatchRow(recentMatch({ ourId: BEN_PROFILE }), NO_JOBS, ROSTER_IDS).won
+      teamMatchRow(recentMatch({ ourId: BEN_PROFILE }), NO_JOBS, ROSTER_IDS)
+        .won,
     ).toBe(true);
   });
 
-  test('a match between two strangers is still attributed to nobody', () => {
+  test("a match between two strangers is still attributed to nobody", () => {
     // The refusal has to survive the fix: widening the id set must not widen it
     // to everyone. No id of ours and no `event_entry_id` means no mark.
     const row = teamMatchRow(
-      { ...recentMatch({ ourId: ANA_USER }), player1_id: 'stranger-1' },
+      { ...recentMatch({ ourId: ANA_USER }), player1_id: "stranger-1" },
       NO_JOBS,
-      ROSTER_IDS
+      ROSTER_IDS,
     );
     expect(row.won).toBeNull();
 
@@ -396,15 +421,15 @@ test.describe('staff seats keep working exactly as they do now', () => {
     // the match are on file and are NOT read, because no side is ours.
     const card = firstServe(
       teamSeasonKpis(
-        [{ ...seasonMatch({ ourId: ANA_USER }), player1_id: 'stranger-1' }],
+        [{ ...seasonMatch({ ourId: ANA_USER }), player1_id: "stranger-1" }],
         NO_JOBS,
-        bothSides('pre-claim', true),
+        bothSides("pre-claim", true),
         ROSTER_IDS,
         ON_DUAL,
-        NO_DUALS
-      )
+        NO_DUALS,
+      ),
     );
-    expect(card?.value).toBe('—');
+    expect(card?.value).toBe("—");
     expect(card?.sparkline).toEqual([]);
   });
 });

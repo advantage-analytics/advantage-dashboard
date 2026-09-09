@@ -10,10 +10,10 @@ const nextConfig: NextConfig = {
   // The browser upload path deliberately does not use it — see
   // src/lib/services/upload/azure-block-upload.ts.
   serverExternalPackages: [
-    'exceljs',
-    '@anthropic-ai/sdk',
-    'openai',
-    '@azure/storage-blob',
+    "exceljs",
+    "@anthropic-ai/sdk",
+    "openai",
+    "@azure/storage-blob",
   ],
   // `react-aria-components` is a 60-component barrel: importing `DatePicker`
   // from it pulls the whole export graph — 106 modules against the 25 the
@@ -23,7 +23,7 @@ const nextConfig: NextConfig = {
   // barrel. The package publishes per-component subpaths, which is what makes
   // the rewrite resolve.
   experimental: {
-    optimizePackageImports: ['react-aria-components'],
+    optimizePackageImports: ["react-aria-components"],
   },
   // Turbopack configuration (Next.js 16+ uses Turbopack by default)
   turbopack: {

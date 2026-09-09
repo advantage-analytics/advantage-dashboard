@@ -74,7 +74,7 @@ export interface PendingInvite {
 
 /** The list, or `null` when the database did not answer. */
 export async function loadPendingInvites(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
 ): Promise<PendingInvite[] | null> {
   const { data, error } = await supabase.rpc("pending_program_invites");
 
@@ -97,7 +97,7 @@ export async function loadPendingInvites(
 
 /** The list, never fatal: chrome renders without the intercept rather than not at all. */
 export async function getPendingInvites(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
 ): Promise<PendingInvite[]> {
   return (await loadPendingInvites(supabase)) ?? [];
 }

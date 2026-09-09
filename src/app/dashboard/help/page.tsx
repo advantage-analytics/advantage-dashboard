@@ -192,8 +192,7 @@ const GLOSSARY: GlossaryGroup[] = [
     entries: [
       {
         term: "First Serve %",
-        definition:
-          "Percentage of first serves that land in the service box.",
+        definition: "Percentage of first serves that land in the service box.",
       },
       {
         term: "Ace",
@@ -202,7 +201,8 @@ const GLOSSARY: GlossaryGroup[] = [
       },
       {
         term: "Double Fault",
-        definition: "Two consecutive serve faults; the receiver wins the point.",
+        definition:
+          "Two consecutive serve faults; the receiver wins the point.",
       },
       {
         term: "Serve Zones · Wide / Body / T",
@@ -242,7 +242,8 @@ const GLOSSARY: GlossaryGroup[] = [
     entries: [
       {
         term: "Short Rally",
-        definition: "Rallies of 0–4 shots — typically decided by serve or return.",
+        definition:
+          "Rallies of 0–4 shots — typically decided by serve or return.",
       },
       {
         term: "Medium Rally",
@@ -250,7 +251,8 @@ const GLOSSARY: GlossaryGroup[] = [
       },
       {
         term: "Long Rally",
-        definition: "Rallies of 9+ shots — endurance and shot tolerance points.",
+        definition:
+          "Rallies of 9+ shots — endurance and shot tolerance points.",
       },
     ],
   },
@@ -276,7 +278,8 @@ const GLOSSARY: GlossaryGroup[] = [
       },
       {
         term: "Break Points Saved %",
-        definition: "Percentage of break points successfully defended on serve.",
+        definition:
+          "Percentage of break points successfully defended on serve.",
       },
       {
         term: "Break Points Converted %",
@@ -301,10 +304,7 @@ export default function HelpCenterPage() {
           settings/layout.tsx. Help's rail is 200px, so the block is ~908px and
           fits the same 960px measure. */}
       <div className="mx-auto flex w-full max-w-[1032px] flex-col gap-9 px-6 py-8 sm:px-8 sm:py-10">
-        <header
-          id="top"
-          className={`flex flex-col gap-3 ${sectionScrollMt}`}
-        >
+        <header id="top" className={`flex flex-col gap-3 ${sectionScrollMt}`}>
           <p className="eyebrow">Help</p>
           <h1 className="text-display">Help center</h1>
           <p className="text-body-sm max-w-[520px]">
@@ -322,13 +322,15 @@ export default function HelpCenterPage() {
         <div className="flex flex-col items-start gap-12 lg:flex-row">
           <HelpToc />
 
-          <article className="flex min-w-0 max-w-[660px] flex-1 flex-col gap-14">
+          <article className="flex max-w-[660px] min-w-0 flex-1 flex-col gap-14">
             {/* ══════════ Getting started — two sources ══════════ */}
             <section
               id="getting-started"
               className={`flex flex-col gap-[26px] ${sectionScrollMt}`}
             >
-              <h2 className={topicHeadingClass}>Getting started — two sources</h2>
+              <h2 className={topicHeadingClass}>
+                Getting started — two sources
+              </h2>
               <p className={`${proseClass} max-w-[560px]`}>
                 A match gets into Advantage one of two ways. Both end in the
                 same library and the same report — pick by what you have, not by
@@ -373,8 +375,8 @@ export default function HelpCenterPage() {
                   Upload your first match →
                 </Link>
                 <span className="text-[11px] text-[var(--ink-500)]">
-                  or press <Kbd size="sm">⌘</Kbd> <Kbd size="sm">U</Kbd> from the
-                  matches list
+                  or press <Kbd size="sm">⌘</Kbd> <Kbd size="sm">U</Kbd> from
+                  the matches list
                 </span>
               </div>
             </section>
@@ -415,7 +417,7 @@ export default function HelpCenterPage() {
                   {ANALYSIS_JOURNEY.map((stage, index) => (
                     <li key={stage.label} className="flex items-center gap-2.5">
                       <span
-                        className={`inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] leading-none ${STATUS_TONE[stage.tone]}`}
+                        className={`inline-flex items-center gap-1.5 text-[11px] leading-none whitespace-nowrap ${STATUS_TONE[stage.tone]}`}
                       >
                         <span
                           aria-hidden="true"
@@ -493,20 +495,24 @@ export default function HelpCenterPage() {
                   <strong className="font-medium text-[var(--ink-900)]">
                     Export Data
                   </strong>
-                  . The file should contain
-                  six sheets:
+                  . The file should contain six sheets:
                   <span className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1">
-                    {["Settings", "Shots", "Points", "Games", "Sets", "Stats"].map(
-                      (sheet) => (
-                        <span key={sheet} className="flex items-center gap-2">
-                          <span
-                            aria-hidden="true"
-                            className="size-1 rounded-full bg-[var(--ink-300)]"
-                          />
-                          {sheet}
-                        </span>
-                      ),
-                    )}
+                    {[
+                      "Settings",
+                      "Shots",
+                      "Points",
+                      "Games",
+                      "Sets",
+                      "Stats",
+                    ].map((sheet) => (
+                      <span key={sheet} className="flex items-center gap-2">
+                        <span
+                          aria-hidden="true"
+                          className="size-1 rounded-full bg-[var(--ink-300)]"
+                        />
+                        {sheet}
+                      </span>
+                    ))}
                   </span>
                 </Step>
                 <Step number="03" title="Drop the .xlsx into Advantage">
@@ -700,7 +706,7 @@ export default function HelpCenterPage() {
                         key={entry.term}
                         className="grid grid-cols-1 gap-x-6 gap-y-1 border-b border-[var(--border-hairline)] py-3 last:border-b-0 sm:grid-cols-[180px_1fr]"
                       >
-                        <dt className="text-[12px] font-medium leading-[1.5] text-[var(--ink-900)]">
+                        <dt className="text-[12px] leading-[1.5] font-medium text-[var(--ink-900)]">
                           {entry.term}
                         </dt>
                         <dd className={proseClass}>{entry.definition}</dd>
@@ -725,8 +731,8 @@ export default function HelpCenterPage() {
                 >
                   {SUPPORT_EMAIL}
                 </a>{" "}
-                — a person answers. Include the match you were looking at and
-                we can go straight to the job.
+                — a person answers. Include the match you were looking at and we
+                can go straight to the job.
               </p>
               <p className="text-[11px] leading-[1.5] text-[var(--ink-500)]">
                 By Clajerson Gimena, Founder

@@ -41,7 +41,7 @@ export function titleCaseTypedName(value: string): string {
   if (HAS_CAPITAL.test(value)) return value;
   return value.replace(
     WORD_INITIAL,
-    (_match, lead: string, letter: string) => lead + letter.toUpperCase()
+    (_match, lead: string, letter: string) => lead + letter.toUpperCase(),
   );
 }
 

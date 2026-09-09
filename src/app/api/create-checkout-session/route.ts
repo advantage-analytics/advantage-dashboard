@@ -27,14 +27,14 @@ export async function POST(request: NextRequest) {
     if (userError) {
       return NextResponse.json(
         { error: "Failed to fetch user data", details: userError.message },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     if (isProPlan(userData?.plan)) {
       return NextResponse.json(
         { error: "You already have the Pro plan" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     console.error("Error creating checkout session:", error);
     return NextResponse.json(
       { error: "Failed to create checkout session", details: message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

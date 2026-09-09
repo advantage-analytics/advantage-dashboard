@@ -19,11 +19,16 @@ function unauthorized() {
 }
 
 function badRequest(error: string, field?: string) {
-  return NextResponse.json({ error, ...(field ? { field } : {}) }, { status: 400 });
+  return NextResponse.json(
+    { error, ...(field ? { field } : {}) },
+    { status: 400 },
+  );
 }
 
 function isFiniteNonNegInt(n: unknown): n is number {
-  return typeof n === "number" && Number.isFinite(n) && n >= 0 && Number.isInteger(n);
+  return (
+    typeof n === "number" && Number.isFinite(n) && n >= 0 && Number.isInteger(n)
+  );
 }
 
 function validateScore(value: unknown): MatchScoreShape | string {
@@ -37,7 +42,10 @@ function validateScore(value: unknown): MatchScoreShape | string {
   }
   if (v.player1.length === 0) return "score must contain at least one set";
   if (v.player1.length > 7) return "score cannot have more than 7 sets";
-  if (!v.player1.every(isFiniteNonNegInt) || !v.player2.every(isFiniteNonNegInt)) {
+  if (
+    !v.player1.every(isFiniteNonNegInt) ||
+    !v.player2.every(isFiniteNonNegInt)
+  ) {
     return "score games must be non-negative integers";
   }
 
@@ -46,7 +54,9 @@ function validateScore(value: unknown): MatchScoreShape | string {
   const normTb = (arr: unknown): (number | null)[] | string => {
     if (arr === undefined || arr === null) return [];
     if (!Array.isArray(arr)) return "tiebreaks must be an array";
-    return arr.map((x) => (x === null || x === undefined || x === "" ? null : Number(x))) as (number | null)[];
+    return arr.map((x) =>
+      x === null || x === undefined || x === "" ? null : Number(x),
+    ) as (number | null)[];
   };
   const tb1 = normTb(p1Tb);
   const tb2 = normTb(p2Tb);
@@ -83,23 +93,26 @@ function trimOrNull(v: unknown): string | null | undefined {
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ matchId: string }> }
+  { params }: { params: Promise<{ matchId: string }> },
 ) {
   const { matchId } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return unauthorized();
 
   const { data, error } = await supabase
     .from("matches")
     .select(
-      "id, tournament_name, round, date, match_type, court_type, player1_name, player2_name, score, private"
+      "id, tournament_name, round, date, match_type, court_type, player1_name, player2_name, score, private",
     )
     .eq("id", matchId)
     .eq("created_by", user.id)
     .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error)
+    return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   return NextResponse.json({ match: data });
@@ -107,11 +120,13 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ matchId: string }> }
+  { params }: { params: Promise<{ matchId: string }> },
 ) {
   const { matchId } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return unauthorized();
 
   let body: Record<string, unknown>;
@@ -123,7 +138,14 @@ export async function PATCH(
 
   const update: Record<string, unknown> = {};
 
-  for (const key of ["tournament_name", "round", "match_type", "court_type", "player1_name", "player2_name"] as const) {
+  for (const key of [
+    "tournament_name",
+    "round",
+    "match_type",
+    "court_type",
+    "player1_name",
+    "player2_name",
+  ] as const) {
     if (key in body) {
       const v = trimOrNull(body[key]);
       if (v !== undefined) update[key] = v;
@@ -143,7 +165,8 @@ export async function PATCH(
       return badRequest("Date is required.", "date");
     }
     const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) return badRequest("Date is invalid.", "date");
+    if (Number.isNaN(d.getTime()))
+      return badRequest("Date is invalid.", "date");
     update.date = d.toISOString();
   }
 
@@ -151,7 +174,12 @@ export async function PATCH(
     const parsed = validateScore(body.score);
     if (typeof parsed === "string") return badRequest(parsed, "score");
     update.score = parsed;
-    update.result = parsed.winner === "player1" ? "win" : parsed.winner === "player2" ? "loss" : null;
+    update.result =
+      parsed.winner === "player1"
+        ? "win"
+        : parsed.winner === "player2"
+          ? "loss"
+          : null;
   }
 
   if (BETA_FORCE_PRIVATE) update.private = true;
@@ -166,11 +194,12 @@ export async function PATCH(
     .eq("id", matchId)
     .eq("created_by", user.id)
     .select(
-      "id, tournament_name, round, date, match_type, court_type, player1_name, player2_name, score, private"
+      "id, tournament_name, round, date, match_type, court_type, player1_name, player2_name, score, private",
     )
     .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error)
+    return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   revalidatePath("/dashboard");
@@ -182,11 +211,13 @@ export async function PATCH(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ matchId: string }> }
+  { params }: { params: Promise<{ matchId: string }> },
 ) {
   const { matchId } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return unauthorized();
 
   const { data: existing, error: lookupError } = await supabase
@@ -196,8 +227,10 @@ export async function DELETE(
     .eq("created_by", user.id)
     .maybeSingle();
 
-  if (lookupError) return NextResponse.json({ error: lookupError.message }, { status: 500 });
-  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (lookupError)
+    return NextResponse.json({ error: lookupError.message }, { status: 500 });
+  if (!existing)
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Storage first, then the row. The ordering is load-bearing and the reason
   // this is a function call rather than a foreign-key cascade — see
@@ -210,7 +243,8 @@ export async function DELETE(
     .eq("id", matchId)
     .eq("created_by", user.id);
 
-  if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
+  if (deleteError)
+    return NextResponse.json({ error: deleteError.message }, { status: 500 });
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/matches");

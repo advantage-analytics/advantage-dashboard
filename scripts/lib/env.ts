@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync } from "node:fs";
 
 /**
  * Minimal `.env.local` loader (no dotenv dependency), shared by the scripts.
@@ -10,10 +10,10 @@ import { readFileSync } from 'node:fs';
  */
 export function loadEnvLocal(): void {
   try {
-    for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
+    for (const line of readFileSync(".env.local", "utf8").split("\n")) {
       const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/);
       if (m && process.env[m[1]] === undefined) {
-        process.env[m[1]] = m[2].trim().replace(/^["'](.*)["']$/, '$1');
+        process.env[m[1]] = m[2].trim().replace(/^["'](.*)["']$/, "$1");
       }
     }
   } catch {

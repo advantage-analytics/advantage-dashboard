@@ -30,7 +30,7 @@ export function presetFor(
   event: ProgramEvent,
   entry: EventEntry,
   match: EventEntry["matches"][number] | null,
-  programs: Map<string, { key: string; school: string }>
+  programs: Map<string, { key: string; school: string }>,
 ): EventPreset {
   return {
     entryId: entry.id,
@@ -44,7 +44,8 @@ export function presetFor(
     // one — see the note on EventPreset.playerUserId.
     playerUserId:
       entry.discipline === "doubles" ? null : (entry.playerUserIds[0] ?? null),
-    opponentName: (match?.opponentLabels ?? entry.opponentLabels).join(" / ") || "",
+    opponentName:
+      (match?.opponentLabels ?? entry.opponentLabels).join(" / ") || "",
     date: event.startsOn,
     surface: event.surface,
     bestOf: event.format.bestOf,
@@ -75,21 +76,38 @@ export function presetFor(
 export function lineupChoices(
   event: ProgramEvent,
   entries: EventEntry[],
-  programs: Map<string, { key: string; school: string }>
+  programs: Map<string, { key: string; school: string }>,
 ): LineChoice[] {
-  return [...entries]
-    // By court on a dual, by `position` on a tournament — see `courts.ts` for
-    // why a dual is never ordered by the stored integer.
-    .sort(compareEntryOrder)
-    .flatMap((entry): LineChoice[] => {
-      const slot = entry.slot ?? entry.matches[0]?.round ?? `#${entry.position + 1}`;
-      const playerName = entry.playerLabels.join(" / ") || null;
-      if (!playerName || entry.forfeit !== null) {
-        return [{ slot, playerName, state: "unset", preset: null }];
-      }
-      const match = entry.matches[0] ?? null;
-      const state: LineChoice["state"] = !match ? "open" : match.hasVideo ? "video" : "result";
-      return [{ slot, playerName, state, preset: presetFor(event, entry, match, programs) }];
-    })
-    .filter((choice, index, all) => all.findIndex((c) => c.slot === choice.slot) === index);
+  return (
+    [...entries]
+      // By court on a dual, by `position` on a tournament — see `courts.ts` for
+      // why a dual is never ordered by the stored integer.
+      .sort(compareEntryOrder)
+      .flatMap((entry): LineChoice[] => {
+        const slot =
+          entry.slot ?? entry.matches[0]?.round ?? `#${entry.position + 1}`;
+        const playerName = entry.playerLabels.join(" / ") || null;
+        if (!playerName || entry.forfeit !== null) {
+          return [{ slot, playerName, state: "unset", preset: null }];
+        }
+        const match = entry.matches[0] ?? null;
+        const state: LineChoice["state"] = !match
+          ? "open"
+          : match.hasVideo
+            ? "video"
+            : "result";
+        return [
+          {
+            slot,
+            playerName,
+            state,
+            preset: presetFor(event, entry, match, programs),
+          },
+        ];
+      })
+      .filter(
+        (choice, index, all) =>
+          all.findIndex((c) => c.slot === choice.slot) === index,
+      )
+  );
 }

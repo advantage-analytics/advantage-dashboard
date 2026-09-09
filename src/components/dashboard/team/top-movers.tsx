@@ -42,19 +42,22 @@ export function TopMovers({
   canManage: boolean;
 }) {
   return (
-    <section
-      aria-label="Top movers"
-      className="surface-card min-w-0 p-5"
-    >
+    <section aria-label="Top movers" className="surface-card min-w-0 p-5">
       <div className="flex items-center gap-3">
         <span className="eyebrow">Top movers</span>
         <span className="text-micro">biggest change since last week</span>
         <div className="flex-1" />
         <Link
           href="/dashboard/team/roster"
-          className="whitespace-nowrap text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+          className="text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
         >
-          Full roster{rosterSize > 0 ? <> — <span className="tabular">{rosterSize}</span></> : null}
+          Full roster
+          {rosterSize > 0 ? (
+            <>
+              {" "}
+              — <span className="tabular">{rosterSize}</span>
+            </>
+          ) : null}
         </Link>
       </div>
 
@@ -88,7 +91,7 @@ function Row({ mover }: { mover: TopMover }) {
           {mover.value}%
         </span>
         <span
-          className="tabular whitespace-nowrap text-right text-[11px]"
+          className="tabular text-right text-[11px] whitespace-nowrap"
           style={{ color: delta.color }}
         >
           {delta.label}
@@ -132,12 +135,15 @@ function Empty({
 
       <div className="mt-2.5 flex flex-wrap items-center gap-5 border-t border-[var(--border-hairline)] pt-[22px] pb-1">
         <div className="min-w-0 flex-1">
-          <span className="block text-[13px] font-medium leading-[1.4] text-[var(--ink-900)]">
+          <span className="block text-[13px] leading-[1.4] font-medium text-[var(--ink-900)]">
             {rosterEmpty
               ? "Nothing here until players are on the roster"
               : "Movers appear after a player's second week of matches"}
           </span>
-          <span className="text-body-sm mt-[3px] block" style={{ textWrap: "pretty" }}>
+          <span
+            className="text-body-sm mt-[3px] block"
+            style={{ textWrap: "pretty" }}
+          >
             {rosterEmpty
               ? "Add players by name, or invite them to claim a profile. Their matches follow."
               : "Each player's biggest change in serve and pressure numbers, against everything earlier."}

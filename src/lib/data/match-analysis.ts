@@ -181,7 +181,7 @@ export const STATUS_MAP: Record<string, AnalysisStatus> = {
  */
 export function resolveAnalysisStatus(
   dbStatus: string,
-  derivationVersion: string | null | undefined
+  derivationVersion: string | null | undefined,
 ): AnalysisStatus | undefined {
   const status = STATUS_MAP[dbStatus];
   if (!status) return undefined;
@@ -206,7 +206,7 @@ export function resolveAnalysisStatus(
  */
 export function withStatsPublished(
   status: AnalysisStatus,
-  statsPublished: boolean
+  statsPublished: boolean,
 ): AnalysisStatus {
   return status === "completed" && !statsPublished ? "timeline" : status;
 }
@@ -249,15 +249,19 @@ export function outcomeInk(status: AnalysisStatus): string {
  * one continuous track whose total always equals the headline percentage,
  * rather than four bars each showing a different number.
  */
-export const PIPELINE_STAGES: { label: string; start: number; end: number }[] = [
-  { label: "Uploaded", start: 0, end: 26 },
-  { label: "Queued", start: 26, end: 40 },
-  { label: "Analyzing", start: 40, end: 100 },
-  { label: "Ready", start: 100, end: 100 },
-];
+export const PIPELINE_STAGES: { label: string; start: number; end: number }[] =
+  [
+    { label: "Uploaded", start: 0, end: 26 },
+    { label: "Queued", start: 26, end: 40 },
+    { label: "Analyzing", start: 40, end: 100 },
+    { label: "Ready", start: 100, end: 100 },
+  ];
 
 /** How full segment `index` should be, given overall progress. */
-export function stageFillPercent(index: number, overallPercent: number): number {
+export function stageFillPercent(
+  index: number,
+  overallPercent: number,
+): number {
   const stage = PIPELINE_STAGES[index];
   // Ready is a terminal marker, not a span — it lights only on completion.
   if (stage.end === stage.start) return overallPercent >= 100 ? 100 : 0;
@@ -281,7 +285,7 @@ export function stageFillPercent(index: number, overallPercent: number): number 
  */
 export function pipelinePercent(
   status: AnalysisStatus,
-  uploadPercent?: number
+  uploadPercent?: number,
 ): number | undefined {
   const [uploaded] = PIPELINE_STAGES;
 
@@ -327,8 +331,8 @@ const MIN_PERCENT_FOR_ETA = 5;
 export function uploadEtaSeconds(
   // Only the three fields it reads, so a caller holding a narrower projection
   // does not have to carry eight unused ones to ask this question.
-  analysis: Pick<MatchAnalysis, 'status' | 'uploadPercent' | 'startedAt'>,
-  nowMs: number
+  analysis: Pick<MatchAnalysis, "status" | "uploadPercent" | "startedAt">,
+  nowMs: number,
 ): number | undefined {
   if (analysis.status !== "uploading") return undefined;
 
@@ -518,10 +522,10 @@ const SUBMIT_STALL_MS = 3 * 60 * 1000;
  * job's point of view nothing went wrong. Hence a threshold rather than a flag.
  */
 export function isSubmitStalled(
-  analysis: Pick<MatchAnalysis, 'status' | 'updatedAt' | 'jobReference'>,
-  nowMs: number = Date.now()
+  analysis: Pick<MatchAnalysis, "status" | "updatedAt" | "jobReference">,
+  nowMs: number = Date.now(),
 ): boolean {
-  if (analysis.status !== 'uploaded') return false;
+  if (analysis.status !== "uploaded") return false;
   // A job the vendor has already accepted is not stalled, whatever its status
   // says — belt and braces, since `uploaded` should never carry a reference.
   if (analysis.jobReference) return false;
@@ -550,7 +554,7 @@ export interface AnalysisAction {
  */
 export function analysisAction(
   analysis: MatchAnalysis,
-  matchId: string
+  matchId: string,
 ): AnalysisAction | null {
   if (analysis.status === "processed") return null;
 
@@ -591,7 +595,7 @@ export function analysisAction(
  */
 export function importedAnalysis(
   sourceProvider: string,
-  verified: boolean
+  verified: boolean,
 ): MatchAnalysis {
   return {
     status: "imported",

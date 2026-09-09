@@ -27,11 +27,7 @@
  * recorded in `auth-button.tsx`.
  */
 export type AdvButtonVariant =
-  | "primary"
-  | "outline"
-  | "ghost"
-  | "danger"
-  | "danger-solid";
+  "primary" | "outline" | "ghost" | "danger" | "danger-solid";
 export type AdvButtonSize = "sm" | "md" | "lg";
 
 const BASE = [
@@ -83,7 +79,7 @@ const VARIANTS: Record<AdvButtonVariant, string> = {
 
 export function advButton(
   variant: AdvButtonVariant = "primary",
-  size: AdvButtonSize = "md"
+  size: AdvButtonSize = "md",
 ): string {
   return `${BASE} ${VARIANTS[variant]} ${SIZES[size]}`;
 }

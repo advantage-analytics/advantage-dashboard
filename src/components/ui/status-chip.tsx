@@ -46,9 +46,9 @@ export function StatusChip({
   return (
     <span
       className={cn(
-        "inline-flex items-center whitespace-nowrap text-[11px] leading-none",
+        "inline-flex items-center text-[11px] leading-none whitespace-nowrap",
         dot && "gap-1.5",
-        className
+        className,
       )}
       style={{ color: TONE[tone] }}
     >
@@ -57,7 +57,7 @@ export function StatusChip({
           className={cn(
             "size-[5px] shrink-0 rounded-full bg-current",
             live &&
-              "animate-[adv-status-pulse_1.6s_var(--ease-primary)_infinite] motion-reduce:animate-none"
+              "animate-[adv-status-pulse_1.6s_var(--ease-primary)_infinite] motion-reduce:animate-none",
           )}
         />
       )}

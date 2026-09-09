@@ -74,7 +74,7 @@ export function SettingsButton({
         "disabled:pointer-events-none disabled:opacity-50",
         SIZES[size],
         VARIANTS[variant],
-        className
+        className,
       )}
       {...props}
     >
@@ -113,7 +113,7 @@ export function SettingsIconButton({
           ? "text-[var(--ink-300)] hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)]"
           : "text-[var(--ink-400)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)]",
         "enabled:cursor-pointer",
-        className
+        className,
       )}
       {...props}
     >

@@ -54,7 +54,7 @@ export interface JoinRequest {
 }
 
 export async function getPendingJoinRequests(
-  programId: string
+  programId: string,
 ): Promise<JoinRequest[]> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("program_join_requests", {

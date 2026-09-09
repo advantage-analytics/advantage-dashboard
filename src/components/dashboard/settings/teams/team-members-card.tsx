@@ -77,13 +77,21 @@ export function TeamMembersCard({
                 className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-[6px] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 text-[12px] font-medium text-[var(--ink-700)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] focus-visible:outline-none"
               >
                 Manage on Roster
-                <ArrowUpRight className="size-3" strokeWidth={1.5} aria-hidden="true" />
+                <ArrowUpRight
+                  className="size-3"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
               </Link>
             ) : (
               <form action={goToRoster}>
                 <SettingsButton type="submit" variant="outline" size="sm">
                   Manage on Roster
-                  <ArrowUpRight className="size-3" strokeWidth={1.5} aria-hidden="true" />
+                  <ArrowUpRight
+                    className="size-3"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
                 </SettingsButton>
               </form>
             )}
@@ -201,7 +209,11 @@ function SeatPips({ seats }: { seats: SeatUsage }) {
       >
         {Array.from({ length: total }, (_, index) => {
           const kind =
-            index < seats.used ? "used" : index < seats.used + held ? "held" : "free";
+            index < seats.used
+              ? "used"
+              : index < seats.used + held
+                ? "held"
+                : "free";
           return (
             <span
               key={index}
@@ -209,7 +221,7 @@ function SeatPips({ seats }: { seats: SeatUsage }) {
                 "size-2 rounded-[2px]",
                 kind === "used" && "bg-[var(--blue)]",
                 kind === "held" && "shadow-[inset_0_0_0_1px_var(--blue)]",
-                kind === "free" && "bg-[var(--ink-100)]"
+                kind === "free" && "bg-[var(--ink-100)]",
               )}
             />
           );

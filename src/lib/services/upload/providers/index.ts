@@ -9,17 +9,17 @@ import {
   ProviderId,
   IProviderUploadStrategy,
   IImportProviderStrategy,
-} from '../types';
-import { swingVisionStrategy } from './swingvision';
-import { splitStepStrategy } from './splitstep';
+} from "../types";
+import { swingVisionStrategy } from "./swingvision";
+import { splitStepStrategy } from "./splitstep";
 
 /** Registry of all provider strategies */
 const providerRegistry: Map<ProviderId, IProviderUploadStrategy> = new Map<
   ProviderId,
   IProviderUploadStrategy
 >([
-  ['swing-vision', swingVisionStrategy],
-  ['splitstep', splitStepStrategy],
+  ["swing-vision", swingVisionStrategy],
+  ["splitstep", splitStepStrategy],
   // Add more providers here:
   // ['atp-tour', atpTourStrategy],
 ]);
@@ -29,11 +29,15 @@ const providerRegistry: Map<ProviderId, IProviderUploadStrategy> = new Map<
  *
  * @throws Error if provider is not found
  */
-export function getProviderStrategy(providerId: ProviderId): IProviderUploadStrategy {
+export function getProviderStrategy(
+  providerId: ProviderId,
+): IProviderUploadStrategy {
   const strategy = providerRegistry.get(providerId);
 
   if (!strategy) {
-    throw new Error(`Unknown provider: ${providerId}. Available providers: ${Array.from(providerRegistry.keys()).join(', ')}`);
+    throw new Error(
+      `Unknown provider: ${providerId}. Available providers: ${Array.from(providerRegistry.keys()).join(", ")}`,
+    );
   }
 
   return strategy;
@@ -49,13 +53,13 @@ export function getProviderStrategy(providerId: ProviderId): IProviderUploadStra
  * @throws Error if the provider is unknown or is not an import provider
  */
 export function getImportProviderStrategy(
-  providerId: ProviderId
+  providerId: ProviderId,
 ): IImportProviderStrategy {
   const strategy = getProviderStrategy(providerId);
 
-  if (strategy.kind !== 'import') {
+  if (strategy.kind !== "import") {
     throw new Error(
-      `Provider ${providerId} is a ${strategy.kind} provider and cannot be used for direct file import.`
+      `Provider ${providerId} is a ${strategy.kind} provider and cannot be used for direct file import.`,
     );
   }
 
@@ -65,7 +69,9 @@ export function getImportProviderStrategy(
 /**
  * Check if provider is supported
  */
-export function isProviderSupported(providerId: string): providerId is ProviderId {
+export function isProviderSupported(
+  providerId: string,
+): providerId is ProviderId {
   return providerRegistry.has(providerId as ProviderId);
 }
 
@@ -97,5 +103,5 @@ export function providerKindOrNull(providerId: string) {
 }
 
 // Re-export individual strategies for direct access if needed
-export { swingVisionStrategy } from './swingvision';
-export { splitStepStrategy } from './splitstep';
+export { swingVisionStrategy } from "./swingvision";
+export { splitStepStrategy } from "./splitstep";

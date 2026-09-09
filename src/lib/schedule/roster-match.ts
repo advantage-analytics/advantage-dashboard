@@ -35,12 +35,16 @@ import type { LadderPlayer } from "@/lib/data/roster-server";
  * who has not accepted an invite yet gets written down. `splitNames` drops
  * blank parts, so an empty label can never reach the roster comparison.
  */
-export function rosterIdsForLabels(raw: string, roster: LadderPlayer[]): string[] {
+export function rosterIdsForLabels(
+  raw: string,
+  roster: LadderPlayer[],
+): string[] {
   return splitNames(raw)
     .map((label) => {
       const typed = normalizedPersonName(label);
-      return roster.find((player) => normalizedPersonName(player.name) === typed)
-        ?.userId;
+      return roster.find(
+        (player) => normalizedPersonName(player.name) === typed,
+      )?.userId;
     })
     .filter((id): id is string => Boolean(id));
 }
@@ -62,14 +66,16 @@ export function rosterIdsForLabels(raw: string, roster: LadderPlayer[]): string[
  */
 export function benchFromLines(
   lines: { ourLabels: string[] }[],
-  ladder: LadderPlayer[]
+  ladder: LadderPlayer[],
 ): LadderPlayer[] {
   const named = new Set(
     lines.flatMap((line) =>
       splitNames(line.ourLabels.join(" / ")).map((label) =>
-        normalizedPersonName(label)
-      )
-    )
+        normalizedPersonName(label),
+      ),
+    ),
   );
-  return ladder.filter((player) => !named.has(normalizedPersonName(player.name)));
+  return ladder.filter(
+    (player) => !named.has(normalizedPersonName(player.name)),
+  );
 }

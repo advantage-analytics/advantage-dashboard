@@ -29,7 +29,10 @@ export function RunStrip({ matches }: { matches: EntryMatch[] }) {
 }
 
 /** "3–1" for a run. */
-export function runRecord(matches: EntryMatch[]): { won: number; lost: number } {
+export function runRecord(matches: EntryMatch[]): {
+  won: number;
+  lost: number;
+} {
   let won = 0;
   let lost = 0;
   for (const match of matches) {

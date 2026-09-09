@@ -32,7 +32,7 @@ export default async function TeamPage({
   if (!workspace) redirect("/login");
 
   const program = workspace.available.find(
-    (candidate) => candidate.kind === "team" && candidate.id === programId
+    (candidate) => candidate.kind === "team" && candidate.id === programId,
   );
   if (!program) redirect("/dashboard/settings/teams");
 

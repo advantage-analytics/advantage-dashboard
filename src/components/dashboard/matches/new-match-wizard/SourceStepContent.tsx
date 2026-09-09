@@ -121,7 +121,8 @@ function sourceCopy(provider: Provider) {
 /** "Cardinal · M" — the squad initial the frames put beside a team's name. */
 function workspaceLabel(workspace: Workspace): string {
   if (workspace.kind !== "team") return "You";
-  const squad = workspace.team === "mens" ? "M" : workspace.team === "womens" ? "W" : null;
+  const squad =
+    workspace.team === "mens" ? "M" : workspace.team === "womens" ? "W" : null;
   return squad ? `${workspace.name} · ${squad}` : workspace.name;
 }
 
@@ -160,13 +161,7 @@ function EngineMark({ className }: { className?: string }) {
 }
 
 /** A source's mark at either of the two sizes the step draws it. */
-function SourceMark({
-  provider,
-  size,
-}: {
-  provider: Provider;
-  size: 40 | 26;
-}) {
+function SourceMark({ provider, size }: { provider: Provider; size: 40 | 26 }) {
   const box = size === 40 ? "size-10" : "size-[26px]";
   if (providerKindOrNull(provider.id) === "processing") {
     // The engine signature is reserved for what Advantage Intelligence
@@ -176,10 +171,12 @@ function SourceMark({
         aria-label={provider.name}
         className={cn(
           box,
-          "inline-flex shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-[var(--ink-900)] text-white"
+          "inline-flex shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-[var(--ink-900)] text-white",
         )}
       >
-        <EngineMark className={size === 40 ? "h-[15px] w-[22px]" : "h-[10px] w-[15px]"} />
+        <EngineMark
+          className={size === 40 ? "h-[15px] w-[22px]" : "h-[10px] w-[15px]"}
+        />
       </span>
     );
   }
@@ -188,13 +185,17 @@ function SourceMark({
       aria-label={provider.name}
       className={cn(
         box,
-        "inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-button)]"
+        "inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-button)]",
       )}
     >
       {/* The provider's colours live inside this square and nowhere else. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={provider.id === "swing-vision" ? "/providers/swingvision-icon.png" : provider.logo}
+        src={
+          provider.id === "swing-vision"
+            ? "/providers/swingvision-icon.png"
+            : provider.logo
+        }
         alt=""
         width={size}
         height={size}
@@ -219,7 +220,7 @@ function RowAvatar({
         "inline-flex size-[22px] shrink-0 items-center justify-center rounded-full text-[10px] font-medium",
         dashed
           ? "border border-dashed border-[var(--ink-300)] text-[var(--ink-400)]"
-          : "bg-[var(--surface-muted)] text-[var(--ink-700)]"
+          : "bg-[var(--surface-muted)] text-[var(--ink-700)]",
       )}
     >
       {initials}
@@ -257,7 +258,7 @@ function Field({
           "flex items-center gap-4 pb-4 transition-shadow duration-200 ease-[var(--ease-primary)]",
           active
             ? "shadow-[inset_0_-2px_0_var(--blue)]"
-            : "shadow-[inset_0_-1px_0_var(--border-hairline)]"
+            : "shadow-[inset_0_-1px_0_var(--border-hairline)]",
         )}
       >
         {children}
@@ -282,7 +283,7 @@ function FieldText({
       <span
         className={cn(
           "inline-flex items-center gap-2 text-[14px] leading-5",
-          muted ? "text-[var(--ink-500)]" : "text-[var(--ink-900)]"
+          muted ? "text-[var(--ink-500)]" : "text-[var(--ink-900)]",
         )}
       >
         {value}
@@ -356,7 +357,7 @@ function SourceStepContentImpl({
         }
       });
     },
-    [active.id]
+    [active.id],
   );
 
   const menuFor = (field: FieldName) => ({
@@ -370,7 +371,7 @@ function SourceStepContentImpl({
   // ── Workspace ────────────────────────────────────────────────────────────
   const switchable = available.length > 1;
   const teamWorkspaces = available.filter(
-    (workspace) => workspace.kind === "team" && canUploadForProgram(workspace)
+    (workspace) => workspace.kind === "team" && canUploadForProgram(workspace),
   );
 
   const workspaceRow = (
@@ -379,12 +380,15 @@ function SourceStepContentImpl({
         aria-hidden="true"
         className={cn(
           "inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-button)] text-[13px] font-medium text-white",
-          isTeam ? "bg-[var(--ink-900)]" : "bg-[var(--blue)]"
+          isTeam ? "bg-[var(--ink-900)]" : "bg-[var(--blue)]",
         )}
       >
         {active.mark}
       </span>
-      <FieldText value={workspaceLabel(active)} subline={workspaceSubline(active)} />
+      <FieldText
+        value={workspaceLabel(active)}
+        subline={workspaceSubline(active)}
+      />
       {switchable && (
         <ChevronsUpDown
           className="size-[13px] shrink-0 text-[var(--ink-400)]"
@@ -399,7 +403,8 @@ function SourceStepContentImpl({
   const subject = whoPlayed.subject;
   const chosenRoster =
     subject?.kind === "roster"
-      ? whoPlayed.roster?.find((row) => row.playerId === subject.playerId) ?? null
+      ? (whoPlayed.roster?.find((row) => row.playerId === subject.playerId) ??
+        null)
       : null;
   const uploaderInitials = viewer.initials;
   const uploaderName = whoPlayed.uploaderName ?? viewer.name;
@@ -411,7 +416,7 @@ function SourceStepContentImpl({
         "inline-flex size-10 shrink-0 items-center justify-center rounded-full text-[13px] font-medium",
         isTeam && !subject
           ? "bg-[var(--surface-subtle)]"
-          : "bg-[var(--surface-muted)] text-[var(--ink-700)]"
+          : "bg-[var(--surface-muted)] text-[var(--ink-700)]",
       )}
     >
       {isTeam && !subject ? (
@@ -464,10 +469,13 @@ function SourceStepContentImpl({
   // Two options only: a coming-soon provider has nothing to choose yet, and
   // the row that says so belongs on a help page, not in a two-item menu.
   const sources = providers.filter((provider) => provider.available !== false);
-  const current = sources.find((provider) => provider.id === selectedProvider) ?? null;
+  const current =
+    sources.find((provider) => provider.id === selectedProvider) ?? null;
   const currentKind = current ? providerKindOrNull(current.id) : null;
-  const videoRefusal = currentKind === "processing" ? explainVideoRefusal(active) : null;
-  const teamHours = isTeam && currentKind === "processing" ? " · team hours" : "";
+  const videoRefusal =
+    currentKind === "processing" ? explainVideoRefusal(active) : null;
+  const teamHours =
+    isTeam && currentKind === "processing" ? " · team hours" : "";
 
   const sourceNote =
     currentKind === "import" ? (
@@ -534,7 +542,7 @@ function SourceStepContentImpl({
                       "flex h-[38px] w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-2.5 text-left transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60",
                       isActive
                         ? "bg-[var(--surface-subtle)]"
-                        : "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]"
+                        : "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]",
                     )}
                   >
                     <span
@@ -543,7 +551,7 @@ function SourceStepContentImpl({
                         "inline-flex size-[22px] shrink-0 items-center justify-center rounded-[var(--radius-button)] text-[10px] font-medium text-white",
                         workspace.kind === "team"
                           ? "bg-[var(--ink-900)]"
-                          : "bg-[var(--blue)]"
+                          : "bg-[var(--blue)]",
                       )}
                     >
                       {workspace.mark}
@@ -599,7 +607,7 @@ function SourceStepContentImpl({
                     setOpenMenu("workspace");
                   }
                 }}
-                className="cursor-pointer whitespace-nowrap text-[11px] font-medium text-[var(--blue)] transition-colors duration-150 hover:text-[var(--blue-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-150 hover:text-[var(--blue-hover)] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {switchingTo ? "Switching…" : "Upload for a teammate"}
               </button>
@@ -623,7 +631,7 @@ function SourceStepContentImpl({
                 <ChevronDown
                   className={cn(
                     "size-[13px] shrink-0 text-[var(--ink-400)] transition-transform duration-200 ease-[var(--ease-primary)]",
-                    openMenu === "for" && "rotate-180"
+                    openMenu === "for" && "rotate-180",
                   )}
                   strokeWidth={1.5}
                   aria-hidden="true"
@@ -647,7 +655,10 @@ function SourceStepContentImpl({
                   aria-hidden="true"
                   className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--ink-300)]"
                 >
-                  <Plus className="size-[11px] text-[var(--ink-500)]" strokeWidth={1.5} />
+                  <Plus
+                    className="size-[11px] text-[var(--ink-500)]"
+                    strokeWidth={1.5}
+                  />
                 </span>
                 <span className="text-[12px] font-medium text-[var(--ink-900)]">
                   Someone new
@@ -657,7 +668,7 @@ function SourceStepContentImpl({
                 </span>
               </Link>
               <span className="my-[5px] h-px bg-[var(--border-hairline)]" />
-              <span className="px-2.5 pb-1 pt-1.5 text-[11px] text-[var(--ink-400)]">
+              <span className="px-2.5 pt-1.5 pb-1 text-[11px] text-[var(--ink-400)]">
                 Roster · {workspaceLabel(active)}
               </span>
 
@@ -688,8 +699,10 @@ function SourceStepContentImpl({
               ) : (
                 whoPlayed.roster.map((player) => {
                   const chosen =
-                    subject?.kind === "roster" && subject.playerId === player.playerId;
-                  const invited = player.invitedEmail !== null && player.userId === null;
+                    subject?.kind === "roster" &&
+                    subject.playerId === player.playerId;
+                  const invited =
+                    player.invitedEmail !== null && player.userId === null;
                   return (
                     <RosterRow
                       key={player.playerId}
@@ -703,7 +716,10 @@ function SourceStepContentImpl({
                         setOpenMenu(null);
                       }}
                       avatar={
-                        <RowAvatar initials={getInitials(player.name)} dashed={invited} />
+                        <RowAvatar
+                          initials={getInitials(player.name)}
+                          dashed={invited}
+                        />
                       }
                       name={player.name}
                       meta={
@@ -714,7 +730,9 @@ function SourceStepContentImpl({
                       trailing={
                         // Roster state travels with the person: a profile a
                         // coach still runs carries the grey pill.
-                        !invited && player.managedBy === "coach" && player.userId === null ? (
+                        !invited &&
+                        player.managedBy === "coach" &&
+                        player.userId === null ? (
                           <Pill>Coach-managed</Pill>
                         ) : null
                       }
@@ -728,13 +746,19 @@ function SourceStepContentImpl({
       </Field>
 
       {/* Source */}
-      <Field label="Source" active={activeField === "source"} below={sourceNote}>
+      <Field
+        label="Source"
+        active={activeField === "source"}
+        below={sourceNote}
+      >
         <Popover {...menuFor("source")}>
           <PopoverTrigger asChild>
             <button
               type="button"
               aria-label={
-                current ? `Source: ${sourceCopy(current).label}. Change source` : "Choose a source"
+                current
+                  ? `Source: ${sourceCopy(current).label}. Change source`
+                  : "Choose a source"
               }
               className={ROW_TRIGGER_CLS}
             >
@@ -759,7 +783,7 @@ function SourceStepContentImpl({
                 />
               )}
               {current && sourceCopy(current).types && (
-                <span className="mono tabular whitespace-nowrap text-[11px] text-[var(--ink-500)]">
+                <span className="mono tabular text-[11px] whitespace-nowrap text-[var(--ink-500)]">
                   {sourceCopy(current).types}
                   {teamHours}
                 </span>
@@ -767,7 +791,7 @@ function SourceStepContentImpl({
               <ChevronDown
                 className={cn(
                   "size-[13px] shrink-0 text-[var(--ink-400)] transition-transform duration-200 ease-[var(--ease-primary)]",
-                  openMenu === "source" && "rotate-180"
+                  openMenu === "source" && "rotate-180",
                 )}
                 strokeWidth={1.5}
                 aria-hidden="true"
@@ -799,7 +823,7 @@ function SourceStepContentImpl({
                     "flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-element)] px-2.5 py-[9px] text-left transition-colors duration-150 focus-visible:outline-none",
                     isCurrent
                       ? "bg-[var(--surface-subtle)]"
-                      : "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]"
+                      : "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]",
                   )}
                 >
                   <SourceMark provider={provider} size={26} />
@@ -812,7 +836,7 @@ function SourceStepContentImpl({
                     </span>
                   </span>
                   {copy.types && (
-                    <span className="mono tabular whitespace-nowrap text-[11px] text-[var(--ink-500)]">
+                    <span className="mono tabular text-[11px] whitespace-nowrap text-[var(--ink-500)]">
                       {copy.types}
                     </span>
                   )}
@@ -861,15 +885,17 @@ function RosterRow({
         "flex h-[38px] w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-2.5 text-left transition-colors duration-150 focus-visible:outline-none",
         chosen
           ? "bg-[var(--surface-subtle)]"
-          : "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]"
+          : "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]",
       )}
     >
       {avatar}
-      <span className="whitespace-nowrap text-[12px] font-medium text-[var(--ink-900)]">
+      <span className="text-[12px] font-medium whitespace-nowrap text-[var(--ink-900)]">
         {name}
       </span>
       {meta && (
-        <span className="min-w-0 truncate text-[11px] text-[var(--ink-500)]">{meta}</span>
+        <span className="min-w-0 truncate text-[11px] text-[var(--ink-500)]">
+          {meta}
+        </span>
       )}
       {trailing && (
         <>

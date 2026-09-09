@@ -19,7 +19,10 @@ export default async function TeamsPage() {
   if (rows.length === 0) redirect("/dashboard/settings/profile");
 
   const withCrests = await Promise.all(
-    rows.map(async (row) => ({ ...row, crestUrl: await crestUrl(row.crestPath) }))
+    rows.map(async (row) => ({
+      ...row,
+      crestUrl: await crestUrl(row.crestPath),
+    })),
   );
 
   return <TeamsList rows={withCrests} />;

@@ -53,7 +53,10 @@ export function FilmEmptyState() {
         <h2 className="text-title" style={{ fontSize: "16px" }}>
           No video for this match
         </h2>
-        <p className="text-body-sm [text-wrap:pretty]" style={{ color: "var(--ink-600)" }}>
+        <p
+          className="text-body-sm [text-wrap:pretty]"
+          style={{ color: "var(--ink-600)" }}
+        >
           {fromSwingVision
             ? "The statistics came from a SwingVision export. Add the film and every point below becomes a clip you can jump to."
             : "There is no film on file for this match. Add it and every point becomes a clip you can jump to."}
@@ -61,7 +64,10 @@ export function FilmEmptyState() {
       </div>
 
       <div className="flex items-center gap-3.5 pt-1">
-        <Link href="/dashboard/matches/new" className={advButton("primary", "md")}>
+        <Link
+          href="/dashboard/matches/new"
+          className={advButton("primary", "md")}
+        >
           Add video
         </Link>
         <Link

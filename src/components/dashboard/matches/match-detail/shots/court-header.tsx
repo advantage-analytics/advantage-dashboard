@@ -85,7 +85,7 @@ function SegGroup({
             tabIndex={disabled ? -1 : 0}
             onClick={() => onChange(o.value)}
             className={cn(
-              "inline-flex h-6 cursor-pointer items-center whitespace-nowrap rounded-[var(--radius-button)] px-[9px] text-[11px]",
+              "inline-flex h-6 cursor-pointer items-center rounded-[var(--radius-button)] px-[9px] text-[11px] whitespace-nowrap",
               active
                 ? "bg-[var(--surface-card)] font-medium text-[var(--ink-900)] shadow-[var(--shadow-card)]"
                 : "font-normal text-[var(--ink-600)] hover:text-[var(--ink-900)]",
@@ -115,7 +115,12 @@ function FilterGroup({
       <span className="text-[12px] font-medium text-[var(--ink-700)]">
         {label}
       </span>
-      <SegGroup label={label} options={options} value={value} onChange={onChange} />
+      <SegGroup
+        label={label}
+        options={options}
+        value={value}
+        onChange={onChange}
+      />
     </div>
   );
 }
@@ -144,7 +149,11 @@ function FilterSection({
 
 /* ── The header ──────────────────────────────────────────────────────────── */
 
-export function CourtHeader({ model, youName, maximizeContent }: CourtHeaderProps) {
+export function CourtHeader({
+  model,
+  youName,
+  maximizeContent,
+}: CourtHeaderProps) {
   const [maximized, setMaximized] = useState(false);
   const {
     mode,
@@ -204,7 +213,7 @@ export function CourtHeader({ model, youName, maximizeContent }: CourtHeaderProp
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="inline-flex h-7 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-2.5 text-[12px] font-medium text-[var(--ink-900)]"
+                className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-2.5 text-[12px] font-medium whitespace-nowrap text-[var(--ink-900)]"
               >
                 <SlidersHorizontal
                   className="size-[13px] text-[var(--ink-600)]"
@@ -217,7 +226,7 @@ export function CourtHeader({ model, youName, maximizeContent }: CourtHeaderProp
             <PopoverContent
               align="end"
               sideOffset={6}
-              className="w-[280px] rounded-[var(--radius-dropdown)] border-[var(--border-card)] bg-[var(--surface-card)] px-4 pb-3 pt-1.5 shadow-[var(--shadow-dropdown)]"
+              className="w-[280px] rounded-[var(--radius-dropdown)] border-[var(--border-card)] bg-[var(--surface-card)] px-4 pt-1.5 pb-3 shadow-[var(--shadow-dropdown)]"
             >
               <FilterSection label="This match" first>
                 <FilterGroup
@@ -414,7 +423,7 @@ export function CourtHeader({ model, youName, maximizeContent }: CourtHeaderProp
           <button
             type="button"
             onClick={clearFilters}
-            className="cursor-pointer whitespace-nowrap text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+            className="cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] hover:text-[var(--blue-hover)]"
           >
             Clear filter
           </button>

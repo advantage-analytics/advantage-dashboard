@@ -62,18 +62,20 @@ export function SurfaceDna({ surfaceBreakdown, totalMatches, winRate }: Props) {
 
   if (segments.length === 0) {
     return (
-      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] p-5">
-        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+      <div className="rounded-[14px] border border-[#F3F3F3] bg-white p-5 shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]">
+        <h2 className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
           Surface DNA
         </h2>
-        <p className="text-[12px] font-normal text-[#71717A] mt-1">No surface data yet</p>
+        <p className="mt-1 text-[12px] font-normal text-[#71717A]">
+          No surface data yet
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] p-5 overflow-hidden">
-      <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-4">
+    <div className="overflow-hidden rounded-[14px] border border-[#F3F3F3] bg-white p-5 shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]">
+      <h2 className="mb-4 text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
         Surface DNA
       </h2>
 
@@ -81,7 +83,14 @@ export function SurfaceDna({ surfaceBreakdown, totalMatches, winRate }: Props) {
         <div className="relative" style={{ width: CX * 2, height: CY * 2 }}>
           <svg width={CX * 2} height={CY * 2} aria-hidden="true">
             {/* Background ring */}
-            <circle cx={CX} cy={CY} r={R} fill="none" stroke="#F0F0F0" strokeWidth={STROKE_W} />
+            <circle
+              cx={CX}
+              cy={CY}
+              r={R}
+              fill="none"
+              stroke="#F0F0F0"
+              strokeWidth={STROKE_W}
+            />
 
             {/* Surface segments */}
             {segments.map((seg, i) => (
@@ -124,7 +133,11 @@ export function SurfaceDna({ surfaceBreakdown, totalMatches, winRate }: Props) {
                     transition={
                       shouldReduceMotion
                         ? { duration: 0 }
-                        : { duration: 0.4, delay: i * 0.1 + 0.05, ease: EASE_CURVE }
+                        : {
+                            duration: 0.4,
+                            delay: i * 0.1 + 0.05,
+                            ease: EASE_CURVE,
+                          }
                     }
                   />
                 )}
@@ -134,10 +147,10 @@ export function SurfaceDna({ surfaceBreakdown, totalMatches, winRate }: Props) {
 
           {/* Center text */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] tabular-nums leading-none">
+            <span className="text-[28px] leading-none font-light tracking-[-0.5px] text-[#0D0D0D] tabular-nums">
               {winRate}%
             </span>
-            <span className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2px] mt-1">
+            <span className="mt-1 text-[9px] font-normal tracking-[2px] text-[#AAAAAA] uppercase">
               Win Rate
             </span>
           </div>
@@ -145,12 +158,15 @@ export function SurfaceDna({ surfaceBreakdown, totalMatches, winRate }: Props) {
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 mt-4">
+      <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-1.5">
         {segments.map((seg) => {
           const wr = Math.round((seg.wins / seg.total) * 100);
           return (
             <div key={seg.surface} className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: seg.color }}
+              />
               <span className="text-[10px] font-normal text-[#525252]">
                 {seg.surface}
               </span>

@@ -27,8 +27,7 @@ export function UploadFailureListener() {
   useEffect(() => {
     function onFailure(event: Event) {
       const detail = (event as CustomEvent).detail as
-        | { matchId?: string; error?: string }
-        | undefined;
+        { matchId?: string; error?: string } | undefined;
 
       push({
         tone: "error",
@@ -39,7 +38,10 @@ export function UploadFailureListener() {
         // worth quoting back to support.
         body: detail?.error || "The transfer stopped before it completed.",
         action: detail?.matchId
-          ? { label: "Open the match", href: `/dashboard/matches/${detail.matchId}` }
+          ? {
+              label: "Open the match",
+              href: `/dashboard/matches/${detail.matchId}`,
+            }
           : undefined,
       });
     }

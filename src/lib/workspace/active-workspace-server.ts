@@ -1,8 +1,8 @@
-import { cache } from 'react';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
-import { createClient } from '@/lib/supabase/server';
-import { getInitials } from '@/lib/data/match-utils';
+import { cache } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
+import { createClient } from "@/lib/supabase/server";
+import { getInitials } from "@/lib/data/match-utils";
 import type {
   ProgramOrgType,
   ProgramRole,
@@ -10,7 +10,7 @@ import type {
   Workspace,
   WorkspaceContextValue,
   UploadPolicy,
-} from './types';
+} from "./types";
 
 /**
  * Resolve the viewer's workspaces for one request.
@@ -25,7 +25,7 @@ import type {
  * `/dashboard/w/[workspaceId]/…`, and this function is where it starts.
  */
 
-const WORKSPACE_COOKIE = 'advantage_workspace';
+const WORKSPACE_COOKIE = "advantage_workspace";
 
 /** A cookie naming a workspace the viewer no longer belongs to falls back here. */
 function personalWorkspace(viewer: Viewer): Workspace {
@@ -35,22 +35,22 @@ function personalWorkspace(viewer: Viewer): Workspace {
     // account id that ledger uses. A synthetic row would be a second source of
     // truth for something already keyed.
     id: viewer.id,
-    kind: 'personal',
-    name: 'Personal',
+    kind: "personal",
+    name: "Personal",
     team: null,
     orgType: null,
     // A personal workspace has no program row and so no stated zone; the
     // server's own is UTC on Vercel and nobody's in particular anywhere else,
     // so this says UTC rather than pretending to know.
-    timeZone: 'UTC',
-    role: 'owner',
+    timeZone: "UTC",
+    role: "owner",
     mark: viewer.initials,
     canSubmitVideo: true,
     // A program-wide policy about *other* people, in a workspace whose only
     // member is its owner. False is the honest value; `canUploadForProgram()`
     // never consults it here because it answers on `kind` first.
     playersCanUpload: false,
-    uploadPolicy: 'everyone',
+    uploadPolicy: "everyone",
     // The opposite default, for the opposite reason. There is no
     // `program_members` row to read here and the viewer is the only person in
     // this workspace, so false would not be cautious — it would assert that
@@ -74,17 +74,17 @@ function personalWorkspace(viewer: Viewer): Workspace {
  */
 async function claimedProfilesByProgram(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
 ): Promise<Map<string, string>> {
   const { data, error } = await supabase
-    .from('program_players')
-    .select('id, program_id')
-    .eq('claimed_by_user_id', userId)
-    .is('archived_at', null)
-    .is('merged_into_id', null);
+    .from("program_players")
+    .select("id, program_id")
+    .eq("claimed_by_user_id", userId)
+    .is("archived_at", null)
+    .is("merged_into_id", null);
 
   if (error) {
-    console.error('[workspace] could not load claimed profiles', {
+    console.error("[workspace] could not load claimed profiles", {
       error: error.message,
     });
     return new Map();
@@ -116,23 +116,23 @@ async function claimedProfilesByProgram(
  */
 async function listProgramWorkspaces(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
 ): Promise<Workspace[]> {
   const [{ data, error }, claimedProfiles] = await Promise.all([
     supabase
-      .from('program_members')
+      .from("program_members")
       .select(
-        'role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, org_type, time_zone)'
+        "role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, org_type, time_zone)",
       )
-      .eq('user_id', userId)
-      .order('joined_at'),
+      .eq("user_id", userId)
+      .order("joined_at"),
     claimedProfilesByProgram(supabase, userId),
   ]);
 
   if (error) {
     // Never fatal: a viewer who cannot load their programs should still get
     // their personal workspace rather than a broken dashboard.
-    console.error('[workspace] could not load program memberships', {
+    console.error("[workspace] could not load program memberships", {
       error: error.message,
     });
     return [];
@@ -158,16 +158,16 @@ async function listProgramWorkspaces(
     return [
       {
         id: program.id,
-        kind: 'team' as const,
+        kind: "team" as const,
         name: program.school_name,
         // Null for a custom org (club/high school/academy), which fields no
         // squad — `teamLabel(null)` then renders the name alone rather than
         // inventing "Men's" for a workspace that never chose one.
         team:
-          program.team === 'womens'
-            ? ('womens' as const)
-            : program.team === 'mens'
-              ? ('mens' as const)
+          program.team === "womens"
+            ? ("womens" as const)
+            : program.team === "mens"
+              ? ("mens" as const)
               : null,
         // NOT NULL with default 'college' in the schema, and the CHECK pins
         // the value set, so the cast is a naming ceremony rather than a guess.
@@ -185,7 +185,7 @@ async function listProgramWorkspaces(
         // 'active' means the claim settled. 'claim_pending' is a live workspace
         // whose video submission waits — see /claim/review, which promises
         // exactly that.
-        canSubmitVideo: program.status === 'active',
+        canSubmitVideo: program.status === "active",
         // The program's own answer to "anyone, or coaches?" from Team
         // settings. Read here rather than at the page, so the upload page's
         // gate and the switcher's `landingPath()` are looking at one value
@@ -205,7 +205,7 @@ async function listProgramWorkspaces(
         // member who never claimed one is listed under their user id (arm 3
         // of `program_roster_full`). Staff have no player page of their own.
         myPlayerId:
-          row.role === 'player'
+          row.role === "player"
             ? (claimedProfiles.get(program.id) ?? userId)
             : null,
       },
@@ -223,13 +223,13 @@ function toViewer(
     role: string | null;
     created_at: string | null;
     onboarded_at: string | null;
-  } | null
+  } | null,
 ): Viewer {
   const firstName = row?.first_name ?? null;
   const lastName = row?.last_name ?? null;
 
-  const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
-  const localPart = email.split('@')[0] ?? email;
+  const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
+  const localPart = email.split("@")[0] ?? email;
 
   return {
     id,
@@ -239,17 +239,19 @@ function toViewer(
     firstName: firstName?.trim() || null,
     // The shared rule, which also handles single-word and "A & B" names the
     // inline version here did not.
-    initials: (fullName && getInitials(fullName)) || localPart.slice(0, 2).toUpperCase(),
-    plan: row?.plan ?? 'free',
+    initials:
+      (fullName && getInitials(fullName)) ||
+      localPart.slice(0, 2).toUpperCase(),
+    plan: row?.plan ?? "free",
     role: row?.role ?? null,
     // Formatted here rather than on each page: Profile and Plan both rendered
     // "Mon YYYY" from their own client-side fetch of this same column, in two
     // copies that were not pinned to the same timezone.
     memberSince: row?.created_at
-      ? new Date(row.created_at).toLocaleDateString('en-US', {
-          month: 'short',
-          year: 'numeric',
-          timeZone: 'UTC',
+      ? new Date(row.created_at).toLocaleDateString("en-US", {
+          month: "short",
+          year: "numeric",
+          timeZone: "UTC",
         })
       : null,
     // Null both for a genuinely un-onboarded account and for a missing profile
@@ -272,12 +274,12 @@ export const getWorkspaceContext = cache(
     // why other members' names need a SECURITY DEFINER lookup rather than a
     // select from here.
     const { data: row } = await supabase
-      .from('users')
-      .select('first_name, last_name, plan, role, created_at, onboarded_at')
-      .eq('id', user.id)
+      .from("users")
+      .select("first_name, last_name, plan, role, created_at, onboarded_at")
+      .eq("id", user.id)
       .single();
 
-    const viewer = toViewer(user.id, user.email ?? '', row);
+    const viewer = toViewer(user.id, user.email ?? "", row);
 
     const available = [
       personalWorkspace(viewer),
@@ -294,7 +296,7 @@ export const getWorkspaceContext = cache(
       available.find((workspace) => workspace.id === requested) ?? available[0];
 
     return { active, available, viewer };
-  }
+  },
 );
 
 export { WORKSPACE_COOKIE };

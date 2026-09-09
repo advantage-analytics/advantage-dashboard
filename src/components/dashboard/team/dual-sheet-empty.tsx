@@ -21,10 +21,7 @@ const GHOST_ROWS = GHOST_OPACITY.slice(0, 2);
  */
 export function DualSheetEmpty({ canSchedule }: { canSchedule: boolean }) {
   return (
-    <section
-      aria-label="This weekend's dual"
-      className="surface-card p-5"
-    >
+    <section aria-label="This weekend's dual" className="surface-card p-5">
       <span className="eyebrow">This weekend</span>
 
       <DayZeroShape
@@ -62,12 +59,15 @@ export function DualSheetEmpty({ canSchedule }: { canSchedule: boolean }) {
 
       <div className="mt-3.5 flex flex-wrap items-center gap-5 border-t border-[var(--border-hairline)] pt-[22px] pb-1">
         <div className="min-w-0 flex-1">
-          <span className="block text-[13px] font-medium leading-[1.4] text-[var(--ink-900)]">
+          <span className="block text-[13px] leading-[1.4] font-medium text-[var(--ink-900)]">
             Nothing here until a dual is on the schedule
           </span>
-          <span className="text-body-sm mt-[3px] block" style={{ textWrap: "pretty" }}>
-            Add the opponent, the date and the lineup. Results and video land
-            on this card as they come in.
+          <span
+            className="text-body-sm mt-[3px] block"
+            style={{ textWrap: "pretty" }}
+          >
+            Add the opponent, the date and the lineup. Results and video land on
+            this card as they come in.
           </span>
         </div>
         {canSchedule && (

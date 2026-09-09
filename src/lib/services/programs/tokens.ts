@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 /**
  * Claim, invite and review tokens.
@@ -16,11 +16,11 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 
 /** 32 bytes. base64url so it survives being pasted out of a mail client. */
 export function generateToken(): string {
-  return randomBytes(32).toString('base64url');
+  return randomBytes(32).toString("base64url");
 }
 
 export function hashToken(token: string): string {
-  return createHash('sha256').update(token, 'utf8').digest('hex');
+  return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
 /**
@@ -32,8 +32,8 @@ export function hashToken(token: string): string {
  * closed rather than crash a route handler.
  */
 export function tokenMatches(token: string, storedHash: string): boolean {
-  const presented = Buffer.from(hashToken(token), 'utf8');
-  const stored = Buffer.from(storedHash, 'utf8');
+  const presented = Buffer.from(hashToken(token), "utf8");
+  const stored = Buffer.from(storedHash, "utf8");
   if (presented.length !== stored.length) return false;
   return timingSafeEqual(presented, stored);
 }
@@ -56,7 +56,7 @@ export const INVITE_TTL_HOURS = 14 * 24;
  */
 export function isUsable(
   row: { expiresAt: string | null; consumedAt: string | null },
-  now: Date = new Date()
+  now: Date = new Date(),
 ): boolean {
   if (row.consumedAt) return false;
   if (!row.expiresAt) return false;

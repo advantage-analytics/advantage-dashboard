@@ -42,9 +42,9 @@ export function RetryActionButton({
               const response = await request();
 
               if (!response.ok) {
-                const payload = (await response
-                  .json()
-                  .catch(() => null)) as { error?: string } | null;
+                const payload = (await response.json().catch(() => null)) as {
+                  error?: string;
+                } | null;
                 setError(payload?.error ?? "That didn't go through.");
                 return;
               }
@@ -68,7 +68,10 @@ export function RetryActionButton({
       </button>
 
       {error && (
-        <p role="alert" className="text-[12px] leading-[18px] text-[var(--danger)]">
+        <p
+          role="alert"
+          className="text-[12px] leading-[18px] text-[var(--danger)]"
+        >
           {error}
         </p>
       )}

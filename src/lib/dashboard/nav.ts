@@ -261,7 +261,7 @@ export function settingsSection(pathname: string): SettingsSection | null {
   return (
     SETTINGS_SECTIONS.find(
       (section) =>
-        pathname === section.href || pathname.startsWith(`${section.href}/`)
+        pathname === section.href || pathname.startsWith(`${section.href}/`),
     ) ?? null
   );
 }
@@ -326,7 +326,7 @@ export function scheduleLeaf(pathname: string): string | null {
  */
 export function activeHref(
   pathname: string,
-  links: readonly NavLink[] = ALL_LINKS
+  links: readonly NavLink[] = ALL_LINKS,
 ): string | null {
   let best: string | null = null;
   for (const { href } of links) {

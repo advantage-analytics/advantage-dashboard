@@ -53,9 +53,13 @@ export interface ServeCaptionInput {
 const ZONES: readonly Zone[] = ["T", "Body", "Wide"];
 
 /** A court's counts, T · Body · Wide, in the order the bar draws them. */
-export function readCourt(counts: [t: number, body: number, wide: number]): CourtRead {
+export function readCourt(
+  counts: [t: number, body: number, wide: number],
+): CourtRead {
   const total = counts[0] + counts[1] + counts[2];
-  const pct = counts.map((c) => (total > 0 ? Math.round((c / total) * 100) : 0));
+  const pct = counts.map((c) =>
+    total > 0 ? Math.round((c / total) * 100) : 0,
+  );
   // Stable on ties: the earlier zone wins, which is the bar's own order.
   const order = [0, 1, 2].sort((a, b) => pct[b] - pct[a] || a - b);
   return {
@@ -71,14 +75,20 @@ export function readCourt(counts: [t: number, body: number, wide: number]): Cour
   };
 }
 
-export function serveCaptionInput(zoneStats: Record<ZoneKey, ZoneStats>): ServeCaptionInput {
+export function serveCaptionInput(
+  zoneStats: Record<ZoneKey, ZoneStats>,
+): ServeCaptionInput {
   return {
     deuce: readCourt([
       zoneStats["deuce-t"].count,
       zoneStats["deuce-body"].count,
       zoneStats["deuce-wide"].count,
     ]),
-    ad: readCourt([zoneStats["ad-t"].count, zoneStats["ad-body"].count, zoneStats["ad-wide"].count]),
+    ad: readCourt([
+      zoneStats["ad-t"].count,
+      zoneStats["ad-body"].count,
+      zoneStats["ad-wide"].count,
+    ]),
   };
 }
 
@@ -119,7 +129,10 @@ const MIN_SERVES = 3;
 const LEAN_GAP = 15;
 
 /** One sentence, or `null` when either court is too thin to read. */
-export function servePlacementCaption({ deuce, ad }: ServeCaptionInput): string | null {
+export function servePlacementCaption({
+  deuce,
+  ad,
+}: ServeCaptionInput): string | null {
   if (deuce.total < MIN_SERVES || ad.total < MIN_SERVES) return null;
 
   const deuceFixed = deuce.topPct >= ADDRESS_PCT;
@@ -143,7 +156,9 @@ export function servePlacementCaption({ deuce, ad }: ServeCaptionInput): string 
   const gap = deuce.topPct - ad.topPct;
   if (Math.abs(gap) >= LEAN_GAP) {
     const [higherName, lowerName, higher] =
-      gap > 0 ? (["Deuce", "ad", deuce] as const) : (["Ad", "deuce", ad] as const);
+      gap > 0
+        ? (["Deuce", "ad", deuce] as const)
+        : (["Ad", "deuce", ad] as const);
     return `${higherName} leans ${zoneWord(higher.top)} at ${higher.topPct}%; the ${lowerName} court is closer to even.`;
   }
 

@@ -6,7 +6,7 @@ anything that averages `match_stats`.
 
 Pairs with [`splitstep-vendor-questions.md`](splitstep-vendor-questions.md),
 which holds the measurements and the open questions to the vendor. This document
-is the *code*; that one is the *evidence*.
+is the _code_; that one is the _evidence_.
 
 ---
 
@@ -52,21 +52,21 @@ npx tsx scripts/splitstep-backfill-grades.ts [--force]    # re-grade stored jobs
 `src/lib/services/splitstep/derivation/` — pure, no I/O, testable against a
 fixture and against a real payload with identical output.
 
-| Module | Does |
-|---|---|
-| `types.ts` | Raw vendor shape vs cleaned shape. The gap between them is the parse layer's whole job |
-| `parse.ts` | **The boundary.** Nulls all sentinels and impossible geometry before anything else touches the data |
-| `court.ts` | Metre conversion, serve/direction zones, the playing-enclosure bound |
-| `rallies.ts` | Groups strokes into rallies, reports malformed numbering |
-| `serves.ts` | First/second serve by ordinal; returns **both** readings of every serve stat plus their spread |
-| `winners.ts` | Point winners from the score stream. Never from the `in` flag |
-| `reconcile.ts` | Folds winners forward, checks against `matches.score`, decides player1 |
-| `result-type.ts` | `result_type`, `shots.result`, shot numbering |
-| `pressure.ts` | Break / set / match points |
-| `flags.ts` | Per-row data-quality flags |
-| `quality.ts` | 7 checks → `high`/`medium`/`low` |
-| `transcript.ts` | Assembles database-shaped rows |
-| `index.ts` | Public surface, `analyzeResults()`, `DERIVATION_VERSION` |
+| Module           | Does                                                                                                |
+| ---------------- | --------------------------------------------------------------------------------------------------- |
+| `types.ts`       | Raw vendor shape vs cleaned shape. The gap between them is the parse layer's whole job              |
+| `parse.ts`       | **The boundary.** Nulls all sentinels and impossible geometry before anything else touches the data |
+| `court.ts`       | Metre conversion, serve/direction zones, the playing-enclosure bound                                |
+| `rallies.ts`     | Groups strokes into rallies, reports malformed numbering                                            |
+| `serves.ts`      | First/second serve by ordinal; returns **both** readings of every serve stat plus their spread      |
+| `winners.ts`     | Point winners from the score stream. Never from the `in` flag                                       |
+| `reconcile.ts`   | Folds winners forward, checks against `matches.score`, decides player1                              |
+| `result-type.ts` | `result_type`, `shots.result`, shot numbering                                                       |
+| `pressure.ts`    | Break / set / match points                                                                          |
+| `flags.ts`       | Per-row data-quality flags                                                                          |
+| `quality.ts`     | 7 checks → `high`/`medium`/`low`                                                                    |
+| `transcript.ts`  | Assembles database-shaped rows                                                                      |
+| `index.ts`       | Public surface, `analyzeResults()`, `DERIVATION_VERSION`                                            |
 
 Only `persist-transcript.ts` and `derive-and-publish.ts` (one level up) touch the
 database.
@@ -85,8 +85,8 @@ x metres about the centre line, **y = 0 at one baseline, 11.885 at the net,
 23.77 at the other**. So the transform is one offset:
 
 ```ts
-x_ours = x_vendor
-y_ours = y_vendor + 11.885     // metersToCourtFrame()
+x_ours = x_vendor;
+y_ours = y_vendor + 11.885; // metersToCourtFrame()
 ```
 
 Confirmed twice: `calculate_match_stats` compares `abs(landing_x)` to 2.74/1.37
@@ -96,7 +96,7 @@ service boxes to the centimetre.
 
 **Do not flip y.** `court-visualization.tsx` mirrors far-side landings through
 `(-x, 23.77 - y)`, a 180° rotation, so the render is invariant only under a
-*simultaneous* x and y flip. Flip y alone and every chart mirrors and the deuce
+_simultaneous_ x and y flip. Flip y alone and every chart mirrors and the deuce
 and ad service boxes swap — while `match_stats` stays numerically identical.
 
 ### A faulted serve takes `shot_number` 0
@@ -104,7 +104,7 @@ and ad service boxes swap — while `match_stats` stays numerically identical.
 Deciding serve is 1, return is 2. `calculate_match_stats` joins
 `serve.shot_number = 1` to `ret.shot_number = 2` with **no** `shot_type` or
 `result` filter, so two rows at 1 fan the join out. Live production shows 1,550
-returns producing 2,534 joined rows, 170 counted as *both* Crosscourt and Down
+returns producing 2,534 joined rows, 170 counted as _both_ Crosscourt and Down
 the Line. SwingVision itself puts both serves at 1 — do not copy it. `0` is
 already this database's convention for pre-point rows (`Feed`).
 
@@ -141,11 +141,11 @@ silently un-suppresses two columns built entirely on phantom return strokes.
 
 ## 4. Trust tiers
 
-| Tier | Stats | Treatment |
-|---|---|---|
-| **Reliable** | points/games won, service & return games, break points, set points, first/second serve counts | Plain number |
-| **Approximate** | winners, errors, FH/BH breakdown, volley winners, serve placement | Prefixed **≈**, ~85–90% point-attribution accuracy |
-| **Unknowable** | aces, double faults, service winners, rally length, whole return family | **Em dash, never 0** |
+| Tier            | Stats                                                                                         | Treatment                                          |
+| --------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| **Reliable**    | points/games won, service & return games, break points, set points, first/second serve counts | Plain number                                       |
+| **Approximate** | winners, errors, FH/BH breakdown, volley winners, serve placement                             | Prefixed **≈**, ~85–90% point-attribution accuracy |
+| **Unknowable**  | aces, double faults, service winners, rally length, whole return family                       | **Em dash, never 0**                               |
 
 Aces cannot be separated from service winners — nothing records an
 attempted-and-missed swing, so a missed return is not a stroke. The rest are
@@ -165,7 +165,7 @@ derivation can correct.
 **Absence must survive to the render.** `?? 0` on a stat path is a bug: it turns
 "we did not measure this" into "the player did none of this". Two layers had it —
 the aggregate readers and the single-match reader — and both are fixed.
-`src/lib/data/aggregate.ts` holds the rule: absent is *excluded* from a mean, and
+`src/lib/data/aggregate.ts` holds the rule: absent is _excluded_ from a mean, and
 a mean over nothing is null.
 
 ---

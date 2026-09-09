@@ -3,7 +3,11 @@
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Check, ChevronsUpDown, Plus, Loader2 } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
@@ -63,7 +67,8 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
     if (pendingId !== null) return;
 
     const index = available.findIndex(
-      (workspace) => rowRefs.current.get(workspace.id) === document.activeElement
+      (workspace) =>
+        rowRefs.current.get(workspace.id) === document.activeElement,
     );
     if (index === -1) return;
 
@@ -80,7 +85,8 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
   // "Men's team workspace" — so the name above it gets the full width. A
   // collegiate name truncates in a 232px rail long before a trailing
   // possessive would have been read.
-  const subLabel = hovered || open ? "Switch workspace" : workspaceSubtitle(active);
+  const subLabel =
+    hovered || open ? "Switch workspace" : workspaceSubtitle(active);
   // Only the rows that share a school name still spend width on the squad.
   const squadFor = squadDisambiguator(available);
 
@@ -113,7 +119,7 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
       aria-expanded={open}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="flex h-[42px] w-full items-center overflow-hidden rounded-[8px] transition-colors duration-200 ease-[var(--ease-primary)] hover:bg-[var(--surface-subtle)] focus-visible:outline-none cursor-pointer"
+      className="flex h-[42px] w-full cursor-pointer items-center overflow-hidden rounded-[8px] transition-colors duration-200 ease-[var(--ease-primary)] hover:bg-[var(--surface-subtle)] focus-visible:outline-none"
     >
       {/* Same 40px column as every nav row, so the mark does not move. */}
       <span className="flex size-10 shrink-0 items-center justify-center">
@@ -121,7 +127,7 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
           aria-hidden="true"
           className={cn(
             "flex size-[26px] items-center justify-center rounded-[6px] text-[11px] font-medium text-white",
-            active.kind === "team" ? "bg-[var(--ink-900)]" : "bg-[var(--blue)]"
+            active.kind === "team" ? "bg-[var(--ink-900)]" : "bg-[var(--blue)]",
           )}
         >
           {active.mark}
@@ -133,10 +139,10 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
           "min-w-0 flex-1 text-left transition-opacity ease-[var(--ease-primary)]",
           expanded
             ? "opacity-100 delay-[80ms] duration-[120ms]"
-            : "opacity-0 delay-0 duration-[80ms]"
+            : "opacity-0 delay-0 duration-[80ms]",
         )}
       >
-        <span className="block truncate text-[13px] font-medium leading-tight text-[var(--ink-900)]">
+        <span className="block truncate text-[13px] leading-tight font-medium text-[var(--ink-900)]">
           {active.name}
         </span>
         <span className="block truncate text-[10px] leading-tight text-[var(--ink-500)]">
@@ -148,7 +154,7 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
         className={cn(
           "mr-1 size-[13px] shrink-0 transition-[color,opacity] duration-200",
           hovered || open ? "text-[var(--ink-700)]" : "text-[var(--ink-400)]",
-          expanded ? "opacity-100" : "opacity-0"
+          expanded ? "opacity-100" : "opacity-0",
         )}
         strokeWidth={1.5}
         aria-hidden="true"
@@ -233,11 +239,11 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
                 onFocus={(event) => event.preventDefault()}
                 onClick={() => switchTo(workspace)}
                 className={cn(
-                  "flex w-full items-center gap-2.5 rounded-[8px] px-2 py-2 text-left transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer",
+                  "flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-2 py-2 text-left transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60",
                   // The current workspace sits bare — no wash, even on hover.
                   // The blue check is its whole mark.
                   !isActive &&
-                    "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]"
+                    "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]",
                 )}
               >
                 <span
@@ -246,7 +252,7 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
                     "flex size-[22px] shrink-0 items-center justify-center rounded-[6px] text-[10px] font-medium text-white",
                     workspace.kind === "team"
                       ? "bg-[var(--ink-900)]"
-                      : "bg-[var(--blue)]"
+                      : "bg-[var(--blue)]",
                   )}
                 >
                   {workspace.mark}
@@ -255,14 +261,24 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
                 <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)]">
                   {workspace.name}
                   {squadLabel && (
-                    <span className="text-[var(--ink-500)]"> · {squadLabel}</span>
+                    <span className="text-[var(--ink-500)]">
+                      {" "}
+                      · {squadLabel}
+                    </span>
                   )}
                 </span>
 
                 {pendingId === workspace.id ? (
-                  <Loader2 className="size-3 shrink-0 animate-spin text-[var(--ink-400)]" aria-hidden="true" />
+                  <Loader2
+                    className="size-3 shrink-0 animate-spin text-[var(--ink-400)]"
+                    aria-hidden="true"
+                  />
                 ) : isActive ? (
-                  <Check className="size-[13px] shrink-0 text-[var(--blue)]" strokeWidth={2} aria-hidden="true" />
+                  <Check
+                    className="size-[13px] shrink-0 text-[var(--blue)]"
+                    strokeWidth={2}
+                    aria-hidden="true"
+                  />
                 ) : null}
               </button>
             </ChromeTooltip>
@@ -280,7 +296,11 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
           className="flex w-full items-center gap-2.5 rounded-[8px] px-2 py-2 text-[12px] text-[var(--ink-700)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]"
         >
           <span className="flex size-[22px] shrink-0 items-center justify-center">
-            <Plus className="size-3.5 text-[var(--ink-500)]" strokeWidth={1.5} aria-hidden="true" />
+            <Plus
+              className="size-3.5 text-[var(--ink-500)]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
           </span>
           Create team workspace
         </Link>

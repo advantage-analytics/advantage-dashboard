@@ -32,13 +32,26 @@ import {
 } from "@/lib/design/data-viz";
 
 type StatKey =
-  | "firstServePct" | "firstServeWonPct" | "secondServeWonPct"
-  | "breakPointsSavedPct" | "serviceGamesWonPct"
-  | "breakPointsConvertedPct" | "firstReturnWonPct" | "secondReturnWonPct" | "returnGamesWonPct"
-  | "aces" | "doubleFaults" | "winners" | "unforcedErrors"
-  | "netPointsWonPct" | "totalPointsWonPct"
-  | "shortRallyWonPct" | "mediumRallyWonPct" | "longRallyWonPct"
-  | "serveRating" | "returnRating";
+  | "firstServePct"
+  | "firstServeWonPct"
+  | "secondServeWonPct"
+  | "breakPointsSavedPct"
+  | "serviceGamesWonPct"
+  | "breakPointsConvertedPct"
+  | "firstReturnWonPct"
+  | "secondReturnWonPct"
+  | "returnGamesWonPct"
+  | "aces"
+  | "doubleFaults"
+  | "winners"
+  | "unforcedErrors"
+  | "netPointsWonPct"
+  | "totalPointsWonPct"
+  | "shortRallyWonPct"
+  | "mediumRallyWonPct"
+  | "longRallyWonPct"
+  | "serveRating"
+  | "returnRating";
 
 interface StatConfig {
   label: string;
@@ -49,39 +62,156 @@ interface StatConfig {
 
 const STAT_CONFIG: Record<StatKey, StatConfig> = {
   // Serve (percentages → left axis, counts → right)
-  aces:               { label: "Aces", color: "#0D0D0D", axis: "right", category: "serve" },
-  doubleFaults:       { label: "DFs", color: VIZ_LOST, axis: "right", category: "serve" },
-  firstServePct:      { label: "1st In %", color: VIZ_BLUE, axis: "left", category: "serve" },
-  firstServeWonPct:   { label: "1st Won %", color: VIZ_BLUE_DEEP, axis: "left", category: "serve" },
-  secondServeWonPct:  { label: "2nd Won %", color: VIZ_BLUE_MID, axis: "left", category: "serve" },
-  breakPointsSavedPct:{ label: "BP Saved %", color: VIZ_VIOLET_DEEP, axis: "left", category: "serve" },
-  serviceGamesWonPct: { label: "Svc Games %", color: VIZ_VIOLET, axis: "left", category: "serve" },
+  aces: { label: "Aces", color: "#0D0D0D", axis: "right", category: "serve" },
+  doubleFaults: {
+    label: "DFs",
+    color: VIZ_LOST,
+    axis: "right",
+    category: "serve",
+  },
+  firstServePct: {
+    label: "1st In %",
+    color: VIZ_BLUE,
+    axis: "left",
+    category: "serve",
+  },
+  firstServeWonPct: {
+    label: "1st Won %",
+    color: VIZ_BLUE_DEEP,
+    axis: "left",
+    category: "serve",
+  },
+  secondServeWonPct: {
+    label: "2nd Won %",
+    color: VIZ_BLUE_MID,
+    axis: "left",
+    category: "serve",
+  },
+  breakPointsSavedPct: {
+    label: "BP Saved %",
+    color: VIZ_VIOLET_DEEP,
+    axis: "left",
+    category: "serve",
+  },
+  serviceGamesWonPct: {
+    label: "Svc Games %",
+    color: VIZ_VIOLET,
+    axis: "left",
+    category: "serve",
+  },
   // Return (percentages → left)
-  breakPointsConvertedPct: { label: "BP Conv %", color: VIZ_GREEN_DEEP, axis: "left", category: "return" },
-  firstReturnWonPct:  { label: "1st Ret Won %", color: VIZ_GREEN, axis: "left", category: "return" },
-  secondReturnWonPct: { label: "2nd Ret Won %", color: VIZ_GREEN_MID, axis: "left", category: "return" },
-  returnGamesWonPct:  { label: "Ret Games %", color: VIZ_GREEN_LIGHT, axis: "left", category: "return" },
+  breakPointsConvertedPct: {
+    label: "BP Conv %",
+    color: VIZ_GREEN_DEEP,
+    axis: "left",
+    category: "return",
+  },
+  firstReturnWonPct: {
+    label: "1st Ret Won %",
+    color: VIZ_GREEN,
+    axis: "left",
+    category: "return",
+  },
+  secondReturnWonPct: {
+    label: "2nd Ret Won %",
+    color: VIZ_GREEN_MID,
+    axis: "left",
+    category: "return",
+  },
+  returnGamesWonPct: {
+    label: "Ret Games %",
+    color: VIZ_GREEN_LIGHT,
+    axis: "left",
+    category: "return",
+  },
   // Other
-  winners:            { label: "Winners", color: "#0D0D0D", axis: "right", category: "other" },
-  unforcedErrors:     { label: "Errors", color: VIZ_AMBER, axis: "right", category: "other" },
-  netPointsWonPct:    { label: "Net Pts %", color: VIZ_SLATE, axis: "left", category: "other" },
-  totalPointsWonPct:  { label: "Total Pts %", color: VIZ_SLATE_LIGHT, axis: "left", category: "other" },
-  shortRallyWonPct:   { label: "Short Rally", color: VIZ_VIOLET_DEEP, axis: "left", category: "other" },
-  mediumRallyWonPct:  { label: "Med Rally", color: VIZ_VIOLET, axis: "left", category: "other" },
-  longRallyWonPct:    { label: "Long Rally", color: VIZ_VIOLET_LIGHT, axis: "left", category: "other" },
+  winners: {
+    label: "Winners",
+    color: "#0D0D0D",
+    axis: "right",
+    category: "other",
+  },
+  unforcedErrors: {
+    label: "Errors",
+    color: VIZ_AMBER,
+    axis: "right",
+    category: "other",
+  },
+  netPointsWonPct: {
+    label: "Net Pts %",
+    color: VIZ_SLATE,
+    axis: "left",
+    category: "other",
+  },
+  totalPointsWonPct: {
+    label: "Total Pts %",
+    color: VIZ_SLATE_LIGHT,
+    axis: "left",
+    category: "other",
+  },
+  shortRallyWonPct: {
+    label: "Short Rally",
+    color: VIZ_VIOLET_DEEP,
+    axis: "left",
+    category: "other",
+  },
+  mediumRallyWonPct: {
+    label: "Med Rally",
+    color: VIZ_VIOLET,
+    axis: "left",
+    category: "other",
+  },
+  longRallyWonPct: {
+    label: "Long Rally",
+    color: VIZ_VIOLET_LIGHT,
+    axis: "left",
+    category: "other",
+  },
   // Ratings (0-300+ scale → right axis)
-  serveRating:        { label: "Serve Rtg", color: VIZ_SLATE_DEEP, axis: "right", category: "serve" },
-  returnRating:       { label: "Return Rtg", color: VIZ_SLATE, axis: "right", category: "return" },
+  serveRating: {
+    label: "Serve Rtg",
+    color: VIZ_SLATE_DEEP,
+    axis: "right",
+    category: "serve",
+  },
+  returnRating: {
+    label: "Return Rtg",
+    color: VIZ_SLATE,
+    axis: "right",
+    category: "return",
+  },
 };
 
 const CATEGORIES: { key: string; label: string; stats: StatKey[] }[] = [
-  { key: "serve", label: "Serve", stats: Object.keys(STAT_CONFIG).filter((k) => STAT_CONFIG[k as StatKey].category === "serve") as StatKey[] },
-  { key: "return", label: "Return", stats: Object.keys(STAT_CONFIG).filter((k) => STAT_CONFIG[k as StatKey].category === "return") as StatKey[] },
-  { key: "other", label: "Other", stats: Object.keys(STAT_CONFIG).filter((k) => STAT_CONFIG[k as StatKey].category === "other") as StatKey[] },
+  {
+    key: "serve",
+    label: "Serve",
+    stats: Object.keys(STAT_CONFIG).filter(
+      (k) => STAT_CONFIG[k as StatKey].category === "serve",
+    ) as StatKey[],
+  },
+  {
+    key: "return",
+    label: "Return",
+    stats: Object.keys(STAT_CONFIG).filter(
+      (k) => STAT_CONFIG[k as StatKey].category === "return",
+    ) as StatKey[],
+  },
+  {
+    key: "other",
+    label: "Other",
+    stats: Object.keys(STAT_CONFIG).filter(
+      (k) => STAT_CONFIG[k as StatKey].category === "other",
+    ) as StatKey[],
+  },
 ];
 
 const ALL_STATS = Object.keys(STAT_CONFIG) as StatKey[];
-const DEFAULT_ENABLED = new Set<StatKey>(["firstServePct", "winners", "unforcedErrors"]);
+const DEFAULT_ENABLED = new Set<StatKey>([
+  "firstServePct",
+  "winners",
+  "unforcedErrors",
+]);
 
 interface Props {
   matches: SelectableMatch[];
@@ -105,12 +235,12 @@ function ChartTooltip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-xl px-3 py-2.5 shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
-      <p className="text-[12px] font-medium text-[#0D0D0D] mb-1">{label}</p>
+    <div className="rounded-xl border border-[#F3F3F3] bg-white px-3 py-2.5 shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
+      <p className="mb-1 text-[12px] font-medium text-[#0D0D0D]">{label}</p>
       {payload.map((p) => (
         <p key={p.dataKey} className="text-[11px] text-[#71717A]">
           <span
-            className="inline-block w-2 h-2 rounded-full mr-1.5"
+            className="mr-1.5 inline-block h-2 w-2 rounded-full"
             style={{ backgroundColor: p.color }}
           />
           {STAT_CONFIG[p.dataKey as StatKey]?.label ?? p.dataKey}:{" "}
@@ -124,11 +254,13 @@ function ChartTooltip({
 }
 
 export function StatProgressionChart({ matches }: Props) {
-  const [enabled, setEnabled] = useState<Set<StatKey>>(() => new Set(DEFAULT_ENABLED));
+  const [enabled, setEnabled] = useState<Set<StatKey>>(
+    () => new Set(DEFAULT_ENABLED),
+  );
 
   const chronological = useMemo(
     () => [...matches].sort((a, b) => a.isoDate.localeCompare(b.isoDate)),
-    [matches]
+    [matches],
   );
 
   // Dynamic window: adapts to dataset size so small datasets still show data
@@ -180,19 +312,19 @@ export function StatProgressionChart({ matches }: Props) {
   }
 
   const hasRightAxis = ALL_STATS.some(
-    (k) => enabled.has(k) && STAT_CONFIG[k].axis === "right"
+    (k) => enabled.has(k) && STAT_CONFIG[k].axis === "right",
   );
   const hasLeftAxis = ALL_STATS.some(
-    (k) => enabled.has(k) && STAT_CONFIG[k].axis === "left"
+    (k) => enabled.has(k) && STAT_CONFIG[k].axis === "left",
   );
 
   if (chronological.length < 2) {
     return (
-      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] p-5">
-        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+      <div className="rounded-[14px] border border-[#F3F3F3] bg-white p-5 shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]">
+        <h2 className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
           Progression
         </h2>
-        <p className="text-[12px] font-normal text-[#71717A] mt-1">
+        <p className="mt-1 text-[12px] font-normal text-[#71717A]">
           Need at least 2 matches
         </p>
       </div>
@@ -200,23 +332,23 @@ export function StatProgressionChart({ matches }: Props) {
   }
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] p-5 overflow-hidden">
-      <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
+    <div className="overflow-hidden rounded-[14px] border border-[#F3F3F3] bg-white p-5 shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+          <h2 className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
             Progression
           </h2>
-          <p className="text-[12px] font-normal text-[#71717A] mt-1">
+          <p className="mt-1 text-[12px] font-normal text-[#71717A]">
             {window}-match rolling averages
           </p>
         </div>
       </div>
 
       {/* Stat toggles by category */}
-      <div className="flex flex-col gap-2 mb-4">
+      <div className="mb-4 flex flex-col gap-2">
         {CATEGORIES.map((cat) => (
           <div key={cat.key} className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[8px] font-medium text-[#AAAAAA] uppercase tracking-[1px] w-[42px] shrink-0">
+            <span className="w-[42px] shrink-0 text-[8px] font-medium tracking-[1px] text-[#AAAAAA] uppercase">
               {cat.label}
             </span>
             {cat.stats.map((key) => {
@@ -227,14 +359,14 @@ export function StatProgressionChart({ matches }: Props) {
                   key={key}
                   type="button"
                   onClick={() => toggleStat(key)}
-                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all duration-200 focus-visible:outline-none ${
+                  className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium transition-all duration-200 focus-visible:outline-none ${
                     isOn
-                      ? "text-[#0D0D0D] bg-[#F7F7F7]"
-                      : "text-[#AAAAAA] bg-transparent hover:bg-[#FAFAFA]"
+                      ? "bg-[#F7F7F7] text-[#0D0D0D]"
+                      : "bg-transparent text-[#AAAAAA] hover:bg-[#FAFAFA]"
                   }`}
                 >
                   <span
-                    className="w-1.5 h-1.5 rounded-full shrink-0 transition-opacity duration-200"
+                    className="h-1.5 w-1.5 shrink-0 rounded-full transition-opacity duration-200"
                     style={{
                       backgroundColor: cfg.color,
                       opacity: isOn ? 1 : 0.25,
@@ -298,18 +430,18 @@ export function StatProgressionChart({ matches }: Props) {
           />
 
           {/* Career avg reference lines */}
-          {ALL_STATS.filter(
-            (k) => enabled.has(k) && careerAvgs[k] != null
-          ).map((key) => (
-            <ReferenceLine
-              key={`ref-${key}`}
-              yAxisId={STAT_CONFIG[key].axis}
-              y={careerAvgs[key]}
-              stroke={STAT_CONFIG[key].color}
-              strokeDasharray="8 4"
-              strokeOpacity={0.2}
-            />
-          ))}
+          {ALL_STATS.filter((k) => enabled.has(k) && careerAvgs[k] != null).map(
+            (key) => (
+              <ReferenceLine
+                key={`ref-${key}`}
+                yAxisId={STAT_CONFIG[key].axis}
+                y={careerAvgs[key]}
+                stroke={STAT_CONFIG[key].color}
+                strokeDasharray="8 4"
+                strokeOpacity={0.2}
+              />
+            ),
+          )}
 
           {/* Stat lines */}
           {ALL_STATS.filter((k) => enabled.has(k)).map((key) => (

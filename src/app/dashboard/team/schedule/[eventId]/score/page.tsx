@@ -74,7 +74,7 @@ export default async function ScoreEventPage({
   const programs = await programNamesFor(
     entries
       .map((entry) => entry.opponentProgramId ?? null)
-      .filter((id): id is string => Boolean(id))
+      .filter((id): id is string => Boolean(id)),
   );
 
   // A forfeited line has no match to score — `recordResult` refuses it — and a
@@ -82,7 +82,7 @@ export default async function ScoreEventPage({
   // already renders both as `unset` with a null preset; this is the same rule
   // stated for the walk rather than for the menu.
   const scoreable = entries.filter(
-    (entry) => entry.forfeit === null && entry.playerLabels.length > 0
+    (entry) => entry.forfeit === null && entry.playerLabels.length > 0,
   );
 
   // `?entry=` names the line; without one, the first line still waiting for a
@@ -103,7 +103,7 @@ export default async function ScoreEventPage({
     event,
     entry,
     entry.matches[0] ?? null,
-    programs
+    programs,
   );
 
   return (

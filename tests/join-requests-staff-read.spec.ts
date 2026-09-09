@@ -1,7 +1,7 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from "node:crypto";
 
-import { expect, test } from '@playwright/test';
-import { type SupabaseClient } from '@supabase/supabase-js';
+import { expect, test } from "@playwright/test";
+import { type SupabaseClient } from "@supabase/supabase-js";
 
 import {
   HAVE_ENV,
@@ -13,8 +13,8 @@ import {
   createLogins,
   deleteAuthUsers,
   runMarker,
-} from './fixtures/live-db';
-import type { DbJoinRequestRow } from '@/lib/data/join-requests-server';
+} from "./fixtures/live-db";
+import type { DbJoinRequestRow } from "@/lib/data/join-requests-server";
 
 /**
  * Staff read path for pending join requests, proven against the live database.
@@ -51,14 +51,14 @@ import type { DbJoinRequestRow } from '@/lib/data/join-requests-server';
 // Fixture — two programs, four logins, five program_requests rows.
 // ---------------------------------------------------------------------------
 
-const { mark: MARK, password: PASSWORD } = runMarker('jr-req');
+const { mark: MARK, password: PASSWORD } = runMarker("jr-req");
 
 // The RPC's row shape is the loader's `DbJoinRequestRow`, imported type-only
 // above — one declaration, so a column change cannot drift the two apart.
 
-test.describe('staff read path for pending join requests (live DB)', () => {
+test.describe("staff read path for pending join requests (live DB)", () => {
   // One worker, in order: the resolve tests mutate the beforeAll fixture.
-  test.describe.configure({ mode: 'serial', timeout: 60_000 });
+  test.describe.configure({ mode: "serial", timeout: 60_000 });
   test.skip(!HAVE_ENV, SKIP_REASON);
 
   let admin: SupabaseClient;
@@ -89,12 +89,12 @@ test.describe('staff read path for pending join requests (live DB)', () => {
 
     [aStaff, aPlayer, bStaff, outsider] = await createLogins(
       admin,
-      ['a-staff', 'a-player', 'b-staff', 'outsider'],
-      { mark: MARK, password: PASSWORD, authUserIds }
+      ["a-staff", "a-player", "b-staff", "outsider"],
+      { mark: MARK, password: PASSWORD, authUserIds },
     );
 
     const programs = await admin
-      .from('programs')
+      .from("programs")
       .insert([
         // school_group must differ: programs_group_team_key is unique on
         // (school_group, team).
@@ -102,25 +102,25 @@ test.describe('staff read path for pending join requests (live DB)', () => {
           program_key: `${MARK}-a`,
           school_group: `${MARK}-a`,
           school_name: `JR Test School A ${MARK}`,
-          team: 'mens',
+          team: "mens",
         },
         {
           program_key: `${MARK}-b`,
           school_group: `${MARK}-b`,
           school_name: `JR Test School B ${MARK}`,
-          team: 'mens',
+          team: "mens",
         },
       ])
-      .select('id, program_key');
+      .select("id, program_key");
     if (programs.error) throw new Error(`programs: ${programs.error.message}`);
     programA = programs.data.find((p) => p.program_key === `${MARK}-a`)!.id;
     programB = programs.data.find((p) => p.program_key === `${MARK}-b`)!.id;
     programIds.push(programA, programB);
 
-    const members = await admin.from('program_members').insert([
-      { program_id: programA, user_id: aStaff.userId, role: 'staff' },
-      { program_id: programA, user_id: aPlayer.userId, role: 'player' },
-      { program_id: programB, user_id: bStaff.userId, role: 'coach' },
+    const members = await admin.from("program_members").insert([
+      { program_id: programA, user_id: aStaff.userId, role: "staff" },
+      { program_id: programA, user_id: aPlayer.userId, role: "player" },
+      { program_id: programB, user_id: bStaff.userId, role: "coach" },
     ]);
     if (members.error) throw new Error(`members: ${members.error.message}`);
 
@@ -129,48 +129,48 @@ test.describe('staff read path for pending join requests (live DB)', () => {
     // every row: PostgREST bulk inserts null (not the column default) into
     // keys a row omits when the rows have mixed shapes.
     const requests = await admin
-      .from('program_requests')
+      .from("program_requests")
       .insert([
         {
-          kind: 'invite_request',
+          kind: "invite_request",
           program_id: programA,
           email: `${MARK}-walk-on-1@example.com`,
-          name: 'JR Walk-on One',
-          note: 'Played juniors, would love a trial.',
-          status: 'open',
+          name: "JR Walk-on One",
+          note: "Played juniors, would love a trial.",
+          status: "open",
         },
         {
-          kind: 'invite_request',
+          kind: "invite_request",
           program_id: programA,
           email: `${MARK}-walk-on-2@example.com`,
-          name: 'JR Walk-on Two',
+          name: "JR Walk-on Two",
           note: null,
-          status: 'open',
+          status: "open",
         },
         {
-          kind: 'ownership_dispute',
+          kind: "ownership_dispute",
           program_id: programA,
           email: `${MARK}-disputer@example.com`,
-          note: 'The listed owner no longer works here.',
-          status: 'open',
+          note: "The listed owner no longer works here.",
+          status: "open",
         },
         {
-          kind: 'invite_request',
+          kind: "invite_request",
           program_id: programA,
           email: `${MARK}-handled@example.com`,
-          name: 'JR Already Handled',
-          status: 'resolved',
+          name: "JR Already Handled",
+          status: "resolved",
           resolved_at: new Date().toISOString(),
         },
         {
-          kind: 'invite_request',
+          kind: "invite_request",
           program_id: programB,
           email: `${MARK}-b-walk-on@example.com`,
-          name: 'JR B Walk-on',
-          status: 'open',
+          name: "JR B Walk-on",
+          status: "open",
         },
       ])
-      .select('id, kind, program_id, email');
+      .select("id, kind, program_id, email");
     if (requests.error) throw new Error(`requests: ${requests.error.message}`);
     requestIds.push(...requests.data.map((r) => r.id));
 
@@ -178,14 +178,13 @@ test.describe('staff read path for pending join requests (live DB)', () => {
     // slice, and a run whose slice ends in "b" makes `…b-walk-on-1@…` contain
     // "b-walk-on" — an intermittent red that reads as a cross-program leak.
     const byEmail = (localPart: string) =>
-      requests.data.find(
-        (r) => r.email === `${MARK}-${localPart}@example.com`
-      )!.id;
-    inviteA1 = byEmail('walk-on-1');
-    inviteA2 = byEmail('walk-on-2');
-    disputeA = byEmail('disputer');
-    resolvedA = byEmail('handled');
-    inviteB = byEmail('b-walk-on');
+      requests.data.find((r) => r.email === `${MARK}-${localPart}@example.com`)!
+        .id;
+    inviteA1 = byEmail("walk-on-1");
+    inviteA2 = byEmail("walk-on-2");
+    disputeA = byEmail("disputer");
+    resolvedA = byEmail("handled");
+    inviteB = byEmail("b-walk-on");
   });
 
   test.afterAll(async () => {
@@ -195,10 +194,10 @@ test.describe('staff read path for pending join requests (live DB)', () => {
     // Requests first and by id: the unlisted-program shape has no program_id,
     // so a cascade off `programs` is not something to lean on here.
     if (requestIds.length > 0) {
-      await admin.from('program_requests').delete().in('id', requestIds);
+      await admin.from("program_requests").delete().in("id", requestIds);
     }
     if (programIds.length > 0) {
-      await admin.from('programs').delete().in('id', programIds);
+      await admin.from("programs").delete().in("id", programIds);
     }
     await deleteAuthUsers(admin, authUserIds);
   });
@@ -207,8 +206,8 @@ test.describe('staff read path for pending join requests (live DB)', () => {
   // Read side.
   // -------------------------------------------------------------------------
 
-  test('program A staff read exactly the open invite requests — never the dispute, the resolved row, or another program\'s queue', async () => {
-    const { data, error } = await aStaff.client.rpc('program_join_requests', {
+  test("program A staff read exactly the open invite requests — never the dispute, the resolved row, or another program's queue", async () => {
+    const { data, error } = await aStaff.client.rpc("program_join_requests", {
       p_program_id: programA,
     });
     expect(error).toBeNull();
@@ -219,8 +218,8 @@ test.describe('staff read path for pending join requests (live DB)', () => {
     // The fields the roster section will render, present and real.
     const first = rows.find((r) => r.id === inviteA1)!;
     expect(first.email).toBe(`${MARK}-walk-on-1@example.com`);
-    expect(first.name).toBe('JR Walk-on One');
-    expect(first.note).toBe('Played juniors, would love a trial.');
+    expect(first.name).toBe("JR Walk-on One");
+    expect(first.note).toBe("Played juniors, would love a trial.");
     expect(first.created_at).toBeTruthy();
 
     // Withheld kinds by id, explicitly — the assertion above already implies
@@ -232,27 +231,27 @@ test.describe('staff read path for pending join requests (live DB)', () => {
   });
 
   for (const [who, session] of [
-    ['a non-member', () => outsider],
-    ['staff of another program', () => bStaff],
-    ['a player of the program itself', () => aPlayer],
+    ["a non-member", () => outsider],
+    ["staff of another program", () => bStaff],
+    ["a player of the program itself", () => aPlayer],
   ] as const) {
     test(`${who} reads zero rows from program A's queue`, async () => {
       const { data, error } = await session().client.rpc(
-        'program_join_requests',
-        { p_program_id: programA }
+        "program_join_requests",
+        { p_program_id: programA },
       );
       expect(error).toBeNull();
       expect(data).toEqual([]);
     });
   }
 
-  test('the table itself stays permission-denied, even for staff', async () => {
+  test("the table itself stays permission-denied, even for staff", async () => {
     // The structural half of the guarantee: there is no query a signed-in
     // session can write against program_requests directly, so no future
     // caller can forget the kind filter and leak a dispute.
     const { data, error } = await aStaff.client
-      .from('program_requests')
-      .select('id')
+      .from("program_requests")
+      .select("id")
       .limit(1);
     expect(data).toBeNull();
     expect(error).not.toBeNull();
@@ -263,23 +262,23 @@ test.describe('staff read path for pending join requests (live DB)', () => {
   // Write side — resolution, and everyone who must be refused it.
   // -------------------------------------------------------------------------
 
-  test('staff resolve one of their own program\'s requests: status, resolved_by and resolved_at all land', async () => {
-    const { error } = await aStaff.client.rpc('resolve_program_join_request', {
+  test("staff resolve one of their own program's requests: status, resolved_by and resolved_at all land", async () => {
+    const { error } = await aStaff.client.rpc("resolve_program_join_request", {
       p_request_id: inviteA1,
     });
     expect(error).toBeNull();
 
     const check = await admin
-      .from('program_requests')
-      .select('status, resolved_by, resolved_at')
-      .eq('id', inviteA1)
+      .from("program_requests")
+      .select("status, resolved_by, resolved_at")
+      .eq("id", inviteA1)
       .single();
-    expect(check.data?.status).toBe('resolved');
+    expect(check.data?.status).toBe("resolved");
     expect(check.data?.resolved_by).toBe(aStaff.userId);
     expect(check.data?.resolved_at).toBeTruthy();
 
     // And it has left the queue.
-    const { data } = await aStaff.client.rpc('program_join_requests', {
+    const { data } = await aStaff.client.rpc("program_join_requests", {
       p_program_id: programA,
     });
     expect(((data ?? []) as DbJoinRequestRow[]).map((r) => r.id)).toEqual([
@@ -288,54 +287,54 @@ test.describe('staff read path for pending join requests (live DB)', () => {
   });
 
   for (const [who, session] of [
-    ['staff of another program', () => bStaff],
-    ['a non-member', () => outsider],
-    ['a player of the program itself', () => aPlayer],
+    ["staff of another program", () => bStaff],
+    ["a non-member", () => outsider],
+    ["a player of the program itself", () => aPlayer],
   ] as const) {
     test(`${who} cannot resolve program A's request`, async () => {
       const { error } = await session().client.rpc(
-        'resolve_program_join_request',
-        { p_request_id: inviteA2 }
+        "resolve_program_join_request",
+        { p_request_id: inviteA2 },
       );
       expect(error).not.toBeNull();
       expect(error!.code).toBe(INSUFFICIENT_PRIVILEGE);
 
       // Untouched, on the service role's authority.
       const check = await admin
-        .from('program_requests')
-        .select('status, resolved_by')
-        .eq('id', inviteA2)
+        .from("program_requests")
+        .select("status, resolved_by")
+        .eq("id", inviteA2)
         .single();
-      expect(check.data?.status).toBe('open');
+      expect(check.data?.status).toBe("open");
       expect(check.data?.resolved_by).toBeNull();
     });
   }
 
-  test('an ownership dispute is unresolvable through this path — even by that program\'s own staff', async () => {
+  test("an ownership dispute is unresolvable through this path — even by that program's own staff", async () => {
     // The kind filter working on the write side: to this function a dispute
     // id must be indistinguishable from a random guess.
-    const { error } = await aStaff.client.rpc('resolve_program_join_request', {
+    const { error } = await aStaff.client.rpc("resolve_program_join_request", {
       p_request_id: disputeA,
     });
     expect(error).not.toBeNull();
     expect(error!.code).toBe(INSUFFICIENT_PRIVILEGE);
 
     const check = await admin
-      .from('program_requests')
-      .select('status')
-      .eq('id', disputeA)
+      .from("program_requests")
+      .select("status")
+      .eq("id", disputeA)
       .single();
-    expect(check.data?.status).toBe('open');
+    expect(check.data?.status).toBe("open");
   });
 
-  test('an already-handled request refuses with P0002, and an unknown id with 42501', async () => {
-    const handled = await aStaff.client.rpc('resolve_program_join_request', {
+  test("an already-handled request refuses with P0002, and an unknown id with 42501", async () => {
+    const handled = await aStaff.client.rpc("resolve_program_join_request", {
       p_request_id: resolvedA,
     });
     expect(handled.error).not.toBeNull();
     expect(handled.error!.code).toBe(NO_DATA_FOUND);
 
-    const unknown = await aStaff.client.rpc('resolve_program_join_request', {
+    const unknown = await aStaff.client.rpc("resolve_program_join_request", {
       p_request_id: randomUUID(),
     });
     expect(unknown.error).not.toBeNull();

@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
-import { type SupabaseClient } from '@supabase/supabase-js';
+import { expect, test } from "@playwright/test";
+import { type SupabaseClient } from "@supabase/supabase-js";
 
 import {
   HAVE_ENV,
@@ -9,7 +9,7 @@ import {
   createLogins,
   deleteAuthUsers,
   runMarker,
-} from './fixtures/live-db';
+} from "./fixtures/live-db";
 
 /**
  * Personal-workspace scoping on the dashboard home, proven against the live
@@ -58,11 +58,11 @@ import {
 
 /** A crashed run is findable by hand:
  *  `select * from programs where program_key like 'home-scope-%'`. */
-const { mark: MARK, password: PASSWORD } = runMarker('home-scope');
+const { mark: MARK, password: PASSWORD } = runMarker("home-scope");
 
-test.describe('personal home scoping (live DB)', () => {
+test.describe("personal home scoping (live DB)", () => {
   // One worker, in order: every test reads the beforeAll fixture.
-  test.describe.configure({ mode: 'serial', timeout: 60_000 });
+  test.describe.configure({ mode: "serial", timeout: 60_000 });
   test.skip(!HAVE_ENV, SKIP_REASON);
 
   let admin: SupabaseClient;
@@ -82,55 +82,57 @@ test.describe('personal home scoping (live DB)', () => {
 
     admin = createAdminClient();
 
-    [athlete] = await createLogins(admin, ['athlete'], {
+    [athlete] = await createLogins(admin, ["athlete"], {
       mark: MARK,
       password: PASSWORD,
       authUserIds,
     });
 
     const program = await admin
-      .from('programs')
+      .from("programs")
       .insert({
         program_key: `${MARK}-p`,
         school_group: `${MARK}-p`,
         school_name: `Home Scope Test School ${MARK}`,
-        team: 'mens',
+        team: "mens",
       })
-      .select('id')
+      .select("id")
       .single();
     if (program.error) throw new Error(`program: ${program.error.message}`);
     programId = program.data.id;
     programIds.push(programId);
 
-    const member = await admin
-      .from('program_members')
-      .insert({ program_id: programId, user_id: athlete.userId, role: 'player' });
+    const member = await admin.from("program_members").insert({
+      program_id: programId,
+      user_id: athlete.userId,
+      role: "player",
+    });
     if (member.error) throw new Error(`member: ${member.error.message}`);
 
     // Both matches are created BY the athlete. The only difference is
     // `program_id` — which is exactly the axis the four fixes filter on, so a
     // `created_by`-only read cannot tell them apart.
     const matches = await admin
-      .from('matches')
+      .from("matches")
       .insert([
         {
           created_by: athlete.userId,
           program_id: null,
           player1_id: athlete.userId,
-          player1_name: 'Home Scope Athlete',
-          player2_name: 'Home Scope Personal Opponent',
+          player1_name: "Home Scope Athlete",
+          player2_name: "Home Scope Personal Opponent",
           date: new Date().toISOString(),
         },
         {
           created_by: athlete.userId,
           program_id: programId,
           player1_id: athlete.userId,
-          player1_name: 'Home Scope Athlete',
-          player2_name: 'Home Scope Program Opponent',
+          player1_name: "Home Scope Athlete",
+          player2_name: "Home Scope Program Opponent",
           date: new Date().toISOString(),
         },
       ])
-      .select('id, program_id');
+      .select("id, program_id");
     if (matches.error) throw new Error(`matches: ${matches.error.message}`);
     personalMatchId = matches.data.find((m) => m.program_id === null)!.id;
     programMatchId = matches.data.find((m) => m.program_id === programId)!.id;
@@ -138,9 +140,17 @@ test.describe('personal home scoping (live DB)', () => {
     // One job per match, both submitted by the athlete: the tray is scoped on
     // the JOB's created_by, so this is the pair that makes the second half of
     // the personal branch (`matches.program_id IS NULL`) load-bearing.
-    const jobs = await admin.from('processing_jobs').insert([
-      { match_id: personalMatchId, created_by: athlete.userId, status: 'pending' },
-      { match_id: programMatchId, created_by: athlete.userId, status: 'pending' },
+    const jobs = await admin.from("processing_jobs").insert([
+      {
+        match_id: personalMatchId,
+        created_by: athlete.userId,
+        status: "pending",
+      },
+      {
+        match_id: programMatchId,
+        created_by: athlete.userId,
+        status: "pending",
+      },
     ]);
     if (jobs.error) throw new Error(`processing_jobs: ${jobs.error.message}`);
   });
@@ -152,10 +162,10 @@ test.describe('personal home scoping (live DB)', () => {
     // Matches first: created_by has no ON DELETE. processing_jobs cascades off
     // the match, so it goes with them. Then the program, then the auth users.
     if (authUserIds.length > 0) {
-      await admin.from('matches').delete().in('created_by', authUserIds);
+      await admin.from("matches").delete().in("created_by", authUserIds);
     }
     if (programIds.length > 0) {
-      await admin.from('programs').delete().in('id', programIds);
+      await admin.from("programs").delete().in("id", programIds);
     }
     await deleteAuthUsers(admin, authUserIds);
 
@@ -169,11 +179,13 @@ test.describe('personal home scoping (live DB)', () => {
     // fails the uuid cast, returns `data: null`, and coalesces to `[]` below —
     // so the leftover check would pass vacuously on the one path it exists for.
     const matchIds = [personalMatchId, programMatchId].filter(Boolean);
-    const [leftoverPrograms, leftoverMatches, leftoverJobs] = await Promise.all([
-      admin.from('programs').select('id').like('program_key', `${MARK}-%`),
-      admin.from('matches').select('id').in('id', matchIds),
-      admin.from('processing_jobs').select('id').in('match_id', matchIds),
-    ]);
+    const [leftoverPrograms, leftoverMatches, leftoverJobs] = await Promise.all(
+      [
+        admin.from("programs").select("id").like("program_key", `${MARK}-%`),
+        admin.from("matches").select("id").in("id", matchIds),
+        admin.from("processing_jobs").select("id").in("match_id", matchIds),
+      ],
+    );
     expect(leftoverPrograms.data ?? []).toEqual([]);
     expect(leftoverMatches.data ?? []).toEqual([]);
     expect(leftoverJobs.data ?? []).toEqual([]);
@@ -183,18 +195,18 @@ test.describe('personal home scoping (live DB)', () => {
   // Fixture sanity — zero/one row below must mean "filtered", never "not there".
   // -------------------------------------------------------------------------
 
-  test('the athlete can read BOTH matches (the leak is possible)', async () => {
+  test("the athlete can read BOTH matches (the leak is possible)", async () => {
     // RLS returns the program match too — its policy is a UNION. That is why
     // the four home surfaces need the `program_id IS NULL` predicate of their
     // own: without it, nothing stops the program match from landing on the
     // personal dashboard.
     const { data, error } = await athlete.client
-      .from('matches')
-      .select('id')
-      .in('id', [personalMatchId, programMatchId]);
+      .from("matches")
+      .select("id")
+      .in("id", [personalMatchId, programMatchId]);
     expect(error).toBeNull();
     expect(new Set((data ?? []).map((m) => m.id))).toEqual(
-      new Set([personalMatchId, programMatchId])
+      new Set([personalMatchId, programMatchId]),
     );
   });
 
@@ -202,43 +214,45 @@ test.describe('personal home scoping (live DB)', () => {
   // The three `matches` reads, in the shapes the source now writes.
   // -------------------------------------------------------------------------
 
-  test('getOverallPerformance() shape returns only the personal match', async () => {
+  test("getOverallPerformance() shape returns only the personal match", async () => {
     // src/lib/data/performance-server.ts — getOverallPerformance()
     const { data, error } = await athlete.client
-      .from('matches')
-      .select('id, date, player1_id, player2_id, player1_name, player2_name, score')
-      .eq('created_by', athlete.userId)
-      .is('program_id', null)
-      .order('date', { ascending: false });
+      .from("matches")
+      .select(
+        "id, date, player1_id, player2_id, player1_name, player2_name, score",
+      )
+      .eq("created_by", athlete.userId)
+      .is("program_id", null)
+      .order("date", { ascending: false });
 
     expect(error).toBeNull();
     expect((data ?? []).map((m) => m.id)).toEqual([personalMatchId]);
   });
 
-  test('recent-activity shape returns only the personal match', async () => {
+  test("recent-activity shape returns only the personal match", async () => {
     // src/app/dashboard/(home)/recent-activity.tsx
     const { data, error } = await athlete.client
-      .from('matches')
+      .from("matches")
       .select(
-        'id, created_by, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, player1_id, player2_id, opponent_hand, opponent_backhand'
+        "id, created_by, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, player1_id, player2_id, opponent_hand, opponent_backhand",
       )
-      .eq('created_by', athlete.userId)
-      .is('program_id', null)
-      .order('date', { ascending: false })
+      .eq("created_by", athlete.userId)
+      .is("program_id", null)
+      .order("date", { ascending: false })
       .limit(50);
 
     expect(error).toBeNull();
     expect((data ?? []).map((m) => m.id)).toEqual([personalMatchId]);
   });
 
-  test('serve-placement-home shape returns only the personal match', async () => {
+  test("serve-placement-home shape returns only the personal match", async () => {
     // src/components/dashboard/home/serve-placement-home.tsx
     const { data, error } = await athlete.client
-      .from('matches')
-      .select('id, player1_name, player2_name')
-      .eq('created_by', athlete.userId)
-      .is('program_id', null)
-      .order('date', { ascending: false })
+      .from("matches")
+      .select("id, player1_name, player2_name")
+      .eq("created_by", athlete.userId)
+      .is("program_id", null)
+      .order("date", { ascending: false })
       .limit(4);
 
     expect(error).toBeNull();
@@ -249,33 +263,33 @@ test.describe('personal home scoping (live DB)', () => {
   // The activity tray, both directions. Same base query, two branches.
   // -------------------------------------------------------------------------
 
-  test('getActivityFeed() personal branch returns only the personal match job', async () => {
+  test("getActivityFeed() personal branch returns only the personal match job", async () => {
     // src/lib/data/activity-server.ts — the `workspace.kind !== 'team'` branch.
     const { data, error } = await athlete.client
-      .from('processing_jobs')
+      .from("processing_jobs")
       .select(
-        'match_id, status, upload_progress_percent, derivation_version, created_at, matches!inner(player1_name, player2_name, program_id)'
+        "match_id, status, upload_progress_percent, derivation_version, created_at, matches!inner(player1_name, player2_name, program_id)",
       )
-      .order('created_at', { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(10)
-      .eq('created_by', athlete.userId)
-      .is('matches.program_id', null);
+      .eq("created_by", athlete.userId)
+      .is("matches.program_id", null);
 
     expect(error).toBeNull();
     expect((data ?? []).map((r) => r.match_id)).toEqual([personalMatchId]);
   });
 
-  test('getActivityFeed() team branch returns only the program match job', async () => {
+  test("getActivityFeed() team branch returns only the program match job", async () => {
     // The other half of the same switch: a team workspace scopes on the
     // match's program, not on who submitted the job.
     const { data, error } = await athlete.client
-      .from('processing_jobs')
+      .from("processing_jobs")
       .select(
-        'match_id, status, upload_progress_percent, derivation_version, created_at, matches!inner(player1_name, player2_name, program_id)'
+        "match_id, status, upload_progress_percent, derivation_version, created_at, matches!inner(player1_name, player2_name, program_id)",
       )
-      .order('created_at', { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(10)
-      .eq('matches.program_id', programId);
+      .eq("matches.program_id", programId);
 
     expect(error).toBeNull();
     expect((data ?? []).map((r) => r.match_id)).toEqual([programMatchId]);

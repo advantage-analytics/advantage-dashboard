@@ -43,7 +43,7 @@ export interface ClaimVerifyAddressInput {
  * on this school address, and the link does nothing in anyone else's hands.
  */
 export function claimVerifyAddressEmail(
-  input: ClaimVerifyAddressInput
+  input: ClaimVerifyAddressInput,
 ): EmailMessage {
   const { to, programName, accountEmail, token } = input;
 
@@ -185,7 +185,7 @@ export interface ClaimObjectionNoticeInput {
  * overwhelming majority of cases the recipient knows exactly who this is.
  */
 export function claimObjectionNoticeEmail(
-  input: ClaimObjectionNoticeInput
+  input: ClaimObjectionNoticeInput,
 ): EmailMessage {
   const {
     to,

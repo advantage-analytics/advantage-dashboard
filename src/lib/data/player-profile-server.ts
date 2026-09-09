@@ -212,13 +212,20 @@ function chipsFrom(stats: ProfileStatRow | null): ProfileChip[] {
     chips.push({ label: "1st serve in", value: `${Math.round(firstServe)}%` });
   }
   if (firstServeWon !== null && firstServeWon !== undefined) {
-    chips.push({ label: "1st serve won", value: `${Math.round(firstServeWon)}%` });
+    chips.push({
+      label: "1st serve won",
+      value: `${Math.round(firstServeWon)}%`,
+    });
   }
-  if (stats.winners !== null) chips.push({ label: "Winners", value: String(stats.winners) });
+  if (stats.winners !== null)
+    chips.push({ label: "Winners", value: String(stats.winners) });
   if (stats.unforcedErrors !== null) {
     chips.push({ label: "Unforced", value: String(stats.unforcedErrors) });
   }
-  if (stats.breakPointsConverted !== null && stats.breakPointOpportunities !== null) {
+  if (
+    stats.breakPointsConverted !== null &&
+    stats.breakPointOpportunities !== null
+  ) {
     chips.push({
       label: "Break pts",
       value: `${stats.breakPointsConverted} of ${stats.breakPointOpportunities}`,
@@ -239,7 +246,7 @@ function chipsFrom(stats: ProfileStatRow | null): ProfileChip[] {
 async function serveMapFor(
   supabase: Awaited<ReturnType<typeof createClient>>,
   /** This player's matches, newest first, and which side of each they were. */
-  sides: readonly { id: string; isPlayer1: boolean }[]
+  sides: readonly { id: string; isPlayer1: boolean }[],
 ): Promise<PlayerProfile["serve"]> {
   const recent = sides.slice(0, SERVE_MAP_MATCHES);
   if (recent.length === 0) return { zoneStats: null, matchCount: 0, serves: 0 };
@@ -249,7 +256,7 @@ async function serveMapFor(
   const { data } = await supabase
     .from("shots")
     .select(
-      "shot_number, shot_type, landing_x, landing_y, result, spin_type, zone, point_id, points!inner(id, match_id, server_is_player1, set_number, result_type, point_score, game_score, won_by_player1)"
+      "shot_number, shot_type, landing_x, landing_y, result, spin_type, zone, point_id, points!inner(id, match_id, server_is_player1, set_number, result_type, point_score, game_score, won_by_player1)",
     )
     .in("points.match_id", [...sideByMatch.keys()])
     .in("shot_type", ["First Serve", "Second Serve"])
@@ -268,7 +275,8 @@ async function serveMapFor(
     const point = pointShots[0].points;
     if (!point) continue;
     const isPlayer1 = sideByMatch.get(point.match_id);
-    if (isPlayer1 === undefined || point.server_is_player1 !== isPlayer1) continue;
+    if (isPlayer1 === undefined || point.server_is_player1 !== isPlayer1)
+      continue;
 
     const serve = pickServeShot(pointShots);
     const dot = pointToServeDot({
@@ -298,7 +306,7 @@ async function serveMapFor(
 
 export const getPlayerProfile = cache(async function getPlayerProfile(
   programId: string,
-  playerId: string
+  playerId: string,
 ): Promise<PlayerProfile | null> {
   const supabase = await createClient();
 
@@ -334,10 +342,12 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
   const { data: matchRows } = await supabase
     .from("matches")
     .select(
-      "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name, event_entry_id"
+      "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name, event_entry_id",
     )
     .eq("program_id", programId)
-    .or(`player1_id.in.(${ownIds.join(",")}),player2_id.in.(${ownIds.join(",")})`)
+    .or(
+      `player1_id.in.(${ownIds.join(",")}),player2_id.in.(${ownIds.join(",")})`,
+    )
     // NULLs last, or an undated row would head the list and be read as the
     // most recent thing this player did.
     .order("date", { ascending: false, nullsFirst: false });
@@ -364,7 +374,7 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
       .select(STAT_COLUMNS)
       .in(
         "match_id",
-        own.map((r) => r.match.id)
+        own.map((r) => r.match.id),
       );
     return statRowsByKey((data ?? []) as unknown as DbStatRow[]);
   })();
@@ -372,7 +382,9 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
   const entriesPromise = (async () => {
     const ids = [
       ...new Set(
-        own.map((r) => r.match.event_entry_id).filter((id): id is string => id !== null)
+        own
+          .map((r) => r.match.event_entry_id)
+          .filter((id): id is string => id !== null),
       ),
     ];
     const entriesById = new Map<string, ProfileEntry>();
@@ -394,7 +406,9 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
       });
     }
 
-    const eventIds = [...new Set([...entriesById.values()].map((e) => e.eventId))];
+    const eventIds = [
+      ...new Set([...entriesById.values()].map((e) => e.eventId)),
+    ];
     if (eventIds.length > 0) {
       const { data: eventRows } = await supabase
         .from("program_events")
@@ -432,11 +446,20 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
   // the time before anything renders.
   const servePromise = serveMapFor(
     supabase,
-    own.map((r) => ({ id: r.match.id, isPlayer1: r.isPlayer1 }))
+    own.map((r) => ({ id: r.match.id, isPlayer1: r.isPlayer1 })),
   );
 
-  const [statsByKey, { entriesById: entries, eventsById: events }, insightRow, serve] =
-    await Promise.all([statsPromise, entriesPromise, insightPromise, servePromise]);
+  const [
+    statsByKey,
+    { entriesById: entries, eventsById: events },
+    insightRow,
+    serve,
+  ] = await Promise.all([
+    statsPromise,
+    entriesPromise,
+    insightPromise,
+    servePromise,
+  ]);
 
   const results: ProfileResult[] = own.map(({ match, isPlayer1 }) => ({
     id: match.id,
@@ -444,7 +467,8 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
     isPlayer1,
     won: matchOutcome(match.score, isPlayer1),
     entryId: match.event_entry_id,
-    opponentName: (isPlayer1 ? match.player2_name : match.player1_name) ?? "Unknown",
+    opponentName:
+      (isPlayer1 ? match.player2_name : match.player1_name) ?? "Unknown",
     score: match.score,
     tournamentName: match.tournament_name,
     stats: statsByKey.get(statKey(match.id, isPlayer1)) ?? null,
@@ -476,7 +500,9 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
         ...toRow(last),
         opponentInitial: getInitials(last.opponentName).charAt(0) || "?",
         insight: (() => {
-          const side = last.isPlayer1 ? insightRow?.player1 : insightRow?.player2;
+          const side = last.isPlayer1
+            ? insightRow?.player1
+            : insightRow?.player2;
           const summary = side?.summary?.trim();
           return summary ? { summary } : null;
         })(),
@@ -484,7 +510,8 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
       }
     : null;
 
-  const name = row.display_name?.trim() || row.email?.split("@")[0] || "Unnamed player";
+  const name =
+    row.display_name?.trim() || row.email?.split("@")[0] || "Unnamed player";
 
   return {
     playerId: row.player_id,

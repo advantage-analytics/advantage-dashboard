@@ -148,7 +148,7 @@ export default async function EditEventPage({
  * world-readable, and `program_key` is unique, so this is a lookup.
  */
 async function opponentDirectoryRow(
-  detail: EventDetail
+  detail: EventDetail,
 ): Promise<ProgramSearchResult | null> {
   const programId =
     detail.entries.find((entry) => entry.opponentProgramId)
@@ -158,7 +158,9 @@ async function opponentDirectoryRow(
   const supabase = await createClient();
   const { data } = await supabase
     .from("programs")
-    .select("program_key, school_name, team, division, conference, state, status")
+    .select(
+      "program_key, school_name, team, division, conference, state, status",
+    )
     .eq("id", programId)
     .maybeSingle();
 

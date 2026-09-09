@@ -29,13 +29,13 @@ export function SettingsNavigation(): React.ReactElement {
   const activeId = settingsSection(pathname ?? "")?.id ?? "profile";
   const hasTeam = available.some((workspace) => workspace.kind === "team");
   const sections = SETTINGS_SECTIONS.filter(
-    (section) => !section.teamMemberOnly || hasTeam
+    (section) => !section.teamMemberOnly || hasTeam,
   );
 
   const handleClick = (
     event: React.MouseEvent,
     href: string,
-    isActive: boolean
+    isActive: boolean,
   ) => {
     if (isActive) return;
     event.preventDefault();
@@ -47,7 +47,7 @@ export function SettingsNavigation(): React.ReactElement {
       className="w-full shrink-0 md:sticky md:top-6 md:w-[168px] md:self-start"
       aria-label="Settings"
     >
-      <div className="-mx-2 flex gap-0.5 overflow-x-auto px-2 pb-2 md:mx-0 md:flex-col md:px-0 md:pb-0 scrollbar-hide">
+      <div className="scrollbar-hide -mx-2 flex gap-0.5 overflow-x-auto px-2 pb-2 md:mx-0 md:flex-col md:px-0 md:pb-0">
         {sections.map(({ id, label, href }) => {
           const isActive = activeId === id;
 
@@ -58,11 +58,11 @@ export function SettingsNavigation(): React.ReactElement {
               onClick={(event) => handleClick(event, href, isActive)}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "whitespace-nowrap rounded-[8px] px-2.5 py-[7px] text-[12px] transition-colors duration-150",
+                "rounded-[8px] px-2.5 py-[7px] text-[12px] whitespace-nowrap transition-colors duration-150",
                 "focus-visible:outline-none",
                 isActive
                   ? "bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
-                  : "text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]"
+                  : "text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",
               )}
             >
               {label}

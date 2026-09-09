@@ -31,7 +31,7 @@ export function lineupOrder(sequence: string[]): string[] {
  */
 export function sequenceFrom(
   members: readonly { playerId: string; lineupSpot: number | null }[],
-  { sentinel }: { sentinel: "always" | "if-needed" }
+  { sentinel }: { sentinel: "always" | "if-needed" },
 ): string[] {
   const ranked: string[] = [];
   const bench: string[] = [];
@@ -49,7 +49,7 @@ export function sequenceFrom(
  */
 export function lineupSpots(
   sequence: string[],
-  playerIds: readonly string[]
+  playerIds: readonly string[],
 ): Map<string, number | null> {
   const order = lineupOrder(sequence);
   const spots = new Map<string, number | null>();
@@ -75,11 +75,11 @@ export function lineupSpots(
  */
 export function lineupChanged(
   sequence: string[],
-  members: readonly { playerId: string; lineupSpot: number | null }[]
+  members: readonly { playerId: string; lineupSpot: number | null }[],
 ): boolean {
   const next = lineupSpots(
     sequence,
-    members.map((m) => m.playerId)
+    members.map((m) => m.playerId),
   );
   return members.some((m) => next.get(m.playerId) !== m.lineupSpot);
 }

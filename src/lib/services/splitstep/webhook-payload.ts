@@ -22,7 +22,8 @@
  */
 
 /** Our `processing_jobs.status`, as advanced by a vendor delivery. */
-export type WebhookNextStatus = 'queued' | 'processing' | 'completed' | 'failed';
+export type WebhookNextStatus =
+  "queued" | "processing" | "completed" | "failed";
 
 export interface ParsedWebhook {
   /** The vendor's job identifier, if one could be found. */
@@ -95,7 +96,7 @@ export interface ParsedWebhook {
  * copies of the normalisation is how one call site silently diverges.
  */
 export function normaliseKey(key: string): string {
-  return key.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return key.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 type Json = unknown;
@@ -111,7 +112,7 @@ type Json = unknown;
 function findFirst(
   value: Json,
   candidates: string[],
-  depth = 0
+  depth = 0,
 ): string | null {
   // Bounded so a self-referential payload cannot spin. Nothing legitimate is
   // this deep.
@@ -125,7 +126,7 @@ function findFirst(
     return null;
   }
 
-  if (typeof value !== 'object') return null;
+  if (typeof value !== "object") return null;
 
   const record = value as Record<string, Json>;
 
@@ -134,10 +135,10 @@ function findFirst(
     for (const [key, entry] of Object.entries(record)) {
       if (normaliseKey(key) !== candidate) continue;
 
-      if (typeof entry === 'string' && entry.trim() !== '') {
+      if (typeof entry === "string" && entry.trim() !== "") {
         return entry.trim();
       }
-      if (typeof entry === 'number' && Number.isFinite(entry)) {
+      if (typeof entry === "number" && Number.isFinite(entry)) {
         return String(entry);
       }
     }
@@ -165,16 +166,18 @@ export function mapToNextStatus(raw: string | null): WebhookNextStatus | null {
 
   // Order matters — `jobcompleted` contains `completed`, so exact-ish matches
   // are checked by inclusion against the most specific term.
-  if (value.includes('fail') || value.includes('error')) return 'failed';
-  if (value.includes('complete') || value.includes('success')) return 'completed';
-  if (value.includes('process') || value.includes('running')) return 'processing';
-  if (value.includes('queue') || value.includes('accept')) return 'queued';
+  if (value.includes("fail") || value.includes("error")) return "failed";
+  if (value.includes("complete") || value.includes("success"))
+    return "completed";
+  if (value.includes("process") || value.includes("running"))
+    return "processing";
+  if (value.includes("queue") || value.includes("accept")) return "queued";
 
   return null;
 }
 
-const JOB_ID_KEYS = ['externaljobid', 'jobid', 'job', 'id'];
-const EVENT_KEYS = ['event', 'eventtype', 'type', 'status', 'state'];
+const JOB_ID_KEYS = ["externaljobid", "jobid", "job", "id"];
+const EVENT_KEYS = ["event", "eventtype", "type", "status", "state"];
 /**
  * The strokes JSON. `strokesurl` is the documented name since September 2026;
  * `sasurl` was the name before that and stays second so replaying a stored
@@ -182,22 +185,26 @@ const EVENT_KEYS = ['event', 'eventtype', 'type', 'status', 'state'];
  * are the original hedge, kept because they cost nothing.
  */
 const STROKES_URL_KEYS = [
-  'strokesurl',
-  'sasurl',
-  'resultsurl',
-  'resulturl',
-  'resultsuri',
-  'downloadurl',
-  'outputurl',
-  'url',
+  "strokesurl",
+  "sasurl",
+  "resultsurl",
+  "resulturl",
+  "resultsuri",
+  "downloadurl",
+  "outputurl",
+  "url",
 ];
 /* Narrow on purpose, like TRIMMED_VIDEO_URL_KEYS: nothing else in the payload
    or in our own request is called this, and a broad fallback could hand us the
    strokes url twice. */
-const PLAYERS_URL_KEYS = ['playersurl', 'playertrackingurl'];
-const TRAJECTORIES_URL_KEYS = ['trajectoriesurl', 'trajectoryurl', 'balltrajectoriesurl'];
-const ERROR_KEYS = ['errormessage', 'error', 'message', 'reason', 'detail'];
-const MATCH_ID_KEYS = ['matchid'];
+const PLAYERS_URL_KEYS = ["playersurl", "playertrackingurl"];
+const TRAJECTORIES_URL_KEYS = [
+  "trajectoriesurl",
+  "trajectoryurl",
+  "balltrajectoriesurl",
+];
+const ERROR_KEYS = ["errormessage", "error", "message", "reason", "detail"];
+const MATCH_ID_KEYS = ["matchid"];
 
 /**
  * The trimmed video, which arrives beside `strokes_url` on a completion.
@@ -213,9 +220,9 @@ const MATCH_ID_KEYS = ['matchid'];
  * one direction that matters.
  */
 const TRIMMED_VIDEO_URL_KEYS = [
-  'trimmedvideourl',
-  'trimmedurl',
-  'processedvideourl',
+  "trimmedvideourl",
+  "trimmedurl",
+  "processedvideourl",
 ];
 
 const UUID_RE =
@@ -229,7 +236,8 @@ export function parseWebhookPayload(body: unknown): ParsedWebhook {
   // A `status` field can carry the event, and an `event` field can carry the
   // status. Try the event first, then fall back to any explicit status.
   const nextStatus =
-    mapToNextStatus(event) ?? mapToNextStatus(findFirst(body, ['status', 'state']));
+    mapToNextStatus(event) ??
+    mapToNextStatus(findFirst(body, ["status", "state"]));
 
   // Only surface error fields on a delivery that actually failed. `message`
   // is a common key for benign human-readable text, and storing "Job accepted"
@@ -240,10 +248,10 @@ export function parseWebhookPayload(body: unknown): ParsedWebhook {
   // for a failure payload that carries no `error` object — and ERROR_KEYS
   // starts with `message`, whose top-level value the docs say not to parse,
   // so the fallback is a last resort, not an equal.
-  const errObj = nextStatus === 'failed' ? findErrorObject(body) : null;
+  const errObj = nextStatus === "failed" ? findErrorObject(body) : null;
   const errorMessage =
-    nextStatus === 'failed'
-      ? stringField(errObj, 'message') ?? findFirst(body, ERROR_KEYS)
+    nextStatus === "failed"
+      ? (stringField(errObj, "message") ?? findFirst(body, ERROR_KEYS))
       : null;
 
   return {
@@ -259,9 +267,9 @@ export function parseWebhookPayload(body: unknown): ParsedWebhook {
     trajectoriesUrl: asHttpUrl(findFirst(body, TRAJECTORIES_URL_KEYS)),
     trimmedVideoUrl: asHttpUrl(findFirst(body, TRIMMED_VIDEO_URL_KEYS)),
     errorMessage,
-    errorCode: stringField(errObj, 'code'),
-    errorCategory: stringField(errObj, 'category'),
-    errorStep: stringField(errObj, 'step'),
+    errorCode: stringField(errObj, "code"),
+    errorCategory: stringField(errObj, "category"),
+    errorStep: stringField(errObj, "step"),
     // Guarded: the fallback lookup passes this straight into a uuid column.
     matchId: matchId && UUID_RE.test(matchId) ? matchId : null,
   };
@@ -275,10 +283,7 @@ export function parseWebhookPayload(body: unknown): ParsedWebhook {
  * Bare `code`/`step` are never searched for globally: they are far too generic
  * as top-level keys, and a wrong match here feeds the retry classifier.
  */
-function findErrorObject(
-  value: Json,
-  depth = 0
-): Record<string, Json> | null {
+function findErrorObject(value: Json, depth = 0): Record<string, Json> | null {
   if (depth > 8 || value == null) return null;
 
   if (Array.isArray(value)) {
@@ -289,15 +294,15 @@ function findErrorObject(
     return null;
   }
 
-  if (typeof value !== 'object') return null;
+  if (typeof value !== "object") return null;
 
   const record = value as Record<string, Json>;
 
   for (const [key, entry] of Object.entries(record)) {
     if (
-      normaliseKey(key) === 'error' &&
+      normaliseKey(key) === "error" &&
       entry !== null &&
-      typeof entry === 'object' &&
+      typeof entry === "object" &&
       !Array.isArray(entry)
     ) {
       return entry as Record<string, Json>;
@@ -324,13 +329,13 @@ function findErrorObject(
  */
 function stringField(
   obj: Record<string, Json> | null,
-  key: string
+  key: string,
 ): string | null {
   if (!obj) return null;
   const target = normaliseKey(key);
   for (const [k, value] of Object.entries(obj)) {
     if (normaliseKey(k) !== target) continue;
-    if (typeof value === 'string' && value.trim() !== '') return value.trim();
+    if (typeof value === "string" && value.trim() !== "") return value.trim();
   }
   return null;
 }
@@ -339,7 +344,7 @@ function asHttpUrl(value: string | null): string | null {
   if (!value) return null;
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? value : null;
+    return url.protocol === "https:" || url.protocol === "http:" ? value : null;
   } catch {
     return null;
   }

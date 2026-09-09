@@ -31,8 +31,11 @@ function TrendDelta({ trend }: { trend: StatTrend | null }) {
   if (!trend || trend.direction === "flat") return null;
   const isGood = (trend.direction === "up") === trend.isPositive;
   return (
-    <span className={`text-[10px] font-medium tabular-nums ${isGood ? "text-[#5DB955]" : "text-[#E51837]"}`}>
-      {trend.direction === "up" ? "+" : "−"}{trend.delta}
+    <span
+      className={`text-[10px] font-medium tabular-nums ${isGood ? "text-[#5DB955]" : "text-[#E51837]"}`}
+    >
+      {trend.direction === "up" ? "+" : "−"}
+      {trend.delta}
     </span>
   );
 }
@@ -41,28 +44,34 @@ function RatingBar({ label, value }: { label: string; value: number }) {
   const pct = Math.max(0, Math.min(100, value));
   return (
     <div className="flex items-center gap-3">
-      <span className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2px] w-[52px] shrink-0">
+      <span className="w-[52px] shrink-0 text-[9px] font-normal tracking-[2px] text-[#AAAAAA] uppercase">
         {label}
       </span>
-      <div className="flex-1 h-1.5 bg-[#F0F0F0] rounded-full overflow-hidden">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#F0F0F0]">
         <div
           className="h-full rounded-full bg-[#3B82F6] transition-all duration-500"
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-[12px] font-light text-[#0D0D0D] tabular-nums w-[24px] text-right">
+      <span className="w-[24px] text-right text-[12px] font-light text-[#0D0D0D] tabular-nums">
         {value > 0 ? value.toFixed(0) : "—"}
       </span>
     </div>
   );
 }
 
-export function PressureIndex({ underPressureRating, serveRating, returnRating, trends }: Props) {
+export function PressureIndex({
+  underPressureRating,
+  serveRating,
+  returnRating,
+  trends,
+}: Props) {
   const shouldReduceMotion = useReducedMotion();
   const value = Math.max(0, Math.min(100, underPressureRating));
   const fillLen = (value / 100) * TOTAL_LEN;
   const color = zoneColor(value);
-  const hasData = underPressureRating > 0 || serveRating > 0 || returnRating > 0;
+  const hasData =
+    underPressureRating > 0 || serveRating > 0 || returnRating > 0;
 
   // Needle angle: 0% = 180° (left), 100% = 0° (right)
   const needleAngle = Math.PI * (1 - value / 100);
@@ -70,12 +79,12 @@ export function PressureIndex({ underPressureRating, serveRating, returnRating, 
   const ny = CY - (R - 4) * Math.sin(needleAngle);
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] p-5 overflow-hidden">
+    <div className="overflow-hidden rounded-[14px] border border-[#F3F3F3] bg-white p-5 shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]">
       <div className="mb-4">
-        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+        <h2 className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
           Pressure Index
         </h2>
-        <p className="text-[12px] font-normal text-[#71717A] mt-1">
+        <p className="mt-1 text-[12px] font-normal text-[#71717A]">
           {hasData ? "Performance under pressure" : "No pressure data yet"}
         </p>
       </div>
@@ -85,12 +94,29 @@ export function PressureIndex({ underPressureRating, serveRating, returnRating, 
           <div className="flex justify-center">
             <svg width={200} height={110} aria-hidden="true">
               {/* Zone backgrounds */}
-              <path d={arcPath(R)} fill="none" stroke="rgba(229,24,55,0.1)" strokeWidth={STROKE_W}
-                strokeDasharray={`${0.4 * TOTAL_LEN} ${0.6 * TOTAL_LEN}`} strokeLinecap="round" />
-              <path d={arcPath(R)} fill="none" stroke="rgba(59,130,246,0.1)" strokeWidth={STROKE_W}
-                strokeDasharray={`0 ${0.4 * TOTAL_LEN} ${0.3 * TOTAL_LEN} ${0.3 * TOTAL_LEN}`} />
-              <path d={arcPath(R)} fill="none" stroke="rgba(93,185,85,0.1)" strokeWidth={STROKE_W}
-                strokeDasharray={`0 ${0.7 * TOTAL_LEN} ${0.3 * TOTAL_LEN} 0`} strokeLinecap="round" />
+              <path
+                d={arcPath(R)}
+                fill="none"
+                stroke="rgba(229,24,55,0.1)"
+                strokeWidth={STROKE_W}
+                strokeDasharray={`${0.4 * TOTAL_LEN} ${0.6 * TOTAL_LEN}`}
+                strokeLinecap="round"
+              />
+              <path
+                d={arcPath(R)}
+                fill="none"
+                stroke="rgba(59,130,246,0.1)"
+                strokeWidth={STROKE_W}
+                strokeDasharray={`0 ${0.4 * TOTAL_LEN} ${0.3 * TOTAL_LEN} ${0.3 * TOTAL_LEN}`}
+              />
+              <path
+                d={arcPath(R)}
+                fill="none"
+                stroke="rgba(93,185,85,0.1)"
+                strokeWidth={STROKE_W}
+                strokeDasharray={`0 ${0.7 * TOTAL_LEN} ${0.3 * TOTAL_LEN} 0`}
+                strokeLinecap="round"
+              />
 
               {/* Active fill */}
               <motion.path
@@ -100,9 +126,17 @@ export function PressureIndex({ underPressureRating, serveRating, returnRating, 
                 strokeWidth={STROKE_W}
                 strokeLinecap="round"
                 strokeDasharray={`${TOTAL_LEN}`}
-                initial={shouldReduceMotion ? { strokeDashoffset: TOTAL_LEN - fillLen } : { strokeDashoffset: TOTAL_LEN }}
+                initial={
+                  shouldReduceMotion
+                    ? { strokeDashoffset: TOTAL_LEN - fillLen }
+                    : { strokeDashoffset: TOTAL_LEN }
+                }
                 animate={{ strokeDashoffset: TOTAL_LEN - fillLen }}
-                transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.8, ease: EASE_CURVE }}
+                transition={
+                  shouldReduceMotion
+                    ? { duration: 0 }
+                    : { duration: 0.8, ease: EASE_CURVE }
+                }
               />
 
               {/* Needle */}
@@ -112,30 +146,62 @@ export function PressureIndex({ underPressureRating, serveRating, returnRating, 
                 stroke="#0D0D0D"
                 strokeWidth={1.5}
                 strokeLinecap="round"
-                initial={shouldReduceMotion ? { x2: nx, y2: ny } : { x2: CX - R + 4, y2: CY }}
+                initial={
+                  shouldReduceMotion
+                    ? { x2: nx, y2: ny }
+                    : { x2: CX - R + 4, y2: CY }
+                }
                 animate={{ x2: nx, y2: ny }}
-                transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.8, delay: 0.1, ease: EASE_CURVE }}
+                transition={
+                  shouldReduceMotion
+                    ? { duration: 0 }
+                    : { duration: 0.8, delay: 0.1, ease: EASE_CURVE }
+                }
               />
               <circle cx={CX} cy={CY} r={3} fill="#0D0D0D" />
 
               {/* Center value */}
-              <text x={CX} y={CY - 16} textAnchor="middle" className="text-[28px] font-light" fill="#0D0D0D">
+              <text
+                x={CX}
+                y={CY - 16}
+                textAnchor="middle"
+                className="text-[28px] font-light"
+                fill="#0D0D0D"
+              >
                 {value.toFixed(0)}
               </text>
 
               {/* Zone labels */}
-              <text x={CX - R + 6} y={CY + 16} textAnchor="start" className="text-[8px] font-medium uppercase" fill="#AAAAAA" letterSpacing="1">0</text>
-              <text x={CX + R - 6} y={CY + 16} textAnchor="end" className="text-[8px] font-medium uppercase" fill="#AAAAAA" letterSpacing="1">100</text>
+              <text
+                x={CX - R + 6}
+                y={CY + 16}
+                textAnchor="start"
+                className="text-[8px] font-medium uppercase"
+                fill="#AAAAAA"
+                letterSpacing="1"
+              >
+                0
+              </text>
+              <text
+                x={CX + R - 6}
+                y={CY + 16}
+                textAnchor="end"
+                className="text-[8px] font-medium uppercase"
+                fill="#AAAAAA"
+                letterSpacing="1"
+              >
+                100
+              </text>
             </svg>
           </div>
 
           {/* Trend */}
-          <div className="flex justify-center mb-4">
+          <div className="mb-4 flex justify-center">
             <TrendDelta trend={trends.underPressureRating} />
           </div>
 
           {/* Sub-ratings */}
-          <div className="flex flex-col gap-2.5 pt-3 border-t border-[#F0F0F0]">
+          <div className="flex flex-col gap-2.5 border-t border-[#F0F0F0] pt-3">
             <RatingBar label="Serve" value={serveRating} />
             <RatingBar label="Return" value={returnRating} />
           </div>

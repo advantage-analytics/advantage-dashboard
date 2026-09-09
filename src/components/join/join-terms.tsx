@@ -128,7 +128,11 @@ function TermsColumn({
 export function JoinSharingTerms() {
   return (
     <div className="grid gap-6 border-t border-[var(--border-hairline)] pt-5 sm:grid-cols-2 sm:gap-10">
-      <TermsColumn title="Your coaches will see" rows={JOIN_TERMS_SEEN} tone="blue" />
+      <TermsColumn
+        title="Your coaches will see"
+        rows={JOIN_TERMS_SEEN}
+        tone="blue"
+      />
       <TermsColumn title="Stays yours" rows={JOIN_TERMS_KEPT} tone="ink" />
     </div>
   );
@@ -155,8 +159,8 @@ export function JoinQuotaNote({
   return (
     <span className="text-micro">
       Team matches run on the program&apos;s{" "}
-      <span className="mono tabular">{formatHours(programHours)}</span>, not your{" "}
-      <span className="mono tabular">{formatHours(personalHours)}</span>.
+      <span className="mono tabular">{formatHours(programHours)}</span>, not
+      your <span className="mono tabular">{formatHours(personalHours)}</span>.
     </span>
   );
 }

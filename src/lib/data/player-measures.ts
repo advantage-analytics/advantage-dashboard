@@ -30,16 +30,56 @@ export interface PlayerMeasureDef {
 
 /** The measures, in reading order. */
 export const PLAYER_MEASURES: PlayerMeasureDef[] = [
-  { key: "first_serve_pct", label: "First serve in", hint: "Share of first serves landing in" },
-  { key: "first_serve_won_pct", label: "First serve won", hint: "Points won behind a first serve" },
-  { key: "second_serve_won_pct", label: "Second serve won", hint: "Points won behind a second serve" },
-  { key: "service_games_won_pct", label: "Service games held", hint: "Service games won" },
-  { key: "break_points_saved_pct", label: "Break points saved", hint: "Break points faced and survived" },
-  { key: "first_return_won_pct", label: "First return won", hint: "Points won returning a first serve" },
-  { key: "second_return_won_pct", label: "Second return won", hint: "Points won returning a second serve" },
-  { key: "return_games_won_pct", label: "Return games won", hint: "Opponent service games broken" },
-  { key: "break_points_converted_pct", label: "Break points taken", hint: "Break chances converted" },
-  { key: "total_points_won_pct", label: "Total points won", hint: "Share of all points won" },
+  {
+    key: "first_serve_pct",
+    label: "First serve in",
+    hint: "Share of first serves landing in",
+  },
+  {
+    key: "first_serve_won_pct",
+    label: "First serve won",
+    hint: "Points won behind a first serve",
+  },
+  {
+    key: "second_serve_won_pct",
+    label: "Second serve won",
+    hint: "Points won behind a second serve",
+  },
+  {
+    key: "service_games_won_pct",
+    label: "Service games held",
+    hint: "Service games won",
+  },
+  {
+    key: "break_points_saved_pct",
+    label: "Break points saved",
+    hint: "Break points faced and survived",
+  },
+  {
+    key: "first_return_won_pct",
+    label: "First return won",
+    hint: "Points won returning a first serve",
+  },
+  {
+    key: "second_return_won_pct",
+    label: "Second return won",
+    hint: "Points won returning a second serve",
+  },
+  {
+    key: "return_games_won_pct",
+    label: "Return games won",
+    hint: "Opponent service games broken",
+  },
+  {
+    key: "break_points_converted_pct",
+    label: "Break points taken",
+    hint: "Break chances converted",
+  },
+  {
+    key: "total_points_won_pct",
+    label: "Total points won",
+    hint: "Share of all points won",
+  },
 ];
 
 /**
@@ -64,5 +104,9 @@ export const ROSTER_DRAWER_MEASURES: RosterDrawerMeasureDef[] = [
   { key: "first_serve_pct", label: "1st serve in", pill: "1st serve" },
   { key: "first_serve_won_pct", label: "1st serve won", pill: "1st won" },
   { key: "second_serve_won_pct", label: "2nd serve won", pill: "2nd won" },
-  { key: "break_points_saved_pct", label: "Break points saved", pill: "BP saved" },
+  {
+    key: "break_points_saved_pct",
+    label: "Break points saved",
+    pill: "BP saved",
+  },
 ];

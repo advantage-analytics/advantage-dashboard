@@ -43,12 +43,18 @@ const Context = createContext<SidebarState | null>(null);
 export function useSidebarState(): SidebarState {
   const state = useContext(Context);
   if (!state) {
-    throw new Error("useSidebarState must be used within a SidebarStateProvider.");
+    throw new Error(
+      "useSidebarState must be used within a SidebarStateProvider.",
+    );
   }
   return state;
 }
 
-export function SidebarStateProvider({ children }: { children: React.ReactNode }) {
+export function SidebarStateProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   // Starts collapsed on the server and on first paint, then reads the stored
   // preference. Rendering the rail first and widening is the cheap direction to
   // be wrong in — the reverse would push the page sideways after hydration.
@@ -72,7 +78,8 @@ export function SidebarStateProvider({ children }: { children: React.ReactNode }
       if (narrow) setExpanded(false);
     };
     collapseIfNarrow(mql.matches);
-    const onChange = (event: MediaQueryListEvent) => collapseIfNarrow(event.matches);
+    const onChange = (event: MediaQueryListEvent) =>
+      collapseIfNarrow(event.matches);
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
   }, []);
@@ -101,7 +108,10 @@ export function SidebarStateProvider({ children }: { children: React.ReactNode }
     return () => document.removeEventListener("keydown", onKey);
   }, [toggle]);
 
-  const value = useMemo<SidebarState>(() => ({ expanded, toggle }), [expanded, toggle]);
+  const value = useMemo<SidebarState>(
+    () => ({ expanded, toggle }),
+    [expanded, toggle],
+  );
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

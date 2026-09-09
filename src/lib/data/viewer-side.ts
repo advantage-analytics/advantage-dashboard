@@ -16,10 +16,12 @@
  */
 export function playerSeat(
   match: { player1_id: string | null; player2_id?: string | null },
-  playerIds: readonly string[]
+  playerIds: readonly string[],
 ): "player1" | "player2" | null {
-  if (match.player1_id && playerIds.includes(match.player1_id)) return "player1";
-  if (match.player2_id && playerIds.includes(match.player2_id)) return "player2";
+  if (match.player1_id && playerIds.includes(match.player1_id))
+    return "player1";
+  if (match.player2_id && playerIds.includes(match.player2_id))
+    return "player2";
   return null;
 }
 
@@ -49,11 +51,15 @@ export function viewerSide(
   match: { player1_id: string | null; player2_id?: string | null },
   playerIds: readonly string[],
   viewerId: string,
-  createdBy?: string | null
+  createdBy?: string | null,
 ): "player1" | "player2" | null {
   const seat = playerSeat(match, playerIds);
   if (seat) return seat;
-  if (!match.player1_id && !match.player2_id && (createdBy ?? viewerId) === viewerId) {
+  if (
+    !match.player1_id &&
+    !match.player2_id &&
+    (createdBy ?? viewerId) === viewerId
+  ) {
     return "player1";
   }
   return null;

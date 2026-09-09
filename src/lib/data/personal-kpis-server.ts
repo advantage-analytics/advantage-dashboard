@@ -35,7 +35,7 @@ const EMPTY: PersonalSeasonKpis = {
 };
 
 export const getPersonalSeasonKpis = cache(async function getPersonalSeasonKpis(
-  userId: string
+  userId: string,
 ): Promise<PersonalSeasonKpis> {
   // Both reads are the shared personal pair — the performance model on the
   // same page asks for them too, and `cache()` means only one of us pays.
@@ -61,7 +61,7 @@ export const getPersonalSeasonKpis = cache(async function getPersonalSeasonKpis(
     // Whoever is on the other side — the name the hover chart's tooltip puts
     // over each point, so it reads as a match rather than a coordinate.
     opponentName: shortName(
-      (isPlayer1 ? match.player2_name : match.player1_name) ?? "Unknown"
+      (isPlayer1 ? match.player2_name : match.player1_name) ?? "Unknown",
     ),
     score: match.score,
     tournamentName: null,

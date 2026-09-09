@@ -51,7 +51,7 @@ export const getMyPlayerIds = cache(async function getMyPlayerIds(): Promise<
     .map((row: unknown) =>
       typeof row === "string"
         ? row
-        : ((row as { my_player_ids?: string })?.my_player_ids ?? null)
+        : ((row as { my_player_ids?: string })?.my_player_ids ?? null),
     )
     .filter((id: string | null): id is string => Boolean(id));
 });
@@ -76,7 +76,7 @@ export function playerSide(
     created_by: string | null;
   },
   myPlayerIds: readonly string[],
-  viewerId: string
+  viewerId: string,
 ): "player1" | "player2" | null {
   if (match.player1_id && myPlayerIds.includes(match.player1_id)) {
     return "player1";
@@ -93,7 +93,7 @@ export function playerSide(
 /** Whether a player id names the viewer. */
 export function isMe(
   playerId: string | null,
-  myPlayerIds: readonly string[]
+  myPlayerIds: readonly string[],
 ): boolean {
   return Boolean(playerId) && myPlayerIds.includes(playerId as string);
 }

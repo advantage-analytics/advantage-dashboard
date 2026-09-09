@@ -15,18 +15,19 @@
  * disagreement means we would auto-approve a claim it decided needs a human.
  */
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { checkClaimEmail } from '../src/lib/services/programs/domain-match';
-import { parseCsv } from './lib/csv';
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { checkClaimEmail } from "../src/lib/services/programs/domain-match";
+import { parseCsv } from "./lib/csv";
 
-const dir = process.argv[2] ?? '/Users/cjgimena/Desktop/advantage-program-claim-dataset';
-const read = (f: string) => parseCsv(readFileSync(join(dir, f), 'utf8'));
+const dir =
+  process.argv[2] ?? "/Users/cjgimena/Desktop/advantage-program-claim-dataset";
+const read = (f: string) => parseCsv(readFileSync(join(dir, f), "utf8"));
 
-const programs = new Map(read('programs.csv').map((p) => [p.program_id, p]));
+const programs = new Map(read("programs.csv").map((p) => [p.program_id, p]));
 
 const lines: string[] = [];
-for (const c of read('program_contacts.csv')) {
+for (const c of read("program_contacts.csv")) {
   const p = programs.get(c.program_id);
   if (!p) continue;
   const r = checkClaimEmail(c.email, p);
@@ -39,9 +40,9 @@ for (const c of read('program_contacts.csv')) {
       r.domainMatched ? 1 : 0,
       r.matchedOn,
       r.skipsManualReview ? 1 : 0,
-    ].join('|')
+    ].join("|"),
   );
 }
 
 lines.sort();
-process.stdout.write(lines.join('\n') + '\n');
+process.stdout.write(lines.join("\n") + "\n");

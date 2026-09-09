@@ -68,7 +68,16 @@ import { LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-card-list";
  * not.
  */
 
-const COLUMNS = ["Date", "Opponent", "Event", "Score", "Result", "", "", ""] as const;
+const COLUMNS = [
+  "Date",
+  "Opponent",
+  "Event",
+  "Score",
+  "Result",
+  "",
+  "",
+  "",
+] as const;
 
 /**
  * Proportional rules for the five columns that carry a value, in
@@ -88,7 +97,11 @@ const ROW_RULES: readonly Rule[] = [
 
 function GhostRow({ opacity }: { opacity: number }) {
   return (
-    <div className={`${LIST_ROW_FRAME} h-[52px]`} style={{ ...LIST_GRID_COLS, opacity }} aria-hidden="true">
+    <div
+      className={`${LIST_ROW_FRAME} h-[52px]`}
+      style={{ ...LIST_GRID_COLS, opacity }}
+      aria-hidden="true"
+    >
       {ROW_RULES.map((rule, i) => (
         <GhostRule key={i} {...rule} />
       ))}
@@ -104,7 +117,7 @@ export function MatchesDayZero(
   props:
     | { scope: "personal" }
     /** Whether this viewer may start the wizard the offer points at. */
-    | { scope: "team"; canUpload: boolean }
+    | { scope: "team"; canUpload: boolean },
 ) {
   const isTeam = props.scope === "team";
   // A player who cannot upload is shown no pair. `null`, not an omitted prop:
@@ -140,15 +153,27 @@ export function MatchesDayZero(
           <div className="flex items-center gap-2 text-[12px] text-[var(--ink-600)]">
             <span className="flex h-7 items-center gap-1.5 px-2">
               Filters
-              <ChevronDown className="size-3 text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
+              <ChevronDown
+                className="size-3 text-[var(--ink-400)]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
             </span>
             <span className="flex h-7 items-center gap-1.5 px-2">
-              <Search className="size-3.5 text-[var(--ink-500)]" strokeWidth={1.5} aria-hidden="true" />
+              <Search
+                className="size-3.5 text-[var(--ink-500)]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
               Search
             </span>
             <span className="flex h-7 items-center gap-1.5 px-2">
               Newest
-              <ChevronDown className="size-3 text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
+              <ChevronDown
+                className="size-3 text-[var(--ink-400)]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
             </span>
           </div>
         </div>
@@ -157,7 +182,7 @@ export function MatchesDayZero(
             hairline under the header only (`MatchesGrid`). */}
         <div className="surface-card" style={{ padding: "2px 24px 6px" }}>
           <div
-            className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pb-2.5 pt-3.5`}
+            className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pt-3.5 pb-2.5`}
             style={LIST_GRID_COLS}
           >
             {COLUMNS.map((label, i) => (

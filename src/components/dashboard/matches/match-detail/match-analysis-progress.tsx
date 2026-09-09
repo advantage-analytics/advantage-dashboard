@@ -40,16 +40,19 @@ const STORED_NOTE = "Your video is stored. Nothing else is needed from you.";
 
 /** Reassurance per stage. Every line has to be true of the pipeline as built. */
 const STAGE_NOTE: Partial<Record<MatchAnalysis["status"], string>> = {
-  uploading: "Keep this tab open until the transfer finishes. Everything after it runs on our side.",
+  uploading:
+    "Keep this tab open until the transfer finishes. Everything after it runs on our side.",
   // Same line for both: from the player's side there is no difference between
   // "stored, not yet submitted" and "submitted, waiting" — neither needs them.
   uploaded: STORED_NOTE,
   queued: STORED_NOTE,
-  processing: "Nothing needs to stay open — this page fills in as soon as the analysis lands.",
+  processing:
+    "Nothing needs to stay open — this page fills in as soon as the analysis lands.",
   deriving: "Turning detected strokes into points and shots. Almost there.",
   // Deliberately not "almost there". This state waits on work that is gated, so
   // the honest version says what is done and does not promise when the rest is.
-  processed: "Your video came back analyzed and is saved. Turning it into your match stats is still in progress.",
+  processed:
+    "Your video came back analyzed and is saved. Turning it into your match stats is still in progress.",
 };
 
 interface MatchAnalysisProgressProps {
@@ -107,15 +110,18 @@ export function MatchAnalysisProgress({
   const etaSeconds = now === null ? undefined : uploadEtaSeconds(analysis, now);
 
   const facts: { label: string; value: string }[] = [];
-  if (analysis.fileName) facts.push({ label: "Video", value: analysis.fileName });
+  if (analysis.fileName)
+    facts.push({ label: "Video", value: analysis.fileName });
   if (analysis.window) facts.push({ label: "Window", value: analysis.window });
-  if (analysis.jobReference) facts.push({ label: "Job", value: analysis.jobReference });
-  if (analysis.stageNote) facts.push({ label: "Stage", value: analysis.stageNote });
+  if (analysis.jobReference)
+    facts.push({ label: "Job", value: analysis.jobReference });
+  if (analysis.stageNote)
+    facts.push({ label: "Stage", value: analysis.stageNote });
 
   return (
     <section aria-label="Analysis progress">
       <div className="mb-4 flex items-center gap-3">
-        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+        <h2 className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
           Analysis
         </h2>
       </div>
@@ -131,7 +137,7 @@ export function MatchAnalysisProgress({
           </p>
           {measured !== undefined && (
             <div className="flex flex-col items-end gap-0.5">
-              <p className="text-[28px] font-light leading-none tracking-[-0.5px] text-[#3B82F6] tabular-nums">
+              <p className="text-[28px] leading-none font-light tracking-[-0.5px] text-[#3B82F6] tabular-nums">
                 {Math.round(measured)}%
               </p>
               {/* Derived from elapsed time against percent moved, so it is
@@ -175,7 +181,11 @@ export function MatchAnalysisProgress({
                 <span
                   className="truncate text-[12px]"
                   style={{
-                    color: failedHere ? "#E51837" : isCurrent ? "#3B82F6" : "#0D0D0D",
+                    color: failedHere
+                      ? "#E51837"
+                      : isCurrent
+                        ? "#3B82F6"
+                        : "#0D0D0D",
                   }}
                 >
                   {stage.label}
@@ -208,8 +218,8 @@ export function MatchAnalysisProgress({
               </p>
               <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
                 Retrying uses the video you already uploaded — nothing needs
-                uploading again. If it keeps failing, trim to a window where
-                the camera stays fixed, or upload a new recording.
+                uploading again. If it keeps failing, trim to a window where the
+                camera stays fixed, or upload a new recording.
               </p>
               {/* Gated on the literal status, not the broader `failed` (which
                   also covers derivation_failed): resubmitJob() refuses
@@ -271,7 +281,7 @@ export function MatchAnalysisProgress({
           <dl className="mt-6 grid grid-cols-2 gap-x-8 gap-y-4 border-t border-[#F3F3F3] pt-5 sm:grid-cols-4">
             {facts.map((fact) => (
               <div key={fact.label} className="flex min-w-0 flex-col gap-1">
-                <dt className="text-[10px] font-medium uppercase tracking-[1.6px] text-[#AAAAAA]">
+                <dt className="text-[10px] font-medium tracking-[1.6px] text-[#AAAAAA] uppercase">
                   {fact.label}
                 </dt>
                 <dd className="min-w-0 truncate text-[12px] text-[#0D0D0D] tabular-nums">

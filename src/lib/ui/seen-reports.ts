@@ -22,7 +22,9 @@ function readSet(): Set<string> {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return new Set();
     const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? new Set(parsed.filter((v): v is string => typeof v === "string")) : new Set();
+    return Array.isArray(parsed)
+      ? new Set(parsed.filter((v): v is string => typeof v === "string"))
+      : new Set();
   } catch {
     return new Set();
   }
@@ -61,14 +63,15 @@ export function markReportSeen(matchId: string): void {
  * "New" count during SSR and a different one the instant hydration's effect
  * ran, which React reports as a mismatch.
  */
-export function useUnseenReportIds(candidateIds: readonly string[]): Set<string> {
+export function useUnseenReportIds(
+  candidateIds: readonly string[],
+): Set<string> {
   const key = candidateIds.join(",");
   const [unseen, setUnseen] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     setUnseen(new Set(unseenReportIds(key ? key.split(",") : [])));
     // key is a stable join of candidateIds — re-derives whenever the id set changes.
-     
   }, [key]);
 
   return unseen;

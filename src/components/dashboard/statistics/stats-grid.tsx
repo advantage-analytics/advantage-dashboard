@@ -28,8 +28,7 @@ function Sparkline({ data: values }: { data: number[] }) {
   const points = values
     .map((v, i) => {
       const x = pad + (i / (values.length - 1)) * (w - pad * 2);
-      const y =
-        pad + (h - pad * 2) - ((v - min) / range) * (h - pad * 2);
+      const y = pad + (h - pad * 2) - ((v - min) / range) * (h - pad * 2);
       return `${x},${y}`;
     })
     .join(" ");
@@ -90,8 +89,7 @@ export function StatsGrid({ data, trends }: StatsGridProps) {
     },
     {
       label: "1st Serve In",
-      value:
-        data.avgFirstServePct !== null ? `${data.avgFirstServePct}%` : "—",
+      value: data.avgFirstServePct !== null ? `${data.avgFirstServePct}%` : "—",
       icon: Target,
       trend: trends.firstServePct,
     },
@@ -109,12 +107,12 @@ export function StatsGrid({ data, trends }: StatsGridProps) {
   const hasData = stats.some((s) => s.value !== "—");
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5 overflow-hidden transition-[box-shadow,border-color,transform] duration-200 hover:shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)] hover:border-[#E7E7E7] hover:scale-[1.008]">
+    <div className="overflow-hidden rounded-[14px] border border-[#F3F3F3] bg-white p-5 shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] transition-[box-shadow,border-color,transform] duration-200 hover:scale-[1.008] hover:border-[#E7E7E7] hover:shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)]">
       <div className="mb-5">
-        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+        <h2 className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
           Key Stats
         </h2>
-        <p className="text-[12px] font-normal text-[#71717A] mt-1">
+        <p className="mt-1 text-[12px] font-normal text-[#71717A]">
           {hasData
             ? "Averages per match — trends vs career"
             : "Upload matches with stats to see averages"}
@@ -125,7 +123,7 @@ export function StatsGrid({ data, trends }: StatsGridProps) {
         {stats.map(({ label, value, icon: Icon, trend }) => (
           <div
             key={label}
-            className="flex flex-col gap-2 bg-[#FAFAFA] rounded-xl p-4 border border-[#F3F3F3]"
+            className="flex flex-col gap-2 rounded-xl border border-[#F3F3F3] bg-[#FAFAFA] p-4"
           >
             <Icon
               className="size-4 text-[#AAAAAA]"
@@ -133,11 +131,11 @@ export function StatsGrid({ data, trends }: StatsGridProps) {
               aria-hidden="true"
             />
             <div>
-              <p className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2px] leading-[13.5px] mb-1">
+              <p className="mb-1 text-[9px] leading-[13.5px] font-normal tracking-[2px] text-[#AAAAAA] uppercase">
                 {label}
               </p>
               <div className="flex items-baseline justify-between">
-                <p className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-none tabular-nums">
+                <p className="text-[28px] leading-none font-light tracking-[-0.5px] text-[#0D0D0D] tabular-nums">
                   {value}
                 </p>
                 <TrendArrow trend={trend} />

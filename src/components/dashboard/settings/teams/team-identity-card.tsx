@@ -23,7 +23,6 @@ export const SURFACE_OPTIONS = [
   { value: "carpet" as const, label: "Carpet" },
 ];
 
-
 /**
  * The identity card: crest, name and home courts.
  *
@@ -53,7 +52,10 @@ export function TeamIdentityCard({
   programId: string;
   crestUrl: string | null;
   draft: IdentityDraft;
-  onChange: <K extends keyof IdentityDraft>(key: K, value: IdentityDraft[K]) => void;
+  onChange: <K extends keyof IdentityDraft>(
+    key: K,
+    value: IdentityDraft[K],
+  ) => void;
   /** Staff of any standing. A player sees the read-only variant. */
   canEdit: boolean;
   isOwner: boolean;
@@ -71,7 +73,10 @@ export function TeamIdentityCard({
         </div>
         <div className="grid grid-cols-1 gap-3.5 border-t border-[var(--border-hairline)] pt-3.5 sm:grid-cols-2 sm:gap-x-6">
           <Fact label="Home venue" value={draft.homeVenue || "—"} />
-          <Fact label="Default surface" value={surfaceLabel(draft.defaultSurface)} />
+          <Fact
+            label="Default surface"
+            value={surfaceLabel(draft.defaultSurface)}
+          />
           <Fact label="Conference" value={draft.conference || "—"} />
           <Fact label="Season" value={draft.season || "—"} mono />
         </div>
@@ -98,7 +103,11 @@ export function TeamIdentityCard({
             onChange={(value) => onChange("schoolName", value)}
           />
         ) : (
-          <LockedField label="Program name" value={draft.schoolName} hint={lockedHint} />
+          <LockedField
+            label="Program name"
+            value={draft.schoolName}
+            hint={lockedHint}
+          />
         )}
 
         {isOwner ? (
@@ -114,7 +123,10 @@ export function TeamIdentityCard({
         ) : (
           <LockedField
             label="Squad"
-            value={SQUAD_OPTIONS.find((option) => option.value === draft.team)?.label ?? ""}
+            value={
+              SQUAD_OPTIONS.find((option) => option.value === draft.team)
+                ?.label ?? ""
+            }
             hint={lockedHint}
           />
         )}
@@ -144,7 +156,11 @@ export function TeamIdentityCard({
             onChange={(value) => onChange("conference", value)}
           />
         ) : (
-          <LockedField label="Conference" value={draft.conference || "—"} hint={lockedHint} />
+          <LockedField
+            label="Conference"
+            value={draft.conference || "—"}
+            hint={lockedHint}
+          />
         )}
 
         <TextField
@@ -213,18 +229,36 @@ function LockedField({
   return (
     <SettingsField label={label} hint={hint}>
       <span className="flex h-8 items-center gap-1.5 border-b border-[var(--ink-100)] text-[13px] text-[var(--ink-600)]">
-        <Lock className="size-[11px] shrink-0 text-[var(--ink-400)]" strokeWidth={1.75} aria-hidden="true" />
+        <Lock
+          className="size-[11px] shrink-0 text-[var(--ink-400)]"
+          strokeWidth={1.75}
+          aria-hidden="true"
+        />
         <span className="truncate">{value}</span>
       </span>
     </SettingsField>
   );
 }
 
-function Fact({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Fact({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-[11px] text-[var(--ink-600)]">{label}</span>
-      <span className={mono ? "mono text-[13px] text-[var(--ink-900)]" : "text-[13px] text-[var(--ink-900)]"}>
+      <span
+        className={
+          mono
+            ? "mono text-[13px] text-[var(--ink-900)]"
+            : "text-[13px] text-[var(--ink-900)]"
+        }
+      >
         {value}
       </span>
     </div>

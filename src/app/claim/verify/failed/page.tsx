@@ -90,7 +90,12 @@ export default async function ClaimFailedPage({
 
   return (
     <ClaimShell width={720} gap={20} back="/claim/program">
-      <ClaimHeading gap={6} title={copy.heading} body={copy.sub} bodyMax="58ch" />
+      <ClaimHeading
+        gap={6}
+        title={copy.heading}
+        body={copy.sub}
+        bodyMax="58ch"
+      />
       {copy.action === "signIn" ? (
         <>
           <ClaimActions>
@@ -102,8 +107,8 @@ export default async function ClaimFailedPage({
             </Link>
           </ClaimActions>
           <span className={CLAIM_MICRO}>
-            Once you&apos;re signed in with the right account, open the link from
-            your email again to finish.
+            Once you&apos;re signed in with the right account, open the link
+            from your email again to finish.
           </span>
         </>
       ) : copy.action === "restart" ? (

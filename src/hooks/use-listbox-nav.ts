@@ -55,7 +55,7 @@ export function useListboxNav({
 
   const optionId = useCallback(
     (index: number) => `${idPrefix}-option-${index}`,
-    [idPrefix]
+    [idPrefix],
   );
 
   const onKeyDown = useCallback(
@@ -92,7 +92,7 @@ export function useListboxNav({
           break;
       }
     },
-    [open, count, activeIndex, onSelect, onDismiss]
+    [open, count, activeIndex, onSelect, onDismiss],
   );
 
   return { activeIndex, setActiveIndex, optionId, onKeyDown };

@@ -12,7 +12,12 @@ import { SingleScoreEntry } from "@/components/dashboard/schedule/single-score-e
 import { matchWon } from "@/lib/schedule/entry-state";
 import { LINE_STATUS, type LineStatus } from "@/lib/schedule/line-status";
 import { formatEventDay } from "@/lib/schedule/format";
-import { isAnalysisFailed, isAnalysisReady, isInFlight, isWorking } from "@/lib/data/match-analysis";
+import {
+  isAnalysisFailed,
+  isAnalysisReady,
+  isInFlight,
+  isWorking,
+} from "@/lib/data/match-analysis";
 import type { TeamSingleMatch } from "@/lib/data/single-match-server";
 
 /**
@@ -62,8 +67,9 @@ export function SingleDetail({
         <div className="min-w-0 flex-1">
           <span className="eyebrow">
             Single match
-            {match.matchType ? ` · ${match.matchType.toLowerCase()}` : ""} ·{" "}
-            {formatEventDay(match.date.slice(0, 10))}
+            {match.matchType
+              ? ` · ${match.matchType.toLowerCase()}`
+              : ""} · {formatEventDay(match.date.slice(0, 10))}
             {won !== null ? " · final" : ""}
           </span>
 
@@ -71,7 +77,7 @@ export function SingleDetail({
               that is what names this page. */}
           <h1 className="mt-2 flex items-baseline gap-3">
             <span
-              className="text-[30px] font-light leading-[34px] tracking-[-0.6px]"
+              className="text-[30px] leading-[34px] font-light tracking-[-0.6px]"
               style={{ color: "var(--ink-900)" }}
             >
               {match.playerName}{" "}
@@ -90,7 +96,10 @@ export function SingleDetail({
                   {index > 0 ? (
                     <span style={{ color: "var(--ink-300)" }}>·</span>
                   ) : null}
-                  <span className="text-[13px]" style={{ color: "var(--ink-700)" }}>
+                  <span
+                    className="text-[13px]"
+                    style={{ color: "var(--ink-700)" }}
+                  >
                     {fact}
                   </span>
                 </span>
@@ -103,7 +112,7 @@ export function SingleDetail({
           <div className="flex shrink-0 flex-col items-end gap-2.5">
             <ScoreLine
               sets={sets}
-              className="tabular text-[40px] font-light leading-[40px]"
+              className="tabular text-[40px] leading-[40px] font-light"
               style={{ color: "var(--ink-900)" }}
             />
             {ready ? (

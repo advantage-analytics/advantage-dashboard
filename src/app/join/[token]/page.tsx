@@ -61,7 +61,7 @@ export default async function JoinPage({
   // 'college' where the state carries no org type — those branches (not_found,
   // expired, already_used, wrong_account) never render an allowance figure.
   const { programHours, personalHours } = quotaHours(
-    "programOrgType" in state ? state.programOrgType : "college"
+    "programOrgType" in state ? state.programOrgType : "college",
   );
 
   // "Not now" is a query flag and nothing else — see `NotNowLink`. It only

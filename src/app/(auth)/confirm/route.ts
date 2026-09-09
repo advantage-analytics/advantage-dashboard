@@ -28,7 +28,9 @@ export async function GET(request: NextRequest) {
   // Checked before building the Supabase client, so a bot or a truncated link
   // doesn't pay for a cookie read and a client construction to be turned away.
   if (!code && !(token_hash && type)) {
-    redirect(`/error?error=${encodeURIComponent("That link is missing its token.")}`);
+    redirect(
+      `/error?error=${encodeURIComponent("That link is missing its token.")}`,
+    );
   }
 
   const supabase = await createClient();

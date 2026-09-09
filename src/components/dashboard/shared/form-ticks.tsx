@@ -31,7 +31,8 @@ export function FormTicks({
   return (
     <>
       <span className="sr-only">
-        Last {form.length}: {form.map((r) => (r === "win" ? "W" : "L")).join(" ")}
+        Last {form.length}:{" "}
+        {form.map((r) => (r === "win" ? "W" : "L")).join(" ")}
       </span>
       <span aria-hidden className="flex items-center gap-[3px]">
         {form.map((result, index) => (

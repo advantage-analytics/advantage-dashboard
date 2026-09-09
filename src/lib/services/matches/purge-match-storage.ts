@@ -1,7 +1,7 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { RESULTS_BUCKET } from '@/lib/services/splitstep/config';
-import { deleteVideoBlob } from '@/lib/services/splitstep/video-url';
-import { MATCH_DATA_BUCKET } from '@/lib/services/upload/storage.service';
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
+import { deleteVideoBlob } from "@/lib/services/splitstep/video-url";
+import { MATCH_DATA_BUCKET } from "@/lib/services/upload/storage.service";
 
 /**
  * Remove every stored object belonging to a set of matches.
@@ -26,7 +26,7 @@ export async function purgeMatchStorage(
   supabase: SupabaseClient,
   matchIds: string[],
   /** Prefixes the logs, so a stranded object says which path left it. */
-  label = 'match delete'
+  label = "match delete",
 ): Promise<void> {
   if (matchIds.length === 0) return;
 
@@ -37,16 +37,16 @@ export async function purgeMatchStorage(
   // both cleanups silently do nothing and the rows are deleted anyway — a
   // permanent multi-GB leak whose only trace would otherwise be its absence.
   const { data: jobs, error: jobsError } = await supabase
-    .from('processing_jobs')
-    .select('video_object_key, trimmed_object_key, results_object_key')
-    .in('match_id', matchIds);
+    .from("processing_jobs")
+    .select("video_object_key, trimmed_object_key, results_object_key")
+    .in("match_id", matchIds);
 
   if (jobsError) {
     console.error(
       `[${label}] could not read storage keys for ${matchIds.length} match(es) — ` +
         `video and results will be stranded, recover with ` +
         `scripts/cleanup-orphan-storage.ts:`,
-      jobsError.message
+      jobsError.message,
     );
   }
 
@@ -74,12 +74,12 @@ export async function purgeMatchStorage(
                 j.video_object_key as string | null,
                 j.trimmed_object_key as string | null,
               ])
-              .filter((k): k is string => Boolean(k))
+              .filter((k): k is string => Boolean(k)),
           ),
         ];
 
         const removed = await Promise.all(
-          blobNames.map((blobName) => deleteVideoBlob({ blobName }))
+          blobNames.map((blobName) => deleteVideoBlob({ blobName })),
         );
 
         const count = removed.filter((r) => r.deleted).length;
@@ -107,7 +107,7 @@ export async function purgeMatchStorage(
           if (resultsError) {
             console.error(
               `[${label}] results cleanup failed for ${RESULTS_BUCKET}:`,
-              resultsError.message
+              resultsError.message,
             );
           }
         }
@@ -122,12 +122,15 @@ export async function purgeMatchStorage(
         //    one bucket for these, so it is named directly rather than read from
         //    a row.
         const { data: files, error: filesError } = await supabase
-          .from('match_files')
-          .select('storage_path')
-          .in('match_id', matchIds);
+          .from("match_files")
+          .select("storage_path")
+          .in("match_id", matchIds);
 
         if (filesError) {
-          console.error(`[${label}] could not read match_files:`, filesError.message);
+          console.error(
+            `[${label}] could not read match_files:`,
+            filesError.message,
+          );
           return;
         }
 
@@ -143,7 +146,7 @@ export async function purgeMatchStorage(
           if (storageError) {
             console.error(
               `[${label}] storage cleanup failed for ${MATCH_DATA_BUCKET}:`,
-              storageError.message
+              storageError.message,
             );
           }
         }

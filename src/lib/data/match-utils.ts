@@ -54,9 +54,10 @@ export function shortName(name: string, maxLen = 14): string {
 /**
  * Format duration in minutes to "XHR YMIN" format
  */
-export function formatDuration(
-  minutes: number
-): { hours: number; mins: number } {
+export function formatDuration(minutes: number): {
+  hours: number;
+  mins: number;
+} {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   return { hours, mins };
@@ -81,9 +82,19 @@ export function formatPlayerStyle(
   }
 
   const b = backhand?.trim().toLowerCase();
-  if (b === "one-handed" || b === "one handed" || b === "1-handed" || b === "1 handed") {
+  if (
+    b === "one-handed" ||
+    b === "one handed" ||
+    b === "1-handed" ||
+    b === "1 handed"
+  ) {
     parts.push("1-HANDED BACKHAND");
-  } else if (b === "two-handed" || b === "two handed" || b === "2-handed" || b === "2 handed") {
+  } else if (
+    b === "two-handed" ||
+    b === "two handed" ||
+    b === "2-handed" ||
+    b === "2 handed"
+  ) {
     parts.push("2-HANDED BACKHAND");
   }
 
@@ -94,7 +105,9 @@ export function formatPlayerStyle(
  * Map a match's raw `result` / `matchContext` string into the uppercase eyebrow
  * label shown in the scoreboard rail ("FINAL", "UNFINISHED", etc.).
  */
-export function formatScoreboardStatus(matchContext: string | undefined): string {
+export function formatScoreboardStatus(
+  matchContext: string | undefined,
+): string {
   if (!matchContext) return "FINAL";
   const c = matchContext.toLowerCase();
   if (c.includes("unfinished")) return "UNFINISHED";

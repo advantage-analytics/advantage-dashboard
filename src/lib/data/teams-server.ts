@@ -38,7 +38,7 @@ export interface SeatUsage {
  * a row-returning function comes back as an array of one.
  */
 export async function getProgramSeatUsage(
-  programId: string
+  programId: string,
 ): Promise<SeatUsage> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("program_seat_usage", {
@@ -65,7 +65,7 @@ export async function getProgramSeatUsage(
  */
 export async function getProgramUsagePending(
   programId: string,
-  billingMonth: string
+  billingMonth: string,
 ): Promise<number> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("program_usage_pending", {
@@ -91,7 +91,7 @@ export async function getProgramUsagePending(
  * than carried on the workspace because nothing else in the chrome draws it.
  */
 export async function listTeamsForViewer(
-  available: readonly Workspace[]
+  available: readonly Workspace[],
 ): Promise<TeamListRow[]> {
   const teams = available.filter((workspace) => workspace.kind === "team");
   if (teams.length === 0) return [];
@@ -105,9 +105,9 @@ export async function listTeamsForViewer(
   ]);
 
   const crests = new Map<string, string | null>(
-    ((crestResult.data ?? []) as { id: string; crest_path: string | null }[]).map(
-      (row) => [row.id, row.crest_path]
-    )
+    (
+      (crestResult.data ?? []) as { id: string; crest_path: string | null }[]
+    ).map((row) => [row.id, row.crest_path]),
   );
 
   return teams.map((workspace, index) => ({
@@ -130,7 +130,9 @@ export const PROGRAM_CRESTS_BUCKET = "program-crests";
  * function of the key, so the row holds the key and nothing else has to be
  * rewritten if the project or bucket ever moves.
  */
-export async function crestUrl(crestPath: string | null): Promise<string | null> {
+export async function crestUrl(
+  crestPath: string | null,
+): Promise<string | null> {
   if (!crestPath) return null;
   const supabase = await createClient();
   const { data } = supabase.storage

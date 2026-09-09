@@ -19,7 +19,8 @@ import type { EventSite } from "@/lib/schedule/types";
 export type Step = "provider" | "file" | "trim" | "match";
 
 /** Where a pre-filled value came from, for the "from …" provenance tag. */
-export type ValueSource = "file" | "export" | "event" | "profile" | "history" | "roster" | "new";
+export type ValueSource =
+  "file" | "export" | "event" | "profile" | "history" | "roster" | "new";
 
 /** Form data structure for match details */
 export interface FormData {
@@ -213,7 +214,7 @@ export const DEFAULT_FORM_DATA: FormData = {
   initialTopPlayerIsPlayer1: undefined,
   fixedCamera: undefined,
   videoStartSeconds: undefined,
-  videoEndSeconds: undefined
+  videoEndSeconds: undefined,
 };
 
 /**
@@ -231,30 +232,32 @@ export const STEP_ORDER_BY_KIND: Record<ProviderKind, Step[]> = {
 };
 
 /** Step configuration for titles and descriptions */
-export const STEP_CONFIG: Record<Step, { title: string; description: string }> = {
-  provider: {
-    title: "Where this match lives, and what it's made from.",
-    description:
-      "Three facts before the file. Once we know whose match it is, the schedule fills the rest."
-  },
-  // The import copy; the video copy is the processing override below.
-  file: {
-    title: "The export.",
-    description:
-      "The XLSX the app shares. Its numbers are already computed — we read them, nothing is processed."
-  },
-  // Only a processing provider reaches this step, so there is no import copy.
-  trim: {
-    title: "Trim to the first serve.",
-    description:
-      "Start at the first point, end at the last. The window has to match the score you enter next."
-  },
-  // The import copy; the video copy is the processing override below.
-  match: {
-    title: "Score and context.",
-    description: "Read from the export. Change anything that's wrong — the file won't be."
-  }
-};
+export const STEP_CONFIG: Record<Step, { title: string; description: string }> =
+  {
+    provider: {
+      title: "Where this match lives, and what it's made from.",
+      description:
+        "Three facts before the file. Once we know whose match it is, the schedule fills the rest.",
+    },
+    // The import copy; the video copy is the processing override below.
+    file: {
+      title: "The export.",
+      description:
+        "The XLSX the app shares. Its numbers are already computed — we read them, nothing is processed.",
+    },
+    // Only a processing provider reaches this step, so there is no import copy.
+    trim: {
+      title: "Trim to the first serve.",
+      description:
+        "Start at the first point, end at the last. The window has to match the score you enter next.",
+    },
+    // The import copy; the video copy is the processing override below.
+    match: {
+      title: "Score and context.",
+      description:
+        "Read from the export. Change anything that's wrong — the file won't be.",
+    },
+  };
 
 /**
  * Field-wise overrides for processing providers, merged over STEP_CONFIG.
@@ -268,12 +271,13 @@ export const STEP_CONFIG_PROCESSING: Partial<
   file: {
     title: "The file.",
     description:
-      "One full match from one camera. Leave the warm-up in — you'll trim to the first serve next."
+      "One full match from one camera. Leave the warm-up in — you'll trim to the first serve next.",
   },
   match: {
     title: "Score and context.",
-    description: "The score is the one thing the video can't tell us. The rest fills what it can."
-  }
+    description:
+      "The score is the one thing the video can't tell us. The rest fills what it can.",
+  },
 };
 
 /** Continue-button label per step. */

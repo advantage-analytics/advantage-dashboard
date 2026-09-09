@@ -3,7 +3,7 @@
 Date: 2026-09-01
 Status: approved 2026-09-01; implemented on `claude/delete-cjgimena-email-d017fe`
 Branch: `claude/delete-cjgimena-email-d017fe`
-Reviewed against: the *Supabase Postgres Best Practices* skill
+Reviewed against: the _Supabase Postgres Best Practices_ skill
 (`supabase:supabase-postgres-best-practices`, rules `security-privileges`,
 `security-rls-performance`, `security-rls-basics`, `schema-constraints`,
 `schema-foreign-key-indexes`, `lock-short-transactions`,
@@ -27,11 +27,11 @@ Deleting `auth.users` cascades into `public.users`, and three tables point at
 `users` with `ON DELETE SET NULL` or `CASCADE` in ways the rest of the schema
 does not allow:
 
-| Column | FK action | What actually happens |
-|---|---|---|
-| `program_players.claimed_by_user_id` | SET NULL | Violates `program_players_claim_check`, which requires `claimed_by_user_id` and `claimed_at` to be null together. **This is the error you hit.** |
-| `match_files.uploaded_by` | CASCADE | Deletes the provider-file rows of every match, including ones the team is supposed to keep. |
-| `matches.created_by`, `processing_jobs.created_by`, `processing_usage.created_by` | NO ACTION | Refuse the delete while any row remains. `deleteAccount()` clears them by deleting the matches — all of them. |
+| Column                                                                            | FK action | What actually happens                                                                                                                            |
+| --------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `program_players.claimed_by_user_id`                                              | SET NULL  | Violates `program_players_claim_check`, which requires `claimed_by_user_id` and `claimed_at` to be null together. **This is the error you hit.** |
+| `match_files.uploaded_by`                                                         | CASCADE   | Deletes the provider-file rows of every match, including ones the team is supposed to keep.                                                      |
+| `matches.created_by`, `processing_jobs.created_by`, `processing_usage.created_by` | NO ACTION | Refuse the delete while any row remains. `deleteAccount()` clears them by deleting the matches — all of them.                                    |
 
 Verified against the live database on 2026-09-01. `supabase/migrations/`
 runs behind it and is not a schema source.
@@ -41,10 +41,10 @@ runs behind it and is not a schema source.
 1. **Retention is decided per match by `matches.program_id`.** A match can
    only be filed under a program by a current member
    (`matches_block_client_regraft`), and `program_id` can never change
-   afterwards. So "filed under the program" *is* "uploaded while on the team".
+   afterwards. So "filed under the program" _is_ "uploaded while on the team".
    No membership history, no `left_at`, no date arithmetic.
 2. **Re-point self-uploads to the profile, audit-logged.** A player's own
-   team upload carries their *login* id in `player1_id`, not their profile
+   team upload carries their _login_ id in `player1_id`, not their profile
    id (5 of the 15 live team matches). Once the login is gone, nothing links
    those rows to the coach-managed profile, so the deletion re-points
    `player1_id`/`player2_id` from the login id to the profile id, on that
@@ -66,12 +66,12 @@ runs behind it and is not a schema source.
 
 ## 1. Behaviour
 
-| Scenario | Program-filed matches | Personal matches | Roster profile | Seat |
-|---|---|---|---|---|
-| Deletes while on the team | Retained, re-pointed to profile, uploader cleared | Purged | Un-claimed → coach-managed | Released |
-| Removed/archived by a coach earlier, then deletes | Retained (they were filed while a member), re-pointed | Purged | Un-claimed (removal never un-claims; archive already hid it) | Already released |
-| Uploaded more after leaving, then deletes | n/a — cannot be filed under a program they are not in | Purged | — | — |
-| Still owns a program | **Refused** with "transfer ownership first" | — | — | — |
+| Scenario                                          | Program-filed matches                                 | Personal matches | Roster profile                                               | Seat             |
+| ------------------------------------------------- | ----------------------------------------------------- | ---------------- | ------------------------------------------------------------ | ---------------- |
+| Deletes while on the team                         | Retained, re-pointed to profile, uploader cleared     | Purged           | Un-claimed → coach-managed                                   | Released         |
+| Removed/archived by a coach earlier, then deletes | Retained (they were filed while a member), re-pointed | Purged           | Un-claimed (removal never un-claims; archive already hid it) | Already released |
+| Uploaded more after leaving, then deletes         | n/a — cannot be filed under a program they are not in | Purged           | —                                                            | —                |
+| Still owns a program                              | **Refused** with "transfer ownership first"           | —                | —                                                            | —                |
 
 "Retained" means: still visible to program members through the `matches`
 SELECT policy's program route, still counted for that roster row in team
@@ -91,7 +91,7 @@ its shape — row work first, login last, every step retryable — and becomes:
    pointed at anyone else (§4). One transaction. Refuses with `42501` while
    the caller owns a program; that error is surfaced as the page message.
 3. **Personal matches** — list `matches` with `created_by = user and
-   program_id is null` (admin client), `purgeMatchStorage()`, delete rows.
+program_id is null` (admin client), `purgeMatchStorage()`, delete rows.
    Unchanged from today except for the `program_id is null` filter.
 4. **Stragglers** — `processing_jobs` and `processing_usage` rows still
    carrying `created_by = user` (individual-ledger usage, jobs against
@@ -302,7 +302,7 @@ grant  execute on function public.release_my_account_from_programs() to authenti
 Notes the plan must carry:
 
 - **`matches_block_client_regraft` fires** (the caller is `authenticated`) and
-  *passes*: `program_id`/`event_entry_id` are untouched, and the new
+  _passes_: `program_id`/`event_entry_id` are untouched, and the new
   `player1_id` is a profile of the same program, which is the exact condition
   its UPDATE branch checks.
 - The audit row's `actor_user_id` is nulled by the FK when the login is
@@ -317,13 +317,13 @@ Notes the plan must carry:
 
 ## 5. Code changes
 
-| File | Change |
-|---|---|
-| `src/components/dashboard/settings/actions.ts` | `deleteAccount()`: sequence in §2; map `42501` from the RPC to the ownership sentence; personal-match query gains `.is("program_id", null)`; log the RPC's returned rows. The long doc comment gets a paragraph on retention and the second guardrail exception. |
-| `src/app/dashboard/settings/account/page.tsx` | Deletion sentence: personal matches, statistics and reports are removed; matches filed under a team stay with that team as a coach-managed profile. Owner box: computed from **every** workspace in `available`, not just `active`, and reads "Deletion is blocked until you transfer ownership." |
-| Row types | No `Db*` type in `src/lib/data/types.ts` declares these columns. Three narrow read types do — `api/splitstep/jobs/route.ts:142`, `services/splitstep/resubmit-job.ts:106`, `api/splitstep/jobs/[jobId]/resubmit/route.ts:78` — and each only compares `created_by` to the caller, so a null compares unequal and the code stays correct (a departed uploader's job can be resubmitted by nobody, which is the existing uploader-only rule). Widen them to `string \| null` so the type tells the truth. Insert payload types (`new-match-wizard/types.ts:146`, `services/upload/types.ts:91`) stay `string`: an insert always has an uploader. |
-| `docs/ui-revamp-guardrails.md` §2 | Second reviewed exception paragraph, dated, mirroring the merge one. |
-| `MAP.md` | No route added; nothing to regenerate. |
+| File                                           | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/components/dashboard/settings/actions.ts` | `deleteAccount()`: sequence in §2; map `42501` from the RPC to the ownership sentence; personal-match query gains `.is("program_id", null)`; log the RPC's returned rows. The long doc comment gets a paragraph on retention and the second guardrail exception.                                                                                                                                                                                                                                                                                                                                                                               |
+| `src/app/dashboard/settings/account/page.tsx`  | Deletion sentence: personal matches, statistics and reports are removed; matches filed under a team stay with that team as a coach-managed profile. Owner box: computed from **every** workspace in `available`, not just `active`, and reads "Deletion is blocked until you transfer ownership."                                                                                                                                                                                                                                                                                                                                              |
+| Row types                                      | No `Db*` type in `src/lib/data/types.ts` declares these columns. Three narrow read types do — `api/splitstep/jobs/route.ts:142`, `services/splitstep/resubmit-job.ts:106`, `api/splitstep/jobs/[jobId]/resubmit/route.ts:78` — and each only compares `created_by` to the caller, so a null compares unequal and the code stays correct (a departed uploader's job can be resubmitted by nobody, which is the existing uploader-only rule). Widen them to `string \| null` so the type tells the truth. Insert payload types (`new-match-wizard/types.ts:146`, `services/upload/types.ts:91`) stay `string`: an insert always has an uploader. |
+| `docs/ui-revamp-guardrails.md` §2              | Second reviewed exception paragraph, dated, mirroring the merge one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `MAP.md`                                       | No route added; nothing to regenerate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 Readers already tolerate a null uploader on program matches:
 `match-detail-server.ts` returns no "uploaded by" label when `created_by`
@@ -334,13 +334,13 @@ keeps them. That last one is the one visible change and is accepted.
 
 ## 6. Error handling
 
-| Failure | User sees | State |
-|---|---|---|
-| Owns a program | The ownership sentence, inline | Nothing changed |
-| RPC fails otherwise | "We couldn't release your team data, so nothing was deleted. Try again." | Nothing changed |
-| Storage purge partial | Nothing (best-effort, logged; `scripts/cleanup-orphan-storage.ts` recovers) | As today |
-| Personal match delete fails | Existing message | Programs released; personal data intact; retry safe |
-| Auth delete fails | Existing "contact support" message | Everything but the login gone; retry safe |
+| Failure                     | User sees                                                                   | State                                               |
+| --------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------- |
+| Owns a program              | The ownership sentence, inline                                              | Nothing changed                                     |
+| RPC fails otherwise         | "We couldn't release your team data, so nothing was deleted. Try again."    | Nothing changed                                     |
+| Storage purge partial       | Nothing (best-effort, logged; `scripts/cleanup-orphan-storage.ts` recovers) | As today                                            |
+| Personal match delete fails | Existing message                                                            | Programs released; personal data intact; retry safe |
+| Auth delete fails           | Existing "contact support" message                                          | Everything but the login gone; retry safe           |
 
 ## 7. Testing
 
@@ -410,16 +410,16 @@ personal match.
 
 ## 9. Postgres best-practices review
 
-| Rule | How this design meets it |
-|---|---|
+| Rule                                                                                                                                                                                   | How this design meets it                                                                                                                                                                                          |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `security-rls-performance` — security definer functions must check the caller's identity inside, run with `search_path = ''`, and not be executable by roles that should not call them | No parameters; subject is `auth.uid()`; `28000` when absent; `search_path = ''` with every name schema-qualified; `revoke … from public, anon`, granted to `authenticated` only, matching `accept_program_invite` |
-| `security-privileges` — least privilege | The server action calls the RPC with the *user's* client; the admin client is used only where it was already used (storage purge, personal rows, auth delete) |
-| `security-rls-basics` | No new table, no policy change; existing policies keep filtering on the columns being nulled, which is the intended outcome (nobody but service role reaches a departed uploader's rows) |
-| `schema-constraints` — no `ADD CONSTRAINT IF NOT EXISTS`; guard DDL | FK swap wrapped in a `do` block keyed on `confdeltype`; `drop trigger if exists`; `create index if not exists`; `drop not null` is idempotent |
-| `schema-foreign-key-indexes` — index FK columns, especially those hit by referential actions | `program_players_claimed_by_idx` added (partial, non-null); every other column the function or the SET NULL actions filter on already has an index (listed in §4) |
-| `query-partial-indexes` | The new index is partial on `claimed_by_user_id is not null`, the only shape any query asks for |
-| `lock-short-transactions` | One function, no external calls, a handful of row updates |
-| `lock-deadlock-prevention` | Programs iterated in `id` order; fixed statement order within each; no `select … for update` needed because every write is keyed on the caller's own id |
+| `security-privileges` — least privilege                                                                                                                                                | The server action calls the RPC with the _user's_ client; the admin client is used only where it was already used (storage purge, personal rows, auth delete)                                                     |
+| `security-rls-basics`                                                                                                                                                                  | No new table, no policy change; existing policies keep filtering on the columns being nulled, which is the intended outcome (nobody but service role reaches a departed uploader's rows)                          |
+| `schema-constraints` — no `ADD CONSTRAINT IF NOT EXISTS`; guard DDL                                                                                                                    | FK swap wrapped in a `do` block keyed on `confdeltype`; `drop trigger if exists`; `create index if not exists`; `drop not null` is idempotent                                                                     |
+| `schema-foreign-key-indexes` — index FK columns, especially those hit by referential actions                                                                                           | `program_players_claimed_by_idx` added (partial, non-null); every other column the function or the SET NULL actions filter on already has an index (listed in §4)                                                 |
+| `query-partial-indexes`                                                                                                                                                                | The new index is partial on `claimed_by_user_id is not null`, the only shape any query asks for                                                                                                                   |
+| `lock-short-transactions`                                                                                                                                                              | One function, no external calls, a handful of row updates                                                                                                                                                         |
+| `lock-deadlock-prevention`                                                                                                                                                             | Programs iterated in `id` order; fixed statement order within each; no `select … for update` needed because every write is keyed on the caller's own id                                                           |
 
 ## 10. Open risks
 

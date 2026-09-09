@@ -53,7 +53,9 @@ export async function GET(req: NextRequest) {
       // `intent` is part of the URL and therefore part of the cache key, so the
       // full and the redacted answer to the same term can never be served for
       // each other.
-      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600" },
-    }
+      headers: {
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600",
+      },
+    },
   );
 }

@@ -36,19 +36,31 @@ export function InsightStatChip({
   // A zero delta is treated as "no trend" — we render value-only rather than a neutral
   // "→0", which next to the value reads as a drop to zero.
   const hasTrend = typeof change === "number" && change !== 0;
-  const isGood = lowerIsBetter ? (change as number) < 0 : (change as number) > 0;
+  const isGood = lowerIsBetter
+    ? (change as number) < 0
+    : (change as number) > 0;
   const trendColor = isGood ? "var(--viz-good)" : "var(--viz-bad)";
   const arrow = (change as number) > 0 ? "↑" : "↓";
   const sign = (change as number) > 0 ? "+" : "";
 
   return (
-    <span className={cn("inline-flex items-baseline gap-[7px] leading-none", className)}>
-      <span className="whitespace-nowrap text-[9px] font-normal uppercase tracking-[2.5px] text-[var(--ink-400)]">
+    <span
+      className={cn(
+        "inline-flex items-baseline gap-[7px] leading-none",
+        className,
+      )}
+    >
+      <span className="text-[9px] font-normal tracking-[2.5px] whitespace-nowrap text-[var(--ink-400)] uppercase">
         {label}
       </span>
-      <span className="tabular text-[12px] font-normal text-[var(--ink-900)]">{value}</span>
+      <span className="tabular text-[12px] font-normal text-[var(--ink-900)]">
+        {value}
+      </span>
       {hasTrend && (
-        <span className="tabular text-[10px] font-medium" style={{ color: trendColor }}>
+        <span
+          className="tabular text-[10px] font-medium"
+          style={{ color: trendColor }}
+        >
           {arrow}
           {sign}
           {change}

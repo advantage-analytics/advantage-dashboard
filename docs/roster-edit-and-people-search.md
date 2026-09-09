@@ -11,7 +11,7 @@
 >
 > **Superseded in part (2026-08-25) — Plan 1 is built.** T1 shipped on
 > `claude/roster-edit-player`. One §1 decision did not survive review: the
-> *"Archived rows are editable"* risk below chose to mitigate in TypeScript and write no
+> _"Archived rows are editable"_ risk below chose to mitigate in TypeScript and write no
 > migration, on the premise that the write was "reachable only from a stale dialog".
 > `rls-boundary-reviewer` disproved that premise — `update_program_player` is
 > `security definer` and granted to `authenticated`, so any staff session can call it
@@ -64,8 +64,8 @@ both verified against source:
    coalesce(pp.email, u.email),
    coalesce(pp.class_year, u.class),
    ```
-   So for a claimed player with no profile email, `member.email` is their *login
-   address*. Seeding from it and saving writes that personal address into
+   So for a claimed player with no profile email, `member.email` is their _login
+   address_. Seeding from it and saving writes that personal address into
    `program_players.email` — a value the coach never typed, which can also trip the
    partial unique index `program_players_email_key`.
 
@@ -104,12 +104,12 @@ with all five params explicit → map errors by SQLSTATE.
 Error mapping (the existing four actions read `error.message` only; that is wrong
 here because the unique index can fire underneath the RPC):
 
-| code | handling |
-|---|---|
-| `42501`, `22023` | pass `error.message` through — the RPC raises human sentences |
-| `23505` | **replace**: "Somebody else on this roster already uses that email address." Never pass the raw constraint string |
-| `28000` | replace: "Your session expired. Sign in again." |
-| else | existing house fallback |
+| code             | handling                                                                                                          |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `42501`, `22023` | pass `error.message` through — the RPC raises human sentences                                                     |
+| `23505`          | **replace**: "Somebody else on this roster already uses that email address." Never pass the raw constraint string |
+| `28000`          | replace: "Your session expired. Sign in again."                                                                   |
+| else             | existing house fallback                                                                                           |
 
 Revalidate `ROSTER_PATH` + `TEAM_HOME_PATH`, plus
 `revalidatePath("/dashboard/team/roster/[playerId]", "page")` — that page renders
@@ -132,7 +132,7 @@ otherwise the coach is told "#3 is already held by Maya Chen" about Maya Chen's 
 current spot.
 
 `add-player-dialog.tsx`'s diff must be deletions plus imports plus one call. Its
-`created`/`formKey` machinery stays — that computes *which id to exclude*, which is
+`created`/`formKey` machinery stays — that computes _which id to exclude_, which is
 add-specific, and its comment documents a silent-duplicate bug it exists to prevent.
 
 Extract the leaves, not the form: a shared `PlayerForm` with `mode="add"|"edit"` is
@@ -186,6 +186,7 @@ provably stale and `revalidatePath` cannot help from the client.
 ```bash
 npx tsc --noEmit && npm run lint && npm test
 ```
+
 Lint holds at its pre-existing warnings, 0 errors. No route added, so `MAP.md` stays
 valid.
 
@@ -194,6 +195,7 @@ the Supabase MCP — CLAUDE.md is explicit that `supabase/migrations/` runs behi
 live database.
 
 Click-through as owner/coach on a team workspace:
+
 1. Edit a player with a **two-word surname** — confirm First/Last split correctly.
 2. Edit a **claimed player with no profile email** — the email field must be
    **empty**, not their login address. This is the correction above; getting it wrong
@@ -205,9 +207,9 @@ Click-through as owner/coach on a team workspace:
 6. Enter an email another player has → mapped sentence, not the raw constraint string.
 7. Stale-open: remove the player in a second tab, then Save → terminal "no longer on
    this roster". Then verify in SQL that the archived row is **unchanged**.
-   *(Superseded: as built, the RPC filters `archived_at` itself — migration
+   _(Superseded: as built, the RPC filters `archived_at` itself — migration
    `20260825131815`. The pre-check is no longer the only thing stopping the write; it is
-   what turns the database's silent refusal into a sentence the coach can read.)*
+   what turns the database's silent refusal into a sentence the coach can read.)_
 8. As a player viewer: no meatball at all.
 9. Audit: `select action, subject_id from program_audit_log where action = 'player.updated'`.
 
@@ -219,8 +221,8 @@ Click-through as owner/coach on a team workspace:
   original reasoning is kept because the mistake in it is the instructive part: "The RPC
   filters `merged_into_id` but not `archived_at`. Reachable only from a stale dialog, but
   it is a successful invisible write, not a no-op. The pre-flight read is the mitigation
-  and is TOCTOU — say so in the comment rather than implying it is a lock." *Reachable
-  only from a stale dialog* was the false step: the function is `security definer` and
+  and is TOCTOU — say so in the comment rather than implying it is a lock." _Reachable
+  only from a stale dialog_ was the false step: the function is `security definer` and
   granted to `authenticated`, so a staff session can call it directly and never touch the
   pre-flight read at all. A guard a caller can skip is not a guard. The TOCTOU point
   still holds for what that read does now — it is what produces the friendly "no longer
@@ -239,7 +241,7 @@ Click-through as owner/coach on a team workspace:
 
 ## 2 · Make people findable in the command palette
 
-*Not yet queued as a task.*
+_Not yet queued as a task._
 
 ### Context
 
@@ -250,13 +252,13 @@ the research is worth recording so it is not re-litigated:
   sort), `4c` (pills + sortable header + bulk select), `5a` (tabs + "Filter roster" +
   "Lineup order") — and **dropped all of it** from the finalized `9a`–`9d` flow.
 - There is a dated written decision in `src/components/dashboard/team/invite-target-picker.tsx:27-31`:
-  *"A college roster is nine to fifteen rows. A filter box would be one more thing to tab
-  past on a list that fits on screen. If a program ever has fifty, add it then."*
+  _"A college roster is nine to fifteen rows. A filter box would be one more thing to tab
+  past on a list that fits on screen. If a program ever has fifty, add it then."_
 - A roster is genuinely ~10–30 rows. Nothing in the app paginates or virtualises it, and
   the sibling opponent roster has no filter either.
 
 **But the question exposed a real gap.** The header palette's tooltip advertises
-*"Matches, players, help"* and it queries only the `matches` table
+_"Matches, players, help"_ and it queries only the `matches` table
 (`search-command-palette.tsx:182-191`). So:
 
 - a player is findable **only if they already appear on a match row**;
@@ -292,7 +294,7 @@ A SQL `normalized_person_name(p_first, p_last)` does exist
 cleaner single-query RPC — worth doing **only** if the superset proves too large in
 practice. Do not add it speculatively.
 
-**2. Scope to the active workspace.** RLS returns players from *every* program the user
+**2. Scope to the active workspace.** RLS returns players from _every_ program the user
 belongs to, but `/dashboard/team/roster/[playerId]` is team-workspace-only and redirects
 otherwise. Read `useWorkspace()` and render the PLAYERS group only when
 `active.kind === "team"`, filtering to `active.id`. Without this, a coach who staffs two
@@ -325,6 +327,7 @@ npx tsc --noEmit && npm run lint && npm test
 ```
 
 Click-through, on a team workspace:
+
 1. ⌘K, type a surname → a **PLAYERS** group appears above MATCHES; Enter opens
    `/dashboard/team/roster/{id}`, **not** a match list.
 2. **The case that is broken today**: search a coach-added player with zero matches. They
@@ -373,13 +376,13 @@ roster?" and the answer is no, at this scale:
   "Lineup order" sort) — and dropped all of it from the finalized `9a`–`9d` flow. §07's
   intro lists what `9a` inherits from `5a`; the filter row is not on that list.
 - `src/components/dashboard/team/invite-target-picker.tsx:27-31` already records the same
-  call: *"A college roster is nine to fifteen rows. A filter box would be one more thing
-  to tab past on a list that fits on screen. If a program ever has fifty, add it then."*
+  call: _"A college roster is nine to fifteen rows. A filter box would be one more thing
+  to tab past on a list that fits on screen. If a program ever has fifty, add it then."_
 - A roster is genuinely ~10–30 rows — players, staff seats and pending invites in one
   list. Nothing in the app paginates or virtualises it, and the sibling opponent roster
   (the same table, via `pooled_roster`) has no filter either.
 
 **Revisit when a program approaches ~50 rows.** If filtering does return, the design's own
-answer was *workflow-state tabs* (All / Needs review / Processing / Invited with live
+answer was _workflow-state tabs_ (All / Needs review / Processing / Invited with live
 counts) rather than a name search — triaging work, not finding people. Finding people is
 Plan 2, and it belongs in the command palette rather than on this one page.

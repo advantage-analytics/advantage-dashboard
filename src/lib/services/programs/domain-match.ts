@@ -50,19 +50,68 @@
 
 /** Never an institutional match. Routes to review; never a rejection on its own. */
 const FREEMAIL = new Set([
-  'gmail.com', 'googlemail.com', 'outlook.com', 'outlook.co.uk', 'hotmail.com',
-  'hotmail.co.uk', 'live.com', 'msn.com', 'yahoo.com', 'yahoo.co.uk', 'ymail.com',
-  'rocketmail.com', 'icloud.com', 'me.com', 'mac.com', 'proton.me',
-  'protonmail.com', 'pm.me', 'tuta.io', 'tutanota.com', 'aol.com', 'aim.com',
-  'gmx.com', 'gmx.net', 'web.de', 'yandex.com', 'yandex.ru', 'qq.com',
-  'mail.ru', 'mail.com', 'zoho.com', 'fastmail.com', 'hey.com', 'duck.com',
-  'mailinator.com', 'comcast.net', 'verizon.net', 'att.net', 'sbcglobal.net',
-  'bellsouth.net', 'cox.net', 'charter.net', 'earthlink.net', 'juno.com',
+  "gmail.com",
+  "googlemail.com",
+  "outlook.com",
+  "outlook.co.uk",
+  "hotmail.com",
+  "hotmail.co.uk",
+  "live.com",
+  "msn.com",
+  "yahoo.com",
+  "yahoo.co.uk",
+  "ymail.com",
+  "rocketmail.com",
+  "icloud.com",
+  "me.com",
+  "mac.com",
+  "proton.me",
+  "protonmail.com",
+  "pm.me",
+  "tuta.io",
+  "tutanota.com",
+  "aol.com",
+  "aim.com",
+  "gmx.com",
+  "gmx.net",
+  "web.de",
+  "yandex.com",
+  "yandex.ru",
+  "qq.com",
+  "mail.ru",
+  "mail.com",
+  "zoho.com",
+  "fastmail.com",
+  "hey.com",
+  "duck.com",
+  "mailinator.com",
+  "comcast.net",
+  "verizon.net",
+  "att.net",
+  "sbcglobal.net",
+  "bellsouth.net",
+  "cox.net",
+  "charter.net",
+  "earthlink.net",
+  "juno.com",
 ]);
 
 const MULTI_SUFFIX = new Set([
-  'ac.uk', 'sch.uk', 'co.uk', 'org.uk', 'edu.au', 'com.au', 'edu.mx',
-  'edu.co', 'edu.br', 'ac.jp', 'edu.sg', 'edu.ph', 'co.nz', 'ac.nz', 'edu.pr',
+  "ac.uk",
+  "sch.uk",
+  "co.uk",
+  "org.uk",
+  "edu.au",
+  "com.au",
+  "edu.mx",
+  "edu.co",
+  "edu.br",
+  "ac.jp",
+  "edu.sg",
+  "edu.ph",
+  "co.nz",
+  "ac.nz",
+  "edu.pr",
 ]);
 
 /**
@@ -71,8 +120,10 @@ const MULTI_SUFFIX = new Set([
  * dataset contains both. Non-academic domains can match; they never skip review.
  */
 const ACADEMIC_SUFFIX = new Set<string>([
-  'edu',
-  ...[...MULTI_SUFFIX].filter((s) => s.startsWith('ac.') || s.startsWith('edu.')),
+  "edu",
+  ...[...MULTI_SUFFIX].filter(
+    (s) => s.startsWith("ac.") || s.startsWith("edu."),
+  ),
 ]);
 
 /**
@@ -97,7 +148,7 @@ const ACADEMIC_SUFFIX = new Set<string>([
  * UCLA address typed on Michigan's form looked approved.
  */
 export const NOTE_REVIEW =
-  'A personal address always needs a manual check. A school address is usually quicker.';
+  "A personal address always needs a manual check. A school address is usually quicker.";
 
 export const NOTE_CONFIRM =
   "We'll send a link here to confirm it's yours. Unless it's on the program's " +
@@ -113,44 +164,44 @@ export const NOTE_CONFIRM =
  */
 function isValidHost(host: string): boolean {
   if (!host || host.length > 253) return false;
-  const labels = host.split('.');
+  const labels = host.split(".");
   if (labels.length < 2) return false;
   return labels.every(
     (l) =>
       l.length >= 1 &&
       l.length <= 63 &&
       /^[a-z0-9-]+$/.test(l) &&
-      !l.startsWith('-') &&
-      !l.endsWith('-')
+      !l.startsWith("-") &&
+      !l.endsWith("-"),
   );
 }
 
 /** Lowercase, trim, drop trailing dots. Empty string if not a valid host. */
 export function normalizeHost(domain: string | null | undefined): string {
-  if (typeof domain !== 'string') return '';
+  if (typeof domain !== "string") return "";
   let d = domain.trim().toLowerCase();
-  while (d.endsWith('.')) d = d.slice(0, -1);
-  return isValidHost(d) ? d : '';
+  while (d.endsWith(".")) d = d.slice(0, -1);
+  return isValidHost(d) ? d : "";
 }
 
 /** `athletics.wisc.edu` → `wisc.edu`, with multi-label suffixes handled. */
 export function registrableDomain(domain: string | null | undefined): string {
   const d = normalizeHost(domain);
-  if (!d) return '';
-  const parts = d.split('.');
-  if (parts.length >= 3 && MULTI_SUFFIX.has(parts.slice(-2).join('.'))) {
-    return parts.slice(-3).join('.');
+  if (!d) return "";
+  const parts = d.split(".");
+  if (parts.length >= 3 && MULTI_SUFFIX.has(parts.slice(-2).join("."))) {
+    return parts.slice(-3).join(".");
   }
-  return parts.slice(-2).join('.');
+  return parts.slice(-2).join(".");
 }
 
 /** The domain part of an address, normalised. Empty unless exactly one address. */
 export function emailDomain(email: string | null | undefined): string {
-  if (typeof email !== 'string') return '';
+  if (typeof email !== "string") return "";
   const e = email.trim().toLowerCase();
-  if ((e.match(/@/g) ?? []).length !== 1 || /\s/.test(e)) return '';
-  const [local, host] = e.split('@');
-  if (!local) return '';
+  if ((e.match(/@/g) ?? []).length !== 1 || /\s/.test(e)) return "";
+  const [local, host] = e.split("@");
+  if (!local) return "";
   return normalizeHost(host);
 }
 
@@ -163,10 +214,10 @@ export function isFreemail(domain: string | null | undefined): boolean {
 export function isAcademic(domain: string | null | undefined): boolean {
   const d = normalizeHost(domain);
   if (!d) return false;
-  const parts = d.split('.');
+  const parts = d.split(".");
   return (
     ACADEMIC_SUFFIX.has(parts[parts.length - 1]) ||
-    ACADEMIC_SUFFIX.has(parts.slice(-2).join('.'))
+    ACADEMIC_SUFFIX.has(parts.slice(-2).join("."))
   );
 }
 
@@ -182,7 +233,7 @@ export function isAcademic(domain: string | null | undefined): boolean {
  */
 export function matchesListed(
   candidate: string | null | undefined,
-  listed: string | null | undefined
+  listed: string | null | undefined,
 ): boolean {
   const c = normalizeHost(candidate);
   const l = normalizeHost(listed);
@@ -193,16 +244,16 @@ export function matchesListed(
 /** `athletics_domains` arrives `;`-joined from CSV or as a `text[]` from Postgres. */
 function asList(value: string | string[] | null | undefined): string[] {
   if (value == null) return [];
-  const items = Array.isArray(value) ? value : String(value).split(';');
+  const items = Array.isArray(value) ? value : String(value).split(";");
   return items.map(normalizeHost).filter(Boolean);
 }
 
 /** Strict truthiness — anything unrecognised is false, so the guard fails closed. */
 function isTrue(value: boolean | string | number | null | undefined): boolean {
-  if (typeof value === 'boolean') return value;
+  if (typeof value === "boolean") return value;
   return (
-    typeof value === 'string' &&
-    ['true', 't', 'yes', '1'].includes(value.trim().toLowerCase())
+    typeof value === "string" &&
+    ["true", "t", "yes", "1"].includes(value.trim().toLowerCase())
   );
 }
 
@@ -235,7 +286,7 @@ export interface ClaimCheck {
 
 export function checkClaimEmail(
   email: string | null | undefined,
-  program: ClaimProgram
+  program: ClaimProgram,
 ): ClaimCheck {
   const domain = emailDomain(email);
   const registrable = registrableDomain(domain);
@@ -244,9 +295,9 @@ export function checkClaimEmail(
     domainMatched: boolean,
     matchedOn: string,
     skipsManualReview: boolean,
-    reason: string
+    reason: string,
   ): ClaimCheck => ({
-    email: typeof email === 'string' ? email.trim().toLowerCase() : '',
+    email: typeof email === "string" ? email.trim().toLowerCase() : "",
     domain,
     registrable,
     domainMatched,
@@ -261,22 +312,22 @@ export function checkClaimEmail(
     inlineNote: isFreemail(domain) ? NOTE_REVIEW : NOTE_CONFIRM,
   });
 
-  if (!domain) return out(false, '', false, 'malformed email address');
+  if (!domain) return out(false, "", false, "malformed email address");
 
   if (isFreemail(domain)) {
-    return out(false, '', false, 'personal email provider; routed to review');
+    return out(false, "", false, "personal email provider; routed to review");
   }
 
   const athletics = asList(program.athletics_domains);
   const primary = normalizeHost(program.primary_domain);
 
   if (!primary && athletics.length === 0) {
-    return out(false, '', false, 'no recorded domain for this program');
+    return out(false, "", false, "no recorded domain for this program");
   }
 
   // Athletics domains first — they are observed evidence, where a primary may
   // have been inferred from a subdomain and never seen directly.
-  let matchedOn = '';
+  let matchedOn = "";
   for (const listed of athletics) {
     if (matchesListed(domain, listed) || matchesListed(registrable, listed)) {
       matchedOn = listed;
@@ -290,7 +341,8 @@ export function checkClaimEmail(
   ) {
     matchedOn = primary;
   }
-  if (!matchedOn) return out(false, '', false, 'no domain match; routed to review');
+  if (!matchedOn)
+    return out(false, "", false, "no domain match; routed to review");
 
   // Matched. Whether that is specific enough to skip review is a separate
   // question, and for guards 1-3 the answer is precomputed per program.
@@ -300,7 +352,7 @@ export function checkClaimEmail(
       matchedOn,
       false,
       `domain matched (${matchedOn}) but this program is flagged for review — ` +
-        `shared, inferred, or non-academic domain`
+        `shared, inferred, or non-academic domain`,
     );
   }
 
@@ -311,7 +363,7 @@ export function checkClaimEmail(
       true,
       matchedOn,
       false,
-      `domain matched (${matchedOn}) but it is not an academic domain`
+      `domain matched (${matchedOn}) but it is not an academic domain`,
     );
   }
 

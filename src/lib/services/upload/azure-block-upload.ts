@@ -56,8 +56,8 @@ export interface BlockUploadOptions {
 /** Thrown when `signal` fires. Distinct so callers can tell it from a failure. */
 export class UploadAbortedError extends Error {
   constructor() {
-    super('Upload cancelled');
-    this.name = 'UploadAbortedError';
+    super("Upload cancelled");
+    this.name = "UploadAbortedError";
   }
 }
 
@@ -67,7 +67,7 @@ export class UploadAbortedError extends Error {
  * above — so the width never has to change with file size.
  */
 function blockIdFor(index: number): string {
-  return btoa(String(index).padStart(6, '0'));
+  return btoa(String(index).padStart(6, "0"));
 }
 
 /**
@@ -105,15 +105,15 @@ function put(params: {
     }
 
     const xhr = new XMLHttpRequest();
-    xhr.open('PUT', url, true);
+    xhr.open("PUT", url, true);
 
     for (const [name, value] of Object.entries(headers ?? {})) {
       xhr.setRequestHeader(name, value);
     }
 
     const onAbort = () => xhr.abort();
-    signal?.addEventListener('abort', onAbort, { once: true });
-    const done = () => signal?.removeEventListener('abort', onAbort);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    const done = () => signal?.removeEventListener("abort", onAbort);
 
     if (onProgress) {
       xhr.upload.onprogress = (e) => {
@@ -130,15 +130,15 @@ function put(params: {
       // Azure puts a machine-readable code in x-ms-error-code and prose in the
       // body. The code is the part worth surfacing: AuthenticationFailed on an
       // expired SAS, BlobNotFound, and so on.
-      const code = xhr.getResponseHeader('x-ms-error-code');
+      const code = xhr.getResponseHeader("x-ms-error-code");
       reject(
         Object.assign(
           new Error(
-            `Azure returned ${xhr.status}${code ? ` (${code})` : ''}` +
-              `${xhr.responseText ? `: ${xhr.responseText.slice(0, 300)}` : ''}`
+            `Azure returned ${xhr.status}${code ? ` (${code})` : ""}` +
+              `${xhr.responseText ? `: ${xhr.responseText.slice(0, 300)}` : ""}`,
           ),
-          { status: xhr.status }
-        )
+          { status: xhr.status },
+        ),
       );
     };
 
@@ -150,11 +150,11 @@ function put(params: {
       reject(
         Object.assign(
           new Error(
-            'Network error uploading to Azure. If this is a new storage ' +
-              'account, check the CORS rule on the blob service.'
+            "Network error uploading to Azure. If this is a new storage " +
+              "account, check the CORS rule on the blob service.",
           ),
-          { status: null }
-        )
+          { status: null },
+        ),
       );
     };
 
@@ -170,7 +170,7 @@ function put(params: {
 /** Retry wrapper. Backs off 1s then 2s. */
 async function putWithRetry(
   params: Parameters<typeof put>[0],
-  label: string
+  label: string,
 ): Promise<void> {
   for (let attempt = 1; ; attempt++) {
     try {
@@ -185,7 +185,7 @@ async function putWithRetry(
       if (!isRetriable(status) || attempt === MAX_ATTEMPTS_PER_BLOCK) throw err;
 
       console.warn(
-        `Retrying ${label} (attempt ${attempt + 1}/${MAX_ATTEMPTS_PER_BLOCK})`
+        `Retrying ${label} (attempt ${attempt + 1}/${MAX_ATTEMPTS_PER_BLOCK})`,
       );
       await new Promise((r) => setTimeout(r, attempt * 1000));
     }
@@ -229,7 +229,7 @@ export async function uploadFileInBlocks({
   onProgress,
 }: BlockUploadOptions): Promise<void> {
   if (file.size === 0) {
-    throw new Error('The selected file is empty.');
+    throw new Error("The selected file is empty.");
   }
 
   // Grow the block size rather than exceed the block ceiling. At 8 MiB the
@@ -237,7 +237,7 @@ export async function uploadFileInBlocks({
   // ever matters if that limit is raised.
   const blockSize = Math.max(
     AZURE_BLOCK_SIZE_BYTES,
-    Math.ceil(file.size / AZURE_MAX_BLOCKS)
+    Math.ceil(file.size / AZURE_MAX_BLOCKS),
   );
   const blockCount = Math.ceil(file.size / blockSize);
   const blockIds: string[] = [];
@@ -260,7 +260,7 @@ export async function uploadFileInBlocks({
         onProgress: (loadedInThisBlock) =>
           onProgress?.(start + loadedInThisBlock, file.size),
       },
-      `block ${index + 1}/${blockCount}`
+      `block ${index + 1}/${blockCount}`,
     );
 
     onProgress?.(end, file.size);
@@ -268,22 +268,22 @@ export async function uploadFileInBlocks({
 
   const blockList =
     '<?xml version="1.0" encoding="utf-8"?><BlockList>' +
-    blockIds.map((id) => `<Latest>${id}</Latest>`).join('') +
-    '</BlockList>';
+    blockIds.map((id) => `<Latest>${id}</Latest>`).join("") +
+    "</BlockList>";
 
   await putWithRetry(
     {
       url: `${uploadUrl}&comp=blocklist`,
       body: blockList,
       headers: {
-        'Content-Type': 'application/xml',
+        "Content-Type": "application/xml",
         // The one place the blob's own content type is set. Without it Azure
         // stores application/octet-stream, and the vendor fetching the file
         // sees a type that disagrees with the bytes.
-        'x-ms-blob-content-type': contentType || 'video/mp4',
+        "x-ms-blob-content-type": contentType || "video/mp4",
       },
       signal,
     },
-    'block list commit'
+    "block list commit",
   );
 }

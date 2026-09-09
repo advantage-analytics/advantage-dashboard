@@ -46,7 +46,8 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { playerId } = await params;
   const workspace = await getWorkspaceContext();
-  if (!workspace || workspace.active.kind !== "team") return { title: "Player" };
+  if (!workspace || workspace.active.kind !== "team")
+    return { title: "Player" };
   const profile = await getPlayerProfile(workspace.active.id, playerId);
   return { title: profile?.name ?? "Player" };
 }
@@ -143,8 +144,13 @@ export default async function PlayerProfilePage({
 
             <div className="grid items-start gap-4 lg:grid-cols-[1.9fr_1fr]">
               <div className="flex min-w-0 flex-col gap-4">
-                {profile.lastMatch && <LastMatchCard match={profile.lastMatch} />}
-                <MatchHistoryCard rows={profile.history} playerName={profile.name} />
+                {profile.lastMatch && (
+                  <LastMatchCard match={profile.lastMatch} />
+                )}
+                <MatchHistoryCard
+                  rows={profile.history}
+                  playerName={profile.name}
+                />
               </div>
               <div className="flex min-w-0 flex-col gap-4">
                 <LineHistoryCard lines={profile.lines} />

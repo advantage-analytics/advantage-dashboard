@@ -21,13 +21,13 @@ that is not merged.
 `emailRedirectTo: …/confirm?next=/dashboard`, so a new account lands on the
 dashboard directly.
 
-The one question set that exists — F2, *"How do you use Advantage?"* at
+The one question set that exists — F2, _"How do you use Advantage?"_ at
 `/claim` — is reachable from exactly two places:
 
-| Entry point | File |
-|---|---|
+| Entry point                       | File                                                     |
+| --------------------------------- | -------------------------------------------------------- |
 | Sidebar → "Create team workspace" | `src/components/dashboard/sidebar/workspace-row.tsx:177` |
-| Login page → "Bringing a team?" | `src/components/auth/login-form.tsx:183` |
+| Login page → "Bringing a team?"   | `src/components/auth/login-form.tsx:183`                 |
 
 So the persona question only fires for someone who has already decided to claim
 a program. That is the wrong shape, and §3 is about fixing it.
@@ -37,12 +37,12 @@ a program. That is the wrong shape, and §3 is about fixing it.
 ## 2. Personal versus team workspaces — settled, keep team-only
 
 **Only team workspaces are creatable, and that is correct.** A personal
-workspace is *derived*, not created: `personalWorkspace()`
+workspace is _derived_, not created: `personalWorkspace()`
 (`src/lib/workspace/active-workspace-server.ts:29`) builds one from the account,
 so exactly one always exists and no UI can make a second.
 
 The convention argument is that Slack, Linear, Notion and Vercel all work this
-way — you *have* a personal space by virtue of having an account, and you *add*
+way — you _have_ a personal space by virtue of having an account, and you _add_
 organisations. That is true but not the binding reason.
 
 **The binding reason is the usage ledger.** `processing_usage` keys an
@@ -56,7 +56,7 @@ double it. Both are billing defects, and neither is visible on screen.
 When someone asks for "another personal workspace" they almost always want
 separate contexts, which is a filter problem, not a container problem.
 
-Multiple *team* workspaces already work and are the real case: a coach at two
+Multiple _team_ workspaces already work and are the real case: a coach at two
 programs, or one who changes schools.
 
 ---
@@ -68,19 +68,19 @@ flow. Those are different events. Deciding you are a coach happens once, at
 first sign-in; claiming a program is an action taken later, possibly much later,
 possibly never.
 
-| Option | What it means | Cost |
-|---|---|---|
-| **A. Leave it** | Persona is only ever asked of people who claim | Everyone else is unclassified forever; the dashboard cannot adapt to a player vs a coach |
-| **B. First-run step after `/confirm`** | `next=/welcome` instead of `/dashboard`; ask persona once, then route | One new route; needs a skip path so it is never a wall |
-| **C. Ask lazily, in context** | No dedicated screen; infer from first meaningful action | No interruption, but the answer arrives too late to shape the first screen, which is the thing worth shaping |
+| Option                                 | What it means                                                         | Cost                                                                                                         |
+| -------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **A. Leave it**                        | Persona is only ever asked of people who claim                        | Everyone else is unclassified forever; the dashboard cannot adapt to a player vs a coach                     |
+| **B. First-run step after `/confirm`** | `next=/welcome` instead of `/dashboard`; ask persona once, then route | One new route; needs a skip path so it is never a wall                                                       |
+| **C. Ask lazily, in context**          | No dedicated screen; infer from first meaningful action               | No interruption, but the answer arrives too late to shape the first screen, which is the thing worth shaping |
 
 **Recommended: B**, with F2 reduced to routing only. The persona question moves
 to first sign-in and is answered once; `/claim` keeps just the program search.
 B is also the only option that makes §4 worth doing, because a persona nobody
 is asked for is a persona nobody can store.
 
-Whatever is chosen, F2's copy already promises *"You can change this in
-settings"* — so a settings control is part of the work, not a follow-up.
+Whatever is chosen, F2's copy already promises _"You can change this in
+settings"_ — so a settings control is part of the work, not a follow-up.
 
 ---
 
@@ -99,18 +99,18 @@ screen looking wrong.
 The `plan-role-split` branch (`69119d4`) is exactly the fix: it adds
 `users.plan` with a trigger blocking client writes, moves the webhook and
 checkout onto it, and makes `saveProfile` validate `role` against the persona
-list. Only its *migration file* is tracked on `collegiate-workspaces`; the app
+list. Only its _migration file_ is tracked on `collegiate-workspaces`; the app
 code is not. **Merging that branch is a hard prerequisite** for storing a
 persona anywhere near `users.role`.
 
 There are also already three role vocabularies, and a fourth should not be
 invented:
 
-| Vocabulary | Values | Means |
-|---|---|---|
-| `ProgramRole` (`workspace/types.ts:20`) | `owner` `coach` `staff` `player` | Standing *inside one program*, from `program_members.role` |
-| Setup form (`setup-form.tsx:10-16`) | `head_coach` `associate_coach` `assistant_coach` `player` `other` | Job title claimed at setup, stored on the claim |
-| `users.role` | `player` `coach` `parent` `academy` | Profile persona — and, today, `founder` for Pro |
+| Vocabulary                              | Values                                                            | Means                                                      |
+| --------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------- |
+| `ProgramRole` (`workspace/types.ts:20`) | `owner` `coach` `staff` `player`                                  | Standing _inside one program_, from `program_members.role` |
+| Setup form (`setup-form.tsx:10-16`)     | `head_coach` `associate_coach` `assistant_coach` `player` `other` | Job title claimed at setup, stored on the claim            |
+| `users.role`                            | `player` `coach` `parent` `academy`                               | Profile persona — and, today, `founder` for Pro            |
 
 The F2 answer belongs in the third once that column is safe to write.
 
@@ -142,7 +142,7 @@ Recommended, and small:
   reviewer cannot tell a player's request from a staff member's without reading
   the free-text note (`program_requests`, `kind='invite_request'`). Worth
   fixing; it changes the table and the admin queue.
-- Anything about the *team* onboarding after a claim settles — roster import,
+- Anything about the _team_ onboarding after a claim settles — roster import,
   invites, permissions. Only the pre-claim questions are covered here.
 - The objection window's settle step. Nothing moves `objection_window` to
   `approved` today, and nothing needs to, since both derive to an `active`

@@ -16,10 +16,16 @@
  * break point" asks what was at stake when it started.
  */
 
-import type { SplitStepRally } from './types';
+import type { SplitStepRally } from "./types";
 
 /** Rungs of a game. AD only appears when the vendor emits it, which it never has. */
-const LADDER: Record<string, number> = { '0': 0, '15': 1, '30': 2, '40': 3, AD: 4 };
+const LADDER: Record<string, number> = {
+  "0": 0,
+  "15": 1,
+  "30": 2,
+  "40": 3,
+  AD: 4,
+};
 
 export interface PressureFlags {
   isBreakPoint: boolean;
@@ -45,10 +51,10 @@ export interface PressureInput {
 function rungs(
   score: string | null,
   server: string,
-  returner: string
+  returner: string,
 ): Record<string, number> | null {
   if (!score) return null;
-  const parts = score.split('-');
+  const parts = score.split("-");
   if (parts.length !== 2) return null;
   const s = LADDER[parts[0].trim().toUpperCase()];
   const r = LADDER[parts[1].trim().toUpperCase()];
@@ -65,11 +71,7 @@ function rungs(
  * as neither player's break point would be the same failure this module exists
  * to fix, one level subtler.
  */
-function winsGame(
-  mine: number,
-  theirs: number,
-  adScoring: boolean
-): boolean {
+function winsGame(mine: number, theirs: number, adScoring: boolean): boolean {
   if (mine < 3) return false;
   if (mine > theirs) return true;
   return !adScoring && mine === 3 && theirs === 3;
@@ -105,7 +107,11 @@ export function pressureFor(input: PressureInput): PressureFlags {
   const returner = labels.find((l) => l !== server);
   if (!returner || labels.length !== 2) return none;
 
-  const before = rungs(rally.strokes[0]?.predPointScore ?? null, server, returner);
+  const before = rungs(
+    rally.strokes[0]?.predPointScore ?? null,
+    server,
+    returner,
+  );
   if (!before) return none;
 
   const setsToWin = Math.floor(bestOf / 2) + 1;

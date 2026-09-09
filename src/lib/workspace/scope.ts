@@ -37,7 +37,7 @@ export function scopeToWorkspace<Q>(
   query: Q,
   workspace: Pick<Workspace, "id" | "kind">,
   viewerId: string,
-  { column = "program_id", createdBy = "created_by" } = {}
+  { column = "program_id", createdBy = "created_by" } = {},
 ): Q {
   const q = query as unknown as Scopable;
   const scoped =

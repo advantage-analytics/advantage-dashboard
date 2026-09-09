@@ -2,7 +2,13 @@ import type { ReactNode } from "react";
 import type { AuthError, AuthErrorField } from "@/lib/auth/error-messages";
 
 /** The one error treatment in the set: 11px, --error, announced. */
-export function ErrorText({ id, children }: { id?: string; children: ReactNode }) {
+export function ErrorText({
+  id,
+  children,
+}: {
+  id?: string;
+  children: ReactNode;
+}) {
   return (
     <span id={id} role="alert" className="text-[11px] text-[var(--error)]">
       {children}

@@ -37,14 +37,14 @@ export default async function UsagePage() {
       ? getProgramUsage(
           workspace.active.id,
           billingMonth,
-          workspace.active.orgType
+          workspace.active.orgType,
         )
       : null,
   ]);
 
   const personalFraction = usageFraction(
     personal.usedSeconds,
-    personal.capSeconds
+    personal.capSeconds,
   );
 
   return (

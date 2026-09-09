@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { expect, test } from "@playwright/test";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import {
   ANON_KEY,
@@ -11,7 +11,7 @@ import {
   createLogins,
   deleteAuthUsers,
   runMarker,
-} from './fixtures/live-db';
+} from "./fixtures/live-db";
 
 /**
  * The claim flow's owner name, proven against the live database.
@@ -65,17 +65,17 @@ import {
 // Fixture — one login, one claimed college program it owns.
 // ---------------------------------------------------------------------------
 
-const { mark: MARK, password: PASSWORD } = runMarker('own-name');
+const { mark: MARK, password: PASSWORD } = runMarker("own-name");
 
 // Deliberately not title case, and deliberately not derivable from an
 // abbreviation of itself.
-const FIRST_NAME = 'eLENA';
-const LAST_NAME = 'vasQUEZ';
+const FIRST_NAME = "eLENA";
+const LAST_NAME = "vasQUEZ";
 const EXPECTED_OWNER = `${FIRST_NAME} ${LAST_NAME}`;
 
-test.describe('claim-flow owner name (live DB)', () => {
+test.describe("claim-flow owner name (live DB)", () => {
   // One worker: both tests read the single fixture built in beforeAll.
-  test.describe.configure({ mode: 'serial', timeout: 60_000 });
+  test.describe.configure({ mode: "serial", timeout: 60_000 });
   test.skip(!HAVE_ENV, SKIP_REASON);
 
   let admin: SupabaseClient;
@@ -99,7 +99,7 @@ test.describe('claim-flow owner name (live DB)', () => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    [owner] = await createLogins(admin, ['owner'], {
+    [owner] = await createLogins(admin, ["owner"], {
       mark: MARK,
       password: PASSWORD,
       authUserIds,
@@ -108,17 +108,20 @@ test.describe('claim-flow owner name (live DB)', () => {
     // The `handle_new_user` trigger already inserted the `public.users` row on
     // the auth insert, so the names are an update, not an insert.
     const named = await admin
-      .from('users')
+      .from("users")
       .update({ first_name: FIRST_NAME, last_name: LAST_NAME })
-      .eq('id', owner.userId)
-      .select('first_name, last_name')
+      .eq("id", owner.userId)
+      .select("first_name, last_name")
       .single();
     if (named.error) throw new Error(`users: ${named.error.message}`);
     // Guard, not an assertion on the subject: if the stored casing were folded
     // on the way in, both reads below would be testing nothing.
-    if (named.data.first_name !== FIRST_NAME || named.data.last_name !== LAST_NAME) {
+    if (
+      named.data.first_name !== FIRST_NAME ||
+      named.data.last_name !== LAST_NAME
+    ) {
       throw new Error(
-        `stored name was normalized: ${named.data.first_name} ${named.data.last_name}`
+        `stored name was normalized: ${named.data.first_name} ${named.data.last_name}`,
       );
     }
 
@@ -127,17 +130,17 @@ test.describe('claim-flow owner name (live DB)', () => {
     // `search_programs`' query branches filter on, so a custom-org fixture
     // would never appear in its results.
     const program = await admin
-      .from('programs')
+      .from("programs")
       .insert({
         program_key: programKey,
         school_group: MARK,
         school_name: schoolName,
-        team: 'mens',
-        status: 'active',
+        team: "mens",
+        status: "active",
         owner_user_id: owner.userId,
         claimed_at: new Date().toISOString(),
       })
-      .select('id')
+      .select("id")
       .single();
     if (program.error) throw new Error(`programs: ${program.error.message}`);
     programId = program.data.id;
@@ -150,13 +153,13 @@ test.describe('claim-flow owner name (live DB)', () => {
     // Program first: owner_user_id is ON DELETE SET NULL, so deleting the auth
     // user would orphan the row rather than take it with it.
     if (programId) {
-      await admin.from('programs').delete().eq('id', programId);
+      await admin.from("programs").delete().eq("id", programId);
     }
     await deleteAuthUsers(admin, authUserIds);
   });
 
-  test('program_public_status returns the owner\'s full name, not an initialled surname', async () => {
-    const { data, error } = await anon.rpc('program_public_status', {
+  test("program_public_status returns the owner's full name, not an initialled surname", async () => {
+    const { data, error } = await anon.rpc("program_public_status", {
       p_program_key: programKey,
     });
     expect(error).toBeNull();
@@ -167,11 +170,11 @@ test.describe('claim-flow owner name (live DB)', () => {
     // Verbatim, raw casing: the surname is whole, and no abbreviating period
     // survived anywhere in the string.
     expect(row!.owner_display).toBe(EXPECTED_OWNER);
-    expect(row!.owner_display).not.toContain('.');
+    expect(row!.owner_display).not.toContain(".");
   });
 
-  test('search_programs returns the owner\'s full name, not an initialled forename', async () => {
-    const { data, error } = await anon.rpc('search_programs', {
+  test("search_programs returns the owner's full name, not an initialled forename", async () => {
+    const { data, error } = await anon.rpc("search_programs", {
       p_term: MARK,
     });
     expect(error).toBeNull();
@@ -184,6 +187,6 @@ test.describe('claim-flow owner name (live DB)', () => {
     expect(row).toBeDefined();
 
     expect(row!.owner_display).toBe(EXPECTED_OWNER);
-    expect(row!.owner_display).not.toContain('.');
+    expect(row!.owner_display).not.toContain(".");
   });
 });

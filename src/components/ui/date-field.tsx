@@ -138,14 +138,16 @@ export function DateField({
   useImperativeHandle(
     handleRef,
     () => ({
-      focus: () => groupRef.current?.querySelector<HTMLElement>('[tabindex="0"]')?.focus(),
+      focus: () =>
+        groupRef.current?.querySelector<HTMLElement>('[tabindex="0"]')?.focus(),
     }),
-    []
+    [],
   );
 
   // The one translation in each direction. A `null` from the library — the
   // field cleared — becomes `""`, never a dropped update.
-  const handleChange = (next: CalendarDate | null) => onChange(formatIsoDate(next));
+  const handleChange = (next: CalendarDate | null) =>
+    onChange(formatIsoDate(next));
 
   // Memoised on the ISO strings, not recomputed per render. `react-stately`
   // memoises the segment list, the formatted parts and the bound validation on
@@ -195,8 +197,14 @@ export function DateField({
   }, []);
 
   const dateValue = useMemo(() => parseIsoDate(value), [value]);
-  const minValue = useMemo(() => (min ? (parseIsoDate(min) ?? undefined) : undefined), [min]);
-  const maxValue = useMemo(() => (max ? (parseIsoDate(max) ?? undefined) : undefined), [max]);
+  const minValue = useMemo(
+    () => (min ? (parseIsoDate(min) ?? undefined) : undefined),
+    [min],
+  );
+  const maxValue = useMemo(
+    () => (max ? (parseIsoDate(max) ?? undefined) : undefined),
+    [max],
+  );
 
   return (
     <DatePicker
@@ -218,7 +226,7 @@ export function DateField({
       className={cn(
         "group/date",
         variant === "underline" ? "block w-full" : "inline-block",
-        className
+        className,
       )}
     >
       <Group
@@ -239,19 +247,19 @@ export function DateField({
                 : "border-[var(--border-field)]",
               "focus-within:border-b-2 focus-within:border-[var(--blue)]",
               "group-data-[open]/date:border-b-2 group-data-[open]/date:border-[var(--blue)]",
-              "data-[invalid]:border-[var(--error)] data-[invalid]:focus-within:border-[var(--error)]"
+              "data-[invalid]:border-[var(--error)] data-[invalid]:focus-within:border-[var(--error)]",
             ),
           variant === "boxed" &&
             cn(
               "h-[30px] rounded-[6px] border border-[var(--border-field)] bg-[var(--surface-field)] px-2.5",
-              "data-[invalid]:border-[var(--error)]"
-            )
+              "data-[invalid]:border-[var(--error)]",
+            ),
         )}
       >
         <DateInput
           className={cn(
             "flex min-w-0 flex-1 items-center text-[var(--ink-900)]",
-            variant === "boxed" ? "text-[12px]" : "text-[13px]"
+            variant === "boxed" ? "text-[12px]" : "text-[13px]",
           )}
         >
           {(segment) => (
@@ -262,7 +270,7 @@ export function DateField({
                 "rounded-[3px] px-[2px] leading-[18px] tabular-nums",
                 "data-[placeholder]:text-[var(--ink-400)]",
                 "data-[type=literal]:text-[var(--ink-400)]",
-                "data-[focused]:bg-[var(--blue)] data-[focused]:text-white data-[focused]:data-[placeholder]:text-white"
+                "data-[focused]:bg-[var(--blue)] data-[focused]:text-white data-[focused]:data-[placeholder]:text-white",
               )}
             />
           )}
@@ -271,10 +279,14 @@ export function DateField({
           className={cn(
             "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-[var(--ink-400)] transition-colors duration-150",
             "hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]",
-            "data-[disabled]:cursor-not-allowed"
+            "data-[disabled]:cursor-not-allowed",
           )}
         >
-          <CalendarIcon className="size-[13px]" strokeWidth={1.5} aria-hidden="true" />
+          <CalendarIcon
+            className="size-[13px]"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
         </Button>
       </Group>
 
@@ -298,7 +310,7 @@ export function DateField({
           "duration-[var(--duration-hover)] ease-[var(--ease-out-expo)]",
           "data-[entering]:animate-in data-[entering]:fade-in data-[entering]:slide-in-from-bottom-[2px]",
           "data-[exiting]:animate-out data-[exiting]:fade-out data-[exiting]:slide-out-to-bottom-[2px]",
-          "motion-reduce:data-[entering]:slide-in-from-bottom-0 motion-reduce:data-[exiting]:slide-out-to-bottom-0"
+          "motion-reduce:data-[entering]:slide-in-from-bottom-0 motion-reduce:data-[exiting]:slide-out-to-bottom-0",
         )}
       >
         <Dialog aria-label={`${label} calendar`}>
@@ -308,14 +320,22 @@ export function DateField({
                 slot="previous"
                 className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-[var(--ink-500)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] data-[disabled]:cursor-default data-[disabled]:opacity-40"
               >
-                <ChevronLeft className="size-[14px]" strokeWidth={1.5} aria-hidden="true" />
+                <ChevronLeft
+                  className="size-[14px]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
               </Button>
               <Heading className="text-[12px] font-medium text-[var(--ink-900)]" />
               <Button
                 slot="next"
                 className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-[var(--ink-500)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] data-[disabled]:cursor-default data-[disabled]:opacity-40"
               >
-                <ChevronRight className="size-[14px]" strokeWidth={1.5} aria-hidden="true" />
+                <ChevronRight
+                  className="size-[14px]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
               </Button>
             </header>
             <CalendarGrid
@@ -324,7 +344,7 @@ export function DateField({
             >
               <CalendarGridHeader>
                 {(day) => (
-                  <CalendarHeaderCell className="h-[22px] w-[30px] text-center text-[10px] font-medium uppercase text-[var(--ink-400)]">
+                  <CalendarHeaderCell className="h-[22px] w-[30px] text-center text-[10px] font-medium text-[var(--ink-400)] uppercase">
                     {day}
                   </CalendarHeaderCell>
                 )}
@@ -334,11 +354,11 @@ export function DateField({
                   <CalendarCell
                     date={date}
                     className={cn(
-                      "relative flex size-[30px] cursor-pointer select-none items-center justify-center rounded-[7px] text-[12px] tabular-nums text-[var(--ink-900)]",
+                      "relative flex size-[30px] cursor-pointer items-center justify-center rounded-[7px] text-[12px] text-[var(--ink-900)] tabular-nums select-none",
                       "data-[hovered]:bg-[var(--surface-subtle)]",
                       "data-[outside-month]:opacity-[0.35]",
                       "data-[disabled]:cursor-default data-[disabled]:text-[var(--ink-400)] data-[disabled]:data-[hovered]:bg-transparent",
-                      "data-[selected]:bg-[var(--blue)] data-[selected]:text-white data-[selected]:data-[hovered]:bg-[var(--blue)]"
+                      "data-[selected]:bg-[var(--blue)] data-[selected]:text-white data-[selected]:data-[hovered]:bg-[var(--blue)]",
                     )}
                   >
                     {({ formattedDate, isToday, isSelected }) => (

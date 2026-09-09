@@ -314,8 +314,8 @@ export function LineupNamePicker({
     (label) =>
       !ladder.some(
         (player) =>
-          normalizedPersonName(player.name) === normalizedPersonName(label)
-      )
+          normalizedPersonName(player.name) === normalizedPersonName(label),
+      ),
   );
 
   const listId = `lineup-${slot}-list`;
@@ -402,7 +402,7 @@ export function LineupNamePicker({
               onClick={() => place(player.name)}
               className={cn(
                 "flex h-[38px] cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-2.5",
-                activeIndex === index ? "bg-[var(--surface-subtle)]" : null
+                activeIndex === index ? "bg-[var(--surface-subtle)]" : null,
               )}
             >
               <span className="truncate text-[12px] text-[var(--ink-900)]">
@@ -439,14 +439,17 @@ export function LineupNamePicker({
               "flex h-[38px] cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-2.5",
               activeIndex === suggestions.length
                 ? "bg-[var(--surface-subtle)]"
-                : null
+                : null,
             )}
           >
             <span
               aria-hidden
               className="flex size-5 shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--ink-300)]"
             >
-              <Plus className="size-3 text-[var(--ink-500)]" strokeWidth={1.5} />
+              <Plus
+                className="size-3 text-[var(--ink-500)]"
+                strokeWidth={1.5}
+              />
             </span>
             <span className="truncate text-[12px] text-[var(--ink-900)]">
               {pending ? "Adding…" : ADD_ROW_LABEL}

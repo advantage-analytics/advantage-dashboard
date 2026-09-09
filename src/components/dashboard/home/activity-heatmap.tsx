@@ -19,8 +19,18 @@ import type { ActivityDay } from "@/lib/data/personal-activity-server";
  */
 
 const MONTHS_SHORT = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ];
 
 /** "2 matches on Aug 12, 2025" from a `YYYY-MM-DD` key, without re-parsing through a tz. */

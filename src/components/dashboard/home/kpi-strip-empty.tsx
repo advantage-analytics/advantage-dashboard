@@ -24,7 +24,8 @@ import { SEASON_KPI_LABELS } from "@/lib/data/player-profile";
  */
 
 /** Where the number's baseline falls in a 28px row of 28px type. */
-const VALUE_RULE = "mb-1.5 h-0.5 w-[34px] shrink-0 rounded-[1px] bg-[var(--ink-200)]";
+const VALUE_RULE =
+  "mb-1.5 h-0.5 w-[34px] shrink-0 rounded-[1px] bg-[var(--ink-200)]";
 
 export function KpiStripEmpty({
   awaitingReport = false,
@@ -54,7 +55,8 @@ export function KpiStripEmpty({
   ariaLabel?: string;
 }) {
   const hint =
-    hintOverride ?? (awaitingReport ? "When the report lands" : "After your first match");
+    hintOverride ??
+    (awaitingReport ? "When the report lands" : "After your first match");
 
   return (
     <KpiTileStrip collapse ariaLabel={ariaLabel}>
@@ -66,7 +68,7 @@ export function KpiStripEmpty({
           {/* One line like the shipped label (see `KpiTile`): the strip drops
               tiles before a default label would need to wrap, so the tile's
               measured height holds at every width. */}
-          <p className="max-w-full truncate text-[9px] font-normal uppercase leading-[13.5px] tracking-[2.5px] text-[var(--ink-400)]">
+          <p className="max-w-full truncate text-[9px] leading-[13.5px] font-normal tracking-[2.5px] text-[var(--ink-400)] uppercase">
             {label}
           </p>
           <div className="flex h-7 shrink-0 items-end overflow-hidden">
@@ -78,7 +80,9 @@ export function KpiStripEmpty({
               wraps in a narrow tile the row grows instead of spilling out of
               the tile's padding. */}
           <div className="flex min-h-[16.5px] shrink-0 items-center">
-            <p className="text-[10px] font-normal leading-[1.4] text-[var(--ink-400)]">{hint}</p>
+            <p className="text-[10px] leading-[1.4] font-normal text-[var(--ink-400)]">
+              {hint}
+            </p>
           </div>
         </div>
       ))}

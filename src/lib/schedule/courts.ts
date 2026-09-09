@@ -57,7 +57,7 @@ export function courtIndex(slot: string | null): number {
  */
 export function compareEntryOrder(
   a: { slot: string | null; position: number },
-  b: { slot: string | null; position: number }
+  b: { slot: string | null; position: number },
 ): number {
   if (a.slot && b.slot) {
     const byCourt = courtIndex(a.slot) - courtIndex(b.slot);

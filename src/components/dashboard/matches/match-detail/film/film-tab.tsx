@@ -63,7 +63,8 @@ function FilmRoom({ video }: { video: MatchVideo }) {
   );
 
   const visiblePoints = useMemo(
-    () => (tab === "saved" ? filteredPoints.filter((p) => p.saved) : filteredPoints),
+    () =>
+      tab === "saved" ? filteredPoints.filter((p) => p.saved) : filteredPoints,
     [filteredPoints, tab],
   );
 
@@ -153,7 +154,8 @@ function FilmRoom({ video }: { video: MatchVideo }) {
         .eq("id", pointId)
         .select("id, saved");
 
-      const stored = !error && data?.length === 1 && data[0].saved === nextSaved;
+      const stored =
+        !error && data?.length === 1 && data[0].saved === nextSaved;
       if (stored) return;
 
       const reverted = pointsRef.current.map((p) =>

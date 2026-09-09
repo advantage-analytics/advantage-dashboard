@@ -107,26 +107,26 @@ export function RecentMatchesEmpty({
        * skip step one, which also asks whose match this is.
        */}
       {showAction && (
-      <div className="mt-3.5 flex items-center gap-5 border-t border-[var(--border-hairline)] pt-[22px] pb-1">
-        <div className="min-w-0 flex-1">
-          <span className="block text-[13px] font-medium leading-[1.4] text-[var(--ink-900)]">
-            Nothing here until you send a match
-          </span>
-          <span
-            className="text-body-sm mt-[3px] block"
-            style={{ textWrap: "pretty" }}
+        <div className="mt-3.5 flex items-center gap-5 border-t border-[var(--border-hairline)] pt-[22px] pb-1">
+          <div className="min-w-0 flex-1">
+            <span className="block text-[13px] leading-[1.4] font-medium text-[var(--ink-900)]">
+              Nothing here until you send a match
+            </span>
+            <span
+              className="text-body-sm mt-[3px] block"
+              style={{ textWrap: "pretty" }}
+            >
+              A singles match, 1080p or better, camera fixed for the whole
+              thing. Or import a SwingVision export, which needs none of that.
+            </span>
+          </div>
+          <Link
+            href="/dashboard/matches/new"
+            className={`${advButton("primary")} shrink-0`}
           >
-            A singles match, 1080p or better, camera fixed for the whole thing.
-            Or import a SwingVision export, which needs none of that.
-          </span>
+            Send a match
+          </Link>
         </div>
-        <Link
-          href="/dashboard/matches/new"
-          className={`${advButton("primary")} shrink-0`}
-        >
-          Send a match
-        </Link>
-      </div>
       )}
     </>
   );

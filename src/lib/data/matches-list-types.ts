@@ -79,7 +79,7 @@ export function formatDisplayDate(isoDate: string): string {
 
 export function transformDbMatch(
   row: DbMatch,
-  _userId: string
+  _userId: string,
 ): DisplayMatch | null {
   if (!row.score?.player1?.length || !row.score?.player2?.length) return null;
 

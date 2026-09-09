@@ -26,10 +26,10 @@ export const metadata: Metadata = {
  */
 async function rosterSubjectFor(
   programId: string,
-  id: string
+  id: string,
 ): Promise<RosterSubject | null> {
   const onRoster = (await getRosterPlayerOptions(programId)).find(
-    (row) => row.playerId === id || row.userId === id
+    (row) => row.playerId === id || row.userId === id,
   );
   // Their `playerId`, never the id as typed — the login era resolves to the
   // profile id, which is what `matches.player1_id` wants.

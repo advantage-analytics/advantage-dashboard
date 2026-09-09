@@ -189,7 +189,8 @@ const MC_SEGMENT = /^mc([a-z])([a-z]+)$/;
 
 function titleCasedToken(token: string, isLastToken: boolean): string {
   if (isDeliberatelyMixedCase(token)) return token;
-  if (isLastToken && ROMAN_NUMERAL_TOKEN.test(token)) return token.toUpperCase();
+  if (isLastToken && ROMAN_NUMERAL_TOKEN.test(token))
+    return token.toUpperCase();
   return token.toLowerCase().replace(/[^-']+/g, titleCasedSegment);
 }
 

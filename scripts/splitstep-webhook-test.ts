@@ -34,22 +34,22 @@
  * and that now includes a blob in the real videos container.
  */
 
-import { createHmac } from 'node:crypto';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { loadEnvLocal } from './lib/env';
-import { RESULTS_BUCKET } from '../src/lib/services/splitstep/config';
+import { createHmac } from "node:crypto";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { loadEnvLocal } from "./lib/env";
+import { RESULTS_BUCKET } from "../src/lib/services/splitstep/config";
 import {
   playersObjectKey,
   resultsObjectKey,
   trajectoriesObjectKey,
   trimmedObjectKey,
-} from '../src/lib/services/splitstep/object-keys';
+} from "../src/lib/services/splitstep/object-keys";
 import {
   AZURE_STORAGE_ENV_VARS,
   deleteVideoBlob,
   resolveAzureStorageConfig,
   trimmedCopyStatus,
-} from '../src/lib/services/splitstep/video-url';
+} from "../src/lib/services/splitstep/video-url";
 
 /* ─── env ─── */
 
@@ -69,30 +69,47 @@ function required(name: string): string {
   return v;
 }
 
-const baseUrl = (flag('--url') ?? process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/+$/, '');
+const baseUrl = (
+  flag("--url") ??
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  ""
+).replace(/\/+$/, "");
 if (!baseUrl) {
-  console.error('No target. Pass --url https://your-deployment or set NEXT_PUBLIC_SITE_URL.');
+  console.error(
+    "No target. Pass --url https://your-deployment or set NEXT_PUBLIC_SITE_URL.",
+  );
   process.exit(1);
 }
 
 const endpoint = `${baseUrl}/api/webhooks/splitstep`;
 const secret = process.env.SPLITSTEP_WEBHOOK_SECRET ?? null;
 const supabase: SupabaseClient = createClient(
-  required('NEXT_PUBLIC_SUPABASE_URL'),
-  required('SUPABASE_SERVICE_ROLE_KEY'),
-  { auth: { persistSession: false } }
+  required("NEXT_PUBLIC_SUPABASE_URL"),
+  required("SUPABASE_SERVICE_ROLE_KEY"),
+  { auth: { persistSession: false } },
 );
 
 const FIXTURE_KEY = `__webhook_test__/${Date.now()}-strokes.json`;
 /* Shaped like a stroke array so the bytes that land are the bytes we expect. */
 const FIXTURE = JSON.stringify([
-  { pred_rally_id: 1, pred_rally_stroke_number: 1, stroke_type: 'serve', in: true },
+  {
+    pred_rally_id: 1,
+    pred_rally_stroke_number: 1,
+    stroke_type: "serve",
+    in: true,
+  },
 ]);
 
 /* Shaped like the vendor's per-frame players array (September 2026 API). */
 const PLAYERS_FIXTURE_KEY = `__webhook_test__/${Date.now()}-players.json`;
 const PLAYERS_FIXTURE = JSON.stringify([
-  { frame: 0, player_x_px: 1.0, player_y_px: 2.0, player_x_m: 0.1, player_y_m: 5.2 },
+  {
+    frame: 0,
+    player_x_px: 1.0,
+    player_y_px: 2.0,
+    player_x_m: 0.1,
+    player_y_m: 5.2,
+  },
 ]);
 
 /**
@@ -107,7 +124,7 @@ const PLAYERS_FIXTURE = JSON.stringify([
  * it, not this script. A mock url would fail in Azure with nothing to read.
  */
 const VIDEO_FIXTURE_KEY = `__webhook_test__/${Date.now()}-trimmed.mp4`;
-const VIDEO_FIXTURE = 'not-a-real-video-just-bytes-to-copy';
+const VIDEO_FIXTURE = "not-a-real-video-just-bytes-to-copy";
 
 /* ─── assertions ─── */
 
@@ -118,7 +135,7 @@ function check(label: string, ok: boolean, detail?: unknown): void {
     console.log(`  PASS  ${label}`);
   } else {
     failures++;
-    console.error(`  FAIL  ${label}`, detail !== undefined ? detail : '');
+    console.error(`  FAIL  ${label}`, detail !== undefined ? detail : "");
   }
 }
 
@@ -132,7 +149,7 @@ function check(label: string, ok: boolean, detail?: unknown): void {
 async function waitFor(
   condition: () => Promise<boolean>,
   timeoutMs = 20_000,
-  intervalMs = 500
+  intervalMs = 500,
 ): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -148,16 +165,18 @@ async function waitFor(
  * and reused rather than serialized twice.
  */
 function sign(rawBody: string): string {
-  return createHmac('sha256', secret!).update(rawBody, 'utf8').digest('base64');
+  return createHmac("sha256", secret!).update(rawBody, "utf8").digest("base64");
 }
 
 async function post(body: unknown): Promise<{ status: number; json: unknown }> {
   const rawBody = JSON.stringify(body);
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
-  if (secret) headers['x-splitstep-signature'] = sign(rawBody);
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+  if (secret) headers["x-splitstep-signature"] = sign(rawBody);
 
   const res = await fetch(endpoint, {
-    method: 'POST',
+    method: "POST",
     headers,
     body: rawBody,
   });
@@ -178,22 +197,26 @@ async function post(body: unknown): Promise<{ status: number; json: unknown }> {
  * `completed`. Both are terminal and both rank above `queued`, which is what
  * the redelivery checks below are actually about: nothing drags the job back.
  */
-const SETTLED_AFTER_COMPLETION = new Set(['completed', 'deriving', 'derivation_failed']);
+const SETTLED_AFTER_COMPLETION = new Set([
+  "completed",
+  "deriving",
+  "derivation_failed",
+]);
 
 async function jobStatus(jobId: string): Promise<string | null> {
   const { data } = await supabase
-    .from('processing_jobs')
-    .select('status')
-    .eq('id', jobId)
+    .from("processing_jobs")
+    .select("status")
+    .eq("id", jobId)
     .maybeSingle();
   return (data as { status: string } | null)?.status ?? null;
 }
 
 async function deliveryCount(externalJobId: string): Promise<number> {
   const { count } = await supabase
-    .from('splitstep_webhook_deliveries')
-    .select('id', { count: 'exact', head: true })
-    .eq('external_job_id', externalJobId);
+    .from("splitstep_webhook_deliveries")
+    .select("id", { count: "exact", head: true })
+    .eq("external_job_id", externalJobId);
   return count ?? 0;
 }
 
@@ -228,37 +251,38 @@ async function makeJob(externalJobId: string): Promise<{ id: string }> {
   // which is live, so each needs a match of its own that currently holds no
   // live job — the first match in the table is usually mid-pipeline.
   const { data: live } = await supabase
-    .from('processing_jobs')
-    .select('match_id')
-    .not('status', 'in', '("failed","completed","derivation_failed")');
+    .from("processing_jobs")
+    .select("match_id")
+    .not("status", "in", '("failed","completed","derivation_failed")');
   const taken = new Set<string>([
     ...((live ?? []) as { match_id: string }[]).map((j) => j.match_id),
     ...createdJobs.map((j) => j.matchId),
   ]);
 
   const { data: candidates } = await supabase
-    .from('matches')
-    .select('id, created_by')
-    .not('created_by', 'is', null)
+    .from("matches")
+    .select("id, created_by")
+    .not("created_by", "is", null)
     .limit(50);
 
-  const match = ((candidates ?? []) as { id: string; created_by: string }[]).find(
-    (m) => !taken.has(m.id)
-  );
+  const match = (
+    (candidates ?? []) as { id: string; created_by: string }[]
+  ).find((m) => !taken.has(m.id));
 
-  if (!match) throw new Error('No match row without a live job to attach a test job to.');
+  if (!match)
+    throw new Error("No match row without a live job to attach a test job to.");
 
   const row = match;
   const { data, error } = await supabase
-    .from('processing_jobs')
+    .from("processing_jobs")
     .insert({
       match_id: row.id,
       created_by: row.created_by,
-      provider: 'splitstep',
+      provider: "splitstep",
       external_job_id: externalJobId,
-      status: 'submitting',
+      status: "submitting",
     })
-    .select('id')
+    .select("id")
     .single();
 
   if (error) throw new Error(`Could not create test job: ${error.message}`);
@@ -276,12 +300,21 @@ async function cleanup(): Promise<void> {
   // a key that was never written is a no-op in both stores.
   const resultKeys = createdJobs.flatMap((j) => {
     const ids = { userId: j.userId, matchId: j.matchId, jobId: j.id };
-    return [resultsObjectKey(ids), playersObjectKey(ids), trajectoriesObjectKey(ids)];
+    return [
+      resultsObjectKey(ids),
+      playersObjectKey(ids),
+      trajectoriesObjectKey(ids),
+    ];
   });
 
   await supabase.storage
     .from(RESULTS_BUCKET)
-    .remove([FIXTURE_KEY, PLAYERS_FIXTURE_KEY, VIDEO_FIXTURE_KEY, ...resultKeys]);
+    .remove([
+      FIXTURE_KEY,
+      PLAYERS_FIXTURE_KEY,
+      VIDEO_FIXTURE_KEY,
+      ...resultKeys,
+    ]);
 
   // Blobs the webhook copied into the REAL videos container. Nothing else will
   // ever remove them: the orphan sweeper only deletes blobs whose match is gone,
@@ -296,7 +329,7 @@ async function cleanup(): Promise<void> {
     if (!azureConfigured) {
       console.error(
         `LEFTOVER: ${blobName} may be in the videos container and this machine ` +
-          `has no Azure credentials to remove it. Delete it by hand.`
+          `has no Azure credentials to remove it. Delete it by hand.`,
       );
       continue;
     }
@@ -306,21 +339,24 @@ async function cleanup(): Promise<void> {
     } catch (err) {
       console.error(
         `Could not remove the test blob ${blobName} — delete it by hand:`,
-        err instanceof Error ? err.message : err
+        err instanceof Error ? err.message : err,
       );
     }
   }
 
   if (createdJobs.length) {
     await supabase
-      .from('processing_jobs')
+      .from("processing_jobs")
       .delete()
-      .in('id', createdJobs.map((j) => j.id));
+      .in(
+        "id",
+        createdJobs.map((j) => j.id),
+      );
   }
   // Results the webhook itself wrote, under the real key layout.
   const { data: leftovers } = await supabase.storage
     .from(RESULTS_BUCKET)
-    .list('__webhook_test__');
+    .list("__webhook_test__");
   if (leftovers?.length) {
     await supabase.storage
       .from(RESULTS_BUCKET)
@@ -332,17 +368,20 @@ async function cleanup(): Promise<void> {
 
 async function main(): Promise<void> {
   console.log(`\nTarget: ${endpoint}`);
-  console.log(`Secret: ${secret ? 'set — signed deliveries' : 'UNSET — exercising the unsigned path'}\n`);
+  console.log(
+    `Secret: ${secret ? "set — signed deliveries" : "UNSET — exercising the unsigned path"}\n`,
+  );
 
   // A signed URL to our own fixture stands in for the vendor's strokes_url, so
   // the download is real HTTP rather than a mock that proves nothing.
   const upload = await supabase.storage
     .from(RESULTS_BUCKET)
-    .upload(FIXTURE_KEY, new Blob([FIXTURE], { type: 'application/json' }), {
-      contentType: 'application/json',
+    .upload(FIXTURE_KEY, new Blob([FIXTURE], { type: "application/json" }), {
+      contentType: "application/json",
       upsert: true,
     });
-  if (upload.error) throw new Error(`Fixture upload failed: ${upload.error.message}`);
+  if (upload.error)
+    throw new Error(`Fixture upload failed: ${upload.error.message}`);
 
   const signed = await supabase.storage
     .from(RESULTS_BUCKET)
@@ -356,19 +395,27 @@ async function main(): Promise<void> {
   // derivation, so its key lands later than the strokes key does.
   const playersUpload = await supabase.storage
     .from(RESULTS_BUCKET)
-    .upload(PLAYERS_FIXTURE_KEY, new Blob([PLAYERS_FIXTURE], { type: 'application/json' }), {
-      contentType: 'application/json',
-      upsert: true,
-    });
+    .upload(
+      PLAYERS_FIXTURE_KEY,
+      new Blob([PLAYERS_FIXTURE], { type: "application/json" }),
+      {
+        contentType: "application/json",
+        upsert: true,
+      },
+    );
   if (playersUpload.error) {
-    throw new Error(`Players fixture upload failed: ${playersUpload.error.message}`);
+    throw new Error(
+      `Players fixture upload failed: ${playersUpload.error.message}`,
+    );
   }
 
   const signedPlayers = await supabase.storage
     .from(RESULTS_BUCKET)
     .createSignedUrl(PLAYERS_FIXTURE_KEY, 600);
   if (signedPlayers.error || !signedPlayers.data) {
-    throw new Error(`Could not sign players fixture: ${signedPlayers.error?.message}`);
+    throw new Error(
+      `Could not sign players fixture: ${signedPlayers.error?.message}`,
+    );
   }
   const playersUrl = signedPlayers.data.signedUrl;
 
@@ -376,19 +423,27 @@ async function main(): Promise<void> {
   // real url that Azure can reach rather than a string that only looks like one.
   const videoUpload = await supabase.storage
     .from(RESULTS_BUCKET)
-    .upload(VIDEO_FIXTURE_KEY, new Blob([VIDEO_FIXTURE], { type: 'video/mp4' }), {
-      contentType: 'video/mp4',
-      upsert: true,
-    });
+    .upload(
+      VIDEO_FIXTURE_KEY,
+      new Blob([VIDEO_FIXTURE], { type: "video/mp4" }),
+      {
+        contentType: "video/mp4",
+        upsert: true,
+      },
+    );
   if (videoUpload.error) {
-    throw new Error(`Video fixture upload failed: ${videoUpload.error.message}`);
+    throw new Error(
+      `Video fixture upload failed: ${videoUpload.error.message}`,
+    );
   }
 
   const signedVideo = await supabase.storage
     .from(RESULTS_BUCKET)
     .createSignedUrl(VIDEO_FIXTURE_KEY, 600);
   if (signedVideo.error || !signedVideo.data) {
-    throw new Error(`Could not sign video fixture: ${signedVideo.error?.message}`);
+    throw new Error(
+      `Could not sign video fixture: ${signedVideo.error?.message}`,
+    );
   }
   const trimmedVideoUrl = signedVideo.data.signedUrl;
 
@@ -399,12 +454,15 @@ async function main(): Promise<void> {
   const completedJob = await makeJob(completedExtId);
   const failedJob = await makeJob(failedExtId);
 
-  console.log('1. queued');
+  console.log("1. queued");
   {
-    const r = await post({ status: 'queued', externalJobId: completedExtId });
-    check('returns 200', r.status === 200, r);
-    check('job moves to queued', (await jobStatus(completedJob.id)) === 'queued');
-    check('delivery recorded', (await deliveryCount(completedExtId)) === 1);
+    const r = await post({ status: "queued", externalJobId: completedExtId });
+    check("returns 200", r.status === 200, r);
+    check(
+      "job moves to queued",
+      (await jobStatus(completedJob.id)) === "queued",
+    );
+    check("delivery recorded", (await deliveryCount(completedExtId)) === 1);
   }
 
   // Declared once and reused by the duplicate check below, because "identical
@@ -413,7 +471,7 @@ async function main(): Promise<void> {
   // one of them, and the duplicate test failed for a reason that had nothing to
   // do with deduping.
   const completionBody = {
-    status: 'job_completed',
+    status: "job_completed",
     externalJobId: completedExtId,
     // Named exactly as the vendor's docs have them (September 2026 revision).
     // If they rename one again, this is the check that fails rather than a
@@ -426,18 +484,20 @@ async function main(): Promise<void> {
     trimmed_video_url: trimmedVideoUrl,
   };
 
-  console.log('2. job_completed — strokes and players fetched and stored, trimmed video copied');
+  console.log(
+    "2. job_completed — strokes and players fetched and stored, trimmed video copied",
+  );
   {
     const r = await post(completionBody);
-    check('returns 200', r.status === 200, r);
+    check("returns 200", r.status === 200, r);
 
     // The download runs in after(), so it completes AFTER the 200 — that is the
     // point of the change, since the vendor times out at 30s and never retries.
     // Poll rather than assert immediately.
     const reached = await waitFor(
-      async () => (await jobStatus(completedJob.id)) === 'completed'
+      async () => (await jobStatus(completedJob.id)) === "completed",
     );
-    check('job reaches completed (async, after the 200)', reached);
+    check("job reaches completed (async, after the 200)", reached);
 
     // Polled, not read once. `status` flips synchronously inside
     // record_splitstep_webhook, so the wait above returns the instant the 200
@@ -446,19 +506,20 @@ async function main(): Promise<void> {
     let key: string | null | undefined;
     const gotKey = await waitFor(async () => {
       const { data } = await supabase
-        .from('processing_jobs')
-        .select('results_object_key')
-        .eq('id', completedJob.id)
+        .from("processing_jobs")
+        .select("results_object_key")
+        .eq("id", completedJob.id)
         .maybeSingle();
-      key = (data as { results_object_key: string | null } | null)?.results_object_key;
+      key = (data as { results_object_key: string | null } | null)
+        ?.results_object_key;
       return Boolean(key);
     });
-    check('results_object_key is set', gotKey, key);
+    check("results_object_key is set", gotKey, key);
 
     if (key) {
       const dl = await supabase.storage.from(RESULTS_BUCKET).download(key);
-      const text = dl.data ? await dl.data.text() : '';
-      check('stored bytes match the fixture byte-for-byte', text === FIXTURE, {
+      const text = dl.data ? await dl.data.text() : "";
+      check("stored bytes match the fixture byte-for-byte", text === FIXTURE, {
         got: text.slice(0, 120),
       });
       await supabase.storage.from(RESULTS_BUCKET).remove([key]);
@@ -468,18 +529,24 @@ async function main(): Promise<void> {
     // block but finishes independently of the results download.
     const gotTrimmedKey = await waitFor(async () => {
       const { data } = await supabase
-        .from('processing_jobs')
-        .select('trimmed_object_key')
-        .eq('id', completedJob.id)
+        .from("processing_jobs")
+        .select("trimmed_object_key")
+        .eq("id", completedJob.id)
         .maybeSingle();
-      return Boolean((data as { trimmed_object_key: string | null } | null)?.trimmed_object_key);
+      return Boolean(
+        (data as { trimmed_object_key: string | null } | null)
+          ?.trimmed_object_key,
+      );
     });
-    check('trimmed_object_key is set — the video url was not dropped', gotTrimmedKey);
+    check(
+      "trimmed_object_key is set — the video url was not dropped",
+      gotTrimmedKey,
+    );
 
     const { data: jobRow } = await supabase
-      .from('processing_jobs')
-      .select('trimmed_object_key, trimmed_video_url, video_object_key')
-      .eq('id', completedJob.id)
+      .from("processing_jobs")
+      .select("trimmed_object_key, trimmed_video_url, video_object_key")
+      .eq("id", completedJob.id)
       .maybeSingle();
     const job = jobRow as {
       trimmed_object_key: string | null;
@@ -487,16 +554,19 @@ async function main(): Promise<void> {
       video_object_key: string | null;
     } | null;
 
-    check("the vendor's url is recorded for recovery", Boolean(job?.trimmed_video_url));
+    check(
+      "the vendor's url is recorded for recovery",
+      Boolean(job?.trimmed_video_url),
+    );
 
     // The players file. Its own poll: it is fetched LAST in after(), after
     // grading and derivation, so it lands later than the strokes key.
     let playersKey: string | null | undefined;
     const gotPlayersKey = await waitFor(async () => {
       const { data } = await supabase
-        .from('processing_jobs')
-        .select('players_object_key, players_url, trajectories_object_key')
-        .eq('id', completedJob.id)
+        .from("processing_jobs")
+        .select("players_object_key, players_url, trajectories_object_key")
+        .eq("id", completedJob.id)
         .maybeSingle();
       const row = data as {
         players_object_key: string | null;
@@ -506,31 +576,41 @@ async function main(): Promise<void> {
       playersKey = row?.players_object_key;
       return Boolean(playersKey);
     });
-    check('players_object_key is set — players_url was parsed and fetched', gotPlayersKey, playersKey);
+    check(
+      "players_object_key is set — players_url was parsed and fetched",
+      gotPlayersKey,
+      playersKey,
+    );
 
     if (playersKey) {
-      const dl = await supabase.storage.from(RESULTS_BUCKET).download(playersKey);
-      const text = dl.data ? await dl.data.text() : '';
-      check('stored players bytes match the fixture byte-for-byte', text === PLAYERS_FIXTURE, {
-        got: text.slice(0, 120),
-      });
+      const dl = await supabase.storage
+        .from(RESULTS_BUCKET)
+        .download(playersKey);
+      const text = dl.data ? await dl.data.text() : "";
+      check(
+        "stored players bytes match the fixture byte-for-byte",
+        text === PLAYERS_FIXTURE,
+        {
+          got: text.slice(0, 120),
+        },
+      );
     }
 
     const { data: urlRow } = await supabase
-      .from('processing_jobs')
-      .select('players_url, trajectories_url, trajectories_object_key')
-      .eq('id', completedJob.id)
+      .from("processing_jobs")
+      .select("players_url, trajectories_url, trajectories_object_key")
+      .eq("id", completedJob.id)
       .maybeSingle();
     const urls = urlRow as {
       players_url: string | null;
       trajectories_url: string | null;
       trajectories_object_key: string | null;
     } | null;
-    check('players_url recorded on the job row', Boolean(urls?.players_url));
+    check("players_url recorded on the job row", Boolean(urls?.players_url));
     check(
-      'a null trajectories_url is tolerated — nothing recorded, nothing fetched',
+      "a null trajectories_url is tolerated — nothing recorded, nothing fetched",
       urls?.trajectories_url === null && urls?.trajectories_object_key === null,
-      urls
+      urls,
     );
 
     // No bookkeeping for cleanup here — it derives the key from the job's ids,
@@ -542,68 +622,78 @@ async function main(): Promise<void> {
         // the sweeper rather than blocking the webhook.
         const copied = await waitFor(
           async () =>
-            (await trimmedCopyStatus({ blobName: job.trimmed_object_key! })) === 'success',
-          30_000
+            (await trimmedCopyStatus({ blobName: job.trimmed_object_key! })) ===
+            "success",
+          30_000,
         );
-        check('Azure reports the copy succeeded', copied);
+        check("Azure reports the copy succeeded", copied);
       } else {
         console.log(
-          `  SKIP  copy verification — ${AZURE_STORAGE_ENV_VARS.join(' / ')} not in .env.local`
+          `  SKIP  copy verification — ${AZURE_STORAGE_ENV_VARS.join(" / ")} not in .env.local`,
         );
       }
     }
   }
 
-  console.log('3. duplicate delivery is a no-op');
+  console.log("3. duplicate delivery is a no-op");
   {
     const before = await deliveryCount(completedExtId);
     const r = await post(completionBody);
-    check('returns 200', r.status === 200, r);
+    check("returns 200", r.status === 200, r);
     const afterDup = await jobStatus(completedJob.id);
-    check('job still settled, not reopened', SETTLED_AFTER_COMPLETION.has(afterDup ?? ''), afterDup);
     check(
-      'no duplicate row for an identical body',
-      (await deliveryCount(completedExtId)) === before
+      "job still settled, not reopened",
+      SETTLED_AFTER_COMPLETION.has(afterDup ?? ""),
+      afterDup,
+    );
+    check(
+      "no duplicate row for an identical body",
+      (await deliveryCount(completedExtId)) === before,
     );
   }
 
-  console.log('4. late out-of-order delivery cannot drag the job backwards');
+  console.log("4. late out-of-order delivery cannot drag the job backwards");
   {
     // The whole point of splitstep_status_rank(). A retried `queued` arriving
     // after completion must not reopen a finished job.
-    const r = await post({ status: 'queued', externalJobId: completedExtId, note: 'late retry' });
-    check('returns 200', r.status === 200, r);
+    const r = await post({
+      status: "queued",
+      externalJobId: completedExtId,
+      note: "late retry",
+    });
+    check("returns 200", r.status === 200, r);
     const afterLate = await jobStatus(completedJob.id);
     check(
-      'job stays settled, not dragged back to queued',
-      SETTLED_AFTER_COMPLETION.has(afterLate ?? ''),
-      afterLate
+      "job stays settled, not dragged back to queued",
+      SETTLED_AFTER_COMPLETION.has(afterLate ?? ""),
+      afterLate,
     );
   }
 
-  console.log('5. job_failed records the message verbatim');
+  console.log("5. job_failed records the message verbatim");
   {
-    const message = 'Underlying: frame decode error at 00:12:31 [raw]';
+    const message = "Underlying: frame decode error at 00:12:31 [raw]";
     const r = await post({
-      status: 'job_failed',
+      status: "job_failed",
       externalJobId: failedExtId,
       message,
     });
-    check('returns 200', r.status === 200, r);
-    check('job moves to failed', (await jobStatus(failedJob.id)) === 'failed');
+    check("returns 200", r.status === 200, r);
+    check("job moves to failed", (await jobStatus(failedJob.id)) === "failed");
 
     const { data } = await supabase
-      .from('processing_jobs')
-      .select('error_message')
-      .eq('id', failedJob.id)
+      .from("processing_jobs")
+      .select("error_message")
+      .eq("id", failedJob.id)
       .maybeSingle();
     check(
-      'message stored verbatim, unparsed',
-      (data as { error_message: string | null } | null)?.error_message === message
+      "message stored verbatim, unparsed",
+      (data as { error_message: string | null } | null)?.error_message ===
+        message,
     );
   }
 
-  console.log('5b. structured error object lands in the error columns');
+  console.log("5b. structured error object lands in the error columns");
   {
     // The real failure shape, confirmed 2026-08-28: a top-level message with
     // raw internals (never shown), and an error object whose message is the
@@ -612,24 +702,28 @@ async function main(): Promise<void> {
     const structuredExtId = `test-structured-${Date.now()}`;
     const structuredJob = await makeJob(structuredExtId);
     const r = await post({
-      status: 'job_failed',
+      status: "job_failed",
       externalJobId: structuredExtId,
-      message: "Failed to download video: HTTPSConnectionPool(host='x'): Read timed out.",
+      message:
+        "Failed to download video: HTTPSConnectionPool(host='x'): Read timed out.",
       error: {
-        code: 'VIDEO_UNREACHABLE',
-        category: 'video_access',
-        step: 'downloading_video',
-        message: 'We could not download your video.',
+        code: "VIDEO_UNREACHABLE",
+        category: "video_access",
+        step: "downloading_video",
+        message: "We could not download your video.",
         detail: "HTTPSConnectionPool(host='x'): Read timed out.",
       },
     });
-    check('returns 200', r.status === 200, r);
-    check('job moves to failed', (await jobStatus(structuredJob.id)) === 'failed');
+    check("returns 200", r.status === 200, r);
+    check(
+      "job moves to failed",
+      (await jobStatus(structuredJob.id)) === "failed",
+    );
 
     const { data } = await supabase
-      .from('processing_jobs')
-      .select('error_code, error_category, error_step, error_message')
-      .eq('id', structuredJob.id)
+      .from("processing_jobs")
+      .select("error_code, error_category, error_step, error_message")
+      .eq("id", structuredJob.id)
       .maybeSingle();
     const row = data as {
       error_code: string | null;
@@ -637,13 +731,13 @@ async function main(): Promise<void> {
       error_step: string | null;
       error_message: string | null;
     } | null;
-    check('error_code recorded', row?.error_code === 'VIDEO_UNREACHABLE', row);
-    check('error_category recorded', row?.error_category === 'video_access');
-    check('error_step recorded', row?.error_step === 'downloading_video');
+    check("error_code recorded", row?.error_code === "VIDEO_UNREACHABLE", row);
+    check("error_category recorded", row?.error_category === "video_access");
+    check("error_step recorded", row?.error_step === "downloading_video");
     check(
       "error_message is error.message, NOT the unparseable top-level one",
-      row?.error_message === 'We could not download your video.',
-      row?.error_message
+      row?.error_message === "We could not download your video.",
+      row?.error_message,
     );
 
     // This failure class triggers the auto-resubmit attempt in after() — but
@@ -654,88 +748,120 @@ async function main(): Promise<void> {
     // against a mocked vendor instead.
     await new Promise((resolve) => setTimeout(resolve, 4_000));
     const { count } = await supabase
-      .from('processing_jobs')
-      .select('id', { count: 'exact', head: true })
-      .eq('resubmitted_from_job_id', structuredJob.id);
+      .from("processing_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("resubmitted_from_job_id", structuredJob.id);
     check(
-      'declined auto-resubmit creates no child row',
+      "declined auto-resubmit creates no child row",
       (count ?? 0) === 0,
-      count
+      count,
     );
   }
 
-  console.log('5c. a video-quality failure is never auto-resubmitted');
+  console.log("5c. a video-quality failure is never auto-resubmitted");
   {
     // VIDEO_RESOLUTION_TOO_LOW can never succeed on retry — the classifier
     // must not even attempt one (no step match, no code match).
     const qualityExtId = `test-quality-${Date.now()}`;
     const qualityJob = await makeJob(qualityExtId);
     const r = await post({
-      status: 'job_failed',
+      status: "job_failed",
       externalJobId: qualityExtId,
       error: {
-        code: 'VIDEO_RESOLUTION_TOO_LOW',
-        category: 'video_quality',
-        step: 'validating_video',
-        message: 'The video resolution is too low to analyse.',
+        code: "VIDEO_RESOLUTION_TOO_LOW",
+        category: "video_quality",
+        step: "validating_video",
+        message: "The video resolution is too low to analyse.",
       },
     });
-    check('returns 200', r.status === 200, r);
-    check('job moves to failed', (await jobStatus(qualityJob.id)) === 'failed');
+    check("returns 200", r.status === 200, r);
+    check("job moves to failed", (await jobStatus(qualityJob.id)) === "failed");
 
     await new Promise((resolve) => setTimeout(resolve, 4_000));
     const { count } = await supabase
-      .from('processing_jobs')
-      .select('id', { count: 'exact', head: true })
-      .eq('resubmitted_from_job_id', qualityJob.id);
-    check('no auto-resubmission row exists', (count ?? 0) === 0, count);
+      .from("processing_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("resubmitted_from_job_id", qualityJob.id);
+    check("no auto-resubmission row exists", (count ?? 0) === 0, count);
   }
 
-  console.log('6. unmatched delivery is kept, not dropped');
+  console.log("6. unmatched delivery is kept, not dropped");
   {
-    const r = await post({ status: 'queued', externalJobId: unknownExtId });
-    check('returns 200 — a retry would orphan identically', r.status === 200, r);
-    check('payload still persisted for forensics', (await deliveryCount(unknownExtId)) === 1);
-    await supabase.from('splitstep_webhook_deliveries').delete().eq('external_job_id', unknownExtId);
+    const r = await post({ status: "queued", externalJobId: unknownExtId });
+    check(
+      "returns 200 — a retry would orphan identically",
+      r.status === 200,
+      r,
+    );
+    check(
+      "payload still persisted for forensics",
+      (await deliveryCount(unknownExtId)) === 1,
+    );
+    await supabase
+      .from("splitstep_webhook_deliveries")
+      .delete()
+      .eq("external_job_id", unknownExtId);
   }
 
-  console.log('7. unparseable body is recorded rather than lost');
+  console.log("7. unparseable body is recorded rather than lost");
   {
     // Signed like any other delivery — the HMAC is over raw bytes, so it does
     // not care that those bytes are not JSON.
-    const rawBody = 'not json{';
-    const headers: Record<string, string> = { 'content-type': 'application/json' };
-    if (secret) headers['x-splitstep-signature'] = sign(rawBody);
-    const res = await fetch(endpoint, { method: 'POST', headers, body: rawBody });
-    check('does not 5xx on malformed input', res.status < 500, res.status);
+    const rawBody = "not json{";
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+    };
+    if (secret) headers["x-splitstep-signature"] = sign(rawBody);
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: rawBody,
+    });
+    check("does not 5xx on malformed input", res.status < 500, res.status);
   }
 
   if (secret) {
-    console.log('8. a bad signature is rejected');
+    console.log("8. a bad signature is rejected");
     {
       const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-splitstep-signature': 'wrong' },
-        body: JSON.stringify({ status: 'queued', externalJobId: completedExtId }),
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-splitstep-signature": "wrong",
+        },
+        body: JSON.stringify({
+          status: "queued",
+          externalJobId: completedExtId,
+        }),
       });
-      check('garbage signature returns 401', res.status === 401, res.status);
+      check("garbage signature returns 401", res.status === 401, res.status);
     }
 
-    console.log('9. a signature over DIFFERENT bytes is rejected');
+    console.log("9. a signature over DIFFERENT bytes is rejected");
     {
       // The real thing HMAC protects against: a valid signature replayed onto a
       // tampered body. Sign one payload, send another.
-      const signedBody = JSON.stringify({ status: 'queued', externalJobId: completedExtId });
-      const tamperedBody = JSON.stringify({ status: 'job_completed', externalJobId: completedExtId });
+      const signedBody = JSON.stringify({
+        status: "queued",
+        externalJobId: completedExtId,
+      });
+      const tamperedBody = JSON.stringify({
+        status: "job_completed",
+        externalJobId: completedExtId,
+      });
       const res = await fetch(endpoint, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'content-type': 'application/json',
-          'x-splitstep-signature': sign(signedBody),
+          "content-type": "application/json",
+          "x-splitstep-signature": sign(signedBody),
         },
         body: tamperedBody,
       });
-      check('signature/body mismatch returns 401', res.status === 401, res.status);
+      check(
+        "signature/body mismatch returns 401",
+        res.status === 401,
+        res.status,
+      );
     }
   }
 }
@@ -747,10 +873,10 @@ main()
       console.error(`\n${failures} check(s) failed.\n`);
       process.exit(1);
     }
-    console.log('\nAll checks passed. Our half of the loop works.\n');
+    console.log("\nAll checks passed. Our half of the loop works.\n");
   })
   .catch(async (err) => {
     await cleanup();
-    console.error('\nRun aborted:', err instanceof Error ? err.message : err);
+    console.error("\nRun aborted:", err instanceof Error ? err.message : err);
     process.exit(1);
   });

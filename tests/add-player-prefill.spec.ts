@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
 /**
  * Add player's `initial` prefill — `add-player-dialog.tsx`, reached from
@@ -44,47 +44,52 @@ import { expect, test } from '@playwright/test';
  */
 
 const SOURCE = readFileSync(
-  join(process.cwd(), 'src/components/dashboard/team/add-player-dialog.tsx'),
-  'utf8'
+  join(process.cwd(), "src/components/dashboard/team/add-player-dialog.tsx"),
+  "utf8",
 );
 
 const HEADER = readFileSync(
-  join(process.cwd(), 'src/components/dashboard/team/roster-header-buttons.tsx'),
-  'utf8'
+  join(
+    process.cwd(),
+    "src/components/dashboard/team/roster-header-buttons.tsx",
+  ),
+  "utf8",
 );
 
-test('the prefill the replica models is the one the dialog ships', () => {
+test("the prefill the replica models is the one the dialog ships", () => {
   // Applied on the open edge, in an effect, never in a state initializer.
-  expect(SOURCE).toContain('const wasOpen = useRef(false);');
-  expect(SOURCE).toContain('const opening = open && !wasOpen.current;');
+  expect(SOURCE).toContain("const wasOpen = useRef(false);");
+  expect(SOURCE).toContain("const opening = open && !wasOpen.current;");
   expect(SOURCE).toMatch(
-    /if \(initial\.firstName\) setFirstName\(initial\.firstName\);[\s\S]*?if \(initial\.lastName\) setLastName\(initial\.lastName\);[\s\S]*?if \(initial\.email\) setEmail\(initial\.email\);[\s\S]*?\}, \[open\]\);/
+    /if \(initial\.firstName\) setFirstName\(initial\.firstName\);[\s\S]*?if \(initial\.lastName\) setLastName\(initial\.lastName\);[\s\S]*?if \(initial\.email\) setEmail\(initial\.email\);[\s\S]*?\}, \[open\]\);/,
   );
   expect(SOURCE).not.toMatch(/useState\((?:initial|props\.initial)/);
 
   // `reset()` clears to empty, not to `initial` — Cancel leaves no residue.
   expect(SOURCE).toMatch(
-    /function reset\(\) \{\s*setFirstName\(""\);\s*setLastName\(""\);[\s\S]*?setEmail\(""\);/
+    /function reset\(\) \{\s*setFirstName\(""\);\s*setLastName\(""\);[\s\S]*?setEmail\(""\);/,
   );
   // ...and nothing inside `reset()` mentions `initial` at all.
   const resetBody = SOURCE.match(/function reset\(\) \{[\s\S]*?\n {2}\}/);
   expect(resetBody).not.toBeNull();
-  expect(resetBody![0]).not.toContain('initial');
+  expect(resetBody![0]).not.toContain("initial");
 
   // The suppression key is still every argument `addProgramPlayer` is handed.
   expect(SOURCE).toMatch(
-    /const formKey = \[\s*firstName\.trim\(\),\s*lastName\.trim\(\),\s*classYear,\s*lineupSpot,\s*email\.trim\(\),\s*\]\.join\("\\u0000"\);/
+    /const formKey = \[\s*firstName\.trim\(\),\s*lastName\.trim\(\),\s*classYear,\s*lineupSpot,\s*email\.trim\(\),\s*\]\.join\("\\u0000"\);/,
   );
   expect(SOURCE).toContain(
-    'created !== null && created.form === formKey ? created.profileId : null'
+    "created !== null && created.form === formKey ? created.profileId : null",
   );
 
   // The header holds the state beside its existing flags and passes it down.
-  expect(HEADER).toContain('const [addingPlayer, setAddingPlayer] = useState(false);');
-  expect(HEADER).toMatch(
-    /const \[addInitial, setAddInitial\] = useState<AddPlayerInitial \| undefined>/
+  expect(HEADER).toContain(
+    "const [addingPlayer, setAddingPlayer] = useState(false);",
   );
-  expect(HEADER).toContain('initial={addInitial}');
+  expect(HEADER).toMatch(
+    /const \[addInitial, setAddInitial\] = useState<AddPlayerInitial \| undefined>/,
+  );
+  expect(HEADER).toContain("initial={addInitial}");
 });
 
 /**
@@ -137,43 +142,43 @@ const HARNESS = `
     render();
   </script>`;
 
-test('the prefill survives a cancel-and-reopen, and Cancel leaves no residue', async ({
+test("the prefill survives a cancel-and-reopen, and Cancel leaves no residue", async ({
   page,
 }) => {
   await page.setContent(HARNESS);
-  const first = page.locator('#first');
-  const last = page.locator('#last');
-  const email = page.locator('#email');
+  const first = page.locator("#first");
+  const last = page.locator("#last");
+  const email = page.locator("#email");
 
   // First open: the prefill lands.
-  await page.click('#open');
-  await expect(first).toHaveValue('Maya');
-  await expect(last).toHaveValue('Ortiz');
-  await expect(email).toHaveValue('maya@school.edu');
+  await page.click("#open");
+  await expect(first).toHaveValue("Maya");
+  await expect(last).toHaveValue("Ortiz");
+  await expect(email).toHaveValue("maya@school.edu");
 
   // An unchanged form still resolves the created row, so the duplicate notes
   // stay off the row this dialog just wrote.
-  await expect(page.locator('#excluded')).toHaveText('p-1');
+  await expect(page.locator("#excluded")).toHaveText("p-1");
 
   // Editing any keyed field drops the exclusion — a changed form is a
   // different write, and the notes come back.
-  await email.fill('other@school.edu');
-  await expect(page.locator('#excluded')).toHaveText('none');
-  await email.fill('maya@school.edu');
-  await expect(page.locator('#excluded')).toHaveText('p-1');
+  await email.fill("other@school.edu");
+  await expect(page.locator("#excluded")).toHaveText("none");
+  await email.fill("maya@school.edu");
+  await expect(page.locator("#excluded")).toHaveText("p-1");
 
   // Cancel empties every field: no residue for the next open to inherit.
-  await page.click('#cancel');
-  await expect(page.locator('#dialog')).toBeHidden();
-  await expect(first).toHaveValue('');
-  await expect(last).toHaveValue('');
-  await expect(email).toHaveValue('');
+  await page.click("#cancel");
+  await expect(page.locator("#dialog")).toBeHidden();
+  await expect(first).toHaveValue("");
+  await expect(last).toHaveValue("");
+  await expect(email).toHaveValue("");
 
   // Second open, same `initial`: the prefill is applied again — which a
   // `useState` initializer on a component that stays mounted could not do.
-  await page.click('#open');
-  await expect(first).toHaveValue('Maya');
-  await expect(last).toHaveValue('Ortiz');
-  await expect(email).toHaveValue('maya@school.edu');
-  await expect(page.locator('#excluded')).toHaveText('p-1');
+  await page.click("#open");
+  await expect(first).toHaveValue("Maya");
+  await expect(last).toHaveValue("Ortiz");
+  await expect(email).toHaveValue("maya@school.edu");
+  await expect(page.locator("#excluded")).toHaveText("p-1");
 });

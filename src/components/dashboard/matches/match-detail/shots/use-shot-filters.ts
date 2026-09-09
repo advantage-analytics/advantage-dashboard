@@ -102,7 +102,9 @@ const SCORE_MAP: Record<string, number> = {
   AD: 3,
 };
 
-export function getPointSide(pointScore: string | null | undefined): "deuce" | "ad" {
+export function getPointSide(
+  pointScore: string | null | undefined,
+): "deuce" | "ad" {
   const s = (pointScore ?? "").toUpperCase().trim();
   if (s === "DEUCE" || s === "40-40") return "deuce";
   if (/^AD?-|-AD?$/.test(s)) return "ad";
@@ -241,7 +243,10 @@ export function pointToReturnDots(
     return [landingDot];
   }
   const contactNorm = didFlip
-    ? { lx: -p.secondShotContactX, ly: REAL_COURT_LENGTH - p.secondShotContactY }
+    ? {
+        lx: -p.secondShotContactX,
+        ly: REAL_COURT_LENGTH - p.secondShotContactY,
+      }
     : { lx: p.secondShotContactX, ly: p.secondShotContactY };
   const nearH = FULL_SVG_NEAR_BASELINE - FULL_SVG_NET_Y;
   const nearSpanY = REAL_COURT_LENGTH - REAL_NET_Y;

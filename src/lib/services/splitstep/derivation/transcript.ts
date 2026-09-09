@@ -16,19 +16,31 @@
  * they were verified, and `reason` carries why not.
  */
 
-import { metersToCourtFrame, kmhToMph, serveZone, directionZone, serveCourtSide } from './court';
-import { flagPoint, flagStroke } from './flags';
+import {
+  metersToCourtFrame,
+  kmhToMph,
+  serveZone,
+  directionZone,
+  serveCourtSide,
+} from "./court";
+import { flagPoint, flagStroke } from "./flags";
 import {
   ACCEPT_UNRECONCILED_FOLD,
   reconcile,
   scoreIsSelfMirroring,
   type MatchScore,
   type Reconciliation,
-} from './reconcile';
-import { classifyPoint, lastServeIndex, shotNumber, shotResult, type ResultType } from './result-type';
-import { resolvePointWinners } from './winners';
-import { pressureFor } from './pressure';
-import type { SplitStepRally, SplitStepStroke } from './types';
+} from "./reconcile";
+import {
+  classifyPoint,
+  lastServeIndex,
+  shotNumber,
+  shotResult,
+  type ResultType,
+} from "./result-type";
+import { resolvePointWinners } from "./winners";
+import { pressureFor } from "./pressure";
+import type { SplitStepRally, SplitStepStroke } from "./types";
 
 export interface DerivedShot {
   shot_number: number;
@@ -83,10 +95,10 @@ export interface Transcript {
  * does. Used for keys only, never for display.
  */
 function orderlessScore(score: string | null): string {
-  if (!score) return 'unknown';
-  const parts = score.split('-').map((p) => p.trim());
+  if (!score) return "unknown";
+  const parts = score.split("-").map((p) => p.trim());
   if (parts.length !== 2) return score;
-  return [...parts].sort().join('-');
+  return [...parts].sort().join("-");
 }
 
 /** Physically impossible serve landings, beyond a wide or long fault. */
@@ -104,10 +116,10 @@ function rallyLandingUsable(stroke: SplitStepStroke): boolean {
 
 /** `shots.shot_type` for a non-serve, from the vendor's coarse taxonomy. */
 function strokeShotType(stroke: SplitStepStroke): string | null {
-  if (stroke.strokeType === 'volley') return 'Volley';
-  if (stroke.strokeSide === 'forehand') return 'Forehand';
-  if (stroke.strokeSide === 'backhand') return 'Backhand';
-  if (stroke.strokeSide === 'overhead') return 'Overhead';
+  if (stroke.strokeType === "volley") return "Volley";
+  if (stroke.strokeSide === "forehand") return "Forehand";
+  if (stroke.strokeSide === "backhand") return "Backhand";
+  if (stroke.strokeSide === "overhead") return "Overhead";
   return null;
 }
 
@@ -121,7 +133,7 @@ function strokeShotType(stroke: SplitStepStroke): string | null {
  */
 function geometryTopLabel(
   rallies: SplitStepRally[],
-  labels: string[]
+  labels: string[],
 ): string | null {
   const firstGame = rallies[0]?.strokes[0]?.predGameScore ?? null;
   const votes = new Map<string, { top: number; bottom: number }>();
@@ -182,7 +194,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     setKeyOf.set(rally.rallyId, orderlessScore(first?.predSetScore ?? null));
     gameKeyOf.set(
       rally.rallyId,
-      `${orderlessScore(first?.predSetScore ?? null)}|${first?.predGameScore}|${rally.server}`
+      `${orderlessScore(first?.predSetScore ?? null)}|${first?.predGameScore}|${rally.server}`,
     );
   }
 
@@ -208,10 +220,13 @@ export function buildTranscript(options: BuildOptions): Transcript {
   };
 
   if (!score) {
-    return { ...empty, reason: 'matches.score is required and was not set' };
+    return { ...empty, reason: "matches.score is required and was not set" };
   }
   if (labels.length !== 2) {
-    return { ...empty, reason: `expected two player labels, found ${labels.length}` };
+    return {
+      ...empty,
+      reason: `expected two player labels, found ${labels.length}`,
+    };
   }
 
   const topLabel = geometryTopLabel(rallies, labels);
@@ -219,8 +234,8 @@ export function buildTranscript(options: BuildOptions): Transcript {
     winners,
     labels,
     score,
-    gameKeyOf: (id) => gameKeyOf.get(id) ?? '',
-    setKeyOf: (id) => setKeyOf.get(id) ?? '',
+    gameKeyOf: (id) => gameKeyOf.get(id) ?? "",
+    setKeyOf: (id) => setKeyOf.get(id) ?? "",
     geometryTopLabel: topLabel,
     initialTopIsPlayer1,
   });
@@ -230,12 +245,13 @@ export function buildTranscript(options: BuildOptions): Transcript {
   if (rec.ok && topLabel && initialTopIsPlayer1 !== null) {
     const expected = initialTopIsPlayer1
       ? topLabel
-      : labels.find((l) => l !== topLabel) ?? null;
+      : (labels.find((l) => l !== topLabel) ?? null);
     if (expected && rec.player1Label && expected !== rec.player1Label) {
       return {
         ...empty,
         reconciliation: rec,
-        reason: 'player_mapping_contradiction: geometry and the score fold disagree',
+        reason:
+          "player_mapping_contradiction: geometry and the score fold disagree",
       };
     }
   }
@@ -276,7 +292,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
   let unreturned = 0;
 
   rallies.forEach((rally, i) => {
-    const key = gameKeyOf.get(rally.rallyId) ?? '';
+    const key = gameKeyOf.get(rally.rallyId) ?? "";
     if (key !== previousGameKey) {
       // Close the game that just ended and credit it before this point is
       // measured, so the tallies describe the state this point begins from.
@@ -284,7 +300,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
       if (closed) {
         if (closed.setIndex !== currentSetIndex) {
           const setWinner = Object.entries(gamesThisSet).sort(
-            (a, b) => b[1] - a[1]
+            (a, b) => b[1] - a[1],
           )[0]?.[0];
           if (setWinner) setsWon[setWinner] = (setsWon[setWinner] ?? 0) + 1;
           for (const label of labels) gamesThisSet[label] = 0;
@@ -312,30 +328,38 @@ export function buildTranscript(options: BuildOptions): Transcript {
       bestOf,
     });
     const resultType = winner ? classifyPoint(rally, winner) : null;
-    const numbering = gameNumberOf.get(`${gameIndex}`) ?? { set: 1, game: gameIndex + 1 };
+    const numbering = gameNumberOf.get(`${gameIndex}`) ?? {
+      set: 1,
+      game: gameIndex + 1,
+    };
 
     const last = rally.strokes[rally.strokes.length - 1];
-    if (last && last.strokeType !== 'serve' && winner) {
+    if (last && last.strokeType !== "serve" && winner) {
       rallyEnders += 1;
       if (last.playerLabel === winner) winnerStruckLast += 1;
     }
-    if (last?.strokeType === 'serve') unreturned += 1;
+    if (last?.strokeType === "serve") unreturned += 1;
 
     const shots: DerivedShot[] = [];
     const serveLanding = rally.serves[rally.serves.length - 1];
     const serveLandingX =
-      serveLanding && serveLandingUsable(serveLanding) ? serveLanding.bounceX : null;
+      serveLanding && serveLandingUsable(serveLanding)
+        ? serveLanding.bounceX
+        : null;
 
     rally.strokes.forEach((stroke, index) => {
-      const isServe = stroke.strokeType === 'serve';
+      const isServe = stroke.strokeType === "serve";
       if (isServe) servesSeen += 1;
 
-      const usable = isServe ? serveLandingUsable(stroke) : rallyLandingUsable(stroke);
+      const usable = isServe
+        ? serveLandingUsable(stroke)
+        : rallyLandingUsable(stroke);
       if (isServe && usable) servesKept += 1;
 
-      const landing = usable && stroke.bounceX !== null && stroke.bounceY !== null
-        ? metersToCourtFrame(stroke.bounceX, stroke.bounceY)
-        : null;
+      const landing =
+        usable && stroke.bounceX !== null && stroke.bounceY !== null
+          ? metersToCourtFrame(stroke.bounceX, stroke.bounceY)
+          : null;
       const contact =
         stroke.playerX !== null && stroke.playerY !== null
           ? metersToCourtFrame(stroke.playerX, stroke.playerY)
@@ -349,8 +373,8 @@ export function buildTranscript(options: BuildOptions): Transcript {
         is_player1: stroke.playerLabel === player1,
         shot_type: isServe
           ? isFirstServe || rally.serves.length === 1
-            ? 'First Serve'
-            : 'Second Serve'
+            ? "First Serve"
+            : "Second Serve"
           : strokeShotType(stroke),
         spin_type: stroke.spinType,
         speed_mph: stroke.speedKmh === null ? null : kmhToMph(stroke.speedKmh),

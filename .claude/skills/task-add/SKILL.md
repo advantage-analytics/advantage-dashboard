@@ -134,10 +134,10 @@ draft still goes through step 3's confirmation either way.
 
 ## Drafting rules
 
-*Referenced by name from other skills. Change them here, not by copy.*
+_Referenced by name from other skills. Change them here, not by copy._
 
-**Observability.** Every criterion must pass this test: *could a reviewer
-holding only the diff verdict this met or not met?*
+**Observability.** Every criterion must pass this test: _could a reviewer
+holding only the diff verdict this met or not met?_
 
 - ✅ "The badge reads 0 and the clear button is hidden once the last filter is removed"
 - ❌ "The filter code is cleaner"
@@ -181,6 +181,7 @@ are exact — the runner parses them:
 
 ```markdown
 ## T<n> · <short imperative title>
+
 - **status:** todo
 - **model:** sonnet
 - **needs:** <T-ids that must finish first, or omit the line>

@@ -117,7 +117,10 @@ export default async function ProgramStatusPage({
           />
           <div className="flex min-w-0 flex-col gap-0.5">
             {age && (
-              <span className="text-body-sm" style={{ color: "var(--ink-900)" }}>
+              <span
+                className="text-body-sm"
+                style={{ color: "var(--ink-900)" }}
+              >
                 Claimed <span className="mono tabular">{age}</span> ago
               </span>
             )}

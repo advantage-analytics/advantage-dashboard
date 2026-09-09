@@ -154,7 +154,7 @@ const PERSONA_FOR_ROLE = {
 async function adoptMembership(
   admin: ReturnType<typeof createAdminClient>,
   userId: string,
-  programId: string
+  programId: string,
 ): Promise<void> {
   // The stamp and the read-back share no data, so they go out together; only
   // the persona write waits on the read.
@@ -208,7 +208,12 @@ export async function acceptInvite(token: string): Promise<JoinActionResult> {
   const supabase = await createClient();
   // The session read depends on nothing the accept returns, so the two
   // round trips overlap rather than queue.
-  const [outcome, { data: { user } }] = await Promise.all([
+  const [
+    outcome,
+    {
+      data: { user },
+    },
+  ] = await Promise.all([
     acceptWithSession(token, supabase),
     supabase.auth.getUser(),
   ]);
@@ -240,14 +245,19 @@ const UUID_PATTERN =
  * couldn't finish that", for something that was never our failure.
  */
 export async function acceptPendingInvite(
-  inviteId: string
+  inviteId: string,
 ): Promise<JoinActionResult> {
   if (!UUID_PATTERN.test(inviteId)) {
     return { ok: false, error: "That invitation isn't available." };
   }
 
   const supabase = await createClient();
-  const [outcome, { data: { user } }] = await Promise.all([
+  const [
+    outcome,
+    {
+      data: { user },
+    },
+  ] = await Promise.all([
     acceptPendingWithSession(inviteId, supabase),
     supabase.auth.getUser(),
   ]);
@@ -272,7 +282,7 @@ export async function acceptPendingInvite(
  */
 export async function createAccountAndAccept(
   token: string,
-  input: { firstName: string; lastName: string; password: string }
+  input: { firstName: string; lastName: string; password: string },
 ): Promise<JoinActionResult> {
   const state = await resolveJoinState(token);
   if (state.kind !== "sign_up") {
@@ -300,16 +310,17 @@ export async function createAccountAndAccept(
   const admin = createAdminClient();
   const fullName = [firstName, lastName].filter(Boolean).join(" ");
 
-  const { data: created, error: createError } = await admin.auth.admin.createUser({
-    email: state.email,
-    password: input.password,
-    email_confirm: true,
-    // `handle_new_user` reads `full_name` to split the profile's first and last
-    // name. Anything else here is ignored by that trigger — deliberately: it is
-    // SECURITY DEFINER, and GoTrue metadata is writable by any signUp() caller
-    // with the anon key, so nothing trust-bearing may ride in it.
-    user_metadata: { full_name: fullName },
-  });
+  const { data: created, error: createError } =
+    await admin.auth.admin.createUser({
+      email: state.email,
+      password: input.password,
+      email_confirm: true,
+      // `handle_new_user` reads `full_name` to split the profile's first and last
+      // name. Anything else here is ignored by that trigger — deliberately: it is
+      // SECURITY DEFINER, and GoTrue metadata is writable by any signUp() caller
+      // with the anon key, so nothing trust-bearing may ride in it.
+      user_metadata: { full_name: fullName },
+    });
 
   if (createError) {
     console.error("[join] could not create the account", {
@@ -384,9 +395,7 @@ export type NudgeResult = { ok: true } | { ok: false; error: string };
  * Nothing about the invitation moves: not `accepted_at`, not `expires_at`. A
  * replacement is minted by the coach, from the roster, or not at all.
  */
-export async function requestFreshInvite(
-  token: string
-): Promise<NudgeResult> {
+export async function requestFreshInvite(token: string): Promise<NudgeResult> {
   const state = await resolveJoinState(token);
   if (state.kind !== "expired") {
     return { ok: false, error: "That link can't be used that way." };
@@ -451,7 +460,7 @@ async function nudgeInviter(invite: InviteRecord): Promise<void> {
       programName: invite.programName,
       inviteeEmail: invite.email,
       expiredOn: new Date(invite.expiresAt),
-    })
+    }),
   );
 
   if (!sent.ok) {
@@ -490,6 +499,6 @@ export async function signOutForInvite(token: string): Promise<void> {
   redirect(
     (await accountExists(invite.email))
       ? signInThenHref(joinHref(token))
-      : joinHref(token)
+      : joinHref(token),
   );
 }

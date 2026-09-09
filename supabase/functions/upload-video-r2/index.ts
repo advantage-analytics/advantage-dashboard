@@ -40,7 +40,8 @@ Deno.serve(async (req: Request) => {
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
   };
 
   if (req.method === "OPTIONS") {
@@ -51,8 +52,14 @@ Deno.serve(async (req: Request) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(
-        JSON.stringify({ success: false, error: "Missing Authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          success: false,
+          error: "Missing Authorization header",
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -65,12 +72,18 @@ Deno.serve(async (req: Request) => {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    const {
+      data: { user },
+      error: userError,
+    } = await userClient.auth.getUser();
     if (userError || !user) {
       console.error("Auth error in upload-video-r2:", userError);
       return new Response(
         JSON.stringify({ success: false, error: "Unauthorized user" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -78,8 +91,14 @@ Deno.serve(async (req: Request) => {
 
     if (!matchId || !fileName) {
       return new Response(
-        JSON.stringify({ success: false, error: "matchId and fileName are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          success: false,
+          error: "matchId and fileName are required",
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -95,13 +114,22 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (matchError || !match || match.created_by !== user.id) {
-      console.error("Match verification failed:", { matchError, match, userId: user.id });
+      console.error("Match verification failed:", {
+        matchError,
+        match,
+        userId: user.id,
+      });
       return new Response(
         JSON.stringify({
           success: false,
-          error: matchError ? matchError.message : "Match not found or unauthorized",
+          error: matchError
+            ? matchError.message
+            : "Match not found or unauthorized",
         }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -142,7 +170,9 @@ Deno.serve(async (req: Request) => {
     });
 
     // 1-hour presigned URL for upload
-    const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+    const uploadUrl = await getSignedUrl(s3Client, command, {
+      expiresIn: 3600,
+    });
 
     console.log(`✅ Generated presigned R2 upload URL for ${videoObjectKey}`);
 
@@ -154,7 +184,10 @@ Deno.serve(async (req: Request) => {
         bucket: bucketName,
         expiresInSeconds: 3600,
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   } catch (err) {
     // A misconfigured deployment is our problem, not the caller's: name the
@@ -162,11 +195,17 @@ Deno.serve(async (req: Request) => {
     if (err instanceof ConfigError) {
       console.error(
         `❌ upload-video-r2 is misconfigured: ${err.variable} is not set. ` +
-          `Set it in the edge function secrets.`
+          `Set it in the edge function secrets.`,
       );
       return new Response(
-        JSON.stringify({ success: false, error: "Video upload is not configured." }),
-        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          success: false,
+          error: "Video upload is not configured.",
+        }),
+        {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -176,7 +215,10 @@ Deno.serve(async (req: Request) => {
         success: false,
         error: err instanceof Error ? err.message : "Internal Server Error",
       }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

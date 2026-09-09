@@ -21,7 +21,7 @@
  * were removed with the implementation — git has them if the ground shifts back.
  */
 
-export type VideoUrlStrategyId = 'azure-sas';
+export type VideoUrlStrategyId = "azure-sas";
 
 export interface VendorVideoUrl {
   /** The URL handed to the vendor as `VideoUrl` in the job request. */

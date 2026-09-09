@@ -43,27 +43,27 @@
  * is recording the envelope, which is what makes everything else recoverable.
  */
 
-import { NextRequest, NextResponse, after } from 'next/server';
-import { createHash, createHmac, timingSafeEqual } from 'crypto';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { parseWebhookPayload } from '@/lib/services/splitstep/webhook-payload';
-import { selectDeliveryStorageKeys } from '@/lib/services/splitstep/delivery-storage-keys';
-import { RESULTS_BUCKET } from '@/lib/services/splitstep/config';
+import { NextRequest, NextResponse, after } from "next/server";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { parseWebhookPayload } from "@/lib/services/splitstep/webhook-payload";
+import { selectDeliveryStorageKeys } from "@/lib/services/splitstep/delivery-storage-keys";
+import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
 import {
   deleteVideoBlob,
   startTrimmedVideoCopy,
   trimmedCopyStatus,
-} from '@/lib/services/splitstep/video-url';
-import { releaseQuota } from '@/lib/services/splitstep/quota';
+} from "@/lib/services/splitstep/video-url";
+import { releaseQuota } from "@/lib/services/splitstep/quota";
 import {
   isDownloadFailure,
   resubmitJob,
-} from '@/lib/services/splitstep/resubmit-job';
-import { gradeResults } from '@/lib/services/splitstep/grade-results';
-import { deriveAndPublish } from '@/lib/services/splitstep/derive-and-publish';
+} from "@/lib/services/splitstep/resubmit-job";
+import { gradeResults } from "@/lib/services/splitstep/grade-results";
+import { deriveAndPublish } from "@/lib/services/splitstep/derive-and-publish";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
  * Set explicitly rather than inherited. The route is bounded by design, but the
@@ -74,7 +74,7 @@ export const dynamic = 'force-dynamic';
  */
 export const maxDuration = 60;
 
-const LOG = '[splitstep-webhook]';
+const LOG = "[splitstep-webhook]";
 
 /* Bucket for raw provider results (created by the 20260805005801 migration).
    Imported rather than re-declared: the verification script reads the same
@@ -104,16 +104,16 @@ const FRAME_DATA_FETCH_TIMEOUT_MS = 20_000;
  * row, which is a worse outcome than carrying a few dead candidates.
  */
 const SIGNATURE_HEADERS = [
-  'x-hmac-signature',
-  'x-splitstep-signature',
-  'x-webhook-signature',
-  'x-signature',
-  'x-signature-256',
-  'x-hub-signature-256',
-  'signature',
-  'x-webhook-secret',
-  'x-api-key',
-  'authorization',
+  "x-hmac-signature",
+  "x-splitstep-signature",
+  "x-webhook-signature",
+  "x-signature",
+  "x-signature-256",
+  "x-hub-signature-256",
+  "signature",
+  "x-webhook-secret",
+  "x-api-key",
+  "authorization",
 ] as const;
 
 type AuthOutcome = {
@@ -152,18 +152,20 @@ function verifyWebhookAuth(request: NextRequest, rawBody: string): AuthOutcome {
   if (!secret) {
     console.warn(
       `${LOG} UNSIGNED — SPLITSTEP_WEBHOOK_SECRET is not set. Accepting without ` +
-        `authentication. This must not remain true once real match video is processed.`
+        `authentication. This must not remain true once real match video is processed.`,
     );
-    return { ok: true, verified: false, reason: 'no secret configured' };
+    return { ok: true, verified: false, reason: "no secret configured" };
   }
 
-  const expected = createHmac('sha256', secret).update(rawBody, 'utf8').digest('base64');
+  const expected = createHmac("sha256", secret)
+    .update(rawBody, "utf8")
+    .digest("base64");
 
   // Equal-length compare via digests, so nothing leaks through timing or length.
   const matches = (presented: string, against: string) =>
     timingSafeEqual(
-      createHash('sha256').update(presented).digest(),
-      createHash('sha256').update(against).digest()
+      createHash("sha256").update(presented).digest(),
+      createHash("sha256").update(against).digest(),
     );
 
   let sawCandidate = false;
@@ -173,10 +175,15 @@ function verifyWebhookAuth(request: NextRequest, rawBody: string): AuthOutcome {
     if (!raw) continue;
     sawCandidate = true;
 
-    const presented = header === 'authorization' ? raw.replace(/^Bearer\s+/i, '') : raw.trim();
+    const presented =
+      header === "authorization" ? raw.replace(/^Bearer\s+/i, "") : raw.trim();
 
     if (matches(presented, expected)) {
-      return { ok: true, verified: true, reason: `HMAC verified via ${header}` };
+      return {
+        ok: true,
+        verified: true,
+        reason: `HMAC verified via ${header}`,
+      };
     }
 
     // Tolerated, not trusted: some senders put the shared secret itself in the
@@ -187,7 +194,7 @@ function verifyWebhookAuth(request: NextRequest, rawBody: string): AuthOutcome {
       console.warn(
         `${LOG} ${header} carried the raw shared secret, not an HMAC of the body. ` +
           `Accepted, but recorded unverified — ask the vendor to send ` +
-          `base64(HMAC-SHA256(secret, raw_body)).`
+          `base64(HMAC-SHA256(secret, raw_body)).`,
       );
       return { ok: true, verified: false, reason: `raw secret via ${header}` };
     }
@@ -196,25 +203,30 @@ function verifyWebhookAuth(request: NextRequest, rawBody: string): AuthOutcome {
   if (sawCandidate) {
     // A signature was presented and it did not match. That is a real failure,
     // not an unknown-header problem.
-    return { ok: false, verified: false, reason: 'signature present but did not match' };
+    return {
+      ok: false,
+      verified: false,
+      reason: "signature present but did not match",
+    };
   }
 
-  const requireSignature = process.env.SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE === 'true';
+  const requireSignature =
+    process.env.SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE === "true";
 
   console.warn(
-    `${LOG} no signature header found${requireSignature ? ' — REJECTING' : ' — accepting unverified'}`,
+    `${LOG} no signature header found${requireSignature ? " — REJECTING" : " — accepting unverified"}`,
     {
       searched: SIGNATURE_HEADERS,
       // The header NAMES are what identify the right one. Values are redacted
       // by safeHeaders() before anything is stored or logged.
       received: [...request.headers.keys()],
-    }
+    },
   );
 
   return {
     ok: !requireSignature,
     verified: false,
-    reason: 'no signature header found',
+    reason: "no signature header found",
   };
 }
 
@@ -226,11 +238,11 @@ function verifyWebhookAuth(request: NextRequest, rawBody: string): AuthOutcome {
  * puts the signature; the values never do.
  */
 function safeHeaders(request: NextRequest): Record<string, string> {
-  const redacted = new Set<string>([...SIGNATURE_HEADERS, 'cookie']);
+  const redacted = new Set<string>([...SIGNATURE_HEADERS, "cookie"]);
 
   const out: Record<string, string> = {};
   request.headers.forEach((value, key) => {
-    out[key] = redacted.has(key.toLowerCase()) ? '[redacted]' : value;
+    out[key] = redacted.has(key.toLowerCase()) ? "[redacted]" : value;
   });
   return out;
 }
@@ -244,12 +256,12 @@ export async function POST(request: NextRequest) {
     rawBody = await request.text();
   } catch (err) {
     console.error(`${LOG} could not read request body`, err);
-    return NextResponse.json({ error: 'Unreadable body' }, { status: 400 });
+    return NextResponse.json({ error: "Unreadable body" }, { status: 400 });
   }
 
   console.log(`${LOG} received`, {
     bytes: rawBody.length,
-    contentType: request.headers.get('content-type'),
+    contentType: request.headers.get("content-type"),
     body: rawBody.slice(0, 4000),
   });
 
@@ -258,14 +270,14 @@ export async function POST(request: NextRequest) {
   const auth = verifyWebhookAuth(request, rawBody);
   if (!auth.ok) {
     console.error(`${LOG} rejected — ${auth.reason}`);
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const verified = auth.verified;
 
   // 3. Interpret. Never fatal: an unparseable body is still recorded verbatim.
   let parsedJson: unknown = null;
   try {
-    parsedJson = rawBody.trim() === '' ? null : JSON.parse(rawBody);
+    parsedJson = rawBody.trim() === "" ? null : JSON.parse(rawBody);
   } catch {
     console.warn(`${LOG} body is not valid JSON — recording raw only`);
   }
@@ -282,14 +294,14 @@ export async function POST(request: NextRequest) {
     hasTrimmedVideoUrl: Boolean(payload.trimmedVideoUrl),
   });
 
-  const fingerprint = createHash('sha256').update(rawBody).digest('hex');
+  const fingerprint = createHash("sha256").update(rawBody).digest("hex");
   const supabase = createAdminClient();
 
   // 4. Record durably. This is the step that must succeed before we return 200 —
   //    it is what makes the envelope, and the urls inside it, recoverable by
   //    hand if everything downstream fails.
   const { data, error } = await supabase
-    .rpc('record_splitstep_webhook', {
+    .rpc("record_splitstep_webhook", {
       p_fingerprint: fingerprint,
       p_raw_body: rawBody,
       p_parsed: parsedJson,
@@ -317,7 +329,10 @@ export async function POST(request: NextRequest) {
       error: error?.message,
       fingerprint,
     });
-    return NextResponse.json({ error: 'Failed to record delivery' }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to record delivery" },
+      { status: 500 },
+    );
   }
 
   const record = data as {
@@ -338,11 +353,14 @@ export async function POST(request: NextRequest) {
     // retry would orphan identically, so 200 is honest. Loud because during the
     // pilot this most likely means the vendor's job-id field is not named what
     // the docs say.
-    console.warn(`${LOG} ORPHAN — no processing_jobs row matched this delivery`, {
-      deliveryId: record.delivery_id,
-      externalJobId: payload.externalJobId,
-      matchId: payload.matchId,
-    });
+    console.warn(
+      `${LOG} ORPHAN — no processing_jobs row matched this delivery`,
+      {
+        deliveryId: record.delivery_id,
+        externalJobId: payload.externalJobId,
+        matchId: payload.matchId,
+      },
+    );
   }
 
   // 5. Results download — AFTER the response is committed, not before.
@@ -357,7 +375,7 @@ export async function POST(request: NextRequest) {
   // confirmed no retry policy exists, so a 500 bought nothing and only risked
   // the timeout. Recovery is by hand from the stored strokes url, or via
   // GET {BASE_URL}/jobs/{job_id}, which the docs now expose.
-  if (payload.nextStatus === 'completed') {
+  if (payload.nextStatus === "completed") {
     const deliveryId = record.delivery_id;
     const jobId = record.matched_job_id;
 
@@ -418,7 +436,7 @@ export async function POST(request: NextRequest) {
             returnBody: true,
           });
 
-          await supabase.rpc('finalize_splitstep_results', {
+          await supabase.rpc("finalize_splitstep_results", {
             p_delivery_id: deliveryId,
             p_job_id: jobId,
             p_results_object_key: stored.ok ? stored.objectKey : null,
@@ -440,7 +458,7 @@ export async function POST(request: NextRequest) {
             // (`sas_url`) and stays valid for days — it can be fetched by hand.
             console.error(
               `${LOG} results download FAILED — recover from the stored strokes url (processing_jobs.sas_url)`,
-              { deliveryId, jobId, error: stored.error }
+              { deliveryId, jobId, error: stored.error },
             );
           }
         }
@@ -513,8 +531,12 @@ export async function POST(request: NextRequest) {
           supabase,
           jobId,
           files: [
-            { kind: 'players', url: playersUrl, objectKey: playersKey },
-            { kind: 'trajectories', url: trajectoriesUrl, objectKey: trajectoriesKey },
+            { kind: "players", url: playersUrl, objectKey: playersKey },
+            {
+              kind: "trajectories",
+              url: trajectoriesUrl,
+              objectKey: trajectoriesKey,
+            },
           ],
         });
       });
@@ -536,7 +558,7 @@ export async function POST(request: NextRequest) {
   // payload carries no duration, and the reservation is already the trim window
   // we asked them to analyse — so the estimate IS the actual, and calling
   // reconcileQuota() would mean inventing a number to pass it.
-  if (payload.nextStatus === 'failed' && record.matched_job_id) {
+  if (payload.nextStatus === "failed" && record.matched_job_id) {
     const failedJobId = record.matched_job_id;
     // Read once outside after(): the auto-retry decision keys on THIS
     // delivery's error fields, not on whatever the row says by the time the
@@ -549,7 +571,9 @@ export async function POST(request: NextRequest) {
       // the same budget, and holding both at once could refuse a retry the
       // budget actually has room for.
       await releaseQuota(supabase, failedJobId);
-      console.log(`${LOG} quota released for failed job`, { jobId: failedJobId });
+      console.log(`${LOG} quota released for failed job`, {
+        jobId: failedJobId,
+      });
 
       // Auto-resubmit — this failure class and ONLY this class. A download
       // failure with a valid SAS means the file, submission and metadata are
@@ -640,7 +664,7 @@ async function copyTrimmedVideo(params: {
     // Recorded as soon as the copy is accepted, not once it finishes. The key
     // is what a later delivery checks to avoid starting a second copy, and what
     // the sweeper needs to know a source video has a successor.
-    const { error } = await supabase.rpc('record_splitstep_trimmed_copy', {
+    const { error } = await supabase.rpc("record_splitstep_trimmed_copy", {
       p_job_id: jobId,
       p_trimmed_object_key: blobName,
     });
@@ -651,7 +675,7 @@ async function copyTrimmedVideo(params: {
       console.error(
         `${LOG} trimmed copy started but the key was NOT recorded — ` +
           `the blob will be orphaned`,
-        { jobId, blobName, error: error.message }
+        { jobId, blobName, error: error.message },
       );
       return;
     }
@@ -661,7 +685,7 @@ async function copyTrimmedVideo(params: {
     console.error(
       `${LOG} trimmed video copy FAILED — recover from trimmed_video_url ` +
         `on the job row, which is valid for about a week`,
-      { jobId, error: err instanceof Error ? err.message : String(err) }
+      { jobId, error: err instanceof Error ? err.message : String(err) },
     );
   }
 }
@@ -697,9 +721,9 @@ async function deleteSourceVideo(params: {
   // Not carried on the delivery record — record_splitstep_webhook() returns the
   // results key, not the video's. One read, after the response is already out.
   const { data, error } = await supabase
-    .from('processing_jobs')
-    .select('video_object_key, trimmed_object_key')
-    .eq('id', jobId)
+    .from("processing_jobs")
+    .select("video_object_key, trimmed_object_key")
+    .eq("id", jobId)
     .maybeSingle();
 
   if (error || !data?.video_object_key) {
@@ -715,7 +739,7 @@ async function deleteSourceVideo(params: {
   if (!data.trimmed_object_key) {
     console.log(
       `${LOG} keeping source video — no trimmed copy exists for this job`,
-      { jobId }
+      { jobId },
     );
     return;
   }
@@ -724,11 +748,11 @@ async function deleteSourceVideo(params: {
     blobName: data.trimmed_object_key,
   });
 
-  if (copyStatus !== 'success') {
+  if (copyStatus !== "success") {
     console.log(
       `${LOG} keeping source video — trimmed copy is ${copyStatus}; ` +
         `the sweeper will delete it once the copy lands`,
-      { jobId }
+      { jobId },
     );
     return;
   }
@@ -737,14 +761,17 @@ async function deleteSourceVideo(params: {
     const { deleted } = await deleteVideoBlob({
       blobName: data.video_object_key,
     });
-    console.log(`${LOG} source video ${deleted ? 'deleted' : 'already gone'}`, {
+    console.log(`${LOG} source video ${deleted ? "deleted" : "already gone"}`, {
       jobId,
     });
   } catch (err) {
-    console.warn(`${LOG} source video cleanup failed — the sweeper will catch it`, {
-      jobId,
-      error: err instanceof Error ? err.message : String(err),
-    });
+    console.warn(
+      `${LOG} source video cleanup failed — the sweeper will catch it`,
+      {
+        jobId,
+        error: err instanceof Error ? err.message : String(err),
+      },
+    );
   }
 }
 
@@ -778,7 +805,7 @@ async function storeVendorJson(params: {
     const response = await fetch(url, {
       signal: AbortSignal.timeout(timeoutMs),
       // No credentials — the URL carries its own.
-      redirect: 'follow',
+      redirect: "follow",
     });
 
     if (!response.ok) {
@@ -790,25 +817,25 @@ async function storeVendorJson(params: {
 
     if (returnBody) {
       text = await response.text();
-      body = new Blob([text], { type: 'application/json' });
+      body = new Blob([text], { type: "application/json" });
     } else {
       body = await response.blob();
     }
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : 'Unknown fetch error',
+      error: err instanceof Error ? err.message : "Unknown fetch error",
     };
   }
 
-  if (body.size === 0 || (text !== undefined && text.trim() === '')) {
-    return { ok: false, error: 'Vendor returned an empty body' };
+  if (body.size === 0 || (text !== undefined && text.trim() === "")) {
+    return { ok: false, error: "Vendor returned an empty body" };
   }
 
   const { error } = await supabase.storage
     .from(RESULTS_BUCKET)
     .upload(objectKey, body, {
-      contentType: 'application/json',
+      contentType: "application/json",
       // Overwrite: a retry that got past the already-stored guard should land
       // on the same key rather than accumulating near-identical copies.
       upsert: true,
@@ -839,7 +866,7 @@ async function storeFrameData(params: {
   supabase: ReturnType<typeof createAdminClient>;
   jobId: string | null;
   files: Array<{
-    kind: 'players' | 'trajectories';
+    kind: "players" | "trajectories";
     url: string | null;
     objectKey: string;
   }>;
@@ -861,32 +888,37 @@ async function storeFrameData(params: {
           console.error(
             `${LOG} ${kind} download FAILED — recover from processing_jobs.${kind}_url, ` +
               `valid about a week`,
-            { jobId, objectKey, error: stored.error }
+            { jobId, objectKey, error: stored.error },
           );
           return;
         }
 
-        console.log(`${LOG} ${kind} stored`, { jobId, objectKey, bytes: stored.bytes });
+        console.log(`${LOG} ${kind} stored`, {
+          jobId,
+          objectKey,
+          bytes: stored.bytes,
+        });
 
         // An orphaned delivery has no row to record the key on; the bytes are
         // still safe under the orphaned/ key, which is the point.
         if (!jobId) return;
 
-        const column = kind === 'players' ? 'players_object_key' : 'trajectories_object_key';
+        const column =
+          kind === "players" ? "players_object_key" : "trajectories_object_key";
         const { error } = await supabase
-          .from('processing_jobs')
+          .from("processing_jobs")
           .update({ [column]: objectKey })
-          .eq('id', jobId);
+          .eq("id", jobId);
 
         if (error) {
           // The bytes are stored under a key nothing points at. Loud, because
           // the only way back is reading this line.
           console.error(
             `${LOG} ${kind} stored but ${column} was NOT recorded — a redelivery will fetch it again`,
-            { jobId, objectKey, error: error.message }
+            { jobId, objectKey, error: error.message },
           );
         }
-      })
+      }),
   );
 }
 
@@ -897,8 +929,8 @@ async function storeFrameData(params: {
  */
 export async function GET() {
   return NextResponse.json({
-    endpoint: 'splitstep-webhook',
-    status: 'ready',
-    method: 'POST',
+    endpoint: "splitstep-webhook",
+    status: "ready",
+    method: "POST",
   });
 }

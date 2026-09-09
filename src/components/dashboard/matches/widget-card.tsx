@@ -23,24 +23,24 @@ export function WidgetCard({
   return (
     <div
       className={cn(
-        "bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-hidden",
-        className
+        "overflow-hidden rounded-[14px] border border-[#F3F3F3] bg-white shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]",
+        className,
       )}
     >
-      <div className="flex items-center justify-between h-[47px] px-6">
-        <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
+      <div className="flex h-[47px] items-center justify-between px-6">
+        <p className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
           {header}
         </p>
         <div className="flex items-center gap-4">
           {secondaryLabel && (
-            <p className="text-[10px] font-normal text-[#AAAAAA] uppercase tracking-[1px]">
+            <p className="text-[10px] font-normal tracking-[1px] text-[#AAAAAA] uppercase">
               {secondaryLabel}
             </p>
           )}
           {actionLabel && actionHref && (
             <Link
               href={actionHref}
-              className="text-[10px] font-medium text-[#3B82F6] uppercase tracking-[2px] hover:text-[#2563EB] transition-colors duration-200"
+              className="text-[10px] font-medium tracking-[2px] text-[#3B82F6] uppercase transition-colors duration-200 hover:text-[#2563EB]"
             >
               {actionLabel}
             </Link>

@@ -10,15 +10,15 @@ Vendor docs: https://splitstep.ai/api-docs.html
 > anything was built and is deliberately not updated as reality moves — parts of it are
 > now wrong on purpose, because the reasoning is still worth reading.
 >
-> | Section | Status |
-> |---|---|
-> | §2 architecture diagram + storage table | **Superseded.** Results JSON goes to Supabase Storage, not R2, and derivation does not run inline in the webhook. See `r2-and-webhook-overview.md` §2 and §5 |
-> | §3 Phase 1 | **Built.** Current state is `r2-and-webhook-overview.md` |
-> | §4 Phase 2 | **Not built**, and gated differently than described |
-> | §5 open questions | **Superseded** by `docs/splitstep-vendor-questions.md` on the `splitstep-derivation` branch. Question numbers are preserved there, so `TODO(splitstep-qN)` markers in the code stay valid |
-> | §6 Phase 3 UI | Partly built — the wizard exists |
-> | §7 environment | **Superseded** by `r2-and-webhook-overview.md` §12 |
-> | §0, §1, §8 | Still accurate |
+> | Section                                 | Status                                                                                                                                                                                    |
+> | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | §2 architecture diagram + storage table | **Superseded.** Results JSON goes to Supabase Storage, not R2, and derivation does not run inline in the webhook. See `r2-and-webhook-overview.md` §2 and §5                              |
+> | §3 Phase 1                              | **Built.** Current state is `r2-and-webhook-overview.md`                                                                                                                                  |
+> | §4 Phase 2                              | **Not built**, and gated differently than described                                                                                                                                       |
+> | §5 open questions                       | **Superseded** by `docs/splitstep-vendor-questions.md` on the `splitstep-derivation` branch. Question numbers are preserved there, so `TODO(splitstep-qN)` markers in the code stay valid |
+> | §6 Phase 3 UI                           | Partly built — the wizard exists                                                                                                                                                          |
+> | §7 environment                          | **Superseded** by `r2-and-webhook-overview.md` §12                                                                                                                                        |
+> | §0, §1, §8                              | Still accurate                                                                                                                                                                            |
 >
 > **For what actually exists today, read `r2-and-webhook-overview.md` first.**
 
@@ -59,7 +59,7 @@ Also read, in the repo:
 
 ## 1. Context
 
-SplitStep is a computer-vision provider. We POST a job containing a public video URL plus match metadata; they process asynchronously and POST results to our webhook. Results are a JSON array of *strokes* — not points, not statistics.
+SplitStep is a computer-vision provider. We POST a job containing a public video URL plus match metadata; they process asynchronously and POST results to our webhook. Results are a JSON array of _strokes_ — not points, not statistics.
 
 The pilot runs free through 31 December 2026 with a cap of 75 processing-hours per collegiate program per month and 2 hours per individual user per month. Caps must be enforced in code.
 
@@ -69,13 +69,13 @@ Customer-facing materials must not attribute anything to SplitStep. Internally, 
 
 `calculate_match_stats` is built on point-level outcomes. SplitStep does not return them.
 
-| Our stats layer needs | SplitStep returns |
-|---|---|
-| `points.won_by_player1` | nothing |
-| `points.result_type` (`Ace`, `Double Fault`, `%Winner%`, `%Unforced Error%`, `Service Winner`) | nothing |
-| `points.is_break_point`, `is_set_point` | nothing |
-| `shots.shot_type` = `First Serve` / `Second Serve` | `stroke_type: "serve"`, no 1st/2nd distinction |
-| `shots.result` = `'In'` | boolean `in` |
+| Our stats layer needs                                                                          | SplitStep returns                              |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `points.won_by_player1`                                                                        | nothing                                        |
+| `points.result_type` (`Ace`, `Double Fault`, `%Winner%`, `%Unforced Error%`, `Service Winner`) | nothing                                        |
+| `points.is_break_point`, `is_set_point`                                                        | nothing                                        |
+| `shots.shot_type` = `First Serve` / `Second Serve`                                             | `stroke_type: "serve"`, no 1st/2nd distinction |
+| `shots.result` = `'In'`                                                                        | boolean `in`                                   |
 
 Everything above must be **derived** from the stroke stream. That derivation engine (Phase 2) is the substantial piece of work here. Phases 1 and 3 are plumbing and UI.
 
@@ -113,11 +113,11 @@ Browser
 
 Storage split — keep these separate, they have different lifetimes and revocation needs:
 
-| Asset | Location | Access |
-|---|---|---|
-| Original video | R2 | user playback (short-lived signed URL) |
-| Vendor-facing video URL | R2 | see §3.2 |
-| Raw results JSON | Supabase Storage, `match-results` (private) | internal only |
+| Asset                   | Location                                    | Access                                 |
+| ----------------------- | ------------------------------------------- | -------------------------------------- |
+| Original video          | R2                                          | user playback (short-lived signed URL) |
+| Vendor-facing video URL | R2                                          | see §3.2                               |
+| Raw results JSON        | Supabase Storage, `match-results` (private) | internal only                          |
 
 **The webhook does not derive.** It verifies, records the delivery, fetches the
 results JSON, and returns. Derivation runs afterwards in a Supabase Edge
@@ -149,33 +149,33 @@ Write migrations under `supabase/migrations/`. Migration-first: no code that rea
 
 **New table: `processing_jobs`**
 
-| Column | Type | Notes |
-|---|---|---|
-| `id` | uuid PK | |
-| `match_id` | uuid FK → matches | |
-| `created_by` | uuid FK → users | for RLS |
-| `provider` | text | `'splitstep'`, default |
-| `external_job_id` | text | SplitStep `job_id`, nullable until submitted |
-| `status` | text | see state machine below |
-| `priority` | text | default `'standard'`. Not sent to the API yet — column exists so tiers are a UI change later, not a migration. |
-| `start_time_seconds` | numeric | trim start, relative to original |
-| `end_time_seconds` | numeric | trim end, relative to original |
-| `billable_seconds` | integer | `end - start`, computed at submit |
-| `video_object_key` | text | R2 key of source video |
-| `video_url_expires_at` | timestamptz | for re-signing on retry |
-| `results_object_key` | text | R2 key of persisted raw JSON |
-| `sas_url` | text | the strokes url, as received (`strokes_url` in the payload since Sept 2026; `sas_url` before) |
-| `sas_expires_at` | timestamptz | received_at + 7d |
-| `players_url`, `trajectories_url` | text | per-frame tracking urls, as received (Sept 2026 API; trajectories nullable) |
-| `players_object_key`, `trajectories_object_key` | text | `match-results` keys once downloaded |
-| `trimmed_video_url` | text | as received; we do not adopt it as playback asset, but record it |
-| `submitted_at`, `queued_ack_at`, `completed_at` | timestamptz | |
-| `attempt_count` | integer | default 0 |
-| `error_message` | text | |
-| `raw_webhook_payload` | jsonb | every webhook received, appended |
-| `derivation_version` | text | version tag of the engine that produced the rows |
-| `derivation_confidence` | text | `high` / `medium` / `low` — see §4.4 |
-| `created_at`, `updated_at` | timestamptz | |
+| Column                                          | Type              | Notes                                                                                                          |
+| ----------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| `id`                                            | uuid PK           |                                                                                                                |
+| `match_id`                                      | uuid FK → matches |                                                                                                                |
+| `created_by`                                    | uuid FK → users   | for RLS                                                                                                        |
+| `provider`                                      | text              | `'splitstep'`, default                                                                                         |
+| `external_job_id`                               | text              | SplitStep `job_id`, nullable until submitted                                                                   |
+| `status`                                        | text              | see state machine below                                                                                        |
+| `priority`                                      | text              | default `'standard'`. Not sent to the API yet — column exists so tiers are a UI change later, not a migration. |
+| `start_time_seconds`                            | numeric           | trim start, relative to original                                                                               |
+| `end_time_seconds`                              | numeric           | trim end, relative to original                                                                                 |
+| `billable_seconds`                              | integer           | `end - start`, computed at submit                                                                              |
+| `video_object_key`                              | text              | R2 key of source video                                                                                         |
+| `video_url_expires_at`                          | timestamptz       | for re-signing on retry                                                                                        |
+| `results_object_key`                            | text              | R2 key of persisted raw JSON                                                                                   |
+| `sas_url`                                       | text              | the strokes url, as received (`strokes_url` in the payload since Sept 2026; `sas_url` before)                  |
+| `sas_expires_at`                                | timestamptz       | received_at + 7d                                                                                               |
+| `players_url`, `trajectories_url`               | text              | per-frame tracking urls, as received (Sept 2026 API; trajectories nullable)                                    |
+| `players_object_key`, `trajectories_object_key` | text              | `match-results` keys once downloaded                                                                           |
+| `trimmed_video_url`                             | text              | as received; we do not adopt it as playback asset, but record it                                               |
+| `submitted_at`, `queued_ack_at`, `completed_at` | timestamptz       |                                                                                                                |
+| `attempt_count`                                 | integer           | default 0                                                                                                      |
+| `error_message`                                 | text              |                                                                                                                |
+| `raw_webhook_payload`                           | jsonb             | every webhook received, appended                                                                               |
+| `derivation_version`                            | text              | version tag of the engine that produced the rows                                                               |
+| `derivation_confidence`                         | text              | `high` / `medium` / `low` — see §4.4                                                                           |
+| `created_at`, `updated_at`                      | timestamptz       |                                                                                                                |
 
 State machine — enforce with a CHECK constraint:
 
@@ -193,17 +193,17 @@ pending → uploading → uploaded → submitting → queued → processing → 
 
 Ledger, not a counter. One row per reservation.
 
-| Column | Type | Notes |
-|---|---|---|
-| `id` | uuid PK | |
-| `account_id` | uuid | user id (individual) or program id (see note) |
-| `account_type` | text | `'individual'` \| `'program'` |
-| `billing_month` | date | first of month, UTC |
-| `job_id` | uuid FK → processing_jobs | |
-| `reserved_seconds` | integer | at submit |
-| `actual_seconds` | integer | at completion, nullable |
-| `released` | boolean | true if job failed and reservation was returned |
-| `created_at` | timestamptz | |
+| Column             | Type                      | Notes                                           |
+| ------------------ | ------------------------- | ----------------------------------------------- |
+| `id`               | uuid PK                   |                                                 |
+| `account_id`       | uuid                      | user id (individual) or program id (see note)   |
+| `account_type`     | text                      | `'individual'` \| `'program'`                   |
+| `billing_month`    | date                      | first of month, UTC                             |
+| `job_id`           | uuid FK → processing_jobs |                                                 |
+| `reserved_seconds` | integer                   | at submit                                       |
+| `actual_seconds`   | integer                   | at completion, nullable                         |
+| `released`         | boolean                   | true if job failed and reservation was returned |
+| `created_at`       | timestamptz               |                                                 |
 
 There is no `programs` table today. For Phase 1, set `account_type = 'individual'` and `account_id = user_id` for everyone, and implement the cap lookup behind a single function so the program tier can be added without touching callers. Flag this — collegiate accounts are needed before September onboarding and are out of scope here.
 
@@ -235,18 +235,18 @@ Regardless of choice:
 
 Field mapping:
 
-| SplitStep field | Source |
-|---|---|
-| `MatchID` | our `matches.id` (uuid) |
-| `VideoUrl` | R2 URL per §3.2 |
-| `WebhookUrl` | `{APP_URL}/api/webhooks/splitstep` |
-| `InitialTopPlayer` | player name at top of frame at video start |
-| `InitialBottomPlayer` | player name at bottom of frame at video start |
-| `StartTime` | trim start, seconds |
-| `EndTime` | trim end, seconds |
-| `SetGameScores` | zip of `matches.score.player1` / `.player2`, ordered **top player first** |
-| `FixedCamera` | `matches.fixed_camera` |
-| `Ad` | `matches.format.ad_scoring` |
+| SplitStep field       | Source                                                                    |
+| --------------------- | ------------------------------------------------------------------------- |
+| `MatchID`             | our `matches.id` (uuid)                                                   |
+| `VideoUrl`            | R2 URL per §3.2                                                           |
+| `WebhookUrl`          | `{APP_URL}/api/webhooks/splitstep`                                        |
+| `InitialTopPlayer`    | player name at top of frame at video start                                |
+| `InitialBottomPlayer` | player name at bottom of frame at video start                             |
+| `StartTime`           | trim start, seconds                                                       |
+| `EndTime`             | trim end, seconds                                                         |
+| `SetGameScores`       | zip of `matches.score.player1` / `.player2`, ordered **top player first** |
+| `FixedCamera`         | `matches.fixed_camera`                                                    |
+| `Ad`                  | `matches.format.ad_scoring`                                               |
 
 Critical details:
 
@@ -274,7 +274,7 @@ Critical details:
 
 **This is the detail most likely to ship broken.**
 
-SplitStep's `time` field is seconds since the start of the *processed* (trimmed) video. Our `points.video_time` and `shots.video_time` are relative to the original, because that is what SwingVision gives us and what the player component seeks against.
+SplitStep's `time` field is seconds since the start of the _processed_ (trimmed) video. Our `points.video_time` and `shots.video_time` are relative to the original, because that is what SwingVision gives us and what the player component seeks against.
 
 At ingest, add `start_time_seconds` to every `time` value so everything is stored in original-video time. Do this once, in the derivation engine, and assert it in a test.
 
@@ -304,6 +304,7 @@ Phase 1 ships and is testable **without** Phase 2. A completed job with no deriv
 The vendor docs show one stroke object. The engine's correctness depends on behavior that document does not specify (§5). Building against the docs alone produces plausible code that is silently wrong.
 
 Required before starting:
+
 - A complete results JSON from a real match, committed as a test fixture.
 - Answers to §5 questions 1, 2 and 3.
 
@@ -331,22 +332,22 @@ Write one conversion module, `metersToNormalized()`, with unit tests pinning the
 
 Group by `pred_rally_id`, order by `pred_rally_stroke_number`.
 
-| Output | Rule | Confidence |
-|---|---|---|
-| Server | `pred_player_id` of stroke 1 | high |
-| First vs second serve | Two consecutive `serve` strokes by the same player in one rally → the first was a fault, the second is `'Second Serve'`. Single serve → `'First Serve'`. | **depends on §5 Q1** |
-| Double fault | Two serves, both `in: false` | same dependency |
-| Ace | Serve `in: true`, no subsequent stroke in rally | high |
-| Point winner | Last stroke of rally: `in: false` or `net_hit: true` → hitter **lost**; `in: true` → hitter **won** | medium |
-| `rally_length` | count of strokes in rally | high |
-| Score progression, break/set/match point | Fold point winners forward using `matches.format` (`ad_scoring`, `best_of`) | high, given point winners |
-| Winner / Unforced Error / Forced Error | Heuristic. See below. | **low** |
+| Output                                   | Rule                                                                                                                                                     | Confidence                |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| Server                                   | `pred_player_id` of stroke 1                                                                                                                             | high                      |
+| First vs second serve                    | Two consecutive `serve` strokes by the same player in one rally → the first was a fault, the second is `'Second Serve'`. Single serve → `'First Serve'`. | **depends on §5 Q1**      |
+| Double fault                             | Two serves, both `in: false`                                                                                                                             | same dependency           |
+| Ace                                      | Serve `in: true`, no subsequent stroke in rally                                                                                                          | high                      |
+| Point winner                             | Last stroke of rally: `in: false` or `net_hit: true` → hitter **lost**; `in: true` → hitter **won**                                                      | medium                    |
+| `rally_length`                           | count of strokes in rally                                                                                                                                | high                      |
+| Score progression, break/set/match point | Fold point winners forward using `matches.format` (`ad_scoring`, `best_of`)                                                                              | high, given point winners |
+| Winner / Unforced Error / Forced Error   | Heuristic. See below.                                                                                                                                    | **low**                   |
 
 **Winner vs UE vs FE.** There is no ground truth in the data. SwingVision makes this call for us; SplitStep does not. Requirements:
 
 - Implement it as a single, isolated, documented, versioned module. It will be revised.
 - Do not scatter the heuristic through the ingest path.
-- Starting rule to implement and then tune: rally-ending stroke with `in: true` where opponent is displaced (distance from the bounce location) beyond a threshold → Winner. Rally-ending stroke with `in: false` where opponent was *not* applying pressure (low incoming `speed_kmh`, opponent near centre) → Unforced Error. Otherwise Forced Error.
+- Starting rule to implement and then tune: rally-ending stroke with `in: true` where opponent is displaced (distance from the bounce location) beyond a threshold → Winner. Rally-ending stroke with `in: false` where opponent was _not_ applying pressure (low incoming `speed_kmh`, opponent near centre) → Unforced Error. Otherwise Forced Error.
 - Emit values matching the strings already present in `points.result_type` (verification task 6).
 - Record which version produced each match in `processing_jobs.derivation_version`.
 

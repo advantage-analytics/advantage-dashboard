@@ -37,7 +37,10 @@ export function FocusCard({
   footer?: { left: React.ReactNode; right?: React.ReactNode };
 }) {
   return (
-    <div className="surface-card flex flex-col gap-3" style={{ padding: "var(--pad-card)" }}>
+    <div
+      className="surface-card flex flex-col gap-3"
+      style={{ padding: "var(--pad-card)" }}
+    >
       <div className="flex items-center gap-2">
         {/* 16px square, 3px radius, white 9×6 swoosh — the frame's own
             geometry for the mark when it sits inline with 12px text; the
@@ -56,11 +59,13 @@ export function FocusCard({
             aria-hidden="true"
           />
         </span>
-        <span className="text-[12px] text-[var(--ink-700)]">Advantage Intelligence</span>
+        <span className="text-[12px] text-[var(--ink-700)]">
+          Advantage Intelligence
+        </span>
         <div className="flex-1" />
         <Link
           href="/dashboard/statistics"
-          className="whitespace-nowrap text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+          className="text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
         >
           Open Statistics
         </Link>

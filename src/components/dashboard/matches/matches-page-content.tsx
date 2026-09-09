@@ -145,7 +145,8 @@ const BACKHAND_OPTIONS: FilterOption[] = [
 
 /** For every facet's stored value → its human label, used uniformly by `describeFilters`. */
 function displayValueFor(key: FilterKey, value: string): string {
-  if (key === "result") return RESULT_OPTIONS.find((o) => o.value === value)?.label ?? value;
+  if (key === "result")
+    return RESULT_OPTIONS.find((o) => o.value === value)?.label ?? value;
   const group = FILTER_GROUPS.find((g) => g.key === key);
   return group?.displayValue ? group.displayValue(value) : value;
 }
@@ -164,12 +165,14 @@ function describeFilters(filters: ActiveFilter[]): string {
 
   if (hand && backhand) {
     parts.push(
-      `${hand === "left" ? "Left" : "Right"}-handed opponents with a ${backhand === "one-handed" ? "one" : "two"}-handed backhand`
+      `${hand === "left" ? "Left" : "Right"}-handed opponents with a ${backhand === "one-handed" ? "one" : "two"}-handed backhand`,
     );
   } else if (hand) {
     parts.push(`${hand === "left" ? "Left" : "Right"}-handed opponents`);
   } else if (backhand) {
-    parts.push(`Opponents with a ${backhand === "one-handed" ? "one" : "two"}-handed backhand`);
+    parts.push(
+      `Opponents with a ${backhand === "one-handed" ? "one" : "two"}-handed backhand`,
+    );
   }
 
   parts.push(...rest.map((f) => displayValueFor(f.key, f.value)));
@@ -212,31 +215,42 @@ const FILTER_GROUPS: {
         if (key && !byName.has(key)) byName.set(key, m.player1.name);
       }
       return [...byName.values()].sort((a, b) =>
-        normalizedPersonName(a).localeCompare(normalizedPersonName(b))
+        normalizedPersonName(a).localeCompare(normalizedPersonName(b)),
       );
     },
   },
   {
     key: "matchType",
     label: "Match type",
-    getValues: (matches) => [...new Set(matches.map((m) => m.matchType))].sort(),
+    getValues: (matches) =>
+      [...new Set(matches.map((m) => m.matchType))].sort(),
   },
   {
     key: "courtType",
     label: "Court",
-    getValues: (matches) => [...new Set(matches.map((m) => m.courtType).filter(Boolean) as string[])].sort(),
+    getValues: (matches) =>
+      [
+        ...new Set(matches.map((m) => m.courtType).filter(Boolean) as string[]),
+      ].sort(),
   },
   {
     key: "source",
     label: "Source",
-    getValues: (matches) => [...new Set(matches.map((m) => m.sourceProvider).filter(Boolean) as string[])].sort(),
+    getValues: (matches) =>
+      [
+        ...new Set(
+          matches.map((m) => m.sourceProvider).filter(Boolean) as string[],
+        ),
+      ].sort(),
     displayValue: providerName,
   },
   {
     key: "analysis",
     label: "Analysis",
     getValues: (matches) => {
-      const present = new Set(matches.map(analysisGroup).filter(Boolean) as string[]);
+      const present = new Set(
+        matches.map(analysisGroup).filter(Boolean) as string[],
+      );
       // Fixed order — these are pipeline stages, so alphabetising them would
       // scramble the sequence a reader expects.
       return ANALYSIS_GROUP_ORDER.filter((group) => present.has(group));
@@ -278,7 +292,8 @@ function SortDropdown({
   // Close on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     }
     if (open) document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -292,8 +307,15 @@ function SortDropdown({
   // Scoped keyboard handler
   function handleContainerKeyDown(e: React.KeyboardEvent) {
     if (!open) return;
-    if (e.key === "Escape") { e.preventDefault(); closeAndReturn(); return; }
-    if (e.key === "Tab") { setOpen(false); return; }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeAndReturn();
+      return;
+    }
+    if (e.key === "Tab") {
+      setOpen(false);
+      return;
+    }
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setFocusIdx((prev) => {
@@ -327,15 +349,24 @@ function SortDropdown({
     if (!open) setFocusIdx(-1);
   }, [open]);
 
-  const activeLabel = SORT_OPTIONS.find((o) => o.field === sortField)?.label ?? "Date";
-  const dirLabel = sortField === "date"
-    ? (sortDir === "asc" ? "Oldest" : "Newest")
-    : (sortDir === "asc" ? "A–Z" : "Z–A");
+  const activeLabel =
+    SORT_OPTIONS.find((o) => o.field === sortField)?.label ?? "Date";
+  const dirLabel =
+    sortField === "date"
+      ? sortDir === "asc"
+        ? "Oldest"
+        : "Newest"
+      : sortDir === "asc"
+        ? "A–Z"
+        : "Z–A";
   // One quiet phrase, the canvas register: "Newest first" for the default date
   // sort, "{Field} A–Z" for the text fields.
-  const sortPhrase = sortField === "date"
-    ? (sortDir === "asc" ? "Oldest first" : "Newest first")
-    : `${activeLabel} ${dirLabel}`;
+  const sortPhrase =
+    sortField === "date"
+      ? sortDir === "asc"
+        ? "Oldest first"
+        : "Newest first"
+      : `${activeLabel} ${dirLabel}`;
 
   return (
     <div className="relative" ref={ref} onKeyDown={handleContainerKeyDown}>
@@ -383,11 +414,16 @@ function SortDropdown({
               return (
                 <button
                   key={opt.field}
-                  ref={(el) => { optionRefs.current[idx] = el; }}
+                  ref={(el) => {
+                    optionRefs.current[idx] = el;
+                  }}
                   role="option"
                   aria-selected={isActive}
                   tabIndex={idx === focusIdx ? 0 : -1}
-                  onClick={() => { onSort(opt.field); setOpen(false); }}
+                  onClick={() => {
+                    onSort(opt.field);
+                    setOpen(false);
+                  }}
                   className={`flex w-full items-center justify-between rounded-[var(--radius-element)] px-2.5 py-2 text-xs transition-colors duration-150 ${isActive ? "" : "hover:bg-[var(--surface-subtle)]"}`}
                   style={{
                     background: isActive ? "var(--surface-subtle)" : undefined,
@@ -397,7 +433,12 @@ function SortDropdown({
                 >
                   {opt.label}
                   {isActive && (
-                    <span className="text-[10px]" style={{ color: "var(--ink-500)" }}>{sortDir === "asc" ? "↑" : "↓"}</span>
+                    <span
+                      className="text-[10px]"
+                      style={{ color: "var(--ink-500)" }}
+                    >
+                      {sortDir === "asc" ? "↑" : "↓"}
+                    </span>
                   )}
                 </button>
               );
@@ -437,7 +478,7 @@ export function MatchesPageContent({
   // but nothing will move it until Phase 2 ships, so subscribing for it would
   // hold the socket described above open forever rather than briefly.
   const hasInFlight = serverMatches.some(
-    (m) => m.analysis && isLiveUpdating(m.analysis.status)
+    (m) => m.analysis && isLiveUpdating(m.analysis.status),
   );
   const livePatches = useLiveMatchAnalysis({
     by: "user",
@@ -464,8 +505,12 @@ export function MatchesPageContent({
   // states in words in the applied-filter strip, with the same "Clear filter"
   // as any other. It has no input of its own.
   const [search, setSearch] = useState(() => searchParams.get("q") || "");
-  const [sortField, setSortField] = useState<SortField>(() => (searchParams.get("sort") as SortField) || "date");
-  const [sortDir, setSortDir] = useState<SortDir>(() => (searchParams.get("dir") as SortDir) || "desc");
+  const [sortField, setSortField] = useState<SortField>(
+    () => (searchParams.get("sort") as SortField) || "date",
+  );
+  const [sortDir, setSortDir] = useState<SortDir>(
+    () => (searchParams.get("dir") as SortDir) || "desc",
+  );
   const [filters, setFilters] = useState<ActiveFilter[]>(() => {
     const result: ActiveFilter[] = [];
     for (const key of FILTER_KEYS) {
@@ -475,7 +520,9 @@ export function MatchesPageContent({
         // can carry both — `?player=Dana+Brooks&player=Dana++Brooks` — and two
         // entries for one chip make the badge out-count the checked chips and
         // render two pills that look identical in the empty state.
-        if (result.some((f) => f.key === key && sameValue(key, f.value, value))) {
+        if (
+          result.some((f) => f.key === key && sameValue(key, f.value, value))
+        ) {
           continue;
         }
         result.push({ key, value });
@@ -488,8 +535,11 @@ export function MatchesPageContent({
     return v === "new" || v === "in-progress" || v === "estimates" ? v : "all";
   });
   const readyMatchIds = useMemo(
-    () => matches.filter((m) => !m.analysis || isAnalysisReady(m.analysis.status)).map((m) => m.id),
-    [matches]
+    () =>
+      matches
+        .filter((m) => !m.analysis || isAnalysisReady(m.analysis.status))
+        .map((m) => m.id),
+    [matches],
   );
   const unseenIds = useUnseenReportIds(readyMatchIds);
   const [page, setPage] = useState(() => Number(searchParams.get("page")) || 1);
@@ -508,7 +558,8 @@ export function MatchesPageContent({
       }
     }
     window.addEventListener("match-created", handleMatchCreated);
-    return () => window.removeEventListener("match-created", handleMatchCreated);
+    return () =>
+      window.removeEventListener("match-created", handleMatchCreated);
   }, []);
 
   // Filter matches
@@ -528,7 +579,7 @@ export function MatchesPageContent({
           m.tournamentName.toLowerCase().includes(q) ||
           normalizedPersonName(m.player1.name).includes(person) ||
           normalizedPersonName(m.player2.name).includes(person) ||
-          (m.round?.toLowerCase().includes(q) ?? false)
+          (m.round?.toLowerCase().includes(q) ?? false),
       );
     }
 
@@ -569,7 +620,9 @@ export function MatchesPageContent({
     if (lifecycle === "new") {
       result = result.filter((m) => unseenIds.has(m.id));
     } else if (lifecycle === "in-progress") {
-      result = result.filter((m) => !!m.analysis && isInFlight(m.analysis.status));
+      result = result.filter(
+        (m) => !!m.analysis && isInFlight(m.analysis.status),
+      );
     } else if (lifecycle === "estimates") {
       result = result.filter((m) => isEstimate(m.analysis));
     }
@@ -609,7 +662,7 @@ export function MatchesPageContent({
   const safePage = Math.min(page, totalPages);
   const paginatedMatches = sorted.slice(
     (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE
+    safePage * PAGE_SIZE,
   );
   const rangeStart = sorted.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(safePage * PAGE_SIZE, sorted.length);
@@ -634,7 +687,11 @@ export function MatchesPageContent({
     if (lifecycle !== "all") params.set("lifecycle", lifecycle);
     for (const f of filters) params.append(f.key, f.value);
     const query = params.toString();
-    window.history.replaceState(null, "", `${pathname}${query ? `?${query}` : ""}`);
+    window.history.replaceState(
+      null,
+      "",
+      `${pathname}${query ? `?${query}` : ""}`,
+    );
   }, [search, sortField, sortDir, page, filters, lifecycle, pathname]);
 
   function toggleSort(field: SortField) {
@@ -646,12 +703,15 @@ export function MatchesPageContent({
     }
   }
 
-
   const toggleFilter = useCallback((key: FilterKey, value: string) => {
     setFilters((prev) => {
-      const exists = prev.some((f) => f.key === key && sameValue(key, f.value, value));
+      const exists = prev.some(
+        (f) => f.key === key && sameValue(key, f.value, value),
+      );
       if (exists)
-        return prev.filter((f) => !(f.key === key && sameValue(key, f.value, value)));
+        return prev.filter(
+          (f) => !(f.key === key && sameValue(key, f.value, value)),
+        );
       return [...prev, { key, value }];
     });
   }, []);
@@ -670,7 +730,7 @@ export function MatchesPageContent({
 
   const segmentedValue = useCallback(
     (key: FilterKey) => filters.find((f) => f.key === key)?.value ?? null,
-    [filters]
+    [filters],
   );
 
   const clearFilters = useCallback(() => setFilters([]), []);
@@ -678,7 +738,7 @@ export function MatchesPageContent({
   const isFilterActive = useCallback(
     (key: FilterKey, value: string) =>
       filters.some((f) => f.key === key && sameValue(key, f.value, value)),
-    [filters]
+    [filters],
   );
 
   // Values are read off the matches, so a category with nothing to offer drops
@@ -687,7 +747,7 @@ export function MatchesPageContent({
   // Analysis → Opponent last, behind its own divider.
   const filterSections: FilterPanelSection<FilterKey>[] = useMemo(() => {
     const checklistSection = (
-      group: (typeof FILTER_GROUPS)[number]
+      group: (typeof FILTER_GROUPS)[number],
     ): FilterPanelSection<FilterKey> | null => {
       if (group.teamOnly && scope !== "team") return null;
       const values = group.getValues(matches);
@@ -723,9 +783,23 @@ export function MatchesPageContent({
       sections.push({
         label: "Opponent",
         segmented: [
-          ...(handHasData ? [{ key: "hand" as FilterKey, rowLabel: "Hand", options: HAND_OPTIONS }] : []),
+          ...(handHasData
+            ? [
+                {
+                  key: "hand" as FilterKey,
+                  rowLabel: "Hand",
+                  options: HAND_OPTIONS,
+                },
+              ]
+            : []),
           ...(backhandHasData
-            ? [{ key: "backhand" as FilterKey, rowLabel: "Backhand", options: BACKHAND_OPTIONS }]
+            ? [
+                {
+                  key: "backhand" as FilterKey,
+                  rowLabel: "Backhand",
+                  options: BACKHAND_OPTIONS,
+                },
+              ]
             : []),
         ],
       });
@@ -766,7 +840,11 @@ export function MatchesPageContent({
             totalCount={matches.length}
           />
 
-          <SortDropdown sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+          <SortDropdown
+            sortField={sortField}
+            sortDir={sortDir}
+            onSort={toggleSort}
+          />
         </div>
       </div>
 
@@ -777,14 +855,23 @@ export function MatchesPageContent({
           className="flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
           style={{ background: "var(--surface-subtle)" }}
         >
-          <FilterIcon className="size-[13px] shrink-0" strokeWidth={1.5} style={{ color: "var(--ink-500)" }} aria-hidden="true" />
+          <FilterIcon
+            className="size-[13px] shrink-0"
+            strokeWidth={1.5}
+            style={{ color: "var(--ink-500)" }}
+            aria-hidden="true"
+          />
           <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
             {[
               ...(search.trim() ? [`Matching “${search.trim()}”`] : []),
               ...(filters.length > 0 ? [describeFilters(filters)] : []),
             ].join(" · ")}
           </span>
-          <span className="size-[3px] rounded-full" style={{ background: "var(--ink-300)" }} aria-hidden="true" />
+          <span
+            className="size-[3px] rounded-full"
+            style={{ background: "var(--ink-300)" }}
+            aria-hidden="true"
+          />
           <span className="text-micro tabular">
             {sorted.length} of {matches.length}
           </span>
@@ -792,7 +879,7 @@ export function MatchesPageContent({
           <button
             type="button"
             onClick={clearCut}
-            className="whitespace-nowrap text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+            className="text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
           >
             Clear filter
           </button>
@@ -802,8 +889,17 @@ export function MatchesPageContent({
       {/* Table / Grid */}
       {sorted.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16">
-          <Search className="mb-3 h-8 w-8" strokeWidth={1.5} style={{ color: "var(--ink-300)" }} />
-          <p className="mb-1 text-[14px] font-medium" style={{ color: "var(--ink-900)" }}>No matches found</p>
+          <Search
+            className="mb-3 h-8 w-8"
+            strokeWidth={1.5}
+            style={{ color: "var(--ink-300)" }}
+          />
+          <p
+            className="mb-1 text-[14px] font-medium"
+            style={{ color: "var(--ink-900)" }}
+          >
+            No matches found
+          </p>
           {(hasCut || lifecycle !== "all") && (
             <div className="mt-1 flex flex-col items-center gap-2">
               <button
@@ -848,7 +944,11 @@ export function MatchesPageContent({
             </button>
           )}
           {safePage > 1 && safePage < totalPages && (
-            <span className="size-[3px] rounded-full" style={{ background: "var(--ink-300)" }} aria-hidden="true" />
+            <span
+              className="size-[3px] rounded-full"
+              style={{ background: "var(--ink-300)" }}
+              aria-hidden="true"
+            />
           )}
           {safePage < totalPages && (
             <button

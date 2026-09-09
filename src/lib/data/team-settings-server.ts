@@ -70,7 +70,7 @@ export interface TeamSettingsData {
 }
 
 export async function getTeamSettings(
-  programId: string
+  programId: string,
 ): Promise<TeamSettingsData | null> {
   const supabase = await createClient();
 
@@ -78,7 +78,7 @@ export async function getTeamSettings(
     supabase
       .from("programs")
       .select(
-        "id, school_name, team, conference, home_venue, default_surface, season, players_can_upload, upload_policy, time_zone, crest_path"
+        "id, school_name, team, conference, home_venue, default_surface, season, players_can_upload, upload_policy, time_zone, crest_path",
       )
       .eq("id", programId)
       .maybeSingle(),

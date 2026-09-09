@@ -1,8 +1,14 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
-import { normalizedPersonName } from '@/lib/data/person-name';
-import { headToHeadRows, opponentPlayerMatches } from '@/lib/data/opponents-server';
-import { benchFromLines, rosterIdsForLabels } from '@/lib/schedule/roster-match';
+import { normalizedPersonName } from "@/lib/data/person-name";
+import {
+  headToHeadRows,
+  opponentPlayerMatches,
+} from "@/lib/data/opponents-server";
+import {
+  benchFromLines,
+  rosterIdsForLabels,
+} from "@/lib/schedule/roster-match";
 
 /**
  * One rule for "the same name", applied on BOTH sides of every comparison.
@@ -36,31 +42,45 @@ import { benchFromLines, rosterIdsForLabels } from '@/lib/schedule/roster-match'
 // inside `first_name`. `matches.player2_name` gets no such treatment: it is
 // written raw from what the uploader typed, so a leading or trailing space
 // does reach it. The fixtures below are assigned accordingly.
-const BROOKS_TYPED = 'Dana Brooks';
-const BROOKS_DOUBLED = 'Dana  Brooks';
-const BROOKS_TRAILING = 'Dana Brooks ';
-const REID_TYPED = 'Sam Reid';
-const REID_DOUBLED = 'Sam  Reid';
-const NEAR_MISS = 'Dana Brook';
+const BROOKS_TYPED = "Dana Brooks";
+const BROOKS_DOUBLED = "Dana  Brooks";
+const BROOKS_TRAILING = "Dana Brooks ";
+const REID_TYPED = "Sam Reid";
+const REID_DOUBLED = "Sam  Reid";
+const NEAR_MISS = "Dana Brook";
 
-test.describe('normalizedPersonName', () => {
-  test('case and whitespace are noise', () => {
-    expect(normalizedPersonName(BROOKS_TRAILING)).toBe(normalizedPersonName(BROOKS_TYPED));
-    expect(normalizedPersonName(BROOKS_DOUBLED)).toBe(normalizedPersonName(BROOKS_TYPED));
-    expect(normalizedPersonName(REID_DOUBLED)).toBe(normalizedPersonName(REID_TYPED));
-    expect(normalizedPersonName('  dana\tBROOKS  ')).toBe(normalizedPersonName(BROOKS_TYPED));
+test.describe("normalizedPersonName", () => {
+  test("case and whitespace are noise", () => {
+    expect(normalizedPersonName(BROOKS_TRAILING)).toBe(
+      normalizedPersonName(BROOKS_TYPED),
+    );
+    expect(normalizedPersonName(BROOKS_DOUBLED)).toBe(
+      normalizedPersonName(BROOKS_TYPED),
+    );
+    expect(normalizedPersonName(REID_DOUBLED)).toBe(
+      normalizedPersonName(REID_TYPED),
+    );
+    expect(normalizedPersonName("  dana\tBROOKS  ")).toBe(
+      normalizedPersonName(BROOKS_TYPED),
+    );
   });
 
-  test('everything else is signal', () => {
-    expect(normalizedPersonName(NEAR_MISS)).not.toBe(normalizedPersonName(BROOKS_TYPED));
-    expect(normalizedPersonName('Brooks Dana')).not.toBe(normalizedPersonName(BROOKS_TYPED));
-    expect(normalizedPersonName('D. Brooks')).not.toBe(normalizedPersonName(BROOKS_TYPED));
+  test("everything else is signal", () => {
+    expect(normalizedPersonName(NEAR_MISS)).not.toBe(
+      normalizedPersonName(BROOKS_TYPED),
+    );
+    expect(normalizedPersonName("Brooks Dana")).not.toBe(
+      normalizedPersonName(BROOKS_TYPED),
+    );
+    expect(normalizedPersonName("D. Brooks")).not.toBe(
+      normalizedPersonName(BROOKS_TYPED),
+    );
   });
 
-  test('a missing name is the empty key, not a wildcard', () => {
-    expect(normalizedPersonName(null)).toBe('');
-    expect(normalizedPersonName(undefined)).toBe('');
-    expect(normalizedPersonName('   ')).toBe('');
+  test("a missing name is the empty key, not a wildcard", () => {
+    expect(normalizedPersonName(null)).toBe("");
+    expect(normalizedPersonName(undefined)).toBe("");
+    expect(normalizedPersonName("   ")).toBe("");
   });
 });
 
@@ -72,97 +92,115 @@ test.describe('normalizedPersonName', () => {
 const row = (
   id: string,
   name: string | null,
-  opponentId: string | null = null
+  opponentId: string | null = null,
 ) => ({
   id,
   player2_name: name,
   opponent_player_id: opponentId,
 });
 
-test.describe('headToHeadRows', () => {
+test.describe("headToHeadRows", () => {
   // `pooled_roster` hands back first and last name separately and the page
   // joins them and trims, so the spelling that reaches this side is the
   // doubled internal space. `matches.player2_name` on the other side is raw,
   // so that is where a trailing space is worth testing.
   const roster = [
-    { id: 'p-brooks', name: BROOKS_DOUBLED },
-    { id: 'p-reid', name: REID_DOUBLED },
+    { id: "p-brooks", name: BROOKS_DOUBLED },
+    { id: "p-reid", name: REID_DOUBLED },
   ];
 
-  test('a match name with a trailing space matches the roster spelling', () => {
-    const kept = headToHeadRows([row('m1', BROOKS_TRAILING)], roster);
-    expect(kept.map((m) => m.id)).toEqual(['m1']);
+  test("a match name with a trailing space matches the roster spelling", () => {
+    const kept = headToHeadRows([row("m1", BROOKS_TRAILING)], roster);
+    expect(kept.map((m) => m.id)).toEqual(["m1"]);
   });
 
-  test('a roster name with a doubled internal space matches the typed form', () => {
-    const kept = headToHeadRows([row('m1', REID_TYPED)], roster);
-    expect(kept.map((m) => m.id)).toEqual(['m1']);
+  test("a roster name with a doubled internal space matches the typed form", () => {
+    const kept = headToHeadRows([row("m1", REID_TYPED)], roster);
+    expect(kept.map((m) => m.id)).toEqual(["m1"]);
   });
 
-  test('the typed side brings its own stray whitespace and case', () => {
+  test("the typed side brings its own stray whitespace and case", () => {
     const kept = headToHeadRows(
-      [row('m1', '  dana   brooks  '), row('m2', 'SAM REID')],
-      roster
+      [row("m1", "  dana   brooks  "), row("m2", "SAM REID")],
+      roster,
     );
-    expect(kept.map((m) => m.id)).toEqual(['m1', 'm2']);
+    expect(kept.map((m) => m.id)).toEqual(["m1", "m2"]);
   });
 
-  test('a near-miss is a different person', () => {
-    expect(headToHeadRows([row('m1', NEAR_MISS)], roster)).toEqual([]);
+  test("a near-miss is a different person", () => {
+    expect(headToHeadRows([row("m1", NEAR_MISS)], roster)).toEqual([]);
   });
 
-  test('identity beats the name, in both directions', () => {
+  test("identity beats the name, in both directions", () => {
     // On the roster by id, so it counts even though the typed name is somebody
     // else's — the pre-identity rows are exactly what the fallback exists for.
-    const byId = headToHeadRows([row('m1', 'Someone Entirely Else', 'p-brooks')], roster);
-    expect(byId.map((m) => m.id)).toEqual(['m1']);
+    const byId = headToHeadRows(
+      [row("m1", "Someone Entirely Else", "p-brooks")],
+      roster,
+    );
+    expect(byId.map((m) => m.id)).toEqual(["m1"]);
 
     // Attributed to a player who is NOT on this roster. The matching name must
     // not drag it back in: an explicit id is an answer, and the name fallback
     // is only for rows that have none.
-    const wrongId = headToHeadRows([row('m1', BROOKS_TYPED, 'someone-elses-id')], roster);
+    const wrongId = headToHeadRows(
+      [row("m1", BROOKS_TYPED, "someone-elses-id")],
+      roster,
+    );
     expect(wrongId).toEqual([]);
   });
 
-  test('two blanks are not a match', () => {
+  test("two blanks are not a match", () => {
     // A match with no opponent name filed under a roster player with no name is
     // the one thing an empty normalized key would silently do.
     const kept = headToHeadRows(
-      [row('m1', null), row('m2', '  ')],
-      [{ id: 'p-nameless', name: '' }]
+      [row("m1", null), row("m2", "  ")],
+      [{ id: "p-nameless", name: "" }],
     );
     expect(kept).toEqual([]);
   });
 });
 
-test.describe('opponentPlayerMatches', () => {
-  test('the profile name matches the typed name through either spelling', () => {
+test.describe("opponentPlayerMatches", () => {
+  test("the profile name matches the typed name through either spelling", () => {
     expect(
-      opponentPlayerMatches([row('m1', BROOKS_TRAILING)], 'her-id', BROOKS_DOUBLED).map(
-        (m) => m.id
-      )
-    ).toEqual(['m1']);
+      opponentPlayerMatches(
+        [row("m1", BROOKS_TRAILING)],
+        "her-id",
+        BROOKS_DOUBLED,
+      ).map((m) => m.id),
+    ).toEqual(["m1"]);
     expect(
-      opponentPlayerMatches([row('m1', REID_TYPED)], 'his-id', REID_DOUBLED).map((m) => m.id)
-    ).toEqual(['m1']);
+      opponentPlayerMatches(
+        [row("m1", REID_TYPED)],
+        "his-id",
+        REID_DOUBLED,
+      ).map((m) => m.id),
+    ).toEqual(["m1"]);
   });
 
-  test('the name fallback never reaches a row attributed to somebody else', () => {
-    const rows = [row('m1', BROOKS_TYPED, 'another-players-id')];
-    expect(opponentPlayerMatches(rows, 'her-id', BROOKS_TYPED)).toEqual([]);
+  test("the name fallback never reaches a row attributed to somebody else", () => {
+    const rows = [row("m1", BROOKS_TYPED, "another-players-id")];
+    expect(opponentPlayerMatches(rows, "her-id", BROOKS_TYPED)).toEqual([]);
   });
 
-  test('her own rows count by id whatever the name says', () => {
-    const rows = [row('m1', null, 'her-id')];
-    expect(opponentPlayerMatches(rows, 'her-id', BROOKS_TYPED).map((m) => m.id)).toEqual(['m1']);
+  test("her own rows count by id whatever the name says", () => {
+    const rows = [row("m1", null, "her-id")];
+    expect(
+      opponentPlayerMatches(rows, "her-id", BROOKS_TYPED).map((m) => m.id),
+    ).toEqual(["m1"]);
   });
 
-  test('a nameless profile claims no unattributed rows', () => {
-    expect(opponentPlayerMatches([row('m1', null)], 'her-id', '   ')).toEqual([]);
+  test("a nameless profile claims no unattributed rows", () => {
+    expect(opponentPlayerMatches([row("m1", null)], "her-id", "   ")).toEqual(
+      [],
+    );
   });
 
-  test('a near-miss is a different person', () => {
-    expect(opponentPlayerMatches([row('m1', NEAR_MISS)], 'her-id', BROOKS_TYPED)).toEqual([]);
+  test("a near-miss is a different person", () => {
+    expect(
+      opponentPlayerMatches([row("m1", NEAR_MISS)], "her-id", BROOKS_TYPED),
+    ).toEqual([]);
   });
 });
 
@@ -170,80 +208,91 @@ test.describe('opponentPlayerMatches', () => {
 // carry the doubled internal space a roster nobody cleaned up produces; Ama is
 // clean, so the typed side can be the messy one for a change.
 const LADDER = [
-  { userId: 'u-brooks', name: BROOKS_DOUBLED, ladderPosition: 1 },
-  { userId: 'u-reid', name: REID_DOUBLED, ladderPosition: 2 },
-  { userId: 'u-osei', name: 'Ama Osei', ladderPosition: 3 },
+  { userId: "u-brooks", name: BROOKS_DOUBLED, ladderPosition: 1 },
+  { userId: "u-reid", name: REID_DOUBLED, ladderPosition: 2 },
+  { userId: "u-osei", name: "Ama Osei", ladderPosition: 3 },
 ];
 
-test.describe('rosterIdsForLabels', () => {
-  test('a ladder name with a doubled internal space resolves from the typed form', () => {
-    expect(rosterIdsForLabels(BROOKS_TYPED, LADDER)).toEqual(['u-brooks']);
+test.describe("rosterIdsForLabels", () => {
+  test("a ladder name with a doubled internal space resolves from the typed form", () => {
+    expect(rosterIdsForLabels(BROOKS_TYPED, LADDER)).toEqual(["u-brooks"]);
   });
 
   // `splitNames` trims each part before this sees it, so the ends of the label
   // assert nothing here — the doubled run in the middle is the load-bearing bit.
-  test('a typed label with a doubled internal space resolves to a clean row', () => {
-    expect(rosterIdsForLabels('  ama   osei ', LADDER)).toEqual(['u-osei']);
+  test("a typed label with a doubled internal space resolves to a clean row", () => {
+    expect(rosterIdsForLabels("  ama   osei ", LADDER)).toEqual(["u-osei"]);
   });
 
-  test('a roster name with a doubled internal space resolves from the typed form', () => {
-    expect(rosterIdsForLabels(REID_TYPED, LADDER)).toEqual(['u-reid']);
+  test("a roster name with a doubled internal space resolves from the typed form", () => {
+    expect(rosterIdsForLabels(REID_TYPED, LADDER)).toEqual(["u-reid"]);
   });
 
-  test('a doubles pair resolves both halves', () => {
+  test("a doubles pair resolves both halves", () => {
     expect(rosterIdsForLabels(`${BROOKS_TYPED} / sam   reid`, LADDER)).toEqual([
-      'u-brooks',
-      'u-reid',
+      "u-brooks",
+      "u-reid",
     ]);
   });
 
-  test('a label matching nobody drops its id rather than guessing', () => {
+  test("a label matching nobody drops its id rather than guessing", () => {
     // The entry still records the typed name; it just carries no userId. That
     // is the line between "we do not know who this is" and attributing an
     // athlete's match to the nearest-looking teammate.
-    expect(rosterIdsForLabels('Nobody Here', LADDER)).toEqual([]);
+    expect(rosterIdsForLabels("Nobody Here", LADDER)).toEqual([]);
     expect(rosterIdsForLabels(NEAR_MISS, LADDER)).toEqual([]);
-    expect(rosterIdsForLabels('Dana', LADDER)).toEqual([]);
-    expect(rosterIdsForLabels('D. Brooks', LADDER)).toEqual([]);
+    expect(rosterIdsForLabels("Dana", LADDER)).toEqual([]);
+    expect(rosterIdsForLabels("D. Brooks", LADDER)).toEqual([]);
   });
 
-  test('the unmatched half of a pair drops out on its own', () => {
-    expect(rosterIdsForLabels(`${BROOKS_TYPED} / Nobody Here`, LADDER)).toEqual(['u-brooks']);
+  test("the unmatched half of a pair drops out on its own", () => {
+    expect(rosterIdsForLabels(`${BROOKS_TYPED} / Nobody Here`, LADDER)).toEqual(
+      ["u-brooks"],
+    );
   });
 
-  test('an empty field resolves to no ids at all', () => {
-    expect(rosterIdsForLabels('', LADDER)).toEqual([]);
-    expect(rosterIdsForLabels('  /  ', LADDER)).toEqual([]);
+  test("an empty field resolves to no ids at all", () => {
+    expect(rosterIdsForLabels("", LADDER)).toEqual([]);
+    expect(rosterIdsForLabels("  /  ", LADDER)).toEqual([]);
   });
 });
 
-test.describe('benchFromLines', () => {
-  test('a ladder name with a doubled internal space leaves the bench when fielded', () => {
+test.describe("benchFromLines", () => {
+  test("a ladder name with a doubled internal space leaves the bench when fielded", () => {
     const bench = benchFromLines([{ ourLabels: [BROOKS_TYPED] }], LADDER);
-    expect(bench.map((p) => p.userId)).toEqual(['u-reid', 'u-osei']);
+    expect(bench.map((p) => p.userId)).toEqual(["u-reid", "u-osei"]);
   });
 
-  test('a typed label with a doubled internal space benches the clean row', () => {
-    const bench = benchFromLines([{ ourLabels: ['Ama  Osei'] }], LADDER);
-    expect(bench.map((p) => p.userId)).toEqual(['u-brooks', 'u-reid']);
+  test("a typed label with a doubled internal space benches the clean row", () => {
+    const bench = benchFromLines([{ ourLabels: ["Ama  Osei"] }], LADDER);
+    expect(bench.map((p) => p.userId)).toEqual(["u-brooks", "u-reid"]);
   });
 
-  test('a ladder name with a doubled internal space leaves the bench too', () => {
+  test("a ladder name with a doubled internal space leaves the bench too", () => {
     const bench = benchFromLines([{ ourLabels: [REID_TYPED] }], LADDER);
-    expect(bench.map((p) => p.userId)).toEqual(['u-brooks', 'u-osei']);
+    expect(bench.map((p) => p.userId)).toEqual(["u-brooks", "u-osei"]);
   });
 
-  test('a doubles line names both of its players', () => {
-    const bench = benchFromLines([{ ourLabels: [`${BROOKS_TYPED} / ${REID_TYPED}`] }], LADDER);
-    expect(bench.map((p) => p.userId)).toEqual(['u-osei']);
+  test("a doubles line names both of its players", () => {
+    const bench = benchFromLines(
+      [{ ourLabels: [`${BROOKS_TYPED} / ${REID_TYPED}`] }],
+      LADDER,
+    );
+    expect(bench.map((p) => p.userId)).toEqual(["u-osei"]);
   });
 
-  test('a near-miss does not take anybody off the bench', () => {
+  test("a near-miss does not take anybody off the bench", () => {
     const bench = benchFromLines([{ ourLabels: [NEAR_MISS] }], LADDER);
-    expect(bench.map((p) => p.userId)).toEqual(['u-brooks', 'u-reid', 'u-osei']);
+    expect(bench.map((p) => p.userId)).toEqual([
+      "u-brooks",
+      "u-reid",
+      "u-osei",
+    ]);
   });
 
-  test('an empty lineup benches the whole ladder', () => {
-    expect(benchFromLines([{ ourLabels: [] }, { ourLabels: [''] }], LADDER)).toHaveLength(3);
+  test("an empty lineup benches the whole ladder", () => {
+    expect(
+      benchFromLines([{ ourLabels: [] }, { ourLabels: [""] }], LADDER),
+    ).toHaveLength(3);
   });
 });

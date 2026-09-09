@@ -20,14 +20,14 @@
  * change on every single game.
  */
 
-import type { SplitStepRally } from './types';
+import type { SplitStepRally } from "./types";
 
 /** Rungs of a standard game, plus AD for ad-scoring matches. */
 const LADDER: Record<string, number> = {
-  '0': 0,
-  '15': 1,
-  '30': 2,
-  '40': 3,
+  "0": 0,
+  "15": 1,
+  "30": 2,
+  "40": 3,
   AD: 4,
 };
 
@@ -35,13 +35,13 @@ export interface WinnerResolution {
   /** Player label that won, or null when no rule resolved it. */
   winner: string | null;
   /** Which rule fired, for the flag trail and for debugging. */
-  via: 'ladder' | 'game' | 'set' | 'final' | null;
+  via: "ladder" | "game" | "set" | "final" | null;
 }
 
 /** Split a server-relative score string into [serverValue, returnerValue]. */
 function tokens(score: string | null): [string, string] | null {
   if (!score) return null;
-  const parts = score.split('-');
+  const parts = score.split("-");
   return parts.length === 2 ? [parts[0].trim(), parts[1].trim()] : null;
 }
 
@@ -54,7 +54,7 @@ function tokens(score: string | null): [string, string] | null {
 function absolutize(
   score: string | null,
   server: string,
-  returner: string
+  returner: string,
 ): Record<string, string> | null {
   const t = tokens(score);
   if (!t) return null;
@@ -64,7 +64,7 @@ function absolutize(
 /** Numeric per-label map, using the point ladder or plain integers. */
 function numeric(
   abs: Record<string, string> | null,
-  useLadder: boolean
+  useLadder: boolean,
 ): Record<string, number> | null {
   if (!abs) return null;
   const out: Record<string, number> = {};
@@ -79,7 +79,7 @@ function numeric(
 /** The label whose value rose by exactly one, when exactly one did. */
 function soleIncrement(
   before: Record<string, number> | null,
-  after: Record<string, number> | null
+  after: Record<string, number> | null,
 ): string | null {
   if (!before || !after) return null;
   const labels = Object.keys(before);
@@ -105,7 +105,7 @@ function otherLabel(label: string, labels: string[]): string | null {
 export function resolveWinner(
   rally: SplitStepRally,
   next: SplitStepRally | null,
-  labels: string[]
+  labels: string[],
 ): WinnerResolution {
   const server = rally.server;
   const returner = otherLabel(server, labels);
@@ -130,9 +130,9 @@ export function resolveWinner(
     for (const useLadder of [true, false]) {
       const winner = soleIncrement(
         numeric(before, useLadder),
-        numeric(after, useLadder)
+        numeric(after, useLadder),
       );
-      if (winner) return { winner, via: 'ladder' };
+      if (winner) return { winner, via: "ladder" };
     }
     return { winner: null, via: null };
   }
@@ -140,27 +140,27 @@ export function resolveWinner(
   // 2. The point that closed a game: exactly one side's game count rises.
   const gameBefore = numeric(
     absolutize(from.predGameScore, server, returner),
-    false
+    false,
   );
   const gameAfter = numeric(
     absolutize(to.predGameScore, nextServer, nextReturner),
-    false
+    false,
   );
   const byGame = soleIncrement(gameBefore, gameAfter);
-  if (byGame) return { winner: byGame, via: 'game' };
+  if (byGame) return { winner: byGame, via: "game" };
 
   // 3. The point that closed a set: the game score resets, so the rise shows up
   //    in the set score instead.
   const setBefore = numeric(
     absolutize(from.predSetScore, server, returner),
-    false
+    false,
   );
   const setAfter = numeric(
     absolutize(to.predSetScore, nextServer, nextReturner),
-    false
+    false,
   );
   const bySet = soleIncrement(setBefore, setAfter);
-  if (bySet) return { winner: bySet, via: 'set' };
+  if (bySet) return { winner: bySet, via: "set" };
 
   return { winner: null, via: null };
 }
@@ -169,7 +169,7 @@ export interface PointWinner {
   rallyId: number;
   server: string;
   winner: string | null;
-  via: WinnerResolution['via'];
+  via: WinnerResolution["via"];
 }
 
 /**
@@ -183,13 +183,13 @@ export interface PointWinner {
  */
 export function resolvePointWinners(
   rallies: SplitStepRally[],
-  labels: string[]
+  labels: string[],
 ): PointWinner[] {
   return rallies.map((rally, i) => {
     const { winner, via } = resolveWinner(
       rally,
       rallies[i + 1] ?? null,
-      labels
+      labels,
     );
     return { rallyId: rally.rallyId, server: rally.server, winner, via };
   });

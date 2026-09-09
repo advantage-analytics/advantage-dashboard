@@ -8,7 +8,10 @@ import { setHasData } from "./utils";
 
 export function Required() {
   return (
-    <span aria-label="Required" className="text-[12px] leading-none text-[var(--error)]">
+    <span
+      aria-label="Required"
+      className="text-[12px] leading-none text-[var(--error)]"
+    >
       *
     </span>
   );
@@ -62,7 +65,7 @@ export const ScoreInput = ({
     className={cn(
       CELL_CLS,
       tiebreak && "text-[13px] text-[var(--ink-700)]",
-      invalid && "border-[var(--error)]"
+      invalid && "border-[var(--error)]",
     )}
   />
 );
@@ -90,8 +93,16 @@ export function ScoreBlock({
   opponentName: string;
   /** "Best of 3 · no-ad" when a line declared the format. */
   fromLine: boolean;
-  onScoreChange: (player: "player" | "opponent", index: number, value: string) => void;
-  onTiebreakChange: (player: "player" | "opponent", index: number, value: string) => void;
+  onScoreChange: (
+    player: "player" | "opponent",
+    index: number,
+    value: string,
+  ) => void;
+  onTiebreakChange: (
+    player: "player" | "opponent",
+    index: number,
+    value: string,
+  ) => void;
   onSetsChange: (count: number) => void;
 }) {
   const bestOf = parseInt(formData.bestOf, 10) || 3;
@@ -106,17 +117,31 @@ export function ScoreBlock({
   const ghost = displayed < bestOf;
 
   const refs = useRef<Record<string, HTMLInputElement | null>>({});
-  const key = (row: "p" | "o", i: number, tb = false) => `${row}${i}${tb ? "t" : ""}`;
-  const focusKey = (k: string) => window.setTimeout(() => refs.current[k]?.focus(), 0);
+  const key = (row: "p" | "o", i: number, tb = false) =>
+    `${row}${i}${tb ? "t" : ""}`;
+  const focusKey = (k: string) =>
+    window.setTimeout(() => refs.current[k]?.focus(), 0);
 
-  const tie = (i: number) => isTiebreakSet(formData.playerScores[i] ?? null, formData.opponentScores[i] ?? null);
+  const tie = (i: number) =>
+    isTiebreakSet(
+      formData.playerScores[i] ?? null,
+      formData.opponentScores[i] ?? null,
+    );
 
   const setDigit = (row: "player" | "opponent", i: number, v: string) => {
     onScoreChange(row, i, v);
     if (v.length === 0) {
       // Clearing the last set's cells removes it.
-      const other = row === "player" ? formData.opponentScores[i] : formData.playerScores[i];
-      if (i === displayed - 1 && i >= 2 && (other === null || other === undefined)) onSetsChange(i);
+      const other =
+        row === "player"
+          ? formData.opponentScores[i]
+          : formData.playerScores[i];
+      if (
+        i === displayed - 1 &&
+        i >= 2 &&
+        (other === null || other === undefined)
+      )
+        onSetsChange(i);
       return;
     }
     // A game digit advances focus; tiebreak cells wait for Tab.
@@ -134,18 +159,33 @@ export function ScoreBlock({
   };
 
   const format = `${FORMAT_OPTIONS.find((o) => o.value === formData.bestOf)?.label ?? "Best of 3"}${
-    formData.adScoring === undefined ? "" : formData.adScoring ? " · ad" : " · no-ad"
+    formData.adScoring === undefined
+      ? ""
+      : formData.adScoring
+        ? " · ad"
+        : " · no-ad"
   }`;
 
   // A render function, not a component: declared inside render, a component
   // would remount on every keystroke and lose the cell that has focus.
-  const renderRow = (row: "player" | "opponent", name: string, muted: boolean) => {
-    const scores = row === "player" ? formData.playerScores : formData.opponentScores;
-    const tbs = row === "player" ? formData.playerTiebreaks : formData.opponentTiebreaks;
+  const renderRow = (
+    row: "player" | "opponent",
+    name: string,
+    muted: boolean,
+  ) => {
+    const scores =
+      row === "player" ? formData.playerScores : formData.opponentScores;
+    const tbs =
+      row === "player" ? formData.playerTiebreaks : formData.opponentTiebreaks;
     const r = row === "player" ? "p" : "o";
     return (
       <div className="flex items-center gap-4">
-        <span className={cn("min-w-0 flex-1 truncate text-[14px]", muted ? "text-[var(--ink-600)]" : "text-[var(--ink-900)]")}>
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate text-[14px]",
+            muted ? "text-[var(--ink-600)]" : "text-[var(--ink-900)]",
+          )}
+        >
           {name}
         </span>
         <span className="flex gap-3">
@@ -174,7 +214,11 @@ export function ScoreBlock({
           ))}
           {ghost && (
             <span className="relative inline-flex size-10 items-center justify-center rounded-[var(--radius-cell)] border border-dashed border-[var(--border-medium)]">
-              <Plus className="pointer-events-none absolute size-[13px] text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
+              <Plus
+                className="pointer-events-none absolute size-[13px] text-[var(--ink-400)]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
               <input
                 ref={(el) => {
                   refs.current[key(r, displayed)] = el;
@@ -184,7 +228,9 @@ export function ScoreBlock({
                 maxLength={1}
                 aria-label={`${name}, add set ${displayed + 1}`}
                 value=""
-                onChange={(e) => ghostDigit(row, e.target.value.replace(/[^0-9]/g, ""))}
+                onChange={(e) =>
+                  ghostDigit(row, e.target.value.replace(/[^0-9]/g, ""))
+                }
                 data-focus-ring="none"
                 className="size-full cursor-text bg-transparent text-center text-[16px] text-[var(--ink-900)] outline-none focus:rounded-[var(--radius-cell)] focus:shadow-[0_0_0_1.5px_var(--blue)]"
               />
@@ -209,11 +255,17 @@ export function ScoreBlock({
       <div className="flex justify-end gap-3 pr-0.5">
         {Array.from({ length: displayed }, (_, i) => (
           <span key={i} className="flex gap-3">
-            <span className="eyebrow-sm w-10 text-center" style={{ color: "var(--ink-400)" }}>
+            <span
+              className="eyebrow-sm w-10 text-center"
+              style={{ color: "var(--ink-400)" }}
+            >
               {i + 1}
             </span>
             {tie(i) && (
-              <span className="eyebrow-sm w-10 text-center" style={{ color: "var(--ink-400)" }}>
+              <span
+                className="eyebrow-sm w-10 text-center"
+                style={{ color: "var(--ink-400)" }}
+              >
                 TB
               </span>
             )}
@@ -224,17 +276,20 @@ export function ScoreBlock({
       {renderRow("player", playerName || "You", false)}
       {renderRow("opponent", opponentName || "Opponent", true)}
       <span className="text-micro pt-0.5">
-        Digits move on <span className="text-[var(--ink-300)]">·</span> tiebreak cells appear on their own
+        Digits move on <span className="text-[var(--ink-300)]">·</span> tiebreak
+        cells appear on their own
         {ghost && (
           <>
             {" "}
-            <span className="text-[var(--ink-300)]">·</span> type in the dashed column to add a set
+            <span className="text-[var(--ink-300)]">·</span> type in the dashed
+            column to add a set
           </>
         )}
         {fromLine && (
           <>
             {" "}
-            <span className="text-[var(--ink-300)]">·</span> format from the event
+            <span className="text-[var(--ink-300)]">·</span> format from the
+            event
           </>
         )}
       </span>

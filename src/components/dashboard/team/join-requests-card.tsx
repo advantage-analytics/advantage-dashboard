@@ -66,7 +66,7 @@ function isEduAddress(email: string): boolean {
 /** The two things we can honestly say about a requester, from data already loaded. */
 function signalsFor(
   request: JoinRequest,
-  openInviteEmails: Set<string>
+  openInviteEmails: Set<string>,
 ): { edu: boolean; hasOpenInvite: boolean } {
   return {
     edu: isEduAddress(request.email),
@@ -115,7 +115,9 @@ export function JoinRequestsCard({
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  const inviteSet = new Set(openInviteEmails.map((e) => e.trim().toLowerCase()));
+  const inviteSet = new Set(
+    openInviteEmails.map((e) => e.trim().toLowerCase()),
+  );
   const visible = requests.filter((request) => !handled.includes(request.id));
 
   /**
@@ -126,7 +128,7 @@ export function JoinRequestsCard({
    */
   function answer(
     request: JoinRequest,
-    action: () => Promise<InviteResult | ActionResult>
+    action: () => Promise<InviteResult | ActionResult>,
   ) {
     setError(null);
     setHandled((current) => [...current, request.id]);
@@ -151,7 +153,9 @@ export function JoinRequestsCard({
         // A rejected action — network drop, redeploy skew — is re-thrown by the
         // transition on the next render, and this route has no error boundary:
         // without this catch, one answer is a full-page crash.
-        restore("Couldn't reach the server — the request is still open. Try again.");
+        restore(
+          "Couldn't reach the server — the request is still open. Try again.",
+        );
       }
     });
   }
@@ -182,7 +186,7 @@ export function JoinRequestsCard({
             setError(null);
             setOpen(true);
           }}
-          className="inline-flex items-center gap-1 whitespace-nowrap text-[12px] font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          className="inline-flex items-center gap-1 text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
         >
           Review requests
           <ArrowRight className="size-3" strokeWidth={1.5} aria-hidden />
@@ -257,7 +261,9 @@ export function JoinRequestsCard({
                       </Pill>
                     )}
                     <Pill>
-                      {hasOpenInvite ? "Matches your invite" : "Not on roster yet"}
+                      {hasOpenInvite
+                        ? "Matches your invite"
+                        : "Not on roster yet"}
                     </Pill>
                   </span>
 
@@ -267,7 +273,7 @@ export function JoinRequestsCard({
                   {request.note && (
                     <span
                       title={request.note}
-                      className="mt-1.5 line-clamp-2 break-words text-[11px] leading-[1.6] text-[var(--ink-600)]"
+                      className="mt-1.5 line-clamp-2 text-[11px] leading-[1.6] break-words text-[var(--ink-600)]"
                     >
                       {request.note}
                     </span>

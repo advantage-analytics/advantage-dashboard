@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
 /**
  * Add player's occupied-spot confirm — `add-player-dialog.tsx`, reached from
@@ -36,26 +36,26 @@ import { expect, test } from '@playwright/test';
  */
 
 const SOURCE = readFileSync(
-  join(process.cwd(), 'src/components/dashboard/team/add-player-dialog.tsx'),
-  'utf8'
+  join(process.cwd(), "src/components/dashboard/team/add-player-dialog.tsx"),
+  "utf8",
 );
 
-test('the gate the replica models is the one the dialog ships', () => {
+test("the gate the replica models is the one the dialog ships", () => {
   // `ready` gains exactly one term, and the button is untouched behind it.
-  expect(SOURCE).toContain('(spotTakenBy.length === 0 || spotAcknowledged)');
-  expect(SOURCE).toContain('disabled={!ready || pending}');
+  expect(SOURCE).toContain("(spotTakenBy.length === 0 || spotAcknowledged)");
+  expect(SOURCE).toContain("disabled={!ready || pending}");
 
   // The acknowledgement resets both on close and on every spot change.
   expect(SOURCE).toMatch(
-    /function reset\(\)[\s\S]*?setSpotAcknowledged\(false\);[\s\S]*?\n {2}}/
+    /function reset\(\)[\s\S]*?setSpotAcknowledged\(false\);[\s\S]*?\n {2}}/,
   );
   expect(SOURCE).toMatch(
-    /function changeLineupSpot\(next: string\) \{\s*setLineupSpot\(next\);\s*setSpotAcknowledged\(false\);/
+    /function changeLineupSpot\(next: string\) \{\s*setLineupSpot\(next\);\s*setSpotAcknowledged\(false\);/,
   );
 
   // Quiet gate, not an alarm: the one red row stays the one the server wrote.
-  expect(SOURCE.match(/<DialogProblem/g)).toEqual(['<DialogProblem']);
-  expect(SOURCE).toContain('<DialogProblem message={error} />');
+  expect(SOURCE.match(/<DialogProblem/g)).toEqual(["<DialogProblem"]);
+  expect(SOURCE).toContain("<DialogProblem message={error} />");
 });
 
 /**
@@ -99,19 +99,19 @@ const HARNESS = `
     render();
   </script>`;
 
-test('an occupied spot gates the primary until it is acknowledged', async ({
+test("an occupied spot gates the primary until it is acknowledged", async ({
   page,
 }) => {
   await page.setContent(HARNESS);
-  const add = page.locator('#add');
-  const ack = page.locator('#ack');
+  const add = page.locator("#add");
+  const ack = page.locator("#ack");
 
   // No spot chosen: nothing to acknowledge, nothing to gate.
   await expect(add).toBeEnabled();
   await expect(ack).toBeHidden();
 
   // An occupied spot raises the confirm and holds the button.
-  await page.selectOption('#spot', '3');
+  await page.selectOption("#spot", "3");
   await expect(ack).toBeVisible();
   await expect(ack).not.toBeChecked();
   await expect(add).toBeDisabled();
@@ -121,13 +121,13 @@ test('an occupied spot gates the primary until it is acknowledged', async ({
   await expect(add).toBeEnabled();
 
   // A *different* occupied spot asks again rather than carrying the tick over.
-  await page.selectOption('#spot', '5');
+  await page.selectOption("#spot", "5");
   await expect(ack).toBeVisible();
   await expect(ack).not.toBeChecked();
   await expect(add).toBeDisabled();
 
   // A free spot asks nothing at all.
-  await page.selectOption('#spot', '1');
+  await page.selectOption("#spot", "1");
   await expect(ack).toBeHidden();
   await expect(add).toBeEnabled();
 });

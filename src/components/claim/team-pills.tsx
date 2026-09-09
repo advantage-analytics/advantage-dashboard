@@ -40,7 +40,7 @@ export function TeamPills({
               "focus-visible:outline-none",
               selected
                 ? "border-transparent bg-[var(--blue-soft)] text-[var(--blue)]"
-                : "border-[var(--border-field)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]"
+                : "border-[var(--border-field)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",
             )}
           >
             {option === "mens" ? "Men's" : "Women's"}

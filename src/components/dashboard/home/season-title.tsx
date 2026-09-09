@@ -49,11 +49,13 @@ export function SeasonTitle({
   const leftSeconds = Math.max(0, usage.capSeconds - usage.usedSeconds);
   const hoursLeft = (
     <>
-      <span className="tabular">{formatHoursShort(leftSeconds)}</span> h left this month
+      <span className="tabular">{formatHoursShort(leftSeconds)}</span> h left
+      this month
     </>
   );
 
-  const awaitingFirstReport = hasMatches && analyzedMatchCount === 0 && matchCount > 0;
+  const awaitingFirstReport =
+    hasMatches && analyzedMatchCount === 0 && matchCount > 0;
 
   return (
     <div className="flex items-end gap-4">
@@ -75,7 +77,9 @@ export function SeasonTitle({
             </span>
           ) : awaitingFirstReport ? (
             <span className="text-body-sm">
-              {matchCount === 1 ? "First report on its way" : "First reports on their way"}
+              {matchCount === 1
+                ? "First report on its way"
+                : "First reports on their way"}
               {" · "}
               {hoursLeft}
             </span>
@@ -83,7 +87,8 @@ export function SeasonTitle({
             <>
               <span className="text-body-sm">
                 <span className="tabular">{analyzedMatchCount}</span>{" "}
-                {analyzedMatchCount === 1 ? "match" : "matches"} analyzed · {hoursLeft}
+                {analyzedMatchCount === 1 ? "match" : "matches"} analyzed ·{" "}
+                {hoursLeft}
               </span>
               <NewReportsSubline userId={userId} fallback="" />
             </>

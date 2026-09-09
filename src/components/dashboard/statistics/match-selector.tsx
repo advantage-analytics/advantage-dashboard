@@ -34,7 +34,7 @@ export function MatchSelector({
 
   const isFiltered = selectedIds.size < matches.length;
   const allDateFilteredSelected = dateFiltered.every((m) =>
-    selectedIds.has(m.id)
+    selectedIds.has(m.id),
   );
 
   function toggleMatch(id: string) {
@@ -65,20 +65,28 @@ export function MatchSelector({
       <button
         type="button"
         onClick={() => setIsOpen((v) => !v)}
-        className="flex items-center gap-2 px-4 py-2 bg-white ring-1 ring-inset ring-[#D9D9D9] rounded-full text-[12px] text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6] transition-colors duration-200 focus-visible:outline-none"
+        className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-[12px] text-[#525252] ring-1 ring-[#D9D9D9] transition-colors duration-200 ring-inset hover:bg-[#EFF6FF] hover:text-[#3B82F6] hover:ring-[#BFDBFE] focus-visible:outline-none"
       >
-        <span className="text-[#0D0D0D] font-medium">
+        <span className="font-medium text-[#0D0D0D]">
           {isFiltered
             ? `${selectedIds.size} of ${matches.length} matches selected`
             : `All ${matches.length} matches`}
         </span>
         {isFiltered && (
-          <span className="w-1.5 h-1.5 rounded-full bg-[#3B82F6] shrink-0" />
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#3B82F6]" />
         )}
         {isOpen ? (
-          <ChevronUp className="w-3.5 h-3.5 text-[#888888]" strokeWidth={1.5} aria-hidden="true" />
+          <ChevronUp
+            className="h-3.5 w-3.5 text-[#888888]"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
         ) : (
-          <ChevronDown className="w-3.5 h-3.5 text-[#888888]" strokeWidth={1.5} aria-hidden="true" />
+          <ChevronDown
+            className="h-3.5 w-3.5 text-[#888888]"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
         )}
       </button>
 
@@ -86,15 +94,29 @@ export function MatchSelector({
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto", transition: shouldReduceMotion ? { duration: 0.1 } : { duration: 0.2, ease: EASE_CURVE } }}
-            exit={{ opacity: 0, height: 0, transition: shouldReduceMotion ? { duration: 0.05 } : { duration: 0.14, ease: EASE_CURVE } }}
+            initial={
+              shouldReduceMotion ? { opacity: 1 } : { opacity: 0, height: 0 }
+            }
+            animate={{
+              opacity: 1,
+              height: "auto",
+              transition: shouldReduceMotion
+                ? { duration: 0.1 }
+                : { duration: 0.2, ease: EASE_CURVE },
+            }}
+            exit={{
+              opacity: 0,
+              height: 0,
+              transition: shouldReduceMotion
+                ? { duration: 0.05 }
+                : { duration: 0.14, ease: EASE_CURVE },
+            }}
             className="overflow-hidden"
           >
-            <div className="mt-2 bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-hidden">
+            <div className="mt-2 overflow-hidden rounded-[14px] border border-[#F3F3F3] bg-white shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
               {/* Date range row */}
-              <div className="flex items-center gap-3 px-5 py-4 border-b border-[#F0F0F0]">
-                <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] shrink-0">
+              <div className="flex items-center gap-3 border-b border-[#F0F0F0] px-5 py-4">
+                <span className="shrink-0 text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
                   Filter by date
                 </span>
                 <div className="flex items-center gap-2">
@@ -124,7 +146,7 @@ export function MatchSelector({
               {/* Match list */}
               <div className="max-h-64 overflow-y-auto">
                 {dateFiltered.length === 0 ? (
-                  <p className="text-[12px] text-[#888888] text-center py-8">
+                  <p className="py-8 text-center text-[12px] text-[#888888]">
                     No matches in this date range.
                   </p>
                 ) : (
@@ -133,17 +155,17 @@ export function MatchSelector({
                     return (
                       <label
                         key={m.id}
-                        className="flex items-center gap-3 px-5 py-3 border-b border-[#F0F0F0] last:border-b-0 hover:bg-[#FAFAFA] cursor-pointer transition-colors duration-200"
+                        className="flex cursor-pointer items-center gap-3 border-b border-[#F0F0F0] px-5 py-3 transition-colors duration-200 last:border-b-0 hover:bg-[#FAFAFA]"
                       >
                         <input
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggleMatch(m.id)}
-                          className="w-3.5 h-3.5 rounded accent-[#3B82F6] shrink-0"
+                          className="h-3.5 w-3.5 shrink-0 rounded accent-[#3B82F6]"
                           aria-label={`${m.tournamentName} vs ${m.player2Name}`}
                         />
                         <span
-                          className={`size-[24px] rounded-[4px] flex items-center justify-center text-[11px] font-semibold leading-none shrink-0 ${
+                          className={`flex size-[24px] shrink-0 items-center justify-center rounded-[4px] text-[11px] leading-none font-semibold ${
                             m.isWin
                               ? "bg-[rgba(93,185,85,0.1)] text-[#5DB955]"
                               : "bg-[rgba(229,24,55,0.1)] text-[#E51837]"
@@ -151,13 +173,13 @@ export function MatchSelector({
                         >
                           {m.isWin ? "W" : "L"}
                         </span>
-                        <span className="text-[12px] font-normal text-[#0D0D0D] truncate flex-1">
+                        <span className="flex-1 truncate text-[12px] font-normal text-[#0D0D0D]">
                           {m.tournamentName}
                         </span>
-                        <span className="text-[12px] font-normal text-[#71717A] truncate max-w-[120px]">
+                        <span className="max-w-[120px] truncate text-[12px] font-normal text-[#71717A]">
                           vs {m.player2Name}
                         </span>
-                        <span className="text-[10px] font-normal text-[#AAAAAA] shrink-0 tabular-nums">
+                        <span className="shrink-0 text-[10px] font-normal text-[#AAAAAA] tabular-nums">
                           {m.displayDate}
                         </span>
                       </label>
@@ -167,13 +189,13 @@ export function MatchSelector({
               </div>
 
               {/* Footer actions */}
-              <div className="flex items-center justify-between px-5 py-3 border-t border-[#F0F0F0]">
+              <div className="flex items-center justify-between border-t border-[#F0F0F0] px-5 py-3">
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
                     onClick={selectAllFiltered}
                     disabled={allDateFilteredSelected}
-                    className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#3B82F6] hover:text-[#2563EB] transition-colors duration-200 active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none"
+                    className="text-[9px] font-medium tracking-[1.5px] text-[#3B82F6] uppercase transition-colors duration-200 hover:text-[#2563EB] active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40"
                   >
                     Select all
                   </button>
@@ -181,7 +203,7 @@ export function MatchSelector({
                   <button
                     type="button"
                     onClick={reset}
-                    className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA] hover:text-[#525252] transition-colors duration-200 active:scale-[0.97]"
+                    className="text-[9px] font-medium tracking-[1.5px] text-[#AAAAAA] uppercase transition-colors duration-200 hover:text-[#525252] active:scale-[0.97]"
                   >
                     Reset
                   </button>
@@ -189,7 +211,7 @@ export function MatchSelector({
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  className="text-[11px] font-medium text-white bg-[#0D0D0D] px-3 py-1.5 rounded-[6px] hover:bg-[#2D2D2D] transition-colors duration-200 active:scale-[0.97]"
+                  className="rounded-[6px] bg-[#0D0D0D] px-3 py-1.5 text-[11px] font-medium text-white transition-colors duration-200 hover:bg-[#2D2D2D] active:scale-[0.97]"
                 >
                   Done
                 </button>

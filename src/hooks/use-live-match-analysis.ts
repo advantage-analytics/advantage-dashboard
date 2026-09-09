@@ -69,10 +69,10 @@ export type LiveAnalysisFilter =
   | { by: "match"; matchId: string | undefined };
 
 export function useLiveMatchAnalysis(
-  filter: LiveAnalysisFilter
+  filter: LiveAnalysisFilter,
 ): Map<string, LiveAnalysisPatch> {
   const [patches, setPatches] = useState<Map<string, LiveAnalysisPatch>>(
-    () => new Map()
+    () => new Map(),
   );
 
   // Primitives, so the effect keys off the value rather than the object
@@ -120,7 +120,8 @@ export function useLiveMatchAnalysis(
             // Filtered on a NEW-record column, for the same reason: under
             // default replica identity `old` carries only the primary key, so a
             // filter evaluated against it would match nothing.
-            filter: by === "user" ? `created_by=eq.${key}` : `match_id=eq.${key}`,
+            filter:
+              by === "user" ? `created_by=eq.${key}` : `match_id=eq.${key}`,
           },
           (payload) => {
             const row = payload.new as Partial<LiveJobRow> | null;
@@ -128,7 +129,7 @@ export function useLiveMatchAnalysis(
 
             const status = resolveAnalysisStatus(
               row.status,
-              row.derivation_version
+              row.derivation_version,
             );
             if (!status) {
               console.warn("[live-analysis] unmapped processing_jobs.status", {
@@ -156,7 +157,7 @@ export function useLiveMatchAnalysis(
               });
               return next;
             });
-          }
+          },
         )
         .subscribe((status) => {
           // A channel that fails to join is silent by default: no error, no
@@ -176,7 +177,7 @@ export function useLiveMatchAnalysis(
           ) {
             console.warn(
               `[live-analysis] subscription ${status} — progress will not update ` +
-                `live until this page is reloaded`
+                `live until this page is reloaded`,
             );
           }
         });
@@ -201,7 +202,7 @@ export function useLiveMatchAnalysis(
  */
 export function withLiveAnalysis<T extends LiveAnalysisPatch>(
   analysis: T,
-  patch: LiveAnalysisPatch | undefined
+  patch: LiveAnalysisPatch | undefined,
 ): T {
   return patch ? { ...analysis, ...patch } : analysis;
 }

@@ -1,9 +1,9 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
 import {
   FORMATS,
   formatOptions,
-} from '@/components/dashboard/schedule/static/dual-build-step';
+} from "@/components/dashboard/schedule/static/dual-build-step";
 
 /**
  * The Format cell is the one input on the dual builder that decides
@@ -17,8 +17,8 @@ import {
  * carries a NAME and nothing else — no encoded scoring rule to parse — and
  * that resolving the name lands on a row whose `adScoring` is a real boolean.
  */
-test.describe('dual Format options', () => {
-  test('one option per format, worded off its row', () => {
+test.describe("dual Format options", () => {
+  test("one option per format, worded off its row", () => {
     const options = formatOptions(FORMATS);
 
     expect(options).toHaveLength(4);
@@ -35,19 +35,19 @@ test.describe('dual Format options', () => {
     });
   });
 
-  test('an option carries a name, never a scoring rule', () => {
+  test("an option carries a name, never a scoring rule", () => {
     for (const option of formatOptions(FORMATS)) {
       // Three keys and no fourth. `bestOf`/`adScoring` on an option would be a
       // second place to read the rule from, and the one the UI reaches first.
       expect(Object.keys(option).sort()).toEqual([
-        'description',
-        'label',
-        'value',
+        "description",
+        "label",
+        "value",
       ]);
     }
   });
 
-  test('every option resolves to a row stating adScoring as a literal', () => {
+  test("every option resolves to a row stating adScoring as a literal", () => {
     for (const option of formatOptions(FORMATS)) {
       // The lookup `DualFactsStep` performs on change, run over every option
       // the coach can pick. A miss would leave `format` unassigned; a row
@@ -55,11 +55,11 @@ test.describe('dual Format options', () => {
       const chosen = FORMATS.find((row) => row.value === option.value);
 
       expect(chosen, `no FORMATS row for ${option.value}`).toBeTruthy();
-      expect(typeof chosen!.adScoring).toBe('boolean');
+      expect(typeof chosen!.adScoring).toBe("boolean");
       expect(chosen!.adScoring === true || chosen!.adScoring === false).toBe(
-        true
+        true,
       );
-      expect(typeof chosen!.bestOf).toBe('number');
+      expect(typeof chosen!.bestOf).toBe("number");
     }
   });
 });

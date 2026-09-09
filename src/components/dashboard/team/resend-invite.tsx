@@ -39,7 +39,7 @@ export function ResendInvite({
 }) {
   const [pending, startTransition] = useTransition();
   const [note, setNote] = useState<{ tone: "ok" | "bad"; text: string } | null>(
-    null
+    null,
   );
 
   return (
@@ -62,7 +62,7 @@ export function ResendInvite({
             setNote(
               result.warning
                 ? { tone: "bad", text: result.warning }
-                : { tone: "ok", text: "Sent again" }
+                : { tone: "ok", text: "Sent again" },
             );
           });
         }}

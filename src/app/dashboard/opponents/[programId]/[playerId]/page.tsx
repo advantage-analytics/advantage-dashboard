@@ -37,7 +37,10 @@ export default async function OpponentPlayerPage({
   const profile = await getOpponentPlayerProfile(active.id, playerId);
   if (!profile) notFound();
 
-  const style = formatPlayerStyle(profile.hand ?? undefined, profile.backhand ?? undefined);
+  const style = formatPlayerStyle(
+    profile.hand ?? undefined,
+    profile.backhand ?? undefined,
+  );
   const measured = profile.measures.filter((m) => m.value !== null).length;
 
   return (
@@ -53,7 +56,7 @@ export default async function OpponentPlayerPage({
           <h1 className="mt-2 text-[30px] leading-9 font-light tracking-[-0.6px] text-[var(--ink-900)]">
             {profile.name}
           </h1>
-          <p className="mt-1 text-[12px] leading-[1.5] tabular-nums text-[var(--ink-700)]">
+          <p className="mt-1 text-[12px] leading-[1.5] text-[var(--ink-700)] tabular-nums">
             {[
               profile.lineupSpot ? `#${profile.lineupSpot}` : null,
               profile.classYear,
@@ -93,7 +96,7 @@ export default async function OpponentPlayerPage({
                     <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ink-900)]">
                       {measure.label}
                     </span>
-                    <span className="shrink-0 text-[13px] font-medium tabular-nums text-[var(--ink-900)]">
+                    <span className="shrink-0 text-[13px] font-medium text-[var(--ink-900)] tabular-nums">
                       {measure.value === null ? (
                         <span className="text-[var(--ink-400)]">—</span>
                       ) : (
@@ -106,9 +109,9 @@ export default async function OpponentPlayerPage({
 
               {measured < profile.measures.length && (
                 <p className="text-[11px] leading-[1.6] text-[var(--ink-500)]">
-                  A dash means the match never measured it — not that it was zero.
-                  Video-derived matches withhold the return family and anything
-                  depending on how a point ended.
+                  A dash means the match never measured it — not that it was
+                  zero. Video-derived matches withhold the return family and
+                  anything depending on how a point ended.
                 </p>
               )}
             </>

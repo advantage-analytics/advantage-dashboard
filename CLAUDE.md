@@ -32,7 +32,7 @@ different products:
   shared monthly video budget
 
 A user may hold several, so this is a switcher, never a flag on the user row. Membership
-lives in `program_members`, *not* `users.role` (nullable free text, nothing validates it).
+lives in `program_members`, _not_ `users.role` (nullable free text, nothing validates it).
 See `src/lib/workspace/types.ts` — the doc comments there are the spec.
 
 **[`MAP.md`](MAP.md) is the code directory** — routes, source layout, and the
@@ -154,7 +154,7 @@ before writing a template or wiring a send.**
 authoritative build reference. `DESIGN.md` documents v2 provenance and what was
 deliberately deferred (dark mode, v2 shadows). Tokens live in
 `src/styles/design-system/`, imported by `globals.css`. The Claude Design project
-*Advantage Design System v3* (`abcb65f6-4e66-44bc-b9de-b3b47f4313c1`) is the current
+_Advantage Design System v3_ (`abcb65f6-4e66-44bc-b9de-b3b47f4313c1`) is the current
 authority on component behaviour; SKILL.md transcribes its rules, marked **(v3)**, and
 flags where shipped code still draws the old pattern. Re-sync from its `CHANGELOG.md`
 (read via DesignSync, not the web) when it moves — it changes no token value.

@@ -255,7 +255,7 @@ export function SetScopeChips() {
         <button
           type="button"
           onClick={() => select(null)}
-          className="cursor-pointer whitespace-nowrap text-[11px] font-medium text-[var(--blue)]"
+          className="cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)]"
         >
           Whole match
         </button>

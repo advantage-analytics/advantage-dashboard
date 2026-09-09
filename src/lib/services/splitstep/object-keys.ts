@@ -16,7 +16,7 @@
  * nothing on their own. Do not read a new secret into this layout.
  */
 
-import { ACCEPTED_VIDEO_EXTENSIONS } from './config';
+import { ACCEPTED_VIDEO_EXTENSIONS } from "./config";
 
 export type AcceptedVideoExtension = (typeof ACCEPTED_VIDEO_EXTENSIONS)[number];
 
@@ -33,7 +33,7 @@ export function videoExtensionFor(fileName: string): AcceptedVideoExtension {
 
   if (!match) {
     throw new Error(
-      `Unsupported video container for "${fileName}". Expected one of ${ACCEPTED_VIDEO_EXTENSIONS.join(', ')}.`
+      `Unsupported video container for "${fileName}". Expected one of ${ACCEPTED_VIDEO_EXTENSIONS.join(", ")}.`,
     );
   }
 

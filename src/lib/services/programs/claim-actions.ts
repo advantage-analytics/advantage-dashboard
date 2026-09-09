@@ -69,7 +69,7 @@ interface PendingClaim {
  */
 async function sendClaimOtp(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  email: string
+  email: string,
 ) {
   return supabase.auth.signInWithOtp({
     email,
@@ -126,7 +126,10 @@ export async function startClaim(input: {
 
   if (!program) return { ok: false, error: "We could not find that program." };
   if (program.status !== "unclaimed") {
-    return { ok: false, error: "Someone has already started setting up this program." };
+    return {
+      ok: false,
+      error: "Someone has already started setting up this program.",
+    };
   }
 
   const supabase = await createClient();
@@ -148,7 +151,10 @@ export async function startClaim(input: {
       db,
       user,
       { programKey: input.programKey, fullName, role: input.role, email },
-      programDisplayName(program.school_name as string, program.team as string | null)
+      programDisplayName(
+        program.school_name as string,
+        program.team as string | null,
+      ),
     );
   }
 
@@ -160,14 +166,17 @@ export async function startClaim(input: {
     // saying so plainly beats a generic failure the claimant cannot act on.
     return {
       ok: false,
-      error: "We could not send the link. Check the address, or try again in a minute.",
+      error:
+        "We could not send the link. Check the address, or try again in a minute.",
     };
   }
 
   // AFTER the send, deliberately. Row creation is then gated by Supabase's
   // email rate limit and its per-address and per-IP OTP throttles — pending
   // claims cannot be created faster than mail actually goes out.
-  const expiresAt = new Date(Date.now() + PENDING_CLAIM_TTL_HOURS * 60 * 60 * 1000);
+  const expiresAt = new Date(
+    Date.now() + PENDING_CLAIM_TTL_HOURS * 60 * 60 * 1000,
+  );
 
   const { error: pendingError } = await db.from("pending_claims").upsert(
     {
@@ -193,7 +202,7 @@ export async function startClaim(input: {
       token_hash: null,
       token_program_key: null,
     },
-    { onConflict: "email,claimant_user_id" }
+    { onConflict: "email,claimant_user_id" },
   );
 
   if (pendingError) {
@@ -211,7 +220,10 @@ export async function startClaim(input: {
 
   // Opportunistic sweep. There is no scheduled job on this project, and this is
   // the only path that creates these rows, so it is the natural place.
-  await db.from("pending_claims").delete().lt("expires_at", new Date().toISOString());
+  await db
+    .from("pending_claims")
+    .delete()
+    .lt("expires_at", new Date().toISOString());
 
   return { ok: true };
 }
@@ -244,7 +256,7 @@ async function startClaimSignedIn(
   db: ReturnType<typeof createAdminClient>,
   user: User,
   pending: PendingClaim,
-  programName: string
+  programName: string,
 ): Promise<ActionOutcome> {
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
@@ -267,11 +279,13 @@ async function startClaimSignedIn(
   if (
     existing &&
     new Date(existing.expires_at as string).getTime() > now &&
-    now - new Date(existing.created_at as string).getTime() < SIGNED_IN_RESEND_COOLDOWN_MS
+    now - new Date(existing.created_at as string).getTime() <
+      SIGNED_IN_RESEND_COOLDOWN_MS
   ) {
     return {
       ok: false,
-      error: "We just sent a link to that address. Give it a minute, then try again.",
+      error:
+        "We just sent a link to that address. Give it a minute, then try again.",
     };
   }
 
@@ -327,14 +341,17 @@ async function startClaimSignedIn(
     // replaces this account's claim on this address and nothing else: the
     // anonymous slot a signed-out claimant may be mid-flight on, and every
     // other account's slot, are different keys this statement cannot reach.
-    { onConflict: "email,claimant_user_id" }
+    { onConflict: "email,claimant_user_id" },
   );
 
   if (pendingError) {
     console.error("[claim] could not record the pending claim", {
       error: pendingError.message,
     });
-    return { ok: false, error: "We could not start that setup. Try again in a moment." };
+    return {
+      ok: false,
+      error: "We could not start that setup. Try again in a moment.",
+    };
   }
 
   const sent = await sendEmail(
@@ -343,7 +360,7 @@ async function startClaimSignedIn(
       programName,
       accountEmail: user.email ?? "your signed-in account",
       token,
-    })
+    }),
   );
 
   if (!sent.ok) {
@@ -354,15 +371,21 @@ async function startClaimSignedIn(
       .delete()
       .eq("email", pending.email)
       .eq("token_hash", tokenHash);
-    console.error("[claim] could not send the verification link", { error: sent.error });
+    console.error("[claim] could not send the verification link", {
+      error: sent.error,
+    });
     return {
       ok: false,
-      error: "We could not send the link. Check the address, or try again in a minute.",
+      error:
+        "We could not send the link. Check the address, or try again in a minute.",
     };
   }
 
   // The same opportunistic sweep the signed-out path runs.
-  await db.from("pending_claims").delete().lt("expires_at", new Date().toISOString());
+  await db
+    .from("pending_claims")
+    .delete()
+    .lt("expires_at", new Date().toISOString());
 
   return { ok: true };
 }
@@ -406,7 +429,8 @@ export async function resendClaim(input: {
 }): Promise<ActionOutcome> {
   const email = input.email.trim().toLowerCase();
   if (!email) return { ok: false, error: "Add an email address." };
-  if (!input.programKey) return { ok: false, error: "We could not find that program." };
+  if (!input.programKey)
+    return { ok: false, error: "We could not find that program." };
 
   // Read-only, same as startClaim's own program check, and for the same
   // reason: don't mail a link into a claim that can no longer be finished.
@@ -421,7 +445,10 @@ export async function resendClaim(input: {
 
   if (!program) return { ok: false, error: "We could not find that program." };
   if (program.status !== "unclaimed") {
-    return { ok: false, error: "Someone has already started setting up this program." };
+    return {
+      ok: false,
+      error: "Someone has already started setting up this program.",
+    };
   }
 
   const supabase = await createClient();
@@ -440,7 +467,7 @@ export async function resendClaim(input: {
       programKey: input.programKey,
       programName: programDisplayName(
         program.school_name as string,
-        program.team as string | null
+        program.team as string | null,
       ),
     });
   }
@@ -448,12 +475,15 @@ export async function resendClaim(input: {
   const { error } = await sendClaimOtp(supabase, email);
 
   if (error) {
-    console.error("[claim] could not resend the link", { error: error.message });
+    console.error("[claim] could not resend the link", {
+      error: error.message,
+    });
     // Same shape as startClaim's own failure: plain, actionable, and not
     // pretending the countdown succeeded when it did not.
     return {
       ok: false,
-      error: "We could not send the link. Check the address, or try again in a minute.",
+      error:
+        "We could not send the link. Check the address, or try again in a minute.",
     };
   }
 
@@ -464,7 +494,9 @@ export async function resendClaim(input: {
   // single-use semantics for the eventual completion are unaffected either
   // way, since completeClaim still deletes the row exactly once regardless
   // of how many times the link inside it was re-sent.
-  const expiresAt = new Date(Date.now() + PENDING_CLAIM_TTL_HOURS * 60 * 60 * 1000);
+  const expiresAt = new Date(
+    Date.now() + PENDING_CLAIM_TTL_HOURS * 60 * 60 * 1000,
+  );
   const { error: pendingError } = await db
     .from("pending_claims")
     .update({ expires_at: expiresAt.toISOString() })
@@ -514,7 +546,7 @@ export async function resendClaim(input: {
 async function resendClaimSignedIn(
   db: ReturnType<typeof createAdminClient>,
   user: User,
-  input: { email: string; programKey: string; programName: string }
+  input: { email: string; programKey: string; programName: string },
 ): Promise<ActionOutcome> {
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
@@ -530,14 +562,19 @@ async function resendClaimSignedIn(
   if (!row || new Date(row.expires_at as string).getTime() <= now) {
     return {
       ok: false,
-      error: "That setup is no longer waiting on a link. Start it again from the program page.",
+      error:
+        "That setup is no longer waiting on a link. Start it again from the program page.",
     };
   }
 
-  if (now - new Date(row.created_at as string).getTime() < SIGNED_IN_RESEND_COOLDOWN_MS) {
+  if (
+    now - new Date(row.created_at as string).getTime() <
+    SIGNED_IN_RESEND_COOLDOWN_MS
+  ) {
     return {
       ok: false,
-      error: "We just sent a link to that address. Give it a minute, then try again.",
+      error:
+        "We just sent a link to that address. Give it a minute, then try again.",
     };
   }
 
@@ -567,7 +604,10 @@ async function resendClaimSignedIn(
         error: rotateError.message,
       });
     }
-    return { ok: false, error: "We could not start that setup. Try again in a moment." };
+    return {
+      ok: false,
+      error: "We could not start that setup. Try again in a moment.",
+    };
   }
 
   const sent = await sendEmail(
@@ -576,14 +616,16 @@ async function resendClaimSignedIn(
       programName: input.programName,
       accountEmail: user.email ?? "your signed-in account",
       token,
-    })
+    }),
   );
 
   if (!sent.ok) {
     // The rotation already retired the previous link, so there is nothing to
     // fall back to — and that is fine: the claimant is on the check-email
     // screen, and "in a minute" is exactly the cooldown that just restarted.
-    console.error("[claim] could not resend the verification link", { error: sent.error });
+    console.error("[claim] could not resend the verification link", {
+      error: sent.error,
+    });
     return {
       ok: false,
       error: "We could not send the link. Try again in a minute.",
@@ -705,7 +747,9 @@ export async function completeClaim(): Promise<CompleteClaimResult> {
   };
   const { data: program } = await db
     .from("programs")
-    .select("school_name, team, primary_domain, athletics_domains, domain_match_skips_review")
+    .select(
+      "school_name, team, primary_domain, athletics_domains, domain_match_skips_review",
+    )
     .eq("program_key", pending.programKey)
     .maybeSingle();
 
@@ -807,7 +851,7 @@ export async function completeClaim(): Promise<CompleteClaimResult> {
  * reachable from a browser, with these or any arguments.
  */
 export async function completeClaimWithToken(
-  token: string
+  token: string,
 ): Promise<CompleteClaimResult> {
   const supabase = await createClient();
   const {
@@ -834,7 +878,8 @@ export async function completeClaimWithToken(
     .maybeSingle();
 
   if (!row) return { ok: false, reason: "no-pending" };
-  if (row.claimant_user_id !== user.id) return { ok: false, reason: "wrong-account" };
+  if (row.claimant_user_id !== user.id)
+    return { ok: false, reason: "wrong-account" };
   if (new Date(row.expires_at as string) < new Date()) {
     // By hash, not by email: this token's row is the only one it may spend.
     // An email-wide delete here would let one expired signed-in link consume
@@ -847,7 +892,9 @@ export async function completeClaimWithToken(
 
   const { data: program } = await db
     .from("programs")
-    .select("school_name, team, primary_domain, athletics_domains, domain_match_skips_review")
+    .select(
+      "school_name, team, primary_domain, athletics_domains, domain_match_skips_review",
+    )
     .eq("program_key", row.program_key)
     .maybeSingle();
 
@@ -866,7 +913,9 @@ export async function completeClaimWithToken(
   });
 
   if (error) {
-    console.error("[claim] signed-in completion failed", { error: error.message });
+    console.error("[claim] signed-in completion failed", {
+      error: error.message,
+    });
     return { ok: false, reason: "failed" };
   }
 
@@ -956,7 +1005,10 @@ async function fileRequest(row: {
     // reviewer already has. Telling someone their second request "failed"
     // would be wrong — it is already filed.
     if (error.code === "23505") return { ok: true };
-    console.error("[claim] could not file request", { kind: row.kind, error: error.message });
+    console.error("[claim] could not file request", {
+      kind: row.kind,
+      error: error.message,
+    });
     return { ok: false, error: "We could not record that. Try again." };
   }
   return { ok: true };
@@ -964,7 +1016,7 @@ async function fileRequest(row: {
 
 /** The bits of a program the request actions need, resolved from its key. */
 async function programForKey(
-  programKey: string
+  programKey: string,
 ): Promise<{ id: string; schoolName: string; team: string | null } | null> {
   const db = createAdminClient();
   const { data } = await db
@@ -991,7 +1043,8 @@ export async function requestInvite(input: {
   role?: string;
 }): Promise<ActionOutcome> {
   const email = input.email.trim();
-  if (!email) return { ok: false, error: "Add an email address so they can reply." };
+  if (!email)
+    return { ok: false, error: "Add an email address so they can reply." };
 
   const program = await programForKey(input.programKey);
   if (!program) return { ok: false, error: "We could not find that program." };
@@ -1049,7 +1102,7 @@ export async function requestInvite(input: {
         programName: programDisplayName(program.schoolName, program.team),
         // Optional on the form, so the greeting has to survive without it.
         requesterName: input.name?.trim() || null,
-      })
+      }),
     );
 
     if (!sent.ok) {
@@ -1080,7 +1133,8 @@ export async function raiseObjection(input: {
   note?: string;
 }): Promise<ActionOutcome> {
   const email = input.email.trim();
-  if (!email) return { ok: false, error: "Add an email address so we can follow up." };
+  if (!email)
+    return { ok: false, error: "Add an email address so we can follow up." };
 
   const db = createAdminClient();
   const { data: program } = await db
@@ -1100,7 +1154,9 @@ export async function raiseObjection(input: {
       .maybeSingle();
 
     if (claim) {
-      const next = nextClaimStatus(claim.status as ClaimStatus, { type: "object" });
+      const next = nextClaimStatus(claim.status as ClaimStatus, {
+        type: "object",
+      });
       if (next) {
         await db
           .from("program_claims")
@@ -1113,7 +1169,11 @@ export async function raiseObjection(input: {
         // human either way.
         await db
           .from("programs")
-          .update({ status: "unclaimed", owner_user_id: null, claimed_at: null })
+          .update({
+            status: "unclaimed",
+            owner_user_id: null,
+            claimed_at: null,
+          })
           .eq("id", program.id);
       }
     }

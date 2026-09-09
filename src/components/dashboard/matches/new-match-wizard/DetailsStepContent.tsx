@@ -96,14 +96,27 @@ export interface DetailsStepContentProps {
   formData: FormData;
   onInputChange: (
     field: keyof FormData,
-    value: string | number | boolean | null | undefined
+    value: string | number | boolean | null | undefined,
   ) => void;
-  onScoreChange: (player: "player" | "opponent", index: number, value: string) => void;
-  onTiebreakChange: (player: "player" | "opponent", index: number, value: string) => void;
+  onScoreChange: (
+    player: "player" | "opponent",
+    index: number,
+    value: string,
+  ) => void;
+  onTiebreakChange: (
+    player: "player" | "opponent",
+    index: number,
+    value: string,
+  ) => void;
   isProcessingProvider: boolean;
   workspaceKind: "personal" | "team";
   /** Whose match this is — settled on step 1, read back here. */
-  subject: { name: string; isSelf: boolean; playerId: string | null; userId: string | null };
+  subject: {
+    name: string;
+    isSelf: boolean;
+    playerId: string | null;
+    userId: string | null;
+  };
   /** The event line this flow started from, when it did. */
   preset: EventPreset | null;
   /** The schedule offer accepted with Attach, when one was. */
@@ -119,7 +132,10 @@ export interface DetailsStepContentProps {
 type Hand = "right" | "left";
 type Backhand = "one-handed" | "two-handed";
 
-const HAND_LABEL: Record<Hand, string> = { right: "Right-handed", left: "Left-handed" };
+const HAND_LABEL: Record<Hand, string> = {
+  right: "Right-handed",
+  left: "Left-handed",
+};
 const BACKHAND_LABEL: Record<Backhand, string> = {
   "two-handed": "Two-handed backhand",
   "one-handed": "One-handed backhand",
@@ -132,7 +148,11 @@ const COURT_OPTIONS: readonly { value: string; label: string }[] = [
   { value: "Grass Court", label: "Grass" },
 ];
 
-const ROUND_OPTIONS: readonly { value: string; label: string; short: string }[] = [
+const ROUND_OPTIONS: readonly {
+  value: string;
+  label: string;
+  short: string;
+}[] = [
   { value: "Round of 128", label: "Round of 128", short: "R128" },
   { value: "Round of 64", label: "Round of 64", short: "R64" },
   { value: "Round of 32", label: "Round of 32", short: "R32" },
@@ -167,13 +187,23 @@ function formatDayShort(date: string): string {
 function formatMonthDay(date: string): string {
   const [y, m, d] = date.slice(0, 10).split("-").map(Number);
   if (!y || !m || !d) return date;
-  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 /** The tournament mark from the design's assets, inline so it takes the ink colour. */
 function TournamentMark({ className }: { className?: string }) {
   return (
-    <svg width="13" height="13" viewBox="0 0 15 15" fill="none" aria-hidden="true" className={className}>
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 15 15"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
       <path
         d="M1.875 1.875H5V5.625H1.875M5 3.75H9.375V11.25H5M9.375 7.5H13.75M1.875 9.375H5V13.125H1.875"
         stroke="currentColor"
@@ -258,7 +288,11 @@ function Cell({
       <span className="flex items-center gap-1">
         <span className="eyebrow">{label}</span>
         {required && <Required />}
-        {tag && <span className="text-micro ml-auto shrink-0 whitespace-nowrap">{tag}</span>}
+        {tag && (
+          <span className="text-micro ml-auto shrink-0 whitespace-nowrap">
+            {tag}
+          </span>
+        )}
       </span>
       {children}
     </div>
@@ -300,26 +334,34 @@ function SelectCell<T extends string | boolean>({
             className={cn(
               UNDERLINE_CLS,
               "cursor-pointer",
-              open ? "border-b-2 border-[var(--blue)] pb-[7px]" : "border-[var(--border-hairline)]",
-              focusRingCls
+              open
+                ? "border-b-2 border-[var(--blue)] pb-[7px]"
+                : "border-[var(--border-hairline)]",
+              focusRingCls,
             )}
           >
             <span
               className={cn(
                 "min-w-0 flex-1 truncate",
                 mono && "mono",
-                current ? "text-[var(--ink-900)]" : "text-[var(--ink-400)]"
+                current ? "text-[var(--ink-900)]" : "text-[var(--ink-400)]",
               )}
             >
               {read ?? current?.label ?? placeholder}
             </span>
-            <ChevronDown className="size-[13px] shrink-0 text-[var(--ink-400)]" strokeWidth={1.5} />
+            <ChevronDown
+              className="size-[13px] shrink-0 text-[var(--ink-400)]"
+              strokeWidth={1.5}
+            />
           </button>
         </PopoverTrigger>
         <PopoverContent
           align="start"
           sideOffset={6}
-          className={cn(floatMenuCls, "w-[var(--radix-popover-trigger-width)] min-w-[180px]")}
+          className={cn(
+            floatMenuCls,
+            "w-[var(--radix-popover-trigger-width)] min-w-[180px]",
+          )}
         >
           {options.map((option) => {
             const isCurrent = option.value === value;
@@ -331,18 +373,25 @@ function SelectCell<T extends string | boolean>({
                   onChange(option.value);
                   setOpen(false);
                 }}
-                className={cn(floatMenuRowCls, "h-[34px]", isCurrent && "bg-[var(--surface-subtle)]")}
+                className={cn(
+                  floatMenuRowCls,
+                  "h-[34px]",
+                  isCurrent && "bg-[var(--surface-subtle)]",
+                )}
               >
                 <span
                   className={cn(
                     "flex-1 text-[12px] text-[var(--ink-900)]",
-                    isCurrent ? "font-medium" : "font-normal"
+                    isCurrent ? "font-medium" : "font-normal",
                   )}
                 >
                   {option.label}
                 </span>
                 {isCurrent ? (
-                  <Check className="size-[13px] text-[var(--blue)]" strokeWidth={1.5} />
+                  <Check
+                    className="size-[13px] text-[var(--blue)]"
+                    strokeWidth={1.5}
+                  />
                 ) : (
                   <span className="w-[13px]" />
                 )}
@@ -378,12 +427,14 @@ function ReadCell({
           className={cn(
             "min-w-0 flex-1 truncate",
             mono && "mono tabular text-[12px]",
-            value ? "text-[var(--ink-900)]" : "text-[var(--ink-400)]"
+            value ? "text-[var(--ink-900)]" : "text-[var(--ink-400)]",
           )}
         >
           {value || placeholder}
         </span>
-        {tag && <span className="text-micro shrink-0 whitespace-nowrap">{tag}</span>}
+        {tag && (
+          <span className="text-micro shrink-0 whitespace-nowrap">{tag}</span>
+        )}
       </div>
     </Cell>
   );
@@ -422,7 +473,11 @@ function DateCell({
   // on the field's invalid state. So the bound is a client-only read: the
   // server snapshot is "no bound", and React swaps in the browser's day on
   // the first client render, before anyone can type.
-  const today = useSyncExternalStore(subscribeToNothing, todayISO, serverHasNoToday);
+  const today = useSyncExternalStore(
+    subscribeToNothing,
+    todayISO,
+    serverHasNoToday,
+  );
 
   return (
     <Cell label="Date" required tag={tag}>
@@ -442,8 +497,8 @@ function DateCell({
           onChange={(e) => onChange(date, e.target.value)}
           data-focus-ring="none"
           className={cn(
-            "h-[34px] shrink-0 border-b border-[var(--border-field)] bg-transparent px-0 text-[13px] tabular-nums text-[var(--ink-900)] outline-none transition-colors duration-150",
-            "focus:border-b-2 focus:border-[var(--blue)]"
+            "h-[34px] shrink-0 border-b border-[var(--border-field)] bg-transparent px-0 text-[13px] text-[var(--ink-900)] tabular-nums transition-colors duration-150 outline-none",
+            "focus:border-b-2 focus:border-[var(--blue)]",
           )}
         />
       </div>
@@ -478,7 +533,9 @@ function EventCell({
       ? events.filter((e) => e.name.toLowerCase().includes(needle))
       : events;
   }, [events, term]);
-  const exact = shown.some((e) => e.name.toLowerCase() === term.trim().toLowerCase());
+  const exact = shown.some(
+    (e) => e.name.toLowerCase() === term.trim().toLowerCase(),
+  );
 
   const commit = (name: string, nextKind: FormData["eventKind"]) => {
     onPick(name, nextKind);
@@ -489,14 +546,18 @@ function EventCell({
 
   return (
     <Cell label="Event" className={cn(open && "col-span-2")}>
-      <Popover open={open} onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) {
-          setAskKind(false);
-          // A typed name that was never chosen still counts: it is the event.
-          if (term.trim() !== value) onPick(term.trim(), term.trim() ? kind ?? "other" : undefined);
-        }
-      }}>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) {
+            setAskKind(false);
+            // A typed name that was never chosen still counts: it is the event.
+            if (term.trim() !== value)
+              onPick(term.trim(), term.trim() ? (kind ?? "other") : undefined);
+          }
+        }}
+      >
         <PopoverAnchor asChild>
           <div
             className={cn(
@@ -507,7 +568,9 @@ function EventCell({
               // focus, and in that window a ring-less field would have shown
               // no focus indicator at all.
               "focus-within:border-b-2 focus-within:border-[var(--blue)] focus-within:pb-[7px]",
-              open ? "border-b-2 border-[var(--blue)] pb-[7px]" : "border-[var(--border-hairline)]"
+              open
+                ? "border-b-2 border-[var(--blue)] pb-[7px]"
+                : "border-[var(--border-hairline)]",
             )}
           >
             <input
@@ -529,7 +592,9 @@ function EventCell({
                 if (e.key === "Enter") {
                   e.preventDefault();
                   if (exact) {
-                    const hit = shown.find((x) => x.name.toLowerCase() === term.trim().toLowerCase())!;
+                    const hit = shown.find(
+                      (x) => x.name.toLowerCase() === term.trim().toLowerCase(),
+                    )!;
                     commit(hit.name, hit.kind);
                   } else if (term.trim()) setAskKind(true);
                 }
@@ -537,7 +602,10 @@ function EventCell({
               className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]"
             />
             {!open && (
-              <ChevronDown className="size-[13px] shrink-0 text-[var(--ink-400)]" strokeWidth={1.5} />
+              <ChevronDown
+                className="size-[13px] shrink-0 text-[var(--ink-400)]"
+                strokeWidth={1.5}
+              />
             )}
           </div>
         </PopoverAnchor>
@@ -552,26 +620,47 @@ function EventCell({
               <span className={floatMenuLabelCls}>
                 What kind of event is &ldquo;{term.trim()}&rdquo;?
               </span>
-              <button type="button" onClick={() => commit(term.trim(), "tournament")} className={floatMenuRowCls}>
+              <button
+                type="button"
+                onClick={() => commit(term.trim(), "tournament")}
+                className={floatMenuRowCls}
+              >
                 <TournamentMark className="text-[var(--ink-500)]" />
-                <span className="flex-1 text-[12px] font-medium text-[var(--ink-900)]">Tournament</span>
-                <span className="text-[11px] text-[var(--ink-500)]">asks for the round</span>
+                <span className="flex-1 text-[12px] font-medium text-[var(--ink-900)]">
+                  Tournament
+                </span>
+                <span className="text-[11px] text-[var(--ink-500)]">
+                  asks for the round
+                </span>
               </button>
-              <button type="button" onClick={() => commit(term.trim(), "other")} className={floatMenuRowCls}>
+              <button
+                type="button"
+                onClick={() => commit(term.trim(), "other")}
+                className={floatMenuRowCls}
+              >
                 <span className="w-[13px]" />
-                <span className="flex-1 text-[12px] font-medium text-[var(--ink-900)]">Other</span>
-                <span className="text-[11px] text-[var(--ink-500)]">a league, a ladder, a trip</span>
+                <span className="flex-1 text-[12px] font-medium text-[var(--ink-900)]">
+                  Other
+                </span>
+                <span className="text-[11px] text-[var(--ink-500)]">
+                  a league, a ladder, a trip
+                </span>
               </button>
             </>
           ) : (
             <>
-              {shown.length > 0 && <span className={floatMenuLabelCls}>Your events</span>}
+              {shown.length > 0 && (
+                <span className={floatMenuLabelCls}>Your events</span>
+              )}
               {shown.slice(0, 6).map((event) => (
                 <button
                   key={event.name}
                   type="button"
                   onClick={() => commit(event.name, event.kind)}
-                  className={cn(floatMenuRowCls, event.name === value && "bg-[var(--surface-subtle)]")}
+                  className={cn(
+                    floatMenuRowCls,
+                    event.name === value && "bg-[var(--surface-subtle)]",
+                  )}
                 >
                   <TournamentMark className="text-[var(--ink-500)] opacity-60" />
                   <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-900)]">
@@ -586,11 +675,20 @@ function EventCell({
               {term.trim() && !exact && (
                 <>
                   {shown.length > 0 && <span className={floatMenuDividerCls} />}
-                  <button type="button" onClick={() => setAskKind(true)} className={floatMenuRowCls}>
-                    <Plus className="size-[13px] shrink-0 text-[var(--ink-500)]" strokeWidth={1.5} />
+                  <button
+                    type="button"
+                    onClick={() => setAskKind(true)}
+                    className={floatMenuRowCls}
+                  >
+                    <Plus
+                      className="size-[13px] shrink-0 text-[var(--ink-500)]"
+                      strokeWidth={1.5}
+                    />
                     <span className="min-w-0 truncate text-[12px] text-[var(--ink-700)]">
                       New event{" "}
-                      <span className="font-medium text-[var(--ink-900)]">&ldquo;{term.trim()}&rdquo;</span>
+                      <span className="font-medium text-[var(--ink-900)]">
+                        &ldquo;{term.trim()}&rdquo;
+                      </span>
                     </span>
                   </button>
                 </>
@@ -627,22 +725,46 @@ function OfferStrip({
   return (
     <div className="flex items-center gap-2 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3 py-[9px]">
       {attached ? (
-        <Check className="mr-0.5 size-[13px] shrink-0 text-[var(--ink-500)]" strokeWidth={1.5} aria-hidden="true" />
+        <Check
+          className="mr-0.5 size-[13px] shrink-0 text-[var(--ink-500)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
       ) : (
-        <span className="mr-0.5 whitespace-nowrap text-[11px] text-[var(--ink-500)]">Looks like</span>
+        <span className="mr-0.5 text-[11px] whitespace-nowrap text-[var(--ink-500)]">
+          Looks like
+        </span>
       )}
-      {offer.slot && <span className="text-[11px] text-[var(--ink-500)]">{offer.slot}</span>}
-      <ChevronRight className="size-3 shrink-0 text-[var(--ink-300)]" strokeWidth={1.5} aria-hidden="true" />
+      {offer.slot && (
+        <span className="text-[11px] text-[var(--ink-500)]">{offer.slot}</span>
+      )}
+      <ChevronRight
+        className="size-3 shrink-0 text-[var(--ink-300)]"
+        strokeWidth={1.5}
+        aria-hidden="true"
+      />
       <span className="min-w-0 truncate text-[12px] text-[var(--ink-900)]">
-        <span className="font-medium">{offer.playerName}</span> vs {offer.opponentName || "—"}
+        <span className="font-medium">{offer.playerName}</span> vs{" "}
+        {offer.opponentName || "—"}
       </span>
-      <span className="mx-2 h-3.5 w-px shrink-0 bg-[var(--border-medium)]" aria-hidden="true" />
-      <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[11px] text-[var(--ink-600)]">
-        <Calendar className="size-[13px] text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
+      <span
+        className="mx-2 h-3.5 w-px shrink-0 bg-[var(--border-medium)]"
+        aria-hidden="true"
+      />
+      <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] whitespace-nowrap text-[var(--ink-600)]">
+        <Calendar
+          className="size-[13px] text-[var(--ink-400)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
         {formatDayShort(offer.date)}
       </span>
-      <span className="ml-3 inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[11px] text-[var(--ink-600)]">
-        <MapPin className="size-[13px] text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
+      <span className="ml-3 inline-flex shrink-0 items-center gap-1.5 text-[11px] whitespace-nowrap text-[var(--ink-600)]">
+        <MapPin
+          className="size-[13px] text-[var(--ink-400)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
         {siteLabel(offer.site)}
       </span>
       <span className="flex-1" />
@@ -700,20 +822,29 @@ function WordSelect<T extends string>({
         <button
           type="button"
           className={cn(
-            "inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-button)] px-2 pb-1 pt-[3px] text-[13px] transition-colors duration-[var(--duration-hover)]",
-            open ? "bg-[var(--ink-100)]" : "bg-[var(--surface-subtle)] hover:bg-[var(--ink-100)]",
+            "inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-button)] px-2 pt-[3px] pb-1 text-[13px] transition-colors duration-[var(--duration-hover)]",
+            open
+              ? "bg-[var(--ink-100)]"
+              : "bg-[var(--surface-subtle)] hover:bg-[var(--ink-100)]",
             current ? "text-[var(--ink-900)]" : "text-[var(--ink-400)]",
-            focusRingCls
+            focusRingCls,
           )}
         >
           {current?.label ?? placeholder}
           <ChevronDown
-            className={cn("size-[13px] text-[var(--ink-400)] transition-transform duration-150", open && "rotate-180")}
+            className={cn(
+              "size-[13px] text-[var(--ink-400)] transition-transform duration-150",
+              open && "rotate-180",
+            )}
             strokeWidth={1.5}
           />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" sideOffset={6} className={cn(floatMenuCls, "w-[180px]")}>
+      <PopoverContent
+        align="start"
+        sideOffset={6}
+        className={cn(floatMenuCls, "w-[180px]")}
+      >
         {options.map((option) => {
           const isCurrent = option.value === value;
           return (
@@ -724,13 +855,25 @@ function WordSelect<T extends string>({
                 onChange(option.value);
                 setOpen(false);
               }}
-              className={cn(floatMenuRowCls, "h-[34px] gap-2", isCurrent && "bg-[var(--surface-subtle)]")}
+              className={cn(
+                floatMenuRowCls,
+                "h-[34px] gap-2",
+                isCurrent && "bg-[var(--surface-subtle)]",
+              )}
             >
-              <span className={cn("flex-1 text-[12px] text-[var(--ink-900)]", isCurrent ? "font-medium" : "font-normal")}>
+              <span
+                className={cn(
+                  "flex-1 text-[12px] text-[var(--ink-900)]",
+                  isCurrent ? "font-medium" : "font-normal",
+                )}
+              >
                 {option.label}
               </span>
               {isCurrent ? (
-                <Check className="size-[13px] text-[var(--blue)]" strokeWidth={1.5} />
+                <Check
+                  className="size-[13px] text-[var(--blue)]"
+                  strokeWidth={1.5}
+                />
               ) : (
                 <span className="w-[13px]" />
               )}
@@ -770,15 +913,30 @@ function StyleWords({
   if (editing) {
     return (
       <span className="inline-flex items-center gap-2 text-[13px] text-[var(--ink-900)]">
-        <WordSelect value={hand} placeholder="Hand" options={HAND_OPTIONS} onChange={onHand} />
+        <WordSelect
+          value={hand}
+          placeholder="Hand"
+          options={HAND_OPTIONS}
+          onChange={onHand}
+        />
         <span className="text-[var(--ink-300)]">·</span>
-        <WordSelect value={backhand} placeholder="Backhand" options={BACKHAND_OPTIONS} onChange={onBackhand} />
+        <WordSelect
+          value={backhand}
+          placeholder="Backhand"
+          options={BACKHAND_OPTIONS}
+          onChange={onBackhand}
+        />
       </span>
     );
   }
   if (!hand && !backhand) {
     return (
-      <span className={cn("inline-flex items-center gap-2 text-[13px] text-[var(--ink-400)]", dimmed && "opacity-45")}>
+      <span
+        className={cn(
+          "inline-flex items-center gap-2 text-[13px] text-[var(--ink-400)]",
+          dimmed && "opacity-45",
+        )}
+      >
         {dimmed ? (
           <>
             Hand <span className="text-[var(--ink-300)]">·</span> Backhand
@@ -791,9 +949,17 @@ function StyleWords({
   }
   return (
     <span className="inline-flex items-center gap-2 text-[13px] text-[var(--ink-900)]">
-      {hand ? HAND_LABEL[hand] : <span className="text-[var(--ink-400)]">Hand</span>}
+      {hand ? (
+        HAND_LABEL[hand]
+      ) : (
+        <span className="text-[var(--ink-400)]">Hand</span>
+      )}
       <span className="text-[var(--ink-300)]">·</span>
-      {backhand ? BACKHAND_LABEL[backhand] : <span className="text-[var(--ink-400)]">Backhand</span>}
+      {backhand ? (
+        BACKHAND_LABEL[backhand]
+      ) : (
+        <span className="text-[var(--ink-400)]">Backhand</span>
+      )}
     </span>
   );
 }
@@ -801,11 +967,14 @@ function StyleWords({
 const ACTION_CLS =
   "cursor-pointer text-[11px] font-medium transition-colors duration-[var(--duration-hover)]";
 
-function provenanceFor(source: ValueSource | undefined, ctx: {
-  isSelf: boolean;
-  school: string | null;
-  saved: boolean;
-}): string | null {
+function provenanceFor(
+  source: ValueSource | undefined,
+  ctx: {
+    isSelf: boolean;
+    school: string | null;
+    saved: boolean;
+  },
+): string | null {
   switch (source) {
     case "profile":
       return ctx.isSelf ? "from your profile" : "from their profile";
@@ -818,7 +987,11 @@ function provenanceFor(source: ValueSource | undefined, ctx: {
     case "roster":
       return ctx.school ? `from ${ctx.school}'s roster` : "from their roster";
     case "new":
-      return ctx.saved && ctx.school ? `new · saved to ${ctx.school}` : ctx.isSelf ? null : "only you see this name";
+      return ctx.saved && ctx.school
+        ? `new · saved to ${ctx.school}`
+        : ctx.isSelf
+          ? null
+          : "only you see this name";
     case "file":
       return "from the file";
     default:
@@ -846,11 +1019,20 @@ function DetailsStepContentImpl({
   // A preset IS the line it came from; the name is what reads at the use
   // sites, several of which pair it with `attachedLine`.
   const line = preset;
-  const lineSchool = attachedLine?.opponentSchool ?? line?.opponentSchool ?? formData.opponentSchool ?? null;
-  const lineProgramKey = attachedLine?.opponentProgramKey ?? line?.opponentProgramKey ?? formData.opponentProgramKey ?? null;
+  const lineSchool =
+    attachedLine?.opponentSchool ??
+    line?.opponentSchool ??
+    formData.opponentSchool ??
+    null;
+  const lineProgramKey =
+    attachedLine?.opponentProgramKey ??
+    line?.opponentProgramKey ??
+    formData.opponentProgramKey ??
+    null;
   const lineSlot = attachedLine?.slot ?? line?.round ?? null;
   const inDual =
-    (attachedLine?.eventKind ?? line?.eventKind) === "dual" && Boolean(lineProgramKey);
+    (attachedLine?.eventKind ?? line?.eventKind) === "dual" &&
+    Boolean(lineProgramKey);
   const fromLine = Boolean(attachedLine || line);
 
   // ---- Async: the offer, the people, the events, the styles
@@ -889,12 +1071,22 @@ function DetailsStepContentImpl({
     return () => {
       cancelled = true;
     };
-  }, [workspaceKind, line, formData.date, subject.playerId, subject.userId, subject.name]);
+  }, [
+    workspaceKind,
+    line,
+    formData.date,
+    subject.playerId,
+    subject.userId,
+    subject.name,
+  ]);
 
   useEffect(() => {
     if (!inDual || !lineProgramKey) return;
     let cancelled = false;
-    void opponentRosterForLine({ opponentProgramKey: lineProgramKey, slot: lineSlot }).then((rows) => {
+    void opponentRosterForLine({
+      opponentProgramKey: lineProgramKey,
+      slot: lineSlot,
+    }).then((rows) => {
       if (!cancelled) setRoster(rows);
     });
     return () => {
@@ -908,29 +1100,49 @@ function DetailsStepContentImpl({
     if (styleAsked.current || subject.isSelf) return;
     if (formData.playerHand || formData.playerBackhand) return;
     styleAsked.current = true;
-    void playerStyleFromMatches({ playerId: subject.playerId, playerName: subject.name }).then((style) => {
+    void playerStyleFromMatches({
+      playerId: subject.playerId,
+      playerName: subject.name,
+    }).then((style) => {
       if (!style) return;
-      const hand = style.hand === "right" || style.hand === "left" ? style.hand : undefined;
+      const hand =
+        style.hand === "right" || style.hand === "left"
+          ? style.hand
+          : undefined;
       const backhand =
-        style.backhand === "one-handed" || style.backhand === "two-handed" ? style.backhand : undefined;
+        style.backhand === "one-handed" || style.backhand === "two-handed"
+          ? style.backhand
+          : undefined;
       if (!hand && !backhand) return;
       onInputChange("playerHand", hand);
       onInputChange("playerBackhand", backhand);
       onInputChange("playerStyleSource", "history");
     });
-  }, [subject.isSelf, subject.playerId, subject.name, formData.playerHand, formData.playerBackhand, onInputChange]);
+  }, [
+    subject.isSelf,
+    subject.playerId,
+    subject.name,
+    formData.playerHand,
+    formData.playerBackhand,
+    onInputChange,
+  ]);
 
-  const offer = attachedLine ?? offers.find((o) => !declined.has(o.entryId)) ?? null;
+  const offer =
+    attachedLine ?? offers.find((o) => !declined.has(o.entryId)) ?? null;
 
   // ---- Players: editing state
 
   const [editingPlayer, setEditingPlayer] = useState(false);
   const [editingOpponent, setEditingOpponent] = useState(false);
-  const [savingProfile, setSavingProfile] = useState<"idle" | "saving" | "saved">("idle");
+  const [savingProfile, setSavingProfile] = useState<
+    "idle" | "saving" | "saved"
+  >("idle");
   const [savedSchool, setSavedSchool] = useState<string | null>(null);
   const [nameOpen, setNameOpen] = useState(false);
   const [nameTerm, setNameTerm] = useState("");
-  const [namingOpponent, setNamingOpponent] = useState(!formData.opponentName.trim());
+  const [namingOpponent, setNamingOpponent] = useState(
+    !formData.opponentName.trim(),
+  );
 
   const opponentHand = formData.opponentHand as Hand | undefined;
   const opponentBackhand = formData.opponentBackhand as Backhand | undefined;
@@ -942,16 +1154,22 @@ function DetailsStepContentImpl({
       onInputChange("opponentName", row.name);
       onInputChange("opponentSource", "history");
       onInputChange("opponentPlayerId", row.playerId);
-      const hand = row.hand === "right" || row.hand === "left" ? row.hand : undefined;
+      const hand =
+        row.hand === "right" || row.hand === "left" ? row.hand : undefined;
       const backhand =
-        row.backhand === "one-handed" || row.backhand === "two-handed" ? row.backhand : undefined;
+        row.backhand === "one-handed" || row.backhand === "two-handed"
+          ? row.backhand
+          : undefined;
       onInputChange("opponentHand", hand);
       onInputChange("opponentBackhand", backhand);
-      onInputChange("opponentStyleSource", hand || backhand ? "history" : undefined);
+      onInputChange(
+        "opponentStyleSource",
+        hand || backhand ? "history" : undefined,
+      );
       setNamingOpponent(false);
       setNameOpen(false);
     },
-    [onInputChange]
+    [onInputChange],
   );
 
   const pickRoster = useCallback(
@@ -960,17 +1178,25 @@ function DetailsStepContentImpl({
       onInputChange("opponentSource", "roster");
       onInputChange("opponentPlayerId", row.playerId);
       // What this program last recorded against them, if anything.
-      const seen = played.find((p) => normalizedPersonName(p.name) === normalizedPersonName(row.name));
-      const hand = seen?.hand === "right" || seen?.hand === "left" ? seen.hand : undefined;
+      const seen = played.find(
+        (p) => normalizedPersonName(p.name) === normalizedPersonName(row.name),
+      );
+      const hand =
+        seen?.hand === "right" || seen?.hand === "left" ? seen.hand : undefined;
       const backhand =
-        seen?.backhand === "one-handed" || seen?.backhand === "two-handed" ? seen.backhand : undefined;
+        seen?.backhand === "one-handed" || seen?.backhand === "two-handed"
+          ? seen.backhand
+          : undefined;
       onInputChange("opponentHand", hand);
       onInputChange("opponentBackhand", backhand);
-      onInputChange("opponentStyleSource", hand || backhand ? "history" : undefined);
+      onInputChange(
+        "opponentStyleSource",
+        hand || backhand ? "history" : undefined,
+      );
       setNamingOpponent(false);
       setNameOpen(false);
     },
-    [onInputChange, played]
+    [onInputChange, played],
   );
 
   const createOpponent = useCallback(
@@ -988,16 +1214,22 @@ function DetailsStepContentImpl({
         // A program-scoped player, saved to their roster — best-effort: the
         // pool refuses where that program manages its own roster, and the
         // typed name stands either way.
-        const result = await saveOpponentPlayer({ opponentProgramKey: lineProgramKey, name });
+        const result = await saveOpponentPlayer({
+          opponentProgramKey: lineProgramKey,
+          name,
+        });
         if (result.saved) setSavedSchool(lineSchool);
       }
     },
-    [inDual, lineProgramKey, lineSchool, onInputChange]
+    [inDual, lineProgramKey, lineSchool, onInputChange],
   );
 
   const saveProfile = async () => {
     setSavingProfile("saving");
-    const { saved } = await saveMyStyle({ hand: playerHand, backhand: playerBackhand });
+    const { saved } = await saveMyStyle({
+      hand: playerHand,
+      backhand: playerBackhand,
+    });
     setSavingProfile(saved ? "saved" : "idle");
     if (saved) onInputChange("playerStyleSource", "profile");
   };
@@ -1006,12 +1238,19 @@ function DetailsStepContentImpl({
 
   const needle = normalizedPersonName(nameTerm);
   const playedShown = useMemo(
-    () => (needle ? played.filter((p) => normalizedPersonName(p.name).includes(needle)) : played).slice(0, 5),
-    [played, needle]
+    () =>
+      (needle
+        ? played.filter((p) => normalizedPersonName(p.name).includes(needle))
+        : played
+      ).slice(0, 5),
+    [played, needle],
   );
   const rosterShown = useMemo(
-    () => (needle ? roster.filter((p) => normalizedPersonName(p.name).includes(needle)) : roster),
-    [roster, needle]
+    () =>
+      needle
+        ? roster.filter((p) => normalizedPersonName(p.name).includes(needle))
+        : roster,
+    [roster, needle],
   );
   const exactKnown =
     playedShown.some((p) => normalizedPersonName(p.name) === needle) ||
@@ -1029,8 +1268,14 @@ function DetailsStepContentImpl({
         : workspaceKind === "personal"
           ? "only you see this name"
           : "new"
-      : provenanceFor(formData.opponentSource, { isSelf: false, school: lineSchool, saved: false }) ??
-        (formData.opponentStyleSource === "history" ? "from your last match" : null);
+      : (provenanceFor(formData.opponentSource, {
+          isSelf: false,
+          school: lineSchool,
+          saved: false,
+        }) ??
+        (formData.opponentStyleSource === "history"
+          ? "from your last match"
+          : null));
 
   // ---- Context
 
@@ -1053,7 +1298,9 @@ function DetailsStepContentImpl({
     const current = COURT_OPTIONS.find((o) => o.value === formData.courtType);
     if (!current) return undefined;
     const site = attachedLine?.site ?? line?.site ?? null;
-    return site ? `${current.label} · ${siteLabel(site).toLowerCase()}` : current.label;
+    return site
+      ? `${current.label} · ${siteLabel(site).toLowerCase()}`
+      : current.label;
   })();
 
   const eventRead = fromLine
@@ -1066,9 +1313,15 @@ function DetailsStepContentImpl({
     <div className="flex flex-col gap-8">
       {error && (
         <div className={noteStripCls}>
-          <XCircle className="mt-0.5 size-[13px] shrink-0 text-[var(--error)]" strokeWidth={1.5} aria-hidden="true" />
+          <XCircle
+            className="mt-0.5 size-[13px] shrink-0 text-[var(--error)]"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
           <span>
-            <b className="font-medium text-[var(--ink-900)]">Couldn&apos;t save this match</b>
+            <b className="font-medium text-[var(--ink-900)]">
+              Couldn&apos;t save this match
+            </b>
             {" — "}
             {error}
           </span>
@@ -1081,7 +1334,9 @@ function DetailsStepContentImpl({
           attached={Boolean(attachedLine)}
           onAttach={() => onAttach(offer)}
           onDetach={onDetach}
-          onDecline={() => setDeclined((prev) => new Set(prev).add(offer.entryId))}
+          onDecline={() =>
+            setDeclined((prev) => new Set(prev).add(offer.entryId))
+          }
         />
       )}
 
@@ -1110,7 +1365,11 @@ function DetailsStepContentImpl({
               <span className="truncate">{subject.name}</span>
               {subject.isSelf && <StatePill>You</StatePill>}
             </span>
-            {playerProvenance && <span className="text-micro whitespace-nowrap">{playerProvenance}</span>}
+            {playerProvenance && (
+              <span className="text-micro whitespace-nowrap">
+                {playerProvenance}
+              </span>
+            )}
           </span>
           <StyleWords
             hand={playerHand}
@@ -1130,21 +1389,37 @@ function DetailsStepContentImpl({
           <span className="flex-1" />
           {editingPlayer ? (
             <span className="inline-flex items-center gap-3.5">
-              {subject.isSelf && (playerHand || playerBackhand) && formData.playerStyleSource !== "profile" && (
-                <button
-                  type="button"
-                  onClick={saveProfile}
-                  disabled={savingProfile !== "idle"}
-                  className={cn(ACTION_CLS, "text-[var(--ink-500)] hover:text-[var(--ink-900)] disabled:cursor-default")}
-                >
-                  {savingProfile === "saving" ? "Saving…" : savingProfile === "saved" ? "Saved to your profile" : "Save to your profile"}
-                </button>
+              {subject.isSelf &&
+                (playerHand || playerBackhand) &&
+                formData.playerStyleSource !== "profile" && (
+                  <button
+                    type="button"
+                    onClick={saveProfile}
+                    disabled={savingProfile !== "idle"}
+                    className={cn(
+                      ACTION_CLS,
+                      "text-[var(--ink-500)] hover:text-[var(--ink-900)] disabled:cursor-default",
+                    )}
+                  >
+                    {savingProfile === "saving"
+                      ? "Saving…"
+                      : savingProfile === "saved"
+                        ? "Saved to your profile"
+                        : "Save to your profile"}
+                  </button>
+                )}
+              {!playerHand && !playerBackhand && (
+                <span className="text-micro whitespace-nowrap">
+                  if you know
+                </span>
               )}
-              {!playerHand && !playerBackhand && <span className="text-micro whitespace-nowrap">if you know</span>}
               <button
                 type="button"
                 onClick={() => setEditingPlayer(false)}
-                className={cn(ACTION_CLS, "text-[var(--blue)] hover:text-[var(--blue-hover)]")}
+                className={cn(
+                  ACTION_CLS,
+                  "text-[var(--blue)] hover:text-[var(--blue-hover)]",
+                )}
               >
                 Done
               </button>
@@ -1153,7 +1428,10 @@ function DetailsStepContentImpl({
             <button
               type="button"
               onClick={() => setEditingPlayer(true)}
-              className={cn(ACTION_CLS, "text-[var(--blue)] hover:text-[var(--blue-hover)]")}
+              className={cn(
+                ACTION_CLS,
+                "text-[var(--blue)] hover:text-[var(--blue-hover)]",
+              )}
             >
               {playerHand || playerBackhand ? "Change" : "Add"}
             </button>
@@ -1165,7 +1443,7 @@ function DetailsStepContentImpl({
           {namingOpponent ? (
             <Popover open={nameOpen} onOpenChange={setNameOpen}>
               <PopoverAnchor asChild>
-                <span className="flex w-[200px] shrink-0 items-center border-b-2 border-[var(--border-medium)] pb-1.5 pt-1 transition-colors focus-within:border-[var(--blue)]">
+                <span className="flex w-[200px] shrink-0 items-center border-b-2 border-[var(--border-medium)] pt-1 pb-1.5 transition-colors focus-within:border-[var(--blue)]">
                   <input
                     autoFocus
                     value={nameTerm}
@@ -1187,8 +1465,12 @@ function DetailsStepContentImpl({
                       e.preventDefault();
                       const term = nameTerm.trim();
                       if (!term) return;
-                      const hitRoster = rosterShown.find((p) => normalizedPersonName(p.name) === needle);
-                      const hitPlayed = playedShown.find((p) => normalizedPersonName(p.name) === needle);
+                      const hitRoster = rosterShown.find(
+                        (p) => normalizedPersonName(p.name) === needle,
+                      );
+                      const hitPlayed = playedShown.find(
+                        (p) => normalizedPersonName(p.name) === needle,
+                      );
                       if (hitRoster) pickRoster(hitRoster);
                       else if (hitPlayed) pickPlayed(hitPlayed);
                       else void createOpponent(term);
@@ -1214,43 +1496,75 @@ function DetailsStepContentImpl({
                     {rosterShown
                       .filter((p) => p.heldThisLine)
                       .map((p) => (
-                        <button key={p.playerId} type="button" onClick={() => pickRoster(p)} className={floatMenuRowCls}>
+                        <button
+                          key={p.playerId}
+                          type="button"
+                          onClick={() => pickRoster(p)}
+                          className={floatMenuRowCls}
+                        >
                           <Avatar name={p.name} />
-                          <span className="text-[12px] font-medium text-[var(--ink-900)]">{p.name}</span>
+                          <span className="text-[12px] font-medium text-[var(--ink-900)]">
+                            {p.name}
+                          </span>
                           <span className="text-[11px] text-[var(--ink-500)]">
                             {p.classYear ? `${p.classYear} · ` : ""}
-                            {p.meetings === 0 ? "no matches vs us" : `${p.meetings} ${p.meetings === 1 ? "match" : "matches"} vs us`}
+                            {p.meetings === 0
+                              ? "no matches vs us"
+                              : `${p.meetings} ${p.meetings === 1 ? "match" : "matches"} vs us`}
                           </span>
                         </button>
                       ))}
                     {rosterShown.some((p) => !p.heldThisLine) && (
                       <span className={floatMenuLabelCls}>
-                        {rosterShown.some((p) => p.heldThisLine) ? "Rest of their roster" : `${lineSchool}'s roster`}
+                        {rosterShown.some((p) => p.heldThisLine)
+                          ? "Rest of their roster"
+                          : `${lineSchool}'s roster`}
                       </span>
                     )}
                     {rosterShown
                       .filter((p) => !p.heldThisLine)
                       .slice(0, 8)
                       .map((p) => (
-                        <button key={p.playerId} type="button" onClick={() => pickRoster(p)} className={floatMenuRowCls}>
+                        <button
+                          key={p.playerId}
+                          type="button"
+                          onClick={() => pickRoster(p)}
+                          className={floatMenuRowCls}
+                        >
                           <Avatar name={p.name} />
-                          <span className="text-[12px] font-medium text-[var(--ink-900)]">{p.name}</span>
+                          <span className="text-[12px] font-medium text-[var(--ink-900)]">
+                            {p.name}
+                          </span>
                           <span className="text-[11px] text-[var(--ink-500)]">
                             {p.classYear ? `${p.classYear} · ` : ""}
-                            {p.meetings === 0 ? "no matches vs us" : `${p.meetings} ${p.meetings === 1 ? "match" : "matches"} vs us`}
+                            {p.meetings === 0
+                              ? "no matches vs us"
+                              : `${p.meetings} ${p.meetings === 1 ? "match" : "matches"} vs us`}
                           </span>
                         </button>
                       ))}
                   </>
                 ) : (
                   <>
-                    {playedShown.length > 0 && <span className={floatMenuLabelCls}>People you&apos;ve played</span>}
+                    {playedShown.length > 0 && (
+                      <span className={floatMenuLabelCls}>
+                        People you&apos;ve played
+                      </span>
+                    )}
                     {playedShown.map((p) => (
-                      <button key={p.name} type="button" onClick={() => pickPlayed(p)} className={floatMenuRowCls}>
+                      <button
+                        key={p.name}
+                        type="button"
+                        onClick={() => pickPlayed(p)}
+                        className={floatMenuRowCls}
+                      >
                         <Avatar name={p.name} />
-                        <span className="text-[12px] font-medium text-[var(--ink-900)]">{p.name}</span>
+                        <span className="text-[12px] font-medium text-[var(--ink-900)]">
+                          {p.name}
+                        </span>
                         <span className="text-[11px] text-[var(--ink-500)]">
-                          {p.matches} {p.matches === 1 ? "match" : "matches"} · last {formatMonthDay(p.lastDate)}
+                          {p.matches} {p.matches === 1 ? "match" : "matches"} ·
+                          last {formatMonthDay(p.lastDate)}
                         </span>
                       </button>
                     ))}
@@ -1258,18 +1572,29 @@ function DetailsStepContentImpl({
                 )}
                 {nameTerm.trim() && !exactKnown && (
                   <>
-                    {(playedShown.length > 0 || rosterShown.length > 0) && <span className={floatMenuDividerCls} />}
-                    <button type="button" onClick={() => void createOpponent(nameTerm.trim())} className={floatMenuRowCls}>
+                    {(playedShown.length > 0 || rosterShown.length > 0) && (
+                      <span className={floatMenuDividerCls} />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void createOpponent(nameTerm.trim())}
+                      className={floatMenuRowCls}
+                    >
                       <NewRing />
                       <span className="min-w-0 truncate text-[12px] text-[var(--ink-700)]">
                         {inDual ? (
                           <>
-                            New player for <span className="font-medium text-[var(--ink-900)]">{lineSchool}</span>
+                            New player for{" "}
+                            <span className="font-medium text-[var(--ink-900)]">
+                              {lineSchool}
+                            </span>
                           </>
                         ) : (
                           <>
                             New opponent{" "}
-                            <span className="font-medium text-[var(--ink-900)]">&ldquo;{nameTerm.trim()}&rdquo;</span>
+                            <span className="font-medium text-[var(--ink-900)]">
+                              &ldquo;{nameTerm.trim()}&rdquo;
+                            </span>
                           </>
                         )}
                       </span>
@@ -1280,9 +1605,13 @@ function DetailsStepContentImpl({
                     </button>
                   </>
                 )}
-                {!nameTerm.trim() && playedShown.length === 0 && rosterShown.length === 0 && (
-                  <span className={cn(floatMenuLabelCls, "pb-2")}>Type their name.</span>
-                )}
+                {!nameTerm.trim() &&
+                  playedShown.length === 0 &&
+                  rosterShown.length === 0 && (
+                    <span className={cn(floatMenuLabelCls, "pb-2")}>
+                      Type their name.
+                    </span>
+                  )}
               </PopoverContent>
             </Popover>
           ) : (
@@ -1298,7 +1627,11 @@ function DetailsStepContentImpl({
               >
                 {formData.opponentName}
               </button>
-              {opponentProvenance && <span className="text-micro whitespace-nowrap">{opponentProvenance}</span>}
+              {opponentProvenance && (
+                <span className="text-micro whitespace-nowrap">
+                  {opponentProvenance}
+                </span>
+              )}
             </span>
           )}
           <StyleWords
@@ -1320,11 +1653,18 @@ function DetailsStepContentImpl({
             <span className="text-micro whitespace-nowrap">after the name</span>
           ) : editingOpponent ? (
             <span className="inline-flex items-center gap-3.5">
-              {!opponentHand && !opponentBackhand && <span className="text-micro whitespace-nowrap">if you know</span>}
+              {!opponentHand && !opponentBackhand && (
+                <span className="text-micro whitespace-nowrap">
+                  if you know
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => setEditingOpponent(false)}
-                className={cn(ACTION_CLS, "text-[var(--blue)] hover:text-[var(--blue-hover)]")}
+                className={cn(
+                  ACTION_CLS,
+                  "text-[var(--blue)] hover:text-[var(--blue-hover)]",
+                )}
               >
                 Done
               </button>
@@ -1333,7 +1673,10 @@ function DetailsStepContentImpl({
             <button
               type="button"
               onClick={() => setEditingOpponent(true)}
-              className={cn(ACTION_CLS, "text-[var(--blue)] hover:text-[var(--blue-hover)]")}
+              className={cn(
+                ACTION_CLS,
+                "text-[var(--blue)] hover:text-[var(--blue-hover)]",
+              )}
             >
               {opponentHand || opponentBackhand ? "Change" : "Add"}
             </button>
@@ -1343,9 +1686,10 @@ function DetailsStepContentImpl({
         {inDual && namingOpponent && (
           <div className={noteStripCls}>
             <span>
-              A player added here belongs to {lineSchool}, not to this match — every match against them
-              reuses the same person, so head-to-heads and their scouting profile add up. Name only; class
-              and line arrive with their next dual.
+              A player added here belongs to {lineSchool}, not to this match —
+              every match against them reuses the same person, so head-to-heads
+              and their scouting profile add up. Name only; class and line
+              arrive with their next dual.
             </span>
           </div>
         )}
@@ -1371,7 +1715,11 @@ function DetailsStepContentImpl({
                 onInputChange("eventKind", kind);
                 onInputChange(
                   "matchType",
-                  kind === "tournament" ? "Tournament" : kind === "dual" ? "Dual Match" : formData.matchType ?? ""
+                  kind === "tournament"
+                    ? "Tournament"
+                    : kind === "dual"
+                      ? "Dual Match"
+                      : (formData.matchType ?? ""),
                 );
                 if (kind !== "tournament") onInputChange("round", "");
               }}
@@ -1427,9 +1775,15 @@ function DetailsStepContentImpl({
           {!isProcessingProvider && (
             <ReadCell
               label="Duration"
-              value={formData.duration ? formatHoursMinutes(formData.duration / 1000) : ""}
+              value={
+                formData.duration
+                  ? formatHoursMinutes(formData.duration / 1000)
+                  : ""
+              }
               placeholder="Not set"
-              tag={exportRead && formData.duration ? "from the export" : undefined}
+              tag={
+                exportRead && formData.duration ? "from the export" : undefined
+              }
               mono
             />
           )}

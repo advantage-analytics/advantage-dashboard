@@ -39,7 +39,7 @@ export function SingleScoreEntry({
   function submit() {
     setError(null);
     const played = [0, 1, 2].filter(
-      (index) => ours[index] !== "" || theirs[index] !== ""
+      (index) => ours[index] !== "" || theirs[index] !== "",
     );
     if (played.length === 0) {
       setError("Enter at least one set.");
@@ -121,7 +121,11 @@ export function SingleScoreEntry({
             {error}
           </span>
         ) : null}
-        <button type="button" className={advButton("ghost", "sm")} onClick={onDone}>
+        <button
+          type="button"
+          className={advButton("ghost", "sm")}
+          onClick={onDone}
+        >
           Cancel
         </button>
         <button

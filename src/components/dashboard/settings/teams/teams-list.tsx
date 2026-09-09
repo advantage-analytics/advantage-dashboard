@@ -23,7 +23,7 @@ export function TeamsList({
   rows: readonly (TeamListRow & { crestUrl: string | null })[];
 }) {
   return (
-    <SettingsCard className="max-w-[640px] gap-0 pb-2 pt-[18px]">
+    <SettingsCard className="max-w-[640px] gap-0 pt-[18px] pb-2">
       <div className="flex items-baseline gap-2.5 pb-1.5">
         <span className="text-[13px] font-medium text-[var(--ink-900)]">
           Your teams

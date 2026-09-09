@@ -191,7 +191,7 @@ export function StaticEventChooser() {
           `overflow-y-auto` takes over, so short viewports scroll instead of
           clipping. */}
       <div className="mx-auto my-auto w-full max-w-[820px] pt-[10px]">
-        <h1 className="text-[30px] font-light leading-[34px] tracking-[-0.6px] text-[var(--ink-900)]">
+        <h1 className="text-[30px] leading-[34px] font-light tracking-[-0.6px] text-[var(--ink-900)]">
           {COPY.heading}
         </h1>
         <p
@@ -216,12 +216,12 @@ export function StaticEventChooser() {
                 aria-checked={active}
                 onClick={() => setChoice(option.id)}
                 className={cn(
-                  "flex cursor-pointer flex-col gap-3.5 rounded-[var(--radius-card)] border px-[26px] pb-[22px] pt-7 text-left",
+                  "flex cursor-pointer flex-col gap-3.5 rounded-[var(--radius-card)] border px-[26px] pt-7 pb-[22px] text-left",
                   "transition-colors duration-[var(--duration-fast)]",
                   "focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
                   active
                     ? "border-[var(--blue)] bg-[var(--blue-tint-08)]"
-                    : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]"
+                    : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]",
                 )}
               >
                 <span className="flex items-center justify-between">
@@ -245,7 +245,7 @@ export function StaticEventChooser() {
                       "flex size-3.5 shrink-0 items-center justify-center rounded-full border",
                       active
                         ? "border-transparent bg-[var(--blue)]"
-                        : "border-[var(--ink-300)]"
+                        : "border-[var(--ink-300)]",
                     )}
                     aria-hidden="true"
                   >
@@ -272,7 +272,7 @@ export function StaticEventChooser() {
                     "mt-auto block border-t pt-3.5",
                     active
                       ? "border-[var(--blue-glow)]"
-                      : "border-[var(--border-hairline)]"
+                      : "border-[var(--border-hairline)]",
                   )}
                 >
                   <span className="text-micro">

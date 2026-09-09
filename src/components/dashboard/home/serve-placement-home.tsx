@@ -150,7 +150,10 @@ export default function ServePlacementHome({ userId }: { userId: string }) {
 
   if (loading) {
     return (
-      <div className="surface-card flex flex-col gap-3" style={{ padding: "var(--pad-card)" }}>
+      <div
+        className="surface-card flex flex-col gap-3"
+        style={{ padding: "var(--pad-card)" }}
+      >
         <span className="eyebrow">Serve placement</span>
         <div className="flex flex-col gap-2" aria-hidden>
           <div className="h-3.5 w-full animate-pulse rounded-full bg-[#F3F3F3]" />
@@ -162,7 +165,11 @@ export default function ServePlacementHome({ userId }: { userId: string }) {
 
   if (error) {
     return (
-      <div className="surface-card flex flex-col gap-2" style={{ padding: "var(--pad-card)" }} role="alert">
+      <div
+        className="surface-card flex flex-col gap-2"
+        style={{ padding: "var(--pad-card)" }}
+        role="alert"
+      >
         <span className="eyebrow">Serve placement</span>
         <p className="text-body-sm">Couldn&apos;t load serve data.</p>
         <button

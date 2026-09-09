@@ -3,7 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canUploadForProgram } from "@/lib/workspace/types";
-import { analysisFor, loadMatchAnalysis } from "@/lib/data/match-analysis-server";
+import {
+  analysisFor,
+  loadMatchAnalysis,
+} from "@/lib/data/match-analysis-server";
 import {
   type DbMatch,
   type DisplayMatch,
@@ -68,7 +71,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
     const query = supabase
       .from("matches")
       .select(
-        "id, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, source_provider, player2_id"
+        "id, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, source_provider, player2_id",
       )
       .order("date", { ascending: false });
 
@@ -78,9 +81,13 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
 
     if (data) {
       // Collect unique opponent user IDs to fetch hand/backhand
-      const opponentIds = [...new Set(
-        data.map((r) => r.player2_id).filter((id): id is string => id != null)
-      )];
+      const opponentIds = [
+        ...new Set(
+          data
+            .map((r) => r.player2_id)
+            .filter((id): id is string => id != null),
+        ),
+      ];
 
       // Both follow-ups key off the ids in `data` and neither reads the other's
       // output, so they overlap rather than stack. Analysis state is keyed by
@@ -88,7 +95,10 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
       // later drops — costs nothing but an unread map entry.
       const [{ data: opponents }, jobs] = await Promise.all([
         opponentIds.length > 0
-          ? supabase.from("users").select("id, hand, backhand").in("id", opponentIds)
+          ? supabase
+              .from("users")
+              .select("id, hand, backhand")
+              .in("id", opponentIds)
           : Promise.resolve({ data: null }),
         (async () => {
           // Vendor-status reconciliation, sequenced before the analysis read
@@ -97,12 +107,22 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
           // loadMatchAnalysis — client components import that module, and the
           // reconciler's admin/Azure dependencies must never enter a client
           // module graph.
-          await reconcileBeforePageRead(data.map((r) => r.id), "matches");
-          return loadMatchAnalysis(supabase, data.map((r) => r.id), { reap: true });
+          await reconcileBeforePageRead(
+            data.map((r) => r.id),
+            "matches",
+          );
+          return loadMatchAnalysis(
+            supabase,
+            data.map((r) => r.id),
+            { reap: true },
+          );
         })(),
       ]);
 
-      const opponentMap = new Map<string, { hand: string | null; backhand: string | null }>();
+      const opponentMap = new Map<
+        string,
+        { hand: string | null; backhand: string | null }
+      >();
       for (const o of opponents ?? []) {
         opponentMap.set(o.id, { hand: o.hand, backhand: o.backhand });
       }
@@ -115,7 +135,9 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
           // player alike, and why a team scope needs no second transform.
           const display = transformDbMatch(row, user.id);
           if (!display) return null;
-          const opp = row.player2_id ? opponentMap.get(row.player2_id) : undefined;
+          const opp = row.player2_id
+            ? opponentMap.get(row.player2_id)
+            : undefined;
           if (opp) {
             display.player2Hand = opp.hand ?? undefined;
             display.player2Backhand = opp.backhand ?? undefined;
@@ -140,7 +162,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   // a door the next page closes.
   if (matches.length === 0 && drafts.length === 0) {
     return (
-      <div className="flex flex-1 w-full flex-col bg-white">
+      <div className="flex w-full flex-1 flex-col bg-white">
         <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-14 pt-5 pb-8">
           <MatchesDayZero
             scope={isTeam ? "team" : "personal"}
@@ -152,16 +174,19 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   }
 
   return (
-    <div className="flex-1 w-full bg-white">
+    <div className="w-full flex-1 bg-white">
       {/* The frame's content column: 32px 56px 24px around it, 24px between the
           title row, the toolbar, the table card and the footer (Platform Audit
           Pb2; the 32px top is the 19d title slot). The 56px sides arrive with
           the table itself at `lg` — below that the gallery cards take the
           narrower page gutter every other page uses. */}
-      <div className="mx-auto flex max-w-screen-2xl flex-col gap-6 px-6 pb-6 pt-5 lg:px-14">
+      <div className="mx-auto flex max-w-screen-2xl flex-col gap-6 px-6 pt-5 pb-6 lg:px-14">
         <MatchesTitleRow
           scope={isTeam ? "team" : "personal"}
-          readyMatches={matches.map((m) => ({ id: m.id, status: m.analysis?.status }))}
+          readyMatches={matches.map((m) => ({
+            id: m.id,
+            status: m.analysis?.status,
+          }))}
         />
 
         <Suspense fallback={<MatchesSkeleton />}>

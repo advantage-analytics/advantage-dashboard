@@ -23,25 +23,25 @@ import {
   isPlausibleCourtPosition,
   MAX_PLAUSIBLE_X_M,
   MAX_PLAUSIBLE_Y_M,
-} from './court';
+} from "./court";
 import type {
   RawSplitStepStroke,
   SplitStepStroke,
   StrokeSide,
   StrokeType,
-} from './types';
+} from "./types";
 
 /** Numeric sentinel the vendor uses for "not measured". */
 const NUMERIC_SENTINEL = -9999;
 /** String sentinel the vendor uses for "not provided". */
-const STRING_SENTINEL = 'None';
+const STRING_SENTINEL = "None";
 
-const STROKE_TYPES: readonly string[] = ['serve', 'groundstroke', 'volley'];
-const STROKE_SIDES: readonly string[] = ['forehand', 'backhand', 'overhead'];
+const STROKE_TYPES: readonly string[] = ["serve", "groundstroke", "volley"];
+const STROKE_SIDES: readonly string[] = ["forehand", "backhand", "overhead"];
 
 /** A numeric field, or null if it carries the sentinel or isn't finite. */
 function num(value: unknown): number | null {
-  if (typeof value !== 'number') return null;
+  if (typeof value !== "number") return null;
   if (!Number.isFinite(value)) return null;
   // Compare with a tolerance: the sentinel appears as both -9999 and -9999.0,
   // and float round-tripping through JSON has been observed to shift it.
@@ -51,7 +51,7 @@ function num(value: unknown): number | null {
 
 /** A string field, or null if it carries the sentinel or is blank. */
 function str(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
+  if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed || trimmed === STRING_SENTINEL) return null;
   return trimmed;
@@ -94,7 +94,7 @@ function strokeSide(value: unknown): StrokeSide | null {
  */
 function position(
   rawX: unknown,
-  rawY: unknown
+  rawY: unknown,
 ): { x: number | null; y: number | null } {
   const x = num(rawX);
   const y = num(rawY);
@@ -126,7 +126,7 @@ export interface ParseResult {
  */
 export function normalizeStroke(
   raw: RawSplitStepStroke,
-  startTimeSeconds: number
+  startTimeSeconds: number,
 ): SplitStepStroke | null {
   const rallyId = num(raw.pred_rally_id);
   const strokeNumber = num(raw.pred_rally_stroke_number);
@@ -135,7 +135,12 @@ export function normalizeStroke(
 
   // Without a rally, a position in it, a timestamp, and a hitter there is
   // nothing to derive. Drop rather than guess.
-  if (rallyId === null || strokeNumber === null || time === null || !playerLabel) {
+  if (
+    rallyId === null ||
+    strokeNumber === null ||
+    time === null ||
+    !playerLabel
+  ) {
     return null;
   }
 
@@ -190,12 +195,10 @@ export function normalizeStroke(
  */
 export function parseStrokes(
   raw: unknown,
-  options: ParseOptions = {}
+  options: ParseOptions = {},
 ): ParseResult {
   if (!Array.isArray(raw)) {
-    throw new Error(
-      'SplitStep results must be a JSON array of stroke objects'
-    );
+    throw new Error("SplitStep results must be a JSON array of stroke objects");
   }
 
   const startTimeSeconds = options.startTimeSeconds ?? 0;

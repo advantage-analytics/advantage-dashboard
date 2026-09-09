@@ -93,17 +93,17 @@ export function DualDetail({
   // waiting for — the same answer the row's own action gives, so the summary
   // and the rows underneath it cannot disagree.
   const needFile = entries.filter(
-    (entry) => entryState(entry) === "no-video"
+    (entry) => entryState(entry) === "no-video",
   ).length;
   const working = entries.filter(
-    (entry) => entryState(entry) === "working"
+    (entry) => entryState(entry) === "working",
   ).length;
   const ready = entries.filter((entry) => entryState(entry) === "ready").length;
 
   // The primary is whatever is actually next: while a line has no result at
   // all, that is a score; once every line is in, it is the video.
   const needsScore = entries.some(
-    (entry) => entry.forfeit === null && entryState(entry) === "empty"
+    (entry) => entry.forfeit === null && entryState(entry) === "empty",
   );
 
   const counts: DetailCount[] = [
@@ -269,7 +269,7 @@ function doublesNote(entries: EventEntry[]): string | undefined {
   // played, which would hand the opponent the doubles point before the doubles
   // were played.
   const lost = entries.filter(
-    (entry) => entryPlayed(entry) && lineWon(entry) !== true
+    (entry) => entryPlayed(entry) && lineWon(entry) !== true,
   ).length;
 
   if (won >= 2) return `${base} — the team point is ours`;

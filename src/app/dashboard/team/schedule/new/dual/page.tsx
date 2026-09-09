@@ -26,7 +26,7 @@ import type { ProgramSearchResult } from "@/lib/data/programs-server";
  */
 function toDirectoryRow(
   program: ConferenceProgram,
-  conference: string | null
+  conference: string | null,
 ): ProgramSearchResult {
   return {
     programKey: program.programKey,
@@ -131,7 +131,8 @@ export default async function NewDualPage() {
   // filtered — `getConferenceTable` says so. Step one wants it gone from the
   // list (a program does not play itself) but wants its division, which the
   // conference row is the only place to get without a second read.
-  const self = conferenceTable.programs.find((program) => program.isSelf) ?? null;
+  const self =
+    conferenceTable.programs.find((program) => program.isSelf) ?? null;
 
   return (
     <NewDualDataProvider
@@ -151,7 +152,9 @@ export default async function NewDualPage() {
         ourProgramKey: conferenceTable.ourProgramKey,
         conferencePrograms: conferenceTable.programs
           .filter((program) => !program.isSelf)
-          .map((program) => toDirectoryRow(program, conferenceTable.conference)),
+          .map((program) =>
+            toDirectoryRow(program, conferenceTable.conference),
+          ),
         // Entries rather than the Map itself: the array needs no assumption
         // about what the server/client serializer carries, and step one rebuilds
         // it in one `useMemo`.

@@ -99,7 +99,9 @@ export function DualSheet({ dual }: { dual: WeekendDual }) {
               {dual.surface ? ` · ${dual.surface}` : ""}
             </Fact>
             <Fact icon={Calendar}>
-              <span className="tabular">{formatEventDayLong(dual.startsOn)}</span>
+              <span className="tabular">
+                {formatEventDayLong(dual.startsOn)}
+              </span>
             </Fact>
             {dual.tally.clinchedBy && dual.tally.clinchedAt ? (
               <Fact icon={Flag}>
@@ -219,7 +221,10 @@ function Tally({ tally, lines }: { tally: DualTally; lines: DualSheetLine[] }) {
           </span>
           {doubles.length > 0 ? (
             <>
-              <span className="h-2.5 w-px bg-[var(--border-medium)]" aria-hidden />
+              <span
+                className="h-2.5 w-px bg-[var(--border-medium)]"
+                aria-hidden
+              />
               <span className="flex items-center gap-[5px]">
                 <span className="eyebrow-sm">D</span>
                 <FormTicks form={doubles} empty={null} />
@@ -303,7 +308,9 @@ function Trailing({ line }: { line: DualSheetLine }) {
   // Played and scored with no video: the score has said everything true
   // about this line. A hand-entered or imported result names its source.
   if (line.sets.length > 0) {
-    return <span className="text-[11px] text-[var(--ink-500)]">Score only</span>;
+    return (
+      <span className="text-[11px] text-[var(--ink-500)]">Score only</span>
+    );
   }
 
   return <StatusChip>Not played</StatusChip>;

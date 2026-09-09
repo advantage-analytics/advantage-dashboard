@@ -55,7 +55,9 @@ export default async function ObjectPage({
         gap={2}
         eyebrow={eyebrow}
         title={
-          pending ? "Tell us this claim is wrong" : "Tell us who should have this"
+          pending
+            ? "Tell us this claim is wrong"
+            : "Tell us who should have this"
         }
         titlePadTop={8}
       />

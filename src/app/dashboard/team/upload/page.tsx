@@ -184,7 +184,9 @@ export default async function TeamUploadPage({
       const schedule = await getProgramSchedule(active.id);
       const siblings = schedule.entriesByEvent.get(group.event.id) ?? [];
       const programs = await programNamesFor(
-        siblings.map((e) => e.opponentProgramId ?? null).filter((id): id is string => Boolean(id))
+        siblings
+          .map((e) => e.opponentProgramId ?? null)
+          .filter((id): id is string => Boolean(id)),
       );
 
       const preset: EventPreset = {
@@ -263,7 +265,7 @@ function LinePicker({
                     per round, and counting entries said 4 above 6 links. */}
                 {group.entries.reduce(
                   (count, entry) => count + Math.max(1, entry.matches.length),
-                  0
+                  0,
                 )}{" "}
                 without video
               </span>
@@ -276,39 +278,40 @@ function LinePicker({
                 ? entry.matches.map((match) => ({ match, key: match.id }))
                 : [{ match: null, key: entry.id }]
               ).map(({ match, key }) => (
-              <Link
-                key={key}
-                href={
-                  match
-                    ? `/dashboard/team/upload?entry=${entry.id}&match=${match.id}`
-                    : `/dashboard/team/upload?entry=${entry.id}`
-                }
-                className="grid grid-cols-[44px_1fr_120px_16px] items-center gap-3.5 border-b border-[var(--border-hairline)] py-3 transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]"
-              >
-                <span
-                  className="mono text-[11px]"
-                  style={{ color: "var(--ink-600)" }}
+                <Link
+                  key={key}
+                  href={
+                    match
+                      ? `/dashboard/team/upload?entry=${entry.id}&match=${match.id}`
+                      : `/dashboard/team/upload?entry=${entry.id}`
+                  }
+                  className="grid grid-cols-[44px_1fr_120px_16px] items-center gap-3.5 border-b border-[var(--border-hairline)] py-3 transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]"
                 >
-                  {entry.slot ?? match?.round ?? "—"}
-                </span>
-                <span className="min-w-0 truncate text-[13px] text-[var(--ink-900)]">
-                  {entry.playerLabels.join(" / ")}{" "}
-                  <span style={{ color: "var(--ink-600)" }}>vs</span>{" "}
-                  {(match?.opponentLabels ?? entry.opponentLabels).join(" / ") ||
-                    "—"}
-                </span>
-                <span
-                  className="text-micro text-right"
-                  style={{ color: "var(--ink-500)" }}
-                >
-                  {supportsVideo(entry) ? "" : "import only"}
-                </span>
-                <ChevronRight
-                  strokeWidth={1.5}
-                  className="size-3.5 text-[var(--ink-400)]"
-                />
-              </Link>
-              ))
+                  <span
+                    className="mono text-[11px]"
+                    style={{ color: "var(--ink-600)" }}
+                  >
+                    {entry.slot ?? match?.round ?? "—"}
+                  </span>
+                  <span className="min-w-0 truncate text-[13px] text-[var(--ink-900)]">
+                    {entry.playerLabels.join(" / ")}{" "}
+                    <span style={{ color: "var(--ink-600)" }}>vs</span>{" "}
+                    {(match?.opponentLabels ?? entry.opponentLabels).join(
+                      " / ",
+                    ) || "—"}
+                  </span>
+                  <span
+                    className="text-micro text-right"
+                    style={{ color: "var(--ink-500)" }}
+                  >
+                    {supportsVideo(entry) ? "" : "import only"}
+                  </span>
+                  <ChevronRight
+                    strokeWidth={1.5}
+                    className="size-3.5 text-[var(--ink-400)]"
+                  />
+                </Link>
+              )),
             )}
           </div>
         ))}

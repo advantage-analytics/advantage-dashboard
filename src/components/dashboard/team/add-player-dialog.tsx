@@ -309,7 +309,7 @@ export function AddPlayerDialog({
       : others.filter(
           (person) =>
             person.role === "player" &&
-            normalizedPersonName(person.name) === typedName
+            normalizedPersonName(person.name) === typedName,
         );
 
   const nameNote = sameName.length === 0 ? null : duplicateNameNote(sameName);
@@ -346,7 +346,7 @@ export function AddPlayerDialog({
         });
         if (!invited.ok) {
           setError(
-            `${lastName.trim()} is on the roster, but the invitation did not send: ${invited.error}`
+            `${lastName.trim()} is on the roster, but the invitation did not send: ${invited.error}`,
           );
           setAlsoInvite(false);
           return;

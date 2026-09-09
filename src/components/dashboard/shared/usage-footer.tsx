@@ -92,7 +92,7 @@ export function UsageFooter({
 
       <Link
         href="/dashboard/settings/usage"
-        className="whitespace-nowrap text-[11px] font-medium transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+        className="text-[11px] font-medium whitespace-nowrap transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
         style={{ color: "var(--blue)" }}
       >
         Usage

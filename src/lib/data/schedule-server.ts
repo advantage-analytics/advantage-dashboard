@@ -124,7 +124,7 @@ export interface ProgramSchedule {
  */
 async function readSchedule(
   programId: string,
-  eventId?: string
+  eventId?: string,
 ): Promise<ProgramSchedule> {
   const supabase = await createClient();
 
@@ -147,7 +147,7 @@ async function readSchedule(
     .select(ENTRY_COLUMNS)
     .in(
       "event_id",
-      events.map((event) => event.id)
+      events.map((event) => event.id),
     )
     .order("position", { ascending: true });
 
@@ -159,7 +159,7 @@ async function readSchedule(
         .select(MATCH_COLUMNS)
         .in(
           "event_entry_id",
-          entries.map((entry) => entry.id)
+          entries.map((entry) => entry.id),
         )
     : { data: [] as DbEntryMatch[] };
 
@@ -170,7 +170,7 @@ async function readSchedule(
   // mislead — the matches list and match detail. These draw a dot.
   const jobs = await loadMatchAnalysis(
     supabase,
-    matches.map((match) => match.id)
+    matches.map((match) => match.id),
   );
 
   const matchesByEntry = new Map<string, EntryMatch[]>();
@@ -211,7 +211,7 @@ async function readSchedule(
       // Sorted by the round ladder: `matches` has no created_at, so without
       // this a tournament run renders in whatever order Postgres returned.
       matches: (matchesByEntry.get(row.id) ?? []).sort(
-        (a, b) => roundRank(a.round) - roundRank(b.round)
+        (a, b) => roundRank(a.round) - roundRank(b.round),
       ),
     };
     const list = entriesByEvent.get(row.event_id);
@@ -247,7 +247,7 @@ async function readSchedule(
  * only invites the question of which is doing the work.
  */
 export const getProgramSchedule = cache(async function getProgramSchedule(
-  programId: string
+  programId: string,
 ): Promise<ProgramSchedule> {
   return readSchedule(programId);
 });
@@ -258,16 +258,17 @@ export const getProgramSchedule = cache(async function getProgramSchedule(
  * Pure, over a schedule already read, so a caller holding one can have the rows
  * without a second trip — and so this mapping can be tested without a database.
  */
-export function scheduleRowsFrom(
-  { events, entriesByEvent }: ProgramSchedule
-): ScheduleRow[] {
+export function scheduleRowsFrom({
+  events,
+  entriesByEvent,
+}: ProgramSchedule): ScheduleRow[] {
   return events.map((event) => {
     const entries = entriesByEvent.get(event.id) ?? [];
     const played = entries.filter(entryPlayed).length;
     const working = entries.reduce(
       (count, entry) =>
         count + entry.matches.filter((match) => isWorking(match.status)).length,
-      0
+      0,
     );
 
     const score = event.kind === "dual" ? dualScore(entries) : null;
@@ -413,7 +414,7 @@ function hasAnyMatch(all: EventEntry[], entryId: string): boolean {
  */
 export function eventDetailFrom(
   { events, entriesByEvent }: ProgramSchedule,
-  eventId: string
+  eventId: string,
 ): EventDetail | null {
   const event = events.find((candidate) => candidate.id === eventId);
   if (!event) return null;
@@ -435,7 +436,7 @@ export function eventDetailFrom(
  */
 export const getEventDetail = cache(async function getEventDetail(
   programId: string,
-  eventId: string
+  eventId: string,
 ): Promise<EventDetail | null> {
   return eventDetailFrom(await readSchedule(programId, eventId), eventId);
 });
@@ -447,7 +448,7 @@ export const getEventDetail = cache(async function getEventDetail(
  * is this list and nothing else.
  */
 export async function getUploadQueue(
-  programId: string
+  programId: string,
 ): Promise<UploadQueueGroup[]> {
   const { events, entriesByEvent } = await getProgramSchedule(programId);
 
@@ -469,15 +470,18 @@ export async function getUploadQueue(
           ...entry,
           matches: entry.matches.filter((match) => !match.hasVideo),
         }))
-        .filter((entry) => entry.matches.length > 0 || !hasAnyMatch(all, entry.id));
+        .filter(
+          (entry) => entry.matches.length > 0 || !hasAnyMatch(all, entry.id),
+        );
 
       const withVideo = nonForfeited.reduce(
-        (count, entry) => count + entry.matches.filter((m) => m.hasVideo).length,
-        0
+        (count, entry) =>
+          count + entry.matches.filter((m) => m.hasVideo).length,
+        0,
       );
       const total = nonForfeited.reduce(
         (count, entry) => count + Math.max(1, entry.matches.length),
-        0
+        0,
       );
 
       return { event, entries: waiting, withVideo, total };
@@ -509,9 +513,11 @@ export interface OpponentProgram {
 }
 
 export async function getOpponentPrograms(
-  programIds: readonly (string | null | undefined)[]
+  programIds: readonly (string | null | undefined)[],
 ): Promise<Record<string, OpponentProgram>> {
-  const ids = [...new Set(programIds.filter((id): id is string => Boolean(id)))];
+  const ids = [
+    ...new Set(programIds.filter((id): id is string => Boolean(id))),
+  ];
   if (ids.length === 0) return {};
 
   const supabase = await createClient();
@@ -533,7 +539,7 @@ export async function getOpponentPrograms(
 
 /** `programs.program_key` and school name, by id, for a dual's opponents. */
 export async function programNamesFor(
-  ids: string[]
+  ids: string[],
 ): Promise<Map<string, { key: string; school: string }>> {
   const map = new Map<string, { key: string; school: string }>();
   const unique = [...new Set(ids)];
@@ -543,7 +549,11 @@ export async function programNamesFor(
     .from("programs")
     .select("id, program_key, school_name")
     .in("id", unique);
-  for (const row of (data ?? []) as { id: string; program_key: string; school_name: string }[]) {
+  for (const row of (data ?? []) as {
+    id: string;
+    program_key: string;
+    school_name: string;
+  }[]) {
     map.set(row.id, { key: row.program_key, school: row.school_name });
   }
   return map;

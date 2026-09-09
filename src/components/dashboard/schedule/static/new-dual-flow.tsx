@@ -130,7 +130,7 @@ const COPY: Record<Step, { title: string; lede: string }> = {
 /** The one place a `ChosenSchool` is built out of step one's two answers. */
 function chosenFrom(
   name: string,
-  program: ProgramSearchResult | null
+  program: ProgramSearchResult | null,
 ): ChosenSchool {
   // The row alone for a pick — its name is read off it downstream — and the
   // text alone otherwise, so the two can never disagree.
@@ -215,7 +215,7 @@ export function dualSeed({ event, entries }: EventDetail): DualDraftSeed {
                 : undefined,
             },
           ]
-        : []
+        : [],
     ),
   };
 }
@@ -229,7 +229,7 @@ export function NewDualFlow(props: NewDualFlowProps) {
             opponentProgram: props.opponentProgram ?? null,
           }
         : undefined,
-    [props.mode, props.event, props.opponentProgram]
+    [props.mode, props.event, props.opponentProgram],
   );
 
   // An edit opens on step two: its school is the event's, already decided.
@@ -241,7 +241,7 @@ export function NewDualFlow(props: NewDualFlowProps) {
         : // The name the dual was recorded under, which is the name it keeps:
           // `updateDual` does not take an opponent at all.
           { kind: "text", name: edit.detail.event.name }
-      : null
+      : null,
   );
 
   const choose = useCallback(
@@ -249,7 +249,7 @@ export function NewDualFlow(props: NewDualFlowProps) {
       setSchool(chosenFrom(name, program));
       setStep(2);
     },
-    []
+    [],
   );
 
   if (school === null) {
@@ -292,7 +292,10 @@ function SchoolStep({
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
   /** What Continue would carry. Null until something is picked or typed. */
-  const choice = useRef<{ name: string | null; program: ProgramSearchResult | null }>({
+  const choice = useRef<{
+    name: string | null;
+    program: ProgramSearchResult | null;
+  }>({
     name: null,
     program: null,
   });
@@ -306,7 +309,7 @@ function SchoolStep({
       choice.current = { name, program };
       setHasChoice(name !== null);
     },
-    []
+    [],
   );
 
   const commit = useCallback(() => {
@@ -370,7 +373,7 @@ function DualDraftFlow({
   // keystroke — harmless, and still not what the hook's contract describes.
   const seed = useMemo(
     () => (edit ? dualSeed(edit.detail) : undefined),
-    [edit]
+    [edit],
   );
   const {
     draft,

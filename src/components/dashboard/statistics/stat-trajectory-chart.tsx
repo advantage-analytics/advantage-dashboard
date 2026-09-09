@@ -14,7 +14,12 @@ import {
 import type { SelectableMatch } from "@/lib/data/statistics-server";
 import { rollingAverage } from "./trend-utils";
 
-type StatKey = "firstServePct" | "winners" | "unforcedErrors" | "aces" | "breakPointsConvertedPct";
+type StatKey =
+  | "firstServePct"
+  | "winners"
+  | "unforcedErrors"
+  | "aces"
+  | "breakPointsConvertedPct";
 
 interface StatOption {
   key: StatKey;
@@ -26,16 +31,52 @@ interface StatOption {
 
 const STAT_PAIRS: [StatOption, StatOption][] = [
   [
-    { key: "firstServePct", label: "1st Serve %", short: "1st Srv", color: "#3B82F6", dashed: false },
-    { key: "unforcedErrors", label: "Unforced Errors", short: "UE", color: "#0D0D0D", dashed: true },
+    {
+      key: "firstServePct",
+      label: "1st Serve %",
+      short: "1st Srv",
+      color: "#3B82F6",
+      dashed: false,
+    },
+    {
+      key: "unforcedErrors",
+      label: "Unforced Errors",
+      short: "UE",
+      color: "#0D0D0D",
+      dashed: true,
+    },
   ],
   [
-    { key: "winners", label: "Winners", short: "Winners", color: "#3B82F6", dashed: false },
-    { key: "aces", label: "Aces", short: "Aces", color: "#0D0D0D", dashed: true },
+    {
+      key: "winners",
+      label: "Winners",
+      short: "Winners",
+      color: "#3B82F6",
+      dashed: false,
+    },
+    {
+      key: "aces",
+      label: "Aces",
+      short: "Aces",
+      color: "#0D0D0D",
+      dashed: true,
+    },
   ],
   [
-    { key: "firstServePct", label: "1st Serve %", short: "1st Srv", color: "#3B82F6", dashed: false },
-    { key: "breakPointsConvertedPct", label: "Break Conv %", short: "BP Conv", color: "#0D0D0D", dashed: true },
+    {
+      key: "firstServePct",
+      label: "1st Serve %",
+      short: "1st Srv",
+      color: "#3B82F6",
+      dashed: false,
+    },
+    {
+      key: "breakPointsConvertedPct",
+      label: "Break Conv %",
+      short: "BP Conv",
+      color: "#0D0D0D",
+      dashed: true,
+    },
   ],
 ];
 
@@ -52,11 +93,14 @@ interface CustomTooltipProps {
 function ChartTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-xl px-3 py-2.5 shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
-      <p className="text-[12px] font-medium text-[#0D0D0D] mb-1">{label}</p>
+    <div className="rounded-xl border border-[#F3F3F3] bg-white px-3 py-2.5 shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
+      <p className="mb-1 text-[12px] font-medium text-[#0D0D0D]">{label}</p>
       {payload.map((p) => (
         <p key={p.dataKey} className="text-[11px] text-[#71717A]">
-          {p.dataKey === "rolling1" ? "Avg" : "Avg"}: <span className="font-medium" style={{ color: p.color }}>{p.value?.toFixed(1) ?? "—"}</span>
+          {p.dataKey === "rolling1" ? "Avg" : "Avg"}:{" "}
+          <span className="font-medium" style={{ color: p.color }}>
+            {p.value?.toFixed(1) ?? "—"}
+          </span>
         </p>
       ))}
     </div>
@@ -69,7 +113,7 @@ export function StatTrajectoryChart({ matches }: Props) {
 
   const chronological = useMemo(
     () => [...matches].sort((a, b) => a.isoDate.localeCompare(b.isoDate)),
-    [matches]
+    [matches],
   );
 
   const chartData = useMemo(() => {
@@ -89,7 +133,10 @@ export function StatTrajectoryChart({ matches }: Props) {
   const careerAvg = useMemo(() => {
     function avg(values: (number | null)[]): number | null {
       const valid = values.filter((v): v is number => v !== null);
-      return valid.length > 0 ? Math.round((valid.reduce((a, b) => a + b, 0) / valid.length) * 10) / 10 : null;
+      return valid.length > 0
+        ? Math.round((valid.reduce((a, b) => a + b, 0) / valid.length) * 10) /
+            10
+        : null;
     }
     return {
       avg1: avg(chronological.map((m) => m[pair[0].key])),
@@ -99,35 +146,37 @@ export function StatTrajectoryChart({ matches }: Props) {
 
   if (chronological.length < 3) {
     return (
-      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] p-5">
-        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+      <div className="rounded-[14px] border border-[#F3F3F3] bg-white p-5 shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]">
+        <h2 className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
           Stat Trajectory
         </h2>
-        <p className="text-[12px] font-normal text-[#71717A] mt-1">Need at least 3 matches</p>
+        <p className="mt-1 text-[12px] font-normal text-[#71717A]">
+          Need at least 3 matches
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] p-5 overflow-hidden">
-      <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
+    <div className="overflow-hidden rounded-[14px] border border-[#F3F3F3] bg-white p-5 shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+          <h2 className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
             Stat Trajectory
           </h2>
-          <p className="text-[12px] font-normal text-[#71717A] mt-1">
+          <p className="mt-1 text-[12px] font-normal text-[#71717A]">
             5-match rolling averages
           </p>
         </div>
 
         {/* Pair selector */}
-        <div className="flex items-center bg-[#F7F7F7] rounded-full p-0.5">
+        <div className="flex items-center rounded-full bg-[#F7F7F7] p-0.5">
           {STAT_PAIRS.map((p, i) => (
             <button
               key={i}
               type="button"
               onClick={() => setPairIndex(i)}
-              className={`px-2.5 py-1 text-[10px] font-medium rounded-full transition-all duration-200 ${
+              className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-all duration-200 ${
                 pairIndex === i
                   ? "bg-white text-[#0D0D0D] shadow-[0px_1px_3px_rgba(0,0,0,0.08)]"
                   : "text-[#888888] hover:text-[#525252]"
@@ -140,20 +189,37 @@ export function StatTrajectoryChart({ matches }: Props) {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 mb-3">
+      <div className="mb-3 flex items-center gap-4">
         <div className="flex items-center gap-1.5">
-          <span className="w-4 h-0.5 rounded-full" style={{ backgroundColor: pair[0].color }} />
-          <span className="text-[10px] font-normal text-[#525252]">{pair[0].label}</span>
+          <span
+            className="h-0.5 w-4 rounded-full"
+            style={{ backgroundColor: pair[0].color }}
+          />
+          <span className="text-[10px] font-normal text-[#525252]">
+            {pair[0].label}
+          </span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-4 h-0.5 rounded-full border-t border-dashed" style={{ borderColor: pair[1].color }} />
-          <span className="text-[10px] font-normal text-[#525252]">{pair[1].label}</span>
+          <span
+            className="h-0.5 w-4 rounded-full border-t border-dashed"
+            style={{ borderColor: pair[1].color }}
+          />
+          <span className="text-[10px] font-normal text-[#525252]">
+            {pair[1].label}
+          </span>
         </div>
       </div>
 
       <ResponsiveContainer width="100%" height={240}>
-        <LineChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -16 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#F0F0F0" vertical={false} />
+        <LineChart
+          data={chartData}
+          margin={{ top: 4, right: 4, bottom: 0, left: -16 }}
+        >
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="#F0F0F0"
+            vertical={false}
+          />
           <XAxis
             dataKey="label"
             tick={{ fontSize: 9, fill: "#AAAAAA" }}
@@ -166,13 +232,30 @@ export function StatTrajectoryChart({ matches }: Props) {
             axisLine={false}
             tickLine={false}
           />
-          <Tooltip content={<ChartTooltip />} cursor={{ stroke: "#3B82F6", strokeWidth: 1, strokeDasharray: "4 4" }} />
+          <Tooltip
+            content={<ChartTooltip />}
+            cursor={{
+              stroke: "#3B82F6",
+              strokeWidth: 1,
+              strokeDasharray: "4 4",
+            }}
+          />
 
           {careerAvg.avg1 !== null && (
-            <ReferenceLine y={careerAvg.avg1} stroke={pair[0].color} strokeDasharray="8 4" strokeOpacity={0.3} />
+            <ReferenceLine
+              y={careerAvg.avg1}
+              stroke={pair[0].color}
+              strokeDasharray="8 4"
+              strokeOpacity={0.3}
+            />
           )}
           {careerAvg.avg2 !== null && (
-            <ReferenceLine y={careerAvg.avg2} stroke={pair[1].color} strokeDasharray="8 4" strokeOpacity={0.3} />
+            <ReferenceLine
+              y={careerAvg.avg2}
+              stroke={pair[1].color}
+              strokeDasharray="8 4"
+              strokeOpacity={0.3}
+            />
           )}
 
           <Line
@@ -181,7 +264,12 @@ export function StatTrajectoryChart({ matches }: Props) {
             stroke={pair[0].color}
             strokeWidth={2}
             dot={false}
-            activeDot={{ r: 4, fill: pair[0].color, stroke: "#fff", strokeWidth: 2 }}
+            activeDot={{
+              r: 4,
+              fill: pair[0].color,
+              stroke: "#fff",
+              strokeWidth: 2,
+            }}
             connectNulls
             animationDuration={600}
           />
@@ -192,7 +280,12 @@ export function StatTrajectoryChart({ matches }: Props) {
             strokeWidth={2}
             strokeDasharray="6 3"
             dot={false}
-            activeDot={{ r: 4, fill: pair[1].color, stroke: "#fff", strokeWidth: 2 }}
+            activeDot={{
+              r: 4,
+              fill: pair[1].color,
+              stroke: "#fff",
+              strokeWidth: 2,
+            }}
             connectNulls
             animationDuration={600}
           />

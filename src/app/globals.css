@@ -60,63 +60,63 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --shadow-card: 0px 2px 8px 0px rgba(0,0,0,0.06);
-  --shadow-card-elevated: 0px 6px 20px 0px rgba(0,0,0,0.12);
-  --shadow-tooltip: 0px 4px 12px 0px rgba(0,0,0,0.12);
+  --shadow-card: 0px 2px 8px 0px rgba(0, 0, 0, 0.06);
+  --shadow-card-elevated: 0px 6px 20px 0px rgba(0, 0, 0, 0.12);
+  --shadow-tooltip: 0px 4px 12px 0px rgba(0, 0, 0, 0.12);
 }
 
 /* Tokens consumed via Tailwind arbitrary values like `border-[var(--color-border-card)]`.
    They live in a non-inline @theme so Tailwind v4 tracks them and emits their :root
    definitions — Turbopack dev mode strips unreferenced/loose :root --color-* vars. */
 @theme {
-  --color-border-card: #F3F3F3;
-  --color-surface-card: #FFFFFF;
-  --color-surface-muted: #FAFAFA;
+  --color-border-card: #f3f3f3;
+  --color-surface-card: #ffffff;
+  --color-surface-muted: #fafafa;
   --color-text-body: #525252;
-  --color-success: #5DB955;
-  --color-error-strong: #E51837;
-  --color-radar-grid: #EFEFEF;
+  --color-success: #5db955;
+  --color-error-strong: #e51837;
+  --color-radar-grid: #efefef;
   --color-accent-blue-ring: rgba(59, 130, 246, 0.4);
-  --color-player-1: #3B82F6;
-  --color-player-1-bar-tint: #BFD5FB;
-  --color-player-2: #A855F7;
-  --color-player-2-bar-tint: #DDC7F7;
+  --color-player-1: #3b82f6;
+  --color-player-1-bar-tint: #bfd5fb;
+  --color-player-2: #a855f7;
+  --color-player-2-bar-tint: #ddc7f7;
 
   /* Ink scale — neutral text/border ramp used across settings + dashboard */
-  --color-ink-900: #0D0D0D;
+  --color-ink-900: #0d0d0d;
   --color-ink-700: #525252;
   --color-ink-500: #888888;
-  --color-ink-400: #AAAAAA;
-  --color-ink-300: #CCCCCC;
-  --color-ink-200: #E5E5EA;
-  --color-ink-100: #F3F3F3;
-  --color-ink-border: #EAECF0;
+  --color-ink-400: #aaaaaa;
+  --color-ink-300: #cccccc;
+  --color-ink-200: #e5e5ea;
+  --color-ink-100: #f3f3f3;
+  --color-ink-border: #eaecf0;
 
   /* Accent blue + tints */
-  --color-blue: #3B82F6;
-  --color-blue-hover: #2563EB;
+  --color-blue: #3b82f6;
+  --color-blue-hover: #2563eb;
   --color-blue-tint-04: rgba(59, 130, 246, 0.04);
   --color-blue-tint-08: rgba(59, 130, 246, 0.08);
   --color-blue-tint-12: rgba(59, 130, 246, 0.12);
-  --color-blue-ring-30: rgba(59, 130, 246, 0.30);
-  --color-blue-ring-40: rgba(59, 130, 246, 0.40);
+  --color-blue-ring-30: rgba(59, 130, 246, 0.3);
+  --color-blue-ring-40: rgba(59, 130, 246, 0.4);
 
   /* Success tints */
-  --color-success-hover: #4EA84A;
+  --color-success-hover: #4ea84a;
   --color-success-tint-04: rgba(93, 185, 85, 0.04);
   --color-success-tint-12: rgba(115, 230, 104, 0.12);
-  --color-success-tint-20: rgba(93, 185, 85, 0.20);
+  --color-success-tint-20: rgba(93, 185, 85, 0.2);
 
   /* Danger tints */
-  --color-danger-hover: #C41530;
+  --color-danger-hover: #c41530;
   --color-danger-tint-15: rgba(229, 24, 55, 0.15);
-  --color-danger-tint-70: rgba(229, 24, 55, 0.70);
+  --color-danger-tint-70: rgba(229, 24, 55, 0.7);
 
   /* Selected card elevation — same shadow as default; selection signaled via border-2 */
   --shadow-selected: 0px 2px 8px 0px rgba(0, 0, 0, 0.06);
 
   /* Raised surface — chips, kbd keycaps, active pills. One step above surface-card. */
-  --color-surface-raised: #FFFFFF;
+  --color-surface-raised: #ffffff;
 
   /* Subtle bottom-edge shadow for keycap-style elements. */
   --color-shadow-keycap: rgba(15, 23, 42, 0.04);
@@ -128,38 +128,38 @@
   /* Inverted ink scale, lower rungs lightened for WCAG AA on #0E0E10 surface.
      Contrast ratios: 900=18.6, 700=9.2, 500=5.4, 400=5.0 (AA), 300=3.6 (AA Large /
      decorative only — never use for body copy). */
-  --color-ink-900: #F5F5F5;
-  --color-ink-700: #B5B5B5;
-  --color-ink-500: #8A8A8A;
+  --color-ink-900: #f5f5f5;
+  --color-ink-700: #b5b5b5;
+  --color-ink-500: #8a8a8a;
   --color-ink-400: #828282;
-  --color-ink-300: #6A6A6A;
-  --color-ink-200: #2E2E2E;
-  --color-ink-100: #1F1F1F;
-  --color-ink-border: #2A2A2A;
+  --color-ink-300: #6a6a6a;
+  --color-ink-200: #2e2e2e;
+  --color-ink-100: #1f1f1f;
+  --color-ink-border: #2a2a2a;
 
   /* Lighter error red so danger copy clears AA on dark surfaces */
-  --color-error-strong: #FF6478;
-  --color-danger-hover: #FF8294;
+  --color-error-strong: #ff6478;
+  --color-danger-hover: #ff8294;
   --color-danger-tint-15: rgba(255, 100, 120, 0.18);
-  --color-danger-tint-70: rgba(255, 100, 120, 0.70);
+  --color-danger-tint-70: rgba(255, 100, 120, 0.7);
 
   /* Success holds — #5DB955 already clears 8:1 on dark */
 
-  --color-surface-card: #0E0E10;
+  --color-surface-card: #0e0e10;
   --color-surface-muted: #161618;
-  --color-surface-raised: #1F1F1F;
-  --color-border-card: #1F1F1F;
-  --color-text-body: #B5B5B5;
+  --color-surface-raised: #1f1f1f;
+  --color-border-card: #1f1f1f;
+  --color-text-body: #b5b5b5;
   --color-shadow-keycap: rgba(0, 0, 0, 0.45);
 
   /* Blues lighten slightly so they read on dark surfaces */
-  --color-blue: #60A5FA;
-  --color-blue-hover: #93C5FD;
+  --color-blue: #60a5fa;
+  --color-blue-hover: #93c5fd;
   --color-blue-tint-04: rgba(96, 165, 250, 0.06);
-  --color-blue-tint-08: rgba(96, 165, 250, 0.10);
+  --color-blue-tint-08: rgba(96, 165, 250, 0.1);
   --color-blue-tint-12: rgba(96, 165, 250, 0.16);
-  --color-blue-ring-30: rgba(96, 165, 250, 0.30);
-  --color-blue-ring-40: rgba(96, 165, 250, 0.40);
+  --color-blue-ring-30: rgba(96, 165, 250, 0.3);
+  --color-blue-ring-40: rgba(96, 165, 250, 0.4);
 
   --shadow-card: 0px 2px 8px 0px rgba(0, 0, 0, 0.45);
   --shadow-selected: 0px 2px 8px 0px rgba(0, 0, 0, 0.45);
@@ -167,18 +167,18 @@
 
 :root {
   /* Auth design tokens */
-  --color-bg-dark: #FAFAFA;
-  --color-bg-panel: #FFFFFF;
-  --color-accent-blue: #3B82F6;
-  --color-accent-blue-hover: #2563EB;
-  --color-text-primary: #0D0D0D;
-  --color-text-secondary: #71717A;
+  --color-bg-dark: #fafafa;
+  --color-bg-panel: #ffffff;
+  --color-accent-blue: #3b82f6;
+  --color-accent-blue-hover: #2563eb;
+  --color-text-primary: #0d0d0d;
+  --color-text-secondary: #71717a;
   --color-text-muted: #888888;
-  --color-text-dim: #AAAAAA;
-  --color-text-faint: #BBBBBB;
+  --color-text-dim: #aaaaaa;
+  --color-text-faint: #bbbbbb;
   --color-border-subtle: rgba(0, 0, 0, 0.1);
   --color-border-faint: rgba(0, 0, 0, 0.05);
-  --color-error: #FF453A;
+  --color-error: #ff453a;
   --color-error-bg: rgba(255, 69, 58, 0.08);
   --color-accent-blue-glow: rgba(59, 130, 246, 0.15);
 
@@ -256,7 +256,7 @@
   }
   html,
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background font-sans text-foreground;
     font-family: var(--font-inter) !important;
     overscroll-behavior: none;
     overflow-x: hidden;
@@ -270,7 +270,7 @@
 }
 
 .btn-primary {
-  @apply px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition;
+  @apply rounded-lg bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700;
 }
 
 /* Plain-CSS classes outside any @layer get stripped by Tailwind v4 + Turbopack
@@ -349,8 +349,17 @@
 }
 
 .font-clash {
-  font-family: "Clash Display", ui-sans-serif, system-ui, -apple-system,
-    "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji" !important;
+  font-family:
+    "Clash Display",
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    "Apple Color Emoji",
+    "Segoe UI Emoji" !important;
 }
 
 @keyframes scroll {
@@ -369,26 +378,38 @@
 /* Auth brand panel mesh gradient */
 .brand-mesh-gradient {
   background:
-    radial-gradient(ellipse 80% 70% at 10% 15%, #60A5FA 0%, transparent 50%),
-    radial-gradient(ellipse 65% 80% at 85% 10%, #38BDF8 0%, transparent 45%),
-    radial-gradient(ellipse 70% 60% at 40% 50%, #7BA4F7 0%, transparent 50%),
-    radial-gradient(ellipse 60% 70% at 80% 70%, #818CF8 0%, transparent 45%),
-    radial-gradient(ellipse 55% 55% at 50% 35%, #93C5FD 0%, transparent 45%),
-    radial-gradient(ellipse 70% 60% at 15% 80%, #4F8EF7 0%, transparent 45%),
-    radial-gradient(ellipse 50% 50% at 70% 45%, #A78BFA 0%, transparent 40%),
-    linear-gradient(135deg, #5B8DEF, #7BA4F7, #818CF8);
+    radial-gradient(ellipse 80% 70% at 10% 15%, #60a5fa 0%, transparent 50%),
+    radial-gradient(ellipse 65% 80% at 85% 10%, #38bdf8 0%, transparent 45%),
+    radial-gradient(ellipse 70% 60% at 40% 50%, #7ba4f7 0%, transparent 50%),
+    radial-gradient(ellipse 60% 70% at 80% 70%, #818cf8 0%, transparent 45%),
+    radial-gradient(ellipse 55% 55% at 50% 35%, #93c5fd 0%, transparent 45%),
+    radial-gradient(ellipse 70% 60% at 15% 80%, #4f8ef7 0%, transparent 45%),
+    radial-gradient(ellipse 50% 50% at 70% 45%, #a78bfa 0%, transparent 40%),
+    linear-gradient(135deg, #5b8def, #7ba4f7, #818cf8);
 }
 
 /* Auth page animations */
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Page enter transition — CSS-based so server HTML is visible at paint time */
 @keyframes page-enter {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-page-enter {
@@ -402,23 +423,41 @@
    is the point: a transform would slide the panel over a table that had
    already jumped. Named for the roster, where it was first built. */
 @keyframes roster-drawer-in {
-  from { width: 0; }
-  to { width: 340px; }
+  from {
+    width: 0;
+  }
+  to {
+    width: 340px;
+  }
 }
 @keyframes roster-drawer-out {
-  from { width: 340px; }
-  to { width: 0; }
+  from {
+    width: 340px;
+  }
+  to {
+    width: 0;
+  }
 }
 
 /* Upload modal animations */
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideDown {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-fadeIn {
@@ -430,19 +469,40 @@
 }
 
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes successPop {
-  0%   { opacity: 0; transform: scale(0.6); }
-  60%  { opacity: 1; transform: scale(1.06); }
-  100% { opacity: 1; transform: scale(1); }
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @keyframes successRise {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-success-pop {
@@ -457,9 +517,15 @@
    field and lands focus on the modal's Continue button — a 1-shot ring pulse
    so the user notices the wizard is ready to commit. SKILL.md curve, 200ms. */
 @keyframes chord-ring-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.55); }
-  60%  { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
-  100% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.55);
+  }
+  60% {
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+  }
 }
 
 .animate-chord-pulse {
@@ -474,8 +540,12 @@
 
 /* New match highlight pulse */
 @keyframes highlight-new-match {
-  0% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3); }
-  100% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0); }
+  0% {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0);
+  }
 }
 
 /* Toasts enter from below their resting place, on the design system's primary
@@ -495,8 +565,14 @@
    only warning a person gets that a background upload died, and a motion
    preference must never suppress it. */
 @keyframes toast-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .toast-enter {
@@ -512,8 +588,12 @@
 /* Settings skeleton — directional shimmer for hairline form fields.
    Stagger via inline --shimmer-delay so a wave scans down the form. */
 @keyframes settings-shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .settings-skeleton-bar {
@@ -549,8 +629,12 @@
    Follows settings-shimmer's mechanics; the fill colour stays inline so the
    same class works for any tone. */
 @keyframes progress-sheen {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .progress-fill-live {

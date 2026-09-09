@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
 import {
   ACCEPT_UNRECONCILED_FOLD,
@@ -20,7 +20,7 @@ import {
   type PointWinner,
   type SplitStepRally,
   type SplitStepStroke,
-} from '@/lib/services/splitstep/derivation';
+} from "@/lib/services/splitstep/derivation";
 
 /**
  * The transcript layer: point winners from the score fold, reconciliation
@@ -33,21 +33,22 @@ import {
  * player1), and that every structural rule holds on real data.
  */
 
-const FIXTURES = path.join(__dirname, 'fixtures', 'splitstep');
-const load = (n: string) => JSON.parse(readFileSync(path.join(FIXTURES, n), 'utf8'));
-const clean = load('clean-match.json');
-const degraded = load('degraded-match.json');
+const FIXTURES = path.join(__dirname, "fixtures", "splitstep");
+const load = (n: string) =>
+  JSON.parse(readFileSync(path.join(FIXTURES, n), "utf8"));
+const clean = load("clean-match.json");
+const degraded = load("degraded-match.json");
 
 /** Orderless set key plus a game key, matching what transcript.ts builds. */
 function keysFor(rallies: SplitStepRally[]) {
   const key = new Map<number, { set: string; game: string }>();
   for (const r of rallies) {
     const f = r.strokes[0];
-    const set = (f?.predSetScore ?? '')
-      .split('-')
+    const set = (f?.predSetScore ?? "")
+      .split("-")
       .map((s) => s.trim())
       .sort()
-      .join('-');
+      .join("-");
     key.set(r.rallyId, { set, game: `${set}|${f?.predGameScore}|${r.server}` });
   }
   return key;
@@ -55,13 +56,34 @@ function keysFor(rallies: SplitStepRally[]) {
 
 function stroke(over: Partial<SplitStepStroke>): SplitStepStroke {
   return {
-    eventId: 0, videoTime: 0, trimmedFrame: 0, rallyId: 1, strokeNumber: 1,
-    playerLabel: 'A', predPointScore: '0-0', predGameScore: '0-0',
-    predSetScore: '0-0', strokeType: 'groundstroke', strokeSide: 'forehand',
-    strokeScore: 1, sideScore: 1, playerX: 0, playerY: -5, opponentX: 0,
-    opponentY: 5, speedKmh: 100, spinType: 'flat', initialHeightM: 1,
-    heightAtNetM: 1.5, netHit: false, bounceX: 0, bounceY: 5, bounceScore: 1,
-    in: true, lineConfidence: 0.9, ...over,
+    eventId: 0,
+    videoTime: 0,
+    trimmedFrame: 0,
+    rallyId: 1,
+    strokeNumber: 1,
+    playerLabel: "A",
+    predPointScore: "0-0",
+    predGameScore: "0-0",
+    predSetScore: "0-0",
+    strokeType: "groundstroke",
+    strokeSide: "forehand",
+    strokeScore: 1,
+    sideScore: 1,
+    playerX: 0,
+    playerY: -5,
+    opponentX: 0,
+    opponentY: 5,
+    speedKmh: 100,
+    spinType: "flat",
+    initialHeightM: 1,
+    heightAtNetM: 1.5,
+    netHit: false,
+    bounceX: 0,
+    bounceY: 5,
+    bounceScore: 1,
+    in: true,
+    lineConfidence: 0.9,
+    ...over,
   };
 }
 
@@ -69,20 +91,20 @@ function rally(strokes: SplitStepStroke[]): SplitStepRally {
   return {
     rallyId: 1,
     strokes,
-    server: strokes[0]?.playerLabel ?? 'A',
-    serves: strokes.filter((s) => s.strokeType === 'serve'),
+    server: strokes[0]?.playerLabel ?? "A",
+    serves: strokes.filter((s) => s.strokeType === "serve"),
   };
 }
 
-test.describe('shot numbering', () => {
-  test('the deciding serve is 1 and the return is 2', () => {
+test.describe("shot numbering", () => {
+  test("the deciding serve is 1 and the return is 2", () => {
     // calculate_match_stats joins serve.shot_number = 1 to ret.shot_number = 2.
     expect(shotNumber(0, 0)).toBe(1);
     expect(shotNumber(1, 0)).toBe(2);
     expect(shotNumber(2, 0)).toBe(3);
   });
 
-  test('a faulted serve takes 0, keeping exactly one row at 1', () => {
+  test("a faulted serve takes 0, keeping exactly one row at 1", () => {
     // Two rows at shot_number 1 fan out that join: production shows 1,550
     // returns producing 2,534 joined rows because SwingVision puts both serves
     // there. Derived rows must not reproduce it.
@@ -91,107 +113,143 @@ test.describe('shot numbering', () => {
     expect(shotNumber(2, 1)).toBe(2);
   });
 
-  test('a groundstroke struck between the two serves also takes 0', () => {
+  test("a groundstroke struck between the two serves also takes 0", () => {
     // 20 / 17 / 17 rallies across the real payloads have one. Numbering it
     // relative to the first serve would make the SECOND SERVE the return.
     const r = rally([
-      stroke({ strokeType: 'serve', in: false }),
-      stroke({ playerLabel: 'B' }),
-      stroke({ strokeType: 'serve' }),
-      stroke({ playerLabel: 'B' }),
+      stroke({ strokeType: "serve", in: false }),
+      stroke({ playerLabel: "B" }),
+      stroke({ strokeType: "serve" }),
+      stroke({ playerLabel: "B" }),
     ]);
     const serveIndex = lastServeIndex(r);
     expect(serveIndex).toBe(2);
-    expect(r.strokes.map((_, i) => shotNumber(i, serveIndex))).toEqual([0, 0, 1, 2]);
+    expect(r.strokes.map((_, i) => shotNumber(i, serveIndex))).toEqual([
+      0, 0, 1, 2,
+    ]);
   });
 });
 
-test.describe('result_type', () => {
+test.describe("result_type", () => {
   const served = (over: Partial<SplitStepStroke> = {}) =>
-    stroke({ strokeType: 'serve', strokeSide: 'overhead', ...over });
+    stroke({ strokeType: "serve", strokeSide: "overhead", ...over });
 
-  test('the point winner striking last is a Winner, on the correct side', () => {
-    const r = rally([served(), stroke({ playerLabel: 'B', strokeSide: 'backhand' })]);
-    expect(classifyPoint(r, 'B')).toBe('Backhand Winner');
-    expect(classifyPoint(r, 'A')).toBe('Backhand Unforced Error');
+  test("the point winner striking last is a Winner, on the correct side", () => {
+    const r = rally([
+      served(),
+      stroke({ playerLabel: "B", strokeSide: "backhand" }),
+    ]);
+    expect(classifyPoint(r, "B")).toBe("Backhand Winner");
+    expect(classifyPoint(r, "A")).toBe("Backhand Unforced Error");
   });
 
-  test('an unreturned serve is a Service Winner, never an Ace', () => {
+  test("an unreturned serve is a Service Winner, never an Ace", () => {
     // Nothing records an attempted-and-missed swing, so the two cannot be
     // separated. Emitting Ace would be a guess; match_stats.aces is suppressed.
     const r = rally([served()]);
-    expect(classifyPoint(r, 'A')).toBe('Service Winner');
+    expect(classifyPoint(r, "A")).toBe("Service Winner");
   });
 
-  test('a second serve the server lost is a Double Fault', () => {
+  test("a second serve the server lost is a Double Fault", () => {
     const r = rally([served({ in: false }), served({ in: false })]);
-    expect(classifyPoint(r, 'B')).toBe('Double Fault');
+    expect(classifyPoint(r, "B")).toBe("Double Fault");
   });
 
-  test('a lone lost serve yields no result_type rather than a false Double Fault', () => {
+  test("a lone lost serve yields no result_type rather than a false Double Fault", () => {
     // There was no first fault, so calling this a double fault would invent one.
-    expect(classifyPoint(rally([served({ in: false })]), 'B')).toBeNull();
+    expect(classifyPoint(rally([served({ in: false })]), "B")).toBeNull();
   });
 
-  test('never emits a Forced Error string', () => {
+  test("never emits a Forced Error string", () => {
     // 'Forehand Forced Error' matches neither LIKE in calculate_match_stats, so
     // such a point would vanish from every aggregate instead of landing in one.
-    for (const winner of ['A', 'B']) {
+    for (const winner of ["A", "B"]) {
       const out = classifyPoint(
-        rally([served(), stroke({ playerLabel: 'B', strokeSide: 'forehand' })]),
-        winner
+        rally([served(), stroke({ playerLabel: "B", strokeSide: "forehand" })]),
+        winner,
       );
       expect(out).not.toMatch(/Forced/);
     }
   });
 });
 
-test.describe('shots.result is structural, not the in flag', () => {
-  test('a mid-rally stroke is In even when the vendor flags it out', () => {
+test.describe("shots.result is structural, not the in flag", () => {
+  test("a mid-rally stroke is In even when the vendor flags it out", () => {
     // The opponent played the next ball, so it was in. This contradiction is
     // the most common defect in the payload (16-38% of strokes).
     const r = rally([
-      stroke({ strokeType: 'serve' }),
-      stroke({ playerLabel: 'B', in: false }),
-      stroke({ playerLabel: 'A' }),
+      stroke({ strokeType: "serve" }),
+      stroke({ playerLabel: "B", in: false }),
+      stroke({ playerLabel: "A" }),
     ]);
     expect(
-      shotResult({ stroke: r.strokes[1], index: 1, rally: r, serveIndex: 0, winner: 'A' })
-    ).toBe('In');
+      shotResult({
+        stroke: r.strokes[1],
+        index: 1,
+        rally: r,
+        serveIndex: 0,
+        winner: "A",
+      }),
+    ).toBe("In");
   });
 
-  test('the last stroke follows the point winner, not the flag', () => {
-    const r = rally([stroke({ strokeType: 'serve' }), stroke({ playerLabel: 'B', in: false })]);
+  test("the last stroke follows the point winner, not the flag", () => {
+    const r = rally([
+      stroke({ strokeType: "serve" }),
+      stroke({ playerLabel: "B", in: false }),
+    ]);
     expect(
-      shotResult({ stroke: r.strokes[1], index: 1, rally: r, serveIndex: 0, winner: 'B' })
-    ).toBe('In');
+      shotResult({
+        stroke: r.strokes[1],
+        index: 1,
+        rally: r,
+        serveIndex: 0,
+        winner: "B",
+      }),
+    ).toBe("In");
     expect(
-      shotResult({ stroke: r.strokes[1], index: 1, rally: r, serveIndex: 0, winner: 'A' })
-    ).toBe('Out');
+      shotResult({
+        stroke: r.strokes[1],
+        index: 1,
+        rally: r,
+        serveIndex: 0,
+        winner: "A",
+      }),
+    ).toBe("Out");
   });
 
-  test('an unreturned serve the server won is In', () => {
+  test("an unreturned serve the server won is In", () => {
     // Marking it Out would contradict its own Service Winner and drop it from
     // second_serves_in.
     const r = rally([
-      stroke({ strokeType: 'serve', in: false }),
-      stroke({ strokeType: 'serve', in: false }),
+      stroke({ strokeType: "serve", in: false }),
+      stroke({ strokeType: "serve", in: false }),
     ]);
     expect(
-      shotResult({ stroke: r.strokes[1], index: 1, rally: r, serveIndex: 1, winner: 'A' })
-    ).toBe('In');
+      shotResult({
+        stroke: r.strokes[1],
+        index: 1,
+        rally: r,
+        serveIndex: 1,
+        winner: "A",
+      }),
+    ).toBe("In");
   });
 });
 
-test.describe('reconciliation', () => {
-  test('a self-mirroring score is detected', () => {
+test.describe("reconciliation", () => {
+  test("a self-mirroring score is detected", () => {
     // A retirement recorded 3-3 satisfies both mappings and identifies nobody.
     expect(scoreIsSelfMirroring({ player1: [3], player2: [3] })).toBe(true);
-    expect(scoreIsSelfMirroring({ player1: [6, 3], player2: [6, 3] })).toBe(true);
-    expect(scoreIsSelfMirroring({ player1: [6, 4], player2: [4, 6] })).toBe(false);
+    expect(scoreIsSelfMirroring({ player1: [6, 3], player2: [6, 3] })).toBe(
+      true,
+    );
+    expect(scoreIsSelfMirroring({ player1: [6, 4], player2: [4, 6] })).toBe(
+      false,
+    );
   });
 
-  test('clean: the fold is self-consistent and identifies player1', () => {
+  test("clean: the fold is self-consistent and identifies player1", () => {
     const a = analyzeResults(clean);
     const winners = resolvePointWinners(a.rallies, a.players);
     const key = keysFor(a.rallies);
@@ -200,8 +258,8 @@ test.describe('reconciliation', () => {
       winners,
       labels: a.players,
       score: { player1: [], player2: [] },
-      gameKeyOf: (id) => key.get(id)?.game ?? '',
-      setKeyOf: (id) => key.get(id)?.set ?? '',
+      gameKeyOf: (id) => key.get(id)?.game ?? "",
+      setKeyOf: (id) => key.get(id)?.set ?? "",
     });
 
     // Feeding the fold its own per-set counts must reconcile, and must name
@@ -214,8 +272,8 @@ test.describe('reconciliation', () => {
         player1: probe.foldedSets.map((s) => s[p1] ?? 0),
         player2: probe.foldedSets.map((s) => s[p2] ?? 0),
       },
-      gameKeyOf: (id) => key.get(id)?.game ?? '',
-      setKeyOf: (id) => key.get(id)?.set ?? '',
+      gameKeyOf: (id) => key.get(id)?.game ?? "",
+      setKeyOf: (id) => key.get(id)?.set ?? "",
     });
 
     expect(again.ok).toBe(true);
@@ -223,10 +281,12 @@ test.describe('reconciliation', () => {
     expect(again.games.length).toBeGreaterThan(10);
     // Only the final rally may be unresolved — it has no successor to compare
     // against and is settled by the fold landing on the entered score.
-    expect(again.unresolvedPoints).toEqual([a.rallies[a.rallies.length - 1].rallyId]);
+    expect(again.unresolvedPoints).toEqual([
+      a.rallies[a.rallies.length - 1].rallyId,
+    ]);
   });
 
-  test('degraded: refused, because five points resolve no winner at all', () => {
+  test("degraded: refused, because five points resolve no winner at all", () => {
     // This is the designed outcome, not a gap. The payload's tiebreak
     // fragments into pseudo-games and its warm-up rally carries a "nan-nan"
     // set score, so five points mid-match cannot be attributed. Publishing a
@@ -239,15 +299,15 @@ test.describe('reconciliation', () => {
       winners,
       labels: a.players,
       score: { player1: [10, 6, 5], player2: [6, 3, 2] },
-      gameKeyOf: (id) => key.get(id)?.game ?? '',
-      setKeyOf: (id) => key.get(id)?.set ?? '',
+      gameKeyOf: (id) => key.get(id)?.game ?? "",
+      setKeyOf: (id) => key.get(id)?.set ?? "",
     });
     expect(out.ok).toBe(false);
     expect(out.reason).toMatch(/resolved no winner/);
     expect(out.unresolvedPoints.length).toBeGreaterThan(1);
   });
 
-  test('a fold that misses the entered score is marked unreconciled, never ok', () => {
+  test("a fold that misses the entered score is marked unreconciled, never ok", () => {
     // Spec §4.4 wanted "off by one game" to grade medium and publish. These
     // rows are the point timeline and the video seek targets, so a wrong point
     // is a false claim on screen, not a rounding error.
@@ -261,8 +321,8 @@ test.describe('reconciliation', () => {
       winners,
       labels: a.players,
       score: { player1: [6, 4], player2: [4, 6] },
-      gameKeyOf: () => 'g',
-      setKeyOf: () => 's',
+      gameKeyOf: () => "g",
+      setKeyOf: () => "s",
     });
     expect(out.ok).toBe(false);
     expect(out.reason).toMatch(/does not match the entered score/);
@@ -274,8 +334,8 @@ test.describe('reconciliation', () => {
     expect(out.player1Source).toBeNull();
   });
 
-  test('bypass: geometry plus the wizard input names player1 when the fold cannot', () => {
-    test.skip(!ACCEPT_UNRECONCILED_FOLD, 'Gate 1 is restored');
+  test("bypass: geometry plus the wizard input names player1 when the fold cannot", () => {
+    test.skip(!ACCEPT_UNRECONCILED_FOLD, "Gate 1 is restored");
     const a = analyzeResults(clean);
     const winners = resolvePointWinners(a.rallies, a.players);
     const key = keysFor(a.rallies);
@@ -284,8 +344,8 @@ test.describe('reconciliation', () => {
       winners,
       labels: a.players,
       score: { player1: [6, 4], player2: [4, 6] },
-      gameKeyOf: (id) => key.get(id)?.game ?? '',
-      setKeyOf: (id) => key.get(id)?.set ?? '',
+      gameKeyOf: (id) => key.get(id)?.game ?? "",
+      setKeyOf: (id) => key.get(id)?.set ?? "",
       geometryTopLabel: second,
       initialTopIsPlayer1: false,
     });
@@ -294,14 +354,14 @@ test.describe('reconciliation', () => {
     // Geometry outranks distance: the top player was `second`, and the
     // wizard said the top player is NOT player1, so player1 is `first`.
     expect(out.player1Label).toBe(first);
-    expect(out.player1Source).toBe('geometry');
+    expect(out.player1Source).toBe("geometry");
     // Rows can be written from this: every point is settled.
     expect(out.settledWinners).toHaveLength(winners.length);
     expect(out.games.length).toBeGreaterThan(10);
   });
 
-  test('bypass: a transcript is still built from an unreconciled fold', () => {
-    test.skip(!ACCEPT_UNRECONCILED_FOLD, 'Gate 1 is restored');
+  test("bypass: a transcript is still built from an unreconciled fold", () => {
+    test.skip(!ACCEPT_UNRECONCILED_FOLD, "Gate 1 is restored");
     const a = analyzeResults(clean);
     const t = buildTranscript({
       rallies: a.rallies,
@@ -314,14 +374,14 @@ test.describe('reconciliation', () => {
     expect(t.points).toHaveLength(a.rallies.length);
     expect(t.reconciliation.ok).toBe(false);
     expect(t.reconciliation.player1Label).not.toBeNull();
-    expect(['geometry', 'distance']).toContain(t.reconciliation.player1Source);
+    expect(["geometry", "distance"]).toContain(t.reconciliation.player1Source);
     // The reason travels with the transcript so the publish log can say why.
     expect(t.reason).toMatch(/does not match the entered score/);
   });
 });
 
-test.describe('transcript', () => {
-  test('refuses without an entered score', () => {
+test.describe("transcript", () => {
+  test("refuses without an entered score", () => {
     const a = analyzeResults(clean);
     const t = buildTranscript({
       rallies: a.rallies,
@@ -335,13 +395,16 @@ test.describe('transcript', () => {
     expect(t.reason).toMatch(/score is required/);
   });
 
-  test('builds rows whose numbering and coordinates match the database frame', () => {
+  test("builds rows whose numbering and coordinates match the database frame", () => {
     const a = analyzeResults(clean);
     const winners = resolvePointWinners(a.rallies, a.players);
     const key = keysFor(a.rallies);
     const probe = reconcile({
-      winners, labels: a.players, score: { player1: [], player2: [] },
-      gameKeyOf: (id) => key.get(id)?.game ?? '', setKeyOf: (id) => key.get(id)?.set ?? '',
+      winners,
+      labels: a.players,
+      score: { player1: [], player2: [] },
+      gameKeyOf: (id) => key.get(id)?.game ?? "",
+      setKeyOf: (id) => key.get(id)?.set ?? "",
     });
     const [p1, p2] = a.players;
     const t = buildTranscript({
@@ -360,8 +423,8 @@ test.describe('transcript', () => {
       expect(point.point_number).toBeGreaterThan(0);
       expect(point.set_number).toBeGreaterThan(0);
       expect(point.game_number).toBeGreaterThan(0);
-      expect(typeof point.won_by_player1).toBe('boolean');
-      expect(typeof point.server_is_player1).toBe('boolean');
+      expect(typeof point.won_by_player1).toBe("boolean");
+      expect(typeof point.server_is_player1).toBe("boolean");
 
       // Exactly one shot at 1 per point, or the return join fans out.
       const atOne = point.shots.filter((s) => s.shot_number === 1);
@@ -370,10 +433,17 @@ test.describe('transcript', () => {
 
       for (const shot of point.shots) {
         if (shot.zone !== null) {
-          expect(['T', 'Body', 'Wide', 'Crosscourt', 'Middle', 'Down the Line'])
-            .toContain(shot.zone);
+          expect([
+            "T",
+            "Body",
+            "Wide",
+            "Crosscourt",
+            "Middle",
+            "Down the Line",
+          ]).toContain(shot.zone);
         }
-        if (shot.result !== null) expect(['In', 'Out', 'Net']).toContain(shot.result);
+        if (shot.result !== null)
+          expect(["In", "Out", "Net"]).toContain(shot.result);
         // Court frame: y runs 0..23.77 with the net at 11.885, so a landing
         // sits near that range rather than in 0..1.
         if (shot.landing_y !== null) {
@@ -385,25 +455,29 @@ test.describe('transcript', () => {
 
     // point_number is 1..n with no gaps; game_number is global, not per-set.
     expect(t.points.map((p) => p.point_number)).toEqual(
-      t.points.map((_, i) => i + 1)
+      t.points.map((_, i) => i + 1),
     );
     const games = new Set(t.points.map((p) => p.game_number));
     expect(games.size).toBe(Math.max(...games));
   });
 
-  test('flags record the contradictions rather than hiding them', () => {
+  test("flags record the contradictions rather than hiding them", () => {
     // Uses the clean fixture because the degraded one is refused outright, and
     // a refused match produces no rows to carry flags.
     const a = analyzeResults(clean);
     const winners = resolvePointWinners(a.rallies, a.players);
     const key = keysFor(a.rallies);
     const probe = reconcile({
-      winners, labels: a.players, score: { player1: [], player2: [] },
-      gameKeyOf: (id) => key.get(id)?.game ?? '', setKeyOf: (id) => key.get(id)?.set ?? '',
+      winners,
+      labels: a.players,
+      score: { player1: [], player2: [] },
+      gameKeyOf: (id) => key.get(id)?.game ?? "",
+      setKeyOf: (id) => key.get(id)?.set ?? "",
     });
     const [p1, p2] = a.players;
     const t = buildTranscript({
-      rallies: a.rallies, labels: a.players,
+      rallies: a.rallies,
+      labels: a.players,
       score: {
         player1: probe.foldedSets.map((s) => s[p1] ?? 0),
         player2: probe.foldedSets.map((s) => s[p2] ?? 0),
@@ -417,8 +491,9 @@ test.describe('transcript', () => {
 
     // The degraded payload's defining defect: balls called out that play
     // continued past. It must be recorded, not silently corrected away.
-    expect(shotFlags.filter((f) => f === SHOT_FLAGS.OUT_BALL_RALLY_CONTINUED).length)
-      .toBeGreaterThan(100);
+    expect(
+      shotFlags.filter((f) => f === SHOT_FLAGS.OUT_BALL_RALLY_CONTINUED).length,
+    ).toBeGreaterThan(100);
     expect(shotFlags).toContain(SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT);
     expect(shotFlags).toContain(SHOT_FLAGS.GEOMETRY_DISCARDED);
     expect(pointFlags).toContain(POINT_FLAGS.SAME_PLAYER_CONSECUTIVE);
@@ -426,16 +501,19 @@ test.describe('transcript', () => {
   });
 });
 
-test.describe('pressure points', () => {
-  test('a break point is the returner one point from the game', () => {
+test.describe("pressure points", () => {
+  test("a break point is the returner one point from the game", () => {
     // Was previously never set, so every derived row defaulted to false and a
     // 6-4 6-4 match — which contains at least two breaks of serve — reported
     // zero break points. That is a fabricated statistic, not a missing one.
-    const serve = stroke({ strokeType: 'serve', strokeSide: 'overhead' });
+    const serve = stroke({ strokeType: "serve", strokeSide: "overhead" });
     const at = (score: string) =>
-      rally([{ ...serve, predPointScore: score }, stroke({ playerLabel: 'B' })]);
+      rally([
+        { ...serve, predPointScore: score },
+        stroke({ playerLabel: "B" }),
+      ]);
     const base = {
-      labels: ['A', 'B'],
+      labels: ["A", "B"],
       gamesThisSet: { A: 0, B: 0 },
       setsWon: { A: 0, B: 0 },
       adScoring: true,
@@ -443,24 +521,34 @@ test.describe('pressure points', () => {
     };
 
     // Server-relative: "30-40" is server 30, returner 40.
-    expect(pressureFor({ rally: at('30-40'), ...base }).isBreakPoint).toBe(true);
+    expect(pressureFor({ rally: at("30-40"), ...base }).isBreakPoint).toBe(
+      true,
+    );
     // 40-30 is the server's game point, not a break point.
-    expect(pressureFor({ rally: at('40-30'), ...base }).isBreakPoint).toBe(false);
+    expect(pressureFor({ rally: at("40-30"), ...base }).isBreakPoint).toBe(
+      false,
+    );
     // Under ad scoring 40-40 is deuce — neither side wins on this point.
-    expect(pressureFor({ rally: at('40-40'), ...base }).isBreakPoint).toBe(false);
+    expect(pressureFor({ rally: at("40-40"), ...base }).isBreakPoint).toBe(
+      false,
+    );
   });
 
-  test('under no-ad, 40-40 IS a break point', () => {
+  test("under no-ad, 40-40 IS a break point", () => {
     // The deciding point is the most pressured point in tennis. Defaulting to
     // ad scoring would silently drop it, which is the same class of error as
     // the fabricated zero, one level subtler.
     const r = rally([
-      stroke({ strokeType: 'serve', strokeSide: 'overhead', predPointScore: '40-40' }),
-      stroke({ playerLabel: 'B' }),
+      stroke({
+        strokeType: "serve",
+        strokeSide: "overhead",
+        predPointScore: "40-40",
+      }),
+      stroke({ playerLabel: "B" }),
     ]);
     const base = {
       rally: r,
-      labels: ['A', 'B'],
+      labels: ["A", "B"],
       gamesThisSet: { A: 0, B: 0 },
       setsWon: { A: 0, B: 0 },
       bestOf: 3,
@@ -469,13 +557,24 @@ test.describe('pressure points', () => {
     expect(pressureFor({ ...base, adScoring: true }).isBreakPoint).toBe(false);
   });
 
-  test('set point needs the game to close the set, match point the match', () => {
+  test("set point needs the game to close the set, match point the match", () => {
     const r = rally([
-      stroke({ strokeType: 'serve', strokeSide: 'overhead', predPointScore: '40-30' }),
-      stroke({ playerLabel: 'B' }),
+      stroke({
+        strokeType: "serve",
+        strokeSide: "overhead",
+        predPointScore: "40-30",
+      }),
+      stroke({ playerLabel: "B" }),
     ]);
     const mk = (games: Record<string, number>, sets: Record<string, number>) =>
-      pressureFor({ rally: r, labels: ['A', 'B'], gamesThisSet: games, setsWon: sets, adScoring: true, bestOf: 3 });
+      pressureFor({
+        rally: r,
+        labels: ["A", "B"],
+        gamesThisSet: games,
+        setsWon: sets,
+        adScoring: true,
+        bestOf: 3,
+      });
 
     // Serving at 5-4, 40-30 — one point from the set.
     expect(mk({ A: 5, B: 4 }, { A: 0, B: 0 }).isSetPoint).toBe(true);
@@ -501,31 +600,31 @@ test.describe('pressure points', () => {
  * final game that runs 40-0 → 40-15 → game: the last two points go to
  * DIFFERENT players, which is exactly what the old fold got wrong.
  */
-test.describe('reconcile: the final point', () => {
-  const LABELS = ['A', 'B'];
+test.describe("reconcile: the final point", () => {
+  const LABELS = ["A", "B"];
 
   // Game 1: A holds to love. Game 2: A leads 40-0, B takes one, A closes it —
   // and that closing point is the one `resolveWinner` cannot see, because it
   // has no successor rally to compare against.
   const WINNERS: PointWinner[] = [
-    { rallyId: 1, server: 'A', winner: 'A', via: 'ladder' },
-    { rallyId: 2, server: 'A', winner: 'A', via: 'ladder' },
-    { rallyId: 3, server: 'A', winner: 'A', via: 'ladder' },
-    { rallyId: 4, server: 'A', winner: 'A', via: 'game' },
-    { rallyId: 5, server: 'B', winner: 'A', via: 'ladder' },
-    { rallyId: 6, server: 'B', winner: 'A', via: 'ladder' },
-    { rallyId: 7, server: 'B', winner: 'A', via: 'ladder' },
-    { rallyId: 8, server: 'B', winner: 'B', via: 'ladder' },
-    { rallyId: 9, server: 'B', winner: null, via: null },
+    { rallyId: 1, server: "A", winner: "A", via: "ladder" },
+    { rallyId: 2, server: "A", winner: "A", via: "ladder" },
+    { rallyId: 3, server: "A", winner: "A", via: "ladder" },
+    { rallyId: 4, server: "A", winner: "A", via: "game" },
+    { rallyId: 5, server: "B", winner: "A", via: "ladder" },
+    { rallyId: 6, server: "B", winner: "A", via: "ladder" },
+    { rallyId: 7, server: "B", winner: "A", via: "ladder" },
+    { rallyId: 8, server: "B", winner: "B", via: "ladder" },
+    { rallyId: 9, server: "B", winner: null, via: null },
   ];
 
-  const gameKeyOf = (id: number) => (id <= 4 ? 'g1' : 'g2');
-  const setKeyOf = () => 's1';
+  const gameKeyOf = (id: number) => (id <= 4 ? "g1" : "g2");
+  const setKeyOf = () => "s1";
 
   const run = (score: { player1: number[]; player2: number[] }) =>
     reconcile({ winners: WINNERS, labels: LABELS, score, gameKeyOf, setKeyOf });
 
-  test('is settled from the entered score, not carried over from the previous point', () => {
+  test("is settled from the entered score, not carried over from the previous point", () => {
     // A won both games. Carrying `lastWinnerInGame` forward across the
     // unresolved point credited game 2 to B, folded 1-1, and refused a match
     // that was entirely correct.
@@ -533,45 +632,45 @@ test.describe('reconcile: the final point', () => {
 
     expect(rec.reason).toBe(null);
     expect(rec.ok).toBe(true);
-    expect(rec.player1Label).toBe('A');
+    expect(rec.player1Label).toBe("A");
     expect(rec.foldedSets).toEqual([{ A: 2 }]);
-    expect(rec.games.map((g) => g.winner)).toEqual(['A', 'A']);
+    expect(rec.games.map((g) => g.winner)).toEqual(["A", "A"]);
   });
 
-  test('settledWinners names the final point, so it is not written as player2', () => {
+  test("settledWinners names the final point, so it is not written as player2", () => {
     const rec = run({ player1: [2], player2: [0] });
 
     // `won_by_player1: winner === player1` reads false for null, so an
     // unsettled final point was recorded as won by player2 in every match.
     expect(rec.settledWinners).toHaveLength(WINNERS.length);
-    expect(rec.settledWinners[8].winner).toBe('A');
+    expect(rec.settledWinners[8].winner).toBe("A");
     // The raw diagnostic still says the vendor stream could not resolve it.
     expect(rec.unresolvedPoints).toEqual([9]);
   });
 
-  test('settling tries both labels but never calls a score neither reproduces ok', () => {
+  test("settling tries both labels but never calls a score neither reproduces ok", () => {
     // The point is that this reads the answer off the entered score, not that
     // it accepts whatever it is given. There are two games here, so no
     // assignment of one point can fold them into three.
     const rec = run({ player1: [2], player2: [1] });
 
     expect(rec.ok).toBe(false);
-    expect(rec.reason).toContain('does not match the entered score');
+    expect(rec.reason).toContain("does not match the entered score");
     if (ACCEPT_UNRECONCILED_FOLD) {
       // Bypass: A=[2] vs entered [2]/[1] is distance 1; B as player1 is 3.
-      expect(rec.player1Label).toBe('A');
-      expect(rec.player1Source).toBe('distance');
+      expect(rec.player1Label).toBe("A");
+      expect(rec.player1Source).toBe("distance");
     }
   });
 
-  test('bypass: a tie on distance with no geometry is still refused', () => {
-    test.skip(!ACCEPT_UNRECONCILED_FOLD, 'Gate 1 is restored');
+  test("bypass: a tie on distance with no geometry is still refused", () => {
+    test.skip(!ACCEPT_UNRECONCILED_FOLD, "Gate 1 is restored");
     // Two resolved games, one each, against an entered 3-3: both mappings are
     // equally wrong, geometry is absent, so there is nothing to name player1
     // from. Writing rows here would be a coin flip on which human owns every
     // statistic, which is the one thing the bypass may not do.
     const split = WINNERS.map((w, i) =>
-      i >= 5 ? { ...w, winner: 'B', via: 'game' as const } : w
+      i >= 5 ? { ...w, winner: "B", via: "game" as const } : w,
     );
     const rec = reconcile({
       winners: split,
@@ -585,7 +684,7 @@ test.describe('reconcile: the final point', () => {
     expect(rec.player1Source).toBeNull();
   });
 
-  test('1-1 is reachable, and still refused — as a mirror, not as a mismatch', () => {
+  test("1-1 is reachable, and still refused — as a mirror, not as a mismatch", () => {
     // 1-1 is what the OLD fold produced for these nine points, and it IS
     // reproducible: credit the trailing point to B. That is precisely why
     // settling cannot be allowed to stop at "some assignment matches" — a
@@ -596,12 +695,14 @@ test.describe('reconcile: the final point', () => {
     const rec = run({ player1: [1], player2: [1] });
 
     expect(rec.ok).toBe(false);
-    expect(rec.reason).toContain('its own mirror');
+    expect(rec.reason).toContain("its own mirror");
   });
 
-  test('a fully resolved match is unaffected', () => {
+  test("a fully resolved match is unaffected", () => {
     const resolved = WINNERS.map((w, i) =>
-      i === WINNERS.length - 1 ? { ...w, winner: 'A', via: 'game' as const } : w
+      i === WINNERS.length - 1
+        ? { ...w, winner: "A", via: "game" as const }
+        : w,
     );
     const rec = reconcile({
       winners: resolved,

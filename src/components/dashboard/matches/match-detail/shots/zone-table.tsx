@@ -35,7 +35,7 @@ export function ZoneTable({
   if (!zoneStats) return null;
 
   return (
-    <div className="surface-card flex flex-col gap-0.5 px-5 pb-2.5 pt-4">
+    <div className="surface-card flex flex-col gap-0.5 px-5 pt-4 pb-2.5">
       <div
         className={`${GRID} items-end border-b border-[var(--border-hairline)] pb-[7px]`}
       >
@@ -66,7 +66,7 @@ export function ZoneTable({
               />
             </span>
             {zs.count === 0 ? (
-              <span className="text-right text-[12px] italic text-[var(--ink-400)]">
+              <span className="text-right text-[12px] text-[var(--ink-400)] italic">
                 —
               </span>
             ) : (

@@ -13,23 +13,23 @@
  * caller must not log it (see the note in useUploadMatchWizard).
  */
 
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from "next/server";
 
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { videoObjectKey } from '@/lib/services/splitstep/object-keys';
-import { mintUploadSas } from '@/lib/services/splitstep/video-url';
-import { getWorkspaceContext } from '@/lib/workspace/active-workspace-server';
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { videoObjectKey } from "@/lib/services/splitstep/object-keys";
+import { mintUploadSas } from "@/lib/services/splitstep/video-url";
+import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import {
   billingWorkspaceFor,
   explainVideoRefusal,
   NO_BILLING_WORKSPACE_REFUSAL,
-} from '@/lib/workspace/types';
+} from "@/lib/workspace/types";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-const LOG = '[splitstep-upload-url]';
+const LOG = "[splitstep-upload-url]";
 
 interface UploadUrlBody {
   matchId?: string;
@@ -49,21 +49,21 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
+    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
   let body: UploadUrlBody;
   try {
     body = (await request.json()) as UploadUrlBody;
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   const { matchId, fileName } = body;
   if (!matchId || !fileName) {
     return NextResponse.json(
-      { error: 'matchId and fileName are required' },
-      { status: 400 }
+      { error: "matchId and fileName are required" },
+      { status: 400 },
     );
   }
 
@@ -72,11 +72,11 @@ export async function POST(request: NextRequest) {
   // that is not yours from one that does not exist — they are different bugs.
   const admin = createAdminClient();
   const { data: match, error: matchError } = await admin
-    .from('matches')
+    .from("matches")
     // `program_id` for the permission check below: NULL is a personal upload,
     // and a program id is whose budget this video will eventually be charged to.
-    .select('id, created_by, program_id')
-    .eq('id', matchId)
+    .select("id, created_by, program_id")
+    .eq("id", matchId)
     .maybeSingle();
 
   if (matchError) {
@@ -84,13 +84,16 @@ export async function POST(request: NextRequest) {
       matchId,
       error: matchError.message,
     });
-    return NextResponse.json({ error: 'Could not load match' }, { status: 500 });
+    return NextResponse.json(
+      { error: "Could not load match" },
+      { status: 500 },
+    );
   }
 
   // Same 404 for missing and not-yours: telling an unauthorized caller that a
   // match id exists is itself a disclosure.
   if (!match || match.created_by !== user.id) {
-    return NextResponse.json({ error: 'No such match' }, { status: 404 });
+    return NextResponse.json({ error: "No such match" }, { status: 404 });
   }
 
   // May this person send video for the workspace this match belongs to?
@@ -123,13 +126,13 @@ export async function POST(request: NextRequest) {
   const workspaceContext = await getWorkspaceContext();
   const billingWorkspace = billingWorkspaceFor(
     workspaceContext?.available ?? [],
-    (match.program_id as string | null) ?? null // NULL = personal upload
+    (match.program_id as string | null) ?? null, // NULL = personal upload
   );
 
   if (!billingWorkspace) {
     return NextResponse.json(
       { error: NO_BILLING_WORKSPACE_REFUSAL },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
@@ -162,8 +165,8 @@ export async function POST(request: NextRequest) {
     blobName = videoObjectKey({ userId: user.id, matchId, fileName });
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unsupported video file' },
-      { status: 400 }
+      { error: err instanceof Error ? err.message : "Unsupported video file" },
+      { status: 400 },
     );
   }
 
@@ -177,8 +180,8 @@ export async function POST(request: NextRequest) {
       error: err instanceof Error ? err.message : String(err),
     });
     return NextResponse.json(
-      { error: 'Video upload is not configured on this deployment.' },
-      { status: 503 }
+      { error: "Video upload is not configured on this deployment." },
+      { status: 503 },
     );
   }
 
@@ -195,9 +198,9 @@ export async function POST(request: NextRequest) {
   // selects the row id back. Deliberately does not touch `status` — the browser
   // owns that transition.
   const { error: recordError } = await admin
-    .from('processing_jobs')
+    .from("processing_jobs")
     .update({ video_object_key: blobName })
-    .eq('match_id', matchId);
+    .eq("match_id", matchId);
 
   if (recordError) {
     // Not fatal. A blob we cannot name is recoverable via the sweeper; refusing

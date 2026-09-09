@@ -31,7 +31,7 @@ import type { DbJoinRequestRow } from "@/lib/data/join-requests-server";
 const ROSTER_PATH = "/dashboard/team/roster";
 
 export async function resolveJoinRequest(
-  requestId: string
+  requestId: string,
 ): Promise<ActionResult> {
   const workspace = await getWorkspaceContext();
   if (!workspace || workspace.active.kind !== "team") {
@@ -88,7 +88,7 @@ export async function resolveJoinRequest(
  * belongs to the program the coach is in — the client passes only an id.
  */
 export async function approveJoinRequest(
-  requestId: string
+  requestId: string,
 ): Promise<InviteResult> {
   const workspace = await getWorkspaceContext();
   if (!workspace || workspace.active.kind !== "team") {
@@ -107,7 +107,7 @@ export async function approveJoinRequest(
   }
 
   const request = ((data ?? []) as DbJoinRequestRow[]).find(
-    (row) => row.id === requestId
+    (row) => row.id === requestId,
   );
   if (!request) {
     // Handled by someone else, declined already, or never this program's to

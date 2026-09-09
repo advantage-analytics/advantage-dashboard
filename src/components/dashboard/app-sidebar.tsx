@@ -59,7 +59,7 @@ export function AppSidebar() {
       className={cn(
         "relative z-40 flex shrink-0 flex-col overflow-hidden p-3",
         "border-r border-[var(--border-hairline)] bg-[var(--surface-card)]",
-        "transition-[width] duration-200 ease-[var(--ease-primary)] motion-reduce:transition-none"
+        "transition-[width] duration-200 ease-[var(--ease-primary)] motion-reduce:transition-none",
       )}
       style={{
         width: expanded ? PANEL_WIDTH : RAIL_WIDTH,
@@ -114,7 +114,11 @@ export function AppSidebar() {
         />
       </div>
 
-      <ViewerFooter expanded={expanded} href={footerHref} active={onOwnProfile} />
+      <ViewerFooter
+        expanded={expanded}
+        href={footerHref}
+        active={onOwnProfile}
+      />
     </nav>
   );
 }
@@ -174,7 +178,7 @@ function ViewerFooter({
               : "text-[var(--ink-700)]",
             expanded
               ? "opacity-100 delay-[80ms] duration-[120ms]"
-              : "opacity-0 delay-0 duration-[80ms]"
+              : "opacity-0 delay-0 duration-[80ms]",
           )}
         >
           {viewer.name}

@@ -89,14 +89,14 @@ export function seedScoreForm(preset: EventPreset): ScoreFormState {
  */
 export function toRecordResultInput(
   preset: EventPreset,
-  state: ScoreFormState
+  state: ScoreFormState,
 ): RecordResultInput {
   const played = state.playerScores
     .map((_, index) => index)
     .filter(
       (index) =>
         state.playerScores[index] !== null ||
-        state.opponentScores[index] !== null
+        state.opponentScores[index] !== null,
     );
 
   return {
@@ -114,7 +114,7 @@ export function toRecordResultInput(
     theirGames: played.map((index) => state.opponentScores[index] ?? 0),
     ourTiebreaks: played.map((index) => state.playerTiebreaks[index] ?? null),
     theirTiebreaks: played.map(
-      (index) => state.opponentTiebreaks[index] ?? null
+      (index) => state.opponentTiebreaks[index] ?? null,
     ),
   };
 }

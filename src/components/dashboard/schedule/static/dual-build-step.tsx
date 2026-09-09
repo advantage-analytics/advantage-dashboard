@@ -144,7 +144,7 @@ export const FORMATS: readonly DualFormat[] = EVENT_FORMATS.map((format) => ({
  * `docs/ui-revamp-guardrails.md` §3.1.
  */
 export function formatOptions(
-  formats: readonly DualFormat[]
+  formats: readonly DualFormat[],
 ): MenuOption<EventFormatValue>[] {
   return formats.map((format) => ({
     value: format.value,
@@ -205,7 +205,6 @@ interface DualDraft {
 /** `2b`'s nine courts, in the order it draws them. */
 const SINGLES_SLOTS = ["S1", "S2", "S3", "S4", "S5", "S6"];
 const DOUBLES_SLOTS = ["D1", "D2", "D3"];
-
 
 /**
  * Six singles and three doubles, seeded from the ladder where there is one.
@@ -368,17 +367,19 @@ function formatFor(value: EventFormatValue | undefined): DualFormat {
  * so the seed→payload path is importable without mounting the hook. See
  * `tests/entry-round-trip.spec.ts`.
  */
-export function seededIdsFromSeed(initial?: DualDraftSeed): Map<string, string> {
+export function seededIdsFromSeed(
+  initial?: DualDraftSeed,
+): Map<string, string> {
   return new Map(
     (initial?.lines ?? [])
       .filter((row): row is DualLineSeed & { id: string } => Boolean(row.id))
-      .map((row) => [row.key, row.id] as const)
+      .map((row) => [row.key, row.id] as const),
   );
 }
 
 /** Which courts are settled, and how — see `DualLineSeed.locked`. */
 export function lockedByKeyFromSeed(
-  initial?: DualDraftSeed
+  initial?: DualDraftSeed,
 ): Record<string, "played" | "forfeited"> {
   const locked: Record<string, "played" | "forfeited"> = {};
   for (const row of initial?.lines ?? []) {
@@ -389,19 +390,19 @@ export function lockedByKeyFromSeed(
 
 /** A settled line's forfeit exactly as it was saved — see `DualLineSeed.forfeit`. */
 export function lockedForfeitFromSeed(
-  initial?: DualDraftSeed
+  initial?: DualDraftSeed,
 ): Map<string, "ours" | "theirs" | null> {
   return new Map(
     (initial?.lines ?? [])
       .filter((row) => row.locked)
-      .map((row) => [row.key, row.forfeit ?? null] as const)
+      .map((row) => [row.key, row.forfeit ?? null] as const),
   );
 }
 
 /** The nine courts, seeded from the ladder and overlaid with `initial.lines`. */
 export function seedDualLines(
   ladder: LadderPlayer[],
-  initial?: DualDraftSeed
+  initial?: DualDraftSeed,
 ): LineupLine[] {
   // A seed that states its lines is a lineup that was SAVED, and a court it
   // does not mention is a court that has no saved row — because the coach
@@ -415,7 +416,13 @@ export function seedDualLines(
     const seed = initial?.lines?.find((row) => row.key === line.key);
     if (!seed) {
       if (!loaded) return line;
-      return { ...line, ourIds: [], ourLabels: [], theirLabels: [], forfeit: null };
+      return {
+        ...line,
+        ourIds: [],
+        ourLabels: [],
+        theirLabels: [],
+        forfeit: null,
+      };
     }
     const ourLabels = seed.ourLabels ?? line.ourLabels;
     return {
@@ -447,7 +454,7 @@ export function seedDualLines(
  */
 export function filledDualLines(
   lines: LineupLine[],
-  lockedByKey: Record<string, "played" | "forfeited">
+  lockedByKey: Record<string, "played" | "forfeited">,
 ): { line: LineupLine; ours: string[]; theirs: string[] }[] {
   return lines
     .map((line) => ({
@@ -462,7 +469,7 @@ export function filledDualLines(
         // A settled line always submits, whatever is on it. An opponent
         // forfeit names nobody on either side, and dropping it here would
         // submit a lineup missing a line the save is not allowed to delete.
-        lockedByKey[row.line.key] !== undefined
+        lockedByKey[row.line.key] !== undefined,
     );
 }
 
@@ -478,7 +485,7 @@ export function filledDualLines(
 export function buildDualPayloadLines(
   filled: { line: LineupLine; ours: string[]; theirs: string[] }[],
   seededIds: Map<string, string>,
-  lockedForfeit: Map<string, "ours" | "theirs" | null>
+  lockedForfeit: Map<string, "ours" | "theirs" | null>,
 ): LineupLineInput[] {
   return filled.map((row) => ({
     // Absent on a line the coach typed into an empty court — a fresh line
@@ -502,7 +509,7 @@ export function buildDualPayloadLines(
     opponentLabels: row.line.forfeit === null ? row.theirs : [],
     // A settled line hands back the side it was saved with, untouched.
     forfeit: lockedForfeit.has(row.line.key)
-      ? lockedForfeit.get(row.line.key) ?? null
+      ? (lockedForfeit.get(row.line.key) ?? null)
       : row.line.forfeit,
   }));
 }
@@ -550,7 +557,7 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
     // Never "Hard": a court type nobody stated is a fact about the fixture we
     // would be inventing.
     surface:
-      initial?.surface !== undefined ? initial.surface : defaultSurface ?? "",
+      initial?.surface !== undefined ? initial.surface : (defaultSurface ?? ""),
     format: formatFor(initial?.format),
   }));
 
@@ -567,14 +574,11 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
    * on a court nobody meant, which is a save that re-points a played line at
    * another player.
    */
-  const seededIds = useMemo(
-    () => seededIdsFromSeed(initial),
-    [initial?.lines]
-  );
+  const seededIds = useMemo(() => seededIdsFromSeed(initial), [initial?.lines]);
 
   const lockedByKey = useMemo(
     () => lockedByKeyFromSeed(initial),
-    [initial?.lines]
+    [initial?.lines],
   );
 
   /**
@@ -586,12 +590,12 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
    */
   const lockedForfeit = useMemo(
     () => lockedForfeitFromSeed(initial),
-    [initial?.lines]
+    [initial?.lines],
   );
 
   // Seeded once. See the header.
   const [lines, setLines] = useState<LineupLine[]>(() =>
-    seedDualLines(ladder, initial)
+    seedDualLines(ladder, initial),
   );
 
   /**
@@ -610,7 +614,7 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
   /** The ladder as this flow now knows it — see `extraPlayers`. */
   const roster = useMemo(
     () => (extraPlayers.length === 0 ? ladder : [...ladder, ...extraPlayers]),
-    [ladder, extraPlayers]
+    [ladder, extraPlayers],
   );
 
   function edit(patch: Partial<DualDraft>) {
@@ -661,7 +665,7 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
   // thing the popups are given — see `OpponentPool`.
   const pool = useMemo(
     () => opponentPoolFor(schoolKey, schoolName, fetchedRoster),
-    [schoolKey, schoolName, fetchedRoster]
+    [schoolKey, schoolName, fetchedRoster],
   );
 
   /**
@@ -690,7 +694,7 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
       setExtraPlayers((current) =>
         current.some((player) => player.userId === added.userId)
           ? current
-          : [...current, added]
+          : [...current, added],
       );
     }
     setLines((current) =>
@@ -701,16 +705,16 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
               ourLabels: [value],
               ourIds: rosterIdsForLabels(value, against),
             }
-          : line
-      )
+          : line,
+      ),
     );
   }
 
   function editTheirLabels(key: string, value: string) {
     setLines((current) =>
       current.map((line) =>
-        line.key === key ? { ...line, theirLabels: [value] } : line
-      )
+        line.key === key ? { ...line, theirLabels: [value] } : line,
+      ),
     );
   }
 
@@ -739,8 +743,8 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
               ourLabels: [],
               theirLabels: [],
             }
-          : line
-      )
+          : line,
+      ),
     );
   }
 
@@ -1007,14 +1011,14 @@ export function DualLineupStep({
   const [added, setAdded] = useState<LadderPlayer[]>([]);
   const roster = useMemo(
     () => (added.length === 0 ? ladder : [...ladder, ...added]),
-    [ladder, added]
+    [ladder, added],
   );
 
   function onAddPlayer(key: string, player: LadderPlayer, value: string) {
     setAdded((current) =>
       current.some((entry) => entry.userId === player.userId)
         ? current
-        : [...current, player]
+        : [...current, player],
     );
     onOurLabels(key, value, player);
   }
@@ -1220,7 +1224,8 @@ function LineupBlock({
   );
 }
 
-const LINE_GRID = "grid grid-cols-[34px_1fr_20px_1fr_70px] items-center gap-2.5";
+const LINE_GRID =
+  "grid grid-cols-[34px_1fr_20px_1fr_70px] items-center gap-2.5";
 
 /**
  * The rule and hover wash under every row but the last — `2b` draws the last
@@ -1370,13 +1375,10 @@ function LineRow({
         // row, so the row is what it is positioned against.
         "relative",
         active || picking ? "z-20" : null,
-        rowRule(last)
+        rowRule(last),
       )}
     >
-      <span
-        className="mono text-[11px]"
-        style={{ color: "var(--ink-600)" }}
-      >
+      <span className="mono text-[11px]" style={{ color: "var(--ink-600)" }}>
         {line.slot}
       </span>
 
@@ -1467,9 +1469,9 @@ function LineRow({
           type="button"
           onClick={() => onForfeit(line.key, true)}
           className={cn(
-            "text-micro rounded-[3px] text-right outline-none transition-opacity duration-[var(--duration-hover)]",
+            "text-micro rounded-[3px] text-right transition-opacity duration-[var(--duration-hover)] outline-none",
             "hover:opacity-100 focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)]",
-            active ? "opacity-100" : "opacity-0"
+            active ? "opacity-100" : "opacity-0",
           )}
           style={{ color: "var(--blue)" }}
         >

@@ -8,7 +8,10 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { MatchDataBlock } from "@/components/dashboard/matches/match-detail/match-data-block";
 import { RailInsightCard } from "@/components/dashboard/matches/match-detail/rail-insight-card";
-import { shortMonthDate, formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
+import {
+  shortMonthDate,
+  formatClock,
+} from "@/components/dashboard/matches/match-detail/format-clock";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { cn } from "@/lib/utils";
 
@@ -73,7 +76,11 @@ function FactRow({
   );
 }
 
-export function MatchRail({ aiSummary, film, isDerived = false }: MatchRailProps) {
+export function MatchRail({
+  aiSummary,
+  film,
+  isDerived = false,
+}: MatchRailProps) {
   const { match, points } = useMatchData();
   const sides = useMatchSides();
 
@@ -199,7 +206,7 @@ export function MatchRail({ aiSummary, film, isDerived = false }: MatchRailProps
 
           {film === "note-swingvision" || film === "note-neutral" ? (
             <div className="flex flex-col gap-[5px] rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3 py-[11px]">
-              <span className="text-[11px] leading-[1.5] text-[var(--ink-700)] [text-wrap:pretty]">
+              <span className="text-[11px] leading-[1.5] [text-wrap:pretty] text-[var(--ink-700)]">
                 {film === "note-swingvision"
                   ? "No video on this match — the stats came from the SwingVision export."
                   : "No video available for this match."}

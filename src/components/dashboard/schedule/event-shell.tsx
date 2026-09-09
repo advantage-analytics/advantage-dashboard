@@ -34,14 +34,14 @@ export function EventShell({
         className={
           flush
             ? "flex min-h-0 flex-1 overflow-hidden"
-            : "flex min-h-0 flex-1 flex-col overflow-y-auto px-12 pb-8 pt-[26px]"
+            : "flex min-h-0 flex-1 flex-col overflow-y-auto px-12 pt-[26px] pb-8"
         }
       >
         {children}
       </div>
 
       {footer ? (
-        <div className="flex shrink-0 items-center gap-3 border-t border-[var(--border-hairline)] px-12 pb-[22px] pt-4">
+        <div className="flex shrink-0 items-center gap-3 border-t border-[var(--border-hairline)] px-12 pt-4 pb-[22px]">
           {footer}
         </div>
       ) : null}

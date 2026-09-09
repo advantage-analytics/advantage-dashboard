@@ -56,8 +56,7 @@ export const focusRingCls = "focus-visible:outline-none";
  * Source: SKILL.md › Component Patterns › Chrome Icon Button, h-7 w-7 rounded-lg,
  * text-muted #888888 on a #F5F5F5 hover.
  */
-export const dangerIconBtnCls =
-  `h-7 w-7 rounded-lg flex items-center justify-center text-[#888888] hover:bg-[#F5F5F5] hover:text-[#E51837] transition-colors duration-200 ${focusRingCls}`;
+export const dangerIconBtnCls = `h-7 w-7 rounded-lg flex items-center justify-center text-[#888888] hover:bg-[#F5F5F5] hover:text-[#E51837] transition-colors duration-200 ${focusRingCls}`;
 
 /**
  * The note strip — one quiet sentence on a surface-subtle wash, 13px glyph
@@ -77,7 +76,8 @@ export const noteStripCls =
 export const floatMenuCls =
   "rounded-[var(--radius-dropdown)] border-[var(--border-hairline)] bg-white p-1.5 shadow-[var(--shadow-dropdown)] flex flex-col";
 
-export const floatMenuLabelCls = "px-2.5 pb-1 pt-1.5 text-[11px] text-[var(--ink-400)]";
+export const floatMenuLabelCls =
+  "px-2.5 pb-1 pt-1.5 text-[11px] text-[var(--ink-400)]";
 
 export const floatMenuRowCls =
   "flex h-[38px] w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-2.5 text-left transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] focus-visible:outline-none focus-visible:bg-[var(--surface-subtle)]";

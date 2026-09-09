@@ -103,7 +103,10 @@ const PHASE_INK: Record<UploadState["phase"], string> = {
   failed: "#E51837",
 };
 
-const PHASE_LABEL: Record<Exclude<UploadState["phase"], "uploading">, string> = {
+const PHASE_LABEL: Record<
+  Exclude<UploadState["phase"], "uploading">,
+  string
+> = {
   done: "Submitting…",
   submitted: "Submitted",
   submit_failed: "Not submitted",
@@ -128,7 +131,7 @@ export function UploadMatchFlow({
   // pinned bar's Change menu swaps it for another line of the same event
   // (design 10a) without leaving the page — the file already dropped stays.
   const [preset, setPreset] = useState<EventPreset | null>(
-    initialPreset ?? draft?.preset ?? null
+    initialPreset ?? draft?.preset ?? null,
   );
   // A team upload came from a line and goes back to it. A personal one has the
   // matches list, which is where its match will appear.
@@ -142,7 +145,7 @@ export function UploadMatchFlow({
   // the second silently replaced the first on screen while both ran, and Cancel
   // only ever reached the newest one.
   const [uploads, setUploads] = useState<Map<string, UploadState>>(
-    () => new Map()
+    () => new Map(),
   );
 
   const handleVideoUpload = useCallback((event: VideoUploadEvent) => {
@@ -180,8 +183,8 @@ export function UploadMatchFlow({
         event.kind === "progress"
           ? { progress: event.progress }
           : event.kind === "failed"
-          ? { phase: "failed", error: event.error, cancel: undefined }
-          : { phase: event.kind, cancel: undefined };
+            ? { phase: "failed", error: event.error, cancel: undefined }
+            : { phase: event.kind, cancel: undefined };
 
       return new Map(prev).set(event.matchId, { ...current, ...patch });
     });
@@ -201,7 +204,8 @@ export function UploadMatchFlow({
           // are still running, which is exactly the bug this keying fixes.
           setUploads((prev) => {
             const next = new Map(prev);
-            for (const [id, u] of next) if (u.phase !== "uploading") next.delete(id);
+            for (const [id, u] of next)
+              if (u.phase !== "uploading") next.delete(id);
             return next;
           });
           setRunId((n) => n + 1);
@@ -248,7 +252,7 @@ function UploadMatchSuccess({
     (u) =>
       u.phase === "failed" ||
       u.phase === "cancelled" ||
-      u.phase === "submit_failed"
+      u.phase === "submit_failed",
   );
   const busy = uploading.length > 0 || uploads.some((u) => u.phase === "done");
 
@@ -283,7 +287,7 @@ function UploadMatchSuccess({
       : window.location.pathname + window.location.search;
 
   return (
-    <div className={`${CONTENT_CLS} pb-16 pt-10`}>
+    <div className={`${CONTENT_CLS} pt-10 pb-16`}>
       <div className="animate-fadeIn flex flex-col items-center gap-3 rounded-[14px] border border-[#F3F3F3] bg-white px-10 py-12 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
         <div
           className="flex size-11 items-center justify-center rounded-full"
@@ -313,11 +317,11 @@ function UploadMatchSuccess({
               ? `Keep this tab open until all ${uploading.length} videos finish. The matches themselves are already safe.`
               : "Keep this tab open until the video finishes. The match itself is already safe."
             : problems.length > 0
-            ? problems[0].error ??
-              (problems[0].phase === "submit_failed"
-                ? "Your video is stored, but it could not be sent for analysis."
-                : "The video upload did not finish.")
-            : "Sent for analysis. Results are added as soon as they're ready."}
+              ? (problems[0].error ??
+                (problems[0].phase === "submit_failed"
+                  ? "Your video is stored, but it could not be sent for analysis."
+                  : "The video upload did not finish."))
+              : "Sent for analysis. Results are added as soon as they're ready."}
         </p>
 
         {/* Prominent keep-open warning — body-size text so it cannot be missed.
@@ -335,8 +339,8 @@ function UploadMatchSuccess({
               {uploading.length > 1
                 ? "your videos are uploading"
                 : "your video is uploading"}
-              . You can navigate within the app, but closing this tab will
-              stop the upload.
+              . You can navigate within the app, but closing this tab will stop
+              the upload.
             </p>
           </div>
         )}
@@ -349,7 +353,9 @@ function UploadMatchSuccess({
             {uploads.map((u) => (
               <li key={u.matchId} className="flex flex-col gap-1.5">
                 <div className="flex items-baseline justify-between gap-3 text-[11px]">
-                  <span className="min-w-0 truncate text-[#525252]">{u.fileName}</span>
+                  <span className="min-w-0 truncate text-[#525252]">
+                    {u.fileName}
+                  </span>
                   <span
                     className="shrink-0 tabular-nums"
                     style={{ color: PHASE_INK[u.phase] }}
@@ -362,7 +368,7 @@ function UploadMatchSuccess({
 
                 <AnalysisProgressTrack
                   percent={
-                    u.phase === "uploading" ? u.progress?.pct ?? 0 : 100
+                    u.phase === "uploading" ? (u.progress?.pct ?? 0) : 100
                   }
                   // `done` keeps the sheen: bytes have landed but the job is
                   // still being handed over, and a still bar would read as
@@ -421,7 +427,11 @@ function UploadMatchSuccess({
               />
             </a>
           ) : (
-            <button type="button" onClick={onUploadAnother} className={advButton("ghost", "md")}>
+            <button
+              type="button"
+              onClick={onUploadAnother}
+              className={advButton("ghost", "md")}
+            >
               Upload another
             </button>
           )}
@@ -443,8 +453,8 @@ function UploadMatchSuccess({
                 // it runs from this tab too.
                 "this upload is still finishing here"
               : uploading.length > 1
-              ? "your videos are still uploading here"
-              : "your video is still uploading here"}
+                ? "your videos are still uploading here"
+                : "your video is still uploading here"}
             .
           </p>
         )}
@@ -457,8 +467,9 @@ function UploadMatchSuccess({
             or its cancel button. The old line claimed leaving cancelled it,
             which was wrong in both directions. */}
         {busy && (
-          <p className="mt-1 text-center text-[10px] uppercase tracking-[2px] text-[#CCCCCC]">
-            Closing this tab stops {uploading.length > 1 ? "them" : "it"} · leaving this page does not
+          <p className="mt-1 text-center text-[10px] tracking-[2px] text-[#CCCCCC] uppercase">
+            Closing this tab stops {uploading.length > 1 ? "them" : "it"} ·
+            leaving this page does not
           </p>
         )}
       </div>
@@ -495,7 +506,10 @@ function FooterMeter({
   // priced video moves it before the job does — as its own segment, so the
   // cost can be told from the balance.
   const pendingFraction = priced
-    ? Math.max(0, usageFraction(usedSeconds + selectedSeconds, capSeconds) - usedFraction)
+    ? Math.max(
+        0,
+        usageFraction(usedSeconds + selectedSeconds, capSeconds) - usedFraction,
+      )
     : 0;
   const cap = formatHoursCap(capSeconds);
 
@@ -519,10 +533,10 @@ function FooterMeter({
           style={{ width: `${pendingFraction * 100}%` }}
         />
       </span>
-      <span className="mono tabular whitespace-nowrap text-[11px] text-[var(--ink-500)]">
+      <span className="mono tabular text-[11px] whitespace-nowrap text-[var(--ink-500)]">
         {priced
           ? `Spends ${formatHoursTenths(selectedSeconds)} h · ${formatHoursTenths(
-              Math.max(0, remainingSeconds - selectedSeconds)
+              Math.max(0, remainingSeconds - selectedSeconds),
             )} of ${cap} h left after`
           : `${formatHoursTenths(remainingSeconds)} of ${cap} h left · ${suffix}`}
       </span>
@@ -571,13 +585,13 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
       createdRef.current = true;
       onCreated(matchId);
     },
-    [onCreated]
+    [onCreated],
   );
   const handleOpenChange = useCallback(
     (open: boolean) => {
       if (!open && !createdRef.current) router.push(exitHref);
     },
-    [router, exitHref]
+    [router, exitHref],
   );
 
   const {
@@ -648,13 +662,15 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     const id = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(id);
   }, []);
-  const idleMinutes = lastChangedAt ? Math.floor((now - lastChangedAt) / 60_000) : 0;
+  const idleMinutes = lastChangedAt
+    ? Math.floor((now - lastChangedAt) / 60_000)
+    : 0;
   usePublishHeaderStatus(
     draftSaving
       ? "Saving…"
       : idleMinutes >= 1
         ? `Draft saved · ${idleMinutes} min ago`
-        : "Draft saved"
+        : "Draft saved",
   );
 
   /**
@@ -680,7 +696,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
       e.preventDefault();
       setIsOver(true);
     },
-    [setIsOver]
+    [setIsOver],
   );
   const onDragLeave = useCallback(() => setIsOver(false), [setIsOver]);
 
@@ -692,7 +708,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
       setIsOver(false);
       onVideoPick(e.dataTransfer.files?.[0] ?? null);
     },
-    [setIsOver, onVideoPick]
+    [setIsOver, onVideoPick],
   );
   const onVideoFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -700,7 +716,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
       // So picking the same file again after Remove still fires a change.
       e.target.value = "";
     },
-    [onVideoPick]
+    [onVideoPick],
   );
 
   // The two camera answers, from the trim step. Booleans only — the fields
@@ -709,7 +725,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     (field: "fixedCamera" | "initialTopPlayerIsPlayer1", value: boolean) => {
       handleInputChange(field, value);
     },
-    [handleInputChange]
+    [handleInputChange],
   );
 
   /**
@@ -728,10 +744,13 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   }, [whoPlayed.subject, preset, formData.playerName]);
 
   const continueHandler =
-    step === "provider" ? handleProviderContinue
-    : step === "file" ? handleFileContinue
-    : step === "trim" ? handleTrimContinue
-    : handleCreateMatch;
+    step === "provider"
+      ? handleProviderContinue
+      : step === "file"
+        ? handleFileContinue
+        : step === "trim"
+          ? handleTrimContinue
+          : handleCreateMatch;
 
   const currentStepIndex = stepOrder.indexOf(step);
   // A preset IS the line it came from; the name is what reads at the use
@@ -788,17 +807,19 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     if (isProcessingProvider) {
       if (!formData.playerName.trim())
         labels.push(
-          whoPlayed.subject?.kind === "roster" ? "player name" : "your name"
+          whoPlayed.subject?.kind === "roster" ? "player name" : "your name",
         );
       if (formData.adScoring === undefined) labels.push("scoring");
       if (formData.fixedCamera === undefined) labels.push("camera");
-      if (formData.initialTopPlayerIsPlayer1 === undefined) labels.push(CAMERA_POSITION_LABEL);
+      if (formData.initialTopPlayerIsPlayer1 === undefined)
+        labels.push(CAMERA_POSITION_LABEL);
     }
     // Confirm has its own sentence for the case where only the camera answers
     // are outstanding, so the shape is decided here beside the list rather than
     // re-derived from label strings three hundred lines away.
     const onlyVideoAnswers =
-      labels.length > 0 && labels.every((l) => l === "camera" || l === CAMERA_POSITION_LABEL);
+      labels.length > 0 &&
+      labels.every((l) => l === "camera" || l === CAMERA_POSITION_LABEL);
     return { labels, onlyVideoAnswers };
   }, [
     formData.date,
@@ -819,13 +840,17 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     // and — in a team workspace — a player are chosen, and the fields themselves
     // are the sentence. The hook refuses Continue on the same two conditions.
     provider:
-      !selectedProvider || (whoPlayed.required && !whoPlayed.subject) ? "" : null,
+      !selectedProvider || (whoPlayed.required && !whoPlayed.subject)
+        ? ""
+        : null,
     // Steps 2 and 3 say nothing either: the zone, the row and the two
     // questions carry their own state, and Continue sleeps at 40% until a file
     // passes the check — and, on the trim step, until the window is wide
     // enough and both camera answers are given.
     file:
-      !uploadedFile || isProbing || isUploading || parsingState.isParsing ? "" : null,
+      !uploadedFile || isProbing || isUploading || parsingState.isParsing
+        ? ""
+        : null,
     trim:
       !uploadedFile?.file ||
       isProbing ||
@@ -837,10 +862,10 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     match: !uploadedFile
       ? "Pick the file again on step 2"
       : isUploading
-      ? "Validating file…"
-      : isCreating
-      ? "Saving…"
-      : null,
+        ? "Validating file…"
+        : isCreating
+          ? "Saving…"
+          : null,
   };
 
   const stepBusy = busyLabel[step];
@@ -880,11 +905,16 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
         /* Only where hours are spent, and only once the allowance is known:
            an export costs nothing, and a bar that has to explain itself is
            a bar that shouldn't be there. */
-        isProcessingProvider && remainingQuotaSeconds !== undefined && (
+        isProcessingProvider &&
+        remainingQuotaSeconds !== undefined && (
           <FooterMeter
             remainingSeconds={remainingQuotaSeconds}
             capSeconds={quotaCapSeconds}
-            suffix={workspaces.active.kind === "team" ? "team hours" : "resets on the 1st"}
+            suffix={
+              workspaces.active.kind === "team"
+                ? "team hours"
+                : "resets on the 1st"
+            }
             /* Only once there is a video to price. A resumed draft keeps its
                trim window in localStorage but cannot keep the File, so the
                handles alone would have the meter costing a video that is no
@@ -900,32 +930,32 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
            offender. The earlier steps carry their own state on the page, so
            it says nothing there. */
         step === "match" &&
-          (stepBusy ? (
-            <span className="text-[11px] text-[var(--ink-500)]">{stepBusy}</span>
-          ) : gatedByMissing ? (
-            <span className="whitespace-nowrap text-[11px] text-[var(--ink-500)]">
-              <span className="font-medium tabular-nums text-[var(--ink-900)]">
-                {missing.labels.length}
-              </span>{" "}
-              to go — {missing.labels.slice(0, 3).join(" · ")}
-              {/* Naming all six wrapped this bar onto two lines and squeezed
+        (stepBusy ? (
+          <span className="text-[11px] text-[var(--ink-500)]">{stepBusy}</span>
+        ) : gatedByMissing ? (
+          <span className="text-[11px] whitespace-nowrap text-[var(--ink-500)]">
+            <span className="font-medium text-[var(--ink-900)] tabular-nums">
+              {missing.labels.length}
+            </span>{" "}
+            to go — {missing.labels.slice(0, 3).join(" · ")}
+            {/* Naming all six wrapped this bar onto two lines and squeezed
                   the meter beside it. Three is enough to start on; the count
                   carries the rest, and the fields themselves are marked. */}
-              {missing.labels.length > 3
-                ? ` +${missing.labels.length - 3} more`
-                : ""}
-            </span>
-          ) : workspaces.available.length > 1 ? (
-            /* Only when there is a choice to get wrong. `program_id` on the
+            {missing.labels.length > 3
+              ? ` +${missing.labels.length - 3} more`
+              : ""}
+          </span>
+        ) : workspaces.available.length > 1 ? (
+          /* Only when there is a choice to get wrong. `program_id` on the
                row follows this exact workspace, and the jobs route bills
                whichever one it names. */
-            <span className="text-[11px] text-[var(--ink-500)]">
-              Saves in{" "}
-              <span className="font-medium text-[var(--ink-900)]">
-                {workspaces.active.name}
-              </span>
+          <span className="text-[11px] text-[var(--ink-500)]">
+            Saves in{" "}
+            <span className="font-medium text-[var(--ink-900)]">
+              {workspaces.active.name}
             </span>
-          ) : null)
+          </span>
+        ) : null)
       }
       secondary={
         <button
@@ -983,7 +1013,9 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={isProcessingProvider ? onVideoDrop : handleDrop}
-          onFileChange={isProcessingProvider ? onVideoFileChange : handleFileChange}
+          onFileChange={
+            isProcessingProvider ? onVideoFileChange : handleFileChange
+          }
           onRemove={isProcessingProvider ? handleRemoveVideo : handleRemoveFile}
         />
       )}
@@ -1013,14 +1045,16 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
           onScoreChange={handleScoreChange}
           onTiebreakChange={handleTiebreakChange}
           isProcessingProvider={isProcessingProvider}
-          workspaceKind={workspaces.active.kind === "team" ? "team" : "personal"}
+          workspaceKind={
+            workspaces.active.kind === "team" ? "team" : "personal"
+          }
           subject={{
             name: formData.playerName || whoPlayed.uploaderName || "You",
             isSelf: !preset && whoPlayed.subject?.kind !== "roster",
             playerId:
               whoPlayed.subject?.kind === "roster"
                 ? whoPlayed.subject.playerId
-                : preset?.playerUserId ?? null,
+                : (preset?.playerUserId ?? null),
             userId: workspaces.viewer.id,
           }}
           preset={preset}

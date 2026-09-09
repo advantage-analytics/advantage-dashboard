@@ -47,7 +47,11 @@ export function HeaderGreeting({
   /** "Personal" — passed rather than typed here so the slot cannot drift from the switcher. */
   workspaceName: string;
 }) {
-  const dateText = useSyncExternalStore(subscribe, readBrowserDate, readServerDate);
+  const dateText = useSyncExternalStore(
+    subscribe,
+    readBrowserDate,
+    readServerDate,
+  );
 
   return (
     <span className="inline-flex items-baseline gap-2">
@@ -62,7 +66,7 @@ export function HeaderGreeting({
         <span
           className={cn(
             "tabular transition-opacity duration-300",
-            dateText ? "opacity-100" : "opacity-0"
+            dateText ? "opacity-100" : "opacity-0",
           )}
         >
           {dateText ? ` · ${dateText}` : ""}

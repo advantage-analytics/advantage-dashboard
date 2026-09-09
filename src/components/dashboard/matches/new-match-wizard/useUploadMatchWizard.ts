@@ -66,7 +66,7 @@ import {
   loadUploadedFileFromStorage,
   saveFormDataToStorage,
   STORAGE_KEYS,
-  MatchMetadata
+  MatchMetadata,
 } from "./utils";
 
 /**
@@ -123,7 +123,7 @@ function explainWriteFailure(error: {
  */
 async function rollbackCreatedMatch(
   supabase: ReturnType<typeof createClient>,
-  matchId: string
+  matchId: string,
 ): Promise<boolean> {
   const { data, error } = await supabase
     .from("matches")
@@ -162,7 +162,7 @@ async function rollbackAndAnnounceFailure(params: {
         ...(matchIsViewable ? { matchId } : {}),
         error,
       },
-    })
+    }),
   );
 }
 
@@ -174,7 +174,7 @@ async function rollbackAndAnnounceFailure(params: {
  */
 const DEFAULT_PROVIDER_ID: ProviderId | null =
   providers.find(
-    (p) => p.available !== false && providerKindOrNull(p.id) === "processing"
+    (p) => p.available !== false && providerKindOrNull(p.id) === "processing",
   )?.id ?? null;
 
 /**
@@ -195,7 +195,7 @@ const DEFAULT_PROVIDER_ID: ProviderId | null =
  */
 const DEFAULT_IMPORT_PROVIDER_ID: ProviderId | null =
   providers.find(
-    (p) => p.available !== false && providerKindOrNull(p.id) === "import"
+    (p) => p.available !== false && providerKindOrNull(p.id) === "import",
   )?.id ?? null;
 
 /**
@@ -317,8 +317,7 @@ export type RosterOption = RosterPlayerOption & {
  * athlete's match to the coach.
  */
 export type MatchSubject =
-  | { kind: "self" }
-  | { kind: "roster"; playerId: string; name: string };
+  { kind: "self" } | { kind: "roster"; playerId: string; name: string };
 
 /**
  * The half of `MatchSubject` a link can name.
@@ -412,7 +411,10 @@ export interface UseUploadMatchWizardReturn {
   handleRemoveFile: () => void;
 
   // Form handling
-  handleInputChange: (field: keyof MatchFormData, value: string | number | boolean | null | undefined) => void;
+  handleInputChange: (
+    field: keyof MatchFormData,
+    value: string | number | boolean | null | undefined,
+  ) => void;
   /**
    * The "who played this match" question, asked ONLY in a team workspace with
    * no preset. A personal workspace has exactly one candidate (the uploader),
@@ -431,8 +433,16 @@ export interface UseUploadMatchWizardReturn {
     /** Records the answer and pre-fills the player-name field from it. */
     choose: (subject: MatchSubject) => void;
   };
-  handleScoreChange: (player: "player" | "opponent", index: number, value: string) => void;
-  handleTiebreakChange: (player: "player" | "opponent", index: number, value: string) => void;
+  handleScoreChange: (
+    player: "player" | "opponent",
+    index: number,
+    value: string,
+  ) => void;
+  handleTiebreakChange: (
+    player: "player" | "opponent",
+    index: number,
+    value: string,
+  ) => void;
 
   // Match creation
   handleCreateMatch: () => Promise<void>;
@@ -457,8 +467,8 @@ function surfaceToCourtType(surface: string): string {
 function getCurrentDate(): string {
   const now = new Date();
   const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
 
@@ -473,7 +483,7 @@ function getDefaultFormData(): MatchFormData {
   return {
     ...DEFAULT_FORM_DATA,
     date: getCurrentDate(),
-    time: getCurrentTime()
+    time: getCurrentTime(),
   };
 }
 
@@ -518,7 +528,9 @@ export function useUploadMatchWizard({
     if (initialProvider) return getProviderKind(initialProvider);
     return DEFAULT_PROVIDER_KIND;
   });
-  const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(
+    null,
+  );
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [isOver, setIsOver] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -541,7 +553,7 @@ export function useUploadMatchWizard({
    * nothing has to run after mount to install it.
    */
   const [matchSubject, setMatchSubject] = useState<MatchSubject | null>(
-    initialSubject ?? null
+    initialSubject ?? null,
   );
   /**
    * The same answer, readable from a callback that outlives the render it was
@@ -661,7 +673,7 @@ export function useUploadMatchWizard({
 
       const used = (data ?? []).reduce(
         (n, row) => n + (row.actual_seconds ?? row.reserved_seconds ?? 0),
-        0
+        0,
       );
       setRemainingQuotaSeconds(Math.max(0, quotaCapSeconds - used));
     })();
@@ -676,7 +688,6 @@ export function useUploadMatchWizard({
     quotaAccountType,
     quotaCapSeconds,
   ]);
-
 
   // Media rules, trim floor and billing all come from the provider rather than
   // from a vendor config the wizard imports directly — the wizard is written
@@ -728,7 +739,16 @@ export function useUploadMatchWizard({
     } finally {
       setDraftSaving(false);
     }
-  }, [draftId, progressKind, step, selectedProvider, formData, uploadedFile, preset, attachedLine]);
+  }, [
+    draftId,
+    progressKind,
+    step,
+    selectedProvider,
+    formData,
+    uploadedFile,
+    preset,
+    attachedLine,
+  ]);
 
   // Load data from localStorage when modal opens
   useEffect(() => {
@@ -749,7 +769,9 @@ export function useUploadMatchWizard({
       // is why it may only be built where the answer is a fact — see the bar
       // on `EventPreset`. `job-request.ts` refusing a doubles line is what
       // makes `supportsVideo: false` one.
-      const presetProvider = preset.supportsVideo ? DEFAULT_PROVIDER_ID : DEFAULT_IMPORT_PROVIDER_ID;
+      const presetProvider = preset.supportsVideo
+        ? DEFAULT_PROVIDER_ID
+        : DEFAULT_IMPORT_PROVIDER_ID;
       setSelectedProvider(presetProvider);
       setFormData((prev) => ({
         ...prev,
@@ -762,7 +784,9 @@ export function useUploadMatchWizard({
         opponentSource: preset.opponentName ? ("event" as const) : undefined,
         date: preset.date,
         dateSource: "event" as const,
-        courtType: preset.surface ? surfaceToCourtType(preset.surface) : prev.courtType,
+        courtType: preset.surface
+          ? surfaceToCourtType(preset.surface)
+          : prev.courtType,
         bestOf: String(preset.bestOf),
         adScoring: preset.adScoring ?? undefined,
         matchType:
@@ -814,7 +838,9 @@ export function useUploadMatchWizard({
       return;
     }
 
-    const existingProvider = localStorage.getItem(STORAGE_KEYS.SELECTED_PROVIDER);
+    const existingProvider = localStorage.getItem(
+      STORAGE_KEYS.SELECTED_PROVIDER,
+    );
     let resumedProvider = false;
     if (initialProvider) {
       // The link named a source. It outranks the stored one — that is a stale
@@ -874,7 +900,9 @@ export function useUploadMatchWizard({
       // unconditionally here was what made a linked import wizard count four
       // steps and then drop to three on the first Continue.
       setProgressKind(
-        initialProvider ? getProviderKind(initialProvider) : DEFAULT_PROVIDER_KIND
+        initialProvider
+          ? getProviderKind(initialProvider)
+          : DEFAULT_PROVIDER_KIND,
       );
       setStep("provider");
     }
@@ -885,7 +913,9 @@ export function useUploadMatchWizard({
     let cancelled = false;
     (async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         if (cancelled || !user) return;
         cachedUserIdRef.current = user.id;
         setUploaderId(user.id);
@@ -910,19 +940,28 @@ export function useUploadMatchWizard({
         // coach picking a row while this request was in flight are the same
         // fact by then, and the second was landing the coach's handedness on
         // the athlete before this line read it.
-        const hand = profile?.hand === "right" || profile?.hand === "left" ? profile.hand : undefined;
+        const hand =
+          profile?.hand === "right" || profile?.hand === "left"
+            ? profile.hand
+            : undefined;
         const backhand =
-          profile?.backhand === "one-handed" || profile?.backhand === "two-handed"
+          profile?.backhand === "one-handed" ||
+          profile?.backhand === "two-handed"
             ? profile.backhand
             : undefined;
         setFormData((prev) => ({
           ...prev,
-          playerName: prev.playerName.trim() || !fullName ? prev.playerName : fullName,
+          playerName:
+            prev.playerName.trim() || !fullName ? prev.playerName : fullName,
           ...(matchSubjectRef.current?.kind !== "roster" &&
           prev.playerHand === undefined &&
           prev.playerBackhand === undefined &&
           (hand || backhand)
-            ? { playerHand: hand, playerBackhand: backhand, playerStyleSource: "profile" as const }
+            ? {
+                playerHand: hand,
+                playerBackhand: backhand,
+                playerStyleSource: "profile" as const,
+              }
             : {}),
         }));
       } catch {
@@ -953,7 +992,9 @@ export function useUploadMatchWizard({
       // asked but has not yet claimed their profile. Staff-only under RLS: a
       // player's read returns nothing, and the rows render without the state.
       const [{ data }, { data: invites }] = await Promise.all([
-        supabase.rpc("program_roster_full", { p_program_id: activeWorkspace.id }),
+        supabase.rpc("program_roster_full", {
+          p_program_id: activeWorkspace.id,
+        }),
         supabase
           .from("program_invites")
           .select("player_id, email")
@@ -963,15 +1004,19 @@ export function useUploadMatchWizard({
       if (cancelled) return;
 
       const invitedByPlayer = new Map<string, string>();
-      for (const invite of (invites ?? []) as { player_id: string | null; email: string }[]) {
-        if (invite.player_id) invitedByPlayer.set(invite.player_id, invite.email);
+      for (const invite of (invites ?? []) as {
+        player_id: string | null;
+        email: string;
+      }[]) {
+        if (invite.player_id)
+          invitedByPlayer.set(invite.player_id, invite.email);
       }
 
       setTeamRoster(
         rosterPlayerOptions((data ?? []) as RosterFullRow[]).map((row) => ({
           ...row,
           invitedEmail: invitedByPlayer.get(row.playerId) ?? null,
-        }))
+        })),
       );
     })();
 
@@ -1030,16 +1075,20 @@ export function useUploadMatchWizard({
       setFormData((prev) => ({
         ...prev,
         playerName:
-          subject.kind === "roster" ? subject.name : uploaderName ?? "",
+          subject.kind === "roster" ? subject.name : (uploaderName ?? ""),
         // A profile's hand and backhand belong to the uploader. Picking a
         // teammate drops them; picking "Myself" back leaves them unset until
         // the details step reads the profile again.
         ...(prev.playerStyleSource === "profile" && subject.kind === "roster"
-          ? { playerHand: undefined, playerBackhand: undefined, playerStyleSource: undefined }
+          ? {
+              playerHand: undefined,
+              playerBackhand: undefined,
+              playerStyleSource: undefined,
+            }
           : {}),
       }));
     },
-    [uploaderName, applyMatchSubject]
+    [uploaderName, applyMatchSubject],
   );
 
   // Step navigation handlers
@@ -1086,7 +1135,8 @@ export function useUploadMatchWizard({
   // hardcoded, like handleBack.
   const handleFileContinue = useCallback(() => {
     const index = stepOrder.indexOf("file");
-    if (index >= 0 && index + 1 < stepOrder.length) setStep(stepOrder[index + 1]);
+    if (index >= 0 && index + 1 < stepOrder.length)
+      setStep(stepOrder[index + 1]);
   }, [stepOrder]);
 
   const handleTrimContinue = useCallback(() => {
@@ -1100,86 +1150,97 @@ export function useUploadMatchWizard({
    * from the file itself so an unusable video is refused at pick time rather
    * than after a twenty-minute upload.
    */
-  const onVideoPick = useCallback(async (file: File | null) => {
-    if (!file || !selectedProvider) return;
+  const onVideoPick = useCallback(
+    async (file: File | null) => {
+      if (!file || !selectedProvider) return;
 
-    setUploadError(null);
-    setVideoWarnings([]);
-    setVideoProbe(null);
-    setUploadedFile(null);
-    setIsProbing(true);
+      setUploadError(null);
+      setVideoWarnings([]);
+      setVideoProbe(null);
+      setUploadedFile(null);
+      setIsProbing(true);
 
-    try {
-      const strategy = getProviderStrategy(selectedProvider);
-      const result: ValidationResult = await strategy.validateFile(file);
+      try {
+        const strategy = getProviderStrategy(selectedProvider);
+        const result: ValidationResult = await strategy.validateFile(file);
 
-      if (!result.success) {
-        setUploadError(result.error || "This video can't be analysed.");
-        return;
+        if (!result.success) {
+          setUploadError(result.error || "This video can't be analysed.");
+          return;
+        }
+
+        const summary = result.details?.video ?? null;
+
+        setVideoProbe(summary);
+        setVideoWarnings(result.warnings ?? []);
+        setUploadedFile({
+          name: file.name,
+          size: formatFileSize(file.size),
+          status: "ready",
+          file,
+          type: file.type,
+        });
+
+        // The recording's own timestamp is the match's date, labelled "from the
+        // file" on the details step. Only where nothing more authoritative set
+        // it: an event line's date outranks the camera's clock.
+        const recorded = new Date(file.lastModified);
+        const fileDate =
+          Number.isFinite(file.lastModified) && file.lastModified > 0
+            ? {
+                date: `${recorded.getFullYear()}-${String(recorded.getMonth() + 1).padStart(2, "0")}-${String(recorded.getDate()).padStart(2, "0")}`,
+                time: `${String(recorded.getHours()).padStart(2, "0")}:${String(recorded.getMinutes()).padStart(2, "0")}`,
+              }
+            : null;
+
+        // Default the trim to the whole video. The user narrows it on the rail;
+        // starting at the full extent means a straight-through flow still submits
+        // a valid window.
+        setFormData((prev) => {
+          const end = summary?.durationSeconds ?? prev.videoEndSeconds;
+          return {
+            ...prev,
+            ...(fileDate && prev.dateSource !== "event"
+              ? { ...fileDate, dateSource: "file" as const }
+              : {}),
+            videoStartSeconds: 0,
+            videoEndSeconds: end,
+            // Same rule as handleTrimChange: the untrimmed clip is the starting
+            // window, so it is also the starting duration. It narrows with the
+            // handles.
+            duration:
+              end !== undefined
+                ? Math.max(0, Math.round(end)) * 1000
+                : prev.duration,
+          };
+        });
+      } catch (err) {
+        setUploadError(
+          err instanceof Error ? err.message : "Couldn't read this video.",
+        );
+      } finally {
+        setIsProbing(false);
       }
-
-      const summary = result.details?.video ?? null;
-
-      setVideoProbe(summary);
-      setVideoWarnings(result.warnings ?? []);
-      setUploadedFile({
-        name: file.name,
-        size: formatFileSize(file.size),
-        status: "ready",
-        file,
-        type: file.type,
-      });
-
-      // The recording's own timestamp is the match's date, labelled "from the
-      // file" on the details step. Only where nothing more authoritative set
-      // it: an event line's date outranks the camera's clock.
-      const recorded = new Date(file.lastModified);
-      const fileDate =
-        Number.isFinite(file.lastModified) && file.lastModified > 0
-          ? {
-              date: `${recorded.getFullYear()}-${String(recorded.getMonth() + 1).padStart(2, "0")}-${String(recorded.getDate()).padStart(2, "0")}`,
-              time: `${String(recorded.getHours()).padStart(2, "0")}:${String(recorded.getMinutes()).padStart(2, "0")}`,
-            }
-          : null;
-
-      // Default the trim to the whole video. The user narrows it on the rail;
-      // starting at the full extent means a straight-through flow still submits
-      // a valid window.
-      setFormData((prev) => {
-        const end = summary?.durationSeconds ?? prev.videoEndSeconds;
-        return {
-          ...prev,
-          ...(fileDate && prev.dateSource !== "event"
-            ? { ...fileDate, dateSource: "file" as const }
-            : {}),
-          videoStartSeconds: 0,
-          videoEndSeconds: end,
-          // Same rule as handleTrimChange: the untrimmed clip is the starting
-          // window, so it is also the starting duration. It narrows with the
-          // handles.
-          duration: end !== undefined ? Math.max(0, Math.round(end)) * 1000 : prev.duration,
-        };
-      });
-    } catch (err) {
-      setUploadError(err instanceof Error ? err.message : "Couldn't read this video.");
-    } finally {
-      setIsProbing(false);
-    }
-  }, [selectedProvider]);
+    },
+    [selectedProvider],
+  );
 
   /** Set the trim window. Values are seconds into the original video. */
-  const handleTrimChange = useCallback((startSeconds: number, endSeconds: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      videoStartSeconds: startSeconds,
-      videoEndSeconds: endSeconds,
-      // The window IS the match: it was trimmed to the first serve and the
-      // final point, so how long it runs is how long the match took. Typing
-      // that a second time only creates a chance to disagree with the
-      // "analysed window" printed two screens later.
-      duration: Math.max(0, Math.round(endSeconds - startSeconds)) * 1000,
-    }));
-  }, []);
+  const handleTrimChange = useCallback(
+    (startSeconds: number, endSeconds: number) => {
+      setFormData((prev) => ({
+        ...prev,
+        videoStartSeconds: startSeconds,
+        videoEndSeconds: endSeconds,
+        // The window IS the match: it was trimmed to the first serve and the
+        // final point, so how long it runs is how long the match took. Typing
+        // that a second time only creates a chance to disagree with the
+        // "analysed window" printed two screens later.
+        duration: Math.max(0, Math.round(endSeconds - startSeconds)) * 1000,
+      }));
+    },
+    [],
+  );
 
   const handleRemoveVideo = useCallback(() => {
     setVideoProbe(null);
@@ -1221,10 +1282,14 @@ export function useUploadMatchWizard({
       return {
         ...prev,
         opponentName: offer.opponentName || prev.opponentName,
-        opponentSource: offer.opponentName ? ("event" as const) : prev.opponentSource,
+        opponentSource: offer.opponentName
+          ? ("event" as const)
+          : prev.opponentSource,
         date: offer.date,
         dateSource: "event" as const,
-        courtType: offer.surface ? surfaceToCourtType(offer.surface) : prev.courtType,
+        courtType: offer.surface
+          ? surfaceToCourtType(offer.surface)
+          : prev.courtType,
         bestOf: String(offer.bestOf),
         // Null stays undefined: the pipeline refuses a job without a real
         // answer, and a dual that declared nothing has not answered.
@@ -1266,222 +1331,239 @@ export function useUploadMatchWizard({
   }, [onOpenChange]);
 
   // File handling
-  const onDrop = useCallback(async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    if (!selectedProvider) {
-      setUploadError("Please select a provider first");
-      return;
-    }
-
-    const file = files[0];
-
-    // Basic file type validation using provider strategy. Awaited because
-    // processing providers validate asynchronously (they probe media metadata);
-    // awaiting an import provider's synchronous result is a no-op.
-    try {
-      const strategy = getProviderStrategy(selectedProvider);
-      const validationResult: ValidationResult = await strategy.validateFile(file);
-
-      if (!validationResult.success) {
-        setUploadError(validationResult.error || "Invalid file");
+  const onDrop = useCallback(
+    async (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+      if (!selectedProvider) {
+        setUploadError("Please select a provider first");
         return;
       }
-    } catch (err) {
-      setUploadError(err instanceof Error ? err.message : "Validation error");
-      return;
-    }
 
-    // For SwingVision files, validate structure using Python script
-    if (selectedProvider === "swing-vision" && file.name.endsWith(".xlsx")) {
-      setIsUploading(true);
-      setUploadError(null);
+      const file = files[0];
 
+      // Basic file type validation using provider strategy. Awaited because
+      // processing providers validate asynchronously (they probe media metadata);
+      // awaiting an import provider's synchronous result is a no-op.
       try {
-        // Convert file to base64 for API
-        const reader = new FileReader();
-        const fileData = await new Promise<string>((resolve, reject) => {
-          reader.onload = () => {
-            const result = reader.result as string;
-            resolve(result);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-
-        // Call validation API
-        const response = await fetch("/api/validate-file", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            file: fileData,
-            fileName: file.name,
-          }),
-        });
-
-        const validationResult = await response.json();
+        const strategy = getProviderStrategy(selectedProvider);
+        const validationResult: ValidationResult =
+          await strategy.validateFile(file);
 
         if (!validationResult.success) {
-          // Use the error message directly from the API (already formatted)
-          const errorMessage = validationResult.error || "File validation failed";
-          setUploadError(errorMessage);
-          setIsUploading(false);
+          setUploadError(validationResult.error || "Invalid file");
           return;
         }
-
-        // Validation passed
-        setUploadError(null);
       } catch (err) {
-        console.error("Validation API error:", err);
-        setUploadError(
-          err instanceof Error
-            ? `Validation error: ${err.message}`
-            : "Failed to validate file. Please try again."
-        );
-        setIsUploading(false);
+        setUploadError(err instanceof Error ? err.message : "Validation error");
         return;
-      } finally {
-        setIsUploading(false);
       }
-    }
 
-    // Set file data for display
-    const fileData: UploadedFile = {
-      name: file.name,
-      size: formatFileSize(file.size),
-      status: "Ready",
-      file: file
-    };
-    setUploadedFile(fileData);
+      // For SwingVision files, validate structure using Python script
+      if (selectedProvider === "swing-vision" && file.name.endsWith(".xlsx")) {
+        setIsUploading(true);
+        setUploadError(null);
 
-    // Store file reference in localStorage (metadata only, not the actual file)
-    const fileDataForStorage = {
-      name: file.name,
-      size: fileData.size,
-      status: "Ready",
-      type: file.type
-    };
-    localStorage.setItem(STORAGE_KEYS.UPLOADED_FILE, JSON.stringify(fileDataForStorage));
+        try {
+          // Convert file to base64 for API
+          const reader = new FileReader();
+          const fileData = await new Promise<string>((resolve, reject) => {
+            reader.onload = () => {
+              const result = reader.result as string;
+              resolve(result);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
 
-    // Attempt to parse file if parser exists for this provider
-    const parserExists = await hasParser(selectedProvider);
-    if (parserExists) {
-      setParsingState({ isParsing: true, parseError: null, parseWarnings: [], parseSuccess: false });
+          // Call validation API
+          const response = await fetch("/api/validate-file", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              file: fileData,
+              fileName: file.name,
+            }),
+          });
 
-      try {
-        const parser = await getParser(selectedProvider);
-        if (parser) {
-          const parseResult = await parser.parse(file);
+          const validationResult = await response.json();
 
-          if (parseResult.success && parseResult.data) {
-            /**
-             * THE EVENT OUTRANKS THE FILE.
-             *
-             * With a preset, these answers came from the event and the
-             * pinned bar tells the coach in as many words that they are not
-             * re-asked here. A parsed file may FILL BLANKS; it may not
-             * overwrite.
-             *
-             * This only became reachable when doubles lines started opening on
-             * the import provider: every preset used to get the processing
-             * provider, which has no parser, so this block never ran for one.
-             * Now it does, and a SwingVision export names one account holder
-             * and one opponent — so an unguarded merge replaced a doubles
-             * line's "Chen / Alvarez" with a single name and its courtside
-             * score with the file's. The line still carries `event_entry_id`,
-             * so the schedule would render that court under the wrong names,
-             * and `reusingMatch` would write it over the recorded result.
-             *
-             * Scores are held only when the event actually supplied one — a
-             * line that has been played but not yet scored is a genuine blank
-             * the file should fill. Tiebreaks travel with the score they
-             * belong to, or they end up describing a different match's sets.
-             */
-            const eventOwns = Boolean(preset);
-            const eventScored = Boolean(preset?.score);
-            // The who-played picker owns the player name exactly the way an
-            // event does: the id travelled with the picked row, and a parsed
-            // export names the ACCOUNT HOLDER — usually the uploader, not the
-            // athlete the coach picked. Letting the file overwrite the name
-            // would leave `player1_id` pointing at one person and
-            // `player1_name` reading as another, with nothing on screen
-            // looking wrong.
-            const subjectOwnsName = eventOwns || (askWhoPlayed && matchSubject !== null);
-
-            setFormData((prev) => ({
-              ...prev,
-              playerName:
-                subjectOwnsName && prev.playerName.trim()
-                  ? prev.playerName
-                  : parseResult.data?.playerName || prev.playerName,
-              opponentName:
-                eventOwns && prev.opponentName.trim()
-                  ? prev.opponentName
-                  : parseResult.data?.opponentName || prev.opponentName,
-              playerScores: eventScored
-                ? prev.playerScores
-                : parseResult.data?.playerScores || prev.playerScores,
-              opponentScores: eventScored
-                ? prev.opponentScores
-                : parseResult.data?.opponentScores || prev.opponentScores,
-              playerTiebreaks: eventScored
-                ? prev.playerTiebreaks
-                : parseResult.data?.playerTiebreaks || prev.playerTiebreaks,
-              opponentTiebreaks: eventScored
-                ? prev.opponentTiebreaks
-                : parseResult.data?.opponentTiebreaks || prev.opponentTiebreaks,
-              // Format comes off the event, which declared it once for every
-              // line, rather than off one player's export of one match.
-              bestOf: eventOwns ? prev.bestOf : parseResult.data?.bestOf || prev.bestOf,
-              numberOfSets: eventScored
-                ? prev.numberOfSets
-                : parseResult.data?.numberOfSets ?? prev.numberOfSets,
-              adScoring:
-                eventOwns && preset?.adScoring !== null
-                  ? prev.adScoring
-                  : parseResult.data?.adScoring !== undefined
-                    ? parseResult.data.adScoring
-                    : prev.adScoring,
-              // Not seeded by a preset, so the file is the only source.
-              result: parseResult.data?.result || prev.result,
-              duration: parseResult.data?.duration || prev.duration,
-              // Preserve existing date/time if parser didn't provide them
-              date: prev.date,
-              time: prev.time,
-            }));
-
-            setParsingState({
-              isParsing: false,
-              parseError: null,
-              parseWarnings: parseResult.warnings,
-              parseSuccess: true,
-            });
-          } else {
-            // Parsing failed - show error but allow manual entry
-            setParsingState({
-              isParsing: false,
-              parseError: parseResult.error || "Failed to parse file",
-              parseWarnings: parseResult.warnings,
-              parseSuccess: false,
-            });
+          if (!validationResult.success) {
+            // Use the error message directly from the API (already formatted)
+            const errorMessage =
+              validationResult.error || "File validation failed";
+            setUploadError(errorMessage);
+            setIsUploading(false);
+            return;
           }
+
+          // Validation passed
+          setUploadError(null);
+        } catch (err) {
+          console.error("Validation API error:", err);
+          setUploadError(
+            err instanceof Error
+              ? `Validation error: ${err.message}`
+              : "Failed to validate file. Please try again.",
+          );
+          setIsUploading(false);
+          return;
+        } finally {
+          setIsUploading(false);
         }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Parsing error";
+      }
+
+      // Set file data for display
+      const fileData: UploadedFile = {
+        name: file.name,
+        size: formatFileSize(file.size),
+        status: "Ready",
+        file: file,
+      };
+      setUploadedFile(fileData);
+
+      // Store file reference in localStorage (metadata only, not the actual file)
+      const fileDataForStorage = {
+        name: file.name,
+        size: fileData.size,
+        status: "Ready",
+        type: file.type,
+      };
+      localStorage.setItem(
+        STORAGE_KEYS.UPLOADED_FILE,
+        JSON.stringify(fileDataForStorage),
+      );
+
+      // Attempt to parse file if parser exists for this provider
+      const parserExists = await hasParser(selectedProvider);
+      if (parserExists) {
         setParsingState({
-          isParsing: false,
-          parseError: message,
+          isParsing: true,
+          parseError: null,
           parseWarnings: [],
           parseSuccess: false,
         });
+
+        try {
+          const parser = await getParser(selectedProvider);
+          if (parser) {
+            const parseResult = await parser.parse(file);
+
+            if (parseResult.success && parseResult.data) {
+              /**
+               * THE EVENT OUTRANKS THE FILE.
+               *
+               * With a preset, these answers came from the event and the
+               * pinned bar tells the coach in as many words that they are not
+               * re-asked here. A parsed file may FILL BLANKS; it may not
+               * overwrite.
+               *
+               * This only became reachable when doubles lines started opening on
+               * the import provider: every preset used to get the processing
+               * provider, which has no parser, so this block never ran for one.
+               * Now it does, and a SwingVision export names one account holder
+               * and one opponent — so an unguarded merge replaced a doubles
+               * line's "Chen / Alvarez" with a single name and its courtside
+               * score with the file's. The line still carries `event_entry_id`,
+               * so the schedule would render that court under the wrong names,
+               * and `reusingMatch` would write it over the recorded result.
+               *
+               * Scores are held only when the event actually supplied one — a
+               * line that has been played but not yet scored is a genuine blank
+               * the file should fill. Tiebreaks travel with the score they
+               * belong to, or they end up describing a different match's sets.
+               */
+              const eventOwns = Boolean(preset);
+              const eventScored = Boolean(preset?.score);
+              // The who-played picker owns the player name exactly the way an
+              // event does: the id travelled with the picked row, and a parsed
+              // export names the ACCOUNT HOLDER — usually the uploader, not the
+              // athlete the coach picked. Letting the file overwrite the name
+              // would leave `player1_id` pointing at one person and
+              // `player1_name` reading as another, with nothing on screen
+              // looking wrong.
+              const subjectOwnsName =
+                eventOwns || (askWhoPlayed && matchSubject !== null);
+
+              setFormData((prev) => ({
+                ...prev,
+                playerName:
+                  subjectOwnsName && prev.playerName.trim()
+                    ? prev.playerName
+                    : parseResult.data?.playerName || prev.playerName,
+                opponentName:
+                  eventOwns && prev.opponentName.trim()
+                    ? prev.opponentName
+                    : parseResult.data?.opponentName || prev.opponentName,
+                playerScores: eventScored
+                  ? prev.playerScores
+                  : parseResult.data?.playerScores || prev.playerScores,
+                opponentScores: eventScored
+                  ? prev.opponentScores
+                  : parseResult.data?.opponentScores || prev.opponentScores,
+                playerTiebreaks: eventScored
+                  ? prev.playerTiebreaks
+                  : parseResult.data?.playerTiebreaks || prev.playerTiebreaks,
+                opponentTiebreaks: eventScored
+                  ? prev.opponentTiebreaks
+                  : parseResult.data?.opponentTiebreaks ||
+                    prev.opponentTiebreaks,
+                // Format comes off the event, which declared it once for every
+                // line, rather than off one player's export of one match.
+                bestOf: eventOwns
+                  ? prev.bestOf
+                  : parseResult.data?.bestOf || prev.bestOf,
+                numberOfSets: eventScored
+                  ? prev.numberOfSets
+                  : (parseResult.data?.numberOfSets ?? prev.numberOfSets),
+                adScoring:
+                  eventOwns && preset?.adScoring !== null
+                    ? prev.adScoring
+                    : parseResult.data?.adScoring !== undefined
+                      ? parseResult.data.adScoring
+                      : prev.adScoring,
+                // Not seeded by a preset, so the file is the only source.
+                result: parseResult.data?.result || prev.result,
+                duration: parseResult.data?.duration || prev.duration,
+                // Preserve existing date/time if parser didn't provide them
+                date: prev.date,
+                time: prev.time,
+              }));
+
+              setParsingState({
+                isParsing: false,
+                parseError: null,
+                parseWarnings: parseResult.warnings,
+                parseSuccess: true,
+              });
+            } else {
+              // Parsing failed - show error but allow manual entry
+              setParsingState({
+                isParsing: false,
+                parseError: parseResult.error || "Failed to parse file",
+                parseWarnings: parseResult.warnings,
+                parseSuccess: false,
+              });
+            }
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Parsing error";
+          setParsingState({
+            isParsing: false,
+            parseError: message,
+            parseWarnings: [],
+            parseSuccess: false,
+          });
+        }
       }
-    }
-    // `preset` is read inside: with a preset the event's answers win over the
-    // parsed file, so a stale closure here would silently restore the
-    // overwrite. Same for the who-played answer, which owns the player name
-    // the same way.
-  }, [selectedProvider, preset, askWhoPlayed, matchSubject]);
+      // `preset` is read inside: with a preset the event's answers win over the
+      // parsed file, so a stale closure here would silently restore the
+      // overwrite. Same for the who-played answer, which owns the player name
+      // the same way.
+    },
+    [selectedProvider, preset, askWhoPlayed, matchSubject],
+  );
 
   const handleDrop: React.DragEventHandler<HTMLDivElement> = useCallback(
     (e) => {
@@ -1490,16 +1572,17 @@ export function useUploadMatchWizard({
       setIsOver(false);
       onDrop(e.dataTransfer?.files ?? null);
     },
-    [onDrop]
+    [onDrop],
   );
 
-  const handleFileChange: React.ChangeEventHandler<HTMLInputElement> = useCallback(
-    (e) => {
-      onDrop(e.target.files);
-      e.currentTarget.value = "";
-    },
-    [onDrop]
-  );
+  const handleFileChange: React.ChangeEventHandler<HTMLInputElement> =
+    useCallback(
+      (e) => {
+        onDrop(e.target.files);
+        e.currentTarget.value = "";
+      },
+      [onDrop],
+    );
 
   const handleRemoveFile = useCallback(() => {
     setUploadedFile(null);
@@ -1507,23 +1590,33 @@ export function useUploadMatchWizard({
   }, []);
 
   // Form handling
-  const handleInputChange = useCallback((field: keyof MatchFormData, value: string | number | boolean | null | undefined) => {
-    setFormData((prev) => {
-      const next = { ...prev, [field]: value };
-      // When bestOf changes, reset numberOfSets so it uses the new format's default
-      if (field === "bestOf") {
-        next.numberOfSets = undefined;
-      }
-      return next;
-    });
-  }, []);
+  const handleInputChange = useCallback(
+    (
+      field: keyof MatchFormData,
+      value: string | number | boolean | null | undefined,
+    ) => {
+      setFormData((prev) => {
+        const next = { ...prev, [field]: value };
+        // When bestOf changes, reset numberOfSets so it uses the new format's default
+        if (field === "bestOf") {
+          next.numberOfSets = undefined;
+        }
+        return next;
+      });
+    },
+    [],
+  );
 
   const updateScoreArray = useCallback(
     (
-      field: "playerScores" | "opponentScores" | "playerTiebreaks" | "opponentTiebreaks",
+      field:
+        | "playerScores"
+        | "opponentScores"
+        | "playerTiebreaks"
+        | "opponentTiebreaks",
       index: number,
       value: string,
-      max?: number
+      max?: number,
     ) => {
       let next: number | null;
       if (value === "") {
@@ -1538,7 +1631,7 @@ export function useUploadMatchWizard({
         [field]: prev[field].map((s, i) => (i === index ? next : s)),
       }));
     },
-    []
+    [],
   );
 
   const handleScoreChange = useCallback(
@@ -1546,10 +1639,10 @@ export function useUploadMatchWizard({
       updateScoreArray(
         player === "player" ? "playerScores" : "opponentScores",
         index,
-        value
+        value,
       );
     },
-    [updateScoreArray]
+    [updateScoreArray],
   );
 
   // Tiebreaks rarely exceed 20; clamp to 99 as a safety bound.
@@ -1559,10 +1652,10 @@ export function useUploadMatchWizard({
         player === "player" ? "playerTiebreaks" : "opponentTiebreaks",
         index,
         value,
-        99
+        99,
       );
     },
-    [updateScoreArray]
+    [updateScoreArray],
   );
 
   // Match creation
@@ -1585,7 +1678,10 @@ export function useUploadMatchWizard({
       // if the cache hasn't populated yet (race against modal open).
       let userId = cachedUserIdRef.current;
       if (!userId) {
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
         if (authError || !user) throw new Error("Not authenticated");
         userId = user.id;
         cachedUserIdRef.current = userId;
@@ -1604,12 +1700,12 @@ export function useUploadMatchWizard({
       const adjustedPlayerScores = getAdjustedScores(
         formData.playerScores,
         formData.bestOf,
-        formData.numberOfSets
+        formData.numberOfSets,
       );
       const adjustedOpponentScores = getAdjustedScores(
         formData.opponentScores,
         formData.bestOf,
-        formData.numberOfSets
+        formData.numberOfSets,
       );
       // WHOSE match this is, which in a team workspace is not the uploader.
       //
@@ -1638,10 +1734,12 @@ export function useUploadMatchWizard({
         parseInt(formData.bestOf),
         playerUserId,
         formData.playerName,
-        formData.opponentName
+        formData.opponentName,
       );
 
-      const eventName = formData.eventName || `${formData.playerName} vs ${formData.opponentName}`;
+      const eventName =
+        formData.eventName ||
+        `${formData.playerName} vs ${formData.opponentName}`;
 
       // Give the opponent an identity, when the uploader named their program.
       //
@@ -1652,7 +1750,11 @@ export function useUploadMatchWizard({
       // A row picked from the opponent's roster already IS an identity, and it
       // travelled with the click. Only a typed name goes through the RPC.
       let opponentPlayerId: string | null = formData.opponentPlayerId ?? null;
-      if (!opponentPlayerId && activeWorkspace.kind === "team" && formData.opponentProgramKey) {
+      if (
+        !opponentPlayerId &&
+        activeWorkspace.kind === "team" &&
+        formData.opponentProgramKey
+      ) {
         try {
           const { data: program } = await supabase
             .from("programs")
@@ -1660,13 +1762,18 @@ export function useUploadMatchWizard({
             .eq("program_key", formData.opponentProgramKey)
             .maybeSingle();
 
-          const opponentProgramId = (program as { id: string } | null)?.id ?? null;
+          const opponentProgramId =
+            (program as { id: string } | null)?.id ?? null;
           const parts = formData.opponentName.trim().split(/\s+/);
 
           // Both names or nothing. `contribute_opponent_player` requires them,
           // and a single-token name ("Kim") is not an identity anyone else
           // would converge on.
-          if (opponentProgramId && opponentProgramId !== activeWorkspace.id && parts.length >= 2) {
+          if (
+            opponentProgramId &&
+            opponentProgramId !== activeWorkspace.id &&
+            parts.length >= 2
+          ) {
             const { data: contributed } = await supabase.rpc(
               "contribute_opponent_player",
               {
@@ -1674,7 +1781,7 @@ export function useUploadMatchWizard({
                 p_opponent_program_id: opponentProgramId,
                 p_first_name: parts.slice(0, -1).join(" "),
                 p_last_name: parts[parts.length - 1],
-              }
+              },
             );
             opponentPlayerId = (contributed as string | null) ?? null;
           }
@@ -1688,7 +1795,7 @@ export function useUploadMatchWizard({
         sourceProvider: selectedProvider,
         // Video providers run computer-vision analysis; file imports carry
         // electronic line-calling data the provider already computed.
-        analysisMethod: isProcessingProvider ? 'ai' : 'elc',
+        analysisMethod: isProcessingProvider ? "ai" : "elc",
         matchType: formData.matchType,
         courtType: formData.courtType,
         // NULL for a personal workspace, which is what the column means. The
@@ -1698,14 +1805,22 @@ export function useUploadMatchWizard({
         opponentPlayerId,
       };
 
-      const matchData = buildMatchData(matchId, { ...formData, eventName }, winner, loser, isPrivateMatch, metadata);
+      const matchData = buildMatchData(
+        matchId,
+        { ...formData, eventName },
+        winner,
+        loser,
+        isPrivateMatch,
+        metadata,
+      );
 
       // Camera context is only meaningful for video analysis.
       const matchRow = isProcessingProvider
         ? {
             ...matchData,
             fixed_camera: formData.fixedCamera ?? null,
-            initial_top_player_is_player1: formData.initialTopPlayerIsPlayer1 ?? null,
+            initial_top_player_is_player1:
+              formData.initialTopPlayerIsPlayer1 ?? null,
           }
         : matchData;
 
@@ -1723,7 +1838,9 @@ export function useUploadMatchWizard({
               // write null over an identity a previous pass established, which
               // is worse than never having set it — the opponent's profile
               // would lose the match rather than never gain it.
-              ...(opponentPlayerId ? { opponent_player_id: opponentPlayerId } : {}),
+              ...(opponentPlayerId
+                ? { opponent_player_id: opponentPlayerId }
+                : {}),
               ...(isProcessingProvider
                 ? {
                     fixed_camera: formData.fixedCamera ?? null,
@@ -1758,9 +1875,9 @@ export function useUploadMatchWizard({
         throw new Error(
           reusingMatch
             ? "This match belongs to someone else on the program, so we could not " +
-              "save the changes. Ask whoever recorded it to make them, or record " +
-              "a new result for this line."
-            : "The match could not be saved. Nothing was uploaded — try again."
+                "save the changes. Ask whoever recorded it to make them, or record " +
+                "a new result for this line."
+            : "The match could not be saved. Nothing was uploaded — try again.",
         );
       }
 
@@ -1783,7 +1900,9 @@ export function useUploadMatchWizard({
       if (!isProcessingProvider) {
         sessionStorage.setItem("match-processing", matchId);
       }
-      window.dispatchEvent(new CustomEvent("match-created", { detail: { matchId } }));
+      window.dispatchEvent(
+        new CustomEvent("match-created", { detail: { matchId } }),
+      );
       onCreated?.(matchId);
 
       // Close the modal FIRST, then refresh after it has finished closing. The modal is
@@ -1815,7 +1934,10 @@ export function useUploadMatchWizard({
             provider: selectedProvider,
             startSeconds,
             endSeconds,
-            billableSeconds: processingStrategy.billableSeconds(startSeconds, endSeconds),
+            billableSeconds: processingStrategy.billableSeconds(
+              startSeconds,
+              endSeconds,
+            ),
             hasFile: Boolean(videoFileToUpload),
           });
           jobId = job.id;
@@ -1873,7 +1995,7 @@ export function useUploadMatchWizard({
               window.dispatchEvent(
                 new CustomEvent("match-upload-failed", {
                   detail: { matchId, error: message },
-                })
+                }),
               );
             },
           });
@@ -1892,7 +2014,10 @@ export function useUploadMatchWizard({
           fd.append("file", fileToUpload);
           fd.append("matchId", matchId);
           fd.append("providerId", providerId);
-          const response = await fetch("/api/upload", { method: "POST", body: fd });
+          const response = await fetch("/api/upload", {
+            method: "POST",
+            body: fd,
+          });
           const result = await response.json();
           if (!response.ok || !result.success) {
             throw new Error(result.error || "Upload failed");
@@ -1929,7 +2054,24 @@ export function useUploadMatchWizard({
     }
     // activeWorkspace is in here on purpose: a coach who switches workspaces
     // with the wizard open must not create the match against the one they left.
-  }, [formData, uploadedFile, selectedProvider, isProcessingProvider, supabase, isPrivateMatch, onOpenChange, onCreated, router, activeWorkspace.id, activeWorkspace.kind, preset, attachedLine, draftId, askWhoPlayed, matchSubject]);
+  }, [
+    formData,
+    uploadedFile,
+    selectedProvider,
+    isProcessingProvider,
+    supabase,
+    isPrivateMatch,
+    onOpenChange,
+    onCreated,
+    router,
+    activeWorkspace.id,
+    activeWorkspace.kind,
+    preset,
+    attachedLine,
+    draftId,
+    askWhoPlayed,
+    matchSubject,
+  ]);
 
   return {
     // State
@@ -1982,7 +2124,9 @@ export function useUploadMatchWizard({
     quotaCapSeconds,
     quotaResetsOn,
     // Every strategy has one — the file picker on step 2 serves both kinds.
-    acceptString: selectedProvider ? getProviderStrategy(selectedProvider).getAcceptString() : "",
+    acceptString: selectedProvider
+      ? getProviderStrategy(selectedProvider).getAcceptString()
+      : "",
     requirementChips: processingStrategy?.requirementChips ?? [],
     onVideoPick,
     handleTrimChange,
@@ -2001,6 +2145,6 @@ export function useUploadMatchWizard({
     handleTiebreakChange,
 
     // Match creation
-    handleCreateMatch
+    handleCreateMatch,
   };
 }

@@ -33,7 +33,10 @@ import { formatShortDate } from "@/lib/ui/date-format";
 import { createClient } from "@/lib/supabase/client";
 import { navLabel, settingsSection } from "@/lib/dashboard/nav";
 import { matchOutcome, setTally } from "@/lib/data/match-utils";
-import { rosterPlayerOptions, type RosterFullRow } from "@/lib/data/roster-shared";
+import {
+  rosterPlayerOptions,
+  type RosterFullRow,
+} from "@/lib/data/roster-shared";
 import { scopeToWorkspace } from "@/lib/workspace/scope";
 import {
   canUploadForProgram,
@@ -200,7 +203,7 @@ function loadRecent(): string[] {
   try {
     return JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]").slice(
       0,
-      MAX_RECENT
+      MAX_RECENT,
     );
   } catch {
     return [];
@@ -212,7 +215,7 @@ function saveRecent(query: string) {
     const existing = loadRecent();
     const updated = [query, ...existing.filter((q) => q !== query)].slice(
       0,
-      MAX_RECENT
+      MAX_RECENT,
     );
     localStorage.setItem(RECENT_KEY, JSON.stringify(updated));
   } catch {
@@ -273,7 +276,7 @@ function actionsFor(active: Workspace): Action[] {
         label: "Add a fixture",
         href: "/dashboard/team/schedule/new",
         icon: CalendarPlus,
-      }
+      },
     );
   }
   actions.push(
@@ -294,7 +297,7 @@ function actionsFor(active: Workspace): Action[] {
       label: "Help",
       href: "/dashboard/help",
       icon: CircleHelp,
-    }
+    },
   );
   return actions;
 }
@@ -313,7 +316,7 @@ function hintFor(href: string): string {
 // --- Small pieces ---
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
-  return <p className="eyebrow px-2 pb-1 pt-2.5">{children}</p>;
+  return <p className="eyebrow px-2 pt-2.5 pb-1">{children}</p>;
 }
 
 const ROW_CLASS =
@@ -357,17 +360,21 @@ export function SearchCommandPalette({
     const personal =
       available.find((w) => w.kind === "personal")?.name ?? "Personal";
     const teams = new Map(
-      available.filter((w) => w.kind === "team").map((w) => [w.id, w.name])
+      available.filter((w) => w.kind === "team").map((w) => [w.id, w.name]),
     );
     return (programId: string | null) =>
-      programId === null ? personal : (teams.get(programId) ?? "Another program");
+      programId === null
+        ? personal
+        : (teams.get(programId) ?? "Another program");
   }, [available]);
 
   // The viewer's own ids and the roster are per-open facts, not per-keystroke
   // ones. Fetched once when the palette opens (the roster only in a program)
   // and read from here by every search.
   const mineRef = useRef<Set<string> | null>(null);
-  const rosterRef = useRef<{ programId: string; rows: RosterFullRow[] } | null>(null);
+  const rosterRef = useRef<{ programId: string; rows: RosterFullRow[] } | null>(
+    null,
+  );
 
   // Debounce query. Commands are local, so they do not wait.
   useEffect(() => {
@@ -451,14 +458,18 @@ export function SearchCommandPalette({
         .from("matches")
         .select(
           "id, player1_id, player1_name, player2_name, tournament_name, round, date, score, program_id",
-          { count: "exact" }
+          { count: "exact" },
         )
         .or(needle)
         .order("date", { ascending: false })
         .limit(MAX_MATCHES);
 
       if (!allWorkspaces) {
-        scoped = scopeToWorkspace(scoped, { id: activeId, kind: activeKind }, user.id);
+        scoped = scopeToWorkspace(
+          scoped,
+          { id: activeId, kind: activeKind },
+          user.id,
+        );
       }
 
       const everywherePromise =
@@ -474,7 +485,12 @@ export function SearchCommandPalette({
         { count: everywhereCount },
         { data: rosterRows },
         { data: idRows },
-      ] = await Promise.all([scoped, everywherePromise, rosterPromise, minePromise]);
+      ] = await Promise.all([
+        scoped,
+        everywherePromise,
+        rosterPromise,
+        minePromise,
+      ]);
 
       if (stale) return;
 
@@ -493,9 +509,9 @@ export function SearchCommandPalette({
             user.id,
             ...((idRows ?? []) as (string | { my_player_ids?: string })[]).map(
               (row) =>
-                typeof row === "string" ? row : (row?.my_player_ids ?? "")
+                typeof row === "string" ? row : (row?.my_player_ids ?? ""),
             ),
-          ].filter(Boolean)
+          ].filter(Boolean),
         );
       }
       const mine = mineRef.current ?? new Set<string>([user.id]);
@@ -527,7 +543,7 @@ export function SearchCommandPalette({
 
       const elsewhereCount = Math.max(
         0,
-        (everywhereCount ?? 0) - (scopedCount ?? 0)
+        (everywhereCount ?? 0) - (scopedCount ?? 0),
       );
 
       const rows = data ?? [];
@@ -579,7 +595,15 @@ export function SearchCommandPalette({
     return () => {
       stale = true;
     };
-  }, [debouncedQuery, mode, allWorkspaces, activeId, activeKind, hasScope, workspaceNames]);
+  }, [
+    debouncedQuery,
+    mode,
+    allWorkspaces,
+    activeId,
+    activeKind,
+    hasScope,
+    workspaceNames,
+  ]);
 
   /**
    * What the list shows, in order, by mode — each section carrying the index
@@ -605,10 +629,19 @@ export function SearchCommandPalette({
     if (mode === "@" || mode === "#") {
       if (!results) return out;
       if (mode === "@") {
-        add("Roster", results.roster.map((data) => ({ type: "roster", data })));
-        add("Opponents", results.opponents.map((data) => ({ type: "opponent", data })));
+        add(
+          "Roster",
+          results.roster.map((data) => ({ type: "roster", data })),
+        );
+        add(
+          "Opponents",
+          results.opponents.map((data) => ({ type: "opponent", data })),
+        );
       } else {
-        add("Events", results.events.map((data) => ({ type: "event", data })));
+        add(
+          "Events",
+          results.events.map((data) => ({ type: "event", data })),
+        );
       }
       return out;
     }
@@ -628,7 +661,10 @@ export function SearchCommandPalette({
     if (!results) {
       if (q !== "") return out;
       add("Jump to", actionItems);
-      add("Recent", recentSearches.map((query) => ({ type: "recent", query })));
+      add(
+        "Recent",
+        recentSearches.map((query) => ({ type: "recent", query })),
+      );
       return out;
     }
 
@@ -650,15 +686,24 @@ export function SearchCommandPalette({
       return out;
     }
 
-    add("Matches", results.matches.map((data) => ({ type: "match", data })));
-    add("Opponents", results.opponents.map((data) => ({ type: "opponent", data })));
-    add("Events", results.events.map((data) => ({ type: "event", data })));
+    add(
+      "Matches",
+      results.matches.map((data) => ({ type: "match", data })),
+    );
+    add(
+      "Opponents",
+      results.opponents.map((data) => ({ type: "opponent", data })),
+    );
+    add(
+      "Events",
+      results.events.map((data) => ({ type: "event", data })),
+    );
     return out;
   }, [query, mode, actions, results, recentSearches, allWorkspaces]);
 
   const flatItems = useMemo(
     () => sections.flatMap((section) => section.items),
-    [sections]
+    [sections],
   );
 
   // The index the keyboard and the render both use. `highlightIndex` is
@@ -690,16 +735,16 @@ export function SearchCommandPalette({
         case "roster":
           // The Roster page opens the drawer for a `?player` it is handed.
           router.push(
-            `/dashboard/team/roster?player=${encodeURIComponent(item.data.playerId)}`
+            `/dashboard/team/roster?player=${encodeURIComponent(item.data.playerId)}`,
           );
           return;
         default:
           router.push(
-            `/dashboard/matches?q=${encodeURIComponent(item.data.name)}`
+            `/dashboard/matches?q=${encodeURIComponent(item.data.name)}`,
           );
       }
     },
-    [query, onOpenChange, router]
+    [query, onOpenChange, router],
   );
 
   /**
@@ -744,7 +789,9 @@ export function SearchCommandPalette({
       }
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setHighlightIndex(Math.min(activeIndex + 1, Math.max(flatItems.length - 1, 0)));
+        setHighlightIndex(
+          Math.min(activeIndex + 1, Math.max(flatItems.length - 1, 0)),
+        );
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         setHighlightIndex(Math.max(activeIndex - 1, 0));
@@ -753,7 +800,7 @@ export function SearchCommandPalette({
         navigateTo(flatItems[activeIndex]);
       }
     },
-    [query, mode, hasScope, flatItems, activeIndex, navigateTo]
+    [query, mode, hasScope, flatItems, activeIndex, navigateTo],
   );
 
   // Scroll highlighted into view
@@ -779,7 +826,9 @@ export function SearchCommandPalette({
           ? "hint"
           : null;
 
-  const placeholder = mode ? MODES[mode].placeholder : "Search, or > for commands";
+  const placeholder = mode
+    ? MODES[mode].placeholder
+    : "Search, or > for commands";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -787,7 +836,7 @@ export function SearchCommandPalette({
           two menus this opens beside now draw the same one. The shadow is the
           token, not a copy of its value. */}
       <DialogContent
-        className="sm:max-w-[480px] sm:rounded-[14px] p-0 overflow-hidden sm:top-[20%] sm:translate-y-0 border border-[var(--border-hairline)] shadow-[var(--shadow-dropdown)]"
+        className="overflow-hidden border border-[var(--border-hairline)] p-0 shadow-[var(--shadow-dropdown)] sm:top-[20%] sm:max-w-[480px] sm:translate-y-0 sm:rounded-[14px]"
         hideCloseButton
       >
         <DialogTitle className="sr-only">Search</DialogTitle>
@@ -836,13 +885,19 @@ export function SearchCommandPalette({
             <button
               type="button"
               onClick={() => setQuery("")}
-              className="shrink-0 rounded-[6px] p-1 transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none focus-visible:bg-[var(--surface-subtle)] cursor-pointer"
+              className="shrink-0 cursor-pointer rounded-[6px] p-1 transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none"
               aria-label="Clear search"
             >
-              <X className="size-3.5 text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
+              <X
+                className="size-3.5 text-[var(--ink-400)]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
             </button>
           ) : (
-            <Kbd size="xs" variant="flat">esc</Kbd>
+            <Kbd size="xs" variant="flat">
+              esc
+            </Kbd>
           )}
         </div>
 
@@ -938,7 +993,7 @@ export function SearchCommandPalette({
                           onMouseEnter={() => setHighlightIndex(idx)}
                           className={cn(
                             ROW_CLASS,
-                            isActiveRow && "bg-[var(--surface-subtle)]"
+                            isActiveRow && "bg-[var(--surface-subtle)]",
                           )}
                           role="option"
                           aria-selected={isActiveRow}
@@ -946,7 +1001,11 @@ export function SearchCommandPalette({
                           <ResultRow item={item} />
                           {/* Enter has a target, and it is the row that says so. */}
                           {isActiveRow && (
-                            <Kbd size="xs" variant="flat" className="bg-[var(--surface-card)]">
+                            <Kbd
+                              size="xs"
+                              variant="flat"
+                              className="bg-[var(--surface-card)]"
+                            >
                               ↵
                             </Kbd>
                           )}
@@ -962,14 +1021,19 @@ export function SearchCommandPalette({
                   <button
                     type="button"
                     onClick={() => setAllWorkspaces(true)}
-                    className={cn(ROW_CLASS, "mt-1 hover:bg-[var(--surface-subtle)] cursor-pointer")}
+                    className={cn(
+                      ROW_CLASS,
+                      "mt-1 cursor-pointer hover:bg-[var(--surface-subtle)]",
+                    )}
                   >
                     <span className="w-[14px] shrink-0" aria-hidden="true" />
                     <span className="min-w-0 flex-1 text-[12px] text-[var(--ink-600)]">
                       {pluralize(results.elsewhereCount, "more result")} in your
                       other workspace{available.length > 2 ? "s" : ""}
                     </span>
-                    <Kbd size="xs" variant="flat">⇧↵</Kbd>
+                    <Kbd size="xs" variant="flat">
+                      ⇧↵
+                    </Kbd>
                   </button>
                 )}
               </motion.div>
@@ -979,9 +1043,15 @@ export function SearchCommandPalette({
 
         {/* Footer: both escapes. The kind on the left, the scope on the right. */}
         <div className="flex h-9 items-center gap-3 border-t border-[var(--border-hairline)] px-3.5">
-          <FooterHint keycap=">" mono>commands</FooterHint>
-          <FooterHint keycap="@" mono>players</FooterHint>
-          <FooterHint keycap="#" mono>events</FooterHint>
+          <FooterHint keycap=">" mono>
+            commands
+          </FooterHint>
+          <FooterHint keycap="@" mono>
+            players
+          </FooterHint>
+          <FooterHint keycap="#" mono>
+            events
+          </FooterHint>
           {hasScope && (
             <span className="ml-auto">
               <FooterHint keycap="⇧↵">
@@ -1091,7 +1161,7 @@ function ResultRow({ item }: { item: FlatItem }) {
           <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ink-900)]">
             {item.data.name}
           </span>
-          <span className="shrink-0 text-[12px] tabular-nums text-[var(--ink-500)]">
+          <span className="shrink-0 text-[12px] text-[var(--ink-500)] tabular-nums">
             {pluralize(item.data.matchCount, "match", "matches")}
           </span>
         </>

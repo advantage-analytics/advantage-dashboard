@@ -22,7 +22,7 @@ export function SettingsCard({
     <div
       className={cn(
         "flex flex-col rounded-[14px] border border-[var(--border-card)] px-6 py-[18px] shadow-[var(--shadow-card)]",
-        className
+        className,
       )}
     >
       {children}
@@ -81,7 +81,7 @@ export function SettingsCardRow({
       className={cn(
         "flex gap-6 border-t border-[var(--border-hairline)] py-3",
         align === "start" ? "items-start" : "items-center",
-        className
+        className,
       )}
     >
       <div className="min-w-0 flex-1">
@@ -207,7 +207,9 @@ export function SettingsField({
         {marker}
       </span>
       {children}
-      {hint && <span className="text-[11px] text-[var(--ink-500)]">{hint}</span>}
+      {hint && (
+        <span className="text-[11px] text-[var(--ink-500)]">{hint}</span>
+      )}
     </Wrapper>
   );
 }
@@ -231,13 +233,13 @@ export function SettingsUnderlineInput({
     <input
       data-focus-ring="none" /* the border-b above carries focus */
       className={cn(
-        "h-[34px] bg-transparent text-[13px] text-[var(--ink-900)] outline-none transition-colors",
+        "h-[34px] bg-transparent text-[13px] text-[var(--ink-900)] transition-colors outline-none",
         "placeholder:text-[var(--ink-400)] focus:border-[var(--blue)]",
         emphasis
           ? "border-b-2 border-[var(--blue)]"
           : "border-b border-[var(--border-field)]",
         mono && "mono",
-        className
+        className,
       )}
       {...props}
     />

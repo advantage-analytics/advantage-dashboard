@@ -38,7 +38,7 @@ export default function AuthCheckbox({
       />
       <label
         htmlFor={id}
-        className="inline-flex h-[16px] w-[16px] cursor-pointer items-center justify-center rounded-[var(--radius-cell)] border border-[var(--border-field)] bg-[var(--surface-card)] transition-[background-color,border-color] duration-[var(--duration-fast)] peer-checked:border-[var(--blue)] peer-checked:bg-[var(--blue)] peer-checked:[&>svg]:opacity-100 peer-focus-visible:shadow-[var(--focus-ring)]"
+        className="inline-flex h-[16px] w-[16px] cursor-pointer items-center justify-center rounded-[var(--radius-cell)] border border-[var(--border-field)] bg-[var(--surface-card)] transition-[background-color,border-color] duration-[var(--duration-fast)] peer-checked:border-[var(--blue)] peer-checked:bg-[var(--blue)] peer-focus-visible:shadow-[var(--focus-ring)] peer-checked:[&>svg]:opacity-100"
       >
         <svg
           width="11"

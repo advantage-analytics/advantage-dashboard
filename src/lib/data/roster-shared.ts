@@ -47,15 +47,15 @@ export interface RosterPlayerOption {
    * unclaimed one is `coach`, which the upload wizard's roster picker shows as
    * the grey Coach-managed pill.
    */
-  managedBy: 'coach' | 'self';
+  managedBy: "coach" | "self";
 }
 
 /** Players only, named, in ladder order (unranked last, then by name). */
 export function rosterPlayerOptions(
-  rows: RosterFullRow[] | null | undefined
+  rows: RosterFullRow[] | null | undefined,
 ): RosterPlayerOption[] {
   return (rows ?? [])
-    .filter((row) => row.role === 'player')
+    .filter((row) => row.role === "player")
     .map((row) => ({
       playerId: row.player_id,
       userId: row.user_id ?? null,
@@ -65,15 +65,17 @@ export function rosterPlayerOptions(
       // either.
       name:
         row.display_name?.trim() ||
-        (row.email ?? '').split('@')[0] ||
-        'Unnamed player',
+        (row.email ?? "").split("@")[0] ||
+        "Unnamed player",
       ladderPosition: row.lineup_spot,
       classYear: row.class_year?.trim() || null,
       email: row.email?.trim() || null,
-      managedBy: (row.managed_by === 'self' ? 'self' : 'coach') as 'coach' | 'self',
+      managedBy: (row.managed_by === "self" ? "self" : "coach") as
+        "coach" | "self",
     }))
     .sort((a, b) => {
-      if (a.ladderPosition === b.ladderPosition) return a.name.localeCompare(b.name);
+      if (a.ladderPosition === b.ladderPosition)
+        return a.name.localeCompare(b.name);
       if (a.ladderPosition === null) return 1;
       if (b.ladderPosition === null) return -1;
       return a.ladderPosition - b.ladderPosition;

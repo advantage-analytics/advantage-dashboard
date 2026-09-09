@@ -90,7 +90,7 @@ const ROSTER_PROFILE_PAGE = /^\/dashboard\/team\/roster\/[^/]+$/;
  * drifted — the sidebar said "Help Center" where this said "Help".
  */
 function getStaticBreadcrumbs(
-  pathname: string
+  pathname: string,
 ): { label: string; href?: string }[] {
   if (pathname === "/dashboard") return [];
   // Pages that are steps within a destination rather than ones themselves:
@@ -138,8 +138,6 @@ function Chip({ children }: { children: React.ReactNode }) {
   );
 }
 
-
-
 export function Header({
   activitySlot,
   greeting,
@@ -159,7 +157,8 @@ export function Header({
   const teamSettingsId = pathname.match(TEAM_SETTINGS_PAGE)?.[1] ?? null;
   const teamSettingsProgram = teamSettingsId
     ? available.find(
-        (workspace) => workspace.kind === "team" && workspace.id === teamSettingsId
+        (workspace) =>
+          workspace.kind === "team" && workspace.id === teamSettingsId,
       )
     : undefined;
   const requestLogout = useRequestLogout();
@@ -246,7 +245,8 @@ export function Header({
   // A page that publishes its own leading slot outranks every treatment below
   // — see `header-slot.tsx`. The profile route is the one that does, and it
   // also holds the slot empty while the page is still on its way.
-  const pageOwnsSlot = headerSlot !== null || ROSTER_PROFILE_PAGE.test(pathname);
+  const pageOwnsSlot =
+    headerSlot !== null || ROSTER_PROFILE_PAGE.test(pathname);
 
   /**
    * The leading slot answers "where am I" once, never twice.
@@ -310,18 +310,18 @@ export function Header({
     title || showGreeting || pageOwnsSlot
       ? []
       : isMatchDetailPage && matchCrumb
-      ? [
-          MATCHES_CRUMB,
-          { label: matchCrumb.tournamentName },
-          { label: `${matchCrumb.player1Name} vs ${matchCrumb.player2Name}` },
-        ]
-      : teamSettingsProgram
-      ? [
-          { label: "Settings", href: "/dashboard/settings" },
-          TEAMS_CRUMB,
-          { label: teamSettingsProgram.name },
-        ]
-      : getStaticBreadcrumbs(pathname);
+        ? [
+            MATCHES_CRUMB,
+            { label: matchCrumb.tournamentName },
+            { label: `${matchCrumb.player1Name} vs ${matchCrumb.player2Name}` },
+          ]
+        : teamSettingsProgram
+          ? [
+              { label: "Settings", href: "/dashboard/settings" },
+              TEAMS_CRUMB,
+              { label: teamSettingsProgram.name },
+            ]
+          : getStaticBreadcrumbs(pathname);
 
   // Radix handles Escape, outside-click and focus return; a client-side
   // navigation from a menu item is the one dismissal it cannot see.
@@ -375,7 +375,7 @@ export function Header({
            scroll, so the frame shows only the resting state. */
         className={cn(
           "sticky top-0 z-30 flex h-11 shrink-0 items-center justify-between border-b bg-white px-6 transition-colors duration-200",
-          scrolled ? "border-[#EBEBEB]" : "border-[var(--border-hairline)]"
+          scrolled ? "border-[#EBEBEB]" : "border-[var(--border-hairline)]",
         )}
       >
         {/* Left: the workspace title, or breadcrumbs — one or the other, never
@@ -419,7 +419,10 @@ export function Header({
                    darker than the frames draw it, deliberately: contrast is a
                    floor, and one rule in one slot beats two. Inline because the
                    DS class is unlayered and beats a Tailwind colour utility. */
-                <span className="text-micro" style={{ color: "var(--ink-600)" }}>
+                <span
+                  className="text-micro"
+                  style={{ color: "var(--ink-600)" }}
+                >
                   {title.qualifier}
                 </span>
               )}
@@ -444,43 +447,44 @@ export function Header({
             </div>
           )}
 
-          {breadcrumbs.length > 0 && !(isMatchDetailPage && matchCrumbLoading) && (
-            <nav
-              aria-label="Breadcrumb"
-              className="flex min-w-0 items-center gap-0.5 text-[11px] font-normal"
-            >
-              {breadcrumbs.map((crumb, i) => (
-                <span key={i} className="flex min-w-0 items-center gap-0.5">
-                  {i > 0 && (
-                    <ChevronRight
-                      className="h-3 w-3 shrink-0 text-[#CCCCCC]"
-                      strokeWidth={1.5}
-                      aria-hidden="true"
-                    />
-                  )}
-                  {crumb.href ? (
-                    <Link
-                      href={crumb.href}
-                      className="shrink-0 text-[#888888] transition-colors duration-200 hover:text-[#525252]"
-                    >
-                      {crumb.label}
-                    </Link>
-                  ) : (
-                    <span
-                      className={cn(
-                        "truncate",
-                        i === breadcrumbs.length - 1
-                          ? "text-[#0D0D0D]"
-                          : "text-[#888888]"
-                      )}
-                    >
-                      {crumb.label}
-                    </span>
-                  )}
-                </span>
-              ))}
-            </nav>
-          )}
+          {breadcrumbs.length > 0 &&
+            !(isMatchDetailPage && matchCrumbLoading) && (
+              <nav
+                aria-label="Breadcrumb"
+                className="flex min-w-0 items-center gap-0.5 text-[11px] font-normal"
+              >
+                {breadcrumbs.map((crumb, i) => (
+                  <span key={i} className="flex min-w-0 items-center gap-0.5">
+                    {i > 0 && (
+                      <ChevronRight
+                        className="h-3 w-3 shrink-0 text-[#CCCCCC]"
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                      />
+                    )}
+                    {crumb.href ? (
+                      <Link
+                        href={crumb.href}
+                        className="shrink-0 text-[#888888] transition-colors duration-200 hover:text-[#525252]"
+                      >
+                        {crumb.label}
+                      </Link>
+                    ) : (
+                      <span
+                        className={cn(
+                          "truncate",
+                          i === breadcrumbs.length - 1
+                            ? "text-[#0D0D0D]"
+                            : "text-[#888888]",
+                        )}
+                      >
+                        {crumb.label}
+                      </span>
+                    )}
+                  </span>
+                ))}
+              </nav>
+            )}
         </div>
 
         {/* Right: page status + search + activity + profile.
@@ -510,9 +514,13 @@ export function Header({
             >
               <button
                 onClick={() => setIsSearchOpen(true)}
-                className="group flex h-7 cursor-pointer items-center gap-[7px] rounded-[8px] px-2 text-[var(--ink-500)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] active:scale-[0.97] focus-visible:outline-none"
+                className="group flex h-7 cursor-pointer items-center gap-[7px] rounded-[8px] px-2 text-[var(--ink-500)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:outline-none active:scale-[0.97]"
               >
-                <Search className="h-[14px] w-[14px]" strokeWidth={1.5} aria-hidden="true" />
+                <Search
+                  className="h-[14px] w-[14px]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
                 <span className="text-[12px] text-[var(--ink-600)] transition-colors duration-150 group-hover:text-[var(--ink-700)]">
                   Search
                 </span>
@@ -539,8 +547,8 @@ export function Header({
               <PopoverTrigger asChild>
                 <button
                   className={cn(
-                    "flex cursor-pointer items-center gap-[5px] rounded-full py-[3px] pl-[3px] pr-1.5 transition-colors duration-150 hover:bg-[var(--surface-subtle)] active:scale-[0.97] focus-visible:outline-none",
-                    isProfileOpen && "bg-[var(--surface-subtle)]"
+                    "flex cursor-pointer items-center gap-[5px] rounded-full py-[3px] pr-1.5 pl-[3px] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none active:scale-[0.97]",
+                    isProfileOpen && "bg-[var(--surface-subtle)]",
                   )}
                   aria-label="Account menu"
                 >
@@ -555,7 +563,7 @@ export function Header({
                       "size-3 transition-transform duration-200",
                       isProfileOpen
                         ? "rotate-180 text-[var(--ink-600)]"
-                        : "text-[var(--ink-400)]"
+                        : "text-[var(--ink-400)]",
                     )}
                     strokeWidth={1.5}
                     aria-hidden="true"
@@ -612,9 +620,7 @@ export function Header({
                     appears the moment a second workspace does. */}
                 {available.length > 1 && (
                   <>
-                    <p className="eyebrow px-3 pb-1 pt-3">
-                      Workspace
-                    </p>
+                    <p className="eyebrow px-3 pt-3 pb-1">Workspace</p>
                     {/* Scrolls at four rows rather than growing the menu — a
                         coach on five programs still gets a menu that fits. */}
                     <div className="max-h-[140px] overflow-y-auto">
@@ -626,7 +632,10 @@ export function Header({
                   </>
                 )}
 
-                <Link href="/dashboard/settings/preferences" className={MENU_ROW_CLASS}>
+                <Link
+                  href="/dashboard/settings/preferences"
+                  className={MENU_ROW_CLASS}
+                >
                   <SlidersHorizontal
                     className="size-[14px] text-[var(--ink-600)]"
                     strokeWidth={1.5}
@@ -673,7 +682,10 @@ export function Header({
         </TooltipProvider>
       </header>
 
-      <SearchCommandPalette open={isSearchOpen} onOpenChange={setIsSearchOpen} />
+      <SearchCommandPalette
+        open={isSearchOpen}
+        onOpenChange={setIsSearchOpen}
+      />
     </>
   );
 }

@@ -11,12 +11,12 @@ worse, silently edits a page the user was not looking at.
 
 **Serve placement exists four times:**
 
-| File | Renders on |
-|---|---|
-| `src/components/dashboard/home/serve-placement-home.tsx` | `/dashboard` |
-| `src/components/dashboard/matches/match-detail/serve-placement-card.tsx` | `/dashboard/matches/[matchId]` |
-| `src/components/dashboard/matches/serve-placement/serve-placement-widget.tsx` | matches subtree |
-| `src/components/dashboard/statistics/serve-placement-stats.tsx` | `/dashboard/statistics` |
+| File                                                                          | Renders on                     |
+| ----------------------------------------------------------------------------- | ------------------------------ |
+| `src/components/dashboard/home/serve-placement-home.tsx`                      | `/dashboard`                   |
+| `src/components/dashboard/matches/match-detail/serve-placement-card.tsx`      | `/dashboard/matches/[matchId]` |
+| `src/components/dashboard/matches/serve-placement/serve-placement-widget.tsx` | matches subtree                |
+| `src/components/dashboard/statistics/serve-placement-stats.tsx`               | `/dashboard/statistics`        |
 
 Statistics cards, match cards and score rows have the same problem.
 

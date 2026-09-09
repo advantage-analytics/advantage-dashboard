@@ -22,21 +22,21 @@ is internal naming only.
 
 If you read an earlier copy, these are the deltas. Everything else still holds.
 
-| | Then | Now |
-|---|---|---|
-| **Source video store** | **Cloudflare R2, served via a Worker** | **Azure Blob Storage, served via a SAS URL** (§3) |
-| **Vendor URL revocation** | **per job, on demand** | **not possible; bounded by a 14-day TTL and deleting the blob on completion** (§3) |
-| **Browser upload** | **one PUT of the whole file** | **8 MiB blocks, with retry per block** (§4) |
-| Webhook auth | plaintext shared secret in a header | **HMAC-SHA256, base64**, per the published contract (§5) |
-| Signature header | unknown; a candidate list | **`X-HMAC-Signature`**, confirmed by the vendor (§5) |
-| Results download | inline, before the 200 | **after the 200**, in `after()` (§5) |
-| Deleting a match | left the video and the results JSON behind | **deletes both**, plus the webhook envelopes (§6) |
-| **After a job completes** | **the video sat there until the match was deleted** | **the source blob is deleted once results are stored** (§6) |
-| Upload progress | invented — the matches list read a fixture array | **real**, from `processing_jobs` (§7) |
-| A closed tab mid-upload | showed "Uploading 0%" forever | **reaped to `failed` after 15 min of silence** (§7) |
-| Orphan sweeper | Supabase Storage only | **all three stores**, including the video container (§6) |
-| Max accepted video | 12 GiB, from a verbal agreement | **8,000,000,000 bytes**, the documented enforced limit (§10) |
-| Phase 2 gate | blocked on a real results fixture | **fixture obtained**; now blocked on vendor answers Q8/Q9/Q13 (§11) |
+|                           | Then                                                | Now                                                                                |
+| ------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **Source video store**    | **Cloudflare R2, served via a Worker**              | **Azure Blob Storage, served via a SAS URL** (§3)                                  |
+| **Vendor URL revocation** | **per job, on demand**                              | **not possible; bounded by a 14-day TTL and deleting the blob on completion** (§3) |
+| **Browser upload**        | **one PUT of the whole file**                       | **8 MiB blocks, with retry per block** (§4)                                        |
+| Webhook auth              | plaintext shared secret in a header                 | **HMAC-SHA256, base64**, per the published contract (§5)                           |
+| Signature header          | unknown; a candidate list                           | **`X-HMAC-Signature`**, confirmed by the vendor (§5)                               |
+| Results download          | inline, before the 200                              | **after the 200**, in `after()` (§5)                                               |
+| Deleting a match          | left the video and the results JSON behind          | **deletes both**, plus the webhook envelopes (§6)                                  |
+| **After a job completes** | **the video sat there until the match was deleted** | **the source blob is deleted once results are stored** (§6)                        |
+| Upload progress           | invented — the matches list read a fixture array    | **real**, from `processing_jobs` (§7)                                              |
+| A closed tab mid-upload   | showed "Uploading 0%" forever                       | **reaped to `failed` after 15 min of silence** (§7)                                |
+| Orphan sweeper            | Supabase Storage only                               | **all three stores**, including the video container (§6)                           |
+| Max accepted video        | 12 GiB, from a verbal agreement                     | **8,000,000,000 bytes**, the documented enforced limit (§10)                       |
+| Phase 2 gate              | blocked on a real results fixture                   | **fixture obtained**; now blocked on vendor answers Q8/Q9/Q13 (§11)                |
 
 Three known gaps from the earlier copy are closed. The vendor-side ones are not, and
 have grown — see §10.
@@ -84,13 +84,13 @@ you read the payload before anything is spent.
 
 ## 2. Two stores, two systems
 
-| Artifact | Where | Why there |
-|---|---|---|
-| Original video, 1–8 GB | **Azure Blob** `advantage-videos`, `videos/…` | the only host the vendor's `VideoUrl` accepts (§3) |
-| **Trimmed video**, returned by the vendor | **Azure Blob** `advantage-videos`, `trimmed/…` | copied server-side from their SAS; the only video that outlives the job |
-| Raw strokes JSON, ~1 MB | **Supabase Storage** `match-results` (private) | beside `match-data`, and next to the Edge Function that will read it |
-| Per-frame players / trajectories JSON (Sept 2026 API), tens of MB | **Supabase Storage** `match-results`, `…/{job}.players.json` / `…/{job}.trajectories.json` | fetched last in `after()`, best-effort; nothing reads them yet |
-| Webhook envelopes, ~1 KB | Postgres `splitstep_webhook_deliveries` | needs to be transactional with the job row |
+| Artifact                                                          | Where                                                                                      | Why there                                                               |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| Original video, 1–8 GB                                            | **Azure Blob** `advantage-videos`, `videos/…`                                              | the only host the vendor's `VideoUrl` accepts (§3)                      |
+| **Trimmed video**, returned by the vendor                         | **Azure Blob** `advantage-videos`, `trimmed/…`                                             | copied server-side from their SAS; the only video that outlives the job |
+| Raw strokes JSON, ~1 MB                                           | **Supabase Storage** `match-results` (private)                                             | beside `match-data`, and next to the Edge Function that will read it    |
+| Per-frame players / trajectories JSON (Sept 2026 API), tens of MB | **Supabase Storage** `match-results`, `…/{job}.players.json` / `…/{job}.trajectories.json` | fetched last in `after()`, best-effort; nothing reads them yet          |
+| Webhook envelopes, ~1 KB                                          | Postgres `splitstep_webhook_deliveries`                                                    | needs to be transactional with the job row                              |
 
 The vendor hands their processed video back on `trimmed_video_url` beside `strokes_url`
 (named `sas_url` until September 2026 — the parser accepts both, and the column is still
@@ -118,7 +118,7 @@ through a Vercel function bounded at 60s.
 Results JSON was originally specced for R2. It moved: at ~1 MB, egress cost is worth
 pennies, nobody external reads it, and the derivation engine that will consume it runs
 in Supabase. **Put the data next to whatever computes on it.** The video sits in Azure
-because that is the only place the *vendor* can read it from.
+because that is the only place the _vendor_ can read it from.
 
 The blob name is unchanged from the R2 key: `videos/{userId}/{matchId}/original.{ext}`,
 still produced by `videoObjectKey()` in `object-keys.ts`. Keeping it matters — the
@@ -139,7 +139,7 @@ tidier flat layout would have broken it silently.
 Not a preference. The vendor's API docs constrain `VideoUrl` to
 `https://<account>.blob.core.windows.net/<container>/<blob>`, "normally with a SAS
 token", and state that other hosts are not supported. Asked directly whether that was
-advisory, they said it was not: *"It needs to be an azure blob, unfortunately."*
+advisory, they said it was not: _"It needs to be an azure blob, unfortunately."_
 
 Everything before that answer served the video from our own infrastructure — R2 behind
 a Cloudflare Worker at `/v/{token}`. It worked, it was cheaper, and the vendor could
@@ -151,11 +151,11 @@ R2 had no consumer other than the vendor. In-app playback uses a local object UR
 the stored file, so when the vendor stopped being able to fetch from our host, the
 whole store lost its reason to exist. Three things justified it:
 
-| Driver | Under the Worker | Now |
-|---|---|---|
-| **Cost** | zero R2 egress on 1–8 GB pulls | ~$0.09/match. Real, and irrelevant at pilot volume |
+| Driver            | Under the Worker                                                                                                                                     | Now                                                                                                                                                                                                 |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Cost**          | zero R2 egress on 1–8 GB pulls                                                                                                                       | ~$0.09/match. Real, and irrelevant at pilot volume                                                                                                                                                  |
 | **Observability** | `vendor_first_downloaded_at`, written by `resolve_video_access_token()` on every fetch — the "processing started" signal the vendor declined to send | **lost.** The replacement is their own `GET {BASE_URL}/jobs/{job_id}`, which is a better signal anyway — their actual queue state instead of our inference from a download log. Not wired yet (§10) |
-| **Revocability** | kill one job's URL on demand | **lost.** See below |
+| **Revocability**  | kill one job's URL on demand                                                                                                                         | **lost.** See below                                                                                                                                                                                 |
 
 ### Revocation, honestly
 
@@ -172,7 +172,7 @@ intent and the real exposure agree. If that stops being true, delete the blob.
 Two things bound the exposure instead, and neither is as good as a kill switch:
 
 1. `VENDOR_URL_TTL_SECONDS`, cut from 30 days to **14**. It was 30 when the number cost
-   nothing; now the TTL *is* the exposure rather than a ceiling above it.
+   nothing; now the TTL _is_ the exposure rather than a ceiling above it.
 2. **Deleting the source blob once results are stored** (§6). This is the real bound,
    and it is new — nothing deleted videos post-completion under R2 either.
 
@@ -277,12 +277,12 @@ carrying a few dead candidates.
 
 Three outcomes, and the asymmetry is deliberate:
 
-| Situation | Result | Why |
-|---|---|---|
-| A candidate header matches the HMAC | accept, `signature_verified = true` | |
-| A candidate header carries the **raw secret** rather than a signature | accept, `signature_verified = false`, warn | proves they hold the secret; says nothing about the body |
-| A candidate header is present and **wrong** | **401** | a real failure, not an unknown-header problem |
-| **No** candidate header found | accept, `signature_verified = false`, log every header name received | see below |
+| Situation                                                             | Result                                                               | Why                                                      |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------- |
+| A candidate header matches the HMAC                                   | accept, `signature_verified = true`                                  |                                                          |
+| A candidate header carries the **raw secret** rather than a signature | accept, `signature_verified = false`, warn                           | proves they hold the secret; says nothing about the body |
+| A candidate header is present and **wrong**                           | **401**                                                              | a real failure, not an unknown-header problem            |
+| **No** candidate header found                                         | accept, `signature_verified = false`, log every header name received | see below                                                |
 
 Rejecting on "no signature found" is the tempting default and it is wrong here. The
 vendor has **no retry policy and a 30s connection timeout**, so a delivery we refuse is
@@ -363,6 +363,7 @@ that ordering is load-bearing for exactly that reason. They run concurrently und
    > removed the source, the trimmed copy is the **only** video for that match, so
    > deleting the match stranded several GB with nothing able to name it — precisely the
    > leak this whole section exists to prevent.
+
 2. **Raw results JSON** in `match-results`, keyed off `processing_jobs.results_object_key`.
 3. **Uploaded provider files** (SwingVision `.xlsx` and friends) in `match-data`.
 
@@ -526,12 +527,12 @@ quota or job state depends on how a component looks, what it is called, or where
 renders. Restyling, re-laying-out, splitting or renaming presentational components
 cannot break the integration.
 
-| Layer | Files | Safe to redesign? |
-|---|---|---|
-| Wizard presentation | `new-match-wizard/{DetailsStepContent,FileStepContent,PinnedLineBar,SourceStepContent,ScoreCell,StepIndicator,TrimStepContent,styles}.tsx` | **Yes, freely** |
-| Matches list & detail | everything under `components/dashboard/matches/` except the wizard hook | **Yes, freely** |
-| Wizard orchestration | `new-match-wizard/useUploadMatchWizard.ts` | **Careful — see below** |
-| Everything server-side | `api/splitstep/`, `api/webhooks/splitstep/`, `lib/services/splitstep/`, `lib/services/upload/`, `supabase/functions/` | Untouched by UI work |
+| Layer                  | Files                                                                                                                                      | Safe to redesign?       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| Wizard presentation    | `new-match-wizard/{DetailsStepContent,FileStepContent,PinnedLineBar,SourceStepContent,ScoreCell,StepIndicator,TrimStepContent,styles}.tsx` | **Yes, freely**         |
+| Matches list & detail  | everything under `components/dashboard/matches/` except the wizard hook                                                                    | **Yes, freely**         |
+| Wizard orchestration   | `new-match-wizard/useUploadMatchWizard.ts`                                                                                                 | **Careful — see below** |
+| Everything server-side | `api/splitstep/`, `api/webhooks/splitstep/`, `lib/services/splitstep/`, `lib/services/upload/`, `supabase/functions/`                      | Untouched by UI work    |
 
 ### The one file to be careful with
 
@@ -551,7 +552,7 @@ Four rules keep it working no matter what the UI looks like:
   outlives the upload — it survives screen shares, extensions, and anyone opening
   devtools. Log the blob name, which is what you want when debugging anyway.
 - **Keep writing `upload_progress_percent`.** Stop and the reaper (§7) fails the job
-  after 15 minutes of silence — the progress write *is* the heartbeat.
+  after 15 minutes of silence — the progress write _is_ the heartbeat.
 - **Keep the `beforeunload` guard around the whole transfer.** The wizard has already
   closed by then, so it is the only thing telling the user the work is not finished.
 - **The upload outlives the wizard.** It continues in the background after the user
@@ -616,7 +617,7 @@ ordering, and match-deletion cleanup. What remains is almost entirely vendor-sid
   is the reason Phase 4 (retire R2) is on hold rather than done.
 - **The job status endpoint is unused, and now matters more.**
   `GET {BASE_URL}/jobs/{job_id}` is both the recovery path for a delivery lost to an
-  outage *and* the replacement for `vendor_first_downloaded_at`, which the move to Azure
+  outage _and_ the replacement for `vendor_first_downloaded_at`, which the move to Azure
   stopped populating (§3). Nothing calls it yet.
 - **`vendor_first_downloaded_at`, `vendor_last_downloaded_at` and `vendor_request_count`
   are now permanently null.** Only the Worker wrote them. Nothing in `src/` reads them,
@@ -646,7 +647,7 @@ a Playwright suite over both.
 
 **It writes nothing to the database, on purpose.** `points.won_by_player1` is `NOT NULL`
 and `shots.point_id` is `NOT NULL`, so there is no schema-legal way to persist one
-derived shot without first committing to a winner for *every* point in the match. The
+derived shot without first committing to a winner for _every_ point in the match. The
 payload has no point-winner field, and the two signals we can derive one from agree
 **88% on the clean fixture and 43% on the degraded one** — worse than chance, with no
 third signal to arbitrate.
@@ -663,17 +664,17 @@ branch. The three that block Phase 2 are **Q8** (what `in` means on a serve), **
 
 ## 12. Environment
 
-| Variable | Where | Notes |
-|---|---|---|
-| `AZURE_STORAGE_ACCOUNT` | Vercel, **per environment** | storage account name. `advantagedashboardca` (**Canada East**) since 2026-09-03: the vendor's GPU workers are local machines in Montreal and a West US 2 download of a 1 GB match timed out 19 minutes in (job 74cea58e); they will not add retries, so the bytes moved next to them instead. `advantagedashboard` (West US 2) is the retired predecessor — keep it until every job whose 14-day `VideoUrl` was signed against it has finished |
-| `AZURE_STORAGE_KEY` | Vercel, **per environment** | account key. Signs **both** the browser's write SAS and the vendor's read SAS |
-| `AZURE_STORAGE_CONTAINER` | Vercel, **per environment** | `advantage-videos` |
-| `NEXT_PUBLIC_SITE_URL` | Vercel, **per environment** | builds the vendor's WebhookUrl. One value shared across Production and Preview means a preview hands them the production origin, where the route does not exist |
-| `SPLITSTEP_WEBHOOK_SECRET` | Vercel | HMAC key, **issued by the vendor**. Unset = unsigned mode, which accepts anything |
-| `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE` | Vercel | `true` = fail-closed on a missing signature. **Set this once a real delivery confirms `X-HMAC-Signature`** |
-| `SPLITSTEP_API_URL`, `SPLITSTEP_API_KEY` | Vercel, **Preview only today** | key issued by the vendor. Production submissions 503 until set there |
-| `CRON_SECRET` | Vercel | any long random string. Vercel sends it as `Authorization: Bearer <secret>` to `/api/cron/reclaim-videos`. **Unset = the reclaim never runs** and source videos accumulate |
-| `R2_*` | — | **retired.** Still in `.env.example` until the R2 code is deleted; nothing reads them |
+| Variable                                 | Where                          | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ---------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AZURE_STORAGE_ACCOUNT`                  | Vercel, **per environment**    | storage account name. `advantagedashboardca` (**Canada East**) since 2026-09-03: the vendor's GPU workers are local machines in Montreal and a West US 2 download of a 1 GB match timed out 19 minutes in (job 74cea58e); they will not add retries, so the bytes moved next to them instead. `advantagedashboard` (West US 2) is the retired predecessor — keep it until every job whose 14-day `VideoUrl` was signed against it has finished |
+| `AZURE_STORAGE_KEY`                      | Vercel, **per environment**    | account key. Signs **both** the browser's write SAS and the vendor's read SAS                                                                                                                                                                                                                                                                                                                                                                  |
+| `AZURE_STORAGE_CONTAINER`                | Vercel, **per environment**    | `advantage-videos`                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `NEXT_PUBLIC_SITE_URL`                   | Vercel, **per environment**    | builds the vendor's WebhookUrl. One value shared across Production and Preview means a preview hands them the production origin, where the route does not exist                                                                                                                                                                                                                                                                                |
+| `SPLITSTEP_WEBHOOK_SECRET`               | Vercel                         | HMAC key, **issued by the vendor**. Unset = unsigned mode, which accepts anything                                                                                                                                                                                                                                                                                                                                                              |
+| `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE`    | Vercel                         | `true` = fail-closed on a missing signature. **Set this once a real delivery confirms `X-HMAC-Signature`**                                                                                                                                                                                                                                                                                                                                     |
+| `SPLITSTEP_API_URL`, `SPLITSTEP_API_KEY` | Vercel, **Preview only today** | key issued by the vendor. Production submissions 503 until set there                                                                                                                                                                                                                                                                                                                                                                           |
+| `CRON_SECRET`                            | Vercel                         | any long random string. Vercel sends it as `Authorization: Bearer <secret>` to `/api/cron/reclaim-videos`. **Unset = the reclaim never runs** and source videos accumulate                                                                                                                                                                                                                                                                     |
+| `R2_*`                                   | —                              | **retired.** Still in `.env.example` until the R2 code is deleted; nothing reads them                                                                                                                                                                                                                                                                                                                                                          |
 
 Note that the account key is the only credential and it does everything, which is why
 the write SAS is scoped to `cw` on one blob name — that scope is the containment, not

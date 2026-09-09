@@ -34,7 +34,7 @@ export function Chip({
         "transition-colors duration-[var(--duration-hover)] outline-none focus-visible:shadow-[var(--focus-ring)]",
         active
           ? "border-[var(--border-medium)] bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
-          : "border-[var(--border-hairline)] font-normal text-[var(--ink-600)] hover:bg-[var(--surface-subtle)]"
+          : "border-[var(--border-hairline)] font-normal text-[var(--ink-600)] hover:bg-[var(--surface-subtle)]",
       )}
     >
       {label}

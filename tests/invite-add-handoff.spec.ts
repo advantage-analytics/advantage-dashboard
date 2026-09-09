@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
 /**
  * Invite → Add player, the hand-off — `roster-invite-dialog.tsx` offering it
@@ -64,25 +64,28 @@ import { expect, test } from '@playwright/test';
  */
 
 const INVITE = readFileSync(
-  join(process.cwd(), 'src/components/dashboard/team/roster-invite-dialog.tsx'),
-  'utf8'
+  join(process.cwd(), "src/components/dashboard/team/roster-invite-dialog.tsx"),
+  "utf8",
 );
 
 const HEADER = readFileSync(
-  join(process.cwd(), 'src/components/dashboard/team/roster-header-buttons.tsx'),
-  'utf8'
+  join(
+    process.cwd(),
+    "src/components/dashboard/team/roster-header-buttons.tsx",
+  ),
+  "utf8",
 );
 
-test('the offer renders under the email field, on exactly three conditions', () => {
+test("the offer renders under the email field, on exactly three conditions", () => {
   // The copy, verbatim — the arrow is an entity in source.
-  expect(INVITE).toContain('Add a coach-managed profile instead &rarr;');
+  expect(INVITE).toContain("Add a coach-managed profile instead &rarr;");
 
   // Guarded on: no profile chosen, no parsed list, something typed.
   expect(INVITE).toContain(
-    '{onHandOffToAddPlayer && !linked && !listed && draft !== "" && ('
+    '{onHandOffToAddPlayer && !linked && !listed && draft !== "" && (',
   );
   // ...and it hands over the trimmed address, nothing else.
-  expect(INVITE).toContain('onHandOffToAddPlayer(address);');
+  expect(INVITE).toContain("onHandOffToAddPlayer(address);");
   expect(INVITE).not.toMatch(/onHandOffToAddPlayer\(\s*\{/);
 
   /* It leaves through `close()`, which is what resets this dialog. The header
@@ -91,59 +94,62 @@ test('the offer renders under the email field, on exactly three conditions', () 
      reopening Invite would offer to invite somebody the coach just added as a
      coach-managed row. `address` is read before `close()` clears `draft`. */
   expect(INVITE).toMatch(
-    /const address = draft;\s*close\(\);\s*onHandOffToAddPlayer\(address\);/
+    /const address = draft;\s*close\(\);\s*onHandOffToAddPlayer\(address\);/,
   );
 
   // Quiet blue text, not a button — the DS's footer-left register.
   expect(INVITE).toMatch(
-    /text-\[11px\] font-medium text-\[var\(--blue\)\][\s\S]{0,80}\n\s*>\n\s*Add a coach-managed profile instead/
+    /text-\[11px\] font-medium text-\[var\(--blue\)\][\s\S]{0,80}\n\s*>\n\s*Add a coach-managed profile instead/,
   );
   expect(INVITE).not.toMatch(
-    /advButton\([^)]*\)[\s\S]{0,200}Add a coach-managed profile/
+    /advButton\([^)]*\)[\s\S]{0,200}Add a coach-managed profile/,
   );
 
   // Positioned under the email field, above the role block.
   expect(INVITE).toMatch(
-    /<\/SettingsField>[\s\S]*?Add a coach-managed profile instead[\s\S]*?\{linked \? \(/
+    /<\/SettingsField>[\s\S]*?Add a coach-managed profile instead[\s\S]*?\{linked \? \(/,
   );
 });
 
-test('the header performs the hand-off and clears it afterwards', () => {
-  expect(HEADER).toContain('onHandOffToAddPlayer={handOffToAddPlayer}');
+test("the header performs the hand-off and clears it afterwards", () => {
+  expect(HEADER).toContain("onHandOffToAddPlayer={handOffToAddPlayer}");
 
   // Email only, no invented name; Invite closes, Add player opens.
   expect(HEADER).toMatch(
-    /function handOffToAddPlayer\(email: string\) \{\s*if \(addingPlayer\) return;\s*setAddInitial\(\{ email \}\);\s*setInviting\(false\);\s*setAddingPlayer\(true\);\s*\}/
+    /function handOffToAddPlayer\(email: string\) \{\s*if \(addingPlayer\) return;\s*setAddInitial\(\{ email \}\);\s*setInviting\(false\);\s*setAddingPlayer\(true\);\s*\}/,
   );
   expect(HEADER).not.toMatch(/setAddInitial\(\{[^}]*(firstName|lastName)/);
 
   // The stale-prefill close: `addInitial` does not outlive one opening.
   expect(HEADER).toMatch(
-    /onOpenChange=\{\(next\) => \{\s*setAddingPlayer\(next\);\s*if \(!next\) setAddInitial\(undefined\);\s*\}\}/
+    /onOpenChange=\{\(next\) => \{\s*setAddingPlayer\(next\);\s*if \(!next\) setAddInitial\(undefined\);\s*\}\}/,
   );
-  expect(HEADER).toContain('initial={addInitial}');
+  expect(HEADER).toContain("initial={addInitial}");
 });
 
 test('the invitation path is untouched — "Someone new" still sends', () => {
   // "Someone new" is still `null`, and still reaches `pick`.
   const PICKER = readFileSync(
-    join(process.cwd(), 'src/components/dashboard/team/invite-target-picker.tsx'),
-    'utf8'
+    join(
+      process.cwd(),
+      "src/components/dashboard/team/invite-target-picker.tsx",
+    ),
+    "utf8",
   );
-  expect(PICKER).toContain('onSelect(index === 0 ? null : players[index - 1]);');
-  expect(INVITE).toContain('onSelect={pick}');
+  expect(PICKER).toContain(
+    "onSelect(index === 0 ? null : players[index - 1]);",
+  );
+  expect(INVITE).toContain("onSelect={pick}");
 
   // Send still calls `submit`, and `submit` still calls the same action with
   // the same three arguments — a null target still means an unbound invite.
   expect(INVITE).toMatch(/disabled=\{!ready\}\s*onClick=\{submit\}/);
   expect(INVITE).toMatch(
-    /const result = await inviteMember\(\{\s*email: address,\s*role,\s*playerId: target\?\.profileId \?\? null,\s*\}\);/
+    /const result = await inviteMember\(\{\s*email: address,\s*role,\s*playerId: target\?\.profileId \?\? null,\s*\}\);/,
   );
   // Readiness is still "there is an address and nothing in flight" — the offer
   // added no condition to it.
-  expect(INVITE).toContain(
-    'const ready = addresses.length > 0 && !pending;'
-  );
+  expect(INVITE).toContain("const ready = addresses.length > 0 && !pending;");
   expect(INVITE).toContain('"Send invite"');
 });
 
@@ -228,76 +234,84 @@ const HARNESS = `
     render();
   </script>`;
 
-test('the offer appears only for an unbound single address', async ({ page }) => {
+test("the offer appears only for an unbound single address", async ({
+  page,
+}) => {
   await page.setContent(HARNESS);
-  const handoff = page.locator('#handoff');
+  const handoff = page.locator("#handoff");
 
   // Empty field: nothing to carry.
   await expect(handoff).toBeHidden();
 
-  await page.fill('#email', 'maya@school.edu');
+  await page.fill("#email", "maya@school.edu");
   await expect(handoff).toBeVisible();
 
   // A chosen profile: the duplicate the picker exists to prevent.
-  await page.click('#pick-profile');
+  await page.click("#pick-profile");
   await expect(handoff).toBeHidden();
 
   // Back to "Someone new" with an address typed: offered again.
-  await page.click('#pick-new');
-  await page.fill('#email', 'maya@school.edu');
+  await page.click("#pick-new");
+  await page.fill("#email", "maya@school.edu");
   await expect(handoff).toBeVisible();
 
   // A pasted list is many people; one row would drop the rest.
-  await page.click('#paste-list');
+  await page.click("#paste-list");
   await expect(handoff).toBeHidden();
 });
 
-test('taking the offer closes Invite and opens Add player with the email', async ({
+test("taking the offer closes Invite and opens Add player with the email", async ({
   page,
 }) => {
   await page.setContent(HARNESS);
 
-  await page.click('#pick-new');
-  await page.fill('#email', 'maya@school.edu');
-  await page.click('#handoff');
+  await page.click("#pick-new");
+  await page.fill("#email", "maya@school.edu");
+  await page.click("#handoff");
 
-  await expect(page.locator('#invite')).toBeHidden();
-  await expect(page.locator('#add')).toBeVisible();
-  await expect(page.locator('#add-email')).toHaveValue('maya@school.edu');
+  await expect(page.locator("#invite")).toBeHidden();
+  await expect(page.locator("#add")).toBeVisible();
+  await expect(page.locator("#add-email")).toHaveValue("maya@school.edu");
   // Only the address crossed over.
-  await expect(page.locator('#add-initial')).toHaveText('{"email":"maya@school.edu"}');
+  await expect(page.locator("#add-initial")).toHaveText(
+    '{"email":"maya@school.edu"}',
+  );
 });
 
-test('the hand-off is a no-op while Add player is already open', async ({ page }) => {
+test("the hand-off is a no-op while Add player is already open", async ({
+  page,
+}) => {
   await page.setContent(HARNESS);
 
   // A coach is part-way through Add player already.
-  await page.click('#add-open');
-  await page.fill('#add-email', 'typed-by-hand@school.edu');
+  await page.click("#add-open");
+  await page.fill("#add-email", "typed-by-hand@school.edu");
 
-  await page.fill('#email', 'maya@school.edu');
-  await page.click('#handoff');
+  await page.fill("#email", "maya@school.edu");
+  await page.click("#handoff");
 
-  await expect(page.locator('#add-email')).toHaveValue('typed-by-hand@school.edu');
-  await expect(page.locator('#add-initial')).toHaveText('none');
+  await expect(page.locator("#add-email")).toHaveValue(
+    "typed-by-hand@school.edu",
+  );
+  await expect(page.locator("#add-initial")).toHaveText("none");
 });
 
-test('a closed Add player forgets the hand-off, so the next open is empty', async ({
+test("a closed Add player forgets the hand-off, so the next open is empty", async ({
   page,
 }) => {
   await page.setContent(HARNESS);
 
-  await page.fill('#email', 'maya@school.edu');
-  await page.click('#handoff');
-  await expect(page.locator('#add-email')).toHaveValue('maya@school.edu');
+  await page.fill("#email", "maya@school.edu");
+  await page.click("#handoff");
+  await expect(page.locator("#add-email")).toHaveValue("maya@school.edu");
 
-  await page.click('#add-close');
-  await expect(page.locator('#add-initial')).toHaveText('none');
+  await page.click("#add-close");
+  await expect(page.locator("#add-initial")).toHaveText("none");
 
   // A later, unrelated "Add player" must not inherit September's address.
-  await page.click('#add-open');
-  await expect(page.locator('#add')).toBeVisible();
-  await expect(page.locator('#add-email')).toHaveValue('');
+  await page.click("#add-open");
+  await expect(page.locator("#add")).toBeVisible();
+  await expect(page.locator("#add-email")).toHaveValue("");
 });
 
 test('"Someone new" plus Send still sends the invitation, offer or not', async ({
@@ -305,12 +319,12 @@ test('"Someone new" plus Send still sends the invitation, offer or not', async (
 }) => {
   await page.setContent(HARNESS);
 
-  await page.click('#pick-new');
-  await page.fill('#email', 'maya@school.edu');
+  await page.click("#pick-new");
+  await page.fill("#email", "maya@school.edu");
   // The offer is on screen and deliberately ignored.
-  await expect(page.locator('#handoff')).toBeVisible();
-  await page.click('#send');
-  await expect(page.locator('#sent')).toHaveText(
-    'invited maya@school.edu playerId=null'
+  await expect(page.locator("#handoff")).toBeVisible();
+  await page.click("#send");
+  await expect(page.locator("#sent")).toHaveText(
+    "invited maya@school.edu playerId=null",
   );
 });

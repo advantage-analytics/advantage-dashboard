@@ -165,8 +165,9 @@ export function PreferencesForm({
       <SettingsCard className="flex-row items-center gap-4">
         <div className="min-w-0 flex-1">
           <div className="text-[12px] text-[var(--ink-900)]">
-            Role: <b className="font-medium">{role ? capitalize(role) : "Not set"}</b> · Plan:{" "}
-            <b className="font-medium">{capitalize(plan)}</b>
+            Role:{" "}
+            <b className="font-medium">{role ? capitalize(role) : "Not set"}</b>{" "}
+            · Plan: <b className="font-medium">{capitalize(plan)}</b>
           </div>
           <div className="mt-0.5 text-[11px] text-[var(--ink-500)]">
             Separate columns — editing your profile can never touch your plan.
@@ -182,4 +183,3 @@ export function PreferencesForm({
     </div>
   );
 }
-

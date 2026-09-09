@@ -15,7 +15,13 @@ interface StepIndicatorProps {
 
 export function StepIndicator({ currentStep, totalSteps }: StepIndicatorProps) {
   return (
-    <div className="flex gap-[3px]" role="progressbar" aria-valuenow={currentStep + 1} aria-valuemin={1} aria-valuemax={totalSteps}>
+    <div
+      className="flex gap-[3px]"
+      role="progressbar"
+      aria-valuenow={currentStep + 1}
+      aria-valuemin={1}
+      aria-valuemax={totalSteps}
+    >
       {Array.from({ length: totalSteps }, (_, index) => (
         <div
           key={index}

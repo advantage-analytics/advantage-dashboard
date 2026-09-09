@@ -37,7 +37,7 @@ export interface MatchVideo {
 }
 
 export const getMatchVideo = cache(async function getMatchVideo(
-  matchId: string
+  matchId: string,
 ): Promise<MatchVideo | null> {
   // Without storage credentials there is nothing to sign, and this is a normal
   // state on a deployment that has never run a video job. Returning null keeps

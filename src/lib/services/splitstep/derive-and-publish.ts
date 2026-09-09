@@ -13,11 +13,11 @@
  * of this logic would be the more expensive mistake.
  */
 
-import type { createAdminClient } from '@/lib/supabase/admin';
-import { persistTranscript } from './persist-transcript';
-import type { Transcript } from './derivation';
+import type { createAdminClient } from "@/lib/supabase/admin";
+import { persistTranscript } from "./persist-transcript";
+import type { Transcript } from "./derivation";
 
-const LOG = '[splitstep:derive]';
+const LOG = "[splitstep:derive]";
 
 export type DeriveOutcome =
   | {
@@ -49,9 +49,9 @@ export async function deriveAndPublish(params: {
 
   try {
     await supabase
-      .from('processing_jobs')
-      .update({ status: 'deriving' })
-      .eq('id', jobId);
+      .from("processing_jobs")
+      .update({ status: "deriving" })
+      .eq("id", jobId);
 
     const written = await persistTranscript({ supabase, jobId });
 
@@ -61,9 +61,9 @@ export async function deriveAndPublish(params: {
       // because these rows are the point-by-point timeline and the video seek
       // targets — a wrong point is a specific false claim on a screen.
       await supabase
-        .from('processing_jobs')
-        .update({ status: 'derivation_failed', error_message: written.reason })
-        .eq('id', jobId);
+        .from("processing_jobs")
+        .update({ status: "derivation_failed", error_message: written.reason })
+        .eq("id", jobId);
       console.error(`${LOG} refused`, { jobId, reason: written.reason });
       return { ok: false, reason: written.reason };
     }
@@ -84,8 +84,8 @@ export async function deriveAndPublish(params: {
     // deriveAndPublish (or the RPC by hand) for every match published since.
     // docs/splitstep-derivation.md §4 explains what those numbers are worth.
     const steps: [string, Record<string, string>][] = [
-      ['calculate_match_stats', { p_match_id: matchId }],
-      ['backfill_returns_in_and_net_points', { p_match_id: matchId }],
+      ["calculate_match_stats", { p_match_id: matchId }],
+      ["backfill_returns_in_and_net_points", { p_match_id: matchId }],
       // ['suppress_derived_match_stats', { p_match_id: matchId }],
     ];
 
@@ -98,20 +98,24 @@ export async function deriveAndPublish(params: {
       // that were never suppressed, so this is a failure even though the
       // transcript survived.
       await supabase
-        .from('processing_jobs')
+        .from("processing_jobs")
         .update({
-          status: 'derivation_failed',
+          status: "derivation_failed",
           error_message: `${fn} failed: ${error.message}`,
         })
-        .eq('id', jobId);
-      console.error(`${LOG} ${fn} failed`, { jobId, matchId, error: error.message });
+        .eq("id", jobId);
+      console.error(`${LOG} ${fn} failed`, {
+        jobId,
+        matchId,
+        error: error.message,
+      });
       return { ok: false, reason: `${fn} failed: ${error.message}` };
     }
 
     await supabase
-      .from('processing_jobs')
-      .update({ status: 'completed', error_message: null })
-      .eq('id', jobId);
+      .from("processing_jobs")
+      .update({ status: "completed", error_message: null })
+      .eq("id", jobId);
 
     // `unreconciled` is reachable now (ACCEPT_UNRECONCILED_FOLD): the fold did
     // not reproduce the entered score and the rows were written anyway, with
@@ -123,7 +127,7 @@ export async function deriveAndPublish(params: {
       matchId,
       points: written.pointsWritten,
       shots: written.shotsWritten,
-      grade: rec.ok ? 'reconciled' : 'unreconciled',
+      grade: rec.ok ? "reconciled" : "unreconciled",
       player1Source: rec.player1Source,
       reason: rec.ok ? undefined : rec.reason,
     });
@@ -138,10 +142,13 @@ export async function deriveAndPublish(params: {
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     await supabase
-      .from('processing_jobs')
-      .update({ status: 'derivation_failed', error_message: reason })
-      .eq('id', jobId)
-      .then(() => undefined, () => undefined);
+      .from("processing_jobs")
+      .update({ status: "derivation_failed", error_message: reason })
+      .eq("id", jobId)
+      .then(
+        () => undefined,
+        () => undefined,
+      );
     console.error(`${LOG} threw`, { jobId, reason });
     return { ok: false, reason };
   }

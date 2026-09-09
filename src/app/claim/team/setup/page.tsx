@@ -1,9 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import {
-  ClaimShell,
-  AsidePanel,
-} from "@/components/claim/claim-shell";
+import { ClaimShell, AsidePanel } from "@/components/claim/claim-shell";
 import { TeamSetupForm } from "@/components/claim/team-setup-form";
 import type { CustomOrgType } from "@/lib/services/programs/create-actions";
 

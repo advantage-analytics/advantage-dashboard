@@ -51,7 +51,6 @@ const OPTIONS: {
   },
 ];
 
-
 export function TeamKindChoice() {
   const router = useRouter();
   const [kind, setKind] = useState<Kind | null>(null);
@@ -75,17 +74,17 @@ export function TeamKindChoice() {
               onClick={() => setKind(option.id)}
               className={cn(
                 "flex cursor-pointer flex-col gap-3.5 rounded-[var(--radius-card)] border p-6 text-left transition-colors duration-[var(--duration-fast)]",
-                "focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]",
+                "focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
                 selected
                   ? "border-[var(--blue)] bg-[var(--blue-tint-08)]"
-                  : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]"
+                  : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]",
               )}
             >
               <div className="flex items-center justify-between">
                 <Icon
                   className={cn(
                     "size-[22px]",
-                    selected ? "text-[var(--blue)]" : "text-[var(--ink-700)]"
+                    selected ? "text-[var(--blue)]" : "text-[var(--ink-700)]",
                   )}
                   strokeWidth={1.5}
                   aria-hidden="true"
@@ -113,8 +112,7 @@ export function TeamKindChoice() {
           type="button"
           disabled={!kind}
           onClick={() =>
-            kind &&
-            router.push(OPTIONS.find((o) => o.id === kind)!.destination)
+            kind && router.push(OPTIONS.find((o) => o.id === kind)!.destination)
           }
           className={CLAIM_BUTTON}
         >

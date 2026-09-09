@@ -3,7 +3,11 @@ import { LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-card-list";
 const SKELETON_ROWS = 5;
 
 function Bar({ className }: { className: string }): React.JSX.Element {
-  return <div className={`animate-pulse rounded bg-[var(--surface-skeleton)] ${className}`} />;
+  return (
+    <div
+      className={`animate-pulse rounded bg-[var(--surface-skeleton)] ${className}`}
+    />
+  );
 }
 
 /**
@@ -12,7 +16,11 @@ function Bar({ className }: { className: string }): React.JSX.Element {
  */
 export function MatchesSkeleton(): React.JSX.Element {
   return (
-    <div className="flex flex-col gap-6" aria-busy="true" aria-label="Loading matches">
+    <div
+      className="flex flex-col gap-6"
+      aria-busy="true"
+      aria-label="Loading matches"
+    >
       {/* Toolbar skeleton — four view pills left, Filters and the sort right. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -29,7 +37,7 @@ export function MatchesSkeleton(): React.JSX.Element {
       {/* Table card skeleton — same surface-card frame as the real table. */}
       <div className="surface-card" style={{ padding: "2px 24px 6px" }}>
         <div
-          className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pb-2.5 pt-3.5`}
+          className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pt-3.5 pb-2.5`}
           style={LIST_GRID_COLS}
         >
           <Bar className="h-2.5 w-8" />
@@ -43,7 +51,11 @@ export function MatchesSkeleton(): React.JSX.Element {
         </div>
         <div>
           {Array.from({ length: SKELETON_ROWS }).map((_, row) => (
-            <div key={row} className={`${LIST_ROW_FRAME} h-[52px]`} style={LIST_GRID_COLS}>
+            <div
+              key={row}
+              className={`${LIST_ROW_FRAME} h-[52px]`}
+              style={LIST_GRID_COLS}
+            >
               <Bar className="h-3 w-11" />
               <span className="flex min-w-0 items-center gap-2.5">
                 <Bar className="size-[26px] shrink-0 rounded-full" />

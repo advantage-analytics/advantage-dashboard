@@ -1,9 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import {
-  teamLabel,
-  programSubtitle,
-} from "@/lib/data/programs-server";
+import { teamLabel, programSubtitle } from "@/lib/data/programs-server";
 import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
 import { SetupAside, SetupForm } from "@/components/claim/setup-form";
 
@@ -36,7 +33,7 @@ export default async function SetupProgramPage({
   const { data: program } = await supabase
     .from("programs")
     .select(
-      "school_name, team, division, conference, status, primary_domain, athletics_domains, domain_match_skips_review"
+      "school_name, team, division, conference, status, primary_domain, athletics_domains, domain_match_skips_review",
     )
     .eq("program_key", programKey)
     .maybeSingle();
@@ -48,7 +45,7 @@ export default async function SetupProgramPage({
     squad,
     programSubtitle(
       program.division as string | null,
-      program.conference as string | null
+      program.conference as string | null,
     ),
   ]
     .filter(Boolean)
@@ -74,7 +71,8 @@ export default async function SetupProgramPage({
           school_name: program.school_name as string,
           primary_domain: program.primary_domain as string | null,
           athletics_domains: program.athletics_domains as string[] | null,
-          domain_match_skips_review: program.domain_match_skips_review as boolean,
+          domain_match_skips_review:
+            program.domain_match_skips_review as boolean,
         }}
       />
     </ClaimShell>

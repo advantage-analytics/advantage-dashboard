@@ -25,7 +25,7 @@ Compare against what already exists so the new stamp sorts last:
 ls supabase/migrations/ | tail -5
 ```
 
-The description says what the migration *does*, in the imperative:
+The description says what the migration _does_, in the imperative:
 `add_shot_zone`, `secure_match_stats_view`, `fix_rally_length`.
 
 ## 2. Understand what you are changing

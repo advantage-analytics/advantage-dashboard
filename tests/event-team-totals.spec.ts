@@ -1,6 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
-import { sumTeamTotals, type TeamTotalRow } from '@/lib/data/event-team-totals';
+import { sumTeamTotals, type TeamTotalRow } from "@/lib/data/event-team-totals";
 
 /**
  * The event totals' arithmetic, against figures worked out by hand.
@@ -21,7 +21,7 @@ import { sumTeamTotals, type TeamTotalRow } from '@/lib/data/event-team-totals';
 function row(
   matchId: string,
   isPlayer1: boolean,
-  counts: Omit<TeamTotalRow, 'match_id' | 'is_player1'>
+  counts: Omit<TeamTotalRow, "match_id" | "is_player1">,
 ): TeamTotalRow {
   return { match_id: matchId, is_player1: isPlayer1, ...counts };
 }
@@ -40,7 +40,7 @@ function row(
  *          points won 45 + 42 = 87, of 100 + 80 = 180           → 48.3%
  */
 const WEEKEND: TeamTotalRow[] = [
-  row('m-1', true, {
+  row("m-1", true, {
     first_serves: 60,
     first_serves_in: 36,
     first_serve_points_won: 27,
@@ -49,7 +49,7 @@ const WEEKEND: TeamTotalRow[] = [
     total_points: 100,
     total_points_won: 55,
   }),
-  row('m-1', false, {
+  row("m-1", false, {
     first_serves: 50,
     first_serves_in: 30,
     first_serve_points_won: 21,
@@ -58,7 +58,7 @@ const WEEKEND: TeamTotalRow[] = [
     total_points: 100,
     total_points_won: 45,
   }),
-  row('m-2', true, {
+  row("m-2", true, {
     first_serves: 40,
     first_serves_in: 24,
     first_serve_points_won: 15,
@@ -67,7 +67,7 @@ const WEEKEND: TeamTotalRow[] = [
     total_points: 80,
     total_points_won: 38,
   }),
-  row('m-2', false, {
+  row("m-2", false, {
     first_serves: 30,
     first_serves_in: 15,
     first_serve_points_won: 9,
@@ -78,8 +78,8 @@ const WEEKEND: TeamTotalRow[] = [
   }),
 ];
 
-test.describe('sumTeamTotals · a weekend as one pool of points', () => {
-  test('our side sums to the hand figures', () => {
+test.describe("sumTeamTotals · a weekend as one pool of points", () => {
+  test("our side sums to the hand figures", () => {
     const totals = sumTeamTotals(WEEKEND);
 
     expect(totals.ours).toEqual({
@@ -90,7 +90,7 @@ test.describe('sumTeamTotals · a weekend as one pool of points', () => {
     });
   });
 
-  test('the opponent side sums to its own hand figures', () => {
+  test("the opponent side sums to its own hand figures", () => {
     const totals = sumTeamTotals(WEEKEND);
 
     expect(totals.theirs).toEqual({
@@ -101,12 +101,12 @@ test.describe('sumTeamTotals · a weekend as one pool of points', () => {
     });
   });
 
-  test('matchesCounted is distinct matches, not rows', () => {
+  test("matchesCounted is distinct matches, not rows", () => {
     // Four rows, two matches — a side is not a match.
     expect(sumTeamTotals(WEEKEND).matchesCounted).toBe(2);
   });
 
-  test('a pooled ratio is not the mean of the per-match percentages', () => {
+  test("a pooled ratio is not the mean of the per-match percentages", () => {
     // Our two matches serve 36/60 = 60% and 24/40 = 60%, so the serve figure
     // agrees either way — points do not. Per match we won 55% and 47.5%, whose
     // mean is 51.25%; pooled over 180 points it is 51.7%. The pooled one is
@@ -116,7 +116,7 @@ test.describe('sumTeamTotals · a weekend as one pool of points', () => {
     expect(sumTeamTotals(WEEKEND).ours.pointsWonPct).not.toBe(51.3);
   });
 
-  test('no rows means every figure is absent, not zero', () => {
+  test("no rows means every figure is absent, not zero", () => {
     expect(sumTeamTotals([])).toEqual({
       ours: {
         firstServeInPct: null,
@@ -135,10 +135,10 @@ test.describe('sumTeamTotals · a weekend as one pool of points', () => {
   });
 });
 
-test.describe('sumTeamTotals · absent is never zero percent', () => {
+test.describe("sumTeamTotals · absent is never zero percent", () => {
   /** A match whose serve columns were withheld but whose points were not. */
   const WITHHELD: TeamTotalRow[] = [
-    row('m-3', true, {
+    row("m-3", true, {
       first_serves: null,
       first_serves_in: null,
       first_serve_points_won: null,
@@ -149,7 +149,7 @@ test.describe('sumTeamTotals · absent is never zero percent', () => {
     }),
   ];
 
-  test('a null-only denominator yields null, while a measured one still divides', () => {
+  test("a null-only denominator yields null, while a measured one still divides", () => {
     const totals = sumTeamTotals(WITHHELD);
 
     expect(totals.ours.firstServeInPct).toBeNull();
@@ -161,9 +161,9 @@ test.describe('sumTeamTotals · absent is never zero percent', () => {
     expect(totals.matchesCounted).toBe(1);
   });
 
-  test('a genuine zero is a figure, an unmeasured denominator is not', () => {
+  test("a genuine zero is a figure, an unmeasured denominator is not", () => {
     const played = sumTeamTotals([
-      row('m-4', true, {
+      row("m-4", true, {
         first_serves: 40,
         first_serves_in: 0,
         first_serve_points_won: 0,
@@ -183,9 +183,9 @@ test.describe('sumTeamTotals · absent is never zero percent', () => {
     expect(played.firstServeWonPct).toBeNull();
   });
 
-  test('null terms add nothing rather than dragging a sum down', () => {
+  test("null terms add nothing rather than dragging a sum down", () => {
     const mixed = sumTeamTotals([
-      row('m-5', true, {
+      row("m-5", true, {
         first_serves: 20,
         first_serves_in: 12,
         first_serve_points_won: 9,
@@ -194,7 +194,7 @@ test.describe('sumTeamTotals · absent is never zero percent', () => {
         total_points: 30,
         total_points_won: 18,
       }),
-      row('m-6', true, {
+      row("m-6", true, {
         first_serves: null,
         first_serves_in: null,
         first_serve_points_won: null,
@@ -215,13 +215,16 @@ test.describe('sumTeamTotals · absent is never zero percent', () => {
   });
 });
 
-test.describe('sumTeamTotals · which side is ours', () => {
-  test('is_player1 true is ours and everything else is theirs', () => {
+test.describe("sumTeamTotals · which side is ours", () => {
+  test("is_player1 true is ours and everything else is theirs", () => {
     const totals = sumTeamTotals(WEEKEND);
 
     // The two sides must not be interchangeable — a reader that flips them
     // prints the opponent's serve percentage under the program's name.
-    expect(totals.ours.breakPoints).toEqual({ converted: 4, opportunities: 12 });
+    expect(totals.ours.breakPoints).toEqual({
+      converted: 4,
+      opportunities: 12,
+    });
     expect(totals.theirs.breakPoints).toEqual({
       converted: 6,
       opportunities: 11,

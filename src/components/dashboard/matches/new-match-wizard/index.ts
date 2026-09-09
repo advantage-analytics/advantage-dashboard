@@ -56,7 +56,10 @@ export {
 
 // Custom hook
 export { useUploadMatchWizard } from "./useUploadMatchWizard";
-export type { UseUploadMatchWizardProps, UseUploadMatchWizardReturn } from "./useUploadMatchWizard";
+export type {
+  UseUploadMatchWizardProps,
+  UseUploadMatchWizardReturn,
+} from "./useUploadMatchWizard";
 
 // Utilities
 export {
@@ -70,5 +73,5 @@ export {
   clearStorageData,
   loadFormDataFromStorage,
   loadUploadedFileFromStorage,
-  saveFormDataToStorage
+  saveFormDataToStorage,
 } from "./utils";

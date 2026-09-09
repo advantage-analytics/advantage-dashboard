@@ -14,7 +14,11 @@ import { advButton } from "@/lib/ui/adv-button";
 import { createClient } from "@/lib/supabase/client";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
-import { isAnalysisFailed, isInFlight, type AnalysisStatus } from "@/lib/data/match-analysis";
+import {
+  isAnalysisFailed,
+  isInFlight,
+  type AnalysisStatus,
+} from "@/lib/data/match-analysis";
 import { viewerSide } from "@/lib/data/viewer-side";
 
 type ToastState =
@@ -56,7 +60,7 @@ interface DbMatch {
 
 function formatOpponentMeta(
   hand: string | null,
-  backhand: string | null
+  backhand: string | null,
 ): string[] {
   const meta: string[] = [];
   if (hand === "left" || hand === "right") {
@@ -126,7 +130,7 @@ function formatDisplayDate(isoDate: string): string {
     const dDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const diffDays = Math.round(
-      (nowDay.getTime() - dDay.getTime()) / (1000 * 60 * 60 * 24)
+      (nowDay.getTime() - dDay.getTime()) / (1000 * 60 * 60 * 24),
     );
 
     if (diffDays === 0) return "Today";
@@ -145,10 +149,7 @@ function formatDisplayDate(isoDate: string): string {
   }
 }
 
-function didUserWin(
-  score: DbMatch["score"],
-  isUserPlayer1: boolean
-): boolean {
+function didUserWin(score: DbMatch["score"], isUserPlayer1: boolean): boolean {
   if (!score?.player1?.length || !score?.player2?.length) return false;
   let p1Sets = 0;
   let p2Sets = 0;
@@ -164,7 +165,7 @@ function groupMatchesIntoEvents(
   playerIds: readonly string[],
   viewerId: string,
   statsMap: Map<string, MatchStats>,
-  analysisMap: Map<string, AnalysisStatus>
+  analysisMap: Map<string, AnalysisStatus>,
 ): EventGroup[] {
   const byKey = new Map<string, DbMatch[]>();
   for (const row of rows) {
@@ -211,12 +212,16 @@ function groupMatchesIntoEvents(
         // their side — game counts and tiebreaks flipped together.
         score: scoreSetsFrom(m.score, { swap: !isUserPlayer1 }),
         won: didUserWin(m.score, isUserPlayer1),
-        firstServePct: stat ? Math.round(parseFloat(stat.first_serve_pct ?? "0")) : null,
+        firstServePct: stat
+          ? Math.round(parseFloat(stat.first_serve_pct ?? "0"))
+          : null,
         winners: stat?.winners ?? null,
         errors: stat?.unforced_errors ?? null,
         opponentMeta: formatOpponentMeta(m.opponent_hand, m.opponent_backhand),
         analysisStatus:
-          status && (isInFlight(status) || isAnalysisFailed(status)) ? status : undefined,
+          status && (isInFlight(status) || isAnalysisFailed(status))
+            ? status
+            : undefined,
       });
     }
 
@@ -320,7 +325,6 @@ export default function RecentActivity({
   matchCount: number;
   wonCount: number;
 }) {
-
   const [events, setEvents] = useState<EventGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -348,7 +352,7 @@ export default function RecentActivity({
       const { data: rows, error: fetchError } = await supabase
         .from("matches")
         .select(
-          "id, created_by, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, player1_id, player2_id, opponent_hand, opponent_backhand"
+          "id, created_by, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, player1_id, player2_id, opponent_hand, opponent_backhand",
         )
         .eq("created_by", userId)
         // AND no program. `/dashboard` is the personal home — same predicate as
@@ -373,7 +377,7 @@ export default function RecentActivity({
         supabase
           .from("match_stats_with_percentages")
           .select(
-            "match_id, is_player1, first_serve_pct, winners, unforced_errors, break_points_saved, break_points_faced, break_point_opportunities, break_points_converted"
+            "match_id, is_player1, first_serve_pct, winners, unforced_errors, break_points_saved, break_points_faced, break_point_opportunities, break_points_converted",
           )
           .in("match_id", matchIds),
         loadMatchAnalysis(supabase, matchIds),
@@ -396,7 +400,9 @@ export default function RecentActivity({
         }
       }
 
-      setEvents(groupMatchesIntoEvents(list, playerIds, userId, statsMap, analysisMap));
+      setEvents(
+        groupMatchesIntoEvents(list, playerIds, userId, statsMap, analysisMap),
+      );
       hasLoadedRef.current = true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load matches");
@@ -425,7 +431,7 @@ export default function RecentActivity({
         setToast((current) =>
           current.kind === "created"
             ? { kind: "analyzing", matchId: current.matchId }
-            : current
+            : current,
         );
       }, 1200);
     };
@@ -437,7 +443,9 @@ export default function RecentActivity({
   }, [load]);
 
   const targetMatchId =
-    toast.kind === "created" || toast.kind === "analyzing" ? toast.matchId : null;
+    toast.kind === "created" || toast.kind === "analyzing"
+      ? toast.matchId
+      : null;
 
   useEffect(() => {
     if (!targetMatchId) return;
@@ -536,236 +544,320 @@ export default function RecentActivity({
 
   return (
     <>
-    <div
-      // `@container/matches`: the rows inside size their stat cells to this
-      // card, not the viewport — see `MatchLink` in recent-matches.tsx.
-      className="surface-card @container/matches"
-      // One padding for every card on Home — `--pad-card`, 20px all round —
-      // so the eyebrows sit on one x and the cards close on one measure.
-      // Pa2 draws this card alone at `2px 24px 14px` with a 40px header row
-      // carrying the top air; the eyebrow lands at the same height either
-      // way, and the rows keep their 8px inset by bleeding 12px instead of
-      // 16 (see `MatchLink`).
-      style={{ padding: "var(--pad-card)" }}
-    >
-      {/* Header — the same row every sibling opens with: eyebrow left, the
+      <div
+        // `@container/matches`: the rows inside size their stat cells to this
+        // card, not the viewport — see `MatchLink` in recent-matches.tsx.
+        className="surface-card @container/matches"
+        // One padding for every card on Home — `--pad-card`, 20px all round —
+        // so the eyebrows sit on one x and the cards close on one measure.
+        // Pa2 draws this card alone at `2px 24px 14px` with a 40px header row
+        // carrying the top air; the eyebrow lands at the same height either
+        // way, and the rows keep their 8px inset by bleeding 12px instead of
+        // 16 (see `MatchLink`).
+        style={{ padding: "var(--pad-card)" }}
+      >
+        {/* Header — the same row every sibling opens with: eyebrow left, the
           card's one link right, 20px from the top edge. */}
-      <div className="flex items-center gap-3">
-        <span className="eyebrow">Recent matches</span>
-        <div className="flex-1" />
-        <Link
-          href="/dashboard/matches"
-          className="text-[11px] font-medium transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:outline-none rounded-sm"
-          style={{ color: "var(--blue)" }}
-        >
-          All matches
-        </Link>
-      </div>
+        <div className="flex items-center gap-3">
+          <span className="eyebrow">Recent matches</span>
+          <div className="flex-1" />
+          <Link
+            href="/dashboard/matches"
+            className="rounded-sm text-[11px] font-medium transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:outline-none"
+            style={{ color: "var(--blue)" }}
+          >
+            All matches
+          </Link>
+        </div>
 
-      {/* Content — no padding of its own; the card's bottom padding is the
+        {/* Content — no padding of its own; the card's bottom padding is the
           whole gap under the footer. */}
-      <div>
-        {loading && (
-          <div className="flex flex-col gap-8 py-4">
-            {[0, 1].map((i) => (
-              <div key={i} className="flex flex-col gap-3">
-                <Skeleton className="h-5 w-40" />
-                <Skeleton className="h-3 w-56" />
-                <div className="flex flex-col gap-3 mt-2">
-                  {[0, 1].map((j) => (
-                    <div key={j} className="flex items-center justify-between">
-                      <div className="flex gap-3 items-center">
-                        <Skeleton className="w-px h-10" />
-                        <div className="flex flex-col gap-2">
-                          <Skeleton className="h-4 w-32" />
-                          <Skeleton className="h-3 w-24" />
+        <div>
+          {loading && (
+            <div className="flex flex-col gap-8 py-4">
+              {[0, 1].map((i) => (
+                <div key={i} className="flex flex-col gap-3">
+                  <Skeleton className="h-5 w-40" />
+                  <Skeleton className="h-3 w-56" />
+                  <div className="mt-2 flex flex-col gap-3">
+                    {[0, 1].map((j) => (
+                      <div
+                        key={j}
+                        className="flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="h-10 w-px" />
+                          <div className="flex flex-col gap-2">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-3 w-24" />
+                          </div>
+                        </div>
+                        <div className="flex gap-4">
+                          {[0, 1, 2].map((k) => (
+                            <div
+                              key={k}
+                              className="flex flex-col items-end gap-2"
+                            >
+                              <Skeleton className="h-2 w-12" />
+                              <Skeleton className="h-3 w-10" />
+                            </div>
+                          ))}
                         </div>
                       </div>
-                      <div className="flex gap-4">
-                        {[0, 1, 2].map((k) => (
-                          <div key={k} className="flex flex-col gap-2 items-end">
-                            <Skeleton className="h-2 w-12" />
-                            <Skeleton className="h-3 w-10" />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
 
-        {error && (
-          <div className="flex flex-col items-center justify-center px-4 py-8 text-center" role="alert">
-            <AlertCircle className="mb-2 size-6 text-[var(--danger)]" strokeWidth={1.5} aria-hidden />
-            <p className="text-[13px] font-medium text-[var(--ink-900)]">
-              Couldn&apos;t load your matches
-            </p>
-            <p className="text-body-sm mt-1 mb-4">The list is still there; the request didn&apos;t make it.</p>
-            {/* An outline, not a second blue: the page's one primary is "New
+          {error && (
+            <div
+              className="flex flex-col items-center justify-center px-4 py-8 text-center"
+              role="alert"
+            >
+              <AlertCircle
+                className="mb-2 size-6 text-[var(--danger)]"
+                strokeWidth={1.5}
+                aria-hidden
+              />
+              <p className="text-[13px] font-medium text-[var(--ink-900)]">
+                Couldn&apos;t load your matches
+              </p>
+              <p className="text-body-sm mt-1 mb-4">
+                The list is still there; the request didn&apos;t make it.
+              </p>
+              {/* An outline, not a second blue: the page's one primary is "New
                 match" in the title row, and a retry is a repair, not a
                 recommendation. */}
-            <button type="button" onClick={load} className={advButton("outline", "sm")}>
-              <RefreshCw className="size-3" strokeWidth={1.5} aria-hidden />
-              Try again
-            </button>
-          </div>
-        )}
+              <button
+                type="button"
+                onClick={load}
+                className={advButton("outline", "sm")}
+              >
+                <RefreshCw className="size-3" strokeWidth={1.5} aria-hidden />
+                Try again
+              </button>
+            </div>
+          )}
 
-        {/* Day zero: the shape of a result, and the one action that makes one.
+          {/* Day zero: the shape of a result, and the one action that makes one.
             The card stays on the page in this state rather than giving way to
             a separate empty screen, so the frame a player learns on the first
             visit is the frame they keep. */}
-        {!loading && !error && events.length === 0 && !hasMatches && (
-          <RecentMatchesEmpty showAction={showEmptyAction} />
-        )}
+          {!loading && !error && events.length === 0 && !hasMatches && (
+            <RecentMatchesEmpty showAction={showEmptyAction} />
+          )}
 
-        {/* Matches exist on the account but none names the viewer as a player
+          {/* Matches exist on the account but none names the viewer as a player
             — a different page from day zero, so it says what the list holds
             rather than how to upload. */}
-        {!loading && !error && events.length === 0 && hasMatches && (
-          <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-            <Inbox className="mb-4 size-7 text-[var(--ink-300)]" strokeWidth={1.5} aria-hidden />
-            <p className="text-[14px] font-medium text-[var(--ink-900)]">
-              No matches to show
-            </p>
-            <p className="text-body-sm mt-1.5 max-w-[36ch]" style={{ textWrap: "pretty" }}>
-              Matches you played appear here as soon as they are sent or
-              imported.
-            </p>
-            <Link
-              href="/dashboard/matches"
-              className="mt-3 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-            >
-              Open all matches
-            </Link>
-          </div>
-        )}
+          {!loading && !error && events.length === 0 && hasMatches && (
+            <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+              <Inbox
+                className="mb-4 size-7 text-[var(--ink-300)]"
+                strokeWidth={1.5}
+                aria-hidden
+              />
+              <p className="text-[14px] font-medium text-[var(--ink-900)]">
+                No matches to show
+              </p>
+              <p
+                className="text-body-sm mt-1.5 max-w-[36ch]"
+                style={{ textWrap: "pretty" }}
+              >
+                Matches you played appear here as soon as they are sent or
+                imported.
+              </p>
+              <Link
+                href="/dashboard/matches"
+                className="mt-3 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+              >
+                Open all matches
+              </Link>
+            </div>
+          )}
 
-        {!loading && !error && events.length > 0 && (
-          <>
-            <EventsList events={events} seenEventIdsRef={seenEventIdsRef} />
-            {/* Pa2's card footer: what the list is a slice of. The left count
+          {!loading && !error && events.length > 0 && (
+            <>
+              <EventsList events={events} seenEventIdsRef={seenEventIdsRef} />
+              {/* Pa2's card footer: what the list is a slice of. The left count
                 is the rows actually drawn — what the grouping leaves after it
                 drops unscored and non-viewer rows and keeps the latest three
                 events. The right one is the same number the title row states,
                 so the two can never disagree. */}
-            <CardFooter
-              className="mt-2.5"
-              left={
-                <>
-                  Latest{" "}
-                  <span className="tabular">
-                    {events.reduce((n, e) => n + e.matches.length, 0)}
-                  </span>{" "}
-                  shown
-                </>
-              }
-              right={
-                <>
-                  <span className="tabular">{matchCount}</span>{" "}
-                  {matchCount === 1 ? "match" : "matches"} ·{" "}
-                  <span className="tabular">{wonCount}</span> won
-                </>
-              }
-            />
-          </>
-        )}
+              <CardFooter
+                className="mt-2.5"
+                left={
+                  <>
+                    Latest{" "}
+                    <span className="tabular">
+                      {events.reduce((n, e) => n + e.matches.length, 0)}
+                    </span>{" "}
+                    shown
+                  </>
+                }
+                right={
+                  <>
+                    <span className="tabular">{matchCount}</span>{" "}
+                    {matchCount === 1 ? "match" : "matches"} ·{" "}
+                    <span className="tabular">{wonCount}</span> won
+                  </>
+                }
+              />
+            </>
+          )}
+        </div>
       </div>
-    </div>
 
-    {/* Floating upload-status pill — confirm → analyzing → ready */}
-    {mounted && createPortal(
-      <AnimatePresence>
-        {toast.kind !== "idle" && (
-          <motion.div
-            initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 24, scale: 0.95 }}
-            animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
-            exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 12, scale: 0.98 }}
-            transition={{
-              duration: shouldReduceMotion ? 0.15 : 0.35,
-              ease: [0.25, 0.46, 0.45, 0.94],
-            }}
-            role="status"
-            onClick={toast.kind === "ready" ? handleToastClick : undefined}
-            className={
-              "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 pl-4 pr-5 py-3 bg-[#0D0D0D] rounded-[12px] shadow-[0px_8px_32px_rgba(0,0,0,0.25),0px_0px_0px_1px_rgba(255,255,255,0.06)_inset] " +
-              (toast.kind === "ready" ? "cursor-pointer hover:bg-[#1A1A1A] transition-colors duration-200" : "")
-            }
-          >
-            {/* Status icon — swaps cleanly across states */}
-            <div className="relative flex items-center justify-center size-5 shrink-0">
-              <AnimatePresence mode="wait" initial={false}>
-                {toast.kind === "created" || toast.kind === "ready" ? (
-                  <motion.div
-                    key={toast.kind}
-                    initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
-                    animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
-                    exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
-                    transition={{ duration: 0.18, ease: [0.25, 0.46, 0.45, 0.94] }}
-                    className="absolute inset-0 flex items-center justify-center"
-                  >
-                    <CheckCircle2 className="size-5 text-[#5DB955]" strokeWidth={1.75} />
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="analyzing"
-                    initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
-                    animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
-                    exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
-                    transition={{ duration: 0.18, ease: [0.25, 0.46, 0.45, 0.94] }}
-                    className="absolute inset-0 flex items-center justify-center"
-                  >
-                    <div className="absolute inset-0 rounded-full border-[1.5px] border-[#3B82F6]/30" aria-hidden />
-                    {!shouldReduceMotion && (
+      {/* Floating upload-status pill — confirm → analyzing → ready */}
+      {mounted &&
+        createPortal(
+          <AnimatePresence>
+            {toast.kind !== "idle" && (
+              <motion.div
+                initial={
+                  shouldReduceMotion
+                    ? { opacity: 0 }
+                    : { opacity: 0, y: 24, scale: 0.95 }
+                }
+                animate={
+                  shouldReduceMotion
+                    ? { opacity: 1 }
+                    : { opacity: 1, y: 0, scale: 1 }
+                }
+                exit={
+                  shouldReduceMotion
+                    ? { opacity: 0 }
+                    : { opacity: 0, y: 12, scale: 0.98 }
+                }
+                transition={{
+                  duration: shouldReduceMotion ? 0.15 : 0.35,
+                  ease: [0.25, 0.46, 0.45, 0.94],
+                }}
+                role="status"
+                onClick={toast.kind === "ready" ? handleToastClick : undefined}
+                className={
+                  "fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-[12px] bg-[#0D0D0D] py-3 pr-5 pl-4 shadow-[0px_8px_32px_rgba(0,0,0,0.25),0px_0px_0px_1px_rgba(255,255,255,0.06)_inset] " +
+                  (toast.kind === "ready"
+                    ? "cursor-pointer transition-colors duration-200 hover:bg-[#1A1A1A]"
+                    : "")
+                }
+              >
+                {/* Status icon — swaps cleanly across states */}
+                <div className="relative flex size-5 shrink-0 items-center justify-center">
+                  <AnimatePresence mode="wait" initial={false}>
+                    {toast.kind === "created" || toast.kind === "ready" ? (
                       <motion.div
-                        className="absolute inset-0 rounded-full border-[1.5px] border-transparent border-t-[#3B82F6]"
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1, ease: "linear", repeat: Infinity }}
-                        aria-hidden
-                      />
+                        key={toast.kind}
+                        initial={
+                          shouldReduceMotion
+                            ? { opacity: 0 }
+                            : { opacity: 0, scale: 0.6 }
+                        }
+                        animate={
+                          shouldReduceMotion
+                            ? { opacity: 1 }
+                            : { opacity: 1, scale: 1 }
+                        }
+                        exit={
+                          shouldReduceMotion
+                            ? { opacity: 0 }
+                            : { opacity: 0, scale: 0.8 }
+                        }
+                        transition={{
+                          duration: 0.18,
+                          ease: [0.25, 0.46, 0.45, 0.94],
+                        }}
+                        className="absolute inset-0 flex items-center justify-center"
+                      >
+                        <CheckCircle2
+                          className="size-5 text-[#5DB955]"
+                          strokeWidth={1.75}
+                        />
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="analyzing"
+                        initial={
+                          shouldReduceMotion
+                            ? { opacity: 0 }
+                            : { opacity: 0, scale: 0.6 }
+                        }
+                        animate={
+                          shouldReduceMotion
+                            ? { opacity: 1 }
+                            : { opacity: 1, scale: 1 }
+                        }
+                        exit={
+                          shouldReduceMotion
+                            ? { opacity: 0 }
+                            : { opacity: 0, scale: 0.8 }
+                        }
+                        transition={{
+                          duration: 0.18,
+                          ease: [0.25, 0.46, 0.45, 0.94],
+                        }}
+                        className="absolute inset-0 flex items-center justify-center"
+                      >
+                        <div
+                          className="absolute inset-0 rounded-full border-[1.5px] border-[#3B82F6]/30"
+                          aria-hidden
+                        />
+                        {!shouldReduceMotion && (
+                          <motion.div
+                            className="absolute inset-0 rounded-full border-[1.5px] border-transparent border-t-[#3B82F6]"
+                            animate={{ rotate: 360 }}
+                            transition={{
+                              duration: 1,
+                              ease: "linear",
+                              repeat: Infinity,
+                            }}
+                            aria-hidden
+                          />
+                        )}
+                        <div
+                          className="size-1.5 rounded-full bg-[#3B82F6]"
+                          aria-hidden
+                        />
+                      </motion.div>
                     )}
-                    <div className="size-1.5 rounded-full bg-[#3B82F6]" aria-hidden />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                  </AnimatePresence>
+                </div>
 
-            <div className="flex flex-col gap-0.5 min-w-[180px]">
-              <p className="text-[12px] font-medium text-white leading-none">
-                {toast.kind === "created"
-                  ? "Match created"
-                  : toast.kind === "ready"
-                  ? "Stats ready"
-                  : "Analyzing match data"}
-              </p>
-              <p className="text-[10px] font-normal text-[#888888] leading-none">
-                {toast.kind === "created"
-                  ? "Analyzing your stats…"
-                  : toast.kind === "ready"
-                  ? "Tap to view your match"
-                  : "Stats will refresh automatically"}
-              </p>
-            </div>
+                <div className="flex min-w-[180px] flex-col gap-0.5">
+                  <p className="text-[12px] leading-none font-medium text-white">
+                    {toast.kind === "created"
+                      ? "Match created"
+                      : toast.kind === "ready"
+                        ? "Stats ready"
+                        : "Analyzing match data"}
+                  </p>
+                  <p className="text-[10px] leading-none font-normal text-[#888888]">
+                    {toast.kind === "created"
+                      ? "Analyzing your stats…"
+                      : toast.kind === "ready"
+                        ? "Tap to view your match"
+                        : "Stats will refresh automatically"}
+                  </p>
+                </div>
 
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                dismissToast();
-              }}
-              className="ml-1 p-1 rounded-full text-white/60 hover:text-white/80 transition-colors duration-200 focus-visible:outline-none"
-              aria-label="Dismiss notification"
-            >
-              <X className="size-3.5" />
-            </button>
-          </motion.div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dismissToast();
+                  }}
+                  className="ml-1 rounded-full p-1 text-white/60 transition-colors duration-200 hover:text-white/80 focus-visible:outline-none"
+                  aria-label="Dismiss notification"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body,
         )}
-      </AnimatePresence>,
-      document.body
-    )}
     </>
   );
 }

@@ -24,15 +24,15 @@ import { cn } from "@/lib/utils";
  */
 const ACTION_CLS = cn(
   "relative inline-flex cursor-pointer items-center rounded-[4px]",
-  "text-[11px] font-medium leading-none",
+  "text-[11px] leading-none font-medium",
   // A blue word: --blue at rest, --blue-hover on hover (colors.css).
   "text-[var(--blue)] hover:text-[var(--blue-hover)]",
-  "outline-none transition-colors duration-[var(--duration-hover)]",
+  "transition-colors duration-[var(--duration-hover)] outline-none",
   "focus-visible:shadow-[var(--focus-ring)]",
   // Invisible target centred on the label. The label itself renders 11px tall
   // (leading-none at 11px), so 7px each side clears WCAG 2.2 SC 2.5.8's 24px
   // floor with a pixel to spare — 6px measured 23px and missed it.
-  "before:absolute before:-inset-x-2 before:-inset-y-[7px] before:content-['']"
+  "before:absolute before:-inset-x-2 before:-inset-y-[7px] before:content-['']",
 );
 
 export function RowAction({

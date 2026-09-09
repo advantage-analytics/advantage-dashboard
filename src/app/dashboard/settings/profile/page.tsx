@@ -31,7 +31,9 @@ export default async function ProfilePage() {
   const supabase = await createClient();
   const { data } = await supabase
     .from("users")
-    .select("first_name, last_name, dob, phone, country, state, hand, backhand, role")
+    .select(
+      "first_name, last_name, dob, phone, country, state, hand, backhand, role",
+    )
     .eq("id", workspace.viewer.id)
     .maybeSingle();
 

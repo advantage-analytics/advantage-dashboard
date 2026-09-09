@@ -83,9 +83,7 @@ export function teamDigestEmail(input: TeamDigestInput): EmailMessage {
     preheader: `${count} ${plural} from ${weekLabel} for ${programName}.`,
     eyebrow: "Weekly digest",
     heading: `${programName} — ${weekLabel}`,
-    body: [
-      `${count} ${plural} landed this week. Here's what's on the board.`,
-    ],
+    body: [`${count} ${plural} landed this week. Here's what's on the board.`],
     list: rows,
     listTitle: "Matches",
     facts: [

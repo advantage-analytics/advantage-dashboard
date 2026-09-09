@@ -29,11 +29,17 @@ const HeaderSlotContext = createContext<HeaderSlotValue>({
   setSlot: () => {},
 });
 
-export function HeaderSlotProvider({ children }: { children: React.ReactNode }) {
+export function HeaderSlotProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const [slot, setSlot] = useState<React.ReactNode | null>(null);
   const value = useMemo(() => ({ slot, setSlot }), [slot]);
   return (
-    <HeaderSlotContext.Provider value={value}>{children}</HeaderSlotContext.Provider>
+    <HeaderSlotContext.Provider value={value}>
+      {children}
+    </HeaderSlotContext.Provider>
   );
 }
 

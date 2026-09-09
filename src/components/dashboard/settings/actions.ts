@@ -155,14 +155,17 @@ export async function deleteAccount(): Promise<ActionResult> {
   } = await supabase.auth.getUser();
 
   if (userError || !user) {
-    return { ok: false, error: "Your session expired. Sign in again to delete your account." };
+    return {
+      ok: false,
+      error: "Your session expired. Sign in again to delete your account.",
+    };
   }
 
   // 1. Programs first, and as the user: the RPC derives its subject from
   //    auth.uid(), so the admin client would have nobody to act for. Failing
   //    here changes nothing, which is the point of doing it first.
   const { data: released, error: releaseError } = await supabase.rpc(
-    "release_my_account_from_programs"
+    "release_my_account_from_programs",
   );
 
   if (releaseError) {
@@ -173,17 +176,21 @@ export async function deleteAccount(): Promise<ActionResult> {
           "You still own a program. Transfer ownership in Team settings, then delete your account.",
       };
     }
-    console.error("[account delete] program release failed:", releaseError.message);
+    console.error(
+      "[account delete] program release failed:",
+      releaseError.message,
+    );
     return {
       ok: false,
-      error: "We could not release your team data, so nothing was deleted. Try again.",
+      error:
+        "We could not release your team data, so nothing was deleted. Try again.",
     };
   }
 
   for (const row of (released ?? []) as ReleasedProgram[]) {
     console.log(
       `[account delete] released from program ${row.program_id}: ` +
-        `${row.retained} match(es) retained, ${row.repointed} re-pointed`
+        `${row.retained} match(es) retained, ${row.repointed} re-pointed`,
     );
   }
 
@@ -202,10 +209,14 @@ export async function deleteAccount(): Promise<ActionResult> {
     .is("program_id", null);
 
   if (matchesError) {
-    console.error("[account delete] could not list matches:", matchesError.message);
+    console.error(
+      "[account delete] could not list matches:",
+      matchesError.message,
+    );
     return {
       ok: false,
-      error: "We could not read your matches, so nothing was deleted. Try again.",
+      error:
+        "We could not read your matches, so nothing was deleted. Try again.",
     };
   }
 
@@ -222,10 +233,14 @@ export async function deleteAccount(): Promise<ActionResult> {
       .in("id", matchIds);
 
     if (matchDeleteError) {
-      console.error("[account delete] match delete failed:", matchDeleteError.message);
+      console.error(
+        "[account delete] match delete failed:",
+        matchDeleteError.message,
+      );
       return {
         ok: false,
-        error: "We could not delete your matches, so your account is unchanged. Try again.",
+        error:
+          "We could not delete your matches, so your account is unchanged. Try again.",
       };
     }
   }
@@ -239,10 +254,15 @@ export async function deleteAccount(): Promise<ActionResult> {
   await adminClient.from("processing_usage").delete().eq("created_by", user.id);
 
   // 4. The login, last.
-  const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(user.id);
+  const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(
+    user.id,
+  );
 
   if (deleteAuthError) {
-    console.error("[account delete] auth delete failed:", deleteAuthError.message);
+    console.error(
+      "[account delete] auth delete failed:",
+      deleteAuthError.message,
+    );
     return {
       ok: false,
       error:

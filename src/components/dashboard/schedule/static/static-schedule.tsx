@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, ChevronDown, Filter as FilterIcon } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   MatchesFilterPanel,
   type FilterPanelSection,
@@ -30,7 +34,10 @@ import { cn } from "@/lib/utils";
  * what each figure counts and, more importantly, what it deliberately does
  * not. `OpponentProgram` is the same story one paragraph down.
  */
-import type { OpponentProgram, SeasonSummary } from "@/lib/data/schedule-server";
+import type {
+  OpponentProgram,
+  SeasonSummary,
+} from "@/lib/data/schedule-server";
 import type {
   EventDetail,
   EventKind,
@@ -160,7 +167,7 @@ export function StaticSchedule({
   const faceted = useMemo(() => cutByFacets(rows, facets), [rows, facets]);
   const visible = useMemo(
     () => order(cutByLifecycle(faceted, lifecycle, today), sort),
-    [faceted, lifecycle, sort, today]
+    [faceted, lifecycle, sort, today],
   );
 
   const drawer = drawerId ? (details[drawerId] ?? null) : null;
@@ -197,7 +204,7 @@ export function StaticSchedule({
         document.getElementById(scheduleRowId(returnFocusTo))?.focus();
       }
     },
-    [finishClose]
+    [finishClose],
   );
 
   /** A row click: open the rail on it, or close the rail if it is already there. */
@@ -206,7 +213,7 @@ export function StaticSchedule({
       if (selectedId === eventId) close(viaKeyboard ? eventId : null);
       else select(eventId, viaKeyboard);
     },
-    [selectedId, select, close]
+    [selectedId, select, close],
   );
 
   const step = useCallback(
@@ -220,7 +227,7 @@ export function StaticSchedule({
         .getElementById(scheduleRowId(next.id))
         ?.scrollIntoView({ block: "nearest" });
     },
-    [visible, selectedId, select]
+    [visible, selectedId, select],
   );
 
   /**
@@ -237,9 +244,12 @@ export function StaticSchedule({
     const nextSort = next.sort ?? sort;
     const nextVisible = order(
       cutByLifecycle(cutByFacets(rows, nextFacets), nextLifecycle, today),
-      nextSort
+      nextSort,
     );
-    if (selectedId !== null && !nextVisible.some((row) => row.id === selectedId)) {
+    if (
+      selectedId !== null &&
+      !nextVisible.some((row) => row.id === selectedId)
+    ) {
       close(null);
     }
     if (next.lifecycle !== undefined) setLifecycle(next.lifecycle);
@@ -266,7 +276,12 @@ export function StaticSchedule({
     if (!selectedId) return;
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey)
+      if (
+        event.defaultPrevented ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      )
         return;
       // `instanceof`, not a cast: a keydown dispatched on `window` or
       // `document` has no `closest`, and the guard must stand down rather
@@ -275,7 +290,11 @@ export function StaticSchedule({
       if (target) {
         if (target.closest("input, textarea, select, [contenteditable=true]"))
           return;
-        if (target.closest(`[role="dialog"]:not([${DRAWER_ATTR}] [role="dialog"])`))
+        if (
+          target.closest(
+            `[role="dialog"]:not([${DRAWER_ATTR}] [role="dialog"])`,
+          )
+        )
           return;
         if (target.closest("[data-radix-popper-content-wrapper]")) return;
       }
@@ -309,7 +328,7 @@ export function StaticSchedule({
     nextDual &&
     (nextDual.entryCount === 0 ||
       (details[nextDual.id]?.entries ?? []).some(
-        (entry) => entry.forfeit === null && entry.playerLabels.length === 0
+        (entry) => entry.forfeit === null && entry.playerLabels.length === 0,
       ))
       ? `/dashboard/team/schedule/${nextDual.id}`
       : null;
@@ -328,8 +347,11 @@ export function StaticSchedule({
   if (rows.length === 0) {
     return (
       <div className="flex w-full flex-1 bg-[var(--surface-card)]">
-        <div className="flex min-w-0 flex-1 flex-col px-14 pb-6 pt-5">
-          <ScheduleDayZero canCreate={canCreate} canAddOwnMatch={canAddOwnMatch} />
+        <div className="flex min-w-0 flex-1 flex-col px-14 pt-5 pb-6">
+          <ScheduleDayZero
+            canCreate={canCreate}
+            canAddOwnMatch={canAddOwnMatch}
+          />
         </div>
       </div>
     );
@@ -337,7 +359,7 @@ export function StaticSchedule({
 
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
-      <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pb-6 pt-5">
+      <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pt-5 pb-6">
         {/* Title slot with summary, ghost Import beside primary New event. */}
         <div className="flex items-end gap-2.5">
           <div>
@@ -411,7 +433,10 @@ export function StaticSchedule({
             label="Filter events"
             noun={{ singular: "event", plural: "events" }}
           />
-          <SortMenu value={sort} onChange={(next) => applyCut({ sort: next })} />
+          <SortMenu
+            value={sort}
+            onChange={(next) => applyCut({ sort: next })}
+          />
         </div>
 
         {/* The panel closes on apply; this states the cut in words. Never
@@ -442,7 +467,7 @@ export function StaticSchedule({
             <button
               type="button"
               onClick={() => applyCut({ facets: { kind: null, site: null } })}
-              className="whitespace-nowrap text-[11px] font-medium"
+              className="text-[11px] font-medium whitespace-nowrap"
               style={{ color: "var(--blue)" }}
             >
               Clear filter
@@ -452,13 +477,19 @@ export function StaticSchedule({
 
         {visible.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16">
-            <p className="mb-1 text-[14px] font-medium" style={{ color: "var(--ink-900)" }}>
+            <p
+              className="mb-1 text-[14px] font-medium"
+              style={{ color: "var(--ink-900)" }}
+            >
               No events match
             </p>
             <button
               type="button"
               onClick={() =>
-                applyCut({ lifecycle: "all", facets: { kind: null, site: null } })
+                applyCut({
+                  lifecycle: "all",
+                  facets: { kind: null, site: null },
+                })
               }
               className="mt-1 text-[11px] font-medium"
               style={{ color: "var(--blue)" }}
@@ -525,18 +556,18 @@ function cutByFacets(rows: ScheduleRow[], facets: Facets): ScheduleRow[] {
   return rows.filter(
     (row) =>
       (facets.kind === null || row.kind === facets.kind) &&
-      (facets.site === null || row.site === facets.site)
+      (facets.site === null || row.site === facets.site),
   );
 }
 
 function cutByLifecycle(
   rows: ScheduleRow[],
   lifecycle: Lifecycle,
-  today: string
+  today: string,
 ): ScheduleRow[] {
   if (lifecycle === "all") return rows;
   return rows.filter((row) =>
-    lifecycle === "upcoming" ? isUpcoming(row, today) : !isUpcoming(row, today)
+    lifecycle === "upcoming" ? isUpcoming(row, today) : !isUpcoming(row, today),
   );
 }
 
@@ -618,10 +649,12 @@ function seasonLabel(rows: ScheduleRow[], today: string): string {
 /** Which program stands across the net — read off the first line that names one. */
 function opponentOf(
   detail: EventDetail,
-  opponents: Record<string, OpponentProgram>
+  opponents: Record<string, OpponentProgram>,
 ): OpponentProgram | null {
   if (detail.event.kind !== "dual") return null;
-  const id = detail.entries.find((entry) => entry.opponentProgramId)?.opponentProgramId;
+  const id = detail.entries.find(
+    (entry) => entry.opponentProgramId,
+  )?.opponentProgramId;
   return id ? (opponents[id] ?? null) : null;
 }
 
@@ -640,7 +673,8 @@ function SortMenu({
     { value: "newest", label: "Newest first" },
     { value: "oldest", label: "Oldest first" },
   ];
-  const current = options.find((option) => option.value === value) ?? options[0];
+  const current =
+    options.find((option) => option.value === value) ?? options[0];
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -651,7 +685,7 @@ function SortMenu({
           aria-label={`Sort: ${current.label}`}
           className={cn(
             "flex h-7 cursor-pointer items-center gap-1.5 rounded-[var(--radius-element)] px-2 text-[12px] transition-colors duration-150",
-            open ? "" : "hover:bg-[var(--surface-subtle)]"
+            open ? "" : "hover:bg-[var(--surface-subtle)]",
           )}
           style={{
             background: open ? "var(--surface-subtle)" : undefined,
@@ -686,11 +720,19 @@ function SortMenu({
                 setOpen(false);
               }}
               className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-element)] px-2 text-left text-[12px] transition-colors duration-100 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none"
-              style={{ color: "var(--ink-900)", fontWeight: active ? 500 : 400 }}
+              style={{
+                color: "var(--ink-900)",
+                fontWeight: active ? 500 : 400,
+              }}
             >
               <span className="flex-1">{option.label}</span>
               {active ? (
-                <Check className="size-3" strokeWidth={2} style={{ color: "var(--ink-700)" }} aria-hidden="true" />
+                <Check
+                  className="size-3"
+                  strokeWidth={2}
+                  style={{ color: "var(--ink-700)" }}
+                  aria-hidden="true"
+                />
               ) : null}
             </button>
           );
@@ -739,7 +781,7 @@ function tabularNumerals(text: string): React.ReactNode[] {
         </span>
       ) : (
         part
-      )
+      ),
     );
 }
 

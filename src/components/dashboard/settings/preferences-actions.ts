@@ -24,7 +24,7 @@ import type { ActionResult } from "@/components/dashboard/settings/actions";
  * nothing read.
  */
 export async function savePreferences(
-  next: Preferences
+  next: Preferences,
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const {
@@ -44,7 +44,7 @@ export async function savePreferences(
       stat_definitions_on_hover: next.statDefinitionsOnHover,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "user_id" }
+    { onConflict: "user_id" },
   );
 
   if (error) return { ok: false, error: error.message };

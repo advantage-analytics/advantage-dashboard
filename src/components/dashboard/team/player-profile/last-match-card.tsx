@@ -34,7 +34,10 @@ const BODY_MAX = 170;
 function splitClaim(summary: string): { claim: string; body: string | null } {
   const match = /^([\s\S]+?[.!?])\s+([\s\S]+)$/.exec(summary.trim());
   if (!match) return { claim: clipText(summary, CLAIM_MAX), body: null };
-  return { claim: clipText(match[1], CLAIM_MAX), body: clipText(match[2], BODY_MAX) };
+  return {
+    claim: clipText(match[1], CLAIM_MAX),
+    body: clipText(match[2], BODY_MAX),
+  };
 }
 
 export function LastMatchCard({ match }: { match: ProfileLastMatch }) {
@@ -63,7 +66,9 @@ export function LastMatchCard({ match }: { match: ProfileLastMatch }) {
           {match.opponentInitial}
         </span>
         <span className="flex min-w-0 flex-col gap-px">
-          <span className="truncate text-[14px] text-[var(--ink-900)]">{match.opponent}</span>
+          <span className="truncate text-[14px] text-[var(--ink-900)]">
+            {match.opponent}
+          </span>
           {where.length > 0 && (
             <span className="truncate text-[11px] text-[var(--ink-500)]">
               {match.school}
@@ -83,7 +88,7 @@ export function LastMatchCard({ match }: { match: ProfileLastMatch }) {
             <ResultMark won={match.won} />
           )}
         </span>
-        <span className="tabular whitespace-nowrap text-[16px] font-light text-[var(--ink-900)]">
+        <span className="tabular text-[16px] font-light whitespace-nowrap text-[var(--ink-900)]">
           {match.score || "—"}
         </span>
       </div>
@@ -105,11 +110,17 @@ export function LastMatchCard({ match }: { match: ProfileLastMatch }) {
                 aria-hidden="true"
               />
             </span>
-            <span className="text-[12px] text-[var(--ink-700)]">Advantage Intelligence</span>
+            <span className="text-[12px] text-[var(--ink-700)]">
+              Advantage Intelligence
+            </span>
             <div className="flex-1" />
             <RowAction href={reportHref} className="gap-1.5">
               Why this
-              <ArrowUpRight className="size-3" strokeWidth={1.5} aria-hidden="true" />
+              <ArrowUpRight
+                className="size-3"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
             </RowAction>
           </div>
           <p
@@ -132,7 +143,11 @@ export function LastMatchCard({ match }: { match: ProfileLastMatch }) {
       {match.chips.length > 0 && (
         <div className="flex flex-wrap gap-x-[22px] gap-y-2.5 border-t border-[var(--border-hairline)] pt-3.5">
           {match.chips.map((chip) => (
-            <InsightStatChip key={chip.label} label={chip.label} value={chip.value} />
+            <InsightStatChip
+              key={chip.label}
+              label={chip.label}
+              value={chip.value}
+            />
           ))}
         </div>
       )}

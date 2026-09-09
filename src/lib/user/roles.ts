@@ -33,7 +33,7 @@ export function isProPlan(plan: string | null | undefined): boolean {
  * what stops a signed-in user PATCHing themselves to Pro.
  */
 export async function upgradeUserToPro(
-  userId: string
+  userId: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = createAdminClient();

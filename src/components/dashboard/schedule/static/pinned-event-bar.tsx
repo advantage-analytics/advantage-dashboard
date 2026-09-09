@@ -98,32 +98,53 @@ export function PinnedEventBar({
   const facts: React.ReactNode[] = [];
   if (dateLabel) {
     facts.push(
-      <span key="date" className="inline-flex shrink-0 items-center gap-1.5 text-[11px] text-[var(--ink-600)]">
-        <Calendar className="size-[13px] text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
+      <span
+        key="date"
+        className="inline-flex shrink-0 items-center gap-1.5 text-[11px] text-[var(--ink-600)]"
+      >
+        <Calendar
+          className="size-[13px] text-[var(--ink-400)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
         {dateLabel}
-      </span>
+      </span>,
     );
   }
   if (site) {
     facts.push(
-      <span key="site" className="inline-flex shrink-0 items-center gap-1.5 text-[11px] text-[var(--ink-600)]">
-        <MapPin className="size-[13px] text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
+      <span
+        key="site"
+        className="inline-flex shrink-0 items-center gap-1.5 text-[11px] text-[var(--ink-600)]"
+      >
+        <MapPin
+          className="size-[13px] text-[var(--ink-400)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
         {siteLabel(site)}
-      </span>
+      </span>,
     );
   }
   if (format) {
     facts.push(
-      <span key="format" className="inline-flex shrink-0 items-center text-[11px] text-[var(--ink-600)]">
+      <span
+        key="format"
+        className="inline-flex shrink-0 items-center text-[11px] text-[var(--ink-600)]"
+      >
         {formatLabel(format)}
-      </span>
+      </span>,
     );
   }
 
   return (
     <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-[18px]">
       {kind === "dual" ? (
-        <Swords className="size-[13px] shrink-0 text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
+        <Swords
+          className="size-[13px] shrink-0 text-[var(--ink-400)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
       ) : (
         <BracketMark className="size-[13px] shrink-0 text-[var(--ink-400)]" />
       )}
@@ -138,7 +159,10 @@ export function PinnedEventBar({
 
       {facts.length > 0 && (
         <>
-          <span className="mx-2 h-3.5 w-px shrink-0 bg-[var(--border-medium)]" aria-hidden="true" />
+          <span
+            className="mx-2 h-3.5 w-px shrink-0 bg-[var(--border-medium)]"
+            aria-hidden="true"
+          />
           {facts.map((fact, index) => (
             <span key={index} className="inline-flex shrink-0 items-center">
               {index > 0 && <FactDivider />}
@@ -155,8 +179,8 @@ export function PinnedEventBar({
           type="button"
           onClick={onChange}
           className={cn(
-            "inline-flex h-[22px] shrink-0 cursor-pointer items-center rounded-[var(--radius-button)] px-2 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] hover:bg-white",
-            "focus-visible:outline-none"
+            "inline-flex h-[22px] shrink-0 cursor-pointer items-center rounded-[var(--radius-button)] px-2 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:bg-white hover:text-[var(--blue-hover)]",
+            "focus-visible:outline-none",
           )}
         >
           Change
