@@ -19,7 +19,7 @@
     "test:upload": "playwright test tests/upload-modal.spec.ts",
     "test:parser": "playwright test tests/swingvision-parser.spec.ts",
     "test:report": "playwright show-report",
-    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true"
+    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks && git config blame.ignoreRevsFile .git-blame-ignore-revs || true"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.85.0",
