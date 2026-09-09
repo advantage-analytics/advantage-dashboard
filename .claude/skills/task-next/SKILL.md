@@ -126,7 +126,7 @@ Give the subagent:
 
 - The task block verbatim, `done when:` list included.
 - `MAP.md` — where things are.
-- `CLAUDE.md` — how to work here.
+- `AGENTS.md` — how to work here. (`CLAUDE.md` is a one-line import of it.)
 - `docs/ui-revamp-guardrails.md` if the task touches `src/app/dashboard/`,
   `src/components/dashboard/`, or the upload wizard.
 - The `trace-route` skill if the task touches dashboard UI, so it resolves the

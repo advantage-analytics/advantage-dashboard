@@ -22,7 +22,7 @@ Statistics cards, match cards and score rows have the same problem.
 
 ## Procedure
 
-1. **Map the words to a route.** Use the route table in `CLAUDE.md` under
+1. **Map the words to a route.** Use the route table in `AGENTS.md` under
    "Routes". "Match detail" → `src/app/dashboard/matches/[matchId]/page.tsx`.
    "Home dashboard" → `src/app/dashboard/(home)/page.tsx`. If the phrase is
    ambiguous between two routes, ask — do not pick the likelier one.

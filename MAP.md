@@ -1,6 +1,6 @@
 # MAP.md — where things are
 
-`CLAUDE.md` answers *how to work here*. This answers *where things are*.
+`AGENTS.md` answers *how to work here*. This answers *where things are*.
 419 TypeScript files is more than a fresh context can orient in from
 conventions alone.
 

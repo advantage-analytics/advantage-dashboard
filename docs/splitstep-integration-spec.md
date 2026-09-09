@@ -42,7 +42,7 @@ Run these against the live database and report every mismatch against this spec 
 
 Also read, in the repo:
 
-- `CLAUDE.md` — repo conventions
+- `AGENTS.md` — repo conventions (`CLAUDE.md` imports it)
 - `.skills/advantage-analytics-design/SKILL.md` — design system. All UI in Phase 3 must conform. Lucide icons only, Inter, light mode only, blue `#3B82F6` for action.
 - `src/lib/services/upload/` — existing provider strategy pattern
 - `src/components/dashboard/matches/use-video-upload.ts` — existing video upload hook

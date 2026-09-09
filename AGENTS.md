@@ -1,6 +1,13 @@
 # AGENTS.md
 
-Guidance for Codex when working in this repository.
+Guidance for coding agents working in this repository — Claude Code, Codex and
+Gemini all read this file. `CLAUDE.md` is a one-line `@AGENTS.md` import and
+`GEMINI.md` is a symlink to it, so there is exactly ONE copy of this to keep
+current. Edit this file; never edit the other two.
+
+This file also hosts the `nextjs-agent-rules` block that `next dev` maintains.
+Because it exists and carries that block, `next dev` skips `CLAUDE.md` entirely
+(see `node_modules/next/dist/server/lib/generate-agent-files.js`).
 
 ## Project Overview
 
@@ -16,6 +23,8 @@ npm run dev          # Dev server on :3000 (Turbopack is the Next 16 default)
 npm run build        # Production build
 npm run lint         # ESLint (flat config)
 npm run test         # Playwright — specs live in tests/
+npm run format       # Prettier (writes). `format:check` is what CI runs
+npm run typecheck    # tsc --noEmit
 ```
 
 ## Architecture
@@ -153,10 +162,11 @@ before writing a template or wiring a send.**
 **Read `.skills/advantage-analytics-design/SKILL.md` before building any UI** — it is the
 authoritative build reference. `DESIGN.md` documents v2 provenance and what was
 deliberately deferred (dark mode, v2 shadows). Tokens live in
-`src/styles/design-system/`, imported by `globals.css`. The current component-behaviour
-authority is _Advantage Design System v3_; `SKILL.md` transcribes its v3 rules and marks
-where shipped code still uses an older pattern. Re-sync its `CHANGELOG.md` through the
-approved design integration when it changes; it changes no token value.
+`src/styles/design-system/`, imported by `globals.css`. The Claude Design project
+_Advantage Design System v3_ (`abcb65f6-4e66-44bc-b9de-b3b47f4313c1`) is the current
+authority on component behaviour; SKILL.md transcribes its rules, marked **(v3)**, and
+flags where shipped code still draws the old pattern. Re-sync from its `CHANGELOG.md`
+(read via DesignSync, not the web) when it moves — it changes no token value.
 
 Inter only (300/400/500/600), type scale 9–56px, blue accent `#3B82F6`, success `#5DB955`,
 error `#E51837`, Lucide icons only, three Framer Motion curves
@@ -166,6 +176,29 @@ reserved for chart and data transitions), no bounce or glassmorphism.
 Auth pages style from CSS variables; dashboard pages use Tailwind utilities directly.
 Primary buttons come from `advButton()` (`src/lib/ui/adv-button.ts`) — don't hand-roll a
 near-miss.
+
+### Gates — what runs, and where
+
+Formatting and pre-merge checks are deliberately NOT Claude-specific:
+
+- `scripts/format-file.sh` routes each file to the formatter that understands
+  it (Prettier / shfmt / black; **nothing** for SQL or TOML). One script, called
+  by both the editor-time hook and the git hook, so they cannot drift.
+- `.githooks/` (pre-commit, commit-msg, pre-push) installs itself via the
+  `prepare` script — `npm install` is the only setup step. `pre-commit` fixes
+  formatting rather than rejecting it; `commit-msg` hard-fails only noise and
+  warns on a missing type prefix.
+- `.github/workflows/ci.yml` is the gate that cannot be bypassed. It needs no
+  secrets: the live-database specs guard on `test.skip(!HAVE_ENV)`, so a keyless
+  checkout runs the rest. `npm run build` is absent on purpose — Vercel already
+  builds every push.
+
+`.prettierignore` documents every exclusion and why. The load-bearing ones:
+`supabase/migrations/` (applied, immutable, and full of dollar-quoted plpgsql
+that SQL formatters corrupt), `MAP.md` and `supabase/email-templates/`
+(generated — a test asserts MAP.md is byte-for-byte the generator's output), and
+`src/styles/design-system/colors.css` (Prettier lowercases hex and cannot be
+told not to; the docs quote these tokens uppercase).
 
 ## Workflow
 
@@ -178,17 +211,17 @@ times — `home/serve-placement-home.tsx`, `matches/match-detail/serve-placement
 
 ### Branch task queues
 
-Each branch has its own queue at `.Codex/tasks/<branch-slug>.md` (the branch
+Each branch has its own queue at `.claude/tasks/<branch-slug>.md` (the branch
 with `/` replaced by `-`). Distinct filenames per branch mean merge conflicts
 on task files are structurally impossible.
 
 - `/task-next` runs one task: a fresh subagent, gated, then committed.
 - To drain the queue, loop a plain-text instruction — **not** `/loop /task-next`,
   which a scheduled fire cannot invoke:
-  > `/loop Read .Codex/skills/task-next/SKILL.md and follow it exactly — run one task from this branch's queue, then stop.`
+  > `/loop Read .claude/skills/task-next/SKILL.md and follow it exactly — run one task from this branch's queue, then stop.`
 - The queue file is yours; append to it any time, including while the loop
   runs. The runner only ever rewrites a task's `status:` line.
-- `.Codex/tasks/<slug>.log.md` is the runner's. Do not hand-edit it.
+- `.claude/tasks/<slug>.log.md` is the runner's. Do not hand-edit it.
 - A merged branch whose queue is fully `done` gets its queue pair deleted in
   a cleanup commit on the integration branch — git history is the archive.
   Pipeline branches get this from stage 07; do it by hand for the rest.
@@ -200,7 +233,7 @@ on task files are structurally impossible.
 Every task needs a `done when:` list. It is the contract
 `task-completion-reviewer` gates against, and a task without one is skipped.
 
-`/task-next`, `/task-add` and `/pr-check` are typed to Codex, not to a shell.
+`/task-next`, `/task-add` and `/pr-check` are typed to your agent, not to a shell.
 Never present them inside a ```bash fence — the app renders a fenced shell
 block as a Run button, and running one there fails with `command not found`.
 
@@ -211,12 +244,16 @@ Larger features can run through the staged pipeline in `work/<slug>/`
 `/feature-new` and advanced one stage at a time by `/feature-next`. Each
 stage's `output/` is a markdown file the human edits between invocations —
 re-invoking the runner is the approval. Rules and contracts:
-`.Codex/pipeline/CONTEXT.md`; spec:
+`.claude/pipeline/CONTEXT.md` (a real path — the pipeline, task queues and
+review agents live under `.claude/` and are shared by every tool, not just
+Claude); spec:
 `docs/superpowers/specs/2026-08-30-icm-feature-pipeline-design.md`.
 Stage 04 feeds the branch task queue above; 05/06 wrap the queue drain and
-`/pr-check`; 07 merges and then deletes the branch's queue pair and
-workspace on the integration branch (git history is the archive). Like `/task-next`, the runner is typed to Codex (never presented
-in a shell-fenced block) and must never be driven by `/loop`.
+`/pr-check`; 07 deletes the branch's queue pair and workspace on the feature
+branch (git history is the archive), then pushes and opens a PR against
+`splitstep-integration` with `gh` — it never merges that PR. Like
+`/task-next`, the runner is typed to your agent (never presented in a shell-fenced
+block) and must never be driven by `/loop`.
 
 ## Conventions
 
