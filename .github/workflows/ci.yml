@@ -55,6 +55,19 @@ jobs:
         if: always()
         run: npm run typecheck
 
+      # Most specs are unit tests over library code, but 12 of them really do
+      # drive a browser, and a fresh runner has no Playwright binaries. The
+      # comment at the top of playwright.config.ts ("these tests do not need
+      # browser binaries") is about not needing a `webServer`, and misled the
+      # first version of this workflow into skipping this step — CI failed with
+      # "Executable doesn't exist at .../chromium_headless_shell".
+      #
+      # Chromium only: the config declares no `projects`, so that is the default
+      # and the sole browser anything here launches.
+      - name: Install Playwright Chromium
+        if: always()
+        run: npx playwright install --with-deps chromium
+
       - name: Test
         if: always()
         run: npm test
