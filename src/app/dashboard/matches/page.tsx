@@ -57,7 +57,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   const query = supabase
     .from("matches")
     .select(
-      "id, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, source_provider, player2_id",
+      "id, created_by, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, source_provider, player2_id",
     )
     .order("date", { ascending: false });
   const [drafts, { data, error }] = await Promise.all([
@@ -67,7 +67,10 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
       : query.eq("created_by", user.id).is("program_id", null),
   ]);
   if (error) throw new Error("Could not load matches", { cause: error });
-  const rows = (data ?? []) as (DbMatch & { player2_id: string | null })[];
+  const rows = (data ?? []) as (DbMatch & {
+    player2_id: string | null;
+    created_by: string | null;
+  })[];
   const matches = rows
     .map((row) => transformDbMatch(row, user.id))
     .filter((m): m is DisplayMatch => m !== null);

@@ -18,6 +18,7 @@ import {
   useLiveMatchAnalysis,
   withLiveAnalysis,
 } from "@/hooks/use-live-match-analysis";
+import { matchesFilterGroups } from "@/lib/data/match-filters";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { providers } from "@/lib/providers";
 import { useUnseenReportIds } from "@/lib/ui/seen-reports";
@@ -201,7 +202,7 @@ const FILTER_GROUPS: {
     // It reads `player1` because that is always the program's side of the row:
     // `recordResult` and the upload wizard both put the opponent in `player2`.
     key: "player",
-    label: "Player",
+    label: "Roster",
     teamOnly: true,
     // Deduplicated by the app's name rule, not by raw string: a season
     // recorded under both "Dana Brooks" and "Dana  Brooks" otherwise offers two
@@ -574,9 +575,9 @@ export function MatchesPageContent({
       );
     }
 
-    // Filters
-    for (const filter of filters) {
-      result = result.filter((m) => {
+    // Alternatives within a facet, intersection across facets.
+    result = result.filter((match) =>
+      matchesFilterGroups(match, filters, (m, filter) => {
         switch (filter.key) {
           case "result":
             return filter.value === "Won"
@@ -602,8 +603,8 @@ export function MatchesPageContent({
           default:
             return true;
         }
-      });
-    }
+      }),
+    );
 
     // Lifecycle — independent of the panel (v3's Data Table law 6): chips
     // answer "what's the state of this match", the panel answers everything

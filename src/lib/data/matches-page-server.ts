@@ -12,7 +12,10 @@ import {
 
 export async function enrichMatches(
   supabase: SupabaseClient,
-  data: (DbMatch & { player2_id: string | null })[],
+  data: (DbMatch & {
+    player2_id: string | null;
+    created_by: string | null;
+  })[],
   user: { id: string },
 ): Promise<DisplayMatch[]> {
   // Collect unique opponent user IDs to fetch hand/backhand
@@ -60,7 +63,7 @@ export async function enrichMatches(
     opponentMap.set(o.id, { hand: o.hand, backhand: o.backhand });
   }
 
-  return (data as (DbMatch & { player2_id: string | null })[])
+  return data
     .map((row) => {
       // `transformDbMatch` ignores the viewer — it decides the winner from
       // the score, player1 against player2, not relative to whoever is
@@ -68,6 +71,7 @@ export async function enrichMatches(
       // player alike, and why a team scope needs no second transform.
       const display = transformDbMatch(row, user.id);
       if (!display) return null;
+      display.canManage = row.created_by === user.id;
       const opp = row.player2_id ? opponentMap.get(row.player2_id) : undefined;
       if (opp) {
         display.player2Hand = opp.hand ?? undefined;

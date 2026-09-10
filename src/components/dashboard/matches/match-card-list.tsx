@@ -1,12 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-list-layout";
+import {
+  LIST_GRID_COLS,
+  LIST_ROW_FRAME,
+  TEAM_LIST_GRID_COLS,
+} from "./match-list-layout";
 export {
   DATE_COL,
   DATE_COL_WITH_YEAR,
   LIST_GRID_COLS,
   LIST_ROW_FRAME,
+  TEAM_LIST_GRID_COLS,
 } from "./match-list-layout";
 import { ChevronRight } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
@@ -100,7 +105,7 @@ import { RowLifecycle } from "./row-state";
  * the same place, over nothing, with the chevron still closing the row.
  */
 export const ACTIONS_LANE =
-  "flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 has-[:focus-visible]:opacity-100 has-[[data-state=open]]:opacity-100";
+  "relative z-[1] flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 has-[:focus-visible]:opacity-100 has-[[data-state=open]]:opacity-100";
 
 interface MatchCardListProps {
   match: DisplayMatch;
@@ -108,12 +113,14 @@ interface MatchCardListProps {
   isNew?: boolean;
   /** Never opened on this device — draws the blue "New" pill. */
   unseen?: boolean;
+  scope?: "personal" | "team";
 }
 
 export function MatchCardList({
   match,
   isNew,
   unseen,
+  scope = "personal",
 }: MatchCardListProps): React.JSX.Element {
   const isWin = match.score.winner === "player1";
 
@@ -122,7 +129,7 @@ export function MatchCardList({
       className={`${LIST_ROW_FRAME} group relative -mx-4 h-[52px] rounded-[var(--radius-element)] px-4 transition-colors duration-200 hover:bg-[var(--surface-muted)]${
         isNew ? "animate-[highlight-new-match_1.5s_ease-out_0.4s_both]" : ""
       }`}
-      style={LIST_GRID_COLS}
+      style={scope === "team" ? TEAM_LIST_GRID_COLS : LIST_GRID_COLS}
       role="row"
     >
       {/* Date — the key column, tabular, matching Schedule and the roster card. */}
@@ -132,6 +139,12 @@ export function MatchCardList({
       >
         {formatShortDate(match.date)}
       </span>
+
+      {scope === "team" && (
+        <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
+          {match.player1.name}
+        </span>
+      )}
 
       {/* Opponent — the name a reader scans for, led by its mark like every
           name column in the product. The invisible full-row link lives here,
@@ -202,11 +215,13 @@ export function MatchCardList({
       </div>
 
       <span className={ACTIONS_LANE}>
-        <MatchActionsMenu
-          matchId={match.id}
-          matchLabel={match.tournamentName}
-          className="bg-[var(--surface-subtle)]"
-        />
+        {match.canManage !== false && (
+          <MatchActionsMenu
+            matchId={match.id}
+            matchLabel={match.tournamentName}
+            className="bg-[var(--surface-subtle)]"
+          />
+        )}
       </span>
 
       {/* Row end — never empty, never moving: chevron-right because the row

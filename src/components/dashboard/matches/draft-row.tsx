@@ -33,6 +33,7 @@ import { formatShortDate } from "@/lib/ui/date-format";
 import {
   ACTIONS_LANE,
   LIST_GRID_COLS,
+  TEAM_LIST_GRID_COLS,
   LIST_ROW_FRAME,
 } from "./match-card-list";
 import { EmptyMark } from "@/components/ui/empty-mark";
@@ -68,7 +69,7 @@ export function DraftRow({
       className={`${LIST_ROW_FRAME} group relative -mx-4 h-[52px] rounded-[var(--radius-element)] bg-[var(--surface-muted)] px-4 transition-opacity duration-200${
         pending ? "opacity-50" : ""
       }`}
-      style={LIST_GRID_COLS}
+      style={scope === "team" ? TEAM_LIST_GRID_COLS : LIST_GRID_COLS}
       role="row"
     >
       {/* Date — when the draft was last touched. */}
@@ -78,6 +79,10 @@ export function DraftRow({
       >
         {formatShortDate(draft.updatedAt)}
       </span>
+
+      {scope === "team" && (
+        <EmptyMark label="Roster player not available in draft summary" />
+      )}
 
       {/* Opponent — led by its mark like every name column; a draft with no
           name yet holds the slot with a dashed ring so the names below still
