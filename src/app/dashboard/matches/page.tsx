@@ -71,7 +71,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
     const query = supabase
       .from("matches")
       .select(
-        "id, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, source_provider, player2_id",
+        "id, created_by, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, source_provider, player2_id",
       )
       .order("date", { ascending: false });
 
@@ -127,7 +127,12 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
         opponentMap.set(o.id, { hand: o.hand, backhand: o.backhand });
       }
 
-      matches = (data as (DbMatch & { player2_id: string | null })[])
+      matches = (
+        data as (DbMatch & {
+          player2_id: string | null;
+          created_by: string | null;
+        })[]
+      )
         .map((row) => {
           // `transformDbMatch` ignores the viewer — it decides the winner from
           // the score, player1 against player2, not relative to whoever is
@@ -135,6 +140,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
           // player alike, and why a team scope needs no second transform.
           const display = transformDbMatch(row, user.id);
           if (!display) return null;
+          display.canManage = row.created_by === user.id;
           const opp = row.player2_id
             ? opponentMap.get(row.player2_id)
             : undefined;
