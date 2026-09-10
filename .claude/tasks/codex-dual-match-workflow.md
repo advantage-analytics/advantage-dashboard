@@ -187,7 +187,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T14 · Clarify tournament roster inclusion and draws
 
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **files:** Best guess: src/components/dashboard/schedule/static/static-tournament-builder.tsx; tests/schedule-tournament-field.spec.ts (new)
 - **done when:**
