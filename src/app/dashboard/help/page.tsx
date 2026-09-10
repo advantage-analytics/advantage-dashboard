@@ -23,8 +23,7 @@ const SWINGVISION_TROUBLESHOOTING_URL =
  * which has been ⌘\ since the rail took the toggle over.
  */
 
-const topicHeadingClass =
-  "text-[22px] font-light leading-[28px] tracking-[-0.3px] text-[var(--ink-900)]";
+const topicHeadingClass = "text-title-lg";
 const blockLabelClass = "text-[12px] font-medium text-[var(--ink-900)]";
 const proseClass = "text-[12px] leading-[1.65] text-[var(--ink-700)]";
 const linkClass =

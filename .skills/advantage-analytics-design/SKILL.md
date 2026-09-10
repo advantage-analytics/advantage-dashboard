@@ -83,6 +83,7 @@ The canonical source of truth for all UI across the app. Read this before buildi
 | ------------- | --------------------------------------------------------- | ------ | ------------------------------------------ |
 | heading-xl    | `text-[30px] font-light tracking-[-0.6px] leading-[36px]` | 300    | Page greeting/hero                         |
 | heading-lg    | `text-[28px] font-light tracking-[-0.5px]`                | 300    | KPI values, large numbers                  |
+| title-lg      | `text-[24px] font-light tracking-[-0.4px] leading-[1.2]`  | 300    | Page/section titles (`.text-title-lg`)     |
 | heading-md    | `text-[16px] font-normal tracking-[-0.4px]`               | 400    | Event/tournament names                     |
 | body-lg       | `text-[14px] font-normal`                                 | 400    | Match opponent names, primary body         |
 | body          | `text-[13px]`                                             | 400    | Standard body text, nav items              |

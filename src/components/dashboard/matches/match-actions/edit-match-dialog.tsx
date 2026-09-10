@@ -400,7 +400,7 @@ export function EditMatchDialog({
     <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
       <DialogContent className="max-h-[90vh] max-w-xl gap-0 overflow-hidden rounded-2xl border-[#F3F3F3] bg-white p-0 shadow-[0px_6px_20px_0px_rgba(0,0,0,0.12)]">
         <DialogHeader className="px-8 pt-5 pb-6">
-          <DialogTitle className="text-left text-[24px] leading-[30px] font-light tracking-[-0.5px] text-[#1D1D1F]">
+          <DialogTitle className="text-left text-[24px] leading-[1.2] font-light tracking-[-0.4px] text-[#1D1D1F]">
             Edit match
           </DialogTitle>
           <DialogDescription className="sr-only">

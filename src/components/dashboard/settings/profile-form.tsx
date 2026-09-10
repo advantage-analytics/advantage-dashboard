@@ -161,9 +161,7 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
           {viewer.initials}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[24px] font-light tracking-[-0.4px] text-[var(--ink-900)]">
-            {displayName}
-          </div>
+          <div className="text-title-lg truncate">{displayName}</div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {roleLabel && <IdentityPill>{roleLabel}</IdentityPill>}
             {active.kind === "team" && (

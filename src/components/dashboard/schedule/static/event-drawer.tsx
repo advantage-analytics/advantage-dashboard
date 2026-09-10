@@ -264,12 +264,7 @@ export function EventDrawer({
           <div className="flex shrink-0 items-center gap-3.5">
             <EventMark kind={event.kind} name={event.name} size={48} />
             <div className="flex min-w-0 flex-col gap-1">
-              <div
-                className="text-[22px] leading-[1.1] font-light tracking-[-0.2px]"
-                style={{ color: "var(--ink-900)" }}
-              >
-                {event.name}
-              </div>
+              <div className="text-title-lg">{event.name}</div>
               {subline ? (
                 <span
                   className="text-[12px]"

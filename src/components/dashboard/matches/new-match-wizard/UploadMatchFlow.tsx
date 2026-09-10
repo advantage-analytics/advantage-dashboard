@@ -305,7 +305,7 @@ function UploadMatchSuccess({
           )}
         </div>
 
-        <h1 className="text-[24px] font-light tracking-[-0.5px] text-[#1D1D1F]">
+        <h1 className="text-[24px] leading-[1.2] font-light tracking-[-0.4px] text-[#1D1D1F]">
           Match saved.
         </h1>
 

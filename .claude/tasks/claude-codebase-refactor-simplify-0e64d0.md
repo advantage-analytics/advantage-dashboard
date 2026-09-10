@@ -66,7 +66,7 @@ Plan of record: `~/.claude/plans/system-reminder-you-are-operating-zippy-adleman
 
 ## T3 · Add the missing page-title step and normalize 14 sites
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1
 - **files:** .skills/advantage-analytics-design/SKILL.md, src/styles/design-system/typography.css, 14 call sites
