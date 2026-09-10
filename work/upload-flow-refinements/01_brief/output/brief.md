@@ -25,11 +25,18 @@ appropriate team upload eligibility.
   direction is a blue checkmark without grey hover, but the seed explicitly asks
   whether retaining grey hover is better. Record the agreed behavior in the
   design system as part of this feature.
-- Define the video requirements work; the seed names this topic without details.
+- Communicate video requirements: 60 fps preferred, 30 fps minimum (including
+  the provider's accepted 29.97 fps), and at least 1080p. The user's required
+  framing includes the far service line, near baseline, and area outside the
+  court. Provider guidance additionally requires the full court, including both
+  baselines; guidance must not imply the far service line alone is sufficient.
 - Plan how Save draft should behave. Implementation of draft persistence is not
   established by this seed.
-- Prevent Continue for teams that are not confirmed, with the meaning of
-  confirmation still to be clarified.
+- Disable upload Continue for teams awaiting claim approval in `/admin/claims`.
+  Per the user's clarification, a college claim made with an email that does
+  not match the scraped emails enters the admin approval queue. This is claim
+  approval, not confirmation of a team or player selection. Approval clears this
+  particular restriction; other upload eligibility requirements still apply.
 - Ensure team match attribution is to players: an owner must not upload a match
   under their own name merely because they own the team.
 
@@ -49,6 +56,12 @@ appropriate team upload eligibility.
   is the athlete.
 - Game-score auto-advance must not apply to tiebreak inputs.
 - Use Advantage Intelligence in user-visible naming.
+- Align video guidance with the provider's documented limits and camera guidance.
+  The API guide specifies files under 8,000,000,000 bytes, singles only, and
+  recommends MP4/H.264 while accepting formats ffmpeg can decode. It recommends
+  an elevated camera centered behind a baseline; processing boundaries should
+  cover complete games matching the supplied set scores. These are provider
+  constraints, not authorization to redesign the processing pipeline.
 - Follow the repository's design system and upload UI guardrails during later
   design and implementation; this brief does not change pipeline contracts or
   existing upload data semantics.
@@ -74,19 +87,24 @@ appropriate team upload eligibility.
 - The player name and hand controls visibly communicate editability.
 - The selected-option hover decision is documented in the design system and
   applied consistently to the affected dropdowns.
-- The agreed team confirmation condition disables Continue while unmet, and
-  owning a team does not by itself make the owner an eligible match athlete.
-- The design-stage output defines the video requirements scope and an explicit
-  Save draft behavior contract before implementation tasks are created for them.
+- Teams whose claims await approval in `/admin/claims` cannot continue with a
+  team upload. Once approved, this restriction clears without bypassing other
+  required fields or eligibility checks. Owning a team does not by itself make
+  the owner an eligible match athlete.
+- Video guidance distinguishes the minimum 1080p/30 fps requirements from the
+  60 fps preference, accepts the documented 29.97 fps exception, and describes
+  framing that includes both baselines, the far service line, and outside-court
+  area. It remains consistent with the provider's other documented constraints.
+- The design-stage output defines how video requirements are presented and an
+  explicit Save draft behavior contract before implementation tasks are created.
 
 ## Open questions
 
-1. What does an unconfirmed team mean: program approval, team selection, roster
-   confirmation, or another state? Which step's Continue must be disabled?
-   Asked in chat; unresolved when this brief was written.
-2. Does Video Requirements mean uploader-facing guidance, uploaded-file validation,
-   or both? What specific requirements or current shortcomings prompted it?
-   Asked in chat; unresolved when this brief was written.
+1. Which upload step should expose the pending claim approval restriction and its
+   explanation? The approval condition itself is resolved: `/admin/claims`.
+2. Beyond presenting the clarified video requirements, should this feature add
+   pre-upload validation? The provider already enforces resolution, frame rate,
+   and file size. How much outside-court area should the framing guidance show?
 3. How should Save draft behave: what is saved, when it is saved, how it is resumed,
    what happens to selected local files or uploaded video, and when it expires or
    is discarded? Is the desired deliverable a plan only or implementation too?
@@ -103,6 +121,13 @@ appropriate team upload eligibility.
 
 ## Also consulted
 
-- No additional source files. This brief uses the seed, stage references (empty),
-  pipeline contracts, and the user's in-chat model preference. Repository guidance
-  supplied in the conversation establishes the design and attribution constraints.
+- [Provider API client guide — Video Guidelines and error codes](https://splitstep.ai/api-docs.html),
+  checked 2026-09-10 for specifications and framing requirements. The guide's
+  specifications accept 29.97 fps; its error table describes rejection below
+  29.9 fps. Do not invent a stricter rejection threshold during implementation.
+- User clarification after stage 01: claim approval means approval through
+  `/admin/claims`; unmatched scraped college emails trigger that queue. Video
+  requirements and framing above incorporate the same clarification.
+- No additional repository source files. This brief also uses the seed, pipeline
+  contracts, and the user's in-chat model preference. Repository guidance supplied
+  in the conversation establishes the design and attribution constraints.
