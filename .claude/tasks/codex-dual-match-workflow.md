@@ -150,7 +150,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T11 · Choose doubles partners by roster identity
 
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T10
 - **files:** Best guess: src/components/dashboard/schedule/static/lineup-name-picker.tsx; src/components/dashboard/schedule/static/dual-build-step.tsx; tests/schedule-doubles-picker.spec.ts (new)
