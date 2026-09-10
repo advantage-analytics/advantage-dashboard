@@ -1,3 +1,8 @@
 export function useRouter() {
-  return { refresh() {} };
+  return {
+    refresh() {},
+    push(href: string) {
+      window.routerPushes.push(href);
+    },
+  };
 }

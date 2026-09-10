@@ -21,3 +21,13 @@ export async function recordResult(input: unknown) {
   }
   return { matchId: "match-browser" };
 }
+
+export async function createTournament(input: unknown) {
+  window.actionCalls.push({ action: "createTournament", input });
+  return { eventId: "created-tournament" };
+}
+
+export async function updateTournament(input: unknown) {
+  window.actionCalls.push({ action: "updateTournament", input });
+  return { eventId: "event-browser" };
+}

@@ -999,7 +999,7 @@ test.describe("/dashboard/team/schedule/new/tournament · 3c", () => {
     drawn(
       builder,
       file,
-      "An entry is a player in a draw — where they start, not what they'll play.",
+      "Include each athlete who is competing, then choose where they enter the singles draw. Seeds are optional.",
     );
     // RETIRED 'Cancel' — `WizardShell`'s, like the dual flow's. The shell is
     //   handed a `cancelHref` on step one and a `back` on step two, and decides
