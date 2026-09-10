@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Reproduce multi-set score loss
 
-- **status:** todo
+- **status:** blocked
 - **model:** gpt-5.3-codex-spark
 - **reasoning:** medium
 - **files:** Best guess: tests/upload-score-regression.spec.ts (new), existing wizard fixtures.
