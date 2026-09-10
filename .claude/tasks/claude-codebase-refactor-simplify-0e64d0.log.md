@@ -329,3 +329,43 @@ even within the subtree — and tighten the configs sentence to say the hook is
 imported directly and the configs come with it. Fix
 `check-design-drift.mjs:74`'s count in the same pass so the doc and the
 checker agree. Then re-run the gate from 5b.
+
+## T11 · Reconcile the docs with what is actually reachable — done (unblocked)
+
+**gate:** re-run from 5b after correcting the blocking defect. Mechanical —
+lint 0 errors, tsc clean, 652/652 tests including the MAP.md staleness check,
+format clean, drift checker green on all six. Completion review —
+`VERDICT: pass`; it re-derived every number from the code rather than from the
+brief, and separately confirmed the `useVisualFilters` → `getFilterConfig` →
+`visuals/configs/` chain. Guardrails not due: the diff touches `AGENTS.md` and
+one comment line in the checker, no `src/` surface.
+
+**changed:** The claim that blocked this — "the 19 files are fully wired to
+each other" — is replaced with what the code actually shows: 20 files,
+`statistics-page-content.tsx` imports 11, and the other eight are imported by
+nothing at all, not even by each other. The paragraph now says what that costs
+a reader: reviving the route lights up 11 components and leaves eight
+unreferenced, and whether those were abandoned directions or unfinished ones
+is not recoverable from the imports. That is the fact worth documenting; the
+original phrasing would have sent someone into the subtree expecting it to
+work as a unit.
+
+Also corrected the source of the wrong figure. `19 files` came from the
+comment this queue itself wrote on `UNREACHABLE` in
+`scripts/check-design-drift.mjs:74`, which was committed and wrong; it now
+says 20. The doc and the checker agree.
+
+The court-visualization half needed one tightening rather than a rewrite: it
+had said `visuals/configs/` and `useVisualFilters` are "both still live via
+serve-placement-widget", which overstates. The widget imports the hook
+directly; the configs are reached through it via `getFilterConfig`. The prose
+now states that chain, so "live one step removed" is visible rather than
+glossed.
+
+**follow-ups:** 1. `docs/ux-overhaul-brief.md` still says "~730 lines" and
+frames both files as things to "resurrect". It is a point-in-time planning doc
+and was not in this task's `files:`, but it now contradicts AGENTS.md. Either
+correct it or mark it explicitly point-in-time, per docs/README.md's own
+convention. 2. `src/app/dashboard/statistics/page.tsx`'s own comment says
+"twenty-one components"; the directory holds 20 files, 19 of them `.tsx`.
+Same class of drift, one more place.

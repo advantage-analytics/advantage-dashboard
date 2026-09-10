@@ -102,12 +102,26 @@ chart reads as "you hit no serves".
 
 ### Statistics
 
-`statistics-server.ts` (`getStatisticsPageData()`, `getSelectableMatches()`) and
-`statistics-client.ts` (`computeStatistics()`) produce the same `StatisticsPageData`; the
-client version recomputes from `SelectableMatch[]` when filters change, avoiding
+`/dashboard/statistics` and `/dashboard/team/statistics` render `ComingSoonPage`, not
+this subtree — the season-rollup view isn't finalised, so the route says so rather than
+shipping a half-answer. The implementation underneath is half-built
+rather than merely switched off, and the shape of that matters to anyone reviving it. Of
+the 20 files in `src/components/dashboard/statistics/`, `statistics-page-content.tsx`
+imports 11; the other eight — `duration-profile`, `performance-ratings-card`,
+`pressure-index`, `rally-breakdown`, `stat-trajectory-chart`, `stats-grid`,
+`surface-chart`, `win-rate-chart` — are imported by nothing at all, not even by each
+other. So there is dead code inside the dead subtree: putting the route back would light
+up 11 components and leave eight still unreferenced, and whether those were abandoned
+directions or unfinished ones is not recoverable from the imports.
+`statistics-server.ts` and `statistics-client.ts` are referenced only from inside this
+subtree. `statistics-server.ts` (`getStatisticsPageData()`, `getSelectableMatches()`)
+and `statistics-client.ts` (`computeStatistics()`) produce the same `StatisticsPageData`;
+the client version recomputes from `SelectableMatch[]` when filters change, avoiding
 round-trips. `STAT_CONFIG` (20 stats, grouped Serve/Return/Other by a `category` field) is
 a **private** const inside `statistics/stat-progression-chart.tsx` — extract it before
-using it from a second component.
+using it from a second component. The route change itself is small — put the loader and
+`StatisticsPageContent` back into the page file — but see the wiring caveat above before
+assuming that is the whole job.
 
 ### Upload pipeline
 
@@ -123,9 +137,15 @@ clears upload localStorage when the path leaves `/dashboard/matches/new`.
 
 ### Court visualization
 
-`matches/visuals/court-visualization.tsx` (~730 lines) — SVG court in serve (half) and
-return (full) modes with dot plots, tooltips and filters. Filter configs in
-`visuals/configs/`; filter state in `useVisualFilters` (`src/hooks/use-visual-filters.ts`).
+`matches/visuals/court-visualization.tsx` (1,239 lines) — SVG court in serve (half) and
+return (full) modes with dot plots, tooltips and filters — has no importer anywhere in
+the app; `match-detail/shots/shots-tab.tsx` superseded it as what `[matchId]/page.tsx`
+actually code-splits to, and the only surviving reference is a prose mention in a
+comment at `splitstep/derivation/court.ts:90`. Its filter state hook outlived it:
+`serve-placement/serve-placement-widget.tsx` imports `useVisualFilters`
+(`src/hooks/use-visual-filters.ts`), which in turn reaches `visuals/configs/` through
+`getFilterConfig` — so the configs are live one step removed, not orphaned with the file
+that used to sit above them.
 
 ### Video analysis (Advantage Intelligence)
 

@@ -71,7 +71,7 @@ const CSS_TOKEN_DEFINITIONS = [
 // Re-verify before removing an entry: the day Statistics ships, these become
 // live and must be swept.
 const UNREACHABLE = [
-  "src/components/dashboard/statistics/", // 19 files, behind /dashboard/statistics
+  "src/components/dashboard/statistics/", // 20 files, behind /dashboard/statistics
   "src/lib/data/statistics-server.ts", // referenced only by the above
   "src/lib/data/statistics-client.ts",
   // Superseded by match-detail/shots/shots-tab.tsx, which is what [matchId]
