@@ -215,7 +215,7 @@ Plan of record: `~/.claude/plans/system-reminder-you-are-operating-zippy-adleman
 
 ## T12 · Teach the drift checker to read stylesheets
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T2
 - **files:** scripts/check-design-drift.mjs

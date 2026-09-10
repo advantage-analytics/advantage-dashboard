@@ -19,13 +19,13 @@
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 
-// KNOWN BLIND SPOT: this walks .ts/.tsx only, so a utility class used inside a
-// stylesheet via `@apply` is invisible to it. Removing shadcn's token layer
-// left exactly that — `@apply border-border` in globals.css's own base layer —
-// and the checker stayed green while the build failed. `npm run build` is the
-// backstop (Vercel builds every push, per AGENTS.md), so this is a gap in
-// coverage rather than in safety. Widen the walk to .css before trusting the
-// checker alone on a token deletion.
+// T12 closed the blind spot documented above (git-blame this comment for the
+// original wording): the walk now covers .css too, so a utility class reached
+// via `@apply` — `@apply border-border` in globals.css's own base layer was
+// the exact case that motivated this — is counted exactly like one written in
+// a component. `stripNonUtilities` does not care which file it is blanking;
+// an `@apply` line is just text containing a utility class name, and every
+// check below already runs on whatever `walk()` hands it.
 const SRC = "src";
 
 // ── The authority ───────────────────────────────────────────────────────────
@@ -40,6 +40,27 @@ const AUTHORITY = "src/styles/design-system/colors.css";
 const TRANSCRIPTIONS = [
   "src/lib/design/data-viz.ts",
   "src/lib/design/player-colors.ts",
+];
+
+// ── Token DEFINITION files, as opposed to consumers ─────────────────────────
+// Now that the walk covers .css, checks 1 (off-palette hex) and 3 (inlined
+// viz hue) need to tell a file that DECLARES a colour from one that USES it —
+// otherwise widening the walk turns every `--ink-900: #0D0D0D;` in the design
+// system's own token layer into a "finding" against itself, which is not
+// drift, it is the source of truth. colors.css is already exempt as
+// AUTHORITY; the rest of src/styles/design-system/ and globals.css declare
+// the same kind of thing (custom properties, semantic type-scale classes) and
+// get the same treatment. This does NOT exempt them from check 4 (shadcn) or
+// the default-palette check below — a `@apply border-border` or a stray
+// `bg-blue-600` in globals.css is real drift regardless of which half of the
+// file it lands in, which is the whole point of this task.
+const CSS_TOKEN_DEFINITIONS = [
+  "src/app/globals.css",
+  "src/styles/design-system/effects.css",
+  "src/styles/design-system/focus.css",
+  "src/styles/design-system/index.css",
+  "src/styles/design-system/spacing.css",
+  "src/styles/design-system/typography.css",
 ];
 
 // ── Unreachable code ────────────────────────────────────────────────────────
@@ -108,6 +129,23 @@ const TEXT_PX_RE = /\btext-\[(\d+)px\]/g;
 const COLOR_PROP_RE =
   /\b(?:fill|stroke|stopColor|color|itemStyle|backgroundColor|borderColor)\s*[=:]\s*\{?["']?(#[0-9a-fA-F]{6})\b/g;
 
+// ── Check 6 — Tailwind's default palette, which colors.css does not own ────
+// Nothing caught `bg-blue-600` or `text-gray-500` before this: check 1 only
+// sees literal hex, and check 4 only sees shadcn's oklch names. A default-
+// palette class is neither — it is a real Tailwind utility that resolves to
+// Tailwind's OWN colour, not a DS token, so `bg-blue-600` sits a shade off
+// SKILL.md's Signal Blue and nothing before this check could tell.  Same
+// prefix list as check 4 (the Tailwind namespaces a colour utility can use);
+// full palette + the standard 50–950 shade scale so `border-neutral-200` is
+// caught same as `bg-blue-600`.
+const DEFAULT_PALETTE_COLORS =
+  "slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose";
+const DEFAULT_PALETTE_SHADES = "50|100|200|300|400|500|600|700|800|900|950";
+const DEFAULT_PALETTE_RE = new RegExp(
+  String.raw`\b(?:${TW_PREFIXES})-(?:${DEFAULT_PALETTE_COLORS})-(?:${DEFAULT_PALETTE_SHADES})\b`,
+  "g",
+);
+
 // Blank out every region that can contain a shadcn-looking substring without
 // being a utility class:
 //   - comments, because a docstring may legitimately DISCUSS `bg-accent`
@@ -136,7 +174,8 @@ async function walk(dir, out = []) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) await walk(path, out);
-    else if ([".ts", ".tsx"].includes(extname(entry.name))) out.push(path);
+    else if ([".ts", ".tsx", ".css"].includes(extname(entry.name)))
+      out.push(path);
   }
   return out;
 }
@@ -170,8 +209,21 @@ for (const t of TRANSCRIPTIONS)
   for (const h of await hexesIn(t)) vizHues.add(h);
 
 const SHADCN_RE = await loadShadcnUtilities();
-const findings = { hex: [], size: [], viz: [], shadcn: [], transcript: [] };
+const findings = {
+  hex: [],
+  size: [],
+  viz: [],
+  shadcn: [],
+  transcript: [],
+  defaultPalette: [],
+};
 const SKIP = new Set([AUTHORITY, ...TRANSCRIPTIONS]);
+// Hex-literal checks (1 and 3) only — NOT the full per-file SKIP above, which
+// would also hide a `@apply border-border` or `bg-blue-600` regression inside
+// these same files from checks 4 and 6. See the comment on
+// CSS_TOKEN_DEFINITIONS for why a definition file is exempt from "is this hex
+// off-palette" but not from "is this a utility class we don't own".
+const HEX_CHECK_EXEMPT = new Set([...HEX_EXEMPT, ...CSS_TOKEN_DEFINITIONS]);
 
 // Check 5 — the transcriptions must agree with the authority.
 for (const file of TRANSCRIPTIONS) {
@@ -190,7 +242,7 @@ for (const file of (await walk(SRC)).sort()) {
   const lineOf = (i) => text.slice(0, i).split("\n").length;
   const allowedHere = new Set((ALLOWED_HEX[file] ?? []).map(norm));
 
-  if (!HEX_EXEMPT.has(file))
+  if (!HEX_CHECK_EXEMPT.has(file))
     for (const m of text.matchAll(HEX_RE)) {
       const hex = norm(m[0]);
       if (palette.has(hex) || allowedHere.has(hex)) continue;
@@ -209,16 +261,27 @@ for (const file of (await walk(SRC)).sort()) {
   // that imports it correctly writes `fill={VIZ_BLUE}` and has no literal to
   // match, so the exemption could only ever hide a file that imports the
   // module AND inlines a hue anyway — which is the violation, not an excuse.
-  if (!HEX_EXEMPT.has(file))
+  if (!HEX_CHECK_EXEMPT.has(file))
     for (const m of text.matchAll(COLOR_PROP_RE)) {
       const hex = norm(m[1]);
       if (!vizHues.has(hex) || allowedHere.has(hex)) continue;
       findings.viz.push(`${file}:${lineOf(m.index)}  ${hex}`);
     }
 
+  // Checks 4 and 6 both hunt for a Tailwind utility class hiding somewhere
+  // that isn't a comment, an arbitrary value, or a CSS custom-property name —
+  // strip once, share the result. This is also what makes `@apply
+  // bg-blue-600` inside a stylesheet count the same as `bg-blue-600` in a
+  // component: `stripNonUtilities` only blanks comments/`[...]`/`--vars`, so
+  // the class name inside an `@apply` line survives untouched.
+  const stripped = stripNonUtilities(text);
+
   if (SHADCN_RE)
-    for (const m of stripNonUtilities(text).matchAll(SHADCN_RE))
+    for (const m of stripped.matchAll(SHADCN_RE))
       findings.shadcn.push(`${file}:${lineOf(m.index)}  ${m[0]}`);
+
+  for (const m of stripped.matchAll(DEFAULT_PALETTE_RE))
+    findings.defaultPalette.push(`${file}:${lineOf(m.index)}  ${m[0]}`);
 }
 
 // ── Seeds. Lower these as tasks clear drift; never raise one. ───────────────
@@ -246,6 +309,12 @@ const CHECKS = [
     seed: 0,
     label: "shadcn token utility",
     fix: "use the DS variable — --ink-*, --surface-*, --blue*",
+  },
+  {
+    key: "defaultPalette",
+    seed: 1,
+    label: "Tailwind default-palette class",
+    fix: "swap for the DS token that plays the same role — --ink-*, --blue*, --surface-*",
   },
   {
     key: "transcript",
