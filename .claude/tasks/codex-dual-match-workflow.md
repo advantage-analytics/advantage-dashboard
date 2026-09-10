@@ -29,7 +29,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T1 · Persist schedule outcome records
 
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **files:** Best guess: supabase/migrations/<timestamp>_add_program_event_outcomes.sql (new); tests/schedule-outcomes-db.spec.ts (new)
 - **done when:**
