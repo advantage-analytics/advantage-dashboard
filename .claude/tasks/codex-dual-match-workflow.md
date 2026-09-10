@@ -75,7 +75,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T5 · Authorize outcome writes and score conflicts
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T3, T4
 - **files:** Best guess: src/lib/schedule/actions.ts; src/lib/schedule/outcomes.ts (new if needed); new outcome migration/RPC additions; tests/schedule-outcome-actions.spec.ts (new)
