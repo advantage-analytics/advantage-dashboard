@@ -221,3 +221,61 @@ and its icon `#D97706` → `#92400E`. That is defensible — SKILL.md names thos
 exact values and the originals were stock Tailwind amber — but it is the most
 user-visible change in the queue so far, it sits in a guardrails seam, and no
 one has looked at it rendered.
+
+## T10 · Decide the data-viz green ramp — done
+
+**gate:** mechanical — lint 0 errors, tsc clean, 652/652 tests, checker green
+on all six. Completion review — `VERDICT: pass`; it verified the load-bearing
+quote at `data-viz.ts:19` verbatim rather than trusting it, and counted the
+resulting colour collisions in the diff itself to confirm the code says what
+the report claimed. Guardrails — `pipeline-guardrails-reviewer` ran and
+returned an explicit "No findings"; required because the diff reaches
+`src/components/dashboard/`, and because `data-viz.ts` is a SHARED design
+module whose deleted exports could in principle have reached a live chart. It
+grepped the whole tree for the three deleted names (zero remaining) and
+confirmed `VIZ_GREEN`, `VIZ_OUTCOME`, `VIZ_SHOT` and `VIZ_SURFACE` are
+byte-for-byte unchanged. `rls-boundary-reviewer` skipped legitimately —
+`src/lib/design/` is not one of its surfaces, and no `src/lib/supabase/`,
+`src/lib/data/`, `src/app/api/` or `supabase/migrations/` is in the diff.
+
+**changed:** The green ramp is deleted. The task offered both paths — add to
+colors.css, or delete — and the argument for deleting turned out stronger than
+the one this queue anticipated. It is not merely that colors.css never
+transcribed the ramp: `data-viz.ts:19` states its own rule that "Won / lost in
+any chart MUST use VIZ_OUTCOME so a green dot on the court matches a green
+'WON' badge elsewhere", and a four-step green SERIES contradicts that outright
+— four greens in one line chart mean green no longer reads as won. The module
+was internally inconsistent, and colors.css's silence was the symptom rather
+than the cause. `VIZ_GREEN` itself is untouched and still feeds `VIZ_SHOT.won`
+and `VIZ_SURFACE.Grass`; only the DEEP/MID/LIGHT steps went.
+
+Two things the implementer got right that were not asked for. It also
+repointed `VIZ_GREEN`'s own use inside `STAT_CONFIG`, on the grounds that one
+green series among blue and slate ones preserves the exact collision the
+deletion exists to remove — the reviewer judged that as satisfying criterion 2
+rather than exceeding it. And its explanatory comment deliberately does NOT
+quote the deleted hex values, because check 5 scans comments and naming them
+would re-trip the very finding the deletion clears.
+
+TWO CORRECTIONS to this queue's own claims, both verified. The runner asserted
+`stat-progression-chart.tsx` has zero external importers; it does not —
+`statistics/statistics-page-content.tsx:16` imports it. It is unreachable
+because the ROUTE renders `ComingSoonPage`, not because nothing imports the
+file. And this task said "five green assignments"; there were four.
+
+Check 5 is now **0** — the first check in this queue to genuinely reach zero.
+
+**follow-ups:** 1. Repointing made `STAT_CONFIG`'s separability worse, and the
+file now records it: `VIZ_SLATE` ×5, `VIZ_SLATE_DEEP` ×4, `VIZ_SLATE_LIGHT` ×3
+across 20 series. Within each category group members stay distinct, so a user
+toggling inside one group still sees separable lines; enable across groups and
+they collide. Tolerable only because the page is unreachable. Twenty series
+cannot be separated by a closed five-role palette — the fix when Statistics
+ships is a different encoding (one series at a time, or shape/dash), not more
+hues. 2. `VIZ_SURFACE` is still RETIRED-but-compiling and hands three of five
+surfaces a slate step; that decision is now the last unresolved palette hole in
+`data-viz.ts`. 3. `STAT_CONFIG` uses raw `"#0D0D0D"` twice, exempt only
+because the file is in the checker's UNREACHABLE list. 4. `STAT_CONFIG` is
+still private to its file; AGENTS.md already says it must be extracted before a
+second consumer, and this colour decision should land in the extracted module
+rather than be re-derived.

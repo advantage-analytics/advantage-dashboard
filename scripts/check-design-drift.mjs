@@ -318,7 +318,7 @@ const CHECKS = [
   },
   {
     key: "transcript",
-    seed: 3,
+    seed: 0,
     label: "transcription drift from colors.css",
     fix: "align the module to colors.css, or add the role to colors.css if it is real",
   },

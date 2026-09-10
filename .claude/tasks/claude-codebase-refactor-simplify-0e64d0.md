@@ -182,7 +182,7 @@ Plan of record: `~/.claude/plans/system-reminder-you-are-operating-zippy-adleman
 
 ## T10 · Decide the data-viz green ramp
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T8
 - **files:** src/lib/design/data-viz.ts, src/styles/design-system/colors.css

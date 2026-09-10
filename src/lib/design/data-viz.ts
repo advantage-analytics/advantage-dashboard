@@ -9,9 +9,9 @@
  * court dot-plot needs more separable hues than two outcome colors can
  * provide. This module is the SINGLE SOURCE OF TRUTH for those hues. Every
  * value here is anchored to the brand palette: outcomes ARE Win Green and
- * Loss Red; ramps derive from Win Green; neutrals are cool-tinted slates;
- * the one warm accent (amber) is reserved for "free point / key event"
- * semantics and never appears as UI chrome.
+ * Loss Red; the one ordinal ramp derives from Signal Blue; neutrals are
+ * cool-tinted slates; the one warm accent (amber) is reserved for "free point /
+ * key event" semantics and never appears as UI chrome.
  *
  * Rules:
  *  - These hues are for data-viz ONLY (Recharts series, inline SVG fills).
@@ -60,12 +60,25 @@ export const VIZ_SHOT = {
   doubleFault: VIZ_SLATE_LIGHT,
 } as const;
 
-/* ── Green ramp (return-family series, anchored on Win Green) ────────── */
+/* ── Green (outcome only — there is deliberately no green ramp) ──────── */
 
-export const VIZ_GREEN_DEEP = "#3E9A45";
-export const VIZ_GREEN = "#5DB955"; // = Win Green
-export const VIZ_GREEN_MID = "#84C97E";
-export const VIZ_GREEN_LIGHT = "#ABDCA6";
+/**
+ * Green is a ROLE, not a family. `--viz-good` is a single value in colors.css
+ * while you/opponent get four steps each, and that asymmetry is the point:
+ * won/lost is binary, so it has nothing to be ordinal about.
+ *
+ * The three extra steps that used to sit here (a deep, a mid and a light green;
+ * see this file's history for the values — quoting them here would re-trip the
+ * transcription check that their deletion just cleared) were framed as "the
+ * return-family series" — pre-M1 hue-family thinking, the same shape as the
+ * violet ramp retired below, and never transcribed into colors.css. They were
+ * deleted rather than promoted: a green series ramp
+ * directly contradicts this file's own rule that won/lost MUST read as green,
+ * because four greens in one chart stop green meaning "won". Separate series
+ * by MEANING or by encoding (shape, dash, one-at-a-time), never by adding a
+ * hue family back.
+ */
+export const VIZ_GREEN = "#5DB955"; // = Win Green / --viz-good
 
 /* ── Blue ramp (serve-family series, anchored on Signal Blue) ────────── */
 
