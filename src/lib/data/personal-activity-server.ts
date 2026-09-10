@@ -80,6 +80,7 @@ function levelFor(count: number): 0 | 1 | 2 | 3 {
  */
 export async function getPersonalActivity(
   userId: string,
+  knownMatches?: { date: string }[],
 ): Promise<PersonalActivity> {
   // Anchor: the Sunday of the current week, then walk back 51 weeks to the
   // grid's first column. Zero the time so day arithmetic can't drift across a
@@ -91,16 +92,20 @@ export async function getPersonalActivity(
     today.getDate() - today.getDay() - (WEEKS - 1) * DAYS_PER_WEEK,
   );
 
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("matches")
-    .select("date")
-    .eq("created_by", userId)
-    .is("program_id", null)
-    .gte("date", startSunday.toISOString());
+  const supabase = knownMatches ? null : await createClient();
+  const { data, error } = knownMatches
+    ? { data: knownMatches, error: null }
+    : await supabase!
+        .from("matches")
+        .select("date")
+        .eq("created_by", userId)
+        .is("program_id", null)
+        .gte("date", startSunday.toISOString());
 
+  if (error) throw new Error("Could not load activity", { cause: error });
   const counts = new Map<string, number>();
   for (const row of data ?? []) {
+    if (!row.date) continue;
     const key = (row.date as string).slice(0, 10);
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }

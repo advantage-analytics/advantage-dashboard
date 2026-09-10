@@ -134,7 +134,9 @@ export function ServePlacementQuietStrip({
   awaitingReport = false,
   statisticsHref = "/dashboard/statistics",
   emptyCopy,
+  framed = true,
 }: {
+  framed?: boolean;
   zoneStats: Record<ZoneKey, ZoneStats> | null;
   /** How many matches the bars were read from — "Last 4 · 89 serves". */
   matchCount: number;
@@ -167,23 +169,27 @@ export function ServePlacementQuietStrip({
 
   return (
     <div
-      className="surface-card flex flex-col gap-3"
-      style={{ padding: "var(--pad-card)" }}
+      className={
+        framed ? "surface-card flex flex-col gap-3" : "flex flex-col gap-3"
+      }
+      style={framed ? { padding: "var(--pad-card)" } : undefined}
     >
-      <div className="flex items-center gap-2.5">
-        <span className="eyebrow">Serve placement</span>
-        <div className="flex-1" />
-        {/* The link names the drawn court a click away. Off over the empty
+      {framed && (
+        <div className="flex items-center gap-2.5">
+          <span className="eyebrow">Serve placement</span>
+          <div className="flex-1" />
+          {/* The link names the drawn court a click away. Off over the empty
             bars, where a placement view holds nothing to view. */}
-        {courts && (
-          <Link
-            href={statisticsHref}
-            className="text-[11px] whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-          >
-            Placement view
-          </Link>
-        )}
-      </div>
+          {courts && (
+            <Link
+              href={statisticsHref}
+              className="text-[11px] whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+            >
+              Placement view
+            </Link>
+          )}
+        </div>
+      )}
 
       {courts && zoneStats ? (
         <>

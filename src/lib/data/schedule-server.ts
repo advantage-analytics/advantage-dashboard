@@ -136,13 +136,15 @@ async function readSchedule(
 
   if (eventId) eventQuery = eventQuery.eq("id", eventId);
 
-  const { data: eventRows } = await eventQuery;
+  const { data: eventRows, error: eventError } = await eventQuery;
+  if (eventError)
+    throw new Error("Could not load schedule", { cause: eventError });
   const events = ((eventRows ?? []) as DbEvent[]).map(toEvent);
   if (events.length === 0) {
     return { events, entriesByEvent: new Map() };
   }
 
-  const { data: entryRows } = await supabase
+  const { data: entryRows, error: entryError } = await supabase
     .from("program_event_entries")
     .select(ENTRY_COLUMNS)
     .in(
@@ -151,9 +153,11 @@ async function readSchedule(
     )
     .order("position", { ascending: true });
 
+  if (entryError)
+    throw new Error("Could not load schedule entries", { cause: entryError });
   const entries = (entryRows ?? []) as DbEntry[];
 
-  const { data: matchRows } = entries.length
+  const { data: matchRows, error: matchError } = entries.length
     ? await supabase
         .from("matches")
         .select(MATCH_COLUMNS)
@@ -161,8 +165,10 @@ async function readSchedule(
           "event_entry_id",
           entries.map((entry) => entry.id),
         )
-    : { data: [] as DbEntryMatch[] };
+    : { data: [] as DbEntryMatch[], error: null };
 
+  if (matchError)
+    throw new Error("Could not load schedule results", { cause: matchError });
   const matches = (matchRows ?? []) as DbEntryMatch[];
 
   // `reap: true` is deliberately NOT passed. It is a write, and it belongs to

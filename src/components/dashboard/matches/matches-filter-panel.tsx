@@ -1,7 +1,8 @@
 "use client";
+import { FilterTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
 
 import { useState } from "react";
-import { Check, SlidersHorizontal } from "lucide-react";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Popover,
@@ -150,28 +151,7 @@ export function MatchesFilterPanel<K extends string>({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          title={label}
-          aria-expanded={open}
-          className={cn(
-            "flex h-7 items-center gap-1.5 rounded-[var(--radius-element)] px-2 text-[12px] transition-colors duration-150",
-            engaged ? "" : "hover:bg-[var(--surface-subtle)]",
-          )}
-          style={{
-            background: engaged ? "var(--surface-subtle)" : undefined,
-            color: engaged ? "var(--ink-900)" : "var(--ink-600)",
-            fontWeight: engaged ? 500 : 400,
-          }}
-        >
-          <SlidersHorizontal
-            className="size-3.5"
-            strokeWidth={1.5}
-            style={{ color: engaged ? "var(--ink-700)" : "var(--ink-500)" }}
-            aria-hidden="true"
-          />
-          Filters
-        </button>
+        <FilterTrigger title={label} aria-expanded={open} engaged={engaged} />
       </PopoverTrigger>
 
       <PopoverContent

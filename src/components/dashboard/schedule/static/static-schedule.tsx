@@ -1,8 +1,10 @@
 "use client";
+import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronDown, Filter as FilterIcon } from "lucide-react";
+import { ScheduleTitleRow } from "@/components/dashboard/team/list-page-heading";
+import { Check, Filter as FilterIcon } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -361,40 +363,13 @@ export function StaticSchedule({
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
       <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pt-5 pb-6">
         {/* Title slot with summary, ghost Import beside primary New event. */}
-        <div className="flex items-end gap-2.5">
-          <div>
-            <h1 className="text-display">Schedule</h1>
-            <p className="text-body-sm mt-[9px]">
-              {programName} · {seasonLabel(rows, today)} ·{" "}
-              <span className="tabular">
-                {rows.length} {rows.length === 1 ? "event" : "events"}
-              </span>{" "}
-              · <span className="tabular">{upcomingCount}</span> upcoming
-            </p>
-          </div>
-          <div className="flex-1" />
-          {canCreate ? (
-            <>
-              {/* Drawn beside New event on both artboards. Nothing behind it
-                  yet — no schedule import exists — so it stands as the design
-                  draws it and says so on hover, rather than as a disabled
-                  control the artboard does not show. */}
-              <button
-                type="button"
-                className={advButton("ghost", "md")}
-                title="Schedule import is not available yet"
-              >
-                Import
-              </button>
-              <Link
-                href="/dashboard/team/schedule/new"
-                className={advButton("primary", "md")}
-              >
-                New event
-              </Link>
-            </>
-          ) : null}
-        </div>
+        <ScheduleTitleRow canCreate={canCreate}>
+          {programName} · {seasonLabel(rows, today)} ·{" "}
+          <span className="tabular">
+            {rows.length} {rows.length === 1 ? "event" : "events"}
+          </span>{" "}
+          · <span className="tabular">{upcomingCount}</span> upcoming
+        </ScheduleTitleRow>
 
         <div className="flex items-center gap-2">
           <Chip
@@ -679,28 +654,14 @@ function SortMenu({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
+        <SortTrigger
           aria-expanded={open}
           aria-label={`Sort: ${current.label}`}
-          className={cn(
-            "flex h-7 cursor-pointer items-center gap-1.5 rounded-[var(--radius-element)] px-2 text-[12px] transition-colors duration-150",
-            open ? "" : "hover:bg-[var(--surface-subtle)]",
-          )}
-          style={{
-            background: open ? "var(--surface-subtle)" : undefined,
-            color: open ? "var(--ink-900)" : "var(--ink-600)",
-            fontWeight: open ? 500 : 400,
-          }}
+          engaged={open}
+          className="cursor-pointer"
         >
           {current.label}
-          <ChevronDown
-            className="size-3"
-            strokeWidth={1.5}
-            style={{ color: open ? "var(--ink-500)" : "var(--ink-400)" }}
-            aria-hidden="true"
-          />
-        </button>
+        </SortTrigger>
       </PopoverTrigger>
       <PopoverContent
         align="end"

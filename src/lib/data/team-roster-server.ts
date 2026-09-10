@@ -357,7 +357,7 @@ export const getRosterData = cache(async function getRosterData(
     // above — but they have no reason to wait on them either. Chained inside
     // the `Promise.all` it costs `matches + stats`, not `all five + stats`.
     (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("matches")
         .select(
           "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name",
@@ -368,6 +368,8 @@ export const getRosterData = cache(async function getRosterData(
         // list and be reported as their last match.
         .order("date", { ascending: false, nullsFirst: false });
 
+      if (error)
+        throw new Error("Could not load roster matches", { cause: error });
       const rows = (data ?? []) as DbMatchRow[];
       if (rows.length === 0) return { matches: rows, stats: [] as DbStatRow[] };
 
@@ -378,13 +380,17 @@ export const getRosterData = cache(async function getRosterData(
         "is_player1",
         ...ROSTER_DRAWER_MEASURES.map((m) => m.key),
       ];
-      const { data: stats } = await supabase
+      const { data: stats, error: statsError } = await supabase
         .from("match_stats_with_percentages")
         .select(columns.join(", "))
         .in(
           "match_id",
           rows.map((m) => m.id),
         );
+      if (statsError)
+        throw new Error("Could not load roster statistics", {
+          cause: statsError,
+        });
       return {
         matches: rows,
         stats: (stats ?? []) as unknown as DbStatRow[],
@@ -392,6 +398,12 @@ export const getRosterData = cache(async function getRosterData(
     })(),
   ]);
 
+  const error =
+    rosterResult.error ??
+    seatResult.error ??
+    invitesResult.error ??
+    programResult.error;
+  if (error) throw new Error("Could not load roster", { cause: error });
   const { matches, stats } = matchesResult;
 
   // The program's own zone for "claimed today" — the same column Team Home

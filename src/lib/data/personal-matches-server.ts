@@ -38,10 +38,19 @@ export interface DbPersonalMatch {
   player2_name: string | null;
   created_by: string | null;
   score: MatchScore | null;
+  tournament_name: string | null;
+  round: string | null;
+  result: string | null;
+  match_type: string | null;
+  court_type: string | null;
+  verified: boolean | null;
+  duration: number | null;
+  opponent_hand: string | null;
+  opponent_backhand: string | null;
 }
 
 const MATCH_COLUMNS =
-  "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score";
+  "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score, tournament_name, round, result, match_type, court_type, verified, duration, opponent_hand, opponent_backhand";
 
 /**
  * `STAT_COLUMNS` is the season strip's list — every `PLAYER_MEASURES` rate
@@ -65,24 +74,34 @@ export interface PersonalMatchData {
   stats: Record<string, unknown>[];
 }
 
+/** Base rows resolve before analytics; the page uses them to choose day zero. */
+export const getPersonalMatches = cache(
+  async (userId: string): Promise<DbPersonalMatch[]> => {
+    const supabase = await createClient();
+    const { data: matchRows, error } = await supabase
+      .from("matches")
+      .select(MATCH_COLUMNS)
+      .eq("created_by", userId)
+      .is("program_id", null)
+      // NULLs last, or an undated row would head the list and be read as the
+      // most recent thing this account did.
+      .order("date", { ascending: false, nullsFirst: false });
+
+    if (error)
+      throw new Error("Could not load personal matches", { cause: error });
+    const matches = (matchRows ?? []) as unknown as DbPersonalMatch[];
+    return matches;
+  },
+);
+
 export const getPersonalMatchData = cache(async function getPersonalMatchData(
   userId: string,
 ): Promise<PersonalMatchData> {
   const supabase = await createClient();
-
-  const { data: matchRows } = await supabase
-    .from("matches")
-    .select(MATCH_COLUMNS)
-    .eq("created_by", userId)
-    .is("program_id", null)
-    // NULLs last, or an undated row would head the list and be read as the
-    // most recent thing this account did.
-    .order("date", { ascending: false, nullsFirst: false });
-
-  const matches = (matchRows ?? []) as unknown as DbPersonalMatch[];
+  const matches = await getPersonalMatches(userId);
   if (matches.length === 0) return { matches, stats: [] };
 
-  const { data: statRows } = await supabase
+  const { data: statRows, error } = await supabase
     .from("match_stats_with_percentages")
     .select(PERSONAL_STAT_COLUMNS)
     .in(
@@ -90,6 +109,8 @@ export const getPersonalMatchData = cache(async function getPersonalMatchData(
       matches.map((m) => m.id),
     );
 
+  if (error)
+    throw new Error("Could not load personal statistics", { cause: error });
   return {
     matches,
     stats: (statRows ?? []) as unknown as Record<string, unknown>[],

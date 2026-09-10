@@ -1,6 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import {
+  LIST_GRID_COLS,
+  LIST_ROW_FRAME,
+  TEAM_LIST_GRID_COLS,
+} from "./match-list-layout";
+export {
+  DATE_COL,
+  DATE_COL_WITH_YEAR,
+  LIST_GRID_COLS,
+  LIST_ROW_FRAME,
+  TEAM_LIST_GRID_COLS,
+} from "./match-list-layout";
 import { ChevronRight } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { ResultMark } from "@/components/dashboard/result-mark";
@@ -39,7 +51,7 @@ import { RowLifecycle } from "./row-state";
  * Marin are not the same measurement — so the column bought little and cost
  * something real.
  */
-export const DATE_COL = "72px";
+
 /**
  * `formatShortDate` stamps the year once a match is not from this year
  * ("Nov 13, 2025", ~80px), which at 72px runs into the Event cell. Each row is
@@ -47,7 +59,6 @@ export const DATE_COL = "72px";
  * `MatchesGrid` measures the list once and sets `--date-col` on the card when
  * any row needs the wider one. A list of this year's matches is the 72px frame.
  */
-export const DATE_COL_WITH_YEAR = "84px";
 
 /**
  * The LIFECYCLE cell is the fluid track, and everything else is bounded.
@@ -71,9 +82,6 @@ export const DATE_COL_WITH_YEAR = "84px";
  * mark and its 10px gap add 36, so 276. Result is 64px, the width Schedule
  * gives the same mark and header. Score is 116px at one precision.
  */
-export const LIST_GRID_COLS = {
-  gridTemplateColumns: `var(--date-col, ${DATE_COL}) minmax(186px,276px) minmax(150px,260px) 116px 64px minmax(96px,1fr) 28px 13px`,
-} as const;
 
 /**
  * The grid frame, shared with the header row above. The 16px column gap is
@@ -84,11 +92,6 @@ export const LIST_GRID_COLS = {
  * side for a rounded, inset hover wash (SKILL 8a). Both still land content on
  * the same x because the row's `-mx-4 px-4` cancels to the header's edge.
  */
-export const TEAM_LIST_GRID_COLS = {
-  gridTemplateColumns: `var(--date-col, ${DATE_COL}) minmax(130px,1fr) minmax(150px,1fr) minmax(130px,1fr) 116px 64px minmax(96px,1fr) 28px 13px`,
-} as const;
-
-export const LIST_ROW_FRAME = "grid items-center gap-x-4";
 
 /**
  * The row's actions lane: 28px at the row's end, inside the chevron, empty at

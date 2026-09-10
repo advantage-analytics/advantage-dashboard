@@ -3,22 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
-import { SeasonTitle } from "@/components/dashboard/home/season-title";
-import {
-  SetupLine,
-  type SetupProgress,
-} from "@/components/dashboard/home/setup-line";
-import { FocusEmpty } from "@/components/dashboard/home/focus-empty";
 import { DayZeroHome } from "@/components/dashboard/home/day-zero-home";
-import RecentActivity from "./recent-activity";
-import ServePlacementHome from "@/components/dashboard/home/serve-placement-home";
-import { FocusCard } from "@/components/dashboard/home/focus-card";
-import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
-import { UsageFooter } from "@/components/dashboard/shared/usage-footer";
-import { ActivityWidget } from "@/components/dashboard/home/activity-widget";
-import type { EvidencePart } from "@/lib/ui/insight-evidence";
-import type { PersonalUsage } from "@/lib/data/usage-server";
-import type { PersonalActivity } from "@/lib/data/personal-activity-server";
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 
@@ -27,45 +12,24 @@ let hasAnimatedOnce = false;
 
 interface HomeContentProps {
   hasMatches: boolean;
-  userId: string;
-  /** Which ids mean "me" on a match row — login plus claimed roster profiles. */
-  playerIds: string[];
-  kpiStrip?: ReactNode;
-  usage: PersonalUsage;
-  /** Every match filed — the insight cache's signature. */
-  matchCount: number;
-  /** Matches a report exists for — what the title and the Focus card count. */
-  analyzedMatchCount: number;
-  /** Matches the viewer won — the matches card's "M matches · W won". */
-  wonCount: number;
-  /** Computed evidence for the Focus card, or null when there is none to state. */
-  insightEvidence: EvidencePart[] | null;
-  /** What the evidence measured — the Focus card's footer caption. */
-  insightCaption: string | null;
-  insightSignature: string;
-  /** 52-week match-day heatmap for the Activity widget. */
-  activity: PersonalActivity;
-  /**
-   * Persisted answers to the getting-set-up questions, read on the server —
-   * this is a client component and cannot query for them itself.
-   */
-  setup: SetupProgress;
+  title: ReactNode;
+  kpiStrip: ReactNode;
+  recent: ReactNode;
+  activity: ReactNode;
+  insight: ReactNode;
+  serves: ReactNode;
+  footer: ReactNode;
 }
 
 export default function HomeContent({
   hasMatches,
-  userId,
-  playerIds,
+  title,
   kpiStrip,
-  usage,
-  matchCount,
-  analyzedMatchCount,
-  wonCount,
-  insightEvidence,
-  insightCaption,
-  insightSignature,
+  recent,
   activity,
-  setup,
+  insight,
+  serves,
+  footer,
 }: HomeContentProps) {
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
@@ -97,18 +61,8 @@ export default function HomeContent({
         transition={{ duration: 0.3, ease: EASE_CURVE, delay: 0.15 }}
         className="flex min-w-0 flex-col gap-5"
       >
-        <RecentActivity
-          userId={userId}
-          playerIds={playerIds}
-          hasMatches={hasMatches}
-          showEmptyAction={hasMatches}
-          showMatchesLink={hasMatches}
-          matchCount={matchCount}
-          wonCount={wonCount}
-        />
-        {/* Under the matches card in the main column — the design's
-            default `activityUnderMatches` placement (artboard 1b). */}
-        <ActivityWidget activity={activity} showSessionLog={hasMatches} />
+        {recent}
+        {activity}
       </motion.div>
 
       <motion.div
@@ -117,41 +71,8 @@ export default function HomeContent({
         transition={{ duration: 0.3, ease: EASE_CURVE, delay: 0.2 }}
         className="flex flex-col gap-5"
       >
-        {/* Three states, one card. With computed evidence it states a
-            finding; on day zero it shows its own anatomy holding nothing, the
-            way every other region on that page does. In between — matches
-            filed, nothing analysed yet — it stays off the page, because
-            "Renders nothing without real numbers" (SKILL.md's InsightCard
-            spec) and a placeholder after the player has already sent a match
-            would be the page failing to notice. */}
-        {insightEvidence ? (
-          <FocusCard
-            footer={{
-              left: insightCaption,
-              right: (
-                <>
-                  <span className="tabular">{analyzedMatchCount}</span>{" "}
-                  {analyzedMatchCount === 1 ? "match" : "matches"}
-                </>
-              ),
-            }}
-          >
-            <HomeAiInsight
-              evidence={insightEvidence}
-              cacheSignature={insightSignature}
-            />
-          </FocusCard>
-        ) : (
-          !hasMatches && (
-            <FocusCard
-              showStatisticsLink={false}
-              footer={{ left: "One thing to work on, after your first match." }}
-            >
-              <FocusEmpty />
-            </FocusCard>
-          )
-        )}
-        <ServePlacementHome userId={userId} />
+        {insight}
+        {serves}
       </motion.div>
     </div>
   );
@@ -168,13 +89,7 @@ export default function HomeContent({
     // 16px between the title row, the strip, the grid and the footer — Pa2's
     // column gap (21a ran 22px; the audit's 1440×900 frames tightened it).
     <div className="flex flex-1 flex-col gap-4">
-      <SeasonTitle
-        hasMatches={hasMatches}
-        matchCount={matchCount}
-        analyzedMatchCount={analyzedMatchCount}
-        usage={usage}
-        userId={userId}
-      />
+      {title}
 
       {/* The frame never moves once a match is in: every region stays present
           and labelled with what will fill it, whether or not it has a figure
@@ -190,14 +105,7 @@ export default function HomeContent({
           of hanging directly under the cards. On a page taller than the
           viewport there is no leftover height and the margin resolves to zero,
           leaving the footer in normal flow after the content. */}
-      <div className="mt-auto flex flex-col gap-4">
-        <SetupLine setup={setup} />
-        <UsageFooter
-          usedSeconds={usage.usedSeconds}
-          capSeconds={usage.capSeconds}
-          billingMonth={usage.billingMonth}
-        />
-      </div>
+      <div className="mt-auto flex flex-col gap-4">{footer}</div>
     </div>
   );
 }

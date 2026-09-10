@@ -273,18 +273,19 @@ export const getWorkspaceContext = cache(
     // Own row only — `users` RLS is a blanket `auth.uid() = id`, which is also
     // why other members' names need a SECURITY DEFINER lookup rather than a
     // select from here.
-    const { data: row } = await supabase
-      .from("users")
-      .select("first_name, last_name, plan, role, created_at, onboarded_at")
-      .eq("id", user.id)
-      .single();
+    // Memberships depend only on the authenticated id, not the profile row.
+    const [{ data: row }, programs] = await Promise.all([
+      supabase
+        .from("users")
+        .select("first_name, last_name, plan, role, created_at, onboarded_at")
+        .eq("id", user.id)
+        .single(),
+      listProgramWorkspaces(supabase, user.id),
+    ]);
 
     const viewer = toViewer(user.id, user.email ?? "", row);
 
-    const available = [
-      personalWorkspace(viewer),
-      ...(await listProgramWorkspaces(supabase, user.id)),
-    ];
+    const available = [personalWorkspace(viewer), ...programs];
 
     const cookieStore = await cookies();
     const requested = cookieStore.get(WORKSPACE_COOKIE)?.value;

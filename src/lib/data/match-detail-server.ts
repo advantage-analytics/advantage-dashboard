@@ -431,46 +431,49 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   const playerIds = [dbRow.player1_id, dbRow.player2_id].filter(
     (id): id is string => id != null,
   );
-  const profiles = new Map<string, PlayerProfile>();
-  if (playerIds.length > 0) {
-    const { data: users } = await supabase
-      .from("users")
-      .select("id, hand, backhand")
-      .in("id", playerIds);
-    if (users) {
-      for (const u of users) {
-        profiles.set(u.id, { hand: u.hand, backhand: u.backhand });
-      }
-    }
-  }
+  const [
+    statsResult,
+    points,
+    playerAverages,
+    kpiHistory,
+    eventId,
+    uploadedBy,
+    profileResult,
+  ] = await Promise.all([
+    getMatchStatisticsFromSupabase(matchId),
+    getMatchPointsFromSupabase(matchId),
+    // The averages need to know which ids mean "me" — a coach may have recorded
+    // this athlete's earlier matches against a roster profile they only claimed
+    // later. Chained inside the batch rather than awaited in front of it, so
+    // only this branch waits on the lookup.
+    (async () =>
+      getPlayerAverageStats(user?.id ? await getMyPlayerIds() : [], matchId))(),
+    // The history hangs off the same lookup, one step further: which seat on
+    // the row is "you" — and so whose baseline this is — is decided from the
+    // viewer's ids. Chained for the same reason as the averages.
+    (async () =>
+      resolveKpiHistory(dbRow, user?.id ? await getMyPlayerIds() : []))(),
+    // The entry lookup rides this wave rather than following it: it needs only
+    // `dbRow`, which is already in hand, and nothing else here reads its answer.
+    // It resolves to null for every match with no line behind it, which is every
+    // personal match and every challenge or practice a program records.
+    getEventIdForEntry(supabase, dbRow.event_entry_id),
+    // Same wave, same reason: it needs only `dbRow`, and it resolves to null
+    // without a round trip for every personal match.
+    resolveUploadedBy(supabase, dbRow),
+    // Profile metadata is independent of stats, points, and history.
+    playerIds.length > 0
+      ? supabase.from("users").select("id, hand, backhand").in("id", playerIds)
+      : Promise.resolve({ data: [] }),
+  ]);
 
-  const [statsResult, points, playerAverages, kpiHistory, eventId, uploadedBy] =
-    await Promise.all([
-      getMatchStatisticsFromSupabase(matchId),
-      getMatchPointsFromSupabase(matchId),
-      // The averages need to know which ids mean "me" — a coach may have recorded
-      // this athlete's earlier matches against a roster profile they only claimed
-      // later. Chained inside the batch rather than awaited in front of it, so
-      // only this branch waits on the lookup.
-      (async () =>
-        getPlayerAverageStats(
-          user?.id ? await getMyPlayerIds() : [],
-          matchId,
-        ))(),
-      // The history hangs off the same lookup, one step further: which seat on
-      // the row is "you" — and so whose baseline this is — is decided from the
-      // viewer's ids. Chained for the same reason as the averages.
-      (async () =>
-        resolveKpiHistory(dbRow, user?.id ? await getMyPlayerIds() : []))(),
-      // The entry lookup rides this wave rather than following it: it needs only
-      // `dbRow`, which is already in hand, and nothing else here reads its answer.
-      // It resolves to null for every match with no line behind it, which is every
-      // personal match and every challenge or practice a program records.
-      getEventIdForEntry(supabase, dbRow.event_entry_id),
-      // Same wave, same reason: it needs only `dbRow`, and it resolves to null
-      // without a round trip for every personal match.
-      resolveUploadedBy(supabase, dbRow),
-    ]);
+  const profiles = new Map<string, PlayerProfile>();
+  for (const profile of profileResult.data ?? []) {
+    profiles.set(profile.id, {
+      hand: profile.hand,
+      backhand: profile.backhand,
+    });
+  }
 
   // `getMyPlayerIds` is `cache()`d and already resolved inside the batch above,
   // so this is a map lookup rather than a second round trip.
