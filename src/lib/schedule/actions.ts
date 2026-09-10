@@ -25,6 +25,7 @@ import {
   isProgramStaff,
 } from "@/lib/workspace/types";
 import type { Discipline, EventSite, OutcomeKind, OutcomeSide } from "./types";
+import { validateLineup } from "./lineup-validation";
 
 export type ActionError = { error: string };
 
@@ -190,6 +191,9 @@ export async function createDual(
   if (!input.opponent.trim()) return { error: "Name the opponent first." };
   if (input.lines.length === 0)
     return { error: "A dual needs at least one line." };
+
+  const lineupErrors = validateLineup(input.lines);
+  if (lineupErrors.length > 0) return { error: lineupErrors[0].reason };
 
   const supabase = await createClient();
 

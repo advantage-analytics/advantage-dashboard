@@ -138,7 +138,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T10 · Validate lineup identities and pairs
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T6
 - **files:** Best guess: src/lib/schedule/entry-plan.ts; src/lib/schedule/actions.ts; src/lib/schedule/lineup-validation.ts (new if needed); tests/schedule-lineup-validation.spec.ts (new)

@@ -3,7 +3,7 @@
  *
  * Pure, and deliberately separate from `actions.ts`: the interesting part of
  * editing a lineup is not the SQL, it is deciding which rows may move. A line
- * that already has a match — or a forfeit — is a line the rest of the product
+ * that already has a match or a non-played result is a line the rest of the product
  * has already answered questions about: a `matches` row points at it, the team
  * score counts it, the upload queue has stopped offering it. Re-pointing that
  * row at a different player would re-attribute a played match with nothing on
@@ -22,6 +22,7 @@
 
 import type { LineupLineInput, TournamentEntryInput } from "./actions";
 import type { EventEntry } from "./types";
+import { validateLineup } from "./lineup-validation";
 
 /**
  * One submitted row, either kind, optionally carrying the id of the entry it
@@ -43,8 +44,8 @@ export interface EntryPlan {
   /** Saved rows the submission dropped, and that are free to disappear. */
   delete: { id: string; slot: string }[];
   /**
-   * Rows the submission would have moved or removed but must not. Any entry
-   * here means the whole save is refused — see the header.
+   * Invalid submitted lines, or saved rows that cannot move or be removed.
+   * Any entry here means the whole save is refused — see the header.
    */
   refuse: { slot: string; reason: string }[];
 }
@@ -87,19 +88,28 @@ const sameList = (a: readonly string[], b: readonly string[]) =>
  * Is this saved entry settled — has the rest of the product already answered a
  * question about it?
  *
- * A match or a forfeit, in either order. `entryPlayed` in `entry-state.ts`
+ * A match, legacy forfeit, or saved outcome in any round. `entryPlayed` in `entry-state.ts`
  * asks a narrower question (is it *decided*), which is not the one here: an
  * entry with a match whose score is still blank is just as unsafe to
  * re-attribute as one with a final score, because the match row exists and
  * points at these players.
  */
 export function isSettled(entry: EventEntry): boolean {
-  return entry.forfeit !== null || entry.matches.length > 0;
+  return (
+    entry.forfeit !== null ||
+    entry.matches.length > 0 ||
+    (entry.outcomes?.length ?? 0) > 0
+  );
 }
 
 /** Why a settled entry cannot be touched, in the coach's own vocabulary. */
 function settledReason(entry: EventEntry, dropped: boolean): string {
   const slot = existingSlotKey(entry);
+  if ((entry.outcomes?.length ?? 0) > 0) {
+    return dropped
+      ? `${slot} has a saved outcome, so it can't be removed. Clear the outcome first.`
+      : `${slot} has a saved outcome. Clear the outcome before changing this line.`;
+  }
   if (entry.forfeit !== null) {
     return dropped
       ? `${slot} is forfeited, so it can't be removed. Clear the forfeit first.`
@@ -154,6 +164,13 @@ export function planEntryChanges(
   incoming: LineupLineInput[] | TournamentEntryInput[],
 ): EntryPlan {
   const plan: EntryPlan = { insert: [], update: [], delete: [], refuse: [] };
+
+  plan.refuse.push(
+    ...validateLineup(
+      incoming.filter((row): row is LineupLineInput => "slot" in row),
+    ),
+  );
+  if (plan.refuse.length > 0) return plan;
 
   const byId = new Map(existing.map((entry) => [entry.id, entry]));
   const bySlot = new Map(
