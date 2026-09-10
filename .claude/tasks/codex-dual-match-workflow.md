@@ -88,7 +88,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T6 · Delete eligible events with server enforcement
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T5
 - **files:** Best guess: src/lib/schedule/actions.ts; new deletion RPC/migration if required; tests/schedule-event-delete.spec.ts (new)

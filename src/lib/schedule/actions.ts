@@ -20,7 +20,10 @@ import {
   type IncomingEntry,
 } from "./entry-plan";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { isProgramStaff } from "@/lib/workspace/types";
+import {
+  canDeleteTeamScheduleEvent,
+  isProgramStaff,
+} from "@/lib/workspace/types";
 import type { Discipline, EventSite, OutcomeKind, OutcomeSide } from "./types";
 
 export type ActionError = { error: string };
@@ -156,6 +159,26 @@ function scheduleWriteError(error: {
         ? "This line changed while you were saving. Refresh the event and try again."
         : error.message,
   };
+}
+
+/** Eligibility and audit are atomic in Postgres, including direct deletes. */
+export async function deleteEvent(
+  eventId: string,
+): Promise<{ ok: true } | ActionError> {
+  const context = await getWorkspaceContext();
+  if (!context) return { error: "Not signed in." };
+  if (!canDeleteTeamScheduleEvent(context.active)) {
+    return { error: "Only an owner or coach can delete an event." };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_schedule_event", {
+    p_program_id: context.active.id,
+    p_event_id: eventId,
+  });
+  if (error) return scheduleWriteError(error);
+  revalidatePath("/dashboard/team/schedule");
+  revalidatePath(`/dashboard/team/schedule/${eventId}`);
+  return { ok: true };
 }
 
 export async function createDual(
