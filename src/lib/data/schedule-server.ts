@@ -1,10 +1,10 @@
 /**
  * Reading a program's schedule.
  *
- * Three round trips, never N: events, then every entry under them, then every
- * match pointing at those entries. A dual has nine lines and a tournament
- * weekend can have thirty results, so a per-entry query would be a page of
- * round trips for one screen.
+ * Three round trips, never N: events, then every entry under them, then the
+ * matches and non-played outcomes pointing at those entries in parallel. A
+ * dual has nine lines and a tournament weekend can have thirty results, so a
+ * per-entry query would be a page of round trips for one screen.
  */
 
 import { cache } from "react";
@@ -15,10 +15,12 @@ import {
   dualScore,
   entryPlayed,
   lineCoverageFrom,
+  outcomeForRound,
 } from "@/lib/schedule/entry-state";
 import { roundRank } from "@/lib/schedule/format";
 import { compareEntryOrder } from "@/lib/schedule/courts";
 import type {
+  EntryOutcome,
   EntryMatch,
   EventDetail,
   EventEntry,
@@ -37,6 +39,9 @@ const ENTRY_COLUMNS =
 
 const MATCH_COLUMNS =
   "id, event_entry_id, round, score, player2_name, source_provider";
+
+const OUTCOME_COLUMNS =
+  "id, entry_id, event_id, program_id, round, kind, side, actor_user_id, recorded_at";
 
 interface DbEvent {
   id: string;
@@ -74,6 +79,21 @@ interface DbEntryMatch {
   score: { player1: number[]; player2: number[] } | null;
   player2_name: string | null;
 }
+
+interface DbEntryOutcome {
+  id: string;
+  entry_id: string;
+  event_id: string;
+  program_id: string;
+  round: string | null;
+  kind: string;
+  side: string;
+  actor_user_id: string;
+  recorded_at: string;
+}
+
+type ScheduleClient = Awaited<ReturnType<typeof createClient>>;
+type AnalysisLoader = typeof loadMatchAnalysis;
 
 function toEvent(row: DbEvent): ProgramEvent {
   return {
@@ -127,7 +147,16 @@ async function readSchedule(
   eventId?: string,
 ): Promise<ProgramSchedule> {
   const supabase = await createClient();
+  return readScheduleWithClient(supabase, programId, eventId);
+}
 
+/** Testable core of the cached server read; callers should use the exports below. */
+export async function readScheduleWithClient(
+  supabase: ScheduleClient,
+  programId: string,
+  eventId?: string,
+  analysisLoader: AnalysisLoader = loadMatchAnalysis,
+): Promise<ProgramSchedule> {
   let eventQuery = supabase
     .from("program_events")
     .select(EVENT_COLUMNS)
@@ -153,22 +182,30 @@ async function readSchedule(
 
   const entries = (entryRows ?? []) as DbEntry[];
 
-  const { data: matchRows } = entries.length
-    ? await supabase
-        .from("matches")
-        .select(MATCH_COLUMNS)
-        .in(
-          "event_entry_id",
-          entries.map((entry) => entry.id),
-        )
-    : { data: [] as DbEntryMatch[] };
+  const entryIds = entries.map((entry) => entry.id);
+  const eventIds = events.map((event) => event.id);
+  const [{ data: matchRows }, { data: outcomeRows }] = entries.length
+    ? await Promise.all([
+        supabase
+          .from("matches")
+          .select(MATCH_COLUMNS)
+          .in("event_entry_id", entryIds),
+        supabase
+          .from("program_event_outcomes")
+          .select(OUTCOME_COLUMNS)
+          .eq("program_id", programId)
+          .in("event_id", eventIds)
+          .in("entry_id", entryIds),
+      ])
+    : [{ data: [] as DbEntryMatch[] }, { data: [] as DbEntryOutcome[] }];
 
   const matches = (matchRows ?? []) as DbEntryMatch[];
+  const outcomes = (outcomeRows ?? []) as DbEntryOutcome[];
 
   // `reap: true` is deliberately NOT passed. It is a write, and it belongs to
   // the surfaces that draw a progress bar big enough for a frozen one to
   // mislead — the matches list and match detail. These draw a dot.
-  const jobs = await loadMatchAnalysis(
+  const jobs = await analysisLoader(
     supabase,
     matches.map((match) => match.id),
   );
@@ -192,6 +229,29 @@ async function readSchedule(
     else matchesByEntry.set(match.event_entry_id, [entryMatch]);
   }
 
+  const outcomesByEntry = new Map<string, EntryOutcome[]>();
+  for (const outcome of outcomes) {
+    // Keep association at the same event + entry grain as the database's
+    // composite foreign key. This also makes a malformed/mock row fail closed.
+    const entry = entries.find(
+      (candidate) =>
+        candidate.id === outcome.entry_id &&
+        candidate.event_id === outcome.event_id,
+    );
+    if (!entry || outcome.program_id !== programId) continue;
+    const entryOutcome: EntryOutcome = {
+      id: outcome.id,
+      round: outcome.round,
+      kind: outcome.kind as EntryOutcome["kind"],
+      side: outcome.side as EntryOutcome["side"],
+      actorUserId: outcome.actor_user_id,
+      recordedAt: outcome.recorded_at,
+    };
+    const list = outcomesByEntry.get(outcome.entry_id);
+    if (list) list.push(entryOutcome);
+    else outcomesByEntry.set(outcome.entry_id, [entryOutcome]);
+  }
+
   const entriesByEvent = new Map<string, EventEntry[]>();
   for (const row of entries) {
     const entry: EventEntry = {
@@ -211,6 +271,9 @@ async function readSchedule(
       // Sorted by the round ladder: `matches` has no created_at, so without
       // this a tournament run renders in whatever order Postgres returned.
       matches: (matchesByEntry.get(row.id) ?? []).sort(
+        (a, b) => roundRank(a.round) - roundRank(b.round),
+      ),
+      outcomes: (outcomesByEntry.get(row.id) ?? []).sort(
         (a, b) => roundRank(a.round) - roundRank(b.round),
       ),
     };
@@ -450,8 +513,14 @@ export const getEventDetail = cache(async function getEventDetail(
 export async function getUploadQueue(
   programId: string,
 ): Promise<UploadQueueGroup[]> {
-  const { events, entriesByEvent } = await getProgramSchedule(programId);
+  return uploadQueueFrom(await getProgramSchedule(programId));
+}
 
+/** Pure upload-queue projection over the shared, workspace-scoped read. */
+export function uploadQueueFrom({
+  events,
+  entriesByEvent,
+}: ProgramSchedule): UploadQueueGroup[] {
   return events
     .map((event) => {
       const all = entriesByEvent.get(event.id) ?? [];
@@ -463,26 +532,34 @@ export async function getUploadQueue(
       // out of both counts. Filtered once, up here, rather than twice: the
       // waiting list and the totals have to be about the same set of lines,
       // and two filters are two chances for them to stop being.
-      const nonForfeited = all.filter((entry) => entry.forfeit === null);
+      const nonForfeited = all.filter(
+        (entry) => outcomeForRound(entry, null) === null,
+      );
 
       const waiting = nonForfeited
         .map((entry) => ({
           ...entry,
-          matches: entry.matches.filter((match) => !match.hasVideo),
+          matches: entry.matches.filter(
+            (match) =>
+              !match.hasVideo && outcomeForRound(entry, match.round) === null,
+          ),
         }))
         .filter(
-          (entry) => entry.matches.length > 0 || !hasAnyMatch(all, entry.id),
+          (entry) =>
+            entry.matches.length > 0 ||
+            (!hasAnyMatch(all, entry.id) && !entry.outcomes?.length),
         );
 
       const withVideo = nonForfeited.reduce(
         (count, entry) =>
-          count + entry.matches.filter((m) => m.hasVideo).length,
+          count +
+          entry.matches.filter(
+            (match) =>
+              match.hasVideo && outcomeForRound(entry, match.round) === null,
+          ).length,
         0,
       );
-      const total = nonForfeited.reduce(
-        (count, entry) => count + Math.max(1, entry.matches.length),
-        0,
-      );
+      const total = lineCoverageFrom(nonForfeited).total;
 
       return { event, entries: waiting, withVideo, total };
     })

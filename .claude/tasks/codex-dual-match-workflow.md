@@ -52,7 +52,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T3 · Load outcomes with team schedule data
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** Best guess: src/lib/data/schedule-server.ts; tests/schedule-outcome-loader.spec.ts (new)
