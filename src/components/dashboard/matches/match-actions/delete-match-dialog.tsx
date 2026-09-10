@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { buttonVariants } from "@/components/ui/button";
+import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
 interface DeleteMatchDialogProps {
@@ -102,8 +102,8 @@ export function DeleteMatchDialog({
             }}
             disabled={loading}
             className={cn(
-              buttonVariants({ variant: "destructive" }),
-              "h-9 rounded-[6px] bg-[#E51837] px-4 text-[13px] font-medium shadow-[0_1px_3px_rgba(229,24,55,0.25)] hover:bg-[#C81530]",
+              advButton("danger-solid"),
+              "shadow-[0_1px_3px_rgba(229,24,55,0.25)]",
             )}
           >
             {loading ? (

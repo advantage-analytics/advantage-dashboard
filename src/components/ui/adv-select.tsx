@@ -26,8 +26,10 @@ import { cn } from "@/lib/utils";
  * and the value ran at 13px in three places and 14px in two.
  *
  * ── Why a native `<select>` and not Radix ───────────────────────────────────
- * `src/components/ui/select.tsx` (Radix) has zero importers, deliberately.
- * The rationale is recorded at `settings-inline-select.tsx` and
+ * The Radix `select.tsx` this repo once carried had zero importers,
+ * deliberately, and has since been deleted — see SKILL.md › Component Patterns
+ * › "Building a primitive": the hard part here belongs to the platform, so the
+ * native control wins. The rationale is recorded at `settings-inline-select.tsx` and
  * `player-fields.tsx`: on a phone the platform picker beats anything we would
  * build, and keyboard handling, type-ahead and screen-reader semantics come
  * for free rather than having to be re-earned. Every one of these is a form

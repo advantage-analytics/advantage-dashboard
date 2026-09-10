@@ -422,6 +422,37 @@ Always respect `prefers-reduced-motion` — skip transforms, keep opacity transi
 
 ## Component Patterns
 
+### Building a primitive — wrap Radix, wrap native, or hand-build
+
+Decide by **where the difficulty is**, not by what a library offers.
+
+| The hard part is…                                                 | Do this                           | Shipped examples                              |
+| ----------------------------------------------------------------- | --------------------------------- | --------------------------------------------- |
+| **Behavior** — portals, focus traps, dismissal, positioning, ARIA | Wrap Radix, style it in DS tokens | `Popover`, `Tooltip`, `Dialog`, `AlertDialog` |
+| **Platform** — the OS already does it better                      | Wrap the **native** control       | `AdvSelect` (native `<select>`)               |
+| **Appearance** — geometry the DS specifies exactly                | Hand-build                        | `AdvSwitch`, `advButton()`, `Card`            |
+
+**Never adopt shadcn's styling layer.** Radix is unstyled behavior and earns
+its place; shadcn's styled components are a _second design system_ — its own
+palette, radii and geometry — and it loses every time it meets this one. That
+is not a prediction, it is the record: `Select`, `Tabs`, `Switch` and `Checkbox`
+were all installed, all abandoned, and all replaced by hand-built equivalents,
+because the primitive hard-codes internals you cannot reach from the outside.
+`AdvSwitch`'s docstring names the moment — shadcn's `Switch` is 32×18.4 where
+the DS says 36×20, with the thumb fixed inside the primitive.
+
+The colour half of that layer caused a quieter failure: it resolved through
+oklch CSS variables, so no hex ever appeared in the source and no colour review
+could see it. `Tooltip` painted `bg-primary` — **black** — where this document
+specifies `--ink-900`, and shadcn's `Button` shipped a black primary against
+`advButton()`'s Signal Blue. Both were removed;
+`scripts/check-design-drift.mjs` check 4 now fails if any shadcn utility class
+returns.
+
+**One question settles it:** would you be fighting the primitive to match this
+document? Then hand-build. A card is pure appearance with no behavior, so it is
+hand-built — which is why the shadcn `Card` sat unused for the life of the repo.
+
 ### Card
 
 ```
