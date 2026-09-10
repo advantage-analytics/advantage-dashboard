@@ -64,7 +64,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T4 · Define schedule role capabilities
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** Best guess: src/lib/workspace/types.ts; tests/schedule-capabilities.spec.ts (new)
 - **done when:**
