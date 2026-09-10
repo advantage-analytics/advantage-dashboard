@@ -44,6 +44,7 @@ import type {
   EventSite,
   ScheduleRow,
 } from "@/lib/schedule/types";
+import type { ScheduleCapabilities } from "@/lib/workspace/types";
 
 /**
  * One program's schedule, as this component reads it.
@@ -67,7 +68,7 @@ interface Facets {
 /**
  * `Tc2` / `Tc2c` — the schedule, in the page shape Matches and Roster share.
  *
- * Title with a one-line summary, ghost Import beside primary New event, the
+ * Title with a one-line summary and primary New event, the
  * All · Upcoming · Completed pills with Filters and sort, one white event
  * table at full width in the date-first grammar, and a season footer with
  * "Set next lineup". `Tc2c` is the page a coach lands on: no event selected,
@@ -115,7 +116,7 @@ export function StaticSchedule({
   schedule,
   season,
   today,
-  canCreate,
+  capabilities,
   canAddOwnMatch,
   programName,
   opponents,
@@ -134,8 +135,8 @@ export function StaticSchedule({
    * here would give the two renders different answers.
    */
   today: string;
-  /** `isProgramStaff` upstream — gates New event, Import, and every write the drawer points at. */
-  canCreate: boolean;
+  /** Named Schedule actions, derived once from the active workspace. */
+  capabilities: ScheduleCapabilities;
   /** `canUploadForProgram` upstream — gates day zero's "One-off match in Matches". */
   canAddOwnMatch: boolean;
   /** The workspace's name, which the summary line opens with. */
@@ -146,6 +147,7 @@ export function StaticSchedule({
   initialSelectedId: string | null;
 }) {
   const { rows, details } = schedule;
+  const { canCreate } = capabilities;
 
   const initial =
     initialSelectedId && rows.some((row) => row.id === initialSelectedId)
@@ -360,7 +362,7 @@ export function StaticSchedule({
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
       <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pt-5 pb-6">
-        {/* Title slot with summary, ghost Import beside primary New event. */}
+        {/* Title slot with summary and primary New event. */}
         <div className="flex items-end gap-2.5">
           <div>
             <h1 className="text-display">Schedule</h1>
@@ -374,25 +376,12 @@ export function StaticSchedule({
           </div>
           <div className="flex-1" />
           {canCreate ? (
-            <>
-              {/* Drawn beside New event on both artboards. Nothing behind it
-                  yet — no schedule import exists — so it stands as the design
-                  draws it and says so on hover, rather than as a disabled
-                  control the artboard does not show. */}
-              <button
-                type="button"
-                className={advButton("ghost", "md")}
-                title="Schedule import is not available yet"
-              >
-                Import
-              </button>
-              <Link
-                href="/dashboard/team/schedule/new"
-                className={advButton("primary", "md")}
-              >
-                New event
-              </Link>
-            </>
+            <Link
+              href="/dashboard/team/schedule/new"
+              className={advButton("primary", "md")}
+            >
+              New event
+            </Link>
           ) : null}
         </div>
 
@@ -538,7 +527,7 @@ export function StaticSchedule({
           onStep={step}
           onClose={() => close(drawerId)}
           onClosed={finishClose}
-          canEdit={canCreate}
+          capabilities={capabilities}
         />
       ) : null}
     </div>

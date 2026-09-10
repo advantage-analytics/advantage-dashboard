@@ -112,6 +112,8 @@ const SCREENS = path.join(
 const UI = path.join(__dirname, "..", "src", "components", "ui");
 /** `ResultMark`, the one outcome register, sits a level up from the screens. */
 const DASHBOARD = path.join(__dirname, "..", "src", "components", "dashboard");
+/** The Matches zero state retains the supported SwingVision file-import entry point. */
+const MATCHES = path.join(DASHBOARD, "matches");
 
 /**
  * One screen's source, reduced to something a designed sentence survives in.
@@ -184,6 +186,7 @@ test.describe("/dashboard/team/schedule · Tc2 Tc2c", () => {
   // `dual-widget.tsx`. Every `drawn()` below was transcribed from the two
   // new artboards; each retired string carries the reason.
   const schedule = screen("static-schedule.tsx");
+  const matchesEmpty = screen("empty-matches.tsx", MATCHES);
   const dayZero = screen("schedule-day-zero.tsx");
   const table = screen("schedule-table.tsx");
   const drawer = screen("event-drawer.tsx");
@@ -245,7 +248,12 @@ test.describe("/dashboard/team/schedule · Tc2 Tc2c", () => {
     drawn(schedule, "static-schedule.tsx", " season");
     drawn(schedule, "static-schedule.tsx", '"event" : "events"');
     drawn(schedule, "static-schedule.tsx", " upcoming");
-    drawn(schedule, "static-schedule.tsx", "Import");
+    expect(
+      schedule.includes("Import"),
+      "static-schedule.tsx must not restore the nonworking Schedule Import action",
+    ).toBe(false);
+    drawn(matchesEmpty, "empty-matches.tsx", "Import from SwingVision");
+    drawn(matchesEmpty, "empty-matches.tsx", 'href="/dashboard/matches/new"');
     drawn(schedule, "static-schedule.tsx", "New event");
     // The three lifecycle pills. No counts inside them (Data Table law 7) —
     // the summary line carries the season's numbers.

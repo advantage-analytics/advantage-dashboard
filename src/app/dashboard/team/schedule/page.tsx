@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { zonedDayString } from "@/lib/data/match-utils";
-import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
+import {
+  canUploadForProgram,
+  scheduleCapabilitiesFor,
+} from "@/lib/workspace/types";
 import {
   getOpponentPrograms,
   getProgramSchedule,
@@ -33,8 +36,9 @@ export const metadata = { title: "Schedule" };
  * an empty `rows` and the component already knows what that means.
  *
  * Both permission answers come from the workspace rather than from the
- * schedule: `isProgramStaff` gates New event and every write the rail points
- * at, and `canUploadForProgram` gates day zero's "One-off match in Matches".
+ * schedule: `scheduleCapabilitiesFor` names every Schedule action the page
+ * exposes, and `canUploadForProgram` separately gates day zero's "One-off
+ * match in Matches".
  */
 export default async function SchedulePage({
   searchParams,
@@ -90,7 +94,7 @@ export default async function SchedulePage({
       // also renders on the server, and a `new Date()` there would give the
       // two renders different answers.
       today={zonedDayString(new Date(), active.timeZone)}
-      canCreate={isProgramStaff(active)}
+      capabilities={scheduleCapabilitiesFor(active)}
       canAddOwnMatch={canUploadForProgram(active)}
       programName={active.name}
       opponents={opponents}

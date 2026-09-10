@@ -33,6 +33,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { OpponentProgram } from "@/lib/data/schedule-server";
 import type { EntryMatch, EventDetail, EventEntry } from "@/lib/schedule/types";
+import type { ScheduleCapabilities } from "@/lib/workspace/types";
 
 /** The drawer's `role="dialog"` carries this so the window key handler can tell it from a modal. */
 export const DRAWER_ATTR = "data-schedule-drawer";
@@ -111,7 +112,7 @@ export function EventDrawer({
   closing,
   autoFocus,
   onClosed,
-  canEdit,
+  capabilities,
 }: {
   detail: EventDetail;
   /** The opponent's program record, where the dual resolved one. */
@@ -126,8 +127,8 @@ export function EventDrawer({
   /** Opened from the keyboard — take focus so `Tab` continues inside. */
   autoFocus: boolean;
   onClosed: () => void;
-  /** `isProgramStaff` upstream — gates every write the rail points at. */
-  canEdit: boolean;
+  /** Named Schedule actions, derived once from the active workspace. */
+  capabilities: ScheduleCapabilities;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const { event, entries } = detail;
@@ -320,7 +321,7 @@ export function EventDrawer({
                     key={entry.id}
                     entry={entry}
                     eventHref={eventHref}
-                    canEdit={canEdit}
+                    canEdit={capabilities.canEdit}
                   />
                 ))}
                 {/* A dual with no lines at all: one row where the lineup would
@@ -330,7 +331,7 @@ export function EventDrawer({
                   <SetLineRow
                     slot="S1"
                     eventHref={eventHref}
-                    canEdit={canEdit}
+                    canEdit={capabilities.canEdit}
                     label="Set lineup"
                   />
                 ) : null}
@@ -342,7 +343,7 @@ export function EventDrawer({
                       key={entry.id}
                       entry={entry}
                       eventHref={eventHref}
-                      canEdit={canEdit}
+                      canEdit={capabilities.canEdit}
                     />
                   ))}
                 </Section>
@@ -387,7 +388,7 @@ export function EventDrawer({
 
           <div className="min-h-0 flex-1" />
 
-          {canEdit && linesOpen ? (
+          {capabilities.canScore && linesOpen ? (
             <Link
               href={eventHref}
               className={cn(advButton("primary", "md"), "w-full shrink-0")}
