@@ -1,9 +1,10 @@
 "use client";
+import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
 
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useSearchParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, ChevronDown, Filter as FilterIcon } from "lucide-react";
+import { Search, Filter as FilterIcon } from "lucide-react";
 import { EmptyMatches } from "./empty-matches";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import type { DraftRowData } from "./draft-row";
@@ -370,27 +371,17 @@ function SortDropdown({
 
   return (
     <div className="relative" ref={ref} onKeyDown={handleContainerKeyDown}>
-      <button
+      <SortTrigger
         ref={triggerRef}
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-controls={open ? listboxId : undefined}
         title={`Sorted by ${activeLabel}, ${dirLabel}`}
-        className={`flex h-7 items-center gap-1.5 rounded-[var(--radius-element)] px-2 text-[12px] transition-colors duration-150 ${open ? "" : "hover:bg-[var(--surface-subtle)]"}`}
-        style={{
-          background: open ? "var(--surface-subtle)" : undefined,
-          color: open ? "var(--ink-900)" : "var(--ink-600)",
-          fontWeight: open ? 500 : 400,
-        }}
+        engaged={open}
       >
         {sortPhrase}
-        <ChevronDown
-          className="h-3 w-3"
-          strokeWidth={1.5}
-          style={{ color: open ? "var(--ink-500)" : "var(--ink-400)" }}
-        />
-      </button>
+      </SortTrigger>
 
       <AnimatePresence>
         {open && (

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { PersonalActivity } from "@/lib/data/personal-activity-server";
 import { ActivityHeatmap } from "@/components/dashboard/home/activity-heatmap";
 
@@ -16,47 +15,11 @@ import { ActivityHeatmap } from "@/components/dashboard/home/activity-heatmap";
  * in the client `ActivityHeatmap` so only that leaf carries interactivity.
  */
 
-export function ActivityWidget({
-  activity,
-  showSessionLog = true,
-}: {
-  activity: PersonalActivity;
-  /** Day-zero Home owns the only destination. */
-  showSessionLog?: boolean;
-}) {
+export function ActivityWidget({ activity }: { activity: PersonalActivity }) {
   const { days, sessionCount, monthLabels } = activity;
 
   return (
-    <div
-      // `@container/activity` so the grid's gap below can scale with this
-      // card's width (`cqi`) rather than the viewport's.
-      className="surface-card @container/activity"
-      style={{
-        padding: "var(--pad-card)",
-        display: "flex",
-        flexDirection: "column",
-        gap: "6px",
-      }}
-    >
-      {/* Pa2's header grammar: eyebrow left, the card's one link right. The
-          session count moved out of the header and into the footer under the
-          grid, where the frame states it as the grid's own reading. */}
-      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-        <span className="eyebrow">Activity</span>
-        <div style={{ flex: 1 }} />
-        {/* The matches list IS the session log — every cell here is a day
-            on that list, so the link opens the list rather than a page of
-            its own. */}
-        {showSessionLog && (
-          <Link
-            href="/dashboard/matches"
-            className="text-[11px] whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-          >
-            Session log
-          </Link>
-        )}
-      </div>
-
+    <>
       <div
         style={{
           display: "flex",
@@ -84,6 +47,6 @@ export function ActivityWidget({
         {sessionCount === 1 ? "session" : "sessions"} ·{" "}
         <span className="tabular">12</span> months
       </span>
-    </div>
+    </>
   );
 }

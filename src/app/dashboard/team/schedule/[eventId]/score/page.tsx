@@ -1,11 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { isProgramStaff } from "@/lib/workspace/types";
-import {
-  eventDetailFrom,
-  getProgramSchedule,
-  programNamesFor,
-} from "@/lib/data/schedule-server";
+import { getEventDetail, programNamesFor } from "@/lib/data/schedule-server";
 import { entryState } from "@/lib/schedule/entry-state";
 import { lineupChoices, presetFor } from "@/lib/schedule/line-choices";
 import { ScoreOnlyFlow } from "@/components/dashboard/schedule/score-only-flow";
@@ -46,12 +42,9 @@ export default async function ScoreEventPage({
   if (active.kind !== "team") redirect("/dashboard");
   if (!isProgramStaff(active)) redirect(`/dashboard/team/schedule/${eventId}`);
 
-  // The season, then one event out of it — `getProgramSchedule` is `cache()`d
-  // and the event page beside this one already pays for it, so slicing is
-  // cheaper than `getEventDetail`'s own read. Same reasoning as
-  // `[eventId]/page.tsx`.
-  const schedule = await getProgramSchedule(active.id);
-  const detail = eventDetailFrom(schedule, eventId);
+  // This route only needs one event. React's request cache does not carry the
+  // season loaded by a previous page into this navigation.
+  const detail = await getEventDetail(active.id, eventId);
   if (!detail) notFound();
 
   // Duals only, and structurally rather than by nobody linking here.

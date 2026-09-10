@@ -41,16 +41,7 @@ export function CourtRecord({ record }: { record: CourtRecord }) {
   const hasResults = columns.length > 0;
 
   return (
-    <section aria-label="Court record" className="surface-card p-5">
-      {/* No header link. The Focus card directly above already says "Open
-          Statistics", and the only other true destination — the schedule —
-          is the history card's "All duals" directly below. A third link that
-          repeats either is the rail saying one thing twice; each column is
-          one click away through that card instead. */}
-      <div className="flex items-center gap-2.5">
-        <span className="eyebrow">Court record</span>
-      </div>
-
+    <CourtRecordFrame>
       {hasResults ? (
         <CourtRecordMosaic record={record} />
       ) : (
@@ -73,7 +64,7 @@ export function CourtRecord({ record }: { record: CourtRecord }) {
           )
         }
       />
-    </section>
+    </CourtRecordFrame>
   );
 }
 
@@ -95,5 +86,21 @@ function GhostMosaic() {
         </div>
       ))}
     </div>
+  );
+}
+
+export function CourtRecordFrame({ children }: { children: React.ReactNode }) {
+  return (
+    <section aria-label="Court record" className="surface-card p-5">
+      {/* No header link. The Focus card directly above already says "Open
+          Statistics", and the only other true destination — the schedule —
+          is the history card's "All duals" directly below. A third link that
+          repeats either is the rail saying one thing twice; each column is
+          one click away through that card instead. */}
+      <div className="flex items-center gap-2.5">
+        <span className="eyebrow">Court record</span>
+      </div>
+      {children}
+    </section>
   );
 }

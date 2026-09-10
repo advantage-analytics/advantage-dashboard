@@ -58,41 +58,48 @@ export function SeasonTitle({
     hasMatches && analyzedMatchCount === 0 && matchCount > 0;
 
   return (
+    <SeasonTitleFrame>
+      {!hasMatches ? (
+        // The product's voice rather than an instruction: the button beside
+        // it and the matches card below both already say what to do, and
+        // every region under this line is present and labelled with what
+        // it will hold. What is left for the opening line is what all of
+        // it adds up to.
+        <span className="text-body-sm" style={{ maxWidth: "66ch" }}>
+          Every serve, every point, and one thing to work on. All of it from one
+          match.
+        </span>
+      ) : awaitingFirstReport ? (
+        <span className="text-body-sm">
+          {matchCount === 1
+            ? "First report on its way"
+            : "First reports on their way"}
+          {" · "}
+          {hoursLeft}
+        </span>
+      ) : (
+        <>
+          <span className="text-body-sm">
+            <span className="tabular">{analyzedMatchCount}</span>{" "}
+            {analyzedMatchCount === 1 ? "match" : "matches"} analyzed ·{" "}
+            {hoursLeft}
+          </span>
+          <NewReportsSubline userId={userId} fallback="" />
+        </>
+      )}
+    </SeasonTitleFrame>
+  );
+}
+
+export function SeasonTitleFrame({ children }: { children: React.ReactNode }) {
+  return (
     <div className="flex items-end gap-4">
       <div>
-        {/* The frame overrides the class's -0.4px tracking to -0.3px inline. */}
         <h1 className="text-title-lg" style={{ letterSpacing: "-0.3px" }}>
           Your season
         </h1>
-        <div className="mt-[7px] flex items-baseline gap-3">
-          {!hasMatches ? (
-            // The product's voice rather than an instruction: the button beside
-            // it and the matches card below both already say what to do, and
-            // every region under this line is present and labelled with what
-            // it will hold. What is left for the opening line is what all of
-            // it adds up to.
-            <span className="text-body-sm" style={{ maxWidth: "66ch" }}>
-              Every serve, every point, and one thing to work on. All of it from
-              one match.
-            </span>
-          ) : awaitingFirstReport ? (
-            <span className="text-body-sm">
-              {matchCount === 1
-                ? "First report on its way"
-                : "First reports on their way"}
-              {" · "}
-              {hoursLeft}
-            </span>
-          ) : (
-            <>
-              <span className="text-body-sm">
-                <span className="tabular">{analyzedMatchCount}</span>{" "}
-                {analyzedMatchCount === 1 ? "match" : "matches"} analyzed ·{" "}
-                {hoursLeft}
-              </span>
-              <NewReportsSubline userId={userId} fallback="" />
-            </>
-          )}
+        <div className="mt-[7px] flex min-h-[18px] items-baseline gap-3">
+          {children}
         </div>
       </div>
       <div className="flex-1" />

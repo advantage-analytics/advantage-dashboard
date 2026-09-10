@@ -17,10 +17,12 @@ import {
 export function MatchesTitleRow({
   scope,
   readyMatches,
+  canUpload = true,
 }: {
   scope: "personal" | "team";
   /** Just enough per match to compute "N analyzed · M new" honestly. */
-  readyMatches: { id: string; status?: AnalysisStatus }[];
+  canUpload?: boolean;
+  readyMatches?: { id: string; status?: AnalysisStatus }[];
 }) {
   const [dateText, setDateText] = useState("");
   useEffect(() => {
@@ -34,7 +36,7 @@ export function MatchesTitleRow({
     );
   }, []);
 
-  const analyzedIds = readyMatches
+  const analyzedIds = (readyMatches ?? [])
     .filter((m) => !m.status || isAnalysisReady(m.status))
     .map((m) => m.id);
   const unseen = useUnseenReportIds(analyzedIds);
@@ -52,8 +54,16 @@ export function MatchesTitleRow({
     <div className="flex items-end gap-4">
       <div>
         <h1 className="text-display">Matches</h1>
-        <div className="mt-[9px] flex items-baseline gap-3">
-          <span className="text-body-sm">{subline}</span>
+        <div className="mt-[9px] flex h-[18px] items-baseline gap-3">
+          {readyMatches ? (
+            <span className="text-body-sm">{subline}</span>
+          ) : (
+            <span
+              role="status"
+              aria-label="Loading match summary"
+              className="block h-3 w-40 rounded bg-[var(--surface-skeleton)] motion-safe:animate-pulse"
+            />
+          )}
           <span
             className={`text-micro tabular transition-opacity duration-300 ${dateText ? "opacity-100" : "opacity-0"}`}
           >
@@ -62,12 +72,14 @@ export function MatchesTitleRow({
         </div>
       </div>
       <div className="flex-1" />
-      <Link
-        href="/dashboard/matches/new"
-        className={advButton("primary", "md")}
-      >
-        New match
-      </Link>
+      {canUpload && (
+        <Link
+          href="/dashboard/matches/new"
+          className={advButton("primary", "md")}
+        >
+          New match
+        </Link>
+      )}
     </div>
   );
 }
