@@ -83,6 +83,7 @@ The canonical source of truth for all UI across the app. Read this before buildi
 | ------------- | --------------------------------------------------------- | ------ | ------------------------------------------ |
 | heading-xl    | `text-[30px] font-light tracking-[-0.6px] leading-[36px]` | 300    | Page greeting/hero                         |
 | heading-lg    | `text-[28px] font-light tracking-[-0.5px]`                | 300    | KPI values, large numbers                  |
+| title-lg      | `text-[24px] font-light tracking-[-0.4px] leading-[1.2]`  | 300    | Page/section titles (`.text-title-lg`)     |
 | heading-md    | `text-[16px] font-normal tracking-[-0.4px]`               | 400    | Event/tournament names                     |
 | body-lg       | `text-[14px] font-normal`                                 | 400    | Match opponent names, primary body         |
 | body          | `text-[13px]`                                             | 400    | Standard body text, nav items              |
@@ -213,35 +214,45 @@ the auth mesh and the sparkline's area fill (stroke colour 18%→0, chart-only).
 - First serve dot: `rgba(59,130,246,0.5)`
 - Second serve dot: `rgba(129,140,248,0.5)` — **retired (v3).** Second
   serves wear `--viz-you-mid` (`#60A5FA`) everywhere, matching the you/opp
-  role-based palette instead of a one-off violet. `statistics/serve-placement-stats.tsx`
-  still carries the old value and needs the swap — not done as part of this
-  token sync, tracked separately.
+  role-based palette instead of a one-off violet. Done: `serve-placement-widget.tsx`
+  imports `VIZ_BLUE` / `VIZ_BLUE_MID` for the first/second pair.
+  `statistics/serve-placement-stats.tsx` still carries the old value and is
+  left alone on purpose — it is unreachable behind `ComingSoonPage`. See
+  "Match Detail Colors" below.
 
 ### Match Detail Colors
 
 Match detail and video sections use additional colors for multi-player differentiation and status:
 
-| Token             | Value     | Use                                                            |
-| ----------------- | --------- | -------------------------------------------------------------- |
-| player-2          | `#A855F7` | Secondary player/opponent color in charts (purple-500)         |
-| player-2-text     | `#7E22CE` | Player 2 text on white or soft-purple bg (WCAG AA, purple-700) |
-| player-2-soft     | `#FAF5FF` | Player 2 soft pill/highlight background (purple-50)            |
-| player-1-text     | `#1D4ED8` | Player 1 text on white or soft-blue bg (WCAG AA)               |
-| player-1-soft     | `#EFF4FF` | Player 1 soft pill/highlight background                        |
-| player-1-bar-tint | `#BFD5FB` | Player 1 non-leader bar fill (on `#F3F3F3` track)              |
-| player-2-bar-tint | `#DDC7F7` | Player 2 non-leader bar fill (on `#F3F3F3` track)              |
-| alt-success       | `#22C55E` | Progress bar success (Tailwind green-500)                      |
-| alt-error         | `#EF4444` | Video/inline error states (Tailwind red-500)                   |
-| alt-error-dark    | `#DC2626` | Darker error emphasis (Tailwind red-600)                       |
-| warning-bg        | `#FFFBEB` | Warning banner background                                      |
-| warning-border    | `#FDE68A` | Warning banner border                                          |
-| warning-text      | `#92400E` | Warning banner text                                            |
+| Token             | Value     | Use                                                    |
+| ----------------- | --------- | ------------------------------------------------------ |
+| player-2          | `#64748B` | Secondary player/opponent color in charts (cool slate) |
+| player-2-text     | `#475569` | Player 2 text on white or soft-slate bg (WCAG AA)      |
+| player-2-soft     | `#F1F5F9` | Player 2 soft pill/highlight background                |
+| player-1-text     | `#1D4ED8` | Player 1 text on white or soft-blue bg (WCAG AA)       |
+| player-1-soft     | `#EFF4FF` | Player 1 soft pill/highlight background                |
+| player-1-bar-tint | `#BFD5FB` | Player 1 non-leader bar fill (on `#F3F3F3` track)      |
+| player-2-bar-tint | `#CBD5E1` | Player 2 non-leader bar fill (on `#F3F3F3` track)      |
+| alt-success       | `#22C55E` | Progress bar success (Tailwind green-500)              |
+| alt-error         | `#EF4444` | Video/inline error states (Tailwind red-500)           |
+| alt-error-dark    | `#DC2626` | Darker error emphasis (Tailwind red-600)               |
+| warning-bg        | `#FFFBEB` | Warning banner background                              |
+| warning-border    | `#FDE68A` | Warning banner border                                  |
+| warning-text      | `#92400E` | Warning banner text                                    |
 
-> The tokens retired violet from player attribution (v2 review decision C):
-> `--player-2` is cool slate `#64748B` in `colors.css`, with `-text` `#475569`,
-> `-soft` `#F1F5F9` and `-bar-tint` `#CBD5E1`. The purple values above are what
-> `src/lib/design/player-colors.ts` and `visuals/court-visualization.tsx` still
-> ship — drift to migrate surface by surface, not a second palette.
+> Violet was retired from player attribution in v2 review decision C, and the
+> values above are the slate that replaced it — you own Signal Blue, the
+> opponent recedes. The migration landed: `globals.css`, `player-colors.ts` and
+> `data-viz.ts` (whose violet ramp is deleted, not repointed) all transcribe
+> `colors.css` now, and `scripts/check-design-drift.mjs` check 5 fails if any of
+> them drifts from it again.
+>
+> Two files still paint violet and are deliberately untouched, because both are
+> unreachable — `statistics/serve-placement-stats.tsx` sits behind
+> `ComingSoonPage`, and `visuals/court-visualization.tsx` was superseded by
+> `match-detail/shots/shots-tab.tsx` and has no importer at all. They are
+> excluded in the checker by name, with the evidence recorded there. Whoever
+> revives either one owns the swap.
 
 ---
 
@@ -411,6 +422,37 @@ Always respect `prefers-reduced-motion` — skip transforms, keep opacity transi
 ---
 
 ## Component Patterns
+
+### Building a primitive — wrap Radix, wrap native, or hand-build
+
+Decide by **where the difficulty is**, not by what a library offers.
+
+| The hard part is…                                                 | Do this                           | Shipped examples                              |
+| ----------------------------------------------------------------- | --------------------------------- | --------------------------------------------- |
+| **Behavior** — portals, focus traps, dismissal, positioning, ARIA | Wrap Radix, style it in DS tokens | `Popover`, `Tooltip`, `Dialog`, `AlertDialog` |
+| **Platform** — the OS already does it better                      | Wrap the **native** control       | `AdvSelect` (native `<select>`)               |
+| **Appearance** — geometry the DS specifies exactly                | Hand-build                        | `AdvSwitch`, `advButton()`, `Card`            |
+
+**Never adopt shadcn's styling layer.** Radix is unstyled behavior and earns
+its place; shadcn's styled components are a _second design system_ — its own
+palette, radii and geometry — and it loses every time it meets this one. That
+is not a prediction, it is the record: `Select`, `Tabs`, `Switch` and `Checkbox`
+were all installed, all abandoned, and all replaced by hand-built equivalents,
+because the primitive hard-codes internals you cannot reach from the outside.
+`AdvSwitch`'s docstring names the moment — shadcn's `Switch` is 32×18.4 where
+the DS says 36×20, with the thumb fixed inside the primitive.
+
+The colour half of that layer caused a quieter failure: it resolved through
+oklch CSS variables, so no hex ever appeared in the source and no colour review
+could see it. `Tooltip` painted `bg-primary` — **black** — where this document
+specifies `--ink-900`, and shadcn's `Button` shipped a black primary against
+`advButton()`'s Signal Blue. Both were removed;
+`scripts/check-design-drift.mjs` check 4 now fails if any shadcn utility class
+returns.
+
+**One question settles it:** would you be fighting the primitive to match this
+document? Then hand-build. A card is pure appearance with no behavior, so it is
+hand-built — which is why the shadcn `Card` sat unused for the life of the repo.
 
 ### Card
 

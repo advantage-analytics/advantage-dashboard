@@ -42,6 +42,13 @@
   --surface-skeleton:var(--ink-100);
   --radar-grid:var(--ink-100);
   --surface-dark:#0D0D0D;
+  /* Dark-surface interaction steps. The dark button and the ready-toast are
+     the only two dark grounds in the product, and both need a hover and a
+     pressed step that a single --surface-dark cannot express — collapsing
+     them onto it would delete the interaction, not tokenize it. The toast's
+     #1A1A1A was a near-twin of the button's #1D1D1F and is merged here. */
+  --surface-dark-hover:#1D1D1F;
+  --surface-dark-pressed:#2A2A2C;
   --border-card:var(--ink-100);
   --border-hairline:var(--ink-100);
   --border-medium:#E5E5EA;
@@ -107,6 +114,15 @@
   --success-tint-12:rgba(115,230,104,0.12);
   --success-tint-15:rgba(115,230,104,0.15);
   --success-tint-20:rgba(93,185,85,0.20);
+  /* Warning — transcribed from SKILL.md's colour table ("warning-bg",
+     "warning-border", "warning-text"). The register already existed in the
+     spec and in the upload wizard's keep-this-tab-open banner; it had simply
+     never been given tokens here, which is how the wizard ended up painting a
+     Tailwind amber ramp. Amber as CHROME lives only in this triple — the
+     data-viz amber (--viz-key) stays charts-only. */
+  --warning-bg:#FFFBEB;
+  --warning-border:#FDE68A;
+  --warning-text:#92400E;
   --danger:#E51837;
   --danger-hover:#C41530;
   --danger-tint-15:rgba(229,24,55,0.15);

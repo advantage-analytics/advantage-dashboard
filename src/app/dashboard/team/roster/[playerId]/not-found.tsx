@@ -4,12 +4,7 @@ import { advButton } from "@/lib/ui/adv-button";
 export default function PlayerNotFound() {
   return (
     <div className="flex w-full flex-1 flex-col items-start gap-4 bg-[var(--surface-card)] px-10 py-12">
-      <h1
-        className="text-[24px] leading-[1.2] font-light tracking-[-0.4px]"
-        style={{ color: "var(--ink-900)" }}
-      >
-        No such player
-      </h1>
+      <h1 className="text-title-lg">No such player</h1>
       <p
         className="max-w-[56ch] text-[13px] leading-[1.6]"
         style={{ color: "var(--ink-700)" }}

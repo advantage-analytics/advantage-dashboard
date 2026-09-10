@@ -539,7 +539,7 @@ export function TournamentWeekendStep({
                indicator at all. `autoFocus` keeps the artboard's blue-on-arrival
                look. */
             data-focus-ring="none"
-            className="w-full bg-transparent text-[22px] font-light tracking-[-0.4px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)]"
+            className="text-title-lg w-full bg-transparent outline-none placeholder:text-[var(--ink-300)]"
           />
         </span>
       </label>

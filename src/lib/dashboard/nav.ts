@@ -47,6 +47,12 @@ export const PERSONAL_NAV: readonly NavLink[] = [
     comingSoon: true,
   },
   {
+    name: "Opponents",
+    href: "/dashboard/opponents",
+    icon: Brain,
+    comingSoon: true,
+  },
+  {
     name: "Ask",
     href: "/dashboard/ask",
     icon: MessageSquare,
@@ -85,7 +91,11 @@ export const PERSONAL_NAV: readonly NavLink[] = [
  * the icon: it now carries the design's own `brain`, not Compare's `Swords`.
  * Opponents sits outside `/dashboard/team` because most of what it shows is
  * not this program's: it reads the pooled public-record views across every
- * program, and only the private tier is scoped to the viewer.
+ * program, and only the private tier is scoped to the viewer. That is also
+ * why it appears in `PERSONAL_NAV` — the pooled record is not program-scoped,
+ * so there is nothing about it that requires a team. Its page answers the
+ * coming-soon stub BEFORE its team gate for the same reason: a nav entry that
+ * silently redirects reads as a broken link, not an unfinished feature.
  *
  * Statistics and Ask are `/dashboard/team/statistics` and `/dashboard/team/ask`
  * — separate routes from `PERSONAL_NAV`'s, not the same href reused. That is

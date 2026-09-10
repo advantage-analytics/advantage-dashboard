@@ -28,26 +28,26 @@ function PlayerScoreRow({
     <div className="flex flex-row items-center justify-between">
       <div className="flex flex-row items-center gap-4">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-[#F2F2F2]">
-          <span className="text-xs font-medium text-[#BFBFBF]">
+          <span className="text-xs font-medium text-[var(--ink-400)]">
             {getInitials(playerName)}
           </span>
         </div>
         <p
           className={`text-sm font-semibold ${
-            isWinner ? "text-[#0D0D0D]" : "text-[#B3B3B3]"
+            isWinner ? "text-[#0D0D0D]" : "text-[var(--ink-400)]"
           }`}
         >
           {playerName}
         </p>
       </div>
-      <div className="flex flex-row gap-4 text-[18px] font-semibold">
+      <div className="flex flex-row gap-4 text-[16px] font-semibold">
         {sets.map((set, idx) => (
           <p
             key={idx}
             className={
               set[playerKey] > set[opponentKey]
                 ? "text-[#0D0D0D]"
-                : "text-[#B3B3B3]"
+                : "text-[var(--ink-400)]"
             }
           >
             {set[playerKey]}

@@ -5,10 +5,12 @@
  *
  * `.adv-switch-track` is 36×20 with a 16px thumb inset 2px, `--ink-200` off and
  * Signal Blue on, the thumb travelling exactly 16px on a 200ms
- * `--ease-primary`. The shadcn `Switch` in `ui/switch.tsx` is 32×18.4 with the
- * thumb hard-coded in the primitive, so matching the DS from the outside was
- * not possible — a near-miss on the one control in a dialog is more noticeable
- * than a near-miss anywhere else, because it sits still while you read it.
+ * `--ease-primary`. shadcn's `Switch` is 32×18.4 with the thumb hard-coded in
+ * the primitive, so matching the DS from the outside was not possible — a
+ * near-miss on the one control in a dialog is more noticeable than a near-miss
+ * anywhere else, because it sits still while you read it. That file has since
+ * been deleted; the general rule it taught is SKILL.md › Component Patterns ›
+ * "Building a primitive" — the hard part here is appearance, so hand-build.
  *
  * A `role="switch"` button rather than a checkbox: there is no form to submit
  * it with, and the value is applied by the dialog's own action.

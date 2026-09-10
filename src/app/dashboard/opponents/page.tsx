@@ -37,18 +37,26 @@ export default async function OpponentsPage() {
   if (!workspace) redirect("/login");
 
   const { active } = workspace;
-  if (active.kind !== "team") redirect("/dashboard");
 
+  // The stub answers BEFORE the team gate, so a personal workspace sees
+  // "coming soon" rather than being bounced to /dashboard — the nav offers
+  // this entry in both workspaces, and a nav item that silently redirects
+  // reads as a broken link rather than an unfinished feature.
+  //
+  // The gate still guards the finalised path below, which needs `active.id`
+  // to be a program.
   if (!FINALISED) {
     return (
       <ComingSoonPage
         title="Opponents"
         heading="Opponent scouting is still being built."
         description="Who your program plays and who it is about to — a conference directory, and every lineup and result an opponent has shared, before you meet them."
-        action={{ label: "View program matches", href: "/dashboard/matches" }}
+        action={{ label: "View matches", href: "/dashboard/matches" }}
       />
     );
   }
+
+  if (active.kind !== "team") redirect("/dashboard");
 
   const [{ conference, programs }, played] = await Promise.all([
     getConferenceTable(active.id),
@@ -108,7 +116,7 @@ function Section({
   return (
     <section className="flex flex-col gap-3">
       <div>
-        <h2 className="text-[15px] font-medium text-[var(--ink-900)]">
+        <h2 className="text-[16px] font-medium text-[var(--ink-900)]">
           {title}
         </h2>
         <p className="mt-0.5 text-[11px] leading-[1.6] text-[var(--ink-500)]">

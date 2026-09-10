@@ -47,7 +47,7 @@ export default function BrandPanel() {
           ))}
         </p>
 
-        <p className="max-w-[46ch] text-[15px] leading-[1.6] font-normal text-white/70">
+        <p className="max-w-[46ch] text-[14px] leading-[1.6] font-normal text-white/70">
           {subtitle}
         </p>
       </div>

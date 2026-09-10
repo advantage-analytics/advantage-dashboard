@@ -15,6 +15,7 @@ import {
   DARK_READOUT_STYLE,
 } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { useReducedMotion } from "framer-motion";
+import { VIZ_BLUE } from "@/lib/design/data-viz";
 import type { KpiFormat } from "@/lib/data/performance-server";
 
 export interface KpiDetailPoint {
@@ -116,11 +117,11 @@ export default function KpiDetailChart({
                 x2="0"
                 y2="1"
               >
-                <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.15} />
-                <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                <stop offset="5%" stopColor={VIZ_BLUE} stopOpacity={0.15} />
+                <stop offset="95%" stopColor={VIZ_BLUE} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#F0F0F0" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#F3F3F3" />
             <XAxis
               dataKey="date"
               tickFormatter={(d: string) => formatDate(d)}
@@ -143,7 +144,7 @@ export default function KpiDetailChart({
             <Tooltip
               content={<CustomTooltip format={format} />}
               cursor={{
-                stroke: "#3B82F6",
+                stroke: VIZ_BLUE,
                 strokeWidth: 1,
                 strokeDasharray: "4 4",
               }}
@@ -151,15 +152,17 @@ export default function KpiDetailChart({
             <Area
               type="linear"
               dataKey="value"
-              stroke="#3B82F6"
+              stroke={VIZ_BLUE}
               strokeWidth={2}
               fill="url(#kpiDetailGradient)"
               isAnimationActive={!shouldReduceMotion}
               animationDuration={shouldReduceMotion ? 0 : 600}
-              dot={<Dot r={3} fill="#3B82F6" stroke="#fff" strokeWidth={1.5} />}
+              dot={
+                <Dot r={3} fill={VIZ_BLUE} stroke="#fff" strokeWidth={1.5} />
+              }
               activeDot={{
                 r: 5,
-                fill: "#3B82F6",
+                fill: VIZ_BLUE,
                 stroke: "#fff",
                 strokeWidth: 2,
               }}

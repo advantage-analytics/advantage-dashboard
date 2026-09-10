@@ -134,7 +134,7 @@ export function MatchInsights({
 }: MatchInsightsProps): React.JSX.Element {
   return (
     <motion.div
-      className="overflow-hidden rounded-[16px] border border-[#E7E7E7] bg-white shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]"
+      className="overflow-hidden rounded-[16px] border border-[var(--border-medium)] bg-white shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]"
       variants={containerVariants}
       initial="hidden"
       animate="visible"
@@ -145,7 +145,7 @@ export function MatchInsights({
           <h2 className="text-base font-medium text-[#0D0D0D]">
             Advantage Intelligence
           </h2>
-          <span className="rounded-full bg-[#EEF4FE] px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em] text-[#3B82F6] uppercase">
+          <span className="rounded-full bg-[var(--blue-soft)] px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em] text-[#3B82F6] uppercase">
             AI-Powered Analysis
           </span>
         </div>

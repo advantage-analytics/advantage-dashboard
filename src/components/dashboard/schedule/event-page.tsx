@@ -310,7 +310,7 @@ export function DetailLine({
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <span className="tabular text-[15px]">{score}</span>
+      <span className="tabular text-[14px]">{score}</span>
 
       {mark !== undefined && mark !== null ? <ResultMark won={mark} /> : null}
 

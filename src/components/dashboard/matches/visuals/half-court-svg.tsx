@@ -244,7 +244,7 @@ function DotTooltipContent({ dot }: { dot: CourtDot }) {
           </span>
           <span className="text-[11px] text-[#525252]">{meta.pointScore}</span>
         </div>
-        <div className="h-px bg-[#F0F0F0]" />
+        <div className="h-px bg-[var(--border-hairline)]" />
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-[#525252]">
             Set {meta.setNumber}
@@ -512,7 +512,7 @@ function renderDots(
         <TooltipContent
           side="top"
           sideOffset={10}
-          className="!w-auto !rounded-xl !border !border-[#E7E7E7] !bg-white !px-0 !py-0 !text-left !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] [&>:last-child]:!hidden"
+          className="!w-auto !rounded-xl !border !border-[var(--border-medium)] !bg-white !px-0 !py-0 !text-left !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] [&>:last-child]:!hidden"
         >
           <DotTooltipContent dot={dot} />
         </TooltipContent>

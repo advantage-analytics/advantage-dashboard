@@ -283,7 +283,7 @@ export function SeasonKpiStrip({
         >
           <div className="px-4 pt-3.5 pb-3">
             <div className="flex items-baseline justify-between">
-              <p className="text-[13px] leading-none font-medium text-[#1D1D1F]">
+              <p className="text-[13px] leading-none font-medium text-[var(--ink-900)]">
                 Customize tiles
               </p>
               <p className="tabular text-[11px] leading-none text-[#AAAAAA]">
@@ -303,7 +303,9 @@ export function SeasonKpiStrip({
                 <span
                   key={i}
                   className={`h-[3px] flex-1 rounded-full transition-colors duration-200 ${
-                    i < visibleKeys.length ? "bg-[#3B82F6]" : "bg-[#EBEBEB]"
+                    i < visibleKeys.length
+                      ? "bg-[#3B82F6]"
+                      : "bg-[var(--ink-200)]"
                   }`}
                 />
               ))}
@@ -342,7 +344,7 @@ export function SeasonKpiStrip({
                       className={`group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors duration-100 focus-visible:bg-[#F5F5F5] focus-visible:outline-none ${
                         disabled
                           ? "cursor-not-allowed opacity-40"
-                          : "cursor-pointer hover:bg-[#F5F5F5] active:bg-[#EBEBEB]"
+                          : "cursor-pointer hover:bg-[#F5F5F5] active:bg-[var(--ink-200)]"
                       } ${checked && !disabled ? "text-[#0D0D0D]" : "text-[#525252]"}`}
                     >
                       <span

@@ -72,7 +72,7 @@ export default async function OpponentPlayerPage({
 
         <section className="flex flex-col gap-3">
           <div>
-            <h2 className="text-[15px] font-medium text-[var(--ink-900)]">
+            <h2 className="text-[16px] font-medium text-[var(--ink-900)]">
               Against your program
             </h2>
             <p className="mt-0.5 max-w-[64ch] text-[11px] leading-[1.6] text-[var(--ink-500)]">

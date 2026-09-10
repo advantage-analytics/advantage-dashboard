@@ -62,7 +62,7 @@ export default async function OpponentPage({
 
         <section className="flex flex-col gap-3">
           <div>
-            <h2 className="text-[15px] font-medium text-[var(--ink-900)]">
+            <h2 className="text-[16px] font-medium text-[var(--ink-900)]">
               Roster
             </h2>
             <p className="mt-0.5 text-[11px] leading-[1.6] text-[var(--ink-500)]">
@@ -105,7 +105,7 @@ export default async function OpponentPage({
 
         <section className="flex flex-col gap-3">
           <div>
-            <h2 className="text-[15px] font-medium text-[var(--ink-900)]">
+            <h2 className="text-[16px] font-medium text-[var(--ink-900)]">
               Lineups
             </h2>
             <p className="mt-0.5 text-[11px] leading-[1.6] text-[var(--ink-500)]">
@@ -146,7 +146,7 @@ export default async function OpponentPage({
 
         <section className="flex flex-col gap-3">
           <div>
-            <h2 className="text-[15px] font-medium text-[var(--ink-900)]">
+            <h2 className="text-[16px] font-medium text-[var(--ink-900)]">
               Against us
             </h2>
             <p className="mt-0.5 text-[11px] leading-[1.6] text-[var(--ink-500)]">

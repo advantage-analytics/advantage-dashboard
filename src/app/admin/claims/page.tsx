@@ -88,7 +88,7 @@ export default async function ReviewQueuePage() {
   return (
     <div className="flex flex-col gap-10">
       <section>
-        <h1 className="text-[22px] font-light tracking-[-0.4px] text-[var(--ink-900)]">
+        <h1 className="text-title-lg">
           Waiting on you
           {waitingCount > 0 && (
             <span className="text-[var(--ink-400)]"> · {waitingCount}</span>

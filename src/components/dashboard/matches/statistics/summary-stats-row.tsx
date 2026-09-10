@@ -78,7 +78,7 @@ export function SummaryStatsRow({
             className="flex flex-row items-center justify-start"
             variants={itemVariants}
           >
-            <div className="mr-6 h-12 w-[2px] bg-[#D9D9D9]" />
+            <div className="mr-6 h-12 w-[2px] bg-[var(--ink-300)]" />
             <div className="flex flex-col items-start justify-start">
               <p className="mb-1 text-center text-xs font-normal text-[#888888]">
                 {stat.label}

@@ -355,7 +355,7 @@ export function VideoFilterBar({
                     "focus-visible:outline-none",
                     count > 0
                       ? "bg-[#EBF2FD] text-[#3B82F6] ring-1 ring-[#3B82F6] ring-inset"
-                      : "bg-white text-[#525252] ring-1 ring-[#EAECF0] ring-inset hover:bg-[#EFF6FF] hover:text-[#3B82F6] hover:ring-[#3B82F6]/30",
+                      : "bg-white text-[#525252] ring-1 ring-[#EAECF0] ring-inset hover:bg-[var(--blue-pressed)] hover:text-[#3B82F6] hover:ring-[#3B82F6]/30",
                   )}
                 >
                   {cat.label}

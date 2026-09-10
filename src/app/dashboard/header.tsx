@@ -375,7 +375,9 @@ export function Header({
            scroll, so the frame shows only the resting state. */
         className={cn(
           "sticky top-0 z-30 flex h-11 shrink-0 items-center justify-between border-b bg-white px-6 transition-colors duration-200",
-          scrolled ? "border-[#EBEBEB]" : "border-[var(--border-hairline)]",
+          scrolled
+            ? "border-[var(--border-medium)]"
+            : "border-[var(--border-hairline)]",
         )}
       >
         {/* Left: the workspace title, or breadcrumbs — one or the other, never
@@ -431,19 +433,19 @@ export function Header({
 
           {isMatchDetailPage && matchCrumbLoading && !matchCrumb && (
             <div className="flex items-center gap-1.5">
-              <span className="inline-block h-3 w-14 animate-pulse rounded bg-[#F0F0F0]" />
+              <span className="inline-block h-3 w-14 animate-pulse rounded bg-[var(--ink-100)]" />
               <ChevronRight
                 className="h-3 w-3 shrink-0 text-[#CCCCCC]"
                 strokeWidth={1.5}
                 aria-hidden="true"
               />
-              <span className="inline-block h-3 w-24 animate-pulse rounded bg-[#F0F0F0]" />
+              <span className="inline-block h-3 w-24 animate-pulse rounded bg-[var(--ink-100)]" />
               <ChevronRight
                 className="h-3 w-3 shrink-0 text-[#CCCCCC]"
                 strokeWidth={1.5}
                 aria-hidden="true"
               />
-              <span className="inline-block h-3 w-32 animate-pulse rounded bg-[#F0F0F0]" />
+              <span className="inline-block h-3 w-32 animate-pulse rounded bg-[var(--ink-100)]" />
             </div>
           )}
 

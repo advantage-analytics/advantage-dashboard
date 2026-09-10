@@ -16,16 +16,10 @@ import { rollingAverage } from "./trend-utils";
 import {
   VIZ_LOST,
   VIZ_AMBER,
-  VIZ_GREEN,
-  VIZ_GREEN_DEEP,
-  VIZ_GREEN_MID,
-  VIZ_GREEN_LIGHT,
   VIZ_BLUE,
   VIZ_BLUE_DEEP,
   VIZ_BLUE_MID,
-  VIZ_VIOLET,
-  VIZ_VIOLET_DEEP,
-  VIZ_VIOLET_LIGHT,
+  VIZ_BLUE_LIGHT,
   VIZ_SLATE,
   VIZ_SLATE_DEEP,
   VIZ_SLATE_LIGHT,
@@ -60,6 +54,20 @@ interface StatConfig {
   category: "serve" | "return" | "other";
 }
 
+// NOTE: two hue families this config used to lean on are gone — violet, retired
+// with player attribution (colors.css, review decision C), and the green ramp,
+// deleted from data-viz.ts because green is the outcome register (won/lost) and
+// a green SERIES stops green meaning "won". The stats they coloured now draw
+// from the blue and slate steps, so collisions across the three category groups
+// are heavy: VIZ_SLATE is assigned five times, VIZ_SLATE_DEEP four,
+// VIZ_SLATE_LIGHT three. Within any one group the members are still distinct,
+// which is all that holds this up, and it holds only because the page is behind
+// `ComingSoonPage` and nothing renders it.
+//
+// Before Statistics ships, this palette needs a real answer: 20 series cannot be
+// separated by a closed five-role palette, so the encoding has to change (one
+// series at a time, or shape/dash rather than hue) rather than reaching for more
+// colours.
 const STAT_CONFIG: Record<StatKey, StatConfig> = {
   // Serve (percentages → left axis, counts → right)
   aces: { label: "Aces", color: "#0D0D0D", axis: "right", category: "serve" },
@@ -89,38 +97,38 @@ const STAT_CONFIG: Record<StatKey, StatConfig> = {
   },
   breakPointsSavedPct: {
     label: "BP Saved %",
-    color: VIZ_VIOLET_DEEP,
+    color: VIZ_SLATE_DEEP,
     axis: "left",
     category: "serve",
   },
   serviceGamesWonPct: {
     label: "Svc Games %",
-    color: VIZ_VIOLET,
+    color: VIZ_SLATE,
     axis: "left",
     category: "serve",
   },
   // Return (percentages → left)
   breakPointsConvertedPct: {
     label: "BP Conv %",
-    color: VIZ_GREEN_DEEP,
+    color: VIZ_BLUE_LIGHT,
     axis: "left",
     category: "return",
   },
   firstReturnWonPct: {
     label: "1st Ret Won %",
-    color: VIZ_GREEN,
+    color: VIZ_SLATE_DEEP,
     axis: "left",
     category: "return",
   },
   secondReturnWonPct: {
     label: "2nd Ret Won %",
-    color: VIZ_GREEN_MID,
+    color: VIZ_SLATE,
     axis: "left",
     category: "return",
   },
   returnGamesWonPct: {
     label: "Ret Games %",
-    color: VIZ_GREEN_LIGHT,
+    color: VIZ_SLATE_LIGHT,
     axis: "left",
     category: "return",
   },
@@ -151,19 +159,19 @@ const STAT_CONFIG: Record<StatKey, StatConfig> = {
   },
   shortRallyWonPct: {
     label: "Short Rally",
-    color: VIZ_VIOLET_DEEP,
+    color: VIZ_SLATE_DEEP,
     axis: "left",
     category: "other",
   },
   mediumRallyWonPct: {
     label: "Med Rally",
-    color: VIZ_VIOLET,
+    color: VIZ_SLATE,
     axis: "left",
     category: "other",
   },
   longRallyWonPct: {
     label: "Long Rally",
-    color: VIZ_VIOLET_LIGHT,
+    color: VIZ_SLATE_LIGHT,
     axis: "left",
     category: "other",
   },

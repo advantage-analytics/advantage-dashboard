@@ -643,7 +643,7 @@ export function PlayerDrawer({
                   table is the opposite case — fixed at 52px, it cannot give
                   the height, so there the name truncates and `title` carries
                   the rest. */}
-              <h2 className="min-w-0 text-[22px] leading-[1.15] font-light tracking-[-0.2px]">
+              <h2 className="text-title-lg min-w-0">
                 <Link
                   href={profile}
                   /* No `title`. The name is fully readable now, and the

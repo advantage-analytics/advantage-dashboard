@@ -85,7 +85,7 @@ export function LogoutProvider({ children }: { children: React.ReactNode }) {
                   aria-hidden="true"
                 />
               </div>
-              <AlertDialogTitle className="text-[16px] font-medium tracking-[-0.4px] text-[#1D1D1F]">
+              <AlertDialogTitle className="text-[16px] font-medium tracking-[-0.4px] text-[var(--ink-900)]">
                 Log out
               </AlertDialogTitle>
             </div>
@@ -115,7 +115,7 @@ export function LogoutProvider({ children }: { children: React.ReactNode }) {
             <AlertDialogAction
               onClick={handleLogout}
               disabled={isLoggingOut}
-              className="h-8 cursor-pointer rounded-[6px] border-none bg-[#E51837] px-4 text-[10px] font-medium tracking-[1.5px] text-white uppercase shadow-none transition-colors duration-200 hover:bg-[#CC1530] focus-visible:outline-none active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-8 cursor-pointer rounded-[6px] border-none bg-[#E51837] px-4 text-[10px] font-medium tracking-[1.5px] text-white uppercase shadow-none transition-colors duration-200 hover:bg-[var(--danger-hover)] focus-visible:outline-none active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isLoggingOut ? (
                 <span className="inline-flex items-center gap-1.5">
