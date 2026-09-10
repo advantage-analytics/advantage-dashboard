@@ -158,10 +158,18 @@ const DEFAULT_PALETTE_RE = new RegExp(
 // match index still maps to the right line in the original file. Replacing
 // with a shorter literal silently reports every finding at the wrong line.
 const blank = (m) => m.replace(/[^\n]/g, " ");
+// Comments only. Checks 1, 3 and 5 match hex literals, and a hex quoted
+// inside a comment — recording why a colour was retired, or citing the DS
+// spec by name — is documentation, not drift. Blanking `[...]` here would be
+// wrong for those checks: `bg-[#F0F0F0]` is exactly the off-palette hex they
+// exist to catch, so only comments are stripped, not arbitrary values.
+const blankComments = (text) =>
+  text.replace(/\/\*[\s\S]*?\*\//g, blank).replace(/\/\/[^\n]*/g, blank);
+// Comments, Tailwind arbitrary values, and CSS custom-property names, for
+// checks 4 and 6 — a Tailwind utility class hiding in a comment, an arbitrary
+// value, or a --var name is not a real class either.
 const stripNonUtilities = (text) =>
-  text
-    .replace(/\/\*[\s\S]*?\*\//g, blank)
-    .replace(/\/\/[^\n]*/g, blank)
+  blankComments(text)
     .replace(/\[[^\]]*\]/g, blank)
     .replace(/--[a-z0-9-]+/g, blank);
 
@@ -227,7 +235,7 @@ const HEX_CHECK_EXEMPT = new Set([...HEX_EXEMPT, ...CSS_TOKEN_DEFINITIONS]);
 
 // Check 5 — the transcriptions must agree with the authority.
 for (const file of TRANSCRIPTIONS) {
-  const text = await readFile(file, "utf8");
+  const text = blankComments(await readFile(file, "utf8"));
   for (const m of text.matchAll(HEX_RE)) {
     const hex = norm(m[0]);
     if (palette.has(hex)) continue;
@@ -239,11 +247,16 @@ for (const file of TRANSCRIPTIONS) {
 for (const file of (await walk(SRC)).sort()) {
   if (SKIP.has(file) || isUnreachable(file)) continue;
   const text = await readFile(file, "utf8");
+  // Comment-stripped once, reused by checks 1 and 3 below — a hex quoted in
+  // prose (explaining why a colour was retired, or naming the DS spec) is
+  // documentation, not drift. blankComments preserves length and newlines,
+  // so lineOf still maps to the right line either way.
+  const hexText = blankComments(text);
   const lineOf = (i) => text.slice(0, i).split("\n").length;
   const allowedHere = new Set((ALLOWED_HEX[file] ?? []).map(norm));
 
   if (!HEX_CHECK_EXEMPT.has(file))
-    for (const m of text.matchAll(HEX_RE)) {
+    for (const m of hexText.matchAll(HEX_RE)) {
       const hex = norm(m[0]);
       if (palette.has(hex) || allowedHere.has(hex)) continue;
       findings.hex.push(`${file}:${lineOf(m.index)}  ${hex}`);
@@ -262,7 +275,7 @@ for (const file of (await walk(SRC)).sort()) {
   // match, so the exemption could only ever hide a file that imports the
   // module AND inlines a hue anyway — which is the violation, not an excuse.
   if (!HEX_CHECK_EXEMPT.has(file))
-    for (const m of text.matchAll(COLOR_PROP_RE)) {
+    for (const m of hexText.matchAll(COLOR_PROP_RE)) {
       const hex = norm(m[1]);
       if (!vizHues.has(hex) || allowedHere.has(hex)) continue;
       findings.viz.push(`${file}:${lineOf(m.index)}  ${hex}`);
@@ -288,12 +301,14 @@ for (const file of (await walk(SRC)).sort()) {
 const CHECKS = [
   {
     key: "hex",
-    // The two survivors are not drift a token can absorb: adv-field.ts's is a
-    // hex quoted in PROSE, in the comment explaining why that value is NOT
-    // tokenized, and review-rows.tsx's #3F8A39 is a readable success ink on a
-    // success tint — a role SKILL.md's colour table never names, so promoting
-    // it would be inventing a token, not recording one.
-    seed: 2,
+    // The one survivor is not drift a token can absorb: review-rows.tsx's
+    // #3F8A39 is a readable success ink on a success tint — a role SKILL.md's
+    // colour table never names, so promoting it would be inventing a token,
+    // not recording one. adv-field.ts used to be a second survivor — a hex
+    // quoted in PROSE, explaining why that value is NOT tokenized — until
+    // checks 1/3/5 started stripping comments before matching, the same way
+    // checks 4/6 already did.
+    seed: 1,
     label: "off-palette hex",
     fix: "resolve to the token it duplicates, or promote a real role to colors.css",
   },
