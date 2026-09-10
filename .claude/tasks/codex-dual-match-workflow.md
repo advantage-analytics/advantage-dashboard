@@ -40,7 +40,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T2 · Resolve outcome state in the schedule domain
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1
 - **files:** Best guess: src/lib/schedule/types.ts; src/lib/schedule/entry-state.ts; src/lib/schedule/line-status.ts; tests/schedule-outcomes.spec.ts (new)

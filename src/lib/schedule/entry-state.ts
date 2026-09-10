@@ -13,7 +13,56 @@ import {
   isInFlight,
   isWorking,
 } from "@/lib/data/match-analysis";
-import type { EntryMatch, EventEntry } from "./types";
+import type {
+  EntryMatch,
+  EntryResult,
+  EventEntry,
+  OutcomeKind,
+  ResolvedOutcome,
+} from "./types";
+
+/** Exact round lookup: a tournament result never leaks into a sibling round. */
+export function outcomeForRound(
+  entry: EventEntry,
+  round: string | null,
+): ResolvedOutcome | null {
+  const outcome = entry.outcomes?.find((item) => item.round === round);
+  if (outcome) return { source: "outcome", outcome };
+  if (round === null && entry.forfeit !== null) {
+    return {
+      source: "legacy",
+      outcome: { kind: "forfeit", side: entry.forfeit, round: null },
+    };
+  }
+  return null;
+}
+
+/** Non-played results take precedence in inconsistent input, as legacy forfeits did. */
+export function resolveEntryResult(
+  entry: EventEntry,
+  round: string | null,
+): EntryResult {
+  const outcome = outcomeForRound(entry, round);
+  if (outcome) return { kind: "non-played", ...outcome };
+  const match = entry.matches.find((item) => item.round === round);
+  return match ? { kind: "played", match } : { kind: "unanswered" };
+}
+
+export function resultWon(result: EntryResult): boolean | null {
+  if (result.kind === "non-played") return result.outcome.side === "theirs";
+  return result.kind === "played" ? matchWon(result.match) : null;
+}
+
+const OUTCOME_STATE = {
+  forfeit: "forfeited",
+  default: "defaulted",
+  withdrawal: "withdrawn",
+} as const satisfies Record<OutcomeKind, EntryState>;
+
+export function resultState(result: EntryResult): EntryState {
+  if (result.kind === "non-played") return OUTCOME_STATE[result.outcome.kind];
+  return result.kind === "played" ? matchState(result.match) : "empty";
+}
 
 export type EntryState =
   /** Nobody has recorded anything. No match row exists yet. */
@@ -45,7 +94,9 @@ export type EntryState =
    * `'theirs'` awards it to us. A forfeited line must never mint a match, enter
    * the analysis pipeline, or carry an invented set score.
    */
-  | "forfeited";
+  | "forfeited"
+  | "defaulted"
+  | "withdrawn";
 
 /**
  * Sets won by each side, from the game counts.
@@ -87,8 +138,13 @@ function setsWon(match: EntryMatch): { us: number; them: number } | null {
  * they were designed before the vendor's singles-only limit was known. This is
  * the correction.
  */
-export function supportsVideo(entry: EventEntry): boolean {
-  return entry.discipline === "singles" && entry.forfeit === null;
+export function supportsVideo(
+  entry: EventEntry,
+  round: string | null = null,
+): boolean {
+  return (
+    entry.discipline === "singles" && outcomeForRound(entry, round) === null
+  );
 }
 
 /** Did we win this match? Null when it has no score, or the sets are level. */
@@ -106,9 +162,10 @@ export function matchWon(match: EntryMatch): boolean | null {
  * Null when the line is not forfeited.
  */
 export function forfeitWon(entry: EventEntry): boolean | null {
-  if (entry.forfeit === "theirs") return true;
-  if (entry.forfeit === "ours") return false;
-  return null;
+  const result = outcomeForRound(entry, null);
+  return result?.outcome.kind === "forfeit"
+    ? result.outcome.side === "theirs"
+    : null;
 }
 
 /**
@@ -134,7 +191,7 @@ export function forfeitWon(entry: EventEntry): boolean | null {
  * without re-reading this comment.
  */
 export function entryPlayed(entry: EventEntry): boolean {
-  if (entry.forfeit !== null) return true;
+  if (entry.forfeit !== null || entry.outcomes?.length) return true;
   return entry.matches.some((match) => matchWon(match) !== null);
 }
 
@@ -160,10 +217,17 @@ export function lineWon(
   entry: EventEntry,
   match?: EntryMatch | null,
 ): boolean | null {
+  const outcome = outcomeForRound(entry, match?.round ?? null);
+  if (outcome) return outcome.outcome.side === "theirs";
   const forfeit = forfeitWon(entry);
   if (forfeit !== null) return forfeit;
   if (match !== undefined) return match ? matchWon(match) : null;
-  return entry.matches.some((m) => matchWon(m) === true);
+  return (
+    entry.outcomes?.some((o) => o.side === "theirs") === true ||
+    entry.matches.some(
+      (m) => resultWon(resolveEntryResult(entry, m.round)) === true,
+    )
+  );
 }
 
 /**
@@ -213,10 +277,25 @@ export function matchState(match: EntryMatch): EntryState {
  */
 const STATE_PRECEDENCE = ["failed", "working", "ready", "waiting"] as const;
 
-export function entryState(entry: EventEntry): EntryState {
-  if (entry.forfeit !== null) return "forfeited";
-  if (entry.matches.length === 0) return "empty";
-  const states = entry.matches.map(matchState);
+export function entryState(
+  entry: EventEntry,
+  round?: string | null,
+): EntryState {
+  if (round !== undefined) return resultState(resolveEntryResult(entry, round));
+  const lineOutcome = outcomeForRound(entry, null);
+  if (lineOutcome) return OUTCOME_STATE[lineOutcome.outcome.kind];
+  const matches = entry.matches.filter(
+    (match) => !outcomeForRound(entry, match.round),
+  );
+  if (matches.length === 0) {
+    // Summary only. A round row must always pass its round explicitly.
+    const kinds = entry.outcomes?.map((o) => o.kind) ?? [];
+    const kind = (["forfeit", "default", "withdrawal"] as const).find((k) =>
+      kinds.includes(k),
+    );
+    return kind ? OUTCOME_STATE[kind] : "empty";
+  }
+  const states = matches.map(matchState);
   return STATE_PRECEDENCE.find((s) => states.includes(s)) ?? "no-video";
 }
 
@@ -287,11 +366,12 @@ export function lineCoverageFrom(entries: EventEntry[]): {
   let total = 0;
 
   for (const entry of entries) {
-    if (entry.forfeit !== null) continue;
-    total += Math.max(1, entry.matches.length);
-    analyzed += entry.matches.filter((match) =>
-      isAnalysisReady(match.status),
-    ).length;
+    if (outcomeForRound(entry, null)) continue;
+    const matches = entry.matches.filter(
+      (match) => !outcomeForRound(entry, match.round),
+    );
+    total += matches.length || (entry.outcomes?.length ? 0 : 1);
+    analyzed += matches.filter((match) => isAnalysisReady(match.status)).length;
   }
 
   return { analyzed, total };
