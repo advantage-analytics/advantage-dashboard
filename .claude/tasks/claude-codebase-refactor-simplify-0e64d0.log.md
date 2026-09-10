@@ -180,3 +180,44 @@ colour props, so the checker does not see them — and they are palette-legal
 under check 1, so they are arguably the DS's sanctioned build form rather than
 drift. Worth a decision on whether class-form centralization is wanted at all
 before anyone treats it as a task.
+
+## T6 · Resolve the off-palette hex — blocked
+
+**gate:** mechanical passed — lint 0 errors, tsc clean, 652/652 tests, checker
+green at `off-palette hex: 2`. Completion review returned **`VERDICT:
+needs-work`**, so per the fail-closed rule the run stopped there and the
+guardrail stage never ran. That matters: the diff reached BOTH
+`src/components/dashboard/` (so `pipeline-guardrails-reviewer` was due) AND
+`src/lib/data/performance-server.ts` (so `rls-boundary-reviewer` was due).
+Neither has seen this work yet, and both must run before it lands.
+
+**why blocked:** two criteria came back unmet. One was pre-authorised and is
+not the blocker — "check 1 reads 0" is unreachable, since two findings survive
+honestly (a `#F7F7F7` quoted inside `adv-field.ts`'s own doc comment
+explaining why that value is deliberately NOT tokenised, and `#3F8A39`, a
+success-ink role SKILL.md names no token for). The real defect is the fourth
+criterion: the task said fix `performance-server.ts`'s colour VALUES and
+_note_ its layering violation without refactoring. The implementer did neither
+half — no note was added anywhere in the diff, and the fix itself introduced
+`import { VIZ_BLUE, VIZ_SLATE } from "@/lib/design/data-viz"` into a server
+data loader, a new cross-layer dependency from `src/lib/data/` into a design
+module. That deepens the violation it was told to leave alone.
+
+**recoverable work:** stash `4bd24db0f402392b0b5570c7894576cdf1b75bfc`
+(31 files, +96/-66). It is genuinely good work — 70 findings resolved down to
+2, five tokens added to `colors.css` of which three (`--warning-bg`,
+`--warning-border`, `--warning-text`) were verified as TRANSCRIBED from
+SKILL.md:239-241 rather than invented. Restore with
+`git stash apply 4bd24db0f402392b0b5570c7894576cdf1b75bfc` — apply, not pop,
+because `refs/stash` is shared across worktrees.
+
+**to unblock, smallest change first:** restore the stash, then either revert
+`performance-server.ts` to literal hex values with a comment naming the
+layering violation, or keep the import and get an explicit decision that a
+data loader may depend on the design layer. Then re-run the gate from 5b and
+let 5c's TWO reviewers run. One visual question also needs a human before this
+ships: the upload wizard's warning banner border moves `#FEF3C7` → `#FDE68A`
+and its icon `#D97706` → `#92400E`. That is defensible — SKILL.md names those
+exact values and the originals were stock Tailwind amber — but it is the most
+user-visible change in the queue so far, it sits in a guardrails seam, and no
+one has looked at it rendered.

@@ -111,7 +111,7 @@ Plan of record: `~/.claude/plans/system-reminder-you-are-operating-zippy-adleman
 
 ## T6 · Resolve the off-palette hex
 
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T1, T5
 - **files:** ~35 live files; heaviest are lib/data/performance-server.ts, matches/match-score-row.tsx, match-detail/share-match-button.tsx, statistics/match-selector.tsx
