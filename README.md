@@ -69,6 +69,14 @@ az login                  # for the azure-storage skill
 stripe login              # for the stripe-cli skill
 ```
 
+`skills-lock.json` is **not** part of setup. It is one maintainer's optional
+design-review skills, restorable with `npx skills experimental_install`. The
+skills it names are gitignored, so a clone does not get them and nothing in this
+repo — no script, no CI step — reads the file. Ignore it unless you specifically
+want that tooling. (`designpass`, `layout` and `shape` are installed locally but
+absent from the lock; add them with `npx skills add` if the lock should restore
+them too.)
+
 ## Where to go next
 
 - [`AGENTS.md`](AGENTS.md) — **how to work here** (architecture, conventions, commands).
