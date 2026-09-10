@@ -21,13 +21,12 @@ function buildHomeInsightSystemPrompt(
   // Top KPI movers: largest absolute non-zero change, accounting for whether
   // a lower value is better (e.g. double faults, unforced errors). Uses the same
   // selection the home card renders as chips, so prose and evidence stay aligned.
-  const movers = getTopKpiMovers(perf.kpiCards, 5)
-    .map((k) => {
-      const improving = k.lowerIsBetter ? k.change < 0 : k.change > 0;
-      return `  - ${k.label}: ${k.value} (${formatChange(k.change)} vs prior, ${
-        improving ? "improving" : "declining"
-      })`;
-    });
+  const movers = getTopKpiMovers(perf.kpiCards, 5).map((k) => {
+    const improving = k.lowerIsBetter ? k.change < 0 : k.change > 0;
+    return `  - ${k.label}: ${k.value} (${formatChange(k.change)} vs prior, ${
+      improving ? "improving" : "declining"
+    })`;
+  });
 
   const moversText =
     movers.length > 0 ? movers.join("\n") : "  No notable stat movement yet.";

@@ -1,4 +1,10 @@
-import { meanOfPresent, num, pct, presentPairs, statKey } from "@/lib/data/aggregate";
+import {
+  meanOfPresent,
+  num,
+  pct,
+  presentPairs,
+  statKey,
+} from "@/lib/data/aggregate";
 import { PLAYER_MEASURES } from "@/lib/data/player-measures";
 import type { KpiFormat } from "@/lib/data/performance-server";
 import type { MatchScore } from "@/lib/data/match-utils";
@@ -82,7 +88,10 @@ export interface DbStatRow {
 function toStatRow(row: DbStatRow): ProfileStatRow {
   return {
     rates: Object.fromEntries(
-      PLAYER_MEASURES.map((m) => [m.key, pct(row[m.key] as string | number | null)])
+      PLAYER_MEASURES.map((m) => [
+        m.key,
+        pct(row[m.key] as string | number | null),
+      ]),
     ),
     breakPointsConverted: num(row.break_points_converted),
     breakPointOpportunities: num(row.break_point_opportunities),
@@ -196,17 +205,37 @@ export const SEASON_KPI_SPECS: readonly SeasonKpiSpec[] = [
   { key: "games-won", label: "Games won", category: "Other" },
   // Everything else the picker offers.
   { key: "second_serve_won_pct", label: "2nd serve won", category: "Serve" },
-  { key: "service_games_won_pct", label: "Service games held", category: "Serve" },
-  { key: "break_points_saved_pct", label: "Break points saved", category: "Serve" },
-  { key: "first_return_won_pct", label: "First return won", category: "Return" },
-  { key: "second_return_won_pct", label: "Second return won", category: "Return" },
-  { key: "return_games_won_pct", label: "Return games won", category: "Return" },
+  {
+    key: "service_games_won_pct",
+    label: "Service games held",
+    category: "Serve",
+  },
+  {
+    key: "break_points_saved_pct",
+    label: "Break points saved",
+    category: "Serve",
+  },
+  {
+    key: "first_return_won_pct",
+    label: "First return won",
+    category: "Return",
+  },
+  {
+    key: "second_return_won_pct",
+    label: "Second return won",
+    category: "Return",
+  },
+  {
+    key: "return_games_won_pct",
+    label: "Return games won",
+    category: "Return",
+  },
   { key: "total_points_won_pct", label: "Total points won", category: "Other" },
 ];
 
 /** The catalogue by key, for the lookups the strip does per render. */
 export const SEASON_KPI_BY_KEY: ReadonlyMap<string, SeasonKpiSpec> = new Map(
-  SEASON_KPI_SPECS.map((spec) => [spec.key, spec])
+  SEASON_KPI_SPECS.map((spec) => [spec.key, spec]),
 );
 
 /** How many tiles the strip shows, and the floor the picker holds. */
@@ -214,10 +243,8 @@ export const SEASON_KPI_MAX = 5;
 export const SEASON_KPI_MIN = 4;
 
 /** The five a viewer who has never chosen sees — and the day-zero labels. */
-export const SEASON_KPI_DEFAULT_KEYS: readonly string[] = SEASON_KPI_SPECS.slice(
-  0,
-  SEASON_KPI_MAX
-).map((s) => s.key);
+export const SEASON_KPI_DEFAULT_KEYS: readonly string[] =
+  SEASON_KPI_SPECS.slice(0, SEASON_KPI_MAX).map((s) => s.key);
 
 /**
  * The default five, in strip order — what the empty strip labels itself
@@ -226,7 +253,7 @@ export const SEASON_KPI_DEFAULT_KEYS: readonly string[] = SEASON_KPI_SPECS.slice
  */
 export const SEASON_KPI_LABELS: readonly string[] = SEASON_KPI_SPECS.slice(
   0,
-  SEASON_KPI_MAX
+  SEASON_KPI_MAX,
 ).map((s) => s.label);
 
 /** How many recent matches "lately" means — the roster and drawer's window. */
@@ -246,7 +273,9 @@ export interface SeriesPoint extends SeriesMeta {
 }
 
 /** The line a match counts for, or null when it was not played on one. */
-export function resolveLine(entry: ProfileEntry | null | undefined): string | null {
+export function resolveLine(
+  entry: ProfileEntry | null | undefined,
+): string | null {
   return entry?.slot ?? null;
 }
 
@@ -260,7 +289,7 @@ export function resolveLine(entry: ProfileEntry | null | undefined): string | nu
 export function resolveSchool(
   entry: ProfileEntry | null | undefined,
   event: ProfileEvent | null | undefined,
-  tournamentName: string | null
+  tournamentName: string | null,
 ): string | null {
   const fromEntry = entry?.opponentSchool?.trim();
   if (fromEntry) return fromEntry;
@@ -301,7 +330,7 @@ export function gamesWonPct(row: ProfileStatRow | null): number | null {
 export function dualRecordFrom(
   results: readonly ProfileResult[],
   entriesById: ReadonlyMap<string, ProfileEntry>,
-  eventsById: ReadonlyMap<string, ProfileEvent>
+  eventsById: ReadonlyMap<string, ProfileEvent>,
 ): { wins: number; losses: number } {
   let wins = 0;
   let losses = 0;
@@ -333,7 +362,7 @@ function slotRank(slot: string): [number, number, string] {
  */
 export function lineHistoryFrom(
   results: readonly ProfileResult[],
-  entriesById: ReadonlyMap<string, ProfileEntry>
+  entriesById: ReadonlyMap<string, ProfileEntry>,
 ): LineRow[] {
   const bySlot = new Map<string, ProfileResult[]>();
   for (const result of results) {
@@ -354,7 +383,8 @@ export function lineHistoryFrom(
       slot,
       wins,
       losses,
-      winPct: decided.length === 0 ? null : Math.round((wins / decided.length) * 100),
+      winPct:
+        decided.length === 0 ? null : Math.round((wins / decided.length) * 100),
       form: decided
         .slice(0, RECENT_WINDOW)
         .reverse()
@@ -391,7 +421,7 @@ export function kpiSeries(
    * cannot land on the wrong one. Omitted where there is no chart to draw.
    */
   metaNewestFirst: readonly SeriesMeta[] = [],
-  window = KPI_SERIES_WINDOW
+  window = KPI_SERIES_WINDOW,
 ): {
   sparkline: number[];
   /** The sparkline's own points, enlarged — same window, same order. */
@@ -421,7 +451,8 @@ export function kpiSeries(
           opponent: p.meta?.opponent ?? "Opponent",
         }));
 
-  if (present.length < TREND_MIN_MATCHES) return { sparkline, points, trend: null };
+  if (present.length < TREND_MIN_MATCHES)
+    return { sparkline, points, trend: null };
 
   const recentSize = Math.min(RECENT_WINDOW, Math.floor(present.length / 2));
   const recent = meanOfPresent(present.slice(0, recentSize), 1);
@@ -444,7 +475,9 @@ export function kpiSeries(
  * climbing or falling across the season says more than "12–4" alone. Only
  * decided matches move it.
  */
-export function runningDifferential(results: readonly ProfileResult[]): number[] {
+export function runningDifferential(
+  results: readonly ProfileResult[],
+): number[] {
   const out: number[] = [];
   let running = 0;
   for (let i = results.length - 1; i >= 0; i--) {
@@ -469,7 +502,9 @@ function percent(value: number | null): string {
 function trendHint(measured: number): string | undefined {
   if (measured === 0) return "After the first report";
   const needed = TREND_MIN_MATCHES - measured;
-  return needed > 0 ? `${needed} more ${needed === 1 ? "match" : "matches"} for a trend` : undefined;
+  return needed > 0
+    ? `${needed} more ${needed === 1 ? "match" : "matches"} for a trend`
+    : undefined;
 }
 
 /**
@@ -495,7 +530,9 @@ export function clipText(text: string, max: number): string {
  * results, and each was writing the same three lines. `statKey` is the one
  * spelling of "this match, this side" the aggregate layer already owns.
  */
-export function statRowsByKey(rows: readonly DbStatRow[]): Map<string, ProfileStatRow> {
+export function statRowsByKey(
+  rows: readonly DbStatRow[],
+): Map<string, ProfileStatRow> {
   const byKey = new Map<string, ProfileStatRow>();
   for (const row of rows) {
     byKey.set(statKey(row.match_id, row.is_player1), toStatRow(row));
@@ -544,7 +581,7 @@ export function seasonStrip(
    * is 6–2 in duals — the denominator being "matches we filmed" with nothing
    * on the tile saying so. It passes the program's dual record instead.
    */
-  record?: { wins: number; losses: number }
+  record?: { wins: number; losses: number },
 ): SeasonStrip {
   let wins = 0;
   let losses = 0;
@@ -552,7 +589,11 @@ export function seasonStrip(
     if (result.won === true) wins++;
     else if (result.won === false) losses++;
   }
-  const kpis = seasonKpis(results, { wins: record?.wins ?? wins, losses: record?.losses ?? losses, duals });
+  const kpis = seasonKpis(results, {
+    wins: record?.wins ?? wins,
+    losses: record?.losses ?? losses,
+    duals,
+  });
   return {
     kpis,
     matchesPlayed: results.length,
@@ -590,7 +631,7 @@ export function seasonKpis(
     losses: number;
     /** Zero and zero where there are no duals — the personal workspace. */
     duals: { wins: number; losses: number };
-  }
+  },
 ): ProfileKpi[] {
   const rows = results.map((r) => r.stats);
   const measured = rows.filter((r) => r !== null).length;
@@ -611,7 +652,7 @@ export function seasonKpis(
   const rateTile = (
     spec: SeasonKpiSpec,
     values: (number | null)[],
-    withTrend = true
+    withTrend = true,
   ): ProfileKpi => {
     const series = kpiSeries(values, meta);
     const mean = meanOfPresent([...values], 1);
@@ -663,23 +704,31 @@ export function seasonKpis(
       let converted = 0;
       let opportunities = 0;
       for (const row of rows) {
-        if (!row || row.breakPointsConverted === null || row.breakPointOpportunities === null) {
+        if (
+          !row ||
+          row.breakPointsConverted === null ||
+          row.breakPointOpportunities === null
+        ) {
           continue;
         }
         converted += row.breakPointsConverted;
         opportunities += row.breakPointOpportunities;
       }
       const values = rows.map((r) =>
-        r && r.breakPointsConverted !== null && r.breakPointOpportunities !== null
+        r &&
+        r.breakPointsConverted !== null &&
+        r.breakPointOpportunities !== null
           ? r.breakPointOpportunities === 0
             ? null
             : (r.breakPointsConverted / r.breakPointOpportunities) * 100
-          : null
+          : null,
       );
       const tile = rateTile(spec, values, false);
       // The season figure is the sum, not the mean of the per-match rates —
       // only the sparkline and the hover chart are per-match.
-      tile.value = percent(opportunities > 0 ? (converted / opportunities) * 100 : null);
+      tile.value = percent(
+        opportunities > 0 ? (converted / opportunities) * 100 : null,
+      );
       tile.description = MEASURE_HINTS.get("break_points_converted_pct");
       if (opportunities > 0) tile.subtext = `${converted} of ${opportunities}`;
       else {
@@ -691,13 +740,21 @@ export function seasonKpis(
     }
 
     if (spec.key === "games-won") {
-      const tile = rateTile(spec, rows.map((r) => gamesWonPct(r)));
+      const tile = rateTile(
+        spec,
+        rows.map((r) => gamesWonPct(r)),
+      );
       tile.description = "Share of all games won, serving and returning";
       tiles.push(tile);
       continue;
     }
 
-    tiles.push(rateTile(spec, rows.map((r) => r?.rates[spec.key] ?? null)));
+    tiles.push(
+      rateTile(
+        spec,
+        rows.map((r) => r?.rates[spec.key] ?? null),
+      ),
+    );
   }
 
   // In catalogue order by construction — the picker looks tiles up by key and

@@ -104,7 +104,9 @@ export function ReferralRequestForm({
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5">
       {/* Act one: the link. */}
       <section className="flex flex-col gap-2.5 border-t border-[var(--border-hairline)] pt-4">
-        <span className={SECTION_LABEL}>Send this to whoever should run it</span>
+        <span className={SECTION_LABEL}>
+          Send this to whoever should run it
+        </span>
         <ReferralLink url={referralUrl} />
       </section>
 

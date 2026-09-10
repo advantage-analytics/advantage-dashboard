@@ -1,6 +1,10 @@
 import { meanOfPresent, num, pct } from "./aggregate";
 import { createClient } from "@/lib/supabase/server";
-import type { MatchDetailedStats, PlayerStatistics, StatFraction } from "./types";
+import type {
+  MatchDetailedStats,
+  PlayerStatistics,
+  StatFraction,
+} from "./types";
 import { playerSeat } from "./viewer-side";
 
 interface DbMatchStatsView {
@@ -176,7 +180,10 @@ async function fetchPlayerStatRows(
   const { data: statRows } = await supabase
     .from("match_stats_with_percentages")
     .select(`match_id, is_player1, ${columns}`)
-    .in("match_id", matches.map((m) => m.id));
+    .in(
+      "match_id",
+      matches.map((m) => m.id),
+    );
 
   if (!statRows?.length) return null;
 
@@ -298,10 +305,16 @@ export async function getPlayerAverageStats(
   // with them — a match where the player genuinely converted no break points was
   // dropped from their conversion average rather than counted in it.
   const avgPct = (field: string) =>
-    meanOfPresent(rows.map((r) => pct(r[field])), 0) ?? undefined;
+    meanOfPresent(
+      rows.map((r) => pct(r[field])),
+      0,
+    ) ?? undefined;
 
   const avgNum = (field: string) =>
-    meanOfPresent(rows.map((r) => countCell(r, field)), 0) ?? undefined;
+    meanOfPresent(
+      rows.map((r) => countCell(r, field)),
+      0,
+    ) ?? undefined;
 
   const netWon = rows.reduce(
     (a, r) => a + (countCell(r, "net_points_won") ?? 0),
@@ -321,7 +334,8 @@ export async function getPlayerAverageStats(
     firstReturnWonPct: avgPct("first_return_won_pct"),
     secondReturnWonPct: avgPct("second_return_won_pct"),
     returnGamesWonPct: avgPct("return_games_won_pct"),
-    netPointsWonPct: netTotal > 0 ? Math.round((netWon / netTotal) * 100) : undefined,
+    netPointsWonPct:
+      netTotal > 0 ? Math.round((netWon / netTotal) * 100) : undefined,
     shortRallyWonPct: avgPct("short_rally_won_pct"),
     mediumRallyWonPct: avgPct("medium_rally_won_pct"),
     longRallyWonPct: avgPct("long_rally_won_pct"),
@@ -344,10 +358,7 @@ export async function getPlayerAverageStats(
  * tile, its baseline and its sparkline all agree on.
  */
 export type MatchKpiKey =
-  | "firstServeIn"
-  | "firstServeWon"
-  | "secondServeWon"
-  | "breakPointsSaved";
+  "firstServeIn" | "firstServeWon" | "secondServeWon" | "breakPointsSaved";
 
 export interface MatchKpiHistory {
   /**
@@ -456,7 +467,8 @@ export function buildKpiHistory(
         return Number.isFinite(time) && time < anchorTime;
       })
       .sort(
-        (a, b) => rowTime(a) - rowTime(b) || a.match_id.localeCompare(b.match_id),
+        (a, b) =>
+          rowTime(a) - rowTime(b) || a.match_id.localeCompare(b.match_id),
       );
     windowRows.push(...earlier.slice(-(KPI_SERIES_WINDOW - 1)), anchor);
   }
@@ -535,7 +547,7 @@ export async function getMatchKpiHistory(
 /* ── Single-match stats ────────────────────────────────── */
 
 export async function getMatchStatisticsFromSupabase(
-  matchId: string
+  matchId: string,
 ): Promise<MatchStatisticsResult | null> {
   const supabase = await createClient();
 
@@ -543,7 +555,7 @@ export async function getMatchStatisticsFromSupabase(
     supabase
       .from("match_stats_with_percentages")
       .select(
-        "is_player1, aces, double_faults, first_serve_pct, first_serve_won_pct, second_serve_won_pct, break_points_converted, first_serve_points_won, second_serve_points_won, service_games_won, service_games_won_pct, first_return_points_won, second_return_points_won, return_games_won, first_return_in_pct, second_return_in_pct, first_returns_in, second_returns_in, first_return_won_pct, second_return_won_pct, return_games_won_pct, break_points_converted_pct, total_points, total_points_won, serve_rating, return_rating, under_pressure_rating, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct, serve_wide_pct, serve_body_pct, serve_t_pct, return_cross_court_pct, return_down_the_line_pct, return_middle_pct, return_contact_inside_pct, return_contact_middle_pct, return_contact_deep_pct, winners, unforced_errors, net_points_appearances, net_points_won, first_serves, first_serves_in, second_serves_in, service_games, break_points_faced, break_points_saved, break_point_opportunities, first_returns, second_returns, return_games, short_rally_won, short_rally_total, medium_rally_won, medium_rally_total, long_rally_won, long_rally_total"
+        "is_player1, aces, double_faults, first_serve_pct, first_serve_won_pct, second_serve_won_pct, break_points_converted, first_serve_points_won, second_serve_points_won, service_games_won, service_games_won_pct, first_return_points_won, second_return_points_won, return_games_won, first_return_in_pct, second_return_in_pct, first_returns_in, second_returns_in, first_return_won_pct, second_return_won_pct, return_games_won_pct, break_points_converted_pct, total_points, total_points_won, serve_rating, return_rating, under_pressure_rating, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct, serve_wide_pct, serve_body_pct, serve_t_pct, return_cross_court_pct, return_down_the_line_pct, return_middle_pct, return_contact_inside_pct, return_contact_middle_pct, return_contact_deep_pct, winners, unforced_errors, net_points_appearances, net_points_won, first_serves, first_serves_in, second_serves_in, service_games, break_points_faced, break_points_saved, break_point_opportunities, first_returns, second_returns, return_games, short_rally_won, short_rally_total, medium_rally_won, medium_rally_total, long_rally_won, long_rally_total",
       )
       .eq("match_id", matchId),
     supabase
@@ -555,12 +567,10 @@ export async function getMatchStatisticsFromSupabase(
 
   if (statsResult.error || !statsResult.data?.length) return null;
 
-  const player1Row = statsResult.data.find(
-    (r) => r.is_player1
-  ) as DbMatchStatsView | undefined;
-  const player2Row = statsResult.data.find(
-    (r) => !r.is_player1
-  ) as DbMatchStatsView | undefined;
+  const player1Row = statsResult.data.find((r) => r.is_player1) as
+    DbMatchStatsView | undefined;
+  const player2Row = statsResult.data.find((r) => !r.is_player1) as
+    DbMatchStatsView | undefined;
   const score = matchResult.data?.score as DbMatchScore | null;
   const player1Name = matchResult.data?.player1_name ?? "Player 1";
   const player2Name = matchResult.data?.player2_name ?? "Player 2";
@@ -643,34 +653,55 @@ const DEFAULT_STATS: PlayerStatistics = {
   returnContactDeepPct: 0,
 };
 
-function frac(made: number | null, attempts: number | null): StatFraction | null {
+function frac(
+  made: number | null,
+  attempts: number | null,
+): StatFraction | null {
   const m = made ?? 0;
   const a = attempts ?? 0;
   return a > 0 ? { made: m, attempts: a } : null;
 }
 
-function buildFractions(row: DbMatchStatsView): Partial<Record<string, StatFraction>> {
+function buildFractions(
+  row: DbMatchStatsView,
+): Partial<Record<string, StatFraction>> {
   const result: Partial<Record<string, StatFraction>> = {};
 
   const entries: [string, StatFraction | null][] = [
     ["firstServeInPct", frac(row.first_serves_in, row.first_serves)],
     ["firstServeWinPct", frac(row.first_serve_points_won, row.first_serves_in)],
-    ["secondServeWinPct", frac(row.second_serve_points_won, row.second_serves_in)],
+    [
+      "secondServeWinPct",
+      frac(row.second_serve_points_won, row.second_serves_in),
+    ],
     ["breakpointsSaved", frac(row.break_points_saved, row.break_points_faced)],
-    ["servicePointsWon", frac(
-      (row.first_serve_points_won ?? 0) + (row.second_serve_points_won ?? 0),
-      row.first_serves,
-    )],
+    [
+      "servicePointsWon",
+      frac(
+        (row.first_serve_points_won ?? 0) + (row.second_serve_points_won ?? 0),
+        row.first_serves,
+      ),
+    ],
     ["serviceGamesWonPct", frac(row.service_games_won, row.service_games)],
     ["firstReturnInPct", frac(row.first_returns_in, row.first_returns)],
     ["secondReturnInPct", frac(row.second_returns_in, row.second_returns)],
     ["firstReturnWonPct", frac(row.first_return_points_won, row.first_returns)],
-    ["secondReturnWonPct", frac(row.second_return_points_won, row.second_returns)],
-    ["breakpointsWonPct", frac(row.break_points_converted, row.break_point_opportunities)],
-    ["returnPointsWon", frac(
-      (row.first_return_points_won ?? 0) + (row.second_return_points_won ?? 0),
-      (row.first_returns ?? 0) + (row.second_returns ?? 0),
-    )],
+    [
+      "secondReturnWonPct",
+      frac(row.second_return_points_won, row.second_returns),
+    ],
+    [
+      "breakpointsWonPct",
+      frac(row.break_points_converted, row.break_point_opportunities),
+    ],
+    [
+      "returnPointsWon",
+      frac(
+        (row.first_return_points_won ?? 0) +
+          (row.second_return_points_won ?? 0),
+        (row.first_returns ?? 0) + (row.second_returns ?? 0),
+      ),
+    ],
     ["returnGamesWonPct", frac(row.return_games_won, row.return_games)],
     ["netPointsWonPct", frac(row.net_points_won, row.net_points_appearances)],
     ["shortRallyWonPct", frac(row.short_rally_won, row.short_rally_total)],
@@ -687,7 +718,7 @@ function buildFractions(row: DbMatchStatsView): Partial<Record<string, StatFract
 
 function transformToPlayerStats(
   row: DbMatchStatsView | undefined,
-  tiebreaksWon: number
+  tiebreaksWon: number,
 ): PlayerStatistics {
   if (!row) return DEFAULT_STATS;
 
@@ -708,7 +739,9 @@ function transformToPlayerStats(
     servicePointsWon:
       (row.first_serve_points_won ?? 0) + (row.second_serve_points_won ?? 0),
     serviceGamesWon: row.service_games_won ?? 0,
-    serviceGamesWonPct: Math.round(parseFloat(row.service_games_won_pct ?? "0")),
+    serviceGamesWonPct: Math.round(
+      parseFloat(row.service_games_won_pct ?? "0"),
+    ),
     returnPointsWon:
       (row.first_return_points_won ?? 0) + (row.second_return_points_won ?? 0),
     firstReturnPointsWon: row.first_return_points_won ?? 0,
@@ -717,14 +750,20 @@ function transformToPlayerStats(
     firstReturnInPct: round(pct(row.first_return_in_pct)),
     secondReturnInPct: round(pct(row.second_return_in_pct)),
     firstReturnWonPct: Math.round(parseFloat(row.first_return_won_pct ?? "0")),
-    secondReturnWonPct: Math.round(parseFloat(row.second_return_won_pct ?? "0")),
+    secondReturnWonPct: Math.round(
+      parseFloat(row.second_return_won_pct ?? "0"),
+    ),
     returnGamesWonPct: Math.round(parseFloat(row.return_games_won_pct ?? "0")),
-    breakpointsWonPct: Math.round(parseFloat(row.break_points_converted_pct ?? "0")),
+    breakpointsWonPct: Math.round(
+      parseFloat(row.break_points_converted_pct ?? "0"),
+    ),
     totalPoints: row.total_points ?? 0,
     totalPointsWon: row.total_points_won ?? 0,
     serveRating: parseFloat(String(row.serve_rating ?? 0)),
     returnRating: Math.round(parseFloat(row.return_rating ?? "0")),
-    underPressureRating: Math.round(parseFloat(row.under_pressure_rating ?? "0")),
+    underPressureRating: Math.round(
+      parseFloat(row.under_pressure_rating ?? "0"),
+    ),
     shortRallyWonPct: Math.round(parseFloat(row.short_rally_won_pct ?? "0")),
     mediumRallyWonPct: Math.round(parseFloat(row.medium_rally_won_pct ?? "0")),
     longRallyWonPct: Math.round(parseFloat(row.long_rally_won_pct ?? "0")),
@@ -732,19 +771,33 @@ function transformToPlayerStats(
     unforcedErrors: row.unforced_errors ?? 0,
     netPointsAppearances: row.net_points_appearances ?? 0,
     netPointsWon: row.net_points_won ?? 0,
-    netPointsWonPct: (row.net_points_appearances ?? 0) > 0
-      ? Math.round(((row.net_points_won ?? 0) / (row.net_points_appearances ?? 1)) * 100)
-      : 0,
+    netPointsWonPct:
+      (row.net_points_appearances ?? 0) > 0
+        ? Math.round(
+            ((row.net_points_won ?? 0) / (row.net_points_appearances ?? 1)) *
+              100,
+          )
+        : 0,
     breakpointsSaved: row.break_points_saved ?? 0,
     fractions: buildFractions(row),
     serveWidePct: Math.round(parseFloat(row.serve_wide_pct ?? "0")),
     serveBodyPct: Math.round(parseFloat(row.serve_body_pct ?? "0")),
     serveTpct: Math.round(parseFloat(row.serve_t_pct ?? "0")),
-    returnCrossCourtPct: Math.round(parseFloat(row.return_cross_court_pct ?? "0")),
-    returnDownTheLinePct: Math.round(parseFloat(row.return_down_the_line_pct ?? "0")),
+    returnCrossCourtPct: Math.round(
+      parseFloat(row.return_cross_court_pct ?? "0"),
+    ),
+    returnDownTheLinePct: Math.round(
+      parseFloat(row.return_down_the_line_pct ?? "0"),
+    ),
     returnMiddlePct: Math.round(parseFloat(row.return_middle_pct ?? "0")),
-    returnContactInsidePct: Math.round(parseFloat(row.return_contact_inside_pct ?? "0")),
-    returnContactMiddlePct: Math.round(parseFloat(row.return_contact_middle_pct ?? "0")),
-    returnContactDeepPct: Math.round(parseFloat(row.return_contact_deep_pct ?? "0")),
+    returnContactInsidePct: Math.round(
+      parseFloat(row.return_contact_inside_pct ?? "0"),
+    ),
+    returnContactMiddlePct: Math.round(
+      parseFloat(row.return_contact_middle_pct ?? "0"),
+    ),
+    returnContactDeepPct: Math.round(
+      parseFloat(row.return_contact_deep_pct ?? "0"),
+    ),
   };
 }

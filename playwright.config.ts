@@ -1,4 +1,4 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig } from "@playwright/test";
 
 /**
  * Playwright is this repo's only test runner. Most specs here are pure logic
@@ -7,7 +7,7 @@ import { defineConfig } from '@playwright/test';
  * browser binaries that these tests do not need.
  */
 export default defineConfig({
-  testDir: './tests',
+  testDir: "./tests",
   fullyParallel: true,
-  reporter: process.env.CI ? 'dot' : 'list',
+  reporter: process.env.CI ? "dot" : "list",
 });

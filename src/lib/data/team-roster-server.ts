@@ -318,7 +318,7 @@ function fallbackName(email: string | null): string {
 }
 
 export const getRosterData = cache(async function getRosterData(
-  programId: string
+  programId: string,
 ): Promise<RosterData> {
   const supabase = await createClient();
 
@@ -329,63 +329,68 @@ export const getRosterData = cache(async function getRosterData(
   // Every one of these has to land before a single row renders, and no branch
   // depends on another — so they go together rather than in the sequence the
   // page happens to display them in. Only the last has an internal order.
-  const [rosterResult, seatResult, invitesResult, programResult, matchesResult] =
-    await Promise.all([
-      // One call for both kinds of roster row. `program_roster` still exists and
-      // is deliberately untouched — it is the SEAT list, which Settings › Team
-      // and the usage breakdown want, and changing its shape would have broken
-      // five call sites in the migration that introduced the concept.
-      supabase.rpc("program_roster_full", { p_program_id: programId }),
-      supabase.rpc("program_seat_usage", { p_program_id: programId }),
-      supabase
-        .from("program_invites")
-        .select("id, email, role, created_at, invited_by")
+  const [
+    rosterResult,
+    seatResult,
+    invitesResult,
+    programResult,
+    matchesResult,
+  ] = await Promise.all([
+    // One call for both kinds of roster row. `program_roster` still exists and
+    // is deliberately untouched — it is the SEAT list, which Settings › Team
+    // and the usage breakdown want, and changing its shape would have broken
+    // five call sites in the migration that introduced the concept.
+    supabase.rpc("program_roster_full", { p_program_id: programId }),
+    supabase.rpc("program_seat_usage", { p_program_id: programId }),
+    supabase
+      .from("program_invites")
+      .select("id, email, role, created_at, invited_by")
+      .eq("program_id", programId)
+      .is("accepted_at", null)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("programs")
+      .select("players_can_upload, upload_policy, time_zone")
+      .eq("id", programId)
+      .maybeSingle(),
+    // The measures need the match ids, so they cannot join the siblings
+    // above — but they have no reason to wait on them either. Chained inside
+    // the `Promise.all` it costs `matches + stats`, not `all five + stats`.
+    (async () => {
+      const { data } = await supabase
+        .from("matches")
+        .select(
+          "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name",
+        )
         .eq("program_id", programId)
-        .is("accepted_at", null)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("programs")
-        .select("players_can_upload, upload_policy, time_zone")
-        .eq("id", programId)
-        .maybeSingle(),
-      // The measures need the match ids, so they cannot join the siblings
-      // above — but they have no reason to wait on them either. Chained inside
-      // the `Promise.all` it costs `matches + stats`, not `all five + stats`.
-      (async () => {
-        const { data } = await supabase
-          .from("matches")
-          .select(
-            "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name"
-          )
-          .eq("program_id", programId)
-          // `nullsFirst` is not a detail here: Postgres puts NULLs first on a
-          // DESC sort, so an undated row would take the front of every member's
-          // list and be reported as their last match.
-          .order("date", { ascending: false, nullsFirst: false });
+        // `nullsFirst` is not a detail here: Postgres puts NULLs first on a
+        // DESC sort, so an undated row would take the front of every member's
+        // list and be reported as their last match.
+        .order("date", { ascending: false, nullsFirst: false });
 
-        const rows = (data ?? []) as DbMatchRow[];
-        if (rows.length === 0) return { matches: rows, stats: [] as DbStatRow[] };
+      const rows = (data ?? []) as DbMatchRow[];
+      if (rows.length === 0) return { matches: rows, stats: [] as DbStatRow[] };
 
-        // The drawer's four columns, and only those — `PLAYER_MEASURES` has
-        // ten, and the other six belong to the profile page.
-        const columns = [
+      // The drawer's four columns, and only those — `PLAYER_MEASURES` has
+      // ten, and the other six belong to the profile page.
+      const columns = [
+        "match_id",
+        "is_player1",
+        ...ROSTER_DRAWER_MEASURES.map((m) => m.key),
+      ];
+      const { data: stats } = await supabase
+        .from("match_stats_with_percentages")
+        .select(columns.join(", "))
+        .in(
           "match_id",
-          "is_player1",
-          ...ROSTER_DRAWER_MEASURES.map((m) => m.key),
-        ];
-        const { data: stats } = await supabase
-          .from("match_stats_with_percentages")
-          .select(columns.join(", "))
-          .in(
-            "match_id",
-            rows.map((m) => m.id)
-          );
-        return {
-          matches: rows,
-          stats: (stats ?? []) as unknown as DbStatRow[],
-        };
-      })(),
-    ]);
+          rows.map((m) => m.id),
+        );
+      return {
+        matches: rows,
+        stats: (stats ?? []) as unknown as DbStatRow[],
+      };
+    })(),
+  ]);
 
   const { matches, stats } = matchesResult;
 
@@ -405,8 +410,8 @@ export const getRosterData = cache(async function getRosterData(
         ROSTER_DRAWER_MEASURES.map((m) => [
           m.key,
           pct(row[m.key] as string | number | null | undefined),
-        ])
-      )
+        ]),
+      ),
     );
   }
 
@@ -437,7 +442,8 @@ export const getRosterData = cache(async function getRosterData(
         match,
         isPlayer1,
         won: matchOutcome(match.score, isPlayer1),
-        values: valuesByPlayer.get(statKey(match.id, isPlayer1)) ?? emptyValues(),
+        values:
+          valuesByPlayer.get(statKey(match.id, isPlayer1)) ?? emptyValues(),
       });
       resultsByMember.set(userId, list);
     }
@@ -474,11 +480,11 @@ export const getRosterData = cache(async function getRosterData(
       // precision a six-match window does not have.
       const value = meanOfPresent(
         recentResults.map((r) => r.values[measure.key]),
-        0
+        0,
       );
       const earlier = meanOfPresent(
         earlierResults.map((r) => r.values[measure.key]),
-        0
+        0,
       );
       return {
         key: measure.key,
@@ -499,7 +505,8 @@ export const getRosterData = cache(async function getRosterData(
       name: row.display_name?.trim() || fallbackName(row.email),
       email: row.email,
       role: row.role as MemberRole,
-      managedBy: row.managed_by === "coach" ? ("coach" as const) : ("self" as const),
+      managedBy:
+        row.managed_by === "coach" ? ("coach" as const) : ("self" as const),
       uploadEnabled: row.upload_enabled,
       classYear: row.class_year,
       lineupSpot: row.lineup_spot,
@@ -519,13 +526,16 @@ export const getRosterData = cache(async function getRosterData(
       lastMatch: latest
         ? {
             opponent: shortName(
-              (latest.isPlayer1 ? latest.match.player2_name : latest.match.player1_name) ??
-                "Unknown"
+              (latest.isPlayer1
+                ? latest.match.player2_name
+                : latest.match.player1_name) ?? "Unknown",
             ),
             // `swap` when this member is stored as player2, so the games and the
             // tiebreak digits flip together — the perspective rule
             // `buildScoreString` used to carry, now shared with `<ScoreLine>`.
-            sets: scoreSetsFrom(latest.match.score, { swap: !latest.isPlayer1 }),
+            sets: scoreSetsFrom(latest.match.score, {
+              swap: !latest.isPlayer1,
+            }),
             won: latest.won,
             analyzing: latestJob ? isWorking(latestJob.status) : false,
             date: latest.match.date ? shortDate(latest.match.date) : "",
@@ -534,7 +544,8 @@ export const getRosterData = cache(async function getRosterData(
       recent: recentResults.map((r) => ({
         id: r.match.id,
         opponent: shortName(
-          (r.isPlayer1 ? r.match.player2_name : r.match.player1_name) ?? "Unknown"
+          (r.isPlayer1 ? r.match.player2_name : r.match.player1_name) ??
+            "Unknown",
         ),
         event: r.match.tournament_name,
         sets: scoreSetsFrom(r.match.score, { swap: !r.isPlayer1 }),
@@ -570,7 +581,12 @@ export const getRosterData = cache(async function getRosterData(
   // by accident of being the first to join, and a roster is read to find a
   // person, not to see who arrived when. An unranked player sorts after a
   // ranked one: a null is "we have not decided", not "line zero".
-  const rank: Record<string, number> = { owner: 0, coach: 1, staff: 2, player: 3 };
+  const rank: Record<string, number> = {
+    owner: 0,
+    coach: 1,
+    staff: 2,
+    player: 3,
+  };
   members.sort((a, b) => {
     if (rank[a.role] !== rank[b.role]) return rank[a.role] - rank[b.role];
     if (a.lineupSpot !== b.lineupSpot) {
@@ -592,9 +608,12 @@ export const getRosterData = cache(async function getRosterData(
     })),
     playersCanUpload: Boolean(programResult.data?.players_can_upload),
     uploadPolicy:
-      (programResult.data?.upload_policy as UploadPolicy | undefined) ?? "everyone",
+      (programResult.data?.upload_policy as UploadPolicy | undefined) ??
+      "everyone",
     // A row-returning function: PostgREST hands back an array of one.
-    seats: (Array.isArray(seatResult.data) ? seatResult.data[0] : seatResult.data) ?? {
+    seats: (Array.isArray(seatResult.data)
+      ? seatResult.data[0]
+      : seatResult.data) ?? {
       seats: 0,
       used: 0,
       pending: 0,

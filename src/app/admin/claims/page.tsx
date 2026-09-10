@@ -46,35 +46,39 @@ function EmptyNote({ children }: { children: React.ReactNode }) {
 export default async function ReviewQueuePage() {
   const db = createAdminClient();
 
-  const [{ data: waiting }, { data: settled }, { data: closed }, { data: requests }] =
-    await Promise.all([
-      db
-        .from("program_claims")
-        .select(CLAIM_FIELDS)
-        // `objected` sits here too: it is terminal, but it is the one outcome
-        // that means somebody disputed a program, which is worth seeing.
-        .eq("status", "pending_review")
-        .order("created_at", { ascending: true }),
-      db
-        .from("program_claims")
-        .select(CLAIM_FIELDS)
-        .eq("status", "objection_window")
-        .order("created_at", { ascending: false })
-        .limit(50),
-      db
-        .from("program_claims")
-        .select(CLAIM_FIELDS)
-        .in("status", ["rejected", "objected"])
-        .order("created_at", { ascending: false })
-        .limit(50),
-      db
-        .from("program_requests")
-        .select(
-          "id, kind, email, name, role, note, school_name, team, created_at, programs(school_name, team)"
-        )
-        .eq("status", "open")
-        .order("created_at", { ascending: true }),
-    ]);
+  const [
+    { data: waiting },
+    { data: settled },
+    { data: closed },
+    { data: requests },
+  ] = await Promise.all([
+    db
+      .from("program_claims")
+      .select(CLAIM_FIELDS)
+      // `objected` sits here too: it is terminal, but it is the one outcome
+      // that means somebody disputed a program, which is worth seeing.
+      .eq("status", "pending_review")
+      .order("created_at", { ascending: true }),
+    db
+      .from("program_claims")
+      .select(CLAIM_FIELDS)
+      .eq("status", "objection_window")
+      .order("created_at", { ascending: false })
+      .limit(50),
+    db
+      .from("program_claims")
+      .select(CLAIM_FIELDS)
+      .in("status", ["rejected", "objected"])
+      .order("created_at", { ascending: false })
+      .limit(50),
+    db
+      .from("program_requests")
+      .select(
+        "id, kind, email, name, role, note, school_name, team, created_at, programs(school_name, team)",
+      )
+      .eq("status", "open")
+      .order("created_at", { ascending: true }),
+  ]);
 
   const waitingCount = waiting?.length ?? 0;
   const settledCount = settled?.length ?? 0;
@@ -91,8 +95,8 @@ export default async function ReviewQueuePage() {
           )}
         </h1>
         <p className="mt-1.5 text-[12px] text-[var(--ink-500)]">
-          The claimed address isn&#39;t on the program&#39;s recorded staff list.
-          The staff page link is one click away.
+          The claimed address isn&#39;t on the program&#39;s recorded staff
+          list. The staff page link is one click away.
         </p>
 
         <div className="mt-5 flex flex-col gap-3">
@@ -111,9 +115,9 @@ export default async function ReviewQueuePage() {
           )}
         </h2>
         <p className="mt-1.5 text-[12px] text-[var(--ink-500)]">
-          Claims that settled — either the address was already on the program&#39;s
-          staff list, or you approved it. The chip on each row says which.
-          Nothing to do; open one only to hand it back.
+          Claims that settled — either the address was already on the
+          program&#39;s staff list, or you approved it. The chip on each row
+          says which. Nothing to do; open one only to hand it back.
         </p>
 
         <div className="mt-5 flex flex-col gap-3">

@@ -121,7 +121,7 @@ export function ServeZonesCourt({
         : null;
 
   return (
-    <div className="surface-card flex flex-col gap-2.5 px-5 pb-3 pt-4">
+    <div className="surface-card flex flex-col gap-2.5 px-5 pt-4 pb-3">
       <div className="flex justify-center">
         <div
           className={
@@ -263,14 +263,70 @@ function ServeHalfCourt({
         })}
 
       {/* Court lines — artboard 47a lines 130–137 */}
-      <line x1={DOUBLES_LEFT} y1={0} x2={DOUBLES_RIGHT} y2={0} stroke="var(--border-medium)" strokeWidth={3.2} />
-      <line x1={DOUBLES_LEFT} y1={0} x2={DOUBLES_LEFT} y2={BASELINE_Y} stroke="var(--border-medium)" strokeWidth={2} />
-      <line x1={DOUBLES_RIGHT} y1={0} x2={DOUBLES_RIGHT} y2={BASELINE_Y} stroke="var(--border-medium)" strokeWidth={2} />
-      <line x1={SINGLES_LEFT} y1={0} x2={SINGLES_LEFT} y2={BASELINE_Y} stroke="var(--border-medium)" strokeWidth={1.5} />
-      <line x1={SINGLES_RIGHT} y1={0} x2={SINGLES_RIGHT} y2={BASELINE_Y} stroke="var(--border-medium)" strokeWidth={1.5} />
-      <line x1={SINGLES_LEFT} y1={SERVICE_Y} x2={SINGLES_RIGHT} y2={SERVICE_Y} stroke="var(--border-medium)" strokeWidth={1.5} />
-      <line x1={CENTER_X} y1={SERVICE_Y} x2={CENTER_X} y2={BASELINE_Y} stroke="var(--border-medium)" strokeWidth={1.5} />
-      <line x1={CENTER_X} y1={0} x2={CENTER_X} y2={9} stroke="var(--border-medium)" strokeWidth={1.5} />
+      <line
+        x1={DOUBLES_LEFT}
+        y1={0}
+        x2={DOUBLES_RIGHT}
+        y2={0}
+        stroke="var(--border-medium)"
+        strokeWidth={3.2}
+      />
+      <line
+        x1={DOUBLES_LEFT}
+        y1={0}
+        x2={DOUBLES_LEFT}
+        y2={BASELINE_Y}
+        stroke="var(--border-medium)"
+        strokeWidth={2}
+      />
+      <line
+        x1={DOUBLES_RIGHT}
+        y1={0}
+        x2={DOUBLES_RIGHT}
+        y2={BASELINE_Y}
+        stroke="var(--border-medium)"
+        strokeWidth={2}
+      />
+      <line
+        x1={SINGLES_LEFT}
+        y1={0}
+        x2={SINGLES_LEFT}
+        y2={BASELINE_Y}
+        stroke="var(--border-medium)"
+        strokeWidth={1.5}
+      />
+      <line
+        x1={SINGLES_RIGHT}
+        y1={0}
+        x2={SINGLES_RIGHT}
+        y2={BASELINE_Y}
+        stroke="var(--border-medium)"
+        strokeWidth={1.5}
+      />
+      <line
+        x1={SINGLES_LEFT}
+        y1={SERVICE_Y}
+        x2={SINGLES_RIGHT}
+        y2={SERVICE_Y}
+        stroke="var(--border-medium)"
+        strokeWidth={1.5}
+      />
+      <line
+        x1={CENTER_X}
+        y1={SERVICE_Y}
+        x2={CENTER_X}
+        y2={BASELINE_Y}
+        stroke="var(--border-medium)"
+        strokeWidth={1.5}
+      />
+      <line
+        x1={CENTER_X}
+        y1={0}
+        x2={CENTER_X}
+        y2={9}
+        stroke="var(--border-medium)"
+        strokeWidth={1.5}
+      />
 
       {/* Zone dividers — placements view only (the cells imply them in zones) */}
       {!showZones &&
@@ -304,7 +360,14 @@ function ServeHalfCourt({
       ))}
 
       {/* Net */}
-      <line x1={14} y1={BASELINE_Y} x2={433} y2={BASELINE_Y} stroke="var(--border-medium)" strokeWidth={3.2} />
+      <line
+        x1={14}
+        y1={BASELINE_Y}
+        x2={433}
+        y2={BASELINE_Y}
+        stroke="var(--border-medium)"
+        strokeWidth={3.2}
+      />
       <text
         x={223.5}
         y={348}

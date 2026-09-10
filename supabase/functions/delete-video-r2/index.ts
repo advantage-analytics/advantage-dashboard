@@ -1,6 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { S3Client, DeleteObjectsCommand } from "npm:@aws-sdk/client-s3@^3.600.0";
+import {
+  S3Client,
+  DeleteObjectsCommand,
+} from "npm:@aws-sdk/client-s3@^3.600.0";
 
 /**
  * Delete a match's source video(s) from R2.
@@ -39,7 +42,8 @@ Deno.serve(async (req: Request) => {
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
   };
 
   if (req.method === "OPTIONS") {
@@ -55,7 +59,10 @@ Deno.serve(async (req: Request) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return json({ success: false, error: "Missing Authorization header" }, 401);
+      return json(
+        { success: false, error: "Missing Authorization header" },
+        401,
+      );
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -66,7 +73,10 @@ Deno.serve(async (req: Request) => {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    const {
+      data: { user },
+      error: userError,
+    } = await userClient.auth.getUser();
     if (userError || !user) {
       return json({ success: false, error: "Unauthorized user" }, 401);
     }
@@ -87,7 +97,10 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (matchError || !match || match.created_by !== user.id) {
-      return json({ success: false, error: "Match not found or unauthorized" }, 403);
+      return json(
+        { success: false, error: "Match not found or unauthorized" },
+        403,
+      );
     }
 
     // Every job for this match, not just the newest: a match resubmitted after
@@ -102,13 +115,16 @@ Deno.serve(async (req: Request) => {
       ...new Set(
         (jobs ?? [])
           .map((j: { video_object_key: string | null }) => j.video_object_key)
-          .filter((k): k is string => Boolean(k))
+          .filter((k): k is string => Boolean(k)),
       ),
     ];
 
     if (keys.length === 0) {
       // Nothing was ever uploaded. Not an error — most matches are imports.
-      return json({ success: true, deleted: [], reason: "no video objects" }, 200);
+      return json(
+        { success: true, deleted: [], reason: "no video objects" },
+        200,
+      );
     }
 
     const accountId = requireEnv("R2_ACCOUNT_ID");
@@ -129,7 +145,7 @@ Deno.serve(async (req: Request) => {
       new DeleteObjectsCommand({
         Bucket: requireEnv("R2_BUCKET_VIDEOS"),
         Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: false },
-      })
+      }),
     );
 
     // R2 reports per-object outcomes; a key that was already gone is a success,
@@ -139,7 +155,9 @@ Deno.serve(async (req: Request) => {
       console.error("❌ some R2 deletes failed", { matchId, errors });
     }
 
-    console.log(`✅ deleted ${result.Deleted?.length ?? 0}/${keys.length} R2 object(s) for match ${matchId}`);
+    console.log(
+      `✅ deleted ${result.Deleted?.length ?? 0}/${keys.length} R2 object(s) for match ${matchId}`,
+    );
 
     return json(
       {
@@ -147,14 +165,17 @@ Deno.serve(async (req: Request) => {
         deleted: (result.Deleted ?? []).map((d) => d.Key),
         errors: errors.map((e) => ({ key: e.Key, message: e.Message })),
       },
-      200
+      200,
     );
   } catch (err) {
     if (err instanceof ConfigError) {
       console.error(
-        `❌ delete-video-r2 is misconfigured: ${err.variable} is not set.`
+        `❌ delete-video-r2 is misconfigured: ${err.variable} is not set.`,
       );
-      return json({ success: false, error: "Video deletion is not configured." }, 503);
+      return json(
+        { success: false, error: "Video deletion is not configured." },
+        503,
+      );
     }
 
     console.error("❌ Error in delete-video-r2 Edge Function:", err);
@@ -163,7 +184,7 @@ Deno.serve(async (req: Request) => {
         success: false,
         error: err instanceof Error ? err.message : "Internal Server Error",
       },
-      500
+      500,
     );
   }
 });

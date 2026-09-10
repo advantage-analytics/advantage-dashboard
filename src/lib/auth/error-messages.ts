@@ -21,7 +21,8 @@ export const PASSWORD_RULE =
   "Password must be 8+ characters, include a number and a special character.";
 
 /** Which field owns the message. `form` is the fallback for anything unattributable. */
-export type AuthErrorField = "email" | "password" | "confirm" | "consent" | "form";
+export type AuthErrorField =
+  "email" | "password" | "confirm" | "consent" | "form";
 
 export interface AuthError {
   field: AuthErrorField;
@@ -89,7 +90,10 @@ export function toAuthError(err: unknown): AuthError {
   const raw = err instanceof Error ? err.message : String(err ?? "");
   const hit = TRANSLATIONS.find((t) => t.match.test(raw));
   if (hit) return { field: hit.field, message: hit.message };
-  return { field: "form", message: "Something went wrong. Try again in a moment." };
+  return {
+    field: "form",
+    message: "Something went wrong. Try again in a moment.",
+  };
 }
 
 /**

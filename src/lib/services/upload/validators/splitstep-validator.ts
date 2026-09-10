@@ -10,7 +10,7 @@
  * limitation of the browser, not a defect in the file, and must not block.
  */
 
-import { probeVideo, type VideoProbe } from '@/lib/video/probe';
+import { probeVideo, type VideoProbe } from "@/lib/video/probe";
 import {
   ACCEPTED_VIDEO_EXTENSIONS,
   MAX_VIDEO_SIZE_BYTES,
@@ -19,8 +19,8 @@ import {
   MIN_VIDEO_HEIGHT,
   MIN_VIDEO_WIDTH,
   RECOMMENDED_VIDEO_FPS,
-} from '@/lib/services/splitstep/config';
-import type { ValidationResult } from '../types';
+} from "@/lib/services/splitstep/config";
+import type { ValidationResult } from "../types";
 
 function formatGigabytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
@@ -37,11 +37,13 @@ function hasAcceptedExtension(fileName: string): boolean {
  * Cheap checks (name, size) run first so an obviously wrong file is rejected
  * without paying for a decode.
  */
-export async function validateSplitStepVideo(file: File): Promise<ValidationResult> {
+export async function validateSplitStepVideo(
+  file: File,
+): Promise<ValidationResult> {
   if (!hasAcceptedExtension(file.name)) {
     return {
       success: false,
-      error: `Unsupported format. Use ${ACCEPTED_VIDEO_EXTENSIONS.join(' or ')} — MP4 (H.264) works best.`,
+      error: `Unsupported format. Use ${ACCEPTED_VIDEO_EXTENSIONS.join(" or ")} — MP4 (H.264) works best.`,
     };
   }
 
@@ -62,7 +64,7 @@ export async function validateSplitStepVideo(file: File): Promise<ValidationResu
     };
   }
 
-  const details: ValidationResult['details'] = { video: probe };
+  const details: ValidationResult["details"] = { video: probe };
 
   if (probe.width < MIN_VIDEO_WIDTH || probe.height < MIN_VIDEO_HEIGHT) {
     return {
@@ -82,7 +84,10 @@ export async function validateSplitStepVideo(file: File): Promise<ValidationResu
     };
   }
 
-  if (probe.durationSeconds > 0 && probe.durationSeconds < MIN_TRIM_DURATION_SECONDS) {
+  if (
+    probe.durationSeconds > 0 &&
+    probe.durationSeconds < MIN_TRIM_DURATION_SECONDS
+  ) {
     return {
       success: false,
       error: `Video is only ${Math.round(probe.durationSeconds)}s long. That's too short to contain a match.`,
@@ -94,11 +99,11 @@ export async function validateSplitStepVideo(file: File): Promise<ValidationResu
 
   if (probe.fps === null) {
     warnings.push(
-      `This browser can't measure frame rate. Analysis needs at least ${MIN_VIDEO_FPS} fps — check your camera setting before submitting.`
+      `This browser can't measure frame rate. Analysis needs at least ${MIN_VIDEO_FPS} fps — check your camera setting before submitting.`,
     );
   } else if (probe.fps < RECOMMENDED_VIDEO_FPS) {
     warnings.push(
-      `Recorded at ${probe.fps} fps. ${RECOMMENDED_VIDEO_FPS} fps produces noticeably better ball tracking.`
+      `Recorded at ${probe.fps} fps. ${RECOMMENDED_VIDEO_FPS} fps produces noticeably better ball tracking.`,
     );
   }
 

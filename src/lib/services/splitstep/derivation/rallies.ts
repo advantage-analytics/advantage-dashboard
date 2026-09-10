@@ -11,7 +11,7 @@
  * papering over them.
  */
 
-import type { SplitStepRally, SplitStepStroke } from './types';
+import type { SplitStepRally, SplitStepStroke } from "./types";
 
 export interface RallyGrouping {
   rallies: SplitStepRally[];
@@ -46,17 +46,17 @@ export function groupIntoRallies(strokes: SplitStepStroke[]): RallyGrouping {
     const ordered = [...group].sort((a, b) => a.strokeNumber - b.strokeNumber);
 
     const numbersAreClean = ordered.every(
-      (stroke, index) => stroke.strokeNumber === index + 1
+      (stroke, index) => stroke.strokeNumber === index + 1,
     );
     if (!numbersAreClean) malformedNumbering.push(rallyId);
 
-    if (ordered[0]?.strokeType !== 'serve') missingOpeningServe.push(rallyId);
+    if (ordered[0]?.strokeType !== "serve") missingOpeningServe.push(rallyId);
 
     rallies.push({
       rallyId,
       strokes: ordered,
-      server: ordered[0]?.playerLabel ?? '',
-      serves: ordered.filter((stroke) => stroke.strokeType === 'serve'),
+      server: ordered[0]?.playerLabel ?? "",
+      serves: ordered.filter((stroke) => stroke.strokeType === "serve"),
     });
   }
 

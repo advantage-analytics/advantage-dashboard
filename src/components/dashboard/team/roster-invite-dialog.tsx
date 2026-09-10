@@ -209,7 +209,7 @@ export function RosterInviteDialog({
     linked || normalized === ""
       ? null
       : (managedPlayers.find(
-          (p) => p.email && p.email.trim().toLowerCase() === normalized
+          (p) => p.email && p.email.trim().toLowerCase() === normalized,
         ) ?? null);
   const showTripwire = emailMatch !== null && normalized !== keptSeparate;
 
@@ -251,7 +251,7 @@ export function RosterInviteDialog({
     const trailing = keepTrailing ? (parts.pop() ?? "") : "";
     const found = parts.filter((part) => LOOKS_LIKE_EMAIL.test(part));
     const rejected = parts.filter(
-      (part) => part.length > 0 && !LOOKS_LIKE_EMAIL.test(part)
+      (part) => part.length > 0 && !LOOKS_LIKE_EMAIL.test(part),
     );
 
     if (found.length > 0) {
@@ -335,7 +335,7 @@ export function RosterInviteDialog({
           // own. Which makes the address the thing the message has to name.
           if (result.linkTo && !listed) {
             const match = managedPlayers.find(
-              (p) => p.profileId === result.linkTo?.profileId
+              (p) => p.profileId === result.linkTo?.profileId,
             );
             if (match) pick(match);
           }
@@ -359,7 +359,7 @@ export function RosterInviteDialog({
               untried.length > 0
                 ? ` Nothing was sent to ${untried.join(", ")}.`
                 : ""
-            }`
+            }`,
           );
           setEmails([]);
           setEmail("");
@@ -484,7 +484,7 @@ export function RosterInviteDialog({
                 {emails.map((address) => (
                   <span
                     key={address}
-                    className="inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] py-1 pl-2.5 pr-1.5 font-mono text-[11px] text-[var(--ink-700)]"
+                    className="inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] py-1 pr-1.5 pl-2.5 font-mono text-[11px] text-[var(--ink-700)]"
                   >
                     {address}
                     <button
@@ -495,7 +495,7 @@ export function RosterInviteDialog({
                         // would otherwise also land on the input behind it.
                         event.preventDefault();
                         setEmails((current) =>
-                          current.filter((item) => item !== address)
+                          current.filter((item) => item !== address),
                         );
                       }}
                       className="cursor-pointer rounded-full p-0.5 text-[var(--ink-400)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)]"
@@ -532,7 +532,7 @@ export function RosterInviteDialog({
                 event.preventDefault();
                 absorb(
                   `${email} ${event.clipboardData.getData("text")} `,
-                  false
+                  false,
                 );
               }}
               onKeyDown={(event) => {
@@ -661,7 +661,11 @@ export function RosterInviteDialog({
             <DialogInfoRow
               tone="blue"
               icon={
-                <AlertCircle className="size-3.5" strokeWidth={1.5} aria-hidden />
+                <AlertCircle
+                  className="size-3.5"
+                  strokeWidth={1.5}
+                  aria-hidden
+                />
               }
             >
               <span className="block">
@@ -702,13 +706,14 @@ export function RosterInviteDialog({
 
           {linked ? (
             <DialogInfoRow
-              icon={<Link2 className="size-3.5" strokeWidth={1.5} aria-hidden />}
+              icon={
+                <Link2 className="size-3.5" strokeWidth={1.5} aria-hidden />
+              }
             >
               No new profile.{" "}
               {target.matchesPlayed > 0 ? (
                 <>
-                  Their{" "}
-                  <span className="tabular">{target.matchesPlayed}</span>{" "}
+                  Their <span className="tabular">{target.matchesPlayed}</span>{" "}
                   {target.matchesPlayed === 1 ? "match" : "matches"}, video and
                   stats stay on this row
                 </>
@@ -720,7 +725,9 @@ export function RosterInviteDialog({
             </DialogInfoRow>
           ) : (
             <DialogInfoRow
-              icon={<Users className="size-3.5" strokeWidth={1.5} aria-hidden />}
+              icon={
+                <Users className="size-3.5" strokeWidth={1.5} aria-hidden />
+              }
             >
               {addresses.length > 1 ? (
                 <>
@@ -821,9 +828,7 @@ function RoleCard({
       <span
         aria-hidden
         className={`mt-px flex size-3.5 shrink-0 items-center justify-center rounded-full ${
-          checked
-            ? "bg-[var(--blue)]"
-            : "border border-[var(--ink-300)]"
+          checked ? "bg-[var(--blue)]" : "border border-[var(--ink-300)]"
         }`}
       >
         {checked && (

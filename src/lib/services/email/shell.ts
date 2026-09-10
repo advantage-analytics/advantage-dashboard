@@ -120,7 +120,7 @@ function factsPanel(facts: EmailFact[]): string {
                         </tr>
                         <tr>
                           <td style="padding:2px 0 0 0; font-family:${FONT}; font-size:14px; line-height:20px; font-weight:500; color:#0D0D0D;" class="ink">${esc(fact.value)}</td>
-                        </tr>`
+                        </tr>`,
     )
     .join("");
 
@@ -244,8 +244,17 @@ export function preferenceNote(setting: string): string {
 
 /** Render one product email to a complete HTML document. */
 export function renderEmail(content: EmailContent): string {
-  const { preheader, eyebrow, heading, body, facts, list, listTitle, cta, note } =
-    content;
+  const {
+    preheader,
+    eyebrow,
+    heading,
+    body,
+    facts,
+    list,
+    listTitle,
+    cta,
+    note,
+  } = content;
 
   return `<!DOCTYPE html>
 <html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -383,7 +392,8 @@ export function renderText(content: EmailContent): string {
 
   if (content.facts?.length) {
     lines.push("");
-    for (const fact of content.facts) lines.push(`${fact.label}: ${fact.value}`);
+    for (const fact of content.facts)
+      lines.push(`${fact.label}: ${fact.value}`);
   }
 
   if (content.list?.length) {
@@ -393,7 +403,7 @@ export function renderText(content: EmailContent): string {
       lines.push(
         row.trailing
           ? `- ${row.primary} — ${row.secondary} (${row.trailing})`
-          : `- ${row.primary} — ${row.secondary}`
+          : `- ${row.primary} — ${row.secondary}`,
       );
     }
   }

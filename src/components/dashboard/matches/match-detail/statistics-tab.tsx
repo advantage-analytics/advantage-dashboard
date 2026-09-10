@@ -55,7 +55,7 @@ export function StatisticsTab({
         One column below `xl`: the v3 rail collapses at 1280px, so a two-column
         pane there is still ~916px wide — narrower viewports stack and scroll.
       */}
-      <div className="grid xl:grid-cols-2 gap-3.5 flex-1 min-h-0">
+      <div className="grid min-h-0 flex-1 gap-3.5 xl:grid-cols-2">
         <HeadToHeadCard />
 
         <div className="flex flex-col gap-3.5">

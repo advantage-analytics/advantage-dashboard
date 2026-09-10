@@ -45,7 +45,7 @@ export async function getPreferences(): Promise<Preferences> {
   const { data, error } = await supabase
     .from("user_preferences")
     .select(
-      "notify_analysis_ready, notify_analysis_failed, weekly_team_digest, default_workspace, match_report_opens_at, stat_definitions_on_hover"
+      "notify_analysis_ready, notify_analysis_failed, weekly_team_digest, default_workspace, match_report_opens_at, stat_definitions_on_hover",
     )
     .eq("user_id", user.id)
     .maybeSingle();

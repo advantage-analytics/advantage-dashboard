@@ -1,8 +1,8 @@
-import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import * as path from 'node:path';
+import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import * as path from "node:path";
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Shared plumbing for specs that run against the live Supabase project — the
@@ -22,13 +22,13 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 function loadEnvLocal(): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const dir of [process.cwd(), path.resolve(__dirname, '../..')]) {
+  for (const dir of [process.cwd(), path.resolve(__dirname, "../..")]) {
     try {
-      const raw = readFileSync(path.join(dir, '.env.local'), 'utf8');
-      for (const line of raw.split('\n')) {
+      const raw = readFileSync(path.join(dir, ".env.local"), "utf8");
+      for (const line of raw.split("\n")) {
         const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
-        const eq = trimmed.indexOf('=');
+        if (!trimmed || trimmed.startsWith("#")) continue;
+        const eq = trimmed.indexOf("=");
         if (eq === -1) continue;
         const key = trimmed.slice(0, eq).trim();
         let value = trimmed.slice(eq + 1).trim();
@@ -52,21 +52,21 @@ const fileEnv = loadEnvLocal();
 const env = (key: string): string | undefined =>
   process.env[key] ?? fileEnv[key];
 
-export const SUPABASE_URL = env('NEXT_PUBLIC_SUPABASE_URL');
-export const ANON_KEY = env('NEXT_PUBLIC_SUPABASE_ANON_KEY');
-export const SERVICE_ROLE_KEY = env('SUPABASE_SERVICE_ROLE_KEY');
+export const SUPABASE_URL = env("NEXT_PUBLIC_SUPABASE_URL");
+export const ANON_KEY = env("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+export const SERVICE_ROLE_KEY = env("SUPABASE_SERVICE_ROLE_KEY");
 export const HAVE_ENV = Boolean(SUPABASE_URL && ANON_KEY && SERVICE_ROLE_KEY);
 
 /** For `test.skip(!HAVE_ENV, SKIP_REASON)` — the suite passes in a keyless checkout. */
 export const SKIP_REASON =
-  'NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY not set';
+  "NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY not set";
 
 // ---------------------------------------------------------------------------
 // Postgres error codes, surfaced by PostgREST as `error.code`.
 // ---------------------------------------------------------------------------
 
-export const INSUFFICIENT_PRIVILEGE = '42501';
-export const NO_DATA_FOUND = 'P0002';
+export const INSUFFICIENT_PRIVILEGE = "42501";
+export const NO_DATA_FOUND = "P0002";
 
 // ---------------------------------------------------------------------------
 // Sessions.
@@ -99,7 +99,7 @@ export function createAdminClient(): SupabaseClient {
 export async function createLogin(
   admin: SupabaseClient,
   label: string,
-  opts: { mark: string; password: string; authUserIds: string[] }
+  opts: { mark: string; password: string; authUserIds: string[] },
 ): Promise<Session> {
   const email = `${opts.mark}-${label}@example.com`;
   const { data, error } = await admin.auth.admin.createUser({
@@ -136,12 +136,12 @@ export async function createLogin(
 export async function createLogins(
   admin: SupabaseClient,
   labels: string[],
-  opts: { mark: string; password: string; authUserIds: string[] }
+  opts: { mark: string; password: string; authUserIds: string[] },
 ): Promise<Session[]> {
   const results = await Promise.allSettled(
-    labels.map((label) => createLogin(admin, label, opts))
+    labels.map((label) => createLogin(admin, label, opts)),
   );
-  const failed = results.find((r) => r.status === 'rejected');
+  const failed = results.find((r) => r.status === "rejected");
   if (failed) throw (failed as PromiseRejectedResult).reason;
   return (results as PromiseFulfilledResult<Session>[]).map((r) => r.value);
 }
@@ -150,7 +150,7 @@ export async function createLogins(
  *  one fails. Auth deletion cascades `public.users` and `program_members`. */
 export async function deleteAuthUsers(
   admin: SupabaseClient,
-  ids: string[]
+  ids: string[],
 ): Promise<void> {
   await Promise.allSettled(ids.map((id) => admin.auth.admin.deleteUser(id)));
 }

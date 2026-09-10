@@ -9,25 +9,25 @@ import {
   IImportProviderStrategy,
   ProviderConfig,
   ValidationResult,
-} from '../types';
+} from "../types";
 
 /** Required sheets in SwingVision export files */
 const SWINGVISION_REQUIRED_SHEETS = [
-  'Settings',
-  'Shots',
-  'Points',
-  'Games',
-  'Sets',
-  'Stats',
+  "Settings",
+  "Shots",
+  "Points",
+  "Games",
+  "Sets",
+  "Stats",
 ] as const;
 
 /** SwingVision provider configuration */
 const SWINGVISION_CONFIG: ProviderConfig = {
-  id: 'swing-vision',
-  name: 'SwingVision',
-  acceptedFileTypes: ['.xlsx'],
+  id: "swing-vision",
+  name: "SwingVision",
+  acceptedFileTypes: [".xlsx"],
   acceptedMimeTypes: [
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ],
   maxFileSizeMB: 50,
   requiredSheets: [...SWINGVISION_REQUIRED_SHEETS],
@@ -40,7 +40,7 @@ const SWINGVISION_CONFIG: ProviderConfig = {
  * Server-side validation (sheet structure) is handled by the Python validation endpoint.
  */
 export class SwingVisionUploadStrategy implements IImportProviderStrategy {
-  readonly kind = 'import' as const;
+  readonly kind = "import" as const;
   readonly config: ProviderConfig = SWINGVISION_CONFIG;
 
   /**
@@ -57,21 +57,21 @@ export class SwingVisionUploadStrategy implements IImportProviderStrategy {
     // Check file extension
     const fileName = file.name.toLowerCase();
     const hasValidExtension = this.config.acceptedFileTypes.some((ext) =>
-      fileName.endsWith(ext)
+      fileName.endsWith(ext),
     );
 
     if (!hasValidExtension) {
       return {
         success: false,
-        error: `Invalid file type. SwingVision requires ${this.config.acceptedFileTypes.join(', ')} files.`,
+        error: `Invalid file type. SwingVision requires ${this.config.acceptedFileTypes.join(", ")} files.`,
       };
     }
 
     // Check MIME type (browsers may report different MIME types)
     const validMimeTypes = [
       ...this.config.acceptedMimeTypes,
-      'application/octet-stream', // Some browsers report this for xlsx
-      '', // Some browsers don't report MIME type
+      "application/octet-stream", // Some browsers report this for xlsx
+      "", // Some browsers don't report MIME type
     ];
 
     if (file.type && !validMimeTypes.includes(file.type)) {
@@ -95,7 +95,8 @@ export class SwingVisionUploadStrategy implements IImportProviderStrategy {
     if (!validFilenamePattern.test(file.name)) {
       return {
         success: false,
-        error: 'Invalid filename. Use only letters, numbers, spaces, hyphens, underscores, and parentheses.',
+        error:
+          "Invalid filename. Use only letters, numbers, spaces, hyphens, underscores, and parentheses.",
       };
     }
 
@@ -106,7 +107,7 @@ export class SwingVisionUploadStrategy implements IImportProviderStrategy {
    * Get accept string for file input element
    */
   getAcceptString(): string {
-    return this.config.acceptedFileTypes.join(',');
+    return this.config.acceptedFileTypes.join(",");
   }
 }
 

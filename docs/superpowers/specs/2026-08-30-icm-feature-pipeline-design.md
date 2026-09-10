@@ -66,14 +66,14 @@ task queues).
 Each stage `CONTEXT.md` is a three-part contract: **Inputs** (exact files to
 load), **Process** (the job), **Outputs** (files written to `output/`).
 
-| Stage | Job | Primary output |
-|---|---|---|
-| 01_brief | Refine BRIEF-SEED.md into goal/scope/non-goals/constraints/success criteria; ask the human when ambiguous | output/brief.md |
-| 02_design | 2–3 approaches + recommendation, then the full design; trace routes first; guardrails doc when UI is touched | output/design.md |
-| 03_plan | Ordered implementation plan; steps sized for one subagent context (split by surface) | output/plan.md |
-| 04_tasks | Decompose plan into queue tasks per task-add conventions; append to `.claude/tasks/<branch-slug>.md` | output/tasks.md + queue append |
-| 05_build | Mechanical: point at the loop drain if tasks remain; when drained, record task statuses + commit range | output/build.md |
-| 06_review | Run pr-check; capture findings and resolutions; human sign-off edit | output/review.md |
+| Stage     | Job                                                                                                          | Primary output                 |
+| --------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| 01_brief  | Refine BRIEF-SEED.md into goal/scope/non-goals/constraints/success criteria; ask the human when ambiguous    | output/brief.md                |
+| 02_design | 2–3 approaches + recommendation, then the full design; trace routes first; guardrails doc when UI is touched | output/design.md               |
+| 03_plan   | Ordered implementation plan; steps sized for one subagent context (split by surface)                         | output/plan.md                 |
+| 04_tasks  | Decompose plan into queue tasks per task-add conventions; append to `.claude/tasks/<branch-slug>.md`         | output/tasks.md + queue append |
+| 05_build  | Mechanical: point at the loop drain if tasks remain; when drained, record task statuses + commit range       | output/build.md                |
+| 06_review | Run pr-check; capture findings and resolutions; human sign-off edit                                          | output/review.md               |
 
 ## Runner — /feature-next <slug>
 

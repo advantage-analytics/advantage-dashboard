@@ -57,7 +57,7 @@ export interface RosterIdRow {
  * is total: an id belonging to nobody on this roster passes through unchanged.
  */
 export function canonicalRosterIds(
-  rows: readonly RosterIdRow[]
+  rows: readonly RosterIdRow[],
 ): Map<string, string> {
   const canonical = new Map<string, string>();
   for (const row of rows) {
@@ -77,7 +77,7 @@ export function canonicalRosterIds(
  * one loop decides which ids belong to a roster row, and this is a view of it.
  */
 export function rosterMatchIds(
-  rows: readonly RosterIdRow[]
+  rows: readonly RosterIdRow[],
 ): ReadonlySet<string> {
   return new Set(canonicalRosterIds(rows).keys());
 }

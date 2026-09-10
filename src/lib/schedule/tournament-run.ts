@@ -62,11 +62,11 @@ export function runFinish(entry: EventEntry): string | null {
   // there is no ladder to read, so the array's last row is the only answer
   // available — `reduce` over an all-`MAX_SAFE_INTEGER` pool lands there.
   const ranked = entry.matches.filter(
-    (match) => roundRank(match.round) !== Number.MAX_SAFE_INTEGER
+    (match) => roundRank(match.round) !== Number.MAX_SAFE_INTEGER,
   );
   const pool = ranked.length > 0 ? ranked : entry.matches;
   const last = pool.reduce((furthest, match) =>
-    roundRank(match.round) >= roundRank(furthest.round) ? match : furthest
+    roundRank(match.round) >= roundRank(furthest.round) ? match : furthest,
   );
 
   if (!last.round) return null;

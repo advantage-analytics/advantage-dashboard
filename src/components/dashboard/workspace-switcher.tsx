@@ -16,7 +16,11 @@ import { squadDisambiguator, type Workspace } from "@/lib/workspace/types";
  * sub-label swap and a collapsed tooltip. This is the plain list the profile
  * menu needs. They share the server action and the ordering, not the chrome.
  */
-export function WorkspaceOptionList({ onSwitched }: { onSwitched?: () => void }) {
+export function WorkspaceOptionList({
+  onSwitched,
+}: {
+  onSwitched?: () => void;
+}) {
   const { active, available } = useWorkspace();
   const [, startTransition] = useTransition();
   // One state, not two. `isPending` and a pending id answered the same question
@@ -63,29 +67,40 @@ export function WorkspaceOptionList({ onSwitched }: { onSwitched?: () => void })
             onClick={() => switchTo(workspace)}
             className={cn(
               MENU_ROW_CLASS,
-              "text-left disabled:cursor-not-allowed disabled:opacity-60"
+              "text-left disabled:cursor-not-allowed disabled:opacity-60",
             )}
           >
             <span className={MENU_LEAD_CLASS}>
               {pendingId === workspace.id ? (
-                <Loader2 className="size-3 animate-spin text-[var(--ink-400)]" aria-hidden="true" />
+                <Loader2
+                  className="size-3 animate-spin text-[var(--ink-400)]"
+                  aria-hidden="true"
+                />
               ) : isActive ? (
-                <Check className="size-[14px] text-[var(--blue)]" strokeWidth={2} aria-hidden="true" />
+                <Check
+                  className="size-[14px] text-[var(--blue)]"
+                  strokeWidth={2}
+                  aria-hidden="true"
+                />
               ) : null}
             </span>
 
             <span
               className={cn(
                 "min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)]",
-                isActive && "font-medium"
+                isActive && "font-medium",
               )}
             >
               {workspace.name}
-              {squad && <span className="text-[var(--ink-500)]"> · {squad}</span>}
+              {squad && (
+                <span className="text-[var(--ink-500)]"> · {squad}</span>
+              )}
             </span>
 
             {workspace.kind === "team" && (
-              <span className="shrink-0 text-[11px] text-[var(--ink-500)]">team</span>
+              <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
+                team
+              </span>
             )}
           </button>
         );

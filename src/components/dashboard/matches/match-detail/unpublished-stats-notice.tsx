@@ -25,18 +25,18 @@ export function UnpublishedStatsNotice() {
           className="mt-0.5 h-4 w-4 shrink-0 text-[#3B82F6]"
           strokeWidth={1.5}
         />
-        <div className="flex flex-col gap-1.5 min-w-0">
-          <p className="text-[13px] font-medium text-[var(--color-text-primary)] leading-[19.5px]">
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <p className="text-[13px] leading-[19.5px] font-medium text-[var(--color-text-primary)]">
             Point-by-point analysis is ready. Match statistics aren&apos;t
             published for this match.
           </p>
-          <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
+          <p className="text-[12px] leading-[19.8px] font-normal text-[var(--color-text-body)]">
             Every point below has been checked against the final score you
             entered, so the timeline, key moments and court placement are
             accurate. Aggregate totals aren&apos;t shown because parts of them
-            can&apos;t be measured reliably from this video yet &mdash; showing a
-            zero would read as a fact about your match rather than a gap in the
-            analysis.
+            can&apos;t be measured reliably from this video yet &mdash; showing
+            a zero would read as a fact about your match rather than a gap in
+            the analysis.
           </p>
         </div>
       </div>

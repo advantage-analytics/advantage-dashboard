@@ -129,7 +129,7 @@ function OptionCard({
       role="radio"
       aria-checked={selected}
       onClick={onSelect}
-      className={`flex h-10 cursor-pointer items-center gap-2.5 whitespace-nowrap rounded-[var(--radius-element)] border px-3 text-[12px] font-medium text-[var(--ink-900)] transition-colors duration-150 ${
+      className={`flex h-10 cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] border px-3 text-[12px] font-medium whitespace-nowrap text-[var(--ink-900)] transition-colors duration-150 ${
         selected
           ? "border-[var(--blue)] bg-[var(--blue-tint-08)]"
           : "border-[var(--border-field)] hover:bg-[var(--surface-subtle)]"
@@ -137,7 +137,11 @@ function OptionCard({
     >
       {selected ? (
         <span className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-full bg-[var(--blue)]">
-          <Check className="size-[9px] text-white" strokeWidth={2.5} aria-hidden="true" />
+          <Check
+            className="size-[9px] text-white"
+            strokeWidth={2.5}
+            aria-hidden="true"
+          />
         </span>
       ) : (
         <span className="inline-flex size-3.5 shrink-0 rounded-full border border-[var(--ink-300)]" />
@@ -161,18 +165,28 @@ function Question({
   label: string;
   hint: string;
   value: boolean | undefined;
-  options: readonly [{ value: boolean; label: string }, { value: boolean; label: string }];
+  options: readonly [
+    { value: boolean; label: string },
+    { value: boolean; label: string },
+  ];
   onChange: (value: boolean) => void;
 }) {
   return (
     <div className="flex flex-col gap-2.5">
       <span className="inline-flex items-center gap-1">
         <span className="eyebrow">{label}</span>
-        <span aria-label="Required" className="text-[12px] leading-none text-[var(--error)]">
+        <span
+          aria-label="Required"
+          className="text-[12px] leading-none text-[var(--error)]"
+        >
           *
         </span>
       </span>
-      <div role="radiogroup" aria-label={label} className="grid grid-cols-2 gap-2">
+      <div
+        role="radiogroup"
+        aria-label={label}
+        className="grid grid-cols-2 gap-2"
+      >
         {options.map((option) => (
           <OptionCard
             key={option.label}
@@ -353,7 +367,7 @@ function TrimStepContentImpl({
       };
       rafRef.current = requestAnimationFrame(tick);
     },
-    []
+    [],
   );
 
   const seekTo = useCallback(
@@ -362,7 +376,7 @@ function TrimStepContentImpl({
       if (!el) return;
       el.currentTime = Math.max(0, Math.min(duration, time));
     },
-    [duration]
+    [duration],
   );
 
   // The position a drag most recently asked the video for. Seeks are
@@ -379,7 +393,7 @@ function TrimStepContentImpl({
       wantedSeekRef.current = null;
       el.currentTime = Math.max(0, Math.min(duration, time));
     },
-    [duration]
+    [duration],
   );
 
   const positionFromEvent = useCallback((clientX: number): number => {
@@ -397,7 +411,7 @@ function TrimStepContentImpl({
       handle === "start"
         ? Math.max(0, Math.min(time, other - frameStep))
         : Math.min(duration, Math.max(time, other + frameStep)),
-    [duration, frameStep]
+    [duration, frameStep],
   );
 
   /** A keyboard nudge commits at once — one step, one write. */
@@ -413,7 +427,7 @@ function TrimStepContentImpl({
         seekTo(next);
       }
     },
-    [start, end, clampCut, onTrimChange, seekTo]
+    [start, end, clampCut, onTrimChange, seekTo],
   );
 
   // The drag itself. The pointer's position lands in a ref; one frame later
@@ -424,7 +438,10 @@ function TrimStepContentImpl({
   const liveRafRef = useRef<number | null>(null);
   const applyDrag = useCallback(
     (grab: Grab, time: number) => {
-      const current = liveRef.current ?? { start: committedStart, end: committedEnd };
+      const current = liveRef.current ?? {
+        start: committedStart,
+        end: committedEnd,
+      };
       let next: { start: number; end: number };
       if (grab === "window") {
         // Shift both cuts by the same amount, stopped by the file's ends.
@@ -433,9 +450,15 @@ function TrimStepContentImpl({
         const nextStart = Math.max(0, Math.min(duration - span, wanted));
         next = { start: nextStart, end: nextStart + span };
       } else if (grab === "start") {
-        next = { start: clampCut("start", time, current.end), end: current.end };
+        next = {
+          start: clampCut("start", time, current.end),
+          end: current.end,
+        };
       } else {
-        next = { start: current.start, end: clampCut("end", time, current.start) };
+        next = {
+          start: current.start,
+          end: clampCut("end", time, current.start),
+        };
       }
       liveRef.current = next;
       if (liveRafRef.current === null) {
@@ -448,7 +471,7 @@ function TrimStepContentImpl({
         });
       }
     },
-    [committedStart, committedEnd, duration, clampCut, seekLatest]
+    [committedStart, committedEnd, duration, clampCut, seekLatest],
   );
 
   /**
@@ -459,27 +482,52 @@ function TrimStepContentImpl({
     (handle: Handle, clientX: number) => {
       const rail = railRef.current;
       if (!rail || duration <= 0) return;
-      const span = Math.max(MIN_PRECISION_SPAN_SECONDS, duration / PRECISION_ZOOM);
+      const span = Math.max(
+        MIN_PRECISION_SPAN_SECONDS,
+        duration / PRECISION_ZOOM,
+      );
       // Short clip — the whole thing already fits at frame resolution.
       if (span >= duration) return;
 
       const rect = rail.getBoundingClientRect();
-      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const ratio = Math.max(
+        0,
+        Math.min(1, (clientX - rect.left) / rect.width),
+      );
       const current = liveRef.current ?? { start, end };
       const anchor = handle === "start" ? current.start : current.end;
-      const nextStart = Math.max(0, Math.min(duration - span, anchor - ratio * span));
+      const nextStart = Math.max(
+        0,
+        Math.min(duration - span, anchor - ratio * span),
+      );
 
       setPrecision(true);
       animateView(nextStart, span);
     },
-    [duration, start, end, animateView]
+    [duration, start, end, animateView],
   );
 
   // Drag inputs go through a ref so the window subscription keys only on
   // `dragging`. Written in an effect, not during render.
-  const dragCtx = useRef({ applyDrag, positionFromEvent, engagePrecision, precision, duration, onTrimChange, seekTo });
+  const dragCtx = useRef({
+    applyDrag,
+    positionFromEvent,
+    engagePrecision,
+    precision,
+    duration,
+    onTrimChange,
+    seekTo,
+  });
   useEffect(() => {
-    dragCtx.current = { applyDrag, positionFromEvent, engagePrecision, precision, duration, onTrimChange, seekTo };
+    dragCtx.current = {
+      applyDrag,
+      positionFromEvent,
+      engagePrecision,
+      precision,
+      duration,
+      onTrimChange,
+      seekTo,
+    };
   });
 
   useEffect(() => {
@@ -489,7 +537,8 @@ function TrimStepContentImpl({
     // pointer leaves the 24px handle — otherwise it flickers to an arrow the
     // moment you move faster than the handle can follow.
     const previousCursor = document.body.style.cursor;
-    document.body.style.cursor = dragging === "window" ? "grabbing" : "ew-resize";
+    document.body.style.cursor =
+      dragging === "window" ? "grabbing" : "ew-resize";
 
     // Hold-to-zoom, re-armed on every move. A quick grab-and-throw across the
     // rail stays at full extent; rest the pointer for a beat and the window
@@ -521,7 +570,10 @@ function TrimStepContentImpl({
           ...prev,
           start: Math.max(
             0,
-            Math.min(ctx.duration - prev.span, prev.start + direction * prev.span * AUTOPAN_STEP)
+            Math.min(
+              ctx.duration - prev.span,
+              prev.start + direction * prev.span * AUTOPAN_STEP,
+            ),
           ),
         };
       });
@@ -577,7 +629,7 @@ function TrimStepContentImpl({
         }
       }, HOLD_TO_ZOOM_MS);
     },
-    [committedStart, committedEnd, positionFromEvent]
+    [committedStart, committedEnd, positionFromEvent],
   );
 
   const nudge = useCallback(
@@ -585,7 +637,7 @@ function TrimStepContentImpl({
       const from = handle === "start" ? start : end;
       moveHandle(handle, from + (coarse ? 1 : frameStep) * direction);
     },
-    [start, end, frameStep, moveHandle]
+    [start, end, frameStep, moveHandle],
   );
 
   const seekBy = useCallback(
@@ -594,7 +646,7 @@ function TrimStepContentImpl({
       if (!el) return;
       seekTo(el.currentTime + delta);
     },
-    [seekTo]
+    [seekTo],
   );
 
   const togglePlay = useCallback(() => {
@@ -640,7 +692,7 @@ function TrimStepContentImpl({
         // rail still work; only the thumbnail is missing.
       }
     },
-    [applyPlayhead]
+    [applyPlayhead],
   );
 
   /**
@@ -648,24 +700,28 @@ function TrimStepContentImpl({
    * knows its dimensions but has not decoded a frame, so the player sits black
    * until something seeks it.
    */
-  const paintFirstFrame = useCallback((e: React.SyntheticEvent<HTMLVideoElement>) => {
-    const el = e.currentTarget;
-    if (el.currentTime === 0) el.currentTime = 0.001;
-  }, []);
+  const paintFirstFrame = useCallback(
+    (e: React.SyntheticEvent<HTMLVideoElement>) => {
+      const el = e.currentTarget;
+      if (el.currentTime === 0) el.currentTime = 0.001;
+    },
+    [],
+  );
 
   const handleTimeUpdate = useCallback(
     (e: React.SyntheticEvent<HTMLVideoElement>) => {
       playheadRef.current = e.currentTarget.currentTime;
       applyPlayhead();
     },
-    [applyPlayhead]
+    [applyPlayhead],
   );
 
   // ---- Derived geometry ----
 
   const pct = useCallback(
-    (time: number) => (view.span > 0 ? ((time - view.start) / view.span) * 100 : 0),
-    [view]
+    (time: number) =>
+      view.span > 0 ? ((time - view.start) / view.span) * 100 : 0,
+    [view],
   );
 
   const startPct = pct(start);
@@ -682,7 +738,9 @@ function TrimStepContentImpl({
   const selectionWidthPct = Math.max(0, visibleEndPct - visibleStartPct);
 
   const aspect =
-    probe && probe.width > 0 && probe.height > 0 ? probe.width / probe.height : FALLBACK_ASPECT;
+    probe && probe.width > 0 && probe.height > 0
+      ? probe.width / probe.height
+      : FALLBACK_ASPECT;
   const previewHeightPx = Math.round(PREVIEW_WIDTH_PX / aspect);
 
   /**
@@ -720,8 +778,8 @@ function TrimStepContentImpl({
           aria-hidden="true"
         />
         <span>
-          A saved draft keeps everything but the video. Go back a step and pick the file again to
-          check it here.
+          A saved draft keeps everything but the video. Go back a step and pick
+          the file again to check it here.
         </span>
       </div>
     );
@@ -754,7 +812,7 @@ function TrimStepContentImpl({
           className="block size-full cursor-pointer bg-black object-contain"
         />
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-gradient-to-t from-black/55 to-transparent pb-2.5 pt-8">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-gradient-to-t from-black/55 to-transparent pt-8 pb-2.5">
           <div className="pointer-events-auto flex items-center gap-2">
             <button
               type="button"
@@ -762,7 +820,11 @@ function TrimStepContentImpl({
               className={controlCls}
               aria-label="Back one frame"
             >
-              <SkipBack className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+              <SkipBack
+                className="size-3.5"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
             </button>
             <button
               type="button"
@@ -771,7 +833,11 @@ function TrimStepContentImpl({
               className={controlCls}
             >
               {isPlaying ? (
-                <Pause className="size-4" strokeWidth={1.5} aria-hidden="true" />
+                <Pause
+                  className="size-4"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
               ) : (
                 <Play className="size-4" strokeWidth={1.5} aria-hidden="true" />
               )}
@@ -782,7 +848,11 @@ function TrimStepContentImpl({
               className={controlCls}
               aria-label="Forward one frame"
             >
-              <SkipForward className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+              <SkipForward
+                className="size-3.5"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
             </button>
             <span className="mx-1 h-3 w-px bg-white/35" aria-hidden="true" />
             <button
@@ -792,9 +862,17 @@ function TrimStepContentImpl({
               className={controlCls}
             >
               {isMuted ? (
-                <VolumeX className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                <VolumeX
+                  className="size-3.5"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
               ) : (
-                <Volume2 className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                <Volume2
+                  className="size-3.5"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
               )}
             </button>
           </div>
@@ -803,7 +881,7 @@ function TrimStepContentImpl({
         {/* Playhead time — text written imperatively, see applyPlayhead. */}
         <span
           ref={clockElRef}
-          className="mono tabular pointer-events-none absolute right-2.5 top-2.5 rounded-[var(--radius-cell)] bg-black/55 px-1.5 py-0.5 text-[10px] text-white/85"
+          className="mono tabular pointer-events-none absolute top-2.5 right-2.5 rounded-[var(--radius-cell)] bg-black/55 px-1.5 py-0.5 text-[10px] text-white/85"
         >
           {formatTimecode(0)}
         </span>
@@ -839,7 +917,9 @@ function TrimStepContentImpl({
                 style={{ height: previewHeightPx }}
               />
               <div className="mono tabular bg-white py-1 text-center text-[10px] text-[var(--ink-700)]">
-                {formatClock(dragging === "start" ? start : end, { tenths: true })}
+                {formatClock(dragging === "start" ? start : end, {
+                  tenths: true,
+                })}
               </div>
             </div>
           ) : null}
@@ -848,7 +928,7 @@ function TrimStepContentImpl({
           <div
             ref={railRef}
             onPointerDown={(e) => seekTo(positionFromEvent(e.clientX))}
-            className="relative cursor-pointer touch-none select-none rounded-[var(--radius-element)] bg-[var(--ink-900)]"
+            className="relative cursor-pointer touch-none rounded-[var(--radius-element)] bg-[var(--ink-900)] select-none"
             style={{ height: RAIL_HEIGHT_PX }}
           >
             {duration > 0 ? (
@@ -876,7 +956,7 @@ function TrimStepContentImpl({
                 <span className="pointer-events-none absolute inset-0 rounded-[var(--radius-element)] bg-[rgba(13,13,13,0.22)]" />
 
                 {filmstrip.isExtracting ? (
-                  <span className="eyebrow-sm pointer-events-none absolute right-2 top-2 rounded-[var(--radius-cell)] bg-black/55 px-1.5 py-0.5 text-white/70">
+                  <span className="eyebrow-sm pointer-events-none absolute top-2 right-2 rounded-[var(--radius-cell)] bg-black/55 px-1.5 py-0.5 text-white/70">
                     Reading frames
                   </span>
                 ) : null}
@@ -900,10 +980,13 @@ function TrimStepContentImpl({
                     e.preventDefault();
                     startDrag("window", e.clientX);
                   }}
-                  className={`absolute -bottom-0.5 -top-0.5 z-[1] rounded-[4px] border-2 border-[var(--blue)] ${
+                  className={`absolute -top-0.5 -bottom-0.5 z-[1] rounded-[4px] border-2 border-[var(--blue)] ${
                     dragging === "window" ? "cursor-grabbing" : "cursor-grab"
                   }`}
-                  style={{ left: `${visibleStartPct}%`, width: `${selectionWidthPct}%` }}
+                  style={{
+                    left: `${visibleStartPct}%`,
+                    width: `${selectionWidthPct}%`,
+                  }}
                 />
 
                 {/* Playhead — a single quiet hairline the rail's own height,
@@ -925,7 +1008,9 @@ function TrimStepContentImpl({
                       key={handle}
                       role="slider"
                       tabIndex={0}
-                      aria-label={handle === "start" ? "Trim start" : "Trim end"}
+                      aria-label={
+                        handle === "start" ? "Trim start" : "Trim end"
+                      }
                       aria-valuemin={0}
                       aria-valuemax={duration}
                       aria-valuenow={value}
@@ -944,17 +1029,19 @@ function TrimStepContentImpl({
                           nudge(handle, 1, e.shiftKey);
                         }
                       }}
-                      className={`group/handle absolute -bottom-0.5 -top-0.5 z-[3] w-6 cursor-ew-resize ${focusRingCls}`}
+                      className={`group/handle absolute -top-0.5 -bottom-0.5 z-[3] w-6 cursor-ew-resize ${focusRingCls}`}
                       style={{ left: `calc(${handlePct}% - 13px)` }}
                     >
                       {/* 10px of Signal Blue on a 24px grab; hover and the
                           drag itself darken it so the hand knows it has it. */}
                       <span
                         className={`absolute inset-y-0 left-[7px] w-[10px] transition-colors duration-[var(--duration-hover)] group-hover/handle:bg-[var(--blue-hover)] ${
-                          dragging === handle ? "bg-[var(--blue-hover)]" : "bg-[var(--blue)]"
+                          dragging === handle
+                            ? "bg-[var(--blue-hover)]"
+                            : "bg-[var(--blue)]"
                         } ${handle === "start" ? "rounded-l-[4px]" : "rounded-r-[4px]"}`}
                       >
-                        <span className="absolute left-1 top-1/2 -mt-[7px] h-3.5 w-0.5 rounded-[1px] bg-white/90" />
+                        <span className="absolute top-1/2 left-1 -mt-[7px] h-3.5 w-0.5 rounded-[1px] bg-white/90" />
                       </span>
                     </div>
                   );
@@ -992,7 +1079,8 @@ function TrimStepContentImpl({
               aria-hidden="true"
             />
             <span>
-              The window is under {formatClipLength(minTrimSeconds)} — widen it to cover the match.
+              The window is under {formatClipLength(minTrimSeconds)} — widen it
+              to cover the match.
             </span>
           </div>
         ) : null}

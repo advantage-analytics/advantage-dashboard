@@ -39,7 +39,16 @@ interface MatchesGridProps {
  * — head nothing and carry an empty label to keep the header's column count in
  * step with the row's.
  */
-const COLUMNS: string[] = ["Date", "Opponent", "Event", "Score", "Result", "", "", ""];
+const COLUMNS: string[] = [
+  "Date",
+  "Opponent",
+  "Event",
+  "Score",
+  "Result",
+  "",
+  "",
+  "",
+];
 
 export function MatchesGrid({
   matches,
@@ -66,9 +75,10 @@ export function MatchesGrid({
   // memoized so a re-render that does not change the rows does not re-scan them.
   const needsYear = useMemo(() => {
     const thisYear = new Date().getFullYear();
-    return [...drafts.map((d) => d.updatedAt), ...matches.map((m) => m.date)].some(
-      (date) => new Date(date).getFullYear() !== thisYear
-    );
+    return [
+      ...drafts.map((d) => d.updatedAt),
+      ...matches.map((m) => m.date),
+    ].some((date) => new Date(date).getFullYear() !== thisYear);
   }, [drafts, matches]);
   const cardStyle = {
     padding: "2px 24px 6px",
@@ -77,9 +87,13 @@ export function MatchesGrid({
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:hidden">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:hidden">
         {matches.map((match) => (
-          <MatchCardGallery key={match.id} match={match} isNew={match.id === newMatchId} />
+          <MatchCardGallery
+            key={match.id}
+            match={match}
+            isNew={match.id === newMatchId}
+          />
         ))}
       </div>
 
@@ -92,7 +106,7 @@ export function MatchesGrid({
         <div className="surface-card" style={cardStyle}>
           {/* Column headers — flush at the card inset, hairline underneath. */}
           <div
-            className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pb-2.5 pt-3.5`}
+            className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pt-3.5 pb-2.5`}
             style={LIST_GRID_COLS}
             role="row"
           >

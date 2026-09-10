@@ -17,7 +17,7 @@
  */
 
 /** A member's standing inside a team workspace. Personal is always `owner`. */
-export type ProgramRole = 'owner' | 'coach' | 'staff' | 'player';
+export type ProgramRole = "owner" | "coach" | "staff" | "player";
 
 /**
  * `programs.upload_policy` — who may send team video. A ladder, top to bottom:
@@ -26,30 +26,30 @@ export type ProgramRole = 'owner' | 'coach' | 'staff' | 'player';
  * `upload_enabled`). `players_can_upload` is derived from it — true exactly
  * at `everyone` — so the boolean readers keep their meaning.
  */
-export type UploadPolicy = 'owner' | 'owner_coaches' | 'staff' | 'everyone';
+export type UploadPolicy = "owner" | "owner_coaches" | "staff" | "everyone";
 
 export const UPLOAD_POLICIES: readonly UploadPolicy[] = [
-  'owner',
-  'owner_coaches',
-  'staff',
-  'everyone',
+  "owner",
+  "owner_coaches",
+  "staff",
+  "everyone",
 ];
 
 /** The policy as a settings row reads it. */
 export function uploadPolicyLabel(policy: UploadPolicy): string {
   switch (policy) {
-    case 'owner':
-      return 'Owner only';
-    case 'owner_coaches':
-      return 'Owner and coaches';
-    case 'staff':
-      return 'All staff';
-    case 'everyone':
-      return 'Everyone on the team';
+    case "owner":
+      return "Owner only";
+    case "owner_coaches":
+      return "Owner and coaches";
+    case "staff":
+      return "All staff";
+    case "everyone":
+      return "Everyone on the team";
   }
 }
 
-export type WorkspaceKind = 'personal' | 'team';
+export type WorkspaceKind = "personal" | "team";
 
 /**
  * `programs.org_type` — what kind of organization backs a team workspace.
@@ -61,11 +61,7 @@ export type WorkspaceKind = 'personal' | 'team';
  * processing tier — see `quotaTierFor()` in `services/splitstep/quota.ts`.
  */
 export type ProgramOrgType =
-  | 'college'
-  | 'club'
-  | 'high_school'
-  | 'academy'
-  | 'other';
+  "college" | "club" | "high_school" | "academy" | "other";
 
 export interface Workspace {
   /**
@@ -83,7 +79,7 @@ export interface Workspace {
    * and for team workspaces backed by a custom org (club / high school /
    * academy; `programs.org_type` other than 'college'), which field no squad.
    */
-  team: 'mens' | 'womens' | null;
+  team: "mens" | "womens" | null;
   /**
    * The backing program's `org_type` for a team workspace; null for personal.
    *
@@ -262,7 +258,7 @@ export interface Viewer {
  * to agree, or a rail item bounces you off the page it points at.
  */
 export function isProgramStaff(workspace: Workspace): boolean {
-  return workspace.kind === 'team' && workspace.role !== 'player';
+  return workspace.kind === "team" && workspace.role !== "player";
 }
 
 /**
@@ -295,15 +291,15 @@ export function isProgramStaff(workspace: Workspace): boolean {
  * hand a player a queue of lines the database will refuse.
  */
 export function canUploadForProgram(workspace: Workspace): boolean {
-  if (workspace.kind !== 'team') return false;
+  if (workspace.kind !== "team") return false;
   switch (workspace.uploadPolicy) {
-    case 'owner':
-      return workspace.role === 'owner';
-    case 'owner_coaches':
-      return workspace.role === 'owner' || workspace.role === 'coach';
-    case 'staff':
+    case "owner":
+      return workspace.role === "owner";
+    case "owner_coaches":
+      return workspace.role === "owner" || workspace.role === "coach";
+    case "staff":
       return isProgramStaff(workspace);
-    case 'everyone':
+    case "everyone":
       // Staff always; a player only with their own row's grant as well —
       // see `memberUploadEnabled` for why the grant narrows nobody else.
       return isProgramStaff(workspace) || workspace.memberUploadEnabled;
@@ -326,11 +322,11 @@ export function canUploadForProgram(workspace: Workspace): boolean {
  */
 export function billingWorkspaceFor(
   available: Workspace[],
-  programId: string | null
+  programId: string | null,
 ): Workspace | undefined {
   return programId
     ? available.find((workspace) => workspace.id === programId)
-    : available.find((workspace) => workspace.kind === 'personal');
+    : available.find((workspace) => workspace.kind === "personal");
 }
 
 /**
@@ -342,7 +338,7 @@ export function billingWorkspaceFor(
  * second copy to edit.
  */
 export const NO_BILLING_WORKSPACE_REFUSAL =
-  'You do not have access to the workspace this match belongs to.';
+  "You do not have access to the workspace this match belongs to.";
 
 /**
  * The one wording for "this program is still being confirmed, so nobody here
@@ -355,7 +351,9 @@ export const NO_BILLING_WORKSPACE_REFUSAL =
  * before an upload and another way after it reads as two rules — the same
  * reason `explainVideoRefusal()` returns a sentence rather than a boolean.
  */
-export function pendingReviewRefusal(workspace: Pick<Workspace, 'name'>): string {
+export function pendingReviewRefusal(
+  workspace: Pick<Workspace, "name">,
+): string {
   return (
     `${workspace.name} is still being confirmed. You can invite staff and ` +
     `build your roster now; sending video opens as soon as that's done.`
@@ -393,7 +391,7 @@ export function pendingReviewRefusal(workspace: Pick<Workspace, 'name'>): string
  * they drift.
  */
 export function explainVideoRefusal(workspace: Workspace): string | null {
-  if (workspace.kind !== 'team') return null;
+  if (workspace.kind !== "team") return null;
 
   // Claim state before the switches, because it is a different question and it
   // answers for everyone: while a program sits in `pending_review` nobody there
@@ -416,7 +414,7 @@ export function explainVideoRefusal(workspace: Workspace): string | null {
 
   // A player, having failed one of the two flags. Which one decides who can
   // fix it, so they are not one message.
-  if (workspace.uploadPolicy !== 'everyone') {
+  if (workspace.uploadPolicy !== "everyone") {
     return (
       `${workspace.name} limits video uploads to ${uploadPolicyLabel(workspace.uploadPolicy).toLowerCase()}, ` +
       `so this match can't be sent for analysis from your account. A coach ` +
@@ -441,9 +439,9 @@ export function explainVideoRefusal(workspace: Workspace): string | null {
  * you are looking at.
  */
 export function workspaceSubtitle(workspace: Workspace): string {
-  if (workspace.kind !== 'team') return 'Personal workspace';
+  if (workspace.kind !== "team") return "Personal workspace";
   const squad = teamLabel(workspace.team);
-  return squad ? `${squad} team workspace` : 'Team workspace';
+  return squad ? `${squad} team workspace` : "Team workspace";
 }
 
 /**
@@ -476,7 +474,7 @@ export function workspaceSubtitle(workspace: Workspace): string {
  * ternary, which is how the two lists start disagreeing.
  */
 export function squadDisambiguator(
-  available: Workspace[]
+  available: Workspace[],
 ): (workspace: Workspace) => string | null {
   const counts = new Map<string, number>();
   for (const workspace of available) {
@@ -495,9 +493,9 @@ export function squadDisambiguator(
  * separate budgets, so the switcher has to tell them apart — two rows reading
  * only "Meridian State" would be a coin flip.
  */
-export function teamLabel(team: Workspace['team']): string | null {
-  if (team === 'mens') return "Men's";
-  if (team === 'womens') return "Women's";
+export function teamLabel(team: Workspace["team"]): string | null {
+  if (team === "mens") return "Men's";
+  if (team === "womens") return "Women's";
   return null;
 }
 
@@ -531,12 +529,12 @@ export function teamLabel(team: Workspace['team']): string | null {
  */
 export function workspaceTitle(
   workspace: Workspace,
-  viewer: Viewer
+  viewer: Viewer,
 ): {
   name: string;
   qualifier: string | null;
 } {
-  if (workspace.kind === 'personal') {
+  if (workspace.kind === "personal") {
     return { name: workspace.name, qualifier: viewer.name.trim() || null };
   }
 

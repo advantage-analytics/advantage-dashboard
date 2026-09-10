@@ -12,20 +12,20 @@
  * into plain functions over one resolved config if this is ever revisited.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { VideoUrlStrategy } from './types';
+import type { VideoUrlStrategy } from "./types";
 import {
   AzureSasVideoUrlStrategy,
   requireAzureStorageConfig,
-} from './azure-sas';
+} from "./azure-sas";
 
 export type {
   MintVendorUrlInput,
   VendorVideoUrl,
   VideoUrlStrategy,
   VideoUrlStrategyId,
-} from './types';
+} from "./types";
 
 /**
  * The storage operations callers actually use. Everything else in azure-sas.ts
@@ -41,8 +41,8 @@ export {
   startTrimmedVideoCopy,
   trimmedCopyStatus,
   videoContainerClient,
-} from './azure-sas';
-export type { BlobCopyStatus } from './azure-sas';
+} from "./azure-sas";
+export type { BlobCopyStatus } from "./azure-sas";
 
 /**
  * Build the configured vendor URL strategy.
@@ -54,7 +54,7 @@ export type { BlobCopyStatus } from './azure-sas';
  *   fails to fetch it, days later, via an unparseable error string.
  */
 export function createVideoUrlStrategy(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
 ): VideoUrlStrategy {
   return new AzureSasVideoUrlStrategy(supabase, requireAzureStorageConfig());
 }

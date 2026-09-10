@@ -68,7 +68,9 @@ const APPLY = process.argv.includes("--apply");
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!url || !key) {
-  console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local");
+  console.error(
+    "Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local",
+  );
   process.exit(1);
 }
 
@@ -163,7 +165,7 @@ interface Store {
 
 async function sweep(
   store: Store,
-  validIds: Set<string>
+  validIds: Set<string>,
 ): Promise<{ orphans: number; deleted: number }> {
   let all: string[];
   try {
@@ -178,7 +180,9 @@ async function sweep(
     return id !== undefined && !validIds.has(id);
   });
 
-  console.log(`[${store.label}] objects: ${all.length}, orphans: ${orphans.length}`);
+  console.log(
+    `[${store.label}] objects: ${all.length}, orphans: ${orphans.length}`,
+  );
   for (const p of orphans.slice(0, 5)) console.log(`  - ${p}`);
   if (orphans.length > 5) console.log(`  … and ${orphans.length - 5} more`);
 
@@ -186,7 +190,9 @@ async function sweep(
   if (APPLY && orphans.length > 0) {
     for (let i = 0; i < orphans.length; i += store.batchSize) {
       try {
-        deleted += await store.removeBatch(orphans.slice(i, i + store.batchSize));
+        deleted += await store.removeBatch(
+          orphans.slice(i, i + store.batchSize),
+        );
       } catch (err) {
         // A batch that throws failed at the transport or on credentials, so the
         // next one would too — stop rather than hammer the remaining batches.
@@ -229,14 +235,14 @@ async function sweepSupersededSources(): Promise<{
     `[superseded] jobs with a trimmed copy: ${outcome.examined}, ` +
       `safe to reclaim: ${outcome.eligible}` +
       (APPLY ? `, reclaimed: ${outcome.reclaimed}` : "") +
-      `, still copying: ${outcome.pending}`
+      `, still copying: ${outcome.pending}`,
   );
 
   if (outcome.broken.length > 0) {
     console.error(
       `[superseded] ${outcome.broken.length} trimmed copy/copies FAILED — the job ` +
         `points at a video that does not exist. Re-copy from trimmed_video_url ` +
-        `before it expires (about a week after completion):`
+        `before it expires (about a week after completion):`,
     );
     for (const b of outcome.broken) {
       console.error(`    ${b.jobId}  ${b.status}  ${b.blobName}`);
@@ -251,7 +257,9 @@ async function sweepSupersededSources(): Promise<{
 async function main() {
   console.log(`[cleanup] mode=${APPLY ? "APPLY" : "DRY-RUN"}\n`);
 
-  const { data: matches, error: mErr } = await supabase.from("matches").select("id");
+  const { data: matches, error: mErr } = await supabase
+    .from("matches")
+    .select("id");
   if (mErr) throw mErr;
 
   const validIds = new Set((matches ?? []).map((m: { id: string }) => m.id));
@@ -263,7 +271,7 @@ async function main() {
   if (validIds.size === 0) {
     console.error(
       "[cleanup] REFUSING: no matches found. Every object would look orphaned.\n" +
-        "          Check NEXT_PUBLIC_SUPABASE_URL points at the right project."
+        "          Check NEXT_PUBLIC_SUPABASE_URL points at the right project.",
     );
     process.exit(1);
   }
@@ -303,7 +311,7 @@ async function main() {
             if (res.deleted) deleted++;
           } catch (err) {
             console.error(
-              `[${videos.name}] ${key}: ${err instanceof Error ? err.message : String(err)}`
+              `[${videos.name}] ${key}: ${err instanceof Error ? err.message : String(err)}`,
             );
           }
         }
@@ -315,7 +323,7 @@ async function main() {
       `[advantage-videos] SKIPPED — ${AZURE_STORAGE_ENV_VARS.join(" / ")} ` +
         "not all in .env.local.\n" +
         "                  This is the container where orphans cost real money; " +
-        "copy the credentials from Vercel to sweep it.\n"
+        "copy the credentials from Vercel to sweep it.\n",
     );
   }
 
@@ -343,10 +351,12 @@ async function main() {
   } else if (!APPLY) {
     console.log(
       `[cleanup] ${totalOrphans} orphan(s) and ${superseded.candidates} ` +
-        `superseded source video(s) found. Rerun with --apply to delete.`
+        `superseded source video(s) found. Rerun with --apply to delete.`,
     );
   } else {
-    console.log(`[cleanup] done. removed ${totalRemoved}/${totalCandidates} object(s).`);
+    console.log(
+      `[cleanup] done. removed ${totalRemoved}/${totalCandidates} object(s).`,
+    );
   }
 }
 

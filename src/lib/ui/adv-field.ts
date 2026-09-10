@@ -114,7 +114,7 @@ const UNDERLINE = [
 
 export function advField(
   kind: AdvFieldKind = "boxed",
-  size: AdvFieldSize = "md"
+  size: AdvFieldSize = "md",
 ): string {
   return kind === "underline"
     ? `${BASE} ${UNDERLINE}`

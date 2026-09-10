@@ -54,6 +54,6 @@ export async function GET(request: NextRequest) {
   return leave(
     !isLocalEnv && forwardedHost
       ? `https://${forwardedHost}${next}`
-      : `${origin}${next}`
+      : `${origin}${next}`,
   );
 }

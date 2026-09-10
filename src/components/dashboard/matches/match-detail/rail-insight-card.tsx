@@ -49,7 +49,7 @@ export function RailInsightCard({ summary, matchId }: RailInsightCardProps) {
         />
       </span>
 
-      <p className="pr-6 text-[13px] font-medium leading-[1.45] text-[var(--ink-900)] [text-wrap:pretty]">
+      <p className="pr-6 text-[13px] leading-[1.45] font-medium [text-wrap:pretty] text-[var(--ink-900)]">
         {summary}
       </p>
 
@@ -71,7 +71,7 @@ export function RailInsightCard({ summary, matchId }: RailInsightCardProps) {
         type="button"
         onClick={dismiss}
         aria-label="Dismiss insight"
-        className="absolute right-2 top-2 flex h-5 w-5 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-colors duration-200 hover:bg-[var(--ink-100)]"
+        className="absolute top-2 right-2 flex h-5 w-5 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-colors duration-200 hover:bg-[var(--ink-100)]"
       >
         <X
           className="h-3 w-3 text-[var(--ink-400)]"

@@ -37,7 +37,7 @@ export function ProgramCrest({
         className={cn(
           box,
           "shrink-0 rounded-[8px] bg-[var(--surface-subtle)] object-cover",
-          className
+          className,
         )}
       />
     );
@@ -49,7 +49,7 @@ export function ProgramCrest({
       className={cn(
         box,
         "flex shrink-0 items-center justify-center rounded-[8px] bg-[var(--surface-subtle)] text-[10px] font-medium tracking-[1px] text-[var(--ink-600)]",
-        className
+        className,
       )}
     >
       {getInitials(name)}

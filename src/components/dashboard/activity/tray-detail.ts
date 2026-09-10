@@ -28,13 +28,13 @@ export function trayDetail(
   inviteCount: number,
   inFlightCount: number,
   elsewhereCount = 0,
-  failedCount = 0
+  failedCount = 0,
 ): string {
   const parts: string[] = [];
 
   if (inviteCount > 0) {
     parts.push(
-      inviteCount === 1 ? "1 invitation" : `${inviteCount} invitations`
+      inviteCount === 1 ? "1 invitation" : `${inviteCount} invitations`,
     );
   }
 

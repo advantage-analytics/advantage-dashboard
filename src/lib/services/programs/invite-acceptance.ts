@@ -165,12 +165,10 @@ export async function loadInvite(token: string): Promise<InviteRecord | null> {
     programName: program
       ? programDisplayName(
           program.school_name as string,
-          program.team as string | null
+          program.team as string | null,
         )
       : "your program",
-    programOrgType: program
-      ? (program.org_type as ProgramOrgType)
-      : "college",
+    programOrgType: program ? (program.org_type as ProgramOrgType) : "college",
     email: (invite.email as string).toLowerCase(),
     role: invite.role as JoinRole,
     expiresAt: invite.expires_at as string,
@@ -179,7 +177,7 @@ export async function loadInvite(token: string): Promise<InviteRecord | null> {
     inviterName: inviter
       ? displayName(
           (inviter.first_name as string | null) ?? null,
-          (inviter.last_name as string | null) ?? null
+          (inviter.last_name as string | null) ?? null,
         )
       : null,
   };
@@ -192,7 +190,10 @@ export async function loadInvite(token: string): Promise<InviteRecord | null> {
  * second sentence written for not knowing. "Coach wasn't notified" is worse
  * than "Nobody was notified" — it reads as a bug, and it is one.
  */
-export function displayName(first: string | null, last: string | null): InviterName {
+export function displayName(
+  first: string | null,
+  last: string | null,
+): InviterName {
   // `titleCaseName` already trims and collapses internal whitespace, so a blank
   // half arrives here as a leading or trailing space and leaves as nothing.
   // Trimming the parts first would be the same work done twice.
@@ -332,13 +333,13 @@ export type AcceptOutcome =
  */
 export async function acceptWithSession(
   token: string,
-  client?: Awaited<ReturnType<typeof createClient>>
+  client?: Awaited<ReturnType<typeof createClient>>,
 ): Promise<AcceptOutcome> {
   return acceptVia(
     client ?? (await createClient()),
     "accept_program_invite",
     { p_token_hash: hashToken(token.trim()) },
-    "[join] accept failed"
+    "[join] accept failed",
   );
 }
 
@@ -362,7 +363,7 @@ async function acceptVia(
   supabase: Awaited<ReturnType<typeof createClient>>,
   rpc: "accept_program_invite" | "accept_pending_invite",
   args: Record<string, string>,
-  logLabel: string
+  logLabel: string,
 ): Promise<AcceptOutcome> {
   const { data, error } = await supabase.rpc(rpc, args).maybeSingle();
 
@@ -405,12 +406,12 @@ async function acceptVia(
  */
 export async function acceptPendingWithSession(
   inviteId: string,
-  client?: Awaited<ReturnType<typeof createClient>>
+  client?: Awaited<ReturnType<typeof createClient>>,
 ): Promise<AcceptOutcome> {
   return acceptVia(
     client ?? (await createClient()),
     "accept_pending_invite",
     { p_invite_id: inviteId },
-    "[join] accept by id failed"
+    "[join] accept by id failed",
   );
 }

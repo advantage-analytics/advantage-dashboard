@@ -86,7 +86,7 @@ export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
         const res = await fetch(
           `/api/programs/search?q=${encodeURIComponent(query)}${
             intent === "join" ? "&intent=join" : ""
-          }`
+          }`,
         );
         const body = (await res.json()) as { results: ProgramRow[] };
         if (id !== latest.current) return;
@@ -165,7 +165,7 @@ export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
                     router.push(
                       intent === "join"
                         ? `/claim/${program.programKey}/request`
-                        : `/claim/${program.programKey}`
+                        : `/claim/${program.programKey}`,
                     )
                   }
                   className={`${ROW_GRID} w-full cursor-pointer px-4 py-3 text-left transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-page)] focus-visible:bg-[var(--surface-page)] focus-visible:outline-none`}

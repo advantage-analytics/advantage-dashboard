@@ -84,7 +84,20 @@ const DEFAULT_DATA: StatisticsPageData = {
   underPressureRating: 0,
 };
 
-const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"] as const;
+const MONTH_LABELS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
 
 interface DbMatch {
   id: string;
@@ -138,8 +151,12 @@ interface DbStat {
  */
 function didUserWin(match: DbMatch, userId: string): boolean {
   if (!match.score?.player1 || !match.score?.player2) return false;
-  const p1Sets = match.score.player1.filter((s, i) => s > (match.score!.player2[i] ?? 0)).length;
-  const p2Sets = match.score.player2.filter((s, i) => s > (match.score!.player1[i] ?? 0)).length;
+  const p1Sets = match.score.player1.filter(
+    (s, i) => s > (match.score!.player2[i] ?? 0),
+  ).length;
+  const p2Sets = match.score.player2.filter(
+    (s, i) => s > (match.score!.player1[i] ?? 0),
+  ).length;
   const player1Won = p1Sets > p2Sets;
   if (match.player1_id === userId) return player1Won;
   if (match.player2_id === userId) return !player1Won;
@@ -148,7 +165,9 @@ function didUserWin(match: DbMatch, userId: string): boolean {
 
 function computeStreak(matches: DbMatch[], userId: string): string {
   if (matches.length === 0) return "—";
-  const sorted = [...matches].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const sorted = [...matches].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+  );
   const firstWon = didUserWin(sorted[0], userId);
   let count = 0;
   for (const m of sorted) {
@@ -158,7 +177,10 @@ function computeStreak(matches: DbMatch[], userId: string): string {
   return `${count}${firstWon ? "W" : "L"}`;
 }
 
-function buildMonthlyTrend(matches: DbMatch[], userId: string): MonthlyTrendPoint[] {
+function buildMonthlyTrend(
+  matches: DbMatch[],
+  userId: string,
+): MonthlyTrendPoint[] {
   const now = new Date();
   const trend: MonthlyTrendPoint[] = [];
 
@@ -190,7 +212,10 @@ function buildMonthlyTrend(matches: DbMatch[], userId: string): MonthlyTrendPoin
   return trend;
 }
 
-function buildSurfaceBreakdown(matches: DbMatch[], userId: string): SurfaceBreakdownItem[] {
+function buildSurfaceBreakdown(
+  matches: DbMatch[],
+  userId: string,
+): SurfaceBreakdownItem[] {
   const map = new Map<string, { wins: number; losses: number }>();
 
   for (const m of matches) {
@@ -210,7 +235,9 @@ function buildSurfaceBreakdown(matches: DbMatch[], userId: string): SurfaceBreak
 function avgOrNull(values: (number | null)[]): number | null {
   const valid = values.filter((v): v is number => v !== null && !isNaN(v));
   if (valid.length === 0) return null;
-  return Math.round((valid.reduce((a, b) => a + b, 0) / valid.length) * 10) / 10;
+  return (
+    Math.round((valid.reduce((a, b) => a + b, 0) / valid.length) * 10) / 10
+  );
 }
 
 function avgPctOrNull(values: (string | null)[]): number | null {
@@ -274,7 +301,7 @@ export async function getSelectableMatches(): Promise<SelectableMatch[]> {
   const { data: matchRows } = await supabase
     .from("matches")
     .select(
-      "id, player1_id, player2_id, player1_name, player2_name, tournament_name, date, court_type, duration, score"
+      "id, player1_id, player2_id, player1_name, player2_name, tournament_name, date, court_type, duration, score",
     )
     .eq("created_by", user.id)
     // AND no program. Statistics is the PERSONAL season — the page says so —
@@ -299,7 +326,7 @@ export async function getSelectableMatches(): Promise<SelectableMatch[]> {
   const { data: statRows } = await supabase
     .from("match_stats_with_percentages")
     .select(
-      "match_id, is_player1, aces, double_faults, winners, unforced_errors, first_serve_pct, first_serve_won_pct, second_serve_won_pct, break_points_converted_pct, break_points_saved_pct, service_games_won_pct, first_return_won_pct, second_return_won_pct, return_games_won_pct, net_points_appearances, net_points_won, total_points_won_pct, serve_rating, return_rating, under_pressure_rating, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct"
+      "match_id, is_player1, aces, double_faults, winners, unforced_errors, first_serve_pct, first_serve_won_pct, second_serve_won_pct, break_points_converted_pct, break_points_saved_pct, service_games_won_pct, first_return_won_pct, second_return_won_pct, return_games_won_pct, net_points_appearances, net_points_won, total_points_won_pct, serve_rating, return_rating, under_pressure_rating, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct",
     )
     .in("match_id", matchIds);
 
@@ -348,7 +375,9 @@ export async function getSelectableMatches(): Promise<SelectableMatch[]> {
       unforcedErrors: s?.unforced_errors ?? null,
       netPointsWonPct:
         s?.net_points_appearances && s.net_points_appearances > 0
-          ? Math.round(((s.net_points_won ?? 0) / s.net_points_appearances) * 100)
+          ? Math.round(
+              ((s.net_points_won ?? 0) / s.net_points_appearances) * 100,
+            )
           : null,
       totalPointsWonPct: parseNum(s?.total_points_won_pct),
       shortRallyWonPct: parseNum(s?.short_rally_won_pct),
@@ -401,7 +430,7 @@ export async function getStatisticsPageData(): Promise<StatisticsPageData> {
   const { data: statRows } = await supabase
     .from("match_stats_with_percentages")
     .select(
-      "match_id, is_player1, aces, double_faults, winners, unforced_errors, first_serve_pct, first_serve_won_pct, second_serve_won_pct, break_points_converted_pct, break_points_saved_pct, service_games_won_pct, first_return_won_pct, second_return_won_pct, return_games_won_pct, net_points_appearances, net_points_won, total_points_won_pct, serve_rating, return_rating, under_pressure_rating, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct"
+      "match_id, is_player1, aces, double_faults, winners, unforced_errors, first_serve_pct, first_serve_won_pct, second_serve_won_pct, break_points_converted_pct, break_points_saved_pct, service_games_won_pct, first_return_won_pct, second_return_won_pct, return_games_won_pct, net_points_appearances, net_points_won, total_points_won_pct, serve_rating, return_rating, under_pressure_rating, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct",
     )
     .in("match_id", matchIds);
 
@@ -438,17 +467,35 @@ export async function getStatisticsPageData(): Promise<StatisticsPageData> {
   // Serve averages
   const avgAces = avgOrNull(userStats.map((s) => s.aces));
   const avgDoubleFaults = avgOrNull(userStats.map((s) => s.double_faults));
-  const avgFirstServePct = avgPctOrNull(userStats.map((s) => s.first_serve_pct));
-  const avgFirstServeWonPct = avgPctOrNull(userStats.map((s) => s.first_serve_won_pct));
-  const avgSecondServeWonPct = avgPctOrNull(userStats.map((s) => s.second_serve_won_pct));
-  const avgBreakPointsSavedPct = avgPctOrNull(userStats.map((s) => s.break_points_saved_pct));
-  const avgServiceGamesWonPct = avgPctOrNull(userStats.map((s) => s.service_games_won_pct));
+  const avgFirstServePct = avgPctOrNull(
+    userStats.map((s) => s.first_serve_pct),
+  );
+  const avgFirstServeWonPct = avgPctOrNull(
+    userStats.map((s) => s.first_serve_won_pct),
+  );
+  const avgSecondServeWonPct = avgPctOrNull(
+    userStats.map((s) => s.second_serve_won_pct),
+  );
+  const avgBreakPointsSavedPct = avgPctOrNull(
+    userStats.map((s) => s.break_points_saved_pct),
+  );
+  const avgServiceGamesWonPct = avgPctOrNull(
+    userStats.map((s) => s.service_games_won_pct),
+  );
 
   // Return averages
-  const avgBreakPointsConvertedPct = avgPctOrNull(userStats.map((s) => s.break_points_converted_pct));
-  const avgFirstReturnWonPct = avgPctOrNull(userStats.map((s) => s.first_return_won_pct));
-  const avgSecondReturnWonPct = avgPctOrNull(userStats.map((s) => s.second_return_won_pct));
-  const avgReturnGamesWonPct = avgPctOrNull(userStats.map((s) => s.return_games_won_pct));
+  const avgBreakPointsConvertedPct = avgPctOrNull(
+    userStats.map((s) => s.break_points_converted_pct),
+  );
+  const avgFirstReturnWonPct = avgPctOrNull(
+    userStats.map((s) => s.first_return_won_pct),
+  );
+  const avgSecondReturnWonPct = avgPctOrNull(
+    userStats.map((s) => s.second_return_won_pct),
+  );
+  const avgReturnGamesWonPct = avgPctOrNull(
+    userStats.map((s) => s.return_games_won_pct),
+  );
 
   // Other averages
   const avgWinners = avgOrNull(userStats.map((s) => s.winners));
@@ -456,19 +503,32 @@ export async function getStatisticsPageData(): Promise<StatisticsPageData> {
   const avgNetPointsWonPct = avgPctOrNull(
     userStats.map((s) =>
       s.net_points_appearances && s.net_points_appearances > 0
-        ? String(Math.round(((s.net_points_won ?? 0) / s.net_points_appearances) * 100))
-        : null
-    )
+        ? String(
+            Math.round(
+              ((s.net_points_won ?? 0) / s.net_points_appearances) * 100,
+            ),
+          )
+        : null,
+    ),
   );
-  const avgTotalPointsWonPct = avgPctOrNull(userStats.map((s) => s.total_points_won_pct));
-  const shortRallyWonPct = avgPctOrNull(userStats.map((s) => s.short_rally_won_pct));
-  const mediumRallyWonPct = avgPctOrNull(userStats.map((s) => s.medium_rally_won_pct));
-  const longRallyWonPct = avgPctOrNull(userStats.map((s) => s.long_rally_won_pct));
+  const avgTotalPointsWonPct = avgPctOrNull(
+    userStats.map((s) => s.total_points_won_pct),
+  );
+  const shortRallyWonPct = avgPctOrNull(
+    userStats.map((s) => s.short_rally_won_pct),
+  );
+  const mediumRallyWonPct = avgPctOrNull(
+    userStats.map((s) => s.medium_rally_won_pct),
+  );
+  const longRallyWonPct = avgPctOrNull(
+    userStats.map((s) => s.long_rally_won_pct),
+  );
 
   // Ratings
   const serveRating = avgPctOrNull(userStats.map((s) => s.serve_rating)) ?? 0;
   const returnRating = avgPctOrNull(userStats.map((s) => s.return_rating)) ?? 0;
-  const underPressureRating = avgPctOrNull(userStats.map((s) => s.under_pressure_rating)) ?? 0;
+  const underPressureRating =
+    avgPctOrNull(userStats.map((s) => s.under_pressure_rating)) ?? 0;
 
   return {
     totalMatches,

@@ -70,7 +70,7 @@ export function ChromeTooltip({
           )}
         </span>
         {detail && (
-          <span className="whitespace-nowrap text-[11px] font-normal text-white/[0.64]">
+          <span className="text-[11px] font-normal whitespace-nowrap text-white/[0.64]">
             {detail}
           </span>
         )}

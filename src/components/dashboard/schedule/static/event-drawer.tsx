@@ -142,14 +142,16 @@ export function EventDrawer({
     ? entries.some(
         (entry) =>
           entry.forfeit === null &&
-          !entry.matches.some((match) => matchWon(match) !== null)
+          !entry.matches.some((match) => matchWon(match) !== null),
       )
     : true;
 
   const subline = isDual ? (opponent?.conference ?? null) : event.host;
   // The pin names where the event is. A dual's host is its venue when the
   // builder recorded one; otherwise the side of the trip is all we know.
-  const venue = isDual ? (event.host ?? siteTitle(event.site)) : siteTitle(event.site);
+  const venue = isDual
+    ? (event.host ?? siteTitle(event.site))
+    : siteTitle(event.site);
 
   useEffect(() => {
     if (autoFocus) panelRef.current?.focus({ preventScroll: true });
@@ -165,7 +167,7 @@ export function EventDrawer({
         "sticky top-11 z-[2] h-[calc(100vh-44px)] shrink-0 self-start overflow-hidden border-l border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)] motion-reduce:animate-none",
         closing
           ? "w-0 animate-[roster-drawer-out_200ms_var(--ease-primary)_both]"
-          : "w-[340px] animate-[roster-drawer-in_200ms_var(--ease-primary)_both]"
+          : "w-[340px] animate-[roster-drawer-in_200ms_var(--ease-primary)_both]",
       )}
     >
       <div
@@ -189,7 +191,11 @@ export function EventDrawer({
                 onClick={() => onStep(-1)}
                 className={ICON_BUTTON}
               >
-                <ChevronUp className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                <ChevronUp
+                  className="size-3.5"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
               </button>
             </ChromeTooltip>
             <ChromeTooltip label="Next event" shortcut="↓">
@@ -200,7 +206,11 @@ export function EventDrawer({
                 onClick={() => onStep(1)}
                 className={ICON_BUTTON}
               >
-                <ChevronDown className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                <ChevronDown
+                  className="size-3.5"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
               </button>
             </ChromeTooltip>
 
@@ -208,7 +218,10 @@ export function EventDrawer({
               <span className="text-[12px]" style={{ color: "var(--ink-600)" }}>
                 Event
               </span>
-              <span className="mono tabular text-[11px]" style={{ color: "var(--ink-400)" }}>
+              <span
+                className="mono tabular text-[11px]"
+                style={{ color: "var(--ink-400)" }}
+              >
                 {index + 1} / {total}
               </span>
             </span>
@@ -219,13 +232,20 @@ export function EventDrawer({
                 the wash the artboard gives every 28px control in this bar. */}
             <Link
               href={eventHref}
-              className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-[var(--radius-element)] px-2 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[var(--radius-element)] px-2 text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
             >
               Open event
-              <ArrowUpRight className="size-3" strokeWidth={1.5} aria-hidden="true" />
+              <ArrowUpRight
+                className="size-3"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
             </Link>
 
-            <span aria-hidden="true" className="mx-0.5 h-3.5 w-px bg-[var(--border-medium)]" />
+            <span
+              aria-hidden="true"
+              className="mx-0.5 h-3.5 w-px bg-[var(--border-medium)]"
+            />
 
             <ChromeTooltip label="Close" shortcut="Esc">
               <button
@@ -240,18 +260,21 @@ export function EventDrawer({
           </div>
         </TooltipProvider>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pb-[22px] pt-6">
+        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6 pb-[22px]">
           <div className="flex shrink-0 items-center gap-3.5">
             <EventMark kind={event.kind} name={event.name} size={48} />
             <div className="flex min-w-0 flex-col gap-1">
               <div
-                className="text-[22px] font-light leading-[1.1] tracking-[-0.2px]"
+                className="text-[22px] leading-[1.1] font-light tracking-[-0.2px]"
                 style={{ color: "var(--ink-900)" }}
               >
                 {event.name}
               </div>
               {subline ? (
-                <span className="text-[12px]" style={{ color: "var(--ink-600)" }}>
+                <span
+                  className="text-[12px]"
+                  style={{ color: "var(--ink-600)" }}
+                >
                   {subline}
                 </span>
               ) : null}
@@ -260,11 +283,23 @@ export function EventDrawer({
 
           <div className="-mt-2.5 flex shrink-0 flex-nowrap items-center gap-3 overflow-hidden">
             <span className="text-micro inline-flex items-center gap-[5px] whitespace-nowrap">
-              <Calendar className="size-3" strokeWidth={1.5} style={{ color: "var(--ink-400)" }} aria-hidden="true" />
-              <span className="tabular">{formatEventDatesLong(event.startsOn, event.endsOn)}</span>
+              <Calendar
+                className="size-3"
+                strokeWidth={1.5}
+                style={{ color: "var(--ink-400)" }}
+                aria-hidden="true"
+              />
+              <span className="tabular">
+                {formatEventDatesLong(event.startsOn, event.endsOn)}
+              </span>
             </span>
             <span className="text-micro inline-flex items-center gap-[5px] whitespace-nowrap">
-              <MapPin className="size-3" strokeWidth={1.5} style={{ color: "var(--ink-400)" }} aria-hidden="true" />
+              <MapPin
+                className="size-3"
+                strokeWidth={1.5}
+                style={{ color: "var(--ink-400)" }}
+                aria-hidden="true"
+              />
               {venue}
             </span>
             {event.surface ? (
@@ -286,19 +321,34 @@ export function EventDrawer({
             <>
               <Section label="Singles">
                 {singles.map((entry) => (
-                  <DualLine key={entry.id} entry={entry} eventHref={eventHref} canEdit={canEdit} />
+                  <DualLine
+                    key={entry.id}
+                    entry={entry}
+                    eventHref={eventHref}
+                    canEdit={canEdit}
+                  />
                 ))}
                 {/* A dual with no lines at all: one row where the lineup would
                     start, pointing at the event page — the same shape as an
                     unset line, one level up. */}
                 {entries.length === 0 ? (
-                  <SetLineRow slot="S1" eventHref={eventHref} canEdit={canEdit} label="Set lineup" />
+                  <SetLineRow
+                    slot="S1"
+                    eventHref={eventHref}
+                    canEdit={canEdit}
+                    label="Set lineup"
+                  />
                 ) : null}
               </Section>
               {doubles.length > 0 ? (
                 <Section label="Doubles">
                   {doubles.map((entry) => (
-                    <DualLine key={entry.id} entry={entry} eventHref={eventHref} canEdit={canEdit} />
+                    <DualLine
+                      key={entry.id}
+                      entry={entry}
+                      eventHref={eventHref}
+                      canEdit={canEdit}
+                    />
                   ))}
                 </Section>
               ) : null}
@@ -322,10 +372,16 @@ export function EventDrawer({
               {entries.length === 0 ? (
                 <Section label="Entries">
                   <div className={cn(ROW, "cursor-default")}>
-                    <span className="mono text-[11px]" style={{ color: "var(--ink-500)" }}>
+                    <span
+                      className="mono text-[11px]"
+                      style={{ color: "var(--ink-500)" }}
+                    >
                       —
                     </span>
-                    <span className="text-[12px]" style={{ color: "var(--ink-700)" }}>
+                    <span
+                      className="text-[12px]"
+                      style={{ color: "var(--ink-700)" }}
+                    >
                       No entries yet
                     </span>
                   </div>
@@ -337,7 +393,10 @@ export function EventDrawer({
           <div className="min-h-0 flex-1" />
 
           {canEdit && linesOpen ? (
-            <Link href={eventHref} className={cn(advButton("primary", "md"), "w-full shrink-0")}>
+            <Link
+              href={eventHref}
+              className={cn(advButton("primary", "md"), "w-full shrink-0")}
+            >
               Enter results
             </Link>
           ) : null}
@@ -379,7 +438,7 @@ function ScoreRow({
 
   return (
     <div className="flex shrink-0 items-center justify-between gap-3.5 border-y border-[var(--border-hairline)] py-3.5">
-      <span className="tabular whitespace-nowrap text-[28px] font-light leading-none tracking-[-0.4px]">
+      <span className="tabular text-[28px] leading-none font-light tracking-[-0.4px] whitespace-nowrap">
         <span style={{ color: usColor }}>{score.us}</span>
         <span className="mx-[3px]" style={{ color: "var(--ink-300)" }}>
           –
@@ -390,7 +449,9 @@ function ScoreRow({
         {singles.map((entry) => (
           <Tick key={entry.id} entry={entry} />
         ))}
-        {singles.length > 0 && doubles.length > 0 ? <span className="w-2" /> : null}
+        {singles.length > 0 && doubles.length > 0 ? (
+          <span className="w-2" />
+        ) : null}
         {doubles.map((entry) => (
           <Tick key={entry.id} entry={entry} />
         ))}
@@ -441,7 +502,7 @@ const ROW =
 const ROW_LINK = cn(
   ROW,
   "cursor-pointer transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)]",
-  "outline-none focus-visible:shadow-[var(--focus-ring)]"
+  "outline-none focus-visible:shadow-[var(--focus-ring)]",
 );
 
 /**
@@ -472,7 +533,10 @@ function DualLine({
     return (
       <div className={ROW}>
         <Slot>{entry.slot}</Slot>
-        <span className="truncate text-[12px]" style={{ color: "var(--ink-700)" }}>
+        <span
+          className="truncate text-[12px]"
+          style={{ color: "var(--ink-700)" }}
+        >
           {name || "—"}
         </span>
         <StatusChip tone={status.tone} className="col-span-3 justify-self-end">
@@ -483,23 +547,33 @@ function DualLine({
   }
 
   if (match) {
-    return <PlayedLine slot={entry.slot} name={name} entry={entry} match={match} />;
+    return (
+      <PlayedLine slot={entry.slot} name={name} entry={entry} match={match} />
+    );
   }
 
   if (entry.playerLabels.length === 0) {
     return (
-      <SetLineRow slot={entry.slot} eventHref={eventHref} canEdit={canEdit} label="Set line" />
+      <SetLineRow
+        slot={entry.slot}
+        eventHref={eventHref}
+        canEdit={canEdit}
+        label="Set line"
+      />
     );
   }
 
   return (
     <div className={ROW}>
       <Slot>{entry.slot}</Slot>
-      <span className="truncate text-[12px]" style={{ color: "var(--ink-700)" }}>
+      <span
+        className="truncate text-[12px]"
+        style={{ color: "var(--ink-700)" }}
+      >
         {name}
       </span>
       <span
-        className="text-micro col-span-3 whitespace-nowrap text-right"
+        className="text-micro col-span-3 text-right whitespace-nowrap"
         style={{ color: "var(--ink-600)" }}
       >
         <span className="mr-1.5 inline-block size-[5px] rounded-full bg-[var(--ink-300)]" />
@@ -522,11 +596,14 @@ function TournamentLine({ entry }: { entry: EventEntry }) {
     return (
       <div className={ROW}>
         <Slot>—</Slot>
-        <span className="truncate text-[12px]" style={{ color: "var(--ink-700)" }}>
+        <span
+          className="truncate text-[12px]"
+          style={{ color: "var(--ink-700)" }}
+        >
           {name || "—"}
         </span>
         <span
-          className="text-micro col-span-3 whitespace-nowrap text-right"
+          className="text-micro col-span-3 text-right whitespace-nowrap"
           style={{ color: "var(--ink-600)" }}
         >
           <span className="mr-1.5 inline-block size-[5px] rounded-full bg-[var(--ink-300)]" />
@@ -536,7 +613,14 @@ function TournamentLine({ entry }: { entry: EventEntry }) {
     );
   }
 
-  return <PlayedLine slot={last.round ?? "—"} name={name} entry={entry} match={last} />;
+  return (
+    <PlayedLine
+      slot={last.round ?? "—"}
+      name={name}
+      entry={entry}
+      match={last}
+    />
+  );
 }
 
 /** A line with a match under it — the one row shape that opens somewhere. */
@@ -555,7 +639,10 @@ function PlayedLine({
   return (
     <Link href={`/dashboard/matches/${match.id}`} className={ROW_LINK}>
       <Slot>{slot}</Slot>
-      <span className="truncate text-[12px]" style={{ color: "var(--ink-900)" }}>
+      <span
+        className="truncate text-[12px]"
+        style={{ color: "var(--ink-900)" }}
+      >
         {name || "—"}
       </span>
       <ScoreLine
@@ -564,7 +651,12 @@ function PlayedLine({
         style={{ color: "var(--ink-600)" }}
       />
       {won === null ? <span /> : <ResultMark won={won} />}
-      <ChevronRight className="size-3" strokeWidth={1.5} style={{ color: "var(--ink-300)" }} aria-hidden="true" />
+      <ChevronRight
+        className="size-3"
+        strokeWidth={1.5}
+        style={{ color: "var(--ink-300)" }}
+        aria-hidden="true"
+      />
     </Link>
   );
 }
@@ -587,7 +679,7 @@ function SetLineRow({
 }) {
   const notSet = (
     <span
-      className="text-micro col-span-3 whitespace-nowrap text-right"
+      className="text-micro col-span-3 text-right whitespace-nowrap"
       style={{ color: "var(--ink-400)" }}
     >
       Not set
@@ -609,7 +701,10 @@ function SetLineRow({
   return (
     <Link href={eventHref} className={ROW_LINK}>
       <Slot>{slot}</Slot>
-      <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: "var(--blue)" }}>
+      <span
+        className="inline-flex items-center gap-1.5 text-[12px] font-medium"
+        style={{ color: "var(--blue)" }}
+      >
         <Plus className="size-3" strokeWidth={1.5} aria-hidden="true" />
         {label}
       </span>

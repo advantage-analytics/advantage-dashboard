@@ -12,31 +12,31 @@
  * grow.
  */
 
-import { serveCourtSide } from './court';
-import type { SplitStepRally, SplitStepStroke } from './types';
+import { serveCourtSide } from "./court";
+import type { SplitStepRally, SplitStepStroke } from "./types";
 
 export const POINT_FLAGS = {
   /** Score fold and the last stroke's `in` flag name different winners. */
-  WINNER_DISPUTED: 'winner_disputed',
+  WINNER_DISPUTED: "winner_disputed",
   /** Two consecutive strokes credited to one player — impossible in singles. */
-  SAME_PLAYER_CONSECUTIVE: 'same_player_consecutive',
+  SAME_PLAYER_CONSECUTIVE: "same_player_consecutive",
   /** A serve flagged in, yet another serve followed it. Let? Ball on? */
-  RESERVE_AFTER_IN: 'reserve_after_in',
+  RESERVE_AFTER_IN: "reserve_after_in",
   /** Service court failed to alternate from the previous point in the game. */
-  SERVICE_COURT_REPEAT: 'service_court_repeat',
+  SERVICE_COURT_REPEAT: "service_court_repeat",
   /** No result_type could be assigned honestly. */
-  RESULT_TYPE_UNKNOWN: 'result_type_unknown',
+  RESULT_TYPE_UNKNOWN: "result_type_unknown",
 } as const;
 
 export const SHOT_FLAGS = {
   /** Flagged out, yet the rally continued past it. */
-  OUT_BALL_RALLY_CONTINUED: 'out_ball_rally_continued',
+  OUT_BALL_RALLY_CONTINUED: "out_ball_rally_continued",
   /** net_hit true while height_at_net_m says the ball cleared the net. */
-  NET_HIT_CONTRADICTS_HEIGHT: 'net_hit_contradicts_height',
+  NET_HIT_CONTRADICTS_HEIGHT: "net_hit_contradicts_height",
   /** Struck at a ball that had already faulted. */
-  PHANTOM_AFTER_FAULT: 'phantom_after_fault',
+  PHANTOM_AFTER_FAULT: "phantom_after_fault",
   /** Position or bounce discarded by the enclosure guard. */
-  GEOMETRY_DISCARDED: 'geometry_discarded',
+  GEOMETRY_DISCARDED: "geometry_discarded",
 } as const;
 
 /** Net height at the posts, plus a ball radius of tolerance. */
@@ -76,7 +76,7 @@ export function flagStroke(params: {
     flags.push(SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT);
   }
 
-  if (index < serveIndex && stroke.strokeType !== 'serve') {
+  if (index < serveIndex && stroke.strokeType !== "serve") {
     flags.push(SHOT_FLAGS.PHANTOM_AFTER_FAULT);
   }
 
@@ -112,15 +112,15 @@ export function flagPoint(params: {
   if (winner && last) {
     const byFlag = last.in
       ? last.playerLabel
-      : rally.strokes.find((s) => s.playerLabel !== last.playerLabel)
-          ?.playerLabel ?? null;
+      : (rally.strokes.find((s) => s.playerLabel !== last.playerLabel)
+          ?.playerLabel ?? null);
     if (byFlag && byFlag !== winner) flags.push(POINT_FLAGS.WINNER_DISPUTED);
   }
 
   for (let i = 0; i < rally.strokes.length - 1; i += 1) {
     const a = rally.strokes[i];
     const b = rally.strokes[i + 1];
-    const bothServes = a.strokeType === 'serve' && b.strokeType === 'serve';
+    const bothServes = a.strokeType === "serve" && b.strokeType === "serve";
     if (a.playerLabel === b.playerLabel && !bothServes) {
       flags.push(POINT_FLAGS.SAME_PLAYER_CONSECUTIVE);
       break;

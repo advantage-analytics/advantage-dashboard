@@ -28,7 +28,5 @@ export async function GET() {
   // Absolute, because NextResponse.redirect requires it. `siteUrl()` is the
   // same origin the rest of the app builds links from, so a preview deployment
   // exits to itself rather than to production.
-  return NextResponse.redirect(
-    new URL(user ? "/dashboard" : "/", siteUrl())
-  );
+  return NextResponse.redirect(new URL(user ? "/dashboard" : "/", siteUrl()));
 }

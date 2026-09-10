@@ -20,16 +20,16 @@
  * which workspace they are LOOKING at.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   type MatchAnalysis,
   isWorking,
   pipelinePercent,
   resolveAnalysisStatus,
-} from './match-analysis';
-import { shortName } from './match-utils';
-import { scopeToWorkspace } from '@/lib/workspace/scope';
-import type { Workspace } from '@/lib/workspace/types';
+} from "./match-analysis";
+import { shortName } from "./match-utils";
+import { scopeToWorkspace } from "@/lib/workspace/scope";
+import type { Workspace } from "@/lib/workspace/types";
 
 /**
  * The window the tray reads. It was 10 when the tray listed settled work too,
@@ -50,7 +50,7 @@ const MAX_ITEMS = 50;
  */
 export type ActivityAnalysis = Pick<
   MatchAnalysis,
-  'status' | 'progressPercent' | 'uploadPercent' | 'startedAt'
+  "status" | "progressPercent" | "uploadPercent" | "startedAt"
 >;
 
 export interface ActivityItem {
@@ -103,7 +103,7 @@ export interface ElsewhereWork {
 export async function getElsewhereWork(
   supabase: SupabaseClient,
   active: Workspace,
-  available: readonly Workspace[]
+  available: readonly Workspace[],
 ): Promise<ElsewhereWork[]> {
   const others = available.filter((workspace) => workspace.id !== active.id);
 
@@ -113,34 +113,50 @@ export async function getElsewhereWork(
       // viewer cannot read is not theirs to count.
       const query = scopeToWorkspace(
         supabase
-          .from('processing_jobs')
-          .select('match_id, status, derivation_version, created_at, matches!inner(program_id)')
-          .order('created_at', { ascending: false }),
+          .from("processing_jobs")
+          .select(
+            "match_id, status, derivation_version, created_at, matches!inner(program_id)",
+          )
+          .order("created_at", { ascending: false }),
         workspace,
         workspace.id,
-        { column: 'matches.program_id' }
+        { column: "matches.program_id" },
       );
       const { data, error } = await query;
       if (error) {
-        console.error('[activity] could not count elsewhere', {
+        console.error("[activity] could not count elsewhere", {
           workspace: workspace.id,
           error: error.message,
         });
-        return { workspaceId: workspace.id, workspaceName: workspace.name, count: 0 };
+        return {
+          workspaceId: workspace.id,
+          workspaceName: workspace.name,
+          count: 0,
+        };
       }
 
       // Newest first, so the first row for a match is its current attempt —
       // the feed's own dedupe, for the same reason.
       const seen = new Set<string>();
       let count = 0;
-      for (const row of (data ?? []) as Pick<JobRow, 'match_id' | 'status' | 'derivation_version'>[]) {
+      for (const row of (data ?? []) as Pick<
+        JobRow,
+        "match_id" | "status" | "derivation_version"
+      >[]) {
         if (seen.has(row.match_id)) continue;
         seen.add(row.match_id);
-        const status = resolveAnalysisStatus(row.status, row.derivation_version);
+        const status = resolveAnalysisStatus(
+          row.status,
+          row.derivation_version,
+        );
         if (status && isWorking(status)) count++;
       }
-      return { workspaceId: workspace.id, workspaceName: workspace.name, count };
-    })
+      return {
+        workspaceId: workspace.id,
+        workspaceName: workspace.name,
+        count,
+      };
+    }),
   );
 
   return counted.filter((work) => work.count > 0);
@@ -148,7 +164,7 @@ export async function getElsewhereWork(
 
 /** Fits two names into a ~300px row that also carries a timestamp. */
 function titleFor(player1: string | null, player2: string | null): string {
-  return `${shortName(player1 ?? 'Unknown', 12)} vs ${shortName(player2 ?? 'Unknown', 12)}`;
+  return `${shortName(player1 ?? "Unknown", 12)} vs ${shortName(player2 ?? "Unknown", 12)}`;
 }
 
 interface JobRow {
@@ -166,7 +182,7 @@ interface JobRow {
 
 export async function getActivityFeed(
   supabase: SupabaseClient,
-  workspace: Workspace
+  workspace: Workspace,
 ): Promise<ActivityFeed> {
   // One round trip with the match embedded, rather than reading a page of
   // matches and discarding the ones without a job.
@@ -177,11 +193,11 @@ export async function getActivityFeed(
   // database. The inner join drops it, which is right: the tray would otherwise
   // render both players' names off a match the viewer has no access to.
   let query = supabase
-    .from('processing_jobs')
+    .from("processing_jobs")
     .select(
-      'match_id, status, upload_progress_percent, derivation_version, created_at, matches!inner(player1_name, player2_name, program_id)'
+      "match_id, status, upload_progress_percent, derivation_version, created_at, matches!inner(player1_name, player2_name, program_id)",
     )
-    .order('created_at', { ascending: false })
+    .order("created_at", { ascending: false })
     .limit(MAX_ITEMS);
 
   // The rule lives in `scopeToWorkspace`; only the column path is this
@@ -190,7 +206,7 @@ export async function getActivityFeed(
   // `matches.program_id` keeps a coach's team uploads out of their personal
   // header — RLS cannot supply that half, its program policy is a UNION.
   query = scopeToWorkspace(query, workspace, workspace.id, {
-    column: 'matches.program_id',
+    column: "matches.program_id",
   });
 
   const { data, error } = await query;
@@ -198,7 +214,7 @@ export async function getActivityFeed(
   if (error) {
     // Never fatal. The tray is chrome — a header that renders without it beats
     // a dashboard that does not render.
-    console.error('[activity] could not load jobs', { error: error.message });
+    console.error("[activity] could not load jobs", { error: error.message });
     return { items: [] };
   }
 
@@ -212,13 +228,15 @@ export async function getActivityFeed(
 
     const status = resolveAnalysisStatus(row.status, row.derivation_version);
     if (!status) {
-      console.warn('[activity] unmapped processing_jobs.status', { status: row.status });
+      console.warn("[activity] unmapped processing_jobs.status", {
+        status: row.status,
+      });
       continue;
     }
     seen.add(row.match_id);
 
     const uploadPercent =
-      status === 'uploading' && row.upload_progress_percent !== null
+      status === "uploading" && row.upload_progress_percent !== null
         ? row.upload_progress_percent
         : undefined;
 
@@ -226,7 +244,7 @@ export async function getActivityFeed(
       matchId: row.match_id,
       title: titleFor(
         row.matches?.player1_name ?? null,
-        row.matches?.player2_name ?? null
+        row.matches?.player2_name ?? null,
       ),
       analysis: {
         status,

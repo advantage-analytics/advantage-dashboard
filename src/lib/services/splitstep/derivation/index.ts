@@ -44,7 +44,7 @@
  * commented out in derive-and-publish.ts. Rows written under this tag were NOT
  * verified against the entered score and must be rebuilt when the gate returns.
  */
-export const DERIVATION_VERSION = '0.3.0-unreconciled';
+export const DERIVATION_VERSION = "0.3.0-unreconciled";
 
 export type {
   RawSplitStepStroke,
@@ -52,7 +52,7 @@ export type {
   SplitStepRally,
   StrokeType,
   StrokeSide,
-} from './types';
+} from "./types";
 
 export {
   parseStrokes,
@@ -60,7 +60,7 @@ export {
   GEOMETRY_BOUNDS,
   type ParseOptions,
   type ParseResult,
-} from './parse';
+} from "./parse";
 
 export {
   metersToCourtFrame,
@@ -75,7 +75,7 @@ export {
   MAX_PLAUSIBLE_X_M,
   MAX_PLAUSIBLE_Y_M,
   type CourtPosition,
-} from './court';
+} from "./court";
 
 export {
   groupIntoRallies,
@@ -83,7 +83,7 @@ export {
   opponentOf,
   rallyDuration,
   type RallyGrouping,
-} from './rallies';
+} from "./rallies";
 
 export {
   serveBracket,
@@ -93,7 +93,7 @@ export {
   type ServeBracket,
   type ServeReading,
   type ServeSideCounts,
-} from './serves';
+} from "./serves";
 
 export {
   scoreQuality,
@@ -101,19 +101,16 @@ export {
   type QualityCheck,
   type QualityGrade,
   type CheckVerdict,
-} from './quality';
+} from "./quality";
 
-export {
-  serveZone,
-  directionZone,
-} from './court';
+export { serveZone, directionZone } from "./court";
 
 export {
   resolvePointWinners,
   resolveWinner,
   type PointWinner,
   type WinnerResolution,
-} from './winners';
+} from "./winners";
 
 export {
   reconcile,
@@ -121,7 +118,7 @@ export {
   scoreIsSelfMirroring,
   type MatchScore,
   type Reconciliation,
-} from './reconcile';
+} from "./reconcile";
 
 export {
   classifyPoint,
@@ -130,13 +127,13 @@ export {
   lastServeIndex,
   type ResultType,
   type ShotResult,
-} from './result-type';
+} from "./result-type";
 
-export { flagPoint, flagStroke, POINT_FLAGS, SHOT_FLAGS } from './flags';
+export { flagPoint, flagStroke, POINT_FLAGS, SHOT_FLAGS } from "./flags";
 
-export { pressureFor, type PressureFlags } from './pressure';
+export { pressureFor, type PressureFlags } from "./pressure";
 
-export { ACCEPT_UNRECONCILED_FOLD } from './reconcile';
+export { ACCEPT_UNRECONCILED_FOLD } from "./reconcile";
 
 export {
   buildTranscript,
@@ -144,15 +141,15 @@ export {
   type DerivedPoint,
   type DerivedShot,
   type BuildOptions,
-} from './transcript';
+} from "./transcript";
 
-import { parseStrokes, type ParseOptions } from './parse';
-import { groupIntoRallies, playerLabels } from './rallies';
-import { aceCandidates, serveBracket, serveSideCounts } from './serves';
-import { scoreQuality } from './quality';
-import type { QualityReport } from './quality';
-import type { ServeBracket, ServeSideCounts } from './serves';
-import type { SplitStepRally, SplitStepStroke } from './types';
+import { parseStrokes, type ParseOptions } from "./parse";
+import { groupIntoRallies, playerLabels } from "./rallies";
+import { aceCandidates, serveBracket, serveSideCounts } from "./serves";
+import { scoreQuality } from "./quality";
+import type { QualityReport } from "./quality";
+import type { ServeBracket, ServeSideCounts } from "./serves";
+import type { SplitStepRally, SplitStepStroke } from "./types";
 
 export interface AnalysisResult {
   strokes: SplitStepStroke[];
@@ -181,7 +178,7 @@ export interface AnalysisResult {
  */
 export function analyzeResults(
   raw: unknown,
-  options: ParseOptions = {}
+  options: ParseOptions = {},
 ): AnalysisResult {
   const { strokes, droppedCount } = parseStrokes(raw, options);
   const { rallies, malformedNumbering, missingOpeningServe } =

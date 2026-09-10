@@ -12,16 +12,16 @@
  * hand.
  */
 
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from "next/server";
 
-import { createAdminClient } from '@/lib/supabase/admin';
-import { reclaimSupersededSources } from '@/lib/services/splitstep/reclaim-videos';
+import { createAdminClient } from "@/lib/supabase/admin";
+import { reclaimSupersededSources } from "@/lib/services/splitstep/reclaim-videos";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const LOG = '[cron:reclaim-videos]';
+const LOG = "[cron:reclaim-videos]";
 
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -34,13 +34,13 @@ export async function GET(request: NextRequest) {
   if (!secret) {
     console.error(
       `${LOG} CRON_SECRET is not set — refusing to run. Set it in Vercel; ` +
-        `the platform sends it as "Authorization: Bearer <secret>".`
+        `the platform sends it as "Authorization: Bearer <secret>".`,
     );
-    return NextResponse.json({ error: 'Not configured' }, { status: 503 });
+    return NextResponse.json({ error: "Not configured" }, { status: 503 });
   }
 
-  if (request.headers.get('authorization') !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const outcome = await reclaimSupersededSources({
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
     console.error(
       `${LOG} ${outcome.broken.length} trimmed copy/copies FAILED — re-copy from ` +
         `trimmed_video_url on these jobs before it expires`,
-      outcome.broken
+      outcome.broken,
     );
   }
 

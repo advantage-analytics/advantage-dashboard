@@ -26,7 +26,12 @@ const SECOND_SERVE_COLOR = "rgba(129,140,248,0.5)";
 /* ── Helpers (adapted from serve-placement-home.tsx) ───────── */
 
 const TENNIS_SCORE_TO_COUNT: Record<string, number> = {
-  "0": 0, "15": 1, "30": 2, "40": 3, "A": 3, "AD": 3,
+  "0": 0,
+  "15": 1,
+  "30": 2,
+  "40": 3,
+  A: 3,
+  AD: 3,
 };
 
 function getPointSide(pointScore: string): "deuce" | "ad" {
@@ -101,7 +106,8 @@ function mapServeToDot(serve: ServeData): CourtDot | null {
     const absX = Math.abs(lx);
     const signedX = side === "deuce" ? -absX : absX;
     cx = CENTER_X + (signedX / REAL_HALF_DOUBLES) * (COURT_W / 2);
-    const yFrac = (ly - REAL_SERVICE_LINE_Y) / (REAL_NET_Y - REAL_SERVICE_LINE_Y);
+    const yFrac =
+      (ly - REAL_SERVICE_LINE_Y) / (REAL_NET_Y - REAL_SERVICE_LINE_Y);
     cy = SERVICE_Y + yFrac * (BASELINE_Y - SERVICE_Y);
     if (isDF) {
       cx = Math.max(4, Math.min(COURT_W - 4, cx));
@@ -144,7 +150,12 @@ interface ZoneCounts {
 
 export function ServePlacementStats({ matchIds }: Props) {
   const [dots, setDots] = useState<CourtDot[]>([]);
-  const [zones, setZones] = useState<ZoneCounts>({ wide: 0, body: 0, t: 0, total: 0 });
+  const [zones, setZones] = useState<ZoneCounts>({
+    wide: 0,
+    body: 0,
+    t: 0,
+    total: 0,
+  });
   const [counts, setCounts] = useState({ first: 0, second: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -195,7 +206,9 @@ export function ServePlacementStats({ matchIds }: Props) {
 
       for (const point of pointsData as DbPointRow[]) {
         const shot = shotByPointId.get(point.id);
-        const isFirstServe = !(shot?.shot_type?.toLowerCase().includes("second") ?? false);
+        const isFirstServe = !(
+          shot?.shot_type?.toLowerCase().includes("second") ?? false
+        );
 
         let landingX = shot?.landing_x ?? null;
         let landingY = shot?.landing_y ?? null;
@@ -248,12 +261,12 @@ export function ServePlacementStats({ matchIds }: Props) {
   }, [idsKey]);
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
+    <div className="overflow-hidden rounded-[14px] border border-[#F3F3F3] bg-white shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]">
       <div className="px-5 pt-5 pb-3">
-        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+        <h2 className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
           Serve Placement
         </h2>
-        <p className="text-[12px] font-normal text-[#71717A] mt-1">
+        <p className="mt-1 text-[12px] font-normal text-[#71717A]">
           {dots.length > 0
             ? `${dots.length} serves across ${matchIds.length} matches`
             : loading
@@ -263,15 +276,15 @@ export function ServePlacementStats({ matchIds }: Props) {
       </div>
 
       {/* Court visualization */}
-      <div className="bg-[#EFF4FF] mx-3 rounded-lg overflow-hidden">
+      <div className="mx-3 overflow-hidden rounded-lg bg-[#EFF4FF]">
         {loading ? (
-          <Skeleton className="w-full h-[300px]" />
+          <Skeleton className="h-[300px] w-full" />
         ) : error ? (
-          <div className="flex items-center justify-center h-[300px] text-[12px] text-[#AAAAAA]">
+          <div className="flex h-[300px] items-center justify-center text-[12px] text-[#AAAAAA]">
             Failed to load serve data
           </div>
         ) : dots.length === 0 ? (
-          <div className="flex items-center justify-center h-[200px] text-[12px] text-[#AAAAAA]">
+          <div className="flex h-[200px] items-center justify-center text-[12px] text-[#AAAAAA]">
             No serve placement data available
           </div>
         ) : (
@@ -283,17 +296,17 @@ export function ServePlacementStats({ matchIds }: Props) {
 
       {/* Legend + Zone breakdown */}
       {dots.length > 0 && (
-        <div className="px-5 py-4 flex items-center justify-between">
+        <div className="flex items-center justify-between px-5 py-4">
           {/* Serve type legend */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#3B82F6]" />
+              <span className="h-2 w-2 rounded-full bg-[#3B82F6]" />
               <span className="text-[10px] font-normal text-[#525252]">
                 1st serve ({counts.first})
               </span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-sm bg-[#8B5CF6]" />
+              <span className="h-2 w-2 rounded-sm bg-[#8B5CF6]" />
               <span className="text-[10px] font-normal text-[#525252]">
                 2nd serve ({counts.second})
               </span>
@@ -311,7 +324,7 @@ export function ServePlacementStats({ matchIds }: Props) {
                 const pct = Math.round((count / zones.total) * 100);
                 return (
                   <div key={label} className="flex items-center gap-1">
-                    <span className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[1.5px]">
+                    <span className="text-[9px] font-normal tracking-[1.5px] text-[#AAAAAA] uppercase">
                       {label}
                     </span>
                     <span className="text-[12px] font-light text-[#0D0D0D] tabular-nums">

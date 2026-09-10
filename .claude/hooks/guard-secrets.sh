@@ -5,11 +5,20 @@
 #
 #   .env*        — nothing but secrets. Always denied (.env.example excepted:
 #                  it is the committed template and holds no values).
-#   .mcp.json    — a config file that HAPPENS to hold credentials inline
-#                  (the Figma server embeds its API key as a CLI arg). Denying
-#                  it outright would block legitimate configuration work, so
-#                  this asks instead, and only when the file really does
-#                  contain something that looks like a key.
+#   .mcp.json    — a config file that MAY hold credentials inline. Denying it
+#                  outright would block legitimate configuration work, so this
+#                  asks instead, and only when the file really does contain
+#                  something that looks like a key.
+#
+#                  The Figma server that embedded an API key as a CLI arg has
+#                  been removed, and .mcp.json now names only keyless/hosted
+#                  servers — so in practice this branch is silent today. It is
+#                  kept, and matters MORE than it used to: the file used to be
+#                  gitignored, so a pasted key stayed on one machine. It is now
+#                  tracked, so a key added to it would be committed and pushed.
+#                  .githooks/pre-commit catches that at commit time; this catches
+#                  it earlier, before the value reaches the transcript at all.
+#                  If you add a server needing a secret, use ${ENV_VAR}.
 #
 # The Bash branch is segment-aware on purpose. An earlier version matched the
 # whole command string, so `[ -e .env.local ]` — an existence check that reads

@@ -18,17 +18,17 @@ Redesign freely around those.
 Verified against a real job (86 min, vendor job `778912d7`, our job
 `2a11168d`), not a test harness:
 
-| | Evidence |
-|---|---|
-| Chunked upload → Azure | 1.54 GB committed |
-| Auto-submit on upload completion | vendor accepted, `external_job_id` recorded |
-| `VideoUrl` SAS | vendor fetched it |
-| Webhook receipt + HMAC | 2 deliveries, both `signature_verified: true` |
-| Signature enforcement | `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE=true`, suite green |
-| Results JSON | 645 KB → `match-results` bucket |
-| Trimmed video capture | 1.43 GB copied into our container, `copyStatus: success` |
-| Source reclaim | 1.54 GB deleted, vendor's SAS neutralised |
-| Quota | reserved to the second; refund on failure tested |
+|                                  | Evidence                                                 |
+| -------------------------------- | -------------------------------------------------------- |
+| Chunked upload → Azure           | 1.54 GB committed                                        |
+| Auto-submit on upload completion | vendor accepted, `external_job_id` recorded              |
+| `VideoUrl` SAS                   | vendor fetched it                                        |
+| Webhook receipt + HMAC           | 2 deliveries, both `signature_verified: true`            |
+| Signature enforcement            | `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE=true`, suite green  |
+| Results JSON                     | 645 KB → `match-results` bucket                          |
+| Trimmed video capture            | 1.43 GB copied into our container, `copyStatus: success` |
+| Source reclaim                   | 1.54 GB deleted, vendor's SAS neutralised                |
+| Quota                            | reserved to the second; refund on failure tested         |
 
 Turnaround was 75 minutes for an 86-minute video. Their results SAS expires
 after ~7 days.
@@ -133,11 +133,12 @@ to `boolean` with a default.** A null coerced to `false` is a wrong answer that
 looks like a real one — see §4.
 
 **The trim window is not cosmetic.** `videoStartSeconds`/`videoEndSeconds` become
-the vendor's `StartTime`/`EndTime` *and* `billable_seconds`, which is what the
+the vendor's `StartTime`/`EndTime` _and_ `billable_seconds`, which is what the
 2-hour monthly cap is charged against. Removing the trim step means every job
 bills the full recording.
 
 **`useUploadMatchWizard.ts` invariants:**
+
 - The `processing_jobs` insert must `.select("id").single()`, and every later
   write must key on that id. Keying on `match_id` touches every job a
   resubmitted match ever had.
@@ -148,24 +149,24 @@ bills the full recording.
 
 ### 3.2 Analysis status — `lib/data/match-analysis.ts`
 
-Shared by the matches list *and* the match detail page, so both agree about one
+Shared by the matches list _and_ the match detail page, so both agree about one
 row. It was consolidated here after they disagreed once.
 
 **There are three predicates and they mean different things.** Collapsing them
 reintroduces fixed bugs:
 
-| Predicate | Question | Drives |
-|---|---|---|
-| `isInFlight` | will this ever change? | grouping, filtering, the match page's short-circuit |
-| `isWorking` | is something happening *right now*? | the animated sheen |
-| `isLiveUpdating` | is a DB update actually coming? | Realtime subscriptions |
+| Predicate        | Question                            | Drives                                              |
+| ---------------- | ----------------------------------- | --------------------------------------------------- |
+| `isInFlight`     | will this ever change?              | grouping, filtering, the match page's short-circuit |
+| `isWorking`      | is something happening _right now_? | the animated sheen                                  |
+| `isLiveUpdating` | is a DB update actually coming?     | Realtime subscriptions                              |
 
-`uploaded` is in-flight, not working (nothing to animate), but *is* live-updating
+`uploaded` is in-flight, not working (nothing to animate), but _is_ live-updating
 (auto-submit fires in seconds). `processed` is in-flight, not working, and **not**
 live-updating — subscribing on it held a WebSocket open forever per user.
 
 **`resolveAnalysisStatus(status, derivation_version)` needs both columns.** The
-vendor's `completed` means *their* half is done. Until derivation runs, the UI
+vendor's `completed` means _their_ half is done. Until derivation runs, the UI
 must show `processed` → **"Stats pending"**, not "Analyzed". Treating `completed`
 as "show stats" renders a page of empty charts, which reads as "you hit no
 serves".
@@ -179,7 +180,7 @@ stat section below it would draw zeroes.
 ### 3.4 Match deletion — `app/api/matches/[matchId]/route.ts`
 
 Storage keys live on `processing_jobs`, which **cascades away with the match**.
-All cleanup must run *before* the row delete, and must cover all three:
+All cleanup must run _before_ the row delete, and must cover all three:
 `video_object_key`, `trimmed_object_key`, `results_object_key`. Missing one
 strands multi-GB blobs that nothing can name. This has been the bug twice.
 
@@ -187,7 +188,7 @@ strands multi-GB blobs that nothing can name. This has been the bug twice.
 
 Layout, typography, spacing, card structure, charts, court visualisations,
 copy, navigation, empty states, the progress track's appearance
-(`analysis-progress-track.tsx`), and the wizard's step *presentation* — as long
+(`analysis-progress-track.tsx`), and the wizard's step _presentation_ — as long
 as §3.1's five fields still get collected.
 
 ~~`match-video-panel.tsx` and `use-video-upload.ts` are **dead**.~~ **Deleted**
@@ -203,7 +204,7 @@ No downstream check can catch these. The page renders, the numbers look
 plausible, and every statistic belongs to the wrong player.
 
 1. **"Your end at video start"** is **camera-relative at the first frame** — is
-   player 1 at the *top of the frame* (far side from the camera). Not the deuce
+   player 1 at the _top of the frame_ (far side from the camera). Not the deuce
    side, not who served first, not a compass direction. Ends change every odd
    game, so it describes the opening and nothing else.
 2. **Set scores are reordered top-player-first** before sending. That ordering
@@ -211,7 +212,7 @@ plausible, and every statistic belongs to the wrong player.
 3. **Tiebreak sets send the GAME count.** A 7-6 set is `[7, 6]` — never the
    tiebreak points.
 
-If a redesign changes how these are asked, keep the *meaning* identical and
+If a redesign changes how these are asked, keep the _meaning_ identical and
 re-read `job-request.ts`'s header comment first.
 
 **Open question:** our field says "video start", but the vendor analyses from
@@ -224,6 +225,7 @@ the start of the match and the ambiguity disappears.
 ## 5. Open action items — none are UI
 
 **Blocking a production launch**
+
 - `SPLITSTEP_API_KEY` is set on Vercel **Preview only**. Production submissions
   will 503 until it is added there.
 - Vercel crons run against **Production only**, so `/api/cron/reclaim-videos`
@@ -232,6 +234,7 @@ the start of the match and the ambiguity disappears.
   `npx tsx scripts/cleanup-orphan-storage.ts --apply`
 
 **Ask the vendor** (contact: Christian; endpoint `https://splitstep.ngrok.io/jobs`)
+
 - Echo `MatchID` on webhooks. Their payload carries `job_id` and `video_id` but
   not `MatchID`, which is why deliveries that beat our id write had to be adopted
   after the fact (`adopt-deliveries.ts`). Echoing it makes the race impossible.
@@ -248,6 +251,7 @@ the start of the match and the ambiguity disappears.
   video surface can offer — and whether keeping their copy over ours is worth it.
 
 **Code, non-UI**
+
 - **Promote the five quality scores to columns.** `homography`, `ball_detection`,
   `bounce_detection`, `player_detection`, `stroke_detection` arrive on every
   completion and sit unqueryable in `raw_webhook_payload`.
@@ -268,7 +272,7 @@ the start of the match and the ambiguity disappears.
 - **The untrimmed cost warning keys off the handles, not the cost.**
   `untrimmed = duration > 0 && start <= 0 && end >= duration - 1`, so trimming 15
   seconds off an 87-minute video suppressed a warning about spending 86 of 120
-  monthly minutes. Should warn on the *share of remaining quota*.
+  monthly minutes. Should warn on the _share of remaining quota_.
 - **Land `plan-role-split`.** Migration `20260806144035` is applied in
   production — `users.plan` exists, is backfilled, and is trigger-protected — but
   no deployed code reads it. Stripe and the subscription page still use
@@ -280,6 +284,7 @@ the start of the match and the ambiguity disappears.
   `supabase db push`.
 
 **Gated, not forgotten**
+
 - **Phase 2 derivation** — blocked on vendor questions Q8/Q9/Q13. This is what
   makes "Stats pending" resolve into real numbers. A real 596-stroke / 114-rally
   payload now exists as an input.
@@ -295,8 +300,8 @@ the start of the match and the ambiguity disappears.
 
 ## 6. Corrections to `ux-overhaul-brief.md`
 
-That brief is dated 2026-08-06 and is still the best statement of *what to
-build*. Four of its "broken" items are now fixed — do not action them:
+That brief is dated 2026-08-06 and is still the best statement of _what to
+build_. Four of its "broken" items are now fixed — do not action them:
 
 - §2.2 #1 "`getMatchAnalysis` is a mock" — **fixed.** `match-analysis-server.ts`
   reads real `processing_jobs` rows.
@@ -335,7 +340,7 @@ predecessor, kept until its in-flight jobs finish) lists the two deployed hosts 
 is wrong. Add the origin rather than replacing the rule; the same rule serves production:
 
 ```ts
-const props = await svc.getProperties();          // @azure/storage-blob
+const props = await svc.getProperties(); // @azure/storage-blob
 props.cors[0].allowedOrigins += ",http://localhost:<port>";
 await svc.setProperties(props);
 ```

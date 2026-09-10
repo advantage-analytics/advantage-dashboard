@@ -51,7 +51,7 @@ export default function AccountPage() {
       setMessage(
         result.ok
           ? { type: "success", text: "Reset link sent. Check your inbox." }
-          : { type: "error", text: result.error }
+          : { type: "error", text: result.error },
       );
     });
   }, []);
@@ -87,10 +87,12 @@ export default function AccountPage() {
   // about the same set or someone reading their personal workspace is
   // refused without ever having been told why.
   const ownedPrograms = available.filter(
-    (workspace) => workspace.kind === "team" && workspace.role === "owner"
+    (workspace) => workspace.kind === "team" && workspace.role === "owner",
   );
   const ownsProgram = ownedPrograms.length > 0;
-  const ownedNames = ownedPrograms.map((workspace) => workspace.name).join(", ");
+  const ownedNames = ownedPrograms
+    .map((workspace) => workspace.name)
+    .join(", ");
 
   return (
     <div className="flex max-w-[660px] flex-col gap-10">
@@ -187,15 +189,15 @@ export default function AccountPage() {
 
       {/* 03 · Delete account — bounded, and the only thing in its own frame. */}
       <section className="mt-2 flex flex-col overflow-hidden rounded-[14px] border border-[var(--border-card)]">
-        <div className="px-5 pb-3 pt-4">
+        <div className="px-5 pt-4 pb-3">
           <SettingsSectionHeading number="03" title="Delete account" />
         </div>
 
         <div className="flex flex-col gap-3 px-5 pb-4">
           <span className="text-[12px] leading-[1.55] text-[var(--ink-600)]">
-            Removes your personal matches, statistics, reports, and your
-            account record. Matches you filed under a team stay with that
-            team, as a profile its coaches manage. This cannot be undone.
+            Removes your personal matches, statistics, reports, and your account
+            record. Matches you filed under a team stay with that team, as a
+            profile its coaches manage. This cannot be undone.
           </span>
 
           {ownsProgram && (
@@ -312,7 +314,7 @@ function FactRow({
     <div
       className={cn(
         "flex items-center gap-4 border-t border-[var(--border-hairline)] py-3.5",
-        className
+        className,
       )}
     >
       <span className="w-[130px] shrink-0 text-[11px] text-[var(--ink-600)]">

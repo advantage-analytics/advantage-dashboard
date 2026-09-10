@@ -71,9 +71,11 @@ function isReportable(card: EvidenceCard): boolean {
  * any, the largest-magnitude levels — still ordered so the two most
  * substantial numbers lead.
  */
-function pickEvidenceCards(
-  kpiCards: EvidenceCard[]
-): { first: EvidenceCard; second: EvidenceCard | undefined; withDeltas: boolean } | null {
+function pickEvidenceCards(kpiCards: EvidenceCard[]): {
+  first: EvidenceCard;
+  second: EvidenceCard | undefined;
+  withDeltas: boolean;
+} | null {
   const reportable = kpiCards.filter(isReportable);
   if (reportable.length === 0) return null;
 
@@ -100,7 +102,7 @@ export interface InsightEvidence {
 /** The evidence line and the caption that names what it measured. */
 export function buildInsightEvidenceWithCaption(
   kpiCards: EvidenceCard[],
-  matchCount: number
+  matchCount: number,
 ): InsightEvidence | null {
   if (matchCount === 0) return null;
 
@@ -122,7 +124,7 @@ export function buildInsightEvidenceWithCaption(
  */
 function evidenceParts(
   picked: NonNullable<ReturnType<typeof pickEvidenceCards>>,
-  matchCount: number
+  matchCount: number,
 ): EvidencePart[] {
   const { first, second, withDeltas } = picked;
 
@@ -139,7 +141,7 @@ function evidenceParts(
     parts.push(
       { text: " (" },
       { text: signed(first.change), tabular: true },
-      { text: ` ${first.changeLabel})` }
+      { text: ` ${first.changeLabel})` },
     );
   }
 
@@ -148,13 +150,13 @@ function evidenceParts(
       { text: " and " },
       { text: inSentence(second.label) },
       { text: " at " },
-      { text: second.value, tabular: true }
+      { text: second.value, tabular: true },
     );
     if (withDeltas) {
       parts.push(
         { text: " (" },
         { text: signed(second.change), tabular: true },
-        { text: ")" }
+        { text: ")" },
       );
     }
   }
@@ -162,4 +164,3 @@ function evidenceParts(
   parts.push({ text: "." });
   return parts;
 }
-

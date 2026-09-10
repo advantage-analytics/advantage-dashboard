@@ -40,7 +40,11 @@ export function EventMark({
         BOX[size],
         // One box map, one type step per size — the alternative was a
         // three-arm ternary repeating the same six classes three times.
-        large ? "text-[14px] tracking-[0.2px]" : medium ? "text-[12px]" : "text-[9px]"
+        large
+          ? "text-[14px] tracking-[0.2px]"
+          : medium
+            ? "text-[12px]"
+            : "text-[9px]",
       )}
     >
       {kind === "tournament" ? (
@@ -48,7 +52,13 @@ export function EventMark({
         <img
           src="/icons/tournament-icon.svg"
           alt=""
-          className={large ? "block size-5" : medium ? "block size-4" : "block size-[13px]"}
+          className={
+            large
+              ? "block size-5"
+              : medium
+                ? "block size-4"
+                : "block size-[13px]"
+          }
         />
       ) : (
         markInitials(name)

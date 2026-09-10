@@ -14,12 +14,11 @@
  * copied so the two callers cannot drift on what "configured" means.
  */
 
-import { resolveWebhookUrl } from './config';
-import { resolveAzureStorageConfig } from './video-url';
+import { resolveWebhookUrl } from "./config";
+import { resolveAzureStorageConfig } from "./video-url";
 
 export type SplitstepVendorApiConfig =
-  | { ok: true; apiUrl: string; apiKey: string }
-  | { ok: false; missing: string };
+  { ok: true; apiUrl: string; apiKey: string } | { ok: false; missing: string };
 
 /**
  * Just the two things a call TO the vendor's status endpoint needs.
@@ -36,14 +35,14 @@ export function resolveSplitstepVendorApiConfig(): SplitstepVendorApiConfig {
 
   // The published vendor client still points at api.example.com; refuse rather
   // than POST a real job at a placeholder host.
-  if (!apiUrl || apiUrl.includes('api.example.com')) {
+  if (!apiUrl || apiUrl.includes("api.example.com")) {
     return {
       ok: false,
-      missing: 'SPLITSTEP_API_URL (absent, or still the placeholder)',
+      missing: "SPLITSTEP_API_URL (absent, or still the placeholder)",
     };
   }
   if (!apiKey) {
-    return { ok: false, missing: 'SPLITSTEP_API_KEY' };
+    return { ok: false, missing: "SPLITSTEP_API_KEY" };
   }
   return { ok: true, apiUrl, apiKey };
 }
@@ -63,7 +62,7 @@ export function resolveSplitstepDeploymentConfig(): SplitstepDeploymentConfig {
   if (!webhookUrl) {
     return {
       ok: false,
-      missing: 'NEXT_PUBLIC_SITE_URL (absent, or points at localhost)',
+      missing: "NEXT_PUBLIC_SITE_URL (absent, or points at localhost)",
     };
   }
 
@@ -78,5 +77,10 @@ export function resolveSplitstepDeploymentConfig(): SplitstepDeploymentConfig {
     return { ok: false, missing: storage.missing };
   }
 
-  return { ok: true, webhookUrl, apiUrl: vendorApi.apiUrl, apiKey: vendorApi.apiKey };
+  return {
+    ok: true,
+    webhookUrl,
+    apiUrl: vendorApi.apiUrl,
+    apiKey: vendorApi.apiKey,
+  };
 }

@@ -34,7 +34,7 @@ export function HeadToHeadWidget({
   opponentProgramId: string | null;
 }) {
   return (
-    <div className="surface-card min-w-0 px-5 pb-4 pt-4">
+    <div className="surface-card min-w-0 px-5 pt-4 pb-4">
       <div className="flex items-baseline justify-between gap-2">
         <span className="eyebrow">Head-to-head</span>
         <span className="text-[12px]" style={{ color: "var(--ink-600)" }}>
@@ -73,7 +73,7 @@ function MeetingRow({ meeting }: { meeting: OpponentMeeting }) {
       <span style={{ color: "var(--ink-600)" }}>
         {formatEventDay(meeting.startsOn)}
       </span>
-      <span className="flex items-center gap-2 tabular">
+      <span className="tabular flex items-center gap-2">
         <ResultMark won={meeting.won} />
         <span style={{ color: "var(--ink-900)" }}>
           {meeting.us}–{meeting.them}

@@ -3,7 +3,11 @@
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
 
-import { advField, type AdvFieldKind, type AdvFieldSize } from "@/lib/ui/adv-field";
+import {
+  advField,
+  type AdvFieldKind,
+  type AdvFieldSize,
+} from "@/lib/ui/adv-field";
 import { cn } from "@/lib/utils";
 
 /**
@@ -76,8 +80,7 @@ import { cn } from "@/lib/utils";
  */
 export type AdvSelectKind = AdvFieldKind | "bare";
 
-export interface AdvSelectProps
-  extends React.SelectHTMLAttributes<HTMLSelectElement> {
+export interface AdvSelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   kind?: AdvSelectKind;
   /**
    * `advField()`'s size tier, forwarded to the `boxed` kind only — the
@@ -142,7 +145,9 @@ export function AdvSelect({
         // rule this kind draws, not chosen by the caller.
         data-focus-ring={kind === "boxed" ? undefined : "none"}
         className={cn(
-          kind === "bare" ? "bg-transparent outline-none" : advField(kind, fieldSize),
+          kind === "bare"
+            ? "bg-transparent outline-none"
+            : advField(kind, fieldSize),
           "w-full cursor-pointer appearance-none",
           VALUE_PADDING[kind],
           "disabled:cursor-not-allowed disabled:opacity-50",
@@ -152,7 +157,7 @@ export function AdvSelect({
           // site that sets its own text colour silently loses the grey. `cn`
           // resolves the pair through tailwind-merge, so only one lands —
           // ordering here is the whole mechanism, not a tiebreak.
-          isPlaceholder && "text-[var(--ink-400)]"
+          isPlaceholder && "text-[var(--ink-400)]",
         )}
       >
         {children}
@@ -162,7 +167,7 @@ export function AdvSelect({
           "pointer-events-none absolute top-1/2 size-[13px] -translate-y-1/2 text-[var(--ink-500)]",
           CHEVRON_INSET[kind],
           props.disabled && "opacity-50",
-          chevronClassName
+          chevronClassName,
         )}
         strokeWidth={1.5}
         aria-hidden="true"

@@ -32,8 +32,11 @@ export function ProfileIdentity({
   if (profile.role !== "player") facts.push(capitalize(profile.role));
   facts.push(
     <>
-      <span className="tabular">{recordLabel(profile.wins, profile.losses)}</span> this season
-    </>
+      <span className="tabular">
+        {recordLabel(profile.wins, profile.losses)}
+      </span>{" "}
+      this season
+    </>,
   );
 
   return (

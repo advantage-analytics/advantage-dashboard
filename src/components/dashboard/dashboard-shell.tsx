@@ -73,25 +73,25 @@ export function DashboardShell({
         <SidebarStateProvider>
           {/* Wraps both, because the page sets the status and the header reads it. */}
           <HeaderStatusProvider>
-          {/* Same reason, other end of the bar: the page publishes a leading
+            {/* Same reason, other end of the bar: the page publishes a leading
               slot and the header reads it. */}
-          <HeaderSlotProvider>
-            <div className="flex h-screen w-full overflow-hidden bg-white">
-              <AppSidebar />
-              <div className="flex min-w-0 flex-1 flex-col overflow-y-auto scroll-smooth motion-reduce:scroll-auto">
-                <Header activitySlot={activitySlot} greeting={greeting} />
-                {/* Grows to fill whatever the header leaves, so a page shorter
+            <HeaderSlotProvider>
+              <div className="flex h-screen w-full overflow-hidden bg-white">
+                <AppSidebar />
+                <div className="flex min-w-0 flex-1 flex-col overflow-y-auto scroll-smooth motion-reduce:scroll-auto">
+                  <Header activitySlot={activitySlot} greeting={greeting} />
+                  {/* Grows to fill whatever the header leaves, so a page shorter
                     than the viewport can still push its own footer to the
                     bottom edge instead of leaving it hanging under the cards.
                     Content taller than the viewport is unaffected — `flex-1`
                     cannot shrink a flex item below its min-content height, so
                     tall pages keep scrolling in normal flow. */}
-                <main className="flex flex-1 flex-col">
-                  <PageTransition>{children}</PageTransition>
-                </main>
+                  <main className="flex flex-1 flex-col">
+                    <PageTransition>{children}</PageTransition>
+                  </main>
+                </div>
               </div>
-            </div>
-          </HeaderSlotProvider>
+            </HeaderSlotProvider>
           </HeaderStatusProvider>
           <MobileGate />
         </SidebarStateProvider>

@@ -186,10 +186,13 @@ function matchesFilm(
   }
 
   if (f.ball === "first" && point.firstShotType !== "First Serve") return false;
-  if (f.ball === "second" && point.firstShotType !== "Second Serve") return false;
+  if (f.ball === "second" && point.firstShotType !== "Second Serve")
+    return false;
 
-  if (f.wing === "forehand" && point.secondShotType !== "Forehand") return false;
-  if (f.wing === "backhand" && point.secondShotType !== "Backhand") return false;
+  if (f.wing === "forehand" && point.secondShotType !== "Forehand")
+    return false;
+  if (f.wing === "backhand" && point.secondShotType !== "Backhand")
+    return false;
 
   if (f.outcome !== "any") {
     const youWon = point.wonByPlayer1 === youIsPlayer1;
@@ -309,7 +312,7 @@ function Segmented<T extends string>({
   return (
     <div className="flex flex-col gap-[5px]">
       <span className="text-[11px] text-[var(--ink-400)]">{label}</span>
-      <div className="inline-flex self-start gap-0.5 rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] p-0.5">
+      <div className="inline-flex gap-0.5 self-start rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] p-0.5">
         {options.map((option) => {
           const active = option.value === value;
           return (
@@ -362,7 +365,9 @@ function CheckRow({
             : "border-[var(--ink-300)] bg-[var(--surface-card)]",
         )}
       >
-        {checked && <Check className="h-[9px] w-[9px] text-white" strokeWidth={3} />}
+        {checked && (
+          <Check className="h-[9px] w-[9px] text-white" strokeWidth={3} />
+        )}
       </span>
       <span className="text-[12px] text-[var(--ink-700)]">{label}</span>
       <div className="flex-1" />
@@ -629,7 +634,11 @@ export function FilmFiltersPanel({
         >
           Clear all
         </button>
-        <button type="button" onClick={onApply} className={advButton("primary", "sm")}>
+        <button
+          type="button"
+          onClick={onApply}
+          className={advButton("primary", "sm")}
+        >
           Apply
         </button>
       </div>

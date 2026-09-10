@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
 import {
   dualScore,
@@ -7,9 +7,9 @@ import {
   forfeitWon,
   lineWon,
   supportsVideo,
-} from '@/lib/schedule/entry-state';
-import { LINE_STATUS } from '@/lib/schedule/line-status';
-import type { EntryMatch, EventEntry } from '@/lib/schedule/types';
+} from "@/lib/schedule/entry-state";
+import { LINE_STATUS } from "@/lib/schedule/line-status";
+import type { EntryMatch, EventEntry } from "@/lib/schedule/types";
 
 /**
  * Forfeited lines, and which team the point goes to.
@@ -29,38 +29,38 @@ import type { EntryMatch, EventEntry } from '@/lib/schedule/types';
  * nothing on screen looking broken.
  */
 
-function match(id: string, winner: 'us' | 'them'): EntryMatch {
+function match(id: string, winner: "us" | "them"): EntryMatch {
   const won = [6, 6];
   const lost = [3, 4];
   return {
     id,
     round: null,
-    status: 'imported',
+    status: "imported",
     score:
-      winner === 'us'
+      winner === "us"
         ? { player1: won, player2: lost }
         : { player1: lost, player2: won },
-    opponentLabels: ['Rival Player'],
+    opponentLabels: ["Rival Player"],
     hasVideo: false,
   };
 }
 
 function entry(
   slot: string,
-  outcome: 'us' | 'them' | 'unplayed' | 'forfeit-ours' | 'forfeit-theirs',
-  position: number
+  outcome: "us" | "them" | "unplayed" | "forfeit-ours" | "forfeit-theirs",
+  position: number,
 ): EventEntry {
   const forfeit =
-    outcome === 'forfeit-ours'
-      ? ('ours' as const)
-      : outcome === 'forfeit-theirs'
-        ? ('theirs' as const)
+    outcome === "forfeit-ours"
+      ? ("ours" as const)
+      : outcome === "forfeit-theirs"
+        ? ("theirs" as const)
         : null;
 
   return {
     id: `entry-${slot}`,
-    eventId: 'e-1',
-    discipline: slot.startsWith('S') ? 'singles' : 'doubles',
+    eventId: "e-1",
+    discipline: slot.startsWith("S") ? "singles" : "doubles",
     slot,
     position,
     draw: null,
@@ -69,11 +69,11 @@ function entry(
     // A forfeited line carries nobody, which is what `dual-form` writes and
     // what `line-row` renders as "— no available player".
     playerLabels: forfeit === null ? [`Player ${slot}`] : [],
-    opponentLabels: forfeit === null ? ['Rival Player'] : [],
-    opponentSchool: 'Rival State',
+    opponentLabels: forfeit === null ? ["Rival Player"] : [],
+    opponentSchool: "Rival State",
     forfeit,
     matches:
-      outcome === 'us' || outcome === 'them'
+      outcome === "us" || outcome === "them"
         ? [match(`m-${slot}`, outcome)]
         : [],
   };
@@ -84,38 +84,46 @@ function card(outcomes: [string, Parameters<typeof entry>[1]][]): EventEntry[] {
 }
 
 const ALL_NINE: [string, Parameters<typeof entry>[1]][] = [
-  ['S1', 'us'],
-  ['S2', 'us'],
-  ['S3', 'us'],
-  ['S4', 'them'],
-  ['S5', 'them'],
-  ['S6', 'them'],
-  ['D1', 'us'],
-  ['D2', 'us'],
-  ['D3', 'them'],
+  ["S1", "us"],
+  ["S2", "us"],
+  ["S3", "us"],
+  ["S4", "them"],
+  ["S5", "them"],
+  ["S6", "them"],
+  ["D1", "us"],
+  ["D2", "us"],
+  ["D3", "them"],
 ];
 
-test.describe('which team a forfeit gives the point to', () => {
+test.describe("which team a forfeit gives the point to", () => {
   test("'theirs' means the opponent forfeited, so we take the line", () => {
-    expect(forfeitWon(entry('S6', 'forfeit-theirs', 5))).toBe(true);
+    expect(forfeitWon(entry("S6", "forfeit-theirs", 5))).toBe(true);
   });
 
   test("'ours' means we could not field a player, so they take the line", () => {
-    expect(forfeitWon(entry('S6', 'forfeit-ours', 5))).toBe(false);
+    expect(forfeitWon(entry("S6", "forfeit-ours", 5))).toBe(false);
   });
 
-  test('a line nobody forfeited has no forfeit answer at all', () => {
-    expect(forfeitWon(entry('S1', 'unplayed', 0))).toBeNull();
+  test("a line nobody forfeited has no forfeit answer at all", () => {
+    expect(forfeitWon(entry("S1", "unplayed", 0))).toBeNull();
   });
 
-  test('the point lands on the scoreboard on the side it was awarded', () => {
+  test("the point lands on the scoreboard on the side it was awarded", () => {
     // Same card twice, differing only in who forfeited S6. The two scores must
     // be mirror images — if they ever agree, the side is being ignored.
     const theyForfeit = dualScore(
-      card([...ALL_NINE.slice(0, 5), ['S6', 'forfeit-theirs'], ...ALL_NINE.slice(6)])
+      card([
+        ...ALL_NINE.slice(0, 5),
+        ["S6", "forfeit-theirs"],
+        ...ALL_NINE.slice(6),
+      ]),
     );
     const weForfeit = dualScore(
-      card([...ALL_NINE.slice(0, 5), ['S6', 'forfeit-ours'], ...ALL_NINE.slice(6)])
+      card([
+        ...ALL_NINE.slice(0, 5),
+        ["S6", "forfeit-ours"],
+        ...ALL_NINE.slice(6),
+      ]),
     );
 
     // S1–S3 ours, S4–S5 theirs, doubles point ours (D1 + D2 of three).
@@ -126,30 +134,30 @@ test.describe('which team a forfeit gives the point to', () => {
   });
 });
 
-test.describe('a dual with forfeits on it still adds up', () => {
-  test('every singles line forfeited still spends all six singles points', () => {
+test.describe("a dual with forfeits on it still adds up", () => {
+  test("every singles line forfeited still spends all six singles points", () => {
     const score = dualScore(
       card([
-        ['S1', 'forfeit-ours'],
-        ['S2', 'forfeit-ours'],
-        ['S3', 'forfeit-ours'],
-        ['S4', 'forfeit-theirs'],
-        ['S5', 'forfeit-theirs'],
-        ['S6', 'forfeit-theirs'],
-        ['D1', 'us'],
-        ['D2', 'us'],
-        ['D3', 'them'],
-      ])
+        ["S1", "forfeit-ours"],
+        ["S2", "forfeit-ours"],
+        ["S3", "forfeit-ours"],
+        ["S4", "forfeit-theirs"],
+        ["S5", "forfeit-theirs"],
+        ["S6", "forfeit-theirs"],
+        ["D1", "us"],
+        ["D2", "us"],
+        ["D3", "them"],
+      ]),
     );
 
     // Three each on the singles, and the doubles point to us: 4–3 of seven.
     expect(score).toEqual({ us: 4, them: 3, decided: true });
   });
 
-  test('a forfeit decides its line — the dual does not read unfinished', () => {
+  test("a forfeit decides its line — the dual does not read unfinished", () => {
     const withForfeit = card([
       ...ALL_NINE.slice(0, 5),
-      ['S6', 'forfeit-ours'],
+      ["S6", "forfeit-ours"],
       ...ALL_NINE.slice(6),
     ]);
     expect(dualScore(withForfeit).decided).toBe(true);
@@ -158,46 +166,46 @@ test.describe('a dual with forfeits on it still adds up', () => {
     // the assertion above is about the forfeit and not about the other eight.
     const withGap = card([
       ...ALL_NINE.slice(0, 5),
-      ['S6', 'unplayed'],
+      ["S6", "unplayed"],
       ...ALL_NINE.slice(6),
     ]);
     expect(dualScore(withGap).decided).toBe(false);
   });
 
-  test('a forfeited line counts as played, an empty one does not', () => {
-    expect(entryPlayed(entry('S6', 'forfeit-ours', 5))).toBe(true);
-    expect(entryPlayed(entry('S6', 'forfeit-theirs', 5))).toBe(true);
-    expect(entryPlayed(entry('S6', 'unplayed', 5))).toBe(false);
+  test("a forfeited line counts as played, an empty one does not", () => {
+    expect(entryPlayed(entry("S6", "forfeit-ours", 5))).toBe(true);
+    expect(entryPlayed(entry("S6", "forfeit-theirs", 5))).toBe(true);
+    expect(entryPlayed(entry("S6", "unplayed", 5))).toBe(false);
   });
 });
 
-test.describe('a forfeited line is never a line waiting to be played', () => {
+test.describe("a forfeited line is never a line waiting to be played", () => {
   test('it reports its own state, not "empty"', () => {
-    expect(entryState(entry('S6', 'forfeit-ours', 5))).toBe('forfeited');
-    expect(entryState(entry('S6', 'unplayed', 5))).toBe('empty');
+    expect(entryState(entry("S6", "forfeit-ours", 5))).toBe("forfeited");
+    expect(entryState(entry("S6", "unplayed", 5))).toBe("empty");
   });
 
-  test('every surface that draws a line state has a label for it', () => {
+  test("every surface that draws a line state has a label for it", () => {
     // `dual-sheet.tsx`, `line-row.tsx` and the detail pane all render through
     // this map. A missing entry would silently draw nothing where the outcome
     // belongs — reading as a line still to come.
     expect(LINE_STATUS.forfeited).toEqual({
-      label: 'Forfeited',
-      tone: 'neutral',
+      label: "Forfeited",
+      tone: "neutral",
     });
   });
 
-  test('nothing can be uploaded against it', () => {
+  test("nothing can be uploaded against it", () => {
     // A forfeited line has no match to analyse, so the video path must refuse
     // it even on singles, where it would otherwise be allowed.
-    expect(supportsVideo(entry('S6', 'forfeit-ours', 5))).toBe(false);
-    expect(supportsVideo(entry('S6', 'forfeit-theirs', 5))).toBe(false);
-    expect(supportsVideo(entry('S6', 'unplayed', 5))).toBe(true);
-    expect(supportsVideo(entry('D3', 'unplayed', 8))).toBe(false);
+    expect(supportsVideo(entry("S6", "forfeit-ours", 5))).toBe(false);
+    expect(supportsVideo(entry("S6", "forfeit-theirs", 5))).toBe(false);
+    expect(supportsVideo(entry("S6", "unplayed", 5))).toBe(true);
+    expect(supportsVideo(entry("D3", "unplayed", 8))).toBe(false);
   });
 });
 
-test.describe('lineWon · one precedence, every surface', () => {
+test.describe("lineWon · one precedence, every surface", () => {
   /**
    * A line carrying BOTH a forfeit and a match. `setForfeit` refuses to mark a
    * line that already has one and `recordResult` refuses to score a forfeited
@@ -209,22 +217,22 @@ test.describe('lineWon · one precedence, every surface', () => {
    * agree about it.
    */
   function contested(): EventEntry {
-    const e = entry('S6', 'forfeit-theirs', 5);
+    const e = entry("S6", "forfeit-theirs", 5);
     // The opponent forfeited — the line is ours — but a match under it says we
     // lost. The forfeit is the outcome; the match is the thing that did not
     // happen.
-    return { ...e, matches: [match('m-S6', 'them')] };
+    return { ...e, matches: [match("m-S6", "them")] };
   }
 
-  test('the forfeit outranks the match, whichever way it is asked', () => {
+  test("the forfeit outranks the match, whichever way it is asked", () => {
     const e = contested();
     expect(lineWon(e)).toBe(true);
     expect(lineWon(e, e.matches[0])).toBe(true);
     expect(lineWon(e, null)).toBe(true);
   });
 
-  test('with no forfeit it defers to the match it was handed', () => {
-    const e = entry('S1', 'them', 0);
+  test("with no forfeit it defers to the match it was handed", () => {
+    const e = entry("S1", "them", 0);
     expect(lineWon(e, e.matches[0])).toBe(false);
     // A row told there is no match for it is undecided, even though the entry
     // holds one — that is the per-round question a tournament row asks.
@@ -233,8 +241,8 @@ test.describe('lineWon · one precedence, every surface', () => {
     expect(lineWon(e)).toBe(false);
   });
 
-  test('an untouched line is undecided, not lost', () => {
-    expect(lineWon(entry('S1', 'unplayed', 0))).toBe(false);
-    expect(lineWon(entry('S1', 'unplayed', 0), null)).toBeNull();
+  test("an untouched line is undecided, not lost", () => {
+    expect(lineWon(entry("S1", "unplayed", 0))).toBe(false);
+    expect(lineWon(entry("S1", "unplayed", 0), null)).toBeNull();
   });
 });

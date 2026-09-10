@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { Mail } from "lucide-react";
-import { ClaimShell, ClaimHeading, CLAIM_LINK } from "@/components/claim/claim-shell";
+import {
+  ClaimShell,
+  ClaimHeading,
+  CLAIM_LINK,
+} from "@/components/claim/claim-shell";
 import { ResendTimer } from "@/components/claim/resend-timer";
 
 export const metadata = { title: "Check your email" };

@@ -33,20 +33,22 @@ export interface LadderPlayer {
  * and floating those to S1 would make the lineup form propose a ladder nobody
  * set.
  */
-export const getRosterPlayerOptions = cache(async function getRosterPlayerOptions(
-  programId: string
-): Promise<RosterPlayerOption[]> {
-  const supabase = await createClient();
+export const getRosterPlayerOptions = cache(
+  async function getRosterPlayerOptions(
+    programId: string,
+  ): Promise<RosterPlayerOption[]> {
+    const supabase = await createClient();
 
-  const { data } = await supabase.rpc("program_roster_full", {
-    p_program_id: programId,
-  });
+    const { data } = await supabase.rpc("program_roster_full", {
+      p_program_id: programId,
+    });
 
-  // The filter/name-fallback/sort rules live in roster-shared.ts, shared with
-  // the upload wizard's who-played picker so the two RPC consumers cannot
-  // drift.
-  return rosterPlayerOptions((data ?? []) as RosterFullRow[]);
-});
+    // The filter/name-fallback/sort rules live in roster-shared.ts, shared with
+    // the upload wizard's who-played picker so the two RPC consumers cannot
+    // drift.
+    return rosterPlayerOptions((data ?? []) as RosterFullRow[]);
+  },
+);
 
 /**
  * The lineup forms' view of the same read.
@@ -59,7 +61,7 @@ export const getRosterPlayerOptions = cache(async function getRosterPlayerOption
  * it.
  */
 export const getLadder = cache(async function getLadder(
-  programId: string
+  programId: string,
 ): Promise<LadderPlayer[]> {
   return (await getRosterPlayerOptions(programId)).map((row) => ({
     userId: row.playerId,

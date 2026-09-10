@@ -29,9 +29,9 @@ export function StatePill({
   return (
     <span
       className={cn(
-        "inline-flex h-[18px] items-center whitespace-nowrap rounded-full px-[7px] text-[10px] font-medium",
+        "inline-flex h-[18px] items-center rounded-full px-[7px] text-[10px] font-medium whitespace-nowrap",
         outline ? "text-[var(--ink-500)]" : "text-[var(--ink-700)]",
-        className
+        className,
       )}
       style={
         outline

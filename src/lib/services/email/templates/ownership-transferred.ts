@@ -24,7 +24,7 @@ export interface OwnershipTransferredInput {
 }
 
 export function ownershipTransferredEmail(
-  input: OwnershipTransferredInput
+  input: OwnershipTransferredInput,
 ): EmailMessage {
   const { to, programName, programId } = input;
   const previous = input.previousOwnerName?.trim() || "The previous owner";

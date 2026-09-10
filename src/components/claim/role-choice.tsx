@@ -91,16 +91,16 @@ export function RoleChoice() {
               onClick={() => setChoice(option.id)}
               className={cn(
                 "flex cursor-pointer flex-col gap-2 rounded-[var(--radius-element)] border p-5 text-left transition-colors duration-[var(--duration-fast)]",
-                "focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]",
+                "focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
                 selected
                   ? "border-[var(--blue)] bg-[var(--blue-soft)]"
-                  : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]"
+                  : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]",
               )}
             >
               <Icon
                 className={cn(
                   "size-5",
-                  selected ? "text-[var(--blue)]" : "text-[var(--ink-600)]"
+                  selected ? "text-[var(--blue)]" : "text-[var(--ink-600)]",
                 )}
                 strokeWidth={1.5}
                 aria-hidden="true"

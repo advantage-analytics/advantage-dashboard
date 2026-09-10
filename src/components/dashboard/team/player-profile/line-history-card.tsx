@@ -1,5 +1,8 @@
 import { FormTicks } from "@/components/dashboard/shared/form-ticks";
-import { GHOST_OPACITY, GhostRule } from "@/components/dashboard/home/day-zero-shape";
+import {
+  GHOST_OPACITY,
+  GhostRule,
+} from "@/components/dashboard/home/day-zero-shape";
 import { recordLabel, type LineRow } from "@/lib/data/player-profile";
 
 /** Exported for the day-zero ghost, which draws these columns empty. */
@@ -7,17 +10,25 @@ export const LINE_GRID = "grid-cols-[32px_1fr_76px_56px]";
 
 export function LineHistoryHeader() {
   return (
-    <div className={`grid ${LINE_GRID} gap-2.5 border-b border-[var(--border-hairline)] pb-2`}>
+    <div
+      className={`grid ${LINE_GRID} gap-2.5 border-b border-[var(--border-hairline)] pb-2`}
+    >
       <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
         #
       </span>
       <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
         Form
       </span>
-      <span className="eyebrow-sm text-right" style={{ color: "var(--ink-400)" }}>
+      <span
+        className="eyebrow-sm text-right"
+        style={{ color: "var(--ink-400)" }}
+      >
         Record
       </span>
-      <span className="eyebrow-sm text-right" style={{ color: "var(--ink-400)" }}>
+      <span
+        className="eyebrow-sm text-right"
+        style={{ color: "var(--ink-400)" }}
+      >
         Win %
       </span>
     </div>
@@ -40,7 +51,9 @@ export function LineHistoryHeader() {
  * They were separate lists for a week and had already drifted to two fade
  * ramps for one card.
  */
-export const LINE_GHOST_RULES: readonly React.ComponentProps<typeof GhostRule>[] = [
+export const LINE_GHOST_RULES: readonly React.ComponentProps<
+  typeof GhostRule
+>[] = [
   { width: "20px" }, // #
   { width: "34px" }, // Form
   { width: "70%" }, // Record
@@ -50,7 +63,11 @@ export const LINE_GHOST_RULES: readonly React.ComponentProps<typeof GhostRule>[]
 /** Three rows is enough to read as a table; a fourth is just more grey. */
 const GHOST_ROW_COUNT = 3;
 
-export function LineHistoryGhostRows({ opacities }: { opacities: readonly number[] }) {
+export function LineHistoryGhostRows({
+  opacities,
+}: {
+  opacities: readonly number[];
+}) {
   return (
     <>
       {opacities.map((opacity) => (
@@ -61,7 +78,10 @@ export function LineHistoryGhostRows({ opacities }: { opacities: readonly number
           aria-hidden="true"
         >
           {LINE_GHOST_RULES.map((rule, i) => (
-            <span key={i} className={`flex items-center${i >= 2 ? " justify-end" : ""}`}>
+            <span
+              key={i}
+              className={`flex items-center${i >= 2 ? "justify-end" : ""}`}
+            >
               <GhostRule {...rule} />
             </span>
           ))}
@@ -91,12 +111,14 @@ export function LineHistoryCard({ lines }: { lines: LineRow[] }) {
               rather than compete with the cards beside it. */}
           <div inert>
             <LineHistoryGhostRows
-              opacities={GHOST_OPACITY.slice(0, GHOST_ROW_COUNT).map((o) => o * 0.5)}
+              opacities={GHOST_OPACITY.slice(0, GHOST_ROW_COUNT).map(
+                (o) => o * 0.5,
+              )}
             />
           </div>
-          <span className="pt-3 text-micro" style={{ textWrap: "pretty" }}>
-            Lines fill in as matches are played on the schedule — a dual&rsquo;s S1 to
-            S6 and D1 to D3, or a tournament draw.
+          <span className="text-micro pt-3" style={{ textWrap: "pretty" }}>
+            Lines fill in as matches are played on the schedule — a dual&rsquo;s
+            S1 to S6 and D1 to D3, or a tournament draw.
           </span>
         </>
       ) : (
@@ -106,7 +128,9 @@ export function LineHistoryCard({ lines }: { lines: LineRow[] }) {
               key={line.slot}
               className={`grid ${LINE_GRID} h-11 items-center gap-2.5`}
             >
-              <span className="mono text-[11px] text-[var(--ink-700)]">{line.slot}</span>
+              <span className="mono text-[11px] text-[var(--ink-700)]">
+                {line.slot}
+              </span>
               <span className="flex items-center">
                 <FormTicks form={line.form} />
               </span>

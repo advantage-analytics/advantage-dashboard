@@ -74,8 +74,8 @@ export function CrestControl({
           Team identity
         </div>
         <div className="mt-[3px] text-[11px] text-[var(--ink-500)]">
-          Crest, name and home courts — used on team match cards, the roster
-          and shared reports.
+          Crest, name and home courts — used on team match cards, the roster and
+          shared reports.
         </div>
         <div className="mt-[7px] flex items-center gap-3">
           <button

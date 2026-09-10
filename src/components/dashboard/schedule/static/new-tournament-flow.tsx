@@ -110,8 +110,7 @@ export type NewTournamentFlowProps = {
   roster: LadderPlayer[];
   defaultSurface: string | null;
 } & (
-  | { mode?: "create"; event?: undefined }
-  | { mode: "edit"; event: EventDetail }
+  { mode?: "create"; event?: undefined } | { mode: "edit"; event: EventDetail }
 );
 
 /**
@@ -131,7 +130,7 @@ export type NewTournamentFlowProps = {
  */
 export function tournamentSeed(
   { event, entries }: EventDetail,
-  roster: LadderPlayer[]
+  roster: LadderPlayer[],
 ): TournamentDraftSeed {
   const onRoster = new Set(roster.map((player) => player.userId));
   const field: TournamentEntrySeed[] = [];
@@ -215,7 +214,7 @@ export function NewTournamentFlow({
   // every keystroke — harmless, and still not what the hook describes.
   const initial = useMemo(
     () => (event ? tournamentSeed(event, roster) : undefined),
-    [event, roster]
+    [event, roster],
   );
 
   const contentRef = useRef<HTMLDivElement>(null);
@@ -250,9 +249,7 @@ export function NewTournamentFlow({
   // second tournament.
   const continueDisabled = lastStep
     ? pending || entryCount === 0
-    : draft.name.trim() === "" ||
-      draft.startsOn === "" ||
-      draft.endsOn === "";
+    : draft.name.trim() === "" || draft.startsOn === "" || draft.endsOn === "";
 
   const onContinue = useCallback(() => {
     if (lastStep) {

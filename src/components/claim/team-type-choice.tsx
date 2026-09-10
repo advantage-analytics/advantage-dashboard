@@ -41,7 +41,6 @@ const OPTIONS: { id: CustomOrgType; label: string; sub: string }[] = [
   },
 ];
 
-
 export function TeamTypeChoice() {
   const router = useRouter();
   const [type, setType] = useState<CustomOrgType | null>(null);
@@ -64,10 +63,10 @@ export function TeamTypeChoice() {
               onClick={() => setType(option.id)}
               className={cn(
                 "flex cursor-pointer items-start gap-2.5 rounded-[var(--radius-element)] border px-5 py-4 text-left transition-colors duration-[var(--duration-fast)]",
-                "focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]",
+                "focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
                 selected
                   ? "border-[var(--blue)] bg-[var(--blue-tint-08)]"
-                  : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]"
+                  : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]",
               )}
             >
               {/* `leading-5` is load-bearing: Tailwind v4's
@@ -90,9 +89,7 @@ export function TeamTypeChoice() {
         <button
           type="button"
           disabled={!type}
-          onClick={() =>
-            type && router.push(`/claim/team/setup?type=${type}`)
-          }
+          onClick={() => type && router.push(`/claim/team/setup?type=${type}`)}
           className={CLAIM_BUTTON}
         >
           Continue

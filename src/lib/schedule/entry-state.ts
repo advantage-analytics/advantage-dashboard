@@ -158,7 +158,7 @@ export function entryPlayed(entry: EventEntry): boolean {
  */
 export function lineWon(
   entry: EventEntry,
-  match?: EntryMatch | null
+  match?: EntryMatch | null,
 ): boolean | null {
   const forfeit = forfeitWon(entry);
   if (forfeit !== null) return forfeit;
@@ -248,16 +248,22 @@ export function dualScore(entries: EventEntry[]): {
   const doubles = entries.filter((entry) => entry.discipline === "doubles");
 
   let us = singles.filter(entryWon).length;
-  let them = singles.filter((entry) => entryPlayed(entry) && !entryWon(entry)).length;
+  let them = singles.filter(
+    (entry) => entryPlayed(entry) && !entryWon(entry),
+  ).length;
 
   const doublesWon = doubles.filter(entryWon).length;
   const doublesLost = doubles.filter(
-    (entry) => entryPlayed(entry) && !entryWon(entry)
+    (entry) => entryPlayed(entry) && !entryWon(entry),
   ).length;
   if (doublesWon >= 2) us += 1;
   else if (doublesLost >= 2) them += 1;
 
-  return { us, them, decided: entries.length > 0 && entries.every(entryPlayed) };
+  return {
+    us,
+    them,
+    decided: entries.length > 0 && entries.every(entryPlayed),
+  };
 }
 
 /**
@@ -284,7 +290,7 @@ export function lineCoverageFrom(entries: EventEntry[]): {
     if (entry.forfeit !== null) continue;
     total += Math.max(1, entry.matches.length);
     analyzed += entry.matches.filter((match) =>
-      isAnalysisReady(match.status)
+      isAnalysisReady(match.status),
     ).length;
   }
 

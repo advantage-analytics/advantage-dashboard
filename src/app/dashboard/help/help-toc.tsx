@@ -124,8 +124,7 @@ export function HelpToc() {
         behavior: reduceMotion ? "auto" : "smooth",
         block: "start",
       });
-      const link =
-        desktopFirstLinkRef.current ?? mobileFirstLinkRef.current;
+      const link = desktopFirstLinkRef.current ?? mobileFirstLinkRef.current;
       // Defer focus so the smooth scroll isn't interrupted on some browsers.
       requestAnimationFrame(() => link?.focus({ preventScroll: true }));
     };
@@ -139,13 +138,7 @@ export function HelpToc() {
   // Respects prefers-reduced-motion and preserves modifier-key default behavior.
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
-      if (
-        e.button !== 0 ||
-        e.metaKey ||
-        e.ctrlKey ||
-        e.shiftKey ||
-        e.altKey
-      ) {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
         return;
       }
       const target = e.target;
@@ -175,15 +168,7 @@ export function HelpToc() {
       {/* Mobile / tablet — sticky pill bar under the dashboard header */}
       <nav
         aria-label="Help topics"
-        className="
-          lg:hidden
-          sticky top-11 z-20
-          -mx-6 px-6 sm:-mx-8 sm:px-8
-          bg-[var(--surface-card)]
-          border-b border-[var(--border-hairline)]
-          flex gap-2 overflow-x-auto whitespace-nowrap
-          py-3
-        "
+        className="sticky top-11 z-20 -mx-6 flex gap-2 overflow-x-auto border-b border-[var(--border-hairline)] bg-[var(--surface-card)] px-6 py-3 whitespace-nowrap sm:-mx-8 sm:px-8 lg:hidden"
       >
         {ITEMS.map((item, idx) => {
           const isActive = active === item.id;
@@ -214,7 +199,7 @@ export function HelpToc() {
         className="hidden w-[200px] shrink-0 self-start lg:sticky lg:top-6 lg:block"
       >
         <div className="mb-2 flex items-baseline justify-between px-2.5">
-          <p className="text-[10px] font-medium uppercase tracking-[1.8px] text-[var(--ink-500)]">
+          <p className="text-[10px] font-medium tracking-[1.8px] text-[var(--ink-500)] uppercase">
             On this page
           </p>
           <span

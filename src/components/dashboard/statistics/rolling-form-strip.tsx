@@ -19,21 +19,27 @@ interface Props {
   currentStreak: string;
 }
 
-export function RollingFormStrip({ matches, totalMatches, winRate, currentStreak }: Props) {
+export function RollingFormStrip({
+  matches,
+  totalMatches,
+  winRate,
+  currentStreak,
+}: Props) {
   const shouldReduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState<number | null>(null);
 
   const chronological = useMemo(
     () => [...matches].sort((a, b) => a.isoDate.localeCompare(b.isoDate)),
-    [matches]
+    [matches],
   );
 
   const displayCount = Math.min(chronological.length, 20);
   const display = chronological.slice(-displayCount);
 
   const ratings = useMemo(
-    () => display.map((m) => ((m.serveRating ?? 50) + (m.returnRating ?? 50)) / 2),
-    [display]
+    () =>
+      display.map((m) => ((m.serveRating ?? 50) + (m.returnRating ?? 50)) / 2),
+    [display],
   );
 
   const rolling = useMemo(() => rollingAverage(ratings, 5), [ratings]);
@@ -63,7 +69,7 @@ export function RollingFormStrip({ matches, totalMatches, winRate, currentStreak
 
   return (
     <div>
-      <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-3">
+      <h2 className="mb-3 text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
         Match Form
       </h2>
 
@@ -81,7 +87,11 @@ export function RollingFormStrip({ matches, totalMatches, winRate, currentStreak
                 rx={4}
                 fill={match.isWin ? "#5DB955" : "#E51837"}
                 opacity={hovered === i ? 1 : 0.75}
-                initial={shouldReduceMotion ? { y, height: h } : { y: baseline, height: 0 }}
+                initial={
+                  shouldReduceMotion
+                    ? { y, height: h }
+                    : { y: baseline, height: 0 }
+                }
                 animate={{ y, height: h }}
                 transition={
                   shouldReduceMotion
@@ -108,7 +118,11 @@ export function RollingFormStrip({ matches, totalMatches, winRate, currentStreak
               transition={
                 shouldReduceMotion
                   ? { duration: 0 }
-                  : { duration: 0.4, delay: displayCount * 0.025 + 0.1, ease: EASE_CURVE }
+                  : {
+                      duration: 0.4,
+                      delay: displayCount * 0.025 + 0.1,
+                      ease: EASE_CURVE,
+                    }
               }
             />
           )}
@@ -116,7 +130,7 @@ export function RollingFormStrip({ matches, totalMatches, winRate, currentStreak
 
         {hovered !== null && (
           <div
-            className="absolute bg-white border border-[#F3F3F3] rounded-xl px-3 py-2 shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] pointer-events-none z-10 -translate-x-1/2 whitespace-nowrap"
+            className="pointer-events-none absolute z-10 -translate-x-1/2 rounded-xl border border-[#F3F3F3] bg-white px-3 py-2 whitespace-nowrap shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]"
             style={{
               left: PAD + hovered * (CHIP_W + CHIP_GAP) + CHIP_W / 2,
               top: 0,
@@ -125,33 +139,42 @@ export function RollingFormStrip({ matches, totalMatches, winRate, currentStreak
             <p className="text-[12px] font-medium text-[#0D0D0D]">
               vs {display[hovered].player2Name}
             </p>
-            <p className="text-[11px] text-[#71717A]">{display[hovered].displayDate}</p>
+            <p className="text-[11px] text-[#71717A]">
+              {display[hovered].displayDate}
+            </p>
             <p
               className={`text-[11px] font-medium ${display[hovered].isWin ? "text-[#5DB955]" : "text-[#E51837]"}`}
             >
-              {display[hovered].isWin ? "Win" : "Loss"} — {Math.round(ratings[hovered])} rating
+              {display[hovered].isWin ? "Win" : "Loss"} —{" "}
+              {Math.round(ratings[hovered])} rating
             </p>
           </div>
         )}
       </div>
 
       {/* Summary: hero win rate + supporting stats */}
-      <div className="flex items-end gap-6 sm:gap-8 mt-5">
+      <div className="mt-5 flex items-end gap-6 sm:gap-8">
         <div className="shrink-0">
-          <p className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] tabular-nums leading-none">
+          <p className="text-[28px] leading-none font-light tracking-[-0.5px] text-[#0D0D0D] tabular-nums">
             {winRate}%
           </p>
-          <p className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2px] mt-1.5">
+          <p className="mt-1.5 text-[9px] font-normal tracking-[2px] text-[#AAAAAA] uppercase">
             Win Rate
           </p>
         </div>
 
-        <div className="flex items-center gap-4 sm:gap-5 pb-0.5">
+        <div className="flex items-center gap-4 pb-0.5 sm:gap-5">
           <div className="flex items-center gap-1.5">
-            <span className="text-[13px] font-light text-[#0D0D0D] tabular-nums">{totalMatches}</span>
-            <span className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2px]">matches</span>
+            <span className="text-[13px] font-light text-[#0D0D0D] tabular-nums">
+              {totalMatches}
+            </span>
+            <span className="text-[9px] font-normal tracking-[2px] text-[#AAAAAA] uppercase">
+              matches
+            </span>
           </div>
-          <span className="text-[13px] font-light text-[#0D0D0D] tabular-nums">{wins}W – {losses}L</span>
+          <span className="text-[13px] font-light text-[#0D0D0D] tabular-nums">
+            {wins}W – {losses}L
+          </span>
           <span
             className={`text-[13px] font-light tabular-nums ${
               currentStreak.includes("W")

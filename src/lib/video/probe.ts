@@ -76,7 +76,7 @@ interface VideoFrameMetadata {
 
 type FrameCallbackVideo = HTMLVideoElement & {
   requestVideoFrameCallback?: (
-    cb: (now: number, metadata: VideoFrameMetadata) => void
+    cb: (now: number, metadata: VideoFrameMetadata) => void,
   ) => number;
   cancelVideoFrameCallback?: (handle: number) => void;
 };
@@ -91,7 +91,7 @@ type FrameCallbackVideo = HTMLVideoElement & {
  */
 function measureFps(video: FrameCallbackVideo): Promise<number | null> {
   return new Promise((resolve) => {
-    if (typeof video.requestVideoFrameCallback !== 'function') {
+    if (typeof video.requestVideoFrameCallback !== "function") {
       resolve(null);
       return;
     }
@@ -104,7 +104,10 @@ function measureFps(video: FrameCallbackVideo): Promise<number | null> {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      if (handle !== null && typeof video.cancelVideoFrameCallback === 'function') {
+      if (
+        handle !== null &&
+        typeof video.cancelVideoFrameCallback === "function"
+      ) {
         video.cancelVideoFrameCallback(handle);
       }
       video.pause();
@@ -157,23 +160,23 @@ function measureFps(video: FrameCallbackVideo): Promise<number | null> {
  */
 export async function probeVideo(file: File): Promise<VideoProbe> {
   const objectUrl = URL.createObjectURL(file);
-  const video = document.createElement('video') as FrameCallbackVideo;
+  const video = document.createElement("video") as FrameCallbackVideo;
 
   try {
-    video.preload = 'metadata';
+    video.preload = "metadata";
     video.muted = true;
     video.playsInline = true;
     video.src = objectUrl;
 
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(
-        () => reject(new Error('Timed out reading video metadata.')),
-        METADATA_TIMEOUT_MS
+        () => reject(new Error("Timed out reading video metadata.")),
+        METADATA_TIMEOUT_MS,
       );
       const cleanup = () => {
         clearTimeout(timer);
-        video.removeEventListener('loadedmetadata', onLoaded);
-        video.removeEventListener('error', onError);
+        video.removeEventListener("loadedmetadata", onLoaded);
+        video.removeEventListener("error", onError);
       };
       const onLoaded = () => {
         cleanup();
@@ -183,20 +186,24 @@ export async function probeVideo(file: File): Promise<VideoProbe> {
         cleanup();
         reject(
           new Error(
-            "Couldn't read this video. It may be corrupt or use a codec this browser can't decode."
-          )
+            "Couldn't read this video. It may be corrupt or use a codec this browser can't decode.",
+          ),
         );
       };
-      video.addEventListener('loadedmetadata', onLoaded);
-      video.addEventListener('error', onError);
+      video.addEventListener("loadedmetadata", onLoaded);
+      video.addEventListener("error", onError);
     });
 
     const width = video.videoWidth;
     const height = video.videoHeight;
-    const durationSeconds = Number.isFinite(video.duration) ? video.duration : 0;
+    const durationSeconds = Number.isFinite(video.duration)
+      ? video.duration
+      : 0;
 
     if (!width || !height) {
-      throw new Error("Couldn't read this video's dimensions. It may not contain a video track.");
+      throw new Error(
+        "Couldn't read this video's dimensions. It may not contain a video track.",
+      );
     }
 
     const fps = await measureFps(video);
@@ -213,7 +220,7 @@ export async function probeVideo(file: File): Promise<VideoProbe> {
     // Order matters: detach the source before revoking, or Safari keeps a
     // handle on a multi-gigabyte blob for the life of the page.
     video.pause();
-    video.removeAttribute('src');
+    video.removeAttribute("src");
     video.load();
     URL.revokeObjectURL(objectUrl);
   }

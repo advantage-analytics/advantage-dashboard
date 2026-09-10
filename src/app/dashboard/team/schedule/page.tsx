@@ -71,8 +71,8 @@ export default async function SchedulePage({
 
   const opponents = await getOpponentPrograms(
     [...schedule.entriesByEvent.values()].flatMap((entries) =>
-      entries.map((entry) => entry.opponentProgramId)
-    )
+      entries.map((entry) => entry.opponentProgramId),
+    ),
   );
 
   return (

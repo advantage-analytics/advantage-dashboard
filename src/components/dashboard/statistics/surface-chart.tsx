@@ -30,15 +30,15 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-xl px-3 py-2.5 shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
-      <p className="text-[12px] font-medium text-[#0D0D0D] mb-1">{label}</p>
+    <div className="rounded-xl border border-[#F3F3F3] bg-white px-3 py-2.5 shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
+      <p className="mb-1 text-[12px] font-medium text-[#0D0D0D]">{label}</p>
       <p className="text-[11px] font-normal text-[#71717A]">
         Wins: <span className="font-medium text-[#5DB955]">{wins}</span>
       </p>
       <p className="text-[11px] font-normal text-[#71717A]">
         Losses: <span className="font-medium text-[#E51837]">{losses}</span>
       </p>
-      <p className="text-[11px] font-normal text-[#71717A] mt-1 border-t border-[#F0F0F0] pt-1">
+      <p className="mt-1 border-t border-[#F0F0F0] pt-1 text-[11px] font-normal text-[#71717A]">
         Win rate: <span className="font-medium text-[#0D0D0D]">{winRate}%</span>
       </p>
     </div>
@@ -50,16 +50,18 @@ export function SurfaceChart({ data }: SurfaceChartProps) {
   const chartHeight = Math.max(filtered.length * 56, 120);
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5 overflow-hidden transition-[box-shadow,border-color,transform] duration-200 hover:shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)] hover:border-[#E7E7E7] hover:scale-[1.008]">
+    <div className="overflow-hidden rounded-[14px] border border-[#F3F3F3] bg-white p-5 shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] transition-[box-shadow,border-color,transform] duration-200 hover:scale-[1.008] hover:border-[#E7E7E7] hover:shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)]">
       <div className="mb-5">
-        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+        <h2 className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
           Surface Breakdown
         </h2>
-        <p className="text-[12px] font-normal text-[#71717A] mt-1">Wins and losses by court type</p>
+        <p className="mt-1 text-[12px] font-normal text-[#71717A]">
+          Wins and losses by court type
+        </p>
       </div>
 
       {filtered.length === 0 ? (
-        <div className="flex items-center justify-center h-24 text-[12px] text-[#AAAAAA]">
+        <div className="flex h-24 items-center justify-center text-[12px] text-[#AAAAAA]">
           No surface data yet
         </div>
       ) : (
@@ -72,7 +74,11 @@ export function SurfaceChart({ data }: SurfaceChartProps) {
               barCategoryGap="30%"
               barGap={4}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#F0F0F0" horizontal={false} />
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="#F0F0F0"
+                horizontal={false}
+              />
               <XAxis
                 type="number"
                 tick={{ fontSize: 10, fill: "#AAAAAA" }}
@@ -88,21 +94,40 @@ export function SurfaceChart({ data }: SurfaceChartProps) {
                 tickLine={false}
                 width={72}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(0,0,0,0.03)" }} />
-              <Bar dataKey="wins" name="wins" fill={VIZ_WON} radius={[0, 4, 4, 0]} animationDuration={500} />
-              <Bar dataKey="losses" name="losses" fill={VIZ_LOST} radius={[0, 4, 4, 0]} animationDuration={500} />
+              <Tooltip
+                content={<CustomTooltip />}
+                cursor={{ fill: "rgba(0,0,0,0.03)" }}
+              />
+              <Bar
+                dataKey="wins"
+                name="wins"
+                fill={VIZ_WON}
+                radius={[0, 4, 4, 0]}
+                animationDuration={500}
+              />
+              <Bar
+                dataKey="losses"
+                name="losses"
+                fill={VIZ_LOST}
+                radius={[0, 4, 4, 0]}
+                animationDuration={500}
+              />
             </BarChart>
           </ResponsiveContainer>
 
           {/* Legend */}
-          <div className="flex items-center gap-4 mt-3">
+          <div className="mt-3 flex items-center gap-4">
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#5DB955]" />
-              <span className="text-[10px] font-normal text-[#AAAAAA]">Wins</span>
+              <span className="h-2 w-2 rounded-full bg-[#5DB955]" />
+              <span className="text-[10px] font-normal text-[#AAAAAA]">
+                Wins
+              </span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#E51837]" />
-              <span className="text-[10px] font-normal text-[#AAAAAA]">Losses</span>
+              <span className="h-2 w-2 rounded-full bg-[#E51837]" />
+              <span className="text-[10px] font-normal text-[#AAAAAA]">
+                Losses
+              </span>
             </div>
           </div>
         </>

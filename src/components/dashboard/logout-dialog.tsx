@@ -75,21 +75,21 @@ export function LogoutProvider({ children }: { children: React.ReactNode }) {
           }
         }}
       >
-        <AlertDialogContent className="sm:max-w-[320px] sm:rounded-2xl p-5 gap-0 border border-[#E5E5EA] shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]">
-          <AlertDialogHeader className="space-y-0 text-left mb-5">
-            <div className="flex items-center gap-2.5 mb-2">
-              <div className="h-7 w-7 rounded-full bg-[rgba(229,24,55,0.15)] flex items-center justify-center shrink-0">
+        <AlertDialogContent className="gap-0 border border-[#E5E5EA] p-5 shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)] sm:max-w-[320px] sm:rounded-2xl">
+          <AlertDialogHeader className="mb-5 space-y-0 text-left">
+            <div className="mb-2 flex items-center gap-2.5">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[rgba(229,24,55,0.15)]">
                 <LogOut
                   className="h-3 w-3 text-[#E51837]"
                   strokeWidth={1.5}
                   aria-hidden="true"
                 />
               </div>
-              <AlertDialogTitle className="text-[16px] font-medium text-[#1D1D1F] tracking-[-0.4px]">
+              <AlertDialogTitle className="text-[16px] font-medium tracking-[-0.4px] text-[#1D1D1F]">
                 Log out
               </AlertDialogTitle>
             </div>
-            <AlertDialogDescription className="text-[13px] text-[#888888] leading-[1.5]">
+            <AlertDialogDescription className="text-[13px] leading-[1.5] text-[#888888]">
               {hasUnsavedChanges
                 ? "You have unsaved changes that will be lost. "
                 : ""}
@@ -97,8 +97,8 @@ export function LogoutProvider({ children }: { children: React.ReactNode }) {
               statistics.
             </AlertDialogDescription>
             {hasError && (
-              <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-[6px] bg-[rgba(229,24,55,0.15)]">
-                <div className="h-1 w-1 rounded-full bg-[#E51837] shrink-0" />
+              <div className="mt-3 flex items-center gap-2 rounded-[6px] bg-[rgba(229,24,55,0.15)] px-3 py-2">
+                <div className="h-1 w-1 shrink-0 rounded-full bg-[#E51837]" />
                 <p className="text-[12px] font-normal text-[#E51837]">
                   Could not log out. Please try again.
                 </p>
@@ -108,14 +108,14 @@ export function LogoutProvider({ children }: { children: React.ReactNode }) {
           <div className="flex items-center justify-end gap-2.5">
             <AlertDialogCancel
               disabled={isLoggingOut}
-              className="h-8 rounded-[6px] px-4 border border-[#EAECF0] bg-transparent text-[10px] font-medium uppercase tracking-[1.5px] text-[#525252] hover:bg-[#F5F5F5] active:scale-[0.97] transition-colors duration-200 cursor-pointer m-0 focus-visible:outline-none"
+              className="m-0 h-8 cursor-pointer rounded-[6px] border border-[#EAECF0] bg-transparent px-4 text-[10px] font-medium tracking-[1.5px] text-[#525252] uppercase transition-colors duration-200 hover:bg-[#F5F5F5] focus-visible:outline-none active:scale-[0.97]"
             >
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleLogout}
               disabled={isLoggingOut}
-              className="h-8 rounded-[6px] px-4 border-none bg-[#E51837] hover:bg-[#CC1530] text-[10px] font-medium uppercase tracking-[1.5px] text-white active:scale-[0.97] transition-colors duration-200 cursor-pointer shadow-none disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none"
+              className="h-8 cursor-pointer rounded-[6px] border-none bg-[#E51837] px-4 text-[10px] font-medium tracking-[1.5px] text-white uppercase shadow-none transition-colors duration-200 hover:bg-[#CC1530] focus-visible:outline-none active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isLoggingOut ? (
                 <span className="inline-flex items-center gap-1.5">

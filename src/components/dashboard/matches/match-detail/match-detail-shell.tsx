@@ -51,7 +51,7 @@ export function MatchDetailShell({
     <div className="flex min-h-0 w-full flex-1 items-stretch">
       <aside
         aria-label="Match summary"
-        className="flex min-h-0 flex-col overflow-y-auto border-r border-[var(--border-hairline)] p-0 [flex:0_0_300px]"
+        className="flex min-h-0 [flex:0_0_300px] flex-col overflow-y-auto border-r border-[var(--border-hairline)] p-0"
       >
         {rail}
       </aside>

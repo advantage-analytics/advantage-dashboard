@@ -25,7 +25,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { advButton } from "@/lib/ui/adv-button";
 import { recordResult } from "@/lib/schedule/actions";
-import { seedScoreForm, toRecordResultInput, type ScoreFormState } from "@/lib/schedule/score-seed";
+import {
+  seedScoreForm,
+  toRecordResultInput,
+  type ScoreFormState,
+} from "@/lib/schedule/score-seed";
 import { StepIndicator } from "@/components/dashboard/matches/new-match-wizard/StepIndicator";
 import { PinnedLineBar } from "@/components/dashboard/matches/new-match-wizard/PinnedLineBar";
 import { ScoreBlock } from "@/components/dashboard/matches/new-match-wizard/ScoreBlock";
@@ -40,7 +44,7 @@ const CONTENT_CLS = "mx-auto w-full max-w-[832px] px-14";
 function replaceAt(
   list: (number | null)[],
   index: number,
-  value: number | null
+  value: number | null,
 ): (number | null)[] {
   const next = [...list];
   // A set typed past the end of the seeded array (best-of-3 form, a fourth
@@ -72,11 +76,11 @@ export function ScoreOnlyFlow({
   // is merged here rather than being baked into each one server-side.
   const barPreset = useMemo<EventPreset>(
     () => ({ ...current, lineup }),
-    [current, lineup]
+    [current, lineup],
   );
 
   const index = lineup.findIndex(
-    (choice) => choice.preset?.entryId === current.entryId
+    (choice) => choice.preset?.entryId === current.entryId,
   );
   const lineNumber = index >= 0 ? index + 1 : 1;
 
@@ -96,7 +100,7 @@ export function ScoreOnlyFlow({
         choice.state === "open" &&
         choice.preset !== null &&
         choice.preset.entryId !== current.entryId &&
-        !scored.includes(choice.preset.entryId ?? "")
+        !scored.includes(choice.preset.entryId ?? ""),
     );
   }, [lineup, index, current.entryId, scored]);
 
@@ -104,7 +108,7 @@ export function ScoreOnlyFlow({
     (choice) =>
       choice.state === "open" &&
       choice.preset !== null &&
-      !scored.includes(choice.preset.entryId ?? "")
+      !scored.includes(choice.preset.entryId ?? ""),
   ).length;
 
   return (
@@ -119,13 +123,13 @@ export function ScoreOnlyFlow({
         outsideHref={eventHref}
       />
 
-      <div className={`${CONTENT_CLS} pb-10 pt-16`}>
+      <div className={`${CONTENT_CLS} pt-16 pb-10`}>
         <div className="flex flex-col gap-3">
           <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
             Line {lineNumber} of {lineup.length}
           </span>
           <h1
-            className="max-w-[560px] text-[30px] font-light leading-[1.15] tracking-[-0.3px] text-[var(--ink-900)]"
+            className="max-w-[560px] text-[30px] leading-[1.15] font-light tracking-[-0.3px] text-[var(--ink-900)]"
             style={{ textWrap: "pretty" }}
           >
             The score.
@@ -183,7 +187,9 @@ function ScoreForm({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [state, setState] = useState<ScoreFormState>(() => seedScoreForm(preset));
+  const [state, setState] = useState<ScoreFormState>(() =>
+    seedScoreForm(preset),
+  );
 
   const digit = (value: string): number | null =>
     value === "" ? null : Number(value);
@@ -191,24 +197,48 @@ function ScoreForm({
   const onScoreChange = (
     row: "player" | "opponent",
     index: number,
-    value: string
+    value: string,
   ) => {
     setState((prior) =>
       row === "player"
-        ? { ...prior, playerScores: replaceAt(prior.playerScores, index, digit(value)) }
-        : { ...prior, opponentScores: replaceAt(prior.opponentScores, index, digit(value)) }
+        ? {
+            ...prior,
+            playerScores: replaceAt(prior.playerScores, index, digit(value)),
+          }
+        : {
+            ...prior,
+            opponentScores: replaceAt(
+              prior.opponentScores,
+              index,
+              digit(value),
+            ),
+          },
     );
   };
 
   const onTiebreakChange = (
     row: "player" | "opponent",
     index: number,
-    value: string
+    value: string,
   ) => {
     setState((prior) =>
       row === "player"
-        ? { ...prior, playerTiebreaks: replaceAt(prior.playerTiebreaks, index, digit(value)) }
-        : { ...prior, opponentTiebreaks: replaceAt(prior.opponentTiebreaks, index, digit(value)) }
+        ? {
+            ...prior,
+            playerTiebreaks: replaceAt(
+              prior.playerTiebreaks,
+              index,
+              digit(value),
+            ),
+          }
+        : {
+            ...prior,
+            opponentTiebreaks: replaceAt(
+              prior.opponentTiebreaks,
+              index,
+              digit(value),
+            ),
+          },
     );
   };
 
@@ -270,7 +300,10 @@ function ScoreForm({
           <input
             value={state.opponentName}
             onChange={(event) =>
-              setState((prior) => ({ ...prior, opponentName: event.target.value }))
+              setState((prior) => ({
+                ...prior,
+                opponentName: event.target.value,
+              }))
             }
             placeholder="Name"
             // The rule recolours to blue on focus, which IS the visible focus
@@ -304,10 +337,11 @@ function ScoreForm({
             </span>
           ) : (
             <span className="text-[11px] text-[var(--ink-500)]">
-              <span className="font-medium tabular-nums text-[var(--ink-900)]">
+              <span className="font-medium text-[var(--ink-900)] tabular-nums">
                 {stillOpen}
               </span>{" "}
-              {stillOpen === 1 ? "line still needs" : "lines still need"} a score
+              {stillOpen === 1 ? "line still needs" : "lines still need"} a
+              score
             </span>
           )}
 

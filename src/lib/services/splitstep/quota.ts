@@ -23,17 +23,17 @@
  * 75-hour allowance, depending on which half won.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   explainVideoRefusal,
   pendingReviewRefusal,
   type Workspace,
-} from '@/lib/workspace/types';
+} from "@/lib/workspace/types";
 import {
   currentBillingMonth,
   getMonthlyCapSeconds,
   type AccountType,
-} from './config';
+} from "./config";
 
 /**
  * Which allowance a submission draws against.
@@ -48,8 +48,10 @@ import {
  * keyed by user id, which is what that ledger has always used, and a team one
  * by program id.
  */
-export function accountTypeFor(workspace: Pick<Workspace, 'kind'>): AccountType {
-  return workspace.kind === 'team' ? 'program' : 'individual';
+export function accountTypeFor(
+  workspace: Pick<Workspace, "kind">,
+): AccountType {
+  return workspace.kind === "team" ? "program" : "individual";
 }
 
 /**
@@ -76,10 +78,10 @@ export function accountTypeFor(workspace: Pick<Workspace, 'kind'>): AccountType 
  * records — this function is the single seam.
  */
 export function quotaTierFor(
-  workspace: Pick<Workspace, 'kind' | 'orgType'>
+  workspace: Pick<Workspace, "kind" | "orgType">,
 ): AccountType {
-  if (workspace.kind !== 'team') return 'individual';
-  return workspace.orgType === 'college' ? 'program' : 'individual';
+  if (workspace.kind !== "team") return "individual";
+  return workspace.orgType === "college" ? "program" : "individual";
 }
 
 /**
@@ -89,7 +91,7 @@ export function quotaTierFor(
  * enforces it (`reserveQuota`) must all name the same number.
  */
 export function monthlyCapSecondsFor(
-  workspace: Pick<Workspace, 'kind' | 'orgType'>
+  workspace: Pick<Workspace, "kind" | "orgType">,
 ): number {
   return getMonthlyCapSeconds(quotaTierFor(workspace));
 }
@@ -187,7 +189,7 @@ export async function reserveQuota(params: {
   const capSeconds = monthlyCapSecondsFor(workspace);
 
   const { data, error } = await supabase
-    .rpc('reserve_processing_quota', {
+    .rpc("reserve_processing_quota", {
       p_job_id: jobId,
       // The workspace's own id: the user for a personal workspace, the program
       // for a team one. Two workspaces, one ledger.
@@ -202,14 +204,22 @@ export async function reserveQuota(params: {
 
   if (error || !data) {
     throw new Error(
-      `Could not reserve processing quota: ${error?.message ?? 'no row returned'}`
+      `Could not reserve processing quota: ${error?.message ?? "no row returned"}`,
     );
   }
 
-  const row = data as { ok: boolean; used_seconds: number; cap_seconds: number };
+  const row = data as {
+    ok: boolean;
+    used_seconds: number;
+    cap_seconds: number;
+  };
 
   if (row.ok) {
-    return { ok: true, usedSeconds: row.used_seconds, capSeconds: row.cap_seconds };
+    return {
+      ok: true,
+      usedSeconds: row.used_seconds,
+      capSeconds: row.cap_seconds,
+    };
   }
 
   const remaining = Math.max(0, row.cap_seconds - row.used_seconds);
@@ -229,16 +239,16 @@ export async function reserveQuota(params: {
 /** Hand back a reservation. Safe to call twice. */
 export async function releaseQuota(
   supabase: SupabaseClient,
-  jobId: string
+  jobId: string,
 ): Promise<void> {
-  const { error } = await supabase.rpc('release_processing_quota', {
+  const { error } = await supabase.rpc("release_processing_quota", {
     p_job_id: jobId,
   });
 
   if (error) {
     // Never fatal to the caller: this runs on failure paths that have already
     // gone wrong, and an un-refunded reservation is recoverable by hand.
-    console.error('[splitstep] could not release quota', {
+    console.error("[splitstep] could not release quota", {
       jobId,
       error: error.message,
     });
@@ -249,15 +259,15 @@ export async function releaseQuota(
 export async function reconcileQuota(
   supabase: SupabaseClient,
   jobId: string,
-  actualSeconds: number
+  actualSeconds: number,
 ): Promise<void> {
-  const { error } = await supabase.rpc('reconcile_processing_quota', {
+  const { error } = await supabase.rpc("reconcile_processing_quota", {
     p_job_id: jobId,
     p_actual_seconds: Math.ceil(actualSeconds),
   });
 
   if (error) {
-    console.error('[splitstep] could not reconcile quota', {
+    console.error("[splitstep] could not reconcile quota", {
       jobId,
       error: error.message,
     });

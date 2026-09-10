@@ -86,7 +86,7 @@ function normalizedOpponentName(name: string): string {
  * into a dual tally.
  */
 export function opponentDualHistory(
-  schedule: ProgramSchedule
+  schedule: ProgramSchedule,
 ): Map<string, OpponentDualHistory> {
   const histories = new Map<string, OpponentDualHistory>();
 
@@ -155,7 +155,7 @@ export interface OpponentMeeting {
 export function opponentMeetings(
   schedule: ProgramSchedule,
   opponentName: string,
-  options?: { excludeEventId?: string }
+  options?: { excludeEventId?: string },
 ): OpponentMeeting[] {
   const key = normalizedOpponentName(opponentName);
   const meetings: OpponentMeeting[] = [];
@@ -181,7 +181,9 @@ export function opponentMeetings(
     });
   }
 
-  return meetings.sort((a, b) => (a.startsOn < b.startsOn ? 1 : a.startsOn > b.startsOn ? -1 : 0));
+  return meetings.sort((a, b) =>
+    a.startsOn < b.startsOn ? 1 : a.startsOn > b.startsOn ? -1 : 0,
+  );
 }
 
 /**
@@ -193,7 +195,7 @@ export function opponentMeetings(
  */
 export function opponentHistoryFor(
   histories: Map<string, OpponentDualHistory>,
-  opponentSchoolName: string
+  opponentSchoolName: string,
 ): OpponentDualHistory {
   return (
     histories.get(normalizedOpponentName(opponentSchoolName)) ?? EMPTY_HISTORY
@@ -210,8 +212,10 @@ export function opponentHistoryFor(
  */
 export function formatOpponentRecord(history: OpponentDualHistory): string {
   if (history.played === 0) return "never played";
-  if (history.us > history.them) return `you lead ${history.us}–${history.them}`;
-  if (history.them > history.us) return `they lead ${history.us}–${history.them}`;
+  if (history.us > history.them)
+    return `you lead ${history.us}–${history.them}`;
+  if (history.them > history.us)
+    return `they lead ${history.us}–${history.them}`;
   return `split ${history.us}–${history.them}`;
 }
 

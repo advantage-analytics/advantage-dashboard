@@ -125,7 +125,7 @@ export function SetupForm({
       // being able to park an open claim on every program in the directory.
       router.push(
         `/claim/check-email?to=${encodeURIComponent(email)}` +
-          `&program=${encodeURIComponent(programKey)}`
+          `&program=${encodeURIComponent(programKey)}`,
       );
     });
   }

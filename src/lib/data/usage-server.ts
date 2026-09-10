@@ -47,7 +47,7 @@ export interface ProgramUsage {
  */
 export async function getPersonalUsage(
   userId: string,
-  billingMonth: string
+  billingMonth: string,
 ): Promise<PersonalUsage> {
   const supabase = await createClient();
   const capSeconds = getMonthlyCapSeconds("individual");
@@ -72,7 +72,7 @@ export async function getPersonalUsage(
 
   const usedSeconds = (data ?? []).reduce(
     (total, row) => total + (row.actual_seconds ?? row.reserved_seconds ?? 0),
-    0
+    0,
   );
 
   return { usedSeconds, capSeconds, billingMonth };
@@ -113,7 +113,7 @@ export async function getProgramUsage(
    * arrives, `quotaTierFor()` maps it to the reduced figure — the fail-closed
    * direction for a number that meters paid vendor spend.
    */
-  orgType: ProgramOrgType | null
+  orgType: ProgramOrgType | null,
 ): Promise<ProgramUsage> {
   const supabase = await createClient();
   const capSeconds = monthlyCapSecondsFor({ kind: "team", orgType });

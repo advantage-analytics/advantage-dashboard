@@ -28,7 +28,13 @@ import {
 import { cn } from "@/lib/utils";
 import { siteLabel } from "@/lib/schedule/format";
 import type { EventPreset, LineChoice } from "./types";
-import { floatMenuCls, floatMenuDividerCls, floatMenuLabelCls, floatMenuRowCls, focusRingCls } from "./styles";
+import {
+  floatMenuCls,
+  floatMenuDividerCls,
+  floatMenuLabelCls,
+  floatMenuRowCls,
+  focusRingCls,
+} from "./styles";
 
 const STATE_LABEL: Record<LineChoice["state"], string> = {
   result: "Result in · no video",
@@ -71,24 +77,46 @@ export function PinnedLineBar({
           {preset.round}
         </Link>
       )}
-      <ChevronRight className="size-3 shrink-0 text-[var(--ink-300)]" strokeWidth={1.5} aria-hidden="true" />
+      <ChevronRight
+        className="size-3 shrink-0 text-[var(--ink-300)]"
+        strokeWidth={1.5}
+        aria-hidden="true"
+      />
       <span className="min-w-0 truncate text-[12px] text-[var(--ink-900)]">
-        <span className="font-medium">{preset.playerName}</span> vs {preset.opponentName || "—"}
+        <span className="font-medium">{preset.playerName}</span> vs{" "}
+        {preset.opponentName || "—"}
       </span>
-      <span className="mx-2 h-3.5 w-px shrink-0 bg-[var(--border-medium)]" aria-hidden="true" />
-      {!preset.opponentName && preset.eventKind === "dual" && preset.eventName && (
-        <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] text-[var(--ink-600)]">
-          <Swords className="size-[13px] text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
-          vs {preset.eventName}
-        </span>
-      )}
+      <span
+        className="mx-2 h-3.5 w-px shrink-0 bg-[var(--border-medium)]"
+        aria-hidden="true"
+      />
+      {!preset.opponentName &&
+        preset.eventKind === "dual" &&
+        preset.eventName && (
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] text-[var(--ink-600)]">
+            <Swords
+              className="size-[13px] text-[var(--ink-400)]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+            vs {preset.eventName}
+          </span>
+        )}
       <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] text-[var(--ink-600)]">
-        <Calendar className="size-[13px] text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
+        <Calendar
+          className="size-[13px] text-[var(--ink-400)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
         {formatDayShort(preset.date)}
       </span>
       {preset.site && (
         <span className="ml-3 inline-flex shrink-0 items-center gap-1.5 text-[11px] text-[var(--ink-600)]">
-          <MapPin className="size-[13px] text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
+          <MapPin
+            className="size-[13px] text-[var(--ink-400)]"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
           {siteLabel(preset.site)}
         </span>
       )}
@@ -103,13 +131,17 @@ export function PinnedLineBar({
               // Engagement is the wash, not a colour change: white reads on the
               // bar's own surface-subtle.
               open && "bg-white",
-              focusRingCls
+              focusRingCls,
             )}
           >
             Change
           </button>
         </PopoverTrigger>
-        <PopoverContent align="end" sideOffset={8} className={cn(floatMenuCls, "w-[360px]")}>
+        <PopoverContent
+          align="end"
+          sideOffset={8}
+          className={cn(floatMenuCls, "w-[360px]")}
+        >
           <span className={floatMenuLabelCls}>
             {preset.eventName}
             {preset.eventKind === "dual" ? " dual" : ""} · lineup
@@ -130,28 +162,36 @@ export function PinnedLineBar({
                   floatMenuRowCls,
                   "gap-3",
                   isCurrent && "bg-[var(--surface-subtle)]",
-                  disabled && "cursor-default hover:bg-transparent"
+                  disabled && "cursor-default hover:bg-transparent",
                 )}
               >
-                <span className="mono w-[22px] shrink-0 text-[11px] text-[var(--ink-500)]">{line.slot}</span>
+                <span className="mono w-[22px] shrink-0 text-[11px] text-[var(--ink-500)]">
+                  {line.slot}
+                </span>
                 <span
                   className={cn(
                     "min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)]",
-                    isCurrent ? "font-medium" : "font-normal"
+                    isCurrent ? "font-medium" : "font-normal",
                   )}
                 >
                   {line.playerName ?? "—"}
                 </span>
                 <span
                   className={cn(
-                    "shrink-0 whitespace-nowrap text-[11px]",
-                    line.state === "unset" ? "text-[var(--ink-400)]" : "text-[var(--ink-500)]"
+                    "shrink-0 text-[11px] whitespace-nowrap",
+                    line.state === "unset"
+                      ? "text-[var(--ink-400)]"
+                      : "text-[var(--ink-500)]",
                   )}
                 >
                   {isCurrent ? "" : STATE_LABEL[line.state]}
                 </span>
                 {isCurrent ? (
-                  <Check className="size-[13px] shrink-0 text-[var(--blue)]" strokeWidth={1.5} aria-hidden="true" />
+                  <Check
+                    className="size-[13px] shrink-0 text-[var(--blue)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
                 ) : (
                   <span className="w-[13px] shrink-0" />
                 )}
@@ -160,8 +200,14 @@ export function PinnedLineBar({
           })}
           <span className={floatMenuDividerCls} />
           <Link href={outsideHref} className={cn(floatMenuRowCls, "gap-3")}>
-            <span className="flex-1 text-[12px] text-[var(--ink-700)]">A match outside this event</span>
-            <ChevronRight className="size-[13px] shrink-0 text-[var(--ink-300)]" strokeWidth={1.5} aria-hidden="true" />
+            <span className="flex-1 text-[12px] text-[var(--ink-700)]">
+              A match outside this event
+            </span>
+            <ChevronRight
+              className="size-[13px] shrink-0 text-[var(--ink-300)]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
           </Link>
         </PopoverContent>
       </Popover>

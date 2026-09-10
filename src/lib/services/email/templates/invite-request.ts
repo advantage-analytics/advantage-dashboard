@@ -33,7 +33,7 @@ export interface InviteRequestReceivedInput {
 }
 
 export function inviteRequestReceivedEmail(
-  input: InviteRequestReceivedInput
+  input: InviteRequestReceivedInput,
 ): EmailMessage {
   const { to, programName, requesterName } = input;
 
@@ -88,7 +88,7 @@ export interface ExpiredInviteNudgeInput {
  * resending mints a new one.
  */
 export function expiredInviteNudgeEmail(
-  input: ExpiredInviteNudgeInput
+  input: ExpiredInviteNudgeInput,
 ): EmailMessage {
   const { to, programName, inviteeEmail, expiredOn } = input;
 
@@ -115,7 +115,10 @@ export function expiredInviteNudgeEmail(
       { label: "Invited", value: inviteeEmail },
       { label: "Expired", value: expired },
     ],
-    cta: { label: "Send a new invite", url: `${siteUrl()}/dashboard/team/roster` },
+    cta: {
+      label: "Send a new invite",
+      url: `${siteUrl()}/dashboard/team/roster`,
+    },
     note: "Inviting the same address again refreshes the invitation rather than adding a second one. If you would rather not, nothing else happens.",
   };
 
@@ -142,7 +145,7 @@ export interface InviteRequestDeclinedInput {
  * a real invitation, and two messages about one decision is one too many.
  */
 export function inviteRequestDeclinedEmail(
-  input: InviteRequestDeclinedInput
+  input: InviteRequestDeclinedInput,
 ): EmailMessage {
   const { to, programName, reason } = input;
 

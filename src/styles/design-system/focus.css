@@ -101,7 +101,13 @@
    below: an opt-out must never hand the control back to the browser's own
    outline. */
 :where(
-  :is(a[href], button, [role="button"], summary, [tabindex]:not([tabindex="-1"])):not([data-focus-ring="none"])
+  :is(
+    a[href],
+    button,
+    [role="button"],
+    summary,
+    [tabindex]:not([tabindex="-1"])
+  ):not([data-focus-ring="none"])
 ):focus-visible {
   box-shadow: var(--focus-ring);
 }
@@ -127,6 +133,8 @@
    :focus-visible matters: an inline `style={{boxShadow:"none"}}` would
    suppress the focus ring AND any shadow the component ever sets for its own
    reasons, silently. */
-:where(:is(input, select, textarea):not([data-focus-ring="none"])):focus-visible {
+:where(
+  :is(input, select, textarea):not([data-focus-ring="none"])
+):focus-visible {
   box-shadow: var(--focus-ring-field);
 }

@@ -38,8 +38,18 @@ const WEEKS = 52;
 const DAYS_PER_WEEK = 7;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MONTH_SHORT = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ];
 
 function dayKey(d: Date): string {
@@ -69,7 +79,7 @@ function levelFor(count: number): 0 | 1 | 2 | 3 {
  * "today" sits in the last column the way a GitHub contribution graph does.
  */
 export async function getPersonalActivity(
-  userId: string
+  userId: string,
 ): Promise<PersonalActivity> {
   // Anchor: the Sunday of the current week, then walk back 51 weeks to the
   // grid's first column. Zero the time so day arithmetic can't drift across a
@@ -77,7 +87,9 @@ export async function getPersonalActivity(
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const startSunday = new Date(today);
-  startSunday.setDate(today.getDate() - today.getDay() - (WEEKS - 1) * DAYS_PER_WEEK);
+  startSunday.setDate(
+    today.getDate() - today.getDay() - (WEEKS - 1) * DAYS_PER_WEEK,
+  );
 
   const supabase = await createClient();
   const { data } = await supabase
@@ -98,12 +110,12 @@ export async function getPersonalActivity(
   for (let w = 0; w < WEEKS; w++) {
     for (let d = 0; d < DAYS_PER_WEEK; d++) {
       const cellDate = new Date(
-        startSunday.getTime() + (w * DAYS_PER_WEEK + d) * MS_PER_DAY
+        startSunday.getTime() + (w * DAYS_PER_WEEK + d) * MS_PER_DAY,
       );
       // Future days in the current week have no matches yet — level 0, blank.
       const isFuture = cellDate.getTime() > today.getTime();
       const key = dayKey(cellDate);
-      const count = isFuture ? 0 : counts.get(key) ?? 0;
+      const count = isFuture ? 0 : (counts.get(key) ?? 0);
       if (count > 0) sessionCount++;
       days.push({ date: key, count, level: levelFor(count) });
     }
@@ -118,7 +130,7 @@ export async function getPersonalActivity(
   const months: string[] = [];
   for (let w = 0; w < WEEKS; w++) {
     const sample = new Date(
-      startSunday.getTime() + w * DAYS_PER_WEEK * MS_PER_DAY
+      startSunday.getTime() + w * DAYS_PER_WEEK * MS_PER_DAY,
     );
     const label = MONTH_SHORT[sample.getMonth()];
     if (months[months.length - 1] !== label) months.push(label);

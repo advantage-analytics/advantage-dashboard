@@ -90,17 +90,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       // a counter at the same number and React would reconcile one toast onto
       // another's node.
       const id = crypto.randomUUID();
-      setToasts((current) => [...current, { ...toast, id }].slice(-MAX_VISIBLE));
+      setToasts((current) =>
+        [...current, { ...toast, id }].slice(-MAX_VISIBLE),
+      );
 
       const ms = AUTO_DISMISS_MS[toast.tone];
       if (ms !== null) {
         timers.current.set(
           id,
-          setTimeout(() => dismiss(id), ms)
+          setTimeout(() => dismiss(id), ms),
         );
       }
     },
-    [dismiss]
+    [dismiss],
   );
 
   useEffect(() => {
@@ -156,7 +158,7 @@ function ToastViewport({
         return (
           <div
             key={toast.id}
-            className="pointer-events-auto flex items-start gap-3 rounded-[var(--radius-card)] border border-[var(--border-medium)] bg-[var(--surface-card)] p-3.5 toast-enter shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)]"
+            className="toast-enter pointer-events-auto flex items-start gap-3 rounded-[var(--radius-card)] border border-[var(--border-medium)] bg-[var(--surface-card)] p-3.5 shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)]"
           >
             <Icon
               className="mt-px size-4 shrink-0"

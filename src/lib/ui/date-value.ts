@@ -1,4 +1,4 @@
-import { CalendarDate, parseDate } from '@internationalized/date';
+import { CalendarDate, parseDate } from "@internationalized/date";
 
 /**
  * The two functions that know the product's date wire format: `YYYY-MM-DD`,
@@ -39,5 +39,5 @@ export function parseIsoDate(value: string): CalendarDate | null {
  * included (`new CalendarDate(26, 9, 6)` prints `0026-09-06`).
  */
 export function formatIsoDate(value: CalendarDate | null): string {
-  return value ? value.toString() : '';
+  return value ? value.toString() : "";
 }

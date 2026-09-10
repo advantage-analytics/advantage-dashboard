@@ -33,7 +33,9 @@ export type ClaimRoleValue = (typeof CLAIM_ROLES)[number]["value"];
  * comes back null, which files the request exactly as one submitted with no
  * role at all.
  */
-export function toClaimRole(input: string | null | undefined): ClaimRoleValue | null {
+export function toClaimRole(
+  input: string | null | undefined,
+): ClaimRoleValue | null {
   const match = CLAIM_ROLES.find((role) => role.value === input);
   return match ? match.value : null;
 }

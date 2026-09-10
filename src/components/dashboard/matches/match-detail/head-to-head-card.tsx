@@ -191,7 +191,8 @@ export function statDisplay(
   value: number | null,
   isPercentage?: boolean,
 ): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "";
+  if (value === null || value === undefined || !Number.isFinite(value))
+    return "";
   return isPercentage ? `${Math.round(value)}%` : String(Math.round(value));
 }
 
@@ -513,7 +514,7 @@ function ValueCell({
           <span
             tabIndex={0}
             aria-label="No data recorded for this stat"
-            className="tabular cursor-help text-[13px] font-light italic text-[var(--color-text-muted)]"
+            className="tabular cursor-help text-[13px] font-light text-[var(--color-text-muted)] italic"
           >
             —
           </span>
@@ -661,7 +662,7 @@ export function HeadToHeadCard() {
 
       {sections.map((section) => (
         <div key={section.title} className="flex flex-col">
-          <div className="flex items-baseline pb-[5px] pt-[13px]">
+          <div className="flex items-baseline pt-[13px] pb-[5px]">
             <span className="eyebrow-sm">{section.title}</span>
           </div>
 
@@ -671,7 +672,9 @@ export function HeadToHeadCard() {
               className="relative -mx-2 flex min-h-8 items-center rounded-[var(--radius-element)] px-2 transition-colors duration-200 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] hover:bg-[var(--surface-muted)]"
               onMouseEnter={() => setHovered(row.label)}
               onMouseLeave={() =>
-                setHovered((current) => (current === row.label ? null : current))
+                setHovered((current) =>
+                  current === row.label ? null : current,
+                )
               }
             >
               <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-600)]">

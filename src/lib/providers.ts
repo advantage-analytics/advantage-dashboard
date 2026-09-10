@@ -30,7 +30,8 @@ export const providers: Provider[] = [
   {
     id: "swing-vision",
     name: "SwingVision",
-    description: "AI-powered tennis analysis — bring the match export, numbers only",
+    description:
+      "AI-powered tennis analysis — bring the match export, numbers only",
     logo: "/providers/swingvision.png",
     pillBg: "#2D8B4E",
     pillText: "#FFFFFF",

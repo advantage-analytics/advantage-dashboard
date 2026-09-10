@@ -20,16 +20,15 @@
  * duration nobody has measured.
  */
 
-import type { createAdminClient } from '@/lib/supabase/admin';
-import { RESULTS_BUCKET } from './config';
-import { analyzeResults, DERIVATION_VERSION } from './derivation';
-import type { QualityReport } from './derivation';
+import type { createAdminClient } from "@/lib/supabase/admin";
+import { RESULTS_BUCKET } from "./config";
+import { analyzeResults, DERIVATION_VERSION } from "./derivation";
+import type { QualityReport } from "./derivation";
 
-const LOG = '[splitstep:grade]';
+const LOG = "[splitstep:grade]";
 
 export type GradeOutcome =
-  | { ok: true; quality: QualityReport }
-  | { ok: false; reason: string };
+  { ok: true; quality: QualityReport } | { ok: false; reason: string };
 
 /**
  * Read a results payload, grade it, and persist the grade.
@@ -58,7 +57,7 @@ export async function gradeResults(params: {
         .from(RESULTS_BUCKET)
         .download(objectKey);
       if (error || !data) {
-        const reason = `could not read stored results: ${error?.message ?? 'no data'}`;
+        const reason = `could not read stored results: ${error?.message ?? "no data"}`;
         console.error(`${LOG} skipped`, { jobId, objectKey, reason });
         return { ok: false, reason };
       }
@@ -81,12 +80,15 @@ export async function gradeResults(params: {
     // empty-charts state that column was introduced to prevent. Grading
     // produces a grade; the version of the grader travels inside the report.
     const { error } = await supabase
-      .from('processing_jobs')
+      .from("processing_jobs")
       .update({
         derivation_confidence: analysis.quality.grade,
-        derivation_quality: { ...analysis.quality, gradedBy: DERIVATION_VERSION },
+        derivation_quality: {
+          ...analysis.quality,
+          gradedBy: DERIVATION_VERSION,
+        },
       })
-      .eq('id', jobId);
+      .eq("id", jobId);
 
     if (error) {
       const reason = `computed but could not be saved: ${error.message}`;
@@ -97,7 +99,7 @@ export async function gradeResults(params: {
     // A low grade logs at error level because it is the signal that a match
     // should not be shown to a coach, and it is otherwise invisible until
     // somebody thinks to query the column.
-    const log = analysis.quality.grade === 'low' ? console.error : console.log;
+    const log = analysis.quality.grade === "low" ? console.error : console.log;
     log(`${LOG} graded ${analysis.quality.grade}`, {
       jobId,
       strokes: analysis.strokes.length,

@@ -51,7 +51,7 @@ export function UnsavedChangesProvider({
   const confirmNavigation = useCallback(() => {
     if (!dirtyRef.current) return true;
     return window.confirm(
-      "You have unsaved changes. Are you sure you want to leave?"
+      "You have unsaved changes. Are you sure you want to leave?",
     );
   }, []);
 

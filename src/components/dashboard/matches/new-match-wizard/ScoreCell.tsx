@@ -41,10 +41,8 @@ export function ScoreCell({
         if (v === "") onEnterEmpty();
         else onEnterValue(v);
       }}
-      className={`!w-7 h-8 text-center text-[#0D0D0D] bg-white border rounded-[6px] px-0 shadow-none placeholder:text-[#CCCCCC] tabular-nums ${
-        invalid
-          ? "border-[#E51837]"
-          : "border-[#EAECF0]"
+      className={`h-8 !w-7 rounded-[6px] border bg-white px-0 text-center text-[#0D0D0D] tabular-nums shadow-none placeholder:text-[#CCCCCC] ${
+        invalid ? "border-[#E51837]" : "border-[#EAECF0]"
       }`}
     />
   );

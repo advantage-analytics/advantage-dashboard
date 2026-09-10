@@ -212,7 +212,8 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
             <div className="flex h-2.5 w-full gap-0.5">
               {segments.map((o, i) => {
                 const id = `${row.id}-${o.key}`;
-                const share = row.total > 0 ? (row.own[o.key] / row.total) * 100 : 0;
+                const share =
+                  row.total > 0 ? (row.own[o.key] / row.total) * 100 : 0;
                 const isFirst = i === 0;
                 const isLast = i === segments.length - 1;
 

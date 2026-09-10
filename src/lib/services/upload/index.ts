@@ -20,11 +20,14 @@ export type {
   IProcessingProviderStrategy,
   IStorageService,
   IUploadService,
-} from './types';
+} from "./types";
 
 // Services
-export { createUploadService, UploadService } from './upload.service';
-export { createStorageService, SupabaseStorageService } from './storage.service';
+export { createUploadService, UploadService } from "./upload.service";
+export {
+  createStorageService,
+  SupabaseStorageService,
+} from "./storage.service";
 
 // Providers
 export {
@@ -36,4 +39,4 @@ export {
   getSupportedProviders,
   swingVisionStrategy,
   splitStepStrategy,
-} from './providers';
+} from "./providers";

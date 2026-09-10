@@ -27,11 +27,15 @@ export function CreateMatchButton({
     <Link
       href={NEW_MATCH_HREF}
       className={cn(
-        "flex items-center rounded-[6px] text-white cursor-pointer transition-[color,background-color,transform] duration-200 ease-out shrink-0 focus-visible:outline-none",
-        variantStyles[variant]
+        "flex shrink-0 cursor-pointer items-center rounded-[6px] text-white transition-[color,background-color,transform] duration-200 ease-out focus-visible:outline-none",
+        variantStyles[variant],
       )}
     >
-      <Plus className={iconStyles[variant]} strokeWidth={2} aria-hidden="true" />
+      <Plus
+        className={iconStyles[variant]}
+        strokeWidth={2}
+        aria-hidden="true"
+      />
       {label}
     </Link>
   );

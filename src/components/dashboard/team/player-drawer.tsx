@@ -9,7 +9,11 @@ import {
   MoreHorizontal,
   X,
 } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { AdvSwitch } from "@/components/ui/adv-switch";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { ResultMark } from "@/components/dashboard/result-mark";
@@ -152,7 +156,8 @@ function Sparkline({ label, points }: { label: string; points: SparkPoint[] }) {
       SPARK_PY -
       ((p.value - min) / (max - min)) * (SPARK_H - SPARK_PY * 2),
   }));
-  const xy = (c: { x: number; y: number }) => `${c.x.toFixed(2)},${c.y.toFixed(2)}`;
+  const xy = (c: { x: number; y: number }) =>
+    `${c.x.toFixed(2)},${c.y.toFixed(2)}`;
   const line = coords.map(xy).join(" ");
   const area = `M ${coords[0].x.toFixed(2)},${SPARK_H} ${coords
     .map((c) => `L ${xy(c)}`)
@@ -201,7 +206,8 @@ function Sparkline({ label, points }: { label: string; points: SparkPoint[] }) {
           have room to draw. */}
       {points.map((point, i) => {
         const left = i === 0 ? 0 : (coords[i - 1].x + coords[i].x) / 2;
-        const right = i === n - 1 ? SPARK_W : (coords[i].x + coords[i + 1].x) / 2;
+        const right =
+          i === n - 1 ? SPARK_W : (coords[i].x + coords[i + 1].x) / 2;
         const lineX = coords[i].x - left;
         const shift = i === 0 ? "0" : i === n - 1 ? "-100%" : "-50%";
         const active = hovered === i;
@@ -277,11 +283,13 @@ function StatPill({
         "transition-colors duration-[var(--duration-hover)] ease-[var(--ease-primary)] hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
         selected
           ? "border-[var(--border-medium)] bg-[var(--surface-subtle)]"
-          : "border-[var(--border-hairline)] bg-transparent"
+          : "border-[var(--border-hairline)] bg-transparent",
       )}
     >
       {measure.pill}
-      <span className="tabular text-[var(--ink-900)]">{percent(measure.value)}</span>
+      <span className="tabular text-[var(--ink-900)]">
+        {percent(measure.value)}
+      </span>
       {delta && (
         <span className="tabular font-medium" style={{ color: delta.color }}>
           {delta.label}
@@ -375,7 +383,7 @@ function MemberMenu({
                 startSend(async () => {
                   const result = await setMemberUploadEnabled(
                     member.userId as string,
-                    next
+                    next,
                   );
                   if (!result.ok) {
                     setEnabled(!next);
@@ -423,7 +431,7 @@ function MemberMenu({
                 // matches attributable.
                 member.profileId
                   ? archiveProgramPlayer(member.profileId)
-                  : removeMember(member.userId as string)
+                  : removeMember(member.userId as string),
               )
             }
             className="block w-full rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)] disabled:opacity-50"
@@ -493,7 +501,9 @@ export function PlayerDrawer({
         .reverse()
         .flatMap((match) => {
           const value = match.values[active.key];
-          return value === null || value === undefined ? [] : [{ value, match }];
+          return value === null || value === undefined
+            ? []
+            : [{ value, match }];
         })
     : [];
   const heroDelta =
@@ -531,7 +541,7 @@ export function PlayerDrawer({
         "sticky top-11 z-[2] h-[calc(100vh-44px)] shrink-0 self-start overflow-hidden border-l border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)] motion-reduce:animate-none",
         closing
           ? "w-0 animate-[roster-drawer-out_200ms_var(--ease-primary)_both]"
-          : "w-[340px] animate-[roster-drawer-in_200ms_var(--ease-primary)_both]"
+          : "w-[340px] animate-[roster-drawer-in_200ms_var(--ease-primary)_both]",
       )}
     >
       <div
@@ -593,7 +603,10 @@ export function PlayerDrawer({
               pending={pending}
             />
           )}
-          <span aria-hidden className="mx-0.5 h-3.5 w-px bg-[var(--border-medium)]" />
+          <span
+            aria-hidden
+            className="mx-0.5 h-3.5 w-px bg-[var(--border-medium)]"
+          />
           <ChromeTooltip label="Close" shortcut="Esc">
             <button
               type="button"
@@ -638,7 +651,7 @@ export function PlayerDrawer({
                      a pale box here, a dark one there — inches from the
                      header's real dark tooltips. Removing the truncation
                      removed the reason for it. */
-                  className="block rounded-[var(--radius-cell)] text-[var(--ink-900)] [text-wrap:balance] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                  className="block rounded-[var(--radius-cell)] [text-wrap:balance] text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
                 >
                   {member.name}
                 </Link>
@@ -677,7 +690,9 @@ export function PlayerDrawer({
                   {points[0]?.match.date ?? ""}
                 </span>
                 <span className="mono text-[10px] text-[var(--ink-400)]">
-                  {points.length > 1 ? points[points.length - 1].match.date : ""}
+                  {points.length > 1
+                    ? points[points.length - 1].match.date
+                    : ""}
                 </span>
               </div>
             </div>

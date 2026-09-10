@@ -15,12 +15,12 @@ the shell.
 
 ## 1. Two senders, on purpose
 
-| | **Product mail** | **Auth mail** |
-|---|---|---|
-| Examples | Program invite, analysis ready, weekly digest, claim outcomes | Confirm your address, reset password, magic link |
-| Lives in | `src/lib/services/email/` | `supabase/email-templates/*.html` |
-| Rendered by | `shell.ts` → `renderEmail()` | Supabase's own template engine, `{{ .ConfirmationURL }}` placeholders |
-| Sent by | `sendEmail()` → Resend REST API | Supabase, over the project's SMTP |
+|             | **Product mail**                                              | **Auth mail**                                                         |
+| ----------- | ------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Examples    | Program invite, analysis ready, weekly digest, claim outcomes | Confirm your address, reset password, magic link                      |
+| Lives in    | `src/lib/services/email/`                                     | `supabase/email-templates/*.html`                                     |
+| Rendered by | `shell.ts` → `renderEmail()`                                  | Supabase's own template engine, `{{ .ConfirmationURL }}` placeholders |
+| Sent by     | `sendEmail()` → Resend REST API                               | Supabase, over the project's SMTP                                     |
 
 This split is deliberate and should stay. Routing auth mail through our sender
 means owning delivery for password resets, and a password reset that does not
@@ -59,13 +59,13 @@ Import from `@/lib/services/email` — the index — never from the files undern
 The split between sender, shell and template is an implementation detail, and a
 caller reaching past it is how a second sender eventually appears.
 
-| File | Role |
-|---|---|
-| `index.ts` | The public surface, and the list of what exists |
-| `send.ts` | `sendEmail()`. The only place this app sends mail from |
-| `shell.ts` | `renderEmail()` / `renderText()` / `preferenceNote()`. The HTML every product email renders into |
-| `config.ts` | Addresses, endpoints, timeout. No inlining these at call sites |
-| `templates/*.ts` | One function per email, grouped by family — `claim.ts` holds three, `analysis.ts` two |
+| File             | Role                                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------ |
+| `index.ts`       | The public surface, and the list of what exists                                                  |
+| `send.ts`        | `sendEmail()`. The only place this app sends mail from                                           |
+| `shell.ts`       | `renderEmail()` / `renderText()` / `preferenceNote()`. The HTML every product email renders into |
+| `config.ts`      | Addresses, endpoints, timeout. No inlining these at call sites                                   |
+| `templates/*.ts` | One function per email, grouped by family — `claim.ts` holds three, `analysis.ts` two            |
 
 ---
 
@@ -76,16 +76,16 @@ it to `renderEmail()`. Every field is escaped on the way in, so user-supplied
 program and player names are safe by construction — and unsafe the moment someone
 bypasses the shell.
 
-| Field | Required | Notes for the author |
-|---|---|---|
-| `preheader` | **yes** | The grey line beside the subject in the inbox |
-| `eyebrow` | **yes** | Upper-cased for you — don't shout in the string |
-| `heading` | **yes** | Also becomes the `<title>` |
-| `body` | **yes** | One paragraph per array entry |
-| `facts` | no | Label/value pairs in a quiet panel. Short values, not sentences |
-| `list` + `listTitle` | no | Repeating rows: primary, secondary, optional right-aligned `trailing` |
-| `cta` | no | **One** button. The shell renders a single CTA, plus a paste-this-link fallback |
-| `note` | no | Small print under the CTA — expiry, what to do if unexpected |
+| Field                | Required | Notes for the author                                                            |
+| -------------------- | -------- | ------------------------------------------------------------------------------- |
+| `preheader`          | **yes**  | The grey line beside the subject in the inbox                                   |
+| `eyebrow`            | **yes**  | Upper-cased for you — don't shout in the string                                 |
+| `heading`            | **yes**  | Also becomes the `<title>`                                                      |
+| `body`               | **yes**  | One paragraph per array entry                                                   |
+| `facts`              | no       | Label/value pairs in a quiet panel. Short values, not sentences                 |
+| `list` + `listTitle` | no       | Repeating rows: primary, secondary, optional right-aligned `trailing`           |
+| `cta`                | no       | **One** button. The shell renders a single CTA, plus a paste-this-link fallback |
+| `note`               | no       | Small print under the CTA — expiry, what to do if unexpected                    |
 
 Block order is fixed by `renderEmail()` and is not a per-template decision:
 
@@ -111,7 +111,7 @@ phone.
      to,
      subject,
      html: renderEmail(content),
-     text: renderText(content),   // always — see §5
+     text: renderText(content), // always — see §5
      tags: { type: "<snake_case>" },
    };
    ```

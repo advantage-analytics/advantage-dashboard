@@ -8,7 +8,7 @@
 export function parseCsv(text: string): Record<string, string>[] {
   const rows: string[][] = [];
   let row: string[] = [];
-  let field = '';
+  let field = "";
   let quoted = false;
 
   for (let i = 0; i < text.length; i++) {
@@ -25,17 +25,17 @@ export function parseCsv(text: string): Record<string, string>[] {
       continue;
     }
     if (ch === '"') quoted = true;
-    else if (ch === ',') {
+    else if (ch === ",") {
       row.push(field);
-      field = '';
-    } else if (ch === '\n') {
+      field = "";
+    } else if (ch === "\n") {
       row.push(field);
       rows.push(row);
       row = [];
-      field = '';
-    } else if (ch !== '\r') field += ch;
+      field = "";
+    } else if (ch !== "\r") field += ch;
   }
-  if (field !== '' || row.length) {
+  if (field !== "" || row.length) {
     row.push(field);
     rows.push(row);
   }
@@ -48,13 +48,14 @@ export function parseCsv(text: string): Record<string, string>[] {
 
 /** '' → null, so an absent CSV value does not become an empty-string row. */
 export const orNull = (v: string | undefined): string | null =>
-  v == null || v.trim() === '' ? null : v.trim();
+  v == null || v.trim() === "" ? null : v.trim();
 
 /** Strict truthiness, matching the dataset's own `_is_true`. Fails closed. */
 export const asBool = (v: string | undefined): boolean =>
-  typeof v === 'string' && ['true', 't', 'yes', '1'].includes(v.trim().toLowerCase());
+  typeof v === "string" &&
+  ["true", "t", "yes", "1"].includes(v.trim().toLowerCase());
 
 export const asInt = (v: string | undefined): number => {
-  const n = Number.parseInt((v ?? '').trim(), 10);
+  const n = Number.parseInt((v ?? "").trim(), 10);
   return Number.isFinite(n) ? n : 0;
 };

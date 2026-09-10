@@ -39,7 +39,7 @@ function daysBetween(a: string, b: string): number {
 /** `programs.program_key` and school name for a set of program ids. */
 async function programKeysFor(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  ids: string[]
+  ids: string[],
 ): Promise<Map<string, { key: string; school: string }>> {
   const map = new Map<string, { key: string; school: string }>();
   if (ids.length === 0) return map;
@@ -47,7 +47,11 @@ async function programKeysFor(
     .from("programs")
     .select("id, program_key, school_name")
     .in("id", ids);
-  for (const row of (data ?? []) as { id: string; program_key: string; school_name: string }[]) {
+  for (const row of (data ?? []) as {
+    id: string;
+    program_key: string;
+    school_name: string;
+  }[]) {
     map.set(row.id, { key: row.program_key, school: row.school_name });
   }
   return map;
@@ -77,7 +81,7 @@ export async function findLineOffers(input: {
   for (const event of schedule.events) {
     const distance = Math.min(
       daysBetween(event.startsOn, input.date),
-      daysBetween(event.endsOn, input.date)
+      daysBetween(event.endsOn, input.date),
     );
     const inside = input.date >= event.startsOn && input.date <= event.endsOn;
     if (!inside && distance > OFFER_WINDOW_DAYS) continue;
@@ -90,7 +94,9 @@ export async function findLineOffers(input: {
       const byName =
         !byId &&
         wanted.length > 0 &&
-        entry.playerLabels.some((label) => normalizedPersonName(label) === wanted);
+        entry.playerLabels.some(
+          (label) => normalizedPersonName(label) === wanted,
+        );
       if (!byId && !byName) continue;
 
       // A line whose match already has video is somebody else's upload.
@@ -126,11 +132,13 @@ export async function findLineOffers(input: {
     .map(({ distance: _distance, ...offer }) => ({
       ...offer,
       opponentProgramKey: offer.opponentProgramKey
-        ? keys.get(offer.opponentProgramKey)?.key ?? null
+        ? (keys.get(offer.opponentProgramKey)?.key ?? null)
         : null,
       opponentSchool:
         offer.opponentSchool ??
-        (offer.opponentProgramKey ? keys.get(offer.opponentProgramKey)?.school ?? null : null),
+        (offer.opponentProgramKey
+          ? (keys.get(offer.opponentProgramKey)?.school ?? null)
+          : null),
     }));
 }
 
@@ -163,7 +171,9 @@ export async function opponentsPlayed(): Promise<OpponentPlayed[]> {
 
   const query = supabase
     .from("matches")
-    .select("player2_name, date, opponent_hand, opponent_backhand, opponent_player_id")
+    .select(
+      "player2_name, date, opponent_hand, opponent_backhand, opponent_player_id",
+    )
     .order("date", { ascending: false })
     .limit(400);
   const { data } =
@@ -255,7 +265,14 @@ export async function yourEvents(): Promise<YourEvent[]> {
       existing.last = Math.max(existing.last, year);
       continue;
     }
-    byName.set(key, { name, years: "", matches: 1, kind, first: year, last: year });
+    byName.set(key, {
+      name,
+      years: "",
+      matches: 1,
+      kind,
+      first: year,
+      last: year,
+    });
   }
   return [...byName.values()].map(({ first, last, ...event }) => ({
     ...event,
@@ -293,7 +310,8 @@ export async function opponentRosterForLine(input: {
     .eq("program_key", input.opponentProgramKey)
     .maybeSingle();
   const opponentProgramId = (program as { id: string } | null)?.id ?? null;
-  if (!opponentProgramId || opponentProgramId === workspace.active.id) return [];
+  if (!opponentProgramId || opponentProgramId === workspace.active.id)
+    return [];
 
   const [{ data: rosterRows }, { data: matchRows }, { data: lineupRows }] =
     await Promise.all([
@@ -302,7 +320,9 @@ export async function opponentRosterForLine(input: {
         .from("matches")
         .select("id, player2_name, opponent_player_id")
         .eq("program_id", workspace.active.id),
-      supabase.rpc("pooled_lineups", { p_opponent_program_id: opponentProgramId }),
+      supabase.rpc("pooled_lineups", {
+        p_opponent_program_id: opponentProgramId,
+      }),
     ]);
 
   const matches = (matchRows ?? []) as {
@@ -320,7 +340,8 @@ export async function opponentRosterForLine(input: {
   }[]) {
     if (line.program_id !== workspace.active.id) continue;
     if (!input.slot || line.slot !== input.slot) continue;
-    for (const label of line.opponent_labels ?? []) heldNames.add(normalizedPersonName(label));
+    for (const label of line.opponent_labels ?? [])
+      heldNames.add(normalizedPersonName(label));
   }
 
   return (
@@ -383,7 +404,10 @@ export async function playerStyleFromMatches(input: {
     ? query.eq("player1_id", input.playerId)
     : query.ilike("player1_name", input.playerName.trim());
   const { data } = await query.maybeSingle();
-  const row = data as { player_hand: string | null; player_backhand: string | null } | null;
+  const row = data as {
+    player_hand: string | null;
+    player_backhand: string | null;
+  } | null;
   if (!row || (!row.player_hand && !row.player_backhand)) return null;
   return { hand: row.player_hand, backhand: row.player_backhand };
 }
@@ -407,7 +431,7 @@ export async function saveMyStyle(input: {
 
 /** Save (or replace) a draft. Returns the row's id and timestamp. */
 export async function saveMatchDraft(
-  draft: Omit<MatchDraft, "updatedAt">
+  draft: Omit<MatchDraft, "updatedAt">,
 ): Promise<{ id: string; updatedAt: string } | null> {
   const workspace = await getWorkspaceContext();
   if (!workspace) return null;
@@ -433,18 +457,20 @@ export async function saveMatchDraft(
       {
         id: draft.id,
         user_id: user.id,
-        program_id: workspace.active.kind === "team" ? workspace.active.id : null,
+        program_id:
+          workspace.active.kind === "team" ? workspace.active.id : null,
         step: draft.step,
         step_index: draft.stepIndex,
         step_count: draft.stepCount,
         provider: draft.provider,
         file_name: draft.fileName,
-        player_name: draft.formData.playerName || draft.preset?.playerName || null,
+        player_name:
+          draft.formData.playerName || draft.preset?.playerName || null,
         event_label: eventLabel,
         payload: draft,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: "id" }
+      { onConflict: "id" },
     )
     .select("id, updated_at")
     .maybeSingle();
@@ -492,22 +518,26 @@ export async function listMatchDrafts(scope: {
   if (!user) return [];
   let query = supabase
     .from("match_drafts")
-    .select("id, player_name, event_label, step_index, step_count, file_name, updated_at")
+    .select(
+      "id, player_name, event_label, step_index, step_count, file_name, updated_at",
+    )
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false });
   query = scope.programId
     ? query.eq("program_id", scope.programId)
     : query.is("program_id", null);
   const { data } = await query;
-  return ((data ?? []) as {
-    id: string;
-    player_name: string | null;
-    event_label: string | null;
-    step_index: number;
-    step_count: number;
-    file_name: string | null;
-    updated_at: string;
-  }[]).map((row) => ({
+  return (
+    (data ?? []) as {
+      id: string;
+      player_name: string | null;
+      event_label: string | null;
+      step_index: number;
+      step_count: number;
+      file_name: string | null;
+      updated_at: string;
+    }[]
+  ).map((row) => ({
     id: row.id,
     playerName: row.player_name,
     eventLabel: row.event_label,

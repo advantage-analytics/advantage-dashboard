@@ -81,7 +81,9 @@ const TEXT_LINK_CLASS =
  * on is one number rather than three copies of it.
  */
 function Lead({ children }: { children?: React.ReactNode }) {
-  return <span className="flex w-[14px] shrink-0 justify-center">{children}</span>;
+  return (
+    <span className="flex w-[14px] shrink-0 justify-center">{children}</span>
+  );
 }
 
 const DOT = (
@@ -108,8 +110,9 @@ function InFlightRow({ item }: { item: ActivityItem }) {
     >
       <Lead>{DOT}</Lead>
       <span className="flex min-w-0 flex-1 flex-col gap-[7px]">
-        <span className="min-w-0 text-[12px] text-[var(--ink-900)] [text-wrap:pretty]">
-          {ANALYSIS_LABEL[analysis.status]} <b className="font-medium">{title}</b>
+        <span className="min-w-0 text-[12px] [text-wrap:pretty] text-[var(--ink-900)]">
+          {ANALYSIS_LABEL[analysis.status]}{" "}
+          <b className="font-medium">{title}</b>
         </span>
         {/* The bar is the whole estimate. The "about N minutes left" line this
             used to carry said the same thing a second time, and needed a
@@ -151,13 +154,13 @@ function FailedRow({ item }: { item: ActivityItem }) {
       <span className="flex min-w-0 flex-1 items-center gap-3">
         <Link
           href={`/dashboard/matches/${item.matchId}`}
-          className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)] hover:underline focus-visible:outline-none focus-visible:underline"
+          className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)] hover:underline focus-visible:underline focus-visible:outline-none"
         >
           Analysis failed — <b className="font-medium">{item.title}</b>
         </Link>
         <Link
           href="/dashboard/matches/new"
-          className="flex h-6 shrink-0 items-center rounded-[6px] border border-[var(--border-medium)] bg-[var(--surface-card)] px-[9px] text-[12px] text-[var(--ink-700)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
+          className="flex h-6 shrink-0 items-center rounded-[6px] border border-[var(--border-medium)] bg-[var(--surface-card)] px-[9px] text-[12px] text-[var(--ink-700)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
         >
           Start over
         </Link>
@@ -215,7 +218,7 @@ function InviteRow({ invite }: { invite: PendingInvite }) {
     <div className={cn(ROW_CLASS, "bg-[var(--surface-subtle)]")}>
       <Lead>{DOT}</Lead>
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="min-w-0 text-[12px] text-[var(--ink-900)] [text-wrap:pretty]">
+        <span className="min-w-0 text-[12px] [text-wrap:pretty] text-[var(--ink-900)]">
           Invitation to <b className="font-medium">{invite.programName}</b>
         </span>
         <span className="mt-[3px] text-[11px] text-[var(--ink-500)]">
@@ -254,7 +257,10 @@ function InviteRow({ invite }: { invite: PendingInvite }) {
               >
                 Accept
               </button>
-              <Link href={invitationHref(invite.id)} className={TEXT_LINK_CLASS}>
+              <Link
+                href={invitationHref(invite.id)}
+                className={TEXT_LINK_CLASS}
+              >
                 Details
               </Link>
             </>
@@ -262,7 +268,10 @@ function InviteRow({ invite }: { invite: PendingInvite }) {
         </span>
 
         {error && (
-          <span role="alert" className="mt-1.5 text-[11px] text-[var(--danger)]">
+          <span
+            role="alert"
+            className="mt-1.5 text-[11px] text-[var(--danger)]"
+          >
             {error}
           </span>
         )}
@@ -296,13 +305,15 @@ function ElsewhereRow({ work }: { work: ElsewhereWork }) {
       className={cn(
         ROW_CLASS,
         ROW_INTERACTIVE_CLASS,
-        "w-full items-center py-[11px] text-left disabled:opacity-60 cursor-pointer"
+        "w-full cursor-pointer items-center py-[11px] text-left disabled:opacity-60",
       )}
     >
       <Lead>{RING}</Lead>
-      <span className="min-w-0 flex-1 text-[12px] text-[var(--ink-600)] [text-wrap:pretty]">
+      <span className="min-w-0 flex-1 text-[12px] [text-wrap:pretty] text-[var(--ink-600)]">
         {work.count} upload{work.count === 1 ? "" : "s"} running in{" "}
-        <b className="font-medium text-[var(--ink-900)]">{work.workspaceName}</b>
+        <b className="font-medium text-[var(--ink-900)]">
+          {work.workspaceName}
+        </b>
       </span>
       <ChevronRight
         className="size-[13px] shrink-0 text-[var(--ink-400)]"
@@ -341,7 +352,7 @@ export function ActivityTray({
    * so `elsewhere` is as fresh as the last RSC render, and no fresher.
    */
   const hasLiveWork = feed.items.some((item) =>
-    isLiveUpdating(item.analysis.status)
+    isLiveUpdating(item.analysis.status),
   );
   const patches = useLiveMatchAnalysis({
     by: "user",
@@ -381,7 +392,7 @@ export function ActivityTray({
     invites.length,
     inFlight.length,
     elsewhereCount,
-    failed.length
+    failed.length,
   );
 
   return (
@@ -392,8 +403,8 @@ export function ActivityTray({
             type="button"
             aria-label={`Activity, ${detail}`}
             className={cn(
-              "group relative flex size-7 items-center justify-center rounded-[8px] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none cursor-pointer",
-              isOpen && "bg-[var(--surface-subtle)]"
+              "group relative flex size-7 cursor-pointer items-center justify-center rounded-[8px] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none",
+              isOpen && "bg-[var(--surface-subtle)]",
             )}
           >
             <Activity
@@ -401,7 +412,7 @@ export function ActivityTray({
                 // The DS `.adv-tray-btn` darkens the glyph only while open;
                 // hover is the surface wash alone.
                 "size-[15px] transition-colors duration-150",
-                isOpen ? "text-[var(--ink-900)]" : "text-[var(--ink-700)]"
+                isOpen ? "text-[var(--ink-900)]" : "text-[var(--ink-700)]",
               )}
               strokeWidth={1.5}
               aria-hidden="true"
@@ -414,12 +425,12 @@ export function ActivityTray({
             {unread > 0 ? (
               <span
                 aria-hidden="true"
-                className="absolute right-[3px] top-[3px] size-1.5 rounded-full bg-[var(--blue)]"
+                className="absolute top-[3px] right-[3px] size-1.5 rounded-full bg-[var(--blue)]"
               />
             ) : elsewhereCount > 0 ? (
               <span
                 aria-hidden="true"
-                className="absolute right-[2.5px] top-[2.5px] size-[7px] rounded-full border-[1.5px] border-[var(--blue)] bg-[var(--surface-card)]"
+                className="absolute top-[2.5px] right-[2.5px] size-[7px] rounded-full border-[1.5px] border-[var(--blue)] bg-[var(--surface-card)]"
               />
             ) : null}
           </button>
@@ -482,7 +493,7 @@ export function ActivityTray({
         <Link
           href="/dashboard/matches"
           onClick={() => setIsOpen(false)}
-          className="flex items-center justify-between border-t border-[var(--border-hairline)] px-4 py-2.5 text-[11px] text-[var(--ink-600)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:outline-none focus-visible:bg-[var(--surface-subtle)]"
+          className="flex items-center justify-between border-t border-[var(--border-hairline)] px-4 py-2.5 text-[11px] text-[var(--ink-600)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none"
         >
           Everything that finished
           <ChevronRight

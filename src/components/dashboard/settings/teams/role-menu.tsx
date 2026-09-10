@@ -64,7 +64,11 @@ export function RoleMenu({
       onChange={(next) => {
         onError(null);
         startTransition(async () => {
-          const result = await setProgramMemberRole({ programId, userId, role: next });
+          const result = await setProgramMemberRole({
+            programId,
+            userId,
+            role: next,
+          });
           if (!result.ok) {
             onError(result.error);
             return;
@@ -84,11 +88,14 @@ export function RoleMenu({
 export function assignableRoles(
   viewerRole: MemberRole,
   viewerId: string,
-  member: { userId: string; role: MemberRole }
+  member: { userId: string; role: MemberRole },
 ): readonly AssignableRole[] {
   if (member.userId === viewerId || member.role === "owner") return [];
   if (viewerRole === "owner") return ["coach", "staff", "player"];
-  if (viewerRole === "coach" && (member.role === "staff" || member.role === "player")) {
+  if (
+    viewerRole === "coach" &&
+    (member.role === "staff" || member.role === "player")
+  ) {
     return ["staff", "player"];
   }
   return [];

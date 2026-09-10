@@ -20,13 +20,12 @@ const POLICY_NOTE: Record<UploadPolicy, string> = {
   everyone: "Players as well, where their row allows it",
 };
 
-const UPLOAD_POLICY_OPTIONS: readonly MenuOption<UploadPolicy>[] = UPLOAD_POLICIES.map(
-  (policy) => ({
+const UPLOAD_POLICY_OPTIONS: readonly MenuOption<UploadPolicy>[] =
+  UPLOAD_POLICIES.map((policy) => ({
     value: policy,
     label: uploadPolicyLabel(policy),
     description: POLICY_NOTE[policy],
-  })
-);
+  }));
 
 /**
  * The two policies. The first is the product's own menu rather than the
@@ -62,7 +61,9 @@ export function TeamPoliciesCard({
       <SettingsCardRow
         label="Personal uploads stay private"
         description="Players share personal matches to the program per match — never automatically."
-        control={<span className="text-[11px] text-[var(--ink-500)]">fixed</span>}
+        control={
+          <span className="text-[11px] text-[var(--ink-500)]">fixed</span>
+        }
       />
     </SettingsCard>
   );

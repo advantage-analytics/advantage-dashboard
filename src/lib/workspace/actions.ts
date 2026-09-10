@@ -1,18 +1,18 @@
-'use server';
+"use server";
 
-import { cookies } from 'next/headers';
-import { revalidatePath } from 'next/cache';
-import { redirect, RedirectType } from 'next/navigation';
+import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache";
+import { redirect, RedirectType } from "next/navigation";
 import {
   WORKSPACE_COOKIE,
   getWorkspaceContext,
-} from './active-workspace-server';
-import type { Workspace } from './types';
+} from "./active-workspace-server";
+import type { Workspace } from "./types";
 
 const WORKSPACE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 function workspaceHome(workspace: Workspace): string {
-  return workspace.kind === 'team' ? '/dashboard/team' : '/dashboard';
+  return workspace.kind === "team" ? "/dashboard/team" : "/dashboard";
 }
 
 /**
@@ -60,7 +60,7 @@ export async function setActiveWorkspace(workspaceId: string): Promise<void> {
  * (no membership row) from a completed switch.
  */
 export async function setActiveWorkspaceInPlace(
-  workspaceId: string
+  workspaceId: string,
 ): Promise<boolean> {
   const target = await writeActiveWorkspace(workspaceId);
   return target !== null;
@@ -78,12 +78,12 @@ export async function setActiveWorkspaceInPlace(
  */
 export async function setActiveWorkspaceThen(
   workspaceId: string,
-  destination: string
+  destination: string,
 ): Promise<void> {
   const target = await writeActiveWorkspace(workspaceId);
   if (!target) return;
 
-  const safe = destination.startsWith('/dashboard/team')
+  const safe = destination.startsWith("/dashboard/team")
     ? destination
     : workspaceHome(target);
   redirect(safe, RedirectType.push);
@@ -94,27 +94,27 @@ export async function setActiveWorkspaceThen(
  * revalidate. Null when the id names no workspace the viewer belongs to.
  */
 async function writeActiveWorkspace(
-  workspaceId: string
+  workspaceId: string,
 ): Promise<Workspace | null> {
   const context = await getWorkspaceContext();
   if (!context) return null;
 
   const target = context.available.find(
-    (workspace) => workspace.id === workspaceId
+    (workspace) => workspace.id === workspaceId,
   );
   if (!target) return null;
 
   const cookieStore = await cookies();
   cookieStore.set(WORKSPACE_COOKIE, target.id, {
-    path: '/',
+    path: "/",
     maxAge: WORKSPACE_COOKIE_MAX_AGE,
-    sameSite: 'lax',
+    sameSite: "lax",
   });
 
   // Every page under the dashboard layout reads the workspace, so all of it is
   // stale — the sidebar's navigation, not just its label. This also tells the
   // client router to drop what it has prefetched for the workspace being left.
-  revalidatePath('/dashboard', 'layout');
+  revalidatePath("/dashboard", "layout");
 
   return target;
 }

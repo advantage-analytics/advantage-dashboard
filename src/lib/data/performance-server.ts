@@ -197,7 +197,7 @@ function calculateWinLoss(
   matches: DbMatch[],
   playerIds: readonly string[],
   viewerId: string,
-  daysAgo?: number
+  daysAgo?: number,
 ): { wins: number; losses: number } {
   const cutoffDate = daysAgo
     ? new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000)
@@ -211,10 +211,10 @@ function calculateWinLoss(
     if (!match.score?.player1 || !match.score?.player2) continue;
 
     const p1Sets = match.score.player1.filter(
-      (s, i) => s > (match.score?.player2[i] ?? 0)
+      (s, i) => s > (match.score?.player2[i] ?? 0),
     ).length;
     const p2Sets = match.score.player2.filter(
-      (s, i) => s > (match.score?.player1[i] ?? 0)
+      (s, i) => s > (match.score?.player1[i] ?? 0),
     ).length;
 
     const side = viewerSide(match, playerIds, viewerId);
@@ -233,7 +233,7 @@ function calculateWinLoss(
 function calculateAverageRating(
   stats: DbMatchStats[],
   userId: string,
-  matchPlayerMap: Map<string, boolean>
+  matchPlayerMap: Map<string, boolean>,
 ): { serve: number; return_: number; pressure: number } {
   if (stats.length === 0) return { serve: 0, return_: 0, pressure: 0 };
 
@@ -298,7 +298,7 @@ function calculateAverageRating(
 function calculateRecentPerformance(
   stats: DbMatchStats[],
   matchPlayerMap: Map<string, boolean>,
-  orderedMatchIds: string[]
+  orderedMatchIds: string[],
 ): RecentPerformanceStat[] {
   if (stats.length === 0) {
     return DEFAULT_PERFORMANCE.recentPerformance;
@@ -328,7 +328,11 @@ function calculateRecentPerformance(
     const firstServeIn = pct(stat.first_serve_pct);
     const firstServeWon = pct(stat.first_serve_won_pct);
     const secondServeWon = pct(stat.second_serve_won_pct);
-    if (firstServeIn === null && firstServeWon === null && secondServeWon === null) {
+    if (
+      firstServeIn === null &&
+      firstServeWon === null &&
+      secondServeWon === null
+    ) {
       continue;
     }
 
@@ -348,8 +352,10 @@ function calculateRecentPerformance(
   }
 
   // Find the two most recent matches that have stats
-  let latestStats: (typeof matchStatsMap extends Map<string, infer V> ? V : never) | undefined;
-  let previousStats: (typeof matchStatsMap extends Map<string, infer V> ? V : never) | undefined;
+  let latestStats:
+    (typeof matchStatsMap extends Map<string, infer V> ? V : never) | undefined;
+  let previousStats:
+    (typeof matchStatsMap extends Map<string, infer V> ? V : never) | undefined;
   for (const matchId of orderedMatchIds) {
     const s = matchStatsMap.get(matchId);
     if (!s) continue;
@@ -391,7 +397,7 @@ function calculateForm(
   matches: DbMatch[],
   playerIds: readonly string[],
   viewerId: string,
-  count: number
+  count: number,
 ): ("W" | "L")[] {
   const form: ("W" | "L")[] = [];
   for (const match of matches) {
@@ -399,10 +405,10 @@ function calculateForm(
     if (!match.score?.player1 || !match.score?.player2) continue;
 
     const p1Sets = match.score.player1.filter(
-      (s, i) => s > (match.score?.player2[i] ?? 0)
+      (s, i) => s > (match.score?.player2[i] ?? 0),
     ).length;
     const p2Sets = match.score.player2.filter(
-      (s, i) => s > (match.score?.player1[i] ?? 0)
+      (s, i) => s > (match.score?.player1[i] ?? 0),
     ).length;
 
     const side = viewerSide(match, playerIds, viewerId);
@@ -418,7 +424,7 @@ function calculateForm(
 function calculateHeatmap(
   matches: DbMatch[],
   playerIds: readonly string[],
-  viewerId: string
+  viewerId: string,
 ): HeatmapDay[] {
   const now = new Date();
   const year = now.getFullYear();
@@ -446,13 +452,17 @@ function calculateHeatmap(
     const dayMatches = dayMap.get(dateStr) ?? [];
     const summaries: HeatmapMatchSummary[] = dayMatches.map((m) => {
       const isP1 = viewerSide(m, playerIds, viewerId) !== "player2";
-      const opponent = isP1 ? (m.player2_name ?? "Opponent") : (m.player1_name ?? "Opponent");
+      const opponent = isP1
+        ? (m.player2_name ?? "Opponent")
+        : (m.player1_name ?? "Opponent");
       const p1Sets = m.score?.player1 ?? [];
       const p2Sets = m.score?.player2 ?? [];
       const p1Won = p1Sets.filter((s, i) => s > (p2Sets[i] ?? 0)).length;
       const p2Won = p2Sets.filter((s, i) => s > (p1Sets[i] ?? 0)).length;
       const won = isP1 ? p1Won > p2Won : p2Won > p1Won;
-      const scoreStr = p1Sets.map((s, i) => `${s}-${p2Sets[i] ?? 0}`).join(", ");
+      const scoreStr = p1Sets
+        .map((s, i) => `${s}-${p2Sets[i] ?? 0}`)
+        .join(", ");
       return { id: m.id, opponent, won, score: scoreStr || "–" };
     });
     result.push({
@@ -613,7 +623,6 @@ const KPI_SPECS: KpiSpec[] = [
   },
 ];
 
-
 function formatKpiValue(value: number, format: KpiFormat): string {
   if (format === "percent") return `${Math.round(value)}%`;
   if (format === "count") return `${Math.round(value)}`;
@@ -624,7 +633,7 @@ function calculateKpiCards(
   stats: DbMatchStats[],
   matchPlayerMap: Map<string, boolean>,
   orderedMatchIds: string[],
-  matchMetaMap: Map<string, { date: string; opponent: string }>
+  matchMetaMap: Map<string, { date: string; opponent: string }>,
 ): KpiCardData[] {
   const statByMatch = new Map<string, DbMatchStats>();
   for (const stat of stats) {
@@ -691,7 +700,7 @@ function calculateKpiCards(
 function calculateWinRateSparkline(
   matches: DbMatch[],
   playerIds: readonly string[],
-  viewerId: string
+  viewerId: string,
 ): { value: number; change: number; sparkline: number[] } {
   if (matches.length === 0) return { value: 0, change: 0, sparkline: [] };
 
@@ -700,10 +709,10 @@ function calculateWinRateSparkline(
   for (const match of [...matches].reverse()) {
     if (!match.score?.player1 || !match.score?.player2) continue;
     const p1Sets = match.score.player1.filter(
-      (s, i) => s > (match.score?.player2[i] ?? 0)
+      (s, i) => s > (match.score?.player2[i] ?? 0),
     ).length;
     const p2Sets = match.score.player2.filter(
-      (s, i) => s > (match.score?.player1[i] ?? 0)
+      (s, i) => s > (match.score?.player1[i] ?? 0),
     ).length;
     const side = viewerSide(match, playerIds, viewerId);
     if (side === null) continue;
@@ -733,10 +742,10 @@ function calculateWinRateSparkline(
     if (side === null) continue;
     recentTotal++;
     const p1Sets = match.score.player1.filter(
-      (s, i) => s > (match.score?.player2[i] ?? 0)
+      (s, i) => s > (match.score?.player2[i] ?? 0),
     ).length;
     const p2Sets = match.score.player2.filter(
-      (s, i) => s > (match.score?.player1[i] ?? 0)
+      (s, i) => s > (match.score?.player1[i] ?? 0),
     ).length;
     const player1Won = p1Sets > p2Sets;
     if (side === "player1" ? player1Won : !player1Won) recentWins++;
@@ -750,10 +759,10 @@ function calculateWinRateSparkline(
     if (side === null) continue;
     olderTotal++;
     const p1Sets = match.score.player1.filter(
-      (s, i) => s > (match.score?.player2[i] ?? 0)
+      (s, i) => s > (match.score?.player2[i] ?? 0),
     ).length;
     const p2Sets = match.score.player2.filter(
-      (s, i) => s > (match.score?.player1[i] ?? 0)
+      (s, i) => s > (match.score?.player1[i] ?? 0),
     ).length;
     const player1Won = p1Sets > p2Sets;
     if (side === "player1" ? player1Won : !player1Won) olderWins++;
@@ -761,7 +770,8 @@ function calculateWinRateSparkline(
 
   const recentRate = recentTotal > 0 ? (recentWins / recentTotal) * 100 : 0;
   const olderRate = olderTotal > 0 ? (olderWins / olderTotal) * 100 : 0;
-  const change = olderTotal > 0 ? Math.round((recentRate - olderRate) * 10) / 10 : 0;
+  const change =
+    olderTotal > 0 ? Math.round((recentRate - olderRate) * 10) / 10 : 0;
 
   return { value: currentRate, change, sparkline: sparkline.slice(-8) };
 }
@@ -769,7 +779,7 @@ function calculateWinRateSparkline(
 function calculatePerformanceProfile(
   stats: DbMatchStats[],
   matchPlayerMap: Map<string, boolean>,
-  orderedMatchIds: string[]
+  orderedMatchIds: string[],
 ): PerformanceProfileDimension[] {
   const dimensions = [
     "SERVE",
@@ -823,11 +833,20 @@ function calculatePerformanceProfile(
     ]);
 
   const currentServe = Math.round(avg(recentStats, serveScore));
-  const previousServe = olderStats.length > 0 ? Math.round(avg(olderStats, serveScore)) : currentServe;
+  const previousServe =
+    olderStats.length > 0
+      ? Math.round(avg(olderStats, serveScore))
+      : currentServe;
   const currentReturn = Math.round(avg(recentStats, returnScore));
-  const previousReturn = olderStats.length > 0 ? Math.round(avg(olderStats, returnScore)) : currentReturn;
+  const previousReturn =
+    olderStats.length > 0
+      ? Math.round(avg(olderStats, returnScore))
+      : currentReturn;
   const currentClutch = Math.round(avg(recentStats, clutchScore));
-  const previousClutch = olderStats.length > 0 ? Math.round(avg(olderStats, clutchScore)) : currentClutch;
+  const previousClutch =
+    olderStats.length > 0
+      ? Math.round(avg(olderStats, clutchScore))
+      : currentClutch;
 
   return [
     { label: "SERVE", current: currentServe, previous: previousServe },
@@ -886,7 +905,7 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
   const recentPerf = calculateRecentPerformance(
     typedStats,
     matchPlayerMap,
-    orderedMatchIds
+    orderedMatchIds,
   );
 
   // A match is analysed when a stats row exists for the side the viewer played.
@@ -908,14 +927,18 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
     performanceRatings: [
       { label: "Serve Rating", value: ratings.serve, barColor: "#666666" },
       { label: "Return Rating", value: ratings.return_, barColor: "#4A90E2" },
-      { label: "Under Pressure Rating", value: ratings.pressure, barColor: "#666666" },
+      {
+        label: "Under Pressure Rating",
+        value: ratings.pressure,
+        barColor: "#666666",
+      },
     ],
     recentPerformance: recentPerf,
     kpiCards: calculateKpiCards(
       typedStats,
       matchPlayerMap,
       orderedMatchIds,
-      matchMetaMap
+      matchMetaMap,
     ),
     winRate: calculateWinRateSparkline(typedMatches, myPlayerIds, user.id),
     form: calculateForm(typedMatches, myPlayerIds, user.id, 5),
@@ -926,7 +949,7 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
     performanceProfile: calculatePerformanceProfile(
       typedStats,
       matchPlayerMap,
-      orderedMatchIds
+      orderedMatchIds,
     ),
   };
 }

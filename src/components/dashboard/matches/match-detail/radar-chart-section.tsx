@@ -49,55 +49,59 @@ function RadarTooltipContent({
 
   return (
     <div
-      className="bg-white rounded-xl shadow-tooltip py-2.5 px-3 flex flex-col gap-2 min-w-[180px] w-max max-w-[260px]"
+      className="flex w-max max-w-[260px] min-w-[180px] flex-col gap-2 rounded-xl bg-white px-3 py-2.5 shadow-tooltip"
       style={{ border: "1px solid var(--color-border-card)" }}
     >
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[1.5px] leading-[1.4] break-words">
+        <span className="text-[10px] leading-[1.4] font-medium tracking-[1.5px] break-words text-[var(--color-text-dim)] uppercase">
           {statLabel}
         </span>
       </div>
       <div className="h-px bg-[var(--color-border-card)]" />
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1.5 min-w-0">
+          <span className="flex min-w-0 items-center gap-1.5">
             <span
               aria-hidden="true"
-              className="size-[5px] rounded-full shrink-0"
+              className="size-[5px] shrink-0 rounded-full"
               style={{ backgroundColor: PLAYER_1 }}
             />
-            <span className="text-[10px] text-[var(--color-text-body)] truncate">{p1Name}</span>
+            <span className="truncate text-[10px] text-[var(--color-text-body)]">
+              {p1Name}
+            </span>
           </span>
           <span
-            className="text-[10px] tabular-nums font-medium shrink-0"
+            className="shrink-0 text-[10px] font-medium tabular-nums"
             style={{ color: PLAYER_1 }}
           >
             {p1}%
           </span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1.5 min-w-0">
+          <span className="flex min-w-0 items-center gap-1.5">
             <span
               aria-hidden="true"
-              className="size-[5px] rounded-full shrink-0"
+              className="size-[5px] shrink-0 rounded-full"
               style={{ backgroundColor: PLAYER_2 }}
             />
-            <span className="text-[10px] text-[var(--color-text-body)] truncate">{p2Name}</span>
+            <span className="truncate text-[10px] text-[var(--color-text-body)]">
+              {p2Name}
+            </span>
           </span>
           <span
-            className="text-[10px] tabular-nums font-medium shrink-0"
+            className="shrink-0 text-[10px] font-medium tabular-nums"
             style={{ color: PLAYER_2 }}
           >
             {p2}%
           </span>
         </div>
         {delta !== 0 && (
-          <div className="flex items-center justify-between pt-1.5 border-t border-[var(--color-border-card)]">
-            <span className="text-[10px] text-[var(--color-text-dim)] uppercase tracking-[1px]">
+          <div className="flex items-center justify-between border-t border-[var(--color-border-card)] pt-1.5">
+            <span className="text-[10px] tracking-[1px] text-[var(--color-text-dim)] uppercase">
               Lead
             </span>
             <span
-              className="text-[10px] tabular-nums font-medium shrink-0"
+              className="shrink-0 text-[10px] font-medium tabular-nums"
               style={{ color: leaderColor }}
             >
               +{Math.abs(delta)}%
@@ -251,12 +255,12 @@ export function RadarChartSection({
   if (data.length === 0) {
     return (
       <div
-        className="flex-1 min-w-0 flex items-center justify-center"
+        className="flex min-w-0 flex-1 items-center justify-center"
         style={{ height: RADAR_CHART_HEIGHT }}
         role="status"
         aria-label="No comparison data"
       >
-        <p className="text-[11px] font-normal text-[var(--color-text-muted)] leading-[1.6]">
+        <p className="text-[11px] leading-[1.6] font-normal text-[var(--color-text-muted)]">
           Comparison data unavailable.
         </p>
       </div>
@@ -265,142 +269,165 @@ export function RadarChartSection({
 
   return (
     <div
-      className="flex-1 min-w-0"
+      className="min-w-0 flex-1"
       role="img"
       aria-label={`Radar chart comparing ${p1Name} and ${p2Name} across ${data.length} stats`}
     >
       <div className="relative w-full" style={{ height: RADAR_CHART_HEIGHT }}>
-      <ResponsiveContainer width="100%" height={RADAR_CHART_HEIGHT}>
-        <RadarChart
-          cx="50%"
-          cy="50%"
-          outerRadius="62%"
-          data={data}
-          onMouseMove={handleChartMove}
-          onMouseLeave={handleChartLeave}
-        >
-          <PolarGrid stroke="var(--color-radar-grid)" strokeWidth={1} gridType="circle" />
-          <PolarAngleAxis
-            dataKey="stat"
-            tick={labelRenderer as never}
-            tickLine={false}
-          />
-          <PolarRadiusAxis
-            angle={90}
-            domain={[0, 100]}
-            tick={false}
-            axisLine={false}
-          />
-          <Radar
-            name={p1Name}
-            dataKey="p1"
-            stroke={PLAYER_1}
-            fill={PLAYER_1}
-            fillOpacity={0.1}
-            strokeWidth={1.5}
-            dot={{ r: 2.5, fill: PLAYER_1, strokeWidth: 0 }}
-            activeDot={{
-              r: 5,
-              fill: PLAYER_1,
-              stroke: "var(--color-surface-card)",
-              strokeWidth: 2,
-            }}
-            isAnimationActive={false}
-          />
-          <Radar
-            name={p2Name}
-            dataKey="p2"
-            stroke={PLAYER_2}
-            fill={PLAYER_2}
-            fillOpacity={0.1}
-            strokeWidth={1.5}
-            dot={{ r: 2.5, fill: PLAYER_2, strokeWidth: 0 }}
-            activeDot={{
-              r: 5,
-              fill: PLAYER_2,
-              stroke: "var(--color-surface-card)",
-              strokeWidth: 2,
-            }}
-            isAnimationActive={false}
-          />
-          {/* Recharts Tooltip intentionally omitted — we render a single unified tooltip outside the SVG so vertex-hover and label-hover share one element. */}
-        </RadarChart>
-      </ResponsiveContainer>
-
-      {/* Stat axis indicator — constant-length dashed line from center to the outer circle along the hovered stat's axis */}
-      {/* eslint-disable-next-line react-hooks/refs -- reads outerRadiusPxRef
-          during render. Recharts hands us the outer radius from inside its own
-          label render (see the ref's declaration above), so promoting it to
-          state would mean calling a setter while a child renders, which React
-          forbids outright; a ref read is the lesser violation. Revisit if
-          Recharts ever exposes resolved geometry as a prop. */}
-      {hover && hoveredEntry && (() => {
-        const dx = hover.x - hover.cx;
-        const dy = hover.y - hover.cy;
-        const dist = Math.hypot(dx, dy) || 1;
-        // Fallback radius if we haven't yet observed a vertex we could
-        // measure against (e.g., the first hover is a label).
-        const radius = outerRadiusPxRef.current ?? dist;
-        const endX = hover.cx + (dx / dist) * radius;
-        const endY = hover.cy + (dy / dist) * radius;
-        return (
-          <svg
-            className="absolute inset-0 pointer-events-none"
-            width="100%"
-            height="100%"
+        <ResponsiveContainer width="100%" height={RADAR_CHART_HEIGHT}>
+          <RadarChart
+            cx="50%"
+            cy="50%"
+            outerRadius="62%"
+            data={data}
+            onMouseMove={handleChartMove}
+            onMouseLeave={handleChartLeave}
           >
-            <line
-              x1={hover.cx}
-              y1={hover.cy}
-              x2={endX}
-              y2={endY}
-              stroke="var(--color-accent-blue)"
+            <PolarGrid
+              stroke="var(--color-radar-grid)"
+              strokeWidth={1}
+              gridType="circle"
+            />
+            <PolarAngleAxis
+              dataKey="stat"
+              tick={labelRenderer as never}
+              tickLine={false}
+            />
+            <PolarRadiusAxis
+              angle={90}
+              domain={[0, 100]}
+              tick={false}
+              axisLine={false}
+            />
+            <Radar
+              name={p1Name}
+              dataKey="p1"
+              stroke={PLAYER_1}
+              fill={PLAYER_1}
+              fillOpacity={0.1}
               strokeWidth={1.5}
-              strokeDasharray="4 3"
-              strokeLinecap="round"
-              opacity={0.85}
+              dot={{ r: 2.5, fill: PLAYER_1, strokeWidth: 0 }}
+              activeDot={{
+                r: 5,
+                fill: PLAYER_1,
+                stroke: "var(--color-surface-card)",
+                strokeWidth: 2,
+              }}
+              isAnimationActive={false}
             />
-          </svg>
-        );
-      })()}
+            <Radar
+              name={p2Name}
+              dataKey="p2"
+              stroke={PLAYER_2}
+              fill={PLAYER_2}
+              fillOpacity={0.1}
+              strokeWidth={1.5}
+              dot={{ r: 2.5, fill: PLAYER_2, strokeWidth: 0 }}
+              activeDot={{
+                r: 5,
+                fill: PLAYER_2,
+                stroke: "var(--color-surface-card)",
+                strokeWidth: 2,
+              }}
+              isAnimationActive={false}
+            />
+            {/* Recharts Tooltip intentionally omitted — we render a single unified tooltip outside the SVG so vertex-hover and label-hover share one element. */}
+          </RadarChart>
+        </ResponsiveContainer>
 
-      {/* Unified hover tooltip — edge-aware positioning, used for both vertex and label hovers */}
-      {hover && hoveredEntry && (() => {
-        const { x, y, cx, cy, source } = hover;
-        const dx = x - cx;
-        const dy = y - cy;
-        const horizRatio = Math.abs(dx) / (cx || 1);
-        const translateX =
-          horizRatio < 0.2 ? "-50%" : dx > 0 ? "-100%" : "0%";
-        const translateY = dy <= 0 ? "calc(-100% - 10px)" : "10px";
-        const marginX = dx > 0 ? -8 : dx < 0 ? 8 : 0;
-        return (
-          <div
-            className="absolute pointer-events-none z-10"
-            role="status"
-            aria-live="polite"
-            style={{
-              left: x + marginX,
-              top: y,
-              transform: `translate(${translateX}, ${translateY})`,
-              transition: source === "vertex"
-                ? "left 120ms ease, top 120ms ease"
-                : "none",
-            }}
-          >
-            <RadarTooltipContent
-              active
-              label={hoveredEntry.stat}
-              payload={[
-                { dataKey: "p1", value: hoveredEntry.p1, payload: { stat: hoveredEntry.stat } },
-                { dataKey: "p2", value: hoveredEntry.p2, payload: { stat: hoveredEntry.stat } },
-              ]}
-              p1Name={p1Name}
-              p2Name={p2Name}
-            />
-          </div>
-        );
-      })()}
+        {/* Stat axis indicator — constant-length dashed line from center to the outer circle along the hovered stat's axis */}
+        {/* eslint-disable react-hooks/refs -- reads outerRadiusPxRef during
+          render. Recharts hands us the outer radius from inside its own label
+          render (see the ref's declaration above), so promoting it to state
+          would mean calling a setter while a child renders, which React
+          forbids outright; a ref read is the lesser violation. Revisit if
+          Recharts ever exposes resolved geometry as a prop.
+
+          A BLOCK disable/enable pair, deliberately, NOT disable-next-line:
+          Prettier reflowed the guard below onto three lines, which moved the
+          old next-line pragma off its target and silently re-armed this error.
+          A block pair cannot drift when the code under it is reformatted. */}
+        {hover &&
+          hoveredEntry &&
+          (() => {
+            const dx = hover.x - hover.cx;
+            const dy = hover.y - hover.cy;
+            const dist = Math.hypot(dx, dy) || 1;
+            // Fallback radius if we haven't yet observed a vertex we could
+            // measure against (e.g., the first hover is a label).
+            const radius = outerRadiusPxRef.current ?? dist;
+            const endX = hover.cx + (dx / dist) * radius;
+            const endY = hover.cy + (dy / dist) * radius;
+            return (
+              <svg
+                className="pointer-events-none absolute inset-0"
+                width="100%"
+                height="100%"
+              >
+                <line
+                  x1={hover.cx}
+                  y1={hover.cy}
+                  x2={endX}
+                  y2={endY}
+                  stroke="var(--color-accent-blue)"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                  strokeLinecap="round"
+                  opacity={0.85}
+                />
+              </svg>
+            );
+          })()}
+        {/* eslint-enable react-hooks/refs */}
+
+        {/* Unified hover tooltip — edge-aware positioning, used for both vertex and label hovers */}
+        {hover &&
+          hoveredEntry &&
+          (() => {
+            const { x, y, cx, cy, source } = hover;
+            const dx = x - cx;
+            const dy = y - cy;
+            const horizRatio = Math.abs(dx) / (cx || 1);
+            const translateX =
+              horizRatio < 0.2 ? "-50%" : dx > 0 ? "-100%" : "0%";
+            const translateY = dy <= 0 ? "calc(-100% - 10px)" : "10px";
+            const marginX = dx > 0 ? -8 : dx < 0 ? 8 : 0;
+            return (
+              <div
+                className="pointer-events-none absolute z-10"
+                role="status"
+                aria-live="polite"
+                style={{
+                  left: x + marginX,
+                  top: y,
+                  transform: `translate(${translateX}, ${translateY})`,
+                  transition:
+                    source === "vertex"
+                      ? "left 120ms ease, top 120ms ease"
+                      : "none",
+                }}
+              >
+                <RadarTooltipContent
+                  active
+                  label={hoveredEntry.stat}
+                  payload={[
+                    {
+                      dataKey: "p1",
+                      value: hoveredEntry.p1,
+                      payload: { stat: hoveredEntry.stat },
+                    },
+                    {
+                      dataKey: "p2",
+                      value: hoveredEntry.p2,
+                      payload: { stat: hoveredEntry.stat },
+                    },
+                  ]}
+                  p1Name={p1Name}
+                  p2Name={p2Name}
+                />
+              </div>
+            );
+          })()}
       </div>
     </div>
   );

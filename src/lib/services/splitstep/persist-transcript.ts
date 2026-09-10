@@ -14,17 +14,17 @@
  * later is safe; the reverse is not.
  */
 
-import type { createAdminClient } from '@/lib/supabase/admin';
+import type { createAdminClient } from "@/lib/supabase/admin";
 import {
   analyzeResults,
   buildTranscript,
   DERIVATION_VERSION,
   type MatchScore,
   type Transcript,
-} from './derivation';
-import { RESULTS_BUCKET } from './config';
+} from "./derivation";
+import { RESULTS_BUCKET } from "./config";
 
-const LOG = '[splitstep:persist]';
+const LOG = "[splitstep:persist]";
 
 export type PersistOutcome =
   | {
@@ -60,30 +60,44 @@ interface MatchRow {
 export async function buildTranscriptForJob(params: {
   supabase: ReturnType<typeof createAdminClient>;
   jobId: string;
-}): Promise<{ transcript: Transcript | null; reason: string | null; job: JobRow | null }> {
+}): Promise<{
+  transcript: Transcript | null;
+  reason: string | null;
+  job: JobRow | null;
+}> {
   const { supabase, jobId } = params;
 
   const { data: job, error: jobError } = await supabase
-    .from('processing_jobs')
-    .select('id, match_id, results_object_key, start_time_seconds, initial_top_player_is_player1')
-    .eq('id', jobId)
+    .from("processing_jobs")
+    .select(
+      "id, match_id, results_object_key, start_time_seconds, initial_top_player_is_player1",
+    )
+    .eq("id", jobId)
     .single<JobRow>();
 
   if (jobError || !job) {
-    return { transcript: null, reason: `job not found: ${jobError?.message}`, job: null };
+    return {
+      transcript: null,
+      reason: `job not found: ${jobError?.message}`,
+      job: null,
+    };
   }
   if (!job.results_object_key) {
-    return { transcript: null, reason: 'job has no stored results', job };
+    return { transcript: null, reason: "job has no stored results", job };
   }
 
   const { data: match, error: matchError } = await supabase
-    .from('matches')
-    .select('id, score, initial_top_player_is_player1, format')
-    .eq('id', job.match_id)
+    .from("matches")
+    .select("id, score, initial_top_player_is_player1, format")
+    .eq("id", job.match_id)
     .single<MatchRow>();
 
   if (matchError || !match) {
-    return { transcript: null, reason: `match not found: ${matchError?.message}`, job };
+    return {
+      transcript: null,
+      reason: `match not found: ${matchError?.message}`,
+      job,
+    };
   }
 
   const { data: blob, error: readError } = await supabase.storage
@@ -93,7 +107,7 @@ export async function buildTranscriptForJob(params: {
   if (readError || !blob) {
     return {
       transcript: null,
-      reason: `could not read results: ${readError?.message ?? 'no data'}`,
+      reason: `could not read results: ${readError?.message ?? "no data"}`,
       job,
     };
   }
@@ -137,11 +151,18 @@ export async function persistTranscript(params: {
   const { supabase, jobId, dryRun = false } = params;
 
   try {
-    const { transcript, reason, job } = await buildTranscriptForJob({ supabase, jobId });
+    const { transcript, reason, job } = await buildTranscriptForJob({
+      supabase,
+      jobId,
+    });
 
     if (!transcript || !transcript.ok || !job) {
       console.error(`${LOG} refused`, { jobId, reason });
-      return { ok: false, reason: reason ?? 'transcript could not be built', transcript };
+      return {
+        ok: false,
+        reason: reason ?? "transcript could not be built",
+        transcript,
+      };
     }
 
     if (dryRun) {
@@ -159,13 +180,17 @@ export async function persistTranscript(params: {
     // interpret, and the delete below is deliberately scoped so it could never
     // remove them.
     const { count: importedCount, error: importedError } = await supabase
-      .from('points')
-      .select('id', { count: 'exact', head: true })
-      .eq('match_id', job.match_id)
-      .eq('derived', false);
+      .from("points")
+      .select("id", { count: "exact", head: true })
+      .eq("match_id", job.match_id)
+      .eq("derived", false);
 
     if (importedError) {
-      return { ok: false, reason: `could not check existing points: ${importedError.message}`, transcript };
+      return {
+        ok: false,
+        reason: `could not check existing points: ${importedError.message}`,
+        transcript,
+      };
     }
     if ((importedCount ?? 0) > 0) {
       return {
@@ -179,13 +204,17 @@ export async function persistTranscript(params: {
     // removing the derived points takes their shots with them and there is no
     // window where a point exists without its strokes.
     const { error: deleteError } = await supabase
-      .from('points')
+      .from("points")
       .delete()
-      .eq('match_id', job.match_id)
-      .eq('derived', true);
+      .eq("match_id", job.match_id)
+      .eq("derived", true);
 
     if (deleteError) {
-      return { ok: false, reason: `could not clear previous rows: ${deleteError.message}`, transcript };
+      return {
+        ok: false,
+        reason: `could not clear previous rows: ${deleteError.message}`,
+        transcript,
+      };
     }
 
     const pointRows = transcript.points.map((p) => ({
@@ -207,12 +236,16 @@ export async function persistTranscript(params: {
     }));
 
     const { data: inserted, error: pointsError } = await supabase
-      .from('points')
+      .from("points")
       .insert(pointRows)
-      .select('id, point_number');
+      .select("id, point_number");
 
     if (pointsError || !inserted) {
-      return { ok: false, reason: `points insert failed: ${pointsError?.message}`, transcript };
+      return {
+        ok: false,
+        reason: `points insert failed: ${pointsError?.message}`,
+        transcript,
+      };
     }
 
     // Map back by point_number rather than by insertion order: the client does
@@ -246,25 +279,40 @@ export async function persistTranscript(params: {
       }));
     });
 
-    if (shotRows.length !== transcript.points.reduce((n, p) => n + p.shots.length, 0)) {
-      return { ok: false, reason: 'internal: a point lost its id during insert', transcript };
+    if (
+      shotRows.length !==
+      transcript.points.reduce((n, p) => n + p.shots.length, 0)
+    ) {
+      return {
+        ok: false,
+        reason: "internal: a point lost its id during insert",
+        transcript,
+      };
     }
 
-    const { error: shotsError } = await supabase.from('shots').insert(shotRows);
+    const { error: shotsError } = await supabase.from("shots").insert(shotRows);
     if (shotsError) {
       // Leave nothing half-written: without the shots the points are a timeline
       // with no strokes, which renders as a match where nobody hit anything.
-      await supabase.from('points').delete().eq('match_id', job.match_id).eq('derived', true);
-      return { ok: false, reason: `shots insert failed: ${shotsError.message}`, transcript };
+      await supabase
+        .from("points")
+        .delete()
+        .eq("match_id", job.match_id)
+        .eq("derived", true);
+      return {
+        ok: false,
+        reason: `shots insert failed: ${shotsError.message}`,
+        transcript,
+      };
     }
 
     // Stamped only now. `resolveAnalysisStatus()` reads a non-null version on a
     // completed job as "Analyzed", so it must not be set until the rows it
     // refers to actually exist.
     await supabase
-      .from('processing_jobs')
+      .from("processing_jobs")
       .update({ derivation_version: DERIVATION_VERSION })
-      .eq('id', jobId);
+      .eq("id", jobId);
 
     console.log(`${LOG} wrote transcript`, {
       jobId,

@@ -36,7 +36,7 @@ export function WorkspaceScopeChip({
         wide
           ? "bg-[var(--blue-soft)] font-medium text-[var(--blue)]"
           : "bg-[var(--surface-subtle)] text-[var(--ink-700)]",
-        className
+        className,
       )}
     >
       {wide ? "All workspaces" : active.name}

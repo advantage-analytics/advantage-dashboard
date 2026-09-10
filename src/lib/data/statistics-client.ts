@@ -6,14 +6,26 @@ import type {
 } from "./statistics-server";
 
 const MONTH_LABELS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ] as const;
 
 function avgOrNull(values: (number | null)[]): number | null {
   const valid = values.filter((v): v is number => v !== null && !isNaN(v));
   if (valid.length === 0) return null;
-  return Math.round((valid.reduce((a, b) => a + b, 0) / valid.length) * 10) / 10;
+  return (
+    Math.round((valid.reduce((a, b) => a + b, 0) / valid.length) * 10) / 10
+  );
 }
 
 function avgPctOrNull(values: (number | null)[]): number | null {
@@ -24,7 +36,9 @@ function avgPctOrNull(values: (number | null)[]): number | null {
 
 function computeStreak(matches: SelectableMatch[]): string {
   if (matches.length === 0) return "—";
-  const sorted = [...matches].sort((a, b) => b.isoDate.localeCompare(a.isoDate));
+  const sorted = [...matches].sort((a, b) =>
+    b.isoDate.localeCompare(a.isoDate),
+  );
   const firstWon = sorted[0].isWin;
   let count = 0;
   for (const m of sorted) {
@@ -49,7 +63,12 @@ function buildMonthlyTrend(matches: SelectableMatch[]): MonthlyTrendPoint[] {
     });
 
     if (monthMatches.length === 0) {
-      trend.push({ month: MONTH_LABELS[month], wins: 0, losses: 0, winRate: 0 });
+      trend.push({
+        month: MONTH_LABELS[month],
+        wins: 0,
+        losses: 0,
+        winRate: 0,
+      });
       continue;
     }
 
@@ -62,7 +81,9 @@ function buildMonthlyTrend(matches: SelectableMatch[]): MonthlyTrendPoint[] {
   return trend;
 }
 
-function buildSurfaceBreakdown(matches: SelectableMatch[]): SurfaceBreakdownItem[] {
+function buildSurfaceBreakdown(
+  matches: SelectableMatch[],
+): SurfaceBreakdownItem[] {
   const map = new Map<string, { wins: number; losses: number }>();
 
   for (const m of matches) {
@@ -108,7 +129,9 @@ const EMPTY: StatisticsPageData = {
   underPressureRating: 0,
 };
 
-export function computeStatistics(matches: SelectableMatch[]): StatisticsPageData {
+export function computeStatistics(
+  matches: SelectableMatch[],
+): StatisticsPageData {
   if (matches.length === 0) return EMPTY;
 
   const wins = matches.filter((m) => m.isWin).length;
@@ -136,11 +159,19 @@ export function computeStatistics(matches: SelectableMatch[]): StatisticsPageDat
     avgFirstServePct: avgPctOrNull(matches.map((m) => m.firstServePct)),
     avgFirstServeWonPct: avgPctOrNull(matches.map((m) => m.firstServeWonPct)),
     avgSecondServeWonPct: avgPctOrNull(matches.map((m) => m.secondServeWonPct)),
-    avgBreakPointsSavedPct: avgPctOrNull(matches.map((m) => m.breakPointsSavedPct)),
-    avgServiceGamesWonPct: avgPctOrNull(matches.map((m) => m.serviceGamesWonPct)),
-    avgBreakPointsConvertedPct: avgPctOrNull(matches.map((m) => m.breakPointsConvertedPct)),
+    avgBreakPointsSavedPct: avgPctOrNull(
+      matches.map((m) => m.breakPointsSavedPct),
+    ),
+    avgServiceGamesWonPct: avgPctOrNull(
+      matches.map((m) => m.serviceGamesWonPct),
+    ),
+    avgBreakPointsConvertedPct: avgPctOrNull(
+      matches.map((m) => m.breakPointsConvertedPct),
+    ),
     avgFirstReturnWonPct: avgPctOrNull(matches.map((m) => m.firstReturnWonPct)),
-    avgSecondReturnWonPct: avgPctOrNull(matches.map((m) => m.secondReturnWonPct)),
+    avgSecondReturnWonPct: avgPctOrNull(
+      matches.map((m) => m.secondReturnWonPct),
+    ),
     avgReturnGamesWonPct: avgPctOrNull(matches.map((m) => m.returnGamesWonPct)),
     avgWinners: avgOrNull(matches.map((m) => m.winners)),
     avgUnforcedErrors: avgOrNull(matches.map((m) => m.unforcedErrors)),
@@ -151,6 +182,7 @@ export function computeStatistics(matches: SelectableMatch[]): StatisticsPageDat
     longRallyWonPct: avgPctOrNull(matches.map((m) => m.longRallyWonPct)),
     serveRating: avgPctOrNull(matches.map((m) => m.serveRating)) ?? 0,
     returnRating: avgPctOrNull(matches.map((m) => m.returnRating)) ?? 0,
-    underPressureRating: avgPctOrNull(matches.map((m) => m.underPressureRating)) ?? 0,
+    underPressureRating:
+      avgPctOrNull(matches.map((m) => m.underPressureRating)) ?? 0,
   };
 }

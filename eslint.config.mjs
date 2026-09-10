@@ -1,5 +1,6 @@
 import js from "@eslint/js";
 import next from "eslint-config-next/core-web-vitals";
+import configPrettier from "eslint-config-prettier/flat";
 
 // eslint-config-next 16 ships native flat config, so there is no FlatCompat
 // bridge here. Do not reintroduce one: running these configs through
@@ -106,6 +107,13 @@ const eslintConfig = [
       "react-hooks/preserve-manual-memoization": "warn", // 1
     },
   },
+
+  // MUST be last. Turns off the 358 ESLint rules that overlap with Prettier,
+  // so the two can never disagree about formatting and fight each other
+  // between the PostToolUse hook and the pre-commit hook.
+  //
+  // Prettier is the formatting authority; ESLint judges correctness only.
+  configPrettier,
 ];
 
 export default eslintConfig;

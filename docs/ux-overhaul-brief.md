@@ -50,10 +50,11 @@
 This is an **information-architecture and flow brief**, not a visual spec. It tells the designer what the product must do, for whom, on which pages, in which states — and which questions are still open.
 
 **Fixed (do not redesign):**
+
 - The design language. `DESIGN.md` and the design SKILL.md define a closed, deliberate system — "The Pro Training Room": Inter only, light mode only, Signal Blue `#3B82F6` as the single accent, outcome-only green/red, hairline hierarchy, eyebrow+rule section pattern, no gamification. This is brand equity, not a default. The overhaul is structural, not tonal. (If the founder wants to revisit the visual language, that is decision **D1** — until answered, tokens stand.)
 - The provider name. The video-analysis product is **"Advantage Intelligence"** in every user-visible string. The vendor (SplitStep) is never named. Pilot terms: free through 2026-12-31, capped at 2 processing-hours/month per individual and 75/month per collegiate program. Caps are enforced in code and must be visible in UX.
 
-**Open (founder must answer before high-fidelity design):** the decisions table in §9. Every recommendation below marked *(rec)* is a recommendation with a default, not a settled fact.
+**Open (founder must answer before high-fidelity design):** the decisions table in §9. Every recommendation below marked _(rec)_ is a recommendation with a default, not a settled fact.
 
 ---
 
@@ -65,16 +66,16 @@ This is an **information-architecture and flow brief**, not a visual spec. It te
 
 **Constraints that shape the UX — none of these are negotiable by design:**
 
-| Constraint | UX consequence |
-|---|---|
-| Vendor processes video **asynchronously with no ETA, no status polling, no processing-started webhook** (they fetch lazily; our Cloudflare Worker's download log is the only "started" signal) | The waiting experience is a first-class design problem. No turnaround promises anywhere. Notification on completion is mandatory, not optional. |
-| Derivation engine (video → points/shots/stats) is **hard-gated on vendor answers** (`docs/r2-and-webhook-overview.md` §11) | A match can exist in "video processed, analysis pending" for an extended period. That state must feel intentional, and the video itself must be watchable in it. |
-| `derivation_confidence` (`high`/`medium`/`low`) is computed by reconciling derived scores against the user-entered final score | Low-confidence stats must be visibly flagged as estimates, with a path to correct the score and re-run. Trust is the product; never present uncertain numbers as fact. |
-| Advantage Intelligence is **singles only, ≥1080p, ≥30fps** | Rejection happens at file-pick, before any bytes move. Doubles teams still need the SwingVision import path — position accordingly. |
-| Quotas: 2h/mo individual, 75h/mo program | Quota meters at submit time and in settings; program quota is a shared budget coaches must be able to see and steward. |
-| Collegiate program accounts are **needed before September onboarding** (spec §3.1) but no `programs` table exists yet | Team features are the next structural layer, not a someday. Sequencing in §8 is anchored on this. |
-| Vercel Hobby, public repo, Stripe wired ($4.99 one-time Pro) | Entitlement UX exists today and must survive the overhaul (see the role-collision bug, §2.2). |
-| Dashboard is **blocked below 768px** (`MobileGate`) | Decision D2. College players and courtside coaches are phone-first; the current gate contradicts the team ambition. |
+| Constraint                                                                                                                                                                                     | UX consequence                                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vendor processes video **asynchronously with no ETA, no status polling, no processing-started webhook** (they fetch lazily; our Cloudflare Worker's download log is the only "started" signal) | The waiting experience is a first-class design problem. No turnaround promises anywhere. Notification on completion is mandatory, not optional.                        |
+| Derivation engine (video → points/shots/stats) is **hard-gated on vendor answers** (`docs/r2-and-webhook-overview.md` §11)                                                                     | A match can exist in "video processed, analysis pending" for an extended period. That state must feel intentional, and the video itself must be watchable in it.       |
+| `derivation_confidence` (`high`/`medium`/`low`) is computed by reconciling derived scores against the user-entered final score                                                                 | Low-confidence stats must be visibly flagged as estimates, with a path to correct the score and re-run. Trust is the product; never present uncertain numbers as fact. |
+| Advantage Intelligence is **singles only, ≥1080p, ≥30fps**                                                                                                                                     | Rejection happens at file-pick, before any bytes move. Doubles teams still need the SwingVision import path — position accordingly.                                    |
+| Quotas: 2h/mo individual, 75h/mo program                                                                                                                                                       | Quota meters at submit time and in settings; program quota is a shared budget coaches must be able to see and steward.                                                 |
+| Collegiate program accounts are **needed before September onboarding** (spec §3.1) but no `programs` table exists yet                                                                          | Team features are the next structural layer, not a someday. Sequencing in §8 is anchored on this.                                                                      |
+| Vercel Hobby, public repo, Stripe wired ($4.99 one-time Pro)                                                                                                                                   | Entitlement UX exists today and must survive the overhaul (see the role-collision bug, §2.2).                                                                          |
+| Dashboard is **blocked below 768px** (`MobileGate`)                                                                                                                                            | Decision D2. College players and courtside coaches are phone-first; the current gate contradicts the team ambition.                                                    |
 
 ---
 
@@ -105,14 +106,14 @@ Code-grounded: every claim below was verified by reading the route files and com
 
 This is the audit's biggest finding: **most of what the founder wants a redesign to add already exists as orphaned code.** The overhaul is less "build new" than "give homes to what's built."
 
-| Orphan (no route/caller today) | Maps to |
-|---|---|
-| Full statistics page: `statistics-page-content.tsx` + `MatchSelector`, `PeriodToggle`, `RollingFormStrip`, `StatProgressionChart`, `OpponentLedger`, `SurfaceDna`, `EfficiencyMatrix`, + server/client data layer (`statistics-server.ts` / `statistics-client.ts`, `stat-configs.ts` with 24 stats) | **Trends** (§6) — the "trends over multiple matches" ask |
-| `/api/chat` — streaming, auth-guarded, provider-abstracted, `MatchContext` prompt builder | **Ask (chatbot)** (§5 F5) — zero UI callers today |
-| Video review subsystem: `match-video-panel.tsx`, `match-video-sidebar.tsx`, `video-filter-bar.tsx`, `use-video-auto-advance.ts` | **Film Room** altitude of the match report — indispensable once video is the source |
-| `court-visualization.tsx` (~730 lines, serve/return modes, filters) + `visuals/configs/` | Match report court section / Film Room |
-| `analysis-sidebar.tsx` (320px rail with status + stat rows) | Basis for the match report's anchor nav rail |
-| `KpiTile` `href` support (unused), `ui/tabs.tsx` and other unused primitives | Deep-linking KPIs; report altitude tabs |
+| Orphan (no route/caller today)                                                                                                                                                                                                                                                                       | Maps to                                                                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Full statistics page: `statistics-page-content.tsx` + `MatchSelector`, `PeriodToggle`, `RollingFormStrip`, `StatProgressionChart`, `OpponentLedger`, `SurfaceDna`, `EfficiencyMatrix`, + server/client data layer (`statistics-server.ts` / `statistics-client.ts`, `stat-configs.ts` with 24 stats) | **Trends** (§6) — the "trends over multiple matches" ask                            |
+| `/api/chat` — streaming, auth-guarded, provider-abstracted, `MatchContext` prompt builder                                                                                                                                                                                                            | **Ask (chatbot)** (§5 F5) — zero UI callers today                                   |
+| Video review subsystem: `match-video-panel.tsx`, `match-video-sidebar.tsx`, `video-filter-bar.tsx`, `use-video-auto-advance.ts`                                                                                                                                                                      | **Film Room** altitude of the match report — indispensable once video is the source |
+| `court-visualization.tsx` (~730 lines, serve/return modes, filters) + `visuals/configs/`                                                                                                                                                                                                             | Match report court section / Film Room                                              |
+| `analysis-sidebar.tsx` (320px rail with status + stat rows)                                                                                                                                                                                                                                          | Basis for the match report's anchor nav rail                                        |
+| `KpiTile` `href` support (unused), `ui/tabs.tsx` and other unused primitives                                                                                                                                                                                                                         | Deep-linking KPIs; report altitude tabs                                             |
 
 ### 2.4 IA problems in one paragraph
 
@@ -124,9 +125,9 @@ Navigation is three destinations (Home, Matches, Statistics→placeholder) plus 
 
 `users.role` options already collected at onboarding: Player / Coach / Parent / Academy — the product asks, then ignores the answer. The redesign should honor it.
 
-**P1 — Competitive individual** (current core; club/tournament/junior). *Jobs:* upload a match with minimum friction; in 30 seconds know what decided it; before practice, know the one pattern to drill; watch the moments that mattered; see whether last month's work moved a number.
+**P1 — Competitive individual** (current core; club/tournament/junior). _Jobs:_ upload a match with minimum friction; in 30 seconds know what decided it; before practice, know the one pattern to drill; watch the moments that mattered; see whether last month's work moved a number.
 **P2 — College player** (team member). Everything P1 wants, plus: see what the coach flagged; compare against own baseline; personal uploads under their own quota vs team matches under the program's.
-**P3 — Coach / program staff** (new, September-anchored). *Jobs:* get the roster analyzed without doing 12 uploads themself; Monday morning, see the weekend's dual-match results across all courts; open one player and speak to specifics; compare two players for a lineup spot; steward 75 shared hours; set what the team's dashboards emphasize.
+**P3 — Coach / program staff** (new, September-anchored). _Jobs:_ get the roster analyzed without doing 12 uploads themself; Monday morning, see the weekend's dual-match results across all courts; open one player and speak to specifics; compare two players for a lineup spot; steward 75 shared hours; set what the team's dashboards emphasize.
 **P4 — Parent/Academy** (defer; design nothing bespoke, but don't paint them out — a parent is a read-only viewer of a junior's data in a later phase).
 
 ---
@@ -158,7 +159,7 @@ Navigation is three destinations (Home, Matches, Statistics→placeholder) plus 
 /team/settings                Members & invites, roles, quota policy, team default analysis view
 ```
 
-*(rec)* One shell, one sidebar, a **workspace switcher** at the top of the sidebar (Personal ⇄ program name) — the Linear/Vercel pattern. A coach's "personal" workspace is simply their own matches. This is decision **D3**.
+_(rec)_ One shell, one sidebar, a **workspace switcher** at the top of the sidebar (Personal ⇄ program name) — the Linear/Vercel pattern. A coach's "personal" workspace is simply their own matches. This is decision **D3**.
 
 ### 4.2 Navigation spec
 
@@ -167,7 +168,7 @@ Navigation is three destinations (Home, Matches, Statistics→placeholder) plus 
 - **Header:** breadcrumbs (extend to settings sub-pages; delete the dead sub-route branch) · ⌘K search · **Jobs tray** (new, §7.3) · profile menu.
 - **Match report in-page nav:** resurrect `analysis-sidebar.tsx` as a sticky anchor rail over the existing six anchors; grows with the new sections. On <1280px it collapses into a top chip row.
 
-### 4.3 Roles, permissions, and account model *(rec — schema sketch for D4/D5)*
+### 4.3 Roles, permissions, and account model _(rec — schema sketch for D4/D5)_
 
 - `programs` (id, name, school, created_by) · `program_members` (program_id, user_id, role: `coach | assistant | player`, status: invited/active) · invite by email with pending state.
 - Matches gain `program_id nullable`. Uploaded in team context → visible to program coaches + the player; counts against program quota. Personal uploads → private, individual quota, **opt-in shareable to the program per match** (finally giving `matches.private` its UI). Default posture is decision **D5**.
@@ -179,13 +180,14 @@ Navigation is three destinations (Home, Matches, Statistics→placeholder) plus 
 ## 5. Key flows
 
 ### F1 — First run (role-aware)
-Sign-up already collects role. Branch the empty state: **Player** → current "See where your game stands" + provider choice framed as *Record & analyze (Advantage Intelligence)* vs *Import from SwingVision*; **Coach** → "Set up your program": name program → invite roster → first upload. Zero-data dashboards never show empty chart grids — they show the two paths to first data. (Empty states exist today and are good; they need the team branch.)
+
+Sign-up already collects role. Branch the empty state: **Player** → current "See where your game stands" + provider choice framed as _Record & analyze (Advantage Intelligence)_ vs _Import from SwingVision_; **Coach** → "Set up your program": name program → invite roster → first upload. Zero-data dashboards never show empty chart grids — they show the two paths to first data. (Empty states exist today and are good; they need the team branch.)
 
 ### F2 — Advantage Intelligence upload and the wait (the flagship flow)
 
 The wizard's front half exists. The redesign owns the **entire lifecycle**:
 
-1. **Pick & validate** — instant local rejection (resolution/fps/duration/container, singles-only notice) *before any bytes move*. Requirement chips exist; add plain-language failure reasons ("This video is 720p — Advantage Intelligence needs 1080p. Phone settings → Camera → Record at 1080p/30 or higher.").
+1. **Pick & validate** — instant local rejection (resolution/fps/duration/container, singles-only notice) _before any bytes move_. Requirement chips exist; add plain-language failure reasons ("This video is 720p — Advantage Intelligence needs 1080p. Phone settings → Camera → Record at 1080p/30 or higher.").
 2. **Upload runs in background while the user trims and fills metadata** (spec §6 — concurrency is designed; storage wiring is the missing plumbing). Show a persistent upload meter inside the wizard; **warn on tab-close while uploading** (browser→R2 multipart does not survive the tab).
 3. **Trim guidance:** the window must cover complete games consistent with the entered score — say so at the trim step, not in a tooltip after failure.
 4. **Confirm** — shows quota impact: "This match uses 1h 12m of your 2h monthly analysis time. 0h 48m remains."
@@ -197,34 +199,38 @@ The wizard's front half exists. The redesign owns the **entire lifecycle**:
 
 ### F3 — Match review at three altitudes (the digestibility thesis)
 
-One page, progressive disclosure, anchor rail. **Altitude 1 — The Story** (30 seconds): hero + score + three AI takeaways written as *claim → evidence → so-what* ("You won 78% of first-serve points but landed only 54% of first serves — the serve, not the rally, decided the 2nd set"), each deep-linking to its evidence below; momentum strip (performance tracker exists). **Altitude 2 — The Numbers** (5 minutes): KPI row → statistics card (Serve/Return/Other, exists) → serve placement & court visuals (resurrect `court-visualization.tsx`) → radar. **Altitude 3 — The Film Room** (deep work): point-by-point log filterable (break points, aces, errors, rallies >8) with **video seek per point** (`video_time`; resurrect the video subsystem). SwingVision matches without video keep the point log; video column simply absent. Custom modules per §7.2.
+One page, progressive disclosure, anchor rail. **Altitude 1 — The Story** (30 seconds): hero + score + three AI takeaways written as _claim → evidence → so-what_ ("You won 78% of first-serve points but landed only 54% of first serves — the serve, not the rally, decided the 2nd set"), each deep-linking to its evidence below; momentum strip (performance tracker exists). **Altitude 2 — The Numbers** (5 minutes): KPI row → statistics card (Serve/Return/Other, exists) → serve placement & court visuals (resurrect `court-visualization.tsx`) → radar. **Altitude 3 — The Film Room** (deep work): point-by-point log filterable (break points, aces, errors, rallies >8) with **video seek per point** (`video_time`; resurrect the video subsystem). SwingVision matches without video keep the point log; video column simply absent. Custom modules per §7.2.
 
 ### F4 — Trends
+
 Wire the orphaned page at `/dashboard/trends`. Existing: match selector, period toggle, rolling form, progression chart, opponent ledger, surface DNA. Add: per-stat drill-down (tap a stat anywhere → its history), date-range presets (season/semester), and win-correlation framing ("You're 9–1 when 1st-serve % ≥ 60"). Later: annotations ("changed serve grip") and UTR-context via `utr_id` + `scripts/user_matches.py`.
 
 ### F5 — Ask (chatbot)
+
 Wire `/api/chat` to a UI three ways: **contextual** ("Ask about this match" on the report — `MatchContext` is already the API's input shape; start here), **global** panel from the sidebar/⌘J with conversation history, and **chat-to-widget** later (an answered question can be pinned as a card — the bridge between chat and customization). Grounding rules: only answer from the user's data; every number cited links to the stat row or filtered film-room view that proves it; "I don't have that" beats invention. Persona: the pro-room analyst — terse, specific, no cheerleading (brand: no hand-holding).
 
 ### F6 — Coach's Monday (team)
+
 Team Home shows: weekend's matches grouped by dual/event across the roster, each with result + confidence/processing state; quota meter (used/remaining of 75h, per-player breakdown); roster strip with per-player form indicators. Open a player → their profile (coach view = the player's Home/Trends, read-only + coach annotations later). Compare (phase 3+): two players, same stat set, side by side.
 
 ### F7 — Team creation & invites
+
 Coach creates program (name/school) → invites by email → invitee lands in personal onboarding with a pending "Join {program}" card → accept → workspace switcher appears. Players see exactly what the program can see of their data at accept time (one screen, plain language — D5 made legible).
 
 ---
 
 ## 6. Page-by-page requirements (condensed)
 
-| Page | Purpose | Must contain | States to design |
-|---|---|---|---|
-| Home | Today, at a glance | Greeting; active-jobs strip (only when jobs exist); latest match story card (Altitude-1 condensed); configurable KPI strip (exists — make tiles link, `href` is already supported); recent matches; AI insight; heatmap/activity | empty (role-branched), populated, jobs-active |
-| Matches | Library | List (recently redesigned — keep); status chips for processing matches driven by `processing_jobs`; one Filter button w/ count (established pattern) | empty, populated, mixed processing |
-| New match | Ingest | Existing wizard + F2 lifecycle; quota preview; tab-close guard | per-step blockers; quota-exceeded; validation failures |
-| Match Report | The product | Three altitudes + anchor rail + confidence banner + customization | processing (per-status), pending-analysis, low-confidence, complete, failed |
-| Trends | Progress over time | Orphaned page, wired + drill-downs | empty (<2 matches: show what will appear), populated |
-| Ask | Analyst on demand | Chat panel + history; contextual entries from report/trends | first-use (suggested questions from real data), streaming, error |
-| Settings | Control | Existing 3 + **Preferences** (play-style preset, default report layout, notifications) + **Team** (if member) | — |
-| Team Home / Roster / Matches / Compare / Team Settings | Program ops | Per F6/F7; quota stewardship; invites | empty roster, pending invites, quota-warning |
+| Page                                                   | Purpose            | Must contain                                                                                                                                                                                                                     | States to design                                                            |
+| ------------------------------------------------------ | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Home                                                   | Today, at a glance | Greeting; active-jobs strip (only when jobs exist); latest match story card (Altitude-1 condensed); configurable KPI strip (exists — make tiles link, `href` is already supported); recent matches; AI insight; heatmap/activity | empty (role-branched), populated, jobs-active                               |
+| Matches                                                | Library            | List (recently redesigned — keep); status chips for processing matches driven by `processing_jobs`; one Filter button w/ count (established pattern)                                                                             | empty, populated, mixed processing                                          |
+| New match                                              | Ingest             | Existing wizard + F2 lifecycle; quota preview; tab-close guard                                                                                                                                                                   | per-step blockers; quota-exceeded; validation failures                      |
+| Match Report                                           | The product        | Three altitudes + anchor rail + confidence banner + customization                                                                                                                                                                | processing (per-status), pending-analysis, low-confidence, complete, failed |
+| Trends                                                 | Progress over time | Orphaned page, wired + drill-downs                                                                                                                                                                                               | empty (<2 matches: show what will appear), populated                        |
+| Ask                                                    | Analyst on demand  | Chat panel + history; contextual entries from report/trends                                                                                                                                                                      | first-use (suggested questions from real data), streaming, error            |
+| Settings                                               | Control            | Existing 3 + **Preferences** (play-style preset, default report layout, notifications) + **Team** (if member)                                                                                                                    | —                                                                           |
+| Team Home / Roster / Matches / Compare / Team Settings | Program ops        | Per F6/F7; quota stewardship; invites                                                                                                                                                                                            | empty roster, pending invites, quota-warning                                |
 
 Every stat label everywhere gets a hover/tap definition from the existing help glossary (already written, `help/page.tsx`) — density with on-demand explanation is how "complex but digestible" resolves without dumbing down.
 
@@ -232,15 +238,15 @@ Every stat label everywhere gets a hover/tap definition from the existing help g
 
 ## 7. Cross-cutting systems
 
-**7.1 Digestibility.** The three-altitude pattern (F3) is the page-level expression. System-wide: insights follow *claim → evidence-link → so-what*; numbers a player compares are `tabular-nums` (already law); benchmarks are always relative ("vs your 3-month average" — deltas exist in `InsightStatChip`) before absolute; glossary-on-hover everywhere; low confidence always labeled.
+**7.1 Digestibility.** The three-altitude pattern (F3) is the page-level expression. System-wide: insights follow _claim → evidence-link → so-what_; numbers a player compares are `tabular-nums` (already law); benchmarks are always relative ("vs your 3-month average" — deltas exist in `InsightStatChip`) before absolute; glossary-on-hover everywhere; low confidence always labeled.
 
-**7.2 Customization ("edit what is shown").** *(rec)* Bound it to **module-level** customization, not a query builder: a central **stat/module library** (extend `stat-configs.ts`) where every module is registerable; **play-style presets** as entry point (Serve & Volleyer, Baseliner, Counterpuncher, All-Court — a serve-and-volleyer's preset pins net points won, volley W/L, first-volley errors, approach outcomes; volley data exists in `shots.shot_type` and SplitStep's `stroke_type: volley`); then free pin/hide/reorder on Report and Trends ("Edit view"). Persist **server-side** (new preference storage — the localStorage KPI picker doesn't survive devices, and coaches need to set a **team default layout** players inherit and may override). Chat-to-widget (F5) is the escape hatch for stats the library lacks.
+**7.2 Customization ("edit what is shown").** _(rec)_ Bound it to **module-level** customization, not a query builder: a central **stat/module library** (extend `stat-configs.ts`) where every module is registerable; **play-style presets** as entry point (Serve & Volleyer, Baseliner, Counterpuncher, All-Court — a serve-and-volleyer's preset pins net points won, volley W/L, first-volley errors, approach outcomes; volley data exists in `shots.shot_type` and SplitStep's `stroke_type: volley`); then free pin/hide/reorder on Report and Trends ("Edit view"). Persist **server-side** (new preference storage — the localStorage KPI picker doesn't survive devices, and coaches need to set a **team default layout** players inherit and may override). Chat-to-widget (F5) is the escape hatch for stats the library lacks.
 
 **7.3 Processing & notifications.** A global **jobs tray** in the header (badge with active count; each job: match, status, % where known) replaces the fragile session-toast; the toast remains only as an ephemeral surface driven by the same store (Supabase Realtime on `processing_jobs`, not `sessionStorage`). **Email on completion and failure** is required by the no-ETA constraint (Supabase SMTP is already configured for auth mail). Digest-style, not per-status spam.
 
 **7.4 Monetization surfaces.** Fix entitlement (§4.3) first. Then the natural upgrade moments: quota meter at submit, "priority processing" tier later (the `priority` column exists but **no tier UI ships** until the vendor confirms a priority parameter — spec Q6), program licensing as its own track. Pricing architecture is decision **D7**.
 
-**7.5 Accessibility & responsive.** WCAG 2.1 AA already stated in `DESIGN.md`'s accessibility section — keep. The open question is the **mobile posture (D2)**: *(rec)* replace the hard `MobileGate` with responsive read-first mobile (Home, Matches, Report altitudes 1–2, jobs status, Ask) while keeping upload/trim desktop-recommended. A courtside coach on a phone is a core team scenario; a hard 768px wall contradicts §3.
+**7.5 Accessibility & responsive.** WCAG 2.1 AA already stated in `DESIGN.md`'s accessibility section — keep. The open question is the **mobile posture (D2)**: _(rec)_ replace the hard `MobileGate` with responsive read-first mobile (Home, Matches, Report altitudes 1–2, jobs status, Ask) while keeping upload/trim desktop-recommended. A courtside coach on a phone is a core team scenario; a hard 768px wall contradicts §3.
 
 ---
 
@@ -256,16 +262,16 @@ Every stat label everywhere gets a hover/tap definition from the existing help g
 
 ## 9. Open decisions — founder input required before high-fidelity design
 
-| # | Decision | Options | Recommendation |
-|---|---|---|---|
-| D1 | Visual language | keep Pro Training Room tokens / evolve | **Keep.** It's distinctive, documented, and on-brand; the overhaul is structural. |
-| D2 | Mobile | responsive read-first / keep desktop gate / native later | **Responsive read-first**; upload stays desktop-recommended. |
-| D3 | Team nav | workspace switcher, one shell / separate coach app | **Workspace switcher.** |
-| D4 | Roles v1 | coach·assistant·player / coach·player only | **Coach·player only** for September; assistant is additive. |
-| D5 | Team data ownership | program-owned by default / player-owned, share per match / context-dependent (rec) | **Context-dependent:** team-context uploads visible to program; personal uploads private with per-match share. |
-| D6 | Naming | "Trends" vs "Statistics"; chat name ("Ask"?); does "Advantage Intelligence" brand the engine only or all AI (chat + insights)? | **Trends; Ask; Advantage Intelligence = the analysis engine**, chat is "Ask" powered by it. |
-| D7 | Pricing architecture | $4.99 lifetime Pro (current) vs subscription vs program licensing tiers | No rec — business call, but it gates quota/priority/seat UI, so decide before Phase 2 design. |
-| D8 | Doubles positioning | Hide AI for doubles matches quietly vs explicit "singles only, import doubles via SwingVision" messaging | **Explicit** — college tennis is 3 doubles courts every dual; silence will read as a bug. |
+| #   | Decision             | Options                                                                                                                        | Recommendation                                                                                                 |
+| --- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| D1  | Visual language      | keep Pro Training Room tokens / evolve                                                                                         | **Keep.** It's distinctive, documented, and on-brand; the overhaul is structural.                              |
+| D2  | Mobile               | responsive read-first / keep desktop gate / native later                                                                       | **Responsive read-first**; upload stays desktop-recommended.                                                   |
+| D3  | Team nav             | workspace switcher, one shell / separate coach app                                                                             | **Workspace switcher.**                                                                                        |
+| D4  | Roles v1             | coach·assistant·player / coach·player only                                                                                     | **Coach·player only** for September; assistant is additive.                                                    |
+| D5  | Team data ownership  | program-owned by default / player-owned, share per match / context-dependent (rec)                                             | **Context-dependent:** team-context uploads visible to program; personal uploads private with per-match share. |
+| D6  | Naming               | "Trends" vs "Statistics"; chat name ("Ask"?); does "Advantage Intelligence" brand the engine only or all AI (chat + insights)? | **Trends; Ask; Advantage Intelligence = the analysis engine**, chat is "Ask" powered by it.                    |
+| D7  | Pricing architecture | $4.99 lifetime Pro (current) vs subscription vs program licensing tiers                                                        | No rec — business call, but it gates quota/priority/seat UI, so decide before Phase 2 design.                  |
+| D8  | Doubles positioning  | Hide AI for doubles matches quietly vs explicit "singles only, import doubles via SwingVision" messaging                       | **Explicit** — college tennis is 3 doubles courts every dual; silence will read as a bug.                      |
 
 ---
 
@@ -274,6 +280,7 @@ Every stat label everywhere gets a hover/tap definition from the existing help g
 **The request is coherent and well-founded.** The stated goal (digestible + deep) resolves cleanly into progressive disclosure; the SplitStep partnership genuinely changes what the product is (source of truth becomes your own video, not another app's export); the serve-and-volleyer example is exactly the right way to brief customization. And much of the wishlist already exists in code, unwired — the overhaul is largely an act of giving built things a coherent home.
 
 **What the brief is missing (add these before handing to Claude Design):**
+
 1. **Persona priority.** Individual-first or college-first? The September deadline and the 75h/mo program pilot say college-first; the current app says individual-first. This ordering changes Home, onboarding, and pricing design. (My sequencing assumes: individual AI GA first because it's nearly plumbed, college layer immediately after — but that's inferred, not stated.)
 2. **Mobile posture** — unstated, currently a hard gate, and load-bearing for the coach persona (D2).
 3. **Privacy/data-ownership stance for teams** (D5) — this is a product-values question a designer shouldn't decide.

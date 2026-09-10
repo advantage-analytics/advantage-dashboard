@@ -19,32 +19,32 @@
  * would vanish from every aggregate rather than land in the wrong one.
  */
 
-import type { SplitStepRally, SplitStepStroke } from './types';
+import type { SplitStepRally, SplitStepStroke } from "./types";
 
 /** Values `calculate_match_stats` can actually see. */
 export type ResultType =
-  | 'Double Fault'
-  | 'Service Winner'
-  | 'Forehand Winner'
-  | 'Backhand Winner'
-  | 'Overhead Winner'
-  | 'Winner'
-  | 'Forehand Unforced Error'
-  | 'Backhand Unforced Error'
-  | 'Overhead Unforced Error'
-  | 'Unforced Error';
+  | "Double Fault"
+  | "Service Winner"
+  | "Forehand Winner"
+  | "Backhand Winner"
+  | "Overhead Winner"
+  | "Winner"
+  | "Forehand Unforced Error"
+  | "Backhand Unforced Error"
+  | "Overhead Unforced Error"
+  | "Unforced Error";
 
 const SIDE_LABEL: Record<string, string> = {
-  forehand: 'Forehand',
-  backhand: 'Backhand',
-  overhead: 'Overhead',
+  forehand: "Forehand",
+  backhand: "Backhand",
+  overhead: "Overhead",
 };
 
 /** Index of the serve the point was actually played from. -1 when none. */
 export function lastServeIndex(rally: SplitStepRally): number {
   let index = -1;
   rally.strokes.forEach((stroke, i) => {
-    if (stroke.strokeType === 'serve') index = i;
+    if (stroke.strokeType === "serve") index = i;
   });
   return index;
 }
@@ -65,22 +65,22 @@ export function lastServeIndex(rally: SplitStepRally): number {
  */
 export function classifyPoint(
   rally: SplitStepRally,
-  winner: string
+  winner: string,
 ): ResultType | null {
   const last = rally.strokes[rally.strokes.length - 1];
   if (!last) return null;
 
   const serveCount = rally.strokes.filter(
-    (s) => s.strokeType === 'serve'
+    (s) => s.strokeType === "serve",
   ).length;
 
-  if (last.strokeType === 'serve') {
+  if (last.strokeType === "serve") {
     // Tested on the stroke's own type rather than on identity with the last
     // serve: 20 / 17 / 17 rallies across the three payloads carry a groundstroke
     // BETWEEN the two serves, so "the last serve" and "the last stroke" are not
     // the same object even in ordinary play.
-    if (winner === rally.server) return 'Service Winner';
-    if (serveCount >= 2) return 'Double Fault';
+    if (winner === rally.server) return "Service Winner";
+    if (serveCount >= 2) return "Double Fault";
     // A lone serve that ended the point with the server LOSING is not a double
     // fault — there was no first fault. It is a fault whose second serve the
     // vendor did not emit, so no honest result_type exists for it.
@@ -90,12 +90,12 @@ export function classifyPoint(
   const side = last.strokeSide ? SIDE_LABEL[last.strokeSide] : null;
   const won = last.playerLabel === winner;
 
-  if (won) return (side ? `${side} Winner` : 'Winner') as ResultType;
-  return (side ? `${side} Unforced Error` : 'Unforced Error') as ResultType;
+  if (won) return (side ? `${side} Winner` : "Winner") as ResultType;
+  return (side ? `${side} Unforced Error` : "Unforced Error") as ResultType;
 }
 
 /** The `shots.result` vocabulary already in the table. */
-export type ShotResult = 'In' | 'Out' | 'Net';
+export type ShotResult = "In" | "Out" | "Net";
 
 /**
  * Derive `shots.result` structurally rather than from the `in` flag.
@@ -117,24 +117,24 @@ export function shotResult(params: {
 }): ShotResult | null {
   const { stroke, index, rally, serveIndex, winner } = params;
   const isLast = index === rally.strokes.length - 1;
-  const missed = stroke.netHit ? 'Net' : 'Out';
+  const missed = stroke.netHit ? "Net" : "Out";
 
   if (index < serveIndex) {
     // Before the deciding serve. A serve here faulted; anything else is a
     // phantom swing at a dead ball and has no result.
-    return stroke.strokeType === 'serve' ? missed : null;
+    return stroke.strokeType === "serve" ? missed : null;
   }
 
-  if (stroke.strokeType === 'serve') {
-    if (!isLast) return 'In';
+  if (stroke.strokeType === "serve") {
+    if (!isLast) return "In";
     // The point ended on the serve. If the server won it, the serve was in and
     // unreturned — marking it Out would contradict the Service Winner we just
     // assigned and drop it from second_serves_in.
-    return winner === rally.server ? 'In' : missed;
+    return winner === rally.server ? "In" : missed;
   }
 
-  if (!isLast) return 'In';
-  return stroke.playerLabel === winner ? 'In' : missed;
+  if (!isLast) return "In";
+  return stroke.playerLabel === winner ? "In" : missed;
 }
 
 /**

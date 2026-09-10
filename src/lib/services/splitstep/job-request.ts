@@ -78,11 +78,10 @@ export interface JobRequestInput {
 }
 
 export type JobRequestResult =
-  | { ok: true; request: SplitStepJobRequest }
-  | { ok: false; errors: string[] };
+  { ok: true; request: SplitStepJobRequest } | { ok: false; errors: string[] };
 
 /** Match types the provider cannot process. */
-const DOUBLES_MATCH_TYPES = ['doubles', 'mixed-doubles', 'mixed doubles'];
+const DOUBLES_MATCH_TYPES = ["doubles", "mixed-doubles", "mixed doubles"];
 
 /**
  * Trim trailing unplayed sets, then confirm what remains is fully specified.
@@ -93,7 +92,7 @@ const DOUBLES_MATCH_TYPES = ['doubles', 'mixed-doubles', 'mixed doubles'];
  */
 function extractSetScores(
   player1Scores: (number | null)[],
-  player2Scores: (number | null)[]
+  player2Scores: (number | null)[],
 ): { scores?: [number, number][]; error?: string } {
   const slotCount = Math.max(player1Scores.length, player2Scores.length);
 
@@ -105,7 +104,7 @@ function extractSetScores(
   }
 
   if (lastPlayed === -1) {
-    return { error: 'Enter the final score for at least one set.' };
+    return { error: "Enter the final score for at least one set." };
   }
 
   const scores: [number, number][] = [];
@@ -125,7 +124,7 @@ function extractSetScores(
 
   if (scores.every(([p1, p2]) => p1 === 0 && p2 === 0)) {
     return {
-      error: 'Enter the game scores — every set is currently 0-0.',
+      error: "Enter the game scores — every set is currently 0-0.",
     };
   }
 
@@ -138,45 +137,47 @@ function extractSetScores(
  * Collects every problem rather than failing on the first, so the UI can show
  * the user all of what needs fixing in one pass.
  */
-export function buildSplitStepJobRequest(input: JobRequestInput): JobRequestResult {
+export function buildSplitStepJobRequest(
+  input: JobRequestInput,
+): JobRequestResult {
   const errors: string[] = [];
 
   if (!input.matchId) {
-    errors.push('Missing match id.');
+    errors.push("Missing match id.");
   }
 
   if (!input.videoUrl && !input.allowEmptyVideoUrl) {
-    errors.push('Missing video URL.');
+    errors.push("Missing video URL.");
   }
 
   if (!input.webhookUrl) {
-    errors.push('Missing webhook URL.');
+    errors.push("Missing webhook URL.");
   }
 
-  const player1Name = input.player1Name?.trim() ?? '';
-  const player2Name = input.player2Name?.trim() ?? '';
+  const player1Name = input.player1Name?.trim() ?? "";
+  const player2Name = input.player2Name?.trim() ?? "";
   if (!player1Name || !player2Name) {
-    errors.push('Both player names are required.');
+    errors.push("Both player names are required.");
   }
 
-  const matchType = input.matchType?.trim().toLowerCase() ?? '';
+  const matchType = input.matchType?.trim().toLowerCase() ?? "";
   if (DOUBLES_MATCH_TYPES.includes(matchType)) {
-    errors.push('Video analysis supports singles matches only.');
+    errors.push("Video analysis supports singles matches only.");
   }
 
   const { startTimeSeconds, endTimeSeconds } = input;
   if (!Number.isFinite(startTimeSeconds) || startTimeSeconds < 0) {
-    errors.push('Trim start is invalid.');
+    errors.push("Trim start is invalid.");
   }
   if (!Number.isFinite(endTimeSeconds) || endTimeSeconds <= 0) {
-    errors.push('Trim end is invalid.');
+    errors.push("Trim end is invalid.");
   }
   if (
     Number.isFinite(startTimeSeconds) &&
     Number.isFinite(endTimeSeconds) &&
     endTimeSeconds <= startTimeSeconds
   ) {
-    errors.push('Trim end must come after trim start.');
+    errors.push("Trim end must come after trim start.");
   }
 
   // The three booleans the vendor requires, validated rather than trusted.
@@ -195,14 +196,14 @@ export function buildSplitStepJobRequest(input: JobRequestInput): JobRequestResu
   const adScoring = input.adScoring;
   const fixedCamera = input.fixedCamera;
 
-  if (typeof topIsPlayer1 !== 'boolean') {
-    errors.push('Pick which end you started the video on.');
+  if (typeof topIsPlayer1 !== "boolean") {
+    errors.push("Pick which end you started the video on.");
   }
-  if (typeof adScoring !== 'boolean') {
-    errors.push('Choose ad or no-ad scoring.');
+  if (typeof adScoring !== "boolean") {
+    errors.push("Choose ad or no-ad scoring.");
   }
-  if (typeof fixedCamera !== 'boolean') {
-    errors.push('Say whether the camera stayed in one position.');
+  if (typeof fixedCamera !== "boolean") {
+    errors.push("Say whether the camera stayed in one position.");
   }
 
   const setResult = extractSetScores(input.player1Scores, input.player2Scores);
@@ -218,9 +219,9 @@ export function buildSplitStepJobRequest(input: JobRequestInput): JobRequestResu
   if (
     errors.length > 0 ||
     !setResult.scores ||
-    typeof topIsPlayer1 !== 'boolean' ||
-    typeof adScoring !== 'boolean' ||
-    typeof fixedCamera !== 'boolean'
+    typeof topIsPlayer1 !== "boolean" ||
+    typeof adScoring !== "boolean" ||
+    typeof fixedCamera !== "boolean"
   ) {
     return { ok: false, errors };
   }
@@ -245,4 +246,3 @@ export function buildSplitStepJobRequest(input: JobRequestInput): JobRequestResu
     },
   };
 }
-

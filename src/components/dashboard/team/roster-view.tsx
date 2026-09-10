@@ -25,10 +25,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { GripVertical } from "lucide-react";
 import type { InviteResult } from "@/components/dashboard/settings/team-actions";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
-import type {
-  RosterInvite,
-  RosterMember,
-} from "@/lib/data/team-roster-server";
+import type { RosterInvite, RosterMember } from "@/lib/data/team-roster-server";
 
 /**
  * The Roster page below its title: the table, the drawer a row opens, and the
@@ -118,7 +115,7 @@ export function RosterView({
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<RosterMember | null>(null);
   const [merging, setMerging] = useState<[RosterMember, RosterMember] | null>(
-    null
+    null,
   );
   const [pending, start] = useTransition();
   const [saving, startSaving] = useTransition();
@@ -138,7 +135,7 @@ export function RosterView({
   }
 
   const drawerMember = drawerId
-    ? members.find((m) => m.playerId === drawerId) ?? null
+    ? (members.find((m) => m.playerId === drawerId) ?? null)
     : null;
   const drawerIndex = drawerMember ? members.indexOf(drawerMember) : -1;
 
@@ -171,7 +168,7 @@ export function RosterView({
         document.getElementById(rosterRowId(returnFocusTo))?.focus();
       }
     },
-    [finishClose]
+    [finishClose],
   );
 
   const toggle = useCallback(
@@ -182,7 +179,7 @@ export function RosterView({
         select(member, viaKeyboard);
       }
     },
-    [selectedId, select, close]
+    [selectedId, select, close],
   );
 
   const step = useCallback(
@@ -196,7 +193,7 @@ export function RosterView({
         .getElementById(rosterRowId(next.playerId))
         ?.scrollIntoView({ block: "nearest" });
     },
-    [members, selectedId, select]
+    [members, selectedId, select],
   );
 
   /* ── Setting the lineup ──────────────────────────────────────────────── */
@@ -291,12 +288,12 @@ export function RosterView({
 
   const onDragStartRow = useCallback(
     (playerId: string) => patchLineup({ dragging: playerId, lifted: null }),
-    [patchLineup]
+    [patchLineup],
   );
 
   const onDragEndRow = useCallback(
     () => patchLineup({ dragging: null }),
-    [patchLineup]
+    [patchLineup],
   );
 
   /**
@@ -314,12 +311,12 @@ export function RosterView({
       if (held) setAnnouncement(describe(sequence, held, members));
       patchLineup({ sequence });
     },
-    [lineup?.dragging, members, patchLineup]
+    [lineup?.dragging, members, patchLineup],
   );
 
   const onLift = useCallback(
     (playerId: string | null) => patchLineup({ lifted: playerId }),
-    [patchLineup]
+    [patchLineup],
   );
 
   /**
@@ -339,7 +336,7 @@ export function RosterView({
       setAnnouncement(describe(sequence, playerId, members));
       patchLineup({ sequence });
     },
-    [lineup, members, patchLineup]
+    [lineup, members, patchLineup],
   );
 
   // The row the drawer showed is gone — removed, or merged away. Adjusted
@@ -362,13 +359,22 @@ export function RosterView({
     if (!selectedId && !lineup) return;
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey)
+      if (
+        event.defaultPrevented ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      )
         return;
       const target = event.target as HTMLElement | null;
       if (target) {
         if (target.closest("input, textarea, select, [contenteditable=true]"))
           return;
-        if (target.closest(`[role="dialog"]:not([${DRAWER_ATTR}] [role="dialog"])`))
+        if (
+          target.closest(
+            `[role="dialog"]:not([${DRAWER_ATTR}] [role="dialog"])`,
+          )
+        )
           return;
         if (target.closest("[data-radix-popper-content-wrapper]")) return;
       }
@@ -456,76 +462,82 @@ export function RosterView({
               than it came; the table below is a layout-animated sibling, so it
               slides down to make room rather than jumping. */}
           <AnimatePresence initial={false}>
-          {lineup && (
-            /* The app's inline-notice register (`settings-alert.tsx`'s info
+            {lineup && (
+              /* The app's inline-notice register (`settings-alert.tsx`'s info
                tint: an 8% wash inside a 12% border), not a filled bar — the
                table below is the thing to look at, and this only has to say
                what mode it is in. Real keycaps from `ui/kbd.tsx`. */
-            <motion.div
-              key="lineup-banner"
-              layout={!reduceMotion}
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4, transition: quick }}
-              transition={settle}
-              className="flex items-center gap-3 rounded-[var(--radius-element)] border border-[var(--blue-tint-12)] bg-[var(--blue-tint-08)] px-3.5 py-2.5"
-            >
-              <GripVertical
-                className="size-3.5 shrink-0 text-[var(--blue)]"
-                strokeWidth={1.5}
-                aria-hidden
-              />
-              <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] leading-[1.5] text-[var(--ink-900)]">
-                <span className="font-medium">Setting the lineup.</span>
-                <span className="text-[var(--ink-700)]">
-                  Drag a row, or focus one and press
-                </span>
-                {/* Lowercase: the system writes standalone word-named keys
+              <motion.div
+                key="lineup-banner"
+                layout={!reduceMotion}
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4, transition: quick }}
+                transition={settle}
+                className="flex items-center gap-3 rounded-[var(--radius-element)] border border-[var(--blue-tint-12)] bg-[var(--blue-tint-08)] px-3.5 py-2.5"
+              >
+                <GripVertical
+                  className="size-3.5 shrink-0 text-[var(--blue)]"
+                  strokeWidth={1.5}
+                  aria-hidden
+                />
+                <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] leading-[1.5] text-[var(--ink-900)]">
+                  <span className="font-medium">Setting the lineup.</span>
+                  <span className="text-[var(--ink-700)]">
+                    Drag a row, or focus one and press
+                  </span>
+                  {/* Lowercase: the system writes standalone word-named keys
                     as labels (`esc`, `space`), and Help's shortcut table
                     already does. Letters in combos stay uppercase. */}
-                <Kbd size="sm">space</Kbd>
-                <span className="text-[var(--ink-700)]">then</span>
-                <Kbd size="sm">↑</Kbd>
-                <Kbd size="sm">↓</Kbd>
-              </p>
-              <span className="ml-auto shrink-0 text-[11px] text-[var(--ink-600)]">
-                Nothing is saved until Save lineup.
-              </span>
-            </motion.div>
-          )}
+                  <Kbd size="sm">space</Kbd>
+                  <span className="text-[var(--ink-700)]">then</span>
+                  <Kbd size="sm">↑</Kbd>
+                  <Kbd size="sm">↓</Kbd>
+                </p>
+                <span className="ml-auto shrink-0 text-[11px] text-[var(--ink-600)]">
+                  Nothing is saved until Save lineup.
+                </span>
+              </motion.div>
+            )}
           </AnimatePresence>
 
           {error && (
-            <p role="alert" className="text-[12px] leading-[18px] text-[var(--danger)]">
+            <p
+              role="alert"
+              className="text-[12px] leading-[18px] text-[var(--danger)]"
+            >
               {error}
             </p>
           )}
 
-          <motion.div layout={reduceMotion ? false : "position"} transition={{ layout: settle }}>
-          <RosterTable
-            members={members}
-            invites={invites}
-            canManage={canManage}
-            viewerId={viewerId}
-            selectedId={selectedId}
-            onToggle={toggle}
-            onMerge={(row) => {
-              const other = members.find(
-                (m) => m.playerId === row.duplicateOfPlayerId
-              );
-              if (other) setMerging([row, other]);
-            }}
-            run={run}
-            pending={pending}
-            lineup={lineup}
-            settling={settling?.sequence ?? null}
-            onStartLineup={startLineup}
-            onLift={onLift}
-            onMove={onMove}
-            onReorder={onReorder}
-            onDragStartRow={onDragStartRow}
-            onDragEndRow={onDragEndRow}
-          />
+          <motion.div
+            layout={reduceMotion ? false : "position"}
+            transition={{ layout: settle }}
+          >
+            <RosterTable
+              members={members}
+              invites={invites}
+              canManage={canManage}
+              viewerId={viewerId}
+              selectedId={selectedId}
+              onToggle={toggle}
+              onMerge={(row) => {
+                const other = members.find(
+                  (m) => m.playerId === row.duplicateOfPlayerId,
+                );
+                if (other) setMerging([row, other]);
+              }}
+              run={run}
+              pending={pending}
+              lineup={lineup}
+              settling={settling?.sequence ?? null}
+              onStartLineup={startLineup}
+              onLift={onLift}
+              onMove={onMove}
+              onReorder={onReorder}
+              onDragStartRow={onDragStartRow}
+              onDragEndRow={onDragEndRow}
+            />
           </motion.div>
 
           {/* Announced rather than drawn: the numbers beside the rows already
@@ -580,7 +592,7 @@ export function RosterView({
 function describe(
   sequence: string[],
   playerId: string,
-  members: RosterMember[]
+  members: RosterMember[],
 ): string {
   const name =
     members.find((m) => m.playerId === playerId)?.name ?? "That player";

@@ -119,13 +119,9 @@ export async function createProcessingJob({
     // running. Rare (the wizard closes on success), but a friendly message
     // beats leaking the raw constraint-violation string to the error toast.
     if (error?.code === "23505") {
-      throw new Error(
-        "An analysis is already in progress for this match."
-      );
+      throw new Error("An analysis is already in progress for this match.");
     }
-    throw new Error(
-      error?.message || "Couldn't queue this match for analysis"
-    );
+    throw new Error(error?.message || "Couldn't queue this match for analysis");
   }
 
   return { id: data.id as string };
@@ -168,7 +164,7 @@ export async function uploadAndSubmitVideo({
 
     if (!res.ok || !payload?.uploadUrl) {
       throw new Error(
-        payload?.error || `Could not get an upload URL (HTTP ${res.status})`
+        payload?.error || `Could not get an upload URL (HTTP ${res.status})`,
       );
     }
 
@@ -261,7 +257,10 @@ export async function uploadAndSubmitVideo({
             .eq("id", jobId)
             .then(({ error }) => {
               if (error) {
-                console.warn("Could not record upload progress:", error.message);
+                console.warn(
+                  "Could not record upload progress:",
+                  error.message,
+                );
               }
             });
         },
@@ -314,17 +313,18 @@ export async function uploadAndSubmitVideo({
           : "";
         throw new Error(
           [
-            submitPayload?.error ?? `Submission failed (HTTP ${submitRes.status})`,
+            submitPayload?.error ??
+              `Submission failed (HTTP ${submitRes.status})`,
             detail,
           ]
             .filter(Boolean)
-            .join(" ")
+            .join(" "),
         );
       }
 
       console.log(
         "📤 Submitted for analysis:",
-        submitPayload?.externalJobId ?? "(no id returned)"
+        submitPayload?.externalJobId ?? "(no id returned)",
       );
       onEvent?.({ matchId, kind: "submitted" });
     } catch (submitErr) {
@@ -334,13 +334,16 @@ export async function uploadAndSubmitVideo({
           : "Could not submit for analysis";
       console.error(
         "Submission failed — the video is uploaded and can be retried:",
-        message
+        message,
       );
 
       // Recorded, not fatal. Status stays `uploaded`.
       await supabase
         .from("processing_jobs")
-        .update({ error_message: message, updated_at: new Date().toISOString() })
+        .update({
+          error_message: message,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", jobId);
 
       onEvent?.({ matchId, kind: "submit_failed", error: message });
@@ -349,7 +352,7 @@ export async function uploadAndSubmitVideo({
     const cancelled = uploadErr instanceof UploadAbortedError;
     console[cancelled ? "log" : "error"](
       cancelled ? "Upload cancelled by the user" : "❌ Video upload error:",
-      cancelled ? "" : uploadErr
+      cancelled ? "" : uploadErr,
     );
 
     const message =
@@ -357,7 +360,7 @@ export async function uploadAndSubmitVideo({
     onEvent?.(
       cancelled
         ? { matchId, kind: "cancelled" }
-        : { matchId, kind: "failed", error: message }
+        : { matchId, kind: "failed", error: message },
     );
 
     await supabase

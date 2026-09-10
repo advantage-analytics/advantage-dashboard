@@ -5,11 +5,11 @@ so existing `TODO(splitstep-qN)` comments in the code stay valid.
 
 Everything below is measured against three real full-match results payloads:
 
-| Payload | Strokes | Rallies | Quality grade |
-|---|---|---|---|
-| `tests/fixtures/splitstep/clean-match.json` | 1,076 | 156 | medium |
-| `tests/fixtures/splitstep/degraded-match.json` | 1,130 | 168 | low |
-| job `2a11168d`, match `2a312682` (Supabase `match-results`) | 596 | 114 | low |
+| Payload                                                     | Strokes | Rallies | Quality grade |
+| ----------------------------------------------------------- | ------- | ------- | ------------- |
+| `tests/fixtures/splitstep/clean-match.json`                 | 1,076   | 156     | medium        |
+| `tests/fixtures/splitstep/degraded-match.json`              | 1,130   | 168     | low           |
+| job `2a11168d`, match `2a312682` (Supabase `match-results`) | 596     | 114     | low           |
 
 Reproduce the first two with `npx playwright test tests/splitstep-derivation.spec.ts`.
 Throughout, "clean" is the first fixture and "degraded" the second.
@@ -28,15 +28,15 @@ ids.
 
 ## 1. Gate status
 
-| | Status |
-|---|---|
-| Real full-match JSON available | ✅ three of them |
-| Q1 — are faulted serves emitted? | ✅ **answered from data: yes** |
-| Q3 — does stroke numbering restart per rally, and do faults count? | ✅ **answered from data: yes to both** |
-| Q13 — can point winners be derived? | ✅ **answered from data: yes, from the score stream** |
-| Q2 — how are lets handled? | ❌ still open |
-| Q4–Q7 | ❌ still open, unchanged |
-| Q8–Q12 | ❌ open |
+|                                                                    | Status                                                |
+| ------------------------------------------------------------------ | ----------------------------------------------------- |
+| Real full-match JSON available                                     | ✅ three of them                                      |
+| Q1 — are faulted serves emitted?                                   | ✅ **answered from data: yes**                        |
+| Q3 — does stroke numbering restart per rally, and do faults count? | ✅ **answered from data: yes to both**                |
+| Q13 — can point winners be derived?                                | ✅ **answered from data: yes, from the score stream** |
+| Q2 — how are lets handled?                                         | ❌ still open                                         |
+| Q4–Q7                                                              | ❌ still open, unchanged                              |
+| Q8–Q12                                                             | ❌ open                                               |
 
 **The gate has substantially lifted.** The third payload settled the question
 that mattered most: its match has a known true final score (6-4, 6-4), and
@@ -65,8 +65,7 @@ Neither fixture contains a rally with more than two serves.
 ### Q3 — Stroke numbering. **Restarts per rally; faults are counted.**
 
 `pred_rally_stroke_number` is exactly 1..n in every rally of both fixtures, with
-no gaps or repeats, and the two serves of a faulted point occupy positions 1 and
-2. Rally ids are contiguous. Every rally opens on a serve except one — rally 0 of
+no gaps or repeats, and the two serves of a faulted point occupy positions 1 and 2. Rally ids are contiguous. Every rally opens on a serve except one — rally 0 of
 the degraded fixture, which is warm-up play before the match and also carries the
 `"nan-nan"` set score.
 
@@ -80,7 +79,7 @@ Rally segmentation is the most trustworthy thing in this payload.
 
 Nothing in either fixture marks a let. Maximum serves per rally is 2, so either
 no lets occurred across two full matches — unlikely — or they are silently
-dropped. If a let *were* emitted as an extra serve, our first/second split would
+dropped. If a let _were_ emitted as an extra serve, our first/second split would
 read it as a fault and understate first-serve percentage further.
 
 ### Q4 — Webhook authentication
@@ -108,12 +107,12 @@ Unchanged.
 Two defensible readings of the same payload give first-serve percentages ~18 and
 ~26 points apart, and double-fault counts differing by 6–7×:
 
-| Reading | Clean | Degraded |
-|---|---|---|
-| First serve in — by rally structure (faulted ⇔ a second serve follows) | 69.9% | 67.1% |
-| First serve in — by the `in` flag | 51.9% | 41.3% |
-| Double faults — rally ends on the second serve | 2 | 4 |
-| Double faults — second serve flagged `in: false` | 14 | 26 |
+| Reading                                                                | Clean | Degraded |
+| ---------------------------------------------------------------------- | ----- | -------- |
+| First serve in — by rally structure (faulted ⇔ a second serve follows) | 69.9% | 67.1%    |
+| First serve in — by the `in` flag                                      | 51.9% | 41.3%    |
+| Double faults — rally ends on the second serve                         | 2     | 4        |
+| Double faults — second serve flagged `in: false`                       | 14    | 26       |
 
 The evidence that the flag is the unreliable half:
 
@@ -133,11 +132,11 @@ Sharper than Q8, and checkable inside a single record. Taking `net_hit: true`
 strokes and reading their `height_at_net_m` (net is 0.914 m at centre, 1.07 m at
 the posts):
 
-| Payload | `net_hit: true` | of those, height **above** the net | median height |
-|---|---|---|---|
-| clean | 66 | 5 | 0.66 m |
-| third | 89 | 37 | 0.92 m |
-| degraded | 327 | **209** | 1.22 m |
+| Payload  | `net_hit: true` | of those, height **above** the net | median height |
+| -------- | --------------- | ---------------------------------- | ------------- |
+| clean    | 66              | 5                                  | 0.66 m        |
+| third    | 89              | 37                                 | 0.92 m        |
+| degraded | 327             | **209**                            | 1.22 m        |
 
 On the clean fixture the two fields agree — 0.66 m is genuinely into the net. On
 the degraded one, 64% of balls flagged as hitting the net are simultaneously
@@ -153,7 +152,7 @@ calibration, and it is the most likely single fix on the vendor side.
 
 The third payload explains part of this: that match is genuinely **no-ad**
 (`matches.format.ad_scoring = false`), so `40-40` as a deciding point is
-*correct* there, and its 20 games reconstruct perfectly.
+_correct_ there, and its 20 games reconstruct perfectly.
 
 What we still cannot confirm is behaviour on an **ad-scoring** match, because we
 have no sample of one — we do not know the setting used for the other two
@@ -181,12 +180,12 @@ Is the float formatting deliberate? Is there a tiebreak flag we are missing?
 
 The two fixtures differ enormously and nothing in either payload says so:
 
-| Check | Clean | Degraded |
-|---|---|---|
-| Unusable bounce coordinates | 4.3% | **22.7%** |
-| Unusable player positions | 0.5% | **15.8%** |
-| Serves flagged `net_hit` that play continued past | 6.4% | **39.6%** |
-| Consecutive strokes credited to the same player (impossible in singles) | 0.7% | **4.6%** |
+| Check                                                                   | Clean | Degraded  |
+| ----------------------------------------------------------------------- | ----- | --------- |
+| Unusable bounce coordinates                                             | 4.3%  | **22.7%** |
+| Unusable player positions                                               | 0.5%  | **15.8%** |
+| Serves flagged `net_hit` that play continued past                       | 6.4%  | **39.6%** |
+| Consecutive strokes credited to the same player (impossible in singles) | 0.7%  | **4.6%**  |
 
 "Unusable" means the sentinel `-9999`, or a coordinate outside the ITF playing
 enclosure (baseline + 6.40 m run-off, sideline + 3.66 m). The degraded fixture
@@ -211,19 +210,19 @@ both sets ending 5-4 with the server holding.
 
 Coverage and cross-check, over point-to-point transitions:
 
-| | Clean | Degraded | Third |
-|---|---|---|---|
-| Winner derivable from the score stream | 153/155 (99%) | 157/167 (94%) | 112/113 (99%) |
-| Last-stroke `in` heuristic agrees with it | 86% | **43%** | 90% |
+|                                           | Clean         | Degraded      | Third         |
+| ----------------------------------------- | ------------- | ------------- | ------------- |
+| Winner derivable from the score stream    | 153/155 (99%) | 157/167 (94%) | 112/113 (99%) |
+| Last-stroke `in` heuristic agrees with it | 86%           | **43%**       | 90%           |
 
 The earlier reading of this table was wrong in two ways, both worth recording so
-they are not repeated. Game boundaries are *not* a blind spot — the winner comes
+they are not repeated. Game boundaries are _not_ a blind spot — the winner comes
 from the game-score delta once the server-perspective flip is handled. And the
 two signals are not symmetric: with ground truth now available on one match, the
 score stream is right and the last-stroke heuristic is the unreliable one, its
 disagreement tracking stroke-tracking quality almost exactly.
 
-**What is still missing is the outcome *type*.** Whether a point ended in a
+**What is still missing is the outcome _type_.** Whether a point ended in a
 winner, a forced error or an unforced error is not recoverable: there is no
 signal for whether a returner reached a ball, which also makes Ace and Service
 Winner indistinguishable. A `rally_end_reason` (`winner` / `out` / `net`), or
@@ -278,7 +277,7 @@ worth flagging early:
   winners, and detection failures alike. The fixtures yield 1 and 4 candidates
   against 67 aces and 486 service winners in our existing SwingVision data.
 - **Forced vs Unforced Error.** No outcome label exists at all. Eight of the ten
-  `points.result_type` values in production encode side *and* outcome
+  `points.result_type` values in production encode side _and_ outcome
   (`Forehand Unforced Error`, `Backhand Winner`, …). Side is available from
   `stroke_side`; outcome is not.
 
@@ -304,7 +303,7 @@ stream and use the entered score as the check. Do not feed the last-stroke flags
 into the winner decision at all** — they belong to `result_type`, which is a
 different problem with a different failure mode.
 
-A constraint solver is still the right shape for the case where the fold *misses*
+A constraint solver is still the right shape for the case where the fold _misses_
 the entered score, since that is where an assignment has to be searched for. It
 is just not needed for the common case, which is a straight fold.
 

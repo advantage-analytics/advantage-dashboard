@@ -54,7 +54,7 @@ const TEAM_HOME_PATH = "/dashboard/team";
  */
 export async function setMemberUploadEnabled(
   userId: string,
-  enabled: boolean
+  enabled: boolean,
 ): Promise<ActionResult> {
   const workspace = await getWorkspaceContext();
   if (!workspace || workspace.active.kind !== "team") {
@@ -108,11 +108,14 @@ export async function setMemberUploadEnabled(
  * re-checking it against exactly this lookup.
  */
 export async function setProgramLineup(
-  orderedPlayerIds: string[]
+  orderedPlayerIds: string[],
 ): Promise<ActionResult> {
   const workspace = await getWorkspaceContext();
   if (!workspace || workspace.active.kind !== "team") {
-    return { ok: false, error: "Switch to your team workspace to set a lineup." };
+    return {
+      ok: false,
+      error: "Switch to your team workspace to set a lineup.",
+    };
   }
 
   const supabase = await createClient();
@@ -159,8 +162,7 @@ export async function setProgramLineup(
  * would be a second query and a guess about which row it meant.
  */
 export type AddPlayerResult =
-  | { ok: true; profileId: string | null }
-  | { ok: false; error: string };
+  { ok: true; profileId: string | null } | { ok: false; error: string };
 
 export async function addProgramPlayer(input: {
   firstName: string;
@@ -171,7 +173,10 @@ export async function addProgramPlayer(input: {
 }): Promise<AddPlayerResult> {
   const workspace = await getWorkspaceContext();
   if (!workspace || workspace.active.kind !== "team") {
-    return { ok: false, error: "Switch to your team workspace to add players." };
+    return {
+      ok: false,
+      error: "Switch to your team workspace to add players.",
+    };
   }
 
   const supabase = await createClient();
@@ -235,8 +240,7 @@ export type PlayerFieldsResult =
   | { ok: false; error: string; gone: boolean };
 
 export type UpdatePlayerResult =
-  | { ok: true }
-  | { ok: false; error: string; gone: boolean };
+  { ok: true } | { ok: false; error: string; gone: boolean };
 
 /**
  * One sentence for a row that is not on this roster anymore, said the same way
@@ -263,7 +267,7 @@ const GONE_MESSAGE = "This player is no longer on this roster.";
  * `update_program_player`.
  */
 export async function getProgramPlayerFields(
-  profileId: string
+  profileId: string,
 ): Promise<PlayerFieldsResult> {
   // Started together on purpose. The row read does not need the workspace — the
   // id is only used below, to check the row is on *this* roster — and
@@ -279,7 +283,7 @@ export async function getProgramPlayerFields(
     supabase
       .from("program_players")
       .select(
-        "program_id, first_name, last_name, class_year, lineup_spot, email, claimed_by_user_id, archived_at, merged_into_id"
+        "program_id, first_name, last_name, class_year, lineup_spot, email, claimed_by_user_id, archived_at, merged_into_id",
       )
       .eq("id", profileId)
       .maybeSingle(),
@@ -406,7 +410,7 @@ export async function updateProgramPlayer(input: {
       error: await describeUpdateFailure(
         error.message,
         workspace.active.id,
-        input
+        input,
       ),
       gone: false,
     };
@@ -436,7 +440,7 @@ export async function updateProgramPlayer(input: {
 async function describeUpdateFailure(
   message: string | undefined,
   programId: string,
-  input: { profileId: string; email: string | null }
+  input: { profileId: string; email: string | null },
 ): Promise<string> {
   const raw = message?.trim() ?? "";
   // Two questions, not one. Postgres writes the constraint name *into* the
@@ -447,7 +451,7 @@ async function describeUpdateFailure(
   // this constraint gets the specific sentence, any other duplicate still gets
   // a written one.
   const isDuplicate = raw.includes(
-    "duplicate key value violates unique constraint"
+    "duplicate key value violates unique constraint",
   );
   const isEmailClash = raw.includes("program_players_email_key");
 
@@ -510,7 +514,7 @@ async function describeUpdateFailure(
  * somebody who has an account. A coach-managed player has none.
  */
 export async function archiveProgramPlayer(
-  profileId: string
+  profileId: string,
 ): Promise<ActionResult> {
   const workspace = await getWorkspaceContext();
   if (!workspace || workspace.active.kind !== "team") {
@@ -556,10 +560,8 @@ export interface MergePreview {
 
 export async function previewMerge(
   survivingId: string,
-  absorbedId: string
-): Promise<
-  { ok: true; preview: MergePreview } | { ok: false; error: string }
-> {
+  absorbedId: string,
+): Promise<{ ok: true; preview: MergePreview } | { ok: false; error: string }> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .rpc("preview_program_player_merge", {

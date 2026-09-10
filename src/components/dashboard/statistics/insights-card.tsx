@@ -14,7 +14,10 @@ interface Insight {
   text: string;
 }
 
-function generateInsights(data: StatisticsPageData, trends: TrendData): Insight[] {
+function generateInsights(
+  data: StatisticsPageData,
+  trends: TrendData,
+): Insight[] {
   const insights: Insight[] = [];
 
   const allTrends: { label: string; trend: StatTrend }[] = [
@@ -34,7 +37,8 @@ function generateInsights(data: StatisticsPageData, trends: TrendData): Insight[
       const { direction, isPositive } = s.trend;
       return (
         direction !== "flat" &&
-        ((direction === "up" && isPositive) || (direction === "down" && !isPositive))
+        ((direction === "up" && isPositive) ||
+          (direction === "down" && !isPositive))
       );
     })
     .sort((a, b) => b.trend.delta - a.trend.delta);
@@ -45,7 +49,8 @@ function generateInsights(data: StatisticsPageData, trends: TrendData): Insight[
       const { direction, isPositive } = s.trend;
       return (
         direction !== "flat" &&
-        ((direction === "down" && isPositive) || (direction === "up" && !isPositive))
+        ((direction === "down" && isPositive) ||
+          (direction === "up" && !isPositive))
       );
     })
     .sort((a, b) => b.trend.delta - a.trend.delta);
@@ -91,11 +96,13 @@ function generateInsights(data: StatisticsPageData, trends: TrendData): Insight[
   // Positive error trends
   if (
     improvements.length === 0 &&
-    (trends.doubleFaults?.direction === "down" || trends.unforcedErrors?.direction === "down")
+    (trends.doubleFaults?.direction === "down" ||
+      trends.unforcedErrors?.direction === "down")
   ) {
-    const errorTrend = trends.doubleFaults?.direction === "down"
-      ? { label: "Double faults", delta: trends.doubleFaults.delta }
-      : { label: "Unforced errors", delta: trends.unforcedErrors!.delta };
+    const errorTrend =
+      trends.doubleFaults?.direction === "down"
+        ? { label: "Double faults", delta: trends.doubleFaults.delta }
+        : { label: "Unforced errors", delta: trends.unforcedErrors!.delta };
     insights.push({
       type: "positive",
       icon: Target,
@@ -143,12 +150,12 @@ export function InsightsCard({ data, trends }: InsightsCardProps) {
   const insights = generateInsights(data, trends);
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] p-5">
+    <div className="rounded-[14px] border border-[#F3F3F3] bg-white p-5 shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]">
       <div className="mb-4">
-        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+        <h2 className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
           Game Insights
         </h2>
-        <p className="text-[12px] font-normal text-[#71717A] mt-1">
+        <p className="mt-1 text-[12px] font-normal text-[#71717A]">
           {insights.length > 0
             ? "Based on your last 5 matches vs career"
             : "Play more matches to unlock insights"}
@@ -160,14 +167,14 @@ export function InsightsCard({ data, trends }: InsightsCardProps) {
           {insights.map((insight, i) => (
             <div
               key={i}
-              className={`flex items-start gap-2.5 p-3 rounded-xl ${TYPE_BG[insight.type]}`}
+              className={`flex items-start gap-2.5 rounded-xl p-3 ${TYPE_BG[insight.type]}`}
             >
               <insight.icon
-                className={`size-3.5 shrink-0 mt-0.5 ${TYPE_COLORS[insight.type]}`}
+                className={`mt-0.5 size-3.5 shrink-0 ${TYPE_COLORS[insight.type]}`}
                 strokeWidth={1.5}
                 aria-hidden="true"
               />
-              <p className="text-[12px] font-normal text-[#525252] leading-[1.5]">
+              <p className="text-[12px] leading-[1.5] font-normal text-[#525252]">
                 {insight.text}
               </p>
             </div>

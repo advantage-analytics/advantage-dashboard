@@ -106,7 +106,7 @@ export interface OpponentPool {
 export function opponentPoolFor(
   key: string,
   schoolName: string,
-  fetched: { forKey: string; candidates: OpponentRosterCandidate[] } | null
+  fetched: { forKey: string; candidates: OpponentRosterCandidate[] } | null,
 ): OpponentPool {
   return {
     [POOL]: true,
@@ -337,15 +337,19 @@ export function OpponentPopup({
    */
   const [walked, setWalked] = useState(false);
 
-  const { activeIndex, setActiveIndex, optionId, onKeyDown: walkList } =
-    useListboxNav({
-      count: rowCount,
-      open,
-      onSelect: (index) => activateRow(index),
-      // Escape reverts. The line keeps what it had — see the header.
-      onDismiss: () => setOpen(false),
-      idPrefix: listboxId,
-    });
+  const {
+    activeIndex,
+    setActiveIndex,
+    optionId,
+    onKeyDown: walkList,
+  } = useListboxNav({
+    count: rowCount,
+    open,
+    onSelect: (index) => activateRow(index),
+    // Escape reverts. The line keeps what it had — see the header.
+    onDismiss: () => setOpen(false),
+    idPrefix: listboxId,
+  });
 
   /**
    * Park the cursor back on the first row whenever the rows themselves change.
@@ -640,7 +644,7 @@ export function OpponentPopup({
           aria-label={
             discipline === "doubles" ? "Add opposing pair" : "Add opposing name"
           }
-          className="absolute right-0 top-[calc(100%+8px)] w-[286px] overflow-hidden rounded-[var(--radius-dropdown)] border border-[var(--border-medium)] bg-[var(--surface-card)] text-left shadow-[var(--shadow-dropdown)]"
+          className="absolute top-[calc(100%+8px)] right-0 w-[286px] overflow-hidden rounded-[var(--radius-dropdown)] border border-[var(--border-medium)] bg-[var(--surface-card)] text-left shadow-[var(--shadow-dropdown)]"
         >
           <div className="flex items-center gap-2 border-b border-[var(--border-hairline)] px-3 py-[9px]">
             <Search
@@ -727,7 +731,7 @@ export function OpponentPopup({
       {!open && confirmation ? (
         <div
           role="status"
-          className="absolute right-0 top-[calc(100%+8px)] flex w-[236px] items-center gap-2 overflow-hidden rounded-[var(--radius-dropdown)] border border-[var(--border-medium)] bg-[var(--surface-card)] px-3 py-2.5 shadow-[var(--shadow-dropdown)]"
+          className="absolute top-[calc(100%+8px)] right-0 flex w-[236px] items-center gap-2 overflow-hidden rounded-[var(--radius-dropdown)] border border-[var(--border-medium)] bg-[var(--surface-card)] px-3 py-2.5 shadow-[var(--shadow-dropdown)]"
         >
           <CircleCheck
             size={14}
@@ -794,14 +798,14 @@ function OptionCard({
           : [
               "border-[var(--border-hairline)]",
               "transition-colors duration-[var(--duration-hover)]",
-            ]
+            ],
       )}
     >
       <span className="min-w-0 flex-1">
         <span
           className={cn(
             "block truncate text-[12px]",
-            strong ? "font-medium" : null
+            strong ? "font-medium" : null,
           )}
           style={{ color: "var(--ink-900)" }}
         >
@@ -840,7 +844,7 @@ function OptionCard({
  */
 function savedSubline(
   school: string,
-  candidate: OpponentRosterCandidate
+  candidate: OpponentRosterCandidate,
 ): string {
   const parts = [
     candidate.lineupSpot !== null

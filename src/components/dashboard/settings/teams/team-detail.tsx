@@ -75,11 +75,13 @@ export function TeamDetail({
   const isStaff = viewerRole !== "player";
 
   const isDirty = (Object.keys(draft) as (keyof IdentityDraft)[]).some(
-    (key) => draft[key] !== saved[key]
+    (key) => draft[key] !== saved[key],
   );
 
-  const set = <K extends keyof IdentityDraft>(key: K, value: IdentityDraft[K]) =>
-    setDraft((previous) => ({ ...previous, [key]: value }));
+  const set = <K extends keyof IdentityDraft>(
+    key: K,
+    value: IdentityDraft[K],
+  ) => setDraft((previous) => ({ ...previous, [key]: value }));
 
   const handleSave = () => {
     setError(null);
@@ -90,7 +92,8 @@ export function TeamDetail({
         team: draft.team,
         conference: draft.conference,
         homeVenue: draft.homeVenue,
-        defaultSurface: draft.defaultSurface === "" ? null : draft.defaultSurface,
+        defaultSurface:
+          draft.defaultSurface === "" ? null : draft.defaultSurface,
         season: draft.season,
         uploadPolicy: draft.uploadPolicy,
       });
@@ -100,13 +103,17 @@ export function TeamDetail({
   };
 
   const roles = new Map<string, MemberRole>(
-    data.members.map((member) => [member.userId, member.role])
+    data.members.map((member) => [member.userId, member.role]),
   );
 
   return (
     <div className="flex max-w-[640px] flex-col gap-5">
       {error && (
-        <SettingsAlert type="error" message={error} onDismiss={() => setError(null)} />
+        <SettingsAlert
+          type="error"
+          message={error}
+          onDismiss={() => setError(null)}
+        />
       )}
 
       <ProgramHoursSummary
@@ -154,7 +161,9 @@ export function TeamDetail({
         <SettingsCard className="gap-0 py-4">
           <div className="flex items-center gap-6">
             <div className="min-w-0 flex-1">
-              <div className="text-[12px] text-[var(--danger)]">Delete program</div>
+              <div className="text-[12px] text-[var(--danger)]">
+                Delete program
+              </div>
               <div className="mt-0.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
                 Removes the roster, schedule and every team match. Athlete-owned
                 matches stay with the athlete.

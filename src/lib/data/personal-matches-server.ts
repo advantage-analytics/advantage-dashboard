@@ -66,7 +66,7 @@ export interface PersonalMatchData {
 }
 
 export const getPersonalMatchData = cache(async function getPersonalMatchData(
-  userId: string
+  userId: string,
 ): Promise<PersonalMatchData> {
   const supabase = await createClient();
 
@@ -87,8 +87,11 @@ export const getPersonalMatchData = cache(async function getPersonalMatchData(
     .select(PERSONAL_STAT_COLUMNS)
     .in(
       "match_id",
-      matches.map((m) => m.id)
+      matches.map((m) => m.id),
     );
 
-  return { matches, stats: (statRows ?? []) as unknown as Record<string, unknown>[] };
+  return {
+    matches,
+    stats: (statRows ?? []) as unknown as Record<string, unknown>[],
+  };
 });

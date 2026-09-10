@@ -117,7 +117,7 @@ export function RallyLengthCard() {
   return (
     <section
       aria-labelledby="rally-length-heading"
-      className="surface-card flex flex-1 min-h-0 flex-col gap-3.5"
+      className="surface-card flex min-h-0 flex-1 flex-col gap-3.5"
       style={{ padding: "18px 20px 16px" }}
     >
       <div className="flex items-baseline gap-2">
@@ -130,8 +130,8 @@ export function RallyLengthCard() {
         </span>
       </div>
 
-      <div className="flex flex-1 min-h-0 flex-col gap-2">
-        <div className="flex flex-1 min-h-24 items-stretch">
+      <div className="flex min-h-0 flex-1 flex-col gap-2">
+        <div className="flex min-h-24 flex-1 items-stretch">
           {visible.map((band, i) => {
             const width = pct(band.count, total);
             const youShare = pct(band.youWon, band.count);
@@ -216,10 +216,7 @@ export function RallyLengthCard() {
           {visible.map((band, i) => (
             <div
               key={band.key}
-              className={cn(
-                "box-border",
-                i < visible.length - 1 && "pr-3",
-              )}
+              className={cn("box-border", i < visible.length - 1 && "pr-3")}
               style={{ width: `${pct(band.count, total)}%` }}
             >
               <div className="flex items-baseline gap-1 overflow-hidden whitespace-nowrap">

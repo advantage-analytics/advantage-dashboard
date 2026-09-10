@@ -154,7 +154,11 @@ export function formatScoreText(sets: ScoreLineSet[]): string {
  */
 export function playedSets(sets: ScoreLineSet[]): ScoreLineSet[] {
   let end = sets.length;
-  while (end > 0 && sets[end - 1].player1 === 0 && sets[end - 1].player2 === 0) {
+  while (
+    end > 0 &&
+    sets[end - 1].player1 === 0 &&
+    sets[end - 1].player2 === 0
+  ) {
     end -= 1;
   }
   return sets.slice(0, end);
@@ -177,7 +181,7 @@ export interface RawMatchScore {
  */
 export function scoreSetsFrom(
   score: RawMatchScore | null | undefined,
-  { swap = false }: { swap?: boolean } = {}
+  { swap = false }: { swap?: boolean } = {},
 ): ScoreLineSet[] {
   if (!score?.player1?.length || !score?.player2?.length) return [];
 

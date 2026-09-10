@@ -178,7 +178,10 @@ export function DualSchoolStep({
    * button that cannot see the answer cannot know whether to be asleep. Null is
    * "nothing chosen yet", which is exactly the state that disables it.
    */
-  onChoiceChange?: (name: string | null, program: ProgramSearchResult | null) => void;
+  onChoiceChange?: (
+    name: string | null,
+    program: ProgramSearchResult | null,
+  ) => void;
 }) {
   const {
     ourConference,
@@ -211,7 +214,7 @@ export function DualSchoolStep({
       try {
         const response = await fetch(
           `/api/programs/search?q=${encodeURIComponent(query)}`,
-          { signal: controller.signal }
+          { signal: controller.signal },
         );
         if (!response.ok) return;
         const body = (await response.json()) as {
@@ -276,7 +279,7 @@ export function DualSchoolStep({
       (program) =>
         query.length === 0 ||
         program.schoolName.toLowerCase().includes(query) ||
-        (program.conference?.toLowerCase().includes(query) ?? false)
+        (program.conference?.toLowerCase().includes(query) ?? false),
     )
     .filter(passesChips);
 
@@ -298,7 +301,9 @@ export function DualSchoolStep({
    * it. The escape row below is the same commitment with the reasoning printed
    * on it.
    */
-  const chosen: string | null = picked ? picked.schoolName : term.trim() || null;
+  const chosen: string | null = picked
+    ? picked.schoolName
+    : term.trim() || null;
 
   // Reported rather than lifted: the choice stays this component's, and the
   // flow above is told what it is so its Continue can gate on it. An effect
@@ -321,16 +326,16 @@ export function DualSchoolStep({
        832px column, which measures 720px inside its gutters and is therefore
        the same width the artboard's own `max-w-[720px]` gave it. */
     <>
-          <div className="flex items-center gap-3 border-b-2 border-[var(--border-medium)] pb-[13px] pt-3 transition-colors focus-within:border-[var(--blue)]">
-            <Search
-              size={17}
-              strokeWidth={1.5}
-              className="shrink-0 text-[var(--ink-600)]"
-            />
-            {/* Autofocused, which is how `2c` draws it: a field with the caret
+      <div className="flex items-center gap-3 border-b-2 border-[var(--border-medium)] pt-3 pb-[13px] transition-colors focus-within:border-[var(--blue)]">
+        <Search
+          size={17}
+          strokeWidth={1.5}
+          className="shrink-0 text-[var(--ink-600)]"
+        />
+        {/* Autofocused, which is how `2c` draws it: a field with the caret
                 already in it. The blue rule under the row is the drawn focus
                 state and stays put. */}
-            {/* The row IS the field, and the rule under it GOES blue on focus
+        {/* The row IS the field, and the rule under it GOES blue on focus
                 — which is what earns this opt-out. `focus.css` is explicit that
                 looking like an underline is not enough: something has to change
                 at focus, or the field goes from one indicator to zero. A
@@ -339,163 +344,163 @@ export function DualSchoolStep({
                 `--focus-ring-field` box-shadow is set unlayered and is
                 unreachable by a Tailwind utility, so the attribute is the
                 documented way. */}
-            <input
-              data-focus-ring="none"
-              autoFocus
-              value={term}
-              onChange={(event) => {
-                const next = event.target.value;
-                setTerm(next);
-                setPicked(null);
-                if (next.trim().length < 2) setResults([]);
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter") return;
-                event.preventDefault();
-                // Whatever is chosen — which after any keystroke is the typed
-                // text, because typing clears the picked row above.
-                commit();
-              }}
-              placeholder="Search programs, or type any opponent"
-              aria-label="Search programs"
-              className="w-full bg-transparent text-[16px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)]"
-            />
-            <span
-              className="text-micro tabular shrink-0"
-              style={{ color: "var(--ink-500)" }}
-            >
-              {directoryTotal === null
-                ? // No total rather than a made-up one, on the one path where
-                  // the count did not come back.
-                  `${listed} listed`
-                : `${listed} of ${directoryTotal.toLocaleString("en-US")}`}
-            </span>
-          </div>
+        <input
+          data-focus-ring="none"
+          autoFocus
+          value={term}
+          onChange={(event) => {
+            const next = event.target.value;
+            setTerm(next);
+            setPicked(null);
+            if (next.trim().length < 2) setResults([]);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            // Whatever is chosen — which after any keystroke is the typed
+            // text, because typing clears the picked row above.
+            commit();
+          }}
+          placeholder="Search programs, or type any opponent"
+          aria-label="Search programs"
+          className="w-full bg-transparent text-[16px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)]"
+        />
+        <span
+          className="text-micro tabular shrink-0"
+          style={{ color: "var(--ink-500)" }}
+        >
+          {directoryTotal === null
+            ? // No total rather than a made-up one, on the one path where
+              // the count did not come back.
+              `${listed} listed`
+            : `${listed} of ${directoryTotal.toLocaleString("en-US")}`}
+        </span>
+      </div>
 
-          {ourConference || ourDivision ? (
-            <div className="mt-4 flex items-center gap-2">
-              {/* Two pills, not three. Both are real filters over the two
+      {ourConference || ourDivision ? (
+        <div className="mt-4 flex items-center gap-2">
+          {/* Two pills, not three. Both are real filters over the two
                   columns `programs` actually carries; the artboard's third,
                   "Region", has no column behind it and is not drawn. */}
-              {ourConference ? (
-                <FilterPill
-                  label={ourConference}
-                  active={conferenceOnly}
-                  onClick={() => setConferenceOnly((on) => !on)}
-                />
-              ) : null}
-              {ourDivision ? (
-                <FilterPill
-                  label={ourDivision}
-                  active={divisionOnly}
-                  onClick={() => setDivisionOnly((on) => !on)}
-                />
-              ) : null}
-              <div className="flex-1" />
-              {/* `--blue` at rest, `--blue-hover` on hover — the rule for every
+          {ourConference ? (
+            <FilterPill
+              label={ourConference}
+              active={conferenceOnly}
+              onClick={() => setConferenceOnly((on) => !on)}
+            />
+          ) : null}
+          {ourDivision ? (
+            <FilterPill
+              label={ourDivision}
+              active={divisionOnly}
+              onClick={() => setDivisionOnly((on) => !on)}
+            />
+          ) : null}
+          <div className="flex-1" />
+          {/* `--blue` at rest, `--blue-hover` on hover — the rule for every
                   blue word since the darker resting `--blue-text` was
                   retired. 11px blue on white measures 3.68:1 and fails WCAG
                   1.4.3 AA; drawn as drawn, and recorded on the token. */}
-              {chipsOn ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConferenceOnly(false);
-                    setDivisionOnly(false);
-                  }}
-                  className="cursor-pointer text-[11px] font-medium text-[var(--blue)]"
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-
-          {conferenceRows.length > 0 ? (
-            <>
-              <div
-                className="eyebrow-sm pb-1.5 pt-[22px]"
-                style={{ color: "var(--ink-400)" }}
-              >
-                Your conference
-              </div>
-              <div className="flex flex-col">
-                {conferenceRows.map((program) => (
-                  <SchoolRow
-                    key={program.programKey}
-                    program={program}
-                    history={historyForProgram(histories, program)}
-                    selected={picked?.programKey === program.programKey}
-                    onSelect={() => setPicked(program)}
-                  />
-                ))}
-              </div>
-            </>
-          ) : null}
-
-          {searchRows.length > 0 ? (
-            <>
-              <div
-                className="eyebrow-sm pb-1.5 pt-5"
-                style={{ color: "var(--ink-400)" }}
-              >
-                All programs
-              </div>
-              <div className="flex flex-col">
-                {searchRows.map((program) => (
-                  <SchoolRow
-                    key={program.programKey}
-                    program={program}
-                    history={historyForProgram(histories, program)}
-                    selected={picked?.programKey === program.programKey}
-                    onSelect={() => setPicked(program)}
-                  />
-                ))}
-              </div>
-            </>
-          ) : null}
-
-          {/* The escape hatch, available once something is typed. A dual against
-              a club side or a school the ITA scrape missed is a real fixture,
-              and a picker that only offered the directory would make the coach
-              lie about who they played to get past the field. */}
-          {term.trim() ? (
+          {chipsOn ? (
             <button
               type="button"
               onClick={() => {
-                setPicked(null);
-                // The row's own promise — the typed text, whatever row may
-                // have been picked above it.
-                onContinue(term.trim(), null);
+                setConferenceOnly(false);
+                setDivisionOnly(false);
               }}
-              className="mt-[18px] flex w-full cursor-pointer items-center gap-2.5 border-t border-[var(--border-hairline)] pt-4 text-left"
+              className="cursor-pointer text-[11px] font-medium text-[var(--blue)]"
             >
-              <Plus
-                size={13}
-                strokeWidth={1.5}
-                className="shrink-0 text-[var(--blue)]"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[12px] font-medium text-[var(--blue)]">
-                  {`Add "${term.trim()}" as an unlisted school or club side`}
-                </span>
-                <span
-                  className="text-micro mt-0.5 block"
-                  style={{ color: "var(--ink-600)" }}
-                >
-                  No program record — their lineup gets typed by hand.
-                </span>
-              </span>
-              {picked === null ? (
-                <span
-                  className="mono shrink-0 text-[10px]"
-                  style={{ color: "var(--ink-500)" }}
-                >
-                  ↵
-                </span>
-              ) : null}
+              Clear
             </button>
           ) : null}
+        </div>
+      ) : null}
+
+      {conferenceRows.length > 0 ? (
+        <>
+          <div
+            className="eyebrow-sm pt-[22px] pb-1.5"
+            style={{ color: "var(--ink-400)" }}
+          >
+            Your conference
+          </div>
+          <div className="flex flex-col">
+            {conferenceRows.map((program) => (
+              <SchoolRow
+                key={program.programKey}
+                program={program}
+                history={historyForProgram(histories, program)}
+                selected={picked?.programKey === program.programKey}
+                onSelect={() => setPicked(program)}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
+
+      {searchRows.length > 0 ? (
+        <>
+          <div
+            className="eyebrow-sm pt-5 pb-1.5"
+            style={{ color: "var(--ink-400)" }}
+          >
+            All programs
+          </div>
+          <div className="flex flex-col">
+            {searchRows.map((program) => (
+              <SchoolRow
+                key={program.programKey}
+                program={program}
+                history={historyForProgram(histories, program)}
+                selected={picked?.programKey === program.programKey}
+                onSelect={() => setPicked(program)}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
+
+      {/* The escape hatch, available once something is typed. A dual against
+              a club side or a school the ITA scrape missed is a real fixture,
+              and a picker that only offered the directory would make the coach
+              lie about who they played to get past the field. */}
+      {term.trim() ? (
+        <button
+          type="button"
+          onClick={() => {
+            setPicked(null);
+            // The row's own promise — the typed text, whatever row may
+            // have been picked above it.
+            onContinue(term.trim(), null);
+          }}
+          className="mt-[18px] flex w-full cursor-pointer items-center gap-2.5 border-t border-[var(--border-hairline)] pt-4 text-left"
+        >
+          <Plus
+            size={13}
+            strokeWidth={1.5}
+            className="shrink-0 text-[var(--blue)]"
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[12px] font-medium text-[var(--blue)]">
+              {`Add "${term.trim()}" as an unlisted school or club side`}
+            </span>
+            <span
+              className="text-micro mt-0.5 block"
+              style={{ color: "var(--ink-600)" }}
+            >
+              No program record — their lineup gets typed by hand.
+            </span>
+          </span>
+          {picked === null ? (
+            <span
+              className="mono shrink-0 text-[10px]"
+              style={{ color: "var(--ink-500)" }}
+            >
+              ↵
+            </span>
+          ) : null}
+        </button>
+      ) : null}
     </>
   );
 }
@@ -522,7 +527,11 @@ function SchoolRow({
   // Exactly one of the two per row, which is what the artboard prints: most
   // rows show a conference, a row without one shows its division.
   const where = program.conference ?? divisionLabel(program.division);
-  const subline = [teamLabel(program.team), where, formatOpponentRecord(history)]
+  const subline = [
+    teamLabel(program.team),
+    where,
+    formatOpponentRecord(history),
+  ]
     .filter(Boolean)
     .join(" · ");
 
@@ -542,7 +551,7 @@ function SchoolRow({
         // that actually reads at rest.
         selected
           ? "bg-[var(--surface-subtle)]"
-          : "hover:bg-[var(--surface-subtle)]"
+          : "hover:bg-[var(--surface-subtle)]",
       )}
     >
       {/* The same mark the schedule table draws for the same opponent
@@ -557,7 +566,7 @@ function SchoolRow({
         <span
           className={cn(
             "block truncate text-[13px] text-[var(--ink-900)]",
-            selected ? "font-medium" : "font-normal"
+            selected ? "font-medium" : "font-normal",
           )}
         >
           {program.schoolName}
@@ -623,7 +632,7 @@ function FilterPill({
         "transition-colors duration-[var(--duration-hover)]",
         active
           ? "bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
-          : "border border-[var(--border-hairline)] font-normal text-[var(--ink-600)] hover:bg-[var(--surface-subtle)]"
+          : "border border-[var(--border-hairline)] font-normal text-[var(--ink-600)] hover:bg-[var(--surface-subtle)]",
       )}
     >
       {label}
@@ -661,10 +670,10 @@ function FilterPill({
  */
 function historyForProgram(
   histories: Map<string, OpponentDualHistory>,
-  program: ProgramSearchResult
+  program: ProgramSearchResult,
 ): OpponentDualHistory {
   return opponentHistoryFor(
     histories,
-    programDisplayName(program.schoolName, program.team)
+    programDisplayName(program.schoolName, program.team),
   );
 }

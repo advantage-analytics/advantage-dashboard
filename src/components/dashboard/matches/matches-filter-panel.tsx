@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { Check, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 /**
  * Design 18a's sectioned panel + 18c's chrome (trigger, applied-filter strip
@@ -90,7 +94,11 @@ function Segmented<K extends string>({
   onSelect: (v: string | null) => void;
 }) {
   return (
-    <div role="radiogroup" aria-label={facet.rowLabel} className="flex gap-1 px-2 pb-2">
+    <div
+      role="radiogroup"
+      aria-label={facet.rowLabel}
+      className="flex gap-1 px-2 pb-2"
+    >
       {facet.options.map((opt) => {
         const active = opt.value === value;
         return (
@@ -105,7 +113,7 @@ function Segmented<K extends string>({
               "h-[26px] border",
               active
                 ? "border-[var(--border-medium)] font-medium"
-                : "border-[var(--border-hairline)] font-normal"
+                : "border-[var(--border-hairline)] font-normal",
             )}
             style={{
               background: active ? "var(--surface-subtle)" : "transparent",
@@ -148,7 +156,7 @@ export function MatchesFilterPanel<K extends string>({
           aria-expanded={open}
           className={cn(
             "flex h-7 items-center gap-1.5 rounded-[var(--radius-element)] px-2 text-[12px] transition-colors duration-150",
-            engaged ? "" : "hover:bg-[var(--surface-subtle)]"
+            engaged ? "" : "hover:bg-[var(--surface-subtle)]",
           )}
           style={{
             background: engaged ? "var(--surface-subtle)" : undefined,
@@ -174,14 +182,20 @@ export function MatchesFilterPanel<K extends string>({
       >
         {sections.map((section, i) => (
           <div key={section.label}>
-            {i > 0 && section.checklist === undefined && section.segmented !== undefined && sections[i - 1]?.checklist !== undefined && (
-              // The one divider in 18a — ahead of Opponent, the first
-              // segmented section after a run of checklists. Sections never
-              // rule themselves off from a same-kind neighbour.
-              <div className="mx-2 my-0.5 h-px" style={{ background: "var(--border-hairline)" }} />
-            )}
+            {i > 0 &&
+              section.checklist === undefined &&
+              section.segmented !== undefined &&
+              sections[i - 1]?.checklist !== undefined && (
+                // The one divider in 18a — ahead of Opponent, the first
+                // segmented section after a run of checklists. Sections never
+                // rule themselves off from a same-kind neighbour.
+                <div
+                  className="mx-2 my-0.5 h-px"
+                  style={{ background: "var(--border-hairline)" }}
+                />
+              )}
             <p
-              className="px-2 pb-1 pt-2 text-[11px]"
+              className="px-2 pt-2 pb-1 text-[11px]"
               style={{ color: "var(--ink-400)" }}
             >
               {section.label}
@@ -190,26 +204,44 @@ export function MatchesFilterPanel<K extends string>({
             {section.checklist && (
               <div className="flex flex-col pb-1.5">
                 {section.checklist.values.map((value) => {
-                  const active = isChecklistActive(section.checklist!.key, value);
+                  const active = isChecklistActive(
+                    section.checklist!.key,
+                    value,
+                  );
                   return (
                     <button
                       key={value}
                       type="button"
                       role="checkbox"
                       aria-checked={active}
-                      onClick={() => onToggleChecklist(section.checklist!.key, value)}
+                      onClick={() =>
+                        onToggleChecklist(section.checklist!.key, value)
+                      }
                       className="flex h-8 items-center gap-[9px] rounded-[var(--radius-element)] px-2 text-left transition-colors duration-150 hover:bg-[var(--surface-subtle)]"
                     >
                       <span
                         className={cn(
                           "flex size-3.5 shrink-0 items-center justify-center rounded-[var(--radius-cell)] border",
-                          active ? "border-[var(--blue)] bg-[var(--blue)]" : "border-[var(--ink-300)]"
+                          active
+                            ? "border-[var(--blue)] bg-[var(--blue)]"
+                            : "border-[var(--ink-300)]",
                         )}
                       >
-                        {active && <Check className="size-2.5 text-white" strokeWidth={3} aria-hidden="true" />}
+                        {active && (
+                          <Check
+                            className="size-2.5 text-white"
+                            strokeWidth={3}
+                            aria-hidden="true"
+                          />
+                        )}
                       </span>
-                      <span className="min-w-0 truncate text-[12px]" style={{ color: "var(--ink-900)" }}>
-                        {section.checklist!.displayValue ? section.checklist!.displayValue(value) : value}
+                      <span
+                        className="min-w-0 truncate text-[12px]"
+                        style={{ color: "var(--ink-900)" }}
+                      >
+                        {section.checklist!.displayValue
+                          ? section.checklist!.displayValue(value)
+                          : value}
                       </span>
                     </button>
                   );
@@ -220,7 +252,10 @@ export function MatchesFilterPanel<K extends string>({
             {section.segmented?.map((facet) => (
               <div key={facet.key}>
                 {facet.rowLabel && (
-                  <p className="px-2 pb-1 text-[10px]" style={{ color: "var(--ink-500)" }}>
+                  <p
+                    className="px-2 pb-1 text-[10px]"
+                    style={{ color: "var(--ink-500)" }}
+                  >
                     {facet.rowLabel}
                   </p>
                 )}
@@ -236,7 +271,7 @@ export function MatchesFilterPanel<K extends string>({
 
         {/* Footer — the only place a count lives; the trigger carries none. */}
         <div
-          className="mt-0.5 flex items-center gap-2 px-2 pb-1 pt-2"
+          className="mt-0.5 flex items-center gap-2 px-2 pt-2 pb-1"
           style={{ borderTop: "1px solid var(--border-hairline)" }}
         >
           <button
@@ -250,7 +285,8 @@ export function MatchesFilterPanel<K extends string>({
           </button>
           <div className="flex-1" />
           <span className="text-micro tabular">
-            {resultCount} of {totalCount} {totalCount === 1 ? noun.singular : noun.plural}
+            {resultCount} of {totalCount}{" "}
+            {totalCount === 1 ? noun.singular : noun.plural}
           </span>
         </div>
       </PopoverContent>

@@ -42,7 +42,7 @@ export const TOP_MOVERS_LIMIT = 7;
 
 export function topMovers(
   members: readonly RosterMember[],
-  limit: number = TOP_MOVERS_LIMIT
+  limit: number = TOP_MOVERS_LIMIT,
 ): TopMover[] {
   const movers: TopMover[] = [];
 

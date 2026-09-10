@@ -14,8 +14,8 @@ import {
   IProcessingProviderStrategy,
   ProviderConfig,
   ValidationResult,
-} from '../types';
-import { validateSplitStepVideo } from '../validators/splitstep-validator';
+} from "../types";
+import { validateSplitStepVideo } from "../validators/splitstep-validator";
 import {
   ACCEPTED_VIDEO_EXTENSIONS,
   ACCEPTED_VIDEO_MIME_TYPES,
@@ -24,10 +24,10 @@ import {
   MIN_VIDEO_FPS,
   MIN_VIDEO_HEIGHT,
   PROVIDER_DISPLAY_NAME,
-} from '@/lib/services/splitstep/config';
+} from "@/lib/services/splitstep/config";
 
 const SPLITSTEP_CONFIG: ProviderConfig = {
-  id: 'splitstep',
+  id: "splitstep",
   name: PROVIDER_DISPLAY_NAME,
   acceptedFileTypes: [...ACCEPTED_VIDEO_EXTENSIONS],
   acceptedMimeTypes: [...ACCEPTED_VIDEO_MIME_TYPES],
@@ -35,14 +35,16 @@ const SPLITSTEP_CONFIG: ProviderConfig = {
 };
 
 export class SplitStepUploadStrategy implements IProcessingProviderStrategy {
-  readonly kind = 'processing' as const;
+  readonly kind = "processing" as const;
   readonly config: ProviderConfig = SPLITSTEP_CONFIG;
   readonly minTrimSeconds = MIN_TRIM_DURATION_SECONDS;
 
   // Interpolated from the same constants the validator checks against, so
   // relaxing a floor updates the promise and the enforcement together.
   readonly requirementChips = [
-    ACCEPTED_VIDEO_EXTENSIONS.map((e) => e.replace(".", "").toUpperCase()).join(" / "),
+    ACCEPTED_VIDEO_EXTENSIONS.map((e) => e.replace(".", "").toUpperCase()).join(
+      " / ",
+    ),
     `${MIN_VIDEO_HEIGHT}p or higher`,
     `${MIN_VIDEO_FPS}fps minimum`,
   ] as const;
@@ -73,7 +75,7 @@ export class SplitStepUploadStrategy implements IProcessingProviderStrategy {
     return [
       ...this.config.acceptedMimeTypes,
       ...this.config.acceptedFileTypes,
-    ].join(',');
+    ].join(",");
   }
 }
 

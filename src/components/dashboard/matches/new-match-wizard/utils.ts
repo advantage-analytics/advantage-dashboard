@@ -21,7 +21,7 @@ export function getNumberOfSets(bestOf: string, numberOfSets?: number): number {
 export function getAdjustedScores(
   currentScores: (number | null)[],
   bestOf: string,
-  numberOfSets?: number
+  numberOfSets?: number,
 ): (number | null)[] {
   const sets = getNumberOfSets(bestOf, numberOfSets);
   if (currentScores.length < sets) {
@@ -44,16 +44,20 @@ export function determineWinner(
    */
   playerUserId: string | null,
   playerName: string,
-  opponentName: string
+  opponentName: string,
 ): WinnerLoserResult {
   let playerSetsWon = 0;
   let opponentSetsWon = 0;
 
   // Convert null to 0 for comparison and result
-  const playerScoresNum = playerScores.map(s => s ?? 0);
-  const opponentScoresNum = opponentScores.map(s => s ?? 0);
+  const playerScoresNum = playerScores.map((s) => s ?? 0);
+  const opponentScoresNum = opponentScores.map((s) => s ?? 0);
 
-  for (let i = 0; i < Math.min(playerScoresNum.length, opponentScoresNum.length); i++) {
+  for (
+    let i = 0;
+    i < Math.min(playerScoresNum.length, opponentScoresNum.length);
+    i++
+  ) {
     if (playerScoresNum[i] > opponentScoresNum[i]) {
       playerSetsWon++;
     } else if (opponentScoresNum[i] > playerScoresNum[i]) {
@@ -69,7 +73,7 @@ export function determineWinner(
       : { id: null, name: opponentName, scores: opponentScoresNum },
     loser: playerWon
       ? { id: null, name: opponentName, scores: opponentScoresNum }
-      : { id: playerUserId, name: playerName, scores: playerScoresNum }
+      : { id: playerUserId, name: playerName, scores: playerScoresNum },
   };
 }
 
@@ -110,7 +114,7 @@ export function buildMatchData(
   winner: WinnerLoserResult["winner"],
   loser: WinnerLoserResult["loser"],
   isPrivate: boolean,
-  metadata: MatchMetadata
+  metadata: MatchMetadata,
 ): MatchData {
   // Validate bestOf - only 1, 3, or 5 are allowed
   const bestOfValue = parseInt(formData.bestOf);
@@ -121,13 +125,29 @@ export function buildMatchData(
   const playerWon = formData.playerName === winner.name;
 
   // Use adjusted scores (respects numberOfSets when user reduced sets)
-  const adjustedPlayerScores = getAdjustedScores(formData.playerScores, formData.bestOf, formData.numberOfSets);
-  const adjustedOpponentScores = getAdjustedScores(formData.opponentScores, formData.bestOf, formData.numberOfSets);
-  const adjustedPlayerTiebreaks = getAdjustedScores(formData.playerTiebreaks, formData.bestOf, formData.numberOfSets);
-  const adjustedOpponentTiebreaks = getAdjustedScores(formData.opponentTiebreaks, formData.bestOf, formData.numberOfSets);
+  const adjustedPlayerScores = getAdjustedScores(
+    formData.playerScores,
+    formData.bestOf,
+    formData.numberOfSets,
+  );
+  const adjustedOpponentScores = getAdjustedScores(
+    formData.opponentScores,
+    formData.bestOf,
+    formData.numberOfSets,
+  );
+  const adjustedPlayerTiebreaks = getAdjustedScores(
+    formData.playerTiebreaks,
+    formData.bestOf,
+    formData.numberOfSets,
+  );
+  const adjustedOpponentTiebreaks = getAdjustedScores(
+    formData.opponentTiebreaks,
+    formData.bestOf,
+    formData.numberOfSets,
+  );
 
-  const playerScoresNum = adjustedPlayerScores.map(s => s ?? 0);
-  const opponentScoresNum = adjustedOpponentScores.map(s => s ?? 0);
+  const playerScoresNum = adjustedPlayerScores.map((s) => s ?? 0);
+  const opponentScoresNum = adjustedOpponentScores.map((s) => s ?? 0);
 
   return {
     id: matchId,
@@ -143,7 +163,7 @@ export function buildMatchData(
     format: {
       best_of: bestOf,
       ad_scoring: formData.adScoring ?? null,
-      play_on_lets: formData.playOnLets
+      play_on_lets: formData.playOnLets,
     },
     result: formData.result,
     // Store the picked local date as the leading YYYY-MM-DD so it survives the
@@ -158,7 +178,7 @@ export function buildMatchData(
       player1: playerScoresNum,
       player2: opponentScoresNum,
       player1_tiebreaks: adjustedPlayerTiebreaks,
-      player2_tiebreaks: adjustedOpponentTiebreaks
+      player2_tiebreaks: adjustedOpponentTiebreaks,
     },
     // New metadata fields
     created_by: metadata.userId,
@@ -170,7 +190,7 @@ export function buildMatchData(
     player_hand: formData.playerHand,
     player_backhand: formData.playerBackhand,
     opponent_hand: formData.opponentHand,
-    opponent_backhand: formData.opponentBackhand
+    opponent_backhand: formData.opponentBackhand,
   };
 }
 
@@ -198,7 +218,8 @@ export function base64ToBlob(base64Data: string, mimeType: string): Blob {
  */
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
@@ -212,7 +233,8 @@ export function formatFileSize(bytes: number): string {
  */
 export function formatClipLength(seconds: number): string {
   if (seconds < 60) return `${Math.ceil(seconds)}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.ceil(seconds % 60)}s`;
+  if (seconds < 3600)
+    return `${Math.floor(seconds / 60)}m ${Math.ceil(seconds % 60)}s`;
   return `${Math.floor(seconds / 3600)}h ${Math.ceil((seconds % 3600) / 60)}m`;
 }
 
@@ -236,7 +258,7 @@ export function formatTransferSpeed(bytesPerSecond: number): string {
  */
 export function formatClock(
   seconds: number | undefined,
-  { tenths = false }: { tenths?: boolean } = {}
+  { tenths = false }: { tenths?: boolean } = {},
 ): string {
   if (seconds == null || !Number.isFinite(seconds) || seconds < 0) {
     return tenths ? "0:00.0" : "—";
@@ -258,7 +280,8 @@ export function formatClock(
  * line: the two readouts have to be the same width to read as a pair.
  */
 export function formatTimecode(seconds: number | undefined): string {
-  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "0:00:00";
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0)
+    return "0:00:00";
   const whole = Math.floor(seconds);
   const h = Math.floor(whole / 3600);
   const m = Math.floor((whole % 3600) / 60);
@@ -305,7 +328,7 @@ export function formatDuration(ms: number | undefined): string {
  */
 export function leadingOnSets(
   playerScores: (number | null)[],
-  opponentScores: (number | null)[]
+  opponentScores: (number | null)[],
 ): "player" | "opponent" | null {
   let p = 0;
   let o = 0;
@@ -362,7 +385,7 @@ export function formatHoursMinutes(seconds: number): string {
  */
 export function validateSetScore(
   p: number | null,
-  o: number | null
+  o: number | null,
 ): { kind: "ok" | "incomplete" | "invalid"; message?: string } {
   if (p === null && o === null) return { kind: "incomplete" };
   if (p === null || o === null) return { kind: "incomplete" };
@@ -374,7 +397,12 @@ export function validateSetScore(
   if (hi === 6 && lo <= 4) return { kind: "ok" };
   if (hi === 7 && (lo === 5 || lo === 6)) return { kind: "ok" };
   // In-progress (e.g. 4-3, 5-5) — accept as incomplete, not invalid
-  if (hi <= 6 && lo <= 6 && !(hi === 6 && lo === 5) && !(hi === 6 && lo === 6)) {
+  if (
+    hi <= 6 &&
+    lo <= 6 &&
+    !(hi === 6 && lo === 5) &&
+    !(hi === 6 && lo === 6)
+  ) {
     if (hi < 6) return { kind: "incomplete" };
   }
   // 6-5, 6-6 are transitional but not final scores
@@ -411,7 +439,7 @@ export function deriveOutcome(
   opponentName: string,
   playerScores: (number | null)[],
   opponentScores: (number | null)[],
-  bestOf: number
+  bestOf: number,
 ): string | null {
   const setsToWin = Math.ceil(bestOf / 2);
   let pSets = 0;
@@ -435,7 +463,8 @@ export function deriveOutcome(
   if (pSets >= setsToWin && pSets > oSets) return `${playerName} Wins`;
   if (oSets >= setsToWin && oSets > pSets) return `${opponentName} Wins`;
   if (midEntry || completed === 0) return null;
-  if (allRenderedFilled || (completed >= 2 && pSets === oSets)) return "Unfinished";
+  if (allRenderedFilled || (completed >= 2 && pSets === oSets))
+    return "Unfinished";
   return null;
 }
 
@@ -444,8 +473,11 @@ export function deriveOutcome(
  * Used to warn before the sets stepper drops it.
  */
 export function setHasData(
-  formData: Pick<FormData, "playerScores" | "opponentScores" | "playerTiebreaks" | "opponentTiebreaks">,
-  index: number
+  formData: Pick<
+    FormData,
+    "playerScores" | "opponentScores" | "playerTiebreaks" | "opponentTiebreaks"
+  >,
+  index: number,
 ): boolean {
   return (
     formData.playerScores[index] != null ||
@@ -469,7 +501,7 @@ export const STORAGE_KEYS = {
    * wizard removes this flag when it next mounts, so a later plain departure
    * clears storage exactly as before.
    */
-  DRAFT_KEPT: "uploadDraftKept"
+  DRAFT_KEPT: "uploadDraftKept",
 } as const;
 
 /**
@@ -516,7 +548,10 @@ export function loadFormDataFromStorage(): FormData | null {
 }
 
 /** Persisted file metadata — the actual `File` can't survive localStorage. */
-export type StoredUploadedFile = Pick<UploadedFile, "name" | "size" | "status" | "type">;
+export type StoredUploadedFile = Pick<
+  UploadedFile,
+  "name" | "size" | "status" | "type"
+>;
 
 /**
  * Load uploaded file metadata from localStorage. Note: the underlying `File`

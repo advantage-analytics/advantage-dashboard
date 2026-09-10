@@ -83,17 +83,17 @@ export function SettingsAlert({
       role={isError ? "alert" : "status"}
       aria-live={isError ? "assertive" : "polite"}
       className={cn(
-        "flex items-start gap-3 px-4 py-3 rounded-lg border animate-in fade-in slide-in-from-top-1 duration-200",
+        "flex animate-in items-start gap-3 rounded-lg border px-4 py-3 duration-200 fade-in slide-in-from-top-1",
         config.bg,
-        config.border
+        config.border,
       )}
     >
       <Icon
-        className={cn("size-3.5 flex-shrink-0 mt-0.5", config.iconColor)}
+        className={cn("mt-0.5 size-3.5 flex-shrink-0", config.iconColor)}
         strokeWidth={1.5}
         aria-hidden="true"
       />
-      <p className={cn("text-[12px] flex-1 leading-relaxed", config.text)}>
+      <p className={cn("flex-1 text-[12px] leading-relaxed", config.text)}>
         {message}
       </p>
       {onDismiss && (
@@ -101,8 +101,8 @@ export function SettingsAlert({
           onClick={onDismiss}
           aria-label="Dismiss alert"
           className={cn(
-            "size-4 flex-shrink-0 rounded flex items-center justify-center hover:bg-black/5 transition-colors focus-visible:outline-none",
-            config.text
+            "flex size-4 flex-shrink-0 items-center justify-center rounded transition-colors hover:bg-black/5 focus-visible:outline-none",
+            config.text,
           )}
         >
           <X className="size-3" strokeWidth={1.5} />

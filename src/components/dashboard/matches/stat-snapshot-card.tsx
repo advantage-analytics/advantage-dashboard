@@ -32,8 +32,7 @@ export function StatSnapshotCard({
     ? `${fraction.made}/${fraction.attempts}`
     : `${rounded}${isPercentage ? "%" : ""}`;
 
-  const delta =
-    averageValue !== null ? Math.round(value - averageValue) : null;
+  const delta = averageValue !== null ? Math.round(value - averageValue) : null;
   const deltaSign = delta !== null && delta > 0 ? "+" : "";
   const deltaColor =
     delta === null || delta === 0
@@ -44,22 +43,22 @@ export function StatSnapshotCard({
 
   return (
     <motion.div
-      className="flex flex-col gap-2 bg-[#FAFAFA] rounded-lg p-4"
+      className="flex flex-col gap-2 rounded-lg bg-[#FAFAFA] p-4"
       initial={prefersReduced ? false : FADE_INITIAL}
       animate={FADE_ANIMATE}
       transition={{ duration: 0.3, delay: index * 0.05, ease: EASE }}
     >
-      <p className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px]">
+      <p className="text-[9px] font-normal tracking-[2.5px] text-[#AAAAAA] uppercase">
         {label}
       </p>
       <div className="flex items-end gap-2">
-        <p className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] tabular-nums leading-none">
+        <p className="text-[28px] leading-none font-light tracking-[-0.5px] text-[#0D0D0D] tabular-nums">
           {displayValue}
         </p>
         {delta !== null && delta !== 0 && (
           <span
             className={cn(
-              "text-[11px] font-medium tabular-nums mb-1",
+              "mb-1 text-[11px] font-medium tabular-nums",
               deltaColor,
             )}
           >
@@ -69,7 +68,7 @@ export function StatSnapshotCard({
           </span>
         )}
       </div>
-      <div className="h-[3px] bg-[#EBEBEB] rounded-full overflow-hidden">
+      <div className="h-[3px] overflow-hidden rounded-full bg-[#EBEBEB]">
         <motion.div
           className="h-full rounded-full bg-[#3B82F6]"
           initial={{ width: 0 }}
@@ -81,7 +80,7 @@ export function StatSnapshotCard({
           }}
         />
       </div>
-      <div className="flex items-center gap-3 mt-auto">
+      <div className="mt-auto flex items-center gap-3">
         {averageValue !== null && (
           <p className="text-[10px] text-[#71717A]">
             Avg{" "}

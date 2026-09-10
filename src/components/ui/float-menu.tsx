@@ -57,8 +57,9 @@ export function FloatMenu({
         sideOffset={sideOffset}
         className={cn(
           "rounded-[10px] p-[5px] shadow-[0px_6px_20px_0px_rgba(0,0,0,0.12)]",
-          width === "trigger" && "w-[var(--radix-popover-trigger-width)] min-w-[212px]",
-          className
+          width === "trigger" &&
+            "w-[var(--radix-popover-trigger-width)] min-w-[212px]",
+          className,
         )}
         style={typeof width === "number" ? { width } : undefined}
       >
@@ -101,7 +102,7 @@ export function FloatMenuItem({
         "flex cursor-pointer items-start gap-2.5 rounded-[7px] px-2.5 py-[7px] text-left transition-colors duration-100",
         "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none",
         chosen && "bg-[var(--surface-subtle)]",
-        className
+        className,
       )}
     >
       <span className="mt-[3px] w-3 shrink-0 text-[var(--blue)]">
@@ -126,7 +127,7 @@ export function FloatMenuItem({
 /** The closing sentence — what this menu deliberately cannot do. */
 export function FloatMenuNote({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mx-1 mt-1 border-t border-[var(--border-hairline)] px-1.5 pb-1 pt-2 text-[11px] leading-[1.5] text-[var(--ink-400)]">
+    <p className="mx-1 mt-1 border-t border-[var(--border-hairline)] px-1.5 pt-2 pb-1 text-[11px] leading-[1.5] text-[var(--ink-400)]">
       {children}
     </p>
   );

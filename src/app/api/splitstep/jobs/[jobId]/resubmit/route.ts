@@ -8,25 +8,25 @@
  * drift on what a legal retry is.
  */
 
-import { NextResponse, type NextRequest } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { NextResponse, type NextRequest } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   resubmitJob,
   type ResubmitRefusalReason,
-} from '@/lib/services/splitstep/resubmit-job';
-import { getWorkspaceContext } from '@/lib/workspace/active-workspace-server';
+} from "@/lib/services/splitstep/resubmit-job";
+import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import {
   billingWorkspaceFor,
   NO_BILLING_WORKSPACE_REFUSAL,
-} from '@/lib/workspace/types';
+} from "@/lib/workspace/types";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 /** Vendor POST plus lookups — same bound as the submit route, same reason. */
 export const maxDuration = 60;
 
-const LOG = '[splitstep-resubmit-route]';
+const LOG = "[splitstep-resubmit-route]";
 
 /**
  * Each refusal maps to the status its meaning already has elsewhere in this
@@ -47,7 +47,7 @@ const REFUSAL_STATUS: Record<ResubmitRefusalReason, number> = {
 
 export async function POST(
   _request: NextRequest,
-  { params }: { params: Promise<{ jobId: string }> }
+  { params }: { params: Promise<{ jobId: string }> },
 ) {
   const { jobId } = await params;
 
@@ -58,7 +58,7 @@ export async function POST(
   } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
+    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
   const admin = createAdminClient();
@@ -66,17 +66,26 @@ export async function POST(
   // Ownership: the job's creator, checked before anything else runs. Same 404
   // for "does not exist" and "not yours" — never confirm another user's job.
   const { data: jobRow, error: jobError } = await admin
-    .from('processing_jobs')
-    .select('id, created_by, match_id')
-    .eq('id', jobId)
+    .from("processing_jobs")
+    .select("id, created_by, match_id")
+    .eq("id", jobId)
     .maybeSingle();
 
   if (jobError) {
-    console.error(`${LOG} job lookup failed`, { jobId, error: jobError.message });
-    return NextResponse.json({ error: 'Could not load the job' }, { status: 500 });
+    console.error(`${LOG} job lookup failed`, {
+      jobId,
+      error: jobError.message,
+    });
+    return NextResponse.json(
+      { error: "Could not load the job" },
+      { status: 500 },
+    );
   }
-  if (!jobRow || (jobRow as { created_by: string | null }).created_by !== user.id) {
-    return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+  if (
+    !jobRow ||
+    (jobRow as { created_by: string | null }).created_by !== user.id
+  ) {
+    return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
 
   // Billing: the MATCH's workspace, exactly as the submit route charges it —
@@ -86,21 +95,21 @@ export async function POST(
   // they share a round trip.
   const [{ data: matchRow }, workspaceContext] = await Promise.all([
     admin
-      .from('matches')
-      .select('program_id')
-      .eq('id', (jobRow as { match_id: string }).match_id)
+      .from("matches")
+      .select("program_id")
+      .eq("id", (jobRow as { match_id: string }).match_id)
       .maybeSingle(),
     getWorkspaceContext(),
   ]);
   const billingWorkspace = billingWorkspaceFor(
     workspaceContext?.available ?? [],
-    (matchRow as { program_id: string | null } | null)?.program_id ?? null
+    (matchRow as { program_id: string | null } | null)?.program_id ?? null,
   );
 
   if (!billingWorkspace) {
     return NextResponse.json(
       { error: NO_BILLING_WORKSPACE_REFUSAL },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
@@ -114,13 +123,13 @@ export async function POST(
   if (!result.ok) {
     return NextResponse.json(
       { error: result.message, reason: result.reason },
-      { status: REFUSAL_STATUS[result.reason] }
+      { status: REFUSAL_STATUS[result.reason] },
     );
   }
 
   return NextResponse.json({
     jobId: result.jobId,
     externalJobId: result.externalJobId,
-    status: 'queued',
+    status: "queued",
   });
 }

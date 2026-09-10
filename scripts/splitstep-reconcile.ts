@@ -29,7 +29,7 @@ async function main(): Promise<void> {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) {
     console.error(
-      "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required."
+      "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.",
     );
     process.exit(1);
   }
@@ -50,11 +50,11 @@ async function main(): Promise<void> {
   });
 
   console.log(
-    `polled ${outcome.polled} job(s), ${outcome.transitioned} transitioned`
+    `polled ${outcome.polled} job(s), ${outcome.transitioned} transitioned`,
   );
   if (outcome.polled === 0) {
     console.log(
-      "nothing to poll — no job is both non-terminal, >30 min stale, and >10 min since its last poll"
+      "nothing to poll — no job is both non-terminal, >30 min stale, and >10 min since its last poll",
     );
   }
 }

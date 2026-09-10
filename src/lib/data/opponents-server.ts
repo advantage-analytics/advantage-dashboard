@@ -3,7 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { PLAYER_MEASURES } from "@/lib/data/player-measures";
 import { meanOfPresent, pct } from "@/lib/data/aggregate";
 import { normalizedPersonName } from "@/lib/data/person-name";
-import { buildScoreString, matchOutcome, shortDate, type MatchScore } from "@/lib/data/match-utils";
+import {
+  buildScoreString,
+  matchOutcome,
+  shortDate,
+  type MatchScore,
+} from "@/lib/data/match-utils";
 import { programDisplayName, teamLabel } from "@/lib/data/programs-server";
 import type { ProgramStatus } from "@/lib/data/programs-server";
 
@@ -60,7 +65,7 @@ export interface ConferenceProgram {
    * consumer deriving one from the other would be un-labelling a string this
    * file deliberately normalized.
    */
-  teamKey: 'mens' | 'womens';
+  teamKey: "mens" | "womens";
   division: string | null;
   state: string | null;
   /** Claimed or not — carried so a conference row can be handed on as a
@@ -155,7 +160,7 @@ function toProgram(row: DbProgramRow, selfId: string): ConferenceProgram {
     // dataset key — `mens` — and `teamLabel`'s own comment is the rule: the UI
     // never shows it raw.
     team: teamLabel(row.team),
-    teamKey: row.team === 'womens' ? 'womens' : 'mens',
+    teamKey: row.team === "womens" ? "womens" : "mens",
     division: row.division,
     state: row.state,
     status: row.status as ProgramStatus,
@@ -194,11 +199,11 @@ interface OpponentAttributedRow {
  */
 export function headToHeadRows<T extends OpponentAttributedRow>(
   rows: T[],
-  roster: { id: string; name: string }[]
+  roster: { id: string; name: string }[],
 ): T[] {
   const rosterIds = new Set(roster.map((p) => p.id));
   const rosterNames = new Set(
-    roster.map((p) => normalizedPersonName(p.name)).filter(Boolean)
+    roster.map((p) => normalizedPersonName(p.name)).filter(Boolean),
   );
   return rows.filter((m) => {
     if (m.opponent_player_id) return rosterIds.has(m.opponent_player_id);
@@ -218,7 +223,7 @@ export function headToHeadRows<T extends OpponentAttributedRow>(
 export function opponentPlayerMatches<T extends OpponentAttributedRow>(
   rows: T[],
   playerId: string,
-  playerName: string
+  playerName: string,
 ): T[] {
   const wanted = normalizedPersonName(playerName);
   return rows.filter(
@@ -226,7 +231,7 @@ export function opponentPlayerMatches<T extends OpponentAttributedRow>(
       m.opponent_player_id === playerId ||
       (m.opponent_player_id === null &&
         wanted !== "" &&
-        normalizedPersonName(m.player2_name) === wanted)
+        normalizedPersonName(m.player2_name) === wanted),
   );
 }
 
@@ -243,7 +248,7 @@ export function opponentPlayerMatches<T extends OpponentAttributedRow>(
  * caller needs to know which row is theirs to render it differently.
  */
 export const getConferenceTable = cache(async function getConferenceTable(
-  programId: string
+  programId: string,
 ): Promise<{
   conference: string | null;
   /** `programs.program_key` for the viewer's own program, conference or not. */
@@ -258,9 +263,10 @@ export const getConferenceTable = cache(async function getConferenceTable(
     .eq("id", programId)
     .maybeSingle();
 
-  const self = selfRow as
-    | { conference: string | null; program_key: string | null }
-    | null;
+  const self = selfRow as {
+    conference: string | null;
+    program_key: string | null;
+  } | null;
   const conference = self?.conference ?? null;
 
   // Carried out of this read whether or not a conference follows it. A caller
@@ -274,14 +280,18 @@ export const getConferenceTable = cache(async function getConferenceTable(
 
   const { data } = await supabase
     .from("programs")
-    .select("id, program_key, school_name, team, division, state, conference, status")
+    .select(
+      "id, program_key, school_name, team, division, state, conference, status",
+    )
     .eq("conference", conference)
     .order("school_name", { ascending: true });
 
   return {
     conference,
     ourProgramKey,
-    programs: ((data ?? []) as DbProgramRow[]).map((row) => toProgram(row, programId)),
+    programs: ((data ?? []) as DbProgramRow[]).map((row) =>
+      toProgram(row, programId),
+    ),
   };
 });
 
@@ -297,7 +307,7 @@ export const getConferenceTable = cache(async function getConferenceTable(
  * inventing one by name-matching is the drift this column was added to end.
  */
 export const getOpponentsPlayed = cache(async function getOpponentsPlayed(
-  programId: string
+  programId: string,
 ): Promise<ConferenceProgram[]> {
   const supabase = await createClient();
 
@@ -309,18 +319,24 @@ export const getOpponentsPlayed = cache(async function getOpponentsPlayed(
 
   const ids = [
     ...new Set(
-      ((entries ?? []) as { opponent_program_id: string }[]).map((e) => e.opponent_program_id)
+      ((entries ?? []) as { opponent_program_id: string }[]).map(
+        (e) => e.opponent_program_id,
+      ),
     ),
   ];
   if (ids.length === 0) return [];
 
   const { data } = await supabase
     .from("programs")
-    .select("id, program_key, school_name, team, division, state, conference, status")
+    .select(
+      "id, program_key, school_name, team, division, state, conference, status",
+    )
     .in("id", ids)
     .order("school_name", { ascending: true });
 
-  return ((data ?? []) as DbProgramRow[]).map((row) => toProgram(row, programId));
+  return ((data ?? []) as DbProgramRow[]).map((row) =>
+    toProgram(row, programId),
+  );
 });
 
 /**
@@ -333,33 +349,38 @@ export const getOpponentsPlayed = cache(async function getOpponentsPlayed(
  */
 export const getOpponentDetail = cache(async function getOpponentDetail(
   programId: string,
-  opponentProgramId: string
+  opponentProgramId: string,
 ): Promise<OpponentDetail | null> {
   const supabase = await createClient();
 
   const { data: programRow } = await supabase
     .from("programs")
-    .select("id, program_key, school_name, team, division, state, conference, status")
+    .select(
+      "id, program_key, school_name, team, division, state, conference, status",
+    )
     .eq("id", opponentProgramId)
     .maybeSingle();
 
   if (!programRow) return null;
   const program = programRow as DbProgramRow;
 
-  const [{ data: rosterRows }, { data: lineupRows }, { data: matchRows }] = await Promise.all([
-    // RPCs, not views. The pooled reads are SECURITY DEFINER functions with
-    // hand-written column lists — the same construct `program_roster_full` uses,
-    // and for the same reason: a policy cannot restrict columns, and a definer
-    // VIEW is the shape 20260817074053 caught leaking. Ordering happens below
-    // rather than in PostgREST, since these return a set rather than a table.
-    supabase.rpc("pooled_roster", { p_program_id: opponentProgramId }),
-    supabase.rpc("pooled_lineups", { p_opponent_program_id: opponentProgramId }),
-    supabase
-      .from("matches")
-      .select("id, player2_name, score, date, opponent_player_id")
-      .eq("program_id", programId)
-      .order("date", { ascending: false, nullsFirst: false }),
-  ]);
+  const [{ data: rosterRows }, { data: lineupRows }, { data: matchRows }] =
+    await Promise.all([
+      // RPCs, not views. The pooled reads are SECURITY DEFINER functions with
+      // hand-written column lists — the same construct `program_roster_full` uses,
+      // and for the same reason: a policy cannot restrict columns, and a definer
+      // VIEW is the shape 20260817074053 caught leaking. Ordering happens below
+      // rather than in PostgREST, since these return a set rather than a table.
+      supabase.rpc("pooled_roster", { p_program_id: opponentProgramId }),
+      supabase.rpc("pooled_lineups", {
+        p_opponent_program_id: opponentProgramId,
+      }),
+      supabase
+        .from("matches")
+        .select("id, player2_name, score, date, opponent_player_id")
+        .eq("program_id", programId)
+        .order("date", { ascending: false, nullsFirst: false }),
+    ]);
 
   const roster: OpponentRosterPlayer[] = (
     (rosterRows ?? []) as {
@@ -385,7 +406,9 @@ export const getOpponentDetail = cache(async function getOpponentDetail(
       return a.lineupSpot - b.lineupSpot;
     });
 
-  const entryIds = ((lineupRows ?? []) as { entry_id: string }[]).map((r) => r.entry_id);
+  const entryIds = ((lineupRows ?? []) as { entry_id: string }[]).map(
+    (r) => r.entry_id,
+  );
 
   // Scores for those lines. `pooled_results` keys on `event_entry_id` and
   // deliberately returns no match id, so nothing reachable from here can join to
@@ -395,7 +418,10 @@ export const getOpponentDetail = cache(async function getOpponentDetail(
     : { data: [] as { event_entry_id: string; score: MatchScore | null }[] };
 
   const scoreByEntry = new Map<string, MatchScore | null>();
-  for (const row of (resultRows ?? []) as { event_entry_id: string; score: MatchScore | null }[]) {
+  for (const row of (resultRows ?? []) as {
+    event_entry_id: string;
+    score: MatchScore | null;
+  }[]) {
     scoreByEntry.set(row.event_entry_id, row.score);
   }
 
@@ -425,7 +451,8 @@ export const getOpponentDetail = cache(async function getOpponentDetail(
     // reads down the order it was played rather than in insertion order.
     .sort(
       (a, b) =>
-        b.startsOn.localeCompare(a.startsOn) || (a.slot ?? "").localeCompare(b.slot ?? "")
+        b.startsOn.localeCompare(a.startsOn) ||
+        (a.slot ?? "").localeCompare(b.slot ?? ""),
     );
 
   // Head to head. The identity-or-name rule, and why it is spelled the way it
@@ -438,15 +465,14 @@ export const getOpponentDetail = cache(async function getOpponentDetail(
       date: string;
       opponent_player_id: string | null;
     }[],
-    roster
-  )
-    .map((m) => ({
-      matchId: m.id,
-      date: shortDate(m.date),
-      opponentName: (m.player2_name ?? "").trim(),
-      score: buildScoreString(m.score, true),
-      won: matchOutcome(m.score, true),
-    }));
+    roster,
+  ).map((m) => ({
+    matchId: m.id,
+    date: shortDate(m.date),
+    opponentName: (m.player2_name ?? "").trim(),
+    score: buildScoreString(m.score, true),
+    won: matchOutcome(m.score, true),
+  }));
 
   let wins = 0;
   let losses = 0;
@@ -485,112 +511,125 @@ export const getOpponentDetail = cache(async function getOpponentDetail(
  * show a coach and an illegitimate thing to show without its denominator, and
  * making the count optional would make omitting it the easy path.
  */
-export const getOpponentPlayerProfile = cache(async function getOpponentPlayerProfile(
-  programId: string,
-  playerId: string
-): Promise<OpponentPlayerProfile | null> {
-  const supabase = await createClient();
+export const getOpponentPlayerProfile = cache(
+  async function getOpponentPlayerProfile(
+    programId: string,
+    playerId: string,
+  ): Promise<OpponentPlayerProfile | null> {
+    const supabase = await createClient();
 
-  const { data: playerRows } = await supabase.rpc("pooled_player", {
-    p_player_id: playerId,
-  });
+    const { data: playerRows } = await supabase.rpc("pooled_player", {
+      p_player_id: playerId,
+    });
 
-  const playerRow = ((playerRows ?? []) as unknown[])[0];
-  if (!playerRow) return null;
-  const player = playerRow as {
-    id: string;
-    program_id: string;
-    first_name: string;
-    last_name: string;
-    class_year: string | null;
-    lineup_spot: number | null;
-  };
-  const name = `${player.first_name} ${player.last_name}`.trim();
-
-  const { data: programRow } = await supabase
-    .from("programs")
-    .select("school_name, team")
-    .eq("id", player.program_id)
-    .maybeSingle();
-
-  // This program's matches against them.
-  //
-  // `opponent_player_id` where the upload named their program, the typed name
-  // everywhere else. NOT `player2_id` — that column is one arm of the `matches`
-  // SELECT policy, so an opponent id there would hand them this match and both
-  // players' statistics the day they claim the profile (20260823090000).
-  const { data: matchRows } = await supabase
-    .from("matches")
-    .select("id, opponent_player_id, player2_name, date, opponent_hand, opponent_backhand")
-    .eq("program_id", programId)
-    .order("date", { ascending: false, nullsFirst: false });
-
-  const matches = opponentPlayerMatches(
-    (matchRows ?? []) as {
+    const playerRow = ((playerRows ?? []) as unknown[])[0];
+    if (!playerRow) return null;
+    const player = playerRow as {
       id: string;
-      opponent_player_id: string | null;
-      player2_name: string | null;
-      date: string;
-      opponent_hand: string | null;
-      opponent_backhand: string | null;
-    }[],
-    playerId,
-    name
-  );
+      program_id: string;
+      first_name: string;
+      last_name: string;
+      class_year: string | null;
+      lineup_spot: number | null;
+    };
+    const name = `${player.first_name} ${player.last_name}`.trim();
 
-  const measures: OpponentMeasure[] = PLAYER_MEASURES.map((measure) => ({
-    key: measure.key,
-    label: measure.label,
-    hint: measure.hint,
-    value: null,
-  }));
+    const { data: programRow } = await supabase
+      .from("programs")
+      .select("school_name, team")
+      .eq("id", player.program_id)
+      .maybeSingle();
 
-  if (matches.length > 0) {
-    const columns = ["match_id", "is_player1", ...PLAYER_MEASURES.map((m) => m.key)];
-    const { data: statRows } = await supabase
-      .from("match_stats_with_percentages")
-      .select(columns.join(", "))
-      // The opponent is player two. This is the entire trick: the row has been
-      // sitting beside our own in every processed match all along.
-      .eq("is_player1", false)
-      .in(
+    // This program's matches against them.
+    //
+    // `opponent_player_id` where the upload named their program, the typed name
+    // everywhere else. NOT `player2_id` — that column is one arm of the `matches`
+    // SELECT policy, so an opponent id there would hand them this match and both
+    // players' statistics the day they claim the profile (20260823090000).
+    const { data: matchRows } = await supabase
+      .from("matches")
+      .select(
+        "id, opponent_player_id, player2_name, date, opponent_hand, opponent_backhand",
+      )
+      .eq("program_id", programId)
+      .order("date", { ascending: false, nullsFirst: false });
+
+    const matches = opponentPlayerMatches(
+      (matchRows ?? []) as {
+        id: string;
+        opponent_player_id: string | null;
+        player2_name: string | null;
+        date: string;
+        opponent_hand: string | null;
+        opponent_backhand: string | null;
+      }[],
+      playerId,
+      name,
+    );
+
+    const measures: OpponentMeasure[] = PLAYER_MEASURES.map((measure) => ({
+      key: measure.key,
+      label: measure.label,
+      hint: measure.hint,
+      value: null,
+    }));
+
+    if (matches.length > 0) {
+      const columns = [
         "match_id",
-        matches.map((m) => m.id)
-      );
+        "is_player1",
+        ...PLAYER_MEASURES.map((m) => m.key),
+      ];
+      const { data: statRows } = await supabase
+        .from("match_stats_with_percentages")
+        .select(columns.join(", "))
+        // The opponent is player two. This is the entire trick: the row has been
+        // sitting beside our own in every processed match all along.
+        .eq("is_player1", false)
+        .in(
+          "match_id",
+          matches.map((m) => m.id),
+        );
 
-    const byMatch = new Map<string, Record<string, unknown>>();
-    for (const row of (statRows ?? []) as unknown as Record<string, unknown>[]) {
-      byMatch.set(String(row.match_id), row);
+      const byMatch = new Map<string, Record<string, unknown>>();
+      for (const row of (statRows ?? []) as unknown as Record<
+        string,
+        unknown
+      >[]) {
+        byMatch.set(String(row.match_id), row);
+      }
+
+      for (const measure of measures) {
+        // `meanOfPresent`, never `?? 0`. A SplitStep-derived match withholds the
+        // whole return family, and averaging that absence in as a zero would
+        // publish "they win no return points" — a specific false claim about a
+        // real person, on a page a coach plans around.
+        measure.value = meanOfPresent(
+          matches.map((m) =>
+            pct(byMatch.get(m.id)?.[measure.key] as string | number | null),
+          ),
+          0,
+        );
+      }
     }
 
-    for (const measure of measures) {
-      // `meanOfPresent`, never `?? 0`. A SplitStep-derived match withholds the
-      // whole return family, and averaging that absence in as a zero would
-      // publish "they win no return points" — a specific false claim about a
-      // real person, on a page a coach plans around.
-      measure.value = meanOfPresent(
-        matches.map((m) => pct(byMatch.get(m.id)?.[measure.key] as string | number | null)),
-        0
-      );
-    }
-  }
+    const mostRecent = matches[0];
 
-  const mostRecent = matches[0];
-
-  return {
-    playerId: player.id,
-    name,
-    classYear: player.class_year,
-    lineupSpot: player.lineup_spot,
-    programName: programRow
-      ? programDisplayName(
-          (programRow as { school_name: string }).school_name,
-          (programRow as { team: string }).team
-        )
-      : "",
-    matchesAgainst: matches.length,
-    hand: mostRecent?.opponent_hand ?? null,
-    backhand: mostRecent?.opponent_backhand ?? null,
-    measures,
-  };
-});
+    return {
+      playerId: player.id,
+      name,
+      classYear: player.class_year,
+      lineupSpot: player.lineup_spot,
+      programName: programRow
+        ? programDisplayName(
+            (programRow as { school_name: string }).school_name,
+            (programRow as { team: string }).team,
+          )
+        : "",
+      matchesAgainst: matches.length,
+      hand: mostRecent?.opponent_hand ?? null,
+      backhand: mostRecent?.opponent_backhand ?? null,
+      measures,
+    };
+  },
+);

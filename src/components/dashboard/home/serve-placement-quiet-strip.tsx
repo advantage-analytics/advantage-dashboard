@@ -92,7 +92,10 @@ function EmptyCourtBar({ label }: { label: string }) {
 
 function Legend({ muted = false }: { muted?: boolean }) {
   return (
-    <span className="flex items-center gap-3" style={muted ? { opacity: 0.6 } : undefined}>
+    <span
+      className="flex items-center gap-3"
+      style={muted ? { opacity: 0.6 } : undefined}
+    >
       {SEGMENT_LABEL.map((seg, i) => (
         <span key={seg} className="flex items-center gap-1.5">
           <span
@@ -163,7 +166,10 @@ export function ServePlacementQuietStrip({
   const serveCount = courts ? courts.deuce.total + courts.ad.total : 0;
 
   return (
-    <div className="surface-card flex flex-col gap-3" style={{ padding: "var(--pad-card)" }}>
+    <div
+      className="surface-card flex flex-col gap-3"
+      style={{ padding: "var(--pad-card)" }}
+    >
       <div className="flex items-center gap-2.5">
         <span className="eyebrow">Serve placement</span>
         <div className="flex-1" />
@@ -172,7 +178,7 @@ export function ServePlacementQuietStrip({
         {courts && (
           <Link
             href={statisticsHref}
-            className="whitespace-nowrap text-[11px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+            className="text-[11px] whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
           >
             Placement view
           </Link>
@@ -186,13 +192,17 @@ export function ServePlacementQuietStrip({
           </span>
           <div className="flex flex-col gap-4">
             {COURTS.map((court) => (
-              <CourtBar key={court.label} label={court.label} read={courts[court.key]} />
+              <CourtBar
+                key={court.label}
+                label={court.label}
+                read={courts[court.key]}
+              />
             ))}
           </div>
           <div className="flex items-center gap-3.5 border-t border-[var(--border-hairline)] pt-3">
             <Legend />
             <div className="flex-1" />
-            <span className="whitespace-nowrap text-[11px] text-[var(--ink-600)]">
+            <span className="text-[11px] whitespace-nowrap text-[var(--ink-600)]">
               Last <span className="tabular">{matchCount}</span> ·{" "}
               <span className="tabular">{serveCount}</span> serves
             </span>
@@ -226,8 +236,10 @@ export function ServePlacementQuietStrip({
           </div>
           <span className="text-micro" style={{ textWrap: "pretty" }}>
             {awaitingReport
-              ? (emptyCopy?.awaiting ?? "Your serve map fills in when the first report lands.")
-              : (emptyCopy?.first ?? "Where your first serves land, after your first match.")}
+              ? (emptyCopy?.awaiting ??
+                "Your serve map fills in when the first report lands.")
+              : (emptyCopy?.first ??
+                "Where your first serves land, after your first match.")}
           </span>
         </>
       )}

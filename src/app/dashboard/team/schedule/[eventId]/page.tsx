@@ -68,7 +68,7 @@ export default async function EventPage({
       totals={totals}
       history={opponentHistoryFor(
         opponentDualHistory(schedule),
-        detail.event.name
+        detail.event.name,
       )}
       meetings={opponentMeetings(schedule, detail.event.name, {
         excludeEventId: eventId,
@@ -93,6 +93,6 @@ function readyMatchIds(detail: EventDetail): string[] {
   return detail.entries.flatMap((entry) =>
     entry.matches
       .filter((match) => isAnalysisReady(match.status))
-      .map((match) => match.id)
+      .map((match) => match.id),
   );
 }

@@ -50,7 +50,8 @@ export function ProfileActions({
 }) {
   const [editing, setEditing] = useState<RosterMember | null>(null);
 
-  const canEditPlayer = mode === "staff" && member !== null && member.role === "player";
+  const canEditPlayer =
+    mode === "staff" && member !== null && member.role === "player";
 
   return (
     <div className="flex shrink-0 items-center gap-2">

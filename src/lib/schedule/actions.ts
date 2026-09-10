@@ -59,7 +59,7 @@ export interface LineupLineInput {
 async function resolveOpponentProgramId(
   supabase: Awaited<ReturnType<typeof createClient>>,
   programKey: string,
-  ourProgramId: string
+  ourProgramId: string,
 ): Promise<string | null> {
   const { data: program } = await supabase
     .from("programs")
@@ -147,13 +147,14 @@ function isError(value: unknown): value is ActionError {
 }
 
 export async function createDual(
-  input: CreateDualInput
+  input: CreateDualInput,
 ): Promise<{ eventId: string } | ActionError> {
   const auth = await requireStaff();
   if (isError(auth)) return auth;
 
   if (!input.opponent.trim()) return { error: "Name the opponent first." };
-  if (input.lines.length === 0) return { error: "A dual needs at least one line." };
+  if (input.lines.length === 0)
+    return { error: "A dual needs at least one line." };
 
   const supabase = await createClient();
 
@@ -166,7 +167,7 @@ export async function createDual(
     ? await resolveOpponentProgramId(
         supabase,
         input.opponentProgramKey,
-        auth.programId
+        auth.programId,
       )
     : null;
 
@@ -193,20 +194,22 @@ export async function createDual(
     return { error: eventError?.message ?? "Couldn't create the dual." };
   }
 
-  const { error: entryError } = await supabase.from("program_event_entries").insert(
-    input.lines.map((line) => ({
-      event_id: event.id,
-      program_id: auth.programId,
-      discipline: line.discipline,
-      slot: line.slot,
-      position: line.position,
-      player_user_ids: line.playerUserIds,
-      player_labels: line.playerLabels,
-      opponent_labels: line.opponentLabels,
-      opponent_program_id: opponentProgramId,
-      forfeit: line.forfeit ?? null,
-    }))
-  );
+  const { error: entryError } = await supabase
+    .from("program_event_entries")
+    .insert(
+      input.lines.map((line) => ({
+        event_id: event.id,
+        program_id: auth.programId,
+        discipline: line.discipline,
+        slot: line.slot,
+        position: line.position,
+        player_user_ids: line.playerUserIds,
+        player_labels: line.playerLabels,
+        opponent_labels: line.opponentLabels,
+        opponent_program_id: opponentProgramId,
+        forfeit: line.forfeit ?? null,
+      })),
+    );
 
   if (entryError) {
     // Roll the event back rather than leaving a dual with no lines, which reads
@@ -240,8 +243,8 @@ export async function createDual(
           } catch {
             // See above: a refusal here costs an identity, never the fixture.
           }
-        }
-      )
+        },
+      ),
     );
   }
 
@@ -250,7 +253,7 @@ export async function createDual(
 }
 
 export async function createTournament(
-  input: CreateTournamentInput
+  input: CreateTournamentInput,
 ): Promise<{ eventId: string } | ActionError> {
   const auth = await requireStaff();
   if (isError(auth)) return auth;
@@ -298,7 +301,7 @@ export async function createTournament(
           seed: entry.seed,
           player_user_ids: entry.playerUserIds,
           player_labels: entry.playerLabels,
-        }))
+        })),
       );
 
     if (entryError) {
@@ -358,7 +361,7 @@ async function applyEntryPlan(
   supabase: Awaited<ReturnType<typeof createClient>>,
   plan: EntryPlan,
   event: { id: string; programId: string },
-  columns: EntryColumns
+  columns: EntryColumns,
 ): Promise<ActionError | null> {
   if (plan.delete.length > 0) {
     const { error } = await supabase
@@ -366,7 +369,7 @@ async function applyEntryPlan(
       .delete()
       .in(
         "id",
-        plan.delete.map((row) => row.id)
+        plan.delete.map((row) => row.id),
       )
       // Scoped again at the write, not just at the read that produced the plan.
       // The ids came from a read this action did itself, so this is belt and
@@ -391,7 +394,7 @@ async function applyEntryPlan(
         event_id: event.id,
         program_id: event.programId,
         ...columns(row.row),
-      }))
+      })),
     );
     if (error) return { error: error.message };
   }
@@ -405,12 +408,13 @@ function revalidateEvent(eventId: string): void {
 }
 
 export async function updateDual(
-  input: UpdateDualInput
+  input: UpdateDualInput,
 ): Promise<{ eventId: string } | ActionError> {
   const auth = await requireStaff();
   if (isError(auth)) return auth;
 
-  if (input.lines.length === 0) return { error: "A dual needs at least one line." };
+  if (input.lines.length === 0)
+    return { error: "A dual needs at least one line." };
 
   // Scoped on BOTH ids, and never on the client's `eventId` alone:
   // `getEventDetail` reads `program_events` filtered by `program_id` as well,
@@ -419,7 +423,8 @@ export async function updateDual(
   // caller poking at ids deserves.
   const detail = await getEventDetail(auth.programId, input.eventId);
   if (!detail) return { error: "That event no longer exists." };
-  if (detail.event.kind !== "dual") return { error: "That event isn't a dual." };
+  if (detail.event.kind !== "dual")
+    return { error: "That event isn't a dual." };
 
   const plan = planEntryChanges(detail.entries, input.lines);
   if (plan.refuse.length > 0) return { error: plan.refuse[0].reason };
@@ -464,7 +469,7 @@ export async function updateDual(
         opponent_program_id: opponentProgramId,
         forfeit: line.forfeit ?? null,
       };
-    }
+    },
   );
   if (failure) return failure;
 
@@ -473,7 +478,7 @@ export async function updateDual(
 }
 
 export async function updateTournament(
-  input: UpdateTournamentInput
+  input: UpdateTournamentInput,
 ): Promise<{ eventId: string } | ActionError> {
   const auth = await requireStaff();
   if (isError(auth)) return auth;
@@ -527,7 +532,7 @@ export async function updateTournament(
         player_user_ids: entry.playerUserIds,
         player_labels: entry.playerLabels,
       };
-    }
+    },
   );
   if (failure) return failure;
 
@@ -545,7 +550,7 @@ export async function updateTournament(
  * entry: one entry, several matches, one per row of the run.
  */
 export async function recordResult(
-  input: RecordResultInput
+  input: RecordResultInput,
 ): Promise<{ matchId: string } | ActionError> {
   const auth = await requireStaff();
   if (isError(auth)) return auth;
@@ -557,7 +562,7 @@ export async function recordResult(
   const { data: entry, error: entryError } = await supabase
     .from("program_event_entries")
     .select(
-      "id, event_id, program_id, slot, player_labels, player_user_ids, discipline, forfeit"
+      "id, event_id, program_id, slot, player_labels, player_user_ids, discipline, forfeit",
     )
     .eq("id", input.entryId)
     .single();
@@ -571,7 +576,9 @@ export async function recordResult(
   // already decided, and the two would disagree everywhere one of them is
   // counted. Clear the forfeit first if the line was actually played.
   if (entry.forfeit) {
-    return { error: "This line is forfeited. Clear the forfeit before adding a score." };
+    return {
+      error: "This line is forfeited. Clear the forfeit before adding a score.",
+    };
   }
 
   const { data: event } = await supabase
@@ -673,7 +680,10 @@ export async function recordResult(
    * (its court), so it has no later round to clobber.
    */
   const syncEntryOpponent = async () => {
-    if (input.opponentSchool === undefined && input.opponentLabels.length === 0) {
+    if (
+      input.opponentSchool === undefined &&
+      input.opponentLabels.length === 0
+    ) {
       return;
     }
     await supabase
@@ -811,7 +821,7 @@ export interface OpponentRosterCandidate {
  * never a policy, never a join that widens access (20260823090000's rule).
  */
 export async function opponentRosterForDual(
-  opponentProgramKey: string
+  opponentProgramKey: string,
 ): Promise<{ candidates: OpponentRosterCandidate[] } | ActionError> {
   const auth = await requireStaff();
   if (isError(auth)) return auth;
@@ -821,7 +831,7 @@ export async function opponentRosterForDual(
   const opponentProgramId = await resolveOpponentProgramId(
     supabase,
     opponentProgramKey,
-    auth.programId
+    auth.programId,
   );
   // A key that resolves to nothing, or to ourselves, has no roster to offer.
   // Same non-answer as an opted-out pool: an empty list, never an error.
@@ -900,7 +910,7 @@ export async function saveOpponentPlayer(input: {
   const opponentProgramId = await resolveOpponentProgramId(
     supabase,
     input.opponentProgramKey,
-    auth.programId
+    auth.programId,
   );
   if (!opponentProgramId) return { saved: false };
 
@@ -912,7 +922,7 @@ export async function saveOpponentPlayer(input: {
         p_opponent_program_id: opponentProgramId,
         p_first_name: parts.slice(0, -1).join(" "),
         p_last_name: parts[parts.length - 1],
-      }
+      },
     );
     return { saved: !error && Boolean(contributed) };
   } catch {
@@ -935,7 +945,7 @@ export async function saveOpponentPlayer(input: {
  */
 export async function setForfeit(
   entryId: string,
-  side: "ours" | "theirs" | null
+  side: "ours" | "theirs" | null,
 ): Promise<{ ok: true } | ActionError> {
   const auth = await requireStaff();
   if (isError(auth)) return auth;
@@ -987,7 +997,8 @@ export async function setForfeit(
 
     if (existingMatches && existingMatches.length > 0) {
       return {
-        error: "This line already has a match recorded. Remove it before forfeiting.",
+        error:
+          "This line already has a match recorded. Remove it before forfeiting.",
       };
     }
   }

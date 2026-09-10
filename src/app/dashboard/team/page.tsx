@@ -110,7 +110,6 @@ export default async function TeamHomePage() {
   const awaitingReport =
     matchCount > 0 && analyzedCount === 0 && firstReport?.state === "progress";
 
-
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]">
       {/* The personal Home's column exactly — `px-14 pt-5 pb-8`, 16px between
@@ -178,7 +177,11 @@ export default async function TeamHomePage() {
             ) : (
               <DualSheetEmpty canSchedule={isStaff} />
             )}
-            <TopMovers movers={movers} rosterSize={rosterSize} canManage={isStaff} />
+            <TopMovers
+              movers={movers}
+              rosterSize={rosterSize}
+              canManage={isStaff}
+            />
           </div>
 
           <div className="flex flex-col gap-5">
@@ -209,13 +212,21 @@ export default async function TeamHomePage() {
               </FocusCard>
             ) : (
               matchCount === 0 && (
-                <FocusCard footer={{ left: "One thing to work on, after the first dual." }}>
+                <FocusCard
+                  footer={{
+                    left: "One thing to work on, after the first dual.",
+                  }}
+                >
                   <FocusEmpty />
                 </FocusCard>
               )
             )}
             <CourtRecord record={courtRecord} />
-            <DualHistory rows={dualHistory} form={dualForm} teamName={active.name} />
+            <DualHistory
+              rows={dualHistory}
+              form={dualForm}
+              teamName={active.name}
+            />
           </div>
         </div>
 

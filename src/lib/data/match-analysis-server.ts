@@ -11,15 +11,15 @@
  * round-trips for one screen.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   type MatchAnalysis,
   importedAnalysis,
   manualAnalysis,
   pipelinePercent,
   resolveAnalysisStatus,
-} from './match-analysis';
-import { formatClock } from '@/components/dashboard/matches/new-match-wizard/utils';
+} from "./match-analysis";
+import { formatClock } from "@/components/dashboard/matches/new-match-wizard/utils";
 
 interface JobRow {
   id: string;
@@ -47,7 +47,7 @@ interface JobRow {
 export async function loadMatchAnalysis(
   supabase: SupabaseClient,
   matchIds: string[],
-  options: { reap?: boolean } = {}
+  options: { reap?: boolean } = {},
 ): Promise<Map<string, MatchAnalysis>> {
   const out = new Map<string, MatchAnalysis>();
   if (matchIds.length === 0) return out;
@@ -76,29 +76,29 @@ export async function loadMatchAnalysis(
   // page in the app, twice per request on the matches list. A read path that
   // quietly writes is only safe while its callers are few enough to enumerate.
   if (options.reap) {
-    const { error: reapError } = await supabase.rpc('reap_stalled_uploads');
+    const { error: reapError } = await supabase.rpc("reap_stalled_uploads");
     if (reapError) {
       // Never fatal — the list is more useful slightly stale than not at all.
-      console.warn('[match-analysis] could not reap stalled uploads', {
+      console.warn("[match-analysis] could not reap stalled uploads", {
         error: reapError.message,
       });
     }
   }
 
   const { data, error } = await supabase
-    .from('processing_jobs')
+    .from("processing_jobs")
     .select(
-      'id, match_id, status, upload_progress_percent, error_message, billable_seconds, external_job_id, created_at, updated_at, derivation_version'
+      "id, match_id, status, upload_progress_percent, error_message, billable_seconds, external_job_id, created_at, updated_at, derivation_version",
     )
-    .in('match_id', matchIds)
+    .in("match_id", matchIds)
     // Newest first, so the reduce below keeps the latest attempt per match.
-    .order('created_at', { ascending: false });
+    .order("created_at", { ascending: false });
 
   if (error) {
     // Not fatal. A matches list that renders without analysis state is far
     // better than one that does not render, and the mock this replaces could
     // not fail at all — so a failure here must not become a page crash.
-    console.error('[match-analysis] could not load processing jobs', {
+    console.error("[match-analysis] could not load processing jobs", {
       error: error.message,
     });
     return out;
@@ -111,14 +111,14 @@ export async function loadMatchAnalysis(
 
     const status = resolveAnalysisStatus(row.status, row.derivation_version);
     if (!status) {
-      console.warn('[match-analysis] unmapped processing_jobs.status', {
+      console.warn("[match-analysis] unmapped processing_jobs.status", {
         status: row.status,
       });
       continue;
     }
 
     const uploadPercent =
-      status === 'uploading' && row.upload_progress_percent !== null
+      status === "uploading" && row.upload_progress_percent !== null
         ? row.upload_progress_percent
         : undefined;
 
@@ -137,7 +137,7 @@ export async function loadMatchAnalysis(
       // make a healthy job look stalled the second it landed.
       jobId: row.id,
       updatedAt: row.updated_at,
-      providerId: 'splitstep',
+      providerId: "splitstep",
       jobReference: row.external_job_id ?? undefined,
       window: formatWindow(row.billable_seconds),
       failNote: row.error_message ?? undefined,
@@ -155,13 +155,16 @@ export async function loadMatchAnalysis(
  */
 export function analysisFor(
   jobs: Map<string, MatchAnalysis>,
-  match: { id: string; sourceProvider?: string; verificationStatus?: string }
+  match: { id: string; sourceProvider?: string; verificationStatus?: string },
 ): MatchAnalysis {
   const job = jobs.get(match.id);
   if (job) return job;
 
   if (!match.sourceProvider) return manualAnalysis();
-  return importedAnalysis(match.sourceProvider, Boolean(match.verificationStatus));
+  return importedAnalysis(
+    match.sourceProvider,
+    Boolean(match.verificationStatus),
+  );
 }
 
 /**

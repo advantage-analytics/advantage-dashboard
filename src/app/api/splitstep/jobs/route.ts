@@ -18,26 +18,26 @@
  * the reservation hands it back.
  */
 
-import { NextResponse, after, type NextRequest } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { adoptOrphanedDeliveries } from '@/lib/services/splitstep/adopt-deliveries';
+import { NextResponse, after, type NextRequest } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { adoptOrphanedDeliveries } from "@/lib/services/splitstep/adopt-deliveries";
 import {
   isDownloadFailure,
   resubmitJob,
-} from '@/lib/services/splitstep/resubmit-job';
-import { buildSplitStepJobRequest } from '@/lib/services/splitstep/job-request';
-import { parseWebhookPayload } from '@/lib/services/splitstep/webhook-payload';
-import { resolveSplitstepDeploymentConfig } from '@/lib/services/splitstep/deployment-config';
-import { createVideoUrlStrategy } from '@/lib/services/splitstep/video-url';
-import { releaseQuota, reserveQuota } from '@/lib/services/splitstep/quota';
-import { getWorkspaceContext } from '@/lib/workspace/active-workspace-server';
+} from "@/lib/services/splitstep/resubmit-job";
+import { buildSplitStepJobRequest } from "@/lib/services/splitstep/job-request";
+import { parseWebhookPayload } from "@/lib/services/splitstep/webhook-payload";
+import { resolveSplitstepDeploymentConfig } from "@/lib/services/splitstep/deployment-config";
+import { createVideoUrlStrategy } from "@/lib/services/splitstep/video-url";
+import { releaseQuota, reserveQuota } from "@/lib/services/splitstep/quota";
+import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import {
   billingWorkspaceFor,
   NO_BILLING_WORKSPACE_REFUSAL,
-} from '@/lib/workspace/types';
+} from "@/lib/workspace/types";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 /**
  * Talking to the vendor is a network call with no published latency guarantee.
@@ -46,7 +46,7 @@ export const runtime = 'nodejs';
  */
 export const maxDuration = 60;
 
-const LOG = '[splitstep-submit]';
+const LOG = "[splitstep-submit]";
 
 interface SubmitBody {
   jobId?: string;
@@ -80,20 +80,20 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
+    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
   let body: SubmitBody;
   try {
     body = (await request.json()) as SubmitBody;
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   const { jobId, initialTopPlayerIsPlayer1, adScoring, fixedCamera } = body;
 
   if (!jobId) {
-    return NextResponse.json({ error: 'jobId is required' }, { status: 400 });
+    return NextResponse.json({ error: "jobId is required" }, { status: 400 });
   }
 
   // The orientation check used to sit here, before anything was loaded. It has
@@ -109,8 +109,8 @@ export async function POST(request: NextRequest) {
       missing: config.missing,
     });
     return NextResponse.json(
-      { error: 'Analysis is not configured on this deployment.' },
-      { status: 503 }
+      { error: "Analysis is not configured on this deployment." },
+      { status: 503 },
     );
   }
 
@@ -118,22 +118,28 @@ export async function POST(request: NextRequest) {
 
   // 2. Load the job and prove the caller owns it.
   const { data: jobRow, error: jobError } = await admin
-    .from('processing_jobs')
+    .from("processing_jobs")
     .select(
-      'id, match_id, created_by, status, external_job_id, video_object_key, start_time_seconds, end_time_seconds, attempt_count, initial_top_player_is_player1, ad_scoring, fixed_camera'
+      "id, match_id, created_by, status, external_job_id, video_object_key, start_time_seconds, end_time_seconds, attempt_count, initial_top_player_is_player1, ad_scoring, fixed_camera",
     )
-    .eq('id', jobId)
+    .eq("id", jobId)
     .maybeSingle();
 
   if (jobError) {
-    console.error(`${LOG} job lookup failed`, { jobId, error: jobError.message });
-    return NextResponse.json({ error: 'Could not load the job' }, { status: 500 });
+    console.error(`${LOG} job lookup failed`, {
+      jobId,
+      error: jobError.message,
+    });
+    return NextResponse.json(
+      { error: "Could not load the job" },
+      { status: 500 },
+    );
   }
 
   // Same 404 for "does not exist" and "not yours" — never confirm the existence
   // of another user's job.
   if (!jobRow || jobRow.created_by !== user.id) {
-    return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+    return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
 
   const job = jobRow as {
@@ -154,49 +160,50 @@ export async function POST(request: NextRequest) {
   // 3. Is it actually submittable?
   if (job.external_job_id) {
     return NextResponse.json(
-      { error: 'This match has already been submitted for analysis.' },
-      { status: 409 }
+      { error: "This match has already been submitted for analysis." },
+      { status: 409 },
     );
   }
 
-  if (job.status !== 'uploaded') {
+  if (job.status !== "uploaded") {
     return NextResponse.json(
       {
         error:
-          job.status === 'uploading'
-            ? 'The video is still uploading. Try again once it finishes.'
+          job.status === "uploading"
+            ? "The video is still uploading. Try again once it finishes."
             : `This job is ${job.status} and cannot be submitted.`,
       },
-      { status: 409 }
+      { status: 409 },
     );
   }
 
   if (!job.video_object_key) {
     return NextResponse.json(
-      { error: 'No video is attached to this job.' },
-      { status: 409 }
+      { error: "No video is attached to this job." },
+      { status: 409 },
     );
   }
 
   if (job.start_time_seconds === null || job.end_time_seconds === null) {
     return NextResponse.json(
-      { error: 'This job has no trim window set.' },
-      { status: 409 }
+      { error: "This job has no trim window set." },
+      { status: 409 },
     );
   }
 
-
   // 4. Match metadata — players, scores, and the singles/doubles gate.
   const { data: matchRow, error: matchError } = await admin
-    .from('matches')
-    .select('id, player1_name, player2_name, score, match_type, program_id, format, fixed_camera, initial_top_player_is_player1')
-    .eq('id', job.match_id)
+    .from("matches")
+    .select(
+      "id, player1_name, player2_name, score, match_type, program_id, format, fixed_camera, initial_top_player_is_player1",
+    )
+    .eq("id", job.match_id)
     .maybeSingle();
 
   if (matchError || !matchRow) {
     return NextResponse.json(
-      { error: 'Could not load the match for this job.' },
-      { status: 500 }
+      { error: "Could not load the match for this job." },
+      { status: 500 },
     );
   }
 
@@ -238,26 +245,27 @@ export async function POST(request: NextRequest) {
   // job row is what the last attempt used; the match row is what was originally
   // answered.
   const effectiveTopPlayer =
-    typeof initialTopPlayerIsPlayer1 === 'boolean'
+    typeof initialTopPlayerIsPlayer1 === "boolean"
       ? initialTopPlayerIsPlayer1
-      : job.initial_top_player_is_player1 ?? match.initial_top_player_is_player1;
+      : (job.initial_top_player_is_player1 ??
+        match.initial_top_player_is_player1);
   const effectiveAdScoring =
-    typeof adScoring === 'boolean'
+    typeof adScoring === "boolean"
       ? adScoring
-      : job.ad_scoring ?? match.format?.ad_scoring;
+      : (job.ad_scoring ?? match.format?.ad_scoring);
   const effectiveFixedCamera =
-    typeof fixedCamera === 'boolean'
+    typeof fixedCamera === "boolean"
       ? fixedCamera
-      : job.fixed_camera ?? match.fixed_camera;
+      : (job.fixed_camera ?? match.fixed_camera);
 
-  if (typeof effectiveTopPlayer !== 'boolean') {
+  if (typeof effectiveTopPlayer !== "boolean") {
     // Refused rather than defaulted. A default here is a coin flip on which
     // player every statistic belongs to. Reaching this means neither the job
     // nor the match recorded an orientation, which is a match created before
     // those columns existed — a human has to answer again.
     return NextResponse.json(
-      { error: 'initialTopPlayerIsPlayer1 is required and must be a boolean' },
-      { status: 400 }
+      { error: "initialTopPlayerIsPlayer1 is required and must be a boolean" },
+      { status: 400 },
     );
   }
 
@@ -266,7 +274,7 @@ export async function POST(request: NextRequest) {
   //    top-player-first ordering of SetGameScores.
   const built = buildSplitStepJobRequest({
     matchId: job.match_id,
-    videoUrl: '',
+    videoUrl: "",
     allowEmptyVideoUrl: true,
     webhookUrl: config.webhookUrl,
     player1Name: match.player1_name,
@@ -287,14 +295,14 @@ export async function POST(request: NextRequest) {
 
   if (!built.ok) {
     return NextResponse.json(
-      { error: 'This match cannot be analysed yet.', details: built.errors },
-      { status: 422 }
+      { error: "This match cannot be analysed yet.", details: built.errors },
+      { status: 422 },
     );
   }
 
   const vendorRequest = built.request;
   const billableSeconds = Math.ceil(
-    vendorRequest.EndTime - vendorRequest.StartTime
+    vendorRequest.EndTime - vendorRequest.StartTime,
   );
 
   // 6. Reserve the allowance. Refuses here, before a job is spent.
@@ -309,13 +317,13 @@ export async function POST(request: NextRequest) {
   const workspaceContext = await getWorkspaceContext();
   const billingWorkspace = billingWorkspaceFor(
     workspaceContext?.available ?? [],
-    match.program_id
+    match.program_id,
   );
 
   if (!billingWorkspace) {
     return NextResponse.json(
       { error: NO_BILLING_WORKSPACE_REFUSAL },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
@@ -329,12 +337,12 @@ export async function POST(request: NextRequest) {
 
   if (!reservation.ok) {
     console.log(
-      `${LOG} refused — ${reservation.permission ? 'not permitted' : 'monthly cap'}`,
+      `${LOG} refused — ${reservation.permission ? "not permitted" : "monthly cap"}`,
       {
         jobId: job.id,
         usedSeconds: reservation.usedSeconds,
         capSeconds: reservation.capSeconds,
-      }
+      },
     );
     return NextResponse.json(
       {
@@ -345,7 +353,7 @@ export async function POST(request: NextRequest) {
       // 429 is what an exhausted allowance means and it keeps that meaning. A
       // player the program has not authorised is a 403: nothing about waiting
       // for the month to roll over changes the answer.
-      { status: reservation.permission ? 403 : 429 }
+      { status: reservation.permission ? 403 : 429 },
     );
   }
 
@@ -356,9 +364,9 @@ export async function POST(request: NextRequest) {
     // top-of-frame strokes back onto player1/player2 and has no other
     // authoritative source for which was which.
     await admin
-      .from('processing_jobs')
+      .from("processing_jobs")
       .update({
-        status: 'submitting',
+        status: "submitting",
         billable_seconds: billableSeconds,
         // Counted, not pinned. This was `1`, which reset the tally on every
         // resubmission and made "how many times has this been tried" a
@@ -368,7 +376,7 @@ export async function POST(request: NextRequest) {
         ad_scoring: vendorRequest.Ad,
         fixed_camera: vendorRequest.FixedCamera,
       })
-      .eq('id', job.id);
+      .eq("id", job.id);
 
     // 7. Mint the vendor URL — a read-only SAS on our Azure blob. (An earlier
     //    revision pointed at a Cloudflare Worker whose download log doubled as
@@ -381,8 +389,11 @@ export async function POST(request: NextRequest) {
 
     // 8. Submit.
     const response = await fetch(config.apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Api-Key': config.apiKey },
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Api-Key": config.apiKey,
+      },
       body: JSON.stringify({ ...vendorRequest, VideoUrl: vendorUrl.url }),
       signal: AbortSignal.timeout(30_000),
     });
@@ -391,7 +402,7 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       throw new Error(
-        `Provider returned ${response.status}: ${rawResponse.slice(0, 500)}`
+        `Provider returned ${response.status}: ${rawResponse.slice(0, 500)}`,
       );
     }
 
@@ -401,7 +412,9 @@ export async function POST(request: NextRequest) {
     // reject shapes the webhook would happily accept.
     let externalJobId: string | null = null;
     try {
-      externalJobId = parseWebhookPayload(JSON.parse(rawResponse)).externalJobId;
+      externalJobId = parseWebhookPayload(
+        JSON.parse(rawResponse),
+      ).externalJobId;
     } catch {
       console.warn(`${LOG} provider response was not JSON`, {
         jobId: job.id,
@@ -413,21 +426,21 @@ export async function POST(request: NextRequest) {
       // Without it the webhook has nothing to match on, so the job would be
       // accepted and then permanently orphaned. Better to fail loudly now.
       throw new Error(
-        'Provider accepted the job but returned no job id — the webhook would ' +
-          'have nothing to match against.'
+        "Provider accepted the job but returned no job id — the webhook would " +
+          "have nothing to match against.",
       );
     }
 
     await admin
-      .from('processing_jobs')
+      .from("processing_jobs")
       .update({
-        status: 'queued',
+        status: "queued",
         external_job_id: externalJobId,
         submitted_at: new Date().toISOString(),
         video_url_expires_at: vendorUrl.expiresAt?.toISOString() ?? null,
         error_message: null,
       })
-      .eq('id', job.id);
+      .eq("id", job.id);
 
     console.log(`${LOG} submitted`, {
       jobId: job.id,
@@ -454,24 +467,33 @@ export async function POST(request: NextRequest) {
 
         if (result.adopted === 0) return;
 
-        console.log(`${LOG} adopted ${result.adopted} early delivery/deliveries`, {
-          jobId: job.id,
-          jobStatus: result.jobStatus,
-        });
+        console.log(
+          `${LOG} adopted ${result.adopted} early delivery/deliveries`,
+          {
+            jobId: job.id,
+            jobStatus: result.jobStatus,
+          },
+        );
 
         // The reason this is not merely cosmetic. A `job_failed` that lost the
         // race never reached the webhook's quota release, so those minutes would
         // stay spent against a 2-hour monthly cap with nothing to show for it.
         // releaseQuota() is idempotent via `released = false`.
-        if (result.jobStatus === 'failed') {
+        if (result.jobStatus === "failed") {
           await releaseQuota(admin, job.id);
-          console.log(`${LOG} quota released for adopted failure`, { jobId: job.id });
+          console.log(`${LOG} quota released for adopted failure`, {
+            jobId: job.id,
+          });
 
           // Same auto-retry the webhook's own job_failed branch runs for a
           // delivery that arrived on time — an orphan-adopted failure must not
           // silently lose its shot at the identical automatic recovery.
           if (isDownloadFailure(result.errorCode, result.errorStep)) {
-            const retry = await resubmitJob({ supabase: admin, jobId: job.id, auto: true });
+            const retry = await resubmitJob({
+              supabase: admin,
+              jobId: job.id,
+              auto: true,
+            });
             if (retry.ok) {
               console.log(`${LOG} auto-resubmitted an orphan-adopted failure`, {
                 jobId: job.id,
@@ -491,7 +513,7 @@ export async function POST(request: NextRequest) {
             `${LOG} an adopted delivery carried a results URL that was never ` +
               `downloaded — fetch strokes_url from splitstep_webhook_deliveries by ` +
               `hand; it stays valid about a week`,
-            { jobId: job.id, externalJobId }
+            { jobId: job.id, externalJobId },
           );
         }
       } catch (err) {
@@ -506,7 +528,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       jobId: job.id,
       externalJobId,
-      status: 'queued',
+      status: "queued",
       billableSeconds,
       usedSeconds: reservation.usedSeconds,
       capSeconds: reservation.capSeconds,
@@ -536,9 +558,9 @@ export async function POST(request: NextRequest) {
     }
 
     const { error: markError } = await admin
-      .from('processing_jobs')
-      .update({ status: 'failed', error_message: message })
-      .eq('id', job.id);
+      .from("processing_jobs")
+      .update({ status: "failed", error_message: message })
+      .eq("id", job.id);
 
     if (markError) {
       console.error(`${LOG} could not mark the job failed`, {
@@ -548,8 +570,8 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: 'Could not submit this match for analysis.', detail: message },
-      { status: 502 }
+      { error: "Could not submit this match for analysis.", detail: message },
+      { status: 502 },
     );
   }
 }

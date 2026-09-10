@@ -1,10 +1,10 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import fs from "node:fs";
+import path from "node:path";
 
-import { expect, test } from '@playwright/test';
-import { ChartLine, UsersRound } from 'lucide-react';
+import { expect, test } from "@playwright/test";
+import { ChartLine, UsersRound } from "lucide-react";
 
-import { PERSONAL_NAV, TEAM_NAV } from '@/lib/dashboard/nav';
+import { PERSONAL_NAV, TEAM_NAV } from "@/lib/dashboard/nav";
 
 /**
  * Nav data regression: the icon swap (ChartLine for Statistics, UsersRound
@@ -13,19 +13,19 @@ import { PERSONAL_NAV, TEAM_NAV } from '@/lib/dashboard/nav';
  * `comingSoon` it shouldn't. This locks both down against the nav data
  * directly rather than rendered output.
  */
-test.describe('nav data: icons and comingSoon flags', () => {
-  test('both Statistics entries use ChartLine', () => {
+test.describe("nav data: icons and comingSoon flags", () => {
+  test("both Statistics entries use ChartLine", () => {
     const personalStatistics = PERSONAL_NAV.find(
-      (link) => link.name === 'Statistics'
+      (link) => link.name === "Statistics",
     );
-    const teamStatistics = TEAM_NAV.find((link) => link.name === 'Statistics');
+    const teamStatistics = TEAM_NAV.find((link) => link.name === "Statistics");
 
     expect(personalStatistics?.icon).toBe(ChartLine);
     expect(teamStatistics?.icon).toBe(ChartLine);
   });
 
-  test('Roster uses UsersRound', () => {
-    const roster = TEAM_NAV.find((link) => link.name === 'Roster');
+  test("Roster uses UsersRound", () => {
+    const roster = TEAM_NAV.find((link) => link.name === "Roster");
     expect(roster?.icon).toBe(UsersRound);
   });
 
@@ -42,8 +42,8 @@ test.describe('nav data: icons and comingSoon flags', () => {
    * that graduates out of `ComingSoonPage` while the nav still promises
    * "coming soon".
    */
-  test('a nav entry is flagged exactly when its page renders ComingSoonPage', () => {
-    const appDir = path.join(process.cwd(), 'src/app');
+  test("a nav entry is flagged exactly when its page renders ComingSoonPage", () => {
+    const appDir = path.join(process.cwd(), "src/app");
 
     /** Every `page.tsx`, keyed by the route it serves. */
     const routeToFile = new Map<string, string>();
@@ -52,16 +52,16 @@ test.describe('nav data: icons and comingSoon flags', () => {
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           walk(full);
-        } else if (entry.name === 'page.tsx') {
+        } else if (entry.name === "page.tsx") {
           // Route groups — `(home)` — are organisational, not part of the URL.
           const route =
-            '/' +
+            "/" +
             path
               .relative(appDir, dir)
               .split(path.sep)
-              .filter((segment) => !segment.startsWith('('))
-              .join('/');
-          routeToFile.set(route === '/' ? '/' : route, full);
+              .filter((segment) => !segment.startsWith("("))
+              .join("/");
+          routeToFile.set(route === "/" ? "/" : route, full);
         }
       }
     };
@@ -74,14 +74,14 @@ test.describe('nav data: icons and comingSoon flags', () => {
       expect(file, `no page.tsx serves ${link.href}`).toBeTruthy();
 
       const rendersComingSoon = fs
-        .readFileSync(file as string, 'utf8')
-        .includes('ComingSoonPage');
+        .readFileSync(file as string, "utf8")
+        .includes("ComingSoonPage");
 
       expect(
         Boolean(link.comingSoon),
         rendersComingSoon
           ? `${link.href} renders ComingSoonPage but is not flagged comingSoon`
-          : `${link.href} is flagged comingSoon but its page no longer renders ComingSoonPage`
+          : `${link.href} is flagged comingSoon but its page no longer renders ComingSoonPage`,
       ).toBe(rendersComingSoon);
     }
   });

@@ -21,8 +21,7 @@ import {
  */
 
 export type EmailResult =
-  | { ok: true; id: string | null }
-  | { ok: false; error: string };
+  { ok: true; id: string | null } | { ok: false; error: string };
 
 export interface EmailMessage {
   to: string;
@@ -167,7 +166,7 @@ function logInsteadOfSending(message: EmailMessage): EmailResult {
       message.text,
       "──────────────────────────────────────────────────────────────",
       "",
-    ].join("\n")
+    ].join("\n"),
   );
 
   return { ok: true, id: null };
@@ -216,7 +215,7 @@ async function isSuppressed(to: string, apiKey: string): Promise<boolean> {
       {
         headers: { Authorization: `Bearer ${apiKey}` },
         signal: controller.signal,
-      }
+      },
     );
 
     if (response.status === 404) return false; // the common, healthy answer

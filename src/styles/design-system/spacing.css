@@ -10,32 +10,32 @@
    radius VALUE above — it documents the icon-rail sidebar and header chrome
    that shipped after v2 was imported, and these are the only new sizes it
    introduces. See SKILL.md's "Icon Rail Sidebar" and "Header" sections. */
-:root{
+:root {
   /* Component-internal half-steps — never layout */
-  --space-0-5:2px;
-  --space-1-5:6px;
-  --space-2-5:10px;
+  --space-0-5: 2px;
+  --space-1-5: 6px;
+  --space-2-5: 10px;
   /* Layout grid */
-  --space-1:4px;
-  --space-2:8px;
-  --space-3:12px;
-  --space-4:16px;
-  --space-5:20px;
-  --space-6:24px;
-  --space-8:32px;
-  --space-10:40px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
   /* Radii — six shapes (review R2: 10→12, 16→14), nothing else */
-  --radius-cell:4px;
-  --radius-button:6px;
-  --radius-element:8px;
-  --radius-dropdown:12px;
-  --radius-card:14px;
-  --radius-pill:9999px;
+  --radius-cell: 4px;
+  --radius-button: 6px;
+  --radius-element: 8px;
+  --radius-dropdown: 12px;
+  --radius-card: 14px;
+  --radius-pill: 9999px;
   /* Legacy aliases */
-  --radius-score-card:var(--radius-dropdown);
-  --radius-modal:var(--radius-card);
+  --radius-score-card: var(--radius-dropdown);
+  --radius-modal: var(--radius-card);
   /* Standard paddings */
-  --pad-card:20px;
+  --pad-card: 20px;
   /* Full-viewport page gutter. 56px, not v2's 32px: every locked Platform
      Audit frame (Pa2 Home, Pb2 Matches, Tb4 Roster, Tc2 Schedule, Pd/Td
      wizards) draws its content at `padding:20px 56px 10px`, and the sticky
@@ -44,16 +44,16 @@
      pages had drifted to 28/32/40 against it. Reading-width pages
      (settings, help, the wizard) are capped by a max-width instead and do
      not use this. */
-  --pad-page-x:56px;
+  --pad-page-x: 56px;
   /* Top only. The frames' 10px bottom is an artboard artifact — a fixed
      900px canvas does not scroll, so pages set their own bottom clearance. */
-  --pad-page-y:20px;
+  --pad-page-y: 20px;
   /* Chrome dims (v3, additive) — icon-rail sidebar + header. Two committed
      rail widths (never a hover peek); rows and the icon column share one
      size at both widths so only the edge travels when the rail toggles. */
-  --rail-width:64px;
-  --panel-width:232px;
-  --rail-row:40px;
-  --rail-icon-col:40px;
-  --header-h:44px;
+  --rail-width: 64px;
+  --panel-width: 232px;
+  --rail-row: 40px;
+  --rail-icon-col: 40px;
+  --header-h: 44px;
 }

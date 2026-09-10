@@ -25,7 +25,10 @@ import { formatChange, textStreamResponse } from "@/lib/llm/stream-response";
  * by the same loader the page rendered from.
  */
 
-function buildTeamInsightSystemPrompt(data: TeamHomeData, program: string): string {
+function buildTeamInsightSystemPrompt(
+  data: TeamHomeData,
+  program: string,
+): string {
   const { dualForm, kpiCards, movers, kpiMatchCount } = data;
 
   const formText =
@@ -41,12 +44,18 @@ function buildTeamInsightSystemPrompt(data: TeamHomeData, program: string): stri
   // double-fault count as improvement the day such a tile joins the
   // catalogue, silently and in the model's own voice.
   const kpiText = getTopKpiMovers(insightCardsFrom(kpiCards), 5)
-    .map((k) => `  - ${k.label}: ${k.value} (${formatChange(k.change)} ${k.changeLabel})`)
+    .map(
+      (k) =>
+        `  - ${k.label}: ${k.value} (${formatChange(k.change)} ${k.changeLabel})`,
+    )
     .join("\n");
 
   const moversText = movers
     .slice(0, 5)
-    .map((m) => `  - ${m.name}: ${m.metric} ${m.value}% (${formatChange(m.delta)})`)
+    .map(
+      (m) =>
+        `  - ${m.name}: ${m.metric} ${m.value}% (${formatChange(m.delta)})`,
+    )
     .join("\n");
 
   return `You write the claim line on the Focus card of Advantage, a tennis analytics platform, for the coaching staff of a collegiate program.
@@ -92,9 +101,14 @@ export async function POST() {
   // A personal workspace has no squad to make a claim about; the personal
   // card asks `/api/home-insight`. 404 rather than 401 — the viewer is
   // signed in, there is simply no such resource for them here.
-  if (active.kind !== "team") return new Response("Not a program", { status: 404 });
+  if (active.kind !== "team")
+    return new Response("Not a program", { status: 404 });
 
-  const data = await getTeamHomeData(active.id, currentBillingMonth(), active.orgType);
+  const data = await getTeamHomeData(
+    active.id,
+    currentBillingMonth(),
+    active.orgType,
+  );
 
   // Nothing analyzed, no claim — the same 204 the personal route answers with,
   // and the same reason: the card's own render gate decides whether there are
@@ -105,9 +119,10 @@ export async function POST() {
 
   let iterable: AsyncIterable<string>;
   try {
-    iterable = await getLLMStream(buildTeamInsightSystemPrompt(data, active.name), [
-      { role: "user", content: "Generate the program's insight." },
-    ]);
+    iterable = await getLLMStream(
+      buildTeamInsightSystemPrompt(data, active.name),
+      [{ role: "user", content: "Generate the program's insight." }],
+    );
   } catch (err) {
     console.error("LLM adapter error:", err);
     return new Response("LLM error", { status: 500 });

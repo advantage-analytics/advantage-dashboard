@@ -52,8 +52,7 @@ export function TransferOwnershipDialog({
   // on every open, so each transfer starts at Confirm with an empty field and
   // the Done step never flashes back to Confirm while the dialog fades out.
 
-  const armed =
-    typed.trim().toLowerCase() === programName.trim().toLowerCase();
+  const armed = typed.trim().toLowerCase() === programName.trim().toLowerCase();
 
   const transfer = () => {
     if (!target || !armed) return;
@@ -85,8 +84,7 @@ export function TransferOwnershipDialog({
         width={480}
         title="Ownership transferred"
         description={
-          warning ??
-          `We emailed ${target.name} so they know it happened.`
+          warning ?? `We emailed ${target.name} so they know it happened.`
         }
         footer={
           <>
@@ -144,13 +142,16 @@ export function TransferOwnershipDialog({
           <Bullet>
             You become a coach — you keep your matches and stay on the roster.
           </Bullet>
-          <Bullet>Team hours, uploads and shared reports are unaffected.</Bullet>
+          <Bullet>
+            Team hours, uploads and shared reports are unaffected.
+          </Bullet>
         </ul>
 
         <label className="flex flex-col gap-2">
           <span className="text-[11px] text-[var(--ink-600)]">
-            Type <span className="mono text-[var(--ink-900)]">{programName}</span>{" "}
-            to confirm
+            Type{" "}
+            <span className="mono text-[var(--ink-900)]">{programName}</span> to
+            confirm
           </span>
           <SettingsUnderlineInput
             type="text"

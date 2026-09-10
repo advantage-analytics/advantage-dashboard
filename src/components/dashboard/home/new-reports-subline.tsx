@@ -62,7 +62,8 @@ export function NewReportsSubline({
   // An empty-but-present span still reserves its `gap-3` slot in the row
   // above the date, pushing it right of where the greeting title starts.
   // Only render the fallback when there's actually text to show.
-  if (!count) return fallback ? <span className="text-body-sm">{fallback}</span> : null;
+  if (!count)
+    return fallback ? <span className="text-body-sm">{fallback}</span> : null;
 
   return (
     <Link

@@ -9,8 +9,18 @@
 import type { EventFormat, EventSite } from "./types";
 
 const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ];
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -79,7 +89,7 @@ export function formatEventDay(iso: string): string {
 /** "4–6 Sep 2026" — the tournament eyebrow, which carries the year. */
 export function formatEventSpanWithYear(
   startsOn: string,
-  endsOn: string
+  endsOn: string,
 ): string {
   return `${formatEventSpan(startsOn, endsOn)} ${localDate(endsOn).getFullYear()}`;
 }
@@ -128,10 +138,7 @@ export function todayISO(): string {
  * `"<bestOf>|<adScoring>"` string encoding was removed from both screens.
  */
 export type EventFormatValue =
-  | "bo3-no-ad"
-  | "bo3-ad"
-  | "one-set-no-ad"
-  | "one-set-ad";
+  "bo3-no-ad" | "bo3-ad" | "one-set-no-ad" | "one-set-ad";
 
 export const EVENT_FORMATS: readonly {
   value: EventFormatValue;
@@ -164,7 +171,7 @@ export function formatValueOf(format: {
 }): EventFormatValue | undefined {
   return EVENT_FORMATS.find(
     (option) =>
-      option.bestOf === format.bestOf && option.adScoring === format.adScoring
+      option.bestOf === format.bestOf && option.adScoring === format.adScoring,
   )?.value;
 }
 
@@ -195,9 +202,19 @@ export function splitNames(text: string): string[] {
  * Postgres returned, and Osei's weekend read R32, Q1, Q2.
  */
 export const ROUND_ORDER = [
-  "Q1", "Q2", "Q3",
-  "R128", "R64", "R32", "R16", "QF", "SF", "F",
-  "C1", "C2", "C3",
+  "Q1",
+  "Q2",
+  "Q3",
+  "R128",
+  "R64",
+  "R32",
+  "R16",
+  "QF",
+  "SF",
+  "F",
+  "C1",
+  "C2",
+  "C3",
 ];
 
 /** Sort key for a round, or a large number for one we do not recognise. */
@@ -299,7 +316,8 @@ export function surfaceTitle(surface: string): string {
  * schedule table's cells stay sentence case.
  */
 export function formatLabel(format: EventFormat): string {
-  const sets = format.bestOf === 1 ? "One Set" : `Best of ${format.bestOf} Sets`;
+  const sets =
+    format.bestOf === 1 ? "One Set" : `Best of ${format.bestOf} Sets`;
   if (format.adScoring === null) return sets;
   return `${sets} · ${format.adScoring ? "Ad Scoring" : "No-Ad Scoring"}`;
 }

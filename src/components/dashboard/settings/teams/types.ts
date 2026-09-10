@@ -21,7 +21,9 @@ export function toDraft(data: TeamSettingsData): IdentityDraft {
     team: data.program.team,
     conference: data.program.conference ?? "",
     homeVenue: data.program.homeVenue ?? "",
-    defaultSurface: (data.program.defaultSurface as IdentityDraft["defaultSurface"] | null) ?? "",
+    defaultSurface:
+      (data.program.defaultSurface as IdentityDraft["defaultSurface"] | null) ??
+      "",
     season: data.program.season ?? "",
     uploadPolicy: data.program.uploadPolicy,
   };

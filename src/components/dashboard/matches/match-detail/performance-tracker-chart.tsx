@@ -290,7 +290,7 @@ export function PerformanceTrackerChart() {
             stays legible over the area fill it sits on. */}
         <span
           aria-hidden="true"
-          className="surface-card pointer-events-none absolute left-2 top-2 z-[2] whitespace-nowrap px-1.5 py-0.5 text-[10px]"
+          className="surface-card pointer-events-none absolute top-2 left-2 z-[2] px-1.5 py-0.5 text-[10px] whitespace-nowrap"
           style={{ color: "var(--ink-400)" }}
         >
           {sides.you.shortName} above
@@ -417,7 +417,7 @@ export function PerformanceTrackerChart() {
         {hovered && hoverCoord && (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute z-[3] flex flex-col gap-0.5 whitespace-nowrap rounded-[12px] bg-[var(--ink-900)] px-3 py-2"
+            className="pointer-events-none absolute z-[3] flex flex-col gap-0.5 rounded-[12px] bg-[var(--ink-900)] px-3 py-2 whitespace-nowrap"
             style={{
               boxShadow: "var(--shadow-dropdown)",
               left: `${(hoverCoord[0] / CHART_W) * 100}%`,
@@ -456,7 +456,7 @@ export function PerformanceTrackerChart() {
             style={{ width: `${(s.count / scopedPoints.length) * 100}%` }}
           >
             <span
-              className="tabular whitespace-nowrap text-[10px]"
+              className="tabular text-[10px] whitespace-nowrap"
               style={{ color: "var(--ink-400)" }}
             >
               Set {s.setNumber}

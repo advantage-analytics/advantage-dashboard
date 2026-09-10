@@ -48,22 +48,22 @@
  * path to deduplicate ~50 lines is the riskier trade.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { buildSplitStepJobRequest } from './job-request';
-import { parseWebhookPayload } from './webhook-payload';
-import { resolveSplitstepDeploymentConfig } from './deployment-config';
-import { createVideoUrlStrategy, videoContainerClient } from './video-url';
-import { releaseQuota, reserveQuota } from './quota';
-import { adoptOrphanedDeliveries } from './adopt-deliveries';
-import type { Workspace } from '@/lib/workspace/types';
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { buildSplitStepJobRequest } from "./job-request";
+import { parseWebhookPayload } from "./webhook-payload";
+import { resolveSplitstepDeploymentConfig } from "./deployment-config";
+import { createVideoUrlStrategy, videoContainerClient } from "./video-url";
+import { releaseQuota, reserveQuota } from "./quota";
+import { adoptOrphanedDeliveries } from "./adopt-deliveries";
+import type { Workspace } from "@/lib/workspace/types";
 
-const LOG = '[splitstep-resubmit]';
+const LOG = "[splitstep-resubmit]";
 
 /** 1 original + 2 resubmissions. Enforced here and nowhere else. */
 export const MAX_TOTAL_ATTEMPTS = 3;
 
 /** Statuses that mean "this row will never move again on its own". */
-const TERMINAL_STATUSES = ['failed', 'completed', 'derivation_failed'];
+const TERMINAL_STATUSES = ["failed", "completed", "derivation_failed"];
 
 /**
  * The ONE failure class the system retries on its own.
@@ -79,22 +79,22 @@ const TERMINAL_STATUSES = ['failed', 'completed', 'derivation_failed'];
  */
 export function isDownloadFailure(
   errorCode: string | null,
-  errorStep: string | null
+  errorStep: string | null,
 ): boolean {
-  return errorStep === 'downloading_video' || errorCode === 'VIDEO_UNREACHABLE';
+  return errorStep === "downloading_video" || errorCode === "VIDEO_UNREACHABLE";
 }
 
 export type ResubmitRefusalReason =
-  | 'not_found'
-  | 'not_failed'
-  | 'in_flight_duplicate'
-  | 'attempt_ceiling'
-  | 'already_auto_resubmitted'
-  | 'video_unavailable'
-  | 'quota'
-  | 'not_configured'
-  | 'invalid_metadata'
-  | 'submit_failed';
+  | "not_found"
+  | "not_failed"
+  | "in_flight_duplicate"
+  | "attempt_ceiling"
+  | "already_auto_resubmitted"
+  | "video_unavailable"
+  | "quota"
+  | "not_configured"
+  | "invalid_metadata"
+  | "submit_failed";
 
 export type ResubmitResult =
   | { ok: true; jobId: string; externalJobId: string }
@@ -134,8 +134,8 @@ export async function resubmitJob(params: {
   if (!config.ok) {
     return {
       ok: false,
-      reason: 'not_configured',
-      message: 'Analysis is not configured on this deployment.',
+      reason: "not_configured",
+      message: "Analysis is not configured on this deployment.",
     };
   }
 
@@ -143,15 +143,15 @@ export async function resubmitJob(params: {
   //    excluded on purpose: its results already exist and resubmitting the
   //    video would spend quota to recompute what a derivation re-run gets free.
   const { data: parentRow, error: parentError } = await supabase
-    .from('processing_jobs')
+    .from("processing_jobs")
     .select(
-      'id, match_id, created_by, status, video_object_key, start_time_seconds, end_time_seconds, initial_top_player_is_player1, ad_scoring, fixed_camera, resubmitted_from_job_id'
+      "id, match_id, created_by, status, video_object_key, start_time_seconds, end_time_seconds, initial_top_player_is_player1, ad_scoring, fixed_camera, resubmitted_from_job_id",
     )
-    .eq('id', jobId)
+    .eq("id", jobId)
     .maybeSingle();
 
   if (parentError || !parentRow) {
-    return { ok: false, reason: 'not_found', message: 'Job not found.' };
+    return { ok: false, reason: "not_found", message: "Job not found." };
   }
 
   // `created_by` is nullable since the uploader may have deleted their
@@ -159,21 +159,23 @@ export async function resubmitJob(params: {
   // program, but nothing may spend quota on a departed person's behalf, so
   // the job reads as not found — the same answer the route gives for
   // "not yours".
-  const raw = parentRow as Omit<ParentJob, 'created_by'> & { created_by: string | null };
+  const raw = parentRow as Omit<ParentJob, "created_by"> & {
+    created_by: string | null;
+  };
   if (!raw.created_by) {
     return {
       ok: false,
-      reason: 'not_found',
+      reason: "not_found",
       message:
-        'The account that uploaded this analysis no longer exists, so it cannot be retried.',
+        "The account that uploaded this analysis no longer exists, so it cannot be retried.",
     };
   }
   const parent: ParentJob = { ...raw, created_by: raw.created_by };
 
-  if (parent.status !== 'failed') {
+  if (parent.status !== "failed") {
     return {
       ok: false,
-      reason: 'not_failed',
+      reason: "not_failed",
       message: `Only a failed analysis can be retried; this one is ${parent.status}.`,
     };
   }
@@ -187,8 +189,8 @@ export async function resubmitJob(params: {
     // resubmit. The recovery for that class is uploading again, not this.
     return {
       ok: false,
-      reason: 'video_unavailable',
-      message: 'This job has no completed video upload to retry from.',
+      reason: "video_unavailable",
+      message: "This job has no completed video upload to retry from.",
     };
   }
 
@@ -199,18 +201,18 @@ export async function resubmitJob(params: {
   if (chain === null) {
     return {
       ok: false,
-      reason: 'submit_failed',
-      message: 'Could not read this job’s retry history.',
+      reason: "submit_failed",
+      message: "Could not read this job’s retry history.",
     };
   }
 
   if (chain.length >= MAX_TOTAL_ATTEMPTS) {
     return {
       ok: false,
-      reason: 'attempt_ceiling',
+      reason: "attempt_ceiling",
       message:
-        'This match has been attempted the maximum number of times. ' +
-        'Contact support if the analysis keeps failing.',
+        "This match has been attempted the maximum number of times. " +
+        "Contact support if the analysis keeps failing.",
     };
   }
 
@@ -219,8 +221,8 @@ export async function resubmitJob(params: {
     // the user instead of looping against whatever is actually wrong.
     return {
       ok: false,
-      reason: 'already_auto_resubmitted',
-      message: 'An automatic retry has already been attempted for this match.',
+      reason: "already_auto_resubmitted",
+      message: "An automatic retry has already been attempted for this match.",
     };
   }
 
@@ -231,21 +233,21 @@ export async function resubmitJob(params: {
   // (two Postgres, one Azure HEAD) run as one wait instead of three.
   const [liveResult, blobResult, matchResult] = await Promise.all([
     supabase
-      .from('processing_jobs')
-      .select('id, status')
-      .eq('match_id', parent.match_id)
-      .not('status', 'in', `(${TERMINAL_STATUSES.join(',')})`),
+      .from("processing_jobs")
+      .select("id, status")
+      .eq("match_id", parent.match_id)
+      .not("status", "in", `(${TERMINAL_STATUSES.join(",")})`),
     videoContainerClient()
       .getBlockBlobClient(parent.video_object_key)
       .exists()
       .then((exists) => ({ ok: true as const, exists }))
       .catch((err) => ({ ok: false as const, err })),
     supabase
-      .from('matches')
+      .from("matches")
       .select(
-        'id, player1_name, player2_name, score, match_type, program_id, format, fixed_camera, initial_top_player_is_player1'
+        "id, player1_name, player2_name, score, match_type, program_id, format, fixed_camera, initial_top_player_is_player1",
       )
-      .eq('id', parent.match_id)
+      .eq("id", parent.match_id)
       .maybeSingle(),
   ]);
 
@@ -255,15 +257,15 @@ export async function resubmitJob(params: {
   if (liveResult.error) {
     return {
       ok: false,
-      reason: 'submit_failed',
-      message: 'Could not check for an analysis already in progress.',
+      reason: "submit_failed",
+      message: "Could not check for an analysis already in progress.",
     };
   }
   if ((liveResult.data ?? []).length > 0) {
     return {
       ok: false,
-      reason: 'in_flight_duplicate',
-      message: 'An analysis for this match is already in progress.',
+      reason: "in_flight_duplicate",
+      message: "An analysis for this match is already in progress.",
     };
   }
 
@@ -272,21 +274,25 @@ export async function resubmitJob(params: {
   if (!blobResult.ok) {
     console.error(`${LOG} blob existence check failed`, {
       jobId,
-      error: blobResult.err instanceof Error ? blobResult.err.message : String(blobResult.err),
+      error:
+        blobResult.err instanceof Error
+          ? blobResult.err.message
+          : String(blobResult.err),
     });
     return {
       ok: false,
-      reason: 'video_unavailable',
-      message: 'Could not verify the video is still available. Try again later.',
+      reason: "video_unavailable",
+      message:
+        "Could not verify the video is still available. Try again later.",
     };
   }
   if (!blobResult.exists) {
     return {
       ok: false,
-      reason: 'video_unavailable',
+      reason: "video_unavailable",
       message:
-        'The original video is no longer stored, so this analysis cannot be ' +
-        'retried. Upload the match again.',
+        "The original video is no longer stored, so this analysis cannot be " +
+        "retried. Upload the match again.",
     };
   }
 
@@ -295,8 +301,8 @@ export async function resubmitJob(params: {
   if (matchError || !matchRow) {
     return {
       ok: false,
-      reason: 'invalid_metadata',
-      message: 'Could not load the match for this job.',
+      reason: "invalid_metadata",
+      message: "Could not load the match for this job.",
     };
   }
 
@@ -320,21 +326,21 @@ export async function resubmitJob(params: {
   const effectiveAdScoring = parent.ad_scoring ?? match.format?.ad_scoring;
   const effectiveFixedCamera = parent.fixed_camera ?? match.fixed_camera;
 
-  if (typeof effectiveTopPlayer !== 'boolean') {
+  if (typeof effectiveTopPlayer !== "boolean") {
     // Refused rather than defaulted — a default is a coin flip on which player
     // every statistic belongs to.
     return {
       ok: false,
-      reason: 'invalid_metadata',
+      reason: "invalid_metadata",
       message:
-        'This match is missing its camera-orientation answer and cannot be ' +
-        'retried automatically.',
+        "This match is missing its camera-orientation answer and cannot be " +
+        "retried automatically.",
     };
   }
 
   const built = buildSplitStepJobRequest({
     matchId: parent.match_id,
-    videoUrl: '',
+    videoUrl: "",
     allowEmptyVideoUrl: true,
     webhookUrl: config.webhookUrl,
     player1Name: match.player1_name,
@@ -352,13 +358,15 @@ export async function resubmitJob(params: {
   if (!built.ok) {
     return {
       ok: false,
-      reason: 'invalid_metadata',
-      message: `This match cannot be analysed: ${built.errors.join('; ')}`,
+      reason: "invalid_metadata",
+      message: `This match cannot be analysed: ${built.errors.join("; ")}`,
     };
   }
 
   const vendorRequest = built.request;
-  const billableSeconds = Math.ceil(vendorRequest.EndTime - vendorRequest.StartTime);
+  const billableSeconds = Math.ceil(
+    vendorRequest.EndTime - vendorRequest.StartTime,
+  );
 
   // 6. Create the child row BEFORE reserving: the quota ledger keys on the
   //    job id, so the row has to exist first. `uploaded` is honest — the bytes
@@ -367,12 +375,12 @@ export async function resubmitJob(params: {
   //    id (useUploadMatchWizard invariant — keying on match_id would touch
   //    every job this match ever had).
   const { data: childRow, error: insertError } = await supabase
-    .from('processing_jobs')
+    .from("processing_jobs")
     .insert({
       match_id: parent.match_id,
       created_by: parent.created_by,
-      provider: 'splitstep',
-      status: 'uploaded',
+      provider: "splitstep",
+      status: "uploaded",
       video_object_key: parent.video_object_key,
       start_time_seconds: parent.start_time_seconds,
       end_time_seconds: parent.end_time_seconds,
@@ -382,7 +390,7 @@ export async function resubmitJob(params: {
       resubmitted_from_job_id: parent.id,
       auto_resubmitted: auto,
     })
-    .select('id')
+    .select("id")
     .single();
 
   if (insertError || !childRow) {
@@ -391,17 +399,17 @@ export async function resubmitJob(params: {
     // user's own click, or two clicks) and lost. The database enforcing this
     // is the actual guard; the read above is only the fast, friendly path in
     // the common case.
-    if (insertError?.code === '23505') {
+    if (insertError?.code === "23505") {
       return {
         ok: false,
-        reason: 'in_flight_duplicate',
-        message: 'An analysis for this match is already in progress.',
+        reason: "in_flight_duplicate",
+        message: "An analysis for this match is already in progress.",
       };
     }
     return {
       ok: false,
-      reason: 'submit_failed',
-      message: 'Could not create the retry job.',
+      reason: "submit_failed",
+      message: "Could not create the retry job.",
     };
   }
   const childId = (childRow as { id: string }).id;
@@ -421,20 +429,20 @@ export async function resubmitJob(params: {
   if (!reserved.ok) {
     // The child row did nothing yet — remove it rather than leaving a
     // permanent extra "failed" attempt for a refusal that spent nothing.
-    await supabase.from('processing_jobs').delete().eq('id', childId);
-    return { ok: false, reason: 'quota', message: reserved.message };
+    await supabase.from("processing_jobs").delete().eq("id", childId);
+    return { ok: false, reason: "quota", message: reserved.message };
   }
 
   // 8. Submit. Mirrors api/splitstep/jobs steps 7–8 — annotated there too.
   try {
     await supabase
-      .from('processing_jobs')
+      .from("processing_jobs")
       .update({
-        status: 'submitting',
+        status: "submitting",
         billable_seconds: billableSeconds,
         attempt_count: 1,
       })
-      .eq('id', childId);
+      .eq("id", childId);
 
     const vendorUrl = await createVideoUrlStrategy(supabase).mint({
       jobId: childId,
@@ -442,8 +450,11 @@ export async function resubmitJob(params: {
     });
 
     const response = await fetch(config.apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Api-Key': config.apiKey },
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Api-Key": config.apiKey,
+      },
       body: JSON.stringify({ ...vendorRequest, VideoUrl: vendorUrl.url }),
       signal: AbortSignal.timeout(30_000),
     });
@@ -452,13 +463,15 @@ export async function resubmitJob(params: {
 
     if (!response.ok) {
       throw new Error(
-        `Provider returned ${response.status}: ${rawResponse.slice(0, 500)}`
+        `Provider returned ${response.status}: ${rawResponse.slice(0, 500)}`,
       );
     }
 
     let externalJobId: string | null = null;
     try {
-      externalJobId = parseWebhookPayload(JSON.parse(rawResponse)).externalJobId;
+      externalJobId = parseWebhookPayload(
+        JSON.parse(rawResponse),
+      ).externalJobId;
     } catch {
       console.warn(`${LOG} provider response was not JSON`, {
         childId,
@@ -468,21 +481,21 @@ export async function resubmitJob(params: {
 
     if (!externalJobId) {
       throw new Error(
-        'Provider accepted the job but returned no job id — the webhook would ' +
-          'have nothing to match against.'
+        "Provider accepted the job but returned no job id — the webhook would " +
+          "have nothing to match against.",
       );
     }
 
     await supabase
-      .from('processing_jobs')
+      .from("processing_jobs")
       .update({
-        status: 'queued',
+        status: "queued",
         external_job_id: externalJobId,
         submitted_at: new Date().toISOString(),
         video_url_expires_at: vendorUrl.expiresAt?.toISOString() ?? null,
         error_message: null,
       })
-      .eq('id', childId);
+      .eq("id", childId);
 
     console.log(`${LOG} resubmitted`, {
       parentId: parent.id,
@@ -508,11 +521,15 @@ export async function resubmitJob(params: {
       // existence) re-checks fresh state against `childId` as the new parent,
       // not against any assumption carried over from this call.
       if (
-        adoption.jobStatus === 'failed' &&
+        adoption.jobStatus === "failed" &&
         isDownloadFailure(adoption.errorCode, adoption.errorStep)
       ) {
         await releaseQuota(supabase, childId);
-        const retry = await resubmitJob({ supabase, jobId: childId, auto: true });
+        const retry = await resubmitJob({
+          supabase,
+          jobId: childId,
+          auto: true,
+        });
         if (retry.ok) {
           console.log(`${LOG} auto-resubmitted an orphan-adopted failure`, {
             childId,
@@ -544,14 +561,14 @@ export async function resubmitJob(params: {
       /* bookkeeping only — see the submit route's identical block */
     }
     await supabase
-      .from('processing_jobs')
-      .update({ status: 'failed', error_message: message })
-      .eq('id', childId);
+      .from("processing_jobs")
+      .update({ status: "failed", error_message: message })
+      .eq("id", childId);
 
     return {
       ok: false,
-      reason: 'submit_failed',
-      message: 'Could not submit the retry to the analysis provider.',
+      reason: "submit_failed",
+      message: "Could not submit the retry to the analysis provider.",
     };
   }
 }
@@ -563,7 +580,7 @@ export async function resubmitJob(params: {
  */
 async function loadChain(
   supabase: SupabaseClient,
-  from: ParentJob
+  from: ParentJob,
 ): Promise<{ id: string; status: string; auto_resubmitted: boolean }[] | null> {
   // Up to the root.
   let rootId = from.id;
@@ -571,32 +588,39 @@ async function loadChain(
   for (let i = 0; parentId && i < 10; i++) {
     rootId = parentId;
     const { data, error } = await supabase
-      .from('processing_jobs')
-      .select('id, resubmitted_from_job_id')
-      .eq('id', parentId)
+      .from("processing_jobs")
+      .select("id, resubmitted_from_job_id")
+      .eq("id", parentId)
       .maybeSingle();
     if (error) return null;
-    parentId = (data as { resubmitted_from_job_id: string | null } | null)
-      ?.resubmitted_from_job_id ?? null;
+    parentId =
+      (data as { resubmitted_from_job_id: string | null } | null)
+        ?.resubmitted_from_job_id ?? null;
   }
 
   // Down from the root.
   const { data: rootRow, error: rootError } = await supabase
-    .from('processing_jobs')
-    .select('id, status, auto_resubmitted')
-    .eq('id', rootId)
+    .from("processing_jobs")
+    .select("id, status, auto_resubmitted")
+    .eq("id", rootId)
     .maybeSingle();
   if (rootError || !rootRow) return null;
 
-  const chain = [rootRow as { id: string; status: string; auto_resubmitted: boolean }];
+  const chain = [
+    rootRow as { id: string; status: string; auto_resubmitted: boolean },
+  ];
   let frontier = [rootId];
   for (let i = 0; frontier.length > 0 && i < 10; i++) {
     const { data, error } = await supabase
-      .from('processing_jobs')
-      .select('id, status, auto_resubmitted')
-      .in('resubmitted_from_job_id', frontier);
+      .from("processing_jobs")
+      .select("id, status, auto_resubmitted")
+      .in("resubmitted_from_job_id", frontier);
     if (error) return null;
-    const next = (data ?? []) as { id: string; status: string; auto_resubmitted: boolean }[];
+    const next = (data ?? []) as {
+      id: string;
+      status: string;
+      auto_resubmitted: boolean;
+    }[];
     const unseen = next.filter((j) => !chain.some((c) => c.id === j.id));
     chain.push(...unseen);
     frontier = unseen.map((j) => j.id);
@@ -618,18 +642,23 @@ async function reserveForChild(params: {
   programId: string | null;
   seconds: number;
 }): Promise<{ ok: true } | { ok: false; message: string }> {
-  const { supabase, auto, workspace, parent, childId, programId, seconds } = params;
+  const { supabase, auto, workspace, parent, childId, programId, seconds } =
+    params;
 
   const effectiveWorkspace = auto
-    ? await resolveAutoRetryWorkspace({ supabase, programId, userId: parent.created_by })
+    ? await resolveAutoRetryWorkspace({
+        supabase,
+        programId,
+        userId: parent.created_by,
+      })
     : workspace;
 
   if (!effectiveWorkspace) {
     return {
       ok: false,
       message: auto
-        ? 'The uploader no longer has permission to submit video for this program.'
-        : 'A billing workspace is required to retry this analysis.',
+        ? "The uploader no longer has permission to submit video for this program."
+        : "A billing workspace is required to retry this analysis.",
     };
   }
 
@@ -671,28 +700,28 @@ async function resolveAutoRetryWorkspace(params: {
     // member of their own workspace.
     return {
       id: userId,
-      kind: 'personal',
-      name: 'Personal',
-      timeZone: 'UTC',
+      kind: "personal",
+      name: "Personal",
+      timeZone: "UTC",
       team: null,
       orgType: null,
-      role: 'owner',
-      mark: '',
+      role: "owner",
+      mark: "",
       canSubmitVideo: true,
       playersCanUpload: false,
-      uploadPolicy: 'everyone',
+      uploadPolicy: "everyone",
       memberUploadEnabled: true,
       myPlayerId: null,
     };
   }
 
   const { data, error } = await supabase
-    .from('program_members')
+    .from("program_members")
     .select(
-      'role, upload_enabled, programs!inner(status, players_can_upload, upload_policy, org_type)'
+      "role, upload_enabled, programs!inner(status, players_can_upload, upload_policy, org_type)",
     )
-    .eq('program_id', programId)
-    .eq('user_id', userId)
+    .eq("program_id", programId)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (error || !data) return null;
@@ -701,33 +730,43 @@ async function resolveAutoRetryWorkspace(params: {
     role: string;
     upload_enabled: boolean;
     programs:
-      | { status: string; players_can_upload: boolean; upload_policy: string; org_type: string }
-      | { status: string; players_can_upload: boolean; upload_policy: string; org_type: string }[];
+      | {
+          status: string;
+          players_can_upload: boolean;
+          upload_policy: string;
+          org_type: string;
+        }
+      | {
+          status: string;
+          players_can_upload: boolean;
+          upload_policy: string;
+          org_type: string;
+        }[];
   };
   const program = Array.isArray(row.programs) ? row.programs[0] : row.programs;
   if (!program) return null;
 
   return {
     id: programId,
-    kind: 'team',
-    name: 'Program',
+    kind: "team",
+    name: "Program",
     team: null,
     // Not read here: this workspace exists only to price a retry through
     // `reserveQuota()`, which never asks what day it is. UTC rather than a
     // second read for a field this path does not use.
-    timeZone: 'UTC',
+    timeZone: "UTC",
     // The real value, not a guess: this workspace goes straight into
     // `reserveQuota()`, and a custom org auto-retrying must draw its reduced
     // tier exactly as a fresh manual submission would — see `quotaTierFor()`.
-    orgType: program.org_type as Workspace['orgType'],
-    role: row.role as Workspace['role'],
-    mark: '',
+    orgType: program.org_type as Workspace["orgType"],
+    role: row.role as Workspace["role"],
+    mark: "",
     // Same rule listProgramWorkspaces() uses: 'active' means the claim
     // settled. A claim rejected or paused since the original submission
     // reads false here, exactly as it would for a fresh manual submission.
-    canSubmitVideo: program.status === 'active',
+    canSubmitVideo: program.status === "active",
     playersCanUpload: program.players_can_upload,
-    uploadPolicy: program.upload_policy as Workspace['uploadPolicy'],
+    uploadPolicy: program.upload_policy as Workspace["uploadPolicy"],
     memberUploadEnabled: Boolean(row.upload_enabled),
     // Not read here: this workspace only prices a retry. The rail's footer
     // link is the sole reader, and it never sees this object.

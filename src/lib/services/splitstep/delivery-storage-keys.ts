@@ -3,7 +3,7 @@ import {
   resultsObjectKey,
   trajectoriesObjectKey,
   trimmedObjectKey,
-} from './object-keys';
+} from "./object-keys";
 
 /**
  * Choose the storage keys for a `completed` SplitStep delivery from the matched
@@ -59,7 +59,7 @@ export function selectDeliveryStorageKeys(params: {
   const { jobId, createdBy, matchId, externalJobId, deliveryId } = params;
 
   if (!jobId) {
-    const orphanDir = `orphaned/${externalJobId ?? 'unknown'}`;
+    const orphanDir = `orphaned/${externalJobId ?? "unknown"}`;
     return {
       resultsKey: `${orphanDir}/${deliveryId}.json`,
       playersKey: `${orphanDir}/${deliveryId}.players.json`,
@@ -68,7 +68,7 @@ export function selectDeliveryStorageKeys(params: {
     };
   }
 
-  const uploaderSegment = createdBy ?? 'former-member';
+  const uploaderSegment = createdBy ?? "former-member";
   const ids = { userId: uploaderSegment, matchId: matchId!, jobId };
 
   return {

@@ -23,15 +23,21 @@ export function MatchMetadataRow({
   // a light-scope hex), 5px inside each pair and 14px between pairs. The date
   // is tabular so "Yesterday" and "Aug 21" hold their columns across rows.
   return (
-    <div className="flex flex-row gap-[14px] items-center">
+    <div className="flex flex-row items-center gap-[14px]">
       {date && (
         <div className="flex items-center gap-[5px]">
-          <Calendar className="size-[13px] text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
+          <Calendar
+            className="size-[13px] text-[var(--ink-400)]"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
           <p className="text-micro tabular">{date}</p>
         </div>
       )}
 
-      {(matchType === "Tournament" || matchType === "Dual Match" || matchType === "Practice") && (
+      {(matchType === "Tournament" ||
+        matchType === "Dual Match" ||
+        matchType === "Practice") && (
         <div className="flex items-center gap-[5px]">
           {matchType === "Tournament" ? (
             <Image
@@ -42,9 +48,17 @@ export function MatchMetadataRow({
               aria-hidden="true"
             />
           ) : matchType === "Dual Match" ? (
-            <Swords className="size-[13px] text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
+            <Swords
+              className="size-[13px] text-[var(--ink-400)]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
           ) : (
-            <Crosshair className="size-[13px] text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
+            <Crosshair
+              className="size-[13px] text-[var(--ink-400)]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
           )}
           <p className="text-micro">{matchType}</p>
         </div>

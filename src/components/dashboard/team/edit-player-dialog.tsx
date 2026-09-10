@@ -132,7 +132,7 @@ export function EditPlayerDialog({
   /** One patch helper, so the five fields cannot drift into five setters. */
   function edit<K extends keyof PlayerFields>(key: K, value: PlayerFields[K]) {
     setFields((current) =>
-      current === null ? current : { ...current, [key]: value }
+      current === null ? current : { ...current, [key]: value },
     );
   }
 
@@ -175,7 +175,7 @@ export function EditPlayerDialog({
         });
       } catch {
         setError(
-          "Couldn't reach the server, so this may or may not have saved. Reload the page to check."
+          "Couldn't reach the server, so this may or may not have saved. Reload the page to check.",
         );
         return;
       }
@@ -310,7 +310,7 @@ export function EditPlayerDialog({
                     legal in the column and must survive being looked at. */}
                 {fields.lineupSpot !== "" &&
                   !LINEUP_SPOTS.some(
-                    (option) => String(option) === fields.lineupSpot
+                    (option) => String(option) === fields.lineupSpot,
                   ) && (
                     <option value={fields.lineupSpot}>
                       #{fields.lineupSpot}

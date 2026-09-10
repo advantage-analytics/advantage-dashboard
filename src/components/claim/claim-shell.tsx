@@ -111,8 +111,17 @@ export function ClaimShell({
           rather than as a dialog that lost its window. */}
       <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between p-5">
         {back ? (
-          <Link href={back} title="Back" aria-label="Back" className={ICON_BUTTON}>
-            <ArrowLeft className="size-[15px]" strokeWidth={1.5} aria-hidden="true" />
+          <Link
+            href={back}
+            title="Back"
+            aria-label="Back"
+            className={ICON_BUTTON}
+          >
+            <ArrowLeft
+              className="size-[15px]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
           </Link>
         ) : (
           <span className="w-8" />
@@ -198,11 +207,17 @@ export function ClaimHeading({
   return (
     <div className="flex flex-col" style={{ gap }}>
       {label && <span className="eyebrow">{label}</span>}
-      <h1 className="text-title-lg" style={titlePadTop ? { paddingTop: titlePadTop } : undefined}>
+      <h1
+        className="text-title-lg"
+        style={titlePadTop ? { paddingTop: titlePadTop } : undefined}
+      >
         {title}
       </h1>
       {body && (
-        <p className="text-body" style={bodyMax ? { maxWidth: bodyMax } : undefined}>
+        <p
+          className="text-body"
+          style={bodyMax ? { maxWidth: bodyMax } : undefined}
+        >
           {body}
         </p>
       )}
@@ -272,7 +287,9 @@ function AsideRows({ items }: { items: string[] }) {
         <li
           key={item}
           className={`text-body-sm py-[11px] last:pb-0 ${
-            index === 0 ? "border-t-0 pt-0" : "border-t border-[var(--border-medium)]"
+            index === 0
+              ? "border-t-0 pt-0"
+              : "border-t border-[var(--border-medium)]"
           }`}
         >
           {item}

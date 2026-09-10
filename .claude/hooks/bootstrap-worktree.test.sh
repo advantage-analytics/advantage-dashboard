@@ -71,6 +71,30 @@ out=$(cd "$WT" && printf '{}' | "$HOOK" 2>/dev/null); rc=$?
 [ "$rc" -eq 0 ]; ok $? "exits 0"
 [ ! -e "$WT/.env.local" ]; ok $? "creates nothing"
 
+echo "-- worktree with core.hooksPath pinned to the default hooks dir --"
+n=$((n+1)); read -r MAIN WT <<<"$(fixture "$n")"
+git -C "$MAIN" config extensions.worktreeConfig true
+git -C "$WT" config --worktree core.hooksPath "$MAIN/.git/hooks"
+git -C "$MAIN" config core.hooksPath .githooks
+out=$(cd "$WT" && printf '{}' | "$HOOK" 2>/dev/null); rc=$?
+[ "$rc" -eq 0 ]; ok $? "exits 0"
+[ -z "$(git -C "$WT" config --worktree --get core.hooksPath 2>/dev/null)" ]; ok $? "clears the per-worktree override"
+[ "$(git -C "$WT" config --get core.hooksPath)" = ".githooks" ]; ok $? "the repo's own .githooks becomes effective"
+printf '%s' "$out" | grep -q 'core.hooksPath'; ok $? "reports what it did"
+
+echo "-- worktree with a DELIBERATE per-worktree hooksPath: left alone --"
+n=$((n+1)); read -r MAIN WT <<<"$(fixture "$n")"
+git -C "$MAIN" config extensions.worktreeConfig true
+git -C "$WT" config --worktree core.hooksPath /some/deliberate/choice
+out=$(cd "$WT" && printf '{}' | "$HOOK" 2>/dev/null)
+[ "$(git -C "$WT" config --worktree --get core.hooksPath)" = "/some/deliberate/choice" ]; ok $? "a non-default value is not touched"
+
+echo "-- worktree with no hooksPath pinned at all --"
+n=$((n+1)); read -r MAIN WT <<<"$(fixture "$n")"
+out=$(cd "$WT" && printf '{}' | "$HOOK" 2>/dev/null); rc=$?
+[ "$rc" -eq 0 ]; ok $? "exits 0 when worktree config is unavailable"
+! printf '%s' "$out" | grep -q 'core.hooksPath'; ok $? "says nothing about hooks"
+
 echo "-- outside a git repo --"
 mkdir -p "$TMPROOT/bare"
 out=$(cd "$TMPROOT/bare" && printf '{}' | "$HOOK" 2>/dev/null); rc=$?

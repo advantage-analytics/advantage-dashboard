@@ -81,13 +81,13 @@ export function WizardShell({
 
       {pinned}
 
-      <div className={`${CONTENT_CLS} pb-10 pt-16`}>
+      <div className={`${CONTENT_CLS} pt-16 pb-10`}>
         <div className="flex flex-col gap-3">
           <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
             Step {stepIndex + 1} of {stepCount}
           </span>
           <h1
-            className="max-w-[560px] text-[30px] font-light leading-[1.15] tracking-[-0.3px] text-[var(--ink-900)]"
+            className="max-w-[560px] text-[30px] leading-[1.15] font-light tracking-[-0.3px] text-[var(--ink-900)]"
             style={{ textWrap: "pretty" }}
           >
             {title}

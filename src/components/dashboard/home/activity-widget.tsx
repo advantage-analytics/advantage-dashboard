@@ -24,7 +24,12 @@ export function ActivityWidget({ activity }: { activity: PersonalActivity }) {
       // `@container/activity` so the grid's gap below can scale with this
       // card's width (`cqi`) rather than the viewport's.
       className="surface-card @container/activity"
-      style={{ padding: "var(--pad-card)", display: "flex", flexDirection: "column", gap: "6px" }}
+      style={{
+        padding: "var(--pad-card)",
+        display: "flex",
+        flexDirection: "column",
+        gap: "6px",
+      }}
     >
       {/* Pa2's header grammar: eyebrow left, the card's one link right. The
           session count moved out of the header and into the footer under the
@@ -37,14 +42,20 @@ export function ActivityWidget({ activity }: { activity: PersonalActivity }) {
             its own. */}
         <Link
           href="/dashboard/matches"
-          className="whitespace-nowrap text-[11px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+          className="text-[11px] whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
         >
           Session log
         </Link>
       </div>
 
       <div
-        style={{ display: "flex", alignItems: "center", gap: 0, paddingLeft: "2px", marginTop: "6px" }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 0,
+          paddingLeft: "2px",
+          marginTop: "6px",
+        }}
         aria-hidden
       >
         {monthLabels.map((m, i) => (
@@ -56,9 +67,13 @@ export function ActivityWidget({ activity }: { activity: PersonalActivity }) {
 
       <ActivityHeatmap days={days} sessionCount={sessionCount} />
 
-      <span className="text-[11px] text-[var(--ink-600)]" style={{ marginTop: "6px" }}>
+      <span
+        className="text-[11px] text-[var(--ink-600)]"
+        style={{ marginTop: "6px" }}
+      >
         <span className="tabular">{sessionCount}</span>{" "}
-        {sessionCount === 1 ? "session" : "sessions"} · <span className="tabular">12</span> months
+        {sessionCount === 1 ? "session" : "sessions"} ·{" "}
+        <span className="tabular">12</span> months
       </span>
     </div>
   );

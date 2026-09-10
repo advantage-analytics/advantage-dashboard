@@ -112,7 +112,8 @@ export interface AnalysisFailedInput {
 }
 
 export function analysisFailedEmail(input: AnalysisFailedInput): EmailMessage {
-  const { to, matchId, matchTitle, matchContext, reason, videoRetained } = input;
+  const { to, matchId, matchTitle, matchContext, reason, videoRetained } =
+    input;
 
   const content: EmailContent = {
     preheader: `We couldn't finish analysing ${matchTitle}.`,

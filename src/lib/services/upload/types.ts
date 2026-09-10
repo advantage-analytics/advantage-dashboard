@@ -5,10 +5,10 @@
  * Each interface has a single, focused responsibility.
  */
 
-import type { VideoProbe } from '@/lib/video/probe';
+import type { VideoProbe } from "@/lib/video/probe";
 
 /** Supported data providers */
-export type ProviderId = 'swing-vision' | 'atp-tour' | 'splitstep';
+export type ProviderId = "swing-vision" | "atp-tour" | "splitstep";
 
 /**
  * How a provider gets match data into the system.
@@ -19,7 +19,7 @@ export type ProviderId = 'swing-vision' | 'atp-tour' | 'splitstep';
  *   service, which returns results asynchronously via webhook. Validation must
  *   await media metadata, and the file is an input to a job, not the data.
  */
-export type ProviderKind = 'import' | 'processing';
+export type ProviderKind = "import" | "processing";
 
 /** File validation result */
 export interface ValidationResult {
@@ -89,7 +89,7 @@ export interface MatchFileRecord {
   file_size: number;
   storage_path: string;
   uploaded_by: string;
-  status: 'uploading' | 'uploaded' | 'validated' | 'failed';
+  status: "uploading" | "uploaded" | "validated" | "failed";
 }
 
 /** Shared surface for every provider strategy. */
@@ -108,7 +108,7 @@ interface IProviderStrategyBase {
  * the file is read.
  */
 export interface IImportProviderStrategy extends IProviderStrategyBase {
-  readonly kind: 'import';
+  readonly kind: "import";
 
   /** Validate file before upload (client-side checks) */
   validateFile(file: File): ValidationResult;
@@ -123,7 +123,7 @@ export interface IImportProviderStrategy extends IProviderStrategyBase {
  * file after a multi-gigabyte upload is the worst failure in the pipeline.
  */
 export interface IProcessingProviderStrategy extends IProviderStrategyBase {
-  readonly kind: 'processing';
+  readonly kind: "processing";
 
   /**
    * Shortest analysable clip, in seconds.
@@ -158,8 +158,7 @@ export interface IProcessingProviderStrategy extends IProviderStrategyBase {
  * parse-and-upload path.
  */
 export type IProviderUploadStrategy =
-  | IImportProviderStrategy
-  | IProcessingProviderStrategy;
+  IImportProviderStrategy | IProcessingProviderStrategy;
 
 /**
  * Storage Service Interface
@@ -168,7 +167,11 @@ export type IProviderUploadStrategy =
  */
 export interface IStorageService {
   /** Upload file to storage bucket */
-  upload(path: string, file: File | Blob, options?: { upsert?: boolean }): Promise<UploadResult>;
+  upload(
+    path: string,
+    file: File | Blob,
+    options?: { upsert?: boolean },
+  ): Promise<UploadResult>;
 
   /** Delete file from storage bucket */
   delete(path: string): Promise<{ success: boolean; error?: string }>;

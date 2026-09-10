@@ -32,7 +32,9 @@ export function CardFooter({
       </span>
       <div className="flex-1" />
       {right && (
-        <span className="whitespace-nowrap text-[11px] text-[var(--ink-600)]">{right}</span>
+        <span className="text-[11px] whitespace-nowrap text-[var(--ink-600)]">
+          {right}
+        </span>
       )}
     </div>
   );

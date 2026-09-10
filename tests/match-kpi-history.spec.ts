@@ -1,10 +1,10 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
 import {
   KPI_SERIES_WINDOW,
   buildKpiHistory,
   type PlayerStatRow,
-} from '@/lib/data/match-stats-server';
+} from "@/lib/data/match-stats-server";
 
 /**
  * What a match page's KPI tile is allowed to claim.
@@ -17,8 +17,8 @@ import {
  * ending on last month's match looks exactly like a line ending on this one.
  */
 
-const MATCH_ID = 'current';
-const MATCH_DAY = '2026-03-20';
+const MATCH_ID = "current";
+const MATCH_DAY = "2026-03-20";
 
 /** `n` days before the match under test, in the shape `matches.date` stores. */
 function daysBefore(n: number): string {
@@ -42,7 +42,7 @@ function cell(value: number | null): string | null {
 function firstServe(
   matchId: string,
   date: string,
-  value: number | null
+  value: number | null,
 ): PlayerStatRow {
   return { match_id: matchId, date, first_serve_pct: cell(value) };
 }
@@ -56,7 +56,7 @@ function currentMatch(value: number | null): PlayerStatRow {
 function allFour(
   matchId: string,
   date: string,
-  [firstIn, firstWon, secondWon, saved]: (number | null)[]
+  [firstIn, firstWon, secondWon, saved]: (number | null)[],
 ): PlayerStatRow {
   return {
     match_id: matchId,
@@ -68,109 +68,112 @@ function allFour(
   };
 }
 
-test.describe('the baseline', () => {
-  test('averages the player OTHER matches, never this one', () => {
+test.describe("the baseline", () => {
+  test("averages the player OTHER matches, never this one", () => {
     // 100% on the day would otherwise be averaged into the figure it is about
     // to be compared against, and a one-match player would see a delta of zero
     // on every tile.
     const { baseline } = buildKpiHistory(
       [
         currentMatch(100),
-        firstServe('a', daysBefore(2), 50),
-        firstServe('b', daysBefore(1), 60),
+        firstServe("a", daysBefore(2), 50),
+        firstServe("b", daysBefore(1), 60),
       ],
-      MATCH_ID
+      MATCH_ID,
     );
 
     expect(baseline.firstServeIn).toBe(55);
   });
 
-  test('drops a match that withheld the statistic instead of scoring it zero', () => {
+  test("drops a match that withheld the statistic instead of scoring it zero", () => {
     const { baseline } = buildKpiHistory(
       [
         currentMatch(70),
-        firstServe('a', daysBefore(2), 60),
-        firstServe('b', daysBefore(1), null),
+        firstServe("a", daysBefore(2), 60),
+        firstServe("b", daysBefore(1), null),
       ],
-      MATCH_ID
+      MATCH_ID,
     );
 
     // 60, not 30. The absent match is not a match played at 0%.
     expect(baseline.firstServeIn).toBe(60);
   });
 
-  test('keeps a real zero, which is a measurement', () => {
+  test("keeps a real zero, which is a measurement", () => {
     const { baseline } = buildKpiHistory(
       [
         currentMatch(70),
-        firstServe('a', daysBefore(2), 0),
-        firstServe('b', daysBefore(1), 60),
+        firstServe("a", daysBefore(2), 0),
+        firstServe("b", daysBefore(1), 60),
       ],
-      MATCH_ID
+      MATCH_ID,
     );
 
     expect(baseline.firstServeIn).toBe(30);
   });
 
-  test('has no key at all when nothing measured it', () => {
+  test("has no key at all when nothing measured it", () => {
     const { baseline } = buildKpiHistory(
       [
         currentMatch(70),
-        firstServe('a', daysBefore(2), null),
-        firstServe('b', daysBefore(1), null),
+        firstServe("a", daysBefore(2), null),
+        firstServe("b", daysBefore(1), null),
       ],
-      MATCH_ID
+      MATCH_ID,
     );
 
     // Absent, not 0 — "we have never measured this" and "you average zero" are
     // different sentences, and the tile says different things about them.
-    expect('firstServeIn' in baseline).toBe(false);
+    expect("firstServeIn" in baseline).toBe(false);
   });
 
-  test('reports whole percent, as the label under the tile prints it', () => {
+  test("reports whole percent, as the label under the tile prints it", () => {
     const { baseline } = buildKpiHistory(
       [
         currentMatch(70),
-        firstServe('a', daysBefore(2), 60.4),
-        firstServe('b', daysBefore(1), 61.6),
+        firstServe("a", daysBefore(2), 60.4),
+        firstServe("b", daysBefore(1), 61.6),
       ],
-      MATCH_ID
+      MATCH_ID,
     );
 
     expect(baseline.firstServeIn).toBe(61);
   });
 });
 
-test.describe('the series', () => {
-  test('runs oldest to newest and ends on this match', () => {
+test.describe("the series", () => {
+  test("runs oldest to newest and ends on this match", () => {
     const { series } = buildKpiHistory(
       [
-        firstServe('b', daysBefore(1), 62),
+        firstServe("b", daysBefore(1), 62),
         currentMatch(58),
-        firstServe('a', daysBefore(9), 50),
+        firstServe("a", daysBefore(9), 50),
       ],
-      MATCH_ID
+      MATCH_ID,
     );
 
     expect(series.firstServeIn).toEqual([50, 62, 58]);
   });
 
-  test('covers at most this match and the seven before it', () => {
+  test("covers at most this match and the seven before it", () => {
     const earlier = Array.from({ length: 12 }, (_, i) =>
-      firstServe(`m${i}`, daysBefore(12 - i), 40 + i)
+      firstServe(`m${i}`, daysBefore(12 - i), 40 + i),
     );
 
-    const { series } = buildKpiHistory([...earlier, currentMatch(70)], MATCH_ID);
+    const { series } = buildKpiHistory(
+      [...earlier, currentMatch(70)],
+      MATCH_ID,
+    );
 
     expect(series.firstServeIn).toHaveLength(KPI_SERIES_WINDOW);
     expect(series.firstServeIn).toEqual([45, 46, 47, 48, 49, 50, 51, 70]);
   });
 
-  test('leaves out a match played after this one', () => {
+  test("leaves out a match played after this one", () => {
     const rows = [
-      firstServe('before', daysBefore(2), 50),
+      firstServe("before", daysBefore(2), 50),
       currentMatch(60),
-      firstServe('after', '2026-03-25', 90),
+      firstServe("after", "2026-03-25", 90),
     ];
 
     const { baseline, series } = buildKpiHistory(rows, MATCH_ID);
@@ -182,11 +185,11 @@ test.describe('the series', () => {
     expect(baseline.firstServeIn).toBe(70);
   });
 
-  test('drops a gap rather than drawing it as zero', () => {
+  test("drops a gap rather than drawing it as zero", () => {
     const rows = [
-      firstServe('a', daysBefore(3), 50),
-      firstServe('b', daysBefore(2), null),
-      firstServe('c', daysBefore(1), 62),
+      firstServe("a", daysBefore(3), 50),
+      firstServe("b", daysBefore(2), null),
+      firstServe("c", daysBefore(1), 62),
       currentMatch(58),
     ];
 
@@ -195,14 +198,14 @@ test.describe('the series', () => {
     expect(series.firstServeIn).toEqual([50, 62, 58]);
   });
 
-  test('is absent below two points', () => {
+  test("is absent below two points", () => {
     const { series } = buildKpiHistory([currentMatch(58)], MATCH_ID);
 
     // One point is a dot, and a chart drawn through it still reads as a trend.
-    expect('firstServeIn' in series).toBe(false);
+    expect("firstServeIn" in series).toBe(false);
   });
 
-  test('is absent when this match is not in the set to end on', () => {
+  test("is absent when this match is not in the set to end on", () => {
     // buildKpiHistory draws a line only if this match is among the rows — the
     // anchor its window ends on. Absent, there is no anchor and no line, and
     // that is now the whole answer: `getMatchKpiHistory` no longer manufactures
@@ -210,34 +213,31 @@ test.describe('the series', () => {
     // lands here and correctly draws nothing. A line that stopped short of this
     // match would be read as this match's trend.
     const { baseline, series } = buildKpiHistory(
-      [
-        firstServe('a', daysBefore(2), 50),
-        firstServe('b', daysBefore(1), 60),
-      ],
-      MATCH_ID
+      [firstServe("a", daysBefore(2), 50), firstServe("b", daysBefore(1), 60)],
+      MATCH_ID,
     );
 
-    expect('firstServeIn' in series).toBe(false);
+    expect("firstServeIn" in series).toBe(false);
     expect(baseline.firstServeIn).toBe(55);
   });
 });
 
-test.describe('one measured match', () => {
-  test('yields a baseline and no line', () => {
+test.describe("one measured match", () => {
+  test("yields a baseline and no line", () => {
     const { baseline, series } = buildKpiHistory(
-      [currentMatch(null), firstServe('a', daysBefore(3), 58)],
-      MATCH_ID
+      [currentMatch(null), firstServe("a", daysBefore(3), 58)],
+      MATCH_ID,
     );
 
     expect(baseline.firstServeIn).toBe(58);
-    expect('firstServeIn' in series).toBe(false);
+    expect("firstServeIn" in series).toBe(false);
   });
 });
 
-test.describe('the four keys', () => {
-  test('each reads its own column', () => {
+test.describe("the four keys", () => {
+  test("each reads its own column", () => {
     const rows = [
-      allFour('a', daysBefore(1), [60, 70, 50, 40]),
+      allFour("a", daysBefore(1), [60, 70, 50, 40]),
       allFour(MATCH_ID, MATCH_DAY, [64, 74, 54, 44]),
     ];
 
@@ -257,16 +257,16 @@ test.describe('the four keys', () => {
     });
   });
 
-  test('a key one source withholds goes quiet on its own', () => {
+  test("a key one source withholds goes quiet on its own", () => {
     const rows = [
-      allFour('a', daysBefore(1), [60, 70, 50, null]),
+      allFour("a", daysBefore(1), [60, 70, 50, null]),
       allFour(MATCH_ID, MATCH_DAY, [64, 74, 54, null]),
     ];
 
     const { baseline, series } = buildKpiHistory(rows, MATCH_ID);
 
-    expect('breakPointsSaved' in baseline).toBe(false);
-    expect('breakPointsSaved' in series).toBe(false);
+    expect("breakPointsSaved" in baseline).toBe(false);
+    expect("breakPointsSaved" in series).toBe(false);
     expect(baseline.firstServeIn).toBe(60);
     expect(series.firstServeIn).toEqual([60, 64]);
   });

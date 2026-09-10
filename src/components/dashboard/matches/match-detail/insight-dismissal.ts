@@ -52,7 +52,10 @@ export function useInsightDismissal(matchId: string): {
 
   const dismissed = useSyncExternalStore(
     subscribe,
-    useCallback(() => localStorage.getItem(storageKey) === "true", [storageKey]),
+    useCallback(
+      () => localStorage.getItem(storageKey) === "true",
+      [storageKey],
+    ),
     () => true,
   );
 

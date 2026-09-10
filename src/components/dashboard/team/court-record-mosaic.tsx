@@ -7,7 +7,10 @@ import {
   DARK_READOUT_CLASS,
   DARK_READOUT_STYLE,
 } from "@/components/dashboard/matches/match-detail/chart-tooltip";
-import { COURT_RECORD_COLS, EmptyCell } from "@/components/dashboard/team/court-record-shell";
+import {
+  COURT_RECORD_COLS,
+  EmptyCell,
+} from "@/components/dashboard/team/court-record-shell";
 import {
   COURT_RECORD_WINDOW,
   type CourtCell,
@@ -119,7 +122,7 @@ export function CourtRecordMosaic({ record }: { record: CourtRecord }) {
             <span
               key={column.eventId}
               role="columnheader"
-              className="tabular whitespace-nowrap text-center text-[9px] text-[var(--ink-400)]"
+              className="tabular text-center text-[9px] whitespace-nowrap text-[var(--ink-400)]"
               aria-label={`${column.opponent}, ${column.date}`}
             >
               {column.date}
@@ -141,7 +144,10 @@ export function CourtRecordMosaic({ record }: { record: CourtRecord }) {
               className="grid items-center gap-1"
               style={{ gridTemplateColumns: COURT_RECORD_COLS }}
             >
-              <span role="rowheader" className="text-[11px] text-[var(--ink-500)]">
+              <span
+                role="rowheader"
+                className="text-[11px] text-[var(--ink-500)]"
+              >
                 {row.slot}
               </span>
               {row.cells.map((cell, c) => (
@@ -172,7 +178,7 @@ export function CourtRecordMosaic({ record }: { record: CourtRecord }) {
         <div
           ref={tipRef}
           role="tooltip"
-          className={`pointer-events-none absolute z-20 flex w-max max-w-[220px] flex-col gap-1 whitespace-nowrap px-3 py-2.5 ${DARK_READOUT_CLASS}`}
+          className={`pointer-events-none absolute z-20 flex w-max max-w-[220px] flex-col gap-1 px-3 py-2.5 whitespace-nowrap ${DARK_READOUT_CLASS}`}
           style={{
             ...DARK_READOUT_STYLE,
             left: tipLeft ?? hover!.cx,
@@ -180,7 +186,10 @@ export function CourtRecordMosaic({ record }: { record: CourtRecord }) {
             // card's header and the card's edge: there it hangs below.
             ...(hover!.top < 40
               ? { top: hover!.top + 20 + 8, transform: "translateX(-50%)" }
-              : { top: hover!.top, transform: "translate(-50%, calc(-100% - 8px))" }),
+              : {
+                  top: hover!.top,
+                  transform: "translate(-50%, calc(-100% - 8px))",
+                }),
           }}
         >
           <span className="text-[12px] font-medium text-white">
@@ -196,11 +205,17 @@ export function CourtRecordMosaic({ record }: { record: CourtRecord }) {
                 {active.forfeit === "ours" ? "Forfeited" : "Won by forfeit"}
               </span>
             ) : (
-              <ScoreLine sets={active.sets} className="tabular text-[11px] text-white" />
+              <ScoreLine
+                sets={active.sets}
+                className="tabular text-[11px] text-white"
+              />
             )}
             <span
               className="text-[11px] font-medium"
-              style={{ color: active.result === "w" ? "var(--viz-good)" : "var(--viz-bad)" }}
+              style={{
+                color:
+                  active.result === "w" ? "var(--viz-good)" : "var(--viz-bad)",
+              }}
             >
               {active.result === "w" ? "Won" : "Lost"}
             </span>
@@ -228,7 +243,9 @@ function Cell({
   const fill = { background: CELL_FILL[cell.result] };
 
   if (cell.result === "-") {
-    return <span role="cell" aria-label={label} className={square} style={fill} />;
+    return (
+      <span role="cell" aria-label={label} className={square} style={fill} />
+    );
   }
 
   const href = cell.reportId
@@ -240,7 +257,7 @@ function Cell({
       <Link
         href={href}
         aria-label={label}
-        className={`${square} transition-[box-shadow] duration-[var(--duration-fast)] hover:shadow-[0_0_0_2px_var(--blue-ring-30)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--blue-ring-40)]`}
+        className={`${square} transition-[box-shadow] duration-[var(--duration-fast)] hover:shadow-[0_0_0_2px_var(--blue-ring-30)] focus-visible:shadow-[0_0_0_2px_var(--blue-ring-40)] focus-visible:outline-none`}
         style={fill}
         onMouseEnter={(e) => onShow(e.currentTarget)}
         onMouseLeave={onHide}

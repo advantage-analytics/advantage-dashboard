@@ -27,8 +27,8 @@
  * See docs/splitstep-vendor-questions.md.
  */
 
-import { serveCourtSide } from './court';
-import type { SplitStepRally } from './types';
+import { serveCourtSide } from "./court";
+import type { SplitStepRally } from "./types";
 
 /** One reading of the serve data. Two of these make a bracket. */
 export interface ServeReading {
@@ -93,8 +93,8 @@ export function aceCandidates(rallies: SplitStepRally[]): number {
   return rallies.filter(
     (rally) =>
       rally.strokes.length === 1 &&
-      rally.strokes[0]?.strokeType === 'serve' &&
-      rally.strokes[0]?.in
+      rally.strokes[0]?.strokeType === "serve" &&
+      rally.strokes[0]?.in,
   ).length;
 }
 
@@ -109,8 +109,8 @@ export function serveSideCounts(rallies: SplitStepRally[]): ServeSideCounts {
       continue;
     }
     const side = serveCourtSide(serve.playerX, serve.playerY);
-    if (side === 'deuce') counts.deuce += 1;
-    else if (side === 'ad') counts.ad += 1;
+    if (side === "deuce") counts.deuce += 1;
+    else if (side === "ad") counts.ad += 1;
     else counts.unknown += 1;
   }
 
@@ -175,10 +175,10 @@ export function serveBracket(rallies: SplitStepRally[]): ServeBracket {
     byRallyStructure,
     byInFlag,
     firstServeSpread: Math.abs(
-      byRallyStructure.firstServePercentage - byInFlag.firstServePercentage
+      byRallyStructure.firstServePercentage - byInFlag.firstServePercentage,
     ),
     doubleFaultSpread: Math.abs(
-      byRallyStructure.doubleFaults - byInFlag.doubleFaults
+      byRallyStructure.doubleFaults - byInFlag.doubleFaults,
     ),
   };
 }
@@ -195,6 +195,6 @@ export function serveBracket(rallies: SplitStepRally[]): ServeBracket {
  * merged) therefore loses the distinction here. Callers that need to know
  * should read `rally.serves.length` rather than infer it from this.
  */
-export function serveShotType(ordinal: number): 'First Serve' | 'Second Serve' {
-  return ordinal === 0 ? 'First Serve' : 'Second Serve';
+export function serveShotType(ordinal: number): "First Serve" | "Second Serve" {
+  return ordinal === 0 ? "First Serve" : "Second Serve";
 }

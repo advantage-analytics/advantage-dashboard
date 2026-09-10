@@ -264,10 +264,7 @@ export function OnboardingFlow() {
                   />
                 </div>
                 <div>
-                  <label
-                    htmlFor="onboarding-last-name"
-                    className={CLAIM_LABEL}
-                  >
+                  <label htmlFor="onboarding-last-name" className={CLAIM_LABEL}>
                     Last name
                   </label>
                   <input
@@ -323,10 +320,10 @@ export function OnboardingFlow() {
                       onClick={() => setPersona(option.id)}
                       className={cn(
                         "flex cursor-pointer flex-col gap-2 rounded-[var(--radius-element)] border p-5 text-left transition-colors duration-[var(--duration-fast)]",
-                        "focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]",
+                        "focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
                         selected
                           ? "border-[var(--blue)] bg-[var(--blue-soft)]"
-                          : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]"
+                          : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]",
                       )}
                     >
                       <Icon
@@ -334,7 +331,7 @@ export function OnboardingFlow() {
                           "size-5",
                           selected
                             ? "text-[var(--blue)]"
-                            : "text-[var(--ink-600)]"
+                            : "text-[var(--ink-600)]",
                         )}
                         strokeWidth={1.5}
                         aria-hidden="true"
@@ -386,10 +383,10 @@ export function OnboardingFlow() {
                       onClick={() => setCollege(option.id)}
                       className={cn(
                         "flex cursor-pointer items-start gap-2.5 rounded-[var(--radius-element)] border px-5 py-4 text-left transition-colors duration-[var(--duration-fast)]",
-                        "focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]",
+                        "focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
                         selected
                           ? "border-[var(--blue)] bg-[var(--blue-tint-08)]"
-                          : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]"
+                          : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]",
                       )}
                     >
                       {/* `leading-5` is load-bearing: Tailwind v4's
@@ -498,7 +495,7 @@ export function OnboardingFlow() {
                         index === 0
                           ? "pb-[9px]"
                           : "border-t border-[var(--border-hairline)] py-[9px]",
-                        index === GUARDIAN_ACKNOWLEDGMENTS.length - 1 && "pb-0"
+                        index === GUARDIAN_ACKNOWLEDGMENTS.length - 1 && "pb-0",
                       )}
                     >
                       <TermMark tone="ink" />
@@ -531,7 +528,7 @@ export function OnboardingFlow() {
                         has documents for. */}
                     <Link
                       href="/legal/terms-and-conditions"
-                      className="rounded-sm text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
+                      className="rounded-sm text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
                     >
                       Read the guardian terms
                     </Link>

@@ -117,7 +117,11 @@ export function RosterNote({
           aria-hidden
           className="-mt-1 flex items-start gap-2 text-[11px] leading-[1.6] text-[var(--ink-600)]"
         >
-          <Icon className="mt-[3px] size-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
+          <Icon
+            className="mt-[3px] size-3.5 shrink-0"
+            strokeWidth={1.5}
+            aria-hidden
+          />
           <span>{note}</span>
         </p>
       )}
@@ -156,14 +160,14 @@ export function nameList(names: string[]): string {
 export function spotHolders(
   roster: RosterMember[],
   spot: string,
-  exclude: string | null
+  exclude: string | null,
 ): string[] {
   if (spot === "") return [];
   return roster
     .filter(
       (person) =>
         person.lineupSpot === Number(spot) &&
-        (exclude === null || person.profileId !== exclude)
+        (exclude === null || person.profileId !== exclude),
     )
     .map((person) => person.name);
 }

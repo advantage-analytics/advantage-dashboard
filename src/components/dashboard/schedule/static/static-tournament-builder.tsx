@@ -241,7 +241,7 @@ function formatFor(value: EventFormatValue | undefined): TournamentFormat {
  */
 export function seedEntries(
   roster: LadderPlayer[],
-  field: TournamentEntrySeed[] | undefined
+  field: TournamentEntrySeed[] | undefined,
 ): Map<string, FieldEntry> {
   const entered = new Map<string, FieldEntry>();
   if (!field) return entered;
@@ -252,8 +252,7 @@ export function seedEntries(
       // Back to the string the cell holds. `null` and absent are both "no
       // seed", which is the empty string — never a 0, which would print as an
       // actual seeding.
-      seed:
-        row.seed !== undefined && row.seed !== null ? String(row.seed) : "",
+      seed: row.seed !== undefined && row.seed !== null ? String(row.seed) : "",
       id: row.id,
       position: row.position,
       labels: row.labels,
@@ -271,7 +270,7 @@ export function seedEntries(
  */
 export function fieldFor(
   roster: LadderPlayer[],
-  entered: ReadonlyMap<string, FieldEntry>
+  entered: ReadonlyMap<string, FieldEntry>,
 ): { player: LadderPlayer; entry: FieldEntry }[] {
   return roster.flatMap((player) => {
     const entry = entered.get(player.userId);
@@ -289,7 +288,7 @@ export function fieldFor(
 export function buildTournamentEntries(
   roster: LadderPlayer[],
   entered: ReadonlyMap<string, FieldEntry>,
-  carry: TournamentEntryInput[]
+  carry: TournamentEntryInput[],
 ): TournamentEntryInput[] {
   const field = fieldFor(roster, entered);
 
@@ -297,7 +296,7 @@ export function buildTournamentEntries(
     Math.max(
       -1,
       ...carry.map((row) => row.position),
-      ...field.map(({ entry }) => entry.position ?? -1)
+      ...field.map(({ entry }) => entry.position ?? -1),
     ) + 1;
 
   return [
@@ -340,14 +339,14 @@ export function buildTournamentEntries(
 export function useTournamentDraft(
   roster: LadderPlayer[],
   defaultSurface: string | null,
-  initial?: TournamentDraftSeed
+  initial?: TournamentDraftSeed,
 ) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   /** `createTournament`'s `ActionError`, held so the flow can print it. */
   const [error, setError] = useState<string | null>(null);
   const [entered, setEntered] = useState<ReadonlyMap<string, FieldEntry>>(() =>
-    seedEntries(roster, initial?.field)
+    seedEntries(roster, initial?.field),
   );
   const [draft, setDraft] = useState<TournamentDraft>(() => ({
     name: initial?.name ?? "",
@@ -363,7 +362,7 @@ export function useTournamentDraft(
     // Never "Hard": a court type nobody stated is a fact about the tournament
     // we would be inventing, and `createTournament` stores "" as a null column.
     surface:
-      initial?.surface !== undefined ? initial.surface : defaultSurface ?? "",
+      initial?.surface !== undefined ? initial.surface : (defaultSurface ?? ""),
   }));
 
   function edit(patch: Partial<TournamentDraft>) {
@@ -392,7 +391,7 @@ export function useTournamentDraft(
         // A qualifier is not seeded, and the cell beside the draw says so with
         // a dash. Keeping a seed alive behind that dash would send a number
         // nobody could see.
-        seed: draw === QUALIFYING ? "" : existing?.seed ?? "",
+        seed: draw === QUALIFYING ? "" : (existing?.seed ?? ""),
       });
       return next;
     });
@@ -457,7 +456,7 @@ export function useTournamentDraft(
     const entries: TournamentEntryInput[] = buildTournamentEntries(
       roster,
       entered,
-      carried
+      carried,
     );
 
     const eventId = initial?.eventId;
@@ -527,7 +526,7 @@ export function TournamentWeekendStep({
         {/* The 2px blue rule is the artboard's. What `3c` draws filled in is
             this field's placeholder: an unnamed tournament is what the screen
             actually opens on, and `createTournament` refuses one. */}
-        <span className="mt-1 flex items-center border-b-2 border-[var(--border-medium)] pb-2 pt-1.5 transition-colors focus-within:border-[var(--blue)]">
+        <span className="mt-1 flex items-center border-b-2 border-[var(--border-medium)] pt-1.5 pb-2 transition-colors focus-within:border-[var(--blue)]">
           <input
             autoFocus
             value={draft.name}
@@ -713,7 +712,7 @@ function FieldRow({
     <div
       className={cn(
         "grid h-[52px] grid-cols-[32px_1fr_132px_88px] items-center gap-3",
-        last ? "" : "border-b border-[var(--border-hairline)]"
+        last ? "" : "border-b border-[var(--border-hairline)]",
       )}
     >
       <span
@@ -726,7 +725,7 @@ function FieldRow({
       <span
         className={cn(
           "truncate text-[13px] text-[var(--ink-900)]",
-          entry ? "font-medium" : "font-normal"
+          entry ? "font-medium" : "font-normal",
         )}
       >
         {name}
@@ -750,7 +749,7 @@ function FieldRow({
           className={cn(
             "min-w-0 flex-1 appearance-none bg-transparent text-[12px] outline-none",
             locked ? "cursor-default" : "cursor-pointer",
-            entry ? "text-[var(--ink-600)]" : "text-[var(--ink-400)]"
+            entry ? "text-[var(--ink-600)]" : "text-[var(--ink-400)]",
           )}
         >
           <option value="">—</option>

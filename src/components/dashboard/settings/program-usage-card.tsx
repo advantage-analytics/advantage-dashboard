@@ -64,7 +64,7 @@ export function ProgramUsageCard({
             <span
               className={cn(
                 "mono min-w-[64px] text-center text-[11px] text-[var(--ink-700)] transition-opacity",
-                isPending && "opacity-40"
+                isPending && "opacity-40",
               )}
             >
               {formatBillingMonth(usage.billingMonth)}

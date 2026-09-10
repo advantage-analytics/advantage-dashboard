@@ -117,8 +117,7 @@ export function MergeProfilesDialog({
   const ready =
     !bothClaimed &&
     preview !== null &&
-    normalizedPersonName(confirmName) ===
-      normalizedPersonName(surviving.name);
+    normalizedPersonName(confirmName) === normalizedPersonName(surviving.name);
 
   function submit() {
     if (!surviving || !absorbed) return;
@@ -163,7 +162,9 @@ export function MergeProfilesDialog({
             disabled={!ready || pending}
             onClick={submit}
           >
-            {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+            {pending && (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+            )}
             Merge profiles
           </button>
         </>
@@ -191,11 +192,17 @@ export function MergeProfilesDialog({
                 <span
                   aria-hidden
                   className={`mt-px flex size-3.5 shrink-0 items-center justify-center rounded-full ${
-                    chosen ? "bg-[var(--blue)]" : "border border-[var(--ink-300)]"
+                    chosen
+                      ? "bg-[var(--blue)]"
+                      : "border border-[var(--ink-300)]"
                   }`}
                 >
                   {chosen && (
-                    <Check className="size-2 text-white" strokeWidth={3} aria-hidden />
+                    <Check
+                      className="size-2 text-white"
+                      strokeWidth={3}
+                      aria-hidden
+                    />
                   )}
                 </span>
                 <span className="min-w-0">
@@ -203,14 +210,18 @@ export function MergeProfilesDialog({
                     {member.name}
                   </span>
                   <span className="mt-0.5 block text-[11px] leading-[1.5] text-[var(--ink-600)]">
-                    {member.managedBy === "self" ? "Self-managed" : "Coach-managed"}{" "}
+                    {member.managedBy === "self"
+                      ? "Self-managed"
+                      : "Coach-managed"}{" "}
                     · <span className="tabular">{member.matchesPlayed}</span>{" "}
                     {member.matchesPlayed === 1 ? "match" : "matches"}
                     <br />
                     {member.email ?? "No email on file"}
                   </span>
                   {member.managedBy === "self" && (
-                    <span className="text-micro mt-1 block">Keeps the login</span>
+                    <span className="text-micro mt-1 block">
+                      Keeps the login
+                    </span>
                   )}
                 </span>
               </button>
@@ -223,8 +234,8 @@ export function MergeProfilesDialog({
         <DialogInfoRow
           icon={<Info className="size-3.5" strokeWidth={1.5} aria-hidden />}
         >
-          Both of these have an account, so this is a roster change rather than a
-          duplicate. Remove whichever one should not be here instead.
+          Both of these have an account, so this is a roster change rather than
+          a duplicate. Remove whichever one should not be here instead.
         </DialogInfoRow>
       ) : (
         <>
@@ -234,8 +245,8 @@ export function MergeProfilesDialog({
             </span>
             <MoveRow icon={<Video className="size-3" strokeWidth={1.5} />}>
               <span className="tabular">{preview?.matchesMoving ?? "…"}</span>{" "}
-              {preview?.matchesMoving === 1 ? "match" : "matches"} and their video
-              → {surviving.name}
+              {preview?.matchesMoving === 1 ? "match" : "matches"} and their
+              video → {surviving.name}
             </MoveRow>
             <MoveRow icon={<BarChart3 className="size-3" strokeWidth={1.5} />}>
               Season stats recompute on the next load — no double counting
@@ -244,7 +255,8 @@ export function MergeProfilesDialog({
               Upload credits kept — matches still show who added them
             </MoveRow>
             <MoveRow icon={<Trash2 className="size-3" strokeWidth={1.5} />}>
-              The {absorbed.managedBy === "self" ? "self-managed" : "coach-managed"}{" "}
+              The{" "}
+              {absorbed.managedBy === "self" ? "self-managed" : "coach-managed"}{" "}
               row is retired
             </MoveRow>
           </div>

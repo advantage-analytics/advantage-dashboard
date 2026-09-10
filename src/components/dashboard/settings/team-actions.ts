@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { generateToken, hashToken, INVITE_TTL_HOURS } from "@/lib/services/programs/tokens";
+import {
+  generateToken,
+  hashToken,
+  INVITE_TTL_HOURS,
+} from "@/lib/services/programs/tokens";
 import {
   ownershipTransferredEmail,
   programInviteEmail,
@@ -66,18 +70,21 @@ const NOT_A_MEMBER = "You're not on that program.";
  * person may act on, whatever the RPC would go on to say.
  */
 async function memberWorkspace(
-  programId: string
+  programId: string,
 ): Promise<{ program: Workspace; viewer: Viewer } | null> {
   const context = await getWorkspaceContext();
   if (!context) return null;
   const program = context.available.find(
-    (workspace) => workspace.kind === "team" && workspace.id === programId
+    (workspace) => workspace.kind === "team" && workspace.id === programId,
   );
   return program ? { program, viewer: context.viewer } : null;
 }
 
 /** Postgres RAISE messages are written for people; pass them straight through. */
-function toMessage(error: { message: string } | null, fallback: string): string {
+function toMessage(
+  error: { message: string } | null,
+  fallback: string,
+): string {
   const raw = error?.message?.trim();
   return raw && raw.length > 0 ? raw : fallback;
 }
@@ -125,7 +132,7 @@ export interface TeamSettingsInput {
  * a rename changes the switcher's label, which lives nowhere under settings.
  */
 export async function saveTeamSettings(
-  input: TeamSettingsInput & { programId: string }
+  input: TeamSettingsInput & { programId: string },
 ): Promise<ActionResult> {
   const member = await memberWorkspace(input.programId);
   if (!member) return { ok: false, error: NOT_A_MEMBER };
@@ -144,7 +151,10 @@ export async function saveTeamSettings(
   });
 
   if (error) {
-    return { ok: false, error: toMessage(error, "Couldn't save team settings.") };
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't save team settings."),
+    };
   }
 
   revalidateTeams();
@@ -188,8 +198,7 @@ export async function setProgramMemberRole(input: {
 }
 
 export type TransferResult =
-  | { ok: true; warning?: string }
-  | { ok: false; error: string };
+  { ok: true; warning?: string } | { ok: false; error: string };
 
 /**
  * Hand the program to a coach or staff member. The caller stays on as a coach.
@@ -235,7 +244,11 @@ export async function transferProgramOwnership(input: {
     p_program_id: input.programId,
   });
   const recipient = (
-    (roster ?? []) as { user_id: string; display_name: string | null; email: string }[]
+    (roster ?? []) as {
+      user_id: string;
+      display_name: string | null;
+      email: string;
+    }[]
   ).find((row) => row.user_id === input.newOwnerUserId);
 
   if (!recipient) {
@@ -252,7 +265,7 @@ export async function transferProgramOwnership(input: {
       programName: programLabel(member.program),
       programId: input.programId,
       previousOwnerName: member.viewer.name,
-    })
+    }),
   );
 
   if (!sent.ok) {
@@ -287,7 +300,7 @@ const CREST_MAX_BYTES = 524_288;
  * the row at it, then remove whatever it replaced.
  */
 export async function uploadProgramCrest(
-  formData: FormData
+  formData: FormData,
 ): Promise<ActionResult> {
   const programId = String(formData.get("programId") ?? "");
   const file = formData.get("file");
@@ -295,7 +308,10 @@ export async function uploadProgramCrest(
   const member = await memberWorkspace(programId);
   if (!member) return { ok: false, error: NOT_A_MEMBER };
   if (member.program.role === "player") {
-    return { ok: false, error: "Only the coaching staff can change the crest." };
+    return {
+      ok: false,
+      error: "Only the coaching staff can change the crest.",
+    };
   }
 
   if (!(file instanceof File) || file.size === 0) {
@@ -323,7 +339,10 @@ export async function uploadProgramCrest(
     .upload(path, file, { contentType: file.type, upsert: false });
 
   if (uploadError) {
-    return { ok: false, error: `Couldn't upload the crest: ${uploadError.message}` };
+    return {
+      ok: false,
+      error: `Couldn't upload the crest: ${uploadError.message}`,
+    };
   }
 
   const { error } = await supabase.rpc("set_program_crest", {
@@ -349,12 +368,15 @@ export async function uploadProgramCrest(
 
 /** Back to the initials mark. Row first, then the object it pointed at. */
 export async function removeProgramCrest(
-  programId: string
+  programId: string,
 ): Promise<ActionResult> {
   const member = await memberWorkspace(programId);
   if (!member) return { ok: false, error: NOT_A_MEMBER };
   if (member.program.role === "player") {
-    return { ok: false, error: "Only the coaching staff can change the crest." };
+    return {
+      ok: false,
+      error: "Only the coaching staff can change the crest.",
+    };
   }
 
   const supabase = await createClient();
@@ -434,9 +456,7 @@ export async function inviteMember(input: {
 
   const { active, viewer } = workspace;
   const supabase = await createClient();
-  const expiresAt = new Date(
-    Date.now() + INVITE_TTL_HOURS * 60 * 60 * 1000
-  );
+  const expiresAt = new Date(Date.now() + INVITE_TTL_HOURS * 60 * 60 * 1000);
 
   // Minted here and held, rather than inlined into the hash as it used to be.
   // `hashToken(generateToken())` discarded the only copy of the token in the
@@ -481,7 +501,7 @@ export async function inviteMember(input: {
       role: input.role,
       token,
       expiresAt,
-    })
+    }),
   );
 
   revalidatePath(SETTINGS_PATH);
@@ -505,7 +525,10 @@ export async function revokeInvite(inviteId: string): Promise<ActionResult> {
   });
 
   if (error) {
-    return { ok: false, error: toMessage(error, "Couldn't revoke that invite.") };
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't revoke that invite."),
+    };
   }
 
   revalidatePath(SETTINGS_PATH);
@@ -524,7 +547,10 @@ export async function removeMember(userId: string): Promise<ActionResult> {
   });
 
   if (error) {
-    return { ok: false, error: toMessage(error, "Couldn't remove that member.") };
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't remove that member."),
+    };
   }
 
   revalidatePath(SETTINGS_PATH);
@@ -546,7 +572,7 @@ export async function removeMember(userId: string): Promise<ActionResult> {
  * write is refused in SQL if they may not.
  */
 export async function setPlayersCanUpload(
-  next: boolean
+  next: boolean,
 ): Promise<ActionResult> {
   const programId = await activeProgramId();
   if (!programId) return { ok: false, error: NOT_IN_PROGRAM };
@@ -555,7 +581,7 @@ export async function setPlayersCanUpload(
   const { data: program, error: readError } = await supabase
     .from("programs")
     .select(
-      "school_name, team, conference, home_venue, default_surface, season"
+      "school_name, team, conference, home_venue, default_surface, season",
     )
     .eq("id", programId)
     .maybeSingle();

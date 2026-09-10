@@ -62,7 +62,10 @@ export function DualHistory({
       {rows.length > 0 ? (
         rows.map((row) => <Row key={row.id} row={row} />)
       ) : (
-        <DayZeroShape description="No dual decided yet." className="flex flex-col">
+        <DayZeroShape
+          description="No dual decided yet."
+          className="flex flex-col"
+        >
           {GHOST_ROWS.map((opacity) => (
             <div
               key={opacity}
@@ -114,8 +117,10 @@ function Row({ row }: { row: DualHistoryRow }) {
     <Link href={`/dashboard/team/schedule/${row.id}`} className={ROW}>
       <EventMark kind="dual" name={row.opponent} size={32} />
       <span className="flex min-w-0 flex-col gap-px">
-        <span className="truncate text-[13px] text-[var(--ink-900)]">{row.opponent}</span>
-        <span className="whitespace-nowrap text-[11px] text-[var(--ink-500)]">
+        <span className="truncate text-[13px] text-[var(--ink-900)]">
+          {row.opponent}
+        </span>
+        <span className="text-[11px] whitespace-nowrap text-[var(--ink-500)]">
           {siteTitle(row.site)} · <span className="mono">{row.date}</span>
         </span>
       </span>
@@ -130,13 +135,19 @@ function Score({ us, them, won }: { us: number; them: number; won: boolean }) {
   const figure = "tabular text-[16px] font-light";
   return (
     <span className="flex items-baseline justify-end gap-[3px] whitespace-nowrap">
-      <span className={figure} style={{ color: won ? "var(--ink-900)" : "var(--ink-500)" }}>
+      <span
+        className={figure}
+        style={{ color: won ? "var(--ink-900)" : "var(--ink-500)" }}
+      >
         {us}
       </span>
       <span className={figure} style={{ color: "var(--ink-300)" }}>
         –
       </span>
-      <span className={figure} style={{ color: won ? "var(--ink-500)" : "var(--ink-900)" }}>
+      <span
+        className={figure}
+        style={{ color: won ? "var(--ink-500)" : "var(--ink-900)" }}
+      >
         {them}
       </span>
     </span>

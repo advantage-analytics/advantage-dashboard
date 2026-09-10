@@ -1,6 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
-import { RECENT_MATCH_GRID } from '@/components/dashboard/team/player-drawer-layout';
+import { RECENT_MATCH_GRID } from "@/components/dashboard/team/player-drawer-layout";
 
 import {
   GAME_SEPARATOR,
@@ -9,7 +9,7 @@ import {
   scoreSetsFrom,
   tiebreakOf,
   type ScoreLineSet,
-} from '@/lib/ui/score-format';
+} from "@/lib/ui/score-format";
 
 /**
  * The roster drawer's recent-match row — `player-drawer.tsx`, reached from
@@ -44,10 +44,10 @@ import {
  * harness needs the raw CSS value, so the bracket contents are unwrapped and
  * Tailwind's underscore-for-space encoding undone.
  */
-const GRID_TEMPLATE = RECENT_MATCH_GRID.replace(/^grid-cols-\[(.*)\]$/, '$1').replace(
-  /_/g,
-  ' '
-);
+const GRID_TEMPLATE = RECENT_MATCH_GRID.replace(
+  /^grid-cols-\[(.*)\]$/,
+  "$1",
+).replace(/_/g, " ");
 
 /** A production shape: a two-setter stored with a phantom trailing set. */
 const TRAILING_ZERO_SET = { player1: [6, 6, 0], player2: [4, 3, 0] };
@@ -102,25 +102,31 @@ function rowHtml(score: Parameters<typeof scoreSetsFrom>[0]): string {
     </div></div>`;
 }
 
-test('a stored trailing 0-0 set never reaches the drawer row', async ({ page }) => {
+test("a stored trailing 0-0 set never reaches the drawer row", async ({
+  page,
+}) => {
   await page.setContent(rowHtml(TRAILING_ZERO_SET));
-  const text = await page.locator('#score').innerText();
+  const text = await page.locator("#score").innerText();
   expect(text).toContain(`6${GAME_SEPARATOR}4`);
   expect(text).toContain(`6${GAME_SEPARATOR}3`);
   expect(text).not.toContain(`0${GAME_SEPARATOR}0`);
 });
 
-test('a three-set score is not clipped by the score track', async ({ page }) => {
+test("a three-set score is not clipped by the score track", async ({
+  page,
+}) => {
   await page.setContent(rowHtml(THREE_SETTER));
-  const score = await page
-    .locator('#score')
-    .evaluate((el) => ({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }));
+  const score = await page.locator("#score").evaluate((el) => ({
+    scrollWidth: el.scrollWidth,
+    clientWidth: el.clientWidth,
+  }));
   expect(score.scrollWidth).toBeLessThanOrEqual(score.clientWidth);
 
   // The width has to come from somewhere: the opponent/event cell absorbs it
   // and truncates, which is the trade this row's grid deliberately makes.
-  const opponent = await page
-    .locator('#opponent')
-    .evaluate((el) => ({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }));
+  const opponent = await page.locator("#opponent").evaluate((el) => ({
+    scrollWidth: el.scrollWidth,
+    clientWidth: el.clientWidth,
+  }));
   expect(opponent.scrollWidth).toBeGreaterThan(opponent.clientWidth);
 });

@@ -173,7 +173,7 @@ export function ScheduleDayZero({
             under the header only. */}
         <div className="surface-card min-w-0 px-6 pt-0.5 pb-1.5">
           <div
-            className={`grid items-center gap-4 border-b border-[var(--border-hairline)] pb-2.5 pt-3.5 ${SCHEDULE_GRID}`}
+            className={`grid items-center gap-4 border-b border-[var(--border-hairline)] pt-3.5 pb-2.5 ${SCHEDULE_GRID}`}
           >
             {SCHEDULE_COLUMNS.map((label) => (
               <span key={label} className="eyebrow-sm min-w-0 truncate">

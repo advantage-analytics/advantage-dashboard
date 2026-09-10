@@ -1,7 +1,7 @@
 /**
  * SwingVision XLSX file parser
  * Parses SwingVision Excel files and extracts match data
- * 
+ *
  * NOTE: This parser uses exceljs which requires Node.js environment.
  * It should only be used in client-side code or API routes.
  */
@@ -10,7 +10,7 @@
 // This function loads exceljs only when needed at runtime
 async function getExcelJS() {
   // Dynamic import that Next.js won't try to bundle for SSR
-  const exceljs = await import('exceljs');
+  const exceljs = await import("exceljs");
   return exceljs;
 }
 import {
@@ -20,12 +20,12 @@ import {
   SwingVisionSetData,
   SwingVisionParsedData,
   FormData,
-} from './types';
+} from "./types";
 
 export class SwingVisionParser implements IFileParser {
   async canParse(file: File): Promise<boolean> {
     // Check if file is an Excel file and has SwingVision structure
-    if (!file.name.endsWith('.xlsx')) {
+    if (!file.name.endsWith(".xlsx")) {
       return false;
     }
 
@@ -36,8 +36,8 @@ export class SwingVisionParser implements IFileParser {
       await workbook.xlsx.load(arrayBuffer);
 
       // SwingVision files must have Settings and Sets sheets
-      const settingsSheet = workbook.getWorksheet('Settings');
-      const setsSheet = workbook.getWorksheet('Sets');
+      const settingsSheet = workbook.getWorksheet("Settings");
+      const setsSheet = workbook.getWorksheet("Sets");
       return settingsSheet !== undefined && setsSheet !== undefined;
     } catch {
       return false;
@@ -52,13 +52,14 @@ export class SwingVisionParser implements IFileParser {
       await workbook.xlsx.load(arrayBuffer);
 
       // Validate required sheets
-      const settingsSheet = workbook.getWorksheet('Settings');
-      const setsSheet = workbook.getWorksheet('Sets');
+      const settingsSheet = workbook.getWorksheet("Settings");
+      const setsSheet = workbook.getWorksheet("Sets");
 
       if (!settingsSheet || !setsSheet) {
         return {
           success: false,
-          error: 'Invalid SwingVision file: Missing required sheets (Settings or Sets)',
+          error:
+            "Invalid SwingVision file: Missing required sheets (Settings or Sets)",
           warnings: [],
         };
       }
@@ -69,7 +70,7 @@ export class SwingVisionParser implements IFileParser {
       if (sets.length === 0) {
         return {
           success: false,
-          error: 'No match data found in Sets sheet',
+          error: "No match data found in Sets sheet",
           warnings: [],
         };
       }
@@ -90,7 +91,7 @@ export class SwingVisionParser implements IFileParser {
         warnings: [],
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
+      const message = error instanceof Error ? error.message : "Unknown error";
       return {
         success: false,
         error: `Failed to parse file: ${message}`,
@@ -99,7 +100,10 @@ export class SwingVisionParser implements IFileParser {
     }
   }
 
-  private async parseSettingsSheet(sheet: any, workbook?: any): Promise<SwingVisionSettingsSheet> {
+  private async parseSettingsSheet(
+    sheet: any,
+    workbook?: any,
+  ): Promise<SwingVisionSettingsSheet> {
     // Convert worksheet to rows array
     const rows: unknown[][] = [];
     sheet.eachRow((row: any) => {
@@ -109,15 +113,15 @@ export class SwingVisionParser implements IFileParser {
 
     if (rows.length < 2) {
       return {
-        hostTeam: 'Player',
-        guestTeam: 'Opponent',
+        hostTeam: "Player",
+        guestTeam: "Opponent",
         adScoring: false,
       };
     }
 
     // Try direct cell access first (more reliable than header matching)
-    let hostTeam = 'Player';
-    let guestTeam = '';
+    let hostTeam = "Player";
+    let guestTeam = "";
     let adScoring = false;
 
     // Row 2 (index 1) contains the data values
@@ -126,16 +130,16 @@ export class SwingVisionParser implements IFileParser {
     // Try common column positions: Host Team typically at D, Guest Team at E
     // But use header matching to be flexible with column order
     const headers = (rows[0] || []).map((h) => String(h).toLowerCase().trim());
-    const hostTeamIdx = headers.findIndex((h) => h.includes('host team'));
-    const guestTeamIdx = headers.findIndex((h) => h.includes('guest team'));
-    const adScoringIdx = headers.findIndex((h) => h.includes('ad scoring'));
+    const hostTeamIdx = headers.findIndex((h) => h.includes("host team"));
+    const guestTeamIdx = headers.findIndex((h) => h.includes("guest team"));
+    const adScoringIdx = headers.findIndex((h) => h.includes("ad scoring"));
 
     if (hostTeamIdx !== -1 && dataRow.length > hostTeamIdx) {
-      hostTeam = String(dataRow[hostTeamIdx] || 'Player').trim();
+      hostTeam = String(dataRow[hostTeamIdx] || "Player").trim();
     }
 
     if (guestTeamIdx !== -1 && dataRow.length > guestTeamIdx) {
-      guestTeam = String(dataRow[guestTeamIdx] || '').trim();
+      guestTeam = String(dataRow[guestTeamIdx] || "").trim();
     }
 
     if (adScoringIdx !== -1 && dataRow.length > adScoringIdx) {
@@ -148,7 +152,7 @@ export class SwingVisionParser implements IFileParser {
     if (guestTeam) {
       const hasLetters = /[a-zA-Z]/.test(guestTeam);
       if (!hasLetters) {
-        guestTeam = ''; // Reject numeric-only values like "174"
+        guestTeam = ""; // Reject numeric-only values like "174"
       }
     }
 
@@ -157,9 +161,17 @@ export class SwingVisionParser implements IFileParser {
       // Look in rows 5-10 for player names
       for (let i = 5; i < Math.min(10, rows.length); i++) {
         const row = rows[i] || [];
-        if (row[0] && String(row[0]).trim() && String(row[0]).trim() !== hostTeam) {
+        if (
+          row[0] &&
+          String(row[0]).trim() &&
+          String(row[0]).trim() !== hostTeam
+        ) {
           const candidate = String(row[0]).trim();
-          if (candidate.length > 2 && !candidate.includes('Speed') && !candidate.includes('is positive')) {
+          if (
+            candidate.length > 2 &&
+            !candidate.includes("Speed") &&
+            !candidate.includes("is positive")
+          ) {
             guestTeam = candidate;
             guestTeamFromFallback = true;
             break;
@@ -170,7 +182,7 @@ export class SwingVisionParser implements IFileParser {
 
     // If guest team is still empty and we have a workbook, try to extract from Shots sheet
     if (!guestTeam && workbook) {
-      const shotsSheet = workbook.getWorksheet('Shots');
+      const shotsSheet = workbook.getWorksheet("Shots");
       if (shotsSheet) {
         const shotRows: unknown[][] = [];
         shotsSheet.eachRow((row: any) => {
@@ -182,9 +194,13 @@ export class SwingVisionParser implements IFileParser {
         // Search through the first few rows to find a name that's different from hostTeam
         for (let i = 1; i < Math.min(10, shotRows.length); i++) {
           if (shotRows[i].length > 22) {
-            const playerFromShots = String(shotRows[i][22] || '').trim();
+            const playerFromShots = String(shotRows[i][22] || "").trim();
             // Find the name that's NOT the host team
-            if (playerFromShots && playerFromShots !== hostTeam && playerFromShots.length > 2) {
+            if (
+              playerFromShots &&
+              playerFromShots !== hostTeam &&
+              playerFromShots.length > 2
+            ) {
               guestTeam = playerFromShots;
               guestTeamFromFallback = true;
               break;
@@ -195,7 +211,7 @@ export class SwingVisionParser implements IFileParser {
     }
 
     if (!guestTeam) {
-      guestTeam = 'Opponent';
+      guestTeam = "Opponent";
     }
 
     return {
@@ -205,7 +221,9 @@ export class SwingVisionParser implements IFileParser {
       adScoring,
       startTime: dataRow[0] ? String(dataRow[0]) : undefined,
       endTime: dataRow[1] ? String(dataRow[1]) : undefined,
-      location: headers.includes('location') ? String(dataRow[headers.indexOf('location')] || '') : undefined,
+      location: headers.includes("location")
+        ? String(dataRow[headers.indexOf("location")] || "")
+        : undefined,
     };
   }
 
@@ -224,13 +242,15 @@ export class SwingVisionParser implements IFileParser {
     const headers = (rows[0] || []).map((h) => String(h).toLowerCase().trim());
 
     // Find column indices
-    const setIdx = headers.findIndex((h) => h.includes('set'));
-    const hostScoreIdx = headers.findIndex((h) => h.includes('host score'));
-    const guestScoreIdx = headers.findIndex((h) => h.includes('guest score'));
-    const hostTiebrkIdx = headers.findIndex((h) => h.includes('host tiebreak'));
-    const guestTiebrkIdx = headers.findIndex((h) => h.includes('guest tiebreak'));
-    const winnerIdx = headers.findIndex((h) => h.includes('set winner'));
-    const durationIdx = headers.findIndex((h) => h.includes('duration'));
+    const setIdx = headers.findIndex((h) => h.includes("set"));
+    const hostScoreIdx = headers.findIndex((h) => h.includes("host score"));
+    const guestScoreIdx = headers.findIndex((h) => h.includes("guest score"));
+    const hostTiebrkIdx = headers.findIndex((h) => h.includes("host tiebreak"));
+    const guestTiebrkIdx = headers.findIndex((h) =>
+      h.includes("guest tiebreak"),
+    );
+    const winnerIdx = headers.findIndex((h) => h.includes("set winner"));
+    const durationIdx = headers.findIndex((h) => h.includes("duration"));
 
     const sets: SwingVisionSetData[] = [];
 
@@ -246,22 +266,32 @@ export class SwingVisionParser implements IFileParser {
       }
 
       // Read winner from the Set Winner column if available, otherwise calculate from scores
-      let winner: 'host' | 'guest' | 'draw';
+      let winner: "host" | "guest" | "draw";
       if (winnerIdx !== -1 && row[winnerIdx]) {
         const winnerValue = String(row[winnerIdx]).toLowerCase().trim();
-        if (winnerValue === 'draw') {
-          winner = 'draw';
-        } else if (winnerValue === 'guest') {
-          winner = 'guest';
-        } else if (winnerValue === 'host') {
-          winner = 'host';
+        if (winnerValue === "draw") {
+          winner = "draw";
+        } else if (winnerValue === "guest") {
+          winner = "guest";
+        } else if (winnerValue === "host") {
+          winner = "host";
         } else {
           // Column has stats data, calculate from scores
-          winner = hostScore > guestScore ? 'host' : (guestScore > hostScore ? 'guest' : 'draw');
+          winner =
+            hostScore > guestScore
+              ? "host"
+              : guestScore > hostScore
+                ? "guest"
+                : "draw";
         }
       } else {
         // No winner column, calculate from scores
-        winner = hostScore > guestScore ? 'host' : (guestScore > hostScore ? 'guest' : 'draw');
+        winner =
+          hostScore > guestScore
+            ? "host"
+            : guestScore > hostScore
+              ? "guest"
+              : "draw";
       }
       const duration = this.parseDuration(row[durationIdx]);
 
@@ -290,9 +320,8 @@ export class SwingVisionParser implements IFileParser {
     return totalMs;
   }
 
-
   private transformToFormData(
-    parsed: SwingVisionParsedData
+    parsed: SwingVisionParsedData,
   ): Partial<FormData> {
     const { settings, sets, totalDuration } = parsed;
 
@@ -304,57 +333,57 @@ export class SwingVisionParser implements IFileParser {
     let opponentScores: number[];
     let playerTiebreaks: (number | null)[];
     let opponentTiebreaks: (number | null)[];
-    let result: string = '';
+    let result: string = "";
 
     if (settings.guestTeamFromFallback) {
       // Fallback case: Guest was empty, found in metadata
       // Only swap the names - scores/tiebreaks are already correct
-      playerName = settings.guestTeam || 'Player';
-      opponentName = settings.hostTeam || 'Opponent';
+      playerName = settings.guestTeam || "Player";
+      opponentName = settings.hostTeam || "Opponent";
       // Keep scores/tiebreaks mapped to host/guest (don't swap)
       playerScores = sets.map((s) => s.hostScore);
       opponentScores = sets.map((s) => s.guestScore);
       playerTiebreaks = sets.map((s) => s.hostTiebreak);
       opponentTiebreaks = sets.map((s) => s.guestTiebreak);
       // Calculate result normally
-      const hostWins = sets.filter((s) => s.winner === 'host').length;
-      const guestWins = sets.filter((s) => s.winner === 'guest').length;
-      const draws = sets.filter((s) => s.winner === 'draw').length;
+      const hostWins = sets.filter((s) => s.winner === "host").length;
+      const guestWins = sets.filter((s) => s.winner === "guest").length;
+      const draws = sets.filter((s) => s.winner === "draw").length;
 
       if (draws > 0) {
         // If any set is a draw, match is incomplete
-        result = 'Unfinished';
+        result = "Unfinished";
       } else if (hostWins > guestWins) {
         result = `${playerName} Wins`;
       } else if (guestWins > hostWins) {
         result = `${opponentName} Wins`;
       } else if (hostWins === guestWins && hostWins > 0) {
         // Tied sets (both won same number of sets)
-        result = 'Unfinished';
+        result = "Unfinished";
       }
     } else {
       // Normal case: Both teams populated from Settings sheet
-      playerName = settings.hostTeam || 'Player';
-      opponentName = settings.guestTeam || 'Opponent';
+      playerName = settings.hostTeam || "Player";
+      opponentName = settings.guestTeam || "Opponent";
       playerScores = sets.map((s) => s.hostScore);
       opponentScores = sets.map((s) => s.guestScore);
       playerTiebreaks = sets.map((s) => s.hostTiebreak);
       opponentTiebreaks = sets.map((s) => s.guestTiebreak);
       // Calculate result normally
-      const hostWins = sets.filter((s) => s.winner === 'host').length;
-      const guestWins = sets.filter((s) => s.winner === 'guest').length;
-      const draws = sets.filter((s) => s.winner === 'draw').length;
+      const hostWins = sets.filter((s) => s.winner === "host").length;
+      const guestWins = sets.filter((s) => s.winner === "guest").length;
+      const draws = sets.filter((s) => s.winner === "draw").length;
 
       if (draws > 0) {
         // If any set is a draw, match is incomplete
-        result = 'Unfinished';
+        result = "Unfinished";
       } else if (hostWins > guestWins) {
         result = `${playerName} Wins`;
       } else if (guestWins > hostWins) {
         result = `${opponentName} Wins`;
       } else if (hostWins === guestWins && hostWins > 0) {
         // Tied sets (both won same number of sets)
-        result = 'Unfinished';
+        result = "Unfinished";
       }
     }
 
@@ -384,7 +413,7 @@ export class SwingVisionParser implements IFileParser {
   }
 
   private parseNumber(value: unknown): number | null {
-    if (value === null || value === undefined || value === '') {
+    if (value === null || value === undefined || value === "") {
       return null;
     }
     const num = Number(value);
@@ -392,9 +421,9 @@ export class SwingVisionParser implements IFileParser {
   }
 
   private parseBoolean(value: unknown): boolean {
-    if (typeof value === 'boolean') return value;
+    if (typeof value === "boolean") return value;
     const str = String(value).toLowerCase().trim();
-    return str === 'true' || str === 'yes' || str === '1';
+    return str === "true" || str === "yes" || str === "1";
   }
 
   private parseDuration(duration: unknown): number {
@@ -407,8 +436,8 @@ export class SwingVisionParser implements IFileParser {
     const trimmed = String(duration).trim();
 
     // If it contains a colon, it's in H:MM format - convert to milliseconds
-    if (trimmed.includes(':')) {
-      const parts = trimmed.split(':');
+    if (trimmed.includes(":")) {
+      const parts = trimmed.split(":");
       if (parts.length === 2) {
         const hours = parseInt(parts[0], 10) || 0;
         const minutes = parseInt(parts[1], 10) || 0;

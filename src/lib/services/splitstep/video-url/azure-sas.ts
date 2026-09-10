@@ -34,16 +34,16 @@ import {
   SASProtocol,
   StorageSharedKeyCredential,
   generateBlobSASQueryParameters,
-} from '@azure/storage-blob';
-import type { ContainerClient } from '@azure/storage-blob';
-import type { SupabaseClient } from '@supabase/supabase-js';
+} from "@azure/storage-blob";
+import type { ContainerClient } from "@azure/storage-blob";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { VENDOR_URL_TTL_SECONDS } from '../config';
+import { VENDOR_URL_TTL_SECONDS } from "../config";
 import type {
   MintVendorUrlInput,
   VendorVideoUrl,
   VideoUrlStrategy,
-} from './types';
+} from "./types";
 
 /**
  * How long a browser upload credential lives.
@@ -72,9 +72,9 @@ export interface AzureStorageConfig {
 
 /** Env var names, in one place, so the preflight gate and the client agree. */
 export const AZURE_STORAGE_ENV_VARS = [
-  'AZURE_STORAGE_ACCOUNT',
-  'AZURE_STORAGE_KEY',
-  'AZURE_STORAGE_CONTAINER',
+  "AZURE_STORAGE_ACCOUNT",
+  "AZURE_STORAGE_KEY",
+  "AZURE_STORAGE_CONTAINER",
 ] as const;
 
 /**
@@ -85,15 +85,14 @@ export const AZURE_STORAGE_ENV_VARS = [
  * resolveDeploymentConfig() in api/splitstep/jobs/route.ts.
  */
 export function resolveAzureStorageConfig():
-  | { ok: true; config: AzureStorageConfig }
-  | { ok: false; missing: string } {
+  { ok: true; config: AzureStorageConfig } | { ok: false; missing: string } {
   const account = process.env.AZURE_STORAGE_ACCOUNT;
   const accountKey = process.env.AZURE_STORAGE_KEY;
   const container = process.env.AZURE_STORAGE_CONTAINER;
 
-  if (!account) return { ok: false, missing: 'AZURE_STORAGE_ACCOUNT' };
-  if (!accountKey) return { ok: false, missing: 'AZURE_STORAGE_KEY' };
-  if (!container) return { ok: false, missing: 'AZURE_STORAGE_CONTAINER' };
+  if (!account) return { ok: false, missing: "AZURE_STORAGE_ACCOUNT" };
+  if (!accountKey) return { ok: false, missing: "AZURE_STORAGE_KEY" };
+  if (!container) return { ok: false, missing: "AZURE_STORAGE_CONTAINER" };
 
   return { ok: true, config: { account, accountKey, container } };
 }
@@ -111,7 +110,7 @@ export function requireAzureStorageConfig(): AzureStorageConfig {
   if (!resolved.ok) {
     throw new Error(
       `${resolved.missing} is not set. Azure Blob Storage holds the source ` +
-        `video and is the only host the provider will fetch from.`
+        `video and is the only host the provider will fetch from.`,
     );
   }
 
@@ -134,7 +133,7 @@ function credentialFor(config: AzureStorageConfig): StorageSharedKeyCredential {
 function containerClientFor(config: AzureStorageConfig): ContainerClient {
   return new BlobServiceClient(
     `https://${config.account}.blob.core.windows.net`,
-    credentialFor(config)
+    credentialFor(config),
   ).getContainerClient(config.container);
 }
 
@@ -162,7 +161,7 @@ function signBlobUrl(params: {
       expiresOn,
       protocol: SASProtocol.Https,
     },
-    credentialFor(config)
+    credentialFor(config),
   ).toString();
 
   const blobUrl = containerClientFor(config).getBlockBlobClient(blobName).url;
@@ -189,7 +188,7 @@ export function mintUploadSas(params: {
     uploadUrl: signBlobUrl({
       config,
       blobName: params.blobName,
-      permissions: 'cw',
+      permissions: "cw",
       expiresOn: expiresAt,
     }),
     expiresAt,
@@ -237,7 +236,7 @@ export function mintPlaybackSas(params: {
     playbackUrl: signBlobUrl({
       config,
       blobName: params.blobName,
-      permissions: 'r',
+      permissions: "r",
       expiresOn: expiresAt,
     }),
     expiresAt,
@@ -268,7 +267,7 @@ export function videoContainerClient(): ContainerClient {
 }
 
 /** What Azure reports for a copy. `pending` is the normal answer for a big one. */
-export type BlobCopyStatus = 'pending' | 'success' | 'aborted' | 'failed';
+export type BlobCopyStatus = "pending" | "success" | "aborted" | "failed";
 
 /**
  * Copy the vendor's trimmed video into our own container.
@@ -298,7 +297,7 @@ export async function startTrimmedVideoCopy(params: {
     .beginCopyFromURL(params.sourceUrl);
 
   const result = poller.getResult();
-  return { copyStatus: (result?.copyStatus as BlobCopyStatus) ?? 'pending' };
+  return { copyStatus: (result?.copyStatus as BlobCopyStatus) ?? "pending" };
 }
 
 /**
@@ -317,15 +316,15 @@ export async function trimmedCopyStatus(params: {
 
   try {
     const properties = await client.getProperties();
-    return (properties.copyStatus as BlobCopyStatus) ?? 'pending';
+    return (properties.copyStatus as BlobCopyStatus) ?? "pending";
   } catch {
     // 404 while a cross-account copy is in flight is normal, not exceptional.
-    return 'pending';
+    return "pending";
   }
 }
 
 export class AzureSasVideoUrlStrategy implements VideoUrlStrategy {
-  readonly id = 'azure-sas' as const;
+  readonly id = "azure-sas" as const;
 
   /**
    * @param supabase Must be a service-role client. The bookkeeping write is an
@@ -335,7 +334,7 @@ export class AzureSasVideoUrlStrategy implements VideoUrlStrategy {
    */
   constructor(
     private readonly supabase: SupabaseClient,
-    private readonly config: AzureStorageConfig
+    private readonly config: AzureStorageConfig,
   ) {}
 
   async mint({
@@ -349,7 +348,7 @@ export class AzureSasVideoUrlStrategy implements VideoUrlStrategy {
     const url = signBlobUrl({
       config: this.config,
       blobName: objectKey,
-      permissions: 'r',
+      permissions: "r",
       expiresOn: expiresAt,
     });
 
@@ -358,19 +357,19 @@ export class AzureSasVideoUrlStrategy implements VideoUrlStrategy {
     // answer "when did we hand out a URL for this job, and had we meant to
     // withdraw it" from the row alone.
     const { data, error } = await this.supabase
-      .from('processing_jobs')
+      .from("processing_jobs")
       .update({
         video_object_key: objectKey,
         video_token_issued_at: issuedAt.toISOString(),
         video_token_revoked_at: null,
         video_url_expires_at: expiresAt.toISOString(),
       })
-      .eq('id', jobId)
-      .select('id');
+      .eq("id", jobId)
+      .select("id");
 
     if (error) {
       throw new Error(
-        `Could not record the video URL for job ${jobId}: ${error.message}`
+        `Could not record the video URL for job ${jobId}: ${error.message}`,
       );
     }
 
@@ -379,7 +378,7 @@ export class AzureSasVideoUrlStrategy implements VideoUrlStrategy {
     // belongs to a job nothing will ever reconcile a webhook against.
     if (!data || data.length === 0) {
       throw new Error(
-        `Could not record the video URL: no processing job ${jobId}.`
+        `Could not record the video URL: no processing job ${jobId}.`,
       );
     }
 
@@ -402,14 +401,14 @@ export class AzureSasVideoUrlStrategy implements VideoUrlStrategy {
    */
   async markUrlRetired(jobId: string): Promise<void> {
     const { error } = await this.supabase
-      .from('processing_jobs')
+      .from("processing_jobs")
       .update({ video_token_revoked_at: new Date().toISOString() })
-      .eq('id', jobId)
-      .is('video_token_revoked_at', null);
+      .eq("id", jobId)
+      .is("video_token_revoked_at", null);
 
     if (error) {
       throw new Error(
-        `Could not record the video URL revocation for job ${jobId}: ${error.message}`
+        `Could not record the video URL revocation for job ${jobId}: ${error.message}`,
       );
     }
   }

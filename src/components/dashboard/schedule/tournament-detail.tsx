@@ -87,7 +87,7 @@ export function TournamentDetail({
       const run = runRecord(entry.matches);
       return { won: total.won + run.won, lost: total.lost + run.lost };
     },
-    { won: 0, lost: 0 }
+    { won: 0, lost: 0 },
   );
 
   // Counted over `matchState`, not `entryState`: a run is many matches, and
@@ -204,7 +204,7 @@ function EntryRun({ entry, canEdit }: { entry: EventEntry; canEdit: boolean }) {
       {segments.map((segment) => (
         <div key={segment.draw}>
           {segmented ? (
-            <div className="pb-1 pt-2.5">
+            <div className="pt-2.5 pb-1">
               <span className="eyebrow-sm">{segment.draw}</span>
             </div>
           ) : null}
@@ -299,7 +299,7 @@ function SchoolsFaced({ entries }: { entries: EventEntry[] }) {
   }
 
   return (
-    <div className="surface-card min-w-0 px-5 pb-4 pt-4">
+    <div className="surface-card min-w-0 px-5 pt-4 pb-4">
       <span className="eyebrow">Schools faced</span>
 
       {order.length === 0 ? (
@@ -312,10 +312,16 @@ function SchoolsFaced({ entries }: { entries: EventEntry[] }) {
             const row = rows.get(school)!;
             const body = (
               <>
-                <span className="min-w-0 truncate" style={{ color: "var(--ink-900)" }}>
+                <span
+                  className="min-w-0 truncate"
+                  style={{ color: "var(--ink-900)" }}
+                >
                   {school}
                 </span>
-                <span className="tabular shrink-0" style={{ color: "var(--ink-600)" }}>
+                <span
+                  className="tabular shrink-0"
+                  style={{ color: "var(--ink-600)" }}
+                >
                   {row.won}–{row.lost}
                 </span>
               </>

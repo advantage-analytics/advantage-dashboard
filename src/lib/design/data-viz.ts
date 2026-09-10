@@ -92,7 +92,12 @@ export const VIZ_PLAYER = {
  * climbs to the Signal Blue peak (the one sanctioned large-area blue in a
  * density viz, per DESIGN.md §2). Index 0 = no matches → 3 = peak.
  */
-export const VIZ_HEATMAP = ["#F2F2F2", "#B8D4F9", "#6AABFF", "#3B82F6"] as const;
+export const VIZ_HEATMAP = [
+  "#F2F2F2",
+  "#B8D4F9",
+  "#6AABFF",
+  "#3B82F6",
+] as const;
 
 /* ── Court surfaces (categorical) ───────────────────────────────────── */
 

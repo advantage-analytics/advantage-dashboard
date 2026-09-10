@@ -72,7 +72,9 @@ export function TeamSeasonTitle({
             </span>
           ) : awaitingReport ? (
             <span className="text-body-sm">
-              {matchCount === 1 ? "First report on its way" : "First reports on their way"}
+              {matchCount === 1
+                ? "First report on its way"
+                : "First reports on their way"}
               {" · "}
               {hoursLeft}
             </span>
@@ -80,7 +82,8 @@ export function TeamSeasonTitle({
             <>
               <span className="text-body-sm">
                 <span className="tabular">{analyzedCount}</span>{" "}
-                {analyzedCount === 1 ? "match" : "matches"} analyzed · {hoursLeft}
+                {analyzedCount === 1 ? "match" : "matches"} analyzed ·{" "}
+                {hoursLeft}
               </span>
               {newResults.count > 0 && (
                 <Link
@@ -88,7 +91,8 @@ export function TeamSeasonTitle({
                   className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
                 >
                   <span className="tabular">{newResults.count}</span> new{" "}
-                  {newResults.count === 1 ? "result" : "results"} since {newResults.since} →
+                  {newResults.count === 1 ? "result" : "results"} since{" "}
+                  {newResults.since} →
                 </Link>
               )}
             </>

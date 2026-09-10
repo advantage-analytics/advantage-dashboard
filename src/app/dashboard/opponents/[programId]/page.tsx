@@ -31,7 +31,8 @@ export default async function OpponentPage({
   const detail = await getOpponentDetail(active.id, programId);
   if (!detail) notFound();
 
-  const { program, conference, roster, lineups, headToHead, wins, losses } = detail;
+  const { program, conference, roster, lineups, headToHead, wins, losses } =
+    detail;
 
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]">
@@ -46,7 +47,7 @@ export default async function OpponentPage({
           <h1 className="mt-2 text-[30px] leading-9 font-light tracking-[-0.6px] text-[var(--ink-900)]">
             {program.schoolName}
           </h1>
-          <p className="mt-1 text-[12px] leading-[1.5] tabular-nums text-[var(--ink-700)]">
+          <p className="mt-1 text-[12px] leading-[1.5] text-[var(--ink-700)] tabular-nums">
             {[
               program.team,
               conference,
@@ -61,7 +62,9 @@ export default async function OpponentPage({
 
         <section className="flex flex-col gap-3">
           <div>
-            <h2 className="text-[15px] font-medium text-[var(--ink-900)]">Roster</h2>
+            <h2 className="text-[15px] font-medium text-[var(--ink-900)]">
+              Roster
+            </h2>
             <p className="mt-0.5 text-[11px] leading-[1.6] text-[var(--ink-500)]">
               {roster.length > 0
                 ? "Shared across programs. Open a player for what they did against your team."
@@ -77,13 +80,13 @@ export default async function OpponentPage({
                   className="relative border-b border-[var(--border-hairline)] transition-colors hover:bg-[var(--surface-muted)]"
                 >
                   <div className="flex items-center gap-3 py-[13px]">
-                    <span className="w-8 shrink-0 text-[11px] tabular-nums text-[var(--ink-500)]">
+                    <span className="w-8 shrink-0 text-[11px] text-[var(--ink-500)] tabular-nums">
                       {player.lineupSpot ? `#${player.lineupSpot}` : "—"}
                     </span>
                     <span className="min-w-0 flex-1">
                       <Link
                         href={`/dashboard/opponents/${program.id}/${player.id}`}
-                        className="block truncate text-[13px] font-medium text-[var(--ink-900)] rounded-[var(--radius-cell)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none after:absolute after:inset-0 after:content-['']"
+                        className="block truncate rounded-[var(--radius-cell)] text-[13px] font-medium text-[var(--ink-900)] after:absolute after:inset-0 after:content-[''] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
                       >
                         {player.name}
                       </Link>
@@ -102,7 +105,9 @@ export default async function OpponentPage({
 
         <section className="flex flex-col gap-3">
           <div>
-            <h2 className="text-[15px] font-medium text-[var(--ink-900)]">Lineups</h2>
+            <h2 className="text-[15px] font-medium text-[var(--ink-900)]">
+              Lineups
+            </h2>
             <p className="mt-0.5 text-[11px] leading-[1.6] text-[var(--ink-500)]">
               {lineups.length > 0
                 ? "Every line any program has recorded against them, newest first."
@@ -117,18 +122,20 @@ export default async function OpponentPage({
                   key={line.entryId}
                   className="flex items-center gap-3 border-b border-[var(--border-hairline)] py-[13px]"
                 >
-                  <span className="w-8 shrink-0 text-[11px] tabular-nums text-[var(--ink-500)]">
+                  <span className="w-8 shrink-0 text-[11px] text-[var(--ink-500)] tabular-nums">
                     {line.slot ?? "—"}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] text-[var(--ink-900)]">
-                      {line.players.length > 0 ? line.players.join(" / ") : "Unnamed"}
+                      {line.players.length > 0
+                        ? line.players.join(" / ")
+                        : "Unnamed"}
                     </span>
                     <span className="block truncate text-[11px] text-[var(--ink-500)]">
                       {line.eventName}
                     </span>
                   </span>
-                  <span className="shrink-0 text-[12px] tabular-nums text-[var(--ink-700)]">
+                  <span className="shrink-0 text-[12px] text-[var(--ink-700)] tabular-nums">
                     {line.score ?? "—"}
                   </span>
                 </li>
@@ -139,7 +146,9 @@ export default async function OpponentPage({
 
         <section className="flex flex-col gap-3">
           <div>
-            <h2 className="text-[15px] font-medium text-[var(--ink-900)]">Against us</h2>
+            <h2 className="text-[15px] font-medium text-[var(--ink-900)]">
+              Against us
+            </h2>
             <p className="mt-0.5 text-[11px] leading-[1.6] text-[var(--ink-500)]">
               {headToHead.length > 0
                 ? "Your program's own matches. Not shared with anyone."
@@ -170,10 +179,10 @@ export default async function OpponentPage({
                   <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ink-900)]">
                     {match.opponentName}
                   </span>
-                  <span className="shrink-0 text-[12px] tabular-nums text-[var(--ink-700)]">
+                  <span className="shrink-0 text-[12px] text-[var(--ink-700)] tabular-nums">
                     {match.score || "—"}
                   </span>
-                  <span className="w-16 shrink-0 text-right text-[11px] tabular-nums text-[var(--ink-500)]">
+                  <span className="w-16 shrink-0 text-right text-[11px] text-[var(--ink-500)] tabular-nums">
                     {match.date}
                   </span>
                 </li>

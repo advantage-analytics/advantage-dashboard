@@ -9,7 +9,10 @@ import {
   isInFlight,
   withStatsPublished,
 } from "@/lib/data/match-analysis";
-import { analysisFor, loadMatchAnalysis } from "@/lib/data/match-analysis-server";
+import {
+  analysisFor,
+  loadMatchAnalysis,
+} from "@/lib/data/match-analysis-server";
 import { MatchAnalysisProgress } from "@/components/dashboard/matches/match-detail/match-analysis-progress";
 import { MarkReportSeen } from "@/components/dashboard/matches/match-detail/mark-report-seen";
 
@@ -156,19 +159,19 @@ export default async function MatchDetailPage({ params }: PageProps) {
             isDerived={isDerived && statsPublished}
             film={
               video
-                // The rail's film cross-link card is gone in 47f — a match with
-                // video shows nothing in the note slot, and its Film tab is
-                // reached from the tab row instead.
-                ? "none"
-                // Allowlist, not "not splitstep": `sourceProvider` is also
-                // `null` for a match a coach typed in by hand (never
-                // imported, never analysed) — see the comment on
-                // `source_provider` in `lib/schedule/actions.ts`. Only the
-                // exact `swing-vision` value backs the SwingVision claim;
-                // every other no-video case gets the neutral copy, which is
-                // true for all of them (splitstep missing its trimmed copy,
-                // a hand-scored match, or any future provider).
-                : match.sourceProvider === "swing-vision"
+                ? // The rail's film cross-link card is gone in 47f — a match with
+                  // video shows nothing in the note slot, and its Film tab is
+                  // reached from the tab row instead.
+                  "none"
+                : // Allowlist, not "not splitstep": `sourceProvider` is also
+                  // `null` for a match a coach typed in by hand (never
+                  // imported, never analysed) — see the comment on
+                  // `source_provider` in `lib/schedule/actions.ts`. Only the
+                  // exact `swing-vision` value backs the SwingVision claim;
+                  // every other no-video case gets the neutral copy, which is
+                  // true for all of them (splitstep missing its trimmed copy,
+                  // a hand-scored match, or any future provider).
+                  match.sourceProvider === "swing-vision"
                   ? "note-swingvision"
                   : "note-neutral"
             }

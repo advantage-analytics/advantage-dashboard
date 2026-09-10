@@ -2,7 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ComingSoonPage } from "@/components/dashboard/coming-soon";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { getConferenceTable, getOpponentsPlayed } from "@/lib/data/opponents-server";
+import {
+  getConferenceTable,
+  getOpponentsPlayed,
+} from "@/lib/data/opponents-server";
 import type { ConferenceProgram } from "@/lib/data/opponents-server";
 
 export const metadata = { title: "Opponents" };
@@ -62,9 +65,10 @@ export default async function OpponentsPage() {
             Opponents
           </h1>
           <p className="mt-1 max-w-[64ch] text-[12px] leading-[1.5] text-[var(--ink-700)]">
-            Lineups and results are shared across programs, so an opponent&rsquo;s season
-            is visible before you play them. Statistics stay yours — what a player
-            did against your team is on their profile, and nowhere else.
+            Lineups and results are shared across programs, so an
+            opponent&rsquo;s season is visible before you play them. Statistics
+            stay yours — what a player did against your team is on their
+            profile, and nowhere else.
           </p>
         </div>
 
@@ -104,8 +108,12 @@ function Section({
   return (
     <section className="flex flex-col gap-3">
       <div>
-        <h2 className="text-[15px] font-medium text-[var(--ink-900)]">{title}</h2>
-        <p className="mt-0.5 text-[11px] leading-[1.6] text-[var(--ink-500)]">{caption}</p>
+        <h2 className="text-[15px] font-medium text-[var(--ink-900)]">
+          {title}
+        </h2>
+        <p className="mt-0.5 text-[11px] leading-[1.6] text-[var(--ink-500)]">
+          {caption}
+        </p>
       </div>
 
       {programs.length > 0 && (
@@ -119,7 +127,7 @@ function Section({
                 <span className="min-w-0 flex-1">
                   <Link
                     href={`/dashboard/opponents/${program.id}`}
-                    className="block truncate text-[13px] font-medium text-[var(--ink-900)] rounded-[var(--radius-cell)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none after:absolute after:inset-0 after:content-['']"
+                    className="block truncate rounded-[var(--radius-cell)] text-[13px] font-medium text-[var(--ink-900)] after:absolute after:inset-0 after:content-[''] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
                   >
                     {program.schoolName}
                   </Link>

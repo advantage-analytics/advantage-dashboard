@@ -164,7 +164,11 @@ export function PointList({
     >
       {/* Points / Saved + the filter trigger */}
       <div className="flex items-center gap-5 border-b border-[var(--border-hairline)] px-3 pt-1">
-        <div role="tablist" aria-label="Point list view" className="flex items-center gap-5">
+        <div
+          role="tablist"
+          aria-label="Point list view"
+          className="flex items-center gap-5"
+        >
           {(["points", "saved"] as const).map((value) => {
             const active = value === tab;
             return (
@@ -247,7 +251,7 @@ export function PointList({
           <button
             type="button"
             onClick={clearAll}
-            className="cursor-pointer whitespace-nowrap text-[11px] font-medium text-[var(--blue)]"
+            className="cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)]"
           >
             Clear filter
           </button>
@@ -425,7 +429,7 @@ const PointRow = memo(function PointRow({
           "inline-flex shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-cell)] p-0.5 focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
           point.saved
             ? "opacity-100"
-            : "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100",
+            : "opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100",
         )}
       >
         <Bookmark

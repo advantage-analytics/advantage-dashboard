@@ -28,10 +28,7 @@ import {
   REVOKE_LABEL,
   resendRole,
 } from "@/components/dashboard/team/roster-vocabulary";
-import type {
-  RosterInvite,
-  RosterMember,
-} from "@/lib/data/team-roster-server";
+import type { RosterInvite, RosterMember } from "@/lib/data/team-roster-server";
 
 /**
  * The players on the program, and the order they play in.
@@ -148,8 +145,7 @@ export const ROW = "flex items-center gap-4";
  * Last match over their own cells.
  */
 export const ROSTER_COLUMNS: readonly (
-  | { spacer: true }
-  | { label: string; col: string; center?: boolean }
+  { spacer: true } | { label: string; col: string; center?: boolean }
 )[] = [
   { label: "#", col: COL.spot, center: true },
   { label: "Player", col: COL.player },
@@ -165,7 +161,6 @@ export const ROSTER_COLUMNS: readonly (
  * running wall to wall. No hairlines between rows — the wash is the boundary.
  */
 const ROW_BOX = "-mx-4 h-[52px] rounded-[var(--radius-element)] px-4";
-
 
 export function rosterRowId(playerId: string): string {
   return `roster-row-${playerId}`;
@@ -185,11 +180,15 @@ export interface LineupDraft {
   dragging: string | null;
 }
 
-
 /** "4–1", or the empty mark for somebody with nothing decided yet. */
 function Record({ wins, losses }: { wins: number; losses: number }) {
   return (
-    <span className={cn(COL.record, "tabular flex items-center text-[13px] text-[var(--ink-900)]")}>
+    <span
+      className={cn(
+        COL.record,
+        "tabular flex items-center text-[13px] text-[var(--ink-900)]",
+      )}
+    >
       {wins + losses === 0 ? (
         <EmptyMark label="No record yet" />
       ) : (
@@ -231,7 +230,10 @@ function LastMatchCell({ member }: { member: RosterMember }) {
     return (
       <span className={cn(COL.last, "flex items-center gap-2.5")}>
         <MarkSlot>
-          <span aria-hidden className="size-[5px] rounded-full bg-[var(--ink-300)]" />
+          <span
+            aria-hidden
+            className="size-[5px] rounded-full bg-[var(--ink-300)]"
+          />
         </MarkSlot>
         <span className="truncate text-[12px] text-[var(--ink-700)]">
           {lastMatch.opponent}
@@ -255,7 +257,9 @@ function LastMatchCell({ member }: { member: RosterMember }) {
         <span className="truncate text-[12px] text-[var(--ink-700)]">
           {lastMatch.opponent}
         </span>
-        <span className={cn(SUBTLE_PILL, "ml-auto shrink-0")}>Review score</span>
+        <span className={cn(SUBTLE_PILL, "ml-auto shrink-0")}>
+          Review score
+        </span>
       </span>
     );
   }
@@ -307,13 +311,13 @@ function SpotCell({
             "size-3.5",
             lifted
               ? "text-[var(--ink-900)]"
-              : "text-[var(--ink-400)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+              : "text-[var(--ink-400)] opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100",
           )}
         />
         {!lifted && (
           <span
             aria-hidden
-            className="mono tabular absolute text-[11px] text-[var(--ink-500)] transition-opacity group-hover:opacity-0 group-focus-within:opacity-0"
+            className="mono tabular absolute text-[11px] text-[var(--ink-500)] transition-opacity group-focus-within:opacity-0 group-hover:opacity-0"
           >
             {spot ?? "—"}
           </span>
@@ -327,7 +331,7 @@ function SpotCell({
       className={cn(
         COL.spot,
         "mono tabular text-center text-[11px]",
-        spot === null ? "text-[var(--ink-400)]" : "text-[var(--ink-500)]"
+        spot === null ? "text-[var(--ink-400)]" : "text-[var(--ink-500)]",
       )}
     >
       {spot ?? "—"}
@@ -525,7 +529,7 @@ function MemberRow({
           "focus:z-[2]! focus:shadow-[var(--focus-ring)] focus:outline-none",
         lifted &&
           "z-[3]! bg-[var(--surface-card)] shadow-[0_0_0_2px_var(--blue),var(--shadow-card-emphasis)]!",
-        inLineupMode && "select-none"
+        inLineupMode && "select-none",
       )}
     >
       {lifted && <SpotBadge spot={spot} />}
@@ -554,7 +558,9 @@ function MemberRow({
             </Link>
           )}
           {isViewer && (
-            <span className="shrink-0 text-[11px] text-[var(--ink-500)]">you</span>
+            <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
+              you
+            </span>
           )}
         </span>
       </span>
@@ -663,7 +669,7 @@ export function RosterTable({
            Setting a lineup is a desk job, and the page's own scroll takes the
            narrow case for the minute the mode is on. Nothing else moves —
            no padding opens, no column shifts — which is the point. */
-        lineup ? "overflow-visible" : "overflow-x-auto"
+        lineup ? "overflow-visible" : "overflow-x-auto",
       )}
     >
       {/* 768px is the row's actual intrinsic width, not a round number:
@@ -677,7 +683,7 @@ export function RosterTable({
         <div
           className={cn(
             ROW,
-            "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5"
+            "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
           )}
         >
           {ROSTER_COLUMNS.map((column) =>
@@ -690,7 +696,7 @@ export function RosterTable({
                   column.col,
                   "eyebrow-sm",
                   column.center && "text-center",
-                  column.label === "Last match" && "flex items-center"
+                  column.label === "Last match" && "flex items-center",
                 )}
               >
                 {column.label}
@@ -707,14 +713,18 @@ export function RosterTable({
                     <button
                       type="button"
                       onClick={onStartLineup}
-                      className="ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-[var(--radius-cell)] text-[11px] font-medium tracking-normal normal-case text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                      className="ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-[var(--radius-cell)] text-[11px] font-medium tracking-normal text-[var(--blue)] normal-case transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
                     >
-                      <GripVertical className="size-3" strokeWidth={1.5} aria-hidden />
+                      <GripVertical
+                        className="size-3"
+                        strokeWidth={1.5}
+                        aria-hidden
+                      />
                       Set lineup
                     </button>
                   )}
               </span>
-            )
+            ),
           )}
         </div>
 
@@ -739,85 +749,88 @@ export function RosterTable({
               carries no `exit`, so one removed or merged away still unmounts
               at once. Give a row an `exit` and it animates here. */}
           <AnimatePresence initial={false}>
-          {sequence.map((id, index) => {
-            if (id === BENCH) {
-              return (
-                /* The bench divider is itself an item in the sequence — that is
+            {sequence.map((id, index) => {
+              if (id === BENCH) {
+                return (
+                  /* The bench divider is itself an item in the sequence — that is
                    what lets a row be dragged across it — but not a handle. */
-                <Reorder.Item
-                  key={BENCH}
-                  as="li"
-                  value={BENCH}
-                  dragListener={false}
-                  layout="position"
-                  /* Height, not a transform: a transform would slide the label
+                  <Reorder.Item
+                    key={BENCH}
+                    as="li"
+                    value={BENCH}
+                    dragListener={false}
+                    layout="position"
+                    /* Height, not a transform: a transform would slide the label
                      while the space it occupied stayed open, and the whole
                      point is the space. `border-box` puts the padding inside
                      `height`, so 0 → auto collapses the row entirely. Bounded
                      to this one line of text, once per mode change. */
-                  initial={reduceMotion ? false : { opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={
-                    reduceMotion
-                      ? { opacity: 0, transition: { duration: 0 } }
-                      : { opacity: 0, height: 0, transition: DIVIDER_OUT }
-                  }
-                  transition={reduceMotion ? { duration: 0 } : ROW_SLIDE}
-                  /* gap-1.5 (6px) picked by eye at 11px against the eyebrow — the
+                    initial={reduceMotion ? false : { opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={
+                      reduceMotion
+                        ? { opacity: 0, transition: { duration: 0 } }
+                        : { opacity: 0, height: 0, transition: DIVIDER_OUT }
+                    }
+                    transition={reduceMotion ? { duration: 0 } : ROW_SLIDE}
+                    /* gap-1.5 (6px) picked by eye at 11px against the eyebrow — the
                      em dash is its own aria-hidden span so this one gap value
                      produces equal spacing on both sides of it. */
-                  className="flex select-none items-center gap-1.5 overflow-hidden pt-4 pb-2"
-                >
-                  <span className="eyebrow-sm">Not in the lineup</span>
-                  {lineup && (
-                    <>
-                      <span aria-hidden="true" className="text-[11px] text-[var(--ink-400)]">
-                        —
-                      </span>
-                      <span className="text-[11px] text-[var(--ink-400)]">
-                        <span className="sr-only">: </span>
-                        drag a row below this line to bench them
-                      </span>
-                    </>
-                  )}
-                </Reorder.Item>
+                    className="flex items-center gap-1.5 overflow-hidden pt-4 pb-2 select-none"
+                  >
+                    <span className="eyebrow-sm">Not in the lineup</span>
+                    {lineup && (
+                      <>
+                        <span
+                          aria-hidden="true"
+                          className="text-[11px] text-[var(--ink-400)]"
+                        >
+                          —
+                        </span>
+                        <span className="text-[11px] text-[var(--ink-400)]">
+                          <span className="sr-only">: </span>
+                          drag a row below this line to bench them
+                        </span>
+                      </>
+                    )}
+                  </Reorder.Item>
+                );
+              }
+              const member = byId.get(id);
+              if (!member) return null;
+              // The number is the position in `held` whenever we are drawing our
+              // own order — in the mode it is what Save will write, and just
+              // after Save it is what Save wrote. Reading `member.lineupSpot`
+              // there would badge a row sitting at the top with the spot it held
+              // BEFORE the save, for as long as the server's rows take to
+              // arrive. At rest it is the server's value, which can differ from
+              // position when two players share a line from the Edit player
+              // form.
+              const spot = held
+                ? benchAt < 0 || index < benchAt
+                  ? index + 1
+                  : null
+                : member.lineupSpot;
+              return (
+                <MemberRow
+                  key={member.playerId}
+                  member={member}
+                  spot={spot}
+                  canManage={canManage}
+                  isViewer={member.userId === viewerId}
+                  selected={member.playerId === selectedId}
+                  onToggle={onToggle}
+                  onMerge={onMerge}
+                  lineup={lineup}
+                  listRef={listRef}
+                  onLift={onLift}
+                  onMove={onMove}
+                  onDragStartRow={onDragStartRow}
+                  onDragEndRow={onDragEndRow}
+                  onFocusStep={focusStep}
+                />
               );
-            }
-            const member = byId.get(id);
-            if (!member) return null;
-            // The number is the position in `held` whenever we are drawing our
-            // own order — in the mode it is what Save will write, and just
-            // after Save it is what Save wrote. Reading `member.lineupSpot`
-            // there would badge a row sitting at the top with the spot it held
-            // BEFORE the save, for as long as the server's rows take to
-            // arrive. At rest it is the server's value, which can differ from
-            // position when two players share a line from the Edit player
-            // form.
-            const spot = held
-              ? benchAt < 0 || index < benchAt
-                ? index + 1
-                : null
-              : member.lineupSpot;
-            return (
-              <MemberRow
-                key={member.playerId}
-                member={member}
-                spot={spot}
-                canManage={canManage}
-                isViewer={member.userId === viewerId}
-                selected={member.playerId === selectedId}
-                onToggle={onToggle}
-                onMerge={onMerge}
-                lineup={lineup}
-                listRef={listRef}
-                onLift={onLift}
-                onMove={onMove}
-                onDragStartRow={onDragStartRow}
-                onDragEndRow={onDragEndRow}
-                onFocusStep={focusStep}
-              />
-            );
-          })}
+            })}
           </AnimatePresence>
 
           {/* Invitations belong in this list, not under it: somebody a coach
@@ -838,10 +851,17 @@ export function RosterTable({
               key={invite.id}
               className={cn(ROW, ROW_BOX, lineup && "opacity-40")}
             >
-              <span className={cn(COL.spot, "mono text-center text-[11px] text-[var(--ink-400)]")}>
+              <span
+                className={cn(
+                  COL.spot,
+                  "mono text-center text-[11px] text-[var(--ink-400)]",
+                )}
+              >
                 —
               </span>
-              <span className={cn(COL.player, "flex min-w-0 items-center gap-2.5")}>
+              <span
+                className={cn(COL.player, "flex min-w-0 items-center gap-2.5")}
+              >
                 <InviteRing />
                 <span className="min-w-0 truncate text-[12px] text-[var(--ink-500)]">
                   {invite.email}
@@ -865,7 +885,7 @@ export function RosterTable({
                         inviteMember({
                           email: invite.email,
                           role: resendRole(invite.role),
-                        })
+                        }),
                       )
                     }
                     className={RESEND_CLASS}

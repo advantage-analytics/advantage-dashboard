@@ -75,7 +75,7 @@ export function MatchTabs({
               aria-selected={isActive}
               onClick={() => select(tab.value)}
               className={cn(
-                "cursor-pointer pb-[9px] pt-[11px] text-[11px] font-medium",
+                "cursor-pointer pt-[11px] pb-[9px] text-[11px] font-medium",
                 isActive
                   ? "text-[var(--ink-900)] shadow-[inset_0_-2px_0_var(--blue)]"
                   : "text-[var(--ink-500)] hover:text-[var(--ink-700)]",

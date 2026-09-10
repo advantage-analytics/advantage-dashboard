@@ -48,7 +48,7 @@ export function RosterHeaderButtons({
    * and this is the one place that can see both dialogs.
    */
   const [addInitial, setAddInitial] = useState<AddPlayerInitial | undefined>(
-    undefined
+    undefined,
   );
 
   /**

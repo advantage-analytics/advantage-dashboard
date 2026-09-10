@@ -62,9 +62,10 @@ export function LineRow({
 
   // A forfeited line with no player on our side renders "— no available
   // player" rather than a bare em dash, because the forfeit explains why.
-  const ourLabel = isForfeited && entry.playerLabels.length === 0
-    ? "— no available player"
-    : entry.playerLabels.join(" / ");
+  const ourLabel =
+    isForfeited && entry.playerLabels.length === 0
+      ? "— no available player"
+      : entry.playerLabels.join(" / ");
   const theirLabel =
     match?.opponentLabels.join(" / ") || entry.opponentLabels.join(" / ");
 
@@ -117,7 +118,10 @@ export function LineRow({
         </span>{" "}
         {theirLabel || "—"}
         {showSchool && entry.opponentSchool ? (
-          <span style={{ color: "var(--ink-600)" }}> {entry.opponentSchool}</span>
+          <span style={{ color: "var(--ink-600)" }}>
+            {" "}
+            {entry.opponentSchool}
+          </span>
         ) : null}
       </span>
 
@@ -207,11 +211,7 @@ function Action({
   if (state === "forfeited") {
     if (!canEdit) {
       const status = LINE_STATUS.forfeited!;
-      return (
-        <StatusChip tone={status.tone}>
-          {status.label}
-        </StatusChip>
-      );
+      return <StatusChip tone={status.tone}>{status.label}</StatusChip>;
     }
     return (
       <RowAction onClick={() => apply(null)}>

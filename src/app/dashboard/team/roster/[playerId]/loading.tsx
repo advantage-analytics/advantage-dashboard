@@ -23,7 +23,10 @@ export default function Loading() {
         {/* KPI strip */}
         <div className="surface-card flex overflow-hidden">
           {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex min-w-0 flex-1 flex-col gap-3 px-5 py-5">
+            <div
+              key={i}
+              className="flex min-w-0 flex-1 flex-col gap-3 px-5 py-5"
+            >
               <Pulse className="h-2.5 w-20 rounded" />
               <Pulse className="h-7 w-16 rounded-md" />
               <Pulse className="h-2.5 w-24 rounded" />
@@ -33,7 +36,10 @@ export default function Loading() {
 
         <div className="grid items-start gap-4 lg:grid-cols-[1.9fr_1fr]">
           <div className="flex flex-col gap-4">
-            <div className="surface-card flex flex-col gap-3.5" style={{ padding: "18px 20px" }}>
+            <div
+              className="surface-card flex flex-col gap-3.5"
+              style={{ padding: "18px 20px" }}
+            >
               <Pulse className="h-2.5 w-20 rounded" />
               <div className="flex items-center gap-3">
                 <Pulse className="size-8 rounded-[6px]" />
@@ -44,7 +50,10 @@ export default function Loading() {
                 <Pulse className="h-4 w-24 rounded" />
               </div>
             </div>
-            <div className="surface-card flex flex-col gap-3" style={{ padding: 20 }}>
+            <div
+              className="surface-card flex flex-col gap-3"
+              style={{ padding: 20 }}
+            >
               <Pulse className="h-2.5 w-24 rounded" />
               {[0, 1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="flex h-8 items-center gap-3">
@@ -57,7 +66,10 @@ export default function Loading() {
             </div>
           </div>
           <div className="flex flex-col gap-4">
-            <div className="surface-card flex flex-col gap-3" style={{ padding: 20 }}>
+            <div
+              className="surface-card flex flex-col gap-3"
+              style={{ padding: 20 }}
+            >
               <Pulse className="h-2.5 w-20 rounded" />
               {[0, 1, 2].map((i) => (
                 <div key={i} className="flex h-8 items-center gap-3">
@@ -67,7 +79,10 @@ export default function Loading() {
                 </div>
               ))}
             </div>
-            <div className="surface-card flex flex-col gap-3" style={{ padding: "18px 20px" }}>
+            <div
+              className="surface-card flex flex-col gap-3"
+              style={{ padding: "18px 20px" }}
+            >
               <Pulse className="h-2.5 w-28 rounded" />
               <Pulse className="h-4 w-48 rounded" />
               <Pulse className="h-3.5 w-full rounded-[4px]" />
@@ -83,7 +98,7 @@ export default function Loading() {
 function Pulse({ className = "" }: { className?: string }) {
   return (
     <div
-      className={`bg-[var(--color-surface-muted)] animate-pulse motion-reduce:animate-none ${className}`}
+      className={`animate-pulse bg-[var(--color-surface-muted)] motion-reduce:animate-none ${className}`}
     />
   );
 }

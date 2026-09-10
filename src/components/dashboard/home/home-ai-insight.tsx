@@ -125,7 +125,10 @@ export default function HomeAiInsight({
           {claim}
         </span>
       ) : (
-        <div className="h-5 w-[85%] animate-pulse rounded-full bg-[#F3F3F3]" aria-hidden />
+        <div
+          className="h-5 w-[85%] animate-pulse rounded-full bg-[#F3F3F3]"
+          aria-hidden
+        />
       )}
 
       {/* Evidence — computed, never invented. Present even when the claim
@@ -141,7 +144,7 @@ export default function HomeAiInsight({
             </span>
           ) : (
             <span key={i}>{part.text}</span>
-          )
+          ),
         )}
       </span>
     </div>

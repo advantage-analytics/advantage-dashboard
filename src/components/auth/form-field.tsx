@@ -106,7 +106,7 @@ export default function FormField({
         className={
           error
             ? "h-[1px] w-full bg-[var(--error)]"
-            : "h-[1px] w-full bg-[var(--border-hairline)] transition-[height,background-color] duration-300 ease-[var(--ease-primary)] group-hover:bg-[var(--border-medium)] group-focus-within:h-[2px] group-focus-within:!bg-[var(--blue)]"
+            : "h-[1px] w-full bg-[var(--border-hairline)] transition-[height,background-color] duration-300 ease-[var(--ease-primary)] group-focus-within:h-[2px] group-focus-within:!bg-[var(--blue)] group-hover:bg-[var(--border-medium)]"
         }
       />
 

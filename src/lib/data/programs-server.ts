@@ -8,8 +8,8 @@
  * name and never an address.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { titleCaseName } from '@/lib/data/person-name';
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { titleCaseName } from "@/lib/data/person-name";
 
 /**
  * The published facts about a program — the columns every result row carries,
@@ -18,7 +18,7 @@ import { titleCaseName } from '@/lib/data/person-name';
 export interface ProgramDirectoryRow {
   programKey: string;
   schoolName: string;
-  team: 'mens' | 'womens';
+  team: "mens" | "womens";
   division: string | null;
   conference: string | null;
   state: string | null;
@@ -44,7 +44,8 @@ export interface PlayerProgramRow extends ProgramDirectoryRow {
   onAdvantage: boolean;
 }
 
-export type ProgramStatus = 'unclaimed' | 'claim_pending' | 'active' | 'suspended';
+export type ProgramStatus =
+  "unclaimed" | "claim_pending" | "active" | "suspended";
 
 /**
  * Drop everything a player is not allowed to see, before it is serialized.
@@ -62,7 +63,7 @@ export function redactForPlayer(row: ProgramSearchResult): PlayerProgramRow {
     division: row.division,
     conference: row.conference,
     state: row.state,
-    onAdvantage: row.status !== 'unclaimed',
+    onAdvantage: row.status !== "unclaimed",
   };
 }
 
@@ -72,7 +73,7 @@ export interface ProgramPublicStatus extends ProgramSearchResult {
 
 /** "mens" → "Men's". The dataset stores the key; the UI never shows it raw. */
 export function teamLabel(team: string): string {
-  return team === 'womens' ? "Women's" : "Men's";
+  return team === "womens" ? "Women's" : "Men's";
 }
 
 /**
@@ -86,7 +87,7 @@ export function teamLabel(team: string): string {
  */
 export function programDisplayName(
   schoolName: string,
-  team: string | null
+  team: string | null,
 ): string {
   if (!team) return schoolName;
   return `${schoolName} ${teamLabel(team)} Tennis`;
@@ -98,9 +99,9 @@ export function programDisplayName(
  * NAIA and JUCO are already how they are said out loud, so they pass through.
  */
 const DIVISION_LABEL: Record<string, string> = {
-  D1: 'D-I',
-  D2: 'D-II',
-  D3: 'D-III',
+  D1: "D-I",
+  D2: "D-II",
+  D3: "D-III",
 };
 
 export function divisionLabel(division: string | null): string | null {
@@ -111,9 +112,9 @@ export function divisionLabel(division: string | null): string | null {
 /** "D-I · Big Sky", skipping whichever half is missing. */
 export function programSubtitle(
   division: string | null,
-  conference: string | null
+  conference: string | null,
 ): string {
-  return [divisionLabel(division), conference].filter(Boolean).join(' · ');
+  return [divisionLabel(division), conference].filter(Boolean).join(" · ");
 }
 
 /**
@@ -133,11 +134,11 @@ export function programSubtitle(
 export function programEyebrow(
   schoolName: string,
   team: string,
-  division: string | null
+  division: string | null,
 ): string {
   return [schoolName, teamLabel(team), divisionLabel(division)]
     .filter(Boolean)
-    .join(' · ');
+    .join(" · ");
 }
 
 const SEARCH_LIMIT = 8;
@@ -147,12 +148,13 @@ function toResult(row: Record<string, unknown>): ProgramSearchResult {
   return {
     programKey: row.program_key as string,
     schoolName: row.school_name as string,
-    team: row.team as 'mens' | 'womens',
+    team: row.team as "mens" | "womens",
     division: row.division as string | null,
     conference: row.conference as string | null,
     state: row.state as string | null,
     status: row.status as ProgramStatus,
-    ownerDisplay: titleCaseName((row.owner_display as string | null) ?? "") || null,
+    ownerDisplay:
+      titleCaseName((row.owner_display as string | null) ?? "") || null,
   };
 }
 
@@ -169,18 +171,18 @@ function toResult(row: Record<string, unknown>): ProgramSearchResult {
  */
 export async function searchPrograms(
   supabase: SupabaseClient,
-  term: string
+  term: string,
 ): Promise<ProgramSearchResult[]> {
   const query = term.trim();
   if (query.length < 2) return [];
 
-  const { data, error } = await supabase.rpc('search_programs', {
+  const { data, error } = await supabase.rpc("search_programs", {
     p_term: query,
     p_limit: SEARCH_LIMIT,
   });
 
   if (error) {
-    console.error('[programs] search failed', { error: error.message });
+    console.error("[programs] search failed", { error: error.message });
     return [];
   }
 
@@ -197,14 +199,14 @@ export async function searchPrograms(
  */
 export async function getProgramPublicStatus(
   supabase: SupabaseClient,
-  programKey: string
+  programKey: string,
 ): Promise<ProgramPublicStatus | null> {
   const { data, error } = await supabase
-    .rpc('program_public_status', { p_program_key: programKey })
+    .rpc("program_public_status", { p_program_key: programKey })
     .maybeSingle();
 
   if (error) {
-    console.error('[programs] status lookup failed', { error: error.message });
+    console.error("[programs] status lookup failed", { error: error.message });
     return null;
   }
   if (!data) return null;
@@ -223,17 +225,20 @@ export async function getProgramPublicStatus(
  * deciding whether to wait or to object needs to know whether this happened six
  * hours ago or six weeks ago.
  */
-export function claimAge(claimedAt: string | null, nowMs = Date.now()): string | null {
+export function claimAge(
+  claimedAt: string | null,
+  nowMs = Date.now(),
+): string | null {
   if (!claimedAt) return null;
   const then = Date.parse(claimedAt);
   if (!Number.isFinite(then)) return null;
 
   const minutes = Math.max(1, Math.round((nowMs - then) / 60000));
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
 
   const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours} hour${hours === 1 ? '' : 's'}`;
+  if (hours < 48) return `${hours} hour${hours === 1 ? "" : "s"}`;
 
   const days = Math.round(hours / 24);
-  return `${days} day${days === 1 ? '' : 's'}`;
+  return `${days} day${days === 1 ? "" : "s"}`;
 }

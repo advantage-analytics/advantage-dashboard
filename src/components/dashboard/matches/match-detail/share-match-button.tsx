@@ -1,13 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  ArrowUpRight,
-  Check,
-  Copy,
-  Link2,
-  Mail,
-} from "lucide-react";
+import { ArrowUpRight, Check, Copy, Link2, Mail } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -20,7 +14,9 @@ interface ShareMatchButtonProps {
   match: Match;
 }
 
-export function ShareMatchButton({ match }: ShareMatchButtonProps): React.JSX.Element {
+export function ShareMatchButton({
+  match,
+}: ShareMatchButtonProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [isMac, setIsMac] = useState<boolean | null>(null);
 
@@ -55,18 +51,18 @@ export function ShareMatchButton({ match }: ShareMatchButtonProps): React.JSX.El
           aria-label="Share match"
           aria-keyshortcuts={isMac ? "Meta+Shift+L" : "Control+Shift+L"}
           className={cn(
-            "flex items-center h-9 pl-3.5 pr-4 gap-1.5 rounded-[6px] text-white cursor-pointer shrink-0",
+            "flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-[6px] pr-4 pl-3.5 text-white",
             "bg-[#3B82F6] hover:bg-[#2563EB] active:bg-[#2563EB] data-[state=open]:bg-[#2563EB]",
             "text-[13px] font-medium tracking-[0.5px]",
             "shadow-[0_1px_3px_rgba(57,134,243,0.25)]",
-            "active:scale-[0.97] transition-[color,background-color,transform] duration-200 ease-out",
+            "transition-[color,background-color,transform] duration-200 ease-out active:scale-[0.97]",
             "focus-visible:outline-none",
           )}
         >
-          <Link2 className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+          <Link2 className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           Share Match
           {isMac !== null && (
-            <kbd className="ml-1 inline-block px-1 py-0.5 rounded text-[10px] font-medium leading-none bg-white/20 text-white">
+            <kbd className="ml-1 inline-block rounded bg-white/20 px-1 py-0.5 text-[10px] leading-none font-medium text-white">
               {isMac ? "⌘⇧L" : "Ctrl+Shift+L"}
             </kbd>
           )}
@@ -78,7 +74,7 @@ export function ShareMatchButton({ match }: ShareMatchButtonProps): React.JSX.El
         sideOffset={8}
         className={cn(
           // Override base popover styling to match design system Dropdown / Menu spec
-          "w-[320px] p-1 rounded-xl border border-[#E5E5EA]",
+          "w-[320px] rounded-xl border border-[#E5E5EA] p-1",
           "shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]",
         )}
       >
@@ -134,11 +130,11 @@ function SharePopoverPanel({
       <div className="flex items-center gap-2 px-2 pt-2 pb-2">
         <div
           className={cn(
-            "flex-1 min-w-0 h-8 flex items-center px-2.5",
-            "bg-[#F5F5F5] border border-[#EAECF0] rounded-[6px]",
+            "flex h-8 min-w-0 flex-1 items-center px-2.5",
+            "rounded-[6px] border border-[#EAECF0] bg-[#F5F5F5]",
           )}
         >
-          <span className="truncate text-[12px] text-[#71717A] leading-none">
+          <span className="truncate text-[12px] leading-none text-[#71717A]">
             {displayUrl}
           </span>
         </div>
@@ -148,10 +144,10 @@ function SharePopoverPanel({
           autoFocus
           aria-live="polite"
           className={cn(
-            "shrink-0 inline-flex items-center gap-1 h-8 px-3 rounded-[6px] text-[12px] font-medium",
-            "bg-white border border-[#EAECF0] text-[#525252]",
+            "inline-flex h-8 shrink-0 items-center gap-1 rounded-[6px] px-3 text-[12px] font-medium",
+            "border border-[#EAECF0] bg-white text-[#525252]",
             "hover:bg-[#F5F5F5] hover:text-[#1D1D1F] active:bg-[#EBEBEB]",
-            "active:scale-[0.97] transition-[background-color,transform,color] duration-150 ease-out",
+            "transition-[background-color,transform,color] duration-150 ease-out active:scale-[0.97]",
             "focus-visible:outline-none",
           )}
         >
@@ -170,14 +166,14 @@ function SharePopoverPanel({
       </div>
 
       {/* Divider — inset, doesn't span edges */}
-      <div className="h-px bg-[#E5E5EA] mx-2 my-1" />
+      <div className="mx-2 my-1 h-px bg-[#E5E5EA]" />
 
       {/* Item rows */}
       <div className="flex flex-col">
         <a
           href={mailtoHref}
           className={cn(
-            "flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-[#1D1D1F]",
+            "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[#1D1D1F]",
             "hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[#EBEBEB]",
             "transition-colors duration-100",
           )}
@@ -194,7 +190,7 @@ function SharePopoverPanel({
             type="button"
             onClick={nativeShare}
             className={cn(
-              "flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-[#1D1D1F] text-left w-full",
+              "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-[#1D1D1F]",
               "hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[#EBEBEB]",
               "transition-colors duration-100",
             )}
@@ -219,7 +215,9 @@ function formatDisplayUrl(url: string): string {
 function buildMailtoHref(match: Match, url: string): string {
   const players = `${match.player1.name} vs ${match.player2.name}`;
   const tournament = match.tournamentName?.trim();
-  const subject = tournament ? `${tournament}: ${players}` : `Match: ${players}`;
+  const subject = tournament
+    ? `${tournament}: ${players}`
+    : `Match: ${players}`;
   const dateLine = match.date ? `\n${match.date}` : "";
   const body = `Match recap:\n\n${players}${dateLine}\n\nFull breakdown: ${url}`;
   return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;

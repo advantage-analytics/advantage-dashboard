@@ -3,7 +3,10 @@ import { getProgramUsage, type ProgramUsage } from "@/lib/data/usage-server";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { getRosterData } from "@/lib/data/team-roster-server";
 import { topMovers, type TopMover } from "@/lib/data/team-movers";
-import { courtRecordFrom, type CourtRecord } from "@/lib/data/team-court-record";
+import {
+  courtRecordFrom,
+  type CourtRecord,
+} from "@/lib/data/team-court-record";
 import {
   buildInsightEvidenceWithCaption,
   type InsightEvidence,
@@ -43,7 +46,11 @@ import {
   getProgramSchedule,
   scheduleRowsFrom,
 } from "@/lib/data/schedule-server";
-import type { EventDetail, ProgramEvent, ScheduleRow } from "@/lib/schedule/types";
+import type {
+  EventDetail,
+  ProgramEvent,
+  ScheduleRow,
+} from "@/lib/schedule/types";
 import { formatEventShortDay } from "@/lib/schedule/format";
 import {
   dualScore,
@@ -157,7 +164,10 @@ export function shiftDay(day: string, delta: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-export function weekBounds(now: Date, timeZone: string): { start: string; end: string } {
+export function weekBounds(
+  now: Date,
+  timeZone: string,
+): { start: string; end: string } {
   // Take the calendar day in `timeZone`, then step days on a UTC-midnight
   // anchor for it. Stepping on a zoned Date walks through DST twice a year and
   // a week built across that boundary is six days or eight; no UTC day is
@@ -527,7 +537,7 @@ function matchContext(row: {
   match_type: string | null;
 }): string {
   const parts = [row.tournament_name, row.round].filter(
-    (part): part is string => Boolean(part?.trim())
+    (part): part is string => Boolean(part?.trim()),
   );
   if (parts.length > 0) return parts.join(" · ");
   return row.match_type?.trim() || "Match";
@@ -586,7 +596,7 @@ function programSide(
     player2_id: string | null;
     event_entry_id: string | null;
   },
-  rosterIds: ReadonlySet<string>
+  rosterIds: ReadonlySet<string>,
 ): "player1" | "player2" | null {
   if (row.player1_id && rosterIds.has(row.player1_id)) return "player1";
   if (row.player2_id && rosterIds.has(row.player2_id)) return "player2";
@@ -619,7 +629,7 @@ function oursFirst(
     player1_name: string | null;
     player2_name: string | null;
   },
-  rosterIds: ReadonlySet<string>
+  rosterIds: ReadonlySet<string>,
 ): {
   side: "player1" | "player2" | null;
   swap: boolean;
@@ -644,7 +654,7 @@ function oursFirst(
 function dualLines(
   entries: EventEntry[],
   discipline: "singles" | "doubles",
-  prefix: "S" | "D"
+  prefix: "S" | "D",
 ): DualSheetLine[] {
   return entries
     .filter((entry) => entry.discipline === discipline)
@@ -693,10 +703,10 @@ function dualBreakdown(entries: EventEntry[]): {
   doubles: { us: number; them: number };
 } {
   const singles = dualScore(
-    entries.filter((entry) => entry.discipline === "singles")
+    entries.filter((entry) => entry.discipline === "singles"),
   );
   const doubles = dualScore(
-    entries.filter((entry) => entry.discipline === "doubles")
+    entries.filter((entry) => entry.discipline === "doubles"),
   );
 
   return {
@@ -722,7 +732,7 @@ function dualBreakdown(entries: EventEntry[]): {
 export function weekendDualRow<T extends { kind: string; startsOn: string }>(
   events: T[],
   week: { start: string; end: string },
-  today: string
+  today: string,
 ): T | null {
   // Both ends tested here, and now that the list is the whole season there is
   // no query floor to lean on at all. There never should have been: the old
@@ -734,7 +744,7 @@ export function weekendDualRow<T extends { kind: string; startsOn: string }>(
     (event) =>
       event.kind === "dual" &&
       event.startsOn >= week.start &&
-      event.startsOn <= week.end
+      event.startsOn <= week.end,
   );
   return duals.find((event) => event.startsOn >= today) ?? duals.at(-1) ?? null;
 }
@@ -754,7 +764,7 @@ export function weekendDualRow<T extends { kind: string; startsOn: string }>(
  */
 export function buildWeekendDual(
   detail: EventDetail | null,
-  mode: WeekendDual["mode"] = "weekend"
+  mode: WeekendDual["mode"] = "weekend",
 ): WeekendDual | null {
   if (!detail || detail.entries.length === 0) return null;
 
@@ -929,7 +939,7 @@ export function rosterProgress(
   rosterRows: { role: string }[],
   invites: { role: string; createdAt: string }[],
   now: number,
-  timeZone: string = DEFAULT_TIME_ZONE
+  timeZone: string = DEFAULT_TIME_ZONE,
 ): RosterProgress {
   const players = playerCount(rosterRows);
   const outstanding = invites.filter((invite) => invite.role === "player");
@@ -955,7 +965,7 @@ export function rosterProgress(
   const soon = outstanding
     .map((invite) => new Date(invite.createdAt).getTime() + ttlMs)
     .filter(
-      (expiry) => Number.isFinite(expiry) && expiry > now && expiry <= horizon
+      (expiry) => Number.isFinite(expiry) && expiry > now && expiry <= horizon,
     )
     .sort((a, b) => a - b);
 
@@ -1020,7 +1030,7 @@ const SLOW_ANALYSIS_HOURS = 6;
  */
 function hoursSince(
   startedAt: string | undefined,
-  nowMs: number
+  nowMs: number,
 ): number | null {
   if (!startedAt) return null;
   const started = Date.parse(startedAt);
@@ -1043,7 +1053,7 @@ function hoursSince(
 export function teamAttention(
   matches: TeamMatchRow[],
   roster: RosterProgress,
-  nowMs: number
+  nowMs: number,
 ): TeamAlert[] {
   const alerts: TeamAlert[] = [];
 
@@ -1159,7 +1169,6 @@ export interface DbSeasonMatch {
   verified: boolean | null;
 }
 
-
 /**
  * What state a match row is in — a job's, or the state implied by having no job.
  *
@@ -1171,7 +1180,7 @@ export interface DbSeasonMatch {
  */
 function analysisOf(
   row: { id: string; source_provider: string | null; verified: boolean | null },
-  jobs: Map<string, MatchAnalysis>
+  jobs: Map<string, MatchAnalysis>,
 ): MatchAnalysis {
   return (
     jobs.get(row.id) ??
@@ -1223,7 +1232,7 @@ export interface DbRecentMatch extends DbSeasonMatch {
 export function teamMatchRow(
   row: DbRecentMatch,
   jobs: Map<string, MatchAnalysis>,
-  rosterIds: ReadonlySet<string>
+  rosterIds: ReadonlySet<string>,
 ): TeamMatchRow {
   const analysis = analysisOf(row, jobs);
   const { side, swap, title } = oursFirst(row, rosterIds);
@@ -1295,7 +1304,7 @@ export type TeamFirstReport =
 export function teamFirstReport(
   rows: DbSeasonMatch[],
   jobs: Map<string, MatchAnalysis>,
-  rosterIds: ReadonlySet<string>
+  rosterIds: ReadonlySet<string>,
 ): TeamFirstReport | null {
   let inFlight: TeamFirstReport | null = null;
 
@@ -1357,9 +1366,12 @@ export function teamSeasonKpis(
   jobs: Map<string, MatchAnalysis>,
   statRows: DbStatRow[],
   rosterIds: ReadonlySet<string>,
-  eventByEntryId: ReadonlyMap<string, { event: ProgramEvent; entry: EventEntry }>,
+  eventByEntryId: ReadonlyMap<
+    string,
+    { event: ProgramEvent; entry: EventEntry }
+  >,
   /** The program's dual record, for the Record tile's "6–2 in duals" line. */
-  duals: { wins: number; losses: number }
+  duals: { wins: number; losses: number },
 ): SeasonStrip {
   const statsByKey = statRowsByKey(statRows);
 
@@ -1371,7 +1383,8 @@ export function teamSeasonKpis(
   // reorders between page loads draws a different trend each time.
   const newestFirst = [...rows].sort(
     (left, right) =>
-      (right.date ?? "").localeCompare(left.date ?? "") || left.id.localeCompare(right.id)
+      (right.date ?? "").localeCompare(left.date ?? "") ||
+      left.id.localeCompare(right.id),
   );
 
   const results: ProfileResult[] = [];
@@ -1379,7 +1392,9 @@ export function teamSeasonKpis(
     if (!isAnalysisReady(analysisOf(row, jobs).status)) continue;
     const side = programSide(row, rosterIds);
     if (side === null) continue;
-    const hung = row.event_entry_id ? eventByEntryId.get(row.event_entry_id) : undefined;
+    const hung = row.event_entry_id
+      ? eventByEntryId.get(row.event_entry_id)
+      : undefined;
     if (!hung || hung.event.kind !== "dual") continue;
     const isPlayer1 = side === "player1";
     const ours = isPlayer1 ? row.player1_name : row.player2_name;
@@ -1447,7 +1462,7 @@ export async function getTeamHomeData(
    * only — a custom org shows (and is enforced) the reduced tier, a verified
    * collegiate program the 75h one. See `getProgramUsage()` / `quotaTierFor()`.
    */
-  orgType: ProgramOrgType | null
+  orgType: ProgramOrgType | null,
 ): Promise<TeamHomeData> {
   const supabase = await createClient();
 
@@ -1466,68 +1481,72 @@ export async function getTeamHomeData(
     programSchedule,
     rosterData,
   ] = await Promise.all([
-      getProgramUsage(programId, billingMonth, orgType),
-      // The one column this page needs from the program row. This was
-      // `getTeamSettings()` — three reads, two of them for an invite-expiry
-      // alert Ta3 retired — kept for a time zone.
-      supabase.from("programs").select("time_zone").eq("id", programId).maybeSingle(),
-      // Every id that means "us" on a match row. The same SECURITY DEFINER
-      // function Roster and the lineup builder read (`roster-server.ts`,
-      // `team-roster-server.ts`) — not a second answer to who is on this team,
-      // and the only one that includes a coach-managed player, whose profile id
-      // is precisely what their matches carry. Staff seats come back from it too
-      // and are kept: a coach uploading without a schedule preset lands their own
-      // user id in `player1_id`, and that is still our side of the net.
-      supabase.rpc("program_roster_full", { p_program_id: programId }),
-      // The season read: every match the program has recorded, not the six the
-      // list shows. Six rows cannot answer "sets won" or "matches analyzed" —
-      // a strip built from the page's most recent handful would report a season
-      // it never looked at. Nor can they answer the checklist's "has a first
-      // report ever come back?", which is why `teamFirstReport()` reads this
-      // too and why the names are in the select: it prints one of these rows.
-      //
-      // Unbounded on purpose, and precedented: `team-roster-server.ts` reads
-      // exactly this way for the same reason, because every per-player
-      // aggregate on the roster is over the whole history too. `nullsFirst:
-      // false` is not a detail — Postgres puts NULLs FIRST on a DESC sort, and
-      // an undated row taking the front of a chronological reversal would be
-      // reported as the oldest match of the season.
-      supabase
-        .from("matches")
-        .select(
-          "id, player1_name, player2_name, player1_id, player2_id, event_entry_id, score, date, source_provider, verified"
-        )
-        .eq("program_id", programId)
-        .order("date", { ascending: false, nullsFirst: false }),
-      // The schedule, through the schedule's own loader, and the page's ONLY
-      // read of `program_events`. Three questions come off this one call: the
-      // dual record in the KPI strip, the next event on the checklist card, and
-      // this week's dual sheet. `dualScore` over the lines is what the sheet
-      // prints and what the schedule list prints; a season record assembled
-      // from a second query set would be a fifth place that decides who won a
-      // dual, and a next event read separately would be a second ordering of
-      // `program_events` that has to agree with this one.
-      //
-      // It costs its own round trips — this is the one card on the page that
-      // reads the whole season — and it is `cache()`d on the read itself, so a
-      // later reader on the same request pays nothing.
-      getProgramSchedule(programId),
-      // The Roster page's own read, for the movers card. Every figure the
-      // movers list prints is one the roster drawer prints for the same
-      // player; see `lib/data/team-movers.ts`.
-      //
-      // **It is not free, and it is not deduplicated with the read above.**
-      // `getRosterData` is `cache()`d per REQUEST, so it collapses with a
-      // second call in this render and not with the Roster page's own call in
-      // the next navigation; and its first statement is `program_roster_full`,
-      // the same RPC this `Promise.all` already runs. So Team Home asks for
-      // the roster twice and additionally pays for seat usage, invitations and
-      // a second season stats scan, to rank seven players. The honest fix is to
-      // widen the `match_stats_with_percentages` select below to the four
-      // `ROSTER_DRAWER_MEASURES` columns and fold the trends here — worth doing
-      // before this page is on anyone's critical path.
-      getRosterData(programId),
-    ]);
+    getProgramUsage(programId, billingMonth, orgType),
+    // The one column this page needs from the program row. This was
+    // `getTeamSettings()` — three reads, two of them for an invite-expiry
+    // alert Ta3 retired — kept for a time zone.
+    supabase
+      .from("programs")
+      .select("time_zone")
+      .eq("id", programId)
+      .maybeSingle(),
+    // Every id that means "us" on a match row. The same SECURITY DEFINER
+    // function Roster and the lineup builder read (`roster-server.ts`,
+    // `team-roster-server.ts`) — not a second answer to who is on this team,
+    // and the only one that includes a coach-managed player, whose profile id
+    // is precisely what their matches carry. Staff seats come back from it too
+    // and are kept: a coach uploading without a schedule preset lands their own
+    // user id in `player1_id`, and that is still our side of the net.
+    supabase.rpc("program_roster_full", { p_program_id: programId }),
+    // The season read: every match the program has recorded, not the six the
+    // list shows. Six rows cannot answer "sets won" or "matches analyzed" —
+    // a strip built from the page's most recent handful would report a season
+    // it never looked at. Nor can they answer the checklist's "has a first
+    // report ever come back?", which is why `teamFirstReport()` reads this
+    // too and why the names are in the select: it prints one of these rows.
+    //
+    // Unbounded on purpose, and precedented: `team-roster-server.ts` reads
+    // exactly this way for the same reason, because every per-player
+    // aggregate on the roster is over the whole history too. `nullsFirst:
+    // false` is not a detail — Postgres puts NULLs FIRST on a DESC sort, and
+    // an undated row taking the front of a chronological reversal would be
+    // reported as the oldest match of the season.
+    supabase
+      .from("matches")
+      .select(
+        "id, player1_name, player2_name, player1_id, player2_id, event_entry_id, score, date, source_provider, verified",
+      )
+      .eq("program_id", programId)
+      .order("date", { ascending: false, nullsFirst: false }),
+    // The schedule, through the schedule's own loader, and the page's ONLY
+    // read of `program_events`. Three questions come off this one call: the
+    // dual record in the KPI strip, the next event on the checklist card, and
+    // this week's dual sheet. `dualScore` over the lines is what the sheet
+    // prints and what the schedule list prints; a season record assembled
+    // from a second query set would be a fifth place that decides who won a
+    // dual, and a next event read separately would be a second ordering of
+    // `program_events` that has to agree with this one.
+    //
+    // It costs its own round trips — this is the one card on the page that
+    // reads the whole season — and it is `cache()`d on the read itself, so a
+    // later reader on the same request pays nothing.
+    getProgramSchedule(programId),
+    // The Roster page's own read, for the movers card. Every figure the
+    // movers list prints is one the roster drawer prints for the same
+    // player; see `lib/data/team-movers.ts`.
+    //
+    // **It is not free, and it is not deduplicated with the read above.**
+    // `getRosterData` is `cache()`d per REQUEST, so it collapses with a
+    // second call in this render and not with the Roster page's own call in
+    // the next navigation; and its first statement is `program_roster_full`,
+    // the same RPC this `Promise.all` already runs. So Team Home asks for
+    // the roster twice and additionally pays for seat usage, invitations and
+    // a second season stats scan, to rank seven players. The honest fix is to
+    // widen the `match_stats_with_percentages` select below to the four
+    // `ROSTER_DRAWER_MEASURES` columns and fold the trends here — worth doing
+    // before this page is on anyone's critical path.
+    getRosterData(programId),
+  ]);
 
   // **The single zone the rest of this read's calendar arithmetic runs in** —
   // the program's own (`programs.time_zone`, read above), falling back to
@@ -1605,16 +1624,21 @@ export async function getTeamHomeData(
         event.kind === "dual" &&
         event.startsOn < today &&
         event.startsOn >= shiftDay(today, -7) &&
-        !dualScore(programSchedule.entriesByEvent.get(event.id) ?? []).decided
+        !dualScore(programSchedule.entriesByEvent.get(event.id) ?? []).decided,
     ) ??
     null;
   const nextDualRow = openRecentDual
     ? null
-    : (upcoming.find((event) => event.kind === "dual" && event.startsOn >= today) ?? null);
+    : (upcoming.find(
+        (event) => event.kind === "dual" && event.startsOn >= today,
+      ) ?? null);
   const weekendDual = openRecentDual
     ? buildWeekendDual(eventDetailFrom(programSchedule, openRecentDual.id))
     : nextDualRow
-      ? buildWeekendDual(eventDetailFrom(programSchedule, nextDualRow.id), "next")
+      ? buildWeekendDual(
+          eventDetailFrom(programSchedule, nextDualRow.id),
+          "next",
+        )
       : null;
 
   // The rail: every dual with a full card in, newest first — `teamScore` is
@@ -1622,7 +1646,9 @@ export async function getTeamHomeData(
   // for printing one. `scheduleRows` is newest-first already.
   const decidedDuals = scheduleRows.filter(
     (row): row is ScheduleRow & { teamScore: { us: number; them: number } } =>
-      row.kind === "dual" && row.teamScore !== null && row.teamScore.us !== row.teamScore.them
+      row.kind === "dual" &&
+      row.teamScore !== null &&
+      row.teamScore.us !== row.teamScore.them,
   );
   let dualWins = 0;
   const dualHistory: DualHistoryRow[] = [];
@@ -1684,14 +1710,16 @@ export async function getTeamHomeData(
     // it as UTC midnight — west of Greenwich, the evening before — so every
     // Friday import fell out of "since Friday". The same trap `format.ts`
     // documents for the schedule; here it is a comparison, not a print.
-    const day = /^\d{4}-\d{2}-\d{2}$/.test(stamp) ? stamp : localDay(new Date(stamp), timeZone);
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(stamp)
+      ? stamp
+      : localDay(new Date(stamp), timeZone);
     if (day >= friday) newResultsCount += 1;
   }
 
   // The squad, off the same snapshot `movers` was ranked from — see the
   // `rosterSize` note below.
   const rosterPlayers = rosterData.members.filter(
-    (member) => member.role === "player"
+    (member) => member.role === "player",
   ).length;
 
   // Same three inputs the strip is built from, and deliberately the same
@@ -1701,7 +1729,10 @@ export async function getTeamHomeData(
 
   // Which Saturday each match belongs to, for the strip's hover chart. One
   // walk of the schedule the page already holds; no read of its own.
-  const eventByEntryId = new Map<string, { event: ProgramEvent; entry: EventEntry }>();
+  const eventByEntryId = new Map<
+    string,
+    { event: ProgramEvent; entry: EventEntry }
+  >();
   for (const event of programSchedule.events) {
     for (const entry of programSchedule.entriesByEvent.get(event.id) ?? []) {
       eventByEntryId.set(entry.id, { event, entry });
@@ -1726,13 +1757,23 @@ export async function getTeamHomeData(
     firstReport,
     weekendDual,
     dualHistory,
-    dualForm: { form: dualForm, wins: dualWins, losses: decidedDuals.length - dualWins },
+    dualForm: {
+      form: dualForm,
+      wins: dualWins,
+      losses: decidedDuals.length - dualWins,
+    },
     newResults: { count: newResultsCount, since: "Friday" },
     movers: topMovers(rosterData.members),
-    courtRecord: courtRecordFrom(programSchedule.events, programSchedule.entriesByEvent),
+    courtRecord: courtRecordFrom(
+      programSchedule.events,
+      programSchedule.entriesByEvent,
+    ),
     // The same cards the strip renders, through the same evidence builder the
     // personal Home reads — so a figure on the card is a figure on a tile.
-    insight: buildInsightEvidenceWithCaption(insightCardsFrom(kpiCards), kpiMatchCount),
+    insight: buildInsightEvidenceWithCaption(
+      insightCardsFrom(kpiCards),
+      kpiMatchCount,
+    ),
     // Off `rosterData`, the same snapshot `movers` was ranked from, so the
     // card's "Full roster — 8" and the eight rows it could show can never
     // disagree. `people` is a second read of the same RPC (see the note on the

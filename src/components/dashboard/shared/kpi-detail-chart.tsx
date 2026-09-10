@@ -60,14 +60,19 @@ function CustomTooltip({ active, payload, format }: CustomTooltipProps) {
   // the product opens the same black box, and this draws its skin from
   // `chart-tooltip.tsx` rather than restating it.
   return (
-    <div className={`flex flex-col gap-1 px-3 py-2.5 ${DARK_READOUT_CLASS}`} style={DARK_READOUT_STYLE}>
-      <p className="max-w-[180px] truncate text-[12px] font-medium leading-none text-white">
+    <div
+      className={`flex flex-col gap-1 px-3 py-2.5 ${DARK_READOUT_CLASS}`}
+      style={DARK_READOUT_STYLE}
+    >
+      <p className="max-w-[180px] truncate text-[12px] leading-none font-medium text-white">
         {d.opponent}
       </p>
       {dateLabel && (
-        <p className="tabular text-[11px] leading-none text-white/[0.64]">{dateLabel}</p>
+        <p className="tabular text-[11px] leading-none text-white/[0.64]">
+          {dateLabel}
+        </p>
       )}
-      <p className="tabular pt-0.5 text-[11px] font-medium leading-none text-white">
+      <p className="tabular pt-0.5 text-[11px] leading-none font-medium text-white">
         {formatValue(d.value, format)}
       </p>
     </div>
@@ -85,16 +90,16 @@ export default function KpiDetailChart({
   return (
     <div className="w-[280px]">
       <div className="mb-3">
-        <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+        <p className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
           {label}
         </p>
-        <p className="text-[11px] font-normal text-[#71717A] mt-1">
+        <p className="mt-1 text-[11px] font-normal text-[#71717A]">
           {hasData ? `Last ${points.length} matches` : "Match history"}
         </p>
       </div>
 
       {!hasData ? (
-        <div className="flex items-center justify-center h-[130px] text-[12px] text-[#AAAAAA]">
+        <div className="flex h-[130px] items-center justify-center text-[12px] text-[#AAAAAA]">
           Not enough match history
         </div>
       ) : (
@@ -104,7 +109,13 @@ export default function KpiDetailChart({
             margin={{ top: 6, right: 8, bottom: 2, left: -6 }}
           >
             <defs>
-              <linearGradient id="kpiDetailGradient" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient
+                id="kpiDetailGradient"
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
                 <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.15} />
                 <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
               </linearGradient>
@@ -146,7 +157,12 @@ export default function KpiDetailChart({
               isAnimationActive={!shouldReduceMotion}
               animationDuration={shouldReduceMotion ? 0 : 600}
               dot={<Dot r={3} fill="#3B82F6" stroke="#fff" strokeWidth={1.5} />}
-              activeDot={{ r: 5, fill: "#3B82F6", stroke: "#fff", strokeWidth: 2 }}
+              activeDot={{
+                r: 5,
+                fill: "#3B82F6",
+                stroke: "#fff",
+                strokeWidth: 2,
+              }}
             />
           </AreaChart>
         </ResponsiveContainer>

@@ -91,9 +91,12 @@ export function OpponentLedger({ matches }: Props) {
       // Those are not one opponent, so they go to Others rather than becoming a
       // row with an empty cell.
       if (total >= 2 && key !== "") {
-        const avg = data.ratings.length > 0
-          ? Math.round(data.ratings.reduce((a, b) => a + b, 0) / data.ratings.length)
-          : 0;
+        const avg =
+          data.ratings.length > 0
+            ? Math.round(
+                data.ratings.reduce((a, b) => a + b, 0) / data.ratings.length,
+              )
+            : 0;
         result.push({
           key,
           name,
@@ -118,9 +121,12 @@ export function OpponentLedger({ matches }: Props) {
 
     if (othersW + othersL > 0) {
       const total = othersW + othersL;
-      const avg = othersRatings.length > 0
-        ? Math.round(othersRatings.reduce((a, b) => a + b, 0) / othersRatings.length)
-        : 0;
+      const avg =
+        othersRatings.length > 0
+          ? Math.round(
+              othersRatings.reduce((a, b) => a + b, 0) / othersRatings.length,
+            )
+          : 0;
       result.push({
         // Not a name, so it cannot collide with a normalized one.
         key: "\u0000others",
@@ -140,27 +146,29 @@ export function OpponentLedger({ matches }: Props) {
   const hasMore = rows.length > INITIAL_ROWS;
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] p-5 overflow-hidden">
+    <div className="overflow-hidden rounded-[14px] border border-[#F3F3F3] bg-white p-5 shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]">
       <div className="mb-4">
-        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+        <h2 className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
           Opponent Ledger
         </h2>
-        <p className="text-[12px] font-normal text-[#71717A] mt-1">
-          {rows.length > 0 ? "Head-to-head records" : "Not enough repeat matchups yet"}
+        <p className="mt-1 text-[12px] font-normal text-[#71717A]">
+          {rows.length > 0
+            ? "Head-to-head records"
+            : "Not enough repeat matchups yet"}
         </p>
       </div>
 
       {rows.length > 0 && (
         <>
           {/* Header row */}
-          <div className="flex items-center gap-3 pb-2 mb-1 border-b border-[#F0F0F0]">
-            <span className="flex-1 text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px]">
+          <div className="mb-1 flex items-center gap-3 border-b border-[#F0F0F0] pb-2">
+            <span className="flex-1 text-[9px] font-medium tracking-[1.5px] text-[#AAAAAA] uppercase">
               Opponent
             </span>
-            <span className="w-[56px] text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px] text-right">
+            <span className="w-[56px] text-right text-[9px] font-medium tracking-[1.5px] text-[#AAAAAA] uppercase">
               Record
             </span>
-            <span className="w-[72px] text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px]">
+            <span className="w-[72px] text-[9px] font-medium tracking-[1.5px] text-[#AAAAAA] uppercase">
               Win %
             </span>
           </div>
@@ -170,31 +178,40 @@ export function OpponentLedger({ matches }: Props) {
               {visibleRows.map((row, i) => (
                 <motion.div
                   key={row.key}
-                  initial={shouldReduceMotion ? false : { opacity: 0, height: 0 }}
+                  initial={
+                    shouldReduceMotion ? false : { opacity: 0, height: 0 }
+                  }
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2, delay: i * 0.03, ease: EASE_CURVE }}
+                  transition={
+                    shouldReduceMotion
+                      ? { duration: 0 }
+                      : { duration: 0.2, delay: i * 0.03, ease: EASE_CURVE }
+                  }
                   className="overflow-hidden"
                 >
-                  <div className="flex items-center gap-3 py-2.5 border-b border-[#F0F0F0] last:border-b-0">
-                    <span className={`flex-1 text-[12px] truncate ${row.name === "Others" ? "text-[#888888] italic" : "font-medium text-[#0D0D0D]"}`}>
+                  <div className="flex items-center gap-3 border-b border-[#F0F0F0] py-2.5 last:border-b-0">
+                    <span
+                      className={`flex-1 truncate text-[12px] ${row.name === "Others" ? "text-[#888888] italic" : "font-medium text-[#0D0D0D]"}`}
+                    >
                       {row.name}
                     </span>
-                    <span className="w-[56px] text-[12px] tabular-nums text-[#525252] text-right">
+                    <span className="w-[56px] text-right text-[12px] text-[#525252] tabular-nums">
                       {row.wins}W-{row.losses}L
                     </span>
-                    <div className="w-[72px] flex items-center gap-2">
-                      <div className="flex-1 h-[4px] rounded-full bg-[#F0F0F0] overflow-hidden">
+                    <div className="flex w-[72px] items-center gap-2">
+                      <div className="h-[4px] flex-1 overflow-hidden rounded-full bg-[#F0F0F0]">
                         <div
                           className="h-full rounded-full"
                           style={{
                             width: `${row.winRate}%`,
-                            backgroundColor: row.winRate >= 50 ? "#5DB955" : "#E51837",
+                            backgroundColor:
+                              row.winRate >= 50 ? "#5DB955" : "#E51837",
                             opacity: 0.7,
                           }}
                         />
                       </div>
-                      <span className="text-[10px] font-light tabular-nums text-[#888888] w-[28px] text-right">
+                      <span className="w-[28px] text-right text-[10px] font-light text-[#888888] tabular-nums">
                         {row.winRate}%
                       </span>
                     </div>
@@ -208,7 +225,7 @@ export function OpponentLedger({ matches }: Props) {
             <button
               type="button"
               onClick={() => setExpanded((v) => !v)}
-              className="mt-2 text-[9px] font-medium uppercase tracking-[1.5px] text-[#3B82F6] hover:text-[#2563EB] transition-colors duration-200"
+              className="mt-2 text-[9px] font-medium tracking-[1.5px] text-[#3B82F6] uppercase transition-colors duration-200 hover:text-[#2563EB]"
             >
               {expanded ? "Show less" : `Show all (${rows.length})`}
             </button>

@@ -58,7 +58,10 @@ export function ProgramHoursSummary({
   const left = Math.max(0, usage.capSeconds - usage.usedSeconds);
   const resetDate = formatResetDate(usage.billingMonth);
   const days = daysUntilReset(usage.billingMonth);
-  const matches = usage.lines.reduce((total, line) => total + line.matchCount, 0);
+  const matches = usage.lines.reduce(
+    (total, line) => total + line.matchCount,
+    0,
+  );
   const people = usage.lines.length;
   const fill = FILL[severity];
   const figureColor = severity === "ok" ? "var(--ink-900)" : fill;
@@ -79,7 +82,7 @@ export function ProgramHoursSummary({
         {/* Proportional figures on purpose — `tabular-nums` loosens a
             standalone number at this size; it is for columns. */}
         <span
-          className="text-[24px] font-light leading-[1.2] tracking-[-0.4px]"
+          className="text-[24px] leading-[1.2] font-light tracking-[-0.4px]"
           style={{ color: figureColor }}
         >
           {formatHoursLong(left)}
@@ -92,7 +95,11 @@ export function ProgramHoursSummary({
             className="ml-1 flex items-center gap-1.5 text-[11px]"
             style={{ color: fill }}
           >
-            <AlertTriangle className="size-3" strokeWidth={1.75} aria-hidden="true" />
+            <AlertTriangle
+              className="size-3"
+              strokeWidth={1.75}
+              aria-hidden="true"
+            />
             {severity === "spent"
               ? `Spent — uploads pause until ${resetDate}`
               : "Running low"}
@@ -130,7 +137,10 @@ export function ProgramHoursSummary({
         >
           {open ? "Hide breakdown" : "Breakdown by person"}
           <ChevronRight
-            className={cn("size-[11px] transition-transform duration-200", open && "rotate-90")}
+            className={cn(
+              "size-[11px] transition-transform duration-200",
+              open && "rotate-90",
+            )}
             strokeWidth={1.75}
             aria-hidden="true"
           />
@@ -146,7 +156,9 @@ export function ProgramHoursSummary({
           ) : (
             usage.lines.map((line) => {
               const share =
-                usage.usedSeconds > 0 ? line.usedSeconds / usage.usedSeconds : 0;
+                usage.usedSeconds > 0
+                  ? line.usedSeconds / usage.usedSeconds
+                  : 0;
               const role = roles.get(line.userId);
               return (
                 <div
@@ -165,7 +177,8 @@ export function ProgramHoursSummary({
                     {line.userId === viewerId && <YouPill />}
                   </span>
                   <span className="text-[11px] text-[var(--ink-500)]">
-                    {line.matchCount} {line.matchCount === 1 ? "match" : "matches"}
+                    {line.matchCount}{" "}
+                    {line.matchCount === 1 ? "match" : "matches"}
                   </span>
                   <span
                     aria-hidden="true"
@@ -174,7 +187,10 @@ export function ProgramHoursSummary({
                   >
                     <span
                       className="block h-1 rounded-[2px]"
-                      style={{ width: `${share * 100}%`, background: "var(--blue)" }}
+                      style={{
+                        width: `${share * 100}%`,
+                        background: "var(--blue)",
+                      }}
                     />
                   </span>
                   <span className="mono w-[56px] text-right text-[11px] text-[var(--ink-700)]">
@@ -188,8 +204,8 @@ export function ProgramHoursSummary({
           {pendingSeconds > 0 && (
             <div className="flex items-center gap-3 py-[9px]">
               <span className="min-w-0 flex-1 text-[11px] text-[var(--ink-500)]">
-                Includes {formatHoursLong(pendingSeconds)} reserved by jobs still
-                running
+                Includes {formatHoursLong(pendingSeconds)} reserved by jobs
+                still running
               </span>
             </div>
           )}

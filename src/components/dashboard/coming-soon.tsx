@@ -73,7 +73,9 @@ function ComingSoon({
     return {
       initial: skip ? (false as const) : { opacity: 0, y: 10 },
       animate: { opacity: 1, y: 0 },
-      transition: skip ? { duration: 0 } : { duration: 0.35, ease: EASE_CURVE, delay },
+      transition: skip
+        ? { duration: 0 }
+        : { duration: 0.35, ease: EASE_CURVE, delay },
     };
   }
 
@@ -98,7 +100,7 @@ function ComingSoon({
           without gaining weight, and stays in the neutral register the state
           deserves. */}
       <motion.span
-        className="mb-5 inline-flex h-6 items-center whitespace-nowrap rounded-full border px-[11px] text-[11px] font-medium"
+        className="mb-5 inline-flex h-6 items-center rounded-full border px-[11px] text-[11px] font-medium whitespace-nowrap"
         style={{ borderColor: "var(--border-medium)", color: "var(--ink-600)" }}
         {...anim(T.LABEL)}
       >
@@ -118,7 +120,10 @@ function ComingSoon({
       </motion.p>
 
       {(action || showHelp) && (
-        <motion.div className="mt-[30px] flex items-center gap-3" {...anim(T.CTA)}>
+        <motion.div
+          className="mt-[30px] flex items-center gap-3"
+          {...anim(T.CTA)}
+        >
           {action && (
             <Link href={action.href} className={advButton("primary")}>
               {action.label}

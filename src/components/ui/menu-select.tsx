@@ -62,7 +62,7 @@ export function MenuSelect<T extends string>({
       setOpen(false);
       if (next !== value) onChange(next);
     },
-    [onChange, value]
+    [onChange, value],
   );
 
   const trigger = (
@@ -93,7 +93,7 @@ export function MenuSelect<T extends string>({
             ? "border-b-2 border-[var(--blue)]"
             : "border-[var(--blue)]"
           : "border-[var(--border-field)]",
-        className
+        className,
       )}
     >
       <span className="truncate">{current ? current.label : value}</span>
@@ -140,7 +140,10 @@ function MenuSelectRow<T extends string>({
   chosen: boolean;
   onPick: (value: T) => void;
 }) {
-  const select = useCallback(() => onPick(option.value), [onPick, option.value]);
+  const select = useCallback(
+    () => onPick(option.value),
+    [onPick, option.value],
+  );
   return (
     <FloatMenuItem
       label={option.label}

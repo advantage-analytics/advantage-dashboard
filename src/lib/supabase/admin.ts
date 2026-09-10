@@ -9,7 +9,9 @@ export function createAdminClient() {
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
   if (!supabaseServiceKey) {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY environment variable is required for admin operations");
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY environment variable is required for admin operations",
+    );
   }
 
   return createClient(supabaseUrl, supabaseServiceKey, {

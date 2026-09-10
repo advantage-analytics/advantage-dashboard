@@ -14,7 +14,14 @@ import type { ProfileMatchRow } from "@/lib/data/player-profile-server";
 export const HISTORY_GRID =
   "grid-cols-[56px_minmax(0,1.2fr)_minmax(0,1.2fr)_40px_18px_88px]";
 
-export const HISTORY_COLUMNS = ["Date", "Name", "School", "Line", "", "Score"] as const;
+export const HISTORY_COLUMNS = [
+  "Date",
+  "Name",
+  "School",
+  "Line",
+  "",
+  "Score",
+] as const;
 
 export function MatchHistoryHeader() {
   return (
@@ -24,7 +31,11 @@ export function MatchHistoryHeader() {
       {HISTORY_COLUMNS.map((column, i) => (
         /* The DS eyebrow class is unlayered and would win over a Tailwind
            colour utility, so the frame's ink-400 is set inline. */
-        <span key={i} className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
+        <span
+          key={i}
+          className="eyebrow-sm"
+          style={{ color: "var(--ink-400)" }}
+        >
           {column}
         </span>
       ))}
@@ -81,7 +92,9 @@ export function MatchHistoryCard({
                 >
                   {row.schoolAbbr}
                 </span>
-                <span className="truncate text-[12px] text-[var(--ink-600)]">{row.school}</span>
+                <span className="truncate text-[12px] text-[var(--ink-600)]">
+                  {row.school}
+                </span>
               </>
             ) : (
               <EmptyMark label="No school recorded" />
@@ -97,7 +110,9 @@ export function MatchHistoryCard({
               <ResultMark won={row.won} />
             )}
           </span>
-          <span className="tabular text-[12px] text-[var(--ink-700)]">{row.score || "—"}</span>
+          <span className="tabular text-[12px] text-[var(--ink-700)]">
+            {row.score || "—"}
+          </span>
         </Link>
       ))}
     </section>

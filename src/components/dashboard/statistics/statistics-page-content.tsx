@@ -2,7 +2,10 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import type { SelectableMatch, StatisticsPageData } from "@/lib/data/statistics-server";
+import type {
+  SelectableMatch,
+  StatisticsPageData,
+} from "@/lib/data/statistics-server";
 import { computeStatistics } from "@/lib/data/statistics-client";
 import { MatchSelector } from "./match-selector";
 import { PeriodToggle, type Period } from "./period-toggle";
@@ -32,12 +35,12 @@ export function StatisticsPageContent({
   const [period, setPeriod] = useState<Period>("all");
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    () => new Set(allMatches.map((m) => m.id))
+    () => new Set(allMatches.map((m) => m.id)),
   );
 
   const sortedMatches = useMemo(
     () => [...allMatches].sort((a, b) => b.isoDate.localeCompare(a.isoDate)),
-    [allMatches]
+    [allMatches],
   );
 
   const handlePeriodChange = useCallback(
@@ -51,7 +54,7 @@ export function StatisticsPageContent({
         setSelectedIds(new Set(recentIds));
       }
     },
-    [allMatches, sortedMatches]
+    [allMatches, sortedMatches],
   );
 
   const handleMatchSelectionChange = useCallback((ids: Set<string>) => {
@@ -63,17 +66,17 @@ export function StatisticsPageContent({
 
   const filteredMatches = useMemo(
     () => allMatches.filter((m) => selectedIds.has(m.id)),
-    [allMatches, selectedIds]
+    [allMatches, selectedIds],
   );
 
   const data: StatisticsPageData = useMemo(
     () => (isFiltered ? computeStatistics(filteredMatches) : initialData),
-    [filteredMatches, isFiltered, initialData]
+    [filteredMatches, isFiltered, initialData],
   );
 
   const trends = useMemo(
     () => computeTrends(sortedMatches, initialData),
-    [sortedMatches, initialData]
+    [sortedMatches, initialData],
   );
 
   const serveMatchIds = useMemo(
@@ -82,7 +85,7 @@ export function StatisticsPageContent({
         .sort((a, b) => b.isoDate.localeCompare(a.isoDate))
         .slice(0, 10)
         .map((m) => m.id),
-    [filteredMatches]
+    [filteredMatches],
   );
 
   if (allMatches.length === 0) {
@@ -96,7 +99,11 @@ export function StatisticsPageContent({
 
   function anim(i: number) {
     if (shouldReduceMotion)
-      return { initial: false as const, animate: { opacity: 1 }, transition: { duration: 0 } };
+      return {
+        initial: false as const,
+        animate: { opacity: 1 },
+        transition: { duration: 0 },
+      };
     return {
       initial: { opacity: 0, y: 12 },
       animate: { opacity: 1, y: 0 },
@@ -107,7 +114,7 @@ export function StatisticsPageContent({
   return (
     <>
       {/* Controls */}
-      <div className="flex items-start justify-between gap-4 mb-5">
+      <div className="mb-5 flex items-start justify-between gap-4">
         <MatchSelector
           matches={allMatches}
           selectedIds={selectedIds}
@@ -121,7 +128,7 @@ export function StatisticsPageContent({
       </div>
 
       {/* Match Form */}
-      <motion.div className="pb-5 mb-5 border-b border-[#F0F0F0]" {...anim(0)}>
+      <motion.div className="mb-5 border-b border-[#F0F0F0] pb-5" {...anim(0)}>
         <RollingFormStrip
           matches={filteredMatches}
           totalMatches={data.totalMatches}
@@ -131,7 +138,7 @@ export function StatisticsPageContent({
       </motion.div>
 
       {/* Key Averages */}
-      <motion.div className="pb-5 mb-6 border-b border-[#F0F0F0]" {...anim(1)}>
+      <motion.div className="mb-6 border-b border-[#F0F0F0] pb-5" {...anim(1)}>
         <StatSummaryStrip data={data} trends={trends} />
       </motion.div>
 
@@ -142,12 +149,12 @@ export function StatisticsPageContent({
 
       {/* Shot Quality */}
       <motion.p
-        className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-4"
+        className="mb-4 text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase"
         {...anim(3)}
       >
         Shot Quality
       </motion.p>
-      <div className="grid grid-cols-12 gap-5 mb-8">
+      <div className="mb-8 grid grid-cols-12 gap-5">
         <motion.div className="col-span-12 lg:col-span-7" {...anim(3)}>
           <ServePlacementStats matchIds={serveMatchIds} />
         </motion.div>
@@ -158,7 +165,7 @@ export function StatisticsPageContent({
 
       {/* Context */}
       <motion.p
-        className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-4"
+        className="mb-4 text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase"
         {...anim(5)}
       >
         Context

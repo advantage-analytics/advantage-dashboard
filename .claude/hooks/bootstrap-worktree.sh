@@ -46,6 +46,31 @@ fi
 [ -d "$toplevel/node_modules" ] || \
   add "node_modules is absent — run \`npm ci\` before any build, test, or gate."
 
+# Git hooks. `git worktree add` never touches core.hooksPath, but Claude Code's
+# agent worktrees pin it per-worktree to the main checkout's (empty) .git/hooks
+# — and WORKTREE scope outranks the repo's own local setting, so `.githooks/`
+# would never run here. That is precisely where /task-next and the feature
+# pipeline commit, so without this the pre-commit and commit-msg hooks are
+# inert for most of this repo's actual commits.
+#
+# A user/global `core.hooksPath` does NOT fix this: precedence is
+# worktree > local > global > system, so the worktree value wins over that too.
+# Clearing the worktree entry is the only thing that works.
+#
+# Cleared ONLY when it points at a default `.git/hooks` directory, so a
+# deliberate per-worktree choice by a human is left alone. Requires
+# extensions.worktreeConfig, which is why every call tolerates failure.
+wt_hooks=$(git config --worktree --get core.hooksPath 2>/dev/null) || wt_hooks=""
+case "$wt_hooks" in
+  */.git/hooks)
+    if git config --worktree --unset core.hooksPath 2>/dev/null; then
+      add "cleared the per-worktree core.hooksPath override — .githooks/ now runs here."
+    else
+      add "core.hooksPath is pinned per-worktree; .githooks/ will NOT run. Clear it with: git config --worktree --unset core.hooksPath"
+    fi
+    ;;
+esac
+
 [ -z "$notes" ] && exit 0
 
 python3 -c '

@@ -40,9 +40,11 @@ export function ScoreEntry({
   const [opponent, setOpponent] = useState(initialOpponent);
   const [ours, setOurs] = useState<string[]>(Array(SET_COUNT).fill(""));
   const [theirs, setTheirs] = useState<string[]>(Array(SET_COUNT).fill(""));
-  const [ourBreaks, setOurBreaks] = useState<string[]>(Array(SET_COUNT).fill(""));
+  const [ourBreaks, setOurBreaks] = useState<string[]>(
+    Array(SET_COUNT).fill(""),
+  );
   const [theirBreaks, setTheirBreaks] = useState<string[]>(
-    Array(SET_COUNT).fill("")
+    Array(SET_COUNT).fill(""),
   );
 
   function submit() {
@@ -65,14 +67,17 @@ export function ScoreEntry({
       const result = await recordResult({
         entryId,
         round,
-        opponentLabels: opponent.split("/").map((part) => part.trim()).filter(Boolean),
+        opponentLabels: opponent
+          .split("/")
+          .map((part) => part.trim())
+          .filter(Boolean),
         ourGames: played.map((index) => Number(ours[index] || 0)),
         theirGames: played.map((index) => Number(theirs[index] || 0)),
         ourTiebreaks: played.map((index) =>
-          ourBreaks[index] === "" ? null : Number(ourBreaks[index])
+          ourBreaks[index] === "" ? null : Number(ourBreaks[index]),
         ),
         theirTiebreaks: played.map((index) =>
-          theirBreaks[index] === "" ? null : Number(theirBreaks[index])
+          theirBreaks[index] === "" ? null : Number(theirBreaks[index]),
         ),
       });
 
@@ -140,7 +145,11 @@ export function ScoreEntry({
             {error}
           </span>
         ) : null}
-        <button type="button" className={advButton("ghost", "sm")} onClick={onDone}>
+        <button
+          type="button"
+          className={advButton("ghost", "sm")}
+          onClick={onDone}
+        >
           Cancel
         </button>
         <button

@@ -116,13 +116,16 @@ function cellFor(entry: EventEntry | undefined): CourtCell {
   return {
     result: lineWon(entry) === true ? "w" : "l",
     ours: entry.playerLabels.join(" / "),
-    theirs: match?.opponentLabels.join(" / ") || entry.opponentLabels.join(" / "),
+    theirs:
+      match?.opponentLabels.join(" / ") || entry.opponentLabels.join(" / "),
     sets: scoreSetsFrom(match?.score),
     forfeit: entry.forfeit,
     // Forfeit first, as `team-home-server.ts`'s `dualLines` decides it: a
     // forfeited line is not a report, whatever a match sitting under it says.
     reportId:
-      entry.forfeit === null && match && matchState(match) === "ready" ? match.id : null,
+      entry.forfeit === null && match && matchState(match) === "ready"
+        ? match.id
+        : null,
   };
 }
 
@@ -136,7 +139,7 @@ function cellFor(entry: EventEntry | undefined): CourtCell {
 export function courtRecordFrom(
   events: ProgramEvent[],
   entriesByEvent: Map<string, EventEntry[]>,
-  window: number = COURT_RECORD_WINDOW
+  window: number = COURT_RECORD_WINDOW,
 ): CourtRecord {
   const played = events
     .filter((event) => event.kind === "dual")

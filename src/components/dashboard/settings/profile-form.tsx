@@ -127,7 +127,7 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
 
   const missing = useMemo(
     () => FIELDS.filter((field) => draft[field].trim() === ""),
-    [draft]
+    [draft],
   );
 
   const handleSave = useCallback(() => {
@@ -142,7 +142,7 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
   const displayName =
     `${draft.firstName} ${draft.lastName}`.trim() || viewer.name;
   const roleLabel = ROLE_OPTIONS.find(
-    (option) => option.value === draft.role
+    (option) => option.value === draft.role,
   )?.label;
 
   return (
@@ -288,7 +288,7 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
                     "focus-visible:outline-none",
                     isSelected
                       ? "border-[var(--blue)] bg-[var(--blue-soft)] text-[var(--ink-900)]"
-                      : "border-[var(--border-field)] text-[var(--ink-700)] hover:border-[var(--ink-300)]"
+                      : "border-[var(--border-field)] text-[var(--ink-700)] hover:border-[var(--ink-300)]",
                   )}
                 >
                   {option.label}
@@ -371,7 +371,7 @@ function ProfileField({
       labelless={isDate}
       marker={
         missing && (
-          <span className="text-[10px] font-medium uppercase tracking-[1.2px] text-[var(--blue)]">
+          <span className="text-[10px] font-medium tracking-[1.2px] text-[var(--blue)] uppercase">
             Missing
           </span>
         )

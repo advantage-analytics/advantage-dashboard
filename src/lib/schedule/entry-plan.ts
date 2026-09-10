@@ -56,7 +56,7 @@ export interface EntryPlan {
  * than two near-identical planners.
  */
 function isTournamentRow(
-  row: IncomingEntry
+  row: IncomingEntry,
 ): row is TournamentEntryInput & { id?: string } {
   return !("slot" in row);
 }
@@ -151,12 +151,14 @@ function changed(entry: EventEntry, row: IncomingEntry): boolean {
  */
 export function planEntryChanges(
   existing: EventEntry[],
-  incoming: LineupLineInput[] | TournamentEntryInput[]
+  incoming: LineupLineInput[] | TournamentEntryInput[],
 ): EntryPlan {
   const plan: EntryPlan = { insert: [], update: [], delete: [], refuse: [] };
 
   const byId = new Map(existing.map((entry) => [entry.id, entry]));
-  const bySlot = new Map(existing.map((entry) => [existingSlotKey(entry), entry]));
+  const bySlot = new Map(
+    existing.map((entry) => [existingSlotKey(entry), entry]),
+  );
 
   const matched = new Set<string>();
 

@@ -53,7 +53,10 @@ export function formatResetDate(billingMonth: string): string {
 }
 
 /** Step a `YYYY-MM-01` key by whole months, in either direction. */
-export function shiftBillingMonth(billingMonth: string, months: number): string {
+export function shiftBillingMonth(
+  billingMonth: string,
+  months: number,
+): string {
   const date = new Date(`${billingMonth}T00:00:00Z`);
   date.setUTCMonth(date.getUTCMonth() + months);
   const year = date.getUTCFullYear();
@@ -93,14 +96,14 @@ export function formatHoursLong(seconds: number): string {
  */
 export function daysUntilReset(
   billingMonth: string,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): number {
   const reset = new Date(`${billingMonth}T00:00:00Z`);
   reset.setUTCMonth(reset.getUTCMonth() + 1);
   const today = Date.UTC(
     now.getUTCFullYear(),
     now.getUTCMonth(),
-    now.getUTCDate()
+    now.getUTCDate(),
   );
   return Math.max(0, Math.round((reset.getTime() - today) / 86_400_000));
 }

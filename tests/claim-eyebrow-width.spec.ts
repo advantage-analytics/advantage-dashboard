@@ -1,8 +1,8 @@
-import { expect, test } from '@playwright/test';
-import { type SupabaseClient } from '@supabase/supabase-js';
+import { expect, test } from "@playwright/test";
+import { type SupabaseClient } from "@supabase/supabase-js";
 
-import { HAVE_ENV, SKIP_REASON, createAdminClient } from './fixtures/live-db';
-import { programEyebrow } from '@/lib/data/programs-server';
+import { HAVE_ENV, SKIP_REASON, createAdminClient } from "./fixtures/live-db";
+import { programEyebrow } from "@/lib/data/programs-server";
 
 /**
  * The width budget for the claim flow's eyebrow line — what it guards, and
@@ -97,9 +97,9 @@ async function readAllPrograms(admin: SupabaseClient): Promise<Row[]> {
   const rows: Row[] = [];
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await admin
-      .from('programs')
-      .select('school_name, team, division, conference, program_key')
-      .order('program_key', { ascending: true })
+      .from("programs")
+      .select("school_name, team, division, conference, program_key")
+      .order("program_key", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
 
     if (error) throw new Error(`programs page at ${from}: ${error.message}`);
@@ -109,17 +109,21 @@ async function readAllPrograms(admin: SupabaseClient): Promise<Row[]> {
   }
 }
 
-test.describe('claim eyebrow width budget (live DB)', () => {
+test.describe("claim eyebrow width budget (live DB)", () => {
   // Serial, so the whole table is read once for all three tests rather than
   // once per worker — and so that a short read stops the suite instead of
   // letting the two data assertions "pass" over half a table.
-  test.describe.configure({ mode: 'serial', timeout: 60_000 });
+  test.describe.configure({ mode: "serial", timeout: 60_000 });
   test.skip(!HAVE_ENV, SKIP_REASON);
 
   let rows: Row[];
   let exactCount: number;
   /** Every row's eyebrow, derived once — both assertions below read it. */
-  let composed: { school: string; conference: string | null; eyebrow: string }[];
+  let composed: {
+    school: string;
+    conference: string | null;
+    eyebrow: string;
+  }[];
 
   test.beforeAll(async () => {
     const admin = createAdminClient();
@@ -127,7 +131,9 @@ test.describe('claim eyebrow width budget (live DB)', () => {
     // The count and the paged read depend on nothing but each other's
     // absence — they are only compared afterwards — so they go together.
     const [countResult, allRows] = await Promise.all([
-      admin.from('programs').select('program_key', { count: 'exact', head: true }),
+      admin
+        .from("programs")
+        .select("program_key", { count: "exact", head: true }),
       readAllPrograms(admin),
     ]);
 
@@ -144,12 +150,12 @@ test.describe('claim eyebrow width budget (live DB)', () => {
     }));
   });
 
-  test('composes an eyebrow for every row in the table', () => {
+  test("composes an eyebrow for every row in the table", () => {
     // If these disagree, the paging above stopped early and every assertion
     // below is only as good as the rows it happened to see.
     expect(
       rows.length,
-      `paged ${rows.length} program rows but the table holds ${exactCount}`
+      `paged ${rows.length} program rows but the table holds ${exactCount}`,
     ).toBe(exactCount);
     // Proof that the 1,000-row cap is really being crossed rather than
     // theoretically handled — but only while the table is bigger than a page.
@@ -158,42 +164,42 @@ test.describe('claim eyebrow width budget (live DB)', () => {
     if (exactCount > PAGE_SIZE) {
       expect(
         rows.length,
-        `table holds ${exactCount} rows, so paging past the ${PAGE_SIZE}-row cap should have happened`
+        `table holds ${exactCount} rows, so paging past the ${PAGE_SIZE}-row cap should have happened`,
       ).toBeGreaterThan(PAGE_SIZE);
     }
   });
 
-  test('every eyebrow fits on one line of the claim shell', () => {
+  test("every eyebrow fits on one line of the claim shell", () => {
     const tooWide = composed
       .filter(({ eyebrow }) => eyebrow.length > MAX_EYEBROW_CHARS)
       .map(
         ({ school, eyebrow }) =>
-          `${school}: ${eyebrow.length} chars (budget ${MAX_EYEBROW_CHARS}) — "${eyebrow}"`
+          `${school}: ${eyebrow.length} chars (budget ${MAX_EYEBROW_CHARS}) — "${eyebrow}"`,
       );
 
     expect(
       tooWide,
-      `${tooWide.length} program eyebrow(s) would wrap in the claim shell`
+      `${tooWide.length} program eyebrow(s) would wrap in the claim shell`,
     ).toEqual([]);
   });
 
-  test('no eyebrow carries the row conference', () => {
+  test("no eyebrow carries the row conference", () => {
     // `programEyebrow` drops conference on purpose — school + squad +
     // division + conference runs to 136 characters for a real JUCO row, far
     // past the budget above. Adding it back is the regression this catches.
     const leaked = composed
-      .filter(
-        (row): row is typeof row & { conference: string } => Boolean(row.conference)
+      .filter((row): row is typeof row & { conference: string } =>
+        Boolean(row.conference),
       )
       .filter(({ eyebrow, conference }) => eyebrow.includes(conference))
       .map(
         ({ school, conference, eyebrow }) =>
-          `${school}: ${eyebrow.length} chars, includes conference "${conference}" — "${eyebrow}"`
+          `${school}: ${eyebrow.length} chars, includes conference "${conference}" — "${eyebrow}"`,
       );
 
     expect(
       leaked,
-      `${leaked.length} program eyebrow(s) include their conference`
+      `${leaked.length} program eyebrow(s) include their conference`,
     ).toEqual([]);
   });
 });

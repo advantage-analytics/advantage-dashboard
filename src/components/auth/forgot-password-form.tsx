@@ -10,7 +10,11 @@ import FormField from "./form-field";
 import AuthButton from "./auth-button";
 import AuthFooter, { AUTH_LINK } from "./auth-footer";
 import FormError from "./form-error";
-import { toAuthError, validateEmail, type AuthError } from "@/lib/auth/error-messages";
+import {
+  toAuthError,
+  validateEmail,
+  type AuthError,
+} from "@/lib/auth/error-messages";
 import {
   recoveryRedirectTo,
   writeRecoveryHandoff,

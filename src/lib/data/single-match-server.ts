@@ -55,14 +55,14 @@ interface DbRow {
 
 export const getTeamSingleMatch = cache(async function getTeamSingleMatch(
   programId: string,
-  matchId: string
+  matchId: string,
 ): Promise<TeamSingleMatch | null> {
   const supabase = await createClient();
 
   const { data } = await supabase
     .from("matches")
     .select(
-      "id, player1_id, player1_name, player2_name, tournament_name, round, date, score, match_type, court_type, insights"
+      "id, player1_id, player1_name, player2_name, tournament_name, round, date, score, match_type, court_type, insights",
     )
     .eq("id", matchId)
     .eq("program_id", programId)
