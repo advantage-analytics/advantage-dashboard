@@ -16,7 +16,14 @@ import { ActivityHeatmap } from "@/components/dashboard/home/activity-heatmap";
  * in the client `ActivityHeatmap` so only that leaf carries interactivity.
  */
 
-export function ActivityWidget({ activity }: { activity: PersonalActivity }) {
+export function ActivityWidget({
+  activity,
+  showSessionLog = true,
+}: {
+  activity: PersonalActivity;
+  /** Day-zero Home owns the only destination. */
+  showSessionLog?: boolean;
+}) {
   const { days, sessionCount, monthLabels } = activity;
 
   return (
@@ -40,12 +47,14 @@ export function ActivityWidget({ activity }: { activity: PersonalActivity }) {
         {/* The matches list IS the session log — every cell here is a day
             on that list, so the link opens the list rather than a page of
             its own. */}
-        <Link
-          href="/dashboard/matches"
-          className="text-[11px] whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-        >
-          Session log
-        </Link>
+        {showSessionLog && (
+          <Link
+            href="/dashboard/matches"
+            className="text-[11px] whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+          >
+            Session log
+          </Link>
+        )}
       </div>
 
       <div

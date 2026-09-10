@@ -35,11 +35,14 @@ export function TopMovers({
   movers,
   rosterSize,
   canManage,
+  isPreview = false,
 }: {
   movers: TopMover[];
   rosterSize: number;
   /** Staff — the only people the "Add players" band can send to the roster. */
   canManage: boolean;
+  /** Day-zero Home owns all setup actions and links. */
+  isPreview?: boolean;
 }) {
   return (
     <section aria-label="Top movers" className="surface-card min-w-0 p-5">
@@ -47,18 +50,20 @@ export function TopMovers({
         <span className="eyebrow">Top movers</span>
         <span className="text-micro">biggest change since last week</span>
         <div className="flex-1" />
-        <Link
-          href="/dashboard/team/roster"
-          className="text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-        >
-          Full roster
-          {rosterSize > 0 ? (
-            <>
-              {" "}
-              — <span className="tabular">{rosterSize}</span>
-            </>
-          ) : null}
-        </Link>
+        {!isPreview && (
+          <Link
+            href="/dashboard/team/roster"
+            className="text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+          >
+            Full roster
+            {rosterSize > 0 ? (
+              <>
+                {" "}
+                — <span className="tabular">{rosterSize}</span>
+              </>
+            ) : null}
+          </Link>
+        )}
       </div>
 
       {movers.length > 0 ? (
@@ -68,7 +73,11 @@ export function TopMovers({
           ))}
         </div>
       ) : (
-        <Empty rosterEmpty={rosterSize === 0} canManage={canManage} />
+        <Empty
+          rosterEmpty={rosterSize === 0}
+          canManage={canManage}
+          isPreview={isPreview}
+        />
       )}
     </section>
   );
@@ -104,9 +113,11 @@ function Row({ mover }: { mover: TopMover }) {
 function Empty({
   rosterEmpty,
   canManage,
+  isPreview,
 }: {
   rosterEmpty: boolean;
   canManage: boolean;
+  isPreview: boolean;
 }) {
   return (
     <>
@@ -149,7 +160,7 @@ function Empty({
               : "Each player's biggest change in serve and pressure numbers, against everything earlier."}
           </span>
         </div>
-        {rosterEmpty && canManage && (
+        {rosterEmpty && canManage && !isPreview && (
           <Link
             href="/dashboard/team/roster"
             className={`${advButton("primary")} shrink-0`}

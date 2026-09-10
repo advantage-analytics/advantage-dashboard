@@ -19,7 +19,14 @@ const GHOST_ROWS = GHOST_OPACITY.slice(0, 2);
  * instruction and its one action; a player, who cannot add a dual, gets the
  * band without the button.
  */
-export function DualSheetEmpty({ canSchedule }: { canSchedule: boolean }) {
+export function DualSheetEmpty({
+  canSchedule,
+  isPreview = false,
+}: {
+  canSchedule: boolean;
+  /** Day-zero Home owns the action; this card is then only a preview. */
+  isPreview?: boolean;
+}) {
   return (
     <section aria-label="This weekend's dual" className="surface-card p-5">
       <span className="eyebrow">This weekend</span>
@@ -70,7 +77,7 @@ export function DualSheetEmpty({ canSchedule }: { canSchedule: boolean }) {
             this card as they come in.
           </span>
         </div>
-        {canSchedule && (
+        {canSchedule && !isPreview && (
           <Link
             href="/dashboard/team/schedule/new/dual"
             className={`${advButton("primary")} shrink-0`}

@@ -18,6 +18,7 @@ import { FocusCard } from "@/components/dashboard/home/focus-card";
 import { FocusEmpty } from "@/components/dashboard/home/focus-empty";
 import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
 import { TeamSetupLine } from "@/components/dashboard/team/team-setup-line";
+import { TeamDayZeroHome } from "@/components/dashboard/team/team-day-zero-home";
 
 /**
  * The page's own name. The header greets rather than naming the page, so
@@ -28,7 +29,7 @@ export const metadata = { title: "Team Home" };
 /**
  * Platform Audit Ta3 — the program's home page, in season and on day zero.
  *
- * One route, one composition, every state. The header bar greets
+ * The populated page's composition. The header bar greets
  * ("Good morning, Elena · Meridian State · Men's tennis · Monday, Aug 10");
  * the page opens on "Team season" in title type, then the KPI strip, then
  * the personal Home's two columns: this weekend's dual and the top movers on
@@ -42,14 +43,10 @@ export const metadata = { title: "Team Home" };
  * simply shares the width with the rail, and a coach who also plays learns
  * one page shape in both workspaces. Nothing inside a card changed.
  *
- * **The frame never moves** (Pa2's rule, carried over from round 45 and
- * taken further). Every region is on screen from the first visit: an empty
- * KPI strip draws its four labels over rules and grey curves, the dual card
- * draws a ghost lineup with one "Add a dual" band, the movers card draws
- * ghost rows with "Add players", the rail says when it fills. Round 45 had
- * these mount nothing until data arrived, which meant a coach's second visit
- * rearranged the page under them and taught the first visit's layout to
- * nobody.
+ * Before setup begins, the centered offer sits above an inert preview of
+ * these regions, without the title row, widget actions or footer. Once a
+ * roster, dual or match exists, the normal dashboard returns so real content
+ * stays accessible while the remaining regions fill in.
  *
  * **What Ta3 retired, by decision (2026-09-07).** The three-card checklist
  * became `TeamSetupLine`, one line in the personal Home's register. The
@@ -110,6 +107,116 @@ export default async function TeamHomePage() {
   const awaitingReport =
     matchCount > 0 && analyzedCount === 0 && firstReport?.state === "progress";
 
+  // Roster and schedule setup are progress even before any match is played.
+  // Never place a real dual sheet inside the inert day-zero preview.
+  const isDayZero = matchCount === 0 && !setup.roster && !setup.schedule;
+
+  const dashboardRegions = (
+    <>
+      <SeasonKpiStrip
+        kpis={kpiCards}
+        hasStats={kpiHasStats}
+        matchesPlayed={kpiMatchCount}
+        awaitingReport={awaitingReport}
+        emptyHint={
+          analyzedCount > 0 && !awaitingReport
+            ? "After your first dual match"
+            : undefined
+        }
+        ariaLabel="Program summary"
+      />
+
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="flex min-w-0 flex-col gap-5">
+          {weekendDual ? (
+            <DualSheet dual={weekendDual} />
+          ) : (
+            <DualSheetEmpty canSchedule={isStaff} isPreview={isDayZero} />
+          )}
+          <TopMovers
+            movers={movers}
+            rosterSize={rosterSize}
+            canManage={isStaff}
+            isPreview={isDayZero}
+          />
+        </div>
+
+        <div className="flex flex-col gap-5">
+          {insight ? (
+            <FocusCard
+              footer={{
+                left: insight.caption,
+                right: (
+                  <>
+                    <span className="tabular">{kpiMatchCount}</span>{" "}
+                    {kpiMatchCount === 1 ? "match" : "matches"}
+                  </>
+                ),
+              }}
+            >
+              <HomeAiInsight
+                evidence={insight.parts}
+                cacheSignature={`${active.id}:${kpiMatchCount}:${kpiCards
+                  .map((card) => card.value)
+                  .join(",")}`}
+                endpoint="/api/team-insight"
+              />
+            </FocusCard>
+          ) : (
+            matchCount === 0 && (
+              <FocusCard
+                showStatisticsLink={!isDayZero}
+                footer={{
+                  left: "One thing to work on, after the first dual.",
+                }}
+              >
+                <FocusEmpty />
+              </FocusCard>
+            )
+          )}
+          <CourtRecord record={courtRecord} />
+          <DualHistory
+            rows={dualHistory}
+            form={dualForm}
+            teamName={active.name}
+            isPreview={isDayZero}
+          />
+        </div>
+      </div>
+    </>
+  );
+
+  const homeContent = (
+    <>
+      <TeamSeasonTitle
+        matchCount={matchCount}
+        analyzedCount={analyzedCount}
+        newResults={newResults}
+        usage={usage}
+        awaitingReport={awaitingReport}
+        action={
+          <NewMatchAction
+            canUpload={canUpload}
+            canSubmitVideo={active.canSubmitVideo}
+          />
+        }
+      />
+
+      {dashboardRegions}
+
+      <div className="flex flex-col gap-4">
+        {isStaff && <TeamSetupLine setup={setup} />}
+        <UsageFooter
+          usedSeconds={usage.usedSeconds}
+          capSeconds={usage.capSeconds}
+          billingMonth={usage.billingMonth}
+          dualWeekends
+          note="free through Dec 31, 2026"
+        />
+      </div>
+    </>
+  );
+
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]">
       {/* The personal Home's column exactly — `px-14 pt-5 pb-8`, 16px between
@@ -118,134 +225,13 @@ export default async function TeamHomePage() {
           the tighter gap is Pa2's, and Roster and Schedule share the same
           56px gutter. */}
       <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4 px-14 pt-5 pb-8">
-        <TeamSeasonTitle
-          matchCount={matchCount}
-          analyzedCount={analyzedCount}
-          newResults={newResults}
-          usage={usage}
-          awaitingReport={awaitingReport}
-          action={
-            <NewMatchAction
-              canUpload={canUpload}
-              canSubmitVideo={active.canSubmitVideo}
-            />
-          }
-        />
-
-        {/* The season strip both Homes draw (`shared/season-kpi-strip.tsx`),
-            over the squad rather than one player. Same catalogue, same
-            picker, same per-viewer pick — a coach who swaps a statistic in
-            on their own Home reads it here too, which is the whole point of
-            there being one strip. **Dual matches only**: a report for a
-            match that is not on a dual's lineup is counted in the title row
-            and nowhere in the strip. Before any of them has statistics the
-            strip is still here, labelled and empty. */}
-        <SeasonKpiStrip
-          kpis={kpiCards}
-          hasStats={kpiHasStats}
-          matchesPlayed={kpiMatchCount}
-          /* Three states, three sentences, and the page owns all three: "When
-             the report lands" while a match is in and nothing is back (the
-             strip cannot infer this — `kpiMatchCount` counts only the
-             analyzed dual matches it averages, which is zero here), "After
-             your first dual match" where reports ARE back but none sits on a
-             dual lineup — the title row above counts those, so the strip has
-             to say why it does not — and the shell's own "After your first
-             match" on day zero. */
-          awaitingReport={awaitingReport}
-          emptyHint={
-            analyzedCount > 0 && !awaitingReport
-              ? "After your first dual match"
-              : undefined
-          }
-          ariaLabel="Program summary"
-        />
-
-        {/* Pa2's grid: 400px rail, 24px gutter, `items-start` so each column
-            bottoms out where its cards do — nothing is stretched to level
-            them, and the cards inside a column sit 20px apart. `lg` rather
-            than Ta3's `xl`, because that is where the personal Home breaks and
-            the two pages should fold at the same width. */}
-        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
-          <div className="flex min-w-0 flex-col gap-5">
-            {/* This week's dual, the next one ahead, or the shape of one. Not
-                staff-only: a player's lines are on this card, and the same
-                `program_events` policy that lets them read the schedule page
-                is what put it there. */}
-            {weekendDual ? (
-              <DualSheet dual={weekendDual} />
-            ) : (
-              <DualSheetEmpty canSchedule={isStaff} />
-            )}
-            <TopMovers
-              movers={movers}
-              rosterSize={rosterSize}
-              canManage={isStaff}
-            />
-          </div>
-
-          <div className="flex flex-col gap-5">
-            {/* The personal Home's three states, one card: computed evidence
-                with a streamed claim; its own anatomy holding nothing before
-                any match is in; and off the page between the two, because a
-                placeholder after a coach has already sent a match would be
-                the page failing to notice. */}
-            {insight ? (
-              <FocusCard
-                footer={{
-                  left: insight.caption,
-                  right: (
-                    <>
-                      <span className="tabular">{kpiMatchCount}</span>{" "}
-                      {kpiMatchCount === 1 ? "match" : "matches"}
-                    </>
-                  ),
-                }}
-              >
-                <HomeAiInsight
-                  evidence={insight.parts}
-                  cacheSignature={`${active.id}:${kpiMatchCount}:${kpiCards
-                    .map((card) => card.value)
-                    .join(",")}`}
-                  endpoint="/api/team-insight"
-                />
-              </FocusCard>
-            ) : (
-              matchCount === 0 && (
-                <FocusCard
-                  footer={{
-                    left: "One thing to work on, after the first dual.",
-                  }}
-                >
-                  <FocusEmpty />
-                </FocusCard>
-              )
-            )}
-            <CourtRecord record={courtRecord} />
-            <DualHistory
-              rows={dualHistory}
-              form={dualForm}
-              teamName={active.name}
-            />
-          </div>
-        </div>
-
-        {/* The frame's bottom edge — the setup line while there is one, then
-            the footer, last on the page in every state. */}
-        <div className="flex flex-col gap-4">
-          {isStaff && <TeamSetupLine setup={setup} />}
-          {/* `dualWeekends` asks the footer for the "about 3 dual weekends"
-              clause; the footer owns both the arithmetic and the refusal to
-              print "about 0". `note` is the pilot's free-quota clause, which
-              this page has carried since round 45. */}
-          <UsageFooter
-            usedSeconds={usage.usedSeconds}
-            capSeconds={usage.capSeconds}
-            billingMonth={usage.billingMonth}
-            dualWeekends
-            note="free through Dec 31, 2026"
-          />
-        </div>
+        {isDayZero ? (
+          <TeamDayZeroHome canManage={isStaff}>
+            {dashboardRegions}
+          </TeamDayZeroHome>
+        ) : (
+          homeContent
+        )}
       </div>
     </div>
   );
