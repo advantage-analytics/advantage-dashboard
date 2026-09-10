@@ -210,7 +210,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T16 · Add result choice to inline scoring
 
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **needs:** T5
 - **files:** Best guess: src/components/dashboard/schedule/score-entry.tsx; src/components/dashboard/schedule/line-row.tsx; src/components/dashboard/schedule/result-choice.tsx (new reusable control); tests/schedule-inline-outcomes.spec.ts (new)

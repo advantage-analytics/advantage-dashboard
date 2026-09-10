@@ -3,7 +3,14 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { advButton } from "@/lib/ui/adv-button";
-import { recordResult } from "@/lib/schedule/actions";
+import { recordResult, setOutcome } from "@/lib/schedule/actions";
+import {
+  outcomeFromResultChoice,
+  ResultChoice,
+  resultChoiceFromOutcome,
+  type ResultChoiceValue,
+} from "@/components/dashboard/schedule/result-choice";
+import type { EntryOutcome } from "@/lib/schedule/types";
 
 const SET_COUNT = 3;
 
@@ -25,17 +32,23 @@ export function ScoreEntry({
   ourLabel,
   round,
   initialOpponent,
+  initialOutcome = null,
   onDone,
 }: {
   entryId: string;
   ourLabel: string;
   round: string | null;
   initialOpponent: string;
+  initialOutcome?: Pick<EntryOutcome, "kind" | "side"> | null;
   onDone: () => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [savedOutcome, setSavedOutcome] = useState(initialOutcome !== null);
+  const [resultChoice, setResultChoice] = useState<ResultChoiceValue>(
+    initialOutcome ? resultChoiceFromOutcome(initialOutcome) : "played",
+  );
 
   const [opponent, setOpponent] = useState(initialOpponent);
   const [ours, setOurs] = useState<string[]>(Array(SET_COUNT).fill(""));
@@ -49,6 +62,29 @@ export function ScoreEntry({
 
   function submit() {
     setError(null);
+
+    if (resultChoice !== "played") {
+      startTransition(async () => {
+        const result = await setOutcome({
+          entryId,
+          round,
+          outcome: outcomeFromResultChoice(resultChoice),
+        });
+        if ("error" in result) {
+          setError(result.error);
+          return;
+        }
+        if (resultChoice === "clear") {
+          setSavedOutcome(false);
+          setResultChoice("played");
+          router.refresh();
+          return;
+        }
+        onDone();
+        router.refresh();
+      });
+      return;
+    }
 
     const played = ours
       .map((_, index) => index)
@@ -93,46 +129,63 @@ export function ScoreEntry({
   return (
     <div className="flex flex-col gap-3 border-b border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-4 py-3.5">
       <div className="flex flex-wrap items-center gap-4">
-        <span className="eyebrow">Opponent</span>
-        <input
-          autoFocus
-          value={opponent}
-          onChange={(event) => setOpponent(event.target.value)}
-          placeholder="Name"
-          className="min-w-[160px] border-b border-[var(--border-hairline)] bg-transparent pb-1 text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)]"
-        />
-
-        <span className="eyebrow">Score</span>
-        <div className="flex items-center gap-3">
-          {Array.from({ length: SET_COUNT }).map((_, index) => (
-            <div key={index} className="flex gap-1">
-              <SetCell
-                value={ours[index]}
-                onChange={(value) => setOurs(replace(ours, index, value))}
-              />
-              <SetCell
-                value={theirs[index]}
-                onChange={(value) => setTheirs(replace(theirs, index, value))}
-              />
-              <TiebreakCell
-                value={ourBreaks[index] || theirBreaks[index]}
-                onChange={(value) => {
-                  // One cell, whichever side lost the breaker. The set winner
-                  // took it 7-x, so the number here belongs to the other side.
-                  const ourGames = Number(ours[index] || 0);
-                  const theirGames = Number(theirs[index] || 0);
-                  if (ourGames > theirGames) {
-                    setTheirBreaks(replace(theirBreaks, index, value));
-                    setOurBreaks(replace(ourBreaks, index, ""));
-                  } else {
-                    setOurBreaks(replace(ourBreaks, index, value));
-                    setTheirBreaks(replace(theirBreaks, index, ""));
-                  }
-                }}
-              />
-            </div>
-          ))}
+        <span className="eyebrow">Result</span>
+        <div className="w-[280px]">
+          <ResultChoice
+            value={resultChoice}
+            onChange={setResultChoice}
+            canClear={savedOutcome}
+            disabled={pending}
+          />
         </div>
+        {resultChoice === "played" ? (
+          <>
+            <span className="eyebrow">Opponent</span>
+            <input
+              autoFocus
+              value={opponent}
+              onChange={(event) => setOpponent(event.target.value)}
+              placeholder="Name"
+              className="min-w-[160px] border-b border-[var(--border-hairline)] bg-transparent pb-1 text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)]"
+            />
+
+            <span className="eyebrow">Score</span>
+            <div className="flex items-center gap-3">
+              {Array.from({ length: SET_COUNT }).map((_, index) => (
+                <div key={index} className="flex gap-1">
+                  <SetCell
+                    label={`Our games, set ${index + 1}`}
+                    value={ours[index]}
+                    onChange={(value) => setOurs(replace(ours, index, value))}
+                  />
+                  <SetCell
+                    label={`Opponent games, set ${index + 1}`}
+                    value={theirs[index]}
+                    onChange={(value) =>
+                      setTheirs(replace(theirs, index, value))
+                    }
+                  />
+                  <TiebreakCell
+                    value={ourBreaks[index] || theirBreaks[index]}
+                    onChange={(value) => {
+                      // One cell, whichever side lost the breaker. The set winner
+                      // took it 7-x, so the number here belongs to the other side.
+                      const ourGames = Number(ours[index] || 0);
+                      const theirGames = Number(theirs[index] || 0);
+                      if (ourGames > theirGames) {
+                        setTheirBreaks(replace(theirBreaks, index, value));
+                        setOurBreaks(replace(ourBreaks, index, ""));
+                      } else {
+                        setOurBreaks(replace(ourBreaks, index, value));
+                        setTheirBreaks(replace(theirBreaks, index, ""));
+                      }
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
       </div>
 
       <div className="flex items-center gap-3">
@@ -158,7 +211,11 @@ export function ScoreEntry({
           className={advButton("primary", "sm")}
           onClick={submit}
         >
-          {pending ? "Saving…" : "Save result"}
+          {pending
+            ? "Saving…"
+            : resultChoice === "clear"
+              ? "Clear outcome"
+              : "Save result"}
         </button>
       </div>
     </div>
@@ -172,14 +229,17 @@ function replace(list: string[], index: number, value: string): string[] {
 }
 
 function SetCell({
+  label,
   value,
   onChange,
 }: {
+  label: string;
   value: string;
   onChange: (value: string) => void;
 }) {
   return (
     <input
+      aria-label={label}
       value={value}
       inputMode="numeric"
       maxLength={2}
