@@ -253,4 +253,3 @@
   - [ ] Database verification demonstrates constraints/RLS in the intended development target; non-played outcomes create no match/processing job and do not change historical analysis statistics.
   - [ ] Existing settled-entry and route-map checks pass; MAP.md is regenerated only if the route tree changed.
 - **notes:** Plan §7. This is the final integration check, not authorization to deploy or apply production migrations. Fix only failures within this feature's scope.
-
