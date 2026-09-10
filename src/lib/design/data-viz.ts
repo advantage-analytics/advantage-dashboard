@@ -74,17 +74,18 @@ export const VIZ_BLUE = "#3B82F6"; // = Signal Blue
 export const VIZ_BLUE_MID = "#60A5FA";
 export const VIZ_BLUE_LIGHT = "#93C5FD";
 
-/* ── Violet ramp (player-2 / secondary-family series, anchored on Player Violet) ── */
-
-export const VIZ_VIOLET_DEEP = "#7C3AED";
-export const VIZ_VIOLET = "#8B5CF6";
-export const VIZ_VIOLET_LIGHT = "#A855F7"; // = Player Violet
-
 /* ── Player attribution (multi-series charts) ───────────────────────── */
 
+/**
+ * You own Signal Blue; the opponent recedes to cool slate. The violet ramp
+ * that used to live here was retired with player attribution (colors.css,
+ * review decision C) — the role-based palette separates by MEANING (you /
+ * opponent / good / bad / key), not by hue family, so a second accent hue had
+ * nothing left to say.
+ */
 export const VIZ_PLAYER = {
-  p1: VIZ_BLUE, // Signal Blue
-  p2: VIZ_VIOLET_LIGHT, // Player Violet
+  p1: VIZ_BLUE, // = --viz-you
+  p2: VIZ_SLATE, // = --viz-opp
 } as const;
 
 /**
@@ -101,11 +102,21 @@ export const VIZ_HEATMAP = [
 
 /* ── Court surfaces (categorical) ───────────────────────────────────── */
 
+/**
+ * RETIRED, and kept only so its one consumer still compiles.
+ *
+ * colors.css retired the surface hues along with violet: a categorical map
+ * needs five separable colours, and the closed role-based palette does not
+ * have five to give. Indoor's violet is gone here, but the three slate steps
+ * that remain do not separate well enough to ship — this map needs its own
+ * decision (a shape or pattern encoding rather than five hues, most likely)
+ * before `statistics/surface-dna.tsx` becomes reachable again.
+ */
 export const VIZ_SURFACE: Record<string, string> = {
-  Hard: "#3B82F6", // Signal Blue
+  Hard: VIZ_BLUE,
   Clay: VIZ_SLATE_LIGHT,
   Grass: VIZ_GREEN,
-  Indoor: "#8B5CF6", // Player Violet family
+  Indoor: VIZ_SLATE_DEEP,
   Carpet: VIZ_SLATE,
 };
 export const VIZ_SURFACE_DEFAULT = VIZ_SLATE_LIGHT;

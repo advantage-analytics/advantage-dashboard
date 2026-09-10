@@ -13,6 +13,11 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { ChevronDown, HelpCircle, Maximize2, Target, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+// Serve type is a data encoding, so its colours come from the viz palette:
+// first serve is --viz-you, second serve --viz-you-mid. The violet that used
+// to mark a second serve was retired with player attribution — SKILL.md
+// §"Court Visualization Colors" states the replacement outright.
+import { VIZ_BLUE, VIZ_BLUE_MID } from "@/lib/design/data-viz";
 import { useVisualFilters } from "@/hooks/use-visual-filters";
 import { FilterPills } from "@/components/dashboard/matches/visuals/filter-pills";
 import {
@@ -632,7 +637,7 @@ function DotTooltip({ dot }: { dot: ServeDot }) {
       xPct={(cx / COURT_W) * 100}
       yPct={(cy / COURT_H) * 100}
       serveTypeLabel={dot.isFirstServe ? "1st Serve" : "2nd Serve"}
-      serveTypeColor={dot.isFirstServe ? "#3B82F6" : "#8B5CF6"}
+      serveTypeColor={dot.isFirstServe ? VIZ_BLUE : VIZ_BLUE_MID}
       resultLabel={dot.result ? RESULT_LABELS[dot.result] : null}
       resultColor={dot.result ? RESULT_COLORS[dot.result] : undefined}
       setNumber={dot.setNumber}
@@ -691,8 +696,8 @@ function ZoneTooltip({
       ? RESULT_COLORS.won
       : RESULT_COLORS.lost
     : stats.first >= stats.second
-      ? "#3B82F6"
-      : "#8B5CF6";
+      ? VIZ_BLUE
+      : VIZ_BLUE_MID;
 
   return (
     <div
@@ -746,13 +751,13 @@ function ZoneTooltip({
         ) : (
           <>
             <TooltipRow
-              color="#3B82F6"
+              color={VIZ_BLUE}
               label="1st Serve"
               count={stats.first}
               total={stats.count}
             />
             <TooltipRow
-              color="#8B5CF6"
+              color={VIZ_BLUE_MID}
               label="2nd Serve"
               count={stats.second}
               total={stats.count}

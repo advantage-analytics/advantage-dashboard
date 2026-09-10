@@ -23,9 +23,6 @@ import {
   VIZ_BLUE,
   VIZ_BLUE_DEEP,
   VIZ_BLUE_MID,
-  VIZ_VIOLET,
-  VIZ_VIOLET_DEEP,
-  VIZ_VIOLET_LIGHT,
   VIZ_SLATE,
   VIZ_SLATE_DEEP,
   VIZ_SLATE_LIGHT,
@@ -60,6 +57,14 @@ interface StatConfig {
   category: "serve" | "return" | "other";
 }
 
+// NOTE: the violet ramp these five stats used was retired with player
+// attribution (colors.css, review decision C), so they now share the slate
+// steps with the stats that already had them — VIZ_SLATE is assigned four
+// times here. That is tolerable only because this page is behind
+// `ComingSoonPage` and nothing renders it. Before Statistics ships, this
+// palette needs a real answer: 20 series cannot be separated by a closed
+// five-role palette, so the encoding has to change (one series at a time,
+// or shape/dash rather than hue) rather than reaching for more colours.
 const STAT_CONFIG: Record<StatKey, StatConfig> = {
   // Serve (percentages → left axis, counts → right)
   aces: { label: "Aces", color: "#0D0D0D", axis: "right", category: "serve" },
@@ -89,13 +94,13 @@ const STAT_CONFIG: Record<StatKey, StatConfig> = {
   },
   breakPointsSavedPct: {
     label: "BP Saved %",
-    color: VIZ_VIOLET_DEEP,
+    color: VIZ_SLATE_DEEP,
     axis: "left",
     category: "serve",
   },
   serviceGamesWonPct: {
     label: "Svc Games %",
-    color: VIZ_VIOLET,
+    color: VIZ_SLATE,
     axis: "left",
     category: "serve",
   },
@@ -151,19 +156,19 @@ const STAT_CONFIG: Record<StatKey, StatConfig> = {
   },
   shortRallyWonPct: {
     label: "Short Rally",
-    color: VIZ_VIOLET_DEEP,
+    color: VIZ_SLATE_DEEP,
     axis: "left",
     category: "other",
   },
   mediumRallyWonPct: {
     label: "Med Rally",
-    color: VIZ_VIOLET,
+    color: VIZ_SLATE,
     axis: "left",
     category: "other",
   },
   longRallyWonPct: {
     label: "Long Rally",
-    color: VIZ_VIOLET_LIGHT,
+    color: VIZ_SLATE_LIGHT,
     axis: "left",
     category: "other",
   },
