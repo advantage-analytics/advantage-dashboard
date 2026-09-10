@@ -15,7 +15,14 @@ case "$file" in
   *) exit 0 ;;
 esac
 
-cd "$CLAUDE_PROJECT_DIR" || exit 0
+# Claude Code provides CLAUDE_PROJECT_DIR; Codex runs the same hook from the
+# project root but does not provide that variable. Resolve the root without
+# depending on either harness so the shared hook is effective in both.
+project_root="${CLAUDE_PROJECT_DIR:-}"
+if [ -z "$project_root" ]; then
+  project_root=$(git rev-parse --show-toplevel 2>/dev/null) || project_root="$PWD"
+fi
+cd "$project_root" || exit 0
 out=$(npx --no-install tsc --noEmit 2>&1)
 [ $? -eq 0 ] && exit 0
 

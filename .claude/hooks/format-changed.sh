@@ -20,7 +20,14 @@ payload=$(cat)
 file=$(printf '%s' "$payload" | jq -r '.tool_input.file_path // .tool_response.filePath // empty')
 [ -n "$file" ] && [ -f "$file" ] || exit 0
 
-cd "$CLAUDE_PROJECT_DIR" || exit 0
+# Claude Code provides CLAUDE_PROJECT_DIR; Codex runs the same hook from the
+# project root but does not provide that variable. Resolve the root without
+# depending on either harness so the shared hook is effective in both.
+project_root="${CLAUDE_PROJECT_DIR:-}"
+if [ -z "$project_root" ]; then
+  project_root=$(git rev-parse --show-toplevel 2>/dev/null) || project_root="$PWD"
+fi
+cd "$project_root" || exit 0
 
 case "$file" in
   *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs)
@@ -29,5 +36,5 @@ esac
 
 # Routing for every other language lives in one place, shared with the git
 # hook. .sql and .toml are deliberately not formatted — see that script.
-"$CLAUDE_PROJECT_DIR/scripts/format-file.sh" "$file" || true
+"$project_root/scripts/format-file.sh" "$file" || true
 exit 0
