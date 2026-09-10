@@ -223,7 +223,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T17 · Add result choice to the full-page score flow
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T16
 - **files:** Best guess: src/components/dashboard/schedule/score-only-flow.tsx; src/app/dashboard/team/schedule/[eventId]/score/page.tsx; src/lib/schedule/line-choices.ts (if routing needs adjustment); tests/schedule-score-flow-outcomes.spec.ts (new)

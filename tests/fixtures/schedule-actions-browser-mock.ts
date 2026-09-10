@@ -3,12 +3,18 @@ type Call = { action: string; input: unknown };
 declare global {
   interface Window {
     actionCalls: Call[];
+    failNextOutcome?: string;
     failNextScore?: string;
   }
 }
 
 export async function setOutcome(input: unknown) {
   window.actionCalls.push({ action: "setOutcome", input });
+  if (window.failNextOutcome) {
+    const error = window.failNextOutcome;
+    window.failNextOutcome = undefined;
+    return { error };
+  }
   return { ok: true as const };
 }
 

@@ -6,7 +6,7 @@ import {
   getProgramSchedule,
   programNamesFor,
 } from "@/lib/data/schedule-server";
-import { entryState } from "@/lib/schedule/entry-state";
+import { entryState, outcomeForRound } from "@/lib/schedule/entry-state";
 import { lineupChoices, presetFor } from "@/lib/schedule/line-choices";
 import { ScoreOnlyFlow } from "@/components/dashboard/schedule/score-only-flow";
 import type { EventPreset } from "@/components/dashboard/matches/new-match-wizard/types";
@@ -77,13 +77,11 @@ export default async function ScoreEventPage({
       .filter((id): id is string => Boolean(id)),
   );
 
-  // A forfeited line has no match to score — `recordResult` refuses it — and a
-  // line nobody holds has no player, so neither is walkable. `lineupChoices`
-  // already renders both as `unset` with a null preset; this is the same rule
-  // stated for the walk rather than for the menu.
-  const scoreable = entries.filter(
-    (entry) => entry.forfeit === null && entry.playerLabels.length > 0,
-  );
+  // A line nobody holds has no result to record. A non-played line DOES stay
+  // in this set: the full-page flow is also where staff clear that outcome
+  // before replacing it with a played score. The upload flow keeps those
+  // lines unselectable through `lineupChoices`' default option.
+  const scoreable = entries.filter((entry) => entry.playerLabels.length > 0);
 
   // `?entry=` names the line; without one, the first line still waiting for a
   // result. An id from a URL is untrusted, so an id this event does not hold
@@ -106,10 +104,25 @@ export default async function ScoreEventPage({
     programs,
   );
 
+  const outcomes = Object.fromEntries(
+    scoreable.map((candidate) => {
+      const resolved = outcomeForRound(candidate, null);
+      return [
+        candidate.id,
+        resolved
+          ? { kind: resolved.outcome.kind, side: resolved.outcome.side }
+          : null,
+      ];
+    }),
+  );
+
   return (
     <ScoreOnlyFlow
       preset={preset}
-      lineup={lineupChoices(event, entries, programs)}
+      lineup={lineupChoices(event, entries, programs, {
+        includeNonPlayed: true,
+      })}
+      outcomes={outcomes}
       eventHref={`/dashboard/team/schedule/${eventId}`}
     />
   );

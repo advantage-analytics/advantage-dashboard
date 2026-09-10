@@ -76,6 +76,40 @@ test.describe("lineupChoices · one row per slot", () => {
     expect(choice).toMatchObject({ state: "unset", preset: null });
   });
 
+  test("the score flow can opt into selecting a saved outcome", () => {
+    const forfeited = entry({ position: 0, forfeit: "ours" });
+    const [choice] = lineupChoices(EVENT, [forfeited], PROGRAMS, {
+      includeNonPlayed: true,
+    });
+    expect(choice).toMatchObject({ state: "result" });
+    expect(choice.preset?.entryId).toBe(forfeited.id);
+  });
+
+  test("a new outcome stays unavailable to upload but is selectable for scoring", () => {
+    const defaulted = entry({
+      position: 0,
+      outcomes: [
+        {
+          id: "outcome-1",
+          round: null,
+          kind: "default",
+          side: "theirs",
+          actorUserId: "staff-1",
+          recordedAt: "2026-09-10T12:00:00Z",
+        },
+      ],
+    });
+    expect(lineupChoices(EVENT, [defaulted], PROGRAMS)[0]).toMatchObject({
+      state: "unset",
+      preset: null,
+    });
+    expect(
+      lineupChoices(EVENT, [defaulted], PROGRAMS, {
+        includeNonPlayed: true,
+      })[0],
+    ).toMatchObject({ state: "result" });
+  });
+
   test("a scored line without video is a result", () => {
     const scored = entry({ position: 0, matches: [match("m-1", false)] });
     const [choice] = lineupChoices(EVENT, [scored], PROGRAMS);

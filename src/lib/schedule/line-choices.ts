@@ -15,7 +15,10 @@ import type {
   LineChoice,
 } from "@/components/dashboard/matches/new-match-wizard/types";
 import type { EventEntry, ProgramEvent } from "@/lib/schedule/types";
-import { supportsVideo as entrySupportsVideo } from "@/lib/schedule/entry-state";
+import {
+  outcomeForRound,
+  supportsVideo as entrySupportsVideo,
+} from "@/lib/schedule/entry-state";
 import { compareEntryOrder } from "@/lib/schedule/courts";
 
 /**
@@ -71,12 +74,14 @@ export function presetFor(
  * lineup order, each with its own state and — where someone holds it — the
  * preset to switch to. A line with video already is still listed (it is
  * legal to attach more video to a scored line), an unset one is listed but
- * not pickable.
+ * not pickable. Non-played lines stay unset for upload by default; the score
+ * flow opts into them so a saved outcome can be cleared or changed.
  */
 export function lineupChoices(
   event: ProgramEvent,
   entries: EventEntry[],
   programs: Map<string, { key: string; school: string }>,
+  options: { includeNonPlayed?: boolean } = {},
 ): LineChoice[] {
   return (
     [...entries]
@@ -87,15 +92,18 @@ export function lineupChoices(
         const slot =
           entry.slot ?? entry.matches[0]?.round ?? `#${entry.position + 1}`;
         const playerName = entry.playerLabels.join(" / ") || null;
-        if (!playerName || entry.forfeit !== null) {
+        const nonPlayed = outcomeForRound(entry, null);
+        if (!playerName || (nonPlayed && !options.includeNonPlayed)) {
           return [{ slot, playerName, state: "unset", preset: null }];
         }
         const match = entry.matches[0] ?? null;
-        const state: LineChoice["state"] = !match
-          ? "open"
-          : match.hasVideo
-            ? "video"
-            : "result";
+        const state: LineChoice["state"] = nonPlayed
+          ? "result"
+          : !match
+            ? "open"
+            : match.hasVideo
+              ? "video"
+              : "result";
         return [
           {
             slot,
