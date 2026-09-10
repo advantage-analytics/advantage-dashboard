@@ -20,4 +20,8 @@ Captured verbatim from the feature-new invocation:
 > * [ ]  Can’t choose which player from your roster was playing in the tournamment a user makes
 > * [ ]  Not clear to put the type of draw in tournament createion
 
+## Scope clarification
+
+This feature is for the **Team Workspace Schedule Page**.
+
 `/feature-next dual-match-workflow` starts the pipeline. The first stage will refine this captured brief; review and edit its output before advancing to design.
