@@ -293,6 +293,8 @@ export interface DualLineSeed {
    * `LineupLineInput.id` and `entry-plan.ts`.
    */
   id?: string;
+  /** Stable roster identities saved beside `ourLabels`. */
+  ourIds?: string[];
   ourLabels?: string[];
   theirLabels?: string[];
   /**
@@ -428,10 +430,9 @@ export function seedDualLines(
     return {
       ...line,
       ourLabels,
-      // Re-resolved from the seeded label, never carried in by the caller:
-      // this id is what the line's eventual match is attributed to, and the
-      // one rule that may produce it is `rosterIdsForLabels`.
-      ourIds: rosterIdsForLabels(ourLabels.join(" / "), ladder),
+      // New identity-aware seeds carry the saved ids. The fallback preserves
+      // compatibility with older callers that supplied labels alone.
+      ourIds: seed.ourIds ?? rosterIdsForLabels(ourLabels.join(" / "), ladder),
       theirLabels: seed.theirLabels ?? line.theirLabels,
       // `undefined` is "not stated"; `null` is "not forfeited". A saved
       // `"theirs"` narrows to null here because `LineupLine` cannot hold it
@@ -459,7 +460,10 @@ export function filledDualLines(
   return lines
     .map((line) => ({
       line,
-      ours: splitNames(line.ourLabels.join(" / ")),
+      ours:
+        line.discipline === "doubles"
+          ? line.ourLabels.map((label) => label.trim()).filter(Boolean)
+          : splitNames(line.ourLabels.join(" / ")),
       theirs: splitNames(line.theirLabels.join(" / ")),
     }))
     .filter(
@@ -710,6 +714,24 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
     );
   }
 
+  /** Apply an explicit roster choice without reparsing its display label. */
+  function selectOurPlayers(
+    key: string,
+    selection: { ids: string[]; labels: string[] },
+  ) {
+    setLines((current) =>
+      current.map((line) =>
+        line.key === key
+          ? {
+              ...line,
+              ourIds: selection.ids,
+              ourLabels: selection.labels,
+            }
+          : line,
+      ),
+    );
+  }
+
   function editTheirLabels(key: string, value: string) {
     setLines((current) =>
       current.map((line) =>
@@ -842,6 +864,7 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
     pool,
     laddered,
     editOurLabels,
+    selectOurPlayers,
     editTheirLabels,
     setForfeited,
     lineCount,
@@ -963,6 +986,7 @@ export function DualLineupStep({
   pool,
   laddered,
   onOurLabels,
+  onOurSelection,
   onTheirLabels,
   onForfeit,
 }: {
@@ -989,6 +1013,10 @@ export function DualLineupStep({
    * edits text passes a two-argument function unchanged.
    */
   onOurLabels: (key: string, value: string, added?: LadderPlayer) => void;
+  onOurSelection: (
+    key: string,
+    selection: { ids: string[]; labels: string[] },
+  ) => void;
   onTheirLabels: (key: string, value: string) => void;
   onForfeit: (key: string, forfeited: boolean) => void;
 }) {
@@ -1044,6 +1072,7 @@ export function DualLineupStep({
         roster={roster}
         onAddPlayer={onAddPlayer}
         onOurLabels={onOurLabels}
+        onOurSelection={onOurSelection}
         onTheirLabels={onTheirLabels}
         onForfeit={onForfeit}
       />
@@ -1059,6 +1088,7 @@ export function DualLineupStep({
           roster={roster}
           onAddPlayer={onAddPlayer}
           onOurLabels={onOurLabels}
+          onOurSelection={onOurSelection}
           onTheirLabels={onTheirLabels}
           onForfeit={onForfeit}
         />
@@ -1170,6 +1200,7 @@ function LineupBlock({
   pool,
   roster,
   onOurLabels,
+  onOurSelection,
   onAddPlayer,
   onTheirLabels,
   onForfeit,
@@ -1185,6 +1216,10 @@ function LineupBlock({
   /** OUR ladder, including anyone added from a court — see `DualLineupStep`. */
   roster: LadderPlayer[];
   onOurLabels: (key: string, value: string, added?: LadderPlayer) => void;
+  onOurSelection: (
+    key: string,
+    selection: { ids: string[]; labels: string[] },
+  ) => void;
   onAddPlayer: (key: string, player: LadderPlayer, value: string) => void;
   onTheirLabels: (key: string, value: string) => void;
   onForfeit: (key: string, forfeited: boolean) => void;
@@ -1213,6 +1248,20 @@ function LineupBlock({
             pool={pool}
             roster={roster}
             onOurLabels={onOurLabels}
+            onOurSelection={onOurSelection}
+            usedPairSlots={
+              new Map(
+                lines
+                  .filter(
+                    (other) =>
+                      other.key !== line.key && other.ourIds.length === 2,
+                  )
+                  .map((other) => [
+                    JSON.stringify([...other.ourIds].sort()),
+                    other.slot,
+                  ]),
+              )
+            }
             onAddPlayer={onAddPlayer}
             onTheirLabels={onTheirLabels}
             onForfeit={onForfeit}
@@ -1291,6 +1340,8 @@ function LineRow({
   pool,
   roster,
   onOurLabels,
+  onOurSelection,
+  usedPairSlots,
   onAddPlayer,
   onTheirLabels,
   onForfeit,
@@ -1304,6 +1355,11 @@ function LineRow({
   /** OUR ladder, ranked and unranked — what the name picker offers. */
   roster: LadderPlayer[];
   onOurLabels: (key: string, value: string, added?: LadderPlayer) => void;
+  onOurSelection: (
+    key: string,
+    selection: { ids: string[]; labels: string[] },
+  ) => void;
+  usedPairSlots: ReadonlyMap<string, string>;
   onAddPlayer: (key: string, player: LadderPlayer, value: string) => void;
   onTheirLabels: (key: string, value: string) => void;
   onForfeit: (key: string, forfeited: boolean) => void;
@@ -1400,10 +1456,13 @@ function LineRow({
         // are closures over THIS row's key — see this component's header.
         <LineupNamePicker
           value={line.ourLabels.join(" / ")}
+          selectedIds={line.ourIds}
           slot={line.slot}
           discipline={line.discipline}
           ladder={roster}
           onChange={(value) => onOurLabels(line.key, value)}
+          onSelection={(selection) => onOurSelection(line.key, selection)}
+          usedPairSlots={usedPairSlots}
           onAddPlayer={(player, value) => onAddPlayer(line.key, player, value)}
           onOpenChange={setPicking}
         />

@@ -184,9 +184,10 @@ interface DualEditTarget {
  * 'D3' — but the type allows null) matches no seeded line and is simply not
  * applied.
  *
- * Both sides are joined back into ONE label, which is how the builder holds a
- * doubles pair: `useDualDraft` splits on `/` at the boundaries and nowhere
- * else. `id` rides on every loaded line — see `DualLineSeed.id`.
+ * Both sides retain their saved label arrays and our side retains its saved
+ * roster identities. No slash-joined reparsing occurs, so a slash inside a
+ * roster name cannot change who the entry belongs to. `id` rides on every
+ * loaded line — see `DualLineSeed.id`.
  */
 export function dualSeed({ event, entries }: EventDetail): DualDraftSeed {
   return {
@@ -203,8 +204,9 @@ export function dualSeed({ event, entries }: EventDetail): DualDraftSeed {
             {
               key: entry.slot,
               id: entry.id,
-              ourLabels: [entry.playerLabels.join(" / ")],
-              theirLabels: [entry.opponentLabels.join(" / ")],
+              ourIds: entry.playerUserIds,
+              ourLabels: entry.playerLabels,
+              theirLabels: entry.opponentLabels,
               forfeit: entry.forfeit,
               // The same question `planEntryChanges` asks at save, asked here
               // so the row is drawn read-only rather than refused later.
@@ -383,6 +385,7 @@ function DualDraftFlow({
     pool,
     laddered,
     editOurLabels,
+    selectOurPlayers,
     editTheirLabels,
     setForfeited,
     lineCount,
@@ -525,6 +528,7 @@ function DualDraftFlow({
           pool={pool}
           laddered={laddered}
           onOurLabels={editOurLabels}
+          onOurSelection={selectOurPlayers}
           onTheirLabels={editTheirLabels}
           onForfeit={setForfeited}
         />
