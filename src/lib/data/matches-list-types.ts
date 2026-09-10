@@ -24,6 +24,8 @@ export interface DbMatch {
 }
 
 export interface DisplayMatch {
+  /** Matches API currently permits only the uploader to edit or delete. */
+  canManage?: boolean;
   id: string;
   tournamentName: string;
   date: string;

@@ -58,6 +58,10 @@ export function MatchActionsMenu({
           className="min-w-[180px] rounded-xl border-[#E5E5EA] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]"
           onClick={stop}
           onPointerDown={stop}
+          onCloseAutoFocus={(event) => {
+            // Let the newly opened dialog own focus.
+            if (editOpen || deleteOpen) event.preventDefault();
+          }}
         >
           <MenuButton
             onSelect={() => {
