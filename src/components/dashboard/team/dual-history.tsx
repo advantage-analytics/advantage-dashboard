@@ -37,11 +37,14 @@ export function DualHistory({
   rows,
   form,
   teamName,
+  isPreview = false,
 }: {
   rows: DualHistoryRow[];
   form: { form: ("win" | "loss")[]; wins: number; losses: number };
   /** The program's own name for the footer's "Meridian form". */
   teamName: string;
+  /** Day-zero Home owns all setup actions and links. */
+  isPreview?: boolean;
 }) {
   return (
     <section
@@ -51,12 +54,14 @@ export function DualHistory({
       <div className="flex items-center gap-2.5 pb-3">
         <span className="eyebrow">Dual match history</span>
         <div className="flex-1" />
-        <Link
-          href="/dashboard/team/schedule"
-          className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-        >
-          All duals
-        </Link>
+        {!isPreview && (
+          <Link
+            href="/dashboard/team/schedule"
+            className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+          >
+            All duals
+          </Link>
+        )}
       </div>
 
       {rows.length > 0 ? (

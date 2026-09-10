@@ -292,6 +292,7 @@ export default function RecentActivity({
   playerIds,
   hasMatches,
   showEmptyAction = true,
+  showMatchesLink = true,
   matchCount,
   wonCount,
 }: {
@@ -316,6 +317,8 @@ export default function RecentActivity({
    * day-zero page, where the centred offer above it is the page's one action.
    */
   showEmptyAction?: boolean;
+  /** Day-zero Home owns the only destination. */
+  showMatchesLink?: boolean;
   /**
    * The footer's "M matches · W won", resolved on the server by the same
    * loader that counts the title row — the two numbers on the page that say
@@ -561,13 +564,15 @@ export default function RecentActivity({
         <div className="flex items-center gap-3">
           <span className="eyebrow">Recent matches</span>
           <div className="flex-1" />
-          <Link
-            href="/dashboard/matches"
-            className="rounded-sm text-[11px] font-medium transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:outline-none"
-            style={{ color: "var(--blue)" }}
-          >
-            All matches
-          </Link>
+          {showMatchesLink && (
+            <Link
+              href="/dashboard/matches"
+              className="rounded-sm text-[11px] font-medium transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:outline-none"
+              style={{ color: "var(--blue)" }}
+            >
+              All matches
+            </Link>
+          )}
         </div>
 
         {/* Content — no padding of its own; the card's bottom padding is the

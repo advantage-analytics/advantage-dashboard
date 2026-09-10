@@ -102,12 +102,13 @@ export default function HomeContent({
           playerIds={playerIds}
           hasMatches={hasMatches}
           showEmptyAction={hasMatches}
+          showMatchesLink={hasMatches}
           matchCount={matchCount}
           wonCount={wonCount}
         />
         {/* Under the matches card in the main column — the design's
             default `activityUnderMatches` placement (artboard 1b). */}
-        <ActivityWidget activity={activity} />
+        <ActivityWidget activity={activity} showSessionLog={hasMatches} />
       </motion.div>
 
       <motion.div
@@ -143,6 +144,7 @@ export default function HomeContent({
         ) : (
           !hasMatches && (
             <FocusCard
+              showStatisticsLink={false}
               footer={{ left: "One thing to work on, after your first match." }}
             >
               <FocusEmpty />
