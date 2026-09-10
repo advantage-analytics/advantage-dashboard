@@ -279,3 +279,53 @@ because the file is in the checker's UNREACHABLE list. 4. `STAT_CONFIG` is
 still private to its file; AGENTS.md already says it must be extracted before a
 second consumer, and this colour decision should land in the extracted module
 rather than be re-derived.
+
+## T11 · Reconcile the docs with what is actually reachable — blocked
+
+**gate:** mechanical passed — lint 0 errors, tsc clean, 652/652 tests
+(including the MAP.md staleness check), format clean. Completion review
+returned **`VERDICT: needs-work`**, so the run stopped there. Guardrails were
+not due in any case: the diff touched only `AGENTS.md`, no `src/` surface.
+
+**why blocked:** the replacement prose asserts that "the 19 files in
+`src/components/dashboard/statistics/` are fully wired to each other", and that
+is false. Verified independently: the directory holds **20** files, not 19;
+`statistics-page-content.tsx` imports **11** of them; and **8 component files
+are orphaned even inside the unreachable subtree** — `duration-profile`,
+`performance-ratings-card`, `pressure-index`, `rally-breakdown`,
+`stat-trajectory-chart`, `stats-grid`, `surface-chart`, `win-rate-chart` —
+plus `statistics-page-content.tsx` itself, which nothing imports because it is
+the root of the dead tree. There is dead code inside the dead code.
+
+That is precisely the class of overclaim this task exists to eliminate, moved
+down one level rather than removed, so it fails on the criterion the task is
+built around: a documentation task that swaps one false statement for another
+is worse than no change.
+
+A second, smaller imprecision: the new text says `visuals/configs/` and
+`useVisualFilters` are "still live via `serve-placement-widget.tsx`". True of
+the hook, which the widget imports directly; the configs are reached only
+transitively, through `use-visual-filters.ts` calling `getFilterConfig`. Worth
+saying accurately rather than glossing.
+
+**the queue's own error, which this uncovered:** the "19 files" figure did not
+come from nowhere — it is copied from the comment the runner wrote on
+`UNREACHABLE` in `scripts/check-design-drift.mjs:74`, which says "19 files,
+behind /dashboard/statistics". That comment is committed and also wrong. It
+needs correcting to 20, and ideally to say how few of them are actually wired.
+The subagent was right to work from the code; it simply did not go far enough.
+
+**recoverable work:** stash `dc44a024948cd06cc39fd745a264a5aaa26839d5`
+(1 file, AGENTS.md). The Court-visualization half is correct and verified —
+1,239 lines, zero importers, superseded by `shots-tab.tsx`, only a prose
+mention at `splitstep/derivation/court.ts:90` — and the register matches the
+surrounding document, which the reviewer confirmed. Restore with
+`git stash apply dc44a024948cd06cc39fd745a264a5aaa26839d5` — apply, not pop,
+because `refs/stash` is shared across worktrees.
+
+**to unblock:** restore, then correct the Statistics paragraph to the verified
+shape — 20 files, 11 reachable from `statistics-page-content.tsx`, 8 orphaned
+even within the subtree — and tighten the configs sentence to say the hook is
+imported directly and the configs come with it. Fix
+`check-design-drift.mjs:74`'s count in the same pass so the doc and the
+checker agree. Then re-run the gate from 5b.

@@ -199,7 +199,7 @@ Plan of record: `~/.claude/plans/system-reminder-you-are-operating-zippy-adleman
 
 ## T11 · Reconcile the docs with what is actually reachable
 
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **needs:** T8
 - **files:** AGENTS.md, docs/ui-revamp-guardrails.md
