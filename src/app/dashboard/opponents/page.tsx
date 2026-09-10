@@ -116,7 +116,7 @@ function Section({
   return (
     <section className="flex flex-col gap-3">
       <div>
-        <h2 className="text-[15px] font-medium text-[var(--ink-900)]">
+        <h2 className="text-[16px] font-medium text-[var(--ink-900)]">
           {title}
         </h2>
         <p className="mt-0.5 text-[11px] leading-[1.6] text-[var(--ink-500)]">

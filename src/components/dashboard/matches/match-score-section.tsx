@@ -40,7 +40,7 @@ function PlayerScoreRow({
           {playerName}
         </p>
       </div>
-      <div className="flex flex-row gap-4 text-[18px] font-semibold">
+      <div className="flex flex-row gap-4 text-[16px] font-semibold">
         {sets.map((set, idx) => (
           <p
             key={idx}

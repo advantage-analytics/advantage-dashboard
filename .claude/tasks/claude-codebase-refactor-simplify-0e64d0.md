@@ -79,7 +79,7 @@ Plan of record: `~/.claude/plans/system-reminder-you-are-operating-zippy-adleman
 
 ## T4 · Snap the remaining 11 off-scale font sizes
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1, T3
 - **files:** ~9 files, one line each

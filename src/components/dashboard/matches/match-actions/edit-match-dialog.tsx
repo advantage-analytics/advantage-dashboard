@@ -458,7 +458,7 @@ export function EditMatchDialog({
                   value={tournament}
                   onChange={(e) => setTournament(e.target.value)}
                   data-focus-ring="none" /* the rule below carries focus */
-                  className="w-full bg-transparent pb-1.5 text-[18px] font-medium tracking-[-0.3px] text-[#0D0D0D] outline-none placeholder:font-normal placeholder:text-[#AAAAAA]"
+                  className="w-full bg-transparent pb-1.5 text-[16px] font-medium tracking-[-0.3px] text-[#0D0D0D] outline-none placeholder:font-normal placeholder:text-[#AAAAAA]"
                 />
               </UnderlineField>
 

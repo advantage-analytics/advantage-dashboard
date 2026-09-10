@@ -86,3 +86,50 @@ names steps `heading-xl/lg/md` while the CSS names classes
 matched 1:1, which is what let a real step go undocumented. Worth unifying. 3. The four figures left off-scale are a distinct role the scale does not
 name — a "figure/metric" step may be the honest fix rather than leaving them
 permanently flagged.
+
+## T4 · Snap the remaining 11 off-scale font sizes — done
+
+**gate:** mechanical — lint 0 errors (39 pre-existing warnings), tsc clean,
+652/652 tests, checker green on all six. Completion review — `VERDICT: pass`;
+it opened the neighbouring type at each site rather than accepting the
+rationale, and confirmed the colour of all eleven is unchanged.
+Guardrails — `pipeline-guardrails-reviewer` ran and returned an explicit "No
+findings", required because the diff reaches `src/app/dashboard/` and
+`src/components/dashboard/` including both match-action dialogs. It verified
+the Tournament input's `value`/`onChange`/`UnderlineField` contract is
+byte-identical, that `handleDelete` and its cleanup ordering are untouched,
+and that set iteration order and winner-colour logic in `match-score-section`
+did not move. `rls-boundary-reviewer` skipped legitimately — no
+`src/lib/supabase/`, `src/lib/data/`, `src/app/api/` or `supabase/migrations/`
+in the diff, per `git diff HEAD --stat` and an empty
+`git ls-files --others --exclude-standard`.
+
+**changed:** Eleven sites snapped: five `15px` → 16px (the `opponents/**`
+section titles, which sit above 11px captions), two `15px` → 14px
+(`brand-panel.tsx`, whose own comment says the text was deliberately demoted
+to read as body, and `event-page.tsx`'s score span), three `18px` → 16px, and
+`profile-form.tsx:160`'s `19px` → 16px. Every hunk moves only the pixel value
+inside `text-[Npx]`; no colour, weight, tracking or layout token was touched.
+
+TWO MORE PREMISE ERRORS in the task, both caught by the implementer and
+confirmed by the runner. First, the task called all three `18px` sites "dialog
+titles"; only `delete-match-dialog.tsx:72` is one — a real `AlertDialogTitle`,
+now `16px/font-medium` exactly per SKILL.md §"Dialog (v3)"'s `title: 16px/500`.
+`edit-match-dialog.tsx:461` is the Tournament `<input>` (the dialog's actual
+title is line 403, which T3 handled), and `match-score-section.tsx` contains
+zero `Dialog` references. Both were treated on their own merits instead.
+Second, criterion 4 ("check 2 reads 0 and its assertion is flipped") was
+unsatisfiable by construction: the six sites T3 correctly left are still
+off-scale, so eleven fixes take the count 17 → 6, not to 0. The seed ratcheted
+to 6 and the assertion was deliberately NOT flipped — forcing it would have
+meant undoing T3's judgment to make a number go green.
+
+**follow-ups:** 1. The checker's `TYPE_SCALE` set omits 24 even though
+`title-lg` IS a documented 24px step — so a component that legitimately needs
+24px as a literal (because it needs a colour other than the class's
+`--ink-900`) has no on-scale literal to snap to, and stays flagged forever.
+Either add 24 to the set or document that 24px must always go through
+`.text-title-lg`. This is the direct cause of two of the six remaining
+findings. 2. `match-score-section.tsx` and `match-card-gallery.tsx` render
+near-duplicate set-score rows at different sizes with independent colour
+logic; worth consolidating if a future task touches match-list styling.

@@ -157,7 +157,7 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
 
       {/* Identity strip */}
       <div className="flex items-center gap-[18px] border-b border-[var(--border-hairline)] pb-6">
-        <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[19px] font-light text-[var(--ink-700)]">
+        <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[16px] font-light text-[var(--ink-700)]">
           {viewer.initials}
         </span>
         <div className="min-w-0 flex-1">

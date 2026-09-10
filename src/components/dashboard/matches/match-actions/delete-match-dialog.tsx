@@ -69,7 +69,7 @@ export function DeleteMatchDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <AlertDialogHeader className="gap-2 text-left">
-          <AlertDialogTitle className="text-[18px] font-medium tracking-[-0.4px] text-[#1D1D1F]">
+          <AlertDialogTitle className="text-[16px] font-medium tracking-[-0.4px] text-[#1D1D1F]">
             Delete this match?
           </AlertDialogTitle>
           <AlertDialogDescription className="text-[13px] leading-[20px] text-[#525252]">
