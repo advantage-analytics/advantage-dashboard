@@ -77,11 +77,17 @@ next-env.d.ts
 !.claude/skills/azure-storage/
 !.claude/skills/stripe-cli/
 
-# .mcp.json IS tracked. It used to be ignored because the Figma server embedded
-# an API key inline as a CLI argument; that server has been removed and the file
-# now names only keyless/hosted servers, so every teammate can get identical MCP
-# config from a clone. If you ever add a server that needs a secret, use
-# ${ENV_VAR} expansion rather than re-ignoring this file.
+# .mcp.json IS tracked, so every teammate gets identical MCP config from a clone.
+#
+# It carries no credential and — checked, not assumed — never did: every value in
+# it is a ${VAR} reference, including the Figma server's
+# `--figma-api-key=${FIGMA_API_KEY}` that this repo's own comments used to
+# describe as an inline key. Ignoring the file was never buying any secrecy.
+#
+# Keep it that way: a server needing a secret gets ${ENV_VAR} expansion, not a
+# literal and not a re-ignore. .claude/hooks/guard-secrets.sh still asks before
+# reading this file IF it ever does contain something key-shaped, and
+# .githooks/pre-commit scans staged content for the same.
 
 # Agent scratch: SDD ledgers, review packages, task briefs and reports. Never
 # committed — but /task-next commits with `git add -A`, so an un-ignored

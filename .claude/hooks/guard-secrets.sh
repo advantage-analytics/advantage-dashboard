@@ -10,9 +10,11 @@
 #                  asks instead, and only when the file really does contain
 #                  something that looks like a key.
 #
-#                  The Figma server that embedded an API key as a CLI arg has
-#                  been removed, and .mcp.json now names only keyless/hosted
-#                  servers — so in practice this branch is silent today. It is
+#                  In practice this branch is silent today: every value in
+#                  .mcp.json is a ${VAR} reference, so mcp_has_secret() finds
+#                  nothing. (The Figma server this comment once blamed for an
+#                  "inline API key" actually used --figma-api-key=${FIGMA_API_KEY}
+#                  — the claim was wrong before it was removed.) The branch is
 #                  kept, and matters MORE than it used to: the file used to be
 #                  gitignored, so a pasted key stayed on one machine. It is now
 #                  tracked, so a key added to it would be committed and pushed.

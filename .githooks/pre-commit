@@ -38,11 +38,16 @@ done <<< "$staged"
 # migration. The real secret is the service-role KEY — a JWT — and the eyJ…
 # pattern catches that. The dot is required: without it the pattern also hits
 # base64 integrity hashes in package-lock.json.
-if git diff --cached -U0 | grep -nE '^\+' | \
-     grep -qE '(sk_live_|rk_live_|ghp_|gho_|github_pat_|xox[baprs]-|AKIA[0-9A-Z]{16}|sbp_|eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{10,})'; then
+# The scanner's own source and its tests are excluded from the CONTENT scan:
+# pre-commit holds the pattern itself, and hooks.test.sh holds probe values, so
+# scanning them makes the hook flag itself and block every edit to it. They are
+# still covered by the filename rule above and by GitHub's push protection.
+SELF=(':(exclude).githooks/pre-commit' ':(exclude).githooks/hooks.test.sh')
+if git diff --cached -U0 -- . "${SELF[@]}" | grep -nE '^\+' | \
+     grep -qE '(figd_|sk_live_|rk_live_|ghp_|gho_|github_pat_|xox[baprs]-|AKIA[0-9A-Z]{16}|sbp_|eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{10,})'; then
   say "a staged line looks like a live credential (Stripe/GitHub/Slack/AWS key, or a JWT)."
-  git diff --cached -U0 | grep -E '^\+' | \
-    grep -nE '(sk_live_|rk_live_|ghp_|gho_|github_pat_|xox[baprs]-|AKIA[0-9A-Z]{16}|sbp_|eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{10,})' | \
+  git diff --cached -U0 -- . "${SELF[@]}" | grep -E '^\+' | \
+    grep -nE '(figd_|sk_live_|rk_live_|ghp_|gho_|github_pat_|xox[baprs]-|AKIA[0-9A-Z]{16}|sbp_|eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{10,})' | \
     sed 's/^/    /' | cut -c1-140 >&2
   printf '    If this is a false positive, commit with --no-verify and say why in the message.\n' >&2
 fi

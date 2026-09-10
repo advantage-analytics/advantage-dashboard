@@ -59,6 +59,17 @@ run_pc; check "live Stripe key in content is rejected" $? 1
 setup; printf 'const k = process.env.STRIPE_KEY;\n' > a.ts; git add a.ts
 run_pc; check "env-var reference is allowed" $? 0
 
+# Every vendor prefix the hook claims to cover gets a case. A prefix silently
+# dropped while editing the regex is otherwise invisible — which is exactly
+# what happened to figd_ once.
+FIGMA="figd_$(printf 'A%.0s' $(seq 1 40))"
+setup; printf 'const k = "%s";\n' "$FIGMA" > a.ts; git add a.ts
+run_pc; check "Figma token in content is rejected" $? 1
+
+GH_TOK="ghp_$(printf 'B%.0s' $(seq 1 36))"
+setup; printf 'const k = "%s";\n' "$GH_TOK" > a.ts; git add a.ts
+run_pc; check "GitHub token in content is rejected" $? 1
+
 # `service_role` is a Postgres role name, not a secret — migrations say
 # `grant ... to service_role` routinely and must not be blocked.
 setup; printf 'grant execute on function public.f() to service_role;\n' > m.sql; git add m.sql
@@ -71,6 +82,23 @@ run_pc; check "an actual service-role JWT is rejected" $? 1
 
 setup; printf '"integrity": "sha512-eyJIkqGIDMZPwPx24pUMfwSxxI8phr"\n' > p.json; git add p.json
 run_pc; check "base64 integrity hash is not a false positive" $? 0
+
+# The scanner must not flag its OWN source or tests: pre-commit contains the
+# pattern and hooks.test.sh contains probe values, so without the exclusion the
+# hook blocks every edit to itself. Staged at their real paths here, which is
+# what the ':(exclude)' pathspec keys on.
+setup; mkdir -p .githooks
+printf 'grep -qE "(figd_|sk_live_|ghp_)" x\n' > .githooks/pre-commit; git add .githooks/pre-commit
+run_pc; check "the hook does not flag its own pattern" $? 0
+
+setup; mkdir -p .githooks
+printf 'FIGMA="figd_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"\n' > .githooks/hooks.test.sh; git add .githooks/hooks.test.sh
+run_pc; check "the hook does not flag its own test fixtures" $? 0
+
+# ...but a real file at any other path is still caught.
+setup; mkdir -p .githooks
+printf 'const k = "ghp_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC";\n' > other.ts; git add other.ts
+run_pc; check "a credential outside the hook's own files is still rejected" $? 1
 
 cd "$ROOT" || exit 1; rm -rf "$TMP"
 
