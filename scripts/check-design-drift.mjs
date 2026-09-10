@@ -300,7 +300,7 @@ const CHECKS = [
   },
   {
     key: "viz",
-    seed: 8,
+    seed: 1,
     label: "inlined viz hue",
     fix: "import the named export from lib/design/data-viz.ts (see its header)",
   },

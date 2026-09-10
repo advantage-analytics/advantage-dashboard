@@ -133,3 +133,50 @@ Either add 24 to the set or document that 24px must always go through
 findings. 2. `match-score-section.tsx` and `match-card-gallery.tsx` render
 near-duplicate set-score rows at different sizes with independent colour
 logic; worth consolidating if a future task touches match-list styling.
+
+## T5 · Centralize inlined chart hex onto data-viz exports — done
+
+**gate:** mechanical — lint 0 errors (39 pre-existing warnings), tsc clean,
+652/652 tests, checker green on all six. Completion review — `VERDICT: pass`;
+it verified `VIZ_BLUE` is byte-identical and independently confirmed the
+`#EFF4FF` justification against `player-colors.ts` and `colors.css` rather
+than taking it on trust, since the whole decision to leave line 286 rests on
+it. Guardrails — `pipeline-guardrails-reviewer` ran and returned an explicit
+"No findings"; required because `serve-placement-widget` is live on personal
+Home AND the match-detail shots tab. It confirmed the one changed line is a
+zone-highlight `<rect>`'s fill with `x`/`y`/`width`/`height`/`opacity`
+untouched, so no coordinate maths, dot placement or zone ordering moved — the
+failure mode that would misrepresent where a player's serves landed.
+`rls-boundary-reviewer` skipped legitimately — no `src/lib/supabase/`,
+`src/lib/data/`, `src/app/api/` or `supabase/migrations/` in the diff.
+
+**changed:** Seven `#3B82F6` on chart and SVG colour props now import
+`VIZ_BLUE`, enforcing the rule `data-viz.ts`'s own header states: "Do not
+inline a raw hex in a component." Six were in `kpi-detail-chart` (gradient
+stops, tooltip cursor, Area stroke, Dot fill, activeDot fill); one was
+`serve-placement-widget`'s active-zone marker, which already had the import
+from T8. `VIZ_BLUE` is exactly `"#3B82F6"`, so all seven are byte-identical
+and nothing renders differently. No new export was needed or invented.
+
+The eighth was left deliberately, and it is a real finding rather than a
+shortfall. `serve-placement-widget.tsx:286` fills the entire court `<rect>`
+with `#EFF4FF` — which is `PLAYER_1_SOFT` / `--player-1-soft` /
+`--blue-pressed`, a PLAYER WASH, not a court colour. `colors.css:153` defines
+`--viz-court-fill: #D6E4F9`, which SKILL.md §"Court Visualization Colors"
+names as the court fill, and it has no export in `data-viz.ts` at all. So the
+court is painted with the wrong token's value, and correcting it is a visible
+recolour on two live surfaces — a value decision, not the centralization this
+task is about, and flatly contradicting criterion 3's "byte-identical".
+Criterion 4 was therefore unreachable: seven fixes take the count 8 → 1. Seed
+ratcheted to 1; assertion deliberately not flipped.
+
+**follow-ups:** 1. The court-fill decision above — either promote
+`--viz-court-fill` to a `VIZ_COURT_FILL` export and recolour the court to
+`#D6E4F9`, or re-document `#EFF4FF` as the intended court styling and correct
+SKILL.md. Either way a person decides, not a sweep. 2. `serve-placement-widget`
+carries many more `#3B82F6` / `#EFF4FF` as Tailwind arbitrary classes
+(`bg-[#3B82F6]`, `bg-[#EFF4FF]`, ~8 sites). `COLOR_PROP_RE` only matches JSX
+colour props, so the checker does not see them — and they are palette-legal
+under check 1, so they are arguably the DS's sanctioned build form rather than
+drift. Worth a decision on whether class-form centralization is wanted at all
+before anyone treats it as a task.

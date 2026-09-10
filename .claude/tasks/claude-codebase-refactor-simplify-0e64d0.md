@@ -91,7 +91,7 @@ Plan of record: `~/.claude/plans/system-reminder-you-are-operating-zippy-adleman
 
 ## T5 · Centralize inlined chart hex onto data-viz exports
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1
 - **files:** src/components/dashboard/shared/kpi-detail-chart.tsx (6), src/components/dashboard/matches/serve-placement/serve-placement-widget.tsx (2)

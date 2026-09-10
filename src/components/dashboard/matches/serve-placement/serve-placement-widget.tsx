@@ -478,7 +478,7 @@ function HalfCourtWithZones({
                     y={SERVICE_Y - 1}
                     width={z.x2 - z.x1}
                     height={2}
-                    fill="#3B82F6"
+                    fill={VIZ_BLUE}
                     opacity={0.6}
                     style={{ pointerEvents: "none" }}
                   />
