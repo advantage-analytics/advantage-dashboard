@@ -20,7 +20,8 @@ ready).
 ## T1 · Reproduce multi-set score loss
 
 - **status:** todo
-- **model:** sonnet
+- **model:** gpt-5.3-codex-spark
+- **reasoning:** medium
 - **files:** Best guess: tests/upload-score-regression.spec.ts (new), existing wizard fixtures.
 - **done when:**
   - [ ] A fixture-backed one-set import reaches the real wizard and reproduces entry into sets 2 and 3, identifying whether values, focus, or submitted scores are lost.
@@ -31,7 +32,8 @@ ready).
 ## T2 · Preserve newly entered score sets
 
 - **status:** todo
-- **model:** opus
+- **model:** gpt-5.6-sol
+- **reasoning:** medium
 - **needs:** T1
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts, src/components/dashboard/matches/new-match-wizard/score-state.ts (new if needed), tests/upload-score-state.spec.ts (new), tests/upload-score-regression.spec.ts.
 - **done when:**
@@ -44,7 +46,8 @@ ready).
 ## T3 · Repair game-score focus order
 
 - **status:** todo
-- **model:** sonnet
+- **model:** gpt-5.3-codex-spark
+- **reasoning:** medium
 - **needs:** T2
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/ScoreBlock.tsx, tests/upload-score-regression.spec.ts.
 - **done when:**
@@ -57,7 +60,8 @@ ready).
 ## T4 · Protect scores when reducing the format
 
 - **status:** todo
-- **model:** sonnet
+- **model:** gpt-5.3-codex-spark
+- **reasoning:** medium
 - **needs:** T3
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/DetailsStepContent.tsx, tests/upload-score-regression.spec.ts.
 - **done when:**
@@ -70,7 +74,8 @@ ready).
 ## T5 · Define completion and import identity rules
 
 - **status:** todo
-- **model:** opus
+- **model:** gpt-5.6-sol
+- **reasoning:** medium
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/validation.ts (new), src/components/dashboard/matches/new-match-wizard/types.ts, tests/upload-validation.spec.ts (new).
 - **done when:**
   - [ ] Required-answer validation reports each missing hand/backhand value for both players alongside existing provider requirements without guessing defaults.
@@ -82,7 +87,8 @@ ready).
 ## T6 · Wire identity confirmation into wizard state
 
 - **status:** todo
-- **model:** fable
+- **model:** gpt-6-astra
+- **reasoning:** high
 - **needs:** T2, T5
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts, tests/upload-validation.spec.ts, existing hook-test fixtures.
 - **done when:**
@@ -95,7 +101,8 @@ ready).
 ## T7 · Show import identity confirmation
 
 - **status:** todo
-- **model:** sonnet
+- **model:** gpt-5.3-codex-spark
+- **reasoning:** medium
 - **needs:** T6
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx, src/components/dashboard/matches/new-match-wizard/ImportIdentityNotice.tsx (new), tests/upload-identity.spec.ts (new).
 - **done when:**
@@ -108,7 +115,8 @@ ready).
 ## T8 · Align shared selected-option styling
 
 - **status:** todo
-- **model:** sonnet
+- **model:** gpt-5.3-codex-spark
+- **reasoning:** medium
 - **files:** Best guess: src/components/ui/float-menu.tsx, .skills/advantage-analytics-design/SKILL.md, existing shared-control tests.
 - **done when:**
   - [ ] Selected rows show a Signal Blue check without persistent grey fill or grey pointer-hover fill.
@@ -120,7 +128,8 @@ ready).
 ## T9 · Order providers and align source selections
 
 - **status:** todo
-- **model:** sonnet
+- **model:** gpt-5.3-codex-spark
+- **reasoning:** medium
 - **needs:** T8
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/SourceStepContent.tsx, its imported EntitySelect implementation (resolve exact path), tests/upload-source.spec.ts (new if needed).
 - **done when:**
@@ -133,7 +142,8 @@ ready).
 ## T10 · Make player details editable and required
 
 - **status:** todo
-- **model:** sonnet
+- **model:** gpt-5.3-codex-spark
+- **reasoning:** medium
 - **needs:** T4, T5, T7, T8
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/DetailsStepContent.tsx, tests/upload-player-details.spec.ts (new).
 - **done when:**
@@ -147,7 +157,8 @@ ready).
 ## T11 · Define reusable upload eligibility
 
 - **status:** todo
-- **model:** fable
+- **model:** gpt-6-astra
+- **reasoning:** high
 - **files:** Best guess: src/lib/workspace/types.ts, src/lib/workspace/upload-eligibility.ts (new only if needed), tests/upload-eligibility.spec.ts (new).
 - **done when:**
   - [ ] A reasoned result distinguishes pending approval, unavailable workspace, role restrictions, and invalid athlete; unknown/load-failed state does not pass.
@@ -160,7 +171,8 @@ ready).
 ## T12 · Enforce roster subjects in wizard state
 
 - **status:** todo
-- **model:** fable
+- **model:** gpt-6-astra
+- **reasoning:** high
 - **needs:** T6, T11
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts, tests/upload-eligibility.spec.ts, targeted flow fixtures.
 - **done when:**
@@ -173,7 +185,8 @@ ready).
 ## T13 · Show approval restrictions at every entry
 
 - **status:** todo
-- **model:** sonnet
+- **model:** gpt-5.3-codex-spark
+- **reasoning:** medium
 - **needs:** T7, T12
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx, tests/upload-approval.spec.ts (new).
 - **done when:**
@@ -186,7 +199,8 @@ ready).
 ## T14 · Enforce upload eligibility on direct writes
 
 - **status:** todo
-- **model:** fable
+- **model:** gpt-6-astra
+- **reasoning:** high
 - **needs:** T11, T12
 - **files:** Best guess: supabase/migrations/<new-timestamp>_upload_eligibility.sql (new), tests/upload-write-eligibility.spec.ts (new).
 - **done when:**
@@ -200,7 +214,8 @@ ready).
 ## T15 · Verify transfer authorization for the athlete
 
 - **status:** todo
-- **model:** fable
+- **model:** gpt-6-astra
+- **reasoning:** high
 - **needs:** T11, T14
 - **files:** Best guess: src/app/api/splitstep/upload-url/route.ts, existing upload-url authorization tests.
 - **done when:**
@@ -213,7 +228,8 @@ ready).
 ## T16 · Verify final job eligibility before quota spend
 
 - **status:** todo
-- **model:** fable
+- **model:** gpt-6-astra
+- **reasoning:** high
 - **needs:** T15
 - **files:** Best guess: src/app/api/splitstep/jobs/route.ts, existing job authorization tests.
 - **done when:**
@@ -226,7 +242,8 @@ ready).
 ## T17 · Present video requirements before selection
 
 - **status:** todo
-- **model:** sonnet
+- **model:** gpt-5.3-codex-spark
+- **reasoning:** medium
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/FileStepContent.tsx, src/components/dashboard/matches/new-match-wizard/VideoRequirements.tsx (new if needed), existing file-step tests.
 - **done when:**
   - [ ] Before selection, guidance states 1080p minimum, 30 fps minimum with 29.97 accepted, and 60 fps preferred.
@@ -238,7 +255,8 @@ ready).
 ## T18 · Align existing video validation with requirements
 
 - **status:** todo
-- **model:** opus
+- **model:** gpt-5.6-sol
+- **reasoning:** medium
 - **needs:** T17
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (import tracing only), its existing video probe/validator (resolve exact path), tests/upload-video-requirements.spec.ts (new if needed).
 - **done when:**
@@ -251,7 +269,8 @@ ready).
 ## T19 · Document Save draft behavior
 
 - **status:** todo
-- **model:** sonnet
+- **model:** gpt-5.3-codex-spark
+- **reasoning:** medium
 - **files:** Best guess: docs/upload-draft-behavior.md (new).
 - **done when:**
   - [ ] The document answers save, resume, replacement, discard, retention, completion cleanup, and transfer-start behavior against the existing draft infrastructure.
@@ -263,7 +282,8 @@ ready).
 ## T20 · Verify the integrated upload refinements
 
 - **status:** todo
-- **model:** fable
+- **model:** gpt-6-astra
+- **reasoning:** high
 - **needs:** T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19
 - **files:** Best guess: focused upload tests from T1–T19 (only actual coverage gaps), task-run verification record.
 - **done when:**
