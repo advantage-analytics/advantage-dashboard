@@ -31,7 +31,7 @@ ready).
 
 ## T2 · Preserve newly entered score sets
 
-- **status:** blocked
+- **status:** todo
 - **model:** gpt-5.6-sol
 - **reasoning:** medium
 - **needs:** T1
@@ -73,7 +73,7 @@ ready).
 
 ## T5 · Define completion and import identity rules
 
-- **status:** todo
+- **status:** blocked
 - **model:** gpt-5.6-sol
 - **reasoning:** medium
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/validation.ts (new), src/components/dashboard/matches/new-match-wizard/types.ts, tests/upload-validation.spec.ts (new).
