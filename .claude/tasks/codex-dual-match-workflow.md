@@ -101,7 +101,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T7 · Wire Schedule capabilities and remove Import
 
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T4
 - **files:** Best guess: src/app/dashboard/team/schedule/page.tsx; src/components/dashboard/schedule/static/static-schedule.tsx; src/components/dashboard/schedule/static/event-drawer.tsx (prop boundary only)
