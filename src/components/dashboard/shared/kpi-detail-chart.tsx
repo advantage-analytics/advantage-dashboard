@@ -121,7 +121,7 @@ export default function KpiDetailChart({
                 <stop offset="95%" stopColor={VIZ_BLUE} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#F0F0F0" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#F3F3F3" />
             <XAxis
               dataKey="date"
               tickFormatter={(d: string) => formatDate(d)}

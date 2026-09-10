@@ -146,7 +146,7 @@ function SharePopoverPanel({
           className={cn(
             "inline-flex h-8 shrink-0 items-center gap-1 rounded-[6px] px-3 text-[12px] font-medium",
             "border border-[#EAECF0] bg-white text-[#525252]",
-            "hover:bg-[#F5F5F5] hover:text-[#1D1D1F] active:bg-[#EBEBEB]",
+            "hover:bg-[#F5F5F5] hover:text-[var(--ink-900)] active:bg-[var(--ink-200)]",
             "transition-[background-color,transform,color] duration-150 ease-out active:scale-[0.97]",
             "focus-visible:outline-none",
           )}
@@ -173,8 +173,8 @@ function SharePopoverPanel({
         <a
           href={mailtoHref}
           className={cn(
-            "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[#1D1D1F]",
-            "hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[#EBEBEB]",
+            "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[var(--ink-900)]",
+            "hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[var(--ink-200)]",
             "transition-colors duration-100",
           )}
         >
@@ -190,8 +190,8 @@ function SharePopoverPanel({
             type="button"
             onClick={nativeShare}
             className={cn(
-              "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-[#1D1D1F]",
-              "hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[#EBEBEB]",
+              "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-[var(--ink-900)]",
+              "hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[var(--ink-200)]",
               "transition-colors duration-100",
             )}
           >

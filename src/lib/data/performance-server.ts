@@ -140,6 +140,25 @@ interface DbMatchStats {
   avg_rally_length: number | null;
 }
 
+/**
+ * `barColor` is presentation, and it does not belong in a data loader.
+ *
+ * These two values ARE the viz palette's you/opponent pair (`--viz-you`
+ * `#3B82F6`, `--viz-opp` `#64748B`), and the tidy-looking fix is to import
+ * `VIZ_BLUE` / `VIZ_SLATE` from `@/lib/design/data-viz`. That was tried and
+ * reverted: it makes `src/lib/data/` depend on the design layer, so a palette
+ * change would reach into a query module and a loader could not be reasoned
+ * about without the design system loaded. Deepening the coupling is a worse
+ * outcome than the literals, which at least keep the violation visible and
+ * confined to two arrays.
+ *
+ * The real fix is for the loader to emit a ROLE — `"serve" | "return" |
+ * "pressure"` — and for the card to map role to hue, at which point
+ * `OverallPerformanceData.barColor` (`src/lib/data/types.ts`) disappears. That
+ * is cheap today, because the only consumer is
+ * `statistics/performance-ratings-card.tsx`, which sits behind
+ * `ComingSoonPage`. It gets more expensive the day Statistics ships.
+ */
 const DEFAULT_PERFORMANCE: OverallPerformanceData = {
   views: [
     { wins: 0, losses: 0, label: "Overall Record" },
@@ -147,9 +166,9 @@ const DEFAULT_PERFORMANCE: OverallPerformanceData = {
     { wins: 0, losses: 0, label: "Last 7 Days" },
   ],
   performanceRatings: [
-    { label: "Serve Rating", value: 0, barColor: "#666666" },
-    { label: "Return Rating", value: 0, barColor: "#4A90E2" },
-    { label: "Under Pressure Rating", value: 0, barColor: "#666666" },
+    { label: "Serve Rating", value: 0, barColor: "#64748B" },
+    { label: "Return Rating", value: 0, barColor: "#3B82F6" },
+    { label: "Under Pressure Rating", value: 0, barColor: "#64748B" },
   ],
   recentPerformance: [
     { label: "First Serve In Percentage", value: 0, change: 0 },
@@ -925,12 +944,12 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
       { ...last7, label: "Last 7 Days" },
     ],
     performanceRatings: [
-      { label: "Serve Rating", value: ratings.serve, barColor: "#666666" },
-      { label: "Return Rating", value: ratings.return_, barColor: "#4A90E2" },
+      { label: "Serve Rating", value: ratings.serve, barColor: "#64748B" },
+      { label: "Return Rating", value: ratings.return_, barColor: "#3B82F6" },
       {
         label: "Under Pressure Rating",
         value: ratings.pressure,
-        barColor: "#666666",
+        barColor: "#64748B",
       },
     ],
     recentPerformance: recentPerf,

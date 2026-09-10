@@ -68,7 +68,7 @@ export function StatSnapshotCard({
           </span>
         )}
       </div>
-      <div className="h-[3px] overflow-hidden rounded-full bg-[#EBEBEB]">
+      <div className="h-[3px] overflow-hidden rounded-full bg-[var(--ink-200)]">
         <motion.div
           className="h-full rounded-full bg-[#3B82F6]"
           initial={{ width: 0 }}

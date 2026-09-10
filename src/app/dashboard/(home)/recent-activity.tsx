@@ -740,7 +740,7 @@ export default function RecentActivity({
                 className={
                   "fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-[12px] bg-[#0D0D0D] py-3 pr-5 pl-4 shadow-[0px_8px_32px_rgba(0,0,0,0.25),0px_0px_0px_1px_rgba(255,255,255,0.06)_inset] " +
                   (toast.kind === "ready"
-                    ? "cursor-pointer transition-colors duration-200 hover:bg-[#1A1A1A]"
+                    ? "cursor-pointer transition-colors duration-200 hover:bg-[var(--surface-dark-hover)]"
                     : "")
                 }
               >

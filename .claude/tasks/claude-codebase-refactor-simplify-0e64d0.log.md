@@ -369,3 +369,60 @@ correct it or mark it explicitly point-in-time, per docs/README.md's own
 convention. 2. `src/app/dashboard/statistics/page.tsx`'s own comment says
 "twenty-one components"; the directory holds 20 files, 19 of them `.tsx`.
 Same class of drift, one more place.
+
+## T6 · Resolve the off-palette hex — done (unblocked)
+
+**gate:** re-run in full after fixing the blocking defect. Mechanical — lint 0
+errors, tsc clean, 652/652 tests, format clean. Completion review —
+`VERDICT: pass`; it confirmed no design-layer import survives anywhere under
+`src/lib/data/` and spot-checked six values against the role each site uses
+them for. Guardrails — BOTH ran, which the blocked run never reached.
+`rls-boundary-reviewer`: explicit "No findings" — no query, filter, scoping
+predicate, service-role usage or RPC moved, and `git diff | grep '^\+import'`
+returned nothing across all 31 files. `pipeline-guardrails-reviewer`: "No
+guardrail violations", with one item raised for human sign-off (below) and a
+useful aside — the sweep is "colour-only, NEAREST-token rendering" rather than
+byte-exact, since `#BFBFBF` and `#B3B3B3` both collapse onto `--ink-400` and
+`#E7E7E7` onto `--border-medium`. That is what near-twin merging means and the
+task asked for it, but the distinction is worth having on record.
+
+**the blocking defect, fixed:** the rejected run had added
+`import { VIZ_BLUE, VIZ_SLATE } from "@/lib/design/data-viz"` to
+`performance-server.ts` — coupling a server data loader to the design layer,
+after the task said to note the layering violation and NOT refactor. The
+import is gone. The six `barColor` values are literals `#64748B` / `#3B82F6`,
+which are the same values those exports carry AND are declared in colors.css,
+so they pass check 1 without any import at all. A doc comment above
+`DEFAULT_PERFORMANCE` now records that `barColor` is presentation, that the
+import was tried and reverted and why, and that the real fix is for the loader
+to emit a role so `OverallPerformanceData.barColor` disappears — cheap now,
+while the only consumer sits behind ComingSoonPage.
+
+**human decision, granted:** the upload wizard's warning banner was the one
+non-value-preserving hunk — border `#FEF3C7` → `#FDE68A`, icon `#D97706` →
+`#92400E`. Rendered side by side in a throwaway preview route before deciding
+(deleted again immediately; a stray route makes MAP.md stale). The change is
+smaller than the hex suggests: background and body text do not move at all,
+the border gains a little definition, and the icon goes from orange to brown.
+The icon change is a repair — the banner has been shipping TWO different
+ambers on its icon and its text, and `--warning-text` unifies them. Accepted
+on that basis: `SettingsAlert`, the app's house notice used in six places,
+sets icon colour and text colour to the same value in every one of its three
+registers, so this converges on the established pattern rather than inventing
+one.
+
+**follow-ups:** 1. The better long-term answer for this banner is to route it
+through `SettingsAlert` with a new `warning` register, which needs an amber
+tint family (`--warning-tint-08` / `-20`) the palette does not have —
+`SettingsAlert` ships success/error/info and no warning at all. That is design
+work, not a sweep, and it needs a decision on whether "warning" is a register
+this product has. 2. Relatedly, SKILL.md's v3 `Notice` primitive says notices
+have NO borders and a surface-subtle ground, which contradicts the bordered
+amber banner the colour table implies. The two halves of the spec disagree;
+worth reconciling. Note the warning triple lives in the same "Match Detail
+Colors" table that carried the retired violet player-2 values until T8 — that
+table has form for going stale. 3. `--surface-dark-hover`,
+`--surface-dark-pressed` and the `--warning-*` triple have no `.dark` values;
+whoever ships dark mode owes them three measured entries. 4.
+`performance-server.ts` should emit a role rather than a hue, retiring
+`OverallPerformanceData.barColor` in `src/lib/data/types.ts`.

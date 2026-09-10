@@ -109,7 +109,7 @@ export function ProgramHoursSummary({
 
       <div
         className="h-1.5 overflow-hidden rounded-[3px]"
-        style={{ background: "#E4EEFD" }}
+        style={{ background: "var(--blue-soft)" }}
         role="meter"
         aria-valuemin={0}
         aria-valuemax={usage.capSeconds}
@@ -183,7 +183,7 @@ export function ProgramHoursSummary({
                   <span
                     aria-hidden="true"
                     className="h-1 w-[88px] shrink-0 overflow-hidden rounded-[2px]"
-                    style={{ background: "#E4EEFD" }}
+                    style={{ background: "var(--blue-soft)" }}
                   >
                     <span
                       className="block h-1 rounded-[2px]"

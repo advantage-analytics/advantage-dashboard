@@ -65,11 +65,11 @@ export function DeleteMatchDialog({
       onOpenChange={(next) => !loading && onOpenChange(next)}
     >
       <AlertDialogContent
-        className="max-w-md gap-3 rounded-2xl border-[#F0F0F0] p-6"
+        className="max-w-md gap-3 rounded-2xl border-[var(--border-hairline)] p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <AlertDialogHeader className="gap-2 text-left">
-          <AlertDialogTitle className="text-[16px] font-medium tracking-[-0.4px] text-[#1D1D1F]">
+          <AlertDialogTitle className="text-[16px] font-medium tracking-[-0.4px] text-[var(--ink-900)]">
             Delete this match?
           </AlertDialogTitle>
           <AlertDialogDescription className="text-[13px] leading-[20px] text-[#525252]">

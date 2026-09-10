@@ -88,7 +88,7 @@ export function ErrorState({
         </div>
 
         {meta && meta.length > 0 ? (
-          <dl className="mt-12 flex w-full flex-col gap-2 border-t border-[#F0F0F0] pt-5">
+          <dl className="mt-12 flex w-full flex-col gap-2 border-t border-[var(--border-hairline)] pt-5">
             {meta.map((item) => (
               <MetaRow key={item.label} item={item} />
             ))}

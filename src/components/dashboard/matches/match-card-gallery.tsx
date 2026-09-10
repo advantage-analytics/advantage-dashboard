@@ -134,7 +134,7 @@ export function MatchCardGallery({
           </div>
 
           {/* Footer metadata with icons */}
-          <div className="mt-3 flex items-center gap-3 border-t border-[#F0F0F0] pt-3">
+          <div className="mt-3 flex items-center gap-3 border-t border-[var(--border-hairline)] pt-3">
             {match.courtType && (
               <div className="flex items-center gap-1">
                 <Image

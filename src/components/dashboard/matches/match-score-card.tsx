@@ -13,7 +13,7 @@ interface MatchScoreCardProps {
 export function MatchScoreCard({ match }: MatchScoreCardProps) {
   return (
     <motion.div
-      className="flex w-[320px] flex-col gap-4 rounded-[16px] border border-[#E7E7E7] bg-white px-6 py-4 shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]"
+      className="flex w-[320px] flex-col gap-4 rounded-[16px] border border-[var(--border-medium)] bg-white px-6 py-4 shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: [...EASE_CURVE] }}
@@ -42,7 +42,7 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
         >
           <div className="flex flex-row items-center gap-4">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-[#F2F2F2]">
-              <span className="text-xs font-medium text-[#BFBFBF]">
+              <span className="text-xs font-medium text-[var(--ink-400)]">
                 {getInitials(match.player1.name)}
               </span>
             </div>
@@ -81,7 +81,7 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
         >
           <div className="flex flex-row items-center gap-4">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-[#F2F2F2]">
-              <span className="text-xs font-medium text-[#BFBFBF]">
+              <span className="text-xs font-medium text-[var(--ink-400)]">
                 {getInitials(match.player2.name)}
               </span>
             </div>

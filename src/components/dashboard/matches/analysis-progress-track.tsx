@@ -33,7 +33,7 @@ export function AnalysisProgressTrack({
 
   return (
     <div
-      className="h-[3px] overflow-hidden rounded-full bg-[#F0F0F0]"
+      className="h-[3px] overflow-hidden rounded-full bg-[var(--ink-100)]"
       {...(label
         ? {
             role: "progressbar",

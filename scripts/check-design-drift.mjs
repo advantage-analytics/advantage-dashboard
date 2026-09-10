@@ -288,7 +288,12 @@ for (const file of (await walk(SRC)).sort()) {
 const CHECKS = [
   {
     key: "hex",
-    seed: 70,
+    // The two survivors are not drift a token can absorb: adv-field.ts's is a
+    // hex quoted in PROSE, in the comment explaining why that value is NOT
+    // tokenized, and review-rows.tsx's #3F8A39 is a readable success ink on a
+    // success tint — a role SKILL.md's colour table never names, so promoting
+    // it would be inventing a token, not recording one.
+    seed: 2,
     label: "off-palette hex",
     fix: "resolve to the token it duplicates, or promote a real role to colors.css",
   },

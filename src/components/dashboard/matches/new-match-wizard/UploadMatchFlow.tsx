@@ -305,7 +305,7 @@ function UploadMatchSuccess({
           )}
         </div>
 
-        <h1 className="text-[24px] leading-[1.2] font-light tracking-[-0.4px] text-[#1D1D1F]">
+        <h1 className="text-[24px] leading-[1.2] font-light tracking-[-0.4px] text-[var(--ink-900)]">
           Match saved.
         </h1>
 
@@ -329,12 +329,12 @@ function UploadMatchSuccess({
             The footnote below this block covers the navigation nuance for
             readers who want the fine print. */}
         {uploading.length > 0 && (
-          <div className="flex w-full max-w-[440px] items-start gap-2.5 rounded-[8px] border border-[#FEF3C7] bg-[#FFFBEB] px-3.5 py-3">
+          <div className="flex w-full max-w-[440px] items-start gap-2.5 rounded-[8px] border border-[var(--warning-border)] bg-[var(--warning-bg)] px-3.5 py-3">
             <AlertTriangle
-              className="mt-0.5 size-4 shrink-0 text-[#D97706]"
+              className="mt-0.5 size-4 shrink-0 text-[var(--warning-text)]"
               strokeWidth={1.5}
             />
-            <p className="text-[13px] leading-[1.5] text-[#92400E]">
+            <p className="text-[13px] leading-[1.5] text-[var(--warning-text)]">
               Keep this tab open —{" "}
               {uploading.length > 1
                 ? "your videos are uploading"

@@ -571,7 +571,7 @@ export function analysisAction(
       label: "Start over",
       href: "/dashboard/matches/new",
       ink: "#E51837",
-      hoverInk: "#B91230",
+      hoverInk: "#C41530",
     };
   }
   if (analysis.status === "manual") {

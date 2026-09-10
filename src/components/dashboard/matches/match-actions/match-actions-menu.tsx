@@ -140,7 +140,7 @@ function MenuButton({
         "focus-visible:outline-none",
         destructive
           ? "text-[#E51837] hover:bg-[rgba(229,24,55,0.08)] focus-visible:bg-[rgba(229,24,55,0.08)] active:bg-[rgba(229,24,55,0.12)]"
-          : "text-[#1D1D1F] hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] active:bg-[#EBEBEB]",
+          : "text-[var(--ink-900)] hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] active:bg-[var(--ink-200)]",
       )}
     >
       <span className={destructive ? "text-[#E51837]" : "text-[#8A8A8E]"}>

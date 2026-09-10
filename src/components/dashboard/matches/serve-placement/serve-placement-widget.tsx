@@ -1734,7 +1734,7 @@ function ShortcutRow({ keys, action }: { keys: string[]; action: string }) {
             <kbd
               key={k}
               className={cn(
-                "inline-block rounded bg-[#F0F0F0] px-1 py-0.5 text-[10px] leading-none font-medium text-[#AAAAAA]",
+                "inline-block rounded bg-[var(--ink-100)] px-1 py-0.5 text-[10px] leading-none font-medium text-[#AAAAAA]",
                 isWordKey && "[font-variant-caps:small-caps]",
               )}
             >

@@ -12,11 +12,13 @@
  *
  * Source: SKILL.md › Component Patterns › Button (Primary, CTA)
  *   bg-accent / bg-accent-hover / radius-button / shadow `[0_1px_3px_rgba(57,134,243,0.25)]`
- *   plus the project-standard disabled treatment from SKILL.md › Interaction States › Disabled
- *   (bg-[#F7F7F7], text-muted #888888).
+ *   plus the project-standard disabled treatment from SKILL.md › Interaction States › Disabled.
+ *   The DS colour table names that disabled ground `bg-field`; colors.css has no such
+ *   token and `advField()` documents why — `--surface-subtle` is two points of grey
+ *   away and is what every other disabled control here already paints.
  */
 export const primaryBtnCls =
-  "h-9 px-4 rounded-[6px] text-[13px] font-medium bg-[#3B82F6] hover:bg-[#2563EB] text-white shadow-[0_1px_3px_rgba(57,134,243,0.25)] transition-colors duration-200 disabled:bg-[#F7F7F7] disabled:text-[#888888] disabled:shadow-none";
+  "h-9 px-4 rounded-[6px] text-[13px] font-medium bg-[#3B82F6] hover:bg-[#2563EB] text-white shadow-[0_1px_3px_rgba(57,134,243,0.25)] transition-colors duration-200 disabled:bg-[var(--surface-subtle)] disabled:text-[#888888] disabled:shadow-none";
 
 /**
  * Quiet ghost CTA — secondary actions paired with a primary (e.g. Confirm step's "Edit").

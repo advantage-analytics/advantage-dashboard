@@ -61,7 +61,7 @@ export function AnalysisSidebar({
       transition={{ duration: 0.4, ease: EASE_CURVE }}
     >
       {/* AI Status header */}
-      <div className="border-b border-[#F0F0F0] p-5">
+      <div className="border-b border-[var(--border-hairline)] p-5">
         <div className="mb-1 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Brain className="h-4 w-4 text-[#3B82F6]" />
@@ -93,7 +93,7 @@ export function AnalysisSidebar({
           <p className="mb-3 text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
             Quick Stats
           </p>
-          <div className="flex flex-col divide-y divide-[#F0F0F0]">
+          <div className="flex flex-col divide-y divide-[var(--border-hairline)]">
             <StatRow
               label="Total Points"
               value={(p1.totalPoints ?? 0) + (p2.totalPoints ?? 0)}

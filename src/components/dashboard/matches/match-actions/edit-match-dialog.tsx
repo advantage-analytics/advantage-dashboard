@@ -400,7 +400,7 @@ export function EditMatchDialog({
     <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
       <DialogContent className="max-h-[90vh] max-w-xl gap-0 overflow-hidden rounded-2xl border-[#F3F3F3] bg-white p-0 shadow-[0px_6px_20px_0px_rgba(0,0,0,0.12)]">
         <DialogHeader className="px-8 pt-5 pb-6">
-          <DialogTitle className="text-left text-[24px] leading-[1.2] font-light tracking-[-0.4px] text-[#1D1D1F]">
+          <DialogTitle className="text-left text-[24px] leading-[1.2] font-light tracking-[-0.4px] text-[var(--ink-900)]">
             Edit match
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -821,7 +821,7 @@ function SaveShortcutHint({ disabled }: { disabled: boolean }) {
   if (isMac === null) return <span aria-hidden="true" />;
 
   const kbdCls =
-    "inline-block px-1 py-0.5 rounded text-[10px] font-medium leading-none text-[#AAAAAA] bg-[#F0F0F0]";
+    "inline-block px-1 py-0.5 rounded text-[10px] font-medium leading-none text-[#AAAAAA] bg-[var(--ink-100)]";
 
   return (
     <span

@@ -42,7 +42,9 @@ export function FilterPills({
   return (
     <div className={cn("flex min-w-0 flex-col gap-2", className)}>
       {label && (
-        <span className="text-[12px] font-medium text-[#999999]">{label}</span>
+        <span className="text-[12px] font-medium text-[var(--ink-500)]">
+          {label}
+        </span>
       )}
       <div className="flex flex-wrap gap-2">
         {options.map((option) => {
@@ -57,7 +59,7 @@ export function FilterPills({
                 "focus-visible:outline-none",
                 isSelected
                   ? "border-[#60A5FA] bg-[#60A5FA] text-white"
-                  : "border-[#D9D9D9] bg-white text-[#525252] hover:bg-[#F5F5F5]",
+                  : "border-[var(--ink-300)] bg-white text-[#525252] hover:bg-[#F5F5F5]",
                 pillClassName,
               )}
             >
