@@ -376,3 +376,25 @@ export function lineCoverageFrom(entries: EventEntry[]): {
 
   return { analyzed, total };
 }
+
+/**
+ * Match ids an event's team-totals query may read.
+ *
+ * A non-played result is the line's answer and therefore excludes any match
+ * sitting underneath the same line/round, just as `resolveEntryResult` and
+ * `lineCoverageFrom` exclude it on screen. The write actions prevent that
+ * contradictory state, but keeping the precedence at this read boundary
+ * prevents stale or legacy data from leaking analysis figures into a line the
+ * page correctly presents as forfeited, defaulted or withdrawn.
+ */
+export function readyMatchIdsFrom(entries: EventEntry[]): string[] {
+  return entries.flatMap((entry) =>
+    entry.matches
+      .filter(
+        (match) =>
+          outcomeForRound(entry, match.round) === null &&
+          isAnalysisReady(match.status),
+      )
+      .map((match) => match.id),
+  );
+}

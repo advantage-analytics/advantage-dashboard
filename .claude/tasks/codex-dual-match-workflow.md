@@ -236,7 +236,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T18 · Render outcomes on the dual detail page
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3, T16
 - **files:** Best guess: src/components/dashboard/schedule/dual-detail.tsx; src/components/dashboard/schedule/line-row.tsx; tests/schedule-dual-outcomes.spec.ts (new)

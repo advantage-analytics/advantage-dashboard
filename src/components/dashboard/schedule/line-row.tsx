@@ -164,11 +164,16 @@ function Action({
   onScore: () => void;
 }) {
   if (state === "forfeited" || state === "defaulted" || state === "withdrawn") {
+    const status = LINE_STATUS[state]!;
     if (!canEdit) {
-      const status = LINE_STATUS[state]!;
       return <StatusChip tone={status.tone}>{status.label}</StatusChip>;
     }
-    return <RowAction onClick={onScore}>Edit result</RowAction>;
+    return (
+      <span className="flex items-center justify-end gap-2">
+        <StatusChip tone={status.tone}>{status.label}</StatusChip>
+        <RowAction onClick={onScore}>Edit result</RowAction>
+      </span>
+    );
   }
 
   if (state === "empty") {
