@@ -248,7 +248,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T19 · Render tournament outcomes by round
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T18
 - **files:** Best guess: src/components/dashboard/schedule/tournament-detail.tsx; src/components/dashboard/schedule/line-row.tsx; tests/schedule-tournament-outcomes.spec.ts (new)
