@@ -260,7 +260,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T20 · Render outcomes in the Schedule drawer
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T9, T19
 - **files:** Best guess: src/components/dashboard/schedule/static/event-drawer.tsx; tests/schedule-drawer-outcomes.spec.ts (new)

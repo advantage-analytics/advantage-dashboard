@@ -23,10 +23,18 @@ import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
 import { EventActionsMenu } from "@/components/dashboard/schedule/static/event-actions-menu";
 import { advButton } from "@/lib/ui/adv-button";
 import { scoreSetsFrom } from "@/lib/ui/score-format";
-import { dualScore, lineWon, matchWon } from "@/lib/schedule/entry-state";
+import {
+  dualScore,
+  entryPlayed,
+  lineWon,
+  resolveEntryResult,
+  resultState,
+  resultWon,
+} from "@/lib/schedule/entry-state";
 import { LINE_STATUS } from "@/lib/schedule/line-status";
 import {
   formatEventDatesLong,
+  roundRank,
   siteTitle,
   surfaceTitle,
 } from "@/lib/schedule/format";
@@ -66,8 +74,9 @@ const ICON_BUTTON =
  * The legend gives the tournament its mark (the DS glyph, "no program to
  * show") and nothing more. The body keeps the dual's shape: the host under
  * the name where the conference would be, the same glyph row, and one row per
- * entry — its last round in the slot column, the last match's score and
- * outcome beside the name. The score row is a dual's and is not drawn.
+ * entry — its latest recorded round in the slot column, with either the played
+ * score or the saved non-played kind/side beside the name. The score row is a
+ * dual's and is not drawn.
  *
  * ── Nothing here fetches ───────────────────────────────────────────────────
  * It renders the `EventDetail` the page already holds, so stepping through
@@ -143,14 +152,13 @@ export function EventDrawer({
   const viewerOnly =
     capabilities.canView && !capabilities.canEdit && !capabilities.canScore;
 
-  // "While lines are open": a line that is neither forfeited nor decided. A
-  // tournament stays open — rounds get added as they are played.
+  // "While lines are open": a line with neither a decided played score nor a
+  // non-played outcome. `entryPlayed` is the shared answer, so recording the
+  // new outcome row closes a dual just as a legacy forfeit did, and clearing
+  // it opens the line again. A tournament stays open — rounds get added as
+  // they are played.
   const linesOpen = isDual
-    ? entries.some(
-        (entry) =>
-          entry.forfeit === null &&
-          !entry.matches.some((match) => matchWon(match) !== null),
-      )
+    ? entries.some((entry) => !entryPlayed(entry))
     : true;
 
   const subline = isDual ? (opponent?.conference ?? null) : event.host;
@@ -519,8 +527,8 @@ const ROW_LINK = cn(
  * One line of a dual, in the state the data puts it in:
  *
  *   played      → score, outcome glyph, chevron; the row opens the match page
- *   awaiting    → players named, no match yet: "Awaiting result"
- *   forfeited   → the shared vocabulary's chip, spanning the score columns
+ *   awaiting    → players named, no result yet: "Awaiting result"
+ *   non-played  → kind chip + side-derived result glyph, with no report link
  *   unset       → nobody named: the blue "+ Set line", pointing at the event
  *
  * Names join with the artboard's middle dot — "Lee · Chen" — rather than the
@@ -535,30 +543,21 @@ function DualLine({
   eventHref: string;
   canEdit: boolean;
 }) {
-  const match = entry.matches[0] ?? null;
   const name = entry.playerLabels.join(" · ");
+  const result = resolveEntryResult(entry, null);
 
-  if (entry.forfeit !== null) {
-    const status = LINE_STATUS.forfeited!;
-    return (
-      <div className={ROW}>
-        <Slot>{entry.slot}</Slot>
-        <span
-          className="truncate text-[12px]"
-          style={{ color: "var(--ink-700)" }}
-        >
-          {name || "—"}
-        </span>
-        <StatusChip tone={status.tone} className="col-span-3 justify-self-end">
-          {status.label}
-        </StatusChip>
-      </div>
-    );
+  if (result.kind === "non-played") {
+    return <OutcomeLine slot={entry.slot} name={name} result={result} />;
   }
 
-  if (match) {
+  if (result.kind === "played") {
     return (
-      <PlayedLine slot={entry.slot} name={name} entry={entry} match={match} />
+      <PlayedLine
+        slot={entry.slot}
+        name={name}
+        entry={entry}
+        match={result.match}
+      />
     );
   }
 
@@ -594,15 +593,15 @@ function DualLine({
 }
 
 /**
- * One tournament entry: its last round in the slot column, the last match's
- * score and outcome beside the name. An entry with no match yet is awaiting
- * its first result.
+ * One tournament entry: its latest recorded round in the slot column, whether
+ * that result is a played match or a schedule-only outcome. An entry with no
+ * result yet is awaiting its first one.
  */
 function TournamentLine({ entry }: { entry: EventEntry }) {
-  const last = entry.matches[entry.matches.length - 1] ?? null;
+  const latest = latestTournamentResult(entry);
   const name = entry.playerLabels.join(" · ");
 
-  if (!last) {
+  if (!latest) {
     return (
       <div className={ROW}>
         <Slot>—</Slot>
@@ -623,13 +622,87 @@ function TournamentLine({ entry }: { entry: EventEntry }) {
     );
   }
 
+  const result = resolveEntryResult(entry, latest.round);
+  if (result.kind === "non-played") {
+    return (
+      <OutcomeLine slot={latest.round ?? "—"} name={name} result={result} />
+    );
+  }
+  if (result.kind === "played") {
+    return (
+      <PlayedLine
+        slot={latest.round ?? "—"}
+        name={name}
+        entry={entry}
+        match={result.match}
+      />
+    );
+  }
+
+  // The candidate list and the shared resolver read the same entry. This is
+  // only a defensive fallback for malformed input that changes between them.
+  return null;
+}
+
+/**
+ * The last result in the tournament ladder, not merely the last match row.
+ * Outcomes seed rounds that have no `matches` record; a match seeds first at a
+ * conflicting round so the row keeps its opponent context, while
+ * `resolveEntryResult` still gives the schedule outcome presentation
+ * precedence. This is the drawer-sized counterpart to the full detail page's
+ * round grouping, using the same shared `roundRank` order.
+ */
+function latestTournamentResult(
+  entry: EventEntry,
+): { round: string | null; order: number } | null {
+  const rows = entry.matches.map((match, index) => ({
+    round: match.round,
+    order: index,
+  }));
+
+  for (const outcome of entry.outcomes ?? []) {
+    if (rows.some((row) => row.round === outcome.round)) continue;
+    rows.push({ round: outcome.round, order: rows.length });
+  }
+
+  rows.sort(
+    (a, b) => roundRank(a.round) - roundRank(b.round) || a.order - b.order,
+  );
+  return rows.at(-1) ?? null;
+}
+
+/** A decided result without a played match: kind in words, side in the mark. */
+function OutcomeLine({
+  slot,
+  name,
+  result,
+}: {
+  slot: string | null;
+  name: string;
+  result: Extract<
+    ReturnType<typeof resolveEntryResult>,
+    { kind: "non-played" }
+  >;
+}) {
+  const state = resultState(result);
+  const status = LINE_STATUS[state]!;
+  const won = resultWon(result);
+
   return (
-    <PlayedLine
-      slot={last.round ?? "—"}
-      name={name}
-      entry={entry}
-      match={last}
-    />
+    <div className={ROW}>
+      <Slot>{slot}</Slot>
+      <span
+        className="truncate text-[12px]"
+        style={{ color: "var(--ink-900)" }}
+      >
+        {name || "—"}
+      </span>
+      <StatusChip tone={status.tone} className="justify-self-end">
+        {status.label}
+      </StatusChip>
+      {won === null ? <span /> : <ResultMark won={won} />}
+      <span />
+    </div>
   );
 }
 
