@@ -73,7 +73,7 @@ ready).
 
 ## T5 · Define completion and import identity rules
 
-- **status:** blocked
+- **status:** done
 - **model:** gpt-5.6-sol
 - **reasoning:** medium
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/validation.ts (new), src/components/dashboard/matches/new-match-wizard/types.ts, tests/upload-validation.spec.ts (new).

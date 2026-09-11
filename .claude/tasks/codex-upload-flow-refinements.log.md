@@ -44,3 +44,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** Mechanical: lint, tsc, the focused 9-test validation suite, and the full keyless npm test passed; Chromium was rerun outside the macOS sandbox after the sandbox-only launch denial. Completion: VERDICT: needs-work because `IdentityConfirmationScope` and `buildImportIdentityConfirmationKey()` omit `importedAthleteId`, allowing a changed imported attribution ID with the same normalized name to retain stale confirmation. Pipeline and RLS guardrails were not dispatched because the completion stage failed first.
 
 **changed:** The restored validation contracts and new attribution-preservation assertions are preserved in stash `3bfb6bc212b46e8d9078478bd4b9f72fbbd67c4b`; no task code was committed. The retry now proves matching, mismatch, and confirmation paths preserve both attribution IDs, but the confirmation key must also bind `importedAthleteId` and invalidate when it changes.
+
+## T5 · Define completion and import identity rules — done
+
+**gate:** Mechanical: lint, tsc, the focused 9-test validation suite, and the full keyless npm test passed; Chromium was rerun outside the macOS sandbox after the sandbox-only launch denial. Completion: VERDICT: pass. Pipeline guardrails: CLEAR, no findings. RLS guardrails were skipped because no Supabase/data/API/migration/query boundary changed.
+
+**changed:** Added pure completion requirements for both players' required hand/backhand values; normalized import identity comparison; and confirmation keys bound to file generation, workspace, athlete, imported athlete ID, and normalized imported identity. Tests cover case/whitespace matching, missing/initial/nickname/punctuation/different-name confirmation, every key invalidation, empty-name behavior, and preservation of both attribution IDs. No UI, parser, API, database, or runtime wiring changed.
