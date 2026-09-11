@@ -76,3 +76,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** Mechanical: lint and tsc passed; the full keyless npm test passed after rerunning outside the macOS sandbox, with live-database and localhost-harness tests skipped there. The focused real-wizard browser suite ran separately and passed all 6 cases. Completion: VERDICT: pass. Pipeline guardrails: CLEAR, no findings. RLS guardrails were skipped because no Supabase/data/API/migration/query boundary changed.
 
 **changed:** Added an explicit confirmation before a format reduction discards populated game or tiebreak sets. Cancelling preserves the original format and scores; confirming trims only excluded sets; empty reductions proceed directly; and event-owned format/scoring remain read-only. Score edits stay in local wizard state until the existing submission boundary. GPT-5.3 Codex Spark was unavailable in this session's collaboration tool, so GPT-5.6 Terra medium was used.
+
+## T6 · Wire identity confirmation into wizard state — blocked
+
+**gate:** Mechanical: lint and tsc passed; the focused hook/score suite passed 29 tests; and the full keyless npm test passed after rerunning outside the macOS sandbox, with live-database tests skipped. Completion: VERDICT: pass. Pipeline guardrails blocked on one scoring-provenance finding: a preset with no event-owned `adScoring` can preserve the previous import's value when a replacement file supplies a different value. RLS guardrails were skipped because no Supabase/data/API/migration/query boundary changed.
+
+**changed:** The identity-state wiring, stale-generation guards, reset behavior, required-style enforcement, and deterministic hook coverage are preserved in stash `5c280ba5dcb6bb12dba7499f220480c0b1620204`; no task code was committed. Retry must preserve scoring only when the attached event actually supplies it and cover replacement files when event scoring is unspecified.
