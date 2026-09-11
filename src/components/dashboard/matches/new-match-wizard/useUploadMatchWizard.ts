@@ -54,6 +54,7 @@ import {
   type EventPreset,
   type LineOffer,
   type MatchDraft,
+  type IdentityMatchStatus,
 } from "./types";
 import { deleteMatchDraft, saveMatchDraft } from "@/lib/wizard/actions";
 import {
@@ -69,6 +70,23 @@ import {
   MatchMetadata,
 } from "./utils";
 import { updateScoreState, type ScoreArrayField } from "./score-state";
+import {
+  buildImportIdentityConfirmationKey,
+  collectMatchCompletionRequirements,
+  evaluateImportedIdentityMatch,
+} from "./validation";
+
+export interface ImportIdentityState {
+  /** Original parser perspective, never rewritten by display-name edits. */
+  parsedNames: { playerName: string; opponentName: string } | null;
+  comparison: IdentityMatchStatus | null;
+  confirmed: boolean;
+  rejected: boolean;
+  blocked: boolean;
+  message: string | null;
+  confirm: () => void;
+  reject: () => void;
+}
 
 /**
  * Turn a refused write into a sentence the player can act on.
@@ -342,6 +360,7 @@ export interface UseUploadMatchWizardReturn {
   uploadError: string | null;
   formData: MatchFormData;
   parsingState: ParsingState;
+  importIdentity: ImportIdentityState;
 
   // Provider flow shape
   /** Step sequence for the selected provider's kind. */
@@ -508,7 +527,7 @@ export function useUploadMatchWizard({
   // The workspace this match will belong to and be billed against. Resolved
   // server-side once per request by the dashboard layout, so reading it here
   // costs nothing and cannot disagree with the sidebar's switcher.
-  const { active: activeWorkspace } = useWorkspace();
+  const { active: activeWorkspace, viewer } = useWorkspace();
 
   // State
   const [step, setStep] = useState<Step>("provider");
@@ -596,6 +615,9 @@ export function useUploadMatchWizard({
   // Its fields are filled into the form, and the values they replaced are
   // kept so Detach can put them back without touching anything typed since.
   const [attachedLine, setAttachedLine] = useState<LineOffer | null>(null);
+  // A parse can finish after attaching or detaching a line. Read its current
+  // scoring declaration, not the line from when the file was picked.
+  const attachedLineRef = useRef<LineOffer | null>(null);
   const detachSnapshot = useRef<Partial<MatchFormData> | null>(null);
   // The draft row this flow writes to. Minted on the first Save draft, or
   // carried in by a resume.
@@ -619,6 +641,37 @@ export function useUploadMatchWizard({
   // only — a File cannot be serialised to localStorage, so a resumed draft
   // requires re-picking the video.
 
+  // Every pick (including a re-picked draft file) is a new parse generation.
+  // Invalidate before the first await, so an older validation or parse cannot
+  // replace the new file, its names, errors, or busy state.
+  const fileGenerationRef = useRef(0);
+  const [parsedImport, setParsedImport] = useState<{
+    generation: number;
+    playerName: string;
+    opponentName: string;
+  } | null>(null);
+  const [identityAnswer, setIdentityAnswer] = useState<{
+    key: string;
+    confirmed: boolean;
+  } | null>(null);
+  const resetIdentityAnswer = useCallback(() => setIdentityAnswer(null), []);
+  const resetFileGeneration = useCallback(() => {
+    const generation = ++fileGenerationRef.current;
+    setParsedImport(null);
+    setIdentityAnswer(null);
+    setUploadedFile(null);
+    setUploadError(null);
+    setIsUploading(false);
+    setIsProbing(false);
+    setParsingState({
+      isParsing: false,
+      parseError: null,
+      parseWarnings: [],
+      parseSuccess: false,
+    });
+    return generation;
+  }, []);
+
   // Which flow we're in. Falls back to the import order before a provider is
   // chosen, which is correct: the Provider step is shared by both.
   const providerKind: ProviderKind = selectedProvider
@@ -629,6 +682,105 @@ export function useUploadMatchWizard({
   // identity change that cannot happen.
   const stepOrder = STEP_ORDER_BY_KIND[providerKind];
   const isProcessingProvider = providerKind === "processing";
+
+  // Compare against the selected identity, never the editable display field.
+  // Viewer data is server-provided and also exists on preset/draft paths that
+  // skip the optional profile-prefill request below.
+  const identityAthleteId = preset
+    ? preset.playerUserId
+    : askWhoPlayed && matchSubject?.kind === "roster"
+      ? matchSubject.playerId
+      : viewer.id;
+  const identityAthleteName = preset
+    ? preset.playerName
+    : askWhoPlayed
+      ? matchSubject?.kind === "roster"
+        ? matchSubject.name
+        : matchSubject?.kind === "self"
+          ? viewer.name
+          : ""
+      : viewer.name;
+  const identityComparison = parsedImport
+    ? evaluateImportedIdentityMatch({
+        athleteId: identityAthleteId,
+        importedAthleteId: null,
+        athleteName: identityAthleteName ?? "",
+        importedName: parsedImport.playerName,
+      })
+    : null;
+  const identityKey =
+    identityComparison && parsedImport
+      ? buildImportIdentityConfirmationKey({
+          ...identityComparison,
+          workspaceId: `${activeWorkspace.kind}:${activeWorkspace.id}`,
+          fileGenerationId: `${selectedProvider}:${parsedImport.generation}`,
+        })
+      : null;
+  const identityConfirmed =
+    identityKey !== null &&
+    identityAnswer?.key === identityKey &&
+    identityAnswer.confirmed;
+  const identityRejected =
+    identityKey !== null &&
+    identityAnswer?.key === identityKey &&
+    !identityAnswer.confirmed;
+  const importIdentityBlocked =
+    !isProcessingProvider &&
+    (!parsedImport ||
+      !parsingState.parseSuccess ||
+      identityRejected ||
+      (identityComparison?.requiresConfirmation === true &&
+        !identityConfirmed) ||
+      (askWhoPlayed && !matchSubject));
+  const identityMessage = !importIdentityBlocked
+    ? null
+    : identityRejected
+      ? "Choose a different file or player. The selected athlete must be player 1 in the export."
+      : !parsedImport
+        ? "Choose a file and wait for its player names to be read."
+        : askWhoPlayed && !matchSubject
+          ? "Choose the player this match belongs to."
+          : "Confirm that player 1 in this export is the selected athlete before continuing.";
+  const confirmImportIdentity = useCallback(() => {
+    if (
+      !identityKey ||
+      !parsedImport ||
+      parsedImport.generation !== fileGenerationRef.current ||
+      (askWhoPlayed && !matchSubject)
+    )
+      return;
+    setIdentityAnswer({ key: identityKey, confirmed: true });
+    setError(null);
+  }, [identityKey, parsedImport, askWhoPlayed, matchSubject]);
+  const rejectImportIdentity = useCallback(() => {
+    if (
+      !identityKey ||
+      !parsedImport ||
+      parsedImport.generation !== fileGenerationRef.current
+    )
+      return;
+    setIdentityAnswer({ key: identityKey, confirmed: false });
+  }, [identityKey, parsedImport]);
+
+  // A workspace/preset switch must not carry file results into a different
+  // event or revive a confirmation when the user switches back. Form values
+  // remain under the existing event seeding rules.
+  useEffect(() => {
+    resetFileGeneration();
+    return () => {
+      fileGenerationRef.current += 1;
+    };
+  }, [
+    open,
+    activeWorkspace.id,
+    activeWorkspace.kind,
+    preset?.entryId,
+    draft?.id,
+    resetFileGeneration,
+  ]);
+  useEffect(() => {
+    resetIdentityAnswer();
+  }, [identityAthleteId, identityAthleteName, resetIdentityAnswer]);
 
   /**
    * The allowance this upload will be billed against.
@@ -833,7 +985,10 @@ export function useUploadMatchWizard({
           : DEFAULT_PROVIDER_ID;
       setSelectedProvider(draftProvider);
       setFormData({ ...getDefaultFormData(), ...draft.formData });
-      if (draft.attachedLine) setAttachedLine(draft.attachedLine);
+      if (draft.attachedLine) {
+        attachedLineRef.current = draft.attachedLine;
+        setAttachedLine(draft.attachedLine);
+      }
       if (draftProvider) {
         const kind = getProviderKind(draftProvider);
         setProgressKind(kind);
@@ -1077,6 +1232,7 @@ export function useUploadMatchWizard({
    */
   const chooseMatchSubject = useCallback(
     (subject: MatchSubject) => {
+      resetIdentityAnswer();
       applyMatchSubject(subject);
       setFormData((prev) => ({
         ...prev,
@@ -1094,23 +1250,27 @@ export function useUploadMatchWizard({
           : {}),
       }));
     },
-    [uploaderName, applyMatchSubject],
+    [uploaderName, applyMatchSubject, resetIdentityAnswer],
   );
 
   // Step navigation handlers
-  const handleProviderSelect = useCallback((providerId: string | null) => {
-    // Validate provider ID before setting
-    if (providerId && isProviderSupported(providerId)) {
-      setSelectedProvider(providerId as ProviderId);
-      localStorage.setItem(STORAGE_KEYS.SELECTED_PROVIDER, providerId);
-    } else {
-      setSelectedProvider(null);
-      localStorage.removeItem(STORAGE_KEYS.SELECTED_PROVIDER);
-    }
-    // Clear any previous upload errors when changing provider
-    setUploadError(null);
-    setUploadedFile(null);
-  }, []);
+  const handleProviderSelect = useCallback(
+    (providerId: string | null) => {
+      resetFileGeneration();
+      // Validate provider ID before setting
+      if (providerId && isProviderSupported(providerId)) {
+        setSelectedProvider(providerId as ProviderId);
+        localStorage.setItem(STORAGE_KEYS.SELECTED_PROVIDER, providerId);
+      } else {
+        setSelectedProvider(null);
+        localStorage.removeItem(STORAGE_KEYS.SELECTED_PROVIDER);
+      }
+      // Clear any previous upload errors when changing provider
+      setUploadError(null);
+      setUploadedFile(null);
+    },
+    [resetFileGeneration],
+  );
 
   const handleProviderContinue = useCallback(() => {
     if (!selectedProvider) return;
@@ -1140,10 +1300,43 @@ export function useUploadMatchWizard({
   // check, an export is already read. Derived from the order rather than
   // hardcoded, like handleBack.
   const handleFileContinue = useCallback(() => {
+    if (
+      !selectedProvider ||
+      !uploadedFile?.file ||
+      isUploading ||
+      isProbing ||
+      parsingState.isParsing ||
+      uploadError
+    )
+      return;
+    if (askWhoPlayed && !matchSubject) return;
+    if (
+      importIdentityBlocked ||
+      (!isProcessingProvider &&
+        parsedImport?.generation !== fileGenerationRef.current)
+    ) {
+      setError(identityMessage);
+      return;
+    }
+    setError(null);
     const index = stepOrder.indexOf("file");
     if (index >= 0 && index + 1 < stepOrder.length)
       setStep(stepOrder[index + 1]);
-  }, [stepOrder]);
+  }, [
+    stepOrder,
+    selectedProvider,
+    uploadedFile,
+    isUploading,
+    isProbing,
+    parsingState.isParsing,
+    uploadError,
+    askWhoPlayed,
+    matchSubject,
+    importIdentityBlocked,
+    isProcessingProvider,
+    parsedImport,
+    identityMessage,
+  ]);
 
   const handleTrimContinue = useCallback(() => {
     setStep("match");
@@ -1160,6 +1353,7 @@ export function useUploadMatchWizard({
     async (file: File | null) => {
       if (!file || !selectedProvider) return;
 
+      const generation = resetFileGeneration();
       setUploadError(null);
       setVideoWarnings([]);
       setVideoProbe(null);
@@ -1169,6 +1363,7 @@ export function useUploadMatchWizard({
       try {
         const strategy = getProviderStrategy(selectedProvider);
         const result: ValidationResult = await strategy.validateFile(file);
+        if (generation !== fileGenerationRef.current) return;
 
         if (!result.success) {
           setUploadError(result.error || "This video can't be analysed.");
@@ -1221,14 +1416,15 @@ export function useUploadMatchWizard({
           };
         });
       } catch (err) {
+        if (generation !== fileGenerationRef.current) return;
         setUploadError(
           err instanceof Error ? err.message : "Couldn't read this video.",
         );
       } finally {
-        setIsProbing(false);
+        if (generation === fileGenerationRef.current) setIsProbing(false);
       }
     },
-    [selectedProvider],
+    [selectedProvider, resetFileGeneration],
   );
 
   /** Set the trim window. Values are seconds into the original video. */
@@ -1249,6 +1445,7 @@ export function useUploadMatchWizard({
   );
 
   const handleRemoveVideo = useCallback(() => {
+    resetFileGeneration();
     setVideoProbe(null);
     setVideoWarnings([]);
     setUploadedFile(null);
@@ -1260,7 +1457,7 @@ export function useUploadMatchWizard({
       // The duration came from the window; without a video there is no window.
       duration: 0,
     }));
-  }, []);
+  }, [resetFileGeneration]);
 
   /**
    * Accept the schedule's offer (design 7a). Six fields fill from the line
@@ -1269,6 +1466,7 @@ export function useUploadMatchWizard({
    * a preset — `event_entry_id` on insert, the existing match on update.
    */
   const attachLine = useCallback((offer: LineOffer) => {
+    attachedLineRef.current = offer;
     setFormData((prev) => {
       detachSnapshot.current = {
         opponentName: prev.opponentName,
@@ -1314,6 +1512,7 @@ export function useUploadMatchWizard({
   const detachLine = useCallback(() => {
     const snapshot = detachSnapshot.current;
     detachSnapshot.current = null;
+    attachedLineRef.current = null;
     setAttachedLine(null);
     if (snapshot) setFormData((prev) => ({ ...prev, ...snapshot }));
   }, []);
@@ -1346,6 +1545,8 @@ export function useUploadMatchWizard({
       }
 
       const file = files[0];
+      const generation = resetFileGeneration();
+      const isCurrent = () => generation === fileGenerationRef.current;
 
       // Basic file type validation using provider strategy. Awaited because
       // processing providers validate asynchronously (they probe media metadata);
@@ -1354,12 +1555,14 @@ export function useUploadMatchWizard({
         const strategy = getProviderStrategy(selectedProvider);
         const validationResult: ValidationResult =
           await strategy.validateFile(file);
+        if (!isCurrent()) return;
 
         if (!validationResult.success) {
           setUploadError(validationResult.error || "Invalid file");
           return;
         }
       } catch (err) {
+        if (!isCurrent()) return;
         setUploadError(err instanceof Error ? err.message : "Validation error");
         return;
       }
@@ -1381,6 +1584,8 @@ export function useUploadMatchWizard({
             reader.readAsDataURL(file);
           });
 
+          if (!isCurrent()) return;
+
           // Call validation API
           const response = await fetch("/api/validate-file", {
             method: "POST",
@@ -1394,6 +1599,7 @@ export function useUploadMatchWizard({
           });
 
           const validationResult = await response.json();
+          if (!isCurrent()) return;
 
           if (!validationResult.success) {
             // Use the error message directly from the API (already formatted)
@@ -1407,6 +1613,7 @@ export function useUploadMatchWizard({
           // Validation passed
           setUploadError(null);
         } catch (err) {
+          if (!isCurrent()) return;
           console.error("Validation API error:", err);
           setUploadError(
             err instanceof Error
@@ -1416,7 +1623,7 @@ export function useUploadMatchWizard({
           setIsUploading(false);
           return;
         } finally {
-          setIsUploading(false);
+          if (isCurrent()) setIsUploading(false);
         }
       }
 
@@ -1443,6 +1650,7 @@ export function useUploadMatchWizard({
 
       // Attempt to parse file if parser exists for this provider
       const parserExists = await hasParser(selectedProvider);
+      if (!isCurrent()) return;
       if (parserExists) {
         setParsingState({
           isParsing: true,
@@ -1453,8 +1661,10 @@ export function useUploadMatchWizard({
 
         try {
           const parser = await getParser(selectedProvider);
+          if (!isCurrent()) return;
           if (parser) {
             const parseResult = await parser.parse(file);
+            if (!isCurrent()) return;
 
             if (parseResult.success && parseResult.data) {
               /**
@@ -1480,8 +1690,17 @@ export function useUploadMatchWizard({
                * the file should fill. Tiebreaks travel with the score they
                * belong to, or they end up describing a different match's sets.
                */
+              setParsedImport({
+                generation,
+                playerName: parseResult.data.playerName ?? "",
+                opponentName: parseResult.data.opponentName ?? "",
+              });
               const eventOwns = Boolean(preset);
               const eventScored = Boolean(preset?.score);
+              // An event-owned date does not imply event-owned scoring: when
+              // the event left scoring blank, each replacement file may fill it.
+              const eventOwnsScoring =
+                (preset ?? attachedLineRef.current)?.adScoring != null;
               // The who-played picker owns the player name exactly the way an
               // event does: the id travelled with the picked row, and a parsed
               // export names the ACCOUNT HOLDER — usually the uploader, not the
@@ -1490,7 +1709,7 @@ export function useUploadMatchWizard({
               // `player1_name` reading as another, with nothing on screen
               // looking wrong.
               const subjectOwnsName =
-                eventOwns || (askWhoPlayed && matchSubject !== null);
+                eventOwns || !askWhoPlayed || matchSubjectRef.current !== null;
 
               setFormData((prev) => ({
                 ...prev,
@@ -1499,7 +1718,8 @@ export function useUploadMatchWizard({
                     ? prev.playerName
                     : parseResult.data?.playerName || prev.playerName,
                 opponentName:
-                  eventOwns && prev.opponentName.trim()
+                  (eventOwns || prev.opponentSource === "event") &&
+                  prev.opponentName.trim()
                     ? prev.opponentName
                     : parseResult.data?.opponentName || prev.opponentName,
                 playerScores: eventScored
@@ -1517,18 +1737,18 @@ export function useUploadMatchWizard({
                     prev.opponentTiebreaks,
                 // Format comes off the event, which declared it once for every
                 // line, rather than off one player's export of one match.
-                bestOf: eventOwns
-                  ? prev.bestOf
-                  : parseResult.data?.bestOf || prev.bestOf,
+                bestOf:
+                  eventOwns || prev.dateSource === "event"
+                    ? prev.bestOf
+                    : parseResult.data?.bestOf || prev.bestOf,
                 numberOfSets: eventScored
                   ? prev.numberOfSets
                   : (parseResult.data?.numberOfSets ?? prev.numberOfSets),
-                adScoring:
-                  eventOwns && preset?.adScoring !== null
-                    ? prev.adScoring
-                    : parseResult.data?.adScoring !== undefined
-                      ? parseResult.data.adScoring
-                      : prev.adScoring,
+                adScoring: eventOwnsScoring
+                  ? prev.adScoring
+                  : parseResult.data?.adScoring !== undefined
+                    ? parseResult.data.adScoring
+                    : prev.adScoring,
                 // Not seeded by a preset, so the file is the only source.
                 result: parseResult.data?.result || prev.result,
                 duration: parseResult.data?.duration || prev.duration,
@@ -1544,7 +1764,7 @@ export function useUploadMatchWizard({
                 parseSuccess: true,
               });
             } else {
-              // Parsing failed - show error but allow manual entry
+              // Without the parsed identity, this import cannot be confirmed.
               setParsingState({
                 isParsing: false,
                 parseError: parseResult.error || "Failed to parse file",
@@ -1554,6 +1774,7 @@ export function useUploadMatchWizard({
             }
           }
         } catch (err) {
+          if (!isCurrent()) return;
           const message = err instanceof Error ? err.message : "Parsing error";
           setParsingState({
             isParsing: false,
@@ -1568,7 +1789,7 @@ export function useUploadMatchWizard({
       // overwrite. Same for the who-played answer, which owns the player name
       // the same way.
     },
-    [selectedProvider, preset, askWhoPlayed, matchSubject],
+    [selectedProvider, preset, askWhoPlayed, resetFileGeneration],
   );
 
   const handleDrop: React.DragEventHandler<HTMLDivElement> = useCallback(
@@ -1591,9 +1812,9 @@ export function useUploadMatchWizard({
     );
 
   const handleRemoveFile = useCallback(() => {
-    setUploadedFile(null);
+    resetFileGeneration();
     localStorage.removeItem(STORAGE_KEYS.UPLOADED_FILE);
-  }, []);
+  }, [resetFileGeneration]);
 
   // Form handling
   const handleInputChange = useCallback(
@@ -1670,6 +1891,41 @@ export function useUploadMatchWizard({
 
     if (!selectedProvider) {
       setError("Please select a provider.");
+      return;
+    }
+
+    if (askWhoPlayed && !matchSubject) {
+      setError("Choose the player this match belongs to.");
+      return;
+    }
+    if (
+      isUploading ||
+      isProbing ||
+      parsingState.isParsing ||
+      uploadError ||
+      importIdentityBlocked ||
+      (!isProcessingProvider &&
+        parsedImport?.generation !== fileGenerationRef.current)
+    ) {
+      setError(
+        identityMessage ?? uploadError ?? "Wait for the file check to finish.",
+      );
+      return;
+    }
+    const missing = collectMatchCompletionRequirements({
+      ...formData,
+      isProcessingProvider,
+      playerSubjectIsRoster: matchSubject?.kind === "roster",
+      adScoring: formData.adScoring ?? undefined,
+      fixedCamera: formData.fixedCamera ?? undefined,
+      initialTopPlayerIsPlayer1:
+        formData.initialTopPlayerIsPlayer1 ?? undefined,
+      hasAnySetScore:
+        formData.playerScores.some((n) => (n ?? 0) > 0) ||
+        formData.opponentScores.some((n) => (n ?? 0) > 0),
+    });
+    if (missing.labels.length > 0) {
+      setError(`Complete the required fields: ${missing.labels.join(", ")}.`);
       return;
     }
 
@@ -2074,6 +2330,13 @@ export function useUploadMatchWizard({
     draftId,
     askWhoPlayed,
     matchSubject,
+    isUploading,
+    isProbing,
+    parsingState.isParsing,
+    uploadError,
+    importIdentityBlocked,
+    parsedImport,
+    identityMessage,
   ]);
 
   return {
@@ -2088,6 +2351,21 @@ export function useUploadMatchWizard({
     uploadError,
     formData,
     parsingState,
+    importIdentity: {
+      parsedNames: parsedImport
+        ? {
+            playerName: parsedImport.playerName,
+            opponentName: parsedImport.opponentName,
+          }
+        : null,
+      comparison: identityComparison,
+      confirmed: identityConfirmed,
+      rejected: identityRejected,
+      blocked: importIdentityBlocked,
+      message: identityMessage,
+      confirm: confirmImportIdentity,
+      reject: rejectImportIdentity,
+    },
 
     // Step navigation
     handleProviderSelect,

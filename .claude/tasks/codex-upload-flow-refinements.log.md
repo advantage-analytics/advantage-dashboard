@@ -82,3 +82,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** Mechanical: lint and tsc passed; the focused hook/score suite passed 29 tests; and the full keyless npm test passed after rerunning outside the macOS sandbox, with live-database tests skipped. Completion: VERDICT: pass. Pipeline guardrails blocked on one scoring-provenance finding: a preset with no event-owned `adScoring` can preserve the previous import's value when a replacement file supplies a different value. RLS guardrails were skipped because no Supabase/data/API/migration/query boundary changed.
 
 **changed:** The identity-state wiring, stale-generation guards, reset behavior, required-style enforcement, and deterministic hook coverage are preserved in stash `5c280ba5dcb6bb12dba7499f220480c0b1620204`; no task code was committed. Retry must preserve scoring only when the attached event actually supplies it and cover replacement files when event scoring is unspecified.
+
+## T6 · Wire identity confirmation into wizard state — done
+
+**gate:** Mechanical: lint and tsc passed; the focused hook/score suite passed 30 tests; and the full keyless npm test passed after rerunning outside the macOS sandbox, with live-database tests skipped. Completion: VERDICT: pass. Pipeline guardrails: CLEAR, no findings. RLS guardrails were skipped because no Supabase/data/API/migration/query boundary changed.
+
+**changed:** Restored and completed identity confirmation state with original parsed names kept separate, stale async generations rejected, personal/team mismatch gates applied to progression and submission, context changes invalidating confirmation, parser perspective preserved, and required styles enforced at the final handler. The provenance repair now preserves scoring only when the event explicitly owns it; replacement imports can update unspecified scoring, including when an attached line changes during parsing.

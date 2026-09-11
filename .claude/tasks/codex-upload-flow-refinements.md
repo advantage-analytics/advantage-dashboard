@@ -86,7 +86,7 @@ ready).
 
 ## T6 · Wire identity confirmation into wizard state
 
-- **status:** blocked
+- **status:** done
 - **model:** gpt-6-astra
 - **reasoning:** high
 - **needs:** T2, T5
