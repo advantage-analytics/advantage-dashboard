@@ -230,3 +230,58 @@ test("stable identities and labels reach payloads without blocking singles parti
     playerLabels: ["Alex / Kim", "Alex / Kim"],
   });
 });
+
+test("forfeit menu distinguishes both sides from normal play and preserves the lineup", async ({
+  page,
+}) => {
+  await openFixture(page);
+  const original = await page.getByLabel("Lineup state").textContent();
+  for (const [side, label] of [
+    ["ours", "We lost — our side forfeited"],
+    ["theirs", "We won — opponent forfeited"],
+  ]) {
+    await page.getByRole("button", { name: "Play choice for S1" }).click();
+    await page
+      .getByRole("menuitemradio", { name: new RegExp(`^${label}`) })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Play choice for S1" }),
+    ).toHaveText(label);
+    const lines = JSON.parse(
+      (await page.getByLabel("Lineup state").textContent())!,
+    );
+    expect(lines[0].forfeit).toBe(side);
+    expect(lines.slice(1)).toEqual(JSON.parse(original!).slice(1));
+    await expect(page.getByText("Morgan Reed", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Play choice for S1" }).click();
+    await page.getByRole("menuitemradio", { name: /^Normal play/ }).click();
+    await expect(page.getByLabel("Lineup state")).toHaveText(original!);
+  }
+});
+
+test("either saved forfeit remains read-only and explains the explicit clear path", async ({
+  page,
+}) => {
+  for (const side of ["ours", "theirs"]) {
+    await page.goto(`${origin}/?outcome=${side}`);
+    await expect(
+      page.getByText(
+        side === "ours"
+          ? "We lost — our side forfeited"
+          : "We won — opponent forfeited",
+        {
+          exact: false,
+        },
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Play choice for S1" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByText("Clear the outcome on the event to edit."),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Play choice for D3" }),
+    ).toHaveCount(0);
+  }
+});

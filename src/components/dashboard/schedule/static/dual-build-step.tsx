@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { DateField } from "@/components/ui/date-field";
 import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
+import { resultLabelFromOutcome } from "@/components/dashboard/schedule/result-choice";
 import {
   OpponentPopup,
   opponentPoolFor,
@@ -300,11 +301,8 @@ export interface DualLineSeed {
   /**
    * Which side forfeited, as the SAVED row states it.
    *
-   * Wider than `LineupLine["forfeit"]` — `"theirs"` is a real saved value that
-   * a builder can never produce (`line-row.tsx` on the event page is where the
-   * opponent's forfeit gets recorded), and a seed that could not spell it would
-   * load such a line as "not forfeited" and submit it back changed. That is a
-   * save `planEntryChanges` refuses, on a line the coach never touched.
+   * Both sides round-trip. For a saved outcome row this remains the legacy
+   * column's value; the lock carries the outcome's display label.
    */
   forfeit?: "ours" | "theirs" | null;
   /**
@@ -317,8 +315,38 @@ export interface DualLineSeed {
    * an edit that will be rejected after the coach has retyped it. Absent means
    * a free line.
    */
-  locked?: "played" | "forfeited";
+  locked?: DualLineLock;
 }
+
+export type DualLineLock =
+  "played" | "forfeited" | ReturnType<typeof resultLabelFromOutcome>;
+
+/** One keyed draft change; settled rows can only reopen after an explicit clear. */
+export function setDraftForfeit(
+  lines: LineupLine[],
+  key: string,
+  side: LineupLine["forfeit"],
+  locked: Record<string, DualLineLock>,
+): LineupLine[] {
+  if (locked[key]) return lines;
+  return lines.map((line) =>
+    line.key === key ? { ...line, forfeit: side } : line,
+  );
+}
+
+export const LINE_PLAY_OPTIONS = [
+  { value: "normal", label: "Normal play", description: "No result recorded." },
+  {
+    value: "ours",
+    label: resultLabelFromOutcome({ kind: "forfeit", side: "ours" }),
+    description: "The point goes to the opponent.",
+  },
+  {
+    value: "theirs",
+    label: resultLabelFromOutcome({ kind: "forfeit", side: "theirs" }),
+    description: "The point goes to us.",
+  },
+] as const;
 
 /**
  * The facts and lines a caller can open the builder on.
@@ -382,8 +410,8 @@ export function seededIdsFromSeed(
 /** Which courts are settled, and how — see `DualLineSeed.locked`. */
 export function lockedByKeyFromSeed(
   initial?: DualDraftSeed,
-): Record<string, "played" | "forfeited"> {
-  const locked: Record<string, "played" | "forfeited"> = {};
+): Record<string, DualLineLock> {
+  const locked: Record<string, DualLineLock> = {};
   for (const row of initial?.lines ?? []) {
     if (row.locked) locked[row.key] = row.locked;
   }
@@ -434,17 +462,7 @@ export function seedDualLines(
       // compatibility with older callers that supplied labels alone.
       ourIds: seed.ourIds ?? rosterIdsForLabels(ourLabels.join(" / "), ladder),
       theirLabels: seed.theirLabels ?? line.theirLabels,
-      // `undefined` is "not stated"; `null` is "not forfeited". A saved
-      // `"theirs"` narrows to null here because `LineupLine` cannot hold it
-      // — such a line is always `locked`, so it is drawn from
-      // `lockedByKeyFromSeed` and submitted from `lockedForfeitFromSeed`,
-      // never from this field.
-      forfeit:
-        seed.forfeit === undefined
-          ? line.forfeit
-          : seed.forfeit === "ours"
-            ? "ours"
-            : null,
+      forfeit: seed.forfeit === undefined ? line.forfeit : seed.forfeit,
     };
   });
 }
@@ -455,7 +473,7 @@ export function seedDualLines(
  */
 export function filledDualLines(
   lines: LineupLine[],
-  lockedByKey: Record<string, "played" | "forfeited">,
+  lockedByKey: Record<string, DualLineLock>,
 ): { line: LineupLine; ours: string[]; theirs: string[] }[] {
   return lines
     .map((line) => ({
@@ -505,12 +523,11 @@ export function buildDualPayloadLines(
     // order is fixed, so the position of a line is a fact about its slot and
     // nothing else.
     position: courtIndex(row.line.slot),
-    // A forfeited line carries nobody on either side. `setForfeited`
-    // already emptied both, so these are empty anyway — stated here so
-    // the write cannot drift from the row.
-    playerUserIds: row.line.forfeit === null ? row.line.ourIds : [],
-    playerLabels: row.line.forfeit === null ? row.ours : [],
-    opponentLabels: row.line.forfeit === null ? row.theirs : [],
+    // A result does not erase the lineup. Retain identities and labels when
+    // choosing, clearing, or round-tripping either side's forfeit.
+    playerUserIds: row.line.ourIds,
+    playerLabels: row.ours,
+    opponentLabels: row.theirs,
     // A settled line hands back the side it was saved with, untouched.
     forfeit: lockedForfeit.has(row.line.key)
       ? (lockedForfeit.get(row.line.key) ?? null)
@@ -589,8 +606,8 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
    * A settled line's forfeit exactly as it was saved, including `"theirs"`.
    *
    * The row is read-only, so what it submits must equal what it loaded or
-   * `planEntryChanges` reports it changed and refuses the whole save. This is
-   * the half `LineupLine` cannot carry — see `DualLineSeed.forfeit`.
+   * `planEntryChanges` reports it changed and refuses the whole save. Outcome
+   * rows keep this legacy column null while the lock names their result.
    */
   const lockedForfeit = useMemo(
     () => lockedForfeitFromSeed(initial),
@@ -740,34 +757,9 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
     );
   }
 
-  /**
-   * Forfeit a line, or take the forfeit back.
-   *
-   * `lineup-editor.tsx`'s rule, ported: forfeiting clears both sides rather
-   * than hiding names still in state, so the row says what it means and
-   * nothing invisible is carried into `createDual`. Taking the forfeit back
-   * leaves the row empty rather than restoring a name — the coach is choosing
-   * who plays that court either way, and a restored name would be the form
-   * guessing at one.
-   *
-   * `"ours"` is the only side a builder can set, and it awards the point to
-   * THEM. The opponent forfeiting is discovered on match day, which is why
-   * `line-row.tsx` on the event page carries the two-sided picker instead.
-   */
-  function setForfeited(key: string, forfeited: boolean) {
-    setLines((current) =>
-      current.map((line) =>
-        line.key === key
-          ? {
-              ...line,
-              forfeit: forfeited ? "ours" : null,
-              ourIds: [],
-              ourLabels: [],
-              theirLabels: [],
-            }
-          : line,
-      ),
-    );
+  /** Draft choices never clear a saved outcome or erase line assignments. */
+  function setForfeited(key: string, side: LineupLine["forfeit"]) {
+    setLines((current) => setDraftForfeit(current, key, side, lockedByKey));
   }
 
   // A line counts once our side is named, and a forfeited line counts with
@@ -999,7 +991,7 @@ export function DualLineupStep({
    * asked early so a settled line is drawn read-only instead of accepting an
    * edit the save is going to refuse.
    */
-  locked?: Record<string, "played" | "forfeited">;
+  locked?: Record<string, DualLineLock>;
   /** The school and its saved roster. `pool.key` rides in every row's key. */
   pool: OpponentPool;
   /** Whether the program has a ladder — the singles note's only variable. */
@@ -1018,7 +1010,7 @@ export function DualLineupStep({
     selection: { ids: string[]; labels: string[] },
   ) => void;
   onTheirLabels: (key: string, value: string) => void;
-  onForfeit: (key: string, forfeited: boolean) => void;
+  onForfeit: (key: string, side: LineupLine["forfeit"]) => void;
 }) {
   const singles = lines.filter((line) => line.discipline === "singles");
   const doubles = lines.filter((line) => line.discipline === "doubles");
@@ -1209,7 +1201,7 @@ function LineupBlock({
   note: string;
   lines: LineupLine[];
   /** Settled courts by line key — see `DualLineupStep`. */
-  locked?: Record<string, "played" | "forfeited">;
+  locked?: Record<string, DualLineLock>;
   addLabel: string;
   /** The school and its saved roster. `pool.key` rides in every row's key. */
   pool: OpponentPool;
@@ -1222,7 +1214,7 @@ function LineupBlock({
   ) => void;
   onAddPlayer: (key: string, player: LadderPlayer, value: string) => void;
   onTheirLabels: (key: string, value: string) => void;
-  onForfeit: (key: string, forfeited: boolean) => void;
+  onForfeit: (key: string, side: LineupLine["forfeit"]) => void;
 }) {
   return (
     <div>
@@ -1274,7 +1266,7 @@ function LineupBlock({
 }
 
 const LINE_GRID =
-  "grid grid-cols-[34px_1fr_20px_1fr_70px] items-center gap-2.5";
+  "grid grid-cols-[34px_1fr_20px_1fr_240px] items-center gap-2.5";
 
 /**
  * The rule and hover wash under every row but the last — `2b` draws the last
@@ -1307,11 +1299,8 @@ function rowRule(last: boolean) {
 /**
  * One line.
  *
- * A forfeited line names nobody on either side, so its two middle cells are
- * empty — spans rather than nothing, because the grid's five columns are what
- * keeps "Forfeited" under "Forfeit" on the rows above it. `2b` draws the last
- * row of each block without the rule and without the hover wash; both follow
- * `last`.
+ * Non-played results retain the saved assignments as text. Draft forfeits
+ * offer the three play choices; a saved result has no editable controls.
  *
  * ── Both names are the line's, and this row is the only thing that can set
  *    either ────────────────────────────────────────────────────────────────
@@ -1325,13 +1314,8 @@ function rowRule(last: boolean) {
  * line id, no index and no way to reach a sibling; the key is never a value
  * either of them holds.
  *
- * `active` is the popup saying it is open or still holding `2e`'s
- * confirmation. `2d` and `2e` both draw that row lifted above the rows below
- * it (`z-index:20`) with the Forfeit affordance showing — the resting row `2b`
- * draws keeps it hidden until the pointer is on it, and that stays. It is a button rather than a span now: `2b` draws the word and
- * nothing else, so the appearance is unchanged, but an `opacity:0` span is a
- * control no keyboard can reach — `focus-visible` reveals it, which is the
- * affordance the dormant editor gave the same word.
+ * `active` lifts the row while its opponent popup is open. The play selector
+ * stays visible so each side's choice is discoverable without hovering.
  */
 function LineRow({
   line,
@@ -1349,7 +1333,7 @@ function LineRow({
 }: {
   line: LineupLine;
   /** Settled, and how — the row is then read-only. See `DualLineSeed.locked`. */
-  locked?: "played" | "forfeited";
+  locked?: DualLineLock;
   addLabel: string;
   pool: OpponentPool;
   /** OUR ladder, ranked and unranked — what the name picker offers. */
@@ -1362,7 +1346,7 @@ function LineRow({
   usedPairSlots: ReadonlyMap<string, string>;
   onAddPlayer: (key: string, player: LadderPlayer, value: string) => void;
   onTheirLabels: (key: string, value: string) => void;
-  onForfeit: (key: string, forfeited: boolean) => void;
+  onForfeit: (key: string, side: LineupLine["forfeit"]) => void;
   last: boolean;
 }) {
   const forfeited = line.forfeit !== null;
@@ -1379,9 +1363,6 @@ function LineRow({
   // submission that moves this line, and a refusal is total, so an editable row
   // here would take a coach's retyped lineup and then reject the whole save.
   if (locked) {
-    // From the lock, not from `line.forfeit`: an opponent's forfeit is saved as
-    // `"theirs"`, which `LineupLine` cannot hold at all.
-    const settledForfeit = locked === "forfeited";
     return (
       <div className={cn(LINE_GRID, "py-[7px]", rowRule(last))}>
         <span className="mono text-[11px]" style={{ color: "var(--ink-600)" }}>
@@ -1389,34 +1370,32 @@ function LineRow({
         </span>
 
         <span className="truncate text-[13px] text-[var(--ink-900)]">
-          {settledForfeit
-            ? /* The one string a forfeited line prints, here and on the event
-                 page's own `line-row.tsx`. */
-              "— no available player"
-            : line.ourLabels.join(" / ")}
+          {line.ourLabels.join(" / ") || "—"}
         </span>
 
-        {settledForfeit ? (
-          <span />
-        ) : (
-          <span className="text-micro" style={{ color: "var(--ink-400)" }}>
-            vs
-          </span>
-        )}
+        <span className="text-micro text-[var(--ink-400)]">vs</span>
 
-        {settledForfeit ? (
-          <span />
-        ) : (
-          <span className="truncate text-[13px] text-[var(--ink-900)]">
-            {line.theirLabels.join(" / ")}
-          </span>
-        )}
+        <span className="truncate text-[13px] text-[var(--ink-900)]">
+          {line.theirLabels.join(" / ") || "—"}
+        </span>
 
         <span
           className="text-micro text-right"
           style={{ color: "var(--ink-500)" }}
         >
-          {locked === "forfeited" ? "Forfeited" : "Played"}
+          {locked === "forfeited"
+            ? resultLabelFromOutcome({
+                kind: "forfeit",
+                side: line.forfeit ?? "theirs",
+              })
+            : locked === "played"
+              ? "Played"
+              : locked}
+          {locked !== "played" && (
+            <span className="mt-1 block">
+              Clear the outcome on the event to edit.
+            </span>
+          )}
         </span>
       </div>
     );
@@ -1442,7 +1421,7 @@ function LineRow({
         // The one string a forfeited builder line prints, and the one
         // `line-row.tsx` prints for the same state on the event page.
         <span className="text-[13px]" style={{ color: "var(--ink-500)" }}>
-          — no available player
+          {line.ourLabels.join(" / ") || "—"}
         </span>
       ) : (
         // `2b` draws our side as plain text because the artboard draws a
@@ -1468,16 +1447,14 @@ function LineRow({
         />
       )}
 
-      {forfeited ? (
-        <span />
-      ) : (
-        <span className="text-micro" style={{ color: "var(--ink-400)" }}>
-          vs
-        </span>
-      )}
+      <span className="text-micro" style={{ color: "var(--ink-400)" }}>
+        vs
+      </span>
 
       {forfeited ? (
-        <span />
+        <span className="text-[13px] text-[var(--ink-500)]">
+          {line.theirLabels.join(" / ") || "—"}
+        </span>
       ) : (
         // `2d`/`2e`. The trigger `2b` draws is this component's closed state,
         // unchanged — 11px ink-400, a 9px plus, and the block's own
@@ -1499,44 +1476,17 @@ function LineRow({
         />
       )}
 
-      {forfeited ? (
-        // The way back. `2b` draws the word and no other affordance on a
-        // forfeited row, so the label and the title carry what the word alone
-        // cannot say — the dormant editor's own two strings.
-        <button
-          type="button"
-          onClick={() => onForfeit(line.key, false)}
-          aria-label={`Clear the forfeit on ${line.slot}`}
-          title="Clear the forfeit"
-          className="text-micro rounded-[3px] text-right outline-none hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)]"
-          style={{ color: "var(--ink-500)" }}
-        >
-          Forfeited
-        </button>
-      ) : (
-        // `opacity:0` with `style-hover="opacity:1"` on the control itself,
-        // which is what `2b` draws — the row's own hover is a separate wash.
-        // Drawn as drawn, and reported: an invisible target is not a
-        // discoverable control. `focus-visible` is the one addition, and it
-        // only reveals what the pointer already can.
-        //
-        // `active` is the second half of the same drawing rather than a
-        // softening of it: `2d` and `2e` draw this word plainly visible on the
-        // row their popup is anchored to, and `2b` draws it hidden on a row at
-        // rest. Both are reproduced — the resting row is untouched.
-        <button
-          type="button"
-          onClick={() => onForfeit(line.key, true)}
-          className={cn(
-            "text-micro rounded-[3px] text-right transition-opacity duration-[var(--duration-hover)] outline-none",
-            "hover:opacity-100 focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)]",
-            active ? "opacity-100" : "opacity-0",
-          )}
-          style={{ color: "var(--blue)" }}
-        >
-          Forfeit
-        </button>
-      )}
+      <MenuSelect
+        label={`Play choice for ${line.slot}`}
+        value={line.forfeit ?? "normal"}
+        options={LINE_PLAY_OPTIONS}
+        onChange={(value) =>
+          onForfeit(line.key, value === "normal" ? null : value)
+        }
+        note="A forfeit records a result without a played match."
+        width={280}
+        className="w-full"
+      />
     </div>
   );
 }

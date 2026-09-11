@@ -30,6 +30,7 @@ import { SCHEDULE_COLUMNS } from "@/components/dashboard/schedule/static/schedul
 import { LINE_STATUS } from "@/lib/schedule/line-status";
 import { formatOpponentRecord } from "@/lib/schedule/opponent-history";
 import { divisionLabel, teamLabel } from "@/lib/data/programs-server";
+import { LINE_PLAY_OPTIONS } from "@/components/dashboard/schedule/static/dual-build-step";
 
 /**
  * The copy record for the four rebuilt schedule routes — what it guards, and
@@ -795,10 +796,13 @@ test.describe("/dashboard/team/schedule/new/dual · 2c 2b 2d 2e", () => {
     );
     drawn(step2, "dual-build-step.tsx", "Add name");
     drawn(step2, "dual-build-step.tsx", "Add pair");
-    // The one string a forfeited builder line prints. Em dash, then the words.
-    drawn(step2, "dual-build-step.tsx", "— no available player");
-    drawn(step2, "dual-build-step.tsx", "Forfeited");
-    drawn(step2, "dual-build-step.tsx", "Forfeit");
+    // Explicit draft choices never describe an unanswered line as played.
+    drawn(step2, "dual-build-step.tsx", "Normal play");
+    expect(LINE_PLAY_OPTIONS.map((option) => option.label)).toEqual([
+      "Normal play",
+      "We lost — our side forfeited",
+      "We won — opponent forfeited",
+    ]);
     drawn(
       step2,
       "dual-build-step.tsx",

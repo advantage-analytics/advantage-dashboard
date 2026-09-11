@@ -163,7 +163,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T12 · Support either forfeit side in the lineup builder
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T11
 - **files:** Best guess: src/components/dashboard/schedule/static/dual-build-step.tsx; src/lib/schedule/actions.ts (builder write adapter); tests/schedule-lineup-forfeit.spec.ts (new)

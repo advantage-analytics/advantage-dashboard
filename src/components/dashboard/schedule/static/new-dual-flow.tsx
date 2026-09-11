@@ -99,12 +99,15 @@ import {
   useDualDraft,
   type ChosenSchool,
   type DualDraftSeed,
+  type DualLineLock,
 } from "@/components/dashboard/schedule/static/dual-build-step";
 import { divisionLabel } from "@/lib/data/programs-server";
 import { formatValueOf } from "@/lib/schedule/format";
 import { isSettled } from "@/lib/schedule/entry-plan";
+import { outcomeForRound } from "@/lib/schedule/entry-state";
+import { resultLabelFromOutcome } from "@/components/dashboard/schedule/result-choice";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
-import type { EventDetail } from "@/lib/schedule/types";
+import type { EventDetail, EventEntry } from "@/lib/schedule/types";
 
 /** Where Cancel goes on step one. Inside the rebuilt set. */
 const SCHEDULE_HREF = "/dashboard/team/schedule";
@@ -189,6 +192,14 @@ interface DualEditTarget {
  * roster name cannot change who the entry belongs to. `id` rides on every
  * loaded line — see `DualLineSeed.id`.
  */
+function dualLineLock(entry: EventEntry): DualLineLock | undefined {
+  const result = outcomeForRound(entry, null);
+  if (result) {
+    return resultLabelFromOutcome(result.outcome);
+  }
+  return isSettled(entry) ? "played" : undefined;
+}
+
 export function dualSeed({ event, entries }: EventDetail): DualDraftSeed {
   return {
     eventId: event.id,
@@ -210,11 +221,7 @@ export function dualSeed({ event, entries }: EventDetail): DualDraftSeed {
               forfeit: entry.forfeit,
               // The same question `planEntryChanges` asks at save, asked here
               // so the row is drawn read-only rather than refused later.
-              locked: isSettled(entry)
-                ? entry.forfeit !== null
-                  ? ("forfeited" as const)
-                  : ("played" as const)
-                : undefined,
+              locked: dualLineLock(entry),
             },
           ]
         : [],

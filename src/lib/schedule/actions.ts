@@ -246,7 +246,9 @@ export async function createDual(
         player_labels: line.playerLabels,
         opponent_labels: line.opponentLabels,
         opponent_program_id: opponentProgramId,
-        forfeit: line.forfeit ?? null,
+        // New builder results live in program_event_outcomes. The legacy
+        // column stays empty; saveBuilderForfeits records the selected side.
+        forfeit: null,
       })),
     );
 
@@ -256,6 +258,13 @@ export async function createDual(
     await supabase.from("program_events").delete().eq("id", event.id);
     return { error: entryError.message };
   }
+
+  const outcomeFailure = await saveBuilderForfeits(
+    supabase,
+    { id: event.id, programId: auth.programId },
+    input.lines,
+  );
+  if (outcomeFailure) return outcomeFailure;
 
   // Give the opposing names an identity, so the next program to play them finds
   // the same people rather than typing a second copy.
@@ -446,6 +455,45 @@ function revalidateEvent(eventId: string): void {
   revalidatePath(`/dashboard/team/schedule/${eventId}`);
 }
 
+/** Record only new draft choices; unchanged settled lines never reach here. */
+async function saveBuilderForfeits(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  event: { id: string; programId: string },
+  lines: LineupLineInput[],
+): Promise<ActionError | null> {
+  const forfeits = lines.filter((line) => line.forfeit != null);
+  if (forfeits.length === 0) return null;
+  const { data: entries, error } = await supabase
+    .from("program_event_entries")
+    .select("id, slot")
+    .eq("event_id", event.id)
+    .eq("program_id", event.programId)
+    .in(
+      "slot",
+      forfeits.map((line) => line.slot),
+    );
+  const fail = (reason: string): ActionError => {
+    revalidateEvent(event.id);
+    return {
+      error: `The lineup was saved, but a forfeit was not: ${reason} Open the event from Schedule and review its outcomes before saving again.`,
+    };
+  };
+  if (error) return fail(error.message);
+  for (const line of forfeits) {
+    const entry = entries?.find((row) => row.slot === line.slot);
+    if (!entry) return fail(`${line.slot} could not be found.`);
+    const { error: outcomeError } = await supabase.rpc("set_schedule_outcome", {
+      p_program_id: event.programId,
+      p_entry_id: entry.id,
+      p_round: null,
+      p_kind: "forfeit",
+      p_side: line.forfeit,
+    });
+    if (outcomeError) return fail(scheduleWriteError(outcomeError).error);
+  }
+  return null;
+}
+
 /** A null outcome clears the saved result at this exact line/round. */
 export async function setOutcome(input: {
   entryId: string;
@@ -532,11 +580,20 @@ export async function updateDual(
         player_labels: line.playerLabels,
         opponent_labels: line.opponentLabels,
         opponent_program_id: opponentProgramId,
-        forfeit: line.forfeit ?? null,
+        forfeit: null,
       };
     },
   );
   if (failure) return failure;
+
+  const outcomeFailure = await saveBuilderForfeits(
+    supabase,
+    { id: detail.event.id, programId: auth.programId },
+    [...plan.update, ...plan.insert].map(
+      (change) => change.row as LineupLineInput,
+    ),
+  );
+  if (outcomeFailure) return outcomeFailure;
 
   revalidateEvent(detail.event.id);
   return { eventId: detail.event.id };

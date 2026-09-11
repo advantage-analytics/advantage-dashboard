@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { NewDualDataProvider } from "@/components/dashboard/schedule/static/dual-school-step";
-import { DualLineupStep } from "@/components/dashboard/schedule/static/dual-build-step";
+import {
+  DualLineupStep,
+  setDraftForfeit,
+} from "@/components/dashboard/schedule/static/dual-build-step";
 import { opponentPoolFor } from "@/components/dashboard/schedule/static/opponent-popup";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { LineupLine } from "@/lib/schedule/types";
+import { resultLabelFromOutcome } from "@/components/dashboard/schedule/result-choice";
 
 const ladder: LadderPlayer[] = [
   {
@@ -70,6 +74,18 @@ window.doublesSelections = [];
 
 function Harness() {
   const [lines, setLines] = useState(initialLines);
+  const outcome = new URLSearchParams(window.location.search).get("outcome");
+  const locked = {
+    D3: "played" as const,
+    ...(outcome
+      ? {
+          S1: resultLabelFromOutcome({
+            kind: "forfeit",
+            side: outcome === "ours" ? "ours" : "theirs",
+          }),
+        }
+      : {}),
+  };
 
   function updateLine(
     key: string,
@@ -101,7 +117,7 @@ function Harness() {
     >
       <DualLineupStep
         lines={lines}
-        locked={{ D3: "played" }}
+        locked={locked}
         pool={opponentPoolFor("text:Test Opponent", "Test Opponent", null)}
         laddered
         onOurLabels={() => undefined}
@@ -112,8 +128,11 @@ function Harness() {
           })
         }
         onTheirLabels={() => undefined}
-        onForfeit={() => undefined}
+        onForfeit={(key, side) =>
+          setLines((current) => setDraftForfeit(current, key, side, locked))
+        }
       />
+      <output aria-label="Lineup state">{JSON.stringify(lines)}</output>
       <output aria-label="D1 roster ids">
         {lines.find((line) => line.key === "D1")?.ourIds.join("|")}
       </output>

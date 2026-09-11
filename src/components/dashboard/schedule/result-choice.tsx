@@ -26,6 +26,14 @@ export function resultChoiceFromOutcome(
   return `${outcome.side}-${outcome.kind}`;
 }
 
+/** The same result words on a selector and a saved, read-only line. */
+export function resultLabelFromOutcome(
+  outcome: Pick<EntryOutcome, "kind" | "side">,
+) {
+  const value = resultChoiceFromOutcome(outcome);
+  return RESULT_CHOICE_OPTIONS.find((option) => option.value === value)!.label;
+}
+
 export function outcomeFromResultChoice(value: ResultChoiceValue): {
   kind: OutcomeKind;
   side: OutcomeSide;

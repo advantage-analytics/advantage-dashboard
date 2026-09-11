@@ -162,17 +162,10 @@ export interface LineupLine {
   /**
    * Which side forfeited this line, or null for a normal line.
    *
-   * The builder can only ever set `"ours"`. A forfeit here means *we* cannot
-   * field a player — that is the only side knowable while writing our own
-   * lineup, and it is the one design 2b draws ("— no available player"). The
-   * opponent forfeiting is discovered on match day, so `line-row.tsx` on the
-   * event page carries the two-sided picker instead — which is why
-   * `EventEntry.forfeit` is wider than this.
-   *
    * `"ours"` awards the point to THEM. Getting that backwards would hand a
    * team a point it did not win with nothing on screen looking broken.
    */
-  forfeit: "ours" | null;
+  forfeit: OutcomeSide | null;
 }
 
 /** One row on the schedule page. Everything here is computed, nothing stored. */
