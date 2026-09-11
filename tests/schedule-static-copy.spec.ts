@@ -191,6 +191,7 @@ test.describe("/dashboard/team/schedule · Tc2 Tc2c", () => {
   const dayZero = screen("schedule-day-zero.tsx");
   const table = screen("schedule-table.tsx");
   const drawer = screen("event-drawer.tsx");
+  const drawerActions = screen("event-actions-menu.tsx");
   const emptyMark = screen("empty-mark.tsx", UI);
   const resultMark = screen("result-mark.tsx", DASHBOARD);
 
@@ -381,12 +382,14 @@ test.describe("/dashboard/team/schedule · Tc2 Tc2c", () => {
   });
 
   test("the drawer's own words", () => {
-    // The 44px header: ‹ › stepping, "Event 2 / 8", "Open event ↗", close.
+    // The 44px header: ‹ › stepping, "Event 2 / 8", overflow actions, close.
     drawn(drawer, "event-drawer.tsx", "Previous event");
     drawn(drawer, "event-drawer.tsx", "Next event");
     drawn(drawer, "event-drawer.tsx", "Event");
     drawn(drawer, "event-drawer.tsx", "{index + 1} / {total}");
-    drawn(drawer, "event-drawer.tsx", "Open event");
+    drawn(drawerActions, "event-actions-menu.tsx", "Event actions");
+    drawn(drawerActions, "event-actions-menu.tsx", "Edit event");
+    drawn(drawerActions, "event-actions-menu.tsx", "Delete event");
     drawn(drawer, "event-drawer.tsx", "Close");
     drawn(drawer, "event-drawer.tsx", "Esc");
     drawn(drawer, "event-drawer.tsx", "Singles");

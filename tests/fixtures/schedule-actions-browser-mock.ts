@@ -5,6 +5,7 @@ declare global {
     actionCalls: Call[];
     failNextOutcome?: string;
     failNextScore?: string;
+    failNextDelete?: string;
   }
 }
 
@@ -36,4 +37,14 @@ export async function createTournament(input: unknown) {
 export async function updateTournament(input: unknown) {
   window.actionCalls.push({ action: "updateTournament", input });
   return { eventId: "event-browser" };
+}
+
+export async function deleteEvent(eventId: string) {
+  window.actionCalls.push({ action: "deleteEvent", input: eventId });
+  if (window.failNextDelete) {
+    const error = window.failNextDelete;
+    window.failNextDelete = undefined;
+    return { error };
+  }
+  return { ok: true as const };
 }

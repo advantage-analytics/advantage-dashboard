@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import {
-  ArrowUpRight,
   Calendar,
   ChevronDown,
   ChevronRight,
@@ -21,6 +20,7 @@ import {
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
+import { EventActionsMenu } from "@/components/dashboard/schedule/static/event-actions-menu";
 import { advButton } from "@/lib/ui/adv-button";
 import { scoreSetsFrom } from "@/lib/ui/score-format";
 import { dualScore, lineWon, matchWon } from "@/lib/schedule/entry-state";
@@ -46,16 +46,15 @@ const ICON_BUTTON =
  * `Tc2` — the selected event's detail, as a dismissable right rail.
  *
  * Same shell as the Roster's drawer: 340px, the float shadow, a 44px header
- * with ‹ › event stepping, "Event n / N", the staff-only "Open event ↗"
- * bridge, and a close that also answers Esc. Body, top to bottom: program
+ * with ‹ › event stepping, "Event n / N", the staff-only overflow menu, and
+ * a close that also answers Esc. Body, top to bottom: program
  * mark and conference; one nowrap glyph row — date, venue, court surface; the
  * score row, where the nine ticks ARE the score (singles, then doubles) with
  * the figures confirming at the left, winner's number in ink-900; then every
  * line — played lines with their score, a line awaiting its result, an unset
  * line as a blue "+ Set line"; and "Enter results" full width while lines are
  * still open. A player instead gets one full-width ghost "Open dual" or
- * "Open tournament" footer; for that role the duplicate header bridge is
- * absent.
+ * "Open tournament" footer and no write menu.
  *
  * ── Row-click law, the other half ──────────────────────────────────────────
  * Lineup lines GAIN the chevron the event rows lost: each is a match and opens
@@ -114,6 +113,7 @@ export function EventDrawer({
   closing,
   autoFocus,
   onClosed,
+  onDeleted,
   capabilities,
 }: {
   detail: EventDetail;
@@ -129,6 +129,8 @@ export function EventDrawer({
   /** Opened from the keyboard — take focus so `Tab` continues inside. */
   autoFocus: boolean;
   onClosed: () => void;
+  /** Remove the successful server deletion from selection and the visible list. */
+  onDeleted: () => void;
   /** Named Schedule actions, derived once from the active workspace. */
   capabilities: ScheduleCapabilities;
 }) {
@@ -242,21 +244,14 @@ export function EventDrawer({
 
             <div className="min-w-2 flex-1" />
 
-            {viewerOnly ? null : (
-              /* The staff bridge remains until the drawer action menu owns it.
-                 A player gets the same destination once, in the footer. */
-              <Link
-                href={eventHref}
-                className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[var(--radius-element)] px-2 text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-              >
-                Open event
-                <ArrowUpRight
-                  className="size-3"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-              </Link>
-            )}
+            {capabilities.canEdit ? (
+              <EventActionsMenu
+                eventId={event.id}
+                eventName={event.name}
+                canDelete={capabilities.canDelete}
+                onDeleted={onDeleted}
+              />
+            ) : null}
 
             <span
               aria-hidden="true"

@@ -17,6 +17,19 @@ import type {
 const params = new URLSearchParams(location.search);
 const role = (params.get("role") ?? "player") as ProgramRole;
 
+declare global {
+  interface Window {
+    actionCalls: { action: string; input: unknown }[];
+    routerPushes: string[];
+    routerRefreshes: number;
+    failNextDelete?: string;
+  }
+}
+
+window.actionCalls = [];
+window.routerPushes = [];
+window.routerRefreshes = 0;
+
 const workspace: Workspace = {
   id: "browser-program",
   kind: "team",

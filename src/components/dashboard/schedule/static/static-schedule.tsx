@@ -146,8 +146,15 @@ export function StaticSchedule({
   /** `?event=` from the URL, or null. Ignored unless it names a row. */
   initialSelectedId: string | null;
 }) {
-  const { rows, details } = schedule;
+  const { rows: serverRows, details } = schedule;
   const { canCreate } = capabilities;
+  const [deletedIds, setDeletedIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const rows = useMemo(
+    () => serverRows.filter((row) => !deletedIds.has(row.id)),
+    [serverRows, deletedIds],
+  );
 
   const initial =
     initialSelectedId && rows.some((row) => row.id === initialSelectedId)
@@ -207,6 +214,41 @@ export function StaticSchedule({
       }
     },
     [finishClose],
+  );
+
+  const removeDeletedEvent = useCallback(
+    (eventId: string) => {
+      const deletedIndex = visible.findIndex((row) => row.id === eventId);
+      const focusRow =
+        visible[deletedIndex + 1] ?? visible[deletedIndex - 1] ?? null;
+      setDeletedIds((current) => {
+        const next = new Set(current);
+        next.add(eventId);
+        return next;
+      });
+      close(null);
+
+      // The alert dialog skips its normal trigger restoration on success:
+      // that trigger leaves with this drawer. Wait until the deleted row is
+      // gone, then land on a durable schedule target.
+      requestAnimationFrame(() => {
+        if (focusRow) {
+          document.getElementById(scheduleRowId(focusRow.id))?.focus();
+          return;
+        }
+        const heading = document.getElementById("schedule-heading");
+        if (heading) {
+          heading.focus();
+          return;
+        }
+        document
+          .querySelector<HTMLElement>(
+            'a[href="/dashboard/team/schedule/new/dual"]',
+          )
+          ?.focus();
+      });
+    },
+    [close, visible],
   );
 
   /** A row click: open the rail on it, or close the rail if it is already there. */
@@ -292,6 +334,7 @@ export function StaticSchedule({
       if (target) {
         if (target.closest("input, textarea, select, [contenteditable=true]"))
           return;
+        if (target.closest('[role="alertdialog"], [aria-modal="true"]')) return;
         if (
           target.closest(
             `[role="dialog"]:not([${DRAWER_ATTR}] [role="dialog"])`,
@@ -365,7 +408,9 @@ export function StaticSchedule({
         {/* Title slot with summary and primary New event. */}
         <div className="flex items-end gap-2.5">
           <div>
-            <h1 className="text-display">Schedule</h1>
+            <h1 id="schedule-heading" tabIndex={-1} className="text-display">
+              Schedule
+            </h1>
             <p className="text-body-sm mt-[9px]">
               {programName} · {seasonLabel(rows, today)} ·{" "}
               <span className="tabular">
@@ -527,6 +572,7 @@ export function StaticSchedule({
           onStep={step}
           onClose={() => close(drawerId)}
           onClosed={finishClose}
+          onDeleted={() => removeDeletedEvent(drawer.event.id)}
           capabilities={capabilities}
         />
       ) : null}

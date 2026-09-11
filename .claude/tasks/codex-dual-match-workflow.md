@@ -125,7 +125,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T9 · Expose event edit and delete in the drawer
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6, T8
 - **files:** Best guess: src/components/dashboard/schedule/static/event-drawer.tsx; src/components/dashboard/schedule/static/event-actions-menu.tsx (new); tests/schedule-drawer-actions.spec.ts
