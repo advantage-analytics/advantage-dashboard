@@ -58,3 +58,9 @@ is the runner's. Newest entries at the bottom.
 **changed:** Added an atomic score-state transition that null-pads short arrays, preserves other cells and meaningful zeroes, retains scoring bounds, and advances the active set count with the first entered digit. Wired the wizard to that transition and added focused coverage through set five, clearing, tiebreaks, bounds, submitted arrays, and the T1 real-wizard paths. Preset/import provenance and parsers are unchanged.
 
 **follow-ups:** 1. T3 can remove the redundant ghost-cell `onSetsChange` call and use the atomic transition while repairing focus behavior.
+
+## T3 · Repair game-score focus order — blocked
+
+**gate:** Mechanical: lint and tsc passed; the full keyless npm test passed after rerunning outside the macOS sandbox, with live-database and localhost-harness tests skipped. Completion: VERDICT: needs-work because the focused browser run timed out in the existing source-selection helper before any new focus assertions executed, so the browser-proof criterion remains unmet. Pipeline and RLS guardrails were not dispatched because completion failed first.
+
+**changed:** The attempted ScoreBlock focus-order fix and browser assertions for correction selection, invalid/cleared no-advance behavior, ghost-set mounting, tiebreak entry, and final-cell retention are preserved in stash `d07abfbca6e152ff20d440f420a7631f5e9f8424`; no task code was committed. Retry must repair the harness/source-selection setup and run the focused browser case through its score assertions. GPT-5.3 Codex Spark was unavailable in this session's collaboration tool, so GPT-5.6 Terra medium was used.
