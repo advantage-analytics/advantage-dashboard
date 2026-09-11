@@ -100,7 +100,7 @@ ready).
 
 ## T7 · Show import identity confirmation
 
-- **status:** todo
+- **status:** blocked
 - **model:** gpt-5.3-codex-spark
 - **reasoning:** medium
 - **needs:** T6
