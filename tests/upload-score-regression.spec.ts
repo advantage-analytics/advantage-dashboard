@@ -73,6 +73,85 @@ test.describe("upload score regression reproduction", () => {
     });
   });
 
+  test("score cells keep corrections, ghost sets, tiebreaks, and the final cell focused", async ({
+    page,
+  }) => {
+    await page.goto(`${baseURL}/wizard-reproduction?mode=new`);
+    await chooseSource(page, "SwingVision export");
+    await page
+      .locator('input[type="file"]')
+      .setInputFiles(await oneSetExport());
+    await expect(page.getByText(/XLSX.*read/)).toBeVisible();
+    await page.locator("[data-wizard-continue]").click();
+    await setFormat(page, "Best of 3");
+
+    const player = "Riley Reproduction";
+    const opponent = "Casey Opponent";
+    const playerFirst = page.getByLabel(`${player}, set 1`);
+    const opponentFirst = page.getByLabel(`${opponent}, set 1`);
+
+    await playerFirst.click();
+    await expect
+      .poll(() =>
+        playerFirst.evaluate((input) => {
+          const scoreInput = input as HTMLInputElement;
+          return (
+            scoreInput.selectionStart === 0 && scoreInput.selectionEnd === 1
+          );
+        }),
+      )
+      .toBe(true);
+    await playerFirst.press("Backspace");
+    await expect(playerFirst).toBeFocused();
+    await playerFirst.press("8");
+    await expect(playerFirst).toBeFocused();
+    await playerFirst.press("Tab");
+    await playerFirst.click();
+    await playerFirst.press("6");
+    await expect(opponentFirst).toBeFocused();
+
+    await opponentFirst.press("Backspace");
+    await expect(opponentFirst).toHaveValue("");
+    await expect(opponentFirst).toBeFocused();
+    await opponentFirst.press("4");
+    const playerSecond = page.getByLabel(`${player}, set 2`);
+    const opponentSecond = page.getByLabel(`${opponent}, set 2`);
+    await expect(playerSecond).toBeFocused();
+    await playerSecond.press("6");
+    await expect(opponentSecond).toBeFocused();
+    await opponentSecond.press("3");
+
+    const playerThird = page.getByLabel(`${player}, set 3`);
+    const opponentThird = page.getByLabel(`${opponent}, set 3`);
+    await expect(playerThird).toBeFocused();
+    await playerThird.press("6");
+    await expect(opponentThird).toBeFocused();
+    await opponentThird.press("2");
+    await expect(opponentThird).toBeFocused();
+    await opponentThird.press("Enter");
+    await expect(opponentThird).toBeFocused();
+
+    await playerFirst.click();
+    await playerFirst.press("7");
+    await expect(opponentFirst).toBeFocused();
+    await opponentFirst.press("Backspace");
+    await expect(opponentFirst).toHaveValue("");
+    await opponentFirst.press("6");
+    await expect(playerSecond).toBeFocused();
+
+    const playerTiebreak = page.getByLabel(`${player}, set 1 tiebreak`);
+    const opponentTiebreak = page.getByLabel(`${opponent}, set 1 tiebreak`);
+    await playerTiebreak.click();
+    await playerTiebreak.press("1");
+    await expect(playerTiebreak).toBeFocused();
+    await playerTiebreak.press("0");
+    await expect(playerTiebreak).toHaveValue("10");
+    await expect(playerTiebreak).toBeFocused();
+    await opponentTiebreak.click();
+    await opponentTiebreak.press("8");
+    await expect(opponentTiebreak).toBeFocused();
+  });
+
   test("video form retains sets 2 and 3 and submits them", async ({ page }) => {
     const submissions: unknown[] = [];
     await mockVideoMetadata(page);

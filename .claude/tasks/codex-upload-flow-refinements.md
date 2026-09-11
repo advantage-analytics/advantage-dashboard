@@ -45,7 +45,7 @@ ready).
 
 ## T3 · Repair game-score focus order
 
-- **status:** blocked
+- **status:** done
 - **model:** gpt-5.3-codex-spark
 - **reasoning:** medium
 - **needs:** T2

@@ -61,6 +61,7 @@ export const ScoreInput = ({
     aria-invalid={invalid || undefined}
     value={value === null ? "" : String(value)}
     onChange={(e) => onValue(e.target.value.replace(/[^0-9]/g, ""))}
+    onFocus={(e) => e.currentTarget.select()}
     data-focus-ring="none"
     className={cn(
       CELL_CLS,
@@ -122,6 +123,9 @@ export function ScoreBlock({
   const focusKey = (k: string) =>
     window.setTimeout(() => refs.current[k]?.focus(), 0);
 
+  const isGameEntry = (value: string) =>
+    /^\d$/.test(value) && Number(value) <= 7;
+
   const tie = (i: number) =>
     isTiebreakSet(
       formData.playerScores[i] ?? null,
@@ -144,16 +148,17 @@ export function ScoreBlock({
         onSetsChange(i);
       return;
     }
-    // A game digit advances focus; tiebreak cells wait for Tab.
+    // A complete game digit advances focus; tiebreak cells wait for Tab.
+    // Out-of-range values stay put so they can be corrected, and the last
+    // available game cell deliberately has nowhere to send focus.
+    if (!isGameEntry(v)) return;
     if (row === "player") focusKey(key("o", i));
-    else if (i + 1 < displayed) focusKey(key("p", i + 1));
-    else if (ghost) focusKey(key("p", i + 1));
+    else if (i + 1 < displayed || ghost) focusKey(key("p", i + 1));
   };
 
   // Typing in the dashed column adds the set and keeps the digit.
   const ghostDigit = (row: "player" | "opponent", v: string) => {
-    if (!v) return;
-    onSetsChange(displayed + 1);
+    if (!isGameEntry(v)) return;
     onScoreChange(row, displayed, v);
     focusKey(row === "player" ? key("o", displayed) : key("p", displayed + 1));
   };
@@ -213,7 +218,10 @@ export function ScoreBlock({
             </span>
           ))}
           {ghost && (
-            <span className="relative inline-flex size-10 items-center justify-center rounded-[var(--radius-cell)] border border-dashed border-[var(--border-medium)]">
+            <span
+              key={displayed}
+              className="relative inline-flex size-10 items-center justify-center rounded-[var(--radius-cell)] border border-dashed border-[var(--border-medium)]"
+            >
               <Plus
                 className="pointer-events-none absolute size-[13px] text-[var(--ink-400)]"
                 strokeWidth={1.5}
