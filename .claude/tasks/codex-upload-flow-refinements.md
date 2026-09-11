@@ -59,7 +59,7 @@ ready).
 
 ## T4 · Protect scores when reducing the format
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-5.3-codex-spark
 - **reasoning:** medium
 - **needs:** T3

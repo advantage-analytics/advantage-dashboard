@@ -417,6 +417,11 @@ export interface UseUploadMatchWizardReturn {
     value: string | number | boolean | null | undefined,
   ) => void;
   /**
+   * Applies a format change after DetailsStepContent has confirmed any score
+   * loss. Format reductions discard only sets outside the new format.
+   */
+  handleFormatChange: (bestOf: string) => void;
+  /**
    * The "who played this match" question, asked ONLY in a team workspace with
    * no preset. A personal workspace has exactly one candidate (the uploader),
    * and a preset already answered it — the lineup named the player. Everywhere
@@ -1608,6 +1613,23 @@ export function useUploadMatchWizard({
     [],
   );
 
+  const handleFormatChange = useCallback((bestOf: string) => {
+    const formatLimit = Number.parseInt(bestOf, 10);
+    if (![1, 3, 5].includes(formatLimit)) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      bestOf,
+      // Keep only the data the newly selected format can represent. This is
+      // reached only after the details step has asked about populated sets.
+      playerScores: prev.playerScores.slice(0, formatLimit),
+      opponentScores: prev.opponentScores.slice(0, formatLimit),
+      playerTiebreaks: prev.playerTiebreaks.slice(0, formatLimit),
+      opponentTiebreaks: prev.opponentTiebreaks.slice(0, formatLimit),
+      numberOfSets: undefined,
+    }));
+  }, []);
+
   const updateScoreArray = useCallback(
     (field: ScoreArrayField, index: number, value: string, max?: number) => {
       setFormData((prev) => updateScoreState(prev, field, index, value, max));
@@ -2115,6 +2137,7 @@ export function useUploadMatchWizard({
 
     // Form handling
     handleInputChange,
+    handleFormatChange,
     whoPlayed: {
       required: askWhoPlayed,
       roster: whoPlayedRoster,

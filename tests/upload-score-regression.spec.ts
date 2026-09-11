@@ -152,6 +152,75 @@ test.describe("upload score regression reproduction", () => {
     await expect(opponentTiebreak).toBeFocused();
   });
 
+  test("reducing format keeps entered scores until the loss is confirmed", async ({
+    page,
+  }) => {
+    const submissions: unknown[] = [];
+    await captureMatchSubmission(page, submissions);
+    await page.goto(`${baseURL}/wizard-reproduction?mode=new`);
+
+    await chooseSource(page, "SwingVision export");
+    await page
+      .locator('input[type="file"]')
+      .setInputFiles(await oneSetExport());
+    await expect(page.getByText(/XLSX.*read/)).toBeVisible();
+    await page.locator("[data-wizard-continue]").click();
+    await setFormat(page, "Best of 3");
+    await enterSecondAndThirdSets(page, "Riley Reproduction", "Casey Opponent");
+
+    await page
+      .getByRole("button", { name: "Best of 3", exact: true })
+      .first()
+      .click();
+    await page.getByRole("button", { name: "Best of 1", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Remove entered set scores?" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Keep current format" }).click();
+
+    await expect(page.getByLabel("Riley Reproduction, set 3")).toHaveValue("6");
+    await expect(page.getByLabel("Casey Opponent, set 3")).toHaveValue("2");
+    expect(submissions).toHaveLength(0);
+
+    await page
+      .getByRole("button", { name: "Best of 3", exact: true })
+      .first()
+      .click();
+    await page.getByRole("button", { name: "Best of 1", exact: true }).click();
+    await page.getByRole("button", { name: "Remove set scores" }).click();
+
+    await expect(page.getByLabel("Riley Reproduction, set 1")).toHaveValue("6");
+    await expect(page.getByLabel("Riley Reproduction, set 2")).toHaveCount(0);
+    await page.locator("[data-wizard-continue]").click();
+    await expect.poll(() => submissions.length).toBe(1);
+    expect(submissions[0]).toMatchObject({
+      score: { player1: [6], player2: [4] },
+    });
+  });
+
+  test("reducing an unpopulated format needs no confirmation", async ({
+    page,
+  }) => {
+    await page.goto(`${baseURL}/wizard-reproduction?mode=new`);
+    await chooseSource(page, "SwingVision export");
+    await page
+      .locator('input[type="file"]')
+      .setInputFiles(await oneSetExport());
+    await expect(page.getByText(/XLSX.*read/)).toBeVisible();
+    await page.locator("[data-wizard-continue]").click();
+    await setFormat(page, "Best of 3");
+
+    await page
+      .getByRole("button", { name: "Best of 3", exact: true })
+      .first()
+      .click();
+    await page.getByRole("button", { name: "Best of 1", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Remove entered set scores?" }),
+    ).toHaveCount(0);
+    await expect(page.getByLabel("Riley Reproduction, set 1")).toHaveValue("6");
+  });
+
   test("video form retains sets 2 and 3 and submits them", async ({ page }) => {
     const submissions: unknown[] = [];
     await mockVideoMetadata(page);

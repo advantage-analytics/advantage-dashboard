@@ -64,6 +64,16 @@ import {
 } from "@/components/ui/popover";
 import { DateField } from "@/components/ui/date-field";
 import { StatePill } from "@/components/ui/state-pill";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/data/match-utils";
 import { normalizedPersonName } from "@/lib/data/person-name";
@@ -89,7 +99,7 @@ import {
   focusRingCls,
   noteStripCls,
 } from "./styles";
-import { formatHoursMinutes } from "./utils";
+import { formatHoursMinutes, setHasData } from "./utils";
 import { FORMAT_OPTIONS, Required, ScoreBlock } from "./ScoreBlock";
 
 export interface DetailsStepContentProps {
@@ -98,6 +108,8 @@ export interface DetailsStepContentProps {
     field: keyof FormData,
     value: string | number | boolean | null | undefined,
   ) => void;
+  /** Called only after a format reduction's score-loss choice is resolved. */
+  onFormatChange: (bestOf: string) => void;
   onScoreChange: (
     player: "player" | "opponent",
     index: number,
@@ -1004,6 +1016,7 @@ function provenanceFor(
 function DetailsStepContentImpl({
   formData,
   onInputChange,
+  onFormatChange,
   onScoreChange,
   onTiebreakChange,
   isProcessingProvider,
@@ -1034,6 +1047,28 @@ function DetailsStepContentImpl({
     (attachedLine?.eventKind ?? line?.eventKind) === "dual" &&
     Boolean(lineProgramKey);
   const fromLine = Boolean(attachedLine || line);
+  const [pendingFormat, setPendingFormat] = useState<string | null>(null);
+
+  const changeFormat = useCallback(
+    (nextBestOf: string) => {
+      const currentBestOf = Number.parseInt(formData.bestOf, 10);
+      const nextLimit = Number.parseInt(nextBestOf, 10);
+      const losesPopulatedSet =
+        Number.isFinite(currentBestOf) &&
+        nextLimit < currentBestOf &&
+        Array.from({ length: currentBestOf - nextLimit }, (_, offset) =>
+          setHasData(formData, nextLimit + offset),
+        ).some(Boolean);
+
+      if (losesPopulatedSet) {
+        setPendingFormat(nextBestOf);
+        return;
+      }
+
+      onFormatChange(nextBestOf);
+    },
+    [formData, onFormatChange],
+  );
 
   // ---- Async: the offer, the people, the events, the styles
 
@@ -1753,25 +1788,53 @@ function DetailsStepContentImpl({
             read={courtRead}
             onChange={(v) => onInputChange("courtType", v)}
           />
-          <SelectCell
-            label="Format"
-            required
-            placeholder="Choose"
-            value={formData.bestOf || undefined}
-            options={FORMAT_OPTIONS}
-            onChange={(v) => onInputChange("bestOf", v)}
-          />
-          <SelectCell
-            label="Scoring"
-            required
-            placeholder="Choose"
-            value={formData.adScoring}
-            options={[
-              { value: true, label: "Ad" },
-              { value: false, label: "No-ad" },
-            ]}
-            onChange={(v) => onInputChange("adScoring", v)}
-          />
+          {fromLine ? (
+            <ReadCell
+              label="Format"
+              required
+              value={
+                FORMAT_OPTIONS.find(
+                  (option) => option.value === formData.bestOf,
+                )?.label ?? "Not set"
+              }
+              tag="from the event"
+            />
+          ) : (
+            <SelectCell
+              label="Format"
+              required
+              placeholder="Choose"
+              value={formData.bestOf || undefined}
+              options={FORMAT_OPTIONS}
+              onChange={changeFormat}
+            />
+          )}
+          {fromLine ? (
+            <ReadCell
+              label="Scoring"
+              required
+              value={
+                formData.adScoring === undefined
+                  ? "Not set"
+                  : formData.adScoring
+                    ? "Ad"
+                    : "No-ad"
+              }
+              tag="from the event"
+            />
+          ) : (
+            <SelectCell
+              label="Scoring"
+              required
+              placeholder="Choose"
+              value={formData.adScoring}
+              options={[
+                { value: true, label: "Ad" },
+                { value: false, label: "No-ad" },
+              ]}
+              onChange={(v) => onInputChange("adScoring", v)}
+            />
+          )}
           {!isProcessingProvider && (
             <ReadCell
               label="Duration"
@@ -1800,6 +1863,33 @@ function DetailsStepContentImpl({
           />
         </div>
       </div>
+      <AlertDialog
+        open={pendingFormat !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingFormat(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove entered set scores?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This format has fewer sets. Continuing removes the scores for the
+              excluded sets.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep current format</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingFormat) onFormatChange(pendingFormat);
+                setPendingFormat(null);
+              }}
+            >
+              Remove set scores
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

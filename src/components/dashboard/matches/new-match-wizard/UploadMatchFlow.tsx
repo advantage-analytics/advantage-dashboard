@@ -622,6 +622,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     handleFileChange,
     handleRemoveFile,
     handleInputChange,
+    handleFormatChange,
     whoPlayed,
     handleScoreChange,
     handleTiebreakChange,
@@ -1042,6 +1043,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
         <DetailsStepContent
           formData={formData}
           onInputChange={handleInputChange}
+          onFormatChange={handleFormatChange}
           onScoreChange={handleScoreChange}
           onTiebreakChange={handleTiebreakChange}
           isProcessingProvider={isProcessingProvider}
