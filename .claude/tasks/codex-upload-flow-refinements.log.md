@@ -14,3 +14,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** Mechanical: lint, tsc, and npm test passed after running the test step with empty Supabase credentials (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` set to empty, escalated launch to allow browser execution). Completion review: VERDICT: needs-work due one criterion. `pipeline-guardrails-reviewer` and `rls-boundary-reviewer` were not dispatched (completion failed first).
 
 **changed:** Added shared identity/completion validation contracts in `src/components/dashboard/matches/new-match-wizard/types.ts`, new helpers in `src/components/dashboard/matches/new-match-wizard/validation.ts`, and coverage in `tests/upload-validation.spec.ts`; blocked by missing assertion that successful/failed identity matching and confirmation preserve attribution IDs, so changes were stashed to `6366f4a6717e7bc82ee168ebb294372ca4cf8c5e`.
+
+## T1 · Reproduce multi-set score loss — blocked
+
+**gate:** Mechanical: lint, tsc, and the focused regression spec passed; full keyless npm test passed after rerunning outside the macOS Chromium sandbox (622 passed, 61 skipped). Completion: VERDICT: needs-work. The test calls `buildMatchData` with manually seeded arrays instead of mounting the real wizard, loading a fixture, entering sets 2 and 3, checking focus, and intercepting the wizard submission boundary. Pipeline and RLS guardrails were skipped because the completion stage failed first.
+
+**changed:** Preserved the utility-level regression test in stash `dd56d35fdbfb37cd201e339f020850989fe45fe9`; no task code was committed. The test documents score truncation at the submission builder but does not satisfy the required real-wizard reproduction. No upload, production database write, or vendor job occurred. GPT-5.3 Codex Spark was requested by the task but was unavailable to this session's subagent tooling, so the prior implementation/review used the available fallback.
