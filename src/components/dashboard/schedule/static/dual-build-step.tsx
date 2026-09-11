@@ -1290,6 +1290,7 @@ function rowRule(last: boolean) {
     last
       ? "border-b border-transparent"
       : "border-b border-[var(--border-hairline)]",
+    "rounded-[var(--radius-element)]",
     "transition-colors duration-[var(--duration-hover)]",
     "hover:bg-[var(--surface-subtle)]",
     "focus-within:border-[var(--blue)] focus-within:bg-[var(--surface-subtle)]",

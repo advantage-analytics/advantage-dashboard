@@ -175,7 +175,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T13 · Round lineup hover treatment
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T12
 - **files:** Best guess: src/components/dashboard/schedule/static/dual-build-step.tsx
