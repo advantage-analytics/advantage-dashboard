@@ -272,7 +272,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T21 · Verify the complete Schedule workflow
 
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T15, T14, T17, T20
 - **files:** Best guess: tests/ schedule regression coverage; MAP.md only if routes actually changed
