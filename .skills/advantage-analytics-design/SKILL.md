@@ -1100,7 +1100,8 @@ Focus → "The underline opt-out").
 built from `ui/float-menu.tsx` — `FloatMenu` (the surface, anchored to the
 trigger it wraps, 10px radius, 5px inset, `--shadow-dropdown`),
 `FloatMenuItem` (a 7px-radius row: 12px label, optional 11px `--ink-500`
-second line saying what the choice means, `--surface-subtle` on hover and on
+second line saying what the choice means, `--surface-subtle` on unselected
+pointer hover and on keyboard focus, no persistent or pointer-hover fill for
 the chosen row, a 12px Signal Blue check — the one colour that means
 "chosen"), `FloatMenuNote` (the closing sentence under a hairline for the
 thing the menu will not do) and `FloatMenuDivider`. **Every select is

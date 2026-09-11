@@ -114,7 +114,7 @@ ready).
 
 ## T8 · Align shared selected-option styling
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-5.3-codex-spark
 - **reasoning:** medium
 - **files:** Best guess: src/components/ui/float-menu.tsx, .skills/advantage-analytics-design/SKILL.md, existing shared-control tests.
