@@ -23,6 +23,7 @@ import {
 } from "@/lib/schedule/actions";
 import {
   EVENT_FORMATS,
+  siteTitle,
   splitNames,
   todayISO,
   type EventFormatValue,
@@ -163,15 +164,13 @@ const DEFAULT_FORMAT =
   FORMATS.find((format) => format.value === "bo3-no-ad") ?? FORMATS[0];
 
 /**
- * The three sites a dual can be at, labelled as the dormant form labels them
- * and in its order. `EventSite` on `value`, so the union is checked here rather
- * than cast at the change handler.
+ * The three sites a dual can be at, titled through the shared schedule
+ * formatter and in the dormant form's order. `EventSite` on `value`, so the
+ * union is checked here rather than cast at the change handler.
  */
-const SITES: readonly { value: EventSite; label: string }[] = [
-  { value: "home", label: "Home" },
-  { value: "away", label: "Away" },
-  { value: "neutral", label: "Neutral" },
-];
+const SITES: readonly { value: EventSite; label: string }[] = (
+  ["home", "away", "neutral"] as const
+).map((value) => ({ value, label: siteTitle(value) }));
 
 /**
  * The surfaces a dual can be on — `programs.default_surface`'s own vocabulary,

@@ -198,7 +198,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T15 · Title-case the wizard venue labels
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T13
 - **files:** Best guess: src/components/dashboard/schedule/static/pinned-event-bar.tsx; src/components/dashboard/schedule/static/dual-build-step.tsx; src/lib/schedule/format.ts (reuse siteTitle)
