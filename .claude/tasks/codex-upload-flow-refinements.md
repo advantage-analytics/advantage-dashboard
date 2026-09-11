@@ -127,7 +127,7 @@ ready).
 
 ## T9 · Order providers and align source selections
 
-- **status:** todo
+- **status:** blocked
 - **model:** gpt-5.3-codex-spark
 - **reasoning:** medium
 - **needs:** T8
