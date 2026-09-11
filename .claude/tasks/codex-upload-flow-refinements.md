@@ -31,7 +31,7 @@ ready).
 
 ## T2 · Preserve newly entered score sets
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-5.6-sol
 - **reasoning:** medium
 - **needs:** T1

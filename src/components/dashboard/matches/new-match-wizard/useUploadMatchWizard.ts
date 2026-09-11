@@ -68,6 +68,7 @@ import {
   STORAGE_KEYS,
   MatchMetadata,
 } from "./utils";
+import { updateScoreState, type ScoreArrayField } from "./score-state";
 
 /**
  * Turn a refused write into a sentence the player can act on.
@@ -1608,28 +1609,8 @@ export function useUploadMatchWizard({
   );
 
   const updateScoreArray = useCallback(
-    (
-      field:
-        | "playerScores"
-        | "opponentScores"
-        | "playerTiebreaks"
-        | "opponentTiebreaks",
-      index: number,
-      value: string,
-      max?: number,
-    ) => {
-      let next: number | null;
-      if (value === "") {
-        next = null;
-      } else if (/^\d+$/.test(value)) {
-        next = max != null ? Math.min(max, Number(value)) : Number(value);
-      } else {
-        return;
-      }
-      setFormData((prev) => ({
-        ...prev,
-        [field]: prev[field].map((s, i) => (i === index ? next : s)),
-      }));
+    (field: ScoreArrayField, index: number, value: string, max?: number) => {
+      setFormData((prev) => updateScoreState(prev, field, index, value, max));
     },
     [],
   );

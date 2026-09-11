@@ -50,3 +50,11 @@ is the runner's. Newest entries at the bottom.
 **gate:** Mechanical: lint, tsc, the focused 9-test validation suite, and the full keyless npm test passed; Chromium was rerun outside the macOS sandbox after the sandbox-only launch denial. Completion: VERDICT: pass. Pipeline guardrails: CLEAR, no findings. RLS guardrails were skipped because no Supabase/data/API/migration/query boundary changed.
 
 **changed:** Added pure completion requirements for both players' required hand/backhand values; normalized import identity comparison; and confirmation keys bound to file generation, workspace, athlete, imported athlete ID, and normalized imported identity. Tests cover case/whitespace matching, missing/initial/nickname/punctuation/different-name confirmation, every key invalidation, empty-name behavior, and preservation of both attribution IDs. No UI, parser, API, database, or runtime wiring changed.
+
+## T2 · Preserve newly entered score sets — done
+
+**gate:** Mechanical: lint and tsc passed; the full keyless npm test passed after rerunning outside the macOS sandbox, with live-database tests skipped. Focused score-state and validation coverage passed 44 tests, and the real-wizard import, video, and preset regression suite passed all 3 cases. Completion: VERDICT: pass. Pipeline guardrails: CLEAR, no findings. RLS guardrails were skipped because no Supabase/data/API/migration/query boundary changed.
+
+**changed:** Added an atomic score-state transition that null-pads short arrays, preserves other cells and meaningful zeroes, retains scoring bounds, and advances the active set count with the first entered digit. Wired the wizard to that transition and added focused coverage through set five, clearing, tiebreaks, bounds, submitted arrays, and the T1 real-wizard paths. Preset/import provenance and parsers are unchanged.
+
+**follow-ups:** 1. T3 can remove the redundant ghost-cell `onSetsChange` call and use the atomic transition while repairing focus behavior.

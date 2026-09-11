@@ -43,9 +43,9 @@ test.describe("upload score regression reproduction", () => {
     await blockExternalBoundaries(page);
   });
 
-  test("one-set SwingVision import loses sets 2 and 3 at submission", async ({
+  test("one-set SwingVision import retains sets 2 and 3 at submission", async ({
     page,
-  }, testInfo) => {
+  }) => {
     const submissions: unknown[] = [];
     await captureMatchSubmission(page, submissions);
     await page.goto(`${baseURL}/wizard-reproduction?mode=new`);
@@ -57,31 +57,19 @@ test.describe("upload score regression reproduction", () => {
     await expect(page.getByText(/XLSX.*read/)).toBeVisible();
     await page.locator("[data-wizard-continue]").click();
     await setFormat(page, "Best of 3");
-    await enterSecondAndThirdSets(
-      page,
-      "Riley Reproduction",
-      "Casey Opponent",
-      true,
-    );
+    await enterSecondAndThirdSets(page, "Riley Reproduction", "Casey Opponent");
 
-    // This is the explicit T1 intermediate result: keystrokes advance focus,
-    // but short parsed arrays discard the second and third set values.
-    testInfo.annotations.push({
-      type: "expected failure",
-      description:
-        "Known T1: one-set import retains only set 1; sets 2 and 3 render blank after entry.",
-    });
     expect(
       await observeScores(page, "Riley Reproduction", "Casey Opponent"),
     ).toEqual({
-      player: ["6", "", ""],
-      opponent: ["4", "", ""],
+      player: ["6", "6", "6"],
+      opponent: ["4", "3", "2"],
     });
 
     await page.locator("[data-wizard-continue]").click();
     await expect.poll(() => submissions.length).toBe(1);
     expect(submissions[0]).toMatchObject({
-      score: { player1: [6, 0, 0], player2: [4, 0, 0] },
+      score: { player1: [6, 6, 6], player2: [4, 3, 2] },
     });
   });
 
@@ -120,12 +108,7 @@ test.describe("upload score regression reproduction", () => {
     await expect(page.getByLabel("Casey Opponent, set 1")).toBeFocused();
     await page.getByLabel("Casey Opponent, set 1").fill("4");
     await expect(page.getByLabel("Riley Reproduction, set 2")).toBeFocused();
-    await enterSecondAndThirdSets(
-      page,
-      "Riley Reproduction",
-      "Casey Opponent",
-      false,
-    );
+    await enterSecondAndThirdSets(page, "Riley Reproduction", "Casey Opponent");
     expect(
       await observeScores(page, "Riley Reproduction", "Casey Opponent"),
     ).toEqual({
@@ -140,9 +123,9 @@ test.describe("upload score regression reproduction", () => {
     });
   });
 
-  test("one-set schedule preset reproduces the same lost entries", async ({
+  test("one-set schedule preset retains newly entered sets", async ({
     page,
-  }, testInfo) => {
+  }) => {
     const submissions: unknown[] = [];
     await captureMatchSubmission(page, submissions);
     await page.goto(`${baseURL}/wizard-reproduction?mode=preset`);
@@ -152,29 +135,19 @@ test.describe("upload score regression reproduction", () => {
       .setInputFiles(await oneSetExport());
     await expect(page.getByText(/XLSX.*read/)).toBeVisible();
     await page.locator("[data-wizard-continue]").click();
-    await enterSecondAndThirdSets(
-      page,
-      "Riley Reproduction",
-      "Casey Opponent",
-      true,
-    );
+    await enterSecondAndThirdSets(page, "Riley Reproduction", "Casey Opponent");
 
-    testInfo.annotations.push({
-      type: "expected failure",
-      description:
-        "Known T1: a one-set preset also drops sets 2 and 3 despite focus advancing through their inputs.",
-    });
     expect(
       await observeScores(page, "Riley Reproduction", "Casey Opponent"),
     ).toEqual({
-      player: ["6", "", ""],
-      opponent: ["4", "", ""],
+      player: ["6", "6", "6"],
+      opponent: ["4", "3", "2"],
     });
 
     await page.locator("[data-wizard-continue]").click();
     await expect.poll(() => submissions.length).toBe(1);
     expect(submissions[0]).toMatchObject({
-      score: { player1: [6, 0, 0], player2: [4, 0, 0] },
+      score: { player1: [6, 6, 6], player2: [4, 3, 2] },
     });
   });
 });
@@ -194,17 +167,14 @@ async function enterSecondAndThirdSets(
   page: Page,
   player: string,
   opponent: string,
-  expectLoss: boolean,
 ) {
   await page.getByLabel(`${player}, set 2`).fill("6");
   await expect(page.getByLabel(`${opponent}, set 2`)).toBeFocused();
   await page.getByLabel(`${opponent}, set 2`).fill("3");
-  const playerThirdSet = expectLoss
-    ? `${player}, add set 3`
-    : `${player}, set 3`;
+  const playerThirdSet = `${player}, set 3`;
   await expect(page.getByLabel(playerThirdSet)).toBeFocused();
   await page.getByLabel(playerThirdSet).fill("6");
-  const thirdSet = expectLoss ? `${opponent}, add set 3` : `${opponent}, set 3`;
+  const thirdSet = `${opponent}, set 3`;
   await expect(page.getByLabel(thirdSet)).toBeFocused();
   await page.getByLabel(thirdSet).fill("2");
 }
