@@ -46,14 +46,16 @@ const ICON_BUTTON =
  * `Tc2` — the selected event's detail, as a dismissable right rail.
  *
  * Same shell as the Roster's drawer: 340px, the float shadow, a 44px header
- * with ‹ › event stepping, "Event n / N", "Open event ↗" as the peek-to-page
+ * with ‹ › event stepping, "Event n / N", the staff-only "Open event ↗"
  * bridge, and a close that also answers Esc. Body, top to bottom: program
  * mark and conference; one nowrap glyph row — date, venue, court surface; the
  * score row, where the nine ticks ARE the score (singles, then doubles) with
  * the figures confirming at the left, winner's number in ink-900; then every
  * line — played lines with their score, a line awaiting its result, an unset
  * line as a blue "+ Set line"; and "Enter results" full width while lines are
- * still open.
+ * still open. A player instead gets one full-width ghost "Open dual" or
+ * "Open tournament" footer; for that role the duplicate header bridge is
+ * absent.
  *
  * ── Row-click law, the other half ──────────────────────────────────────────
  * Lineup lines GAIN the chevron the event rows lost: each is a match and opens
@@ -136,6 +138,8 @@ export function EventDrawer({
   const singles = entries.filter((entry) => entry.discipline === "singles");
   const doubles = entries.filter((entry) => entry.discipline === "doubles");
   const eventHref = `/dashboard/team/schedule/${event.id}`;
+  const viewerOnly =
+    capabilities.canView && !capabilities.canEdit && !capabilities.canScore;
 
   // "While lines are open": a line that is neither forfeited nor decided. A
   // tournament stays open — rounds get added as they are played.
@@ -153,6 +157,15 @@ export function EventDrawer({
   const venue = isDual
     ? (event.host ?? siteTitle(event.site))
     : siteTitle(event.site);
+  const footerAction = viewerOnly ? (
+    <Link href={eventHref} className={cn(advButton("ghost", "md"), "w-full")}>
+      {isDual ? "Open dual" : "Open tournament"}
+    </Link>
+  ) : capabilities.canScore && linesOpen ? (
+    <Link href={eventHref} className={cn(advButton("primary", "md"), "w-full")}>
+      Enter results
+    </Link>
+  ) : null;
 
   useEffect(() => {
     if (autoFocus) panelRef.current?.focus({ preventScroll: true });
@@ -229,19 +242,21 @@ export function EventDrawer({
 
             <div className="min-w-2 flex-1" />
 
-            {/* The doc's own anchor rule — blue at rest, ink-900 on hover — with
-                the wash the artboard gives every 28px control in this bar. */}
-            <Link
-              href={eventHref}
-              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[var(--radius-element)] px-2 text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-            >
-              Open event
-              <ArrowUpRight
-                className="size-3"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-            </Link>
+            {viewerOnly ? null : (
+              /* The staff bridge remains until the drawer action menu owns it.
+                 A player gets the same destination once, in the footer. */
+              <Link
+                href={eventHref}
+                className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[var(--radius-element)] px-2 text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+              >
+                Open event
+                <ArrowUpRight
+                  className="size-3"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+              </Link>
+            )}
 
             <span
               aria-hidden="true"
@@ -261,7 +276,13 @@ export function EventDrawer({
           </div>
         </TooltipProvider>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6 pb-[22px]">
+        <div
+          data-schedule-drawer-body=""
+          className={cn(
+            "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6",
+            footerAction ? "pb-4" : "pb-[22px]",
+          )}
+        >
           <div className="flex shrink-0 items-center gap-3.5">
             <EventMark kind={event.kind} name={event.name} size={48} />
             <div className="flex min-w-0 flex-col gap-1">
@@ -385,18 +406,16 @@ export function EventDrawer({
               ) : null}
             </>
           )}
-
-          <div className="min-h-0 flex-1" />
-
-          {capabilities.canScore && linesOpen ? (
-            <Link
-              href={eventHref}
-              className={cn(advButton("primary", "md"), "w-full shrink-0")}
-            >
-              Enter results
-            </Link>
-          ) : null}
         </div>
+
+        {footerAction ? (
+          <div
+            data-schedule-drawer-footer=""
+            className="shrink-0 bg-[var(--surface-card)] px-[22px] pb-[22px]"
+          >
+            {footerAction}
+          </div>
+        ) : null}
       </div>
     </aside>
   );

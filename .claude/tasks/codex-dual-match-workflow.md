@@ -113,7 +113,7 @@ used. Suggested new test paths are explicitly marked as guesses.
 
 ## T8 · Add the viewer drawer footer
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T7
 - **files:** Best guess: src/components/dashboard/schedule/static/event-drawer.tsx; tests/schedule-drawer-actions.spec.ts (new)
