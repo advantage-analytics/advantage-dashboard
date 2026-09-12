@@ -12,7 +12,13 @@ One task. One subagent. One commit, or one stash. Then stop.
 Stopping is what makes looping safe: each iteration re-enters this procedure
 for the next task rather than letting one context accumulate all of them.
 
-## Draining the queue — and why it is not `/loop /task-next`
+The queue file format — slug derivation, status vocabulary, `needs:`
+semantics, the task-block grammar, id numbering, the `/loop` incantation — is
+shared with `/task-add` and lives in one place:
+[queue-format](../task-add/reference/queue-format.md). Consult it for steps 1
+and 2; this file does not restate it.
+
+## Why this is not `/loop /task-next`
 
 This skill sets `disable-model-invocation: true` because it commits, dispatches
 subagents, and can stash your work. It must never fire on an ambiguous sentence.
@@ -24,28 +30,28 @@ model may invoke on its own, and a skill marked `disable-model-invocation: true`
 exactly once — the time you typed it — and then silently does nothing on every
 fire after. It does not error; it just stops draining.
 
-Loop a plain-text instruction instead. Plain text is precisely what a scheduled
-fire _can_ act on:
-
-> `/loop Read .claude/skills/task-next/SKILL.md and follow it exactly — run one task from this branch's queue; do not add, edit, or reorder tasks; then stop.`
-
-**Do not tidy that back into `/loop /task-next`.** It reads better and it does
-not work.
+Loop the plain-text instruction in
+[queue-format](../task-add/reference/queue-format.md) instead. **Do not tidy
+it back into `/loop /task-next`.** It reads better and it does not work.
 
 ## 1. Locate the queue
 
+Follow [queue-format](../task-add/reference/queue-format.md) to derive the
+branch slug and locate `.claude/tasks/<slug>.md`. If it does not exist, say so
+and stop — offer to create one, do not invent tasks.
+
+`check.sh` wraps the mechanical half of this:
+
 ```bash
-git branch --show-current
+bash .claude/skills/task-next/check.sh slug         # the derived slug, or fails on detached HEAD
+bash .claude/skills/task-next/check.sh queue-paths  # the queue and log file paths
+bash .claude/skills/task-next/check.sh lint         # queue-format grammar: status values, the
+                                                     # middle-dot heading separator, duplicate ids
+                                                     # within the queue, and dangling needs: ids
 ```
 
-Empty output means detached HEAD. **Stop and say so.** Do not guess a slug and
-do not fall back to another file.
-
-The slug is the branch with `/` replaced by `-`:
-`claude/workspace-setup-repo-1389c6` → `claude-workspace-setup-repo-1389c6`.
-
-Read `.claude/tasks/<slug>.md`. If it does not exist, say so and stop — offer
-to create one, do not invent tasks.
+Run `lint` before picking a task — a malformed heading or an unrecognized
+status value is worth catching before step 2 tries to parse it.
 
 **Re-read this file every run.** The user appends to it while the loop runs.
 
@@ -56,16 +62,14 @@ If the user passed a task id, use that one. Otherwise:
 1. The first task with `status: next`, in file order — the queue-jump.
 2. Otherwise the first with `status: todo`.
 
-`status: later` is never picked by either rule above — it marks a task
-deferred until someone promotes it to `todo` by hand. It is not malformed and
-is not skipped-and-logged; it is simply invisible to the picker.
+`status: later` is never picked by either rule above (see
+[queue-format](../task-add/reference/queue-format.md)) — it is not malformed
+and is not skipped-and-logged; it is simply invisible to the picker.
 
-A task with a `- **needs:**` line is eligible only once every task it names
-is finished — `done` in the queue, or gone from the queue but recorded
-`— done` in the log. Anything else (`todo`, `doing`, `blocked`, an id that
-resolves to nothing anywhere) leaves it waiting: pass over it silently, like
-`later`, and keep scanning. Do not log it as skipped — waiting is normal, not
-malformed.
+A task with a `- **needs:**` line follows the eligibility rule in
+[queue-format](../task-add/reference/queue-format.md) — pass over it silently,
+like `later`, and keep scanning. Do not log it as skipped — waiting is normal,
+not malformed.
 
 Skip and log any task whose `done when:` list is missing or empty, then
 **keep scanning past it** to the next candidate in file order — a skip never
@@ -91,13 +95,14 @@ never surfaces as a failure, just a queue that quietly never drains and sends
 ## 3. Pre-flight
 
 ```bash
-[ -d node_modules ] || npm ci
+bash .claude/skills/task-next/check.sh preflight
 ```
 
-A fresh worktree never has `node_modules` — the bootstrap hook supplies
-`.env.local` but deliberately does not install, because a `SessionStart` hook
-must not block a session for minutes. So install here and carry on; this skill
-is already a multi-minute operation.
+Runs `npm ci` if `node_modules` is missing, a no-op otherwise. A fresh
+worktree never has `node_modules` — the bootstrap hook supplies `.env.local`
+but deliberately does not install, because a `SessionStart` hook must not
+block a session for minutes. So install here and carry on; this skill is
+already a multi-minute operation.
 
 **If the install itself fails, stop.** The gate cannot run without it, and an
 ungated commit is worse than no progress. Report the install error rather than
@@ -117,10 +122,9 @@ again.
 One task, one subagent — that is what gives each task a fresh context window,
 and it is why this skill does not do the work itself.
 
-Dispatch it on the task's routed model: pass the task's `- **model:**` value
-(`sonnet`, `opus`, or `fable`) as the Agent tool's `model` parameter. Missing
-or unrecognized means `sonnet` — routing above that tier is the `/task-add`
-planner's call, never this skill's.
+Dispatch it on the task's routed model — see
+[queue-format](../task-add/reference/queue-format.md) for the exact `model:`
+values and the sonnet fallback.
 
 Give the subagent:
 
@@ -149,46 +153,31 @@ is noise about code that does not compile.
 
 **a. Mechanical**
 
-Redirect each command to a scratch file so its output never lands in this
-session — the loop's context has to survive a whole drain. Success contributes
-nothing but the exit status; read a log only on failure, and only its tail:
-
 ```bash
-G=$(mktemp -d)
-npm run lint     > "$G/lint.log" 2>&1 || { echo "lint FAILED"; tail -40 "$G/lint.log"; }
-npx tsc --noEmit > "$G/tsc.log"  2>&1 || { echo "tsc FAILED";  tail -40 "$G/tsc.log"; }
-npm test         > "$G/test.log" 2>&1 || { echo "test FAILED"; tail -40 "$G/test.log"; }
+bash .claude/skills/task-next/check.sh gate
 ```
 
-**One known false failure.** `tsconfig.json` pulls in `.next/types/**/*.ts`
-and `.next/dev/types/**/*.ts` — route-type files generated by a _previous_
-build. A pull that deletes or renames a route leaves them pointing at a page
-that no longer exists, and `tsc` reports an error in code nobody wrote:
+Runs lint, typecheck and the full test suite, redirecting each to a scratch
+file so output never lands in this session — the loop's context has to
+survive a whole drain. Prints `GATE PASS` or `GATE FAIL` as its last line;
+read the log tail above it only on failure.
+
+It also handles the one known false failure: `tsconfig.json` pulls in
+`.next/types/**/*.ts` and `.next/dev/types/**/*.ts` — route-type files
+generated by a _previous_ build. A pull that deletes or renames a route
+leaves them pointing at a page that no longer exists, and `tsc` reports an
+error in code nobody wrote:
 
 ```
 .next/types/validator.ts(359,39): error TS2307: Cannot find module
 '../../src/app/dashboard/team/compare/page.js'
 ```
 
-If — and only if — **every** error path is under `.next/`, clear the stale
-output and run it again. Judge that from the whole log, not the tail:
-
-```bash
-grep 'error TS' "$G/tsc.log" | grep -v '^\.next/'
-```
-
-Empty output means every error is stale route types — clear and re-run, under
-the same redirect discipline:
-
-```bash
-rm -rf .next/types .next/dev/types
-npx tsc --noEmit > "$G/tsc.log" 2>&1 || { echo "tsc FAILED"; tail -40 "$G/tsc.log"; }
-```
-
-**The re-run is the verdict, not the diagnosis.** One error under `src/` means
-it is real: fix it, and clear nothing. Never call a red `tsc` stale without
-re-running to green — that is exactly how a genuine type error gets waved
-through, and this stage is the cheapest place to catch one.
+If — and only if — **every** error path is under `.next/`, `check.sh gate`
+clears the stale output and re-runs typecheck once, automatically. **The
+re-run is the verdict, not the diagnosis.** One error under `src/` means it
+is real and `GATE FAIL` stands — this is exactly how a genuine type error
+would otherwise get waved through as "probably stale".
 
 **b. Completion review** — dispatch `task-completion-reviewer` with the task
 block. Its first line is `VERDICT: pass` or `VERDICT: needs-work`.
@@ -201,7 +190,11 @@ so they run concurrently:
 - `rls-boundary-reviewer` — `src/lib/supabase/`, `src/lib/data/`,
   `src/app/api/`, `supabase/migrations/`, or any new table, view or query.
 
-Determine which surfaces the diff touches from both `git diff HEAD --stat`
+```bash
+bash .claude/skills/task-next/check.sh surfaces
+```
+
+Determines which surfaces the diff touches from both `git diff HEAD --stat`
 **and** `git ls-files --others --exclude-standard` — a task whose new files
 land entirely under one of the surfaces above must not skip that surface's
 reviewer just because those files are untracked and so absent from
@@ -249,8 +242,14 @@ git commit -m "T<n>: <title>"
 ```
 
 One commit now carries all three together: the task's code changes, `status:
-done`, and the log entry. `git status --short` must come back empty
-immediately after — if it isn't, the bookkeeping got left behind again.
+done`, and the log entry.
+
+```bash
+bash .claude/skills/task-next/check.sh clean
+```
+
+Must pass immediately after — if it doesn't, the bookkeeping got left behind
+again.
 
 ## 6b. Anything failed — stash
 
@@ -298,8 +297,13 @@ git commit -m "T<n>: blocked"
 
 The failed work stays out of history on purpose — that's what the stash is
 for — but the bookkeeping still needs to land somewhere durable, and this
-commit is the only vehicle for that. `git status --short` must come back
-empty immediately after.
+commit is the only vehicle for that.
+
+```bash
+bash .claude/skills/task-next/check.sh clean
+```
+
+Must pass immediately after.
 
 **Never revert, never `git checkout --`, never discard.** The stash exists so
 the tree is clean for the next task while the work stays recoverable.

@@ -19,6 +19,12 @@ commits.
 logs it as malformed. Dictation never produces one. This skill is the bridge
 between how a task arrives and the shape the runner can execute.
 
+The queue file format — slug derivation, status vocabulary, `needs:`
+semantics, the task-block grammar, id numbering, the `/loop` incantation — is
+shared with `/task-next` and lives in one place:
+[queue-format](reference/queue-format.md). Consult it for step 1 and for the
+Shape rule in Drafting rules below; this file does not restate it.
+
 ## The asymmetry that governs everything below
 
 A skipped task is visible in the log and costs one re-add.
@@ -34,50 +40,9 @@ too thin to make observable, ask. Never pad the list to fill the slot.
 
 ## 1. Resolve the queue
 
-```bash
-git branch --show-current
-```
-
-Empty output means detached HEAD. **Stop and say so.** Do not guess a slug.
-
-The slug is the branch with `/` replaced by `-`. Read
-`.claude/tasks/<slug>.md`.
-
-**If it does not exist**, create it with this header, filling in the branch
-name and a one-line scope:
-
-```markdown
-# Tasks — <branch>
-
-> Scope: <one line — what this branch owns>
-
-Run one with `/task-next`. To drain the file, loop a plain-text instruction —
-**not** `/loop /task-next`, which a scheduled fire cannot invoke:
-
-> `/loop Read .claude/skills/task-next/SKILL.md and follow it exactly — run one task from this branch's queue; do not add, edit, or reorder tasks; then stop.`
-
-Append freely while it runs: the queue is re-read at the start of every
-iteration, and the runner only ever rewrites a task's `status:` line.
-Mark a task `next` to jump the queue.
-
-Status values: `todo` (eligible to run), `next` (jump the queue), `doing` /
-`done` / `blocked` (written by the runner around a dispatch), and `later`
-(deferred — `/task-next`'s picker never selects it, so a loop drain skips
-straight past it; promote a task to `todo` by hand once it's actually
-ready).
-```
-
-Create the `.log.md` sibling too, with its own header, so the runner has
-somewhere to write:
-
-```markdown
-# Run log — <branch>
-
-Written by `/task-next`. Do not hand-edit — the queue file is yours, this one
-is the runner's. Newest entries at the bottom.
-```
-
-A new queue file must be confirmed tracked before you commit — see step 4.
+Follow [queue-format](reference/queue-format.md) — locate the branch's queue
+and log files, create them from the templates there if the queue does not
+exist yet.
 
 ## 2. Plan on Fable
 
@@ -114,11 +79,9 @@ criteria. Target: one task is one comfortable subagent context.
 When in doubt, route one tier up: a wrong-low route costs a failed gate, a
 stash and a re-run — more than the tier difference saves.
 
-**Dependencies.** When one task builds on another's outcome — its criteria
-assume the other's change exists, or both rewrite the same code — give the
-dependent a `- **needs:** T<n>` line naming what must finish first
-(comma-separate several). Independent tasks carry no line; independence is
-what lets them run in any order. Point only at tasks that are not yet done.
+**Dependencies.** When one task builds on another's outcome, give the
+dependent a `- **needs:**` line — see [queue-format](reference/queue-format.md)
+for the exact semantics.
 
 **Escalation.** If the log shows the same work blocked before, propose one
 tier above the model that failed and flag the bump in the draft. Never
@@ -134,7 +97,10 @@ draft still goes through step 3's confirmation either way.
 
 ## Drafting rules
 
-_Referenced by name from other skills. Change them here, not by copy._
+_Referenced by name from other skills. Change them here, not by copy — except
+the task-block shape and numbering, which live in
+[queue-format](reference/queue-format.md) because `task-next` needs the same
+grammar to parse what this produces._
 
 **Observability.** Every criterion must pass this test: _could a reviewer
 holding only the diff verdict this met or not met?_
@@ -156,50 +122,11 @@ not drafts.
 the subagent the runner dispatches. Mark it as a guess; the runner already
 treats it as one a subagent may correct.
 
-**Numbering.** Take the next id above the highest ever used — **scan both
-`.claude/tasks/<slug>.md` and `.claude/tasks/<slug>.log.md`**, and take the
-higher of the two:
-
-```bash
-{ grep -ho '^## T[0-9]*' .claude/tasks/<slug>.md .claude/tasks/<slug>.log.md; } \
-  | grep -o '[0-9]*' | sort -n | tail -1
-```
-
-The queue alone is not enough. A finished or abandoned task gets deleted from
-the queue but stays in the log forever, so scanning only the queue silently
-reclaims its id — which is precisely what this rule exists to prevent.
-
-**Never reuse a number**, even one freed by a deletion: the run log references
-tasks by id, and a reused id makes the log ambiguous about which work a line
-describes.
+**Shape and numbering.** See [queue-format](reference/queue-format.md) for the
+exact task-block grammar and the id-numbering rule.
 
 **Duplicates.** If an existing task looks like the same work, name it and let
 the author decide. Flag; never merge.
-
-**Shape.** The heading separator is a middle dot (·, U+00B7). The field markers
-are exact — the runner parses them:
-
-```markdown
-## T<n> · <short imperative title>
-
-- **status:** todo
-- **model:** sonnet
-- **needs:** <T-ids that must finish first, or omit the line>
-- **files:** <best guess>
-- **done when:**
-  - [ ] <observable criterion>
-  - [ ] <observable criterion>
-  - [ ] <observable criterion>
-- **notes:** <context worth keeping, or omit the line>
-```
-
-**`model:`** is the execution route — `sonnet`, `opus`, or `fable`. New drafts
-always carry the line so the routing decision is visible in the queue;
-`/task-next` treats an absent line (legacy tasks) as `sonnet`.
-
-**`needs:`** names tasks that must be `done` before this one is eligible —
-`/task-next` passes over a task whose `needs:` are unmet. Omit the line for
-independent tasks.
 
 ## 3. Confirm
 

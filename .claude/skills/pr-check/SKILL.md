@@ -1,15 +1,17 @@
 ---
 name: pr-check
-description: Run the full pre-merge gate on the current branch — lint, typecheck, tests, then quality and safety review via /simplify, the vercel-react-best-practices skill, and this project's guardrail subagents. Use before opening a PR or merging to main. There is no CI in this repo, so this is the only gate.
+description: Run the full pre-merge gate on the current branch — lint, typecheck, tests, then quality and safety review via /simplify, the vercel-react-best-practices skill, and this project's guardrail subagents. Use before opening a PR or merging to main. .github/workflows/ci.yml runs the same lint/typecheck/test trio on every PR and push, but only this skill runs the review stages.
 disable-model-invocation: true
 argument-hint: "[optional: 'full' to force every reviewer at full effort, or a scope like 'ui only']"
 ---
 
 # Pre-merge check
 
-**This repo has no `.github/` workflows.** Nothing runs on push, nothing runs
-on a PR. Every check is this one. Do not skip a stage because the diff "looks
-small" — the failure modes this catches are the silent kind.
+**`.github/workflows/ci.yml` runs lint, typecheck, format:check and the test
+suite on every PR and on pushes to `main`/`splitstep-integration`** — but it
+runs no review stage. `/simplify`, the guardrail subagents, and `code-review`
+only run here. Do not skip a stage because the diff "looks small" — the
+failure modes this catches are the silent kind.
 
 **`/pr-check full` is the paranoid mode.** It turns the economies below back
 off: guardrail reviewers run even over an all-task-gated range, and
