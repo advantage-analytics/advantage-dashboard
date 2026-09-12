@@ -2,11 +2,11 @@
 
 Guidance for coding agents working in this repository — Claude Code, Codex and
 Gemini all read this file. `CLAUDE.md` is a one-line `@AGENTS.md` import and
-`GEMINI.md` is a symlink to it, so there is exactly ONE copy of this to keep
-current. Edit this file; never edit the other two.
+`GEMINI.md` is a symlink to it, so there is exactly ONE copy to keep current.
+Edit this file; never edit the other two.
 
-This file also hosts the `nextjs-agent-rules` block that `next dev` maintains.
-Because it exists and carries that block, `next dev` skips `CLAUDE.md` entirely
+It also hosts the `nextjs-agent-rules` block that `next dev` maintains. Because
+this file exists and carries that block, `next dev` skips `CLAUDE.md` entirely
 (see `node_modules/next/dist/server/lib/generate-agent-files.js`).
 
 ## Project Overview
@@ -25,9 +25,15 @@ npm run lint         # ESLint (flat config)
 npm run test         # Playwright — specs live in tests/
 npm run format       # Prettier (writes). `format:check` is what CI runs
 npm run typecheck    # tsc --noEmit
+npm run map          # Regenerate MAP.md's route table
 ```
 
 ## Architecture
+
+**[`MAP.md`](MAP.md) is the code directory** — routes, source layout and the data
+layer in one place. Read it before searching for a file, and use the `trace-route`
+skill before editing any dashboard UI: several components share a name across
+different routes, and picking by filename edits a page nobody was looking at.
 
 ### Workspaces — read this before any dashboard work
 
@@ -42,33 +48,23 @@ different products:
 
 A user may hold several, so this is a switcher, never a flag on the user row. Membership
 lives in `program_members`, _not_ `users.role` (nullable free text, nothing validates it).
-See `src/lib/workspace/types.ts` — the doc comments there are the spec.
-
-**[`MAP.md`](MAP.md) is the code directory** — routes, source layout, and the
-data layer, in one place. Read it before searching for a file. Its route table
-is generated: run `npm run map` after adding a route, or `npm test` fails.
+`src/lib/workspace/types.ts`'s doc comments are the spec.
 
 ### Routes
 
-- `src/app/(auth)/` — `login`, `sign-up`, `forgot-password`, `update-password`,
-  `check-email`, `sign-up-success`, `error`, plus `confirm/` (email) and `callback/`
-  (OAuth) route handlers. `/request-access` is a `next.config.ts` redirect to the landing
-  page form, not a page.
-- `src/app/dashboard/` — `(home)`, `matches`, `matches/[matchId]`, `matches/new`,
-  `statistics`, `ask`, `help`,
-  `team/{roster,schedule/[eventId]/{score,edit},compare,upload,settings}`,
-  `settings/{account,profile,plan,preferences,subscription,teams,teams/[programId],usage}`
-- `src/app/claim/`, `src/app/join/[token]`, `src/app/admin/claims` — program claim,
-  invite acceptance and claim review flows
-- `src/app/api/` — `upload`, `validate-file`, `chat`, `home-insight`, `team-insight`, `matches/[matchId]`,
-  `programs/search`, `splitstep/{jobs,upload-url}`, `create-checkout-session`,
-  `webhooks/{splitstep,stripe}`, `cron/reclaim-videos`
+Full table in [`MAP.md`](MAP.md). Three things it does not tell you:
 
-Session refresh runs in **`src/proxy.ts`** — Next 16's replacement for the `middleware`
-file convention. It does session refresh only and deliberately does **not** redirect — route
-protection lives in the Server Component layouts that own each area
-(`dashboard/`, `dashboard/team/`, `admin/`), next to the workspace/role lookup it
-depends on. Webhook and cron routes are excluded from the matcher on purpose.
+- Session refresh runs in **`src/proxy.ts`**, Next 16's replacement for the
+  `middleware` file convention. It refreshes only and deliberately does **not**
+  redirect — route protection lives in the Server Component layouts that own each
+  area (`dashboard/`, `dashboard/team/`, `admin/`), next to the workspace and role
+  lookup it depends on. Webhook and cron routes are excluded from the matcher on
+  purpose.
+- `/dashboard/statistics`, `/dashboard/team/statistics`, `/dashboard/ask`,
+  `/dashboard/team/ask` and `/dashboard/opponents` render `ComingSoonPage`. Their
+  shape is not settled, so there is no implementation behind them to revive — the
+  loaders in `opponents-server.ts` are the exception and are live elsewhere.
+- `/request-access` is a `next.config.ts` redirect to the landing page form, not a page.
 
 ### Data flow
 
@@ -77,220 +73,120 @@ components (`"use client"`) own UI state and use the browser client. Three clien
 factories in `src/lib/supabase/`: `server.ts` (cookies), `client.ts` (browser),
 `admin.ts` (service role, bypasses RLS). All user data is RLS-scoped.
 
-Server-side loaders live in `src/lib/data/*-server.ts`; their client-side counterparts are
-`*-client.ts`. Key tables: `matches`, `match_stats`, `points`, `shots`, `users`,
-`programs`, `program_members`, `program_claims`, `program_events`, `processing_jobs`,
-`processing_usage`. The `match_stats_with_percentages` view adds computed percentages.
-Schema: the **live database is the only source of truth** — verify via the
-Supabase MCP (`list_tables`, `execute_sql`). `supabase/migrations/` runs roughly
-100 migrations behind it.
+Server-side loaders live in `src/lib/data/*-server.ts`. Key tables: `matches`,
+`match_stats`, `points`, `shots`, `users`, `programs`, `program_members`,
+`program_claims`, `program_events`, `processing_jobs`, `processing_usage`. The
+`match_stats_with_percentages` view adds computed percentages. Schema: the **live
+database is the only source of truth** — verify via the Supabase MCP (`list_tables`,
+`execute_sql`). `supabase/migrations/` runs roughly 100 migrations behind it.
 
 Edge functions in `supabase/functions/`: `process-match` (parses uploaded .xlsx
-asynchronously — upload returns immediately), `generate-insights`, `upload-video-r2`,
-`delete-video-r2`.
+asynchronously — upload returns immediately) and `generate-insights`.
 
 ### Match detail
 
-`matches/[matchId]` is a **single page with no sub-routes** — the directory holds only
-`error/layout/loading/not-found/page`. Sections are scroll anchors. `layout.tsx` and
-`page.tsx` both call `getMatchDetailData()` (`src/lib/data/match-detail-server.ts`), which
-is wrapped in React `cache()` so the two share one fetch. The layout puts the result in
-`MatchDataProvider`; deep client components read it via `useMatchData()` instead of
-prop-drilling. `page.tsx` short-circuits to the hero + `MatchAnalysisProgress` while a
-match is still analysing — otherwise every stat section draws zeroes, and an empty serve
-chart reads as "you hit no serves".
-
-### Statistics
-
-`/dashboard/statistics` and `/dashboard/team/statistics` render `ComingSoonPage`, not
-this subtree — the season-rollup view isn't finalised, so the route says so rather than
-shipping a half-answer. The implementation underneath is half-built
-rather than merely switched off, and the shape of that matters to anyone reviving it. Of
-the 20 files in `src/components/dashboard/statistics/`, `statistics-page-content.tsx`
-imports 11; the other eight — `duration-profile`, `performance-ratings-card`,
-`pressure-index`, `rally-breakdown`, `stat-trajectory-chart`, `stats-grid`,
-`surface-chart`, `win-rate-chart` — are imported by nothing at all, not even by each
-other. So there is dead code inside the dead subtree: putting the route back would light
-up 11 components and leave eight still unreferenced, and whether those were abandoned
-directions or unfinished ones is not recoverable from the imports.
-`statistics-server.ts` and `statistics-client.ts` are referenced only from inside this
-subtree. `statistics-server.ts` (`getStatisticsPageData()`, `getSelectableMatches()`)
-and `statistics-client.ts` (`computeStatistics()`) produce the same `StatisticsPageData`;
-the client version recomputes from `SelectableMatch[]` when filters change, avoiding
-round-trips. `STAT_CONFIG` (20 stats, grouped Serve/Return/Other by a `category` field) is
-a **private** const inside `statistics/stat-progression-chart.tsx` — extract it before
-using it from a second component. The route change itself is small — put the loader and
-`StatisticsPageContent` back into the page file — but see the wiring caveat above before
-assuming that is the whole job.
+`matches/[matchId]` is a **single page with no sub-routes**; sections are scroll anchors.
+`layout.tsx` and `page.tsx` both call `getMatchDetailData()`
+(`src/lib/data/match-detail-server.ts`), wrapped in React `cache()` so the two share one
+fetch. The layout puts the result in `MatchDataProvider`; deep client components read it
+via `useMatchData()` instead of prop-drilling. `page.tsx` short-circuits to the hero +
+`MatchAnalysisProgress` while a match is still analysing — otherwise every stat section
+draws zeroes, and an empty serve chart reads as "you hit no serves".
 
 ### Upload pipeline
 
 SwingVision .xlsx → `SwingVisionValidator` → `SwingVisionParser` → `match-data` bucket →
-`process-match` extracts points/shots. Code in `src/lib/services/upload/`
-(`parsers/`, `providers/`, `validators/`); the provider strategy pattern is how new
-sources get added.
+`process-match` extracts points/shots. Code in `src/lib/services/upload/`; the provider
+strategy pattern is how new sources get added.
 
-The wizard is a full page at `/dashboard/matches/new`, not a dialog. Step order branches on
-provider kind — import providers run Provider → Match → Confirm, processing providers
+The wizard is a full page at `/dashboard/matches/new`, not a dialog. Step order branches
+on provider kind — import providers run Provider → Match → Confirm, processing providers
 insert a Video step (`STEP_ORDER_BY_KIND` in the subtree's `types.ts`). `DashboardShell`
 clears upload localStorage when the path leaves `/dashboard/matches/new`.
-
-### Court visualization
-
-`matches/visuals/court-visualization.tsx` (1,239 lines) — SVG court in serve (half) and
-return (full) modes with dot plots, tooltips and filters — has no importer anywhere in
-the app; `match-detail/shots/shots-tab.tsx` superseded it as what `[matchId]/page.tsx`
-actually code-splits to, and the only surviving reference is a prose mention in a
-comment at `splitstep/derivation/court.ts:90`. Its filter state hook outlived it:
-`serve-placement/serve-placement-widget.tsx` imports `useVisualFilters`
-(`src/hooks/use-visual-filters.ts`), which in turn reaches `visuals/configs/` through
-`getFilterConfig` — so the configs are live one step removed, not orphaned with the file
-that used to sit above them.
 
 ### Video analysis (Advantage Intelligence)
 
 A working pipeline carries real athlete video to a third-party vendor and back:
 browser → **Azure Blob** → vendor → webhook → results JSON + trimmed video. It has
-processed a real full-length match. Cloudflare R2 is retired but not yet deleted;
-`workers/video-access` belongs to that retired path.
+processed a real full-length match.
 
-**Before changing any dashboard UI, read [`docs/ui-revamp-guardrails.md`](docs/ui-revamp-guardrails.md).**
-It lists what must not be touched and the three wizard inputs that — when wrong — attribute
-every statistic to the wrong player with nothing looking broken on screen.
-[`docs/README.md`](docs/README.md) indexes the rest and marks which docs are current state
-vs. point-in-time.
+**IMPORTANT: before changing any dashboard UI, read
+[`docs/ui-revamp-guardrails.md`](docs/ui-revamp-guardrails.md).** It lists what must not
+be touched and the three wizard inputs that — when wrong — attribute every statistic to
+the wrong player with nothing looking broken on screen.
+[`docs/README.md`](docs/README.md) indexes the rest and marks which docs are current
+state vs. point-in-time.
 
 The provider is **"Advantage Intelligence"** in every user-visible string. `splitstep` is
 internal naming only.
 
-### LLM
+### LLM and email
 
-`/api/chat` streams via `getLLMStream()` (`src/lib/llm/adapter.ts`). `LLM_PROVIDER=anthropic|openai`;
-SDKs are dynamically imported so only the configured one loads. Falls back to mock mode
-with no key. See `docs/llm-setup.md`.
+`getLLMStream()` (`src/lib/llm/adapter.ts`) streams for `/api/home-insight` and
+`/api/team-insight`; `LLM_PROVIDER=anthropic|openai`, SDKs dynamically imported, mock
+mode with no key (`docs/llm-setup.md`).
 
-### Transactional email
-
-Product mail (invites, notifications, digests) renders through
-`src/lib/services/email/shell.ts` and sends via Resend; auth mail is Supabase's own, in
-`supabase/email-templates/*.html`. `shell.ts` is a hand-copy of that markup — change one
-and you must change the other. **Read [`docs/email-system.md`](docs/email-system.md)
-before writing a template or wiring a send.**
+Product mail renders through `src/lib/services/email/shell.ts` and sends via Resend;
+auth mail is Supabase's own, in `supabase/email-templates/*.html`. `shell.ts` is a
+hand-copy of that markup — change one and you must change the other. Read
+[`docs/email-system.md`](docs/email-system.md) before writing a template or wiring a send.
 
 ## Design System
 
-**Read `.skills/advantage-analytics-design/SKILL.md` before building any UI** — it is the
-authoritative build reference. `DESIGN.md` documents v2 provenance and what was
-deliberately deferred (dark mode, v2 shadows). Tokens live in
-`src/styles/design-system/`, imported by `globals.css`. The Claude Design project
-_Advantage Design System v3_ (`abcb65f6-4e66-44bc-b9de-b3b47f4313c1`) is the current
-authority on component behaviour; SKILL.md transcribes its rules, marked **(v3)**, and
-flags where shipped code still draws the old pattern. Re-sync from its `CHANGELOG.md`
-(read via DesignSync, not the web) when it moves — it changes no token value.
+**IMPORTANT: read `.skills/advantage-analytics-design/SKILL.md` before building any UI.**
+It is deliberately short — brand, principles, the banned-pattern list, the
+primitive-construction rule — plus a routing table into `reference/` (`foundations`,
+`components`, `empty-and-loading`, `chrome`, `tables`, `primitives`, `home-recipes`,
+`settings`, `focus`). Read SKILL.md first, then only the reference files your surface
+needs — never a reference file in isolation, since SKILL.md carries the precedence rule.
+Tokens live in `src/styles/design-system/`, imported by `globals.css`. `DESIGN.md` records
+v2 provenance and what was deliberately deferred (dark mode, v2 shadows). Primary buttons
+come from `advButton()` (`src/lib/ui/adv-button.ts`) — don't hand-roll a near-miss.
+Re-sync from the v3 Claude Design project's `CHANGELOG.md` via DesignSync, not the web:
+route each round to the file that owns the topic and `grep -rn` the skill directory
+first, since a rule may be printed in more than one place. It never changes a token value.
 
-Inter only (300/400/500/600), type scale 9–56px, blue accent `#3B82F6`, success `#5DB955`,
-error `#E51837`, Lucide icons only, three Framer Motion curves
-(`[0.25, 0.46, 0.45, 0.94]`, `[0.23, 1, 0.32, 1]`, and `[0.2, 0, 0.4, 1]` — `--ease-chart`,
-reserved for chart and data transitions), no bounce or glassmorphism.
+## Task queues and the feature pipeline
 
-Auth pages style from CSS variables; dashboard pages use Tailwind utilities directly.
-Primary buttons come from `advButton()` (`src/lib/ui/adv-button.ts`) — don't hand-roll a
-near-miss.
+Each branch has its own queue at `.claude/tasks/<branch-slug>.md` (`/` → `-`), so task
+files never conflict. `/task-add` appends; `/task-next` runs one task in a gated subagent
+and commits it. The staged ICM pipeline in `work/<slug>/` (`/feature-new`,
+`/feature-next`) sits in front of the same queue — rules in `.claude/pipeline/CONTEXT.md`,
+spec in `docs/superpowers/specs/2026-08-30-icm-feature-pipeline-design.md`. Everything
+else about them lives in each skill's own SKILL.md and in the queue file's header.
 
-### Gates — what runs, and where
+**Which one to use.** `/task-add` when you know what to build, even several tasks — it
+already turns raw intent into sized, routed tasks with `done when:` criteria.
+`/feature-new` only when the approach is undecided or the feature wants a brief and design
+you can edit first; it adds design alternatives, a human gate per stage, a success-criteria
+check at review and landing as a PR, at seven invocations. A feature whose stages all
+finish in one sitting probably wanted `/task-add`.
 
-Formatting and pre-merge checks are deliberately NOT Claude-specific:
+Two rules you need _before_ invoking any of them:
 
-- `scripts/format-file.sh` routes each file to the formatter that understands
-  it (Prettier / shfmt / black; **nothing** for SQL or TOML). One script, called
-  by both the editor-time hook and the git hook, so they cannot drift.
-- `.githooks/` (pre-commit, commit-msg, pre-push) installs itself via the
-  `prepare` script — `npm install` is the only setup step. `pre-commit` fixes
-  formatting rather than rejecting it; `commit-msg` hard-fails only noise and
-  warns on a missing type prefix.
-- `.github/workflows/ci.yml` is the gate that cannot be bypassed. It needs no
-  secrets: the live-database specs guard on `test.skip(!HAVE_ENV)`, so a keyless
-  checkout runs the rest. `npm run build` is absent on purpose — Vercel already
-  builds every push.
-
-`.prettierignore` documents every exclusion and why. The load-bearing ones:
-`supabase/migrations/` (applied, immutable, and full of dollar-quoted plpgsql
-that SQL formatters corrupt), `MAP.md` and `supabase/email-templates/`
-(generated — a test asserts MAP.md is byte-for-byte the generator's output), and
-`src/styles/design-system/colors.css` (Prettier lowercases hex and cannot be
-told not to; the docs quote these tokens uppercase).
-
-## Workflow
-
-**Trace the route before editing components.** When the user names a page, open the route
-file and follow the import chain to the exact rendered component, and state that path
-before proposing edits. Overlapping names are everywhere: serve placement exists four
-times — `home/serve-placement-home.tsx`, `matches/match-detail/serve-placement-card.tsx`,
-`matches/serve-placement/serve-placement-widget.tsx`, and
-`statistics/serve-placement-stats.tsx`.
-
-### Branch task queues
-
-Each branch has its own queue at `.claude/tasks/<branch-slug>.md` (the branch
-with `/` replaced by `-`). Distinct filenames per branch mean merge conflicts
-on task files are structurally impossible.
-
-- `/task-next` runs one task: a fresh subagent, gated, then committed.
-- To drain the queue, loop a plain-text instruction — **not** `/loop /task-next`,
-  which a scheduled fire cannot invoke:
-  > `/loop Read .claude/skills/task-next/SKILL.md and follow it exactly — run one task from this branch's queue, then stop.`
-- The queue file is yours; append to it any time, including while the loop
-  runs. The runner only ever rewrites a task's `status:` line.
-- `.claude/tasks/<slug>.log.md` is the runner's. Do not hand-edit it.
-- A merged branch whose queue is fully `done` gets its queue pair deleted in
-  a cleanup commit on the integration branch — git history is the archive.
-  Pipeline branches get this from stage 07; do it by hand for the rest.
-- Status values: `todo`, `next`, `doing`, `done` and `blocked` are the
-  runner-driven ones. `later` is a deferred task — `/task-next`'s picker never
-  selects it automatically, so a loop drain skips straight past
-  it. Promote it to `todo` by hand when it's actually ready to run.
-
-Every task needs a `done when:` list. It is the contract
-`task-completion-reviewer` gates against, and a task without one is skipped.
-
-`/task-next`, `/task-add` and `/pr-check` are typed to your agent, not to a shell.
-Never present them inside a ```bash fence — the app renders a fenced shell
-block as a Run button, and running one there fails with `command not found`.
-
-### Feature pipeline (ICM)
-
-Larger features can run through the staged pipeline in `work/<slug>/`
-(brief → design → plan → tasks → build → review → land), scaffolded by
-`/feature-new` and advanced one stage at a time by `/feature-next`. Each
-stage's `output/` is a markdown file the human edits between invocations —
-re-invoking the runner is the approval. Rules and contracts:
-`.claude/pipeline/CONTEXT.md` (a real path — the pipeline, task queues and
-review agents live under `.claude/` and are shared by every tool, not just
-Claude); spec:
-`docs/superpowers/specs/2026-08-30-icm-feature-pipeline-design.md`.
-Stage 04 feeds the branch task queue above; 05/06 wrap the queue drain and
-`/pr-check`; 07 deletes the branch's queue pair and workspace on the feature
-branch (git history is the archive), then pushes and opens a PR against
-`splitstep-integration` with `gh` — it never merges that PR. Like
-`/task-next`, the runner is typed to your agent (never presented in a shell-fenced
-block) and must never be driven by `/loop`.
+- **IMPORTANT: never present `/task-next`, `/task-add`, `/pr-check` or `/feature-next`
+  inside a ```bash fence.** The app renders a fenced shell block as a Run button, and
+  running one there fails with `command not found`.
+- **Never drive them with `/loop <command>`** — a scheduled fire cannot invoke a skill
+  that sets `disable-model-invocation`. To drain a queue, loop a plain-text instruction:
+  `/loop Read .claude/skills/task-next/SKILL.md and follow it exactly — run one task from
+this branch's queue, then stop.`
 
 ## Conventions
 
-- `@/` alias for imports from `src/`
-- `*-server.ts` / `*-client.ts` for the server/client split; `Db` prefix on row types
-- shadcn/ui primitives in `src/components/ui/`; `cn()` from `src/lib/utils.ts`
-- Framer Motion for animation, Recharts for charts
-- No global state library — Context + server-side fetching only
-- `exceljs`, `@azure/storage-blob` and the LLM SDKs are `serverExternalPackages` in
-  `next.config.ts`; `@azure/storage-blob` signs vendor SAS URLs and must never reach a
-  client bundle
+- `MAP.md` is generated — run `npm run map` after adding a route, or `npm test` fails.
+- Never hand-format `supabase/migrations/` or `src/styles/design-system/colors.css`.
+  `.prettierignore` documents every exclusion and why.
+- No global state library — Context + server-side fetching only.
+- `@azure/storage-blob` signs vendor SAS URLs and **must never reach a client bundle**;
+  it, `exceljs` and the LLM SDKs are `serverExternalPackages` in `next.config.ts`.
 
 ## Environment
 
-Copy `.env.example` to `.env.local` — it is the source of truth and documents each
-variable, including which ones are deliberately optional and what leaving them unset
-actually does. Only the three Supabase keys plus `NEXT_PUBLIC_SITE_URL` are needed to boot.
+Copy `.env.example` to `.env.local` — it documents every variable, which are optional,
+and what leaving one unset actually does. Only the three Supabase keys plus
+`NEXT_PUBLIC_SITE_URL` are needed to boot. In an agent worktree,
+`.claude/hooks/bootstrap-worktree.sh` symlinks it from the main checkout.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

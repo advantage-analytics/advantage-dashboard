@@ -9,22 +9,27 @@
  * in a weekend's results is doing the same thing they do when they upload,
  * minus the file — so it should be the same room, not a second one.
  *
- * One step, one question: the score. This file reaches for no database client,
- * no wizard hook and no browser storage — there is no draft to keep, because a
- * score is four numbers and a name. `recordResult` is the only write, and it is
- * the same action the inline `ScoreEntry` row calls — one spelling of "a line
- * was played" rather than two that drift.
+ * One step, one question: the result. This file reaches for no database client,
+ * no wizard hook and no browser storage. It shares `recordResult`, `setOutcome`
+ * and `ResultChoice` with the inline row, so played scores and non-played
+ * outcomes cannot acquire two action contracts or two vocabularies.
  *
  * **The reseed is the load-bearing detail.** Switching lines remounts the form
- * (`key={preset.entryId}`), so the previous line's digits cannot survive into
- * the next one. A shared, mutated form is how S2 gets S1's 6-4.
+ * (`key={preset.entryId}`), so the previous line's choice and digits cannot
+ * survive into the next one. A shared, mutated form is how S2 gets S1's 6-4.
  */
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { advButton } from "@/lib/ui/adv-button";
-import { recordResult } from "@/lib/schedule/actions";
+import { recordResult, setOutcome } from "@/lib/schedule/actions";
+import {
+  outcomeFromResultChoice,
+  ResultChoice,
+  resultChoiceFromOutcome,
+  type ResultChoiceValue,
+} from "@/components/dashboard/schedule/result-choice";
 import {
   seedScoreForm,
   toRecordResultInput,
@@ -37,6 +42,7 @@ import type {
   EventPreset,
   LineChoice,
 } from "@/components/dashboard/matches/new-match-wizard/types";
+import type { EntryOutcome } from "@/lib/schedule/types";
 
 /** The wizard's own content column, copied so the two pages measure the same. */
 const CONTENT_CLS = "mx-auto w-full max-w-[832px] px-14";
@@ -58,18 +64,30 @@ function replaceAt(
 export function ScoreOnlyFlow({
   preset,
   lineup,
+  outcomes,
   eventHref,
 }: {
   /** The line the page resolved — `?entry=`, or the first line with no score. */
   preset: EventPreset;
   /** Every line of the event, for the pinned bar's Change menu and the walk. */
   lineup: LineChoice[];
+  /** Saved schedule-only outcomes, keyed by entry id (legacy forfeits included). */
+  outcomes: Record<
+    string,
+    Pick<EntryOutcome, "kind" | "side"> | null | undefined
+  >;
   /** Where Cancel and "Save and close" land. */
   eventHref: string;
 }) {
   const [current, setCurrent] = useState<EventPreset>(preset);
-  /** Lines scored in THIS session, so the footer's count comes down as you go. */
-  const [scored, setScored] = useState<string[]>([]);
+  /** Session overrides for the server-seeded lineup's resolved/open state. */
+  const [resolution, setResolution] = useState<
+    Record<string, "open" | "resolved">
+  >({});
+  /** Successful outcome writes, including a null that means cleared. */
+  const [outcomeOverrides, setOutcomeOverrides] = useState<
+    Record<string, Pick<EntryOutcome, "kind" | "side"> | null>
+  >({});
 
   // The lineup travels on the preset because that is where `PinnedLineBar`
   // reads it; the presets inside `lineup` carry no lineup of their own, so it
@@ -84,31 +102,33 @@ export function ScoreOnlyFlow({
   );
   const lineNumber = index >= 0 ? index + 1 : 1;
 
+  const isOpen = (choice: LineChoice): boolean => {
+    const entryId = choice.preset?.entryId;
+    if (!entryId) return false;
+    return resolution[entryId]
+      ? resolution[entryId] === "open"
+      : choice.state === "open";
+  };
+
+  // Guarded on `index >= 0`. At -1 — a line the Change menu does not list,
+  // which the slot de-duplication in `lineupChoices` can produce — the old
+  // shape concatenated `slice(0)` with `slice(0, 0)` and walked the whole
+  // lineup twice. The filter below still drops the current line, so the walk
+  // stays right without building the list two deep.
+  const rotated =
+    index >= 0
+      ? [...lineup.slice(index + 1), ...lineup.slice(0, index)]
+      : lineup;
   /** The still-open lines other than this one, in lineup order from here. */
-  const openAfter = useMemo(() => {
-    // Guarded on `index >= 0`. At -1 — a line the Change menu does not list,
-    // which the slot de-duplication in `lineupChoices` can produce — the old
-    // shape concatenated `slice(0)` with `slice(0, 0)` and walked the whole
-    // lineup twice. The filter below still dropped the current line, so the
-    // walk was right; the list was just built two deep for no reason.
-    const rotated =
-      index >= 0
-        ? [...lineup.slice(index + 1), ...lineup.slice(0, index)]
-        : lineup;
-    return rotated.filter(
-      (choice) =>
-        choice.state === "open" &&
-        choice.preset !== null &&
-        choice.preset.entryId !== current.entryId &&
-        !scored.includes(choice.preset.entryId ?? ""),
-    );
-  }, [lineup, index, current.entryId, scored]);
+  const openAfter = rotated.filter(
+    (choice) =>
+      isOpen(choice) &&
+      choice.preset !== null &&
+      choice.preset.entryId !== current.entryId,
+  );
 
   const stillOpen = lineup.filter(
-    (choice) =>
-      choice.state === "open" &&
-      choice.preset !== null &&
-      !scored.includes(choice.preset.entryId ?? ""),
+    (choice) => choice.preset !== null && isOpen(choice),
   ).length;
 
   return (
@@ -132,14 +152,14 @@ export function ScoreOnlyFlow({
             className="max-w-[560px] text-[30px] leading-[1.15] font-light tracking-[-0.3px] text-[var(--ink-900)]"
             style={{ textWrap: "pretty" }}
           >
-            The score.
+            The result.
           </h1>
           <p
             className="max-w-[480px] text-[13px] leading-[1.55] text-[var(--ink-600)]"
             style={{ textWrap: "pretty" }}
           >
-            Type it the way you would say it. The winner comes from the numbers,
-            so there is nothing else to tick.
+            Choose how the line finished. If it was played, enter the score the
+            way you would say it.
           </p>
         </div>
       </div>
@@ -151,12 +171,28 @@ export function ScoreOnlyFlow({
       <ScoreForm
         key={current.entryId ?? "line"}
         preset={current}
+        initialOutcome={
+          current.entryId &&
+          Object.prototype.hasOwnProperty.call(
+            outcomeOverrides,
+            current.entryId,
+          )
+            ? outcomeOverrides[current.entryId]
+            : current.entryId
+              ? (outcomes[current.entryId] ?? null)
+              : null
+        }
         eventHref={eventHref}
         stillOpen={stillOpen}
         nextOpen={openAfter[0]?.preset ?? null}
-        onSaved={(entryId, next) => {
-          setScored((prior) => [...prior, entryId]);
+        onSaved={(entryId, next, outcome) => {
+          setResolution((prior) => ({ ...prior, [entryId]: "resolved" }));
+          setOutcomeOverrides((prior) => ({ ...prior, [entryId]: outcome }));
           if (next) setCurrent(next);
+        }}
+        onCleared={(entryId) => {
+          setResolution((prior) => ({ ...prior, [entryId]: "open" }));
+          setOutcomeOverrides((prior) => ({ ...prior, [entryId]: null }));
         }}
       />
     </div>
@@ -172,21 +208,33 @@ export function ScoreOnlyFlow({
  */
 function ScoreForm({
   preset,
+  initialOutcome,
   eventHref,
   stillOpen,
   nextOpen,
   onSaved,
+  onCleared,
 }: {
   preset: EventPreset;
+  initialOutcome: Pick<EntryOutcome, "kind" | "side"> | null;
   eventHref: string;
   stillOpen: number;
   /** The next open line to walk to, or null when this is the last one. */
   nextOpen: EventPreset | null;
-  onSaved: (entryId: string, next: EventPreset | null) => void;
+  onSaved: (
+    entryId: string,
+    next: EventPreset | null,
+    outcome: Pick<EntryOutcome, "kind" | "side"> | null,
+  ) => void;
+  onCleared: (entryId: string) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [savedOutcome, setSavedOutcome] = useState(initialOutcome !== null);
+  const [resultChoice, setResultChoice] = useState<ResultChoiceValue>(
+    initialOutcome ? resultChoiceFromOutcome(initialOutcome) : "played",
+  );
   const [state, setState] = useState<ScoreFormState>(() =>
     seedScoreForm(preset),
   );
@@ -244,6 +292,35 @@ function ScoreForm({
 
   function save(then: "next" | "close") {
     setError(null);
+
+    if (resultChoice !== "played") {
+      const selectedOutcome = outcomeFromResultChoice(resultChoice);
+      startTransition(async () => {
+        const result = await setOutcome({
+          entryId: preset.entryId ?? "",
+          round: preset.eventKind === "tournament" ? preset.round : null,
+          outcome: selectedOutcome,
+        });
+        if ("error" in result) {
+          setError(result.error);
+          return;
+        }
+        router.refresh();
+        if (resultChoice === "clear") {
+          setSavedOutcome(false);
+          setResultChoice("played");
+          onCleared(preset.entryId ?? "");
+          return;
+        }
+        if (then === "close" || !nextOpen) {
+          router.push(eventHref);
+          return;
+        }
+        onSaved(preset.entryId ?? "", nextOpen, selectedOutcome);
+      });
+      return;
+    }
+
     const input = toRecordResultInput(preset, state);
 
     if (input.ourGames.length === 0) {
@@ -266,56 +343,70 @@ function ScoreForm({
         router.push(eventHref);
         return;
       }
-      onSaved(preset.entryId ?? "", nextOpen);
+      onSaved(preset.entryId ?? "", nextOpen, null);
     });
   }
 
   return (
     <>
       <div className={`${CONTENT_CLS} flex flex-col gap-9 pb-16`}>
-        <ScoreBlock
-          formData={{
-            bestOf: String(preset.bestOf),
-            // Whatever the event carries, `null` included — never defaulted.
-            // A `false` here would print "no-ad" over a format nobody stated.
-            adScoring: preset.adScoring ?? undefined,
-            playerScores: state.playerScores,
-            opponentScores: state.opponentScores,
-            playerTiebreaks: state.playerTiebreaks,
-            opponentTiebreaks: state.opponentTiebreaks,
-            numberOfSets: undefined,
-          }}
-          playerName={preset.playerName}
-          opponentName={state.opponentName}
-          fromLine
-          onScoreChange={onScoreChange}
-          onTiebreakChange={onTiebreakChange}
-          /* The block derives its columns from the cells that have digits in
-             them, so there is no separate count to keep in step. */
-          onSetsChange={() => {}}
-        />
-
-        <div className="flex flex-col gap-2">
-          <span className="eyebrow">Opponent</span>
-          <input
-            value={state.opponentName}
-            onChange={(event) =>
-              setState((prior) => ({
-                ...prior,
-                opponentName: event.target.value,
-              }))
-            }
-            placeholder="Name"
-            // The rule recolours to blue on focus, which IS the visible focus
-            // indicator WCAG 2.4.7 asks for — so the neutral field ring from
-            // `focus.css` would be a second, redundant one stacked on top.
-            data-focus-ring="none"
-            className="max-w-[320px] border-b border-[var(--border-hairline)] bg-transparent pb-1.5 text-[14px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)] focus:border-[var(--blue)]"
+        <div className="flex w-[280px] flex-col gap-2">
+          <span className="eyebrow">Result</span>
+          <ResultChoice
+            value={resultChoice}
+            onChange={setResultChoice}
+            canClear={savedOutcome}
+            disabled={pending}
           />
-          <span className="text-micro">
-            A doubles line takes both names, separated by a slash.
-          </span>
         </div>
+
+        {resultChoice === "played" ? (
+          <>
+            <ScoreBlock
+              formData={{
+                bestOf: String(preset.bestOf),
+                // Whatever the event carries, `null` included — never defaulted.
+                // A `false` here would print "no-ad" over a format nobody stated.
+                adScoring: preset.adScoring ?? undefined,
+                playerScores: state.playerScores,
+                opponentScores: state.opponentScores,
+                playerTiebreaks: state.playerTiebreaks,
+                opponentTiebreaks: state.opponentTiebreaks,
+                numberOfSets: undefined,
+              }}
+              playerName={preset.playerName}
+              opponentName={state.opponentName}
+              fromLine
+              onScoreChange={onScoreChange}
+              onTiebreakChange={onTiebreakChange}
+              /* The block derives its columns from the cells that have digits in
+                 them, so there is no separate count to keep in step. */
+              onSetsChange={() => {}}
+            />
+
+            <div className="flex flex-col gap-2">
+              <span className="eyebrow">Opponent</span>
+              <input
+                value={state.opponentName}
+                onChange={(event) =>
+                  setState((prior) => ({
+                    ...prior,
+                    opponentName: event.target.value,
+                  }))
+                }
+                placeholder="Name"
+                // The rule recolours to blue on focus, which IS the visible focus
+                // indicator WCAG 2.4.7 asks for — so the neutral field ring from
+                // `focus.css` would be a second, redundant one stacked on top.
+                data-focus-ring="none"
+                className="max-w-[320px] border-b border-[var(--border-hairline)] bg-transparent pb-1.5 text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)] focus:border-[var(--blue)]"
+              />
+              <span className="text-micro">
+                A doubles line takes both names, separated by a slash.
+              </span>
+            </div>
+          </>
+        ) : null}
       </div>
 
       {/* Same 64px white-on-hairline footer as the wizard's, so the primary
@@ -341,7 +432,7 @@ function ScoreForm({
                 {stillOpen}
               </span>{" "}
               {stillOpen === 1 ? "line still needs" : "lines still need"} a
-              score
+              result
             </span>
           )}
 
@@ -351,7 +442,7 @@ function ScoreForm({
               falls back to "Save and close", and drawing the ghost too would
               put two identically labelled buttons side by side doing the same
               thing — a choice that isn't one. */}
-          {nextOpen ? (
+          {nextOpen && resultChoice !== "clear" ? (
             <button
               type="button"
               disabled={pending}
@@ -369,9 +460,11 @@ function ScoreForm({
           >
             {pending
               ? "Saving…"
-              : nextOpen
-                ? "Save and next line"
-                : "Save and close"}
+              : resultChoice === "clear"
+                ? "Clear outcome"
+                : nextOpen
+                  ? "Save and next line"
+                  : "Save and close"}
           </button>
         </div>
       </div>

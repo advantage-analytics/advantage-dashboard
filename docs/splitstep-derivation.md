@@ -94,10 +94,10 @@ Confirmed twice: `calculate_match_stats` compares `abs(landing_x)` to 2.74/1.37
 SwingVision in-serve `landing_y` occupies 5.49–11.87 and 11.93–18.29, the two
 service boxes to the centimetre.
 
-**Do not flip y.** `court-visualization.tsx` mirrors far-side landings through
-`(-x, 23.77 - y)`, a 180° rotation, so the render is invariant only under a
-_simultaneous_ x and y flip. Flip y alone and every chart mirrors and the deuce
-and ad service boxes swap — while `match_stats` stays numerically identical.
+**Do not flip y.** `serveSide()` reads the sign of `hittingToward`, which a
+y-only flip inverts, so every serve is attributed to the opposite service box
+and deuce and ad swap wherever they are labelled — while `match_stats` stays
+numerically identical, so nothing fails.
 
 ### A faulted serve takes `shot_number` 0
 

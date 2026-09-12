@@ -183,4 +183,4 @@ The following local sources were inspected for this recommendation. They describ
 - `src/components/dashboard/home/day-zero-home.tsx`: first-match offer and inert preview.
 - `src/components/dashboard/matches/matches-day-zero.tsx`: first-use list composition and permission-aware actions.
 - `src/app/dashboard/matches/page.tsx`: data loading before the returned nested boundary.
-- `.skills/advantage-analytics-design/SKILL.md`: established typography, surfaces, controls, and first-use design authority.
+- `.skills/advantage-analytics-design/SKILL.md` and `reference/empty-and-loading.md`: established typography, surfaces, controls, and first-use design authority.

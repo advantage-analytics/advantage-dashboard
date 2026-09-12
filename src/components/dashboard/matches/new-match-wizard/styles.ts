@@ -2,9 +2,10 @@
  * Shared className strings for the new-match-wizard subtree.
  *
  * Every value below is a literal copy of a token documented in
- * `.skills/advantage-analytics-design/SKILL.md`. The mapping is recorded so
- * future palette work can be done by editing SKILL.md + a single grep, not by
- * hunting nine files.
+ * `.skills/advantage-analytics-design/reference/foundations.md` and the
+ * wizard/task primitives in `reference/primitives.md`. The mapping is
+ * recorded so future palette work can be done by editing those files + a
+ * single grep, not by hunting nine files.
  */
 
 /**

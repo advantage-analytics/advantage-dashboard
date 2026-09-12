@@ -6,8 +6,15 @@ import { cn } from "@/lib/utils";
 import { useListboxNav } from "@/hooks/use-listbox-nav";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { splitNames } from "@/lib/schedule/format";
+import { pairKey } from "@/lib/schedule/lineup-validation";
 import { addProgramPlayer } from "@/components/dashboard/team/roster-actions";
+import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import type { LadderPlayer } from "@/lib/data/roster-server";
+
+export interface RosterSelection {
+  ids: string[];
+  labels: string[];
+}
 
 /**
  * Our side of a lineup court: a field over the roster, not a name to retype.
@@ -19,11 +26,10 @@ import type { LadderPlayer } from "@/lib/data/roster-server";
  * with that court attributed to nobody, with nothing on screen saying so. A
  * coach typing nine names by hand only has to slip once.
  *
- * Picking a row writes the roster's own spelling, which is what makes the
- * match: the id is still recomputed from the label upstream rather than handed
- * over beside it, so the label and the id cannot drift apart. That invariant is
- * the reason this component reports a name and never an id — see
- * `roster-match.ts`, and `editOurLabels`' header.
+ * Singles retain the free-text typeahead. Doubles use two explicit roster
+ * choices and report each stable id beside its display label; this prevents
+ * same-name athletes (and names containing a slash) from being reparsed into
+ * a different identity upstream.
  *
  * ── Everyone, ranked or not ─────────────────────────────────────────────────
  * `seedLineup` seeds S1–S6 from RANKED players only, because roster join order
@@ -79,7 +85,130 @@ function priorSegmentsOf(value: string): string[] {
     .filter(Boolean);
 }
 
-export function LineupNamePicker({
+export function LineupNamePicker(props: {
+  value: string;
+  selectedIds: string[];
+  slot: string;
+  discipline: "singles" | "doubles";
+  ladder: LadderPlayer[];
+  onChange: (value: string) => void;
+  onSelection: (selection: RosterSelection) => void;
+  usedPairSlots?: ReadonlyMap<string, string>;
+  onAddPlayer: (player: LadderPlayer, value: string) => void;
+  onOpenChange: (open: boolean) => void;
+}) {
+  if (props.discipline === "doubles") {
+    return <DoublesRosterPicker {...props} />;
+  }
+  return <RosterTypeahead {...props} />;
+}
+
+function DoublesRosterPicker({
+  selectedIds,
+  slot,
+  ladder,
+  onSelection,
+  usedPairSlots = new Map(),
+}: {
+  selectedIds: string[];
+  slot: string;
+  ladder: LadderPlayer[];
+  onSelection: (selection: RosterSelection) => void;
+  usedPairSlots?: ReadonlyMap<string, string>;
+}) {
+  const ids = [selectedIds[0] ?? "", selectedIds[1] ?? ""];
+  const duplicate = ids[0] !== "" && ids[0] === ids[1];
+  const usedSlots = [...new Set(usedPairSlots.values())].join(", ");
+  const nameCounts = new Map<string, number>();
+  for (const player of ladder) {
+    const name = normalizedPersonName(player.name);
+    nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
+  }
+
+  function optionLabel(player: LadderPlayer): string {
+    const rank =
+      player.ladderPosition !== null ? ` · S${player.ladderPosition}` : "";
+    const identity =
+      (nameCounts.get(normalizedPersonName(player.name)) ?? 0) > 1
+        ? ` · roster ${player.userId.slice(-8)}`
+        : "";
+    return `${player.name}${rank}${identity}`;
+  }
+
+  function optionsFor(index: number): MenuOption<string>[] {
+    const unavailable = ids[1 - index];
+    return [
+      { value: "", label: "Choose player" },
+      ...ladder
+        .filter((player) => {
+          if (player.userId === unavailable) return false;
+          if (!unavailable) return true;
+          return !usedPairSlots.has(pairKey([player.userId, unavailable]));
+        })
+        .map((player) => ({
+          value: player.userId,
+          label: optionLabel(player),
+        })),
+    ];
+  }
+
+  function choose(index: number, userId: string) {
+    // A pair is ordered and dense. Clearing its first half clears the pair;
+    // otherwise an id selected as partner two would silently slide into the
+    // first position when the payload filters empty values.
+    if (index === 0 && userId === "") {
+      onSelection({ ids: [], labels: [] });
+      return;
+    }
+    const next = [...ids];
+    next[index] = userId;
+    const chosen = next
+      .map((id) => ladder.find((player) => player.userId === id))
+      .filter((player): player is LadderPlayer => Boolean(player));
+    onSelection({
+      ids: chosen.map((player) => player.userId),
+      labels: chosen.map((player) => player.name),
+    });
+  }
+
+  return (
+    <div className="grid min-w-0 grid-cols-2 gap-2">
+      {[0, 1].map((index) => (
+        <label key={index} className="min-w-0">
+          <span className="text-micro mb-1 block text-[var(--ink-500)]">
+            Partner {index + 1}
+          </span>
+          <MenuSelect
+            value={ids[index]}
+            label={`Our partner ${index + 1} at ${slot}`}
+            options={optionsFor(index)}
+            onChange={(userId) => choose(index, userId)}
+            disabled={index === 1 && ids[0] === ""}
+            className="w-full"
+            width="trigger"
+            note={
+              ids[1 - index]
+                ? "The partner already selected for this line is unavailable."
+                : undefined
+            }
+          />
+        </label>
+      ))}
+      <p
+        className="text-micro col-span-2 text-[var(--ink-500)]"
+        role={duplicate ? "alert" : undefined}
+      >
+        {duplicate
+          ? "Choose two distinct athletes for this doubles line."
+          : usedPairSlots.size > 0
+            ? `The partner already selected here is unavailable. The same two-player pairing, in either order, is already assigned on ${usedSlots}.`
+            : "Each partner is linked to their roster identity. A selected partner is unavailable in the other list."}
+      </p>
+    </div>
+  );
+}
+
+function RosterTypeahead({
   value,
   slot,
   discipline,
@@ -95,7 +224,9 @@ export function LineupNamePicker({
   discipline: "singles" | "doubles";
   /** The whole roster, ranked and unranked. */
   ladder: LadderPlayer[];
+  selectedIds: string[];
   onChange: (value: string) => void;
+  onSelection: (selection: RosterSelection) => void;
   /**
    * A player who did not exist until just now.
    *

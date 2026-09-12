@@ -96,6 +96,6 @@ job is still running fails in a way the UI reports as a vendor error.
 
 ## Related
 
-- `docs/r2-and-webhook-overview.md` — current state of the pipeline, SAS URLs, quota, deletion
+- `docs/video-pipeline-overview.md` — current state of the pipeline, SAS URLs, quota, deletion
 - `src/lib/services/splitstep/video-url/azure-sas.ts` — how the app signs vendor URLs
 - `@azure/storage-blob` is a `serverExternalPackage`; it must never reach a client bundle

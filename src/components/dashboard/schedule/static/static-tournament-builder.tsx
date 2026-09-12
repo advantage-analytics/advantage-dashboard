@@ -2,9 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown, LockKeyhole } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DateField } from "@/components/ui/date-field";
+import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import {
   createTournament,
   updateTournament,
@@ -628,6 +629,15 @@ export function TournamentFieldStep({
 }) {
   return (
     <div>
+      {roster.length > 0 ? (
+        <div className="grid grid-cols-[32px_1fr_96px_220px_88px] items-end gap-3 border-b border-[var(--border-hairline)] pb-2">
+          <span aria-hidden="true" />
+          <span className="eyebrow">Athlete</span>
+          <span className="eyebrow">Competing</span>
+          <span className="eyebrow">Draw</span>
+          <span className="eyebrow">Seed</span>
+        </div>
+      ) : null}
       <div className="flex flex-col">
         {roster.map((player, index) => (
           <FieldRow
@@ -654,25 +664,26 @@ export function TournamentFieldStep({
       ) : null}
 
       <p className="text-micro mt-2.5" style={{ color: "var(--ink-500)" }}>
-        An entry is a player in a draw — where they start, not what they&#39;ll
-        play.
+        Include each athlete who is competing, then choose where they enter the
+        singles draw. Seeds are optional.
       </p>
     </div>
   );
 }
 
 /**
- * One roster line: their ladder spot, their name, their draw, and their seed.
+ * One roster line: their ladder spot, identity, inclusion, draw, and seed.
  *
- * 52px, hairline-separated. The name is NOT editable, which is the deleted
- * entry list's rule and the reason it exists: retyping a name over an entry
- * that already carries a roster id is how a match gets attributed to the wrong
- * athlete. A correction is a different row's draw, never an edit that silently
- * keeps the old id.
+ * At least 58px, hairline-separated. The name is NOT editable, which is the
+ * deleted entry list's rule and the reason it exists: retyping a name over an
+ * entry that already carries a roster id is how a match gets attributed to the
+ * wrong athlete. A correction is a different row's draw, never an edit that
+ * silently keeps the old id.
  *
  * A settled row — one whose entry has a match or a forfeit — is drawn in place
- * with nothing on it a save could move: the draw select is disabled beside a
- * `Played` micro, and the seed is a label rather than a field. See
+ * with nothing on it a save could move: its inclusion control and draw menu
+ * are disabled beside a `Played`/`Forfeited` micro, and the seed is a label
+ * rather than a field. See
  * `FieldEntry.locked`.
  */
 function FieldRow({
@@ -711,7 +722,7 @@ function FieldRow({
   return (
     <div
       className={cn(
-        "grid h-[52px] grid-cols-[32px_1fr_132px_88px] items-center gap-3",
+        "grid min-h-[58px] grid-cols-[32px_1fr_96px_220px_88px] items-center gap-3 py-1",
         last ? "" : "border-b border-[var(--border-hairline)]",
       )}
     >
@@ -731,43 +742,56 @@ function FieldRow({
         {name}
       </span>
 
-      {/* The row's whole control surface: a draw enters the player, `—` takes
-          them back out. `appearance-none` is what stops the platform drawing a
-          chevron the artboard does not draw here.
-
-          A settled entry's select is disabled rather than hidden, so the draw
-          it is in stays legible, and the micro beside it says why the row is
-          closed. `—` is unreachable there, which is the point: a played entry
-          cannot be taken out of the field, and `planEntryChanges` would refuse
-          the whole save if it tried. */}
-      <span className="flex min-w-0 items-center gap-1.5">
-        <select
-          aria-label={`Draw for ${name}`}
-          value={entry?.draw ?? ""}
-          disabled={locked !== undefined}
-          onChange={(event) => onDraw(event.target.value)}
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={entry !== undefined}
+        aria-label={`${entry ? "Exclude" : "Include"} ${name} from tournament`}
+        disabled={locked !== undefined}
+        onClick={() => (entry ? onDraw("") : onDraw(MAIN_DRAW))}
+        className="flex w-fit cursor-pointer items-center gap-2 text-[12px] text-[var(--ink-600)] disabled:cursor-default disabled:opacity-70"
+      >
+        <span
+          aria-hidden="true"
           className={cn(
-            "min-w-0 flex-1 appearance-none bg-transparent text-[12px] outline-none",
-            locked ? "cursor-default" : "cursor-pointer",
-            entry ? "text-[var(--ink-600)]" : "text-[var(--ink-400)]",
+            "flex size-4 items-center justify-center rounded-[4px] border",
+            entry
+              ? "border-[var(--blue)] bg-[var(--blue)] text-white"
+              : "border-[var(--ink-300)] bg-transparent",
           )}
         >
-          <option value="">—</option>
-          {DRAWS.map((draw) => (
-            <option key={draw} value={draw}>
-              {draw}
-            </option>
-          ))}
-        </select>
-        {locked ? (
-          <span
-            className="text-micro shrink-0"
-            style={{ color: "var(--ink-500)" }}
-          >
-            {locked === "forfeited" ? "Forfeited" : "Played"}
-          </span>
-        ) : null}
-      </span>
+          {entry ? <Check className="size-3" strokeWidth={2.5} /> : null}
+        </span>
+        <span>{entry ? "Included" : "Include"}</span>
+      </button>
+
+      {entry ? (
+        <span className="flex min-w-0 items-center gap-1.5">
+          <MenuSelect
+            label={`Draw for ${name}`}
+            value={entry.draw}
+            options={DRAW_MENU_OPTIONS}
+            onChange={(draw) => onDraw(draw)}
+            disabled={locked !== undefined}
+            className="w-full"
+            width={260}
+          />
+          {locked ? (
+            <span className="text-micro flex shrink-0 items-center gap-1 text-[var(--ink-500)]">
+              <LockKeyhole
+                className="size-3.5"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              {locked === "forfeited" ? "Forfeited" : "Played"}
+            </span>
+          ) : null}
+        </span>
+      ) : (
+        <span className="text-[11px] text-[var(--ink-400)]">
+          Choose Include first
+        </span>
+      )}
 
       {entry === undefined ? (
         // Nobody to hold a seed. Drawn rather than dropped so the column does
@@ -938,6 +962,23 @@ const QUALIFYING = "Qualifying";
  * at creation would let a weekend be described before it happened.
  */
 const DRAWS: readonly string[] = [MAIN_DRAW, QUALIFYING];
+
+/**
+ * The two supported stored values, with the decision each one represents.
+ * `MenuSelect` can carry this second line; a native option cannot.
+ */
+const DRAW_MENU_OPTIONS: readonly MenuOption<string>[] = [
+  {
+    value: MAIN_DRAW,
+    label: MAIN_DRAW,
+    description: "The athlete starts in the tournament's main bracket.",
+  },
+  {
+    value: QUALIFYING,
+    label: QUALIFYING,
+    description: "The athlete must qualify before entering the main bracket.",
+  },
+];
 
 /**
  * One cell of the four-up row: `padding:6px 0 7px` under a hairline.

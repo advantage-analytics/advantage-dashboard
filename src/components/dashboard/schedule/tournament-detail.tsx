@@ -22,14 +22,16 @@ import { TeamTotalsWidget } from "@/components/dashboard/schedule/team-totals-wi
 import { runRecord } from "@/components/dashboard/schedule/run-strip";
 import { lineCoverageFrom, matchState } from "@/lib/schedule/entry-state";
 import {
+  drawOfRound,
   formatEventSpanWithYear,
+  roundRank,
   siteTitle,
   surfaceTitle,
 } from "@/lib/schedule/format";
-import { groupByDraw, runFinish } from "@/lib/schedule/tournament-run";
+import { runFinish } from "@/lib/schedule/tournament-run";
 import { advButton } from "@/lib/ui/adv-button";
 import type { EventTeamTotals } from "@/lib/data/event-team-totals";
-import type { EventDetail, EventEntry } from "@/lib/schedule/types";
+import type { EntryMatch, EventDetail, EventEntry } from "@/lib/schedule/types";
 
 /**
  * The tournament's five columns, stated once and handed to both `TableCard`
@@ -191,7 +193,7 @@ export function TournamentDetail({
  * heading itself is the separation.
  */
 function EntryRun({ entry, canEdit }: { entry: EventEntry; canEdit: boolean }) {
-  const segments = groupByDraw(entry);
+  const segments = groupResultRowsByDraw(entry);
   const segmented = segments.length > 1;
 
   return (
@@ -208,13 +210,13 @@ function EntryRun({ entry, canEdit }: { entry: EventEntry; canEdit: boolean }) {
               <span className="eyebrow-sm">{segment.draw}</span>
             </div>
           ) : null}
-          {segment.matches.map((match) => (
+          {segment.rows.map(({ round, match, key }) => (
             <LineRow
-              key={match.id}
+              key={key}
               entry={entry}
               match={match}
-              label={match.round ?? "—"}
-              round={match.round}
+              label={round ?? "—"}
+              round={round}
               canEdit={canEdit}
               columns={COLUMNS}
               showSchool={false}
@@ -228,6 +230,63 @@ function EntryRun({ entry, canEdit }: { entry: EventEntry; canEdit: boolean }) {
       ))}
     </>
   );
+}
+
+/**
+ * A tournament run's rendered rows, including schedule-only outcomes.
+ *
+ * `groupByDraw` deliberately answers a match-only domain question used by the
+ * run summary. This adapter is narrower: it exists only for the event table,
+ * where an outcome without a `matches` row still needs a row of its own.
+ *
+ * Match rounds are seeded first so the existing row survives unchanged when
+ * an inconsistent legacy payload contains both a match and an outcome at the
+ * same round. `LineRow` then applies the domain's outcome precedence while
+ * retaining that match's opponent label. Outcome-only rounds append to the
+ * same ladder and the stable rank sort restores the loader's established
+ * tournament order before draw grouping.
+ */
+function groupResultRowsByDraw(entry: EventEntry) {
+  const rows: {
+    round: string | null;
+    match: EntryMatch | null;
+    key: string;
+    order: number;
+  }[] = entry.matches.map((match, index) => ({
+    round: match.round,
+    match,
+    key: `match-${match.id}`,
+    order: index,
+  }));
+
+  for (const outcome of entry.outcomes ?? []) {
+    if (rows.some((row) => row.round === outcome.round)) continue;
+    rows.push({
+      round: outcome.round,
+      match: null,
+      key: `outcome-${outcome.id}`,
+      order: rows.length,
+    });
+  }
+
+  rows.sort(
+    (a, b) => roundRank(a.round) - roundRank(b.round) || a.order - b.order,
+  );
+
+  const home = entry.draw ?? "Main draw";
+  const order: string[] = [];
+  const buckets = new Map<string, typeof rows>();
+
+  for (const row of rows) {
+    const draw = drawOfRound(row.round) ?? home;
+    if (!buckets.has(draw)) {
+      buckets.set(draw, []);
+      order.push(draw);
+    }
+    buckets.get(draw)!.push(row);
+  }
+
+  return order.map((draw) => ({ draw, rows: buckets.get(draw)! }));
 }
 
 /**
@@ -329,17 +388,12 @@ function SchoolsFaced({ entries }: { entries: EventEntry[] }) {
             const className =
               "flex h-[36px] items-center justify-between gap-3 text-[12px]";
 
-            // A link only where the event actually resolved a program. A row
-            // that looks clickable and lands nowhere is worse than a plain one.
-            return row.programId ? (
-              <Link
-                key={school}
-                href={`/dashboard/opponents/${row.programId}`}
-                className={className}
-              >
-                {body}
-              </Link>
-            ) : (
+            // Plain rows. These linked to the opponent detail page, which was
+            // deleted with the rest of the unfinished Opponents UI; a row that
+            // looks clickable and lands nowhere is worse than a plain one.
+            // Restore the link when that page ships — `row.programId` is still
+            // resolved above and is what it needs.
+            return (
               <div key={school} className={className}>
                 {body}
               </div>

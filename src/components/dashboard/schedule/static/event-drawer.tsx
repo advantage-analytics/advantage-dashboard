@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import {
-  ArrowUpRight,
   Calendar,
   ChevronDown,
   ChevronRight,
@@ -21,18 +20,28 @@ import {
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
+import { EventActionsMenu } from "@/components/dashboard/schedule/static/event-actions-menu";
 import { advButton } from "@/lib/ui/adv-button";
 import { scoreSetsFrom } from "@/lib/ui/score-format";
-import { dualScore, lineWon, matchWon } from "@/lib/schedule/entry-state";
+import {
+  dualScore,
+  entryPlayed,
+  lineWon,
+  resolveEntryResult,
+  resultState,
+  resultWon,
+} from "@/lib/schedule/entry-state";
 import { LINE_STATUS } from "@/lib/schedule/line-status";
 import {
   formatEventDatesLong,
+  roundRank,
   siteTitle,
   surfaceTitle,
 } from "@/lib/schedule/format";
 import { cn } from "@/lib/utils";
 import type { OpponentProgram } from "@/lib/data/schedule-server";
 import type { EntryMatch, EventDetail, EventEntry } from "@/lib/schedule/types";
+import type { ScheduleCapabilities } from "@/lib/workspace/types";
 
 /** The drawer's `role="dialog"` carries this so the window key handler can tell it from a modal. */
 export const DRAWER_ATTR = "data-schedule-drawer";
@@ -45,14 +54,15 @@ const ICON_BUTTON =
  * `Tc2` — the selected event's detail, as a dismissable right rail.
  *
  * Same shell as the Roster's drawer: 340px, the float shadow, a 44px header
- * with ‹ › event stepping, "Event n / N", "Open event ↗" as the peek-to-page
- * bridge, and a close that also answers Esc. Body, top to bottom: program
+ * with ‹ › event stepping, "Event n / N", the staff-only overflow menu, and
+ * a close that also answers Esc. Body, top to bottom: program
  * mark and conference; one nowrap glyph row — date, venue, court surface; the
  * score row, where the nine ticks ARE the score (singles, then doubles) with
  * the figures confirming at the left, winner's number in ink-900; then every
  * line — played lines with their score, a line awaiting its result, an unset
  * line as a blue "+ Set line"; and "Enter results" full width while lines are
- * still open.
+ * still open. A player instead gets one full-width ghost "Open dual" or
+ * "Open tournament" footer and no write menu.
  *
  * ── Row-click law, the other half ──────────────────────────────────────────
  * Lineup lines GAIN the chevron the event rows lost: each is a match and opens
@@ -64,8 +74,9 @@ const ICON_BUTTON =
  * The legend gives the tournament its mark (the DS glyph, "no program to
  * show") and nothing more. The body keeps the dual's shape: the host under
  * the name where the conference would be, the same glyph row, and one row per
- * entry — its last round in the slot column, the last match's score and
- * outcome beside the name. The score row is a dual's and is not drawn.
+ * entry — its latest recorded round in the slot column, with either the played
+ * score or the saved non-played kind/side beside the name. The score row is a
+ * dual's and is not drawn.
  *
  * ── Nothing here fetches ───────────────────────────────────────────────────
  * It renders the `EventDetail` the page already holds, so stepping through
@@ -111,7 +122,8 @@ export function EventDrawer({
   closing,
   autoFocus,
   onClosed,
-  canEdit,
+  onDeleted,
+  capabilities,
 }: {
   detail: EventDetail;
   /** The opponent's program record, where the dual resolved one. */
@@ -126,8 +138,10 @@ export function EventDrawer({
   /** Opened from the keyboard — take focus so `Tab` continues inside. */
   autoFocus: boolean;
   onClosed: () => void;
-  /** `isProgramStaff` upstream — gates every write the rail points at. */
-  canEdit: boolean;
+  /** Remove the successful server deletion from selection and the visible list. */
+  onDeleted: () => void;
+  /** Named Schedule actions, derived once from the active workspace. */
+  capabilities: ScheduleCapabilities;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const { event, entries } = detail;
@@ -135,15 +149,16 @@ export function EventDrawer({
   const singles = entries.filter((entry) => entry.discipline === "singles");
   const doubles = entries.filter((entry) => entry.discipline === "doubles");
   const eventHref = `/dashboard/team/schedule/${event.id}`;
+  const viewerOnly =
+    capabilities.canView && !capabilities.canEdit && !capabilities.canScore;
 
-  // "While lines are open": a line that is neither forfeited nor decided. A
-  // tournament stays open — rounds get added as they are played.
+  // "While lines are open": a line with neither a decided played score nor a
+  // non-played outcome. `entryPlayed` is the shared answer, so recording the
+  // new outcome row closes a dual just as a legacy forfeit did, and clearing
+  // it opens the line again. A tournament stays open — rounds get added as
+  // they are played.
   const linesOpen = isDual
-    ? entries.some(
-        (entry) =>
-          entry.forfeit === null &&
-          !entry.matches.some((match) => matchWon(match) !== null),
-      )
+    ? entries.some((entry) => !entryPlayed(entry))
     : true;
 
   const subline = isDual ? (opponent?.conference ?? null) : event.host;
@@ -152,6 +167,15 @@ export function EventDrawer({
   const venue = isDual
     ? (event.host ?? siteTitle(event.site))
     : siteTitle(event.site);
+  const footerAction = viewerOnly ? (
+    <Link href={eventHref} className={cn(advButton("ghost", "md"), "w-full")}>
+      {isDual ? "Open dual" : "Open tournament"}
+    </Link>
+  ) : capabilities.canScore && linesOpen ? (
+    <Link href={eventHref} className={cn(advButton("primary", "md"), "w-full")}>
+      Enter results
+    </Link>
+  ) : null;
 
   useEffect(() => {
     if (autoFocus) panelRef.current?.focus({ preventScroll: true });
@@ -228,19 +252,14 @@ export function EventDrawer({
 
             <div className="min-w-2 flex-1" />
 
-            {/* The doc's own anchor rule — blue at rest, ink-900 on hover — with
-                the wash the artboard gives every 28px control in this bar. */}
-            <Link
-              href={eventHref}
-              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[var(--radius-element)] px-2 text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-            >
-              Open event
-              <ArrowUpRight
-                className="size-3"
-                strokeWidth={1.5}
-                aria-hidden="true"
+            {capabilities.canEdit ? (
+              <EventActionsMenu
+                eventId={event.id}
+                eventName={event.name}
+                canDelete={capabilities.canDelete}
+                onDeleted={onDeleted}
               />
-            </Link>
+            ) : null}
 
             <span
               aria-hidden="true"
@@ -260,7 +279,13 @@ export function EventDrawer({
           </div>
         </TooltipProvider>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6 pb-[22px]">
+        <div
+          data-schedule-drawer-body=""
+          className={cn(
+            "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6",
+            footerAction ? "pb-4" : "pb-[22px]",
+          )}
+        >
           <div className="flex shrink-0 items-center gap-3.5">
             <EventMark kind={event.kind} name={event.name} size={48} />
             <div className="flex min-w-0 flex-col gap-1">
@@ -320,7 +345,7 @@ export function EventDrawer({
                     key={entry.id}
                     entry={entry}
                     eventHref={eventHref}
-                    canEdit={canEdit}
+                    canEdit={capabilities.canEdit}
                   />
                 ))}
                 {/* A dual with no lines at all: one row where the lineup would
@@ -330,7 +355,7 @@ export function EventDrawer({
                   <SetLineRow
                     slot="S1"
                     eventHref={eventHref}
-                    canEdit={canEdit}
+                    canEdit={capabilities.canEdit}
                     label="Set lineup"
                   />
                 ) : null}
@@ -342,7 +367,7 @@ export function EventDrawer({
                       key={entry.id}
                       entry={entry}
                       eventHref={eventHref}
-                      canEdit={canEdit}
+                      canEdit={capabilities.canEdit}
                     />
                   ))}
                 </Section>
@@ -384,18 +409,16 @@ export function EventDrawer({
               ) : null}
             </>
           )}
-
-          <div className="min-h-0 flex-1" />
-
-          {canEdit && linesOpen ? (
-            <Link
-              href={eventHref}
-              className={cn(advButton("primary", "md"), "w-full shrink-0")}
-            >
-              Enter results
-            </Link>
-          ) : null}
         </div>
+
+        {footerAction ? (
+          <div
+            data-schedule-drawer-footer=""
+            className="shrink-0 bg-[var(--surface-card)] px-[22px] pb-[22px]"
+          >
+            {footerAction}
+          </div>
+        ) : null}
       </div>
     </aside>
   );
@@ -504,8 +527,8 @@ const ROW_LINK = cn(
  * One line of a dual, in the state the data puts it in:
  *
  *   played      → score, outcome glyph, chevron; the row opens the match page
- *   awaiting    → players named, no match yet: "Awaiting result"
- *   forfeited   → the shared vocabulary's chip, spanning the score columns
+ *   awaiting    → players named, no result yet: "Awaiting result"
+ *   non-played  → kind chip + side-derived result glyph, with no report link
  *   unset       → nobody named: the blue "+ Set line", pointing at the event
  *
  * Names join with the artboard's middle dot — "Lee · Chen" — rather than the
@@ -520,30 +543,21 @@ function DualLine({
   eventHref: string;
   canEdit: boolean;
 }) {
-  const match = entry.matches[0] ?? null;
   const name = entry.playerLabels.join(" · ");
+  const result = resolveEntryResult(entry, null);
 
-  if (entry.forfeit !== null) {
-    const status = LINE_STATUS.forfeited!;
-    return (
-      <div className={ROW}>
-        <Slot>{entry.slot}</Slot>
-        <span
-          className="truncate text-[12px]"
-          style={{ color: "var(--ink-700)" }}
-        >
-          {name || "—"}
-        </span>
-        <StatusChip tone={status.tone} className="col-span-3 justify-self-end">
-          {status.label}
-        </StatusChip>
-      </div>
-    );
+  if (result.kind === "non-played") {
+    return <OutcomeLine slot={entry.slot} name={name} result={result} />;
   }
 
-  if (match) {
+  if (result.kind === "played") {
     return (
-      <PlayedLine slot={entry.slot} name={name} entry={entry} match={match} />
+      <PlayedLine
+        slot={entry.slot}
+        name={name}
+        entry={entry}
+        match={result.match}
+      />
     );
   }
 
@@ -579,15 +593,15 @@ function DualLine({
 }
 
 /**
- * One tournament entry: its last round in the slot column, the last match's
- * score and outcome beside the name. An entry with no match yet is awaiting
- * its first result.
+ * One tournament entry: its latest recorded round in the slot column, whether
+ * that result is a played match or a schedule-only outcome. An entry with no
+ * result yet is awaiting its first one.
  */
 function TournamentLine({ entry }: { entry: EventEntry }) {
-  const last = entry.matches[entry.matches.length - 1] ?? null;
+  const latest = latestTournamentResult(entry);
   const name = entry.playerLabels.join(" · ");
 
-  if (!last) {
+  if (!latest) {
     return (
       <div className={ROW}>
         <Slot>—</Slot>
@@ -608,13 +622,87 @@ function TournamentLine({ entry }: { entry: EventEntry }) {
     );
   }
 
+  const result = resolveEntryResult(entry, latest.round);
+  if (result.kind === "non-played") {
+    return (
+      <OutcomeLine slot={latest.round ?? "—"} name={name} result={result} />
+    );
+  }
+  if (result.kind === "played") {
+    return (
+      <PlayedLine
+        slot={latest.round ?? "—"}
+        name={name}
+        entry={entry}
+        match={result.match}
+      />
+    );
+  }
+
+  // The candidate list and the shared resolver read the same entry. This is
+  // only a defensive fallback for malformed input that changes between them.
+  return null;
+}
+
+/**
+ * The last result in the tournament ladder, not merely the last match row.
+ * Outcomes seed rounds that have no `matches` record; a match seeds first at a
+ * conflicting round so the row keeps its opponent context, while
+ * `resolveEntryResult` still gives the schedule outcome presentation
+ * precedence. This is the drawer-sized counterpart to the full detail page's
+ * round grouping, using the same shared `roundRank` order.
+ */
+function latestTournamentResult(
+  entry: EventEntry,
+): { round: string | null; order: number } | null {
+  const rows = entry.matches.map((match, index) => ({
+    round: match.round,
+    order: index,
+  }));
+
+  for (const outcome of entry.outcomes ?? []) {
+    if (rows.some((row) => row.round === outcome.round)) continue;
+    rows.push({ round: outcome.round, order: rows.length });
+  }
+
+  rows.sort(
+    (a, b) => roundRank(a.round) - roundRank(b.round) || a.order - b.order,
+  );
+  return rows.at(-1) ?? null;
+}
+
+/** A decided result without a played match: kind in words, side in the mark. */
+function OutcomeLine({
+  slot,
+  name,
+  result,
+}: {
+  slot: string | null;
+  name: string;
+  result: Extract<
+    ReturnType<typeof resolveEntryResult>,
+    { kind: "non-played" }
+  >;
+}) {
+  const state = resultState(result);
+  const status = LINE_STATUS[state]!;
+  const won = resultWon(result);
+
   return (
-    <PlayedLine
-      slot={last.round ?? "—"}
-      name={name}
-      entry={entry}
-      match={last}
-    />
+    <div className={ROW}>
+      <Slot>{slot}</Slot>
+      <span
+        className="truncate text-[12px]"
+        style={{ color: "var(--ink-900)" }}
+      >
+        {name || "—"}
+      </span>
+      <StatusChip tone={status.tone} className="justify-self-end">
+        {status.label}
+      </StatusChip>
+      {won === null ? <span /> : <ResultMark won={won} />}
+      <span />
+    </div>
   );
 }
 

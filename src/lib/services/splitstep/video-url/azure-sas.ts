@@ -222,7 +222,7 @@ const PLAYBACK_SAS_TTL_SECONDS = 30 * 60;
  * hold a multi-gigabyte body for the length of the watch, and proxying breaks
  * HTTP range requests, which is what makes seeking work at all. The trade is
  * Azure egress at roughly $0.087/GB — real, and the reason
- * `r2-and-webhook-overview.md` says to revisit R2 when playback ships.
+ * `video-pipeline-overview.md` says to revisit this when playback ships.
  */
 export function mintPlaybackSas(params: {
   blobName: string;

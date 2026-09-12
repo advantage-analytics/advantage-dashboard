@@ -30,6 +30,7 @@ import { SCHEDULE_COLUMNS } from "@/components/dashboard/schedule/static/schedul
 import { LINE_STATUS } from "@/lib/schedule/line-status";
 import { formatOpponentRecord } from "@/lib/schedule/opponent-history";
 import { divisionLabel, teamLabel } from "@/lib/data/programs-server";
+import { LINE_PLAY_OPTIONS } from "@/components/dashboard/schedule/static/dual-build-step";
 
 /**
  * The copy record for the four rebuilt schedule routes — what it guards, and
@@ -112,6 +113,8 @@ const SCREENS = path.join(
 const UI = path.join(__dirname, "..", "src", "components", "ui");
 /** `ResultMark`, the one outcome register, sits a level up from the screens. */
 const DASHBOARD = path.join(__dirname, "..", "src", "components", "dashboard");
+/** The Matches zero state retains the supported SwingVision file-import entry point. */
+const MATCHES = path.join(DASHBOARD, "matches");
 
 /**
  * One screen's source, reduced to something a designed sentence survives in.
@@ -185,10 +188,12 @@ test.describe("/dashboard/team/schedule · Tc2 Tc2c", () => {
   // new artboards; each retired string carries the reason.
   const schedule =
     screen("static-schedule.tsx") + screen("../../team/list-page-heading.tsx");
+  const matchesEmpty = screen("empty-matches.tsx", MATCHES);
   const dayZero = screen("schedule-day-zero.tsx");
   const table =
     screen("schedule-table.tsx") + screen("schedule-table-layout.ts");
   const drawer = screen("event-drawer.tsx");
+  const drawerActions = screen("event-actions-menu.tsx");
   const emptyMark = screen("empty-mark.tsx", UI);
   const resultMark = screen("result-mark.tsx", DASHBOARD);
 
@@ -247,7 +252,12 @@ test.describe("/dashboard/team/schedule · Tc2 Tc2c", () => {
     drawn(schedule, "static-schedule.tsx", " season");
     drawn(schedule, "static-schedule.tsx", '"event" : "events"');
     drawn(schedule, "static-schedule.tsx", " upcoming");
-    drawn(schedule, "static-schedule.tsx", "Import");
+    expect(
+      schedule.includes("Import"),
+      "static-schedule.tsx must not restore the nonworking Schedule Import action",
+    ).toBe(false);
+    drawn(matchesEmpty, "empty-matches.tsx", "Import from SwingVision");
+    drawn(matchesEmpty, "empty-matches.tsx", 'href="/dashboard/matches/new"');
     drawn(schedule, "static-schedule.tsx", "New event");
     // The three lifecycle pills. No counts inside them (Data Table law 7) —
     // the summary line carries the season's numbers.
@@ -374,12 +384,14 @@ test.describe("/dashboard/team/schedule · Tc2 Tc2c", () => {
   });
 
   test("the drawer's own words", () => {
-    // The 44px header: ‹ › stepping, "Event 2 / 8", "Open event ↗", close.
+    // The 44px header: ‹ › stepping, "Event 2 / 8", overflow actions, close.
     drawn(drawer, "event-drawer.tsx", "Previous event");
     drawn(drawer, "event-drawer.tsx", "Next event");
     drawn(drawer, "event-drawer.tsx", "Event");
     drawn(drawer, "event-drawer.tsx", "{index + 1} / {total}");
-    drawn(drawer, "event-drawer.tsx", "Open event");
+    drawn(drawerActions, "event-actions-menu.tsx", "Event actions");
+    drawn(drawerActions, "event-actions-menu.tsx", "Edit event");
+    drawn(drawerActions, "event-actions-menu.tsx", "Delete event");
     drawn(drawer, "event-drawer.tsx", "Close");
     drawn(drawer, "event-drawer.tsx", "Esc");
     drawn(drawer, "event-drawer.tsx", "Singles");
@@ -789,10 +801,13 @@ test.describe("/dashboard/team/schedule/new/dual · 2c 2b 2d 2e", () => {
     );
     drawn(step2, "dual-build-step.tsx", "Add name");
     drawn(step2, "dual-build-step.tsx", "Add pair");
-    // The one string a forfeited builder line prints. Em dash, then the words.
-    drawn(step2, "dual-build-step.tsx", "— no available player");
-    drawn(step2, "dual-build-step.tsx", "Forfeited");
-    drawn(step2, "dual-build-step.tsx", "Forfeit");
+    // Explicit draft choices never describe an unanswered line as played.
+    drawn(step2, "dual-build-step.tsx", "Normal play");
+    expect(LINE_PLAY_OPTIONS.map((option) => option.label)).toEqual([
+      "Normal play",
+      "We lost — our side forfeited",
+      "We won — opponent forfeited",
+    ]);
     drawn(
       step2,
       "dual-build-step.tsx",
@@ -993,7 +1008,7 @@ test.describe("/dashboard/team/schedule/new/tournament · 3c", () => {
     drawn(
       builder,
       file,
-      "An entry is a player in a draw — where they start, not what they'll play.",
+      "Include each athlete who is competing, then choose where they enter the singles draw. Seeds are optional.",
     );
     // RETIRED 'Cancel' — `WizardShell`'s, like the dual flow's. The shell is
     //   handed a `cancelHref` on step one and a `back` on step two, and decides

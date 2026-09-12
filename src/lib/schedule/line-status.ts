@@ -36,4 +36,6 @@ export const LINE_STATUS: Partial<Record<EntryState, LineStatus>> = {
   waiting: { label: "In line", tone: "blue" },
   failed: { label: "Analysis failed", tone: "loss" },
   forfeited: { label: "Forfeited", tone: "neutral" },
+  defaulted: { label: "Defaulted", tone: "neutral" },
+  withdrawn: { label: "Withdrawn", tone: "neutral" },
 };

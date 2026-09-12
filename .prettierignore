@@ -24,11 +24,6 @@ work/
 # Vendored agent-skill tooling: largely bundled/minified browser scripts.
 .agents/
 
-# Retired deployment. `workers/video-access` belongs to the Cloudflare R2 path
-# that Azure Blob replaced; it is kept only until the R2 code is deleted.
-# Reformatting code on its way out is pure diff noise.
-workers/
-
 # SQL migrations — EXCLUDED ON PURPOSE, not by oversight.
 #
 # Two independent reasons, either sufficient:

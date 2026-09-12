@@ -61,7 +61,19 @@ how an existing program table does it rather than inventing a new shape.
 `20260219130601_secure_match_stats_view.sql` because that was learned the hard
 way. Read it before creating or altering any view, and match its approach.
 
-## 4. Apply it
+## 4. Run the mechanical check
+
+```bash
+bash .claude/skills/create-migration/check.sh
+```
+
+Catches the filename stamp, ordering, RLS-without-policy and edit-to-an-
+already-committed-migration mistakes before you spend an `apply_migration`
+call on one. It is not a substitute for `get_advisors` below — a clean run
+here only means the mechanical rules hold, not that the predicate is correct
+or that a view is safe.
+
+## 5. Apply it
 
 ```
 mcp__supabase__apply_migration
@@ -77,20 +89,18 @@ mcp__supabase__get_advisors  -- catches missing RLS and other security gaps
 `get_advisors` is the check that catches what you forgot. Run it every time,
 and report what it says.
 
-## 5. Downstream
+## 6. Downstream
 
 A schema change usually has code consequences. Before calling it done:
 
 - Row types are `Db`-prefixed in `src/lib/data/types.ts` — update them.
 - `mcp__supabase__generate_typescript_types` if the generated types are used.
-- If you changed anything the stats read, check both
-  `src/lib/data/statistics-server.ts` and `statistics-client.ts`. They produce
-  the same shape from different sources and must be changed together.
+- If you changed anything the match statistics read, check
+  `src/lib/data/match-detail-server.ts` and `performance-server.ts`.
 
 ## Checklist before reporting done
 
-- [ ] Filename stamp sorts after every existing migration
-- [ ] RLS enabled + policy, in this same file, for any new table
+- [ ] `check.sh` run clean (filename, ordering, RLS + policy, no edited migration)
 - [ ] Views checked for cross-account leakage
 - [ ] Applied, and verified with a real query
 - [ ] `get_advisors` run and its output reported
