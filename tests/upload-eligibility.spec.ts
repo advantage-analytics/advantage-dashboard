@@ -88,7 +88,7 @@ const ROSTER: readonly RosterIdentity[] = [AVA, BEN, CAM];
 const pick = (playerId: string) => ({ kind: "roster" as const, playerId });
 
 function refused(
-  result: UploadEligibility,
+  result: UploadEligibility | WizardEligibility,
 ): Extract<UploadEligibility, { ok: false }> {
   expect(result.ok).toBe(false);
   if (result.ok) throw new Error("unreachable");
@@ -780,5 +780,821 @@ test.describe("separate from the video spending policy", () => {
       }),
     );
     expect(Object.keys(result).sort()).toEqual(["athlete", "ok"]);
+  });
+});
+
+// ─── 6. The wizard's wiring (T12) ─────────────────────────────────────────────
+//
+// `subject-eligibility.ts` is how `useUploadMatchWizard` puts its own state in
+// front of this decision and reads the answer back. Pure, so the arrangements
+// the task names — an owner's own profile, a pending team, a subject from the
+// wrong workspace, an archived or merged profile, a stale preset, a resumed
+// draft with no subject — are fixtures here rather than a browser session.
+// The property every case below shares: no path resolves to the viewer's
+// login in a team workspace, whatever is missing.
+
+import {
+  draftResumeStep,
+  eligibleRosterOptions,
+  identityAthleteFor,
+  rosterSubjectOrNull,
+  wizardAthleteChoice,
+  wizardUploadEligibility,
+  type MatchSubject,
+  type WizardEligibility,
+} from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
+import { buildImportIdentityConfirmationKey } from "@/components/dashboard/matches/new-match-wizard/validation";
+import type { EventPreset } from "@/components/dashboard/matches/new-match-wizard/types";
+import type { RosterFullRow } from "@/lib/data/roster-shared";
+
+const OWNER = "u-owner";
+const OWN_PROFILE = {
+  id: "pp-owner",
+  program_id: "p-westfield",
+  first_name: "Dana",
+  last_name: "Owner",
+  email: "dana@westfield.edu",
+  class_year: null,
+  lineup_spot: 2,
+  claimed_by_user_id: OWNER,
+};
+
+/** `program_roster_full`'s player arm, as the wizard reads it. */
+const RPC_ROWS: RosterFullRow[] = [
+  {
+    player_id: "pp-ava",
+    user_id: "u-ava",
+    display_name: "Ava Lin",
+    email: null,
+    role: "player",
+    lineup_spot: 1,
+    managed_by: "self",
+  },
+  {
+    player_id: "pp-ben",
+    user_id: null,
+    display_name: "Ben Cho",
+    email: null,
+    role: "player",
+    lineup_spot: null,
+    managed_by: "coach",
+  },
+  // A staff seat — arm 2. Dropped by the shared filter, as it always was.
+  {
+    player_id: OWNER,
+    user_id: OWNER,
+    display_name: "Dana Owner",
+    email: null,
+    role: "owner",
+    lineup_spot: null,
+    managed_by: "self",
+  },
+];
+
+const rosterPick = (playerId: string, name = playerId): MatchSubject => ({
+  kind: "roster",
+  playerId,
+  name,
+});
+
+function preset(overrides: Partial<EventPreset> = {}): EventPreset {
+  return {
+    entryId: "entry-1",
+    eventId: "event-1",
+    eventName: "Westfield vs Meridian",
+    matchId: null,
+    round: "S1",
+    playerName: "Ava Lin",
+    playerUserId: "pp-ava",
+    opponentName: "Kim Park",
+    date: "2026-09-10",
+    surface: "hard",
+    bestOf: 3,
+    adScoring: true,
+    score: null,
+    supportsVideo: true,
+    eventHref: "/dashboard/team/schedule/event-1",
+    site: "home",
+    eventKind: "dual",
+    opponentProgramKey: null,
+    opponentSchool: null,
+    ...overrides,
+  };
+}
+
+test.describe("wizard: the eligible roster offers an owner's own profile", () => {
+  test("folds in the viewer's claimed profile when the RPC left it out", () => {
+    // The live `program_roster_full` drops a profile claimed by staff, and
+    // `Workspace.myPlayerId` is null for staff. Without the direct read an
+    // owner who plays has no row of their own to pick.
+    const roster = eligibleRosterOptions(
+      RPC_ROWS,
+      OWN_PROFILE,
+      "p-westfield",
+      OWNER,
+    );
+    const own = roster.find((row) => row.playerId === "pp-owner");
+    expect(own).toBeDefined();
+    expect(own?.userId).toBe(OWNER);
+    expect(own?.managedBy).toBe("self");
+    expect(own?.name).toBe("Dana Owner");
+    // Ladder order still holds: Ava (1), Dana (2), then the unranked Ben.
+    expect(roster.map((row) => row.playerId)).toEqual([
+      "pp-ava",
+      "pp-owner",
+      "pp-ben",
+    ]);
+    // …and the picked row passes as a ROSTER choice, resolved to its
+    // profile id — not because the picker is the owner.
+    const result = wizardUploadEligibility({
+      workspace: team({ role: "owner", id: "p-westfield" }),
+      viewerId: OWNER,
+      subject: rosterPick("pp-owner", "Dana Owner"),
+      roster,
+    });
+    expect(result).toEqual({ ok: true, attribution: "pp-owner" });
+  });
+
+  test("never lists a staff login, with or without a profile", () => {
+    const withoutProfile = eligibleRosterOptions(
+      RPC_ROWS,
+      null,
+      "p-westfield",
+      OWNER,
+    );
+    expect(withoutProfile.map((row) => row.playerId)).toEqual([
+      "pp-ava",
+      "pp-ben",
+    ]);
+    expect(withoutProfile.some((row) => row.playerId === OWNER)).toBe(false);
+  });
+
+  test("does not add the own row twice, nor another program's, nor someone else's", () => {
+    const alreadyThere = eligibleRosterOptions(
+      [
+        ...RPC_ROWS,
+        {
+          player_id: "pp-owner",
+          user_id: OWNER,
+          display_name: "Dana Owner",
+          email: null,
+          role: "player",
+          lineup_spot: 2,
+          managed_by: "self",
+        },
+      ],
+      OWN_PROFILE,
+      "p-westfield",
+      OWNER,
+    );
+    expect(
+      alreadyThere.filter((row) => row.playerId === "pp-owner"),
+    ).toHaveLength(1);
+
+    const otherProgram = eligibleRosterOptions(
+      RPC_ROWS,
+      { ...OWN_PROFILE, program_id: "p-elsewhere" },
+      "p-westfield",
+      OWNER,
+    );
+    expect(otherProgram.some((row) => row.playerId === "pp-owner")).toBe(false);
+
+    const someoneElse = eligibleRosterOptions(
+      RPC_ROWS,
+      { ...OWN_PROFILE, claimed_by_user_id: "u-other" },
+      "p-westfield",
+      OWNER,
+    );
+    expect(someoneElse.some((row) => row.playerId === "pp-owner")).toBe(false);
+  });
+
+  test("has no 'myself' answer in a team workspace", () => {
+    // Nothing chosen is nothing chosen — not the uploader.
+    expect(
+      wizardAthleteChoice({
+        workspace: team(),
+        subject: null,
+      }),
+    ).toBeNull();
+    // And a `self` that somehow arrives is passed through to be refused,
+    // never rewritten into an id.
+    const result = wizardUploadEligibility({
+      workspace: team({ role: "owner" }),
+      viewerId: OWNER,
+      subject: { kind: "self" },
+      roster: ROSTER,
+    });
+    expect(refused(result).reason).toBe("athlete-required");
+    expect("attribution" in result).toBe(false);
+  });
+});
+
+test.describe("wizard: handlers cannot progress a pending team or an invalid subject", () => {
+  test("a pending team is refused with the approval notice, athlete or not", () => {
+    const result = refused(
+      wizardUploadEligibility({
+        workspace: team({ programStatus: "claim_pending" }),
+        viewerId: VIEWER,
+        subject: rosterPick("pp-ava"),
+        roster: ROSTER,
+      }),
+    );
+    expect(result.reason).toBe("pending-approval");
+    expect(result.message).toBe(PENDING_APPROVAL_NOTICE);
+    expect(result.retryable).toBe(false);
+  });
+
+  test("a subject the roster does not carry is refused", () => {
+    const result = refused(
+      wizardUploadEligibility({
+        workspace: team(),
+        viewerId: VIEWER,
+        subject: rosterPick("pp-stranger"),
+        roster: ROSTER,
+      }),
+    );
+    expect(result.reason).toBe("athlete-not-on-roster");
+    expect(result.retryable).toBe(false);
+  });
+
+  test("a roster still loading, or failed, decides nothing — and passes nobody", () => {
+    for (const roster of [undefined, null] as const) {
+      const result = refused(
+        wizardUploadEligibility({
+          workspace: team(),
+          viewerId: VIEWER,
+          subject: rosterPick("pp-ava"),
+          roster,
+        }),
+      );
+      expect(result.reason).toBe("roster-unknown");
+      expect(result.retryable).toBe(true);
+    }
+  });
+
+  test("a restricted role is refused before the athlete is even read", () => {
+    const result = refused(
+      wizardUploadEligibility({
+        workspace: team({ role: "player", memberUploadEnabled: false }),
+        viewerId: VIEWER,
+        subject: rosterPick("pp-ava"),
+        roster: ROSTER,
+      }),
+    );
+    expect(result.reason).toBe("role-restricted");
+  });
+});
+
+test.describe("wizard: stale subjects return to selection, never to the uploader", () => {
+  test("wrong workspace — a roster pick carried into a personal workspace", () => {
+    const result = refused(
+      wizardUploadEligibility({
+        workspace: personal(),
+        viewerId: VIEWER,
+        subject: rosterPick("pp-ava"),
+        roster: undefined,
+      }),
+    );
+    expect(result.reason).toBe("athlete-not-personal");
+    expect("attribution" in result).toBe(false);
+  });
+
+  test("archived or merged — the reloaded roster no longer names them", () => {
+    // Ava chosen; then her profile is archived (or merged into another) and
+    // the roster reloads without her. The subject clears; nothing takes its
+    // place.
+    const before = ROSTER;
+    const after = ROSTER.filter((row) => row.playerId !== "pp-ava");
+    const chosen = rosterPick("pp-ava", "Ava Lin");
+    expect(rosterSubjectOrNull(chosen, before)).toBe(chosen);
+    expect(rosterSubjectOrNull(chosen, after)).toBeNull();
+    // A roster not yet loaded decides nothing: the pick stands to be checked.
+    expect(rosterSubjectOrNull(chosen, null)).toBe(chosen);
+    // `self` is on no roster.
+    expect(rosterSubjectOrNull({ kind: "self" }, before)).toBeNull();
+    // Both id eras name the same person.
+    expect(rosterSubjectOrNull(rosterPick("u-ava"), before)).not.toBeNull();
+
+    const result = refused(
+      wizardUploadEligibility({
+        workspace: team(),
+        viewerId: VIEWER,
+        subject: chosen,
+        roster: after,
+      }),
+    );
+    expect(result.reason).toBe("athlete-not-on-roster");
+  });
+
+  test("stale preset — a line whose player has left the roster", () => {
+    const result = refused(
+      wizardUploadEligibility({
+        workspace: team({ role: "coach" }),
+        viewerId: VIEWER,
+        preset: preset({ playerUserId: "pp-archived" }),
+        subject: null,
+        roster: ROSTER,
+      }),
+    );
+    expect(result.reason).toBe("athlete-not-on-roster");
+    expect("attribution" in result).toBe(false);
+  });
+
+  test("a singles line with nobody assigned is not filed under nobody", () => {
+    // The fix is assigning the line on the event, which owns that fact.
+    const result = refused(
+      wizardUploadEligibility({
+        workspace: team({ role: "coach" }),
+        viewerId: VIEWER,
+        preset: preset({ playerUserId: null, playerName: "" }),
+        subject: null,
+        roster: ROSTER,
+      }),
+    );
+    expect(result.reason).toBe("athlete-required");
+  });
+
+  test("missing draft subject — a team draft resumes on the picker", () => {
+    // The who-played answer is not persisted with a draft, so a resumed team
+    // draft lands where it is asked, not past it.
+    expect(draftResumeStep(true)).toBe("provider");
+    expect(draftResumeStep(false)).toBe("file");
+    // And with nothing chosen, nothing passes.
+    const result = refused(
+      wizardUploadEligibility({
+        workspace: team(),
+        viewerId: VIEWER,
+        subject: null,
+        roster: ROSTER,
+      }),
+    );
+    expect(result.reason).toBe("athlete-required");
+  });
+
+  test("no refusal carries an attribution, and no pass carries the viewer in a team", () => {
+    const arrangements: Parameters<typeof wizardUploadEligibility>[0][] = [
+      { workspace: team(), viewerId: VIEWER, subject: null, roster: ROSTER },
+      {
+        workspace: team(),
+        viewerId: VIEWER,
+        subject: { kind: "self" },
+        roster: ROSTER,
+      },
+      {
+        workspace: team(),
+        viewerId: VIEWER,
+        subject: rosterPick("pp-gone"),
+        roster: ROSTER,
+      },
+      {
+        workspace: team(),
+        viewerId: VIEWER,
+        subject: rosterPick("pp-ava"),
+        roster: null,
+      },
+      {
+        workspace: team({ programStatus: "claim_pending" }),
+        viewerId: VIEWER,
+        subject: rosterPick("pp-ava"),
+        roster: ROSTER,
+      },
+      {
+        workspace: team(),
+        viewerId: VIEWER,
+        preset: preset({ playerUserId: null, playerName: "" }),
+        subject: null,
+        roster: ROSTER,
+      },
+    ];
+    for (const input of arrangements) {
+      const result = wizardUploadEligibility(input);
+      if (result.ok) {
+        expect(result.attribution).not.toBe(VIEWER);
+      } else {
+        expect("attribution" in result).toBe(false);
+      }
+    }
+  });
+});
+
+test.describe("wizard: a subject change invalidates the import confirmation", () => {
+  const scope = (athlete: { id: string | null; name: string }) =>
+    buildImportIdentityConfirmationKey({
+      workspaceId: "team:p-westfield",
+      athleteId: athlete.id,
+      importedAthleteId: null,
+      athleteName: athlete.name,
+      importedName: "Ava Lin",
+      fileGenerationId: "swingvision:1",
+    });
+
+  test("the key follows the chosen athlete, and holds no login while unchosen", () => {
+    const workspace = team();
+    const viewer = { id: VIEWER, name: "Casey Coach" };
+    const ava = identityAthleteFor({
+      workspace,
+      viewer,
+      subject: rosterPick("pp-ava", "Ava Lin"),
+    });
+    const ben = identityAthleteFor({
+      workspace,
+      viewer,
+      subject: rosterPick("pp-ben", "Ben Cho"),
+    });
+    const nobody = identityAthleteFor({ workspace, viewer, subject: null });
+
+    expect(scope(ava)).not.toBe(scope(ben));
+    expect(nobody).toEqual({ id: null, name: "" });
+    expect(scope(nobody)).not.toContain(VIEWER);
+
+    // A preset's identity is the line's; a personal one is the viewer's.
+    expect(
+      identityAthleteFor({
+        workspace,
+        viewer,
+        preset: preset(),
+        subject: null,
+      }),
+    ).toEqual({ id: "pp-ava", name: "Ava Lin" });
+    expect(
+      identityAthleteFor({ workspace: personal(), viewer, subject: null }),
+    ).toEqual({ id: VIEWER, name: "Casey Coach" });
+  });
+});
+
+test.describe("wizard: active, authorized paths still pass", () => {
+  test("a personal upload is the viewer's own", () => {
+    expect(
+      wizardUploadEligibility({
+        workspace: personal(),
+        viewerId: VIEWER,
+        subject: null,
+        roster: undefined,
+      }),
+    ).toEqual({ ok: true, attribution: VIEWER });
+  });
+
+  test("a coach picking a roster player, by either id era", () => {
+    expect(
+      wizardUploadEligibility({
+        workspace: team({ role: "coach" }),
+        viewerId: VIEWER,
+        subject: rosterPick("pp-ava"),
+        roster: ROSTER,
+      }),
+    ).toEqual({ ok: true, attribution: "pp-ava" });
+    // A login-era id resolves to the profile id new rows carry.
+    expect(
+      wizardUploadEligibility({
+        workspace: team({ role: "coach" }),
+        viewerId: VIEWER,
+        subject: rosterPick("u-ava"),
+        roster: ROSTER,
+      }),
+    ).toEqual({ ok: true, attribution: "pp-ava" });
+  });
+
+  test("a player under an open policy with their own switch on, picking themself", () => {
+    expect(
+      wizardUploadEligibility({
+        workspace: team({ role: "player", myPlayerId: "pp-ava" }),
+        viewerId: "u-ava",
+        subject: rosterPick("pp-ava"),
+        roster: ROSTER,
+      }),
+    ).toEqual({ ok: true, attribution: "pp-ava" });
+  });
+
+  test("a staff preset on a live singles line, new row or fill", () => {
+    const workspace = team({ role: "coach" });
+    expect(
+      wizardUploadEligibility({
+        workspace,
+        viewerId: VIEWER,
+        preset: preset(),
+        subject: null,
+        roster: ROSTER,
+        attachesToLine: true,
+      }),
+    ).toEqual({ ok: true, attribution: "pp-ava" });
+    // A player may NOT attach a new row to a line, as the trigger says.
+    expect(
+      refused(
+        wizardUploadEligibility({
+          workspace: team({ role: "player", memberUploadEnabled: true }),
+          viewerId: "u-ava",
+          preset: preset(),
+          subject: null,
+          roster: ROSTER,
+          attachesToLine: true,
+        }),
+      ).message,
+    ).toBe(LINE_REQUIRES_STAFF_REFUSAL);
+  });
+
+  test("a doubles line names no single player and is filed under none", () => {
+    // The one carve-out: two athletes on our side, `player1_id` names
+    // neither, exactly as the wizard wrote it before — and NOT the coach.
+    expect(
+      wizardUploadEligibility({
+        workspace: team({ role: "coach" }),
+        viewerId: VIEWER,
+        preset: preset({
+          playerUserId: null,
+          playerName: "Ava Lin / Ben Cho",
+          supportsVideo: false,
+        }),
+        subject: null,
+        roster: ROSTER,
+      }),
+    ).toEqual({ ok: true, attribution: null });
+  });
+});
+
+// ─── 7. The wizard's handlers, through the real hook ─────────────────────────
+//
+// `uploadWizardHarness` runs the hook's source with deterministic hook slots
+// and mocked IO. These check the HANDLERS — that a refusal from section 6
+// actually stops Continue and Save match, that the picker's list is what the
+// eligible roster says, and that the id which reaches the write is the one
+// the decision resolved.
+
+import {
+  parsedNames,
+  rosterRow,
+  uploadWizardHarness,
+} from "./fixtures/upload-wizard-hook";
+import { DEFAULT_FORM_DATA } from "@/components/dashboard/matches/new-match-wizard/types";
+
+/** Everything Save match needs besides the athlete and the file. */
+function completeDetails(h: ReturnType<typeof uploadWizardHarness>) {
+  h.current.handleInputChange("playerHand", "right");
+  h.current.handleInputChange("playerBackhand", "two-handed");
+  h.current.handleInputChange("opponentHand", "left");
+  h.current.handleInputChange("opponentBackhand", "one-handed");
+  h.render();
+}
+
+test.describe("wizard handlers: a pending team cannot progress or create", () => {
+  test("Continue and Save match both stop, with the approval notice", async () => {
+    const h = uploadWizardHarness({
+      team: true,
+      workspace: { programStatus: "claim_pending" },
+    });
+    await h.flush();
+    h.current.whoPlayed.choose({
+      kind: "roster",
+      playerId: "athlete",
+      name: "Player athlete",
+    });
+    h.render();
+    expect(h.current.whoPlayed.subject?.kind).toBe("roster");
+    expect(h.current.eligibility).toMatchObject({
+      ok: false,
+      reason: "pending-approval",
+      message: PENDING_APPROVAL_NOTICE,
+    });
+
+    h.current.handleProviderContinue();
+    h.render();
+    expect(h.current.step).toBe("provider");
+    expect(h.current.error).toBe(PENDING_APPROVAL_NOTICE);
+
+    // Even called directly, the write does not happen.
+    const file = await h.pick("match.csv");
+    file.resolve(parsedNames("Player athlete"));
+    await h.flush();
+    completeDetails(h);
+    await h.current.handleCreateMatch();
+    h.render();
+    expect(h.writes).toEqual([]);
+    expect(h.winnerCalls).toEqual([]);
+  });
+});
+
+test.describe("wizard handlers: only eligible roster subjects are offered or installed", () => {
+  test("'self' is not an answer in a team workspace", async () => {
+    const h = uploadWizardHarness({ team: true });
+    await h.flush();
+    h.current.whoPlayed.choose({ kind: "self" });
+    h.render();
+    expect(h.current.whoPlayed.subject).toBeNull();
+    expect(h.current.eligibility).toMatchObject({
+      ok: false,
+      reason: "athlete-required",
+    });
+    h.current.handleProviderContinue();
+    h.render();
+    expect(h.current.step).toBe("provider");
+  });
+
+  test("a pick the loaded roster does not carry is ignored", async () => {
+    const h = uploadWizardHarness({ team: true });
+    await h.flush();
+    h.current.whoPlayed.choose({
+      kind: "roster",
+      playerId: "stranger",
+      name: "Not Here",
+    });
+    h.render();
+    expect(h.current.whoPlayed.subject).toBeNull();
+  });
+
+  test("a seeded subject the roster no longer names returns to selection", async () => {
+    const h = uploadWizardHarness({
+      team: true,
+      props: {
+        initialSubject: { kind: "roster", playerId: "gone", name: "Gone" },
+      },
+    });
+    // Before the roster lands the seed stands; once it has, nothing does.
+    expect(h.current.whoPlayed.subject?.kind).toBe("roster");
+    await h.flush();
+    expect(h.current.whoPlayed.subject).toBeNull();
+    h.current.handleProviderContinue();
+    h.render();
+    expect(h.current.step).toBe("provider");
+  });
+
+  test("the picker lists an owner's own profile, and it passes as a roster choice", async () => {
+    const h = uploadWizardHarness({
+      team: true,
+      workspace: { role: "owner" },
+      ownProfile: {
+        id: "pp-owner",
+        program_id: "team-a",
+        first_name: "Riley",
+        last_name: "Player",
+        email: null,
+        class_year: null,
+        lineup_spot: null,
+        claimed_by_user_id: "user",
+      },
+    });
+    await h.flush();
+    const own = h.current.whoPlayed.roster?.find(
+      (row) => row.playerId === "pp-owner",
+    );
+    expect(own).toMatchObject({ userId: "user", managedBy: "self" });
+    // And no row anywhere carries the login id as a player id.
+    expect(
+      h.current.whoPlayed.roster?.some((row) => row.playerId === "user"),
+    ).toBe(false);
+
+    h.current.whoPlayed.choose({
+      kind: "roster",
+      playerId: "pp-owner",
+      name: "Riley Player",
+    });
+    h.render();
+    expect(h.current.eligibility).toEqual({
+      ok: true,
+      attribution: "pp-owner",
+    });
+    h.current.handleProviderContinue();
+    h.render();
+    expect(h.current.step).toBe("file");
+  });
+
+  test("an owner with no profile has no row of their own, and no fallback", async () => {
+    const h = uploadWizardHarness({
+      team: true,
+      workspace: { role: "owner" },
+      roster: [rosterRow("athlete")],
+    });
+    await h.flush();
+    expect(h.current.whoPlayed.roster?.map((row) => row.playerId)).toEqual([
+      "athlete",
+    ]);
+    expect(h.current.eligibility).toMatchObject({
+      ok: false,
+      reason: "athlete-required",
+    });
+  });
+
+  test("a roster that failed to load refuses, retryably, and is flagged", async () => {
+    const h = uploadWizardHarness({ team: true, rosterError: "boom" });
+    await h.flush();
+    expect(h.current.whoPlayed.roster).toBeNull();
+    expect(h.current.whoPlayed.loadFailed).toBe(true);
+    // A pick before the list exists is allowed to stand…
+    h.current.whoPlayed.choose({
+      kind: "roster",
+      playerId: "athlete",
+      name: "Player athlete",
+    });
+    h.render();
+    expect(h.current.eligibility).toMatchObject({
+      ok: false,
+      reason: "roster-unknown",
+      retryable: true,
+    });
+    // …and Continue waits rather than errors: nothing has been decided.
+    h.current.handleProviderContinue();
+    h.render();
+    expect(h.current.step).toBe("provider");
+    expect(h.current.error).toBeNull();
+  });
+});
+
+test.describe("wizard handlers: what reaches the write", () => {
+  test("a team match carries the picked profile, never the uploader", async () => {
+    const h = uploadWizardHarness({ team: true });
+    await h.flush();
+    h.current.whoPlayed.choose({
+      kind: "roster",
+      playerId: "athlete",
+      name: "Player athlete",
+    });
+    h.render();
+    h.current.handleProviderContinue();
+    h.render();
+    const file = await h.pick("match.csv");
+    file.resolve(parsedNames("Player athlete"));
+    await h.flush();
+    completeDetails(h);
+    h.current.handleFileContinue();
+    h.render();
+    expect(h.current.step).toBe("match");
+    await h.current.handleCreateMatch();
+    h.render();
+    expect(h.writes).toHaveLength(1);
+    expect(h.winnerCalls[0]?.[3]).toBe("athlete");
+  });
+
+  test("a personal match is the viewer's own", async () => {
+    const h = uploadWizardHarness();
+    await h.flush();
+    h.current.handleProviderContinue();
+    h.render();
+    const file = await h.pick("match.csv");
+    file.resolve(parsedNames("Riley Player"));
+    await h.flush();
+    completeDetails(h);
+    h.current.handleFileContinue();
+    h.render();
+    await h.current.handleCreateMatch();
+    h.render();
+    expect(h.writes).toHaveLength(1);
+    expect(h.winnerCalls[0]?.[3]).toBe("user");
+  });
+});
+
+test.describe("wizard handlers: drafts and confirmations", () => {
+  test("a team draft resumes on the picker; a personal one on the file step", async () => {
+    const draft = {
+      id: "draft-1",
+      step: "match" as const,
+      stepCount: 3,
+      stepIndex: 2,
+      provider: "swing-vision",
+      formData: { ...DEFAULT_FORM_DATA, opponentName: "Casey Opponent" },
+      fileName: "old.csv",
+      preset: null,
+      attachedLine: null,
+      updatedAt: "2026-09-10T00:00:00.000Z",
+    };
+    const teamDraft = uploadWizardHarness({ team: true, props: { draft } });
+    await teamDraft.flush();
+    expect(teamDraft.current.step).toBe("provider");
+    expect(teamDraft.current.whoPlayed.subject).toBeNull();
+    // The draft's answers are still there — only the step returned.
+    expect(teamDraft.current.formData.opponentName).toBe("Casey Opponent");
+
+    const personalDraft = uploadWizardHarness({ props: { draft } });
+    await personalDraft.flush();
+    expect(personalDraft.current.step).toBe("file");
+  });
+
+  test("changing the subject drops an import confirmation", async () => {
+    const h = uploadWizardHarness({ team: true });
+    await h.flush();
+    h.current.whoPlayed.choose({
+      kind: "roster",
+      playerId: "first",
+      name: "First Player",
+    });
+    h.render();
+    h.current.handleProviderContinue();
+    h.render();
+    const file = await h.pick("match.csv");
+    file.resolve(parsedNames("F. Player"));
+    await h.flush();
+    expect(h.current.importIdentity.blocked).toBe(true);
+    h.current.importIdentity.confirm();
+    h.render();
+    expect(h.current.importIdentity.confirmed).toBe(true);
+    expect(h.current.importIdentity.blocked).toBe(false);
+
+    h.current.whoPlayed.choose({
+      kind: "roster",
+      playerId: "second",
+      name: "Second Player",
+    });
+    h.render();
+    expect(h.current.whoPlayed.subject).toMatchObject({ playerId: "second" });
+    expect(h.current.importIdentity.confirmed).toBe(false);
+    expect(h.current.importIdentity.blocked).toBe(true);
+    expect(h.current.importIdentity.comparison?.athleteId).toBe("second");
   });
 });

@@ -1,17 +1,19 @@
 /**
  * May this person record a match here — and for whom?
  *
- * NOT YET WIRED IN. This module is the contract only; as of T11 nothing
- * outside `tests/upload-eligibility.spec.ts` calls it, and no upload path is
- * gated by it. It is built to become one reasoned answer for every seam that
- * files a match — the wizard before it lets someone continue (T12), the
- * wizard again before it writes (T13), and the two video routes before a
- * credential is minted or a job is spent (T14-T16). Each of those will ask
- * with whatever it has in hand and get back either the attribution to write
- * or one named reason it must not. Until those tasks land, attribution is
- * still enforced solely by the `matches_block_client_regraft` trigger and
- * RLS; read the paragraphs below as the design those tasks implement, not as
- * a description of what runs today.
+ * WHO ASKS, as of T12. The upload wizard does — through
+ * `wizardUploadEligibility()` in
+ * `components/dashboard/matches/new-match-wizard/subject-eligibility.ts`,
+ * which `useUploadMatchWizard` calls before it leaves step 1, before it
+ * leaves the file step, and again at the write, and whose `attribution` is
+ * the only value the wizard puts in `matches.player1_id`. That is the one
+ * client seam. It is built to become one reasoned answer for every seam that
+ * files a match: the wizard's page showing the same refusal and a re-read
+ * status (T13), a direct-write gate (T14), and the two video routes before a
+ * credential is minted or a job is spent (T15-T16) are still to come, and
+ * until they land those paths are gated by the `matches_block_client_regraft`
+ * trigger and RLS alone. Each caller asks with whatever it has in hand and
+ * gets back either the attribution to write or one named reason it must not.
  *
  * PROVIDER-INDEPENDENT, and that is the point of its existence. The video
  * seams already have `explainVideoRefusal()` and `reserveQuota()`, which

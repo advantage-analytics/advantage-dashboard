@@ -38,11 +38,21 @@ import {
 } from "@/lib/services/splitstep/quota";
 import { formatResetDate } from "@/lib/data/usage-format";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
-import {
-  rosterPlayerOptions,
-  type RosterFullRow,
-  type RosterPlayerOption,
+import type {
+  RosterFullRow,
+  RosterPlayerOption,
 } from "@/lib/data/roster-shared";
+import {
+  draftResumeStep,
+  eligibleRosterOptions,
+  identityAthleteFor,
+  rosterSubjectOrNull,
+  wizardUploadEligibility,
+  type MatchSubject,
+  type OwnProfileRow,
+  type RosterSubject,
+  type WizardEligibility,
+} from "./subject-eligibility";
 import {
   Step,
   FormData as MatchFormData,
@@ -328,25 +338,12 @@ export type RosterOption = RosterPlayerOption & {
 };
 
 /**
- * WHOSE match a team upload records.
- *
- * `self` writes the uploader's own login id, exactly what the wizard always
- * wrote — so a player uploading their own match is unchanged. `roster` writes
- * the picked profile's id, which is what stops a coach's upload attributing an
- * athlete's match to the coach.
+ * WHOSE match a team upload records — defined beside the pure eligibility
+ * wiring in `subject-eligibility.ts`, re-exported here so the picker and the
+ * route keep importing it from the hook. See that file for why `self` is not
+ * an answer in a team workspace.
  */
-export type MatchSubject =
-  { kind: "self" } | { kind: "roster"; playerId: string; name: string };
-
-/**
- * The half of `MatchSubject` a link can name.
- *
- * "Myself" needs no shortcut — it is the uploader, and the wizard's own
- * default in the only workspace where it is not asked — so a seed is always a
- * roster athlete. Narrowing it here rather than accepting the whole union
- * keeps the impossible variant out of every seeding path.
- */
-export type RosterSubject = Extract<MatchSubject, { kind: "roster" }>;
+export type { MatchSubject, RosterSubject, WizardEligibility };
 
 export interface UseUploadMatchWizardReturn {
   // State
@@ -449,15 +446,38 @@ export interface UseUploadMatchWizardReturn {
   whoPlayed: {
     /** True in a team workspace with no preset — the wizard must ask. */
     required: boolean;
-    /** The program's players, uploader excluded. Null while loading. */
+    /**
+     * The ELIGIBLE roster: the program's live players, the viewer's own
+     * profile included when they genuinely hold one (see
+     * `eligibleRosterOptions`). Nobody else is offered — there is no "Myself"
+     * row for staff, because a staff login is not an athlete. Null while
+     * loading and after a failed load; `loadFailed` tells those apart.
+     */
     roster: RosterOption[] | null;
-    /** The uploader's display name, for the "Myself" row. */
+    /** True when the roster read failed. `reload()` asks again. */
+    loadFailed: boolean;
+    reload: () => void;
+    /**
+     * The uploader's display name — for the details step's "You" label in a
+     * personal workspace, and for the picker's aria text. Not an option.
+     */
     uploaderName: string | null;
     /** The current answer. Null until chosen, which gates Continue. */
     subject: MatchSubject | null;
-    /** Records the answer and pre-fills the player-name field from it. */
+    /**
+     * Records the answer and pre-fills the player-name field from it. In a
+     * team workspace only a roster player on the loaded list is accepted;
+     * anything else is ignored rather than installed.
+     */
     choose: (subject: MatchSubject) => void;
   };
+  /**
+   * May this match be recorded here, and for whom — `uploadEligibility()`
+   * over the wizard's own state (`subject-eligibility.ts`). Every handler
+   * that moves forward or writes asks it first; it is exposed so the page
+   * can show the same refusal, with Retry where `retryable` is true (T13).
+   */
+  eligibility: WizardEligibility;
   handleScoreChange: (
     player: "player" | "opponent",
     index: number,
@@ -605,12 +625,18 @@ export function useUploadMatchWizard({
     matchSubjectRef.current = subject;
     setMatchSubject(subject);
   }, []);
-  /** The program's players, for the who-played picker. Null while loading. */
+  /**
+   * The eligible roster, for the who-played picker and for checking a
+   * preset's player. Null while loading and after a failed load —
+   * `rosterLoadFailed` says which, and `uploadEligibility()` refuses both as
+   * `roster-unknown` (retryable) rather than passing anyone.
+   */
   const [teamRoster, setTeamRoster] = useState<RosterOption[] | null>(null);
-  /** The uploader's profile name and login, for the "Myself" row and for
-   * filtering their own roster profile out of the list. */
+  const [rosterLoadFailed, setRosterLoadFailed] = useState(false);
+  /** Bumped by `reloadRoster()`; the roster effect depends on it. */
+  const [rosterAttempt, setRosterAttempt] = useState(0);
+  /** The uploader's profile name, for the personal wizard's "You" label. */
   const [uploaderName, setUploaderName] = useState<string | null>(null);
-  const [uploaderId, setUploaderId] = useState<string | null>(null);
   // The lineup slot the schedule offered and the person accepted (3d/7a).
   // Its fields are filled into the form, and the values they replaced are
   // kept so Detach can put them back without touching anything typed since.
@@ -685,21 +711,16 @@ export function useUploadMatchWizard({
 
   // Compare against the selected identity, never the editable display field.
   // Viewer data is server-provided and also exists on preset/draft paths that
-  // skip the optional profile-prefill request below.
-  const identityAthleteId = preset
-    ? preset.playerUserId
-    : askWhoPlayed && matchSubject?.kind === "roster"
-      ? matchSubject.playerId
-      : viewer.id;
-  const identityAthleteName = preset
-    ? preset.playerName
-    : askWhoPlayed
-      ? matchSubject?.kind === "roster"
-        ? matchSubject.name
-        : matchSubject?.kind === "self"
-          ? viewer.name
-          : ""
-      : viewer.name;
+  // skip the optional profile-prefill request below. In a team workspace with
+  // nothing chosen this is null and "", not the viewer — see
+  // `identityAthleteFor` for why the confirmation key must not hold a login.
+  const { id: identityAthleteId, name: identityAthleteName } =
+    identityAthleteFor({
+      workspace: activeWorkspace,
+      viewer,
+      preset,
+      subject: matchSubject,
+    });
   const identityComparison = parsedImport
     ? evaluateImportedIdentityMatch({
         athleteId: identityAthleteId,
@@ -993,8 +1014,10 @@ export function useUploadMatchWizard({
         const kind = getProviderKind(draftProvider);
         setProgressKind(kind);
         // The file never survives a draft, so resume lands where it is picked
-        // again — never past it, whatever step the draft recorded.
-        setStep("file");
+        // again — never past it, whatever step the draft recorded. Nor does
+        // the who-played answer, so a team draft lands one step earlier, on
+        // the picker: see `draftResumeStep`.
+        setStep(draftResumeStep(askWhoPlayed));
       }
       return;
     }
@@ -1079,7 +1102,6 @@ export function useUploadMatchWizard({
         } = await supabase.auth.getUser();
         if (cancelled || !user) return;
         cachedUserIdRef.current = user.id;
-        setUploaderId(user.id);
         const { data: profile } = await supabase
           .from("users")
           .select("first_name, last_name, hand, backhand")
@@ -1135,7 +1157,8 @@ export function useUploadMatchWizard({
   }, [open, supabase, preset, draft, askWhoPlayed, seededPlayerName]);
 
   /**
-   * The roster behind the who-played picker.
+   * The eligible roster — behind the who-played picker, and behind the check
+   * a preset's player gets before anything is written.
    *
    * Fetched through the same SECURITY DEFINER RPC the ladder page uses
    * (`program_roster_full`), which returns nothing to a non-member — so a
@@ -1143,16 +1166,34 @@ export function useUploadMatchWizard({
    * fallback and ladder sort are `rosterPlayerOptions()` in
    * `lib/data/roster-shared.ts`, shared with `getLadder()` so the two RPC
    * consumers cannot drift.
+   *
+   * Plus one direct read of `program_players`: the viewer's own live profile
+   * on this program. The RPC's player arm drops a profile claimed by staff,
+   * so an owner or coach who also plays would otherwise have no row of their
+   * own to pick — and no "Myself" to fall back on, since that is exactly the
+   * fallback this wizard no longer has. `eligibleRosterOptions()` folds it in
+   * on the same terms as everyone else. Readable under the roster's own
+   * SELECT policy (`program_id in user_program_ids()`).
+   *
+   * A failed RPC leaves the roster NULL and flags it, rather than reading as
+   * an empty program: `uploadEligibility()` refuses on null as
+   * `roster-unknown` (retryable), and `reloadRoster()` asks again. Runs for
+   * every team workspace, preset or not — a preset's player is checked
+   * against this list too.
    */
   useEffect(() => {
-    if (!open || !askWhoPlayed) return;
+    if (!open || activeWorkspace.kind !== "team") return;
     let cancelled = false;
 
     (async () => {
       // The open invitations ride along so the picker can show who has been
       // asked but has not yet claimed their profile. Staff-only under RLS: a
       // player's read returns nothing, and the rows render without the state.
-      const [{ data }, { data: invites }] = await Promise.all([
+      const [
+        { data, error: rosterError },
+        { data: invites },
+        { data: ownRows },
+      ] = await Promise.all([
         supabase.rpc("program_roster_full", {
           p_program_id: activeWorkspace.id,
         }),
@@ -1161,8 +1202,27 @@ export function useUploadMatchWizard({
           .select("player_id, email")
           .eq("program_id", activeWorkspace.id)
           .is("accepted_at", null),
+        supabase
+          .from("program_players")
+          .select(
+            "id, program_id, first_name, last_name, email, class_year, lineup_spot, claimed_by_user_id",
+          )
+          .eq("program_id", activeWorkspace.id)
+          .eq("claimed_by_user_id", viewer.id)
+          .is("archived_at", null)
+          .is("merged_into_id", null)
+          .limit(1),
       ]);
       if (cancelled) return;
+
+      if (rosterError) {
+        console.error("[wizard] could not load the roster", {
+          error: rosterError.message,
+        });
+        setTeamRoster(null);
+        setRosterLoadFailed(true);
+        return;
+      }
 
       const invitedByPlayer = new Map<string, string>();
       for (const invite of (invites ?? []) as {
@@ -1173,8 +1233,15 @@ export function useUploadMatchWizard({
           invitedByPlayer.set(invite.player_id, invite.email);
       }
 
+      const own = ((ownRows ?? []) as OwnProfileRow[])[0] ?? null;
+      setRosterLoadFailed(false);
       setTeamRoster(
-        rosterPlayerOptions((data ?? []) as RosterFullRow[]).map((row) => ({
+        eligibleRosterOptions(
+          (data ?? []) as RosterFullRow[],
+          own,
+          activeWorkspace.id,
+          viewer.id,
+        ).map((row) => ({
           ...row,
           invitedEmail: invitedByPlayer.get(row.playerId) ?? null,
         })),
@@ -1184,7 +1251,14 @@ export function useUploadMatchWizard({
     return () => {
       cancelled = true;
     };
-  }, [open, askWhoPlayed, supabase, activeWorkspace.id]);
+  }, [
+    open,
+    activeWorkspace.kind,
+    activeWorkspace.id,
+    viewer.id,
+    supabase,
+    rosterAttempt,
+  ]);
 
   /**
    * Reset the who-played answer when the workspace CHANGES while the wizard is
@@ -1209,16 +1283,51 @@ export function useUploadMatchWizard({
   }, [open, activeWorkspace.id, applyMatchSubject]);
 
   /**
-   * The picker's list: the roster minus the uploader's own claimed profile.
-   * "Myself" already stands for them, and offering both would be the same
-   * person twice under two different ids.
+   * A subject the loaded roster does not have returns to selection.
+   *
+   * Covers the seeds and the survivors: a `?player=` link the server checked
+   * against a roster that has since changed, a pick made while the roster was
+   * still loading, a profile archived or merged while the wizard sat open,
+   * and — after `reloadRoster()` — anyone the fresh list no longer names.
+   * The answer becomes null and the picker asks again. It never becomes the
+   * uploader: `rosterSubjectOrNull` has no such branch.
    */
-  const whoPlayedRoster = useMemo(() => {
-    if (!teamRoster) return null;
-    return uploaderId
-      ? teamRoster.filter((row) => row.userId !== uploaderId)
-      : teamRoster;
-  }, [teamRoster, uploaderId]);
+  useEffect(() => {
+    if (!open || activeWorkspace.kind !== "team" || preset) return;
+    const current = matchSubjectRef.current;
+    if (rosterSubjectOrNull(current, teamRoster) !== current) {
+      applyMatchSubject(null);
+    }
+  }, [open, activeWorkspace.kind, preset, teamRoster, applyMatchSubject]);
+
+  const reloadRoster = useCallback(() => {
+    setRosterLoadFailed(false);
+    setTeamRoster(null);
+    setRosterAttempt((n) => n + 1);
+  }, []);
+
+  /**
+   * May this match be recorded here, and for whom. Asked fresh on every
+   * render from the live state, so a handler cannot read a stale answer, and
+   * exposed on the return so the page can show the same sentence.
+   *
+   * `attachesToLine` is true only for a NEW row that will carry
+   * `event_entry_id` — filling a line's existing match is an update the
+   * regraft trigger does not gate on staff, and neither does this.
+   */
+  const lineTarget = preset ?? attachedLine;
+  const eligibility = useMemo(
+    () =>
+      wizardUploadEligibility({
+        workspace: activeWorkspace,
+        viewerId: viewer.id,
+        preset,
+        subject: matchSubject,
+        roster: activeWorkspace.kind === "team" ? teamRoster : undefined,
+        attachesToLine: Boolean(lineTarget?.entryId) && !lineTarget?.matchId,
+      }),
+    [activeWorkspace, viewer.id, preset, matchSubject, teamRoster, lineTarget],
+  );
 
   /**
    * Record the answer AND pre-fill the player-name field from it, so the
@@ -1226,12 +1335,21 @@ export function useUploadMatchWizard({
    *
    * The id travels with the choice, never with the text: a name is not
    * evidence of an identity, and `player1_id` is half the SELECT policy on
-   * `matches`. Choosing "Myself" resets the name to the uploader's own —
-   * keeping a previously picked teammate's name over a self attribution would
-   * be the silent mismatch this control exists to prevent.
+   * `matches`.
+   *
+   * In a team workspace only a roster player can be installed: `self` is
+   * refused outright (a staff login is not an athlete, and the picker no
+   * longer offers it), and a roster id the loaded list does not carry is
+   * refused too. A pick made before the list has loaded is accepted and
+   * re-checked by the effect above once it has.
    */
   const chooseMatchSubject = useCallback(
     (subject: MatchSubject) => {
+      if (activeWorkspace.kind === "team") {
+        if (subject.kind !== "roster") return;
+        if (teamRoster && rosterSubjectOrNull(subject, teamRoster) === null)
+          return;
+      }
       resetIdentityAnswer();
       applyMatchSubject(subject);
       setFormData((prev) => ({
@@ -1239,8 +1357,9 @@ export function useUploadMatchWizard({
         playerName:
           subject.kind === "roster" ? subject.name : (uploaderName ?? ""),
         // A profile's hand and backhand belong to the uploader. Picking a
-        // teammate drops them; picking "Myself" back leaves them unset until
-        // the details step reads the profile again.
+        // roster player drops them — an owner picking their OWN profile too,
+        // since that row is a roster choice like any other and the details
+        // step reads the profile again for it.
         ...(prev.playerStyleSource === "profile" && subject.kind === "roster"
           ? {
               playerHand: undefined,
@@ -1250,7 +1369,13 @@ export function useUploadMatchWizard({
           : {}),
       }));
     },
-    [uploaderName, applyMatchSubject, resetIdentityAnswer],
+    [
+      activeWorkspace.kind,
+      teamRoster,
+      uploaderName,
+      applyMatchSubject,
+      resetIdentityAnswer,
+    ],
   );
 
   // Step navigation handlers
@@ -1279,10 +1404,16 @@ export function useUploadMatchWizard({
     // selected for one, and the cost of getting it wrong is paid entirely by
     // the coach — a full video upload, then a 422.
     if (preset && !preset.supportsVideo && isProcessingProvider) return;
-    // Same rule for a team upload with no preset — the who-played question is
-    // this step's, and skipping it would fall back to attributing the match to
-    // whoever is uploading.
-    if (askWhoPlayed && !matchSubject) return;
+    // May this match be recorded here, and for whom — the pending program,
+    // the restricted role, the missing or off-roster athlete all stop here,
+    // with the contract's own sentence. A reading not yet obtained (roster
+    // still loading, status unknown) stops too, silently: nothing has been
+    // decided, and the page offers Retry for those rather than an error.
+    if (!eligibility.ok) {
+      if (!eligibility.retryable) setError(eligibility.message);
+      return;
+    }
+    setError(null);
     // Both kinds drop their file next; the order decides what follows it.
     setProgressKind(providerKind);
     setStep(stepOrder[1]);
@@ -1292,8 +1423,7 @@ export function useUploadMatchWizard({
     providerKind,
     preset,
     isProcessingProvider,
-    askWhoPlayed,
-    matchSubject,
+    eligibility,
   ]);
 
   // Where the file step goes depends on the kind: a video still needs its
@@ -1309,7 +1439,12 @@ export function useUploadMatchWizard({
       uploadError
     )
       return;
-    if (askWhoPlayed && !matchSubject) return;
+    // Asked again here, not only on step 1: a preset opens on this step, and
+    // the roster can have changed under a subject chosen a step ago.
+    if (!eligibility.ok) {
+      if (!eligibility.retryable) setError(eligibility.message);
+      return;
+    }
     if (
       importIdentityBlocked ||
       (!isProcessingProvider &&
@@ -1330,8 +1465,7 @@ export function useUploadMatchWizard({
     isProbing,
     parsingState.isParsing,
     uploadError,
-    askWhoPlayed,
-    matchSubject,
+    eligibility,
     importIdentityBlocked,
     isProcessingProvider,
     parsedImport,
@@ -1894,8 +2028,13 @@ export function useUploadMatchWizard({
       return;
     }
 
-    if (askWhoPlayed && !matchSubject) {
-      setError("Choose the player this match belongs to.");
+    // The last ask, at the write. The same decision the two Continue handlers
+    // made, re-read from live state: a program that went pending, a profile
+    // archived, a roster that failed to load since — none of them get a row.
+    // A retryable refusal is a reading not yet obtained, and it is shown as
+    // the contract's sentence here too, because there is no later step.
+    if (!eligibility.ok) {
+      setError(eligibility.message);
       return;
     }
     if (
@@ -1968,24 +2107,17 @@ export function useUploadMatchWizard({
       );
       // WHOSE match this is, which in a team workspace is not the uploader.
       //
-      // With a preset the answer comes from the roster — and `null` when the
-      // named player has no account is the correct answer, not a gap to fill
-      // with `userId`. Falling back to the uploader is exactly the bug this
-      // replaces: it attributes an athlete's match to their coach, and since
-      // `player1_id` is half the `matches` SELECT policy, it also hands the
-      // coach read access the athlete then loses.
-      //
-      // No preset in a TEAM workspace asks the same question via the
-      // who-played picker: a picked roster row carries that profile's id
-      // (`program_players.id`, the id `matches_block_client_regraft` checks
-      // against the roster), and "Myself" is the uploader — the wizard's
-      // original answer, unchanged. In a personal workspace the uploader IS
-      // the player and nothing here differs from before.
-      const playerUserId = preset
-        ? preset.playerUserId
-        : askWhoPlayed && matchSubject?.kind === "roster"
-          ? matchSubject.playerId
-          : userId;
+      // The id `uploadEligibility()` resolved and nothing else: the picked
+      // roster profile's (`program_players.id`, the id
+      // `matches_block_client_regraft` checks against the roster), the
+      // viewer's own in a personal workspace, or null for a doubles line
+      // (`wizardUploadEligibility`). There is deliberately no `?? userId`
+      // here. Falling back to the uploader was the bug this replaces: it
+      // attributed an athlete's match to their coach, and since `player1_id`
+      // is half the `matches` SELECT policy, it also handed the coach read
+      // access the athlete then lost. `userId` below is the UPLOADER, and it
+      // goes to `created_by` only.
+      const playerUserId = eligibility.attribution;
 
       const { winner, loser } = determineWinner(
         adjustedPlayerScores,
@@ -2328,7 +2460,7 @@ export function useUploadMatchWizard({
     preset,
     attachedLine,
     draftId,
-    askWhoPlayed,
+    eligibility,
     matchSubject,
     isUploading,
     isProbing,
@@ -2418,11 +2550,14 @@ export function useUploadMatchWizard({
     handleFormatChange,
     whoPlayed: {
       required: askWhoPlayed,
-      roster: whoPlayedRoster,
+      roster: teamRoster,
+      loadFailed: rosterLoadFailed,
+      reload: reloadRoster,
       uploaderName,
       subject: matchSubject,
       choose: chooseMatchSubject,
     },
+    eligibility,
     handleScoreChange,
     handleTiebreakChange,
 

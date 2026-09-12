@@ -170,7 +170,7 @@ ready).
 
 ## T12 · Enforce roster subjects in wizard state
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **reasoning:** high
 - **needs:** T6, T11

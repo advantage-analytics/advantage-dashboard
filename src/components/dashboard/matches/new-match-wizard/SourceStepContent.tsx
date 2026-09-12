@@ -71,6 +71,7 @@ export interface SourceStepContentProps {
   whoPlayed: {
     required: boolean;
     roster: RosterOption[] | null;
+    loadFailed: boolean;
     uploaderName: string | null;
     subject: MatchSubject | null;
     choose: (subject: MatchSubject) => void;
@@ -406,6 +407,8 @@ function SourceStepContentImpl({
       ? (whoPlayed.roster?.find((row) => row.playerId === subject.playerId) ??
         null)
       : null;
+  // For the personal workspace's own-match lead. In a team workspace the
+  // lead is always a roster player's initials or the empty mark.
   const uploaderInitials = viewer.initials;
   const uploaderName = whoPlayed.uploaderName ?? viewer.name;
 
@@ -672,29 +675,21 @@ function SourceStepContentImpl({
                 Roster · {workspaceLabel(active)}
               </span>
 
-              {/* The uploader's own row. "self" writes their login id — the
-                  wizard's original answer, unchanged. */}
-              {uploaderName && (
-                <RosterRow
-                  chosen={subject?.kind === "self"}
-                  onChoose={() => {
-                    whoPlayed.choose({ kind: "self" });
-                    setOpenMenu(null);
-                  }}
-                  avatar={<RowAvatar initials={uploaderInitials} />}
-                  name={uploaderName}
-                  meta="Your own match"
-                  trailing={<Pill>You</Pill>}
-                />
-              )}
-
+              {/* No "Myself" row. A team match is recorded against a roster
+                  player, and a staff login is not one — the hook's eligibility
+                  refuses `self` here, so offering it would be offering a
+                  refusal. A viewer who genuinely holds a player profile finds
+                  it in the list below, marked You: the hook folds their own
+                  `program_players` row in when the roster RPC leaves it out. */}
               {whoPlayed.roster === null ? (
                 <span className="px-2.5 py-2 text-[11px] text-[var(--ink-500)]">
-                  Loading the roster…
+                  {whoPlayed.loadFailed
+                    ? "The roster couldn't be loaded."
+                    : "Loading the roster…"}
                 </span>
               ) : whoPlayed.roster.length === 0 ? (
                 <span className="px-2.5 py-2 text-[11px] text-[var(--ink-500)]">
-                  Nobody else is on this program&rsquo;s roster yet.
+                  Nobody is on this program&rsquo;s roster yet.
                 </span>
               ) : (
                 whoPlayed.roster.map((player) => {
@@ -703,6 +698,12 @@ function SourceStepContentImpl({
                     subject.playerId === player.playerId;
                   const invited =
                     player.invitedEmail !== null && player.userId === null;
+                  // The viewer's own profile — by the login bound to it, or
+                  // by the id the workspace already resolved as theirs.
+                  const isYou =
+                    player.userId === viewer.id ||
+                    (active.myPlayerId !== null &&
+                      player.playerId === active.myPlayerId);
                   return (
                     <RosterRow
                       key={player.playerId}
@@ -723,16 +724,20 @@ function SourceStepContentImpl({
                       }
                       name={player.name}
                       meta={
-                        invited
-                          ? `Invited · ${player.invitedEmail}`
-                          : rosterMeta(player)
+                        isYou
+                          ? "Your own match"
+                          : invited
+                            ? `Invited · ${player.invitedEmail}`
+                            : rosterMeta(player)
                       }
                       trailing={
                         // Roster state travels with the person: a profile a
                         // coach still runs carries the grey pill.
-                        !invited &&
-                        player.managedBy === "coach" &&
-                        player.userId === null ? (
+                        isYou ? (
+                          <Pill>You</Pill>
+                        ) : !invited &&
+                          player.managedBy === "coach" &&
+                          player.userId === null ? (
                           <Pill>Coach-managed</Pill>
                         ) : null
                       }

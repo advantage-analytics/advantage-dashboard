@@ -5,10 +5,42 @@ import ts from "typescript";
 import * as types from "@/components/dashboard/matches/new-match-wizard/types";
 import * as validation from "@/components/dashboard/matches/new-match-wizard/validation";
 import * as scoreState from "@/components/dashboard/matches/new-match-wizard/score-state";
+import * as subjectEligibility from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
 import type {
   UseUploadMatchWizardProps,
   UseUploadMatchWizardReturn,
 } from "@/components/dashboard/matches/new-match-wizard/useUploadMatchWizard";
+import type { RosterFullRow } from "@/lib/data/roster-shared";
+import type { Workspace } from "@/lib/workspace/types";
+
+/**
+ * The roster the mocked `program_roster_full` returns — every player id the
+ * hook specs pick, so a `whoPlayed.choose()` in those specs names someone the
+ * eligibility check can find. Override per harness with `roster`.
+ */
+export const DEFAULT_ROSTER_IDS = [
+  "athlete",
+  "first",
+  "second",
+  "wrong",
+  "right",
+] as const;
+
+export function rosterRow(
+  playerId: string,
+  overrides: Partial<RosterFullRow> = {},
+): RosterFullRow {
+  return {
+    player_id: playerId,
+    user_id: null,
+    display_name: `Player ${playerId}`,
+    email: null,
+    role: "player",
+    lineup_spot: null,
+    managed_by: "coach",
+    ...overrides,
+  };
+}
 
 export function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -21,19 +53,54 @@ export function deferred<T>() {
 /** Execute the real hook with deterministic hook slots and controlled IO.
  * This tests state/handler contracts, not React rendering or browser events. */
 export function uploadWizardHarness(
-  options: { team?: boolean; props?: Partial<UseUploadMatchWizardProps> } = {},
+  options: {
+    team?: boolean;
+    props?: Partial<UseUploadMatchWizardProps>;
+    /** Overrides on the active workspace — `programStatus`, `role`, … */
+    workspace?: Partial<Workspace>;
+    /** What `program_roster_full` returns. Defaults to `DEFAULT_ROSTER_IDS`. */
+    roster?: RosterFullRow[];
+    /** A roster RPC failure: `{ error }` instead of rows. */
+    rosterError?: string;
+    /**
+     * The viewer's own live `program_players` row, as the hook's direct read
+     * returns it — the owner-who-plays case the RPC leaves out.
+     */
+    ownProfile?: subjectEligibility.OwnProfileRow | null;
+  } = {},
 ) {
   const slots: any[] = [];
   let cursor = 0;
   let dirty = true;
   let effects: (() => void)[] = [];
+  // A full `Workspace`, because `uploadEligibility()` reads the status, the
+  // policy ladder and the player switches — a partial one reads as
+  // "status unknown" and refuses everything.
+  const active: Workspace = {
+    id: options.team ? "team-a" : "user",
+    kind: options.team ? "team" : "personal",
+    name: options.team ? "Team A" : "Personal",
+    team: null,
+    orgType: options.team ? "college" : null,
+    timeZone: "UTC",
+    role: options.team ? "coach" : "owner",
+    mark: "T",
+    canSubmitVideo: true,
+    programStatus: options.team ? "active" : null,
+    playersCanUpload: true,
+    memberUploadEnabled: true,
+    uploadPolicy: "everyone",
+    myPlayerId: null,
+    ...options.workspace,
+  };
   const workspace = {
-    active: {
-      id: options.team ? "team-a" : "user",
-      kind: options.team ? "team" : "personal",
-    },
+    active,
     viewer: { id: "user", name: "Riley Player" },
   };
+  const roster =
+    options.roster ?? DEFAULT_ROSTER_IDS.map((id) => rosterRow(id));
+  /** Every `determineWinner()` call's arguments — `[3]` is the attribution. */
+  const winnerCalls: unknown[][] = [];
   const parses = new Map<string, ReturnType<typeof deferred<any>>>();
   const checks = new Map<string, ReturnType<typeof deferred<any>>>();
   const apiChecks = new Map<string, ReturnType<typeof deferred<any>>>();
@@ -107,10 +174,29 @@ export function uploadWizardHarness(
       },
     },
   );
+  // The hook's one direct roster read: the viewer's own profile row.
+  const ownProfileQuery: any = new Proxy(
+    {},
+    {
+      get: (_, key) => {
+        if (key === "then")
+          return (resolve: (value: unknown) => void) =>
+            resolve({
+              data: options.ownProfile ? [options.ownProfile] : [],
+              error: null,
+            });
+        return () => ownProfileQuery;
+      },
+    },
+  );
   const supabase = {
     auth: { getUser: async () => ({ data: { user: { id: "user" } } }) },
-    from: () => query,
-    rpc: async () => ({ data: [] }),
+    from: (table: string) =>
+      table === "program_players" ? ownProfileQuery : query,
+    rpc: async () =>
+      options.rosterError
+        ? { data: null, error: { message: options.rosterError } }
+        : { data: roster, error: null },
   };
   const dependencies: Record<string, unknown> = {
     react,
@@ -146,11 +232,13 @@ export function uploadWizardHarness(
       monthlyCapSecondsFor: () => 7200,
     },
     "@/lib/data/usage-format": { formatResetDate: () => "Oct 1" },
-    "@/lib/data/roster-shared": { rosterPlayerOptions: () => [] },
     "@/lib/wizard/actions": {},
     "./types": types,
     "./validation": validation,
     "./score-state": scoreState,
+    // The real thing: pure, and it is the seam under test. It pulls in the
+    // real `roster-shared` and `upload-eligibility` modules with it.
+    "./subject-eligibility": subjectEligibility,
     "./utils": {
       STORAGE_KEYS: {
         UPLOADED_FILE: "file",
@@ -163,7 +251,10 @@ export function uploadWizardHarness(
       clearStorageData() {},
       formatFileSize: () => "1 KB",
       getAdjustedScores: (scores: unknown) => scores,
-      determineWinner: () => ({ winner: {}, loser: {} }),
+      determineWinner: (...args: unknown[]) => {
+        winnerCalls.push(args);
+        return { winner: {}, loser: {} };
+      },
       buildMatchData: (_id: unknown, form: unknown) => form,
     },
   };
@@ -253,6 +344,7 @@ export function uploadWizardHarness(
     workspace,
     props,
     writes,
+    winnerCalls,
     checks,
     apiChecks,
     parses,
