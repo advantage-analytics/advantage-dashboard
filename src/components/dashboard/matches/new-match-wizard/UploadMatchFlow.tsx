@@ -114,11 +114,20 @@ const PHASE_LABEL: Record<
 export function UploadMatchFlow({
   preset: initialPreset,
   draft,
+  draftRefusal,
   initialProvider,
   initialSubject,
 }: {
   preset?: EventPreset | null;
   draft?: MatchDraft | null;
+  /**
+   * Why the `?draft=` in the URL was not resumed — the page's own sentence
+   * (`draftWorkspaceRefusal()`), already worded. Arrives WITH `draft: null`:
+   * a refused draft is not a half-applied one, so nothing of it — not the
+   * preset, not the attached line, not a single form answer — reaches the
+   * wizard, and this only explains the empty flow the person is looking at.
+   */
+  draftRefusal?: string | null;
   /** A source named by the link that opened the wizard — see the hook. */
   initialProvider?: ProviderId | null;
   /** A roster player named by the link that opened the wizard — see the hook. */
@@ -227,9 +236,36 @@ export function UploadMatchFlow({
       preset={preset}
       onSwitchPreset={setPreset}
       draft={draft ?? null}
+      draftRefusal={draftRefusal ?? null}
       initialProvider={initialProvider ?? null}
       initialSubject={initialSubject ?? null}
     />
+  );
+}
+
+/**
+ * One sentence the flow has to say before the step matters — a draft that was
+ * not resumed, a draft that was not saved.
+ *
+ * The same warning chrome `EligibilityNotice` wears, and for the same reason:
+ * both are "this did not happen, and here is why", not "something broke".
+ * It renders words it is given and decides nothing; the rule that produced
+ * the sentence lives with the rule, never here.
+ */
+function FlowNotice({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex items-start gap-3 rounded-[var(--radius-element)] border border-[var(--warning-border)] bg-[var(--warning-bg)] px-3.5 py-3 text-[12px] leading-[1.5] text-[var(--warning-text)]"
+    >
+      <AlertTriangle
+        className="mt-0.5 size-4 shrink-0"
+        strokeWidth={1.5}
+        aria-hidden="true"
+      />
+      <p className="min-w-0 flex-1">{children}</p>
+    </div>
   );
 }
 
@@ -557,6 +593,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   preset,
   onSwitchPreset,
   draft,
+  draftRefusal,
   initialProvider,
   initialSubject,
 }: {
@@ -566,6 +603,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   preset: EventPreset | null;
   onSwitchPreset: (next: EventPreset) => void;
   draft: MatchDraft | null;
+  draftRefusal: string | null;
   initialProvider: ProviderId | null;
   initialSubject: RosterSubject | null;
 }) {
@@ -614,6 +652,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     detachLine,
     saveDraft,
     draftSaving,
+    draftSaveError,
     lastChangedAt,
     setIsOver,
     handleDrop,
@@ -669,9 +708,11 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   usePublishHeaderStatus(
     draftSaving
       ? "Saving…"
-      : idleMinutes >= 1
-        ? `Draft saved · ${idleMinutes} min ago`
-        : "Draft saved",
+      : draftSaveError
+        ? "Draft not saved"
+        : idleMinutes >= 1
+          ? `Draft saved · ${idleMinutes} min ago`
+          : "Draft saved",
   );
 
   /**
@@ -688,7 +729,15 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
       localStorage.setItem(STORAGE_KEYS.SELECTED_PROVIDER, selectedProvider);
     }
     localStorage.setItem(STORAGE_KEYS.DRAFT_KEPT, "1");
-    await saveDraft();
+    // Leaving is the REWARD for a saved draft, not the action itself. A
+    // refused write used to navigate anyway, which told the person their work
+    // was safe and then offered them no Resume row for it. On failure we stay
+    // exactly where we are — same step, same answers — and `draftSaveError`
+    // says so beside the button. `DRAFT_KEPT` stays set on purpose: it only
+    // stops `DashboardShell` wiping the local copy, which is now the only
+    // copy there is.
+    const saved = await saveDraft();
+    if (!saved) return;
     router.push(exitHref);
   }, [formData, selectedProvider, saveDraft, router, exitHref]);
 
@@ -1022,6 +1071,19 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
       onContinue={continueHandler}
       continueDisabled={continueDisabled}
     >
+      {/* Said before the step, because both answer a question the person
+          already asked: "did my draft come back" and "did my draft save".
+          The refusal only belongs on the entry step — once they have moved
+          on, the flow they are in is the answer. */}
+      {(draftSaveError || (draftRefusal && step === firstStep)) && (
+        <div className="mb-9 flex flex-col gap-3">
+          {draftRefusal && step === firstStep && (
+            <FlowNotice>{draftRefusal}</FlowNotice>
+          )}
+          {draftSaveError && <FlowNotice>{draftSaveError}</FlowNotice>}
+        </div>
+      )}
+
       {/* Workspace · For · Source. In a personal workspace For is the
           uploader; in a team workspace it is the one thing the workspace
           cannot infer — whose match this is — and the hook refuses Continue

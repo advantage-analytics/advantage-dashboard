@@ -484,17 +484,50 @@ export async function deleteMatchDraft(id: string): Promise<void> {
   await supabase.from("match_drafts").delete().eq("id", id);
 }
 
-/** One of the viewer's drafts, for resuming. Null when it is not theirs. */
-export async function loadMatchDraft(id: string): Promise<MatchDraft | null> {
+/**
+ * A draft as it comes back off the row, carrying the workspace it was saved
+ * under alongside its payload.
+ *
+ * `program_id` is a COLUMN, not part of the jsonb payload — `saveMatchDraft`
+ * writes it from `getWorkspaceContext()` at save time, so it cannot be
+ * back-dated by anything the client later puts in `payload`. That is why it is
+ * spread last below, and why the resume check reads this field rather than
+ * anything inside the draft.
+ */
+export interface LoadedMatchDraft extends MatchDraft {
+  /** The team workspace it was saved in, or null for a personal one. */
+  programId: string | null;
+}
+
+/**
+ * One of the viewer's drafts, for resuming. Null when it is not theirs.
+ *
+ * RLS (`(select auth.uid()) = user_id`) answers ownership, and ownership
+ * alone: a draft the viewer saved in a program they have since left still
+ * reads back here. Which workspace it belongs to is a separate question, and
+ * `program_id` is what answers it — see `draftBelongsToWorkspace()`.
+ */
+export async function loadMatchDraft(
+  id: string,
+): Promise<LoadedMatchDraft | null> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("match_drafts")
-    .select("payload, updated_at")
+    .select("payload, updated_at, program_id")
     .eq("id", id)
     .maybeSingle();
-  const row = data as { payload: MatchDraft; updated_at: string } | null;
+  const row = data as {
+    payload: MatchDraft;
+    updated_at: string;
+    program_id: string | null;
+  } | null;
   if (!row) return null;
-  return { ...row.payload, id, updatedAt: row.updated_at };
+  return {
+    ...row.payload,
+    id,
+    updatedAt: row.updated_at,
+    programId: row.program_id,
+  };
 }
 
 /** The drafts the Matches table lists at its top (design 11c). */

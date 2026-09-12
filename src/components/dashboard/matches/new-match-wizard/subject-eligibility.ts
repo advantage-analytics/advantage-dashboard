@@ -288,3 +288,43 @@ export function identityAthleteFor(input: {
 export function draftResumeStep(asksWhoPlayed: boolean): Step {
   return asksWhoPlayed ? "provider" : "file";
 }
+
+/**
+ * The workspace a draft may be resumed into: its own, and only its own.
+ *
+ * `match_drafts.program_id` records the workspace the draft was saved under
+ * (`saveMatchDraft`), and RLS on that table scopes rows by `user_id` alone —
+ * so a draft reads back to its author whatever workspace is active now, and
+ * whether or not they are still a member of the program it was saved in. This
+ * is the comparison nothing used to make.
+ *
+ * A personal workspace is `program_id IS NULL`, so both sides normalise to
+ * "the program id, or null", and a personal draft resumed while a team is
+ * active is a mismatch exactly as a team draft in a personal workspace is.
+ */
+export function draftBelongsToWorkspace(
+  draftProgramId: string | null,
+  workspace: Pick<Workspace, "kind" | "id">,
+): boolean {
+  return draftProgramId === (workspace.kind === "team" ? workspace.id : null);
+}
+
+/**
+ * Why a draft was not resumed, in the words the wizard shows.
+ *
+ * The refusal is deliberate and not a switch: resuming must never re-home a
+ * draft into whatever workspace happens to be active, because `program_id` is
+ * what the row will be billed and scoped by, and a URL is not consent to
+ * change the workspace every other surface is showing. Nor can a switch always
+ * be offered — the draft's program may be one the author has since left. So
+ * the wizard starts clean and says whose draft it was, leaving the switch to
+ * the switcher.
+ *
+ * `savedIn` is null when the draft's workspace is not one the viewer holds any
+ * more; the sentence then names no program rather than inventing one.
+ */
+export function draftWorkspaceRefusal(savedIn: string | null): string {
+  return savedIn
+    ? `That draft was saved in ${savedIn}, so it wasn't resumed here. Switch to ${savedIn} to pick it up — this match will be saved in the workspace you're in now.`
+    : "That draft was saved in another workspace, so it wasn't resumed here. Switch to the workspace it belongs to to pick it up — this match will be saved in the workspace you're in now.";
+}

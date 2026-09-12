@@ -420,6 +420,16 @@ export interface UseUploadMatchWizardReturn {
   /** Write the draft row. Returns false when it could not be saved. */
   saveDraft: () => Promise<boolean>;
   draftSaving: boolean;
+  /**
+   * Why the last `saveDraft()` failed, or null when the last one worked.
+   *
+   * Lives here rather than in the component because the hook is what knows
+   * the write was refused: a caller that only ever awaited the promise and
+   * navigated away is the defect this exists to make impossible to repeat.
+   * The wizard stays open and the answers stay in state; only the durable row
+   * is missing.
+   */
+  draftSaveError: string | null;
   /** When the form last changed — for "Draft saved · 2 min ago". */
   lastChangedAt: number | null;
 
@@ -657,6 +667,7 @@ export function useUploadMatchWizard({
   // carried in by a resume.
   const [draftId, setDraftId] = useState<string | null>(draft?.id ?? null);
   const [draftSaving, setDraftSaving] = useState(false);
+  const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
   const [lastChangedAt, setLastChangedAt] = useState<number | null>(null);
   const [parsingState, setParsingState] = useState<ParsingState>({
     isParsing: false,
@@ -932,8 +943,18 @@ export function useUploadMatchWizard({
         preset: preset ?? null,
         attachedLine,
       });
-      if (!saved) return false;
+      if (!saved) {
+        // Every reason `saveMatchDraft` returns null — no workspace context,
+        // no signed-in user, an RLS refusal, a database error — reaches the
+        // person as the same sentence, because the answer is the same one:
+        // nothing durable was written, the answers are still here, try again.
+        setDraftSaveError(
+          "We couldn't save your draft. Your answers are still here — try again.",
+        );
+        return false;
+      }
       setDraftId(saved.id);
+      setDraftSaveError(null);
       return true;
     } finally {
       setDraftSaving(false);
@@ -2707,6 +2728,7 @@ export function useUploadMatchWizard({
     // Drafts
     saveDraft,
     draftSaving,
+    draftSaveError,
     lastChangedAt,
 
     // File handling

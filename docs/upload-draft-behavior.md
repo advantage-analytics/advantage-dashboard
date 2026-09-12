@@ -1,7 +1,9 @@
 # Upload wizard: Save draft behavior
 
-**Status:** current as of 2026-09-12, verified against `codex/upload-flow-refinements` @
-`246049e` and the live database (via the Supabase MCP — `match_drafts` is migration
+**Status:** current as of 2026-09-12. Originally verified against
+`codex/upload-flow-refinements` @ `246049e`; **amended after T21**, which fixed the two
+defects this document had recorded and left standing (§3 and the resume gap in §2). Every
+line below reflects the post-T21 code, and the live database (via the Supabase MCP — `match_drafts` is migration
 `20260903060451`, applied; `upload_eligibility`, `20260911000000`, is **not**).
 **Read alongside:** `work/upload-flow-refinements/02_design/output/design.md` §"Save
 draft behavior contract — plan only", which this document expands and answers. This is
@@ -60,7 +62,10 @@ Shipped. Clicking "Save draft":
    and on the existing `draftId` thereafter (`useUploadMatchWizard.ts:900`,
    `actions.ts:433-480`, `onConflict: "id"`). Every subsequent Save draft on the same
    wizard session updates that same row rather than creating a new one.
-4. Navigates to `exitHref` regardless of step 3's outcome — see the failure gap below.
+4. Navigates to `exitHref` **only when step 3 succeeded** (`UploadMatchFlow.tsx`,
+   `handleSaveDraft`: `const saved = await saveDraft(); if (!saved) return;`). A refused
+   write keeps the wizard exactly where it is — see §3, now a description of the fix
+   rather than of the gap.
 
 The autosave in step 1 already runs continuously while the wizard is open
 (`useUploadMatchWizard.ts:890-897`); Save draft's local write is redundant with it but
@@ -68,11 +73,11 @@ harmless.
 
 ### Resume
 
-Shipped, with a real gap. `/dashboard/matches/new?draft=<id>` loads the row through
-`loadMatchDraft` (`src/app/dashboard/matches/new/page.tsx:67-68`,
-`actions.ts:488-498`), which is ownership-scoped by RLS (no explicit `user_id` filter in
-the query itself, `actions.ts:488-495` — the policy is what makes another user's id
-resolve to nothing). The wizard's mount effect then seeds `selectedProvider`, `formData`,
+Shipped. Two routes resume a draft — `/dashboard/matches/new?draft=<id>` and
+`/dashboard/team/upload?draft=<id>` — and both load the row through
+`loadMatchDraft` (`actions.ts`), which is ownership-scoped by RLS (no explicit `user_id`
+filter in the query itself — the policy is what makes another user's id resolve to
+nothing). The wizard's mount effect then seeds `selectedProvider`, `formData`,
 and `attachedLine` from the draft's payload (`useUploadMatchWizard.ts:1002-1012`).
 
 The step it resumes to is decided by `draftResumeStep()`
@@ -86,17 +91,28 @@ attribution bug `MatchSubject` exists to prevent (comment at
 object cannot survive `localStorage` or a jsonb column, so both kinds always land on a
 step that re-asks for it.
 
-**The gap:** nothing compares the draft's stored `program_id` to the workspace that is
-currently active. `loadMatchDraft` (`actions.ts:488-498`) does not read or check
-`program_id`, and the resume effect (`useUploadMatchWizard.ts:1002-1023`) applies the
-draft's `provider`/`formData`/`attachedLine` unconditionally — there is no `if
-(draft.programId !== activeWorkspace.id)` anywhere in that path. A draft saved under one
-team workspace can be resumed while a different workspace (personal, or another program)
-is active, carrying that draft's attached line and form answers into a workspace they
-were never eligible for. Because the who-played subject is never restored, this cannot
-mis-attribute a match to the wrong _player_, but it can attach the wrong event line, or
-present opponent/roster context from a program the current workspace has no relationship
-to.
+**Fixed in T21.** `loadMatchDraft` now selects `program_id` alongside the payload and
+returns it as `LoadedMatchDraft.programId` (`actions.ts`), and the route compares it to
+the active workspace before the draft reaches the wizard at all
+(`draftBelongsToWorkspace()` in `subject-eligibility.ts`, called from BOTH resume
+routes — a check on only one of them would be the same bug with a longer URL). A personal draft is `program_id IS NULL`, so both sides
+normalise to "the program id, or null" and either direction of mismatch is caught.
+
+The mismatch **refuses** rather than switching: the page passes `draft={null}` plus a
+`draftRefusal` sentence (`draftWorkspaceRefusal()`), which the wizard renders as a notice
+on its entry step and nothing else. Nothing of the draft — not the preset the component
+seeds from `draft?.preset`, not the attached line, not one form answer — is applied.
+Silently switching the active workspace was rejected for two reasons: `program_id` is
+what the resulting row is scoped and billed by, so a URL would be re-deciding the
+workspace every other surface is showing; and `match_drafts` is RLS-scoped to `user_id`
+alone, so the draft's program may be one the author has since left, where no switch
+exists to offer. The refusal names the workspace when the viewer still holds it and names
+none when they do not.
+
+This check runs on the server, at resume, and is not a rival to T13's client-side
+`pinnedMatchWorkspace` — that one pins an EXISTING match's workspace against an in-place
+switcher change mid-flow. They answer different questions at different moments: "may this
+draft be opened here" once, and "may this open flow be re-homed" continuously.
 
 ### Replacement
 
@@ -185,26 +201,32 @@ statement like "transfer already started ⇒ treat it as an editable pre-upload 
 not apply to this codebase's state machine, because that state — mid-transfer with a
 still-open draft — cannot occur.
 
-## 3. Save-failure behavior today (the item most worth calling out)
+## 3. Save-failure behavior (fixed in T21)
 
-Shipped, and it does not match the design's proposed contract. `handleSaveDraft`
-(`UploadMatchFlow.tsx:685-693`) does:
+Shipped, and it now matches the design's proposed contract. `handleSaveDraft`
+(`UploadMatchFlow.tsx`) does:
 
 ```
 localStorage.setItem(STORAGE_KEYS.DRAFT_KEPT, "1");
-await saveDraft();
+const saved = await saveDraft();
+if (!saved) return;
 router.push(exitHref);
 ```
 
-`saveDraft()` returns `false` on failure (`useUploadMatchWizard.ts:915`, when
-`saveMatchDraft` comes back null — no workspace context, no signed-in user, or a
-database error) but `handleSaveDraft` does not check that return value. The wizard
-navigates to `exitHref` unconditionally. Local storage is left intact (the `DRAFT_KEPT`
-flag was already set, so `DashboardShell` will not clear it on the way out), so the
-in-progress answers are not lost to a page refresh — but nothing tells the user the
-server-side draft was never written, and the Matches table's draft list will not show a
-Resume row for it. This is the concrete instance of the defect the design document
-flagged by inspection alone; this document confirms it by reading the call site.
+`saveDraft()` returns `false` when `saveMatchDraft` comes back null — no workspace
+context, no signed-in user, or a database error — and in that same branch sets
+`draftSaveError` on the hook ("We couldn't save your draft. Your answers are still
+here — try again."). The wizard therefore stays on the current step with every field
+value intact, renders that sentence as a notice above the step, and the header's status
+slot reads "Draft not saved" rather than "Draft saved". The Save draft button is live
+again immediately, so the retry is the same click.
+
+`DRAFT_KEPT` is deliberately left set in the failure branch: it does nothing but stop
+`DashboardShell` wiping the local copy (§4), which after a failed save is the only copy
+that exists.
+
+Until T21 this function discarded `saveDraft()`'s boolean and navigated unconditionally —
+the concrete instance of the defect the design document flagged by inspection.
 
 ## 4. `DashboardShell`'s localStorage sweep
 
@@ -252,9 +274,14 @@ independent of whichever recommendation below (or a different design) is chosen:
   job." A future implementation must not add a cron job, TTL column, or scheduled sweep
   for `match_drafts`.
 
-## 6. Recommendations (future acceptance criteria — nothing here is built)
+## 6. Recommendations
 
-> **Recommendation: Save failure must not lose the user's place.** `handleSaveDraft`
+The first two below were **built by T21** and are kept here, marked, because their
+acceptance criteria are what the fix was gated against — §2 and §3 describe the shipped
+result. The remaining two are still unbuilt, and nothing here authorizes building them.
+
+> **Recommendation — DONE (T21). Save failure must not lose the user's place.**
+> `handleSaveDraft`
 > should branch on `saveDraft()`'s boolean result. On `false`, remain on the current step
 > with the current `formData` untouched, surface an explicit error (e.g. "Couldn't save
 > your draft — try again"), and offer a retry action, matching the design contract's "Save
@@ -265,7 +292,9 @@ independent of whichever recommendation below (or a different design) is chosen:
 > denial) leaves the wizard open, on the same step, with the same field values, and shows
 > a visible failure message; the user is not redirected to the Matches table.
 
-> **Recommendation: Durable, revalidated subject/workspace binding.** A saved draft
+> **Recommendation — DONE in part (T21): item 1 built, item 2 still unbuilt (no subject
+> is persisted in a draft, so there is nothing yet to revalidate).
+> Durable, revalidated subject/workspace binding.** A saved draft
 > should carry an explicit, checked binding to the workspace it was saved under (today's
 > `program_id` column already exists for this) and — for a team draft — to the roster
 > subject it was answering for, if that is ever added to the payload. On resume, before
@@ -294,7 +323,8 @@ independent of whichever recommendation below (or a different design) is chosen:
 > saved" status copy (`UploadMatchFlow.tsx:669-675`) so it only reflects the durable
 > `match_drafts` write, not the local autosave tick — today that status string can read
 > "Draft saved" from local autosave alone, before the user has ever clicked the Save
-> draft button.
+> draft button. T21 narrowed this only at the failure end — the status now reads "Draft
+> not saved" after a refused write — and left the false positive untouched.
 >
 > Acceptance: the wizard's UI never claims "Draft saved" in a way a user would reasonably
 > read as "there is a Resume row for this in the Matches table" unless a `match_drafts`
@@ -312,8 +342,8 @@ independent of whichever recommendation below (or a different design) is chosen:
 > failed) does not create a second `matches` row; it either declines to resume with an
 > explanation, or routes the user to the existing match.
 
-None of the four recommendations above are implemented by this document, and none of
-them should be read as authorizing implementation — they restate, with file/line
-grounding, the same four gaps the design document (§"Save draft behavior contract — plan
-only") identified by inspection. Building any of them is separate scoped work with its
-own task and its own tests.
+The two marked DONE were implemented by T21, with `tests/upload-draft-resume.spec.ts`
+proving both keylessly. The two unmarked ones are not implemented, and nothing in this
+document authorizes implementing them — they restate, with file grounding, gaps the
+design document (§"Save draft behavior contract — plan only") identified by inspection.
+Building either is separate scoped work with its own task and its own tests.

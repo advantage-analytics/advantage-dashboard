@@ -78,6 +78,13 @@ export function uploadWizardHarness(
      * returns it — the owner-who-plays case the RPC leaves out.
      */
     ownProfile?: subjectEligibility.OwnProfileRow | null;
+    /**
+     * What the `saveMatchDraft` server action answers. `"refused"` is the
+     * null it returns for no workspace context, no signed-in user, or a
+     * database/RLS error — the branch `saveDraft()` reports as `false`.
+     * Defaults to a successful write.
+     */
+    draftSave?: "saved" | "refused";
   } = {},
 ) {
   const slots: any[] = [];
@@ -112,6 +119,9 @@ export function uploadWizardHarness(
     options.roster ?? DEFAULT_ROSTER_IDS.map((id) => rosterRow(id));
   /** Every `determineWinner()` call's arguments — `[3]` is the attribution. */
   const winnerCalls: unknown[][] = [];
+  /** Every draft the hook asked `saveMatchDraft` to write, in order. */
+  const draftSaves: { id: string }[] = [];
+  const draftDeletes: string[] = [];
   const parses = new Map<string, ReturnType<typeof deferred<any>>>();
   const checks = new Map<string, ReturnType<typeof deferred<any>>>();
   const apiChecks = new Map<string, ReturnType<typeof deferred<any>>>();
@@ -280,7 +290,17 @@ export function uploadWizardHarness(
       monthlyCapSecondsFor: () => 7200,
     },
     "@/lib/data/usage-format": { formatResetDate: () => "Oct 1" },
-    "@/lib/wizard/actions": {},
+    "@/lib/wizard/actions": {
+      saveMatchDraft: async (draft: { id: string }) => {
+        draftSaves.push(draft);
+        return options.draftSave === "refused"
+          ? null
+          : { id: draft.id, updatedAt: "2026-09-12T00:00:00.000Z" };
+      },
+      deleteMatchDraft: async (id: string) => {
+        draftDeletes.push(id);
+      },
+    },
     "./types": types,
     "./validation": validation,
     "./score-state": scoreState,
@@ -399,6 +419,8 @@ export function uploadWizardHarness(
     props,
     writes,
     winnerCalls,
+    draftSaves,
+    draftDeletes,
     checks,
     apiChecks,
     parses,
