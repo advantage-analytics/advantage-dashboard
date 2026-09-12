@@ -184,7 +184,7 @@ ready).
 
 ## T13 · Show approval restrictions at every entry
 
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **reasoning:** medium
 - **needs:** T7, T12
