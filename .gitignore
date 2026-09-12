@@ -2,9 +2,6 @@
 
 # dependencies
 /node_modules
-# workers/ are separate deployments with their own dependency trees; the
-# root-anchored rule above does not reach them.
-**/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -116,12 +113,6 @@ pnpm-lock.yaml
 .playwright-mcp/
 /test-results/
 /playwright-report/
-
-# wrangler local state — per-machine build cache and a simulated local R2,
-# regenerated on every `wrangler deploy`. Note the simulated bucket is why
-# `wrangler r2 object get` reports "key does not exist" for objects that are
-# really there: it reads local unless you pass --remote.
-workers/*/.wrangler/
 
 # agents
 .agents
