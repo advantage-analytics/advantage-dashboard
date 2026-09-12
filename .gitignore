@@ -55,9 +55,10 @@ next-env.d.ts
 # holds one person's permission allowlist, launch.json points at their own
 # worktree paths, and worktrees/ is a working directory.
 #
-# .claude/skills/ is mostly THIRD-PARTY skills installed from the committed
-# skills-lock.json (pbakaus/impeccable). Those are reinstallable dependencies,
-# so only the project-authored ones are tracked here. Add a new one to this
+# .claude/skills/ holds only project-authored skills, tracked individually
+# below. Generic design-review skills (critique, polish, harden, etc.) come
+# from the user-level `impeccable` skill instead of a per-repo install —
+# nothing here reinstalls or references them. Add a new project skill to this
 # list when you write it — the default is ignored.
 .claude/*
 !.claude/settings.json

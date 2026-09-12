@@ -2,13 +2,10 @@ import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
 /**
- * Opponents belongs to a program.
- *
- * Same guard, and the same reasoning, as `dashboard/team/layout.tsx`: the rail
- * picks its menu from the active workspace, so without this a personal-workspace
- * visitor who types the URL gets a scouting page beside personal navigation.
- * One check here rather than the same check repeated on three pages and
- * enforced by remembering.
+ * The Opponents entry is available in both workspaces. Authenticate here,
+ * but let the index render its Coming Soon page for personal members too.
+ * The index's finalised path and both opponent detail pages enforce their
+ * own team-only guards before reading program data.
  *
  * The route sits outside `/dashboard/team` on purpose. Most of what it renders
  * is not this program's — the roster and lineup history come from the pooled
@@ -25,7 +22,6 @@ export default async function OpponentsLayout({
 }) {
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
-  if (workspace.active.kind !== "team") redirect("/dashboard");
 
   return <>{children}</>;
 }

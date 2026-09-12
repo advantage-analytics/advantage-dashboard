@@ -166,13 +166,15 @@ export async function readScheduleWithClient(
 
   if (eventId) eventQuery = eventQuery.eq("id", eventId);
 
-  const { data: eventRows } = await eventQuery;
+  const { data: eventRows, error: eventError } = await eventQuery;
+  if (eventError)
+    throw new Error("Could not load schedule", { cause: eventError });
   const events = ((eventRows ?? []) as DbEvent[]).map(toEvent);
   if (events.length === 0) {
     return { events, entriesByEvent: new Map() };
   }
 
-  const { data: entryRows } = await supabase
+  const { data: entryRows, error: entryError } = await supabase
     .from("program_event_entries")
     .select(ENTRY_COLUMNS)
     .in(
@@ -181,11 +183,16 @@ export async function readScheduleWithClient(
     )
     .order("position", { ascending: true });
 
+  if (entryError)
+    throw new Error("Could not load schedule entries", { cause: entryError });
   const entries = (entryRows ?? []) as DbEntry[];
 
   const entryIds = entries.map((entry) => entry.id);
   const eventIds = events.map((event) => event.id);
-  const [{ data: matchRows }, { data: outcomeRows }] = entries.length
+  const [
+    { data: matchRows, error: matchError },
+    { data: outcomeRows, error: outcomeError },
+  ] = entries.length
     ? await Promise.all([
         supabase
           .from("matches")
@@ -198,8 +205,17 @@ export async function readScheduleWithClient(
           .in("event_id", eventIds)
           .in("entry_id", entryIds),
       ])
-    : [{ data: [] as DbEntryMatch[] }, { data: [] as DbEntryOutcome[] }];
+    : [
+        { data: [] as DbEntryMatch[], error: null },
+        { data: [] as DbEntryOutcome[], error: null },
+      ];
 
+  if (matchError)
+    throw new Error("Could not load schedule results", { cause: matchError });
+  if (outcomeError)
+    throw new Error("Could not load schedule outcomes", {
+      cause: outcomeError,
+    });
   const matches = (matchRows ?? []) as DbEntryMatch[];
   const outcomes = (outcomeRows ?? []) as DbEntryOutcome[];
 

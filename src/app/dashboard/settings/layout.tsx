@@ -4,7 +4,7 @@ import { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { SettingsNavigation } from "@/components/dashboard/settings/settings-navigation";
 import { settingsSection, SETTINGS_SECTIONS } from "@/lib/dashboard/nav";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
@@ -108,21 +108,18 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
         <div className="flex flex-col gap-12 md:flex-row">
           <SettingsNavigation />
           <div className="min-w-0 flex-1">
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.div
-                // Teams has pages beneath it; keying on the path lets the
-                // drill-down fade like every other section change does.
-                key={
-                  section.id === "teams" ? (pathname ?? section.id) : section.id
-                }
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.25, ease: EASE_CURVE }}
-              >
-                {children}
-              </motion.div>
-            </AnimatePresence>
+            <motion.div
+              // Teams has pages beneath it; keying on the path lets the
+              // drill-down fade like every other section change does.
+              key={
+                section.id === "teams" ? (pathname ?? section.id) : section.id
+              }
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, ease: EASE_CURVE }}
+            >
+              {children}
+            </motion.div>
           </div>
         </div>
       </div>

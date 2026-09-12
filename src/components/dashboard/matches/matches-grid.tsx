@@ -10,6 +10,7 @@ import {
   DATE_COL,
   DATE_COL_WITH_YEAR,
   LIST_GRID_COLS,
+  TEAM_LIST_GRID_COLS,
   LIST_ROW_FRAME,
 } from "./match-card-list";
 
@@ -92,6 +93,7 @@ export function MatchesGrid({
           <MatchCardGallery
             key={match.id}
             match={match}
+            scope={scope}
             isNew={match.id === newMatchId}
           />
         ))}
@@ -103,38 +105,46 @@ export function MatchesGrid({
             rhythm and the card should not add a second one — a hairline under
             the header only, and rows that carry a rounded inset hover instead
             of dividers (SKILL 8a). */}
-        <div className="surface-card" style={cardStyle}>
-          {/* Column headers — flush at the card inset, hairline underneath. */}
+        <div className="surface-card overflow-x-auto" style={cardStyle}>
           <div
-            className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pt-3.5 pb-2.5`}
-            style={LIST_GRID_COLS}
-            role="row"
+            className={scope === "team" ? "min-w-[1048px]" : "min-w-[1000px]"}
           >
-            {COLUMNS.map((label, i) => (
-              <span
-                key={label || `col-${i}`}
-                className="eyebrow-sm min-w-0 truncate"
-                role="columnheader"
-              >
-                {label}
-              </span>
-            ))}
-          </div>
-          {/* Rows — no per-item entrance tween. Content must never depend on an
+            {/* Column headers — flush at the card inset, hairline underneath. */}
+            <div
+              className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pt-3.5 pb-2.5`}
+              style={scope === "team" ? TEAM_LIST_GRID_COLS : LIST_GRID_COLS}
+              role="row"
+            >
+              {(scope === "team"
+                ? [COLUMNS[0], "Roster", ...COLUMNS.slice(1)]
+                : COLUMNS
+              ).map((label, i) => (
+                <span
+                  key={label || `col-${i}`}
+                  className="eyebrow-sm min-w-0 truncate"
+                  role="columnheader"
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+            {/* Rows — no per-item entrance tween. Content must never depend on an
               animation frame to become visible; PageTransition already carries
               the route-level entrance. */}
-          <div>
-            {drafts.map((draft) => (
-              <DraftRow key={draft.id} draft={draft} scope={scope} />
-            ))}
-            {matches.map((match) => (
-              <MatchCardList
-                key={match.id}
-                match={match}
-                isNew={match.id === newMatchId}
-                unseen={unseenIds?.has(match.id)}
-              />
-            ))}
+            <div>
+              {drafts.map((draft) => (
+                <DraftRow key={draft.id} draft={draft} scope={scope} />
+              ))}
+              {matches.map((match) => (
+                <MatchCardList
+                  key={match.id}
+                  match={match}
+                  scope={scope}
+                  isNew={match.id === newMatchId}
+                  unseen={unseenIds?.has(match.id)}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </div>

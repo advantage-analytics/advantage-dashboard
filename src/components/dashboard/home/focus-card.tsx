@@ -22,6 +22,7 @@ import { CardFooter } from "@/components/dashboard/shared/card-footer";
 export function FocusCard({
   children,
   footer,
+  showStatisticsLink = true,
 }: {
   children: React.ReactNode;
   /**
@@ -35,6 +36,8 @@ export function FocusCard({
    * anatomy) — hoisting it to the shell is what lets it survive both.
    */
   footer?: { left: React.ReactNode; right?: React.ReactNode };
+  /** Day-zero previews keep their data anatomy but expose no destinations. */
+  showStatisticsLink?: boolean;
 }) {
   return (
     <div
@@ -63,12 +66,14 @@ export function FocusCard({
           Advantage Intelligence
         </span>
         <div className="flex-1" />
-        <Link
-          href="/dashboard/statistics"
-          className="text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-        >
-          Open Statistics
-        </Link>
+        {showStatisticsLink && (
+          <Link
+            href="/dashboard/statistics"
+            className="text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+          >
+            Open Statistics
+          </Link>
+        )}
       </div>
       {children}
       {footer && <CardFooter left={footer.left} right={footer.right} />}

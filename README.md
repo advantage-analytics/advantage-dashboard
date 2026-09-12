@@ -69,13 +69,12 @@ az login                  # for the azure-storage skill
 stripe login              # for the stripe-cli skill
 ```
 
-`skills-lock.json` is **not** part of setup. It is one maintainer's optional
-design-review skills, restorable with `npx skills experimental_install`. The
-skills it names are gitignored, so a clone does not get them and nothing in this
-repo — no script, no CI step — reads the file. Ignore it unless you specifically
-want that tooling. (`designpass`, `layout` and `shape` are installed locally but
-absent from the lock; add them with `npx skills add` if the lock should restore
-them too.)
+Generic design-review skills (critique, polish, harden, distill, and friends)
+are not installed per-repo — use the user-level `impeccable` skill
+(`/impeccable <verb> <target>`) instead. This repo used to vendor its own copy
+via a committed `skills-lock.json`, but those copies drifted out of date
+against `impeccable`'s own updates, so the lockfile was removed. Run
+`npx skills add pbakaus/impeccable` at the user level if it is ever missing.
 
 ## Where to go next
 

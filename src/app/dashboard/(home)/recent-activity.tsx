@@ -1,10 +1,15 @@
 "use client";
 
+import {
+  loadRecentMatches,
+  type EventGroup,
+} from "@/lib/data/home-recent-data";
+export type { EventGroup, MatchRow } from "@/lib/data/home-recent-data";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { AlertCircle, CheckCircle2, Inbox, RefreshCw, X } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import RecentMatches from "@/components/dashboard/home/recent-matches";
@@ -12,14 +17,6 @@ import { CardFooter } from "@/components/dashboard/shared/card-footer";
 import { RecentMatchesEmpty } from "@/components/dashboard/home/recent-matches-empty";
 import { advButton } from "@/lib/ui/adv-button";
 import { createClient } from "@/lib/supabase/client";
-import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
-import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
-import {
-  isAnalysisFailed,
-  isInFlight,
-  type AnalysisStatus,
-} from "@/lib/data/match-analysis";
-import { viewerSide } from "@/lib/data/viewer-side";
 
 type ToastState =
   | { kind: "idle" }
@@ -32,213 +29,6 @@ type ToastState =
 // a safety net, not a poll interval.
 const PROCESSING_TIMEOUT_MS = 120000;
 const PROCESSING_STORAGE_KEY = "match-processing";
-
-interface DbMatch {
-  id: string;
-  created_by: string;
-  player1_id: string | null;
-  player2_id: string | null;
-  player1_name: string;
-  player2_name: string;
-  tournament_name: string | null;
-  round: string | null;
-  date: string;
-  score: {
-    player1: number[];
-    player2: number[];
-    player1_tiebreaks?: (number | null)[];
-    player2_tiebreaks?: (number | null)[];
-  } | null;
-  result: string | null;
-  match_type: string | null;
-  court_type: string | null;
-  verified: boolean | null;
-  duration: number | null;
-  opponent_hand: string | null;
-  opponent_backhand: string | null;
-}
-
-function formatOpponentMeta(
-  hand: string | null,
-  backhand: string | null,
-): string[] {
-  const meta: string[] = [];
-  if (hand === "left" || hand === "right") {
-    meta.push(`${hand.toUpperCase()} HANDED`);
-  }
-  if (backhand === "one-handed" || backhand === "two-handed") {
-    meta.push(`${backhand === "one-handed" ? "1" : "2"}-HANDED BACKHAND`);
-  }
-  return meta;
-}
-
-interface MatchStats {
-  match_id: string;
-  is_player1: boolean;
-  first_serve_pct: string | null;
-  winners: number | null;
-  unforced_errors: number | null;
-  break_points_saved: number | null;
-  break_points_faced: number | null;
-  break_point_opportunities: number | null;
-  break_points_converted: number | null;
-}
-
-export interface EventGroup {
-  id: string;
-  tournamentName: string;
-  date: string;
-  matchType: string | null;
-  courtType: string | null;
-  verificationStatus: string | null;
-  matches: MatchRow[];
-}
-
-export interface MatchRow {
-  id: string;
-  opponentName: string;
-  /**
-   * Sets, already turned the viewer's way round — not a formatted string. The
-   * rail used to carry "6-4 6-2" from a private formatter here, which is how
-   * the home page ended up spelling scores differently from the matches list.
-   * `<ScoreLine>` owns the spelling now; this row only owns the orientation.
-   */
-  score: ScoreLineSet[];
-  won: boolean;
-  firstServePct: number | null;
-  winners: number | null;
-  errors: number | null;
-  opponentMeta?: string[];
-  /**
-   * Set while the match is still analyzing, or while analysis has failed —
-   * swaps the row for the loader/error + `StatusChip` treatment instead of a
-   * result. `isInFlight` alone used to gate this, which meant a `failed` or
-   * `derivation_failed` job fell through to the ordinary win/loss row: real
-   * score, dashes for every stat, nothing on screen saying the analysis never
-   * finished. `manual` doesn't need the same carve-out — it never resolves to
-   * a status here at all (no job row exists for it), so it already renders as
-   * the plain result row its dashes correctly describe.
-   */
-  analysisStatus?: AnalysisStatus;
-}
-
-function formatDisplayDate(isoDate: string): string {
-  try {
-    const d = new Date(isoDate);
-    if (Number.isNaN(d.getTime())) return isoDate;
-    const now = new Date();
-    const dDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const diffDays = Math.round(
-      (nowDay.getTime() - dDay.getTime()) / (1000 * 60 * 60 * 24),
-    );
-
-    if (diffDays === 0) return "Today";
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays > 1 && diffDays <= 6) return `${diffDays} days ago`;
-    if (diffDays > 6 && diffDays <= 13) return "Last week";
-
-    const sameYear = d.getFullYear() === now.getFullYear();
-    return d.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      ...(sameYear ? {} : { year: "numeric" }),
-    });
-  } catch {
-    return isoDate;
-  }
-}
-
-function didUserWin(score: DbMatch["score"], isUserPlayer1: boolean): boolean {
-  if (!score?.player1?.length || !score?.player2?.length) return false;
-  let p1Sets = 0;
-  let p2Sets = 0;
-  score.player1.forEach((s, i) => {
-    if (s > (score.player2[i] ?? 0)) p1Sets++;
-    else if ((score.player2[i] ?? 0) > s) p2Sets++;
-  });
-  return isUserPlayer1 ? p1Sets > p2Sets : p2Sets > p1Sets;
-}
-
-function groupMatchesIntoEvents(
-  rows: DbMatch[],
-  playerIds: readonly string[],
-  viewerId: string,
-  statsMap: Map<string, MatchStats>,
-  analysisMap: Map<string, AnalysisStatus>,
-): EventGroup[] {
-  const byKey = new Map<string, DbMatch[]>();
-  for (const row of rows) {
-    const dateOnly =
-      row.date && row.date.length >= 10 ? row.date.slice(0, 10) : row.date;
-    const key = `${row.tournament_name ?? ""}|${dateOnly}`;
-    if (!byKey.has(key)) byKey.set(key, []);
-    byKey.get(key)!.push(row);
-  }
-  const events: EventGroup[] = [];
-  const keys = Array.from(byKey.keys()).sort((a, b) => {
-    const dateA = byKey.get(a)![0].date;
-    const dateB = byKey.get(b)![0].date;
-    return dateB.localeCompare(dateA);
-  });
-  for (const key of keys.slice(0, 3)) {
-    const matches = byKey.get(key)!;
-    const first = matches[0];
-    const mapped: MatchRow[] = [];
-
-    for (const m of matches) {
-      if (!m.score?.player1?.length) continue;
-      // The id set, not one id: a match a coach recorded for this athlete
-      // before they had an account carries their roster PROFILE's id, and this
-      // is what picks the opponent and orients the score.
-      //
-      // Three-state, not two: a match where the viewer is neither player used
-      // to fall through the old `Boolean(...)` check straight into "assume
-      // player2" — a stranger's name, orientation and win/loss rendered as
-      // the viewer's own. `viewerSide()` (shared with `performance-server.ts`,
-      // which is why the KPI strip already dropped what this list used to
-      // render wrong) answers "player1" | "player2" | null; null means drop.
-      const side = viewerSide(m, playerIds, viewerId, m.created_by);
-      if (side === null) continue;
-      const isUserPlayer1 = side === "player1";
-      const opponent = isUserPlayer1 ? m.player2_name : m.player1_name;
-      const stat = statsMap.get(m.id);
-      const status = analysisMap.get(m.id);
-
-      mapped.push({
-        id: m.id,
-        opponentName: opponent,
-        // `swap` when the viewer is stored as player2, so the row reads from
-        // their side — game counts and tiebreaks flipped together.
-        score: scoreSetsFrom(m.score, { swap: !isUserPlayer1 }),
-        won: didUserWin(m.score, isUserPlayer1),
-        firstServePct: stat
-          ? Math.round(parseFloat(stat.first_serve_pct ?? "0"))
-          : null,
-        winners: stat?.winners ?? null,
-        errors: stat?.unforced_errors ?? null,
-        opponentMeta: formatOpponentMeta(m.opponent_hand, m.opponent_backhand),
-        analysisStatus:
-          status && (isInFlight(status) || isAnalysisFailed(status))
-            ? status
-            : undefined,
-      });
-    }
-
-    if (mapped.length === 0) continue;
-    events.push({
-      id: first.id,
-      tournamentName: first.tournament_name ?? "Unknown event",
-      date: formatDisplayDate(first.date),
-      matchType: first.match_type ?? null,
-      courtType: first.court_type ?? null,
-      // Sentence case — the DS's one register for labels, and how Pa2 spells it.
-      verificationStatus: first.verified ? "Verified result" : null,
-      matches: mapped,
-    });
-  }
-  return events;
-}
 
 function EventsList({
   events,
@@ -294,6 +84,7 @@ export default function RecentActivity({
   showEmptyAction = true,
   matchCount,
   wonCount,
+  initialEvents,
 }: {
   /** Whose uploads this list is scoped to. */
   userId: string;
@@ -324,11 +115,12 @@ export default function RecentActivity({
    */
   matchCount: number;
   wonCount: number;
+  initialEvents: EventGroup[];
 }) {
-  const [events, setEvents] = useState<EventGroup[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<EventGroup[]>(initialEvents);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const hasLoadedRef = useRef(false);
+  const requestRef = useRef(0);
   const seenEventIdsRef = useRef<Set<string> | null>(null);
   const [toast, setToast] = useState<ToastState>({ kind: "idle" });
   const [mounted, setMounted] = useState(false);
@@ -344,77 +136,32 @@ export default function RecentActivity({
   }, []);
 
   const load = useCallback(async () => {
+    const requestId = ++requestRef.current;
     const supabase = createClient();
-    // Only show skeleton on initial load — subsequent fetches update in-place
-    if (!hasLoadedRef.current) setLoading(true);
+    setRefreshing(true);
     setError(null);
     try {
-      const { data: rows, error: fetchError } = await supabase
-        .from("matches")
-        .select(
-          "id, created_by, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, player1_id, player2_id, opponent_hand, opponent_backhand",
-        )
-        .eq("created_by", userId)
-        // AND no program. `/dashboard` is the personal home — same predicate as
-        // the matches list (`matches/page.tsx`), for the same reason:
-        // `matches.program_id` is nullable precisely so "no program" is the
-        // personal workspace.
-        .is("program_id", null)
-        .order("date", { ascending: false })
-        .limit(50);
-
-      if (fetchError) {
-        setError(fetchError.message);
-        setEvents([]);
-        return;
-      }
-      const list = (rows ?? []) as DbMatch[];
-      const matchIds = list.map((m) => m.id);
-
-      // Stats and in-flight analysis state key off the same id set and neither
-      // reads the other's output, so they run together rather than in series.
-      const [{ data: stats }, analysis] = await Promise.all([
-        supabase
-          .from("match_stats_with_percentages")
-          .select(
-            "match_id, is_player1, first_serve_pct, winners, unforced_errors, break_points_saved, break_points_faced, break_point_opportunities, break_points_converted",
-          )
-          .in("match_id", matchIds),
-        loadMatchAnalysis(supabase, matchIds),
-      ]);
-      const analysisMap = new Map<string, AnalysisStatus>();
-      for (const [id, a] of analysis) analysisMap.set(id, a.status);
-
-      const matchById = new Map(list.map((m) => [m.id, m]));
-      const statsMap = new Map<string, MatchStats>();
-      if (stats) {
-        for (const stat of stats as MatchStats[]) {
-          const match = matchById.get(stat.match_id);
-          if (!match) continue;
-          const side = viewerSide(match, playerIds, userId, match.created_by);
-          if (side === null) continue;
-          const isUserPlayer1 = side === "player1";
-          if (stat.is_player1 === isUserPlayer1) {
-            statsMap.set(stat.match_id, stat);
-          }
-        }
-      }
-
-      setEvents(
-        groupMatchesIntoEvents(list, playerIds, userId, statsMap, analysisMap),
-      );
-      hasLoadedRef.current = true;
+      const nextEvents = await loadRecentMatches(supabase, userId, playerIds);
+      if (requestId !== requestRef.current) return;
+      setEvents(nextEvents);
     } catch (e) {
+      if (requestId !== requestRef.current) return;
       setError(e instanceof Error ? e.message : "Failed to load matches");
-      setEvents([]);
     } finally {
-      setLoading(false);
+      if (requestId === requestRef.current) setRefreshing(false);
     }
   }, [userId, playerIds]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    // Server refreshes supply the latest snapshot without remounting the card.
+    ++requestRef.current;
+    setEvents(initialEvents);
+    setError(null);
+    setRefreshing(false);
+    return () => {
+      ++requestRef.current;
+    };
+  }, [initialEvents]);
 
   useEffect(() => {
     let createdTimer: ReturnType<typeof setTimeout> | undefined;
@@ -462,7 +209,9 @@ export default function RecentActivity({
       settled = true;
       sessionStorage.removeItem(PROCESSING_STORAGE_KEY);
       setToast({ kind: "ready", matchId: targetMatchId });
-      load();
+      // HomeContent owns the page refresh for this event. That refresh updates
+      // recent matches together with the title, KPIs, activity, and serves, so
+      // reloading this card here would issue the same reads twice.
       window.dispatchEvent(new Event("match-processed"));
     };
 
@@ -544,170 +293,105 @@ export default function RecentActivity({
 
   return (
     <>
-      <div
-        // `@container/matches`: the rows inside size their stat cells to this
-        // card, not the viewport — see `MatchLink` in recent-matches.tsx.
-        className="surface-card @container/matches"
-        // One padding for every card on Home — `--pad-card`, 20px all round —
-        // so the eyebrows sit on one x and the cards close on one measure.
-        // Pa2 draws this card alone at `2px 24px 14px` with a 40px header row
-        // carrying the top air; the eyebrow lands at the same height either
-        // way, and the rows keep their 8px inset by bleeding 12px instead of
-        // 16 (see `MatchLink`).
-        style={{ padding: "var(--pad-card)" }}
-      >
-        {/* Header — the same row every sibling opens with: eyebrow left, the
-          card's one link right, 20px from the top edge. */}
-        <div className="flex items-center gap-3">
-          <span className="eyebrow">Recent matches</span>
-          <div className="flex-1" />
-          <Link
-            href="/dashboard/matches"
-            className="rounded-sm text-[11px] font-medium transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:outline-none"
-            style={{ color: "var(--blue)" }}
-          >
-            All matches
-          </Link>
-        </div>
-
-        {/* Content — no padding of its own; the card's bottom padding is the
+      {/* Content — no padding of its own; the card's bottom padding is the
           whole gap under the footer. */}
-        <div>
-          {loading && (
-            <div className="flex flex-col gap-8 py-4">
-              {[0, 1].map((i) => (
-                <div key={i} className="flex flex-col gap-3">
-                  <Skeleton className="h-5 w-40" />
-                  <Skeleton className="h-3 w-56" />
-                  <div className="mt-2 flex flex-col gap-3">
-                    {[0, 1].map((j) => (
-                      <div
-                        key={j}
-                        className="flex items-center justify-between"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Skeleton className="h-10 w-px" />
-                          <div className="flex flex-col gap-2">
-                            <Skeleton className="h-4 w-32" />
-                            <Skeleton className="h-3 w-24" />
-                          </div>
-                        </div>
-                        <div className="flex gap-4">
-                          {[0, 1, 2].map((k) => (
-                            <div
-                              key={k}
-                              className="flex flex-col items-end gap-2"
-                            >
-                              <Skeleton className="h-2 w-12" />
-                              <Skeleton className="h-3 w-10" />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {error && (
-            <div
-              className="flex flex-col items-center justify-center px-4 py-8 text-center"
-              role="alert"
-            >
-              <AlertCircle
-                className="mb-2 size-6 text-[var(--danger)]"
-                strokeWidth={1.5}
-                aria-hidden
-              />
-              <p className="text-[13px] font-medium text-[var(--ink-900)]">
-                Couldn&apos;t load your matches
-              </p>
-              <p className="text-body-sm mt-1 mb-4">
-                The list is still there; the request didn&apos;t make it.
-              </p>
-              {/* An outline, not a second blue: the page's one primary is "New
+      <div>
+        {error && (
+          <div
+            className="flex flex-col items-center justify-center px-4 py-8 text-center"
+            role="alert"
+          >
+            <AlertCircle
+              className="mb-2 size-6 text-[var(--danger)]"
+              strokeWidth={1.5}
+              aria-hidden
+            />
+            <p className="text-[13px] font-medium text-[var(--ink-900)]">
+              Couldn&apos;t update your matches
+            </p>
+            <p className="text-body-sm mt-1 mb-4">
+              Your previous results are still shown. Try the update again.
+            </p>
+            {/* An outline, not a second blue: the page's one primary is "New
                 match" in the title row, and a retry is a repair, not a
                 recommendation. */}
-              <button
-                type="button"
-                onClick={load}
-                className={advButton("outline", "sm")}
-              >
-                <RefreshCw className="size-3" strokeWidth={1.5} aria-hidden />
-                Try again
-              </button>
-            </div>
-          )}
+            <button
+              type="button"
+              onClick={load}
+              className={advButton("outline", "sm")}
+            >
+              <RefreshCw className="size-3" strokeWidth={1.5} aria-hidden />
+              Try again
+            </button>
+          </div>
+        )}
 
-          {/* Day zero: the shape of a result, and the one action that makes one.
+        {/* Day zero: the shape of a result, and the one action that makes one.
             The card stays on the page in this state rather than giving way to
             a separate empty screen, so the frame a player learns on the first
             visit is the frame they keep. */}
-          {!loading && !error && events.length === 0 && !hasMatches && (
-            <RecentMatchesEmpty showAction={showEmptyAction} />
-          )}
+        {!error && events.length === 0 && !hasMatches && (
+          <RecentMatchesEmpty showAction={showEmptyAction} />
+        )}
 
-          {/* Matches exist on the account but none names the viewer as a player
+        {/* Matches exist on the account but none names the viewer as a player
             — a different page from day zero, so it says what the list holds
             rather than how to upload. */}
-          {!loading && !error && events.length === 0 && hasMatches && (
-            <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-              <Inbox
-                className="mb-4 size-7 text-[var(--ink-300)]"
-                strokeWidth={1.5}
-                aria-hidden
-              />
-              <p className="text-[14px] font-medium text-[var(--ink-900)]">
-                No matches to show
-              </p>
-              <p
-                className="text-body-sm mt-1.5 max-w-[36ch]"
-                style={{ textWrap: "pretty" }}
-              >
-                Matches you played appear here as soon as they are sent or
-                imported.
-              </p>
-              <Link
-                href="/dashboard/matches"
-                className="mt-3 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-              >
-                Open all matches
-              </Link>
-            </div>
-          )}
+        {!error && events.length === 0 && hasMatches && (
+          <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+            <Inbox
+              className="mb-4 size-7 text-[var(--ink-300)]"
+              strokeWidth={1.5}
+              aria-hidden
+            />
+            <p className="text-[14px] font-medium text-[var(--ink-900)]">
+              No matches to show
+            </p>
+            <p
+              className="text-body-sm mt-1.5 max-w-[36ch]"
+              style={{ textWrap: "pretty" }}
+            >
+              Matches you played appear here as soon as they are sent or
+              imported.
+            </p>
+            <Link
+              href="/dashboard/matches"
+              className="mt-3 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+            >
+              Open all matches
+            </Link>
+          </div>
+        )}
 
-          {!loading && !error && events.length > 0 && (
-            <>
-              <EventsList events={events} seenEventIdsRef={seenEventIdsRef} />
-              {/* Pa2's card footer: what the list is a slice of. The left count
+        {events.length > 0 && (
+          <>
+            <EventsList events={events} seenEventIdsRef={seenEventIdsRef} />
+            {/* Pa2's card footer: what the list is a slice of. The left count
                 is the rows actually drawn — what the grouping leaves after it
                 drops unscored and non-viewer rows and keeps the latest three
                 events. The right one is the same number the title row states,
                 so the two can never disagree. */}
-              <CardFooter
-                className="mt-2.5"
-                left={
-                  <>
-                    Latest{" "}
-                    <span className="tabular">
-                      {events.reduce((n, e) => n + e.matches.length, 0)}
-                    </span>{" "}
-                    shown
-                  </>
-                }
-                right={
-                  <>
-                    <span className="tabular">{matchCount}</span>{" "}
-                    {matchCount === 1 ? "match" : "matches"} ·{" "}
-                    <span className="tabular">{wonCount}</span> won
-                  </>
-                }
-              />
-            </>
-          )}
-        </div>
+            <CardFooter
+              className="mt-2.5"
+              left={
+                <>
+                  Latest{" "}
+                  <span className="tabular">
+                    {events.reduce((n, e) => n + e.matches.length, 0)}
+                  </span>{" "}
+                  shown
+                </>
+              }
+              right={
+                <>
+                  <span className="tabular">{matchCount}</span>{" "}
+                  {matchCount === 1 ? "match" : "matches"} ·{" "}
+                  <span className="tabular">{wonCount}</span> won
+                </>
+              }
+            />
+          </>
+        )}
       </div>
 
       {/* Floating upload-status pill — confirm → analyzing → ready */}

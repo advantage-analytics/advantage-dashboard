@@ -55,6 +55,7 @@ export interface JoinRequest {
 
 export async function getPendingJoinRequests(
   programId: string,
+  strict = false,
 ): Promise<JoinRequest[]> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("program_join_requests", {
@@ -62,6 +63,8 @@ export async function getPendingJoinRequests(
   });
 
   if (error) {
+    if (strict)
+      throw new Error("Could not load join requests", { cause: error });
     // Never fatal: a roster page that cannot load this list should render
     // without it rather than break — same posture as the workspace lookup.
     console.error("[join-requests] could not load pending join requests", {

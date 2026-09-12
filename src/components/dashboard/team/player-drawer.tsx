@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { canUploadForProgram } from "@/lib/workspace/types";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import {
   ChevronDown,
@@ -482,6 +484,8 @@ export function PlayerDrawer({
   run: (action: () => Promise<ActionResult | InviteResult>) => void;
   pending: boolean;
 }) {
+  const { active: workspace } = useWorkspace();
+  const canUpload = canUploadForProgram(workspace);
   const panelRef = useRef<HTMLDivElement>(null);
   // Which of the four the chart shows. Held here rather than per member so
   // stepping ↑↓ through the roster compares players on the same figure.
@@ -777,18 +781,18 @@ export function PlayerDrawer({
               ))
             )}
           </div>
-
-          <div className="min-h-0 flex-1" />
-
-          {canManage && (
-            <div className="flex flex-col gap-3.5">
-              <Link
-                href={`/dashboard/matches/new?player=${member.playerId}`}
-                className={cn(advButton("primary"), "w-full")}
-              >
-                Upload for {firstName}
-              </Link>
-            </div>
+        </div>
+        <div className="flex shrink-0 flex-col gap-3 px-[22px] py-4">
+          <Link href={profile} className={cn(advButton("ghost"), "w-full")}>
+            Open profile
+          </Link>
+          {canUpload && (
+            <Link
+              href={`/dashboard/matches/new?player=${member.playerId}`}
+              className={cn(advButton("primary"), "w-full")}
+            >
+              Upload for {firstName}
+            </Link>
           )}
         </div>
       </div>

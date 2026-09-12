@@ -1,4 +1,7 @@
-import { Fragment } from "react";
+import { TeamListHeading } from "@/components/dashboard/team/list-page-heading";
+import { RosterPageSkeleton } from "@/components/dashboard/loading/team-page-pending";
+import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
+import { Fragment, Suspense } from "react";
 import { redirect } from "next/navigation";
 import { UserCheck } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
@@ -81,20 +84,69 @@ export default async function RosterPage({
   // coach any way in at all. `isProgramStaff` is the one spelling every other
   // team route uses, and its doc comment exists because the rail and the Team
   // page once wrote this rule in opposite directions.
+  return (
+    <WidgetBoundary key={`${viewer.id}:${active.id}`} label="Roster">
+      <Suspense fallback={<RosterPageSkeleton />}>
+        <RosterContent
+          active={active}
+          viewer={viewer}
+          searchParams={searchParams}
+        />
+      </Suspense>
+    </WidgetBoundary>
+  );
+}
+
+async function RosterContent({
+  active,
+  viewer,
+  searchParams,
+}: {
+  active: NonNullable<
+    Awaited<ReturnType<typeof getWorkspaceContext>>
+  >["active"];
+  viewer: NonNullable<
+    Awaited<ReturnType<typeof getWorkspaceContext>>
+  >["viewer"];
+  searchParams: Promise<{ player?: string | string[] }>;
+}) {
   const canManage = isProgramStaff(active);
 
   // A deep link is the one case that lands with the drawer already open.
   const { player } = await searchParams;
   const initialSelectedId = typeof player === "string" ? player : null;
 
-  // Two independent reads, so they go together. The join-request queue is
+  // Two independent reads start together. The join-request queue is
   // staff-only: `program_join_requests` is SECURITY DEFINER and hands a player
   // the same empty array it hands a stranger, so this only declines to ask for
   // a queue the database would refuse to fill.
-  const [roster, joinRequests] = await Promise.all([
+  const [rosterResult, joinRequestsResult] = await Promise.allSettled([
     getRosterData(active.id),
-    canManage ? getPendingJoinRequests(active.id) : Promise.resolve([]),
+    canManage ? getPendingJoinRequests(active.id, true) : Promise.resolve([]),
   ]);
+  if (rosterResult.status === "rejected") throw rosterResult.reason;
+  const roster = rosterResult.value;
+
+  // Join requests decide whether an otherwise empty program is truly at day
+  // zero, so failure is fatal only in that state. Once a roster row or invite
+  // is already known, the queue is secondary content and must not replace the
+  // populated page with an error boundary.
+  const hasKnownRosterContent =
+    roster.members.some((member) => member.role === "player") ||
+    roster.invites.length > 0;
+  let joinRequests: Awaited<ReturnType<typeof getPendingJoinRequests>> = [];
+  if (joinRequestsResult.status === "fulfilled") {
+    joinRequests = joinRequestsResult.value;
+  } else if (!hasKnownRosterContent) {
+    throw joinRequestsResult.reason;
+  } else {
+    console.error("[join-requests] could not load pending join requests", {
+      error:
+        joinRequestsResult.reason instanceof Error
+          ? joinRequestsResult.reason.message
+          : String(joinRequestsResult.reason),
+    });
+  }
 
   // The one split this page turns on. `getRosterData` returns both kinds
   // because the footer needs the staff and Team Home needs the whole list;
@@ -175,15 +227,12 @@ export default async function RosterPage({
        the fragment children below AND these two. React drops the
        "statically created" marker on JSX serialised from a server component,
        and then treats a two-child `<div>` like a keyless array. */
-    <div>
-      <h1 key="title" className="text-display">
-        Roster
-      </h1>
+    <TeamListHeading title="Roster">
       {/* 9px under the title, the one gap tuned by hand — 8 reads as attached,
           12 as unrelated. The clauses are the roster's shared vocabulary, so
           Team Home's card and this page cannot describe the same two people
           differently. */}
-      <p key="summary" className="text-body-sm mt-[9px]">
+      <span key="summary">
         {canManage ? (
           /* Keyed fragments, not bare ones. This JSX is built in a server
              component and handed to a client one as a prop; across that wire
@@ -213,8 +262,8 @@ export default async function RosterPage({
         ) : (
           "Your coaching staff manage who is on the program and who can send video."
         )}
-      </p>
-    </div>
+      </span>
+    </TeamListHeading>
   );
 
   const actions = canManage ? (

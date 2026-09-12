@@ -1,142 +1,299 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import HomeContent from "./home-content";
-import { SeasonKpiStrip } from "@/components/dashboard/shared/season-kpi-strip";
-import type { SetupProgress } from "@/components/dashboard/home/setup-line";
+import RecentActivity from "./recent-activity";
 import { createClient } from "@/lib/supabase/server";
+import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { getPersonalMatches } from "@/lib/data/personal-matches-server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { getOverallPerformance } from "@/lib/data/performance-server";
 import { getPersonalSeasonKpis } from "@/lib/data/personal-kpis-server";
 import { getPersonalUsage } from "@/lib/data/usage-server";
 import { getPersonalActivity } from "@/lib/data/personal-activity-server";
+import {
+  countViewerWins,
+  loadRecentMatches,
+  type DbRecentMatch,
+} from "@/lib/data/home-recent-data";
+import { loadHomeServes } from "@/lib/data/home-serve-data";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { buildInsightEvidenceWithCaption } from "@/lib/ui/insight-evidence";
+import { SeasonKpiStrip } from "@/components/dashboard/shared/season-kpi-strip";
+import { SeasonTitle } from "@/components/dashboard/home/season-title";
+import { ActivityWidget } from "@/components/dashboard/home/activity-widget";
+import { SetupLine } from "@/components/dashboard/home/setup-line";
+import { UsageFooter } from "@/components/dashboard/shared/usage-footer";
+import { FocusCard } from "@/components/dashboard/home/focus-card";
+import { FocusEmpty } from "@/components/dashboard/home/focus-empty";
+import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
+import ServePlacementHome from "@/components/dashboard/home/serve-placement-home";
+import {
+  HomeTitlePending,
+  HomeKpisPending,
+  HomeActivityBodyPending,
+  HomeRecentBodyPending,
+  HomeServesPending,
+  HomeFooterPending,
+} from "@/components/dashboard/loading/home-skeleton";
+import { HomeWidgetFrame } from "@/components/dashboard/home/home-widget-frame";
+import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 
 export default async function Home() {
+  const workspace = await getWorkspaceContext();
+  if (!workspace) redirect("/login");
+  if (workspace.active.kind === "team") redirect("/dashboard/team");
   const supabase = await createClient();
-
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims) {
-    redirect("/login");
-  }
-
-  const userId = data.claims.sub;
+  const userId = workspace.viewer.id;
   const billingMonth = currentBillingMonth();
-  const [
-    { data: user },
-    performanceData,
-    myPlayerIds,
-    usage,
-    { data: savedPreferences },
-    activity,
-    season,
-  ] = await Promise.all([
-    // `hand` and `backhand` are the getting-set-up checklist's first answer.
-    // The name used to ride along here for the page's greeting; that greeting
-    // now lives in the header (Platform Audit Pa2), which reads the viewer the
-    // layout already resolved.
-    supabase.from("users").select("hand, backhand").eq("id", userId).single(),
-    getOverallPerformance(),
-    // Which ids mean "me" on a match row. `cache()`d, so the several readers on
-    // this page share one round trip.
-    getMyPlayerIds(),
-    getPersonalUsage(userId, billingMonth),
-    // Has this account ever saved Settings › Preferences?
-    //
-    // `user_preferences` carries a NOT NULL default on every column and has no
-    // row until the first save, so the row's existence IS the answer to "have
-    // you chosen how you're notified" — the values cannot answer it, because
-    // the defaults a saver kept are byte-identical to the defaults a stranger
-    // never saw. RLS on this table is own-row only in all three directions;
-    // the filter states that rather than leaning on it.
-    supabase
-      .from("user_preferences")
-      .select("user_id")
-      .eq("user_id", userId)
-      .maybeSingle(),
-    // 52-week match-day heatmap for the Activity widget. Personal scope only
-    // (created_by = me AND program_id IS NULL), matching the Matches list.
-    getPersonalActivity(userId),
-    // The season strip's five tiles — the same strip a team player's profile
-    // draws, over the personal matches above.
-    getPersonalSeasonKpis(userId),
-  ]);
-
-  const { kpiCards, winRate, form, matchCount, analyzedMatchCount, wonCount } =
-    performanceData;
-  const hasMatches = matchCount > 0;
-
-  // The Focus card's evidence line, composed here from the same computed KPI
-  // movers the strip above it renders. The model never sees this sentence and
-  // never writes a figure — it supplies only the claim above it. `null` when
-  // there is no movement to report, which is what keeps the card off the page
-  // entirely rather than letting it reach for something to say.
-  const insight = buildInsightEvidenceWithCaption(kpiCards, matchCount);
-
-  // Signature of the data the insight is built from. When a new match is uploaded
-  // (and processed), these change, busting the client-side insight cache so the
-  // card regenerates instead of showing the stale session-cached text.
-  const insightSignature = `${matchCount}:${winRate.value}:${form.join("")}`;
-
-  // The getting-set-up checklist's three answers, each a persisted fact rather
-  // than a local flag — so the list is right on a second device, and a step
-  // stays done after a sign-out.
-  const setup: SetupProgress = {
-    // Both, not either: a hand without a backhand orients half the analysis,
-    // and the row asks for the pair.
-    playingProfile: Boolean(user?.hand && user?.backhand),
-    notifications: Boolean(savedPreferences),
-  };
-
+  // Shared base rows are the only layout prerequisite. The analytics loader
+  // reuses this cached query, rather than issuing an extra existence check.
+  const matches = await getPersonalMatches(userId);
+  const resources = startHomeResources(supabase, userId, matches, billingMonth);
+  const { hasMatches } = resources;
   return (
     <div className="flex w-full flex-1 flex-col bg-white">
-      {/* `w-full` alongside `mx-auto`: auto side margins on a column flex item
-          switch off the stretch that would otherwise size it, so without an
-          explicit width the container would shrink to fit its content.
-
-          20px top and 56px sides are Platform Audit Pa2's content column,
-          which tightened 21a's 32px vertical padding so the usage footer sits
-          above the fold at 1440×900. The max-width never binds at that size;
-          it only stops the column running edge to edge on a much wider
-          monitor.
-
-          **The bottom is 32px, not the frame's 10px.** That is the one
-          measurement the artboard cannot be copied on: on the canvas the 10px
-          sits inside a rounded 900px card, where it reads as a margin, and in
-          a browser it is the last 10px before the window edge, where the
-          footer reads as clipped rather than placed. Every sibling page runs
-          32-40px here, and Team Home — which draws this exact `UsageFooter` —
-          runs 32px, so the footer now sits at the same height above the fold
-          in both workspaces instead of two. */}
       <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-14 pt-5 pb-8">
         <HomeContent
+          key={userId}
           hasMatches={hasMatches}
-          userId={userId}
-          playerIds={myPlayerIds}
-          // One strip, shared with a team player's profile (Platform Audit
-          // `Te`): Record, First serve in, 1st serve won, Break pts won, Games
-          // won — the viewer's own numbers, trends from their second match.
-          // It draws itself empty until a match has statistics, so the page a
-          // player learns on day zero is the page they keep; a first match
-          // still in the pipeline reads "When the report lands", not a promise
-          // about a match that has not been analysed once.
-          kpiStrip={
-            <SeasonKpiStrip
-              kpis={season.kpis}
-              hasStats={season.hasStats}
-              matchesPlayed={season.matchesPlayed}
-            />
+          title={region(
+            "Season summary",
+            <HomeTitlePending />,
+            <Title resources={resources} />,
+          )}
+          kpiStrip={region(
+            "Season statistics",
+            <HomeKpisPending />,
+            <Kpis resources={resources} />,
+          )}
+          recent={
+            <HomeWidgetFrame
+              title="Recent matches"
+              href={hasMatches ? "/dashboard/matches" : undefined}
+              action="All matches"
+              className="@container/matches"
+            >
+              {region(
+                "Recent matches",
+                <HomeRecentBodyPending />,
+                <Recent resources={resources} />,
+              )}
+            </HomeWidgetFrame>
           }
-          usage={usage}
-          matchCount={matchCount}
-          analyzedMatchCount={analyzedMatchCount}
-          wonCount={wonCount}
-          insightEvidence={insight?.parts ?? null}
-          insightCaption={insight?.caption ?? null}
-          insightSignature={insightSignature}
-          activity={activity}
-          setup={setup}
+          activity={
+            <HomeWidgetFrame
+              title="Activity"
+              href={hasMatches ? "/dashboard/matches" : undefined}
+              action="Session log"
+              className="@container/activity flex flex-col gap-1.5"
+            >
+              {region(
+                "Activity",
+                <HomeActivityBodyPending />,
+                <Activity resources={resources} />,
+              )}
+            </HomeWidgetFrame>
+          }
+          insight={region(
+            "Advantage Intelligence",
+            null,
+            <Insight resources={resources} />,
+          )}
+          serves={
+            <HomeWidgetFrame
+              title="Serve placement"
+              href={hasMatches ? "/dashboard/statistics" : undefined}
+              action="Placement view"
+              className="flex flex-col gap-3"
+            >
+              {region(
+                "Serve placement",
+                <HomeServesPending />,
+                <Serves resources={resources} />,
+              )}
+            </HomeWidgetFrame>
+          }
+          footer={region(
+            "Usage",
+            <HomeFooterPending />,
+            <Footer resources={resources} />,
+          )}
         />
       </div>
     </div>
   );
 }
+
+function startHomeResources(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  matches: Awaited<ReturnType<typeof getPersonalMatches>>,
+  billingMonth: string,
+) {
+  const hasMatches = matches.length > 0;
+  const performance = hasMatches
+    ? getOverallPerformance()
+    : Promise.resolve(null);
+  const usage = hasMatches
+    ? getPersonalUsage(userId, billingMonth)
+    : Promise.resolve(null);
+  const season = hasMatches
+    ? getPersonalSeasonKpis(userId)
+    : Promise.resolve({ kpis: [], hasStats: false, matchesPlayed: 0 });
+  const activity = getPersonalActivity(userId, matches);
+  const players = hasMatches ? getMyPlayerIds() : Promise.resolve([userId]);
+  const recent = players.then((ids) =>
+    hasMatches
+      ? loadRecentMatches(
+          supabase,
+          userId,
+          ids,
+          matches.slice(0, 50) as DbRecentMatch[],
+        )
+      : [],
+  );
+  const wonCount = players.then((ids) =>
+    countViewerWins(matches as DbRecentMatch[], ids, userId),
+  );
+  const serves = hasMatches
+    ? loadHomeServes(supabase, userId, matches.slice(0, 4))
+    : Promise.resolve({ dots: [], matchCount: 0 });
+  const setup = hasMatches
+    ? Promise.all([
+        supabase
+          .from("users")
+          .select("hand, backhand")
+          .eq("id", userId)
+          .single(),
+        supabase
+          .from("user_preferences")
+          .select("user_id")
+          .eq("user_id", userId)
+          .maybeSingle(),
+      ])
+    : Promise.resolve(null);
+  return {
+    hasMatches,
+    matches,
+    userId,
+    performance,
+    usage,
+    season,
+    recent,
+    wonCount,
+    players,
+    activity,
+    serves,
+    setup,
+  };
+}
+type HomeResources = ReturnType<typeof startHomeResources>;
+async function Title({ resources }: { resources: HomeResources }) {
+  const { hasMatches, matches, userId, performance, usage } = resources;
+  const [p, u] = await Promise.all([performance, usage]);
+  if (!u) return null;
+  return (
+    <SeasonTitle
+      hasMatches={hasMatches}
+      matchCount={matches.length}
+      analyzedMatchCount={p?.analyzedMatchCount ?? 0}
+      usage={u}
+      userId={userId}
+    />
+  );
+}
+async function Kpis({ resources }: { resources: HomeResources }) {
+  const { season } = resources;
+  const data = await season;
+  return (
+    <SeasonKpiStrip
+      kpis={data.kpis}
+      hasStats={data.hasStats}
+      matchesPlayed={data.matchesPlayed}
+    />
+  );
+}
+async function Recent({ resources }: { resources: HomeResources }) {
+  const { recent, players, wonCount, userId, hasMatches, matches } = resources;
+  const [events, ids, wins] = await Promise.all([recent, players, wonCount]);
+  return (
+    <RecentActivity
+      userId={userId}
+      playerIds={ids}
+      hasMatches={hasMatches}
+      showEmptyAction={hasMatches}
+      matchCount={matches.length}
+      wonCount={wins}
+      initialEvents={events}
+    />
+  );
+}
+async function Activity({ resources }: { resources: HomeResources }) {
+  const { activity } = resources;
+  return <ActivityWidget activity={await activity} />;
+}
+async function Serves({ resources }: { resources: HomeResources }) {
+  return <ServePlacementHome initialData={await resources.serves} />;
+}
+async function Insight({ resources }: { resources: HomeResources }) {
+  const { hasMatches, performance, userId } = resources;
+  if (!hasMatches)
+    return (
+      <FocusCard
+        showStatisticsLink={false}
+        footer={{ left: "One thing to work on, after your first match." }}
+      >
+        <FocusEmpty />
+      </FocusCard>
+    );
+  const p = await performance;
+  if (!p) return null;
+  const evidence = buildInsightEvidenceWithCaption(p.kpiCards, p.matchCount);
+  // This card is conditional in the approved design. Do not reserve a fake
+  // populated card before its evidence establishes that it belongs here.
+  if (!evidence) return null;
+  return (
+    <FocusCard
+      footer={{
+        left: evidence.caption,
+        right: `${p.analyzedMatchCount} ${p.analyzedMatchCount === 1 ? "match" : "matches"}`,
+      }}
+    >
+      <HomeAiInsight
+        evidence={evidence.parts}
+        cacheSignature={`${userId}:${p.matchCount}:${p.winRate.value}:${p.form.join("")}`}
+      />
+    </FocusCard>
+  );
+}
+async function Footer({ resources }: { resources: HomeResources }) {
+  const { setup, usage } = resources;
+  const [profile, u] = await Promise.all([setup, usage]);
+  if (!profile || !u) return null;
+  const [{ data: user }, { data: preferences }] = profile;
+  return (
+    <>
+      <SetupLine
+        setup={{
+          playingProfile: Boolean(user?.hand && user?.backhand),
+          notifications: Boolean(preferences),
+        }}
+      />
+      <UsageFooter
+        usedSeconds={u.usedSeconds}
+        capSeconds={u.capSeconds}
+        billingMonth={u.billingMonth}
+      />
+    </>
+  );
+}
+
+const region = (
+  label: string,
+  fallback: React.ReactNode,
+  content: React.ReactNode,
+) => (
+  <WidgetBoundary label={label}>
+    <Suspense fallback={fallback}>{content}</Suspense>
+  </WidgetBoundary>
+);

@@ -1,7 +1,11 @@
+import { Suspense, type ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
-import { getTeamHomeData } from "@/lib/data/team-home-server";
+import {
+  getTeamHomePresence,
+  getTeamHomeResources,
+} from "@/lib/data/team-home-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { UsageFooter } from "@/components/dashboard/shared/usage-footer";
 import {
@@ -18,235 +22,326 @@ import { FocusCard } from "@/components/dashboard/home/focus-card";
 import { FocusEmpty } from "@/components/dashboard/home/focus-empty";
 import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
 import { TeamSetupLine } from "@/components/dashboard/team/team-setup-line";
+import { TeamDayZeroHome } from "@/components/dashboard/team/team-day-zero-home";
 
-/**
- * The page's own name. The header greets rather than naming the page, so
- * without this the tab fell back to the root layout's "Advantage Analytics".
- */
+import { topMovers } from "@/lib/data/team-movers";
+import { TopMoversFrame } from "@/components/dashboard/team/top-movers";
+import { CourtRecordFrame } from "@/components/dashboard/team/court-record";
+import { DualHistoryFrame } from "@/components/dashboard/team/dual-history";
+import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
+import {
+  HomeKpisPending,
+  HomeFooterPending,
+} from "@/components/dashboard/loading/home-skeleton";
+import {
+  TeamHomeFrame,
+  TeamHomeRegions,
+  TeamTitlePending,
+  DualPending,
+  MoversBodyPending,
+  CourtBodyPending,
+  HistoryBodyPending,
+} from "@/components/dashboard/loading/team-home-skeleton";
+
 export const metadata = { title: "Team Home" };
+type Resources = ReturnType<typeof getTeamHomeResources>;
 
-/**
- * Platform Audit Ta3 — the program's home page, in season and on day zero.
- *
- * One route, one composition, every state. The header bar greets
- * ("Good morning, Elena · Meridian State · Men's tennis · Monday, Aug 10");
- * the page opens on "Team season" in title type, then the KPI strip, then
- * the personal Home's two columns: this weekend's dual and the top movers on
- * the left, and a 400px rail of the Focus card, the court record and the
- * dual history — over a quiet setup line and the usage footer.
- *
- * **The columns are Pa2's, by decision (2026-09-07, "Team Home Layouts"
- * canvas, direction A).** Ta3 ran the dual sheet across the whole page and it
- * was a third of a 900px viewport before the squad appeared at all — on a
- * Tuesday, a result nobody needed re-read. Now the card keeps every row and
- * simply shares the width with the rail, and a coach who also plays learns
- * one page shape in both workspaces. Nothing inside a card changed.
- *
- * **The frame never moves** (Pa2's rule, carried over from round 45 and
- * taken further). Every region is on screen from the first visit: an empty
- * KPI strip draws its four labels over rules and grey curves, the dual card
- * draws a ghost lineup with one "Add a dual" band, the movers card draws
- * ghost rows with "Add players", the rail says when it fills. Round 45 had
- * these mount nothing until data arrived, which meant a coach's second visit
- * rearranged the page under them and taught the first visit's layout to
- * nobody.
- *
- * **What Ta3 retired, by decision (2026-09-07).** The three-card checklist
- * became `TeamSetupLine`, one line in the personal Home's register. The
- * Matches list, the Next-event card, the Roster card and the Needs-attention
- * list are gone from this page; `/dashboard/matches`, the schedule and the
- * roster each carry what those summarised.
- *
- * **White, not the frame's grey.** SKILL.md's ratified surface rule: every
- * dashboard surface is `--surface-card`, and a card is told from the page by
- * its hairline and shadow, never by a tint underneath.
- */
+/** Known card frames render immediately; each resource fills its own region. */
 export default async function TeamHomePage() {
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
-
   const { active } = workspace;
-  // The rail only offers this destination inside a program. Somebody who typed
-  // the URL from a personal workspace gets their own dashboard rather than an
-  // empty program page that belongs to nobody.
   if (active.kind !== "team") redirect("/dashboard");
-
-  const billingMonth = currentBillingMonth();
-  const {
-    usage,
-    matchCount,
-    analyzedCount,
-    kpiCards,
-    kpiHasStats,
-    kpiMatchCount,
-    firstReport,
-    weekendDual,
-    dualHistory,
-    dualForm,
-    newResults,
-    movers,
-    rosterSize,
-    setup,
-    courtRecord,
-    insight,
-  } = await getTeamHomeData(active.id, billingMonth, active.orgType);
-
-  // Roster facts and the setup line are staff business. `isProgramStaff`
-  // rather than the same test spelled by hand — its own doc comment exists
-  // because the rail and this page once wrote the rule in opposite directions.
+  const presence = getTeamHomePresence(active.id);
+  const resources = getTeamHomeResources(
+    active.id,
+    currentBillingMonth(),
+    active.orgType,
+  );
   const isStaff = isProgramStaff(active);
+  const action = (
+    <NewMatchAction
+      canUpload={canUploadForProgram(active)}
+      canSubmitVideo={active.canSubmitVideo}
+    />
+  );
+  const state = await presence;
+  const isDayZero = !state.hasMatches && !state.hasRoster && !state.hasSchedule;
+  const kpis = region(
+    "Program summary",
+    <HomeKpisPending />,
+    <Kpis resources={resources} />,
+  );
+  const dual = region(
+    "Dual",
+    <DualPending />,
+    <Dual resources={resources} canSchedule={isStaff} isPreview={isDayZero} />,
+  );
+  const movers = region(
+    "Top movers",
+    <TopMoversFrame isPreview={isDayZero}>
+      <MoversBodyPending />
+    </TopMoversFrame>,
+    <Movers resources={resources} canManage={isStaff} isPreview={isDayZero} />,
+  );
+  const insight = region(
+    "Advantage Intelligence",
+    null,
+    <Insight
+      resources={resources}
+      programId={active.id}
+      isPreview={isDayZero}
+    />,
+  );
+  const court = region(
+    "Court record",
+    <CourtRecordFrame>
+      <CourtBodyPending />
+    </CourtRecordFrame>,
+    <Court resources={resources} />,
+  );
+  const history = region(
+    "Dual match history",
+    <DualHistoryFrame isPreview={isDayZero}>
+      <HistoryBodyPending />
+    </DualHistoryFrame>,
+    <History
+      resources={resources}
+      teamName={active.name}
+      isPreview={isDayZero}
+    />,
+  );
 
-  // Who may send video at all — see `canUploadForProgram()`. A player without
-  // it gets no button rather than a disabled one; staff whose claim is still
-  // being confirmed get it disabled, because for them it genuinely is paused.
-  const canUpload = canUploadForProgram(active);
-
-  // A match is in and no report has come back yet — said once here and read by
-  // both the title row and the empty strip, so the two cannot describe the
-  // same morning differently.
-  // `state === "progress"`, not `!== "done"`: `teamFirstReport` returns null
-  // for a match whose analysis FAILED, and "on its way" about that one was a
-  // promise the page could never keep.
-  const awaitingReport =
-    matchCount > 0 && analyzedCount === 0 && firstReport?.state === "progress";
-
-  return (
-    <div className="w-full flex-1 bg-[var(--surface-card)]">
-      {/* The personal Home's column exactly — `px-14 pt-5 pb-8`, 16px between
-          the title row, the strip, the grid and the footer — so the two
-          workspaces' pages line up region for region. Ta3 ran 24px here;
-          the tighter gap is Pa2's, and Roster and Schedule share the same
-          56px gutter. */}
-      <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4 px-14 pt-5 pb-8">
-        <TeamSeasonTitle
-          matchCount={matchCount}
-          analyzedCount={analyzedCount}
-          newResults={newResults}
-          usage={usage}
-          awaitingReport={awaitingReport}
-          action={
-            <NewMatchAction
-              canUpload={canUpload}
-              canSubmitVideo={active.canSubmitVideo}
-            />
-          }
-        />
-
-        {/* The season strip both Homes draw (`shared/season-kpi-strip.tsx`),
-            over the squad rather than one player. Same catalogue, same
-            picker, same per-viewer pick — a coach who swaps a statistic in
-            on their own Home reads it here too, which is the whole point of
-            there being one strip. **Dual matches only**: a report for a
-            match that is not on a dual's lineup is counted in the title row
-            and nowhere in the strip. Before any of them has statistics the
-            strip is still here, labelled and empty. */}
-        <SeasonKpiStrip
-          kpis={kpiCards}
-          hasStats={kpiHasStats}
-          matchesPlayed={kpiMatchCount}
-          /* Three states, three sentences, and the page owns all three: "When
-             the report lands" while a match is in and nothing is back (the
-             strip cannot infer this — `kpiMatchCount` counts only the
-             analyzed dual matches it averages, which is zero here), "After
-             your first dual match" where reports ARE back but none sits on a
-             dual lineup — the title row above counts those, so the strip has
-             to say why it does not — and the shell's own "After your first
-             match" on day zero. */
-          awaitingReport={awaitingReport}
-          emptyHint={
-            analyzedCount > 0 && !awaitingReport
-              ? "After your first dual match"
-              : undefined
-          }
-          ariaLabel="Program summary"
-        />
-
-        {/* Pa2's grid: 400px rail, 24px gutter, `items-start` so each column
-            bottoms out where its cards do — nothing is stretched to level
-            them, and the cards inside a column sit 20px apart. `lg` rather
-            than Ta3's `xl`, because that is where the personal Home breaks and
-            the two pages should fold at the same width. */}
-        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
-          <div className="flex min-w-0 flex-col gap-5">
-            {/* This week's dual, the next one ahead, or the shape of one. Not
-                staff-only: a player's lines are on this card, and the same
-                `program_events` policy that lets them read the schedule page
-                is what put it there. */}
-            {weekendDual ? (
-              <DualSheet dual={weekendDual} />
-            ) : (
-              <DualSheetEmpty canSchedule={isStaff} />
-            )}
-            <TopMovers
+  if (isDayZero) {
+    return (
+      <div className="w-full flex-1 bg-[var(--surface-card)]">
+        <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4 px-14 pt-5 pb-8">
+          <TeamDayZeroHome canManage={isStaff}>
+            <TeamHomeRegions
+              kpis={kpis}
+              dual={dual}
               movers={movers}
-              rosterSize={rosterSize}
-              canManage={isStaff}
+              insight={insight}
+              court={court}
+              history={history}
             />
-          </div>
-
-          <div className="flex flex-col gap-5">
-            {/* The personal Home's three states, one card: computed evidence
-                with a streamed claim; its own anatomy holding nothing before
-                any match is in; and off the page between the two, because a
-                placeholder after a coach has already sent a match would be
-                the page failing to notice. */}
-            {insight ? (
-              <FocusCard
-                footer={{
-                  left: insight.caption,
-                  right: (
-                    <>
-                      <span className="tabular">{kpiMatchCount}</span>{" "}
-                      {kpiMatchCount === 1 ? "match" : "matches"}
-                    </>
-                  ),
-                }}
-              >
-                <HomeAiInsight
-                  evidence={insight.parts}
-                  cacheSignature={`${active.id}:${kpiMatchCount}:${kpiCards
-                    .map((card) => card.value)
-                    .join(",")}`}
-                  endpoint="/api/team-insight"
-                />
-              </FocusCard>
-            ) : (
-              matchCount === 0 && (
-                <FocusCard
-                  footer={{
-                    left: "One thing to work on, after the first dual.",
-                  }}
-                >
-                  <FocusEmpty />
-                </FocusCard>
-              )
-            )}
-            <CourtRecord record={courtRecord} />
-            <DualHistory
-              rows={dualHistory}
-              form={dualForm}
-              teamName={active.name}
-            />
-          </div>
-        </div>
-
-        {/* The frame's bottom edge — the setup line while there is one, then
-            the footer, last on the page in every state. */}
-        <div className="flex flex-col gap-4">
-          {isStaff && <TeamSetupLine setup={setup} />}
-          {/* `dualWeekends` asks the footer for the "about 3 dual weekends"
-              clause; the footer owns both the arithmetic and the refusal to
-              print "about 0". `note` is the pilot's free-quota clause, which
-              this page has carried since round 45. */}
-          <UsageFooter
-            usedSeconds={usage.usedSeconds}
-            capSeconds={usage.capSeconds}
-            billingMonth={usage.billingMonth}
-            dualWeekends
-            note="free through Dec 31, 2026"
-          />
+          </TeamDayZeroHome>
         </div>
       </div>
-    </div>
+    );
+  }
+
+  return (
+    <TeamHomeFrame
+      key={`${workspace.viewer.id}:${active.id}`}
+      title={region(
+        "Team summary",
+        <TeamTitlePending action={action} />,
+        <Title resources={resources} action={action} />,
+      )}
+      kpis={kpis}
+      dual={dual}
+      movers={movers}
+      insight={insight}
+      court={court}
+      history={history}
+      footer={region(
+        "Team usage",
+        <HomeFooterPending />,
+        <Footer resources={resources} isStaff={isStaff} />,
+      )}
+    />
+  );
+}
+function awaiting(data: Awaited<Resources["analytics"]>) {
+  return (
+    data.matchCount > 0 &&
+    data.analyzedCount === 0 &&
+    data.firstReport?.state === "progress"
+  );
+}
+async function Title({
+  resources,
+  action,
+}: {
+  resources: Resources;
+  action: ReactNode;
+}) {
+  const [data, usage] = await Promise.all([
+    resources.analytics,
+    resources.usage,
+  ]);
+  return (
+    <TeamSeasonTitle
+      matchCount={data.matchCount}
+      analyzedCount={data.analyzedCount}
+      newResults={data.newResults}
+      usage={usage}
+      awaitingReport={awaiting(data)}
+      action={action}
+    />
+  );
+}
+async function Kpis({ resources }: { resources: Resources }) {
+  const data = await resources.analytics;
+  return (
+    <SeasonKpiStrip
+      kpis={data.kpiCards}
+      hasStats={data.kpiHasStats}
+      matchesPlayed={data.kpiMatchCount}
+      awaitingReport={awaiting(data)}
+      emptyHint={
+        data.analyzedCount > 0 && !awaiting(data)
+          ? "After your first dual match"
+          : undefined
+      }
+      ariaLabel="Program summary"
+    />
+  );
+}
+async function Dual({
+  resources,
+  canSchedule,
+  isPreview,
+}: {
+  resources: Resources;
+  canSchedule: boolean;
+  isPreview: boolean;
+}) {
+  const { weekendDual } = await resources.schedule;
+  return weekendDual ? (
+    <DualSheet dual={weekendDual} />
+  ) : (
+    <DualSheetEmpty canSchedule={canSchedule} isPreview={isPreview} />
+  );
+}
+async function Movers({
+  resources,
+  canManage,
+  isPreview,
+}: {
+  resources: Resources;
+  canManage: boolean;
+  isPreview: boolean;
+}) {
+  const roster = await resources.roster;
+  return (
+    <TopMovers
+      movers={topMovers(roster.members)}
+      rosterSize={
+        roster.members.filter((member) => member.role === "player").length
+      }
+      canManage={canManage}
+      isPreview={isPreview}
+    />
+  );
+}
+async function Court({ resources }: { resources: Resources }) {
+  return <CourtRecord record={(await resources.schedule).courtRecord} />;
+}
+async function History({
+  resources,
+  teamName,
+  isPreview,
+}: {
+  resources: Resources;
+  teamName: string;
+  isPreview: boolean;
+}) {
+  const { dualHistory, dualForm, dualWins, decidedDuals } =
+    await resources.schedule;
+  return (
+    <DualHistory
+      rows={dualHistory}
+      form={{
+        form: dualForm,
+        wins: dualWins,
+        losses: decidedDuals.length - dualWins,
+      }}
+      teamName={teamName}
+      isPreview={isPreview}
+    />
+  );
+}
+async function Insight({
+  resources,
+  programId,
+  isPreview,
+}: {
+  resources: Resources;
+  programId: string;
+  isPreview: boolean;
+}) {
+  const { insight, kpiMatchCount, kpiCards, matchCount } =
+    await resources.analytics;
+  if (insight)
+    return (
+      <FocusCard
+        showStatisticsLink={!isPreview}
+        footer={{
+          left: insight.caption,
+          right: `${kpiMatchCount} ${kpiMatchCount === 1 ? "match" : "matches"}`,
+        }}
+      >
+        <HomeAiInsight
+          evidence={insight.parts}
+          cacheSignature={`${programId}:${kpiMatchCount}:${kpiCards.map((card) => card.value).join(",")}`}
+          endpoint="/api/team-insight"
+        />
+      </FocusCard>
+    );
+  return matchCount === 0 ? (
+    <FocusCard
+      showStatisticsLink={!isPreview}
+      footer={{ left: "One thing to work on, after the first dual." }}
+    >
+      <FocusEmpty />
+    </FocusCard>
+  ) : null;
+}
+async function Footer({
+  resources,
+  isStaff,
+}: {
+  resources: Resources;
+  isStaff: boolean;
+}) {
+  const usage = await resources.usage;
+  return (
+    <>
+      <Suspense fallback={null}>
+        {isStaff && <Setup resources={resources} />}
+      </Suspense>
+      <UsageFooter
+        usedSeconds={usage.usedSeconds}
+        capSeconds={usage.capSeconds}
+        billingMonth={usage.billingMonth}
+        dualWeekends
+        note="free through Dec 31, 2026"
+      />
+    </>
+  );
+}
+async function Setup({ resources }: { resources: Resources }) {
+  const [roster, schedule, analytics] = await Promise.all([
+    resources.roster,
+    resources.schedule,
+    resources.analytics,
+  ]);
+  return (
+    <TeamSetupLine
+      setup={{
+        roster: roster.members.some((member) => member.role === "player"),
+        schedule: schedule.scheduleRows.some((row) => row.kind === "dual"),
+        report: analytics.firstReport !== null,
+      }}
+    />
+  );
+}
+function region(label: string, fallback: ReactNode, children: ReactNode) {
+  return (
+    <WidgetBoundary label={label}>
+      <Suspense fallback={fallback}>{children}</Suspense>
+    </WidgetBoundary>
   );
 }

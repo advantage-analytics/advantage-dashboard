@@ -179,19 +179,24 @@ before writing a template or wiring a send.**
 
 ## Design System
 
-**Read `.skills/advantage-analytics-design/SKILL.md` before building any UI** — it is the
-authoritative build reference. `DESIGN.md` documents v2 provenance and what was
-deliberately deferred (dark mode, v2 shadows). Tokens live in
-`src/styles/design-system/`, imported by `globals.css`. The Claude Design project
-_Advantage Design System v3_ (`abcb65f6-4e66-44bc-b9de-b3b47f4313c1`) is the current
-authority on component behaviour; SKILL.md transcribes its rules, marked **(v3)**, and
-flags where shipped code still draws the old pattern. Re-sync from its `CHANGELOG.md`
-(read via DesignSync, not the web) when it moves — it changes no token value.
-
-Inter only (300/400/500/600), type scale 9–56px, blue accent `#3B82F6`, success `#5DB955`,
-error `#E51837`, Lucide icons only, three Framer Motion curves
-(`[0.25, 0.46, 0.45, 0.94]`, `[0.23, 1, 0.32, 1]`, and `[0.2, 0, 0.4, 1]` — `--ease-chart`,
-reserved for chart and data transitions), no bounce or glassmorphism.
+**IMPORTANT: read `.skills/advantage-analytics-design/SKILL.md` before building any UI.**
+It is deliberately short — brand, design principles, the banned-pattern list, the
+primitive-construction rule — plus a routing table into
+`.skills/advantage-analytics-design/reference/`: `foundations.md` (type, colour,
+spacing, radius, shadow, motion, layout), `components.md`, `empty-and-loading.md`,
+`chrome.md` (rail, header, dialog, menus, glyphs), `tables.md` (the table laws),
+`primitives.md` (v3 primitives, wizard, match vocabulary), `home-recipes.md`,
+`settings.md`, `focus.md`. Read SKILL.md first, then the one or two reference files
+your surface needs — never grep a reference file in isolation, since SKILL.md carries
+the precedence rule that decides which of two conflicting patterns wins. Tokens live
+in `src/styles/design-system/`, imported by `globals.css`. `DESIGN.md` documents v2
+provenance and what was deliberately deferred (dark mode, v2 shadows). The Claude
+Design project _Advantage Design System v3_ (`abcb65f6-4e66-44bc-b9de-b3b47f4313c1`)
+is the current authority on component behaviour; the skill transcribes its rules,
+marked **(v3)**, and flags where shipped code still draws the old pattern. Re-sync from
+its `CHANGELOG.md` (read via DesignSync, not the web) when it moves — route each round
+to the file that owns the topic and `grep -rn` the skill directory before editing,
+since a rule may be printed in more than one place. It changes no token value.
 
 Auth pages style from CSS variables; dashboard pages use Tailwind utilities directly.
 Primary buttons come from `advButton()` (`src/lib/ui/adv-button.ts`) — don't hand-roll a
@@ -229,6 +234,24 @@ times — `home/serve-placement-home.tsx`, `matches/match-detail/serve-placement
 `matches/serve-placement/serve-placement-widget.tsx`, and
 `statistics/serve-placement-stats.tsx`.
 
+### Which one to use: `/task-add` or `/feature-new`
+
+The two are layered, not alternatives — the feature pipeline writes its tasks
+into the branch queue and drains them with `/task-next`. The choice is only
+about the front end.
+
+Use **`/task-add`** when you know what to build, even if it is several tasks.
+It already turns raw intent into sized, model-routed tasks with observable
+`done when:` criteria, and asks one question when the intent is too thin.
+
+Use **`/feature-new`** when the approach is undecided, or the feature is big
+enough to want a brief and design you can edit before any task exists. What
+it adds over `/task-add`: design alternatives with trade-offs (stage 02), a
+human gate between every stage, the brief's success criteria checked at
+review (06), and landing as a PR (07). That costs seven invocations and seven
+commits — a feature whose stages all finish in one sitting probably wanted
+`/task-add`.
+
 ### Branch task queues
 
 Each branch has its own queue at `.claude/tasks/<branch-slug>.md` (the branch
@@ -259,7 +282,8 @@ block as a Run button, and running one there fails with `command not found`.
 
 ### Feature pipeline (ICM)
 
-Larger features can run through the staged pipeline in `work/<slug>/`
+Features that need a design decision (see "Which one to use" above) run
+through the staged pipeline in `work/<slug>/`
 (brief → design → plan → tasks → build → review → land), scaffolded by
 `/feature-new` and advanced one stage at a time by `/feature-next`. Each
 stage's `output/` is a markdown file the human edits between invocations —

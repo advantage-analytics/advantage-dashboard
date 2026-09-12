@@ -37,28 +37,17 @@ export function DualHistory({
   rows,
   form,
   teamName,
+  isPreview = false,
 }: {
   rows: DualHistoryRow[];
   form: { form: ("win" | "loss")[]; wins: number; losses: number };
   /** The program's own name for the footer's "Meridian form". */
   teamName: string;
+  /** Day-zero Home owns all setup actions and links. */
+  isPreview?: boolean;
 }) {
   return (
-    <section
-      aria-label="Dual match history"
-      className="surface-card flex min-w-0 flex-col gap-0.5 p-5"
-    >
-      <div className="flex items-center gap-2.5 pb-3">
-        <span className="eyebrow">Dual match history</span>
-        <div className="flex-1" />
-        <Link
-          href="/dashboard/team/schedule"
-          className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-        >
-          All duals
-        </Link>
-      </div>
-
+    <DualHistoryFrame isPreview={isPreview}>
       {rows.length > 0 ? (
         rows.map((row) => <Row key={row.id} row={row} />)
       ) : (
@@ -105,7 +94,7 @@ export function DualHistory({
           ) : undefined
         }
       />
-    </section>
+    </DualHistoryFrame>
   );
 }
 
@@ -157,4 +146,33 @@ function Score({ us, them, won }: { us: number; them: number; won: boolean }) {
 /** "Meridian State University" → "Meridian": the frame's one-word form label. */
 function shortTeamName(name: string): string {
   return name.trim().split(/\s+/)[0] || name;
+}
+
+export function DualHistoryFrame({
+  children,
+  isPreview = false,
+}: {
+  children: React.ReactNode;
+  isPreview?: boolean;
+}) {
+  return (
+    <section
+      aria-label="Dual match history"
+      className="surface-card flex min-w-0 flex-col gap-0.5 p-5"
+    >
+      <div className="flex items-center gap-2.5 pb-3">
+        <span className="eyebrow">Dual match history</span>
+        <div className="flex-1" />
+        {!isPreview && (
+          <Link
+            href="/dashboard/team/schedule"
+            className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+          >
+            All duals
+          </Link>
+        )}
+      </div>
+      {children}
+    </section>
+  );
 }

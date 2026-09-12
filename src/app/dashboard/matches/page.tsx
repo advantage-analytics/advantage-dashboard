@@ -1,12 +1,10 @@
+import { redirect } from "next/navigation";
+import { enrichMatches } from "@/lib/data/matches-page-server";
+import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canUploadForProgram } from "@/lib/workspace/types";
-import {
-  analysisFor,
-  loadMatchAnalysis,
-} from "@/lib/data/match-analysis-server";
 import {
   type DbMatch,
   type DisplayMatch,
@@ -51,105 +49,31 @@ import { listMatchDrafts } from "@/lib/wizard/actions";
  * fan-out of per-match channels.
  */
 export default async function MatchesPage(): Promise<React.JSX.Element> {
-  const supabase = await createClient();
   const workspace = await getWorkspaceContext();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const isTeam = workspace?.active.kind === "team";
-  let matches: DisplayMatch[] = [];
-  // The viewer's own half-finished uploads, listed at the top (design 11c).
-  // Scoped like the matches beside them: a team draft under the program, a
-  // personal one under nothing.
-  const drafts = user
-    ? await listMatchDrafts({ programId: isTeam ? workspace!.active.id : null })
-    : [];
-
-  if (user) {
-    const query = supabase
-      .from("matches")
-      .select(
-        "id, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, source_provider, player2_id",
-      )
-      .order("date", { ascending: false });
-
-    const { data } = await (isTeam
+  if (!workspace) redirect("/login");
+  const user = workspace.viewer;
+  const supabase = await createClient();
+  const isTeam = workspace.active.kind === "team";
+  const query = supabase
+    .from("matches")
+    .select(
+      "id, created_by, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, source_provider, player2_id",
+    )
+    .order("date", { ascending: false });
+  const [drafts, { data, error }] = await Promise.all([
+    listMatchDrafts({ programId: isTeam ? workspace.active.id : null }),
+    isTeam
       ? query.eq("program_id", workspace.active.id)
-      : query.eq("created_by", user.id).is("program_id", null));
-
-    if (data) {
-      // Collect unique opponent user IDs to fetch hand/backhand
-      const opponentIds = [
-        ...new Set(
-          data
-            .map((r) => r.player2_id)
-            .filter((id): id is string => id != null),
-        ),
-      ];
-
-      // Both follow-ups key off the ids in `data` and neither reads the other's
-      // output, so they overlap rather than stack. Analysis state is keyed by
-      // match id, so feeding it every row — including any that transformDbMatch
-      // later drops — costs nothing but an unread map entry.
-      const [{ data: opponents }, jobs] = await Promise.all([
-        opponentIds.length > 0
-          ? supabase
-              .from("users")
-              .select("id, hand, backhand")
-              .in("id", opponentIds)
-          : Promise.resolve({ data: null }),
-        (async () => {
-          // Vendor-status reconciliation, sequenced before the analysis read
-          // so what the poll learns is what this list renders. Never fatal.
-          // Lives here and on the match detail page, not in
-          // loadMatchAnalysis — client components import that module, and the
-          // reconciler's admin/Azure dependencies must never enter a client
-          // module graph.
-          await reconcileBeforePageRead(
-            data.map((r) => r.id),
-            "matches",
-          );
-          return loadMatchAnalysis(
-            supabase,
-            data.map((r) => r.id),
-            { reap: true },
-          );
-        })(),
-      ]);
-
-      const opponentMap = new Map<
-        string,
-        { hand: string | null; backhand: string | null }
-      >();
-      for (const o of opponents ?? []) {
-        opponentMap.set(o.id, { hand: o.hand, backhand: o.backhand });
-      }
-
-      matches = (data as (DbMatch & { player2_id: string | null })[])
-        .map((row) => {
-          // `transformDbMatch` ignores the viewer — it decides the winner from
-          // the score, player1 against player2, not relative to whoever is
-          // looking. That is what makes one row safe to show a coach and the
-          // player alike, and why a team scope needs no second transform.
-          const display = transformDbMatch(row, user.id);
-          if (!display) return null;
-          const opp = row.player2_id
-            ? opponentMap.get(row.player2_id)
-            : undefined;
-          if (opp) {
-            display.player2Hand = opp.hand ?? undefined;
-            display.player2Backhand = opp.backhand ?? undefined;
-          }
-          // Matches with no job row resolve to `imported` or `manual` here.
-          display.analysis = analysisFor(jobs, display);
-          return display;
-        })
-        .filter((m): m is DisplayMatch => m !== null);
-    }
-  }
-
+      : query.eq("created_by", user.id).is("program_id", null),
+  ]);
+  if (error) throw new Error("Could not load matches", { cause: error });
+  const rows = (data ?? []) as (DbMatch & {
+    player2_id: string | null;
+    created_by: string | null;
+  })[];
+  const matches = rows
+    .map((row) => transformDbMatch(row, user.id))
+    .filter((m): m is DisplayMatch => m !== null);
   // Day zero, both scopes: the offer over the list's shape, no title row —
   // the same composition Home draws, so a player meets one offer wherever
   // they land. A draft counts as a match in flight, so it keeps the list.
@@ -173,34 +97,83 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
     );
   }
 
+  // Start the slower reads once. Title counts and the list share their result;
+  // the frame no longer waits for opponent profiles and analysis reconciliation.
+  const enriched = enrichMatches(supabase, rows, user);
+  const scope = isTeam ? "team" : "personal";
+  const canUpload = !isTeam || canUploadForProgram(workspace.active);
+  const scopeKey = `${user.id}:${workspace.active.id}`;
   return (
     <div className="w-full flex-1 bg-white">
-      {/* The frame's content column: 32px 56px 24px around it, 24px between the
-          title row, the toolbar, the table card and the footer (Platform Audit
-          Pb2; the 32px top is the 19d title slot). The 56px sides arrive with
-          the table itself at `lg` — below that the gallery cards take the
-          narrower page gutter every other page uses. */}
       <div className="mx-auto flex max-w-screen-2xl flex-col gap-6 px-6 pt-5 pb-6 lg:px-14">
-        <MatchesTitleRow
-          scope={isTeam ? "team" : "personal"}
-          readyMatches={matches.map((m) => ({
-            id: m.id,
-            status: m.analysis?.status,
-          }))}
-        />
-
-        <Suspense fallback={<MatchesSkeleton />}>
-          {/* userId drives the realtime subscription's server-side filter, so
-              a busy account never receives other people's job rows. See the
-              header for what that means inside a team workspace. */}
-          <MatchesPageContent
-            matches={matches}
-            drafts={drafts}
-            userId={user?.id}
-            scope={isTeam ? "team" : "personal"}
-          />
-        </Suspense>
+        <WidgetBoundary key={`title:${scopeKey}`} label="Match summary">
+          <Suspense
+            fallback={<MatchesTitleRow scope={scope} canUpload={canUpload} />}
+          >
+            <MatchesResolvedTitle
+              enriched={enriched}
+              scope={scope}
+              canUpload={canUpload}
+            />
+          </Suspense>
+        </WidgetBoundary>
+        <WidgetBoundary key={scopeKey} label="Matches">
+          <Suspense fallback={<MatchesSkeleton />}>
+            <MatchesResolvedContent
+              enriched={enriched}
+              drafts={drafts}
+              userId={user.id}
+              scope={scope}
+              scopeKey={scopeKey}
+            />
+          </Suspense>
+        </WidgetBoundary>
       </div>
     </div>
+  );
+}
+
+async function MatchesResolvedTitle({
+  enriched,
+  scope,
+  canUpload,
+}: {
+  enriched: Promise<DisplayMatch[]>;
+  scope: "team" | "personal";
+  canUpload: boolean;
+}) {
+  const readyMatches = (await enriched).map((m) => ({
+    id: m.id,
+    status: m.analysis?.status,
+  }));
+  return (
+    <MatchesTitleRow
+      scope={scope}
+      canUpload={canUpload}
+      readyMatches={readyMatches}
+    />
+  );
+}
+async function MatchesResolvedContent({
+  enriched,
+  drafts,
+  userId,
+  scope,
+  scopeKey,
+}: {
+  enriched: Promise<DisplayMatch[]>;
+  drafts: Awaited<ReturnType<typeof listMatchDrafts>>;
+  userId: string;
+  scope: "team" | "personal";
+  scopeKey: string;
+}) {
+  return (
+    <MatchesPageContent
+      key={scopeKey}
+      matches={await enriched}
+      drafts={drafts}
+      userId={userId}
+      scope={scope}
+    />
   );
 }

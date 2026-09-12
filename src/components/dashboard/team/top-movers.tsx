@@ -35,32 +35,17 @@ export function TopMovers({
   movers,
   rosterSize,
   canManage,
+  isPreview = false,
 }: {
   movers: TopMover[];
   rosterSize: number;
   /** Staff — the only people the "Add players" band can send to the roster. */
   canManage: boolean;
+  /** Day-zero Home owns all setup actions and links. */
+  isPreview?: boolean;
 }) {
   return (
-    <section aria-label="Top movers" className="surface-card min-w-0 p-5">
-      <div className="flex items-center gap-3">
-        <span className="eyebrow">Top movers</span>
-        <span className="text-micro">biggest change since last week</span>
-        <div className="flex-1" />
-        <Link
-          href="/dashboard/team/roster"
-          className="text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-        >
-          Full roster
-          {rosterSize > 0 ? (
-            <>
-              {" "}
-              — <span className="tabular">{rosterSize}</span>
-            </>
-          ) : null}
-        </Link>
-      </div>
-
+    <TopMoversFrame rosterSize={rosterSize} isPreview={isPreview}>
       {movers.length > 0 ? (
         <div className="mt-2 flex flex-col">
           {movers.map((mover) => (
@@ -68,9 +53,13 @@ export function TopMovers({
           ))}
         </div>
       ) : (
-        <Empty rosterEmpty={rosterSize === 0} canManage={canManage} />
+        <Empty
+          rosterEmpty={rosterSize === 0}
+          canManage={canManage}
+          isPreview={isPreview}
+        />
       )}
-    </section>
+    </TopMoversFrame>
   );
 }
 
@@ -104,9 +93,11 @@ function Row({ mover }: { mover: TopMover }) {
 function Empty({
   rosterEmpty,
   canManage,
+  isPreview,
 }: {
   rosterEmpty: boolean;
   canManage: boolean;
+  isPreview: boolean;
 }) {
   return (
     <>
@@ -149,7 +140,7 @@ function Empty({
               : "Each player's biggest change in serve and pressure numbers, against everything earlier."}
           </span>
         </div>
-        {rosterEmpty && canManage && (
+        {rosterEmpty && canManage && !isPreview && (
           <Link
             href="/dashboard/team/roster"
             className={`${advButton("primary")} shrink-0`}
@@ -159,5 +150,40 @@ function Empty({
         )}
       </div>
     </>
+  );
+}
+
+export function TopMoversFrame({
+  children,
+  rosterSize,
+  isPreview = false,
+}: {
+  children: React.ReactNode;
+  rosterSize?: number;
+  isPreview?: boolean;
+}) {
+  return (
+    <section aria-label="Top movers" className="surface-card min-w-0 p-5">
+      <div className="flex items-center gap-3">
+        <span className="eyebrow">Top movers</span>
+        <span className="text-micro">biggest change since last week</span>
+        <div className="flex-1" />
+        {!isPreview && (
+          <Link
+            href="/dashboard/team/roster"
+            className="text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+          >
+            Full roster
+            {(rosterSize ?? 0) > 0 ? (
+              <>
+                {" "}
+                — <span className="tabular">{rosterSize}</span>
+              </>
+            ) : null}
+          </Link>
+        )}
+      </div>
+      {children}
+    </section>
   );
 }

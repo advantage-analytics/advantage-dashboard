@@ -186,10 +186,12 @@ test.describe("/dashboard/team/schedule · Tc2 Tc2c", () => {
   // drawer of events beside a lineup pane; that shape is gone, and with it
   // `dual-widget.tsx`. Every `drawn()` below was transcribed from the two
   // new artboards; each retired string carries the reason.
-  const schedule = screen("static-schedule.tsx");
+  const schedule =
+    screen("static-schedule.tsx") + screen("../../team/list-page-heading.tsx");
   const matchesEmpty = screen("empty-matches.tsx", MATCHES);
   const dayZero = screen("schedule-day-zero.tsx");
-  const table = screen("schedule-table.tsx");
+  const table =
+    screen("schedule-table.tsx") + screen("schedule-table-layout.ts");
   const drawer = screen("event-drawer.tsx");
   const drawerActions = screen("event-actions-menu.tsx");
   const emptyMark = screen("empty-mark.tsx", UI);

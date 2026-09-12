@@ -1,3 +1,6 @@
+import { Suspense } from "react";
+import { SchedulePageSkeleton } from "@/components/dashboard/loading/team-page-pending";
+import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { zonedDayString } from "@/lib/data/match-utils";
@@ -51,6 +54,27 @@ export default async function SchedulePage({
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");
 
+  return (
+    <WidgetBoundary
+      key={`${workspace.viewer.id}:${active.id}`}
+      label="Schedule"
+    >
+      <Suspense fallback={<SchedulePageSkeleton />}>
+        <ScheduleContent active={active} searchParams={searchParams} />
+      </Suspense>
+    </WidgetBoundary>
+  );
+}
+
+async function ScheduleContent({
+  active,
+  searchParams,
+}: {
+  active: NonNullable<
+    Awaited<ReturnType<typeof getWorkspaceContext>>
+  >["active"];
+  searchParams: Promise<{ event?: string | string[] }>;
+}) {
   const schedule = await getProgramSchedule(active.id);
 
   const rows = scheduleRowsFrom(schedule);

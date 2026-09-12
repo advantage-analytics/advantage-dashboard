@@ -4,10 +4,7 @@ import { isProgramStaff } from "@/lib/workspace/types";
 import { createClient } from "@/lib/supabase/server";
 import { getLadder } from "@/lib/data/roster-server";
 import { getTeamSettings } from "@/lib/data/team-settings-server";
-import {
-  eventDetailFrom,
-  getProgramSchedule,
-} from "@/lib/data/schedule-server";
+import { getEventDetail } from "@/lib/data/schedule-server";
 import { NewDualDataProvider } from "@/components/dashboard/schedule/static/dual-school-step";
 import { NewDualFlow } from "@/components/dashboard/schedule/static/new-dual-flow";
 import { NewTournamentFlow } from "@/components/dashboard/schedule/static/new-tournament-flow";
@@ -77,8 +74,7 @@ export default async function EditEventPage({
   if (active.kind !== "team") redirect("/dashboard");
   if (!isProgramStaff(active)) redirect(`/dashboard/team/schedule/${eventId}`);
 
-  const schedule = await getProgramSchedule(active.id);
-  const detail = eventDetailFrom(schedule, eventId);
+  const detail = await getEventDetail(active.id, eventId);
   if (!detail) notFound();
 
   if (detail.event.kind === "tournament") {

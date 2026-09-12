@@ -58,6 +58,50 @@ export function TeamSeasonTitle({
   );
 
   return (
+    <TeamSeasonTitleFrame action={action}>
+      {matchCount === 0 ? (
+        <span className="text-body-sm" style={{ maxWidth: "66ch" }}>
+          Every court, every dual, and who is moving. All of it from the first
+          match.
+        </span>
+      ) : awaitingReport ? (
+        <span className="text-body-sm">
+          {matchCount === 1
+            ? "First report on its way"
+            : "First reports on their way"}
+          {" · "}
+          {hoursLeft}
+        </span>
+      ) : (
+        <>
+          <span className="text-body-sm">
+            <span className="tabular">{analyzedCount}</span>{" "}
+            {analyzedCount === 1 ? "match" : "matches"} analyzed · {hoursLeft}
+          </span>
+          {newResults.count > 0 && (
+            <Link
+              href="/dashboard/matches"
+              className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+            >
+              <span className="tabular">{newResults.count}</span> new{" "}
+              {newResults.count === 1 ? "result" : "results"} since{" "}
+              {newResults.since} →
+            </Link>
+          )}
+        </>
+      )}
+    </TeamSeasonTitleFrame>
+  );
+}
+
+export function TeamSeasonTitleFrame({
+  action,
+  children,
+}: {
+  action: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
     <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-end">
       <div>
         {/* The frame overrides the class's -0.4px tracking to -0.3px inline. */}
@@ -65,38 +109,7 @@ export function TeamSeasonTitle({
           Team season
         </h1>
         <div className="mt-[7px] flex flex-wrap items-baseline gap-3">
-          {matchCount === 0 ? (
-            <span className="text-body-sm" style={{ maxWidth: "66ch" }}>
-              Every court, every dual, and who is moving. All of it from the
-              first match.
-            </span>
-          ) : awaitingReport ? (
-            <span className="text-body-sm">
-              {matchCount === 1
-                ? "First report on its way"
-                : "First reports on their way"}
-              {" · "}
-              {hoursLeft}
-            </span>
-          ) : (
-            <>
-              <span className="text-body-sm">
-                <span className="tabular">{analyzedCount}</span>{" "}
-                {analyzedCount === 1 ? "match" : "matches"} analyzed ·{" "}
-                {hoursLeft}
-              </span>
-              {newResults.count > 0 && (
-                <Link
-                  href="/dashboard/matches"
-                  className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-                >
-                  <span className="tabular">{newResults.count}</span> new{" "}
-                  {newResults.count === 1 ? "result" : "results"} since{" "}
-                  {newResults.since} →
-                </Link>
-              )}
-            </>
-          )}
+          {children}
         </div>
       </div>
       <div className="hidden flex-1 sm:block" />

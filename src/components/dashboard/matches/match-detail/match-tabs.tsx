@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 /**
@@ -10,9 +10,9 @@ import { cn } from "@/lib/utils";
  * under it.
  *
  * Tab state lives in the URL as `?tab=`, absent for the default Statistics
- * view. Changes go through `router.push` deliberately — each selection is a
- * history entry, so the back button restores the prior tab. No new route
- * directory: the match page stays a single page (CLAUDE.md contract).
+ * view. Native history updates Next's search params without fetching the
+ * report again. Each selection is a history entry, so Back restores the prior
+ * tab. No new route directory: the match page stays a single page.
  *
  * `trailing` is the right edge of the row (artboard 47f) — the Statistics
  * pane's set scope today. It is a slot rather than a fixed control because
@@ -39,7 +39,6 @@ export function MatchTabs({
   active: MatchTab;
   trailing?: ReactNode;
 }) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -52,7 +51,11 @@ export function MatchTabs({
       params.set("tab", tab);
     }
     const query = params.toString();
-    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    window.history.pushState(
+      null,
+      "",
+      query ? `${pathname}?${query}` : pathname,
+    );
   };
 
   return (
