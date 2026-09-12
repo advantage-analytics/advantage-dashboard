@@ -43,6 +43,11 @@ const REFUSAL_STATUS: Record<ResubmitRefusalReason, number> = {
   not_configured: 503,
   invalid_metadata: 422,
   submit_failed: 502,
+  // The upload contract (T17), with the statuses `/api/splitstep/jobs` gives
+  // the same answers: a decided refusal is a 403, a reading that could not be
+  // obtained is a 503 so the button says "try again" rather than "no".
+  not_eligible: 403,
+  eligibility_unknown: 503,
 };
 
 export async function POST(
@@ -118,6 +123,9 @@ export async function POST(
     jobId,
     auto: false,
     workspace: billingWorkspace,
+    // The SESSION client, for the upload contract's roster read —
+    // `loadEligibleRoster()` answers only for a program this login is in.
+    session: supabase,
   });
 
   if (!result.ok) {
