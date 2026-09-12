@@ -182,51 +182,32 @@ would otherwise get waved through as "probably stale".
 **b. Completion review** — dispatch `task-completion-reviewer` with the task
 block. Its first line is `VERDICT: pass` or `VERDICT: needs-work`.
 
-**c. Guardrails**, only for the surfaces the diff touches, both in one message
-so they run concurrently:
-
-- `pipeline-guardrails-reviewer` — `src/app/dashboard/`,
-  `src/components/dashboard/`, or the upload wizard.
-- `rls-boundary-reviewer` — `src/lib/supabase/`, `src/lib/data/`,
-  `src/app/api/`, `supabase/migrations/`, or any new table, view or query.
-
-```bash
-bash .claude/skills/task-next/check.sh surfaces
-```
-
-Determines which surfaces the diff touches from both `git diff HEAD --stat`
-**and** `git ls-files --others --exclude-standard` — a task whose new files
-land entirely under one of the surfaces above must not skip that surface's
-reviewer just because those files are untracked and so absent from
-`git diff HEAD --stat` alone.
-
-`HEAD` is not optional there. Bare `git diff` shows unstaged changes only, and
-`git ls-files --others` stops listing a file the moment it is staged — so a
-subagent that ran `git add` without committing (it is told not to commit, not
-told not to stage) would fall through _both_ halves of that check, and a
-dashboard or migration change would silently skip its reviewer while step 7
-reports the skip as legitimate.
-
 **Fail-closed:** a stage that does not return something explicitly parseable
 as clear is a **failure**, not a pass — go to 6b. A crashed subagent,
 truncated output, or a report with prose but no verdict all count. For 5b that
 means anything other than a literal `VERDICT: pass` — including
-`VERDICT: needs-work` or no verdict line at all. Neither guardrail agent in 5c
-emits a verdict literal; they return prose findings only, so their "clear" is
-an explicit statement that they found nothing. Any finding at all from either
-one blocks — there is no severity triage at this gate, and don't invent one.
-(That triage is `code-review`'s job, at `/pr-check`, over the whole branch.)
+`VERDICT: needs-work` or no verdict line at all.
 
-All three must clear under that standard. `simplify` and `code-review` are
-**not** run here — they belong to `/pr-check` at branch end, over the whole
-branch diff, where reuse and altitude findings can actually be made.
+Both stages must clear under that standard.
+
+**The guardrail reviewers do not run here.** `pipeline-guardrails-reviewer`
+and `rls-boundary-reviewer` run once per branch, at `/pr-check` Stage 3, over
+the whole range. They used to run at this gate, on every task's own diff: an
+N-task drain spent 2N reviewer context windows — each re-reading
+`docs/ui-revamp-guardrails.md` and the diff from cold — to find what one pass
+over the finished branch finds once. A violation now lands as a commit and is
+caught before merge instead of before commit. That is the trade; it is
+deliberate. Do not dispatch either agent from this skill, and do not add a
+severity triage here to compensate. `simplify` and `code-review` are likewise
+`/pr-check`'s, over the whole branch diff, where reuse and altitude findings
+can actually be made.
 
 ## 6a. All clear — commit
 
 Set the task's `status:` to `done`. Append to `.claude/tasks/<slug>.log.md`:
 a heading naming the task id, title and status (`## T<n> · <title> — done`),
-then two fields — `**gate:**` (the verdict per stage, and which guardrails ran
-versus were skipped and why, matching step 7) and `**changed:**` (what
+then two fields — `**gate:**` (the verdict per stage, matching step 7) and
+`**changed:**` (what
 changed, a line or short paragraph) — plus, only when the subagent's report
 surfaced follow-up ideas, a third: `**follow-ups:**`, numbered ideas kept for
 the author to triage through `/task-add` later. Ideas, not tasks — nothing
@@ -310,9 +291,9 @@ the tree is clean for the next task while the work stays recoverable.
 
 ## 7. Report and stop
 
-Say which task ran, the verdict per gate stage — including which guardrails
-ran and which were skipped, and why, the same detail `/pr-check` Stage 4.3
-reports — and what landed: a commit SHA or a stash ref. If the scan passed
+Say which task ran, the verdict per gate stage — mechanical and completion;
+the guardrails are `/pr-check`'s and have no verdict to report here — and what
+landed: a commit SHA or a stash ref. If the scan passed
 over tasks waiting on unmet `needs:`, name them and what each waits on —
 the report is where a mistyped id gets noticed. Then stop, even if
 more tasks are eligible. The loop re-enters for the next one.

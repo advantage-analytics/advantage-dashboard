@@ -142,6 +142,35 @@ mkdir -p "$R/src/lib/other"
 out=$( cd "$R" && "$BIN" surfaces 2>&1 )
 printf '%s' "$out" | grep -q "no guardrail surface touched"; ok $? "reports no surface when nothing sensitive is touched"
 
+echo "-- surfaces over a git range --"
+n=$((n+1)); R=$(fixture "$n" "range-branch")
+mkdir -p "$R/src/components/dashboard" "$R/supabase/migrations"
+: >"$R/src/components/dashboard/widget.tsx"
+: >"$R/supabase/migrations/20260101000000_y.sql"
+( cd "$R" && git add -A && git commit -q -m "second" )
+out=$( cd "$R" && "$BIN" surfaces "HEAD~1...HEAD" 2>&1 )
+printf '%s' "$out" | grep -q "pipeline-guardrails-reviewer: needed"; ok $? "flags the dashboard surface from a committed range"
+printf '%s' "$out" | grep -q "rls-boundary-reviewer: needed"; ok $? "flags the supabase surface from a committed range"
+
+n=$((n+1)); R=$(fixture "$n" "range-quiet-branch")
+mkdir -p "$R/src/lib/other"
+: >"$R/src/lib/other/util.ts"
+( cd "$R" && git add -A && git commit -q -m "second" )
+out=$( cd "$R" && "$BIN" surfaces "HEAD~1...HEAD" 2>&1 )
+printf '%s' "$out" | grep -q "no guardrail surface touched"; ok $? "reports no surface over a range touching nothing sensitive"
+
+# A range must not fall back to the working tree: a dirty dashboard file that
+# is NOT in the range must not be reported, or /pr-check would attribute a
+# reviewer to a range that does not contain the change.
+n=$((n+1)); R=$(fixture "$n" "range-isolation-branch")
+mkdir -p "$R/src/lib/other" "$R/src/components/dashboard"
+: >"$R/src/lib/other/util.ts"
+( cd "$R" && git add -A && git commit -q -m "second" )
+: >"$R/src/components/dashboard/uncommitted.tsx"
+out=$( cd "$R" && "$BIN" surfaces "HEAD~1...HEAD" 2>&1 )
+printf '%s' "$out" | grep -q "pipeline-guardrails-reviewer"; [ $? -ne 0 ]
+ok $? "a range ignores an untracked file outside it"
+
 echo "-- clean --"
 n=$((n+1)); R=$(fixture "$n" "clean-branch")
 ( cd "$R" && "$BIN" clean >/dev/null 2>&1 ); ok $? "exits 0 on a clean tree"

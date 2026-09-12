@@ -7,8 +7,11 @@
 #
 # Wraps the deterministic half of task-next's steps 1, 2, 3, 5a and 6 — the
 # parts that are pure mechanics, not judgment. Everything that needs
-# judgment (which subagent to dispatch, how to interpret a guardrail's prose
+# judgment (which subagent to dispatch, how to interpret a reviewer's prose
 # findings, what to write in a log entry) stays in SKILL.md.
+#
+# `surfaces` is the exception: its caller is /pr-check, not task-next. It
+# stayed here because it is tested here and shares the slug/queue plumbing.
 #
 # Subcommands:
 #   slug                 print the branch-derived queue slug, or fail loudly
@@ -18,8 +21,8 @@
 #   preflight            ensure node_modules exists (npm ci if not)
 #   gate                 run lint, typecheck, test; handle the stale
 #                        .next/types false-failure; print PASS or FAIL
-#   surfaces             print which guardrail surfaces the working tree
-#                        touches (dashboard, supabase)
+#   surfaces [<range>]   print which guardrail reviewers a change is due —
+#                        a git range if given, else the working tree
 #   clean                fail if the working tree is not clean
 #
 # Exit status is always meaningful: 0 for the happy path, 1 otherwise. Every
@@ -170,18 +173,40 @@ gate() {
 }
 
 # ── surfaces ──────────────────────────────────────────────────────────────
-# Combines git diff HEAD --stat and git ls-files --others --exclude-standard
-# so a staged-but-not-committed new file is not missed — see task-next
-# SKILL.md step 5c for why both halves are load-bearing.
+# Names which guardrail reviewers a change is due. Called from /pr-check
+# Stage 3, which is the only place those reviewers run — task-next does not
+# dispatch them.
+#
+# With a range argument ("$base"...HEAD), reads that range. Without one,
+# reads the working tree, and there it must combine `git diff HEAD
+# --name-only` with `git ls-files --others --exclude-standard`: a change made
+# entirely of new files is absent from the first, so consulting it alone would
+# report "no surface touched" over a whole new dashboard directory.
+#
+# `HEAD` is not optional in that first command. Bare `git diff` shows unstaged
+# changes only, and `git ls-files --others` stops listing a file the moment it
+# is staged — so anything staged-but-uncommitted falls through BOTH halves,
+# and the caller reports a skip it believes is legitimate.
 surfaces() {
-  local touched dashboard=0 supabase=0
-  touched=$(
-    { git diff HEAD --stat --name-only 2>/dev/null
-      git ls-files --others --exclude-standard 2>/dev/null
-    } | sort -u
-  )
+  local range=${1:-} touched dashboard=0 supabase=0
+  if [ -n "$range" ]; then
+    touched=$(git diff "$range" --name-only 2>/dev/null | sort -u)
+  else
+    touched=$(
+      { git diff HEAD --name-only 2>/dev/null
+        git ls-files --others --exclude-standard 2>/dev/null
+      } | sort -u
+    )
+  fi
 
-  [ -z "$touched" ] && { printf 'no changes in the working tree\n'; return 0; }
+  if [ -z "$touched" ]; then
+    if [ -n "$range" ]; then
+      printf 'no files changed in %s\n' "$range"
+    else
+      printf 'no changes in the working tree\n'
+    fi
+    return 0
+  fi
 
   while IFS= read -r f; do
     case "$f" in
@@ -221,7 +246,7 @@ queue-paths) queue_paths ;;
 lint) lint ;;
 preflight) preflight ;;
 gate) gate ;;
-surfaces) surfaces ;;
+surfaces) surfaces "${1:-}" ;;
 clean) clean ;;
 *) die "unknown subcommand '$cmd' — one of: slug queue-paths lint preflight gate surfaces clean" ;;
 esac
