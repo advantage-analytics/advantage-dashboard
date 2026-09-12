@@ -48,22 +48,16 @@ import { useWizardKeys } from "./useWizardKeys";
 import { SourceStepContent } from "./SourceStepContent";
 import { FileStepContent } from "./FileStepContent";
 import { ImportIdentityNotice } from "./ImportIdentityNotice";
-import { wizardContinueBlocked } from "./validation";
+import {
+  collectMatchCompletionRequirements,
+  wizardContinueBlocked,
+} from "./validation";
 import { TrimStepContent } from "./TrimStepContent";
 import { DetailsStepContent } from "./DetailsStepContent";
 import { PinnedLineBar } from "./PinnedLineBar";
 
 /** Where the flow returns to when it is dismissed or finished. */
 const PERSONAL_EXIT_HREF = "/dashboard/matches";
-
-/**
- * The missing-field label for `initialTopPlayerIsPlayer1`, matching
- * DetailsContent's field label. One const because the string is both pushed
- * into the list and compared against — it has already been reworded once, and
- * a rename that misses the comparison silently breaks the "only the camera
- * answers are outstanding" sentence.
- */
-const CAMERA_POSITION_LABEL = "your position at video start";
 
 /**
  * What one upload is doing, owned HERE rather than in the wizard hook.
@@ -801,41 +795,48 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
    * Only for processing providers. A SwingVision import gets its scores and
    * names from the parsed file, so demanding them by hand would ask twice.
    */
-  const missing = useMemo(() => {
-    const labels: string[] = [];
-    // The opponent, the score and the day are what every match needs; the
-    // rest is the video job's.
-    if (!formData.opponentName.trim()) labels.push("opponent");
-    if (!hasAnySetScore) labels.push("score");
-    if (!formData.date) labels.push("date");
-    if (isProcessingProvider) {
-      if (!formData.playerName.trim())
-        labels.push(
-          whoPlayed.subject?.kind === "roster" ? "player name" : "your name",
-        );
-      if (formData.adScoring === undefined) labels.push("scoring");
-      if (formData.fixedCamera === undefined) labels.push("camera");
-      if (formData.initialTopPlayerIsPlayer1 === undefined)
-        labels.push(CAMERA_POSITION_LABEL);
-    }
-    // Confirm has its own sentence for the case where only the camera answers
-    // are outstanding, so the shape is decided here beside the list rather than
-    // re-derived from label strings three hundred lines away.
-    const onlyVideoAnswers =
-      labels.length > 0 &&
-      labels.every((l) => l === "camera" || l === CAMERA_POSITION_LABEL);
-    return { labels, onlyVideoAnswers };
-  }, [
-    formData.date,
-    formData.playerName,
-    formData.opponentName,
-    formData.adScoring,
-    formData.fixedCamera,
-    formData.initialTopPlayerIsPlayer1,
-    hasAnySetScore,
-    isProcessingProvider,
-    whoPlayed.subject,
-  ]);
+  const missing = useMemo(
+    () =>
+      // The single contract `validation.ts` describes: this is the "earlier,
+      // visible half" (the footer counter below, and the Continue gate) and
+      // `handleCreateMatch`'s write-time check is the same facts re-read at
+      // the moment of the write. Both call this one function so a
+      // requirement added here can never leave the write-time check blind,
+      // or the reverse — the two used to diverge (hand/backhand were only
+      // checked at write time, and the camera-position label didn't match
+      // between the two, which broke the "only the camera answers are
+      // outstanding" sentence below).
+      collectMatchCompletionRequirements({
+        isProcessingProvider,
+        hasAnySetScore,
+        playerSubjectIsRoster: whoPlayed.subject?.kind === "roster",
+        opponentName: formData.opponentName,
+        date: formData.date,
+        playerName: formData.playerName,
+        playerHand: formData.playerHand,
+        playerBackhand: formData.playerBackhand,
+        opponentHand: formData.opponentHand,
+        opponentBackhand: formData.opponentBackhand,
+        adScoring: formData.adScoring,
+        fixedCamera: formData.fixedCamera,
+        initialTopPlayerIsPlayer1: formData.initialTopPlayerIsPlayer1,
+      }),
+    [
+      isProcessingProvider,
+      hasAnySetScore,
+      whoPlayed.subject,
+      formData.opponentName,
+      formData.date,
+      formData.playerName,
+      formData.playerHand,
+      formData.playerBackhand,
+      formData.opponentHand,
+      formData.opponentBackhand,
+      formData.adScoring,
+      formData.fixedCamera,
+      formData.initialTopPlayerIsPlayer1,
+    ],
+  );
 
   // Work in progress, per step. Separate from `missing` because these are
   // states to wait out rather than fields to fill, and they read differently.

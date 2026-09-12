@@ -141,7 +141,7 @@ ready).
 
 ## T10 · Make player details editable and required
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **reasoning:** medium
 - **needs:** T4, T5, T7, T8

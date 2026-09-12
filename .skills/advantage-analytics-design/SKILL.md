@@ -1109,7 +1109,11 @@ thing the menu will not do) and `FloatMenuDivider`. **Every select is
 `underline` for a form field (full width, the caption's hairline, no radius)
 and `pill` for the control beside a `SettingsCardRow` label (30px, bordered);
 both turn their edge blue while open, and the menu matches the trigger's
-width under a field.
+width under a field. `value` accepts `undefined` for a genuinely unanswered
+required field (paired with `placeholder`) — the trigger then shows the
+placeholder in `--ink-400` and no row draws as chosen, rather than guessing an
+option or printing the raw value (2026-09-12, in-repo — the upload wizard's
+hand/backhand fields).
 
 **No native `<select>` in product UI.** It cannot carry a second line per
 option, its popup is the browser's not ours, and drawn as an underline on a
