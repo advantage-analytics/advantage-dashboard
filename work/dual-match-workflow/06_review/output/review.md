@@ -1,11 +1,12 @@
 # Stage 06 — Review
 
-Sign-off: pending
+Sign-off: approved — by the author, 2026-09-12, after F1 and F2 were resolved
 
-> **Update — F1 and F2 are both resolved** (see the resolution sections at the
-> end). The verdict line below is the review as written; read the resolutions
-> before signing off. F3-F8 and everything under "Consciously left" remain
-> open, as follow-up branches.
+> **Signed off.** Both blocking findings were resolved on this branch — F1 in
+> `169ee58`, F2 in `9d3cd9e` (applied to production). The verdict line below is
+> preserved as the review was originally written; the two resolution sections
+> at the end record what changed and why. F3-F8 and everything under
+> "Consciously left" remain open and are to be taken as follow-up branches.
 
 Target reviewed: **branch range `40f5505...HEAD`** (clean tree at start; the
 stage-2 quality fixes below are uncommitted at time of writing).
