@@ -444,11 +444,14 @@ test("a video seam refusal the contract did not catch still stops the mint", asy
 // ── After authorization ───────────────────────────────────────────────────
 
 test("an unsupported container → 400, nothing minted", async () => {
+  // Not `.avi` — that is an accepted container. The vendor takes anything
+  // ffmpeg can decode, so the allowlist covers the common camera and phone
+  // containers; this fixture has to be something genuinely outside it.
   const h = harness({});
   expectDenied(
     h,
     400,
-    await call(h, { matchId: "m-1", fileName: "final.avi" }),
+    await call(h, { matchId: "m-1", fileName: "final.txt" }),
   );
 });
 

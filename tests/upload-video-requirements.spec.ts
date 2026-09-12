@@ -21,6 +21,7 @@ import {
   checkVideoFileBasics,
   evaluateVideoProbe,
 } from "@/lib/services/upload/validators/splitstep-validator";
+import { videoExtensionFor } from "@/lib/services/splitstep/object-keys";
 import {
   ACCEPTED_VIDEO_EXTENSIONS,
   MAX_VIDEO_SIZE_BYTES,
@@ -87,11 +88,54 @@ test.describe("container", () => {
   });
 
   test("an unbuildable container is refused before any decode, and says what to send", () => {
-    const result = checkVideoFileBasics({ name: "match.avi", size: 10 });
+    const result = checkVideoFileBasics({ name: "match.txt", size: 10 });
     expect(result?.success).toBe(false);
     for (const ext of ACCEPTED_VIDEO_EXTENSIONS) {
       expect(result?.error).toContain(ext);
     }
+  });
+});
+
+test.describe("widened container allowlist — vendor accepts 'any container ffmpeg can decode'", () => {
+  // The vendor's guide (https://splitstep.ai/api-docs.html) accepts any
+  // container ffmpeg can decode, with MP4 (H.264) merely preferred. That set
+  // is not enumerable, so ACCEPTED_VIDEO_EXTENSIONS is a practical allowlist
+  // of containers a camera or phone actually produces — widened here past
+  // mp4/mov to cover common phone and camera exports.
+  const expectedWidenedSet = [".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm"];
+
+  test("the allowlist covers exactly the practical camera/phone containers", () => {
+    expect([...ACCEPTED_VIDEO_EXTENSIONS].sort()).toEqual(
+      [...expectedWidenedSet].sort(),
+    );
+  });
+
+  for (const ext of [".m4v", ".avi", ".mkv", ".webm"]) {
+    test(`${ext} clears the pick-time validator and builds a storage key`, () => {
+      const fileName = `match${ext}`;
+
+      // Accepted at the pick-time gate...
+      expect(checkVideoFileBasics({ name: fileName, size: 10 })).toBeNull();
+
+      // ...and videoExtensionFor() — which the upload-url route relies on to
+      // build the blob key — agrees rather than throwing. These two must
+      // move together: widening one without the other is exactly the
+      // pick-time-accept/upload-time-400 failure this fix removes.
+      expect(videoExtensionFor(fileName)).toBe(ext);
+    });
+  }
+
+  test("an unknown extension still throws from videoExtensionFor(), not just the validator", () => {
+    expect(() => videoExtensionFor("match.txt")).toThrow(
+      /Unsupported video container/,
+    );
+  });
+
+  test("a renamed unknown extension (.txt) is still refused at pick time", () => {
+    // "Anything ffmpeg can decode" is not enumerable — a genuinely
+    // unrecognised container still fails fast, before any bytes move.
+    const result = checkVideoFileBasics({ name: "notes.txt", size: 10 });
+    expect(result?.success).toBe(false);
   });
 });
 

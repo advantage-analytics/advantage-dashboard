@@ -30,13 +30,16 @@
  * the vendor might still refuse is left to the vendor, which is the party that
  * actually knows.
  *
- * Likewise the container allowlist stays at `ACCEPTED_VIDEO_EXTENSIONS`. That
- * is not an MP4 preference being enforced (.mov is accepted, and the message
- * names MP4 only as the best-performing choice): it is the set of extensions
- * `videoExtensionFor()` in src/lib/services/splitstep/object-keys.ts can build
- * a blob key from. The vendor's "formats ffmpeg can decode" names no
- * enumerable set, and widening one end without the storage-key contract at the
- * other would trade a legible refusal at the picker for a 400 after the upload.
+ * Likewise the container allowlist is exactly `ACCEPTED_VIDEO_EXTENSIONS` —
+ * not the message's MP4 preference being enforced (.mov, .m4v, .avi, .mkv and
+ * .webm are all accepted; the message names MP4 only as the best-performing
+ * choice) but the set of extensions `videoExtensionFor()` in
+ * src/lib/services/splitstep/object-keys.ts can build a blob key from. The
+ * vendor's "any container ffmpeg can decode" names no enumerable set, so this
+ * is a practical allowlist of what a camera or phone actually produces, kept
+ * in lockstep with `videoExtensionFor()` so widening one end never outruns the
+ * storage-key contract at the other — that mismatch is what would trade a
+ * legible refusal at the picker for a 400 after the upload.
  */
 
 import {
