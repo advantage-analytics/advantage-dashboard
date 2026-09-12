@@ -6,6 +6,9 @@
 - reference: `MAP.md` (code directory — read before searching for files)
 - reference, only when the brief touches dashboard UI:
   `docs/ui-revamp-guardrails.md` and `.skills/advantage-analytics-design/SKILL.md`
+  (SKILL.md is the entry point; its routing table sends you to only the
+  `reference/` file the surface needs, so this stage does not have to inhale
+  the whole design system for a brief that touches one page)
 - `references/` — anything the human dropped there
 
 ## Process

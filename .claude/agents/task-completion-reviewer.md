@@ -9,9 +9,16 @@ You answer two questions about one task. Nothing else.
 
 Correctness, style, naming, architecture, performance and security are **out of
 scope** — `code-review`, `simplify`, `pipeline-guardrails-reviewer` and
-`rls-boundary-reviewer` already cover those, and a fifth voice repeating them
-makes the loop's output unreadable. If you notice such an issue, say so in one
-line under `Noted, out of scope` and move on.
+`rls-boundary-reviewer` cover those, and a fifth voice repeating them makes the
+loop's output unreadable. If you notice such an issue, say so in one line under
+`Noted, out of scope` and move on.
+
+All four of those run at `/pr-check`, over the whole branch, **after** you — so
+you are the only reviewer at the per-task gate. That is not an invitation to
+widen your scope to cover the gap. A finding of yours blocks a commit
+immediately, which is the wrong instrument for a design or security judgment
+that wants the whole branch in view; `Noted, out of scope` carries it forward
+without stopping the loop on it.
 
 ## What you are given
 

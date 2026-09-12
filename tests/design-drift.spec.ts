@@ -1,10 +1,11 @@
 import { test, expect } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 
-// The design system is 2,384 lines of prose, so drift returns silently — a
-// near-twin grey, a font size in a gap the scale never defined, a chart hue
-// inlined instead of imported. `scripts/check-design-drift.mjs` counts those;
-// this is what makes the count a gate rather than a report nobody runs.
+// The design system is thousands of lines of prose across SKILL.md and its
+// reference/ files, so drift returns silently — a near-twin grey, a font
+// size in a gap the scale never defined, a chart hue inlined instead of
+// imported. `scripts/check-design-drift.mjs` counts those; this is what
+// makes the count a gate rather than a report nobody runs.
 //
 // It needs no environment, so unlike the live-database specs it runs on CI's
 // keyless checkout.
