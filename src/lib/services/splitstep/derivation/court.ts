@@ -87,10 +87,11 @@ export interface CourtPosition {
  * do NOT vary it by `initial_top_player_is_player1` — that flag decides player
  * identity, never geometry. A y-only flip would look harmless because every
  * y-dependent expression in `calculate_match_stats` is symmetric about the net,
- * but `court-visualization.tsx` mirrors far-side landings through
- * `(-x, 23.77 - y)` — a 180° rotation — so the render is invariant only under a
- * simultaneous x and y flip. Flip y alone and every chart mirrors, swapping the
- * deuce and ad service boxes, while match_stats stays numerically identical.
+ * but `serveSide()` below reads the sign of `hittingToward`, which a y-only
+ * flip inverts. Flip y alone and every serve lands in the opposite service
+ * box — deuce and ad swap everywhere they are labelled — while match_stats
+ * stays numerically identical, so nothing fails and the charts are simply
+ * wrong.
  */
 export function metersToCourtFrame(
   xMeters: number,

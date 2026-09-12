@@ -247,12 +247,9 @@ Match detail and video sections use additional colors for multi-player different
 > `colors.css` now, and `scripts/check-design-drift.mjs` check 5 fails if any of
 > them drifts from it again.
 >
-> Two files still paint violet and are deliberately untouched, because both are
-> unreachable — `statistics/serve-placement-stats.tsx` sits behind
-> `ComingSoonPage`, and `visuals/court-visualization.tsx` was superseded by
-> `match-detail/shots/shots-tab.tsx` and has no importer at all. They are
-> excluded in the checker by name, with the evidence recorded there. Whoever
-> revives either one owns the swap.
+> The two files that still painted violet were both unreachable and have since
+> been deleted, so no exclusion is needed: every file the checker reads now
+> transcribes `colors.css`.
 
 ---
 
