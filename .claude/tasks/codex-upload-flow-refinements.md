@@ -227,7 +227,7 @@ ready).
 
 ## T16 · Verify final job eligibility before quota spend
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **reasoning:** high
 - **needs:** T15

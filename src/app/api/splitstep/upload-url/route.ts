@@ -21,8 +21,7 @@ import { type NextRequest } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { eligibleRosterOptions } from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
-import type { RosterFullRow } from "@/lib/data/roster-shared";
+import { loadEligibleRoster } from "@/lib/services/splitstep/eligible-roster";
 import { mintUploadSas } from "@/lib/services/splitstep/video-url";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
@@ -75,42 +74,14 @@ export async function POST(request: NextRequest) {
     },
 
     async loadRoster(programId) {
-      // The session client, as `getRosterPlayerOptions()` reads it: the RPC
-      // is SECURITY DEFINER and answers only for a program the caller is in,
-      // which `billingWorkspaceFor()` has already established. The own-profile
-      // read mirrors `claimedProfilesByProgram()` in
-      // `active-workspace-server.ts` — live, bound to this login, this
-      // program — because the RPC's player arm drops a profile claimed by
-      // staff, and an owner who genuinely plays would otherwise be refused
-      // for their own match. `eligibleRosterOptions()` is the wizard's merge
-      // of the two, reused so the route and the picker cannot disagree about
-      // who is on the roster.
-      const [rows, own] = await Promise.all([
-        supabase.rpc("program_roster_full", { p_program_id: programId }),
-        supabase
-          .from("program_players")
-          .select(
-            "id, program_id, first_name, last_name, email, class_year, lineup_spot, claimed_by_user_id",
-          )
-          .eq("program_id", programId)
-          .eq("claimed_by_user_id", userId ?? "")
-          .is("archived_at", null)
-          .is("merged_into_id", null)
-          .limit(1),
-      ]);
-      if (rows.error || own.error) {
-        console.error("[splitstep-upload-url] could not load roster", {
-          programId,
-          error: rows.error?.message ?? own.error?.message,
-        });
-        return null;
-      }
-      return eligibleRosterOptions(
-        (rows.data ?? []) as RosterFullRow[],
-        own.data?.[0] ?? null,
+      // One roster read for both video seams — see `loadEligibleRoster()`,
+      // where this dep's body and its reasoning moved (T16).
+      return loadEligibleRoster({
+        supabase,
         programId,
-        userId ?? "",
-      );
+        userId,
+        log: "[splitstep-upload-url]",
+      });
     },
 
     mintUploadSas,

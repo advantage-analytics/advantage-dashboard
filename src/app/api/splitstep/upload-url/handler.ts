@@ -23,10 +23,10 @@
 
 import { NextResponse } from "next/server";
 
+import { athleteOnRow } from "@/lib/services/splitstep/match-athlete";
 import { videoObjectKey } from "@/lib/services/splitstep/object-keys";
 import {
   uploadEligibility,
-  type AthleteChoice,
   type RosterIdentity,
 } from "@/lib/workspace/upload-eligibility";
 import {
@@ -91,31 +91,12 @@ interface UploadUrlBody {
 }
 
 /**
- * The row's athlete, in the contract's terms.
- *
- * A personal match is the uploader's own: NULL or their login is `self`, and
- * anything else is a roster choice that `uploadEligibility()` refuses as
- * `athlete-not-personal`. A team match names whoever `player1_id` names, or
- * nobody — NULL is passed through as nothing chosen, not rewritten to the
- * uploader, for the reason the contract's header gives: a coach's login on an
- * athlete's row hands the coach read access the athlete then loses. A
- * player-role member whose row carries their own login is still a `roster`
- * choice here, resolved by the roster rather than by equality with the
- * caller — that is what lets an arm-3 player pass and a staff login fail.
+ * `athleteOnRow` moved to `lib/services/splitstep/match-athlete.ts` (T16) so
+ * `/api/splitstep/jobs` maps the row the same way before it spends quota.
+ * Re-exported so this module's existing importers — the T15 spec among them —
+ * keep reading it from here; the mapping itself is unchanged.
  */
-export function athleteOnRow(
-  match: Pick<UploadUrlMatch, "program_id" | "player1_id">,
-  userId: string,
-): AthleteChoice | null {
-  if (match.program_id === null) {
-    return match.player1_id === null || match.player1_id === userId
-      ? { kind: "self" }
-      : { kind: "roster", playerId: match.player1_id };
-  }
-  return match.player1_id === null
-    ? null
-    : { kind: "roster", playerId: match.player1_id };
-}
+export { athleteOnRow };
 
 export async function handleUploadUrl(
   request: Request,
