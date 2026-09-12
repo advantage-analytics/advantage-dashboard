@@ -198,7 +198,7 @@ ready).
 
 ## T14 · Enforce upload eligibility on direct writes
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **reasoning:** high
 - **needs:** T11, T12
