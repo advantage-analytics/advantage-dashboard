@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // Makes the design system machine-checkable.
 //
-// SKILL.md is 2,384 lines of prose, so drift returns silently: a near-twin
-// grey, a font size in a gap the scale never defined, a chart hue inlined
-// instead of imported, a retired colour that three files still ship.
+// The design system (.skills/advantage-analytics-design/) is thousands of
+// lines of prose across SKILL.md and its reference/ files, so drift returns
+// silently: a near-twin grey, a font size in a gap the scale never defined,
+// a chart hue inlined instead of imported, a retired colour that three files
+// still ship.
 //
 // ── Why a burn-down and not `=== 0` ─────────────────────────────────────────
 // The tree is not clean today. A checker demanding zero would be red on day
@@ -93,7 +95,7 @@ const ALLOWED_HEX = {
 // templates it mirrors. Tokenizing it would break that pairing to no benefit.
 const HEX_EXEMPT = new Set(["src/lib/services/email/shell.ts"]);
 
-// ── The type scale, from SKILL.md §"Type Scale" ─────────────────────────────
+// ── The type scale, from reference/foundations.md §"Type Scale" ────────────
 const TYPE_SCALE = new Set([8, 9, 10, 11, 12, 13, 14, 16, 28, 30, 40, 56]);
 
 // ── shadcn's oklch token layer ──────────────────────────────────────────────

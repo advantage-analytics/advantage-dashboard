@@ -134,21 +134,33 @@ hand-copy of that markup — change one and you must change the other. Read
 ## Design System
 
 **IMPORTANT: read `.skills/advantage-analytics-design/SKILL.md` before building any UI.**
-It is the authoritative build reference — tokens, type scale, colours, motion and
-component recipes. Tokens live in `src/styles/design-system/`, imported by `globals.css`.
-`DESIGN.md` records v2 provenance and what was deliberately deferred (dark mode, v2
-shadows). Primary buttons come from `advButton()` (`src/lib/ui/adv-button.ts`) — don't
-hand-roll a near-miss. Re-sync SKILL.md from the v3 Claude Design project's `CHANGELOG.md`
-via DesignSync, not the web; it never changes a token value.
+It is deliberately short — brand, principles, the banned-pattern list, the
+primitive-construction rule — plus a routing table into `reference/` (`foundations`,
+`components`, `empty-and-loading`, `chrome`, `tables`, `primitives`, `home-recipes`,
+`settings`, `focus`). Read SKILL.md first, then only the reference files your surface
+needs — never a reference file in isolation, since SKILL.md carries the precedence rule.
+Tokens live in `src/styles/design-system/`, imported by `globals.css`. `DESIGN.md` records
+v2 provenance and what was deliberately deferred (dark mode, v2 shadows). Primary buttons
+come from `advButton()` (`src/lib/ui/adv-button.ts`) — don't hand-roll a near-miss.
+Re-sync from the v3 Claude Design project's `CHANGELOG.md` via DesignSync, not the web:
+route each round to the file that owns the topic and `grep -rn` the skill directory
+first, since a rule may be printed in more than one place. It never changes a token value.
 
 ## Task queues and the feature pipeline
 
 Each branch has its own queue at `.claude/tasks/<branch-slug>.md` (`/` → `-`), so task
 files never conflict. `/task-add` appends; `/task-next` runs one task in a gated subagent
-and commits it. Larger features run the staged ICM pipeline in `work/<slug>/` via
-`/feature-new` and `/feature-next` — rules in `.claude/pipeline/CONTEXT.md`, spec in
-`docs/superpowers/specs/2026-08-30-icm-feature-pipeline-design.md`. Everything else about
-them lives in each skill's own SKILL.md and in the queue file's header.
+and commits it. The staged ICM pipeline in `work/<slug>/` (`/feature-new`,
+`/feature-next`) sits in front of the same queue — rules in `.claude/pipeline/CONTEXT.md`,
+spec in `docs/superpowers/specs/2026-08-30-icm-feature-pipeline-design.md`. Everything
+else about them lives in each skill's own SKILL.md and in the queue file's header.
+
+**Which one to use.** `/task-add` when you know what to build, even several tasks — it
+already turns raw intent into sized, routed tasks with `done when:` criteria.
+`/feature-new` only when the approach is undecided or the feature wants a brief and design
+you can edit first; it adds design alternatives, a human gate per stage, a success-criteria
+check at review and landing as a PR, at seven invocations. A feature whose stages all
+finish in one sitting probably wanted `/task-add`.
 
 Two rules you need _before_ invoking any of them:
 

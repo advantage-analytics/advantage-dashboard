@@ -1,21 +1,24 @@
 ---
 name: pr-check
-description: Run the full pre-merge gate on the current branch — lint, typecheck, tests, then quality and safety review via /simplify, the vercel-react-best-practices skill, and this project's guardrail subagents. Use before opening a PR or merging to main. There is no CI in this repo, so this is the only gate.
+description: Run the full pre-merge gate on the current branch — lint, typecheck, tests, then quality and safety review via /simplify, the vercel-react-best-practices skill, and this project's guardrail subagents. Use before opening a PR or merging to main. .github/workflows/ci.yml runs the same lint/typecheck/test trio on every PR and push, but only this skill runs the review stages.
 disable-model-invocation: true
 argument-hint: "[optional: 'full' to force every reviewer at full effort, or a scope like 'ui only']"
 ---
 
 # Pre-merge check
 
-**This repo has no `.github/` workflows.** Nothing runs on push, nothing runs
-on a PR. Every check is this one. Do not skip a stage because the diff "looks
-small" — the failure modes this catches are the silent kind.
+**`.github/workflows/ci.yml` runs lint, typecheck, format:check and the test
+suite on every PR and on pushes to `main`/`splitstep-integration`** — but it
+runs no review stage. `/simplify`, the guardrail subagents, and `code-review`
+only run here. Do not skip a stage because the diff "looks small" — the
+failure modes this catches are the silent kind.
 
-**`/pr-check full` is the paranoid mode.** It turns the economies below back
-off: guardrail reviewers run even over an all-task-gated range, and
-`code-review` runs at `high`. Use it at the merge-to-`main` moment, or when
-the branch carries hand-made commits you want swept twice. The default run
-trusts the per-task gates it can verify, and spends accordingly.
+**`/pr-check full` is the paranoid mode.** It raises `code-review` from
+`medium` to `high`. That is now its whole effect: the guardrail reviewers run
+on every `/pr-check`, `full` or not, so there is no longer a coverage
+difference between the two modes — only a depth one. Use it at the
+merge-to-`main` moment, or when the branch carries hand-made commits you want
+swept twice.
 
 ## What to review — read this before stage 1
 
@@ -153,24 +156,41 @@ Run the general review:
   calibration for a second net behind the per-task gates. `full` mode raises
   it to `high` deliberately.
 
-Then decide whether the project reviewers need to run at all. Check whether
-the whole range already went through the per-task gate:
+Then run the project reviewers. **This is the only place they run** — no
+range is exempt, and there is no "already covered" shortcut.
+
+That deserves stating plainly, because the shortcut is easy to re-derive and
+wrong. `/task-next` used to dispatch both guardrail reviewers on every task's
+own diff, and this stage used to skip them whenever every commit in the range
+was a `/task-next` commit. The per-task dispatch is gone — an N-task drain
+paid for 2N reviewer context windows to find what one pass over the branch
+finds once. Reinstating the skip without reinstating that dispatch leaves the
+guardrails running **nowhere**, on precisely the branches the old check judged
+safest.
+
+These reviewers are not ceremony. `rls-boundary-reviewer` found a real
+seat-reservation bug at a task gate — no unique index on
+`(program_id, player_id)`, so a duplicate open invite holds a seat with no
+release path short of deleting the row by hand — traced through
+`accept_program_invite` to the exact state the seat count treats as reserved.
+It is written up at `.claude/tasks/splitstep-integration.md` T18. Nothing
+mechanical would have caught it; lint and `tsc` do not know what a seat is.
+Do not add the skip back.
+
+Determine the surfaces mechanically rather than by eye:
 
 ```bash
-git log "$base"..HEAD --format=%s | grep -vE '^(T[0-9]+:|task: add |task: route |skip: )' \
-  || echo "all task-gated"
+bash .claude/skills/task-next/check.sh surfaces "$base"...HEAD
 ```
 
-`all task-gated` means every commit is a `/task-next` commit or its
-bookkeeping — both guardrail reviewers already ran on each task's own diff
-before it was committed. Do not dispatch them again: report them in stage 4
-as **covered per-task**, citing the `T<n>` entries in
-`.claude/tasks/<slug>.log.md`. Any other subject in the range — a hand-made
-commit, a merge — means part of it never faced the gate: run the reviewers
-over the whole range, fail-closed. `full` mode always runs them.
+It names each reviewer the range is due, reading `git diff <range>
+--name-only`. Use the working-tree form (no argument) instead when "What to
+review" picked a dirty tree — that form additionally consults
+`git ls-files --others --exclude-standard`, so a change made entirely of new
+files is not missed.
 
-When they do run, run the project-specific reviewers **in parallel**, for
-whichever surfaces the diff touches:
+Run the project-specific reviewers **in parallel**, for whichever surfaces the
+diff touches:
 
 - **`pipeline-guardrails-reviewer`** — if anything under
   `src/app/dashboard/`, `src/components/dashboard/`, or the upload wizard
@@ -203,9 +223,10 @@ Give the user:
 1. Pass/fail per mechanical gate, with real output for anything that failed.
 2. What `simplify` changed, if anything.
 3. Findings from each reviewer that ran, worst first — and which reviewers you
-   skipped, with the reason. **Covered per-task** (guardrails on an
-   all-task-gated range, with the `T<n>` log entries cited) is a distinct
-   reason from **surface not touched** — name which.
+   skipped, with the reason. **Surface not touched** is the only legitimate
+   reason to skip a guardrail reviewer here, and `check.sh surfaces` is what
+   establishes it. "Already covered per-task" is not a reason: nothing runs
+   them per-task any more.
 4. A plain verdict: ready to merge, or the specific list of what is not.
 
 Do not soften a failure into "mostly passing". If it is not ready, say what

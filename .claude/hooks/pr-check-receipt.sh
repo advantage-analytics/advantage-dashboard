@@ -4,9 +4,12 @@
 #
 # Records what /pr-check actually checked, and at which commit.
 #
-# /pr-check is the only pre-merge gate in this repo — there is no CI, nothing
-# runs on push — and until now its verdict went to the screen and nowhere else.
-# There was no way to answer "has this branch been gated, and at which commit?"
+# /pr-check is the pre-merge gate a human runs by hand, on the diff a PR
+# actually carries. .github/workflows/ci.yml is a separate, always-on check —
+# it runs on every PR and on pushes to main/splitstep-integration — but until
+# now /pr-check's own verdict went to the screen and nowhere else. There was
+# no way to answer "has this branch been through /pr-check, and at which
+# commit?", which is a different question than "did CI pass".
 #
 # Storage is <git-common-dir>/claude/pr-check-receipts.json, NOT .claude/.
 # That is deliberate: /pr-check runs inside a worktree while the merge happens

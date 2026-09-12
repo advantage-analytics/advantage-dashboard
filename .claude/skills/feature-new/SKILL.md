@@ -1,6 +1,6 @@
 ---
 name: feature-new
-description: Scaffold a new ICM feature-pipeline workspace under work/<slug> from the .claude/pipeline/ factory templates. Use when starting feature work that should run through the staged brief→design→plan→tasks→build→review pipeline.
+description: Scaffold a new ICM feature-pipeline workspace under work/<slug> from the .claude/pipeline/ factory templates. Use when starting feature work whose approach is undecided or that needs a written brief and design, run through the staged brief→design→plan→tasks→build→review pipeline. When what to build is already clear, use /task-add instead.
 argument-hint: "<feature-slug> (kebab-case)"
 ---
 
