@@ -29,6 +29,7 @@ function workspace(
     role,
     mark: "W",
     canSubmitVideo: true,
+    programStatus: "active",
     playersCanUpload: uploadPolicy === "everyone",
     uploadPolicy,
     memberUploadEnabled,

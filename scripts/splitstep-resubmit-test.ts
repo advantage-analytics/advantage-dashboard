@@ -241,6 +241,7 @@ async function main(): Promise<void> {
     role: "owner",
     mark: "T",
     canSubmitVideo: true,
+    programStatus: null,
     playersCanUpload: false,
     uploadPolicy: "everyone",
     memberUploadEnabled: true,

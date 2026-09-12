@@ -191,7 +191,8 @@ Focus → "The underline opt-out").
 built from `ui/float-menu.tsx` — `FloatMenu` (the surface, anchored to the
 trigger it wraps, 10px radius, 5px inset, `--shadow-dropdown`),
 `FloatMenuItem` (a 7px-radius row: 12px label, optional 11px `--ink-500`
-second line saying what the choice means, `--surface-subtle` on hover and on
+second line saying what the choice means, `--surface-subtle` on unselected
+pointer hover and on keyboard focus, no persistent or pointer-hover fill for
 the chosen row, a 12px Signal Blue check — the one colour that means
 "chosen"), `FloatMenuNote` (the closing sentence under a hairline for the
 thing the menu will not do) and `FloatMenuDivider`. **Every select is
@@ -199,7 +200,11 @@ thing the menu will not do) and `FloatMenuDivider`. **Every select is
 `underline` for a form field (full width, the caption's hairline, no radius)
 and `pill` for the control beside a `SettingsCardRow` label (30px, bordered);
 both turn their edge blue while open, and the menu matches the trigger's
-width under a field.
+width under a field. `value` accepts `undefined` for a genuinely unanswered
+required field (paired with `placeholder`) — the trigger then shows the
+placeholder in `--ink-400` and no row draws as chosen, rather than guessing an
+option or printing the raw value (2026-09-12, in-repo — the upload wizard's
+hand/backhand fields).
 
 **No native `<select>` in product UI.** It cannot carry a second line per
 option, its popup is the browser's not ours, and drawn as an underline on a
@@ -212,10 +217,13 @@ The header's account menu predates the primitives and still carries its own
 classes; migrate it to `FloatMenu` rather than copying them.
 
 **EntitySelect (v3)** — the "For" field, picking a person or someone new.
-Float menu radius 12, 6px padding; rows 38px (radius 8, hover surface-subtle,
-selected keeps the wash + a 13px `--blue` check — Signal Blue is the one
-colour that means "chosen", in menus and cards alike; the earlier ink-900
-menu check is superseded). Person row = 22px avatar +
+Float menu radius 12, 6px padding; rows 38px (radius 8; surface-subtle is an
+unselected row's pointer hover and any row's keyboard focus, never a standing
+fill on the selection, which is marked by a 13px `--blue` check alone — Signal
+Blue is the one colour that means "chosen", in menus and cards alike; the
+earlier ink-900 menu check is superseded). The check keeps its own 13px slot at
+the row's right edge, after any state pill, so an empty slot still aligns.
+Person row = 22px avatar +
 12/500 name + 11px ink-500 middot-joined meta. "Someone new" is always first,
 above a hairline, dashed-ring avatar. Section labels are quiet sentence case
 (11px ink-400) — no uppercase eyebrows inside menus, no nested menus.

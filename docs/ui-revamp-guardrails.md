@@ -96,12 +96,21 @@ be. Doubles teams and existing users depend on it.
 almost always the wrong fix:
 
 ```
-src/app/api/webhooks/splitstep/route.ts    receives vendor deliveries
-src/app/api/splitstep/jobs/route.ts        submits a job, reserves quota
-src/app/api/splitstep/upload-url/route.ts  mints the browser's write SAS
+src/app/api/webhooks/splitstep/route.ts     receives vendor deliveries
+src/app/api/splitstep/jobs/route.ts        wiring: clients, deps, the after() block
+src/app/api/splitstep/jobs/handler.ts      the decision: eligibility, quota, vendor
+src/app/api/splitstep/upload-url/route.ts  wiring: clients, deps, the blob-name write
+src/app/api/splitstep/upload-url/handler.ts  the decision: eligibility, then the SAS
 src/lib/services/splitstep/**              payload build, keys, quota, Azure, reclaim
 supabase/migrations/**                     never edit an applied migration
 ```
+
+Each `route.ts` above is now wiring only; the authorization ladder lives in the
+sibling `handler.ts`, which takes its I/O as injected dependencies so the vendor
+call and the quota reservation can be stubbed in a test. If you are looking for
+where a request is _refused_, it is the handler. The split exists because Next
+reserves a route file's exports to the HTTP methods, so there was nowhere else
+to put a testable seam.
 
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.

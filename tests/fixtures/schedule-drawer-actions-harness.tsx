@@ -39,6 +39,7 @@ const workspace: Workspace = {
   timeZone: "America/Los_Angeles",
   role,
   mark: "BU",
+  programStatus: "active",
   canSubmitVideo: true,
   playersCanUpload: true,
   memberUploadEnabled: true,

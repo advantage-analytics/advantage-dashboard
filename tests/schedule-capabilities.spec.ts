@@ -21,6 +21,7 @@ function workspace(
     timeZone: "UTC",
     role,
     mark: "W",
+    programStatus: "active",
     canSubmitVideo: true,
     playersCanUpload: kind === "team",
     memberUploadEnabled: true,

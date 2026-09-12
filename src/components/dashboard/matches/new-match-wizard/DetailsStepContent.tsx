@@ -18,10 +18,12 @@
  *
  *   The PLAYERS — who played and which way. The opponent is named here and
  *   nowhere else: an underline in the 200px column with everyone you've played
- *   offered as you type (or, in a dual, the opponent program's roster), then a
- *   read-back row like the player's own — name and provenance, hand · backhand,
- *   Change. Change and Add turn the two facts into tappable words in the same
- *   sentence; nothing grows.
+ *   offered as you type (or, in a dual, the opponent program's roster), a
+ *   pencil marking the name as tappable once picked. Hand and backhand are two
+ *   REQUIRED, always-editable `MenuSelect` fields per player — never behind an
+ *   Add/Change toggle, never a guessed default: an unanswered one reads as
+ *   "Hand"/"Backhand" in the empty-field ink, and `collectMatchCompletionRequirements`
+ *   (`validation.ts`) blocks Save on it exactly like opponent, score and date.
  *
  *   The CONTEXT — a three-column grid on the underline vocabulary: Event (with
  *   your own past events offered as you type), Date (already taken from the
@@ -53,6 +55,7 @@ import {
   ChevronDown,
   ChevronRight,
   MapPin,
+  Pencil,
   Plus,
   XCircle,
 } from "lucide-react";
@@ -64,6 +67,17 @@ import {
 } from "@/components/ui/popover";
 import { DateField } from "@/components/ui/date-field";
 import { StatePill } from "@/components/ui/state-pill";
+import { MenuSelect } from "@/components/ui/menu-select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/data/match-utils";
 import { normalizedPersonName } from "@/lib/data/person-name";
@@ -89,7 +103,7 @@ import {
   focusRingCls,
   noteStripCls,
 } from "./styles";
-import { formatHoursMinutes } from "./utils";
+import { formatHoursMinutes, setHasData } from "./utils";
 import { FORMAT_OPTIONS, Required, ScoreBlock } from "./ScoreBlock";
 
 export interface DetailsStepContentProps {
@@ -98,6 +112,8 @@ export interface DetailsStepContentProps {
     field: keyof FormData,
     value: string | number | boolean | null | undefined,
   ) => void;
+  /** Called only after a format reduction's score-loss choice is resolved. */
+  onFormatChange: (bestOf: string) => void;
   onScoreChange: (
     player: "player" | "opponent",
     index: number,
@@ -131,15 +147,6 @@ export interface DetailsStepContentProps {
 
 type Hand = "right" | "left";
 type Backhand = "one-handed" | "two-handed";
-
-const HAND_LABEL: Record<Hand, string> = {
-  right: "Right-handed",
-  left: "Left-handed",
-};
-const BACKHAND_LABEL: Record<Backhand, string> = {
-  "two-handed": "Two-handed backhand",
-  "one-handed": "One-handed backhand",
-};
 
 const COURT_OPTIONS: readonly { value: string; label: string }[] = [
   { value: "Outdoor Hard Court", label: "Hard" },
@@ -376,7 +383,7 @@ function SelectCell<T extends string | boolean>({
                 className={cn(
                   floatMenuRowCls,
                   "h-[34px]",
-                  isCurrent && "bg-[var(--surface-subtle)]",
+                  isCurrent && "hover:bg-transparent",
                 )}
               >
                 <span
@@ -659,17 +666,26 @@ function EventCell({
                   onClick={() => commit(event.name, event.kind)}
                   className={cn(
                     floatMenuRowCls,
-                    event.name === value && "bg-[var(--surface-subtle)]",
+                    event.name === value && "hover:bg-transparent",
                   )}
                 >
                   <TournamentMark className="text-[var(--ink-500)] opacity-60" />
-                  <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-900)]">
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--ink-900)]">
                     {event.name}
                   </span>
                   <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
                     {event.years}
                     {event.matches > 1 ? ` · ${event.matches} matches` : ""}
                   </span>
+                  {event.name === value ? (
+                    <Check
+                      className="size-[13px] shrink-0 text-[var(--blue)]"
+                      strokeWidth={1.5}
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <span className="w-[13px] shrink-0" />
+                  )}
                 </button>
               ))}
               {term.trim() && !exact && (
@@ -802,89 +818,12 @@ function OfferStrip({
 // ---------------------------------------------------------------------------
 // The players
 
-/** One of the two facts as a tappable word — a two-item menu, radius 12. */
-function WordSelect<T extends string>({
-  value,
-  placeholder,
-  options,
-  onChange,
-}: {
-  value: T | undefined;
-  placeholder: string;
-  options: readonly { value: T; label: string }[];
-  onChange: (value: T | undefined) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const current = options.find((o) => o.value === value);
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-button)] px-2 pt-[3px] pb-1 text-[13px] transition-colors duration-[var(--duration-hover)]",
-            open
-              ? "bg-[var(--ink-100)]"
-              : "bg-[var(--surface-subtle)] hover:bg-[var(--ink-100)]",
-            current ? "text-[var(--ink-900)]" : "text-[var(--ink-400)]",
-            focusRingCls,
-          )}
-        >
-          {current?.label ?? placeholder}
-          <ChevronDown
-            className={cn(
-              "size-[13px] text-[var(--ink-400)] transition-transform duration-150",
-              open && "rotate-180",
-            )}
-            strokeWidth={1.5}
-          />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        sideOffset={6}
-        className={cn(floatMenuCls, "w-[180px]")}
-      >
-        {options.map((option) => {
-          const isCurrent = option.value === value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => {
-                onChange(option.value);
-                setOpen(false);
-              }}
-              className={cn(
-                floatMenuRowCls,
-                "h-[34px] gap-2",
-                isCurrent && "bg-[var(--surface-subtle)]",
-              )}
-            >
-              <span
-                className={cn(
-                  "flex-1 text-[12px] text-[var(--ink-900)]",
-                  isCurrent ? "font-medium" : "font-normal",
-                )}
-              >
-                {option.label}
-              </span>
-              {isCurrent ? (
-                <Check
-                  className="size-[13px] text-[var(--blue)]"
-                  strokeWidth={1.5}
-                />
-              ) : (
-                <span className="w-[13px]" />
-              )}
-            </button>
-          );
-        })}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
+/**
+ * Hand and backhand, as two required `MenuSelect` fields — never a guessed
+ * default, never an "Unknown" row. An unset value shows `placeholder` in the
+ * empty-field ink; `collectMatchCompletionRequirements` (`validation.ts`) is
+ * what actually blocks Save on it, this is only the control.
+ */
 const HAND_OPTIONS: readonly { value: Hand; label: string }[] = [
   { value: "right", label: "Right-handed" },
   { value: "left", label: "Left-handed" },
@@ -893,76 +832,6 @@ const BACKHAND_OPTIONS: readonly { value: Backhand; label: string }[] = [
   { value: "two-handed", label: "Two-handed backhand" },
   { value: "one-handed", label: "One-handed backhand" },
 ];
-
-/** The read-back sentence, or its editing form: the same two words either way. */
-function StyleWords({
-  hand,
-  backhand,
-  editing,
-  onHand,
-  onBackhand,
-  dimmed = false,
-}: {
-  hand: Hand | undefined;
-  backhand: Backhand | undefined;
-  editing: boolean;
-  onHand: (v: Hand | undefined) => void;
-  onBackhand: (v: Backhand | undefined) => void;
-  dimmed?: boolean;
-}) {
-  if (editing) {
-    return (
-      <span className="inline-flex items-center gap-2 text-[13px] text-[var(--ink-900)]">
-        <WordSelect
-          value={hand}
-          placeholder="Hand"
-          options={HAND_OPTIONS}
-          onChange={onHand}
-        />
-        <span className="text-[var(--ink-300)]">·</span>
-        <WordSelect
-          value={backhand}
-          placeholder="Backhand"
-          options={BACKHAND_OPTIONS}
-          onChange={onBackhand}
-        />
-      </span>
-    );
-  }
-  if (!hand && !backhand) {
-    return (
-      <span
-        className={cn(
-          "inline-flex items-center gap-2 text-[13px] text-[var(--ink-400)]",
-          dimmed && "opacity-45",
-        )}
-      >
-        {dimmed ? (
-          <>
-            Hand <span className="text-[var(--ink-300)]">·</span> Backhand
-          </>
-        ) : (
-          "Not set"
-        )}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-2 text-[13px] text-[var(--ink-900)]">
-      {hand ? (
-        HAND_LABEL[hand]
-      ) : (
-        <span className="text-[var(--ink-400)]">Hand</span>
-      )}
-      <span className="text-[var(--ink-300)]">·</span>
-      {backhand ? (
-        BACKHAND_LABEL[backhand]
-      ) : (
-        <span className="text-[var(--ink-400)]">Backhand</span>
-      )}
-    </span>
-  );
-}
 
 const ACTION_CLS =
   "cursor-pointer text-[11px] font-medium transition-colors duration-[var(--duration-hover)]";
@@ -1004,6 +873,7 @@ function provenanceFor(
 function DetailsStepContentImpl({
   formData,
   onInputChange,
+  onFormatChange,
   onScoreChange,
   onTiebreakChange,
   isProcessingProvider,
@@ -1034,6 +904,28 @@ function DetailsStepContentImpl({
     (attachedLine?.eventKind ?? line?.eventKind) === "dual" &&
     Boolean(lineProgramKey);
   const fromLine = Boolean(attachedLine || line);
+  const [pendingFormat, setPendingFormat] = useState<string | null>(null);
+
+  const changeFormat = useCallback(
+    (nextBestOf: string) => {
+      const currentBestOf = Number.parseInt(formData.bestOf, 10);
+      const nextLimit = Number.parseInt(nextBestOf, 10);
+      const losesPopulatedSet =
+        Number.isFinite(currentBestOf) &&
+        nextLimit < currentBestOf &&
+        Array.from({ length: currentBestOf - nextLimit }, (_, offset) =>
+          setHasData(formData, nextLimit + offset),
+        ).some(Boolean);
+
+      if (losesPopulatedSet) {
+        setPendingFormat(nextBestOf);
+        return;
+      }
+
+      onFormatChange(nextBestOf);
+    },
+    [formData, onFormatChange],
+  );
 
   // ---- Async: the offer, the people, the events, the styles
 
@@ -1132,8 +1024,6 @@ function DetailsStepContentImpl({
 
   // ---- Players: editing state
 
-  const [editingPlayer, setEditingPlayer] = useState(false);
-  const [editingOpponent, setEditingOpponent] = useState(false);
   const [savingProfile, setSavingProfile] = useState<
     "idle" | "saving" | "saved"
   >("idle");
@@ -1358,9 +1248,13 @@ function DetailsStepContentImpl({
           micro="who played, and which way — the opponent is named here and nowhere else"
         />
 
-        {/* The workspace's own player — settled on step 1, read back here. */}
-        <div className="flex min-h-10 items-center gap-6">
-          <span className="flex w-[200px] shrink-0 flex-col gap-0.5">
+        {/* The workspace's own player — settled on step 1, read back here.
+            Name is never editable in this step; hand and backhand always
+            are, as two required fields — never behind an Add/Change toggle,
+            since a missing answer has to read as missing, not as one tap
+            away from looking answered. */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-6">
+          <span className="flex w-full shrink-0 flex-col gap-0.5 sm:w-[200px] sm:pt-[9px]">
             <span className="inline-flex items-center gap-2 text-[13px] text-[var(--ink-900)]">
               <span className="truncate">{subject.name}</span>
               {subject.isSelf && <StatePill>You</StatePill>}
@@ -1371,79 +1265,64 @@ function DetailsStepContentImpl({
               </span>
             )}
           </span>
-          <StyleWords
-            hand={playerHand}
-            backhand={playerBackhand}
-            editing={editingPlayer}
-            onHand={(v) => {
-              onInputChange("playerHand", v);
-              onInputChange("playerStyleSource", undefined);
-              setSavingProfile("idle");
-            }}
-            onBackhand={(v) => {
-              onInputChange("playerBackhand", v);
-              onInputChange("playerStyleSource", undefined);
-              setSavingProfile("idle");
-            }}
-          />
-          <span className="flex-1" />
-          {editingPlayer ? (
-            <span className="inline-flex items-center gap-3.5">
-              {subject.isSelf &&
-                (playerHand || playerBackhand) &&
-                formData.playerStyleSource !== "profile" && (
-                  <button
-                    type="button"
-                    onClick={saveProfile}
-                    disabled={savingProfile !== "idle"}
-                    className={cn(
-                      ACTION_CLS,
-                      "text-[var(--ink-500)] hover:text-[var(--ink-900)] disabled:cursor-default",
-                    )}
-                  >
-                    {savingProfile === "saving"
-                      ? "Saving…"
-                      : savingProfile === "saved"
-                        ? "Saved to your profile"
-                        : "Save to your profile"}
-                  </button>
-                )}
-              {!playerHand && !playerBackhand && (
-                <span className="text-micro whitespace-nowrap">
-                  if you know
-                </span>
-              )}
+          <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:gap-4">
+            <Cell label="Hand" required className="min-w-0 sm:flex-1">
+              <MenuSelect
+                label="Player hand"
+                variant="underline"
+                value={playerHand}
+                placeholder="Hand"
+                options={HAND_OPTIONS}
+                onChange={(v) => {
+                  onInputChange("playerHand", v);
+                  onInputChange("playerStyleSource", undefined);
+                  setSavingProfile("idle");
+                }}
+              />
+            </Cell>
+            <Cell label="Backhand" required className="min-w-0 sm:flex-1">
+              <MenuSelect
+                label="Player backhand"
+                variant="underline"
+                value={playerBackhand}
+                placeholder="Backhand"
+                width={220}
+                options={BACKHAND_OPTIONS}
+                onChange={(v) => {
+                  onInputChange("playerBackhand", v);
+                  onInputChange("playerStyleSource", undefined);
+                  setSavingProfile("idle");
+                }}
+              />
+            </Cell>
+          </div>
+          {subject.isSelf &&
+            (playerHand || playerBackhand) &&
+            formData.playerStyleSource !== "profile" && (
               <button
                 type="button"
-                onClick={() => setEditingPlayer(false)}
+                onClick={saveProfile}
+                disabled={savingProfile !== "idle"}
                 className={cn(
                   ACTION_CLS,
-                  "text-[var(--blue)] hover:text-[var(--blue-hover)]",
+                  "shrink-0 self-start whitespace-nowrap text-[var(--ink-500)] hover:text-[var(--ink-900)] disabled:cursor-default sm:pt-[11px]",
                 )}
               >
-                Done
+                {savingProfile === "saving"
+                  ? "Saving…"
+                  : savingProfile === "saved"
+                    ? "Saved to your profile"
+                    : "Save to your profile"}
               </button>
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEditingPlayer(true)}
-              className={cn(
-                ACTION_CLS,
-                "text-[var(--blue)] hover:text-[var(--blue-hover)]",
-              )}
-            >
-              {playerHand || playerBackhand ? "Change" : "Add"}
-            </button>
-          )}
+            )}
         </div>
 
         {/* The opponent — named here, then read back like the row above. */}
-        <div className="flex min-h-10 items-center gap-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-6">
           {namingOpponent ? (
             <Popover open={nameOpen} onOpenChange={setNameOpen}>
               <PopoverAnchor asChild>
-                <span className="flex w-[200px] shrink-0 items-center border-b-2 border-[var(--border-medium)] pt-1 pb-1.5 transition-colors focus-within:border-[var(--blue)]">
+                <span className="flex w-full shrink-0 items-center border-b-2 border-[var(--border-medium)] pt-1 pb-1.5 transition-colors focus-within:border-[var(--blue)] sm:w-[200px]">
                   <input
                     autoFocus
                     value={nameTerm}
@@ -1615,7 +1494,7 @@ function DetailsStepContentImpl({
               </PopoverContent>
             </Popover>
           ) : (
-            <span className="flex w-[200px] shrink-0 flex-col gap-0.5">
+            <span className="flex w-full shrink-0 flex-col gap-0.5 sm:w-[200px]">
               <button
                 type="button"
                 onClick={() => {
@@ -1623,9 +1502,14 @@ function DetailsStepContentImpl({
                   setNamingOpponent(true);
                 }}
                 title="Change the opponent"
-                className="cursor-pointer truncate text-left text-[13px] text-[var(--ink-900)]"
+                className="group inline-flex cursor-pointer items-center gap-1.5 text-left text-[13px] text-[var(--ink-900)]"
               >
-                {formData.opponentName}
+                <span className="truncate">{formData.opponentName}</span>
+                <Pencil
+                  className="size-3 shrink-0 text-[var(--ink-400)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--ink-700)]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
               </button>
               {opponentProvenance && (
                 <span className="text-micro whitespace-nowrap">
@@ -1634,52 +1518,41 @@ function DetailsStepContentImpl({
               )}
             </span>
           )}
-          <StyleWords
-            hand={opponentHand}
-            backhand={opponentBackhand}
-            editing={editingOpponent && !namingOpponent}
-            dimmed={namingOpponent}
-            onHand={(v) => {
-              onInputChange("opponentHand", v);
-              onInputChange("opponentStyleSource", undefined);
-            }}
-            onBackhand={(v) => {
-              onInputChange("opponentBackhand", v);
-              onInputChange("opponentStyleSource", undefined);
-            }}
-          />
-          <span className="flex-1" />
-          {namingOpponent ? (
-            <span className="text-micro whitespace-nowrap">after the name</span>
-          ) : editingOpponent ? (
-            <span className="inline-flex items-center gap-3.5">
-              {!opponentHand && !opponentBackhand && (
-                <span className="text-micro whitespace-nowrap">
-                  if you know
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => setEditingOpponent(false)}
-                className={cn(
-                  ACTION_CLS,
-                  "text-[var(--blue)] hover:text-[var(--blue-hover)]",
-                )}
-              >
-                Done
-              </button>
+          <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:gap-4">
+            <Cell label="Hand" required className="min-w-0 sm:flex-1">
+              <MenuSelect
+                label="Opponent hand"
+                variant="underline"
+                value={opponentHand}
+                placeholder="Hand"
+                disabled={namingOpponent}
+                options={HAND_OPTIONS}
+                onChange={(v) => {
+                  onInputChange("opponentHand", v);
+                  onInputChange("opponentStyleSource", undefined);
+                }}
+              />
+            </Cell>
+            <Cell label="Backhand" required className="min-w-0 sm:flex-1">
+              <MenuSelect
+                label="Opponent backhand"
+                variant="underline"
+                value={opponentBackhand}
+                placeholder="Backhand"
+                width={220}
+                disabled={namingOpponent}
+                options={BACKHAND_OPTIONS}
+                onChange={(v) => {
+                  onInputChange("opponentBackhand", v);
+                  onInputChange("opponentStyleSource", undefined);
+                }}
+              />
+            </Cell>
+          </div>
+          {namingOpponent && (
+            <span className="text-micro shrink-0 whitespace-nowrap sm:pt-[11px]">
+              after the name
             </span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEditingOpponent(true)}
-              className={cn(
-                ACTION_CLS,
-                "text-[var(--blue)] hover:text-[var(--blue-hover)]",
-              )}
-            >
-              {opponentHand || opponentBackhand ? "Change" : "Add"}
-            </button>
           )}
         </div>
 
@@ -1753,25 +1626,53 @@ function DetailsStepContentImpl({
             read={courtRead}
             onChange={(v) => onInputChange("courtType", v)}
           />
-          <SelectCell
-            label="Format"
-            required
-            placeholder="Choose"
-            value={formData.bestOf || undefined}
-            options={FORMAT_OPTIONS}
-            onChange={(v) => onInputChange("bestOf", v)}
-          />
-          <SelectCell
-            label="Scoring"
-            required
-            placeholder="Choose"
-            value={formData.adScoring}
-            options={[
-              { value: true, label: "Ad" },
-              { value: false, label: "No-ad" },
-            ]}
-            onChange={(v) => onInputChange("adScoring", v)}
-          />
+          {fromLine ? (
+            <ReadCell
+              label="Format"
+              required
+              value={
+                FORMAT_OPTIONS.find(
+                  (option) => option.value === formData.bestOf,
+                )?.label ?? "Not set"
+              }
+              tag="from the event"
+            />
+          ) : (
+            <SelectCell
+              label="Format"
+              required
+              placeholder="Choose"
+              value={formData.bestOf || undefined}
+              options={FORMAT_OPTIONS}
+              onChange={changeFormat}
+            />
+          )}
+          {fromLine ? (
+            <ReadCell
+              label="Scoring"
+              required
+              value={
+                formData.adScoring === undefined
+                  ? "Not set"
+                  : formData.adScoring
+                    ? "Ad"
+                    : "No-ad"
+              }
+              tag="from the event"
+            />
+          ) : (
+            <SelectCell
+              label="Scoring"
+              required
+              placeholder="Choose"
+              value={formData.adScoring}
+              options={[
+                { value: true, label: "Ad" },
+                { value: false, label: "No-ad" },
+              ]}
+              onChange={(v) => onInputChange("adScoring", v)}
+            />
+          )}
           {!isProcessingProvider && (
             <ReadCell
               label="Duration"
@@ -1800,6 +1701,33 @@ function DetailsStepContentImpl({
           />
         </div>
       </div>
+      <AlertDialog
+        open={pendingFormat !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingFormat(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove entered set scores?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This format has fewer sets. Continuing removes the scores for the
+              excluded sets.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep current format</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingFormat) onFormatChange(pendingFormat);
+                setPendingFormat(null);
+              }}
+            >
+              Remove set scores
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -19,8 +19,9 @@ import { cn } from "@/lib/utils";
  * a row's action menu composes them the same way.
  *
  * Geometry is the Teams design's: 10px radius, 5px inset, 7px-radius rows,
- * `--surface-subtle` for hover and for the chosen row, Signal Blue only on
- * the check — it is the one colour that means "chosen". Nothing here is a
+ * `--surface-subtle` for an unchosen row's hover or either row's keyboard
+ * focus, never as a chosen-row fill; Signal Blue only on the check — it is
+ * the one colour that means "chosen". Nothing here is a
  * native `<select>`: the browser's popup cannot carry a second line, and the
  * native control's underline on a radiused box is how a hairline came to
  * curl at both ends once already.
@@ -72,7 +73,7 @@ export function FloatMenu({
 }
 
 /**
- * One row. `chosen` draws the check and the wash; `description` is the
+ * One row. `chosen` draws the check; `description` is the
  * second line — use it when the label alone would not tell a coach what
  * they are choosing ("Staff"), and leave it off when it would ("Clay").
  */
@@ -100,8 +101,8 @@ export function FloatMenuItem({
       onClick={onSelect}
       className={cn(
         "flex cursor-pointer items-start gap-2.5 rounded-[7px] px-2.5 py-[7px] text-left transition-colors duration-100",
-        "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none",
-        chosen && "bg-[var(--surface-subtle)]",
+        "focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none",
+        !chosen && "hover:bg-[var(--surface-subtle)]",
         className,
       )}
     >

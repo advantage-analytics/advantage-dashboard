@@ -13,7 +13,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, Check, CircleX, ExternalLink } from "lucide-react";
+import { Check, CircleX, ExternalLink, TriangleAlert } from "lucide-react";
 import {
   Step,
   STEP_CONFIG,
@@ -47,21 +47,19 @@ import { WizardShell, CONTENT_CLS } from "./WizardShell";
 import { useWizardKeys } from "./useWizardKeys";
 import { SourceStepContent } from "./SourceStepContent";
 import { FileStepContent } from "./FileStepContent";
+import { ImportIdentityNotice } from "./ImportIdentityNotice";
+import { EligibilityNotice } from "./EligibilityNotice";
+import {
+  collectMatchCompletionRequirements,
+  wizardContinueBlocked,
+} from "./validation";
 import { TrimStepContent } from "./TrimStepContent";
 import { DetailsStepContent } from "./DetailsStepContent";
 import { PinnedLineBar } from "./PinnedLineBar";
+import { WizardNotice } from "./WizardNotice";
 
 /** Where the flow returns to when it is dismissed or finished. */
 const PERSONAL_EXIT_HREF = "/dashboard/matches";
-
-/**
- * The missing-field label for `initialTopPlayerIsPlayer1`, matching
- * DetailsContent's field label. One const because the string is both pushed
- * into the list and compared against — it has already been reworded once, and
- * a rename that misses the comparison silently breaks the "only the camera
- * answers are outstanding" sentence.
- */
-const CAMERA_POSITION_LABEL = "your position at video start";
 
 /**
  * What one upload is doing, owned HERE rather than in the wizard hook.
@@ -117,11 +115,20 @@ const PHASE_LABEL: Record<
 export function UploadMatchFlow({
   preset: initialPreset,
   draft,
+  draftRefusal,
   initialProvider,
   initialSubject,
 }: {
   preset?: EventPreset | null;
   draft?: MatchDraft | null;
+  /**
+   * Why the `?draft=` in the URL was not resumed — the page's own sentence
+   * (`draftWorkspaceRefusal()`), already worded. Arrives WITH `draft: null`:
+   * a refused draft is not a half-applied one, so nothing of it — not the
+   * preset, not the attached line, not a single form answer — reaches the
+   * wizard, and this only explains the empty flow the person is looking at.
+   */
+  draftRefusal?: string | null;
   /** A source named by the link that opened the wizard — see the hook. */
   initialProvider?: ProviderId | null;
   /** A roster player named by the link that opened the wizard — see the hook. */
@@ -230,9 +237,27 @@ export function UploadMatchFlow({
       preset={preset}
       onSwitchPreset={setPreset}
       draft={draft ?? null}
+      draftRefusal={draftRefusal ?? null}
       initialProvider={initialProvider ?? null}
       initialSubject={initialSubject ?? null}
     />
+  );
+}
+
+/**
+ * One sentence the flow has to say before the step matters — a draft that was
+ * not resumed, a draft that was not saved.
+ *
+ * The same warning chrome `EligibilityNotice` wears, and for the same reason:
+ * both are "this did not happen, and here is why", not "something broke".
+ * It renders words it is given and decides nothing; the rule that produced
+ * the sentence lives with the rule, never here.
+ */
+function FlowNotice({ children }: { children: React.ReactNode }) {
+  return (
+    <WizardNotice>
+      <p>{children}</p>
+    </WizardNotice>
   );
 }
 
@@ -330,7 +355,7 @@ function UploadMatchSuccess({
             readers who want the fine print. */}
         {uploading.length > 0 && (
           <div className="flex w-full max-w-[440px] items-start gap-2.5 rounded-[8px] border border-[var(--warning-border)] bg-[var(--warning-bg)] px-3.5 py-3">
-            <AlertTriangle
+            <TriangleAlert
               className="mt-0.5 size-4 shrink-0 text-[var(--warning-text)]"
               strokeWidth={1.5}
             />
@@ -560,6 +585,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   preset,
   onSwitchPreset,
   draft,
+  draftRefusal,
   initialProvider,
   initialSubject,
 }: {
@@ -569,6 +595,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   preset: EventPreset | null;
   onSwitchPreset: (next: EventPreset) => void;
   draft: MatchDraft | null;
+  draftRefusal: string | null;
   initialProvider: ProviderId | null;
   initialSubject: RosterSubject | null;
 }) {
@@ -605,6 +632,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     uploadError,
     formData,
     parsingState,
+    importIdentity,
     handleProviderSelect,
     handleProviderContinue,
     handleFileContinue,
@@ -616,13 +644,17 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     detachLine,
     saveDraft,
     draftSaving,
+    draftSaveError,
     lastChangedAt,
     setIsOver,
     handleDrop,
     handleFileChange,
     handleRemoveFile,
     handleInputChange,
+    handleFormatChange,
     whoPlayed,
+    eligibility,
+    retryEligibility,
     handleScoreChange,
     handleTiebreakChange,
     handleCreateMatch,
@@ -668,9 +700,11 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   usePublishHeaderStatus(
     draftSaving
       ? "Saving…"
-      : idleMinutes >= 1
-        ? `Draft saved · ${idleMinutes} min ago`
-        : "Draft saved",
+      : draftSaveError
+        ? "Draft not saved"
+        : idleMinutes >= 1
+          ? `Draft saved · ${idleMinutes} min ago`
+          : "Draft saved",
   );
 
   /**
@@ -687,7 +721,15 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
       localStorage.setItem(STORAGE_KEYS.SELECTED_PROVIDER, selectedProvider);
     }
     localStorage.setItem(STORAGE_KEYS.DRAFT_KEPT, "1");
-    await saveDraft();
+    // Leaving is the REWARD for a saved draft, not the action itself. A
+    // refused write used to navigate anyway, which told the person their work
+    // was safe and then offered them no Resume row for it. On failure we stay
+    // exactly where we are — same step, same answers — and `draftSaveError`
+    // says so beside the button. `DRAFT_KEPT` stays set on purpose: it only
+    // stops `DashboardShell` wiping the local copy, which is now the only
+    // copy there is.
+    const saved = await saveDraft();
+    if (!saved) return;
     router.push(exitHref);
   }, [formData, selectedProvider, saveDraft, router, exitHref]);
 
@@ -797,41 +839,48 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
    * Only for processing providers. A SwingVision import gets its scores and
    * names from the parsed file, so demanding them by hand would ask twice.
    */
-  const missing = useMemo(() => {
-    const labels: string[] = [];
-    // The opponent, the score and the day are what every match needs; the
-    // rest is the video job's.
-    if (!formData.opponentName.trim()) labels.push("opponent");
-    if (!hasAnySetScore) labels.push("score");
-    if (!formData.date) labels.push("date");
-    if (isProcessingProvider) {
-      if (!formData.playerName.trim())
-        labels.push(
-          whoPlayed.subject?.kind === "roster" ? "player name" : "your name",
-        );
-      if (formData.adScoring === undefined) labels.push("scoring");
-      if (formData.fixedCamera === undefined) labels.push("camera");
-      if (formData.initialTopPlayerIsPlayer1 === undefined)
-        labels.push(CAMERA_POSITION_LABEL);
-    }
-    // Confirm has its own sentence for the case where only the camera answers
-    // are outstanding, so the shape is decided here beside the list rather than
-    // re-derived from label strings three hundred lines away.
-    const onlyVideoAnswers =
-      labels.length > 0 &&
-      labels.every((l) => l === "camera" || l === CAMERA_POSITION_LABEL);
-    return { labels, onlyVideoAnswers };
-  }, [
-    formData.date,
-    formData.playerName,
-    formData.opponentName,
-    formData.adScoring,
-    formData.fixedCamera,
-    formData.initialTopPlayerIsPlayer1,
-    hasAnySetScore,
-    isProcessingProvider,
-    whoPlayed.subject,
-  ]);
+  const missing = useMemo(
+    () =>
+      // The single contract `validation.ts` describes: this is the "earlier,
+      // visible half" (the footer counter below, and the Continue gate) and
+      // `handleCreateMatch`'s write-time check is the same facts re-read at
+      // the moment of the write. Both call this one function so a
+      // requirement added here can never leave the write-time check blind,
+      // or the reverse — the two used to diverge (hand/backhand were only
+      // checked at write time, and the camera-position label didn't match
+      // between the two, which broke the "only the camera answers are
+      // outstanding" sentence below).
+      collectMatchCompletionRequirements({
+        isProcessingProvider,
+        hasAnySetScore,
+        playerSubjectIsRoster: whoPlayed.subject?.kind === "roster",
+        opponentName: formData.opponentName,
+        date: formData.date,
+        playerName: formData.playerName,
+        playerHand: formData.playerHand,
+        playerBackhand: formData.playerBackhand,
+        opponentHand: formData.opponentHand,
+        opponentBackhand: formData.opponentBackhand,
+        adScoring: formData.adScoring,
+        fixedCamera: formData.fixedCamera,
+        initialTopPlayerIsPlayer1: formData.initialTopPlayerIsPlayer1,
+      }),
+    [
+      isProcessingProvider,
+      hasAnySetScore,
+      whoPlayed.subject,
+      formData.opponentName,
+      formData.date,
+      formData.playerName,
+      formData.playerHand,
+      formData.playerBackhand,
+      formData.opponentHand,
+      formData.opponentBackhand,
+      formData.adScoring,
+      formData.fixedCamera,
+      formData.initialTopPlayerIsPlayer1,
+    ],
+  );
 
   // Work in progress, per step. Separate from `missing` because these are
   // states to wait out rather than fields to fill, and they read differently.
@@ -870,7 +919,72 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
 
   const stepBusy = busyLabel[step];
   const gatedByMissing = step === "match" && missing.labels.length > 0;
-  const continueDisabled = stepBusy !== null || gatedByMissing;
+  /**
+   * Is the identity question on screen right now?
+   *
+   * The gate below disables Continue only while it is. `importIdentity.blocked`
+   * is true for other reasons too — no file yet, an export that would not parse
+   * — and those are already refused by `handleFileContinue` with a sentence.
+   * Disabling the button for them would take the sentence away and leave a dead
+   * control with no explanation; disabling it for the notice is the opposite,
+   * because the notice IS the explanation and the two answers sit in it.
+   */
+  const identityNoticeVisible =
+    step === "file" &&
+    !isProcessingProvider &&
+    importIdentity.comparison?.requiresConfirmation === true;
+
+  /**
+   * Is the eligibility refusal on screen right now — the same "notice
+   * decides the gate" rule as the identity question above (T7). Shown on the
+   * two steps a fresh Source, a preset File and a resumed File entry can all
+   * land on before anything else is answered: step 1 (nothing chosen yet)
+   * and step 2 (a preset or a resumed draft opens here directly, past step
+   * 1's picker).
+   *
+   * `athlete-required` is excluded: step 1's own roster picker (or the
+   * absence of one, in a personal workspace) IS that explanation, and a
+   * second banner saying the same thing would be noise, not help.
+   */
+  /**
+   * A roster that has not answered yet is not a roster that failed.
+   *
+   * Both arrive as `roster: null` and both refuse as `roster-unknown`, which is
+   * right for the GATE — nobody should continue against an unknown roster. It
+   * is wrong for the NOTICE: on every preset flow and every `?player=` link the
+   * athlete is known on the first render while the RPC is still in flight, so
+   * the banner would say "We couldn't load the roster. Try again." about a
+   * request that has not failed, complete with a Retry button, on the coach's
+   * normal path. `whoPlayed.loadFailed` is the hook's own answer to which of
+   * the two this is.
+   */
+  const rosterStillLoading =
+    !eligibility.ok &&
+    eligibility.reason === "roster-unknown" &&
+    !whoPlayed.loadFailed;
+
+  const eligibilityNoticeVisible =
+    (step === "provider" || step === "file") &&
+    !eligibility.ok &&
+    eligibility.reason !== "athlete-required" &&
+    !rosterStillLoading;
+
+  // One value, two ways forward: the footer button below is disabled by it and
+  // `useWizardKeys` refuses plain Enter on it, so a keyboard user can never
+  // pass a gate a clicking user cannot. `wizardContinueBlocked` is pure and
+  // lives in `validation.ts` so that claim is tested, not asserted. Whatever
+  // slips past it meets the same facts again in the handler.
+  const continueDisabled = wizardContinueBlocked({
+    step,
+    busy: stepBusy !== null,
+    missingMatchAnswers: missing.labels.length > 0,
+    importIdentityBlocked: identityNoticeVisible && importIdentity.blocked,
+    // `|| rosterStillLoading` is the one deliberate exception to T7's
+    // "the visible notice decides the gate": there is nothing to explain
+    // during a read that is simply still running, but there is also nothing
+    // to continue to.
+    eligibilityBlocked: eligibilityNoticeVisible || rosterStillLoading,
+  });
 
   useWizardKeys({
     contentRef,
@@ -971,6 +1085,19 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
       onContinue={continueHandler}
       continueDisabled={continueDisabled}
     >
+      {/* Said before the step, because both answer a question the person
+          already asked: "did my draft come back" and "did my draft save".
+          The refusal only belongs on the entry step — once they have moved
+          on, the flow they are in is the answer. */}
+      {(draftSaveError || (draftRefusal && step === firstStep)) && (
+        <div className="mb-9 flex flex-col gap-3">
+          {draftRefusal && step === firstStep && (
+            <FlowNotice>{draftRefusal}</FlowNotice>
+          )}
+          {draftSaveError && <FlowNotice>{draftSaveError}</FlowNotice>}
+        </div>
+      )}
+
       {/* Workspace · For · Source. In a personal workspace For is the
           uploader; in a team workspace it is the one thing the workspace
           cannot infer — whose match this is — and the hook refuses Continue
@@ -986,38 +1113,85 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
           roster's "upload for this player" shortcut now seeds the ordinary
           wizard through `initialSubject` instead. */}
       {step === "provider" && (
-        <SourceStepContent
-          selectedProvider={selectedProvider}
-          onProviderSelect={handleProviderSelect}
-          whoPlayed={whoPlayed}
-        />
+        <div className="flex flex-col gap-9">
+          <SourceStepContent
+            selectedProvider={selectedProvider}
+            onProviderSelect={handleProviderSelect}
+            whoPlayed={whoPlayed}
+          />
+          {eligibilityNoticeVisible && !eligibility.ok && (
+            <EligibilityNotice
+              eligibility={eligibility}
+              onRetry={retryEligibility}
+            />
+          )}
+        </div>
       )}
 
       {/* Step 2 asks for one thing. The same component for both kinds;
           the handlers differ because a video is probed locally and an
           export is validated and read. */}
       {step === "file" && (
-        <FileStepContent
-          kind={isProcessingProvider ? "processing" : "import"}
-          selectedProvider={selectedProvider}
-          subjectFirstName={subjectFirstName}
-          uploadedFile={uploadedFile}
-          probe={videoProbe}
-          warnings={isProcessingProvider ? videoWarnings : []}
-          busy={isProbing || isUploading || parsingState.isParsing}
-          error={uploadError}
-          parsingState={parsingState}
-          formData={formData}
-          acceptString={acceptString}
-          isOver={isOver}
-          onDragOver={onDragOver}
-          onDragLeave={onDragLeave}
-          onDrop={isProcessingProvider ? onVideoDrop : handleDrop}
-          onFileChange={
-            isProcessingProvider ? onVideoFileChange : handleFileChange
-          }
-          onRemove={isProcessingProvider ? handleRemoveVideo : handleRemoveFile}
-        />
+        /* The identity notice is a SIBLING of the step content, in the step's
+           own 36px rhythm — it sits after "Found in the export", where the two
+           names it is asking about have just been shown, and above nothing, so
+           it can never cover the drop zone's error strip or the parse
+           progress. The column exists because `WizardShell`'s content slot is
+           a plain div with no gap of its own. */
+        <div className="flex flex-col gap-9">
+          <FileStepContent
+            kind={isProcessingProvider ? "processing" : "import"}
+            selectedProvider={selectedProvider}
+            subjectFirstName={subjectFirstName}
+            uploadedFile={uploadedFile}
+            probe={videoProbe}
+            warnings={isProcessingProvider ? videoWarnings : []}
+            busy={isProbing || isUploading || parsingState.isParsing}
+            error={uploadError}
+            parsingState={parsingState}
+            formData={formData}
+            acceptString={acceptString}
+            isOver={isOver}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={isProcessingProvider ? onVideoDrop : handleDrop}
+            onFileChange={
+              isProcessingProvider ? onVideoFileChange : handleFileChange
+            }
+            onRemove={
+              isProcessingProvider ? handleRemoveVideo : handleRemoveFile
+            }
+          />
+          {identityNoticeVisible && importIdentity.comparison && (
+            <ImportIdentityNotice
+              comparison={importIdentity.comparison}
+              workspaceKind={
+                workspaces.active.kind === "team" ? "team" : "personal"
+              }
+              rejected={importIdentity.rejected}
+              onConfirm={importIdentity.confirm}
+              onReject={importIdentity.reject}
+              /* Clearing the file is the reset: `handleRemoveFile` bumps the
+                 file generation, which drops the parse, the answer and this
+                 notice with it. */
+              onChangeFile={handleRemoveFile}
+              /* Step 1 owns the who-played question, so "Change player" is
+                 Back — and only where there is a choice: a preset already
+                 named the athlete, and a personal workspace has one. */
+              onChangePlayer={
+                workspaces.active.kind === "team" && !preset
+                  ? handleBack
+                  : undefined
+              }
+            />
+          )}
+          {eligibilityNoticeVisible && !eligibility.ok && (
+            <EligibilityNotice
+              eligibility={eligibility}
+              onRetry={retryEligibility}
+            />
+          )}
+        </div>
       )}
 
       {step === "trim" && (
@@ -1042,6 +1216,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
         <DetailsStepContent
           formData={formData}
           onInputChange={handleInputChange}
+          onFormatChange={handleFormatChange}
           onScoreChange={handleScoreChange}
           onTiebreakChange={handleTiebreakChange}
           isProcessingProvider={isProcessingProvider}

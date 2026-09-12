@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { UploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard/UploadMatchFlow";
 import type { RosterSubject } from "@/components/dashboard/matches/new-match-wizard/useUploadMatchWizard";
+import {
+  draftBelongsToWorkspace,
+  draftWorkspaceRefusal,
+} from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
 import { loadMatchDraft } from "@/lib/wizard/actions";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { getRosterPlayerOptions } from "@/lib/data/roster-server";
@@ -61,13 +65,35 @@ export default async function NewMatchPage({
 }): Promise<React.JSX.Element> {
   const { draft: draftId, source, player } = await searchParams;
 
-  // Independent reads, so they overlap. The workspace is resolved only for a
-  // `?player=` visit — it is `cache()`d and the dashboard layout has already
-  // paid for it, but a page should not await a question it is not asking.
-  const [draft, workspace] = await Promise.all([
+  // Independent reads, so they overlap. The workspace is resolved for a
+  // `?player=` visit (to name a roster player) and for a `?draft=` one (to
+  // check the draft belongs here) — it is `cache()`d and the dashboard layout
+  // has already paid for it, but a page should not await a question it is not
+  // asking.
+  const [loadedDraft, workspace] = await Promise.all([
     draftId ? loadMatchDraft(draftId) : null,
-    player ? getWorkspaceContext() : null,
+    player || draftId ? getWorkspaceContext() : null,
   ]);
+
+  // A draft belongs to the workspace it was saved in, and resume is where that
+  // gets checked: `match_drafts` is RLS-scoped to its author, not to a
+  // program, so the author's own link opens in whatever workspace is active —
+  // including one the draft's event line, opponent pool and roster context
+  // have no relationship to. Refused rather than re-homed; see
+  // `draftWorkspaceRefusal()` for why a silent switch is not the answer.
+  const resumable =
+    loadedDraft === null ||
+    (workspace !== null &&
+      draftBelongsToWorkspace(loadedDraft.programId, workspace.active));
+  const draft = resumable ? loadedDraft : null;
+  const draftRefusal =
+    loadedDraft !== null && !resumable
+      ? draftWorkspaceRefusal(
+          workspace?.available.find((option) =>
+            draftBelongsToWorkspace(loadedDraft.programId, option),
+          )?.name ?? null,
+        )
+      : null;
 
   const initialProvider: ProviderId | null =
     source && isProviderSupported(source) ? (source as ProviderId) : null;
@@ -82,6 +108,7 @@ export default async function NewMatchPage({
   return (
     <UploadMatchFlow
       draft={draft}
+      draftRefusal={draftRefusal}
       initialProvider={initialProvider}
       initialSubject={initialSubject}
     />

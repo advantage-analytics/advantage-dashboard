@@ -61,6 +61,7 @@ export const ScoreInput = ({
     aria-invalid={invalid || undefined}
     value={value === null ? "" : String(value)}
     onChange={(e) => onValue(e.target.value.replace(/[^0-9]/g, ""))}
+    onFocus={(e) => e.currentTarget.select()}
     data-focus-ring="none"
     className={cn(
       CELL_CLS,
@@ -122,6 +123,15 @@ export function ScoreBlock({
   const focusKey = (k: string) =>
     window.setTimeout(() => refs.current[k]?.focus(), 0);
 
+  const isGameEntry = (value: string) =>
+    /^\d$/.test(value) && Number(value) <= 7;
+
+  // A digit, whatever its value. `isGameEntry` answers "should focus move on",
+  // which is a narrower question than "is this worth recording": a set can open
+  // 8-6 or 9-7, and those digits have to land in the cell even though nothing
+  // should advance off them yet.
+  const isDigit = (value: string) => /^\d$/.test(value);
+
   const tie = (i: number) =>
     isTiebreakSet(
       formData.playerScores[i] ?? null,
@@ -144,17 +154,26 @@ export function ScoreBlock({
         onSetsChange(i);
       return;
     }
-    // A game digit advances focus; tiebreak cells wait for Tab.
+    // A complete game digit advances focus; tiebreak cells wait for Tab.
+    // Out-of-range values stay put so they can be corrected, and the last
+    // available game cell deliberately has nowhere to send focus.
+    if (!isGameEntry(v)) return;
     if (row === "player") focusKey(key("o", i));
-    else if (i + 1 < displayed) focusKey(key("p", i + 1));
-    else if (ghost) focusKey(key("p", i + 1));
+    else if (i + 1 < displayed || ghost) focusKey(key("p", i + 1));
   };
 
   // Typing in the dashed column adds the set and keeps the digit.
+  //
+  // Records first, advances second — the same order `setDigit` uses above, and
+  // for the same reason. Gating the RECORD on `isGameEntry` silently dropped
+  // an 8 or a 9, so a third set opening 8-6 or 9-7 could not be started at all:
+  // the cell is `maxLength={1}`, so there was no second keystroke to recover
+  // with, and the same digit typed into an existing cell was accepted. The
+  // range check belongs to focus movement, not to whether the value is kept.
   const ghostDigit = (row: "player" | "opponent", v: string) => {
-    if (!v) return;
-    onSetsChange(displayed + 1);
+    if (!isDigit(v)) return;
     onScoreChange(row, displayed, v);
+    if (!isGameEntry(v)) return;
     focusKey(row === "player" ? key("o", displayed) : key("p", displayed + 1));
   };
 
@@ -213,7 +232,10 @@ export function ScoreBlock({
             </span>
           ))}
           {ghost && (
-            <span className="relative inline-flex size-10 items-center justify-center rounded-[var(--radius-cell)] border border-dashed border-[var(--border-medium)]">
+            <span
+              key={displayed}
+              className="relative inline-flex size-10 items-center justify-center rounded-[var(--radius-cell)] border border-dashed border-[var(--border-medium)]"
+            >
               <Plus
                 className="pointer-events-none absolute size-[13px] text-[var(--ink-400)]"
                 strokeWidth={1.5}

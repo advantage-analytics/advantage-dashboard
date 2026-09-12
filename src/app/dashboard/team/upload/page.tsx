@@ -9,6 +9,10 @@ import {
   programNamesFor,
 } from "@/lib/data/schedule-server";
 import { loadMatchDraft } from "@/lib/wizard/actions";
+import {
+  draftBelongsToWorkspace,
+  draftWorkspaceRefusal,
+} from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
 import { presetFor, lineupChoices } from "@/lib/schedule/line-choices";
 import { getTeamSingleMatch } from "@/lib/data/single-match-server";
 import { supportsVideo } from "@/lib/schedule/entry-state";
@@ -100,10 +104,26 @@ export default async function TeamUploadPage({
   if (entryId && !staff) redirect("/dashboard/team/upload");
 
   // Resume a draft the Matches table offered. The draft carries its own
-  // preset, so a line-started flow comes back with its bar.
+  // preset, so a line-started flow comes back with its bar — but only if it
+  // was saved in THIS program. `match_drafts` is RLS-scoped to `user_id`
+  // alone, so a coach's own link opens whichever workspace is active, and a
+  // draft's attached line belongs to the program it was saved under. Same
+  // check, same refusal and same reasoning as `/dashboard/matches/new`.
   if (draftId) {
-    const draft = await loadMatchDraft(draftId);
-    if (draft) return <UploadMatchFlow draft={draft} />;
+    const loadedDraft = await loadMatchDraft(draftId);
+    if (loadedDraft) {
+      return draftBelongsToWorkspace(loadedDraft.programId, active) ? (
+        <UploadMatchFlow draft={loadedDraft} />
+      ) : (
+        <UploadMatchFlow
+          draftRefusal={draftWorkspaceRefusal(
+            workspace.available.find((option) =>
+              draftBelongsToWorkspace(loadedDraft.programId, option),
+            )?.name ?? null,
+          )}
+        />
+      );
+    }
   }
 
   // NOT hoisted above the `?match=` branch below. That branch never reads the

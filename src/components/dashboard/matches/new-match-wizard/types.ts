@@ -296,6 +296,81 @@ export interface ParsingState {
   parseSuccess: boolean;
 }
 
+/** One side of an import identity comparison, preserving attribution ids. */
+export interface IdentityMatchSnapshot {
+  /** The athlete this match flow is being uploaded for. */
+  athleteId: string | null;
+  /** A parsed/parsed-identity id when one exists in future flows. */
+  importedAthleteId: string | null;
+  athleteName: string;
+  importedName: string;
+}
+
+/** Result for `evaluateImportedIdentityMatch()`. */
+export interface IdentityMatchStatus extends IdentityMatchSnapshot {
+  normalizedAthleteName: string;
+  normalizedImportedName: string;
+  matchesByName: boolean;
+  /**
+   * True when the flow must ask for explicit user confirmation.
+   *
+   * This is true for missing values and every non-`normalizedPersonName`
+   * match, including initials, nicknames and punctuation differences.
+   */
+  requiresConfirmation: boolean;
+  /**
+   * Why confirmation is required, when required. `name-match` means no
+   * confirmation gate is needed.
+   */
+  reason: "name-match" | "missing-name" | "name-mismatch";
+}
+
+/**
+ * Inputs that stay stable if a confirmation can be reused.
+ *
+ * The file generation is the file's identity; changing it invalidates any
+ * previous confirmation with this same match and workspace.
+ */
+export interface IdentityConfirmationScope {
+  workspaceId: string;
+  athleteId: string | null;
+  importedAthleteId: string | null;
+  athleteName: string;
+  importedName: string;
+  fileGenerationId: string;
+}
+
+/**
+ * Inputs for `collectMatchCompletionRequirements()`.
+ *
+ * This covers the common match-step requirements independent of surface.
+ */
+export interface MatchCompletionRequirementInput {
+  isProcessingProvider: boolean;
+  hasAnySetScore: boolean;
+  playerSubjectIsRoster: boolean;
+  opponentName: string;
+  date: string;
+  playerName: string;
+  playerHand?: "right" | "left";
+  playerBackhand?: "one-handed" | "two-handed";
+  opponentHand?: "right" | "left";
+  opponentBackhand?: "one-handed" | "two-handed";
+  adScoring?: boolean;
+  fixedCamera?: boolean;
+  initialTopPlayerIsPlayer1?: boolean;
+}
+
+/** Missing-fields payload read by the match footer and callers. */
+export interface MissingMatchRequirements {
+  labels: string[];
+  /**
+   * When only vendor video fields are missing, UX can treat it as a one-line
+   * state even though multiple labels are present.
+   */
+  onlyVideoAnswers: boolean;
+}
+
 /**
  * What an event already knows about a line, handed to the wizard so it can
  * pre-answer everything except the video.

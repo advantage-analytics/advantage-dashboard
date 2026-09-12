@@ -28,15 +28,6 @@ export interface Provider {
 
 export const providers: Provider[] = [
   {
-    id: "swing-vision",
-    name: "SwingVision",
-    description:
-      "AI-powered tennis analysis — bring the match export, numbers only",
-    logo: "/providers/swingvision.png",
-    pillBg: "#2D8B4E",
-    pillText: "#FFFFFF",
-  },
-  {
     // Internally `splitstep`. The vendor is never named in the UI — this is
     // presented as our own analysis engine.
     id: "splitstep",
@@ -49,6 +40,15 @@ export const providers: Provider[] = [
     // mark and with none of their internal padding.
     logoMaxHeight: 22,
     pillBg: "#3B82F6",
+    pillText: "#FFFFFF",
+  },
+  {
+    id: "swing-vision",
+    name: "SwingVision",
+    description:
+      "AI-powered tennis analysis — bring the match export, numbers only",
+    logo: "/providers/swingvision.png",
+    pillBg: "#2D8B4E",
     pillText: "#FFFFFF",
   },
   {

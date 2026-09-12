@@ -53,11 +53,34 @@ export const MIN_VIDEO_FPS = 30;
 /** Vendor's recommended frame rate. Below this we warn but do not block. */
 export const RECOMMENDED_VIDEO_FPS = 60;
 
-/** Accepted containers. MP4 (H.264) is the vendor's preferred format. */
-export const ACCEPTED_VIDEO_EXTENSIONS = [".mp4", ".mov"] as const;
+/**
+ * Accepted containers. MP4 (H.264) is the vendor's preferred format.
+ *
+ * The vendor's API guide (https://splitstep.ai/api-docs.html, checked
+ * 2026-09-12) states "Any container and codec ffmpeg can decode is
+ * accepted", with MP4 (H.264) merely preferred and unsupported files failing
+ * decode with `VIDEO_UNREADABLE`. That set isn't enumerable, so this stays a
+ * practical allowlist of containers a camera or phone actually produces
+ * rather than a literal transcription of "anything ffmpeg can decode" — a
+ * pick-time refusal for a genuinely unrecognised container (e.g. `.txt`
+ * renamed) is better than a post-upload `VIDEO_UNREADABLE`. Widen this list
+ * again only for another real container in the wild, not preemptively.
+ */
+export const ACCEPTED_VIDEO_EXTENSIONS = [
+  ".mp4",
+  ".mov",
+  ".m4v",
+  ".avi",
+  ".mkv",
+  ".webm",
+] as const;
 export const ACCEPTED_VIDEO_MIME_TYPES = [
   "video/mp4",
   "video/quicktime",
+  "video/x-m4v",
+  "video/x-msvideo",
+  "video/x-matroska",
+  "video/webm",
 ] as const;
 
 /**

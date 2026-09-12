@@ -37,10 +37,18 @@ export function MenuSelect<T extends string>({
   disabled = false,
   className,
   width,
+  placeholder,
 }: {
   /** Accessible name — the visible caption or row label sits beside it. */
   label: string;
-  value: T;
+  /**
+   * `undefined` is a real, renderable state — an unanswered required field —
+   * not a bug. It draws no row as chosen and shows `placeholder` in the
+   * empty-field ink, rather than guessing an option or falling back to
+   * printing the raw value. Callers that can pass `undefined` must supply
+   * `placeholder`.
+   */
+  value: T | undefined;
   options: readonly MenuOption<T>[];
   onChange: (next: T) => void;
   variant?: "pill" | "underline";
@@ -51,6 +59,8 @@ export function MenuSelect<T extends string>({
   className?: string;
   /** Menu width. Defaults to the trigger's width for `underline`, 232px for `pill`. */
   width?: number | "trigger";
+  /** Shown, in the empty-field ink, when `value` is unset. */
+  placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
   const current = options.find((option) => option.value === value);
@@ -62,6 +72,8 @@ export function MenuSelect<T extends string>({
       setOpen(false);
       if (next !== value) onChange(next);
     },
+    // `value` may be `undefined`; `next !== value` is still exactly the
+    // "did this actually change" check.
     [onChange, value],
   );
 
@@ -96,7 +108,9 @@ export function MenuSelect<T extends string>({
         className,
       )}
     >
-      <span className="truncate">{current ? current.label : value}</span>
+      <span className={cn("truncate", !current && "text-[var(--ink-400)]")}>
+        {current ? current.label : (placeholder ?? value)}
+      </span>
       <ChevronDown
         className="size-3 shrink-0 text-[var(--ink-500)]"
         strokeWidth={1.5}

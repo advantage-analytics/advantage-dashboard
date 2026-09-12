@@ -15,8 +15,10 @@
  * 14px value with one text-micro subline, and a hairline rule that goes 2px
  * Signal Blue on the field being worked. The two fields with menus open the
  * EntitySelect grammar: 12px radius, 6px padding, one quiet sentence-case
- * section label, rows on an 8px radius with the surface-subtle wash on the
- * current pick.
+ * section label, rows on an 8px radius. The chosen row is marked by a 13px
+ * Signal Blue check and nothing else — surface-subtle is pointer hover for an
+ * unchosen row and keyboard focus for any row, never a standing fill on the
+ * pick (`ui/float-menu.tsx` is where that rule lives).
  *
  * "Upload for a teammate" is not a mode switch. It moves the workspace to the
  * team — in place, so the step underneath survives — leaves the other two
@@ -71,6 +73,7 @@ export interface SourceStepContentProps {
   whoPlayed: {
     required: boolean;
     roster: RosterOption[] | null;
+    loadFailed: boolean;
     uploaderName: string | null;
     subject: MatchSubject | null;
     choose: (subject: MatchSubject) => void;
@@ -406,6 +409,8 @@ function SourceStepContentImpl({
       ? (whoPlayed.roster?.find((row) => row.playerId === subject.playerId) ??
         null)
       : null;
+  // For the personal workspace's own-match lead. In a team workspace the
+  // lead is always a roster player's initials or the empty mark.
   const uploaderInitials = viewer.initials;
   const uploaderName = whoPlayed.uploaderName ?? viewer.name;
 
@@ -540,9 +545,8 @@ function SourceStepContentImpl({
                     }}
                     className={cn(
                       "flex h-[38px] w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-2.5 text-left transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60",
-                      isActive
-                        ? "bg-[var(--surface-subtle)]"
-                        : "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]",
+                      "focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none",
+                      !isActive && "hover:bg-[var(--surface-subtle)]",
                     )}
                   >
                     <span
@@ -672,29 +676,21 @@ function SourceStepContentImpl({
                 Roster · {workspaceLabel(active)}
               </span>
 
-              {/* The uploader's own row. "self" writes their login id — the
-                  wizard's original answer, unchanged. */}
-              {uploaderName && (
-                <RosterRow
-                  chosen={subject?.kind === "self"}
-                  onChoose={() => {
-                    whoPlayed.choose({ kind: "self" });
-                    setOpenMenu(null);
-                  }}
-                  avatar={<RowAvatar initials={uploaderInitials} />}
-                  name={uploaderName}
-                  meta="Your own match"
-                  trailing={<Pill>You</Pill>}
-                />
-              )}
-
+              {/* No "Myself" row. A team match is recorded against a roster
+                  player, and a staff login is not one — the hook's eligibility
+                  refuses `self` here, so offering it would be offering a
+                  refusal. A viewer who genuinely holds a player profile finds
+                  it in the list below, marked You: the hook folds their own
+                  `program_players` row in when the roster RPC leaves it out. */}
               {whoPlayed.roster === null ? (
                 <span className="px-2.5 py-2 text-[11px] text-[var(--ink-500)]">
-                  Loading the roster…
+                  {whoPlayed.loadFailed
+                    ? "The roster couldn't be loaded."
+                    : "Loading the roster…"}
                 </span>
               ) : whoPlayed.roster.length === 0 ? (
                 <span className="px-2.5 py-2 text-[11px] text-[var(--ink-500)]">
-                  Nobody else is on this program&rsquo;s roster yet.
+                  Nobody is on this program&rsquo;s roster yet.
                 </span>
               ) : (
                 whoPlayed.roster.map((player) => {
@@ -703,6 +699,12 @@ function SourceStepContentImpl({
                     subject.playerId === player.playerId;
                   const invited =
                     player.invitedEmail !== null && player.userId === null;
+                  // The viewer's own profile — by the login bound to it, or
+                  // by the id the workspace already resolved as theirs.
+                  const isYou =
+                    player.userId === viewer.id ||
+                    (active.myPlayerId !== null &&
+                      player.playerId === active.myPlayerId);
                   return (
                     <RosterRow
                       key={player.playerId}
@@ -723,16 +725,20 @@ function SourceStepContentImpl({
                       }
                       name={player.name}
                       meta={
-                        invited
-                          ? `Invited · ${player.invitedEmail}`
-                          : rosterMeta(player)
+                        isYou
+                          ? "Your own match"
+                          : invited
+                            ? `Invited · ${player.invitedEmail}`
+                            : rosterMeta(player)
                       }
                       trailing={
                         // Roster state travels with the person: a profile a
                         // coach still runs carries the grey pill.
-                        !invited &&
-                        player.managedBy === "coach" &&
-                        player.userId === null ? (
+                        isYou ? (
+                          <Pill>You</Pill>
+                        ) : !invited &&
+                          player.managedBy === "coach" &&
+                          player.userId === null ? (
                           <Pill>Coach-managed</Pill>
                         ) : null
                       }
@@ -821,14 +827,13 @@ function SourceStepContentImpl({
                   }}
                   className={cn(
                     "flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-element)] px-2.5 py-[9px] text-left transition-colors duration-150 focus-visible:outline-none",
-                    isCurrent
-                      ? "bg-[var(--surface-subtle)]"
-                      : "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]",
+                    "focus-visible:bg-[var(--surface-subtle)]",
+                    !isCurrent && "hover:bg-[var(--surface-subtle)]",
                   )}
                 >
                   <SourceMark provider={provider} size={26} />
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="text-[13px] font-medium text-[var(--ink-900)]">
+                    <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
                       {copy.label}
                     </span>
                     <span className="truncate text-[11px] text-[var(--ink-500)]">
@@ -883,9 +888,8 @@ function RosterRow({
       onClick={onChoose}
       className={cn(
         "flex h-[38px] w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-2.5 text-left transition-colors duration-150 focus-visible:outline-none",
-        chosen
-          ? "bg-[var(--surface-subtle)]"
-          : "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]",
+        "focus-visible:bg-[var(--surface-subtle)]",
+        !chosen && "hover:bg-[var(--surface-subtle)]",
       )}
     >
       {avatar}
@@ -897,11 +901,20 @@ function RosterRow({
           {meta}
         </span>
       )}
-      {trailing && (
-        <>
-          <span className="flex-1" />
-          {trailing}
-        </>
+      <span className="flex-1" />
+      {trailing}
+      {/* The chosen row is marked the way every other select in the app marks
+          one — a 13px Signal Blue check in its own slot, no persistent fill
+          (`ui/float-menu.tsx`). It sits after the You / Coach-managed pill so
+          the two read as different facts: who this is, then what is picked. */}
+      {chosen ? (
+        <Check
+          className="size-[13px] shrink-0 text-[var(--blue)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+      ) : (
+        <span className="w-[13px] shrink-0" aria-hidden="true" />
       )}
     </button>
   );
