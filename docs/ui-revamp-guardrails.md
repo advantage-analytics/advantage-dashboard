@@ -1,7 +1,7 @@
 # UI revamp guardrails — what the Advantage Intelligence pipeline needs from the UI
 
 **Status:** current as of 2026-08-15, branch `splitstep-integration` @ `60204fd`
-**Read alongside:** [`r2-and-webhook-overview.md`](r2-and-webhook-overview.md) (how the pipeline works), [`ux-overhaul-brief.md`](ux-overhaul-brief.md) (what to build — but see §6, parts of it are stale)
+**Read alongside:** [`video-pipeline-overview.md`](video-pipeline-overview.md) (how the pipeline works), [`ux-overhaul-brief.md`](ux-overhaul-brief.md) (what to build — but see §6, parts of it are stale)
 
 The video pipeline works end to end and has carried one real full-length match.
 This document exists so a UI rewrite does not silently break it. It is written
@@ -278,8 +278,13 @@ the start of the match and the ambiguity disappears.
   no deployed code reads it. Stripe and the subscription page still use
   `users.role`. They agree with each other so payments work; it is drift, not an
   outage. That branch is the missing code half.
-- **Phase 4, retire R2** — on hold. If trimmed videos eventually move to R2 for
-  zero-egress playback, deleting `workers/video-access/` now means rebuilding it.
+- ~~**Phase 4, retire R2.**~~ **Done.** `workers/video-access/`, both R2 edge
+  functions and the `R2_*` env block are deleted; Azure had carried a full match
+  end to end, which was the condition for removing them. This closes the cheap
+  path to moving trimmed videos back to R2 for zero-egress playback — that is now
+  a build rather than a revival, and at pilot volume the egress bill does not
+  justify one (`video-pipeline-overview.md` §11). Undeploying the two edge
+  functions, the Worker and the bucket is an ops step, not a code one.
 - **Ten older migrations carry no applied version stamp.** Verify before trusting
   `supabase db push`.
 
@@ -294,7 +299,7 @@ the start of the match and the ambiguity disappears.
   R2 question it raised is now live rather than hypothetical: egress is $0 there
   against Azure's ~$0.087/GB, and video is being served. That branch merged to
   `main` in PR #131; its handoff doc is retired, with the leftovers folded into
-  `r2-and-webhook-overview.md` §10 and `email-system.md` §8.
+  `video-pipeline-overview.md` §10 and `email-system.md` §8.
 
 ---
 
