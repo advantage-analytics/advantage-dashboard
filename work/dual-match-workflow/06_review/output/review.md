@@ -2,9 +2,10 @@
 
 Sign-off: pending
 
-> **Update — F1 is resolved** (see "Resolution of F1" near the end). F2 remains
-> open and is live in production. The verdict line below is the review as
-> written; re-read the resolution section before signing off.
+> **Update — F1 and F2 are both resolved** (see the resolution sections at the
+> end). The verdict line below is the review as written; read the resolutions
+> before signing off. F3-F8 and everything under "Consciously left" remain
+> open, as follow-up branches.
 
 Target reviewed: **branch range `40f5505...HEAD`** (clean tree at start; the
 stage-2 quality fixes below are uncommitted at time of writing).
@@ -349,3 +350,48 @@ Gates after the fix: `lint` 0, `tsc` 0, `format:check` 0, `npm test`
 
 F1 no longer blocks. **F2 is still open and is live in production** — it needs
 a corrective migration, which is a separate decision.
+
+---
+
+## Resolution of F2
+
+Fixed and applied to production as
+`supabase/migrations/20260912071500_guard_schedule_match_tenant_check.sql`.
+
+`guard_schedule_result()`'s `matches` branch now applies the same disclosure
+rule its `program_event_outcomes` branch already had: a caller with no
+membership in the entry's program is handed straight on with `return new`,
+before any probe of that line's forfeit or outcome state.
+`matches_block_client_regraft` — which sorts after this trigger — then refuses
+the write, identically for every non-member, so the two error paths no longer
+distinguish "has a result" from "has none".
+
+Deliberately a **membership** check, not a role check. The purpose is to stop
+disclosure, not to re-state authorization: staffing is still enforced where it
+was, by `matches_block_client_regraft`. Making this branch role-aware would
+have moved an authorization decision into a trigger that exists for integrity,
+and changed refusal behaviour for members who are not staff.
+
+Additive by construction: a member reaches exactly the code they reached
+before, so no legitimate insert or update changes behaviour. Service-role
+ingestion carries no JWT and stays exempt, matching the outcomes branch.
+
+**Pre-flight safety check.** Before applying, the replacement function was
+normalised (comments stripped, whitespace collapsed) with the new block removed
+and hashed: it matched the deployed function's normalised hash
+`9508a562a8e787503021ed328c5a5bbb` exactly, proving the membership check was
+the only functional difference and nothing else had drifted.
+
+**Post-apply verification against production:** deployed normalised hash
+`a3eb55096280a777dec5202bc4582e75` (the value computed locally before
+applying); tenant check present; still `SECURITY DEFINER` with `search_path`
+pinned; both triggers still attached; `authenticated` still cannot execute the
+function directly; `matches` row count unchanged at 39.
+
+Gates after the change: `lint` 0, `tsc` 0, `format:check` 0, `npm test`
+**734 passed, 0 failed**.
+
+Note that the repository's migration chain is not replayable from an empty
+database, so this file documents the change and matches production, but is not
+independently verifiable by replay — the same limitation recorded in the
+stage 05 build report.
