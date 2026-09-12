@@ -23,12 +23,9 @@ import {
   Hash,
   Info,
   Loader2,
-  Scan,
   Swords,
   TriangleAlert,
-  User,
   Users,
-  Video,
   X,
   XCircle,
 } from "lucide-react";
@@ -41,6 +38,7 @@ import type {
 } from "./types";
 import { noteStripCls } from "./styles";
 import { formatResolution, formatTimecode, getNumberOfSets } from "./utils";
+import { VideoRequirements } from "./VideoRequirements";
 
 export interface FileStepContentProps {
   kind: ProviderKind;
@@ -79,27 +77,12 @@ interface Requirement {
 }
 
 /**
- * What the analysis needs, in the note register — 13px glyph, bold lead, one
+ * What the export needs, in the note register — 13px glyph, bold lead, one
  * consequence each — rather than behind a help icon, because the person most
- * likely to get them wrong is the one who wouldn't click.
+ * likely to get them wrong is the one who wouldn't click. The video path's
+ * equivalent panel is `VideoRequirements` — it grew past a bullet list, so
+ * it lives in its own file.
  */
-const VIDEO_REQUIREMENTS: readonly Requirement[] = [
-  {
-    icon: Video,
-    lead: "One camera, one position",
-    rest: " — a tripod or a phone against the fence. Following the play breaks the court mapping.",
-  },
-  {
-    icon: Scan,
-    lead: "Behind the baseline",
-    rest: ", high enough to see both service boxes and all four corners of the court.",
-  },
-  {
-    icon: User,
-    lead: "Singles, complete games",
-    rest: " — the window you trim to has to match the score you enter in step 4.",
-  },
-];
 
 /** The export's requirements, not the camera's. Doubles is named as not-yet. */
 const EXPORT_REQUIREMENTS: readonly Requirement[] = [
@@ -344,7 +327,6 @@ function FileStepContentImpl({
   const isVideo = kind === "processing";
   const noun = sourceNoun(kind, selectedProvider);
   const whose = subjectFirstName ? `${subjectFirstName}'s` : "your";
-  const requirements = isVideo ? VIDEO_REQUIREMENTS : EXPORT_REQUIREMENTS;
   const Glyph = isVideo ? Film : FileSpreadsheet;
 
   const extension = uploadedFile?.name.includes(".")
@@ -607,13 +589,13 @@ function FileStepContentImpl({
           beneath says what was found instead. */}
       {hasFile && !isVideo && parsingState.parseSuccess ? (
         <FoundInExport formData={formData} />
+      ) : isVideo ? (
+        <VideoRequirements />
       ) : (
         <div className="flex flex-col gap-3.5">
-          <span className="eyebrow">
-            {isVideo ? "What the analysis needs" : "What the export needs"}
-          </span>
+          <span className="eyebrow">What the export needs</span>
           <div className="flex flex-col gap-2.5">
-            {requirements.map(({ icon: Icon, lead, rest }) => (
+            {EXPORT_REQUIREMENTS.map(({ icon: Icon, lead, rest }) => (
               <div key={lead} className="flex items-start gap-3">
                 <Icon
                   className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-400)]"

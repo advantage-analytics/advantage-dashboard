@@ -241,7 +241,7 @@ ready).
 
 ## T17 · Present video requirements before selection
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **reasoning:** medium
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/FileStepContent.tsx, src/components/dashboard/matches/new-match-wizard/VideoRequirements.tsx (new if needed), existing file-step tests.
