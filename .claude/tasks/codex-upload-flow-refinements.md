@@ -156,7 +156,7 @@ ready).
 
 ## T11 · Define reusable upload eligibility
 
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **reasoning:** high
 - **files:** Best guess: src/lib/workspace/types.ts, src/lib/workspace/upload-eligibility.ts (new only if needed), tests/upload-eligibility.spec.ts (new).
