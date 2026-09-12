@@ -383,7 +383,7 @@ function SelectCell<T extends string | boolean>({
                 className={cn(
                   floatMenuRowCls,
                   "h-[34px]",
-                  isCurrent && "bg-[var(--surface-subtle)]",
+                  isCurrent && "hover:bg-transparent",
                 )}
               >
                 <span
@@ -666,17 +666,26 @@ function EventCell({
                   onClick={() => commit(event.name, event.kind)}
                   className={cn(
                     floatMenuRowCls,
-                    event.name === value && "bg-[var(--surface-subtle)]",
+                    event.name === value && "hover:bg-transparent",
                   )}
                 >
                   <TournamentMark className="text-[var(--ink-500)] opacity-60" />
-                  <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-900)]">
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--ink-900)]">
                     {event.name}
                   </span>
                   <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
                     {event.years}
                     {event.matches > 1 ? ` · ${event.matches} matches` : ""}
                   </span>
+                  {event.name === value ? (
+                    <Check
+                      className="size-[13px] shrink-0 text-[var(--blue)]"
+                      strokeWidth={1.5}
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <span className="w-[13px] shrink-0" />
+                  )}
                 </button>
               ))}
               {term.trim() && !exact && (

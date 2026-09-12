@@ -161,7 +161,7 @@ export function PinnedLineBar({
                 className={cn(
                   floatMenuRowCls,
                   "gap-3",
-                  isCurrent && "bg-[var(--surface-subtle)]",
+                  isCurrent && "hover:bg-transparent",
                   disabled && "cursor-default hover:bg-transparent",
                 )}
               >

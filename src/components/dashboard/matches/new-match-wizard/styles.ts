@@ -72,7 +72,15 @@ export const noteStripCls =
 /**
  * The float menu — EntitySelect grammar: radius 12, 6px padding, hairline,
  * dropdown shadow. Rows are 38px with an 8px radius and a surface-subtle
- * wash on hover; the current row keeps the wash and a Signal Blue check.
+ * wash on hover and on keyboard focus.
+ *
+ * `floatMenuRowCls` carries that hover unconditionally because most of its
+ * consumers are ACTION rows, where a wash on hover is right. A SELECTION row
+ * is different: per T8 (`float-menu.tsx`) and T9, the pick is marked by a
+ * 13px `--blue` check alone — never a standing fill — and the chosen row
+ * suppresses its own hover with `hover:bg-transparent`, so add that at the
+ * call site. Unchosen rows keep a same-width spacer so nothing reflows on
+ * selection. See `.skills/advantage-analytics-design/SKILL.md`, EntitySelect.
  * Design: Upload Wizard v5 — 2a, 6b, 10a, 11a, 11b, 11d.
  */
 export const floatMenuCls =
