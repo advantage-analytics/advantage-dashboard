@@ -268,7 +268,7 @@ ready).
 
 ## T19 · Document Save draft behavior
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **reasoning:** medium
 - **files:** Best guess: docs/upload-draft-behavior.md (new).

@@ -217,3 +217,24 @@ is the runner's. Newest entries at the bottom.
 2. Portrait 1080×1920 is refused by `width < 1920`. The guide says "1080p minimum" without addressing orientation. Probably right for court framing, but it is an assumption, not a sourced constraint.
 3. Real-file probing remains out of reach — no `ffmpeg` on this machine and no video fixtures under `tests/`. Nothing exercises `probeVideo()` against actual bytes; the specs drive the accept/reject decision from constructed `VideoProbe` values. The spec header says so rather than implying coverage it lacks.
 4. The requirement chips in `providers/splitstep.ts:45` render `MP4 / MOV` from the same constant, so they move automatically if the allowlist is ever widened.
+
+## T19 · Document Save draft behavior — done
+
+**gate:** Mechanical: lint, `tsc --noEmit`, `format:check` and the full keyless `npm test` all passed (884 passed, 37 skipped), including `tests/generate-map.spec.ts`, so `MAP.md` is undisturbed. Completion: VERDICT: pass — the shipped-vs-recommendation convention tested adversarially with no proposal found disguised as a present-tense fact, and the citations spot-checked against source and confirmed accurate to the line. Both guardrail reviewers were skipped because the diff touches no `.ts`, `.tsx` or `.sql` file at all — there is no surface for either to audit.
+
+**changed:** Added `docs/upload-draft-behavior.md` and registered it in `docs/README.md` following that file's own convention. Documentation only; no source, migration or test file touched. Every claim outside a blockquote is shipped behaviour carrying a file/line citation; every proposal is a `> **Recommendation:**` blockquote with its own "Acceptance:" clause, and the convention is stated in the document's opening before it is used.
+
+**Three defects found while documenting, none fixed here.**
+
+1. **A failed draft save is indistinguishable from a successful one.** `saveDraft()` returns `false` on failure, but `handleSaveDraft` (`UploadMatchFlow.tsx:685-693`) discards the boolean and calls `router.push(exitHref)` regardless — the user is navigated away believing their work is saved. Verified independently by the runner in the source, not just reported.
+2. **A draft can be resumed into the wrong workspace.** `loadMatchDraft` (`actions.ts:488-498`) does not select `program_id`, and nothing compares the draft's program against the active workspace on resume. The completion reviewer confirmed the omission in the select. This is attribution-adjacent, immediately beside what T12–T16 hardened.
+3. **Retention is indefinite** — no expiry job exists anywhere under `src/app/api/` or `supabase/functions/`, which matches the design's "no new expiry job" intent but means nothing ever reclaims an abandoned draft.
+
+**Verified, and worth keeping:** a draft and a started transfer cannot coexist — the draft is deleted synchronously before `createProcessingJob`/`uploadAndSubmitVideo` run — so the transfer-start question has a simpler answer than the criterion anticipated. `match_drafts` carries RLS `(select auth.uid()) = user_id` (migration `20260903120000`, applied). `upload_eligibility` (`20260911000000`, T14) is confirmed **absent** from `list_migrations` — still not live.
+
+**follow-ups:**
+
+1. The Matches-table's own delete-draft call site was not located within the searched subtree and is marked "presumed" in the document rather than asserted. Worth confirming.
+2. A failed `deleteMatchDraft` at completion leaves a stale Resume row with no guard against a subsequent duplicate-match submission.
+3. `onVideoPick` resets trim bounds on file replacement but does not reset `initialTopPlayerIsPlayer1`/`fixedCamera` — a carryover across a file swap, documented as uncleared. These are two of the three vendor inputs, so this is worth a deliberate decision rather than inheritance.
+4. Renaming the autosave's localStorage keys so they do not read as durable persistence.
