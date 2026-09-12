@@ -43,8 +43,6 @@ markers is hand-written — edit it as things move.
 | `/dashboard/matches/[matchId]` | [`src/app/dashboard/matches/[matchId]/page.tsx`](src/app/dashboard/matches/[matchId]/page.tsx) |
 | `/dashboard/matches/new` | [`src/app/dashboard/matches/new/page.tsx`](src/app/dashboard/matches/new/page.tsx) |
 | `/dashboard/matches` | [`src/app/dashboard/matches/page.tsx`](src/app/dashboard/matches/page.tsx) |
-| `/dashboard/opponents/[programId]/[playerId]` | [`src/app/dashboard/opponents/[programId]/[playerId]/page.tsx`](src/app/dashboard/opponents/[programId]/[playerId]/page.tsx) |
-| `/dashboard/opponents/[programId]` | [`src/app/dashboard/opponents/[programId]/page.tsx`](src/app/dashboard/opponents/[programId]/page.tsx) |
 | `/dashboard/opponents` | [`src/app/dashboard/opponents/page.tsx`](src/app/dashboard/opponents/page.tsx) |
 | `/dashboard/settings/account` | [`src/app/dashboard/settings/account/page.tsx`](src/app/dashboard/settings/account/page.tsx) |
 | `/dashboard/settings` | [`src/app/dashboard/settings/page.tsx`](src/app/dashboard/settings/page.tsx) |
