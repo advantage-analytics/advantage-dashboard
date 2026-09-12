@@ -48,6 +48,7 @@ import { useWizardKeys } from "./useWizardKeys";
 import { SourceStepContent } from "./SourceStepContent";
 import { FileStepContent } from "./FileStepContent";
 import { ImportIdentityNotice } from "./ImportIdentityNotice";
+import { EligibilityNotice } from "./EligibilityNotice";
 import {
   collectMatchCompletionRequirements,
   wizardContinueBlocked,
@@ -621,6 +622,8 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     handleInputChange,
     handleFormatChange,
     whoPlayed,
+    eligibility,
+    retryEligibility,
     handleScoreChange,
     handleTiebreakChange,
     handleCreateMatch,
@@ -890,6 +893,23 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     !isProcessingProvider &&
     importIdentity.comparison?.requiresConfirmation === true;
 
+  /**
+   * Is the eligibility refusal on screen right now — the same "notice
+   * decides the gate" rule as the identity question above (T7). Shown on the
+   * two steps a fresh Source, a preset File and a resumed File entry can all
+   * land on before anything else is answered: step 1 (nothing chosen yet)
+   * and step 2 (a preset or a resumed draft opens here directly, past step
+   * 1's picker).
+   *
+   * `athlete-required` is excluded: step 1's own roster picker (or the
+   * absence of one, in a personal workspace) IS that explanation, and a
+   * second banner saying the same thing would be noise, not help.
+   */
+  const eligibilityNoticeVisible =
+    (step === "provider" || step === "file") &&
+    !eligibility.ok &&
+    eligibility.reason !== "athlete-required";
+
   // One value, two ways forward: the footer button below is disabled by it and
   // `useWizardKeys` refuses plain Enter on it, so a keyboard user can never
   // pass a gate a clicking user cannot. `wizardContinueBlocked` is pure and
@@ -900,6 +920,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     busy: stepBusy !== null,
     missingMatchAnswers: missing.labels.length > 0,
     importIdentityBlocked: identityNoticeVisible && importIdentity.blocked,
+    eligibilityBlocked: eligibilityNoticeVisible,
   });
 
   useWizardKeys({
@@ -1016,11 +1037,19 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
           roster's "upload for this player" shortcut now seeds the ordinary
           wizard through `initialSubject` instead. */}
       {step === "provider" && (
-        <SourceStepContent
-          selectedProvider={selectedProvider}
-          onProviderSelect={handleProviderSelect}
-          whoPlayed={whoPlayed}
-        />
+        <div className="flex flex-col gap-9">
+          <SourceStepContent
+            selectedProvider={selectedProvider}
+            onProviderSelect={handleProviderSelect}
+            whoPlayed={whoPlayed}
+          />
+          {eligibilityNoticeVisible && !eligibility.ok && (
+            <EligibilityNotice
+              eligibility={eligibility}
+              onRetry={retryEligibility}
+            />
+          )}
+        </div>
       )}
 
       {/* Step 2 asks for one thing. The same component for both kinds;
@@ -1078,6 +1107,12 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
                   ? handleBack
                   : undefined
               }
+            />
+          )}
+          {eligibilityNoticeVisible && !eligibility.ok && (
+            <EligibilityNotice
+              eligibility={eligibility}
+              onRetry={retryEligibility}
             />
           )}
         </div>

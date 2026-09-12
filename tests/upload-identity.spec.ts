@@ -325,6 +325,7 @@ test("the file step is blocked by the same value the keyboard reads", () => {
     busy: false,
     missingMatchAnswers: false,
     importIdentityBlocked: false,
+    eligibilityBlocked: false,
   };
   expect(wizardContinueBlocked(base)).toBe(false);
   expect(wizardContinueBlocked({ ...base, importIdentityBlocked: true })).toBe(

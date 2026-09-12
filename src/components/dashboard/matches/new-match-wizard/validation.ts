@@ -145,8 +145,18 @@ export function wizardContinueBlocked(input: {
   missingMatchAnswers: boolean;
   /** `ImportIdentityState.blocked` — an unread, unconfirmed or refused import. */
   importIdentityBlocked: boolean;
+  /**
+   * The eligibility notice is on screen (T13) — `!eligibility.ok` on the
+   * provider or file step, for any reason but `athlete-required` (step 1's
+   * own picker already explains that one). Scoped to when the notice is
+   * VISIBLE, the same rule `importIdentityBlocked` follows: disabling
+   * Continue for a refusal with no sentence on screen would be a dead
+   * control, not a gate.
+   */
+  eligibilityBlocked: boolean;
 }): boolean {
   if (input.busy) return true;
   if (input.step === "match" && input.missingMatchAnswers) return true;
+  if (input.eligibilityBlocked) return true;
   return input.step === "file" && input.importIdentityBlocked;
 }

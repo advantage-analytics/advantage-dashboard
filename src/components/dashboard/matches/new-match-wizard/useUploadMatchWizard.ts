@@ -38,6 +38,8 @@ import {
 } from "@/lib/services/splitstep/quota";
 import { formatResetDate } from "@/lib/data/usage-format";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import type { Workspace } from "@/lib/workspace/types";
+import type { ProgramApprovalReading } from "@/lib/workspace/upload-eligibility";
 import type {
   RosterFullRow,
   RosterPlayerOption,
@@ -478,6 +480,12 @@ export interface UseUploadMatchWizardReturn {
    * can show the same refusal, with Retry where `retryable` is true (T13).
    */
   eligibility: WizardEligibility;
+  /**
+   * Retry a retryable refusal (`eligibility.retryable`) — re-reads the
+   * program's approval or the roster, whichever failed. A no-op otherwise:
+   * a decided refusal is fixed by changing something, not asking again.
+   */
+  retryEligibility: () => void;
   handleScoreChange: (
     player: "player" | "opponent",
     index: number,
@@ -671,6 +679,18 @@ export function useUploadMatchWizard({
   // Invalidate before the first await, so an older validation or parse cannot
   // replace the new file, its names, errors, or busy state.
   const fileGenerationRef = useRef(0);
+  /**
+   * In-flight guard for {@link handleCreateMatch}.
+   *
+   * `isCreating` is state, so it cannot disable the Continue button within
+   * the tick a click arrives in — and since T13 the handler awaits a fresh
+   * `programs.status` read before it ever reaches `setIsCreating(true)`. A
+   * second click during that round trip would re-enter and, if both
+   * eligibility rechecks pass, file the same match twice. A ref closes the
+   * window synchronously; `isCreating` still drives what the button looks
+   * like.
+   */
+  const creatingRef = useRef(false);
   const [parsedImport, setParsedImport] = useState<{
     generation: number;
     playerName: string;
@@ -1157,6 +1177,116 @@ export function useUploadMatchWizard({
   }, [open, supabase, preset, draft, askWhoPlayed, seededPlayerName]);
 
   /**
+   * The workspace an EXISTING match belongs to — pinned the moment a preset
+   * or an accepted line first names one (`matchId`), and never re-read from
+   * the live switcher after that.
+   *
+   * The workspace switcher can change `activeWorkspace` on this same mounted
+   * page without navigating away (`setActiveWorkspaceInPlace`), so a coach
+   * who reuses a scored line and then switches programs would otherwise have
+   * that match's roster, approval and attribution re-decided against the
+   * NEWLY selected program — the client repeating the mistake T15/T16 fixed
+   * server-side with `billingWorkspaceFor(match.program_id)`. Cleared the
+   * moment nothing existing is in play (no `matchId`), so a fresh preset or a
+   * detached line still tracks the live workspace like any other new upload.
+   *
+   * Set from an effect, not during render — a ref read/write while
+   * rendering is what `react-hooks/refs` exists to catch, since it can
+   * silently disagree with what actually painted. The one-render lag this
+   * costs is free: on the render where an existing match FIRST appears,
+   * `activeWorkspace` and the eventual pin are the same workspace anyway: no
+   * switch has happened yet.
+   */
+  const activeWorkspaceRef = useRef(activeWorkspace);
+  useEffect(() => {
+    activeWorkspaceRef.current = activeWorkspace;
+  }, [activeWorkspace]);
+  const existingMatchId = (preset ?? attachedLine)?.matchId ?? null;
+  const [pinnedMatchWorkspace, setPinnedMatchWorkspace] =
+    useState<Workspace | null>(null);
+  useEffect(() => {
+    if (existingMatchId) {
+      setPinnedMatchWorkspace((prev) => prev ?? activeWorkspaceRef.current);
+    } else {
+      setPinnedMatchWorkspace((prev) => (prev === null ? prev : null));
+    }
+  }, [existingMatchId]);
+  /**
+   * The workspace eligibility, the roster fetch and the who-played reset all
+   * reason about — the pinned one while an existing match is in play, the
+   * live one otherwise.
+   */
+  const eligibilityWorkspace = pinnedMatchWorkspace ?? activeWorkspace;
+
+  /**
+   * A fresher `programs.status` than `eligibilityWorkspace` carries — the
+   * `approval` input `wizardUploadEligibility()` documents. `undefined`
+   * trusts the workspace's own; `"unknown"` is a read that failed, which
+   * blocks with `retryable: true` rather than falling back to a stale pass.
+   * Reset whenever the eligibility workspace changes, so a pending program
+   * A's fresh "active" reading can never survive as program B's.
+   */
+  const [approvalReading, setApprovalReading] = useState<
+    ProgramApprovalReading | undefined
+  >(undefined);
+  useEffect(() => {
+    setApprovalReading(undefined);
+  }, [eligibilityWorkspace.id]);
+  /** Guards a slow read from clobbering a faster, later one. */
+  const approvalRequestRef = useRef(0);
+  /**
+   * Re-read the program's live status. Returns the reading (not only sets
+   * it) so `handleCreateMatch` can decide on THIS call's answer rather than
+   * the state it schedules — the two can disagree by a render.
+   */
+  const refreshApproval = useCallback(async (): Promise<
+    ProgramApprovalReading | undefined
+  > => {
+    if (eligibilityWorkspace.kind !== "team") return undefined;
+    const programId = eligibilityWorkspace.id;
+    const token = ++approvalRequestRef.current;
+    const { data, error: statusError } = await supabase
+      .from("programs")
+      .select("status")
+      .eq("id", programId)
+      .maybeSingle();
+    const reading: ProgramApprovalReading =
+      statusError || !data
+        ? "unknown"
+        : (data.status as ProgramApprovalReading);
+    if (approvalRequestRef.current === token) setApprovalReading(reading);
+    return reading;
+  }, [eligibilityWorkspace.kind, eligibilityWorkspace.id, supabase]);
+  /**
+   * "Returning to the page" re-check: a program's approval can change while
+   * this tab sits in the background (a claim gets approved, or a violation
+   * suspends it), and the workspace's own `programStatus` is only as fresh
+   * as the request that built it. Re-reading when the tab regains focus
+   * means an approval granted while the coach was away lifts the notice
+   * without a manual reload, and a suspension does not keep offering
+   * Continue on a stale "active".
+   */
+  useEffect(() => {
+    if (!open || eligibilityWorkspace.kind !== "team") return;
+    // Guarded, not assumed: the wizard hook specs run it outside a DOM
+    // (`tests/fixtures/upload-wizard-hook.ts` executes real effects with no
+    // `document`/`window`), and this re-check is a nicety on top of the
+    // submit-time reread below, not something either environment may crash
+    // without.
+    if (typeof document === "undefined" || typeof window === "undefined")
+      return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshApproval();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [open, eligibilityWorkspace.kind, refreshApproval]);
+
+  /**
    * The eligible roster — behind the who-played picker, and behind the check
    * a preset's player gets before anything is written.
    *
@@ -1182,7 +1312,7 @@ export function useUploadMatchWizard({
    * against this list too.
    */
   useEffect(() => {
-    if (!open || activeWorkspace.kind !== "team") return;
+    if (!open || eligibilityWorkspace.kind !== "team") return;
     let cancelled = false;
 
     (async () => {
@@ -1195,19 +1325,19 @@ export function useUploadMatchWizard({
         { data: ownRows },
       ] = await Promise.all([
         supabase.rpc("program_roster_full", {
-          p_program_id: activeWorkspace.id,
+          p_program_id: eligibilityWorkspace.id,
         }),
         supabase
           .from("program_invites")
           .select("player_id, email")
-          .eq("program_id", activeWorkspace.id)
+          .eq("program_id", eligibilityWorkspace.id)
           .is("accepted_at", null),
         supabase
           .from("program_players")
           .select(
             "id, program_id, first_name, last_name, email, class_year, lineup_spot, claimed_by_user_id",
           )
-          .eq("program_id", activeWorkspace.id)
+          .eq("program_id", eligibilityWorkspace.id)
           .eq("claimed_by_user_id", viewer.id)
           .is("archived_at", null)
           .is("merged_into_id", null)
@@ -1239,7 +1369,7 @@ export function useUploadMatchWizard({
         eligibleRosterOptions(
           (data ?? []) as RosterFullRow[],
           own,
-          activeWorkspace.id,
+          eligibilityWorkspace.id,
           viewer.id,
         ).map((row) => ({
           ...row,
@@ -1253,8 +1383,8 @@ export function useUploadMatchWizard({
     };
   }, [
     open,
-    activeWorkspace.kind,
-    activeWorkspace.id,
+    eligibilityWorkspace.kind,
+    eligibilityWorkspace.id,
     viewer.id,
     supabase,
     rosterAttempt,
@@ -1266,21 +1396,25 @@ export function useUploadMatchWizard({
    * program's player1_id into workspace B's match row.
    *
    * The id is compared against the last one this ran for rather than keyed on
-   * alone, because an effect keyed on `activeWorkspace.id` also fires on
+   * alone, because an effect keyed on `eligibilityWorkspace.id` also fires on
    * mount, where nothing has changed. That extra fire is not free: it clears
    * an answer a `?player=` link had already installed as initial state, which
    * made the seed depend on being written by a later-declared effect — the
    * feature held in place by source order inside a 2,000-line hook, with no
    * type error and no test if anyone reordered it.
+   *
+   * Keyed on `eligibilityWorkspace`, not the raw switcher: while an existing
+   * match pins that value, a live workspace switch must not clear the answer
+   * out from under it (see `pinnedMatchWorkspace` above).
    */
-  const subjectWorkspaceRef = useRef(activeWorkspace.id);
+  const subjectWorkspaceRef = useRef(eligibilityWorkspace.id);
   useEffect(() => {
     if (!open) return;
-    if (subjectWorkspaceRef.current === activeWorkspace.id) return;
-    subjectWorkspaceRef.current = activeWorkspace.id;
+    if (subjectWorkspaceRef.current === eligibilityWorkspace.id) return;
+    subjectWorkspaceRef.current = eligibilityWorkspace.id;
     applyMatchSubject(null);
     setTeamRoster(null);
-  }, [open, activeWorkspace.id, applyMatchSubject]);
+  }, [open, eligibilityWorkspace.id, applyMatchSubject]);
 
   /**
    * A subject the loaded roster does not have returns to selection.
@@ -1293,12 +1427,12 @@ export function useUploadMatchWizard({
    * uploader: `rosterSubjectOrNull` has no such branch.
    */
   useEffect(() => {
-    if (!open || activeWorkspace.kind !== "team" || preset) return;
+    if (!open || eligibilityWorkspace.kind !== "team" || preset) return;
     const current = matchSubjectRef.current;
     if (rosterSubjectOrNull(current, teamRoster) !== current) {
       applyMatchSubject(null);
     }
-  }, [open, activeWorkspace.kind, preset, teamRoster, applyMatchSubject]);
+  }, [open, eligibilityWorkspace.kind, preset, teamRoster, applyMatchSubject]);
 
   const reloadRoster = useCallback(() => {
     setRosterLoadFailed(false);
@@ -1316,18 +1450,53 @@ export function useUploadMatchWizard({
    * regraft trigger does not gate on staff, and neither does this.
    */
   const lineTarget = preset ?? attachedLine;
+  /**
+   * Every input `wizardUploadEligibility()` needs except the approval
+   * reading — shared between the live memo below and `handleCreateMatch`'s
+   * fresh re-check, so the two can never build the decision from different
+   * facts. `workspace` is `eligibilityWorkspace`, not the raw switcher — see
+   * `pinnedMatchWorkspace` above.
+   */
+  const eligibilityInput = useMemo(
+    () => ({
+      workspace: eligibilityWorkspace,
+      viewerId: viewer.id,
+      preset,
+      subject: matchSubject,
+      roster: eligibilityWorkspace.kind === "team" ? teamRoster : undefined,
+      attachesToLine: Boolean(lineTarget?.entryId) && !lineTarget?.matchId,
+    }),
+    [
+      eligibilityWorkspace,
+      viewer.id,
+      preset,
+      matchSubject,
+      teamRoster,
+      lineTarget,
+    ],
+  );
   const eligibility = useMemo(
     () =>
       wizardUploadEligibility({
-        workspace: activeWorkspace,
-        viewerId: viewer.id,
-        preset,
-        subject: matchSubject,
-        roster: activeWorkspace.kind === "team" ? teamRoster : undefined,
-        attachesToLine: Boolean(lineTarget?.entryId) && !lineTarget?.matchId,
+        ...eligibilityInput,
+        approval: approvalReading,
       }),
-    [activeWorkspace, viewer.id, preset, matchSubject, teamRoster, lineTarget],
+    [eligibilityInput, approvalReading],
   );
+  /**
+   * Retry a retryable refusal — re-reads whichever lookup failed (the
+   * program's approval, or the roster) without touching anything else. A
+   * no-op for a decided refusal (`retryable: false`): the fix there is
+   * changing something, not asking again.
+   */
+  const retryEligibility = useCallback(() => {
+    if (eligibility.ok || !eligibility.retryable) return;
+    if (eligibility.reason === "approval-unknown") {
+      void refreshApproval();
+    } else if (eligibility.reason === "roster-unknown") {
+      reloadRoster();
+    }
+  }, [eligibility, refreshApproval, reloadRoster]);
 
   /**
    * Record the answer AND pre-fill the player-name field from it, so the
@@ -1345,7 +1514,7 @@ export function useUploadMatchWizard({
    */
   const chooseMatchSubject = useCallback(
     (subject: MatchSubject) => {
-      if (activeWorkspace.kind === "team") {
+      if (eligibilityWorkspace.kind === "team") {
         if (subject.kind !== "roster") return;
         if (teamRoster && rosterSubjectOrNull(subject, teamRoster) === null)
           return;
@@ -1370,7 +1539,7 @@ export function useUploadMatchWizard({
       }));
     },
     [
-      activeWorkspace.kind,
+      eligibilityWorkspace.kind,
       teamRoster,
       uploaderName,
       applyMatchSubject,
@@ -2018,430 +2187,451 @@ export function useUploadMatchWizard({
 
   // Match creation
   const handleCreateMatch = useCallback(async () => {
-    if (!formData || !uploadedFile?.file) {
-      setError("Please complete all required fields and upload a file.");
-      return;
-    }
-
-    if (!selectedProvider) {
-      setError("Please select a provider.");
-      return;
-    }
-
-    // The last ask, at the write. The same decision the two Continue handlers
-    // made, re-read from live state: a program that went pending, a profile
-    // archived, a roster that failed to load since — none of them get a row.
-    // A retryable refusal is a reading not yet obtained, and it is shown as
-    // the contract's sentence here too, because there is no later step.
-    if (!eligibility.ok) {
-      setError(eligibility.message);
-      return;
-    }
-    if (
-      isUploading ||
-      isProbing ||
-      parsingState.isParsing ||
-      uploadError ||
-      importIdentityBlocked ||
-      (!isProcessingProvider &&
-        parsedImport?.generation !== fileGenerationRef.current)
-    ) {
-      setError(
-        identityMessage ?? uploadError ?? "Wait for the file check to finish.",
-      );
-      return;
-    }
-    const missing = collectMatchCompletionRequirements({
-      ...formData,
-      isProcessingProvider,
-      playerSubjectIsRoster: matchSubject?.kind === "roster",
-      adScoring: formData.adScoring ?? undefined,
-      fixedCamera: formData.fixedCamera ?? undefined,
-      initialTopPlayerIsPlayer1:
-        formData.initialTopPlayerIsPlayer1 ?? undefined,
-      hasAnySetScore:
-        formData.playerScores.some((n) => (n ?? 0) > 0) ||
-        formData.opponentScores.some((n) => (n ?? 0) > 0),
-    });
-    if (missing.labels.length > 0) {
-      setError(`Complete the required fields: ${missing.labels.join(", ")}.`);
-      return;
-    }
-
-    setIsCreating(true);
-    setError(null);
-
+    if (creatingRef.current) return;
+    creatingRef.current = true;
     try {
-      // Use the userId cached on modal open. Falls back to auth.getUser() only
-      // if the cache hasn't populated yet (race against modal open).
-      let userId = cachedUserIdRef.current;
-      if (!userId) {
-        const {
-          data: { user },
-          error: authError,
-        } = await supabase.auth.getUser();
-        if (authError || !user) throw new Error("Not authenticated");
-        userId = user.id;
-        cachedUserIdRef.current = userId;
-      }
-
-      // A preset line that has already been scored HAS a match — reuse it.
-      // Minting a second would give one court two results and count it twice in
-      // the dual's team score, which is the duplicate 22e's "fills 3 of 9"
-      // receipt exists to rule out.
-      // A line reached either way — pinned by the page, or offered on the
-      // details step and accepted — is the same destination.
-      const line = preset ?? attachedLine;
-      const matchId = line?.matchId ?? crypto.randomUUID();
-      const reusingMatch = Boolean(line?.matchId);
-
-      const adjustedPlayerScores = getAdjustedScores(
-        formData.playerScores,
-        formData.bestOf,
-        formData.numberOfSets,
-      );
-      const adjustedOpponentScores = getAdjustedScores(
-        formData.opponentScores,
-        formData.bestOf,
-        formData.numberOfSets,
-      );
-      // WHOSE match this is, which in a team workspace is not the uploader.
-      //
-      // The id `uploadEligibility()` resolved and nothing else: the picked
-      // roster profile's (`program_players.id`, the id
-      // `matches_block_client_regraft` checks against the roster), the
-      // viewer's own in a personal workspace, or null for a doubles line
-      // (`wizardUploadEligibility`). There is deliberately no `?? userId`
-      // here. Falling back to the uploader was the bug this replaces: it
-      // attributed an athlete's match to their coach, and since `player1_id`
-      // is half the `matches` SELECT policy, it also handed the coach read
-      // access the athlete then lost. `userId` below is the UPLOADER, and it
-      // goes to `created_by` only.
-      const playerUserId = eligibility.attribution;
-
-      const { winner, loser } = determineWinner(
-        adjustedPlayerScores,
-        adjustedOpponentScores,
-        parseInt(formData.bestOf),
-        playerUserId,
-        formData.playerName,
-        formData.opponentName,
-      );
-
-      const eventName =
-        formData.eventName ||
-        `${formData.playerName} vs ${formData.opponentName}`;
-
-      // Give the opponent an identity, when the uploader named their program.
-      //
-      // Best-effort and never blocking: `contribute_opponent_player` refuses
-      // when that program manages its own roster — correctly, since an outsider
-      // must not write to a live roster — and a refusal costs an opponent
-      // profile a data point, not the upload. The match is the record.
-      // A row picked from the opponent's roster already IS an identity, and it
-      // travelled with the click. Only a typed name goes through the RPC.
-      let opponentPlayerId: string | null = formData.opponentPlayerId ?? null;
-      if (
-        !opponentPlayerId &&
-        activeWorkspace.kind === "team" &&
-        formData.opponentProgramKey
-      ) {
-        try {
-          const { data: program } = await supabase
-            .from("programs")
-            .select("id")
-            .eq("program_key", formData.opponentProgramKey)
-            .maybeSingle();
-
-          const opponentProgramId =
-            (program as { id: string } | null)?.id ?? null;
-          const parts = formData.opponentName.trim().split(/\s+/);
-
-          // Both names or nothing. `contribute_opponent_player` requires them,
-          // and a single-token name ("Kim") is not an identity anyone else
-          // would converge on.
-          if (
-            opponentProgramId &&
-            opponentProgramId !== activeWorkspace.id &&
-            parts.length >= 2
-          ) {
-            const { data: contributed } = await supabase.rpc(
-              "contribute_opponent_player",
-              {
-                p_program_id: activeWorkspace.id,
-                p_opponent_program_id: opponentProgramId,
-                p_first_name: parts.slice(0, -1).join(" "),
-                p_last_name: parts[parts.length - 1],
-              },
-            );
-            opponentPlayerId = (contributed as string | null) ?? null;
-          }
-        } catch {
-          // See above — an identity is an enrichment, never a precondition.
-        }
-      }
-
-      const metadata: MatchMetadata = {
-        userId,
-        sourceProvider: selectedProvider,
-        // Video providers run computer-vision analysis; file imports carry
-        // electronic line-calling data the provider already computed.
-        analysisMethod: isProcessingProvider ? "ai" : "elc",
-        matchType: formData.matchType,
-        courtType: formData.courtType,
-        // NULL for a personal workspace, which is what the column means. The
-        // jobs route reads this back to pick the ledger, so a team upload has
-        // to carry the program or it silently bills the uploader.
-        programId: activeWorkspace.kind === "team" ? activeWorkspace.id : null,
-        opponentPlayerId,
-      };
-
-      const matchData = buildMatchData(
-        matchId,
-        { ...formData, eventName },
-        winner,
-        loser,
-        isPrivateMatch,
-        metadata,
-      );
-
-      // Camera context is only meaningful for video analysis.
-      const matchRow = isProcessingProvider
-        ? {
-            ...matchData,
-            fixed_camera: formData.fixedCamera ?? null,
-            initial_top_player_is_player1:
-              formData.initialTopPlayerIsPlayer1 ?? null,
-          }
-        : matchData;
-
-      // Fill vs create. A preset line whose match exists gets its score and the
-      // camera answers written onto the row it already has; everything else
-      // inserts. `event_entry_id` is what ties a new one back to its line.
-      const { data: written, error: matchError } = reusingMatch
-        ? await supabase
-            .from("matches")
-            .update({
-              score: matchRow.score,
-              player1_name: matchRow.player1_name,
-              player2_name: matchRow.player2_name,
-              // Only when one was resolved. Spreading it unconditionally would
-              // write null over an identity a previous pass established, which
-              // is worse than never having set it — the opponent's profile
-              // would lose the match rather than never gain it.
-              ...(opponentPlayerId
-                ? { opponent_player_id: opponentPlayerId }
-                : {}),
-              ...(isProcessingProvider
-                ? {
-                    fixed_camera: formData.fixedCamera ?? null,
-                    initial_top_player_is_player1:
-                      formData.initialTopPlayerIsPlayer1 ?? null,
-                  }
-                : {}),
-            })
-            .eq("id", matchId)
-            // `.select()` so an update that matched NO ROW is visible. This is
-            // a browser-client write against a policy of `auth.uid() =
-            // created_by`, and a coach filling a line somebody else recorded
-            // is not the creator — so RLS silently filtered the row out and
-            // PostgREST returned success with `error: null`. The score
-            // correction was discarded, and `fixed_camera` /
-            // `initial_top_player_is_player1` never persisted, which is
-            // exactly the fallback `/api/splitstep/jobs` reads when the wizard
-            // could not answer the camera questions. The submission then 400s
-            // permanently with nothing explaining why.
-            .select("id")
-        : await supabase
-            .from("matches")
-            .insert({ ...matchRow, event_entry_id: line?.entryId ?? null })
-            .select("id");
-
-      if (matchError) {
-        console.error("Supabase insert error:", matchError);
-        throw new Error(explainWriteFailure(matchError));
-      }
-
-      if (!written || written.length === 0) {
-        throw new Error(
-          reusingMatch
-            ? "This match belongs to someone else on the program, so we could not " +
-                "save the changes. Ask whoever recorded it to make them, or record " +
-                "a new result for this line."
-            : "The match could not be saved. Nothing was uploaded — try again.",
-        );
-      }
-
-      // Match row is in. Close the modal now so the user can move on; the file
-      // upload (1–10s for typical .xlsx) and downstream processing run in the
-      // background. The home page already shows a "match processing" toast
-      // driven by the match-created event + sessionStorage flag, so this is the
-      // user's signal that work is in flight.
-      clearStorageData();
-      // The draft, if one was saved, is done with. Best-effort: a row left
-      // behind is a stale Resume in the list, not a wrong match.
-      if (draftId) void deleteMatchDraft(draftId).catch(() => undefined);
-      // Store the real matchId (recent-activity reads this back as the id to poll for
-      // processing completion). Storing a literal "true" made the first-upload poll
-      // target a bogus id and never detect completion.
-      //
-      // Skipped for draft video jobs: the "analyzing" toast resolves on a
-      // match_stats INSERT, and a draft has nothing uploaded to produce one. It
-      // would sit spinning forever and reappear on every page load.
-      if (!isProcessingProvider) {
-        sessionStorage.setItem("match-processing", matchId);
-      }
-      window.dispatchEvent(
-        new CustomEvent("match-created", { detail: { matchId } }),
-      );
-      onCreated?.(matchId);
-
-      // Close the modal FIRST, then refresh after it has finished closing. The modal is
-      // a Radix dialog that locks <body> (pointer-events + scroll) while open. A
-      // refresh that re-renders the subtree hosting this open dialog tears it down
-      // mid-close so Radix never restores <body>, freezing the whole page. (Home's
-      // day-zero state used to be a separate subtree that unmounted wholesale on the
-      // first upload, which is how this was found.) Deferring past the 200ms close
-      // animation lets the dialog unmount and unlock <body> before anything swaps.
-      onOpenChange(false);
-      setTimeout(() => router.refresh(), 300);
-
-      // Video providers (e.g. Advantage Intelligence): record job & upload video
-      // to Azure. The sequence itself lives in
-      // `lib/services/splitstep/submit-match-video.ts` so the team upload
-      // wizard runs the same one per video rather than keeping a second copy of
-      // the invariants in guardrails 3.1.
-      if (processingStrategy) {
-        const startSeconds = formData.videoStartSeconds ?? 0;
-        const endSeconds = formData.videoEndSeconds ?? 0;
-        const videoFileToUpload = uploadedFile?.file;
-
-        let jobId: string;
-        try {
-          const job = await createProcessingJob({
-            supabase,
-            matchId,
-            userId,
-            provider: selectedProvider,
-            startSeconds,
-            endSeconds,
-            billableSeconds: processingStrategy.billableSeconds(
-              startSeconds,
-              endSeconds,
-            ),
-            hasFile: Boolean(videoFileToUpload),
-          });
-          jobId = job.id;
-        } catch (jobErr) {
-          console.error("Processing job insert error:", jobErr);
-          // Roll back the match row so the user gets a clean retry — but ONLY
-          // one this wizard just created. A personal match row exists purely to
-          // carry its video, so removing it is the clean retry; an event line's
-          // match is a recorded result that predates this upload, and deleting
-          // it would destroy a score somebody entered courtside.
-          //
-          // `matchId` then rides on the failure event ONLY if that row survived
-          // — see the note at the transfer-failure dispatch below.
-          await rollbackAndAnnounceFailure({
-            supabase,
-            matchId,
-            reusingMatch,
-            error:
-              jobErr instanceof Error
-                ? jobErr.message
-                : "Couldn't queue this match for analysis",
-          });
-          return;
-        }
-
-        // Background: the wizard has already closed by now.
-        if (videoFileToUpload) {
-          void uploadAndSubmitVideo({
-            supabase,
-            jobId,
-            matchId,
-            file: videoFileToUpload,
-            answers: {
-              initialTopPlayerIsPlayer1: formData.initialTopPlayerIsPlayer1,
-              adScoring: formData.adScoring,
-              fixedCamera: formData.fixedCamera,
-            },
-            onEvent: (event) => onVideoUpload?.(event),
-            onTransferFailed: (message) => {
-              /**
-               * THE RULE FOR `matchId` ON THIS EVENT, stated once here because
-               * all three dispatch sites answer to it:
-               *
-               * `matchId` is a PROMISE THAT THE MATCH IS THERE. The listener
-               * turns it into "Open the match" on the failure toast, so sending
-               * one for a row that is gone is worse than sending none — the
-               * person clicks the only thing the notice offers and lands on
-               * "Match not found", which reads as a second, unrelated fault.
-               *
-               * This site keeps it: the transfer is what failed, and the match
-               * row and its processing job are both still standing. The two
-               * rollback sites send it only when their delete left the row in
-               * place. Nothing else about the event changes.
-               */
-              window.dispatchEvent(
-                new CustomEvent("match-upload-failed", {
-                  detail: { matchId, error: message },
-                }),
-              );
-            },
-          });
-        }
-
+      if (!formData || !uploadedFile?.file) {
+        setError("Please complete all required fields and upload a file.");
         return;
       }
 
-      // Background upload. On failure, surface via a custom event so the
-      // toast/banner system can react without the modal needing to stay open.
-      const fileToUpload = uploadedFile.file;
-      const providerId = selectedProvider;
-      void (async () => {
-        try {
-          const fd = new FormData();
-          fd.append("file", fileToUpload);
-          fd.append("matchId", matchId);
-          fd.append("providerId", providerId);
-          const response = await fetch("/api/upload", {
-            method: "POST",
-            body: fd,
-          });
-          const result = await response.json();
-          if (!response.ok || !result.success) {
-            throw new Error(result.error || "Upload failed");
-          }
-        } catch (err) {
-          console.error("Background file upload error:", err);
-          // Roll back the phantom match row so the user has a clean retry path.
-          // Same exemption as above: never delete a row that already carried a
-          // result before this upload started.
-          //
-          // And the same rule for the link: an import match with no file behind
-          // it is a row of zeroes, so once the rollback removes it there is
-          // nothing to offer.
-          await rollbackAndAnnounceFailure({
-            supabase,
-            matchId,
-            reusingMatch,
-            error: err instanceof Error ? err.message : "Upload failed",
-          });
+      if (!selectedProvider) {
+        setError("Please select a provider.");
+        return;
+      }
+
+      // The last ask, at the write — and the one place this re-reads the
+      // program's approval fresh rather than trusting the memo, because a
+      // submit is the moment "recheck eligibility" (T13) most matters: a claim
+      // approved or suspended while this tab sat open must not be decided on
+      // whatever `programs.status` looked like when the page loaded. The same
+      // decision the two Continue handlers made, from the same
+      // `eligibilityInput`, with just the approval reading replaced by this
+      // call's own answer — a program that went pending, a profile archived, a
+      // roster that failed to load since — none of them get a row. A retryable
+      // refusal is a reading not yet obtained, and it is shown as the
+      // contract's sentence here too, because there is no later step.
+      const freshApproval = await refreshApproval();
+      const freshEligibility = wizardUploadEligibility({
+        ...eligibilityInput,
+        approval: freshApproval ?? approvalReading,
+      });
+      if (!freshEligibility.ok) {
+        setError(freshEligibility.message);
+        return;
+      }
+      if (
+        isUploading ||
+        isProbing ||
+        parsingState.isParsing ||
+        uploadError ||
+        importIdentityBlocked ||
+        (!isProcessingProvider &&
+          parsedImport?.generation !== fileGenerationRef.current)
+      ) {
+        setError(
+          identityMessage ??
+            uploadError ??
+            "Wait for the file check to finish.",
+        );
+        return;
+      }
+      const missing = collectMatchCompletionRequirements({
+        ...formData,
+        isProcessingProvider,
+        playerSubjectIsRoster: matchSubject?.kind === "roster",
+        adScoring: formData.adScoring ?? undefined,
+        fixedCamera: formData.fixedCamera ?? undefined,
+        initialTopPlayerIsPlayer1:
+          formData.initialTopPlayerIsPlayer1 ?? undefined,
+        hasAnySetScore:
+          formData.playerScores.some((n) => (n ?? 0) > 0) ||
+          formData.opponentScores.some((n) => (n ?? 0) > 0),
+      });
+      if (missing.labels.length > 0) {
+        setError(`Complete the required fields: ${missing.labels.join(", ")}.`);
+        return;
+      }
+
+      setIsCreating(true);
+      setError(null);
+
+      try {
+        // Use the userId cached on modal open. Falls back to auth.getUser() only
+        // if the cache hasn't populated yet (race against modal open).
+        let userId = cachedUserIdRef.current;
+        if (!userId) {
+          const {
+            data: { user },
+            error: authError,
+          } = await supabase.auth.getUser();
+          if (authError || !user) throw new Error("Not authenticated");
+          userId = user.id;
+          cachedUserIdRef.current = userId;
         }
-      })();
-    } catch (e: any) {
-      console.error("Error creating match:", e);
-      const errorMessage =
-        e?.message ||
-        e?.error?.message ||
-        e?.details ||
-        e?.hint ||
-        JSON.stringify(e) ||
-        "Failed to create match. Please try again.";
-      setError(errorMessage);
+
+        // A preset line that has already been scored HAS a match — reuse it.
+        // Minting a second would give one court two results and count it twice in
+        // the dual's team score, which is the duplicate 22e's "fills 3 of 9"
+        // receipt exists to rule out.
+        // A line reached either way — pinned by the page, or offered on the
+        // details step and accepted — is the same destination.
+        const line = preset ?? attachedLine;
+        const matchId = line?.matchId ?? crypto.randomUUID();
+        const reusingMatch = Boolean(line?.matchId);
+
+        const adjustedPlayerScores = getAdjustedScores(
+          formData.playerScores,
+          formData.bestOf,
+          formData.numberOfSets,
+        );
+        const adjustedOpponentScores = getAdjustedScores(
+          formData.opponentScores,
+          formData.bestOf,
+          formData.numberOfSets,
+        );
+        // WHOSE match this is, which in a team workspace is not the uploader.
+        //
+        // The id `uploadEligibility()` resolved and nothing else: the picked
+        // roster profile's (`program_players.id`, the id
+        // `matches_block_client_regraft` checks against the roster), the
+        // viewer's own in a personal workspace, or null for a doubles line
+        // (`wizardUploadEligibility`). There is deliberately no `?? userId`
+        // here. Falling back to the uploader was the bug this replaces: it
+        // attributed an athlete's match to their coach, and since `player1_id`
+        // is half the `matches` SELECT policy, it also handed the coach read
+        // access the athlete then lost. `userId` below is the UPLOADER, and it
+        // goes to `created_by` only. From `freshEligibility`, not the memo —
+        // the value this call just re-decided the write on.
+        const playerUserId = freshEligibility.attribution;
+
+        const { winner, loser } = determineWinner(
+          adjustedPlayerScores,
+          adjustedOpponentScores,
+          parseInt(formData.bestOf),
+          playerUserId,
+          formData.playerName,
+          formData.opponentName,
+        );
+
+        const eventName =
+          formData.eventName ||
+          `${formData.playerName} vs ${formData.opponentName}`;
+
+        // Give the opponent an identity, when the uploader named their program.
+        //
+        // Best-effort and never blocking: `contribute_opponent_player` refuses
+        // when that program manages its own roster — correctly, since an outsider
+        // must not write to a live roster — and a refusal costs an opponent
+        // profile a data point, not the upload. The match is the record.
+        // A row picked from the opponent's roster already IS an identity, and it
+        // travelled with the click. Only a typed name goes through the RPC.
+        let opponentPlayerId: string | null = formData.opponentPlayerId ?? null;
+        if (
+          !opponentPlayerId &&
+          activeWorkspace.kind === "team" &&
+          formData.opponentProgramKey
+        ) {
+          try {
+            const { data: program } = await supabase
+              .from("programs")
+              .select("id")
+              .eq("program_key", formData.opponentProgramKey)
+              .maybeSingle();
+
+            const opponentProgramId =
+              (program as { id: string } | null)?.id ?? null;
+            const parts = formData.opponentName.trim().split(/\s+/);
+
+            // Both names or nothing. `contribute_opponent_player` requires them,
+            // and a single-token name ("Kim") is not an identity anyone else
+            // would converge on.
+            if (
+              opponentProgramId &&
+              opponentProgramId !== activeWorkspace.id &&
+              parts.length >= 2
+            ) {
+              const { data: contributed } = await supabase.rpc(
+                "contribute_opponent_player",
+                {
+                  p_program_id: activeWorkspace.id,
+                  p_opponent_program_id: opponentProgramId,
+                  p_first_name: parts.slice(0, -1).join(" "),
+                  p_last_name: parts[parts.length - 1],
+                },
+              );
+              opponentPlayerId = (contributed as string | null) ?? null;
+            }
+          } catch {
+            // See above — an identity is an enrichment, never a precondition.
+          }
+        }
+
+        const metadata: MatchMetadata = {
+          userId,
+          sourceProvider: selectedProvider,
+          // Video providers run computer-vision analysis; file imports carry
+          // electronic line-calling data the provider already computed.
+          analysisMethod: isProcessingProvider ? "ai" : "elc",
+          matchType: formData.matchType,
+          courtType: formData.courtType,
+          // NULL for a personal workspace, which is what the column means. The
+          // jobs route reads this back to pick the ledger, so a team upload has
+          // to carry the program or it silently bills the uploader.
+          programId:
+            activeWorkspace.kind === "team" ? activeWorkspace.id : null,
+          opponentPlayerId,
+        };
+
+        const matchData = buildMatchData(
+          matchId,
+          { ...formData, eventName },
+          winner,
+          loser,
+          isPrivateMatch,
+          metadata,
+        );
+
+        // Camera context is only meaningful for video analysis.
+        const matchRow = isProcessingProvider
+          ? {
+              ...matchData,
+              fixed_camera: formData.fixedCamera ?? null,
+              initial_top_player_is_player1:
+                formData.initialTopPlayerIsPlayer1 ?? null,
+            }
+          : matchData;
+
+        // Fill vs create. A preset line whose match exists gets its score and the
+        // camera answers written onto the row it already has; everything else
+        // inserts. `event_entry_id` is what ties a new one back to its line.
+        const { data: written, error: matchError } = reusingMatch
+          ? await supabase
+              .from("matches")
+              .update({
+                score: matchRow.score,
+                player1_name: matchRow.player1_name,
+                player2_name: matchRow.player2_name,
+                // Only when one was resolved. Spreading it unconditionally would
+                // write null over an identity a previous pass established, which
+                // is worse than never having set it — the opponent's profile
+                // would lose the match rather than never gain it.
+                ...(opponentPlayerId
+                  ? { opponent_player_id: opponentPlayerId }
+                  : {}),
+                ...(isProcessingProvider
+                  ? {
+                      fixed_camera: formData.fixedCamera ?? null,
+                      initial_top_player_is_player1:
+                        formData.initialTopPlayerIsPlayer1 ?? null,
+                    }
+                  : {}),
+              })
+              .eq("id", matchId)
+              // `.select()` so an update that matched NO ROW is visible. This is
+              // a browser-client write against a policy of `auth.uid() =
+              // created_by`, and a coach filling a line somebody else recorded
+              // is not the creator — so RLS silently filtered the row out and
+              // PostgREST returned success with `error: null`. The score
+              // correction was discarded, and `fixed_camera` /
+              // `initial_top_player_is_player1` never persisted, which is
+              // exactly the fallback `/api/splitstep/jobs` reads when the wizard
+              // could not answer the camera questions. The submission then 400s
+              // permanently with nothing explaining why.
+              .select("id")
+          : await supabase
+              .from("matches")
+              .insert({ ...matchRow, event_entry_id: line?.entryId ?? null })
+              .select("id");
+
+        if (matchError) {
+          console.error("Supabase insert error:", matchError);
+          throw new Error(explainWriteFailure(matchError));
+        }
+
+        if (!written || written.length === 0) {
+          throw new Error(
+            reusingMatch
+              ? "This match belongs to someone else on the program, so we could not " +
+                  "save the changes. Ask whoever recorded it to make them, or record " +
+                  "a new result for this line."
+              : "The match could not be saved. Nothing was uploaded — try again.",
+          );
+        }
+
+        // Match row is in. Close the modal now so the user can move on; the file
+        // upload (1–10s for typical .xlsx) and downstream processing run in the
+        // background. The home page already shows a "match processing" toast
+        // driven by the match-created event + sessionStorage flag, so this is the
+        // user's signal that work is in flight.
+        clearStorageData();
+        // The draft, if one was saved, is done with. Best-effort: a row left
+        // behind is a stale Resume in the list, not a wrong match.
+        if (draftId) void deleteMatchDraft(draftId).catch(() => undefined);
+        // Store the real matchId (recent-activity reads this back as the id to poll for
+        // processing completion). Storing a literal "true" made the first-upload poll
+        // target a bogus id and never detect completion.
+        //
+        // Skipped for draft video jobs: the "analyzing" toast resolves on a
+        // match_stats INSERT, and a draft has nothing uploaded to produce one. It
+        // would sit spinning forever and reappear on every page load.
+        if (!isProcessingProvider) {
+          sessionStorage.setItem("match-processing", matchId);
+        }
+        window.dispatchEvent(
+          new CustomEvent("match-created", { detail: { matchId } }),
+        );
+        onCreated?.(matchId);
+
+        // Close the modal FIRST, then refresh after it has finished closing. The modal is
+        // a Radix dialog that locks <body> (pointer-events + scroll) while open. A
+        // refresh that re-renders the subtree hosting this open dialog tears it down
+        // mid-close so Radix never restores <body>, freezing the whole page. (Home's
+        // day-zero state used to be a separate subtree that unmounted wholesale on the
+        // first upload, which is how this was found.) Deferring past the 200ms close
+        // animation lets the dialog unmount and unlock <body> before anything swaps.
+        onOpenChange(false);
+        setTimeout(() => router.refresh(), 300);
+
+        // Video providers (e.g. Advantage Intelligence): record job & upload video
+        // to Azure. The sequence itself lives in
+        // `lib/services/splitstep/submit-match-video.ts` so the team upload
+        // wizard runs the same one per video rather than keeping a second copy of
+        // the invariants in guardrails 3.1.
+        if (processingStrategy) {
+          const startSeconds = formData.videoStartSeconds ?? 0;
+          const endSeconds = formData.videoEndSeconds ?? 0;
+          const videoFileToUpload = uploadedFile?.file;
+
+          let jobId: string;
+          try {
+            const job = await createProcessingJob({
+              supabase,
+              matchId,
+              userId,
+              provider: selectedProvider,
+              startSeconds,
+              endSeconds,
+              billableSeconds: processingStrategy.billableSeconds(
+                startSeconds,
+                endSeconds,
+              ),
+              hasFile: Boolean(videoFileToUpload),
+            });
+            jobId = job.id;
+          } catch (jobErr) {
+            console.error("Processing job insert error:", jobErr);
+            // Roll back the match row so the user gets a clean retry — but ONLY
+            // one this wizard just created. A personal match row exists purely to
+            // carry its video, so removing it is the clean retry; an event line's
+            // match is a recorded result that predates this upload, and deleting
+            // it would destroy a score somebody entered courtside.
+            //
+            // `matchId` then rides on the failure event ONLY if that row survived
+            // — see the note at the transfer-failure dispatch below.
+            await rollbackAndAnnounceFailure({
+              supabase,
+              matchId,
+              reusingMatch,
+              error:
+                jobErr instanceof Error
+                  ? jobErr.message
+                  : "Couldn't queue this match for analysis",
+            });
+            return;
+          }
+
+          // Background: the wizard has already closed by now.
+          if (videoFileToUpload) {
+            void uploadAndSubmitVideo({
+              supabase,
+              jobId,
+              matchId,
+              file: videoFileToUpload,
+              answers: {
+                initialTopPlayerIsPlayer1: formData.initialTopPlayerIsPlayer1,
+                adScoring: formData.adScoring,
+                fixedCamera: formData.fixedCamera,
+              },
+              onEvent: (event) => onVideoUpload?.(event),
+              onTransferFailed: (message) => {
+                /**
+                 * THE RULE FOR `matchId` ON THIS EVENT, stated once here because
+                 * all three dispatch sites answer to it:
+                 *
+                 * `matchId` is a PROMISE THAT THE MATCH IS THERE. The listener
+                 * turns it into "Open the match" on the failure toast, so sending
+                 * one for a row that is gone is worse than sending none — the
+                 * person clicks the only thing the notice offers and lands on
+                 * "Match not found", which reads as a second, unrelated fault.
+                 *
+                 * This site keeps it: the transfer is what failed, and the match
+                 * row and its processing job are both still standing. The two
+                 * rollback sites send it only when their delete left the row in
+                 * place. Nothing else about the event changes.
+                 */
+                window.dispatchEvent(
+                  new CustomEvent("match-upload-failed", {
+                    detail: { matchId, error: message },
+                  }),
+                );
+              },
+            });
+          }
+
+          return;
+        }
+
+        // Background upload. On failure, surface via a custom event so the
+        // toast/banner system can react without the modal needing to stay open.
+        const fileToUpload = uploadedFile.file;
+        const providerId = selectedProvider;
+        void (async () => {
+          try {
+            const fd = new FormData();
+            fd.append("file", fileToUpload);
+            fd.append("matchId", matchId);
+            fd.append("providerId", providerId);
+            const response = await fetch("/api/upload", {
+              method: "POST",
+              body: fd,
+            });
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+              throw new Error(result.error || "Upload failed");
+            }
+          } catch (err) {
+            console.error("Background file upload error:", err);
+            // Roll back the phantom match row so the user has a clean retry path.
+            // Same exemption as above: never delete a row that already carried a
+            // result before this upload started.
+            //
+            // And the same rule for the link: an import match with no file behind
+            // it is a row of zeroes, so once the rollback removes it there is
+            // nothing to offer.
+            await rollbackAndAnnounceFailure({
+              supabase,
+              matchId,
+              reusingMatch,
+              error: err instanceof Error ? err.message : "Upload failed",
+            });
+          }
+        })();
+      } catch (e: any) {
+        console.error("Error creating match:", e);
+        const errorMessage =
+          e?.message ||
+          e?.error?.message ||
+          e?.details ||
+          e?.hint ||
+          JSON.stringify(e) ||
+          "Failed to create match. Please try again.";
+        setError(errorMessage);
+      } finally {
+        setIsCreating(false);
+      }
     } finally {
-      setIsCreating(false);
+      creatingRef.current = false;
     }
     // activeWorkspace is in here on purpose: a coach who switches workspaces
     // with the wizard open must not create the match against the one they left.
@@ -2460,7 +2650,9 @@ export function useUploadMatchWizard({
     preset,
     attachedLine,
     draftId,
-    eligibility,
+    eligibilityInput,
+    approvalReading,
+    refreshApproval,
     matchSubject,
     isUploading,
     isProbing,
@@ -2558,6 +2750,7 @@ export function useUploadMatchWizard({
       choose: chooseMatchSubject,
     },
     eligibility,
+    retryEligibility,
     handleScoreChange,
     handleTiebreakChange,
 

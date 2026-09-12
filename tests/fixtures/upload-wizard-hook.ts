@@ -63,6 +63,17 @@ export function uploadWizardHarness(
     /** A roster RPC failure: `{ error }` instead of rows. */
     rosterError?: string;
     /**
+     * Successive answers to a live `programs.status` read
+     * (`refreshApproval()`), consumed in call order and the last one held
+     * once exhausted. An entry of `"error"` is a failed read (`{ error }`,
+     * mapped to `"unknown"`). Defaults to one read of the workspace's own
+     * `programStatus`, so a spec that never calls `refreshApproval()` need
+     * not set this.
+     */
+    programStatusReads?: (
+      "unclaimed" | "claim_pending" | "active" | "suspended" | "error"
+    )[];
+    /**
      * The viewer's own live `program_players` row, as the hook's direct read
      * returns it — the owner-who-plays case the RPC leaves out.
      */
@@ -189,14 +200,51 @@ export function uploadWizardHarness(
       },
     },
   );
+  // `refreshApproval()`'s read of `programs.status` (T13). Each call
+  // consumes the next entry of `programStatusReads`, holding the last one
+  // once exhausted, so a spec can script "unknown, then active" for a Retry.
+  let rosterRpcCallCount = 0;
+  let programStatusCallCount = 0;
+  const programStatusReads = options.programStatusReads ?? [
+    (active.programStatus ?? "active") as
+      "unclaimed" | "claim_pending" | "active" | "suspended",
+  ];
+  const programStatusQuery: any = new Proxy(
+    {},
+    {
+      get: (_, key) => {
+        if (key === "single" || key === "maybeSingle") {
+          return async () => {
+            const index = Math.min(
+              programStatusCallCount,
+              programStatusReads.length - 1,
+            );
+            programStatusCallCount++;
+            const read = programStatusReads[index];
+            if (read === "error") {
+              return { data: null, error: { message: "network error" } };
+            }
+            return { data: { status: read }, error: null };
+          };
+        }
+        return () => programStatusQuery;
+      },
+    },
+  );
   const supabase = {
     auth: { getUser: async () => ({ data: { user: { id: "user" } } }) },
     from: (table: string) =>
-      table === "program_players" ? ownProfileQuery : query,
-    rpc: async () =>
-      options.rosterError
+      table === "program_players"
+        ? ownProfileQuery
+        : table === "programs"
+          ? programStatusQuery
+          : query,
+    rpc: async () => {
+      rosterRpcCallCount++;
+      return options.rosterError
         ? { data: null, error: { message: options.rosterError } }
-        : { data: roster, error: null },
+        : { data: roster, error: null };
+    },
   };
   const dependencies: Record<string, unknown> = {
     react,
@@ -340,6 +388,12 @@ export function uploadWizardHarness(
   return {
     get current() {
       return current;
+    },
+    get programStatusCallCount() {
+      return programStatusCallCount;
+    },
+    get rosterRpcCallCount() {
+      return rosterRpcCallCount;
     },
     workspace,
     props,
