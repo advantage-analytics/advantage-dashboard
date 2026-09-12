@@ -16,8 +16,9 @@ import {
  * header, spacing and footer. This is that structure once.
  *
  * ── Why 520 rather than the DS's 440 ────────────────────────────────────────
- * The design system's Dialog (v3) spec (`.skills/advantage-analytics-design/
- * SKILL.md` § Dialog) gives form dialogs `w-[440px]` and reserves `w-[520px]`
+ * The design system's Dialog (v3) spec
+ * (`.skills/advantage-analytics-design/reference/chrome.md` § Dialog) gives
+ * form dialogs `w-[440px]` and reserves `w-[520px]`
  * for compare dialogs. The roster's forms carry more rows than the v3 form
  * dialog anticipates, so this shell now defaults to the DS's own compare-
  * dialog width instead of inventing a new number.
