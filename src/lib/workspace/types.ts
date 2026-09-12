@@ -16,6 +16,8 @@
  * entitlement out of a field nothing validates.
  */
 
+import type { ProgramStatus } from "@/lib/services/programs/claim-state";
+
 /** A member's standing inside a team workspace. Personal is always `owner`. */
 export type ProgramRole = "owner" | "coach" | "staff" | "player";
 
@@ -115,6 +117,24 @@ export interface Workspace {
    * questions about the same program.
    */
   canSubmitVideo: boolean;
+  /**
+   * `programs.status` as the server read it — the column `canSubmitVideo` is
+   * derived from, carried raw. Null for a personal workspace, which has no
+   * program row.
+   *
+   * Here because the boolean above answers one question ("may the budget be
+   * spent") and collapses two different reasons for "no": a `claim_pending`
+   * program is waiting on a person, a `suspended` one is not. The upload
+   * wizard has to tell those apart — "your team is awaiting approval" is a
+   * false statement on a suspended program — and the boolean cannot say which.
+   * `uploadEligibility()` in `upload-eligibility.ts` is the reader; the video
+   * seams keep reading `canSubmitVideo`, because theirs is the one-question
+   * version.
+   *
+   * Derived in the same constructor as `canSubmitVideo`, from the same select,
+   * so the two cannot disagree without the constructor itself being wrong.
+   */
+  programStatus: ProgramStatus | null;
   /**
    * `programs.players_can_upload` — may this program's *players* send video,
    * or only its staff?
@@ -389,6 +409,14 @@ export function pendingReviewRefusal(
  * concerned. Copy lives here for the same reason `workspaceSubtitle()` and
  * `teamLabel()` do — the rule and the way it is explained change together or
  * they drift.
+ *
+ * This is the VIDEO question — may the allowance be spent. "May a match be
+ * recorded here at all, and for whom" is a different one that an import asks
+ * too, and it lives in `upload-eligibility.ts` (`uploadEligibility()`), which
+ * reuses `canUploadForProgram()` for the role half and never reads
+ * `canSubmitVideo`. The two seams stay separate on purpose: a pending program
+ * must block every upload, not only the ones that cost minutes — which is
+ * what T12-T16 wire that function in to do.
  */
 export function explainVideoRefusal(workspace: Workspace): string | null {
   if (workspace.kind !== "team") return null;

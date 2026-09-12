@@ -44,6 +44,7 @@ const workspace: WorkspaceContextValue = {
     role: "owner",
     mark: "WR",
     canSubmitVideo: true,
+    programStatus: null,
     playersCanUpload: false,
     memberUploadEnabled: true,
     uploadPolicy: "everyone",

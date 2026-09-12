@@ -708,6 +708,7 @@ async function resolveAutoRetryWorkspace(params: {
       role: "owner",
       mark: "",
       canSubmitVideo: true,
+      programStatus: null,
       playersCanUpload: false,
       uploadPolicy: "everyone",
       memberUploadEnabled: true,
@@ -765,6 +766,9 @@ async function resolveAutoRetryWorkspace(params: {
     // settled. A claim rejected or paused since the original submission
     // reads false here, exactly as it would for a fresh manual submission.
     canSubmitVideo: program.status === "active",
+    // Raw, for the same reason listProgramWorkspaces() carries it; not read
+    // by `reserveQuota()`, which asks the boolean above.
+    programStatus: program.status as Workspace["programStatus"],
     playersCanUpload: program.players_can_upload,
     uploadPolicy: program.upload_policy as Workspace["uploadPolicy"],
     memberUploadEnabled: Boolean(row.upload_enabled),

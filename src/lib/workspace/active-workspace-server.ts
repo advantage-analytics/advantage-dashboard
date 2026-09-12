@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { getInitials } from "@/lib/data/match-utils";
+import type { ProgramStatus } from "@/lib/services/programs/claim-state";
 import type {
   ProgramOrgType,
   ProgramRole,
@@ -46,6 +47,8 @@ function personalWorkspace(viewer: Viewer): Workspace {
     role: "owner",
     mark: viewer.initials,
     canSubmitVideo: true,
+    // No program row, so no status to carry — see `Workspace.programStatus`.
+    programStatus: null,
     // A program-wide policy about *other* people, in a workspace whose only
     // member is its owner. False is the honest value; `canUploadForProgram()`
     // never consults it here because it answers on `kind` first.
@@ -186,6 +189,10 @@ async function listProgramWorkspaces(
         // whose video submission waits — see /claim/review, which promises
         // exactly that.
         canSubmitVideo: program.status === "active",
+        // The same column, raw, for the reader that needs to know WHICH
+        // non-active state this is. The CHECK pins the value set, so the cast
+        // is a naming ceremony — see `Workspace.programStatus`.
+        programStatus: program.status as ProgramStatus,
         // The program's own answer to "anyone, or coaches?" from Team
         // settings. Read here rather than at the page, so the upload page's
         // gate and the switcher's `landingPath()` are looking at one value
