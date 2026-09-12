@@ -100,7 +100,7 @@ ready).
 
 ## T7 · Show import identity confirmation
 
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **reasoning:** medium
 - **needs:** T6

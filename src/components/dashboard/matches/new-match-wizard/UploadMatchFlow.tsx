@@ -47,6 +47,8 @@ import { WizardShell, CONTENT_CLS } from "./WizardShell";
 import { useWizardKeys } from "./useWizardKeys";
 import { SourceStepContent } from "./SourceStepContent";
 import { FileStepContent } from "./FileStepContent";
+import { ImportIdentityNotice } from "./ImportIdentityNotice";
+import { wizardContinueBlocked } from "./validation";
 import { TrimStepContent } from "./TrimStepContent";
 import { DetailsStepContent } from "./DetailsStepContent";
 import { PinnedLineBar } from "./PinnedLineBar";
@@ -605,6 +607,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     uploadError,
     formData,
     parsingState,
+    importIdentity,
     handleProviderSelect,
     handleProviderContinue,
     handleFileContinue,
@@ -871,7 +874,32 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
 
   const stepBusy = busyLabel[step];
   const gatedByMissing = step === "match" && missing.labels.length > 0;
-  const continueDisabled = stepBusy !== null || gatedByMissing;
+  /**
+   * Is the identity question on screen right now?
+   *
+   * The gate below disables Continue only while it is. `importIdentity.blocked`
+   * is true for other reasons too — no file yet, an export that would not parse
+   * — and those are already refused by `handleFileContinue` with a sentence.
+   * Disabling the button for them would take the sentence away and leave a dead
+   * control with no explanation; disabling it for the notice is the opposite,
+   * because the notice IS the explanation and the two answers sit in it.
+   */
+  const identityNoticeVisible =
+    step === "file" &&
+    !isProcessingProvider &&
+    importIdentity.comparison?.requiresConfirmation === true;
+
+  // One value, two ways forward: the footer button below is disabled by it and
+  // `useWizardKeys` refuses plain Enter on it, so a keyboard user can never
+  // pass a gate a clicking user cannot. `wizardContinueBlocked` is pure and
+  // lives in `validation.ts` so that claim is tested, not asserted. Whatever
+  // slips past it meets the same facts again in the handler.
+  const continueDisabled = wizardContinueBlocked({
+    step,
+    busy: stepBusy !== null,
+    missingMatchAnswers: missing.labels.length > 0,
+    importIdentityBlocked: identityNoticeVisible && importIdentity.blocked,
+  });
 
   useWizardKeys({
     contentRef,
@@ -998,27 +1026,60 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
           the handlers differ because a video is probed locally and an
           export is validated and read. */}
       {step === "file" && (
-        <FileStepContent
-          kind={isProcessingProvider ? "processing" : "import"}
-          selectedProvider={selectedProvider}
-          subjectFirstName={subjectFirstName}
-          uploadedFile={uploadedFile}
-          probe={videoProbe}
-          warnings={isProcessingProvider ? videoWarnings : []}
-          busy={isProbing || isUploading || parsingState.isParsing}
-          error={uploadError}
-          parsingState={parsingState}
-          formData={formData}
-          acceptString={acceptString}
-          isOver={isOver}
-          onDragOver={onDragOver}
-          onDragLeave={onDragLeave}
-          onDrop={isProcessingProvider ? onVideoDrop : handleDrop}
-          onFileChange={
-            isProcessingProvider ? onVideoFileChange : handleFileChange
-          }
-          onRemove={isProcessingProvider ? handleRemoveVideo : handleRemoveFile}
-        />
+        /* The identity notice is a SIBLING of the step content, in the step's
+           own 36px rhythm — it sits after "Found in the export", where the two
+           names it is asking about have just been shown, and above nothing, so
+           it can never cover the drop zone's error strip or the parse
+           progress. The column exists because `WizardShell`'s content slot is
+           a plain div with no gap of its own. */
+        <div className="flex flex-col gap-9">
+          <FileStepContent
+            kind={isProcessingProvider ? "processing" : "import"}
+            selectedProvider={selectedProvider}
+            subjectFirstName={subjectFirstName}
+            uploadedFile={uploadedFile}
+            probe={videoProbe}
+            warnings={isProcessingProvider ? videoWarnings : []}
+            busy={isProbing || isUploading || parsingState.isParsing}
+            error={uploadError}
+            parsingState={parsingState}
+            formData={formData}
+            acceptString={acceptString}
+            isOver={isOver}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={isProcessingProvider ? onVideoDrop : handleDrop}
+            onFileChange={
+              isProcessingProvider ? onVideoFileChange : handleFileChange
+            }
+            onRemove={
+              isProcessingProvider ? handleRemoveVideo : handleRemoveFile
+            }
+          />
+          {identityNoticeVisible && importIdentity.comparison && (
+            <ImportIdentityNotice
+              comparison={importIdentity.comparison}
+              workspaceKind={
+                workspaces.active.kind === "team" ? "team" : "personal"
+              }
+              rejected={importIdentity.rejected}
+              onConfirm={importIdentity.confirm}
+              onReject={importIdentity.reject}
+              /* Clearing the file is the reset: `handleRemoveFile` bumps the
+                 file generation, which drops the parse, the answer and this
+                 notice with it. */
+              onChangeFile={handleRemoveFile}
+              /* Step 1 owns the who-played question, so "Change player" is
+                 Back — and only where there is a choice: a preset already
+                 named the athlete, and a personal workspace has one. */
+              onChangePlayer={
+                workspaces.active.kind === "team" && !preset
+                  ? handleBack
+                  : undefined
+              }
+            />
+          )}
+        </div>
       )}
 
       {step === "trim" && (

@@ -2,6 +2,7 @@ import { normalizedPersonName } from "@/lib/data/person-name";
 
 import type {
   IdentityConfirmationScope,
+  Step,
   IdentityMatchSnapshot,
   IdentityMatchStatus,
   MissingMatchRequirements,
@@ -124,4 +125,28 @@ export function collectMatchCompletionRequirements(
     labels,
     onlyVideoAnswers,
   };
+}
+
+/**
+ * Whether Continue is unavailable, as one value.
+ *
+ * Both ways forward read this: `WizardShell` disables the footer button with
+ * it, and `useWizardKeys` refuses plain Enter on it. Keeping the composition
+ * here — rather than inline in the flow component — is what makes "click and
+ * keyboard cannot disagree" a testable statement rather than a reading of two
+ * call sites. The handlers in `useUploadMatchWizard` re-check the same facts
+ * at the moment of the write; this is the earlier, visible half.
+ */
+export function wizardContinueBlocked(input: {
+  step: Step;
+  /** A step-scoped busy label — probing, uploading, parsing, saving. */
+  busy: boolean;
+  /** The match step's unanswered-requirements gate. */
+  missingMatchAnswers: boolean;
+  /** `ImportIdentityState.blocked` — an unread, unconfirmed or refused import. */
+  importIdentityBlocked: boolean;
+}): boolean {
+  if (input.busy) return true;
+  if (input.step === "match" && input.missingMatchAnswers) return true;
+  return input.step === "file" && input.importIdentityBlocked;
 }
