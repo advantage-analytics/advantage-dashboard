@@ -15,8 +15,10 @@
  * 14px value with one text-micro subline, and a hairline rule that goes 2px
  * Signal Blue on the field being worked. The two fields with menus open the
  * EntitySelect grammar: 12px radius, 6px padding, one quiet sentence-case
- * section label, rows on an 8px radius with the surface-subtle wash on the
- * current pick.
+ * section label, rows on an 8px radius. The chosen row is marked by a 13px
+ * Signal Blue check and nothing else — surface-subtle is pointer hover for an
+ * unchosen row and keyboard focus for any row, never a standing fill on the
+ * pick (`ui/float-menu.tsx` is where that rule lives).
  *
  * "Upload for a teammate" is not a mode switch. It moves the workspace to the
  * team — in place, so the step underneath survives — leaves the other two
@@ -543,9 +545,8 @@ function SourceStepContentImpl({
                     }}
                     className={cn(
                       "flex h-[38px] w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-2.5 text-left transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60",
-                      isActive
-                        ? "bg-[var(--surface-subtle)]"
-                        : "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]",
+                      "focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none",
+                      !isActive && "hover:bg-[var(--surface-subtle)]",
                     )}
                   >
                     <span
@@ -826,14 +827,13 @@ function SourceStepContentImpl({
                   }}
                   className={cn(
                     "flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-element)] px-2.5 py-[9px] text-left transition-colors duration-150 focus-visible:outline-none",
-                    isCurrent
-                      ? "bg-[var(--surface-subtle)]"
-                      : "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]",
+                    "focus-visible:bg-[var(--surface-subtle)]",
+                    !isCurrent && "hover:bg-[var(--surface-subtle)]",
                   )}
                 >
                   <SourceMark provider={provider} size={26} />
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="text-[13px] font-medium text-[var(--ink-900)]">
+                    <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
                       {copy.label}
                     </span>
                     <span className="truncate text-[11px] text-[var(--ink-500)]">
@@ -888,9 +888,8 @@ function RosterRow({
       onClick={onChoose}
       className={cn(
         "flex h-[38px] w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-2.5 text-left transition-colors duration-150 focus-visible:outline-none",
-        chosen
-          ? "bg-[var(--surface-subtle)]"
-          : "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]",
+        "focus-visible:bg-[var(--surface-subtle)]",
+        !chosen && "hover:bg-[var(--surface-subtle)]",
       )}
     >
       {avatar}
@@ -902,11 +901,20 @@ function RosterRow({
           {meta}
         </span>
       )}
-      {trailing && (
-        <>
-          <span className="flex-1" />
-          {trailing}
-        </>
+      <span className="flex-1" />
+      {trailing}
+      {/* The chosen row is marked the way every other select in the app marks
+          one — a 13px Signal Blue check in its own slot, no persistent fill
+          (`ui/float-menu.tsx`). It sits after the You / Coach-managed pill so
+          the two read as different facts: who this is, then what is picked. */}
+      {chosen ? (
+        <Check
+          className="size-[13px] shrink-0 text-[var(--blue)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+      ) : (
+        <span className="w-[13px] shrink-0" aria-hidden="true" />
       )}
     </button>
   );

@@ -127,7 +127,7 @@ ready).
 
 ## T9 · Order providers and align source selections
 
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **reasoning:** medium
 - **needs:** T8

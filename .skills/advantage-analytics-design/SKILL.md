@@ -1122,11 +1122,13 @@ The header's account menu predates the primitives and still carries its own
 classes; migrate it to `FloatMenu` rather than copying them.
 
 **EntitySelect (v3)** — the "For" field, picking a person or someone new.
-Float menu radius 12, 6px padding; rows 38px (radius 8, hover surface-subtle,
-selected keeps the wash + a 13px `--blue` check — Signal Blue is the one
-colour that means "chosen", in menus and cards alike; the earlier ink-900
-menu check is superseded). Person row = 22px avatar +
-12/500 name + 11px ink-500 middot-joined meta. "Someone new" is always first,
+Float menu radius 12, 6px padding; rows 38px (radius 8; surface-subtle is an
+unselected row's pointer hover and any row's keyboard focus, never a standing
+fill on the selection, which is marked by a 13px `--blue` check alone — Signal
+Blue is the one colour that means "chosen", in menus and cards alike; the
+earlier ink-900 menu check is superseded). The check keeps its own 13px slot at
+the row's right edge, after any state pill, so an empty slot still aligns.
+Person row = 22px avatar + 12/500 name + 11px ink-500 middot-joined meta. "Someone new" is always first,
 above a hairline, dashed-ring avatar. Section labels are quiet sentence case
 (11px ink-400) — no uppercase eyebrows inside menus, no nested menus.
 
