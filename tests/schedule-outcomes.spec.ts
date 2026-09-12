@@ -5,6 +5,7 @@ import {
   entryState,
   lineCoverageFrom,
   lineWon,
+  readyMatchIdsFrom,
   resolveEntryResult,
   resultState,
   resultWon,
@@ -255,4 +256,83 @@ test("a mixed dual awards one doubles point and becomes unanswered after clearin
       doubles[2],
     ]),
   ).toEqual({ us: 3, them: 3, decided: false });
+});
+
+/**
+ * A dual line keys its result two ways and both are load-bearing: an outcome
+ * on `round = null` (the database enforces it), a match on the line's SLOT
+ * (what `recordResult` writes, and what every dual match in the live database
+ * holds). Callers ask at the outcome grain, so the match lookup has to
+ * translate — otherwise a scored dual line renders as unanswered, which is
+ * what shipped and what the round-null fixture default hid.
+ */
+test.describe("a dual line whose match carries its slot as the round", () => {
+  const scoredDual: EventEntry = {
+    id: "entry-s1",
+    eventId: "dual",
+    discipline: "singles",
+    slot: "S1",
+    position: 0,
+    draw: null,
+    seed: null,
+    playerUserIds: ["player-s1"],
+    playerLabels: ["Our S1"],
+    opponentLabels: ["Opponent S1"],
+    opponentSchool: "Meridian State",
+    forfeit: null,
+    outcomes: [],
+    matches: [
+      {
+        id: "match-s1",
+        round: "S1",
+        status: "manual",
+        score: { player1: [6, 6], player2: [2, 2] },
+        opponentLabels: [],
+        hasVideo: false,
+      },
+    ],
+  };
+
+  test("resolves as played, not unanswered", () => {
+    const result = resolveEntryResult(scoredDual, null);
+    expect(result.kind).toBe("played");
+    expect(resultWon(result)).toBe(true);
+  });
+
+  test("does not offer the editor for an already-scored line", () => {
+    expect(entryState(scoredDual, null)).not.toBe("empty");
+    expect(entryPlayed(scoredDual)).toBe(true);
+    expect(lineWon(scoredDual)).toBe(true);
+  });
+
+  test("a saved outcome still outranks the match on the same line", () => {
+    const withOutcome: EventEntry = {
+      ...scoredDual,
+      outcomes: [
+        {
+          id: "outcome-s1",
+          round: null,
+          kind: "withdrawal",
+          side: "ours",
+          actorUserId: "coach",
+          recordedAt: "2026-09-10T00:00:00Z",
+        },
+      ],
+    };
+    const result = resolveEntryResult(withOutcome, null);
+    expect(result.kind).toBe("non-played");
+    expect(entryState(withOutcome, null)).toBe("withdrawn");
+    // The contradictory match must not leak into analysis figures.
+    expect(readyMatchIdsFrom([withOutcome])).toEqual([]);
+  });
+
+  test("a tournament round is unaffected by the dual translation", () => {
+    const tournament: EventEntry = {
+      ...scoredDual,
+      slot: null,
+      matches: [{ ...scoredDual.matches[0]!, id: "m-qf", round: "QF" }],
+    };
+    expect(resolveEntryResult(tournament, "QF").kind).toBe("played");
+    expect(resolveEntryResult(tournament, "SF").kind).toBe("unanswered");
+  });
 });

@@ -16,6 +16,7 @@ import {
   entryPlayed,
   lineCoverageFrom,
   outcomeForRound,
+  outcomeForMatch,
 } from "@/lib/schedule/entry-state";
 import { roundRank } from "@/lib/schedule/format";
 import { compareEntryOrder } from "@/lib/schedule/courts";
@@ -541,7 +542,7 @@ export function uploadQueueFrom({
           ...entry,
           matches: entry.matches.filter(
             (match) =>
-              !match.hasVideo && outcomeForRound(entry, match.round) === null,
+              !match.hasVideo && outcomeForMatch(entry, match) === null,
           ),
         }))
         .filter(
@@ -554,8 +555,7 @@ export function uploadQueueFrom({
         (count, entry) =>
           count +
           entry.matches.filter(
-            (match) =>
-              match.hasVideo && outcomeForRound(entry, match.round) === null,
+            (match) => match.hasVideo && outcomeForMatch(entry, match) === null,
           ).length,
         0,
       );

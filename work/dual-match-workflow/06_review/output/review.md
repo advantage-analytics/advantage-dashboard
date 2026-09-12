@@ -2,6 +2,10 @@
 
 Sign-off: pending
 
+> **Update — F1 is resolved** (see "Resolution of F1" near the end). F2 remains
+> open and is live in production. The verdict line below is the review as
+> written; re-read the resolution section before signing off.
+
 Target reviewed: **branch range `40f5505...HEAD`** (clean tree at start; the
 stage-2 quality fixes below are uncommitted at time of writing).
 Gate run: `.claude/skills/pr-check/SKILL.md`.
@@ -286,3 +290,62 @@ diff, `01_brief/output/brief.md`, `.claude/skills/pr-check/SKILL.md`):
 - the **live Supabase database**, read-only, to verify F1's round keys, F2's
   trigger firing order and `matches` INSERT policy, and the applied state of
   the three migrations
+
+---
+
+## Resolution of F1
+
+Fixed on this branch. The investigation changed the diagnosis, so the fix is
+not the one the finding first proposed — worth recording why.
+
+**What the finding got right:** the resolver never matches a dual's match, and
+played dual lines render as unanswered.
+
+**What changed on investigation:** F1 originally proposed normalising dual
+match rounds to `null` and migrating the 7 production rows. That would have
+been wrong. `matches.round = <slot>` on a dual is not a mistake — it is the
+established convention, written by **two** independent paths (`recordResult`
+and the upload wizard), surfaced in the wizard's user-facing Round field, and
+read back as the slot by `lineupChoices`. Normalising it would have changed a
+product-visible convention and touched guardrail-sensitive wizard code.
+
+The real defect is that **two grains legitimately coexist** and the new domain
+code assumed one:
+
+| Representation | Dual grain | Enforced by |
+| --- | --- | --- |
+| `program_event_outcomes.round` | `null` | `program_event_outcomes_round_check` (database) |
+| `matches.round` | the line's slot (`S1`…`D3`) | `recordResult`, the upload wizard |
+
+**The fix** translates between them once, in the module that owns the
+derivation (`entry-state.ts`), instead of letting each call site guess:
+
+- `outcomeRoundOf(entry, matchRound)` — private; maps a match's round to the
+  outcome grain (slot → `null` on a dual, unchanged elsewhere)
+- `outcomeForMatch(entry, match)` — the outcome covering a match's line
+- `matchForRound(entry, round)` — the match answering a caller's round grain
+
+Call sites moved onto them: `resolveEntryResult`, `entryState`,
+`readyMatchIdsFrom`, `lineWon` (both branches), and `uploadQueueFrom`'s two
+lookups in `schedule-server.ts`. No production data was changed, no writer was
+changed, and tournaments are untouched — their entries carry no slot and their
+rounds never equal one.
+
+`lineWon` was **not** in the original finding. The new tests caught it: it fed
+a raw `match.round` into the resolver, so a dual with a saved outcome would
+have reported the match's winner instead of the outcome's.
+
+**Regression guard.** `tests/fixtures/schedule-dual-outcomes-data.ts` now
+stamps the slot onto any fixture match built without a round, so *every*
+existing dual test runs against the production shape rather than the
+round-`null` shape that hid this. Four targeted tests were added to
+`tests/schedule-outcomes.spec.ts` covering: resolves as played; does not offer
+the editor on a scored line; a saved outcome still outranks a contradictory
+match and keeps it out of `readyMatchIdsFrom`; and a tournament round is
+unaffected by the translation.
+
+Gates after the fix: `lint` 0, `tsc` 0, `format:check` 0, `npm test`
+**734 passed, 0 failed** (730 before, plus the 4 new).
+
+F1 no longer blocks. **F2 is still open and is live in production** — it needs
+a corrective migration, which is a separate decision.

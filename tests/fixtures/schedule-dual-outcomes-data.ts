@@ -26,7 +26,7 @@ function match(
 }
 
 function entry(slot: string, overrides: Partial<EventEntry> = {}): EventEntry {
-  return {
+  const built: EventEntry = {
     id: `entry-${slot.toLowerCase()}`,
     eventId: "dual-outcomes",
     discipline: slot.startsWith("D") ? "doubles" : "singles",
@@ -42,6 +42,18 @@ function entry(slot: string, overrides: Partial<EventEntry> = {}): EventEntry {
     matches: [],
     outcomes: [],
     ...overrides,
+  };
+  return {
+    ...built,
+    // A dual match is stored with its line's SLOT in `round` — what
+    // `recordResult` writes, what the upload wizard puts in its Round field,
+    // and what every dual match in the live database holds. This fixture used
+    // to default them to null, which is the OUTCOME grain, so a resolver that
+    // could never find a dual's match still passed the whole suite. Keep the
+    // real shape here: an outcome keys on null, a match keys on the slot.
+    matches: built.matches.map((item) =>
+      item.round === null ? { ...item, round: slot } : item,
+    ),
   };
 }
 

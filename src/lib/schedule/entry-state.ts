@@ -37,6 +37,48 @@ export function outcomeForRound(
   return null;
 }
 
+/**
+ * A dual keeps its result in two places that key it differently, and both
+ * spellings are load-bearing:
+ *
+ * - `program_event_outcomes` keys a dual outcome on `round = null`. The
+ *   database enforces it (`program_event_outcomes_round_check`).
+ * - `matches.round` carries the line's **slot** (`S1`…`D3`). That is what
+ *   `recordResult` writes, what the upload wizard puts in its Round field,
+ *   and what every dual match in the live database holds.
+ *
+ * So a dual caller asks with `round === null` — the outcome grain — and the
+ * match lookup has to understand that means "this line's match". Translating
+ * once, here, is what keeps the two grains from being re-guessed at each call
+ * site; asking `matches.find(m => m.round === null)` on a dual silently finds
+ * nothing and renders a scored line as unanswered.
+ *
+ * A tournament is unaffected: its entries carry no slot, and its rounds are
+ * ladder positions that never equal one.
+ */
+function outcomeRoundOf(entry: EventEntry, matchRound: string | null) {
+  return matchRound !== null && matchRound === entry.slot ? null : matchRound;
+}
+
+/** The outcome covering this match's line, asked at the outcome's own grain. */
+export function outcomeForMatch(
+  entry: EventEntry,
+  match: EntryMatch,
+): ResolvedOutcome | null {
+  return outcomeForRound(entry, outcomeRoundOf(entry, match.round));
+}
+
+/** The match answering this line at the caller's round grain. */
+export function matchForRound(
+  entry: EventEntry,
+  round: string | null,
+): EntryMatch | null {
+  return (
+    entry.matches.find((item) => outcomeRoundOf(entry, item.round) === round) ??
+    null
+  );
+}
+
 /** Non-played results take precedence in inconsistent input, as legacy forfeits did. */
 export function resolveEntryResult(
   entry: EventEntry,
@@ -44,7 +86,7 @@ export function resolveEntryResult(
 ): EntryResult {
   const outcome = outcomeForRound(entry, round);
   if (outcome) return { kind: "non-played", ...outcome };
-  const match = entry.matches.find((item) => item.round === round);
+  const match = matchForRound(entry, round);
   return match ? { kind: "played", match } : { kind: "unanswered" };
 }
 
@@ -217,7 +259,10 @@ export function lineWon(
   entry: EventEntry,
   match?: EntryMatch | null,
 ): boolean | null {
-  const outcome = outcomeForRound(entry, match?.round ?? null);
+  // Ask at the outcome's grain, not the match's: on a dual those differ.
+  const outcome = match
+    ? outcomeForMatch(entry, match)
+    : outcomeForRound(entry, null);
   if (outcome) return outcome.outcome.side === "theirs";
   const forfeit = forfeitWon(entry);
   if (forfeit !== null) return forfeit;
@@ -225,7 +270,9 @@ export function lineWon(
   return (
     entry.outcomes?.some((o) => o.side === "theirs") === true ||
     entry.matches.some(
-      (m) => resultWon(resolveEntryResult(entry, m.round)) === true,
+      (m) =>
+        resultWon(resolveEntryResult(entry, outcomeRoundOf(entry, m.round))) ===
+        true,
     )
   );
 }
@@ -285,7 +332,7 @@ export function entryState(
   const lineOutcome = outcomeForRound(entry, null);
   if (lineOutcome) return OUTCOME_STATE[lineOutcome.outcome.kind];
   const matches = entry.matches.filter(
-    (match) => !outcomeForRound(entry, match.round),
+    (match) => !outcomeForMatch(entry, match),
   );
   if (matches.length === 0) {
     // Summary only. A round row must always pass its round explicitly.
@@ -392,7 +439,7 @@ export function readyMatchIdsFrom(entries: EventEntry[]): string[] {
     entry.matches
       .filter(
         (match) =>
-          outcomeForRound(entry, match.round) === null &&
+          outcomeForMatch(entry, match) === null &&
           isAnalysisReady(match.status),
       )
       .map((match) => match.id),
