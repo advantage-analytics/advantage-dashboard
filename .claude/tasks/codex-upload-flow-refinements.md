@@ -254,7 +254,7 @@ ready).
 
 ## T18 · Align existing video validation with requirements
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **reasoning:** medium
 - **needs:** T17

@@ -45,7 +45,16 @@ const STANDARD_FPS = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 90, 120];
 /** Relative tolerance for snapping a measured rate to a standard one. */
 const FPS_SNAP_TOLERANCE = 0.02;
 
-function snapToStandardFps(measured: number): number {
+/**
+ * Snap a measured rate to the nearest standard rate, when it is close enough.
+ *
+ * Exported so the validator can apply it to an `fps` it did not measure
+ * itself. It is idempotent on values this module already returned, so the
+ * validator paying for it a second time costs nothing — and without it the
+ * validator's 30 fps floor would silently depend on probe internals, refusing
+ * a documented-accepted 29.97 the moment an fps arrived from anywhere else.
+ */
+export function snapToStandardFps(measured: number): number {
   let closest = measured;
   let closestDelta = Infinity;
 
