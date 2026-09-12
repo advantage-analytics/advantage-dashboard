@@ -213,7 +213,7 @@ ready).
 
 ## T15 · Verify transfer authorization for the athlete
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **reasoning:** high
 - **needs:** T11, T14
