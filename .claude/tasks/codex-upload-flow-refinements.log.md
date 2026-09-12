@@ -336,3 +336,32 @@ is the runner's. Newest entries at the bottom.
 **Also verified by the completion reviewer, and worth carrying forward:** the regression claim holds — `git diff 99397cb` is empty for `job-request.ts`, `api/webhooks/**`, `api/cron/**`, `upload/parsers/**`, `providers/**` and `quota.ts`. The migration's five rollout prerequisites match its own header at `20260911000000_upload_eligibility.sql:61-76`. Draft persistence is confirmed plan-only against `02_design/output/design.md:202,277`. The direct-request specs genuinely import the `handler.ts` modules rather than driving the wizard, satisfying criterion 3's second half.
 
 **The retry is narrow:** restore the stash, replace the keyless skip figure with the measured **98 skipped / 871 passed**, state that the eight gated specs carry the difference, and re-gate. Nothing else in the record was found wanting.
+
+## T20 · Verify the integrated upload refinements — done
+
+**gate:** Retry of the run blocked above; stash `28b5bb68…` restored and the single factual error corrected by the runner. Mechanical: lint (0 errors, 42 warnings), `tsc --noEmit`, `format:check` all clean; `npm test` **932 passed / 37 skipped / 0 failed**. Completion: VERDICT: pass. Guardrail reviewers were not dispatched — the only source change is a test file, so neither has a surface to audit.
+
+**The correction, measured twice by two methods.** The blocked run claimed a keyless CI checkout would show 43 skips. The completion reviewer measured it by moving `.env.local` aside: **98 skipped / 871 passed**. The runner reproduced that independently without touching secrets — `HAVE_ENV` resolves as `Boolean(process.env[key] ?? fileEnv[key])` for the three Supabase keys, so running with those set to **empty strings** makes them falsy while leaving `.env.local` alone: 98 skipped / 871 passed, matching exactly. A grep-based estimate of ~101 made during triage was the rough one; 98 is authoritative.
+
+**The skip figures, stated properly.** In this worktree: 37 skips — 31 from `tests/upload-write-eligibility.spec.ts` (T14's database specs, gated on `LOCAL_SUPABASE_*`) and 6 from `tests/upload-score-regression.spec.ts` (gated on `WIZARD_REPRODUCTION_BASE_URL`). In a keyless CI checkout: **98 skipped / 871 passed** — the extra 61 are the eight `HAVE_ENV`-gated live-database specs (`account-deletion-retention`, `claim-eyebrow-width`, `join-requests-staff-read`, `program-owner-name-live`, `pending-invites`, `personal-home-scope`, `rls-workspace-isolation`, `teams-management`), none of which belong to this branch. Here they execute against the live database and pass, writing their own throwaway fixture rows and spending no upload or vendor quota.
+
+**The gap T20 closed.** `tests/upload-score-regression.spec.ts` — the branch's only real-browser proof of T1–T4 — had **silently gone red**. T10 added required hand/backhand fields, and because the spec is gated behind a hand-started dev server it never re-ran, so `[data-wizard-continue]` sat disabled on step 3 with the footer reading "4 to go". `answerPlayerStyles()` was added at four submit sites: it asserts Save is disabled, drives all four `MenuSelect` triggers by pointer to their `menuitemradio` rows, and asserts Save becomes enabled. 2 passed / 4 failed before; 5 passed / 1 failed after. This is the failure mode of gating a test behind manual setup — it does not fail loudly, it quietly stops being evidence.
+
+**The one remaining red browser case is a harness artefact, correctly left alone.** `src/app/wizard-reproduction/wizard-reproduction-harness.tsx` mounts a **personal** workspace with a preset carrying a scheduled line, so T11's contract rightly refuses it `line-requires-staff` — exactly what T12's follow-up 4 predicted. The fix belongs in that `src/` harness, outside this task's remit.
+
+**Enforcement, partitioned by evidence rather than collapsed.**
+
+- _Proven and executed here:_ the 68 route-handler tests (`upload-url-authorization`, `job-submission-authorization`) refusing approval and attribution **before** a SAS credential is minted and **before** `reserveQuota()`, exercised by direct handler import rather than through the wizard — which is what criterion 3's second half asks for.
+- _Client-side by design and permanently:_ the two service-role routes. The live trigger opens `if not v_is_client then return new; end if;`, and T14's new guards copy that idiom, so the database will **never** cover service-role paths even once the migration is applied. T15/T16's checks are the enforcement there, not a stopgap.
+- _Migration-pending:_ T14's rules. Confirmed absent from live via `list_migrations`; its 31 specs skipped here, and even green locally they prove only that the file applies over a hand-reconstructed baseline.
+- _Reasoned but unexecuted:_ pixel-level hover and focus-visible (asserted as classes; no screenshots, no ~400px pass), real-file `probeVideo()` (no `ffmpeg`, no fixtures), T13's tab-focus re-read.
+
+**Regression check:** zero diff against merge-base `99397cb` for `job-request.ts`, `api/webhooks/**`, `api/cron/**`, `upload/parsers/**`, `providers/**` and `quota.ts`, verified independently at the gate. Migration rollout prerequisites match the file's own header at `20260911000000_upload_eligibility.sql:61-76`. Draft persistence is plan-only, confirmed against `02_design/output/design.md:202,277`.
+
+**Open issues carried forward, none new — all re-confirmed in source:**
+
+1. **User-facing today:** `VideoRequirements.tsx:55` says Advantage Intelligence "accepts most formats a camera or phone can produce"; `ACCEPTED_VIDEO_EXTENSIONS` is `.mp4`/`.mov` and `object-keys.ts:30` throws otherwise. Needs a product decision in one direction.
+2. `handleSaveDraft` discards `saveDraft()`'s failure boolean and navigates away; `loadMatchDraft` omits `program_id`, so a draft can resume into the wrong workspace.
+3. `resubmit-job.ts` never calls `uploadEligibility()` — the one seam still spending against an unchecked row.
+4. `new-match-wizard/styles.ts`'s `floatMenuRowCls` hard-codes the superseded hover wash with a stale doc comment.
+5. `docs/ui-revamp-guardrails.md:100-101` names `jobs/route.ts` and `upload-url/route.ts`; the decisions now live in the sibling `handler.ts` files.

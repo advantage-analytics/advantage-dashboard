@@ -66,6 +66,8 @@ test.describe("upload score regression reproduction", () => {
       opponent: ["4", "3", "2"],
     });
 
+    await answerPlayerStyles(page);
+
     await page.locator("[data-wizard-continue]").click();
     await expect.poll(() => submissions.length).toBe(1);
     expect(submissions[0]).toMatchObject({
@@ -191,6 +193,7 @@ test.describe("upload score regression reproduction", () => {
 
     await expect(page.getByLabel("Riley Reproduction, set 1")).toHaveValue("6");
     await expect(page.getByLabel("Riley Reproduction, set 2")).toHaveCount(0);
+    await answerPlayerStyles(page);
     await page.locator("[data-wizard-continue]").click();
     await expect.poll(() => submissions.length).toBe(1);
     expect(submissions[0]).toMatchObject({
@@ -264,6 +267,8 @@ test.describe("upload score regression reproduction", () => {
       opponent: ["4", "3", "2"],
     });
 
+    await answerPlayerStyles(page);
+
     await page.locator("[data-wizard-continue]").click();
     await expect.poll(() => submissions.length).toBe(1);
     expect(submissions[0]).toMatchObject({
@@ -292,6 +297,8 @@ test.describe("upload score regression reproduction", () => {
       opponent: ["4", "3", "2"],
     });
 
+    await answerPlayerStyles(page);
+
     await page.locator("[data-wizard-continue]").click();
     await expect.poll(() => submissions.length).toBe(1);
     expect(submissions[0]).toMatchObject({
@@ -299,6 +306,28 @@ test.describe("upload score regression reproduction", () => {
     });
   });
 });
+
+/**
+ * T10 made both players' hand and backhand required, so the footer's
+ * "Save match" stays disabled until all four are answered. Answer them the
+ * way a person does — the trigger, then the row — and prove the gate held
+ * first, so a run against a wizard that stopped requiring them fails here
+ * instead of silently passing with a different footer.
+ */
+async function answerPlayerStyles(page: Page) {
+  await expect(page.locator("[data-wizard-continue]")).toBeDisabled();
+  const picks: [string, string][] = [
+    ["Player hand", "Right-handed"],
+    ["Player backhand", "Two-handed backhand"],
+    ["Opponent hand", "Left-handed"],
+    ["Opponent backhand", "One-handed backhand"],
+  ];
+  for (const [trigger, option] of picks) {
+    await page.getByRole("button", { name: trigger, exact: true }).click();
+    await page.getByRole("menuitemradio", { name: option }).click();
+  }
+  await expect(page.locator("[data-wizard-continue]")).toBeEnabled();
+}
 
 async function chooseSource(page: Page, name: string) {
   await page.getByRole("button", { name: /Source:|Choose a source/ }).click();
