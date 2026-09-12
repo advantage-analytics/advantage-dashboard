@@ -365,3 +365,58 @@ is the runner's. Newest entries at the bottom.
 3. `resubmit-job.ts` never calls `uploadEligibility()` — the one seam still spending against an unchecked row.
 4. `new-match-wizard/styles.ts`'s `floatMenuRowCls` hard-codes the superseded hover wash with a stale doc comment.
 5. `docs/ui-revamp-guardrails.md:100-101` names `jobs/route.ts` and `upload-url/route.ts`; the decisions now live in the sibling `handler.ts` files.
+
+---
+
+## Post-queue follow-ups — the branch's own findings, closed
+
+The queue drained 20/20. These are the open items its tasks recorded rather
+than fixed, plus the deployment step T14 deferred. All five landed on this
+branch at the user's direction, gated as one batch: lint, `tsc --noEmit`,
+`format:check` clean and `npm test` **968 passed / 37 skipped / 0 failed** (up
+from 932 — 36 tests added, none broken). `rls-boundary-reviewer` and
+`pipeline-guardrails-reviewer` both returned **no findings**.
+
+**T14's migration is APPLIED to production.** Recorded live as
+`20260912214427_upload_eligibility` (the MCP assigned its own version; the repo
+file is `20260911000000_...`, harmless here since this repo does not use
+`db push` and already runs ~100 behind). Pre-apply: live
+`matches_block_client_regraft` md5 `958732b561243c7d22262b312efda811`, 2768
+bytes — no drift from what the migration transcribed. Post-apply, verified: all
+3 triggers present with the `matches` trigger's column list correctly extended
+by `source_provider, analysis_method`; **all six pre-existing guards intact** in
+the regraft body, which grew 2768 → 3905 bytes exactly as the T14 block would;
+`search_path=""` pinned on all four functions; `execute` revoked from
+`public`/`anon`/`authenticated` on both SECURITY DEFINER helpers, so
+`upload_eligibility_refusal` cannot be used as a roster oracle.
+
+**The vendor question that had been open since T17/T18 is settled by their own
+docs.** `https://splitstep.ai/api-docs.html` states verbatim: _"Any container
+and codec ffmpeg can decode is accepted. MP4 (H.264) preferred."_ So the copy
+was accurate and the allowlist was narrower than the thing it described — the
+contradiction resolved toward the copy, not away from it. The guide also
+confirms the thresholds already shipped (1080p, 30 fps with 29.97 accepted,
+under 8,000,000,000 bytes) and that the 29.9 rejection floor T18 flagged as
+contradictory is real (`VIDEO_FRAME_RATE_TOO_LOW`).
+
+**Two findings worth recording for their own sake.**
+
+1. The draft agent found a **second resume route** — `src/app/dashboard/team/upload/page.tsx` — that no task had named. Fixing only the reported one "would have been the same bug with a longer URL."
+2. Running three agents in parallel produced one cross-agent collision, caught by a sibling rather than by its author: widening the allowlist made `.avi` valid, which broke T15's "unsupported container" fixture in `tests/upload-url-authorization.spec.ts`. Moved to `.txt`; that spec is back to 31/31.
+
+**The one caveat raised at the gate, resolved empirically.** The RLS reviewer
+accepted the auto-retry exemption but asked whether any `failed` job sits in the
+pre-gate window, since its next auto-retry would spend without ever having
+passed the contract. Checked live: 11 jobs exist — 6 `failed` (2026-08-06 to
+08-28, none retried), 3 `completed`, 2 `uploaded`, and **nothing in flight**.
+Auto-retry fires on the transition to failure, not on rows already sitting
+failed, and the two `uploaded` jobs have not been submitted yet so they will go
+through the gated route. The window is empty.
+
+**Still open, deliberately.** `docs/upload-draft-behavior.md`'s remaining
+recommendations are unbuilt — durable draft persistence is still plan-only. The
+local autosave can still show "Draft saved" on a false positive; this batch only
+narrowed the failure end. The `wizard-reproduction` harness still mounts a
+personal workspace with a scheduled-line preset, so one browser case in
+`tests/upload-score-regression.spec.ts` stays red as a harness artefact, and
+`providers/splitstep.ts`'s `requirementChips` is a dead prop nothing renders.
