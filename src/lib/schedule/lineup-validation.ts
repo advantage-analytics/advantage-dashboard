@@ -1,5 +1,17 @@
 import type { LineupLineInput } from "./actions";
 
+/**
+ * The identity of a doubles pairing, order-independent.
+ *
+ * The server refuses a save whose pairs collide; the builder greys the pairing
+ * out and the picker drops it from the option list. All three must agree on
+ * this string, or the picker offers a pair the save then rejects — the dead end
+ * this validation exists to prevent. One spelling, imported by all three.
+ */
+export function pairKey(ids: readonly string[]): string {
+  return JSON.stringify([...ids].sort());
+}
+
 /** Only stable identities establish duplicates; typed labels are not IDs. */
 export function validateLineup(
   lines: readonly LineupLineInput[],
@@ -20,7 +32,7 @@ export function validateLineup(
     // Singles participation and other pairings are allowed. An incomplete
     // pair cannot establish the identity of both athletes.
     if (line.discipline !== "doubles" || ids.length !== 2) continue;
-    const key = JSON.stringify([...ids].sort());
+    const key = pairKey(ids);
     const firstSlot = pairs.get(key);
     if (firstSlot !== undefined) {
       errors.push({

@@ -29,6 +29,7 @@ import {
   type EventFormatValue,
 } from "@/lib/schedule/format";
 import { rosterIdsForLabels } from "@/lib/schedule/roster-match";
+import { pairKey } from "@/lib/schedule/lineup-validation";
 import { courtIndex } from "@/lib/schedule/courts";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
@@ -1247,10 +1248,7 @@ function LineupBlock({
                     (other) =>
                       other.key !== line.key && other.ourIds.length === 2,
                   )
-                  .map((other) => [
-                    JSON.stringify([...other.ourIds].sort()),
-                    other.slot,
-                  ]),
+                  .map((other) => [pairKey(other.ourIds), other.slot]),
               )
             }
             onAddPlayer={onAddPlayer}

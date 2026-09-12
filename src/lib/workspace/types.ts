@@ -257,7 +257,9 @@ export interface Viewer {
  * role === player"). Neither is authorization — the database is — but they have
  * to agree, or a rail item bounces you off the page it points at.
  */
-export function isProgramStaff(workspace: Workspace): boolean {
+export function isProgramStaff(
+  workspace: Pick<Workspace, "kind" | "role">,
+): boolean {
   return workspace.kind === "team" && workspace.role !== "player";
 }
 
@@ -285,7 +287,9 @@ export function canViewTeamSchedule(workspace: ScheduleWorkspace): boolean {
  * line is a staff-only write enforced independently by the database.
  */
 export function canManageTeamSchedule(workspace: ScheduleWorkspace): boolean {
-  return workspace.kind === "team" && workspace.role !== "player";
+  // One spelling of the staff rule, so the Schedule's presentation gate and
+  // `requireStaff()`'s server-action gate cannot drift apart.
+  return isProgramStaff(workspace);
 }
 
 /** May this viewer delete an otherwise-safe, empty team Schedule event? */

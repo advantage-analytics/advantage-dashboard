@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { useListboxNav } from "@/hooks/use-listbox-nav";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { splitNames } from "@/lib/schedule/format";
+import { pairKey } from "@/lib/schedule/lineup-validation";
 import { addProgramPlayer } from "@/components/dashboard/team/roster-actions";
 import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import type { LadderPlayer } from "@/lib/data/roster-server";
@@ -142,9 +143,7 @@ function DoublesRosterPicker({
         .filter((player) => {
           if (player.userId === unavailable) return false;
           if (!unavailable) return true;
-          return !usedPairSlots.has(
-            JSON.stringify([player.userId, unavailable].sort()),
-          );
+          return !usedPairSlots.has(pairKey([player.userId, unavailable]));
         })
         .map((player) => ({
           value: player.userId,

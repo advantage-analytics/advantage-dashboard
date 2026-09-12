@@ -229,16 +229,16 @@ export async function readScheduleWithClient(
     else matchesByEntry.set(match.event_entry_id, [entryMatch]);
   }
 
+  // Keep association at the same event + entry grain as the database's
+  // composite foreign key. This also makes a malformed/mock row fail closed.
+  const eventByEntryId = new Map(entries.map((e) => [e.id, e.event_id]));
   const outcomesByEntry = new Map<string, EntryOutcome[]>();
   for (const outcome of outcomes) {
-    // Keep association at the same event + entry grain as the database's
-    // composite foreign key. This also makes a malformed/mock row fail closed.
-    const entry = entries.find(
-      (candidate) =>
-        candidate.id === outcome.entry_id &&
-        candidate.event_id === outcome.event_id,
-    );
-    if (!entry || outcome.program_id !== programId) continue;
+    if (
+      eventByEntryId.get(outcome.entry_id) !== outcome.event_id ||
+      outcome.program_id !== programId
+    )
+      continue;
     const entryOutcome: EntryOutcome = {
       id: outcome.id,
       round: outcome.round,

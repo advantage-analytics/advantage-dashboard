@@ -131,7 +131,6 @@ export function LineRow({
         <Action
           state={state}
           match={match}
-          entry={entry}
           entryId={entry.id}
           matchId={match?.id ?? null}
           videoAllowed={supportsVideo(entry, round)}
@@ -146,7 +145,6 @@ export function LineRow({
 function Action({
   state,
   match,
-  entry,
   entryId,
   matchId,
   videoAllowed,
@@ -155,7 +153,6 @@ function Action({
 }: {
   state: EntryState;
   match: EntryMatch | null;
-  entry: EventEntry;
   entryId: string;
   /** Which of the entry's matches this row is. Null on an unplayed line. */
   matchId: string | null;
