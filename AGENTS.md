@@ -234,6 +234,24 @@ times — `home/serve-placement-home.tsx`, `matches/match-detail/serve-placement
 `matches/serve-placement/serve-placement-widget.tsx`, and
 `statistics/serve-placement-stats.tsx`.
 
+### Which one to use: `/task-add` or `/feature-new`
+
+The two are layered, not alternatives — the feature pipeline writes its tasks
+into the branch queue and drains them with `/task-next`. The choice is only
+about the front end.
+
+Use **`/task-add`** when you know what to build, even if it is several tasks.
+It already turns raw intent into sized, model-routed tasks with observable
+`done when:` criteria, and asks one question when the intent is too thin.
+
+Use **`/feature-new`** when the approach is undecided, or the feature is big
+enough to want a brief and design you can edit before any task exists. What
+it adds over `/task-add`: design alternatives with trade-offs (stage 02), a
+human gate between every stage, the brief's success criteria checked at
+review (06), and landing as a PR (07). That costs seven invocations and seven
+commits — a feature whose stages all finish in one sitting probably wanted
+`/task-add`.
+
 ### Branch task queues
 
 Each branch has its own queue at `.claude/tasks/<branch-slug>.md` (the branch
@@ -264,7 +282,8 @@ block as a Run button, and running one there fails with `command not found`.
 
 ### Feature pipeline (ICM)
 
-Larger features can run through the staged pipeline in `work/<slug>/`
+Features that need a design decision (see "Which one to use" above) run
+through the staged pipeline in `work/<slug>/`
 (brief → design → plan → tasks → build → review → land), scaffolded by
 `/feature-new` and advanced one stage at a time by `/feature-next`. Each
 stage's `output/` is a markdown file the human edits between invocations —
