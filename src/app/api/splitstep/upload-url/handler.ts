@@ -191,6 +191,11 @@ export async function handleUploadUrl(
   // coach's own login on the row, an id from a different program's roster, or
   // a program still waiting on its claim all reached the credential. The
   // roster is read only for a team match; a personal one has none to read.
+  //
+  // This is not defence in depth over the database. The harm here is minting
+  // an Azure SAS, which is not a database write, so no trigger can prevent it
+  // even in principle — the two layers hold disjoint jurisdictions, and this
+  // one owns the credential. See the same note in `jobs/handler.ts`.
   const roster =
     billingWorkspace.kind === "team"
       ? await deps.loadRoster(billingWorkspace.id)

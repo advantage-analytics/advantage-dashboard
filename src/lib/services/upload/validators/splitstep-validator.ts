@@ -73,9 +73,23 @@ function formatGigabytes(bytes: number): string {
   return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
 }
 
-function hasAcceptedExtension(fileName: string): boolean {
+/**
+ * "a or b" for two, "a, b, c or d" for more. The allowlist grew from two
+ * entries to six, and a bare `join(" or ")` turned the refusal into
+ * ".mp4 or .mov or .m4v or .avi or .mkv or .webm".
+ */
+function formatExtensionList(extensions: readonly string[]): string {
+  if (extensions.length < 2) return extensions[0] ?? "";
+  return `${extensions.slice(0, -1).join(", ")} or ${extensions[extensions.length - 1]}`;
+}
+
+function acceptedExtensionOf(fileName: string): string | null {
   const lower = fileName.toLowerCase();
-  return ACCEPTED_VIDEO_EXTENSIONS.some((ext) => lower.endsWith(ext));
+  return ACCEPTED_VIDEO_EXTENSIONS.find((ext) => lower.endsWith(ext)) ?? null;
+}
+
+function hasAcceptedExtension(fileName: string): boolean {
+  return acceptedExtensionOf(fileName) !== null;
 }
 
 /**
@@ -91,7 +105,7 @@ export function checkVideoFileBasics(file: {
   if (!hasAcceptedExtension(file.name)) {
     return {
       success: false,
-      error: `Unsupported format. Use ${ACCEPTED_VIDEO_EXTENSIONS.join(" or ")} — MP4 (H.264) works best.`,
+      error: `Unsupported format. Use ${formatExtensionList(ACCEPTED_VIDEO_EXTENSIONS)} — MP4 (H.264) works best.`,
     };
   }
 
@@ -186,6 +200,30 @@ export async function validateSplitStepVideo(
   try {
     probe = await probeVideo(file);
   } catch (err) {
+    // A probe failure is not the same fact as a bad file. `probeVideo` builds
+    // an `HTMLVideoElement`, so it can only read what THIS BROWSER decodes —
+    // and Chrome and Safari decode neither .avi nor .mkv, both of which the
+    // allowlist above accepts because the vendor does ("any container ffmpeg
+    // can decode"). Refusing there would be us reporting our own limitation as
+    // the file's defect, in a sentence ("may be corrupt") that tells the person
+    // nothing they can act on — and it would make the widened allowlist a lie
+    // for two of its six entries.
+    //
+    // So ask the browser whether it could ever have decoded this, and only
+    // refuse when it says it should have been able to. That is the same
+    // judgement the null-fps warning below makes, for the same reason: a
+    // requirement we cannot check is still a requirement, and the vendor is the
+    // party that actually knows.
+    if (browserCannotDecode(file)) {
+      return {
+        success: true,
+        warnings: [
+          `This browser can't read ${acceptedExtensionOf(file.name) ?? "this container"} files, so nothing here could be checked. ` +
+            `The requirements still apply — ${MIN_VIDEO_WIDTH}×${MIN_VIDEO_HEIGHT} and at least ${MIN_VIDEO_FPS} fps — and ` +
+            `${PROVIDER_DISPLAY_NAME} can still reject the video after it uploads.`,
+        ],
+      };
+    }
     return {
       success: false,
       error: err instanceof Error ? err.message : "Couldn't read this video.",
@@ -193,4 +231,25 @@ export async function validateSplitStepVideo(
   }
 
   return evaluateVideoProbe(probe);
+}
+
+/**
+ * Does this browser definitively refuse the container?
+ *
+ * `canPlayType` answers `""`, `"maybe"` or `"probably"`; only the empty string
+ * is a definite no, which is exactly the signal wanted here — it keeps the
+ * deferral narrow. A file whose type the browser does not even recognise is in
+ * the same position. Outside a browser (tests, SSR) this answers false, so the
+ * refusal path is what a non-DOM caller gets.
+ */
+function browserCannotDecode(file: File): boolean {
+  if (typeof document === "undefined") return false;
+  // An absent MIME type is not evidence of anything — the OS simply did not
+  // label the file. Refusing is the honest answer there: excusing it would let
+  // a truncated .mp4 upload up to 8 GB and then tell the person "this browser
+  // can't read .mp4 files", which is false and unactionable. Only an explicit
+  // `""` from `canPlayType` — a definite no about a type we DO know — earns
+  // the deferral.
+  if (!file.type) return false;
+  return document.createElement("video").canPlayType(file.type) === "";
 }

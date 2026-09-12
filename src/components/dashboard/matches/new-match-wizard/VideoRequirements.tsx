@@ -1,8 +1,13 @@
-"use client";
-
 /**
  * VideoRequirements — the "what the analysis needs" panel under the file
  * step's drop zone, for the Advantage Intelligence (video) path only.
+ *
+ * Deliberately NOT `"use client"`. It holds no state, no effects, no handlers
+ * and touches no browser global — it is a spec line, an inline SVG and four
+ * rows of copy. Its only caller, `FileStepContent`, is already a client
+ * component, so the directive marked a boundary that was not there and bought
+ * nothing; without it this panel can also be rendered from a Server Component
+ * if the guidance is ever wanted somewhere outside the wizard.
  *
  * Split out of `FileStepContent.tsx` to keep that file bounded — this block
  * grew from three quiet bullets into a spec line, a court-framing guide, and

@@ -404,11 +404,19 @@ export async function handleSubmitJob(
   // caller created the job; `reserveQuota()` below proves the workspace's
   // budget is open to them; neither proves the athlete on the row is a live
   // player on THIS program's roster or that the program's claim has been
-  // approved. The live `matches_block_client_regraft` accepts any member of
-  // the program as the athlete, staff included, never reads `programs.status`,
-  // and is skipped outright for the service-role client this route loads
-  // through — so a coach's own login on the row, an id from another program's
+  // approved. A coach's own login on the row, an id from another program's
   // roster, or a program still waiting on its claim would all reach the spend.
+  //
+  // THIS CHECK IS NOT DEFENCE IN DEPTH OVER THE DATABASE, and reading it that
+  // way is how it gets deleted. The two layers hold disjoint jurisdictions.
+  // `matches_block_client_regraft` and the T14 guards own the writes a browser
+  // can reach directly through PostgREST; they open with
+  // `if not v_is_client then return new`, so they are skipped for the
+  // service-role client this route loads through. But the harms HERE are not
+  // database writes at all — they are reserving a workspace's allowance and
+  // posting to the vendor. No trigger can prevent either, even in principle.
+  // So this is the only enforcement for those actions, permanently, and not a
+  // stopgap awaiting a migration.
   // The same `athleteOnRow()` mapping and roster read as `upload-url`, so the
   // two seams cannot disagree about a row — and an older row carrying a
   // player's login id rather than their profile id is still that player,

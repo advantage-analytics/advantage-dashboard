@@ -1,6 +1,24 @@
 /**
  * The wizard's half of "may this person record a match here, and for whom".
  *
+ * ── DO NOT MAKE THIS A CLIENT MODULE ────────────────────────────────────────
+ * Despite living in a components directory, this file is imported by SERVER
+ * code: `lib/services/splitstep/eligible-roster.ts` (which both video routes
+ * use), and the two Server Components that resume a draft —
+ * `app/dashboard/matches/new/page.tsx` and `app/dashboard/team/upload/page.tsx`.
+ * Adding `"use client"` here, or importing a hook or a component into it,
+ * breaks all three at once — including the two API routes whose whole purpose
+ * is to be the enforcement that survives a hostile client. Nothing in the type
+ * system or the lint config will stop that edit.
+ *
+ * It is a `.ts` file with no JSX on purpose. Keep it that way: everything here
+ * is a pure function over plain data. If something needs React, it belongs in
+ * the component that renders it, not here. (The tidier fix is to move the
+ * server-facing helpers — `eligibleRosterOptions`, `draftBelongsToWorkspace`,
+ * `draftWorkspaceRefusal` — into `lib/workspace/` and leave only the
+ * wizard-coupled ones, which are the ones that touch `./types`. That is a
+ * seven-file move and wants its own branch.)
+ *
  * `uploadEligibility()` (`lib/workspace/upload-eligibility.ts`) is the
  * decision; this file is how the wizard puts its own state in front of it and
  * reads the answer back. Everything here is pure — no React, no Supabase — so

@@ -126,6 +126,12 @@ export function ScoreBlock({
   const isGameEntry = (value: string) =>
     /^\d$/.test(value) && Number(value) <= 7;
 
+  // A digit, whatever its value. `isGameEntry` answers "should focus move on",
+  // which is a narrower question than "is this worth recording": a set can open
+  // 8-6 or 9-7, and those digits have to land in the cell even though nothing
+  // should advance off them yet.
+  const isDigit = (value: string) => /^\d$/.test(value);
+
   const tie = (i: number) =>
     isTiebreakSet(
       formData.playerScores[i] ?? null,
@@ -157,9 +163,17 @@ export function ScoreBlock({
   };
 
   // Typing in the dashed column adds the set and keeps the digit.
+  //
+  // Records first, advances second — the same order `setDigit` uses above, and
+  // for the same reason. Gating the RECORD on `isGameEntry` silently dropped
+  // an 8 or a 9, so a third set opening 8-6 or 9-7 could not be started at all:
+  // the cell is `maxLength={1}`, so there was no second keystroke to recover
+  // with, and the same digit typed into an existing cell was accepted. The
+  // range check belongs to focus movement, not to whether the value is kept.
   const ghostDigit = (row: "player" | "opponent", v: string) => {
-    if (!isGameEntry(v)) return;
+    if (!isDigit(v)) return;
     onScoreChange(row, displayed, v);
+    if (!isGameEntry(v)) return;
     focusKey(row === "player" ? key("o", displayed) : key("p", displayed + 1));
   };
 

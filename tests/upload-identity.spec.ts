@@ -59,6 +59,37 @@ const noticeModule = (() => {
   const exports: {
     ImportIdentityNotice?: React.ComponentType<NoticeProps>;
   } = {};
+
+  // Sibling wizard modules are loaded for real, through this same compile, so
+  // the assertions below read the shipped chrome rather than a stand-in. The
+  // notice's shell lives in `WizardNotice.tsx`; stubbing it would leave
+  // `role="status"`, the live region and the icon untested here, which is most
+  // of what this spec checks.
+  const loadSibling = (relative: string) => {
+    const siblingExports: Record<string, unknown> = {};
+    const compiled = ts.transpileModule(
+      readFileSync(resolve(`${WIZARD}/${relative}.tsx`), "utf8"),
+      {
+        compilerOptions: {
+          module: ts.ModuleKind.CommonJS,
+          jsx: ts.JsxEmit.ReactJSX,
+        },
+      },
+    ).outputText;
+    runInNewContext(compiled, {
+      exports: siblingExports,
+      require: stubRequire,
+    });
+    return siblingExports;
+  };
+
+  const stubRequire = (id: string): unknown => {
+    if (id === "react/jsx-runtime") return jsx;
+    if (id === "react") return React;
+    if (id.startsWith("./")) return loadSibling(id.slice(2));
+    return baseRequire(id);
+  };
+
   const { outputText } = ts.transpileModule(
     readFileSync(resolve(`${WIZARD}/ImportIdentityNotice.tsx`), "utf8"),
     {
@@ -70,34 +101,34 @@ const noticeModule = (() => {
   );
   runInNewContext(outputText, {
     exports,
-    require: (id: string) => {
-      if (id === "react/jsx-runtime") return jsx;
-      if (id === "react") return React;
-      // Icons are decoration; the notice's meaning is its words and buttons.
-      if (id === "lucide-react")
-        return new Proxy(
-          {},
-          {
-            get: (_t, name: string) =>
-              function Icon(props: Record<string, unknown>) {
-                // Props pass through, so `aria-hidden` is observable below.
-                const { children: _children, ...rest } = props;
-                void _children;
-                return React.createElement("span", {
-                  ...rest,
-                  "data-icon": name,
-                });
-              },
-          },
-        );
-      // The design system's button, as a marker: the assertions below care
-      // which VARIANT each action asks for, not what Tailwind compiles it to.
-      if (id === "@/lib/ui/adv-button")
-        return { advButton: (variant: string) => `advbtn-${variant}` };
-      throw new Error(`unexpected import in the notice: ${id}`);
-    },
+    require: stubRequire,
   });
   return exports;
+
+  function baseRequire(id: string): unknown {
+    // Icons are decoration; the notice's meaning is its words and buttons.
+    if (id === "lucide-react")
+      return new Proxy(
+        {},
+        {
+          get: (_t, name: string) =>
+            function Icon(props: Record<string, unknown>) {
+              // Props pass through, so `aria-hidden` is observable below.
+              const { children: _children, ...rest } = props;
+              void _children;
+              return React.createElement("span", {
+                ...rest,
+                "data-icon": name,
+              });
+            },
+        },
+      );
+    // The design system's button, as a marker: the assertions below care
+    // which VARIANT each action asks for, not what Tailwind compiles it to.
+    if (id === "@/lib/ui/adv-button")
+      return { advButton: (variant: string) => `advbtn-${variant}` };
+    throw new Error(`unexpected import in the notice: ${id}`);
+  }
 })();
 
 function comparisonOf(

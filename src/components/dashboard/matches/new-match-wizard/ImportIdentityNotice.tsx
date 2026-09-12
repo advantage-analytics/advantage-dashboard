@@ -1,6 +1,6 @@
-import { TriangleAlert } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
 import type { IdentityMatchStatus } from "./types";
+import { WizardNotice } from "./WizardNotice";
 
 export interface ImportIdentityNoticeProps {
   /**
@@ -157,20 +157,7 @@ export function ImportIdentityNotice({
  * person's attention has already moved on from the drop zone.
  */
 function Notice({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex items-start gap-3 rounded-[var(--radius-element)] border border-[var(--warning-border)] bg-[var(--warning-bg)] px-3.5 py-3 text-[12px] leading-[1.5] text-[var(--warning-text)]"
-    >
-      <TriangleAlert
-        className="mt-0.5 size-4 shrink-0"
-        strokeWidth={1.5}
-        aria-hidden="true"
-      />
-      <div className="flex min-w-0 flex-1 flex-col gap-3">{children}</div>
-    </div>
-  );
+  return <WizardNotice>{children}</WizardNotice>;
 }
 
 function Actions({ children }: { children: React.ReactNode }) {

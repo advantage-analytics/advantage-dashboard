@@ -13,7 +13,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, Check, CircleX, ExternalLink } from "lucide-react";
+import { Check, CircleX, ExternalLink, TriangleAlert } from "lucide-react";
 import {
   Step,
   STEP_CONFIG,
@@ -56,6 +56,7 @@ import {
 import { TrimStepContent } from "./TrimStepContent";
 import { DetailsStepContent } from "./DetailsStepContent";
 import { PinnedLineBar } from "./PinnedLineBar";
+import { WizardNotice } from "./WizardNotice";
 
 /** Where the flow returns to when it is dismissed or finished. */
 const PERSONAL_EXIT_HREF = "/dashboard/matches";
@@ -254,18 +255,9 @@ export function UploadMatchFlow({
  */
 function FlowNotice({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex items-start gap-3 rounded-[var(--radius-element)] border border-[var(--warning-border)] bg-[var(--warning-bg)] px-3.5 py-3 text-[12px] leading-[1.5] text-[var(--warning-text)]"
-    >
-      <AlertTriangle
-        className="mt-0.5 size-4 shrink-0"
-        strokeWidth={1.5}
-        aria-hidden="true"
-      />
-      <p className="min-w-0 flex-1">{children}</p>
-    </div>
+    <WizardNotice>
+      <p>{children}</p>
+    </WizardNotice>
   );
 }
 
@@ -363,7 +355,7 @@ function UploadMatchSuccess({
             readers who want the fine print. */}
         {uploading.length > 0 && (
           <div className="flex w-full max-w-[440px] items-start gap-2.5 rounded-[8px] border border-[var(--warning-border)] bg-[var(--warning-bg)] px-3.5 py-3">
-            <AlertTriangle
+            <TriangleAlert
               className="mt-0.5 size-4 shrink-0 text-[var(--warning-text)]"
               strokeWidth={1.5}
             />
@@ -954,10 +946,28 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
    * absence of one, in a personal workspace) IS that explanation, and a
    * second banner saying the same thing would be noise, not help.
    */
+  /**
+   * A roster that has not answered yet is not a roster that failed.
+   *
+   * Both arrive as `roster: null` and both refuse as `roster-unknown`, which is
+   * right for the GATE — nobody should continue against an unknown roster. It
+   * is wrong for the NOTICE: on every preset flow and every `?player=` link the
+   * athlete is known on the first render while the RPC is still in flight, so
+   * the banner would say "We couldn't load the roster. Try again." about a
+   * request that has not failed, complete with a Retry button, on the coach's
+   * normal path. `whoPlayed.loadFailed` is the hook's own answer to which of
+   * the two this is.
+   */
+  const rosterStillLoading =
+    !eligibility.ok &&
+    eligibility.reason === "roster-unknown" &&
+    !whoPlayed.loadFailed;
+
   const eligibilityNoticeVisible =
     (step === "provider" || step === "file") &&
     !eligibility.ok &&
-    eligibility.reason !== "athlete-required";
+    eligibility.reason !== "athlete-required" &&
+    !rosterStillLoading;
 
   // One value, two ways forward: the footer button below is disabled by it and
   // `useWizardKeys` refuses plain Enter on it, so a keyboard user can never
@@ -969,7 +979,11 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     busy: stepBusy !== null,
     missingMatchAnswers: missing.labels.length > 0,
     importIdentityBlocked: identityNoticeVisible && importIdentity.blocked,
-    eligibilityBlocked: eligibilityNoticeVisible,
+    // `|| rosterStillLoading` is the one deliberate exception to T7's
+    // "the visible notice decides the gate": there is nothing to explain
+    // during a read that is simply still running, but there is also nothing
+    // to continue to.
+    eligibilityBlocked: eligibilityNoticeVisible || rosterStillLoading,
   });
 
   useWizardKeys({
