@@ -95,9 +95,8 @@ A schema change usually has code consequences. Before calling it done:
 
 - Row types are `Db`-prefixed in `src/lib/data/types.ts` — update them.
 - `mcp__supabase__generate_typescript_types` if the generated types are used.
-- If you changed anything the stats read, check both
-  `src/lib/data/statistics-server.ts` and `statistics-client.ts`. They produce
-  the same shape from different sources and must be changed together.
+- If you changed anything the match statistics read, check
+  `src/lib/data/match-detail-server.ts` and `performance-server.ts`.
 
 ## Checklist before reporting done
 

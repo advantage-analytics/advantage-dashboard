@@ -1,11 +1,10 @@
 /**
  * Mint a browser upload credential for a match video.
  *
- * Replaces the `upload-video-r2` Supabase Edge Function. That function existed
- * because the Next runtime held no storage credentials — under Azure it must,
- * since the same account key signs the vendor's read SAS. Moving it here
- * collapses two credential stores into one and lets auth go through the normal
- * `createClient()` session instead of a hand-parsed bearer header.
+ * Lives in the Next runtime rather than an edge function because the same
+ * Azure account key signs the vendor's read SAS — one credential store — and
+ * auth goes through the normal `createClient()` session instead of a
+ * hand-parsed bearer header.
  *
  * The returned URL is a write credential for exactly one blob name: `cw`, no
  * read, no delete, no list. Whoever holds it can put bytes at that one name and

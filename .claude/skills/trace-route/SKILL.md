@@ -11,14 +11,19 @@ worse, silently edits a page the user was not looking at.
 
 **Serve placement exists four times:**
 
-| File                                                                          | Renders on                     |
-| ----------------------------------------------------------------------------- | ------------------------------ |
-| `src/components/dashboard/home/serve-placement-home.tsx`                      | `/dashboard`                   |
-| `src/components/dashboard/matches/match-detail/serve-placement-card.tsx`      | `/dashboard/matches/[matchId]` |
-| `src/components/dashboard/matches/serve-placement/serve-placement-widget.tsx` | matches subtree                |
-| `src/components/dashboard/statistics/serve-placement-stats.tsx`               | `/dashboard/statistics`        |
+| File                                                                          | Renders on                          |
+| ----------------------------------------------------------------------------- | ----------------------------------- |
+| `src/components/dashboard/home/serve-placement-home.tsx`                      | `/dashboard`                        |
+| `src/components/dashboard/home/serve-placement-quiet-strip.tsx`               | `/dashboard`, inside the card above |
+| `src/components/dashboard/team/player-profile/serve-placement-card.tsx`       | `/dashboard/team/roster/[playerId]` |
+| `src/components/dashboard/matches/serve-placement/serve-placement-widget.tsx` | nothing — see below                 |
 
-Statistics cards, match cards and score rows have the same problem.
+The last one is the trap. `ServePlacementWidget` itself has no importer; the
+match detail Shots tab reuses only its exported types, colours and helpers
+(`shots/serve-zones-court.tsx`, `zone-table.tsx`, `use-shot-filters.ts`). Edit
+it expecting a rendered change and nothing moves on screen.
+
+Match cards and score rows have the same problem.
 
 ## Procedure
 

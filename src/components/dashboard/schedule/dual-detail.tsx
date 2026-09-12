@@ -121,12 +121,6 @@ export function DualDetail({
     },
   ];
 
-  // The first line that resolved an opponent program. A dual's lines all name
-  // one school, so any of them answers — but a dual entered as free text
-  // resolves none, and the widget's footer link is omitted for it.
-  const opponentProgramId =
-    entries.find((entry) => entry.opponentProgramId)?.opponentProgramId ?? null;
-
   return (
     <EventPageFrame
       title={<EventTitle vs name={event.name} />}
@@ -192,12 +186,7 @@ export function DualDetail({
             totals={totals}
             coverage={lineCoverageFrom(entries)}
           />
-          <HeadToHeadWidget
-            school={event.name}
-            history={history}
-            meetings={meetings}
-            opponentProgramId={opponentProgramId}
-          />
+          <HeadToHeadWidget history={history} meetings={meetings} />
         </div>
       }
     >

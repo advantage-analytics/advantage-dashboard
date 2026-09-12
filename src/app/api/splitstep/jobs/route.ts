@@ -378,10 +378,8 @@ export async function POST(request: NextRequest) {
       })
       .eq("id", job.id);
 
-    // 7. Mint the vendor URL — a read-only SAS on our Azure blob. (An earlier
-    //    revision pointed at a Cloudflare Worker whose download log doubled as
-    //    the processing-started signal; the Worker is retired and that signal
-    //    no longer exists.)
+    // 7. Mint the vendor URL — a read-only SAS on our Azure blob. There is no
+    //    processing-started signal; the first thing we hear is the webhook.
     const vendorUrl = await createVideoUrlStrategy(admin).mint({
       jobId: job.id,
       objectKey: job.video_object_key,

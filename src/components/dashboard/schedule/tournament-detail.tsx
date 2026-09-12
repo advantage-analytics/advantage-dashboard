@@ -329,17 +329,12 @@ function SchoolsFaced({ entries }: { entries: EventEntry[] }) {
             const className =
               "flex h-[36px] items-center justify-between gap-3 text-[12px]";
 
-            // A link only where the event actually resolved a program. A row
-            // that looks clickable and lands nowhere is worse than a plain one.
-            return row.programId ? (
-              <Link
-                key={school}
-                href={`/dashboard/opponents/${row.programId}`}
-                className={className}
-              >
-                {body}
-              </Link>
-            ) : (
+            // Plain rows. These linked to the opponent detail page, which was
+            // deleted with the rest of the unfinished Opponents UI; a row that
+            // looks clickable and lands nowhere is worse than a plain one.
+            // Restore the link when that page ships — `row.programId` is still
+            // resolved above and is what it needs.
+            return (
               <div key={school} className={className}>
                 {body}
               </div>

@@ -58,6 +58,10 @@ Use `tabular-nums` for all numeric data (stats, scores, percentages) to ensure a
 
 ## Colors
 
+Auth pages style from CSS variables; dashboard pages use Tailwind utilities
+directly. The tokens are the same either way — this is about which surface you
+are on, not two palettes.
+
 ### Text Colors
 
 | Token              | Value            | Use                                                                   |
@@ -146,9 +150,8 @@ the auth mesh and the sparkline's area fill (stroke colour 18%→0, chart-only).
 - Second serve dot: `rgba(129,140,248,0.5)` — **retired (v3).** Second
   serves wear `--viz-you-mid` (`#60A5FA`) everywhere, matching the you/opp
   role-based palette instead of a one-off violet. Done: `serve-placement-widget.tsx`
-  imports `VIZ_BLUE` / `VIZ_BLUE_MID` for the first/second pair.
-  `statistics/serve-placement-stats.tsx` still carries the old value and is
-  left alone on purpose — it is unreachable behind `ComingSoonPage`. See
+  imports `VIZ_BLUE` / `VIZ_BLUE_MID` for the first/second pair. The one
+  unreachable file that still carried the old value has been deleted. See
   "Match Detail Colors" below.
 
 ### Match Detail Colors
@@ -178,12 +181,9 @@ Match detail and video sections use additional colors for multi-player different
 > `colors.css` now, and `scripts/check-design-drift.mjs` check 5 fails if any of
 > them drifts from it again.
 >
-> Two files still paint violet and are deliberately untouched, because both are
-> unreachable — `statistics/serve-placement-stats.tsx` sits behind
-> `ComingSoonPage`, and `visuals/court-visualization.tsx` was superseded by
-> `match-detail/shots/shots-tab.tsx` and has no importer at all. They are
-> excluded in the checker by name, with the evidence recorded there. Whoever
-> revives either one owns the swap.
+> The two files that still painted violet were both unreachable and have since
+> been deleted, so no exclusion is needed: every file the checker reads now
+> transcribes `colors.css`.
 
 ---
 

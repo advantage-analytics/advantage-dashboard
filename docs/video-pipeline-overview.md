@@ -5,41 +5,18 @@ Written for whoever picks this up next. Branch: `splitstep-integration`.
 The provider is **"Advantage Intelligence"** in every user-visible string. `splitstep`
 is internal naming only.
 
-> **This file is mid-migration.** Source video moved from Cloudflare R2 to Azure Blob
-> Storage. The app code is fully switched over; the retired R2 pieces
-> (`workers/video-access/`, `supabase/functions/upload-video-r2/`,
-> `supabase/functions/delete-video-r2/`) are still in the repo on purpose, because
-> nothing has run against a real Azure account yet. Delete them — and rename this
-> file — once one job has round-tripped. See §3.
->
-> `video-url/worker-token.ts` is already gone: renaming `revoke()` to
-> `markUrlRetired()` would have meant editing dead code to satisfy an interface it
-> could never be used through.
+> Source video lives in **Azure Blob Storage**. It was Cloudflare R2 behind a Worker
+> until the vendor confirmed they can only fetch from Azure; the R2 code was kept
+> until a real job round-tripped, which it has, and was then deleted — Worker, both
+> edge functions, env block and all. §3 keeps the reasoning, because the trade-offs
+> it records still bind.
 
 ---
 
-## 0. What changed since the first version of this doc
+## 0. Status
 
-If you read an earlier copy, these are the deltas. Everything else still holds.
-
-|                           | Then                                                | Now                                                                                |
-| ------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| **Source video store**    | **Cloudflare R2, served via a Worker**              | **Azure Blob Storage, served via a SAS URL** (§3)                                  |
-| **Vendor URL revocation** | **per job, on demand**                              | **not possible; bounded by a 14-day TTL and deleting the blob on completion** (§3) |
-| **Browser upload**        | **one PUT of the whole file**                       | **8 MiB blocks, with retry per block** (§4)                                        |
-| Webhook auth              | plaintext shared secret in a header                 | **HMAC-SHA256, base64**, per the published contract (§5)                           |
-| Signature header          | unknown; a candidate list                           | **`X-HMAC-Signature`**, confirmed by the vendor (§5)                               |
-| Results download          | inline, before the 200                              | **after the 200**, in `after()` (§5)                                               |
-| Deleting a match          | left the video and the results JSON behind          | **deletes both**, plus the webhook envelopes (§6)                                  |
-| **After a job completes** | **the video sat there until the match was deleted** | **the source blob is deleted once results are stored** (§6)                        |
-| Upload progress           | invented — the matches list read a fixture array    | **real**, from `processing_jobs` (§7)                                              |
-| A closed tab mid-upload   | showed "Uploading 0%" forever                       | **reaped to `failed` after 15 min of silence** (§7)                                |
-| Orphan sweeper            | Supabase Storage only                               | **all three stores**, including the video container (§6)                           |
-| Max accepted video        | 12 GiB, from a verbal agreement                     | **8,000,000,000 bytes**, the documented enforced limit (§10)                       |
-| Phase 2 gate              | blocked on a real results fixture                   | **fixture obtained**; now blocked on vendor answers Q8/Q9/Q13 (§11)                |
-
-Three known gaps from the earlier copy are closed. The vendor-side ones are not, and
-have grown — see §10.
+Current state, kept current. Azure Blob has carried a full real match end to end. The
+open items live in §10 and §11; everything before them describes what runs today.
 
 ---
 
@@ -126,7 +103,7 @@ orphan sweeper identifies a stray by the match id in the **third path segment**,
 tidier flat layout would have broken it silently.
 
 > **The coupling that used to bite is gone.** `R2_BUCKET_VIDEOS` and `bucket_name` in
-> `workers/video-access/wrangler.toml` had to be the same string — the write side and
+> the retired Worker's `wrangler.toml` had to be the same string — the write side and
 > the read side of the same object, in two systems, with nothing but a human enforcing
 > it. That drifted once and produced a perfect silent failure: uploads succeeded,
 > `video_object_key` was recorded, and the vendor 404'd on every fetch with nothing
@@ -143,13 +120,14 @@ advisory, they said it was not: _"It needs to be an azure blob, unfortunately."_
 
 Everything before that answer served the video from our own infrastructure — R2 behind
 a Cloudflare Worker at `/v/{token}`. It worked, it was cheaper, and the vendor could
-not read it.
+not read it, which is the whole reason it is gone.
 
 ### What the Worker was for, and what replaced each part
 
-R2 had no consumer other than the vendor. In-app playback uses a local object URL, not
-the stored file, so when the vendor stopped being able to fetch from our host, the
-whole store lost its reason to exist. Three things justified it:
+R2 had no consumer other than the vendor — in-app playback uses a local object URL, not
+the stored file — so when the vendor could no longer fetch from our host, the store lost
+its reason to exist. Two of the three things that justified it were genuinely lost, and
+that is the cost of the move:
 
 | Driver            | Under the Worker                                                                                                                                     | Now                                                                                                                                                                                                 |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -601,7 +579,7 @@ ordering, and match-deletion cleanup. What remains is almost entirely vendor-sid
   `mintPlaybackSas()` (read-only, 30 minutes) plus `MatchVideoCard` on the match page
   stream the trimmed video direct from Azure — proxying breaks range requests. The
   orphaned `match-video-panel.tsx` was deleted with it. This is what makes the
-  R2-egress bullet below live rather than hypothetical.
+  egress-cost bullet below live rather than hypothetical.
 - **Retry after a vendor `job_failed` is a budget decision, not code.** The submit
   route handles the cheap case — a job stuck at `uploaded`, no vendor job, bytes
   already in Azure — and refuses when `external_job_id` is set, because retrying a
@@ -610,17 +588,19 @@ ordering, and match-deletion cleanup. What remains is almost entirely vendor-sid
   before it is coded. A genuinely stalled job
   (`85518306-2baf-427e-ad6c-79555041a523`) is waiting to be the retry path's first
   real test on a Preview deploy.
-- **Trimmed videos are in Azure, and R2 would be cheaper.** Egress is the whole argument:
-  ~$0.087/GB against R2's $0, with storage a wash. Azure won on the deadline, not on
-  merit — a SAS expires and Azure→Azure copy is one server-side call, while Azure→R2
-  means streaming gigabytes through a Worker. Revisit when playback lands, and note this
-  is the reason Phase 4 (retire R2) is on hold rather than done.
+- **Trimmed videos are in Azure, and object storage with free egress would be cheaper.**
+  Egress is the whole argument: ~$0.087/GB against $0 on R2 or a similar store, with
+  storage a wash. Azure won on the deadline, not on merit — a SAS expires and
+  Azure→Azure copy is one server-side call, while copying out means streaming gigabytes
+  through a proxy. The R2 code is deleted, so acting on this is now a build, not a
+  revival; at pilot volume the bill does not justify one. Revisit if playback traffic
+  grows.
 - **The job status endpoint is unused, and now matters more.**
   `GET {BASE_URL}/jobs/{job_id}` is both the recovery path for a delivery lost to an
   outage _and_ the replacement for `vendor_first_downloaded_at`, which the move to Azure
   stopped populating (§3). Nothing calls it yet.
 - **`vendor_first_downloaded_at`, `vendor_last_downloaded_at` and `vendor_request_count`
-  are now permanently null.** Only the Worker wrote them. Nothing in `src/` reads them,
+  are permanently null.** Only the retired Worker wrote them. Nothing in `src/` reads them,
   but `docs/ux-overhaul-brief.md` plans a "Processing" status on the first — that plan
   needs the job-status endpoint instead. The columns are left in place rather than
   dropped; decide once the replacement is wired.
@@ -674,7 +654,6 @@ branch. The three that block Phase 2 are **Q8** (what `in` means on a serve), **
 | `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE`    | Vercel                         | `true` = fail-closed on a missing signature. **Set this once a real delivery confirms `X-HMAC-Signature`**                                                                                                                                                                                                                                                                                                                                     |
 | `SPLITSTEP_API_URL`, `SPLITSTEP_API_KEY` | Vercel, **Preview only today** | key issued by the vendor. Production submissions 503 until set there                                                                                                                                                                                                                                                                                                                                                                           |
 | `CRON_SECRET`                            | Vercel                         | any long random string. Vercel sends it as `Authorization: Bearer <secret>` to `/api/cron/reclaim-videos`. **Unset = the reclaim never runs** and source videos accumulate                                                                                                                                                                                                                                                                     |
-| `R2_*`                                   | —                              | **retired.** Still in `.env.example` until the R2 code is deleted; nothing reads them                                                                                                                                                                                                                                                                                                                                                          |
 
 Note that the account key is the only credential and it does everything, which is why
 the write SAS is scoped to `cw` on one blob name — that scope is the containment, not

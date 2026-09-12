@@ -66,23 +66,13 @@ const CSS_TOKEN_DEFINITIONS = [
 ];
 
 // ── Unreachable code ────────────────────────────────────────────────────────
-// Everything here sits behind a `ComingSoonPage` and has zero importers
-// outside itself — verified, not assumed. It is kept as the seed for the real
-// page, so it is not deleted; but sweeping it would spend a third of the
-// effort on code nobody can reach AND leave dead code looking maintained.
-// Re-verify before removing an entry: the day Statistics ships, these become
-// live and must be swept.
-const UNREACHABLE = [
-  "src/components/dashboard/statistics/", // 20 files, behind /dashboard/statistics
-  "src/lib/data/statistics-server.ts", // referenced only by the above
-  "src/lib/data/statistics-client.ts",
-  // Superseded by match-detail/shots/shots-tab.tsx, which is what [matchId]
-  // actually code-splits to. Nothing imports this file — the only surviving
-  // reference is a prose mention in splitstep/derivation/court.ts:90. Both
-  // SKILL.md and AGENTS.md still describe it as live, which is how it kept
-  // looking maintained.
-  "src/components/dashboard/matches/visuals/court-visualization.tsx",
-];
+// Empty, and that is the intended state. This held the statistics subtree and
+// court-visualization.tsx — code behind a `ComingSoonPage` or with no importer
+// at all, skipped so the checker did not report drift nobody could see. All of
+// it has since been deleted rather than maintained, so every file the checker
+// reads is reachable. Add an entry only for code that is provably unreachable
+// AND being kept on purpose; deleting it is the better answer.
+const UNREACHABLE = [];
 
 // ── Allowlist: third-party brand colour, which we do not get to choose ──────
 const ALLOWED_HEX = {

@@ -12,15 +12,15 @@ Vendor docs: https://splitstep.ai/api-docs.html
 >
 > | Section                                 | Status                                                                                                                                                                                    |
 > | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-> | §2 architecture diagram + storage table | **Superseded.** Results JSON goes to Supabase Storage, not R2, and derivation does not run inline in the webhook. See `r2-and-webhook-overview.md` §2 and §5                              |
-> | §3 Phase 1                              | **Built.** Current state is `r2-and-webhook-overview.md`                                                                                                                                  |
+> | §2 architecture diagram + storage table | **Superseded.** Results JSON goes to Supabase Storage, not R2, and derivation does not run inline in the webhook. See `video-pipeline-overview.md` §2 and §5                              |
+> | §3 Phase 1                              | **Built.** Current state is `video-pipeline-overview.md`. The R2 storage path this section describes is deleted; source video is Azure Blob                                               |
 > | §4 Phase 2                              | **Not built**, and gated differently than described                                                                                                                                       |
 > | §5 open questions                       | **Superseded** by `docs/splitstep-vendor-questions.md` on the `splitstep-derivation` branch. Question numbers are preserved there, so `TODO(splitstep-qN)` markers in the code stay valid |
 > | §6 Phase 3 UI                           | Partly built — the wizard exists                                                                                                                                                          |
-> | §7 environment                          | **Superseded** by `r2-and-webhook-overview.md` §12                                                                                                                                        |
+> | §7 environment                          | **Superseded** by `video-pipeline-overview.md` §12                                                                                                                                        |
 > | §0, §1, §8                              | Still accurate                                                                                                                                                                            |
 >
-> **For what actually exists today, read `r2-and-webhook-overview.md` first.**
+> **For what actually exists today, read `video-pipeline-overview.md` first.**
 
 ---
 

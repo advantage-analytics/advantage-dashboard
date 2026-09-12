@@ -232,6 +232,13 @@ bash .claude/skills/task-next/check.sh clean
 Must pass immediately after — if it doesn't, the bookkeeping got left behind
 again.
 
+**After the last task on a branch.** A merged branch whose queue is fully
+`done` gets its queue pair (`.claude/tasks/<slug>.md` and `<slug>.log.md`)
+deleted in a cleanup commit on the integration branch — git history is the
+archive. Pipeline branches get this from stage 07 automatically; for every
+other branch it is a manual step, and skipping it leaves dead queues that
+later readers mistake for live work.
+
 ## 6b. Anything failed — stash
 
 ```bash

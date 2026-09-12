@@ -61,9 +61,9 @@ export const getMyPlayerIds = cache(async function getMyPlayerIds(): Promise<
  *
  * Returns `null` for a match that is not theirs, so a caller cannot mistake
  * "not mine" for "mine, and I was player two" — which is exactly the bug this
- * shape exists to prevent. `statistics-server.ts` documents the original:
- * treating an unknown `player1_id` as proof the viewer was player 2 inverted
- * every such row, and a match our side won was counted as a loss.
+ * shape exists to prevent. The original: treating an unknown `player1_id` as
+ * proof the viewer was player 2 inverted every such row, and a match our side
+ * won was counted as a loss.
  *
  * The last clause is legacy personal matches: uploaded before player ids were
  * populated at all, where the uploader is the only evidence of whose match it

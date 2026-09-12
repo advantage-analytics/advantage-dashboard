@@ -200,8 +200,7 @@ const DEFAULT_PERFORMANCE: OverallPerformanceData = {
  * `player1_id` used to be compared to a single user id, and everything else
  * inferred: `isUserPlayer1 ? player1Won : !player1Won`. That treats an UNKNOWN
  * player one as proof the viewer was player two, so a row with a null or
- * foreign `player1_id` inverted — a match our side won counted as a loss. It is
- * the bug `statistics-server.ts` fixed for Statistics and this file inherited.
+ * foreign `player1_id` inverted — a match our side won counted as a loss.
  *
  * It matters more now. A coach uploading for a roster athlete writes that
  * athlete's PROFILE id here, so these rows are reliably somebody else's — this

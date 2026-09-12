@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { formatEventDay } from "@/lib/schedule/format";
 import {
@@ -9,13 +8,14 @@ import {
 
 /**
  * T6 — the rail's "Head-to-head" card: the record line, then one row per
- * prior meeting, then (only with an opponent program id) a link to the full
- * history.
+ * prior meeting.
  *
- * The `school` name is taken as a prop but never printed in the body —
- * `formatOpponentRecord` already reads "you lead 3–1" with no name attached,
- * and the card sits directly under the event page's own title, which already
- * names the opponent. `school` exists only for the footer link's copy.
+ * No opponent name is printed: `formatOpponentRecord` already reads "you lead
+ * 3–1" with no name attached, and the card sits directly under the event
+ * page's own title, which already names the opponent. It once took a `school`
+ * and an `opponentProgramId` for a footer link to the opponent detail page;
+ * that page was deleted with the rest of the unfinished Opponents UI, so both
+ * props went with the link. Restore them when it ships.
  *
  * Server-renderable and data-shaped, same as `TeamTotalsWidget`: `history`
  * and `meetings` arrive already computed (`opponent-history.ts`), so an
@@ -23,15 +23,11 @@ import {
  * the same render path as one with a long series, not a separate empty state.
  */
 export function HeadToHeadWidget({
-  school,
   history,
   meetings,
-  opponentProgramId,
 }: {
-  school: string;
   history: OpponentDualHistory;
   meetings: OpponentMeeting[];
-  opponentProgramId: string | null;
 }) {
   return (
     <div className="surface-card min-w-0 px-5 pt-4 pb-4">
@@ -53,16 +49,6 @@ export function HeadToHeadWidget({
           No previous duals
         </p>
       )}
-
-      {opponentProgramId ? (
-        <Link
-          href={`/dashboard/opponents/${opponentProgramId}`}
-          className="mt-2 inline-block text-[12px] font-medium"
-          style={{ color: "var(--blue)" }}
-        >
-          All matches with {school} →
-        </Link>
-      ) : null}
     </div>
   );
 }

@@ -43,8 +43,6 @@ markers is hand-written — edit it as things move.
 | `/dashboard/matches/[matchId]` | [`src/app/dashboard/matches/[matchId]/page.tsx`](src/app/dashboard/matches/[matchId]/page.tsx) |
 | `/dashboard/matches/new` | [`src/app/dashboard/matches/new/page.tsx`](src/app/dashboard/matches/new/page.tsx) |
 | `/dashboard/matches` | [`src/app/dashboard/matches/page.tsx`](src/app/dashboard/matches/page.tsx) |
-| `/dashboard/opponents/[programId]/[playerId]` | [`src/app/dashboard/opponents/[programId]/[playerId]/page.tsx`](src/app/dashboard/opponents/[programId]/[playerId]/page.tsx) |
-| `/dashboard/opponents/[programId]` | [`src/app/dashboard/opponents/[programId]/page.tsx`](src/app/dashboard/opponents/[programId]/page.tsx) |
 | `/dashboard/opponents` | [`src/app/dashboard/opponents/page.tsx`](src/app/dashboard/opponents/page.tsx) |
 | `/dashboard/settings/account` | [`src/app/dashboard/settings/account/page.tsx`](src/app/dashboard/settings/account/page.tsx) |
 | `/dashboard/settings` | [`src/app/dashboard/settings/page.tsx`](src/app/dashboard/settings/page.tsx) |
@@ -99,7 +97,7 @@ which exists four separate times.
 | `src/components/ui/` | shadcn/ui primitives |
 | `src/components/dashboard/` | Feature components, mirroring the dashboard routes |
 | `src/lib/supabase/` | Three client factories: `server`, `client`, `admin` (service role) |
-| `src/lib/data/` | Server-side data layer, one file per domain (matches, activity, roster, team, schedule, statistics, ...); only `statistics` is split `*-server.ts` / `*-client.ts` for client-side recomputation |
+| `src/lib/data/` | Server-side data layer, one file per domain (matches, activity, roster, team, schedule, opponents, ...). A `*-client.ts` twin exists only where a page recomputes in the browser; today none do |
 | `src/lib/services/upload/` | Provider-strategy upload pipeline: parsers, providers, validators |
 | `src/lib/services/email/` | Transactional email: one sender, one HTML shell, templates grouped by family. Auth mail is Supabase's own, in `supabase/email-templates/` — see [`docs/email-system.md`](docs/email-system.md) |
 | `src/lib/llm/` | Provider-agnostic streaming adapter |
@@ -112,9 +110,6 @@ which exists four separate times.
 - **Three Supabase clients.** `server.ts` (cookie auth, Server Components and
   route handlers), `client.ts` (localStorage auth, browser), `admin.ts`
   (**service role — bypasses RLS entirely**).
-- **Statistics are computed twice by design:** `statistics-server.ts` for the
-  initial server load, `statistics-client.ts` for recomputation when filters
-  change. Both produce the same shape.
 - **Schema:** verify against the live database via the Supabase MCP, not
   `supabase/migrations/` — the folder runs well behind.
 
