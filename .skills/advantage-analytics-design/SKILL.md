@@ -127,6 +127,10 @@ Use `tabular-nums` for all numeric data (stats, scores, percentages) to ensure a
 
 ## Colors
 
+Auth pages style from CSS variables; dashboard pages use Tailwind utilities
+directly. The tokens are the same either way — this is about which surface you
+are on, not two palettes.
+
 ### Text Colors
 
 | Token              | Value            | Use                                                                   |

@@ -206,6 +206,15 @@ site or one decision:
   follow".
 - **`teamDigestEmail` + `digestIsWorthSending`** exist and nothing schedules
   them. Needs a Monday cron — and Vercel crons run in Production only.
+- **Sending volume against the free tier.** Resend's free plan allows 3,000
+  sends a month and **100 a day**; over the cap it pauses rather than billing.
+  Every wired send today is triggered by one human action, so the daily limit
+  is unreachable. The digest is the one that could hit it: it fans out to every
+  member of every program at once. Send it in chunks well under 100 spread
+  across the morning, or to coaches only, and move to a paid plan when the
+  recipient count approaches the cap rather than discovering it on a Monday.
+  Auth mail does not count against this — it goes out through Supabase's own
+  SMTP (§1).
 - **A separate sending subdomain.** `advantage-analytics.com` currently sends
   both cold outreach to college staff and transactional pilot invitations, and
   the suppression list already holds ~20 `.edu` addresses from the outreach.
