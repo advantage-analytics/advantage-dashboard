@@ -99,12 +99,15 @@ import {
   useDualDraft,
   type ChosenSchool,
   type DualDraftSeed,
+  type DualLineLock,
 } from "@/components/dashboard/schedule/static/dual-build-step";
 import { divisionLabel } from "@/lib/data/programs-server";
 import { formatValueOf } from "@/lib/schedule/format";
 import { isSettled } from "@/lib/schedule/entry-plan";
+import { outcomeForRound } from "@/lib/schedule/entry-state";
+import { resultLabelFromOutcome } from "@/components/dashboard/schedule/result-choice";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
-import type { EventDetail } from "@/lib/schedule/types";
+import type { EventDetail, EventEntry } from "@/lib/schedule/types";
 
 /** Where Cancel goes on step one. Inside the rebuilt set. */
 const SCHEDULE_HREF = "/dashboard/team/schedule";
@@ -184,10 +187,19 @@ interface DualEditTarget {
  * 'D3' — but the type allows null) matches no seeded line and is simply not
  * applied.
  *
- * Both sides are joined back into ONE label, which is how the builder holds a
- * doubles pair: `useDualDraft` splits on `/` at the boundaries and nowhere
- * else. `id` rides on every loaded line — see `DualLineSeed.id`.
+ * Both sides retain their saved label arrays and our side retains its saved
+ * roster identities. No slash-joined reparsing occurs, so a slash inside a
+ * roster name cannot change who the entry belongs to. `id` rides on every
+ * loaded line — see `DualLineSeed.id`.
  */
+function dualLineLock(entry: EventEntry): DualLineLock | undefined {
+  const result = outcomeForRound(entry, null);
+  if (result) {
+    return resultLabelFromOutcome(result.outcome);
+  }
+  return isSettled(entry) ? "played" : undefined;
+}
+
 export function dualSeed({ event, entries }: EventDetail): DualDraftSeed {
   return {
     eventId: event.id,
@@ -203,16 +215,13 @@ export function dualSeed({ event, entries }: EventDetail): DualDraftSeed {
             {
               key: entry.slot,
               id: entry.id,
-              ourLabels: [entry.playerLabels.join(" / ")],
-              theirLabels: [entry.opponentLabels.join(" / ")],
+              ourIds: entry.playerUserIds,
+              ourLabels: entry.playerLabels,
+              theirLabels: entry.opponentLabels,
               forfeit: entry.forfeit,
               // The same question `planEntryChanges` asks at save, asked here
               // so the row is drawn read-only rather than refused later.
-              locked: isSettled(entry)
-                ? entry.forfeit !== null
-                  ? ("forfeited" as const)
-                  : ("played" as const)
-                : undefined,
+              locked: dualLineLock(entry),
             },
           ]
         : [],
@@ -383,6 +392,7 @@ function DualDraftFlow({
     pool,
     laddered,
     editOurLabels,
+    selectOurPlayers,
     editTheirLabels,
     setForfeited,
     lineCount,
@@ -525,6 +535,7 @@ function DualDraftFlow({
           pool={pool}
           laddered={laddered}
           onOurLabels={editOurLabels}
+          onOurSelection={selectOurPlayers}
           onTheirLabels={editTheirLabels}
           onForfeit={setForfeited}
         />

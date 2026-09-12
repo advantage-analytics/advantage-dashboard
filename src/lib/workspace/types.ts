@@ -257,8 +257,67 @@ export interface Viewer {
  * role === player"). Neither is authorization — the database is — but they have
  * to agree, or a rail item bounces you off the page it points at.
  */
-export function isProgramStaff(workspace: Workspace): boolean {
+export function isProgramStaff(
+  workspace: Pick<Workspace, "kind" | "role">,
+): boolean {
   return workspace.kind === "team" && workspace.role !== "player";
+}
+
+/** The Schedule actions exposed to a viewer in the active workspace. */
+export interface ScheduleCapabilities {
+  canView: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
+  canScore: boolean;
+  canDelete: boolean;
+}
+
+type ScheduleWorkspace = Pick<Workspace, "kind" | "role">;
+
+/** May this viewer open and browse the team Schedule? */
+export function canViewTeamSchedule(workspace: ScheduleWorkspace): boolean {
+  return workspace.kind === "team";
+}
+
+/**
+ * May this viewer create, edit, or score team Schedule events and lines?
+ *
+ * Upload entitlement is intentionally absent from this answer. A player may
+ * be allowed to submit an unscheduled match, but attaching data to a scheduled
+ * line is a staff-only write enforced independently by the database.
+ */
+export function canManageTeamSchedule(workspace: ScheduleWorkspace): boolean {
+  // One spelling of the staff rule, so the Schedule's presentation gate and
+  // `requireStaff()`'s server-action gate cannot drift apart.
+  return isProgramStaff(workspace);
+}
+
+/** May this viewer delete an otherwise-safe, empty team Schedule event? */
+export function canDeleteTeamScheduleEvent(
+  workspace: ScheduleWorkspace,
+): boolean {
+  return (
+    workspace.kind === "team" &&
+    (workspace.role === "owner" || workspace.role === "coach")
+  );
+}
+
+/**
+ * Resolve the shared Schedule presentation/action policy in one place.
+ * Database authorization remains authoritative for every write.
+ */
+export function scheduleCapabilitiesFor(
+  workspace: ScheduleWorkspace,
+): ScheduleCapabilities {
+  const canManage = canManageTeamSchedule(workspace);
+
+  return {
+    canView: canViewTeamSchedule(workspace),
+    canCreate: canManage,
+    canEdit: canManage,
+    canScore: canManage,
+    canDelete: canDeleteTeamScheduleEvent(workspace),
+  };
 }
 
 /**

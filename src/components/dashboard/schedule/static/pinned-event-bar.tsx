@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 import {
   formatEventDay,
   formatEventSpanWithYear,
-  siteLabel,
+  siteTitle,
   formatLabel,
 } from "@/lib/schedule/format";
 import type { EventFormat, EventSite } from "@/lib/schedule/types";
@@ -122,7 +122,7 @@ export function PinnedEventBar({
           strokeWidth={1.5}
           aria-hidden="true"
         />
-        {siteLabel(site)}
+        {siteTitle(site)}
       </span>,
     );
   }

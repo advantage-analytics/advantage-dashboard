@@ -20,8 +20,12 @@ import {
   type IncomingEntry,
 } from "./entry-plan";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { isProgramStaff } from "@/lib/workspace/types";
-import type { Discipline, EventSite } from "./types";
+import {
+  canDeleteTeamScheduleEvent,
+  isProgramStaff,
+} from "@/lib/workspace/types";
+import type { Discipline, EventSite, OutcomeKind, OutcomeSide } from "./types";
+import { validateLineup } from "./lineup-validation";
 
 export type ActionError = { error: string };
 
@@ -146,6 +150,38 @@ function isError(value: unknown): value is ActionError {
   return typeof value === "object" && value !== null && "error" in value;
 }
 
+function scheduleWriteError(error: {
+  code?: string;
+  message: string;
+}): ActionError {
+  return {
+    error:
+      error.code === "40001" || error.code === "40P01"
+        ? "This line changed while you were saving. Refresh the event and try again."
+        : error.message,
+  };
+}
+
+/** Eligibility and audit are atomic in Postgres, including direct deletes. */
+export async function deleteEvent(
+  eventId: string,
+): Promise<{ ok: true } | ActionError> {
+  const context = await getWorkspaceContext();
+  if (!context) return { error: "Not signed in." };
+  if (!canDeleteTeamScheduleEvent(context.active)) {
+    return { error: "Only an owner or coach can delete an event." };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_schedule_event", {
+    p_program_id: context.active.id,
+    p_event_id: eventId,
+  });
+  if (error) return scheduleWriteError(error);
+  revalidatePath("/dashboard/team/schedule");
+  revalidatePath(`/dashboard/team/schedule/${eventId}`);
+  return { ok: true };
+}
+
 export async function createDual(
   input: CreateDualInput,
 ): Promise<{ eventId: string } | ActionError> {
@@ -155,6 +191,9 @@ export async function createDual(
   if (!input.opponent.trim()) return { error: "Name the opponent first." };
   if (input.lines.length === 0)
     return { error: "A dual needs at least one line." };
+
+  const lineupErrors = validateLineup(input.lines);
+  if (lineupErrors.length > 0) return { error: lineupErrors[0].reason };
 
   const supabase = await createClient();
 
@@ -207,7 +246,9 @@ export async function createDual(
         player_labels: line.playerLabels,
         opponent_labels: line.opponentLabels,
         opponent_program_id: opponentProgramId,
-        forfeit: line.forfeit ?? null,
+        // New builder results live in program_event_outcomes. The legacy
+        // column stays empty; saveBuilderForfeits records the selected side.
+        forfeit: null,
       })),
     );
 
@@ -217,6 +258,13 @@ export async function createDual(
     await supabase.from("program_events").delete().eq("id", event.id);
     return { error: entryError.message };
   }
+
+  const outcomeFailure = await saveBuilderForfeits(
+    supabase,
+    { id: event.id, programId: auth.programId },
+    input.lines,
+  );
+  if (outcomeFailure) return outcomeFailure;
 
   // Give the opposing names an identity, so the next program to play them finds
   // the same people rather than typing a second copy.
@@ -407,6 +455,71 @@ function revalidateEvent(eventId: string): void {
   revalidatePath(`/dashboard/team/schedule/${eventId}`);
 }
 
+/** Record only new draft choices; unchanged settled lines never reach here. */
+async function saveBuilderForfeits(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  event: { id: string; programId: string },
+  lines: LineupLineInput[],
+): Promise<ActionError | null> {
+  const forfeits = lines.filter((line) => line.forfeit != null);
+  if (forfeits.length === 0) return null;
+  const { data: entries, error } = await supabase
+    .from("program_event_entries")
+    .select("id, slot")
+    .eq("event_id", event.id)
+    .eq("program_id", event.programId)
+    .in(
+      "slot",
+      forfeits.map((line) => line.slot),
+    );
+  const fail = (reason: string): ActionError => {
+    revalidateEvent(event.id);
+    return {
+      error: `The lineup was saved, but a forfeit was not: ${reason} Open the event from Schedule and review its outcomes before saving again.`,
+    };
+  };
+  if (error) return fail(error.message);
+  for (const line of forfeits) {
+    const entry = entries?.find((row) => row.slot === line.slot);
+    if (!entry) return fail(`${line.slot} could not be found.`);
+    const { error: outcomeError } = await supabase.rpc("set_schedule_outcome", {
+      p_program_id: event.programId,
+      p_entry_id: entry.id,
+      p_round: null,
+      p_kind: "forfeit",
+      p_side: line.forfeit,
+    });
+    if (outcomeError) return fail(scheduleWriteError(outcomeError).error);
+  }
+  return null;
+}
+
+/** A null outcome clears the saved result at this exact line/round. */
+export async function setOutcome(input: {
+  entryId: string;
+  round: string | null;
+  outcome: { kind: OutcomeKind; side: OutcomeSide } | null;
+}): Promise<{ ok: true } | ActionError> {
+  const auth = await requireStaff();
+  if (isError(auth)) return auth;
+  const supabase = await createClient();
+  const { data: eventId, error } = await supabase.rpc("set_schedule_outcome", {
+    p_program_id: auth.programId,
+    p_entry_id: input.entryId,
+    p_round: input.round,
+    p_kind: input.outcome?.kind ?? null,
+    p_side: input.outcome?.side ?? null,
+  });
+  if (error) return scheduleWriteError(error);
+  if (typeof eventId !== "string") {
+    return {
+      error: "The outcome was not saved. Refresh the event and try again.",
+    };
+  }
+  revalidateEvent(eventId);
+  return { ok: true };
+}
+
 export async function updateDual(
   input: UpdateDualInput,
 ): Promise<{ eventId: string } | ActionError> {
@@ -467,11 +580,20 @@ export async function updateDual(
         player_labels: line.playerLabels,
         opponent_labels: line.opponentLabels,
         opponent_program_id: opponentProgramId,
-        forfeit: line.forfeit ?? null,
+        forfeit: null,
       };
     },
   );
   if (failure) return failure;
+
+  const outcomeFailure = await saveBuilderForfeits(
+    supabase,
+    { id: detail.event.id, programId: auth.programId },
+    [...plan.update, ...plan.insert].map(
+      (change) => change.row as LineupLineInput,
+    ),
+  );
+  if (outcomeFailure) return outcomeFailure;
 
   revalidateEvent(detail.event.id);
   return { eventId: detail.event.id };
@@ -600,7 +722,28 @@ export async function recordResult(
     ad_scoring?: boolean | null;
   };
 
-  const round = input.round ?? (entry.slot as string | null);
+  // A forged round must not bypass the dual's single-result grain.
+  const round =
+    event.kind === "dual" ? (entry.slot as string | null) : input.round;
+  if (event.kind === "tournament" && !round) {
+    return { error: "Choose a tournament round before saving the score." };
+  }
+  let outcomeQuery = supabase
+    .from("program_event_outcomes")
+    .select("id")
+    .eq("entry_id", entry.id);
+  outcomeQuery =
+    event.kind === "dual"
+      ? outcomeQuery.is("round", null)
+      : outcomeQuery.eq("round", round!);
+  const { data: outcomes, error: outcomeError } = await outcomeQuery.limit(1);
+  if (outcomeError)
+    return {
+      error: "Couldn't check this line's outcome. Refresh and try again.",
+    };
+  if (outcomes?.length) {
+    return { error: "Clear the saved outcome before adding a score." };
+  }
 
   // Never mint a second match for the same line.
   //
@@ -718,7 +861,7 @@ export async function recordResult(
       // to explain it.
       .select("id");
 
-    if (updateError) return { error: updateError.message };
+    if (updateError) return scheduleWriteError(updateError);
 
     if (!updated || updated.length === 0) {
       return {
@@ -779,7 +922,7 @@ export async function recordResult(
     private: false,
   });
 
-  if (matchError) return { error: matchError.message };
+  if (matchError) return scheduleWriteError(matchError);
 
   await syncEntryOpponent();
 
@@ -1003,12 +1146,19 @@ export async function setForfeit(
     }
   }
 
-  const { error: updateError } = await supabase
+  const { data: updated, error: updateError } = await supabase
     .from("program_event_entries")
     .update({ forfeit: side, updated_at: new Date().toISOString() })
-    .eq("id", entryId);
+    .eq("id", entryId)
+    .eq("program_id", auth.programId)
+    .select("id");
 
-  if (updateError) return { error: updateError.message };
+  if (updateError) return scheduleWriteError(updateError);
+  if (!updated?.length)
+    return {
+      error:
+        "This line could not be changed. Refresh and check your staff access.",
+    };
 
   revalidatePath("/dashboard/team/schedule");
   revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);

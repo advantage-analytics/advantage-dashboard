@@ -29,21 +29,12 @@ export function ScheduleTitleRow({
       <TeamListHeading title="Schedule">{children}</TeamListHeading>
       <div className="flex-1" />
       {canCreate && (
-        <>
-          <button
-            type="button"
-            className={advButton("ghost", "md")}
-            title="Schedule import is not available yet"
-          >
-            Import
-          </button>
-          <Link
-            href="/dashboard/team/schedule/new"
-            className={advButton("primary", "md")}
-          >
-            New event
-          </Link>
-        </>
+        <Link
+          href="/dashboard/team/schedule/new"
+          className={advButton("primary", "md")}
+        >
+          New event
+        </Link>
       )}
     </div>
   );

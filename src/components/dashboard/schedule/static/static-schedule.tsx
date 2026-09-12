@@ -46,6 +46,7 @@ import type {
   EventSite,
   ScheduleRow,
 } from "@/lib/schedule/types";
+import type { ScheduleCapabilities } from "@/lib/workspace/types";
 
 /**
  * One program's schedule, as this component reads it.
@@ -69,7 +70,7 @@ interface Facets {
 /**
  * `Tc2` / `Tc2c` — the schedule, in the page shape Matches and Roster share.
  *
- * Title with a one-line summary, ghost Import beside primary New event, the
+ * Title with a one-line summary and primary New event, the
  * All · Upcoming · Completed pills with Filters and sort, one white event
  * table at full width in the date-first grammar, and a season footer with
  * "Set next lineup". `Tc2c` is the page a coach lands on: no event selected,
@@ -117,7 +118,7 @@ export function StaticSchedule({
   schedule,
   season,
   today,
-  canCreate,
+  capabilities,
   canAddOwnMatch,
   programName,
   opponents,
@@ -136,8 +137,8 @@ export function StaticSchedule({
    * here would give the two renders different answers.
    */
   today: string;
-  /** `isProgramStaff` upstream — gates New event, Import, and every write the drawer points at. */
-  canCreate: boolean;
+  /** Named Schedule actions, derived once from the active workspace. */
+  capabilities: ScheduleCapabilities;
   /** `canUploadForProgram` upstream — gates day zero's "One-off match in Matches". */
   canAddOwnMatch: boolean;
   /** The workspace's name, which the summary line opens with. */
@@ -147,7 +148,15 @@ export function StaticSchedule({
   /** `?event=` from the URL, or null. Ignored unless it names a row. */
   initialSelectedId: string | null;
 }) {
-  const { rows, details } = schedule;
+  const { rows: serverRows, details } = schedule;
+  const { canCreate } = capabilities;
+  const [deletedIds, setDeletedIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const rows = useMemo(
+    () => serverRows.filter((row) => !deletedIds.has(row.id)),
+    [serverRows, deletedIds],
+  );
 
   const initial =
     initialSelectedId && rows.some((row) => row.id === initialSelectedId)
@@ -207,6 +216,41 @@ export function StaticSchedule({
       }
     },
     [finishClose],
+  );
+
+  const removeDeletedEvent = useCallback(
+    (eventId: string) => {
+      const deletedIndex = visible.findIndex((row) => row.id === eventId);
+      const focusRow =
+        visible[deletedIndex + 1] ?? visible[deletedIndex - 1] ?? null;
+      setDeletedIds((current) => {
+        const next = new Set(current);
+        next.add(eventId);
+        return next;
+      });
+      close(null);
+
+      // The alert dialog skips its normal trigger restoration on success:
+      // that trigger leaves with this drawer. Wait until the deleted row is
+      // gone, then land on a durable schedule target.
+      requestAnimationFrame(() => {
+        if (focusRow) {
+          document.getElementById(scheduleRowId(focusRow.id))?.focus();
+          return;
+        }
+        const heading = document.getElementById("schedule-heading");
+        if (heading) {
+          heading.focus();
+          return;
+        }
+        document
+          .querySelector<HTMLElement>(
+            'a[href="/dashboard/team/schedule/new/dual"]',
+          )
+          ?.focus();
+      });
+    },
+    [close, visible],
   );
 
   /** A row click: open the rail on it, or close the rail if it is already there. */
@@ -292,6 +336,7 @@ export function StaticSchedule({
       if (target) {
         if (target.closest("input, textarea, select, [contenteditable=true]"))
           return;
+        if (target.closest('[role="alertdialog"], [aria-modal="true"]')) return;
         if (
           target.closest(
             `[role="dialog"]:not([${DRAWER_ATTR}] [role="dialog"])`,
@@ -362,7 +407,7 @@ export function StaticSchedule({
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
       <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pt-5 pb-6">
-        {/* Title slot with summary, ghost Import beside primary New event. */}
+        {/* Title slot with summary and primary New event. */}
         <ScheduleTitleRow canCreate={canCreate}>
           {programName} · {seasonLabel(rows, today)} ·{" "}
           <span className="tabular">
@@ -513,7 +558,8 @@ export function StaticSchedule({
           onStep={step}
           onClose={() => close(drawerId)}
           onClosed={finishClose}
-          canEdit={canCreate}
+          onDeleted={() => removeDeletedEvent(drawer.event.id)}
+          capabilities={capabilities}
         />
       ) : null}
     </div>

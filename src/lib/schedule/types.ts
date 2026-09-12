@@ -3,8 +3,8 @@
  * entry has produced.
  *
  * An entry is somebody on our side, in a slot, at an event. It deliberately
- * carries no score and no result: the moment anyone records how a line went, a
- * `matches` row exists and the score lives there. See
+ * carries no score: played scores live in `matches`, while non-played results
+ * live separately in schedule outcomes and never enter analysis. See
  * `supabase/migrations/20260820072347_program_event_entries.sql`.
  */
 
@@ -13,6 +13,35 @@ import type { AnalysisStatus } from "@/lib/data/match-analysis";
 export type EventKind = "dual" | "tournament";
 export type EventSite = "home" | "away" | "neutral";
 export type Discipline = "singles" | "doubles";
+
+export type OutcomeKind = "forfeit" | "default" | "withdrawal";
+/** The side that forfeited, defaulted or withdrew, NOT the winner. */
+export type OutcomeSide = "ours" | "theirs";
+
+/** Schedule-only result, reduced from program_event_outcomes. */
+export interface EntryOutcome {
+  id: string;
+  /** Null for a dual line; the specific round for a tournament entry. */
+  round: string | null;
+  kind: OutcomeKind;
+  side: OutcomeSide;
+  actorUserId: string;
+  recordedAt: string;
+}
+
+/** Legacy forfeits have no outcome row or attribution to invent. */
+export type ResolvedOutcome =
+  | { source: "outcome"; outcome: EntryOutcome }
+  | {
+      source: "legacy";
+      outcome: { kind: "forfeit"; side: OutcomeSide; round: null };
+    };
+
+/** Exactly one answer for a dual line or an explicitly selected round. */
+export type EntryResult =
+  | { kind: "unanswered" }
+  | { kind: "played"; match: EntryMatch }
+  | ({ kind: "non-played" } & ResolvedOutcome);
 
 export interface EventFormat {
   bestOf: number;
@@ -106,6 +135,8 @@ export interface EventEntry {
   forfeit: "ours" | "theirs" | null;
   /** 0..1 for a dual line; 0..n for a tournament entry — that is its run. */
   matches: EntryMatch[];
+  /** Optional during loader rollout. Clearing removes the relevant outcome. */
+  outcomes?: EntryOutcome[];
 }
 
 /**
@@ -131,17 +162,10 @@ export interface LineupLine {
   /**
    * Which side forfeited this line, or null for a normal line.
    *
-   * The builder can only ever set `"ours"`. A forfeit here means *we* cannot
-   * field a player — that is the only side knowable while writing our own
-   * lineup, and it is the one design 2b draws ("— no available player"). The
-   * opponent forfeiting is discovered on match day, so `line-row.tsx` on the
-   * event page carries the two-sided picker instead — which is why
-   * `EventEntry.forfeit` is wider than this.
-   *
    * `"ours"` awards the point to THEM. Getting that backwards would hand a
    * team a point it did not win with nothing on screen looking broken.
    */
-  forfeit: "ours" | null;
+  forfeit: OutcomeSide | null;
 }
 
 /** One row on the schedule page. Everything here is computed, nothing stored. */

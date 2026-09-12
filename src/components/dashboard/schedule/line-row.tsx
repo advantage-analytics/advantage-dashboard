@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
@@ -9,13 +8,14 @@ import { scoreSetsFrom } from "@/lib/ui/score-format";
 import { ScoreEntry } from "@/components/dashboard/schedule/score-entry";
 import { RowAction } from "@/components/dashboard/schedule/row-action";
 import {
-  entryState,
-  lineWon,
-  matchState,
+  outcomeForRound,
+  resolveEntryResult,
+  resultState,
+  resultWon,
   supportsVideo,
+  type EntryState,
 } from "@/lib/schedule/entry-state";
 import { LINE_STATUS } from "@/lib/schedule/line-status";
-import { setForfeit } from "@/lib/schedule/actions";
 import type { EntryMatch, EventEntry } from "@/lib/schedule/types";
 
 /**
@@ -58,30 +58,26 @@ export function LineRow({
 }) {
   const [scoring, setScoring] = useState(false);
 
-  const isForfeited = entry.forfeit !== null;
+  const result = resolveEntryResult(entry, round);
+  const outcome = outcomeForRound(entry, round);
+  const isNonPlayed = result.kind === "non-played";
 
-  // A forfeited line with no player on our side renders "— no available
-  // player" rather than a bare em dash, because the forfeit explains why.
+  // A non-played line with no player on our side renders "— no available
+  // player" rather than a bare em dash, because the outcome explains why.
   const ourLabel =
-    isForfeited && entry.playerLabels.length === 0
+    isNonPlayed && entry.playerLabels.length === 0
       ? "— no available player"
       : entry.playerLabels.join(" / ");
   const theirLabel =
     match?.opponentLabels.join(" / ") || entry.opponentLabels.join(" / ");
 
-  // A forfeit's outcome is on the entry, not on a match — `lineWon` is where
-  // that precedence is stated, for every surface at once.
-  const won = lineWon(entry, match);
+  // One round's result decides its mark. A tournament sibling must not leak
+  // into this row, and a schedule outcome takes precedence over a match.
+  const won = resultWon(result);
 
-  // This row's own match, not the entry's. A tournament entry renders one row
-  // per round, and asking the entry gives every round the loudest round's
-  // answer. `entryState` is still right for the matchless row, where there is
-  // no match to ask.
-  const state = isForfeited
-    ? ("forfeited" as const)
-    : match
-      ? matchState(match)
-      : entryState(entry);
+  // This row's exact result, not the whole entry. A tournament entry renders
+  // one row per round, so asking the entry would give sibling rounds one state.
+  const state = resultState(result);
 
   if (scoring) {
     return (
@@ -90,6 +86,7 @@ export function LineRow({
         ourLabel={entry.playerLabels[0] ?? "Our player"}
         round={round}
         initialOpponent={theirLabel}
+        initialOutcome={outcome?.outcome ?? null}
         onDone={() => setScoring(false)}
       />
     );
@@ -105,16 +102,14 @@ export function LineRow({
         {label}
       </span>
 
-      {/* Round 44: the glyph, not the word. This row already spells the outcome
-          a second way in the d./f. verb beside the matchup, and it has no
-          Result header to read a badge against — one outcome vocabulary per row
-          shape. "Won"/"Lost" survives as the mark's accessible name. */}
+      {/* The shared result glyph is the product's one outcome register.
+          "Won"/"Lost" survives as the mark's accessible name. */}
       <span>{won === null ? null : <ResultMark won={won} />}</span>
 
       <span className="min-w-0 truncate text-[13px] text-[var(--ink-900)]">
         {ourLabel || "—"}{" "}
         <span style={{ color: "var(--ink-600)" }}>
-          {isForfeited ? "vs" : won === null ? "vs" : won ? "d." : "f."}
+          {isNonPlayed ? "vs" : won === null ? "vs" : won ? "d." : "f."}
         </span>{" "}
         {theirLabel || "—"}
         {showSchool && entry.opponentSchool ? (
@@ -125,9 +120,9 @@ export function LineRow({
         ) : null}
       </span>
 
-      {/* A forfeited line carries no set score — never an invented one. */}
+      {/* A non-played line carries no set score — never an invented one. */}
       <ScoreLine
-        sets={isForfeited ? [] : match ? scoreSetsFrom(match.score) : []}
+        sets={isNonPlayed ? [] : match ? scoreSetsFrom(match.score) : []}
         className="tabular text-right text-[13px]"
         style={{ color: "var(--ink-900)" }}
       />
@@ -136,10 +131,9 @@ export function LineRow({
         <Action
           state={state}
           match={match}
-          entry={entry}
           entryId={entry.id}
           matchId={match?.id ?? null}
-          videoAllowed={supportsVideo(entry)}
+          videoAllowed={supportsVideo(entry, round)}
           canEdit={canEdit}
           onScore={() => setScoring(true)}
         />
@@ -151,16 +145,14 @@ export function LineRow({
 function Action({
   state,
   match,
-  entry,
   entryId,
   matchId,
   videoAllowed,
   canEdit,
   onScore,
 }: {
-  state: ReturnType<typeof entryState>;
+  state: EntryState;
   match: EntryMatch | null;
-  entry: EventEntry;
   entryId: string;
   /** Which of the entry's matches this row is. Null on an unplayed line. */
   matchId: string | null;
@@ -168,91 +160,23 @@ function Action({
   canEdit: boolean;
   onScore: () => void;
 }) {
-  const router = useRouter();
-  const [confirming, setConfirming] = useState<"ours" | "theirs" | null>(null);
-  const [pending, startTransition] = useTransition();
-  // `setForfeit` refuses a line that already has a match, and refuses a
-  // tournament entry outright. Both refusals used to be dropped on the floor,
-  // which reached the coach as a button that did nothing — the guard was
-  // working and invisible, which is worse than no guard for the person
-  // clicking it.
-  const [failure, setFailure] = useState<string | null>(null);
-
-  function apply(side: "ours" | "theirs" | null) {
-    startTransition(async () => {
-      const result = await setForfeit(entryId, side);
-      if ("error" in result) {
-        setFailure(result.error);
-        return;
-      }
-      setFailure(null);
-      setConfirming(null);
-      router.refresh();
-    });
-  }
-
-  if (failure !== null) {
-    return (
-      <span className="flex items-center gap-2 text-[11px]">
-        <span style={{ color: "var(--danger)" }}>{failure}</span>
-        <button
-          type="button"
-          onClick={() => setFailure(null)}
-          className="rounded-[3px] text-[11px] outline-none focus-visible:shadow-[var(--focus-ring)]"
-          style={{ color: "var(--ink-500)" }}
-        >
-          Dismiss
-        </button>
-      </span>
-    );
-  }
-
-  // Forfeited: show status and a clear action for editors.
-  if (state === "forfeited") {
+  if (state === "forfeited" || state === "defaulted" || state === "withdrawn") {
+    const status = LINE_STATUS[state]!;
     if (!canEdit) {
-      const status = LINE_STATUS.forfeited!;
       return <StatusChip tone={status.tone}>{status.label}</StatusChip>;
     }
     return (
-      <RowAction onClick={() => apply(null)}>
-        {pending ? "Clearing…" : "Clear forfeit"}
-      </RowAction>
+      <span className="flex items-center justify-end gap-2">
+        <StatusChip tone={status.tone}>{status.label}</StatusChip>
+        <RowAction onClick={onScore}>Edit result</RowAction>
+      </span>
     );
   }
 
   if (state === "empty") {
     if (!canEdit) return null;
 
-    // Confirming which side forfeited — a small inline picker.
-    if (confirming !== null) {
-      return (
-        <span className="flex items-center gap-2 text-[11px]">
-          <RowAction onClick={() => apply("ours")}>
-            {pending ? "…" : "Ours"}
-          </RowAction>
-          <span style={{ color: "var(--ink-300)" }}>·</span>
-          <RowAction onClick={() => apply("theirs")}>
-            {pending ? "…" : "Theirs"}
-          </RowAction>
-          <span style={{ color: "var(--ink-300)" }}>·</span>
-          <button
-            type="button"
-            onClick={() => setConfirming(null)}
-            className="text-[11px] text-[var(--ink-500)] outline-none"
-          >
-            Cancel
-          </button>
-        </span>
-      );
-    }
-
-    return (
-      <span className="flex items-center gap-2">
-        <RowAction onClick={onScore}>Add score</RowAction>
-        <span style={{ color: "var(--ink-300)" }}>·</span>
-        <RowAction onClick={() => setConfirming("ours")}>Forfeit</RowAction>
-      </span>
-    );
+    return <RowAction onClick={onScore}>Add result</RowAction>;
   }
 
   // The waiting states — working, waiting, failed — and their words come from
