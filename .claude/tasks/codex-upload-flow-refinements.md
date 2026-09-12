@@ -20,19 +20,19 @@ ready).
 ## T1 · Reproduce multi-set score loss
 
 - **status:** done
-- **model:** gpt-5.3-codex-spark
+- **model:** sonnet
 - **reasoning:** medium
 - **files:** Best guess: tests/upload-score-regression.spec.ts (new), existing wizard fixtures.
 - **done when:**
   - [ ] A fixture-backed one-set import reaches the real wizard and reproduces entry into sets 2 and 3, identifying whether values, focus, or submitted scores are lost.
   - [ ] Equivalent video-form and preset cases are exercised and their results recorded.
   - [ ] The reproduction uses intercepted submission and no real upload or vendor job; any expected failing assertion is explicitly reported as the intermediate result.
-- **notes:** Plan 01. Reproduction only; do not claim a runtime fix. Source: work/upload-flow-refinements/03_plan/output/plan.md. Execution preference: Codex Spark when supported; otherwise use the available equivalent and report the fallback. Own this surface only; other contributors may be working in the repository, so preserve their edits.
+- **notes:** Plan 01. Reproduction only; do not claim a runtime fix. Source: work/upload-flow-refinements/03_plan/output/plan.md. Own this surface only; other contributors may be working in the repository, so preserve their edits.
 
 ## T2 · Preserve newly entered score sets
 
 - **status:** done
-- **model:** gpt-5.6-sol
+- **model:** opus
 - **reasoning:** medium
 - **needs:** T1
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts, src/components/dashboard/matches/new-match-wizard/score-state.ts (new if needed), tests/upload-score-state.spec.ts (new), tests/upload-score-regression.spec.ts.
@@ -46,7 +46,7 @@ ready).
 ## T3 · Repair game-score focus order
 
 - **status:** done
-- **model:** gpt-5.3-codex-spark
+- **model:** sonnet
 - **reasoning:** medium
 - **needs:** T2
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/ScoreBlock.tsx, tests/upload-score-regression.spec.ts.
@@ -55,12 +55,12 @@ ready).
   - [ ] Entering an existing game cell selects its value for correction; clearing and invalid input do not advance.
   - [ ] Typing a 10–8 tiebreak keeps focus during multi-digit entry; the last game cell does not submit or focus a nonexistent input.
   - [ ] Browser assertions cover focus order, correction, ghost creation, and the final cell.
-- **notes:** Plan 03. Use T2's coherent score transition and stable input identity. Source: work/upload-flow-refinements/03_plan/output/plan.md. Execution preference: Codex Spark when supported; otherwise use the available equivalent and report the fallback. Own this surface only; other contributors may be working in the repository, so preserve their edits.
+- **notes:** Plan 03. Use T2's coherent score transition and stable input identity. Source: work/upload-flow-refinements/03_plan/output/plan.md. Own this surface only; other contributors may be working in the repository, so preserve their edits.
 
 ## T4 · Protect scores when reducing the format
 
 - **status:** done
-- **model:** gpt-5.3-codex-spark
+- **model:** sonnet
 - **reasoning:** medium
 - **needs:** T3
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/DetailsStepContent.tsx, tests/upload-score-regression.spec.ts.
@@ -69,12 +69,12 @@ ready).
   - [ ] Cancelling retains the original format and all scores; confirming removes only excluded sets.
   - [ ] Changing a format with no populated excluded sets needs no confirmation, and event-owned format locks remain intact.
   - [ ] Editing does not write score changes to an existing match before submission.
-- **notes:** Plan 04. Prevent score loss only; no new scoring rules. Source: work/upload-flow-refinements/03_plan/output/plan.md. Execution preference: Codex Spark when supported; otherwise use the available equivalent and report the fallback. Own this surface only; other contributors may be working in the repository, so preserve their edits.
+- **notes:** Plan 04. Prevent score loss only; no new scoring rules. Source: work/upload-flow-refinements/03_plan/output/plan.md. Own this surface only; other contributors may be working in the repository, so preserve their edits.
 
 ## T5 · Define completion and import identity rules
 
 - **status:** done
-- **model:** gpt-5.6-sol
+- **model:** opus
 - **reasoning:** medium
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/validation.ts (new), src/components/dashboard/matches/new-match-wizard/types.ts, tests/upload-validation.spec.ts (new).
 - **done when:**
@@ -87,7 +87,7 @@ ready).
 ## T6 · Wire identity confirmation into wizard state
 
 - **status:** done
-- **model:** gpt-6-astra
+- **model:** fable
 - **reasoning:** high
 - **needs:** T2, T5
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts, tests/upload-validation.spec.ts, existing hook-test fixtures.
@@ -101,7 +101,7 @@ ready).
 ## T7 · Show import identity confirmation
 
 - **status:** blocked
-- **model:** gpt-5.3-codex-spark
+- **model:** opus
 - **reasoning:** medium
 - **needs:** T6
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx, src/components/dashboard/matches/new-match-wizard/ImportIdentityNotice.tsx (new), tests/upload-identity.spec.ts (new).
@@ -110,12 +110,12 @@ ready).
   - [ ] One confirmation action and a secondary change-file/player action are available; a negative answer explains the need for a correctly oriented export.
   - [ ] Click and keyboard continuation use the same blocking result, and the notice is announced accessibly.
   - [ ] Replacing the file resets the notice state; confirmation or name editing does not alter athlete IDs.
-- **notes:** Plan 07. UI consumes T6's state; do not duplicate the identity predicate. Source: work/upload-flow-refinements/03_plan/output/plan.md. Execution preference: Codex Spark when supported; otherwise use the available equivalent and report the fallback. Own this surface only; other contributors may be working in the repository, so preserve their edits.
+- **notes:** Plan 07. UI consumes T6's state; do not duplicate the identity predicate. Source: work/upload-flow-refinements/03_plan/output/plan.md. Own this surface only; other contributors may be working in the repository, so preserve their edits.
 
 ## T8 · Align shared selected-option styling
 
 - **status:** done
-- **model:** gpt-5.3-codex-spark
+- **model:** sonnet
 - **reasoning:** medium
 - **files:** Best guess: src/components/ui/float-menu.tsx, .skills/advantage-analytics-design/SKILL.md, existing shared-control tests.
 - **done when:**
@@ -123,12 +123,12 @@ ready).
   - [ ] Unselected options retain hover feedback and selected/unselected options retain visible keyboard focus.
   - [ ] Canonical Dropdown / Menu documentation describes the shipped treatment.
   - [ ] Representative consumers retain action-menu behavior; semantic success glyphs and white radio checks are unchanged.
-- **notes:** Plan 08. Visual inspection of pointer and keyboard states; no unrelated menu redesign. Source: work/upload-flow-refinements/03_plan/output/plan.md. Execution preference: Codex Spark when supported; otherwise use the available equivalent and report the fallback. Own this surface only; other contributors may be working in the repository, so preserve their edits.
+- **notes:** Plan 08. Visual inspection of pointer and keyboard states; no unrelated menu redesign. Source: work/upload-flow-refinements/03_plan/output/plan.md. Own this surface only; other contributors may be working in the repository, so preserve their edits.
 
 ## T9 · Order providers and align source selections
 
 - **status:** blocked
-- **model:** gpt-5.3-codex-spark
+- **model:** opus
 - **reasoning:** medium
 - **needs:** T8
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/SourceStepContent.tsx, its imported EntitySelect implementation (resolve exact path), tests/upload-source.spec.ts (new if needed).
@@ -137,12 +137,12 @@ ready).
   - [ ] Explicit SwingVision/source-link/draft choices and preset locks are preserved; import-only presets do not offer video.
   - [ ] Chosen provider/entity rows use the shared blue-check selection treatment.
   - [ ] Option labels remain readable and keyboard focus visible in the affected selectors.
-- **notes:** Plan 09. EntitySelect path is a bounded import lookup, not a repository sweep. Source: work/upload-flow-refinements/03_plan/output/plan.md. Execution preference: Codex Spark when supported; otherwise use the available equivalent and report the fallback. Own this surface only; other contributors may be working in the repository, so preserve their edits.
+- **notes:** Plan 09. EntitySelect path is a bounded import lookup, not a repository sweep. Source: work/upload-flow-refinements/03_plan/output/plan.md. Own this surface only; other contributors may be working in the repository, so preserve their edits.
 
 ## T10 · Make player details editable and required
 
 - **status:** todo
-- **model:** gpt-5.3-codex-spark
+- **model:** sonnet
 - **reasoning:** medium
 - **needs:** T4, T5, T7, T8
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/DetailsStepContent.tsx, tests/upload-player-details.spec.ts (new).
@@ -152,12 +152,12 @@ ready).
   - [ ] Short backhand labels remain on one line with room for the check; narrow layouts stack fields instead of wrapping option text.
   - [ ] Editable names have visible edit affordances while schedule-owned locks remain intact.
   - [ ] Profile saving stays explicit and self-only; teammate edits do not write to the uploader profile or roster names, and missing styles block completion.
-- **notes:** Plan 10. Validate the existing two side fields for doubles; no four-person metadata model. Source: work/upload-flow-refinements/03_plan/output/plan.md. Execution preference: Codex Spark when supported; otherwise use the available equivalent and report the fallback. Own this surface only; other contributors may be working in the repository, so preserve their edits.
+- **notes:** Plan 10. Validate the existing two side fields for doubles; no four-person metadata model. Source: work/upload-flow-refinements/03_plan/output/plan.md. Own this surface only; other contributors may be working in the repository, so preserve their edits.
 
 ## T11 · Define reusable upload eligibility
 
 - **status:** todo
-- **model:** gpt-6-astra
+- **model:** fable
 - **reasoning:** high
 - **files:** Best guess: src/lib/workspace/types.ts, src/lib/workspace/upload-eligibility.ts (new only if needed), tests/upload-eligibility.spec.ts (new).
 - **done when:**
@@ -171,7 +171,7 @@ ready).
 ## T12 · Enforce roster subjects in wizard state
 
 - **status:** todo
-- **model:** gpt-6-astra
+- **model:** fable
 - **reasoning:** high
 - **needs:** T6, T11
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts, tests/upload-eligibility.spec.ts, targeted flow fixtures.
@@ -185,7 +185,7 @@ ready).
 ## T13 · Show approval restrictions at every entry
 
 - **status:** todo
-- **model:** gpt-5.3-codex-spark
+- **model:** sonnet
 - **reasoning:** medium
 - **needs:** T7, T12
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx, tests/upload-approval.spec.ts (new).
@@ -194,12 +194,12 @@ ready).
   - [ ] Button and keyboard behavior share the same eligibility result; Back, exit, and Save draft remain usable.
   - [ ] Returning to the page and submitting recheck eligibility; lookup failure offers retry without unlocking submission.
   - [ ] Refreshed approval clears only the approval restriction, and existing-match checks use the match's workspace rather than a newly selected workspace.
-- **notes:** Plan 13. No redirect that hides the notice; preserve the staff line picker. Source: work/upload-flow-refinements/03_plan/output/plan.md. Execution preference: Codex Spark when supported; otherwise use the available equivalent and report the fallback. Own this surface only; other contributors may be working in the repository, so preserve their edits.
+- **notes:** Plan 13. No redirect that hides the notice; preserve the staff line picker. Source: work/upload-flow-refinements/03_plan/output/plan.md. Own this surface only; other contributors may be working in the repository, so preserve their edits.
 
 ## T14 · Enforce upload eligibility on direct writes
 
 - **status:** todo
-- **model:** gpt-6-astra
+- **model:** fable
 - **reasoning:** high
 - **needs:** T11, T12
 - **files:** Best guess: supabase/migrations/<new-timestamp>_upload_eligibility.sql (new), tests/upload-write-eligibility.spec.ts (new).
@@ -214,7 +214,7 @@ ready).
 ## T15 · Verify transfer authorization for the athlete
 
 - **status:** todo
-- **model:** gpt-6-astra
+- **model:** fable
 - **reasoning:** high
 - **needs:** T11, T14
 - **files:** Best guess: src/app/api/splitstep/upload-url/route.ts, existing upload-url authorization tests.
@@ -228,7 +228,7 @@ ready).
 ## T16 · Verify final job eligibility before quota spend
 
 - **status:** todo
-- **model:** gpt-6-astra
+- **model:** fable
 - **reasoning:** high
 - **needs:** T15
 - **files:** Best guess: src/app/api/splitstep/jobs/route.ts, existing job authorization tests.
@@ -242,7 +242,7 @@ ready).
 ## T17 · Present video requirements before selection
 
 - **status:** todo
-- **model:** gpt-5.3-codex-spark
+- **model:** sonnet
 - **reasoning:** medium
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/FileStepContent.tsx, src/components/dashboard/matches/new-match-wizard/VideoRequirements.tsx (new if needed), existing file-step tests.
 - **done when:**
@@ -250,12 +250,12 @@ ready).
   - [ ] A simple court guide includes both baselines, far service line, and outside-court space without inventing a measured margin or claiming automatic framing validation.
   - [ ] Supporting guidance covers file size, preferred format, singles, and complete-game trim requirements using Advantage Intelligence naming.
   - [ ] Mobile/desktop inspection confirms readable guidance that does not obscure errors/progress or introduce camera defaults.
-- **notes:** Plan 17. Follow the reviewed provider guidance; no video-analysis engine. Source: work/upload-flow-refinements/03_plan/output/plan.md. Execution preference: Codex Spark when supported; otherwise use the available equivalent and report the fallback. Own this surface only; other contributors may be working in the repository, so preserve their edits.
+- **notes:** Plan 17. Follow the reviewed provider guidance; no video-analysis engine. Source: work/upload-flow-refinements/03_plan/output/plan.md. Own this surface only; other contributors may be working in the repository, so preserve their edits.
 
 ## T18 · Align existing video validation with requirements
 
 - **status:** todo
-- **model:** gpt-5.6-sol
+- **model:** opus
 - **reasoning:** medium
 - **needs:** T17
 - **files:** Best guess: src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (import tracing only), its existing video probe/validator (resolve exact path), tests/upload-video-requirements.spec.ts (new if needed).
@@ -269,7 +269,7 @@ ready).
 ## T19 · Document Save draft behavior
 
 - **status:** todo
-- **model:** gpt-5.3-codex-spark
+- **model:** sonnet
 - **reasoning:** medium
 - **files:** Best guess: docs/upload-draft-behavior.md (new).
 - **done when:**
@@ -277,12 +277,12 @@ ready).
   - [ ] Future acceptance criteria cover save failure staying put, durable subject/workspace binding, local versus server persistence, and duplicate prevention.
   - [ ] The document excludes File objects/credentials from payloads and specifies no new expiry job.
   - [ ] Recommendations are distinguished from shipped behavior; no draft persistence implementation or executable follow-up task is added.
-- **notes:** Plan 19. Documentation only. Source: work/upload-flow-refinements/03_plan/output/plan.md. Execution preference: Codex Spark when supported; otherwise use the available equivalent and report the fallback. Own this surface only; other contributors may be working in the repository, so preserve their edits.
+- **notes:** Plan 19. Documentation only. Source: work/upload-flow-refinements/03_plan/output/plan.md. Own this surface only; other contributors may be working in the repository, so preserve their edits.
 
 ## T20 · Verify the integrated upload refinements
 
 - **status:** todo
-- **model:** gpt-6-astra
+- **model:** fable
 - **reasoning:** high
 - **needs:** T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19
 - **files:** Best guess: focused upload tests from T1–T19 (only actual coverage gaps), task-run verification record.
