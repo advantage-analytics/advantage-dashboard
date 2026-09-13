@@ -158,7 +158,11 @@ export function StaticEventChooser() {
   return (
     <EventShell
       footer={
-        <>
+        // The body's own 820px column, so Cancel and Continue sit under the
+        // cards' edges instead of at the far ends of the pane — the body is
+        // centred and a full-width bar under it read as belonging to a
+        // different screen.
+        <div className="mx-auto flex w-full max-w-[820px] items-center gap-3">
           <button
             type="button"
             className={advButton("ghost", "md")}
@@ -177,7 +181,7 @@ export function StaticEventChooser() {
           >
             {COPY.continue}
           </button>
-        </>
+        </div>
       }
     >
       {/* The artboard's body is `padding:36px 48px 0`. `EventShell` already
