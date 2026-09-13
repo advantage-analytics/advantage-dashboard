@@ -291,7 +291,7 @@ export interface Viewer {
    * `users.role` — the self-described persona (player/coach/parent/academy).
    * Written by onboarding only and shown nowhere in Settings; it gates nothing (team
    * surfaces key off `Workspace.role` above) and is never what the account
-   * is entitled to. See `lib/user/roles.ts` for why those two had to be split.
+   * is entitled to. See `lib/user/plan.ts` for why those two had to be split.
    */
   role: string | null;
   /** `users.created_at` as "Mon YYYY", or null for a row without one. */
