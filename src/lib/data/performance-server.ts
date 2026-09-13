@@ -4,21 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { getPersonalMatchData } from "@/lib/data/personal-matches-server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { viewerSide } from "./viewer-side";
+import { scoreWinner } from "./match-utils";
 
-/**
- * Did player1 take this match? The stored `winner` when a retirement or a
- * default decided it — the side that stopped can lead on sets — and the set
- * count otherwise, as every tally here always counted it.
- */
+/** Did player1 take this match? The shared rule; level sets are not a win. */
 function player1Took(score: NonNullable<DbMatch["score"]>): boolean {
-  if (score.winner) return score.winner === "player1";
-  const p1Sets = score.player1.filter(
-    (s, i) => s > (score.player2[i] ?? 0),
-  ).length;
-  const p2Sets = score.player2.filter(
-    (s, i) => s > (score.player1[i] ?? 0),
-  ).length;
-  return p1Sets > p2Sets;
+  return scoreWinner(score) === "player1";
 }
 
 interface WinLossView {
@@ -479,14 +469,7 @@ function calculateHeatmap(
         : (m.player1_name ?? "Opponent");
       const p1Sets = m.score?.player1 ?? [];
       const p2Sets = m.score?.player2 ?? [];
-      const p1Won = p1Sets.filter((s, i) => s > (p2Sets[i] ?? 0)).length;
-      const p2Won = p2Sets.filter((s, i) => s > (p1Sets[i] ?? 0)).length;
-      const winner = m.score?.winner;
-      const won = winner
-        ? (winner === "player1") === isP1
-        : isP1
-          ? p1Won > p2Won
-          : p2Won > p1Won;
+      const won = scoreWinner(m.score) === (isP1 ? "player1" : "player2");
       const scoreStr = p1Sets
         .map((s, i) => `${s}-${p2Sets[i] ?? 0}`)
         .join(", ");

@@ -1,4 +1,5 @@
 import type { LineupLineInput } from "./actions";
+import { DUAL_SLOT_ORDER, slotDiscipline } from "./courts";
 import { splitNames } from "./format";
 import type { LineupLine } from "./types";
 
@@ -50,17 +51,7 @@ export function validateLineup(
 }
 
 /** A dual's nine courts, in order — the lineup a dual must field in full. */
-export const DUAL_SLOTS = [
-  "S1",
-  "S2",
-  "S3",
-  "S4",
-  "S5",
-  "S6",
-  "D1",
-  "D2",
-  "D3",
-] as const;
+export const DUAL_SLOTS = DUAL_SLOT_ORDER;
 
 /**
  * Is this line set — a player on a singles court, a pair on a doubles court,
@@ -147,11 +138,11 @@ export function validateDualLineup(
       continue;
     }
     seen.add(line.slot);
-    const doubles = line.slot.startsWith("D");
-    if (line.discipline !== (doubles ? "doubles" : "singles")) {
+    const discipline = slotDiscipline(line.slot);
+    if (line.discipline !== discipline) {
       errors.push({
         slot: line.slot,
-        reason: `${line.slot} is a ${doubles ? "doubles" : "singles"} line.`,
+        reason: `${line.slot} is a ${discipline} line.`,
       });
       continue;
     }
@@ -177,7 +168,7 @@ export function validateDualLineup(
       continue;
     }
     if (
-      doubles &&
+      discipline === "doubles" &&
       !line.noPlayer &&
       line.opponentLabels.filter((label) => label.trim() !== "").length === 1
     ) {
@@ -200,7 +191,7 @@ export function validateDualLineup(
     })),
   );
   for (const [slot, earlier] of clashes) {
-    const kind = slot.startsWith("D") ? "doubles" : "singles";
+    const kind = slotDiscipline(slot);
     errors.push({
       slot,
       reason: `${slot} has a player already on ${earlier}. A player can play one ${kind} line.`,

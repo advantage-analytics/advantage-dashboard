@@ -1,9 +1,10 @@
+import { DOUBLES_SLOTS, SINGLES_SLOTS } from "@/lib/schedule/courts";
 import { lineWon } from "@/lib/schedule/entry-state";
 import type { EventEntry } from "@/lib/schedule/types";
 
 /** A college dual's full card: six singles lines and three doubles. */
-const DUAL_SINGLES = 6;
-const DUAL_DOUBLES = 3;
+const DUAL_SINGLES = SINGLES_SLOTS.length;
+const DUAL_DOUBLES = DOUBLES_SLOTS.length;
 
 /**
  * `sm` is the Form Ticks size the drawer draws. `lg` is the same strip at twice

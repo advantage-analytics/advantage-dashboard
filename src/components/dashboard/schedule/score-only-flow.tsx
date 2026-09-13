@@ -25,17 +25,12 @@
  * recorded round for correction. See `score/page.tsx`.
  */
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { Check, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { advButton } from "@/lib/ui/adv-button";
-import {
-  opponentRosterForDual,
-  recordResult,
-  setOutcome,
-  type OpponentRosterCandidate,
-} from "@/lib/schedule/actions";
+import { recordResult, setOutcome } from "@/lib/schedule/actions";
 import { ROUND_ORDER, splitNames } from "@/lib/schedule/format";
 import {
   outcomeKey,
@@ -47,9 +42,11 @@ import {
   type SavedLineUpload,
   type ScoreFormState,
 } from "@/lib/schedule/score-seed";
+import { endingMark } from "@/lib/schedule/entry-state";
 import {
   OpponentPopup,
-  opponentPoolFor,
+  useOpponentPool,
+  type OpponentPool,
 } from "@/components/dashboard/schedule/static/opponent-popup";
 import {
   OpponentPairPicker,
@@ -125,6 +122,18 @@ export function ScoreOnlyFlow({
    * the line the form has just LEFT.
    */
   const [lastSaved, setLastSaved] = useState<SavedLineUpload | null>(null);
+  // The opponent's saved roster, fetched once for the event rather than on
+  // every line's remount — and only when some line still needs a name.
+  const naming = lineup.some(
+    (choice) => choice.preset && choice.preset.opponentName.trim() === "",
+  );
+  const schoolName = current.opponentSchool ?? current.eventName ?? "";
+  const programKey = current.opponentProgramKey;
+  const pool = useOpponentPool(
+    naming ? programKey : null,
+    programKey ? `program:${programKey}` : `text:${schoolName}`,
+    schoolName,
+  );
   /** Session overrides for the server-seeded lineup's resolved/open state. */
   const [resolution, setResolution] = useState<
     Record<string, "open" | "resolved">
@@ -223,6 +232,7 @@ export function ScoreOnlyFlow({
         key={currentKey ?? "line"}
         preset={current}
         lineup={lineup}
+        pool={pool}
         initialOutcome={
           currentKey &&
           Object.prototype.hasOwnProperty.call(outcomeOverrides, currentKey)
@@ -281,6 +291,7 @@ export function ScoreOnlyFlow({
 function ScoreForm({
   preset,
   lineup,
+  pool,
   initialOutcome,
   recorded,
   noun,
@@ -296,6 +307,8 @@ function ScoreForm({
   preset: EventPreset;
   /** Every line of the event — who their other players already are. */
   lineup: LineChoice[];
+  /** The opponent's school and saved roster, for naming a blank opponent. */
+  pool: OpponentPool;
   initialOutcome: Pick<EntryOutcome, "kind" | "side"> | null;
   /** A tournament round that already holds a result — saving replaces it. */
   recorded: boolean;
@@ -420,19 +433,27 @@ function ScoreForm({
     else router.push(eventHref);
   };
 
+  /** This line's outcome write; shows the refusal and answers whether it took. */
+  async function writeOutcome(
+    outcome: Pick<EntryOutcome, "kind" | "side"> | null,
+  ): Promise<boolean> {
+    const result = await setOutcome({
+      entryId: preset.entryId ?? "",
+      round: tournament ? preset.round : null,
+      outcome,
+    });
+    if ("error" in result) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }
+
   /** Remove a no-score result (a default, or a legacy one) and start over. */
   function removeResult() {
     setError(null);
     startTransition(async () => {
-      const result = await setOutcome({
-        entryId: preset.entryId ?? "",
-        round: tournament ? preset.round : null,
-        outcome: null,
-      });
-      if ("error" in result) {
-        setError(result.error);
-        return;
-      }
+      if (!(await writeOutcome(null))) return;
       router.refresh();
       setSavedOutcome(null);
       setState((prior) => ({ ...prior, ending: null, stoppedBy: null }));
@@ -470,35 +491,13 @@ function ScoreForm({
     startTransition(async () => {
       if (plan.kind === "outcome") {
         const outcome = { kind: "default" as const, side: plan.side };
+        const changed =
+          savedOutcome?.kind !== "default" || savedOutcome.side !== plan.side;
         // A saved outcome is never updated in place (the database refuses it),
         // so a changed side is a clear and a save.
-        if (
-          savedOutcome &&
-          (savedOutcome.kind !== "default" || savedOutcome.side !== plan.side)
-        ) {
-          const cleared = await setOutcome({
-            entryId: preset.entryId ?? "",
-            round: tournament ? preset.round : null,
-            outcome: null,
-          });
-          if ("error" in cleared) {
-            setError(cleared.error);
-            return;
-          }
-        }
-        if (
-          savedOutcome?.kind !== "default" ||
-          savedOutcome.side !== plan.side
-        ) {
-          const result = await setOutcome({
-            entryId: preset.entryId ?? "",
-            round: tournament ? preset.round : null,
-            outcome,
-          });
-          if ("error" in result) {
-            setError(result.error);
-            return;
-          }
+        if (changed) {
+          if (savedOutcome && !(await writeOutcome(null))) return;
+          if (!(await writeOutcome(outcome))) return;
         }
         setSavedOutcome(outcome);
         finish(outcome, null);
@@ -506,15 +505,7 @@ function ScoreForm({
       }
 
       if (plan.clearOutcomeFirst) {
-        const cleared = await setOutcome({
-          entryId: preset.entryId ?? "",
-          round: tournament ? preset.round : null,
-          outcome: null,
-        });
-        if ("error" in cleared) {
-          setError(cleared.error);
-          return;
-        }
+        if (!(await writeOutcome(null))) return;
         setSavedOutcome(null);
       }
 
@@ -532,6 +523,7 @@ function ScoreForm({
     <OpponentInRow
       preset={preset}
       lineup={lineup}
+      pool={pool}
       doubles={doubles}
       value={state.opponentName}
       onChange={(opponentName) =>
@@ -899,7 +891,7 @@ function EndingLine({
           <>
             {" "}
             <span className="text-[var(--ink-300)]">·</span> the score stays as
-            entered, marked {retired ? "ret." : "def."}
+            entered, marked {endingMark(state.ending)}
           </>
         ) : winner && !retired ? (
           <>
@@ -1013,41 +1005,19 @@ function LineupForfeitNote({
 function OpponentInRow({
   preset,
   lineup,
+  pool,
   doubles,
   value,
   onChange,
 }: {
   preset: EventPreset;
+  /** Their school and saved roster — fetched once, above the per-line remount. */
+  pool: OpponentPool;
   lineup: LineChoice[];
   doubles: boolean;
   value: string;
   onChange: (value: string) => void;
 }) {
-  const programKey = preset.opponentProgramKey;
-  const schoolName = preset.opponentSchool ?? preset.eventName ?? "";
-  const poolKey = programKey ? `program:${programKey}` : `text:${schoolName}`;
-  const [fetched, setFetched] = useState<{
-    forKey: string;
-    candidates: OpponentRosterCandidate[];
-  } | null>(null);
-
-  useEffect(() => {
-    if (!programKey) return;
-    let stale = false;
-    void opponentRosterForDual(programKey).then((result) => {
-      if (stale || "error" in result) return;
-      setFetched({ forKey: poolKey, candidates: result.candidates });
-    });
-    return () => {
-      stale = true;
-    };
-  }, [programKey, poolKey]);
-
-  const pool = useMemo(
-    () => opponentPoolFor(poolKey, schoolName, fetched),
-    [poolKey, schoolName, fetched],
-  );
-
   const slot = preset.round ?? "Line";
 
   if (!doubles) {

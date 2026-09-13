@@ -1,5 +1,6 @@
 import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
 import type { MatchAnalysis } from "@/lib/data/match-analysis";
+import { scoreWinner } from "@/lib/data/match-utils";
 
 export interface DbMatch {
   id: string;
@@ -97,13 +98,6 @@ export function transformDbMatch(
     player2Tiebreak: row.score?.player2_tiebreaks?.[i] ?? null,
   }));
 
-  let p1Sets = 0;
-  let p2Sets = 0;
-  for (const set of sets) {
-    if (set.player1 > set.player2) p1Sets++;
-    else if (set.player2 > set.player1) p2Sets++;
-  }
-
   return {
     id: row.id,
     tournamentName: row.tournament_name ?? "Unknown Event",
@@ -119,10 +113,9 @@ export function transformDbMatch(
     player2: { name: row.player2_name },
     score: {
       sets,
-      // A stored winner first: a retired or defaulted match names who took
-      // it, and the side that stopped can be ahead on sets. The schedule's
-      // `matchWon` reads it the same way.
-      winner: row.score?.winner ?? (p1Sets > p2Sets ? "player1" : "player2"),
+      // The shared rule (a stored winner, then sets). A level score has always
+      // read as player2 here.
+      winner: scoreWinner(row.score) ?? "player2",
     },
   };
 }

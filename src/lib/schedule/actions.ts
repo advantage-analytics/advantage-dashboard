@@ -35,6 +35,7 @@ import type {
   OutcomeSide,
 } from "./types";
 import { validateDualLineup, validateLineup } from "./lineup-validation";
+import { matchResultFor } from "./entry-state";
 
 export type ActionError = { error: string };
 
@@ -881,14 +882,7 @@ export async function recordResult(
       ? { winner: ending.side === "ours" ? "player2" : "player1" }
       : {}),
   };
-  // `matchResultFor` in entry-state.ts spells the same words for readers;
-  // repeated here so this server module keeps its import list.
-  const matchResult =
-    ending?.kind === "retired"
-      ? "Retired"
-      : ending?.kind === "defaulted"
-        ? "Defaulted"
-        : "Final Score";
+  const matchResult = matchResultFor(ending?.kind ?? null);
 
   /**
    * WHOSE match this is, not just what it is called.

@@ -2487,15 +2487,25 @@ export function useUploadMatchWizard({
           ? await supabase
               .from("matches")
               .update({
-                // A retired or defaulted line's winner rides on the score, and
-                // the typed form does not carry it — writing the form's score
-                // alone would hand the line back to whoever led on games.
-                score: preset?.score?.winner
-                  ? { ...matchRow.score, winner: preset.score.winner }
-                  : matchRow.score,
+                // A retired line's winner rides on the score, and the typed
+                // form does not carry it — so it is kept while the refilled
+                // match still stopped as a retirement, and dropped otherwise:
+                // a score corrected to a finished match is decided by its sets.
+                score:
+                  stopped &&
+                  formData.result === "Retired" &&
+                  preset?.score?.winner
+                    ? { ...matchRow.score, winner: preset.score.winner }
+                    : matchRow.score,
                 player1_name: matchRow.player1_name,
                 player2_name: matchRow.player2_name,
-                ...(stopped ? { result: matchRow.result } : {}),
+                // The score page can have written "Retired"/"Defaulted"; a
+                // refill that no longer stopped must not keep that label.
+                ...(stopped
+                  ? { result: matchRow.result }
+                  : preset?.ending
+                    ? { result: matchRow.result || "Final Score" }
+                    : {}),
                 // Only when one was resolved. Spreading it unconditionally would
                 // write null over an identity a previous pass established, which
                 // is worse than never having set it — the opponent's profile

@@ -100,6 +100,9 @@ export function LineRow({
   // This row's exact result, not the whole entry. A tournament entry renders
   // one row per round, so asking the entry would give sibling rounds one state.
   const state = resultState(result);
+  const forfeitSide = lineupForfeitSide(entry);
+  // "ret."/"def." after a stopped match's score, as on a scoresheet.
+  const mark = isNonPlayed ? null : endingMark(match?.ending);
 
   const action = (
     <Action
@@ -110,7 +113,7 @@ export function LineRow({
       videoAllowed={supportsVideo(entry, round)}
       // A "No player" forfeit, either side's, is the lineup's own answer: it
       // changes through Edit dual, not the score flow.
-      canEdit={canEdit && lineupForfeitSide(entry) === null}
+      canEdit={canEdit && forfeitSide === null}
       scoreHref={scoreHref(entry.eventId, entry.id, round)}
     />
   );
@@ -120,7 +123,7 @@ export function LineRow({
     // A dual saves with every line set, so a line with nobody on it is the
     // "No player" forfeit — there is no unset line to offer to fill.
     const noPlayer = entry.playerLabels.length === 0;
-    const theirNoPlayer = lineupForfeitSide(entry) === "theirs";
+    const theirNoPlayer = forfeitSide === "theirs";
     return (
       <div className={`${SPLIT_ROW} ${columns}`}>
         <SlotLabel>{label}</SlotLabel>
@@ -180,10 +183,10 @@ export function LineRow({
               style={{ color: "var(--ink-900)" }}
             />
           ) : null}
-          {sets.length > 0 && endingMark(match?.ending) ? (
+          {sets.length > 0 && mark ? (
             // How a stopped match ended rides on its score, as on a scoresheet.
             <span className="text-[11px] whitespace-nowrap text-[var(--ink-500)]">
-              {endingMark(match?.ending)}
+              {mark}
             </span>
           ) : null}
         </span>
@@ -245,9 +248,9 @@ export function LineRow({
           className="tabular text-right text-[13px]"
           style={{ color: "var(--ink-900)" }}
         />
-        {!isNonPlayed && endingMark(match?.ending) ? (
+        {mark ? (
           <span className="ml-1.5 text-[11px] text-[var(--ink-500)]">
-            {endingMark(match?.ending)}
+            {mark}
           </span>
         ) : null}
       </span>

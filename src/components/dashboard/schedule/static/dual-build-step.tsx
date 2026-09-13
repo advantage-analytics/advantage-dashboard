@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { DOUBLES_SLOTS, SINGLES_SLOTS } from "@/lib/schedule/courts";
 import { DateField } from "@/components/ui/date-field";
 import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import { resultLabelFromOutcome } from "@/components/dashboard/schedule/result-choice";
 import {
-  opponentPoolFor,
+  useOpponentPool,
   type OpponentPool,
 } from "@/components/dashboard/schedule/static/opponent-popup";
 import {
@@ -18,10 +19,8 @@ import { useNewDualData } from "@/components/dashboard/schedule/static/dual-scho
 import { programDisplayName } from "@/lib/data/programs-server";
 import {
   createDual,
-  opponentRosterForDual,
   updateDual,
   type LineupLineInput,
-  type OpponentRosterCandidate,
 } from "@/lib/schedule/actions";
 import {
   EVENT_FORMATS,
@@ -212,10 +211,6 @@ interface DualDraft {
   surface: string;
   format: DualFormat;
 }
-
-/** `2b`'s nine courts, in the order it draws them. */
-const SINGLES_SLOTS = ["S1", "S2", "S3", "S4", "S5", "S6"];
-const DOUBLES_SLOTS = ["D1", "D2", "D3"];
 
 /**
  * Six singles and three doubles, seeded from the ladder where there is one.
@@ -626,41 +621,12 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
       ? `program:${school.program.programKey}`
       : `text:${school.name}`;
 
-  // The opponent's pooled roster, stored WITH the school key it was fetched
-  // for. `dual-form.tsx`'s rule, ported: an in-flight request for School A
-  // must not land after a change of school and pose as School B's. The
-  // cleanup marks a superseded fetch stale, and `opponentPoolFor` below drops
-  // any roster whose stamp no longer matches whatever is on screen.
-  const [fetchedRoster, setFetchedRoster] = useState<{
-    forKey: string;
-    candidates: OpponentRosterCandidate[];
-  } | null>(null);
-  const programKey =
-    school.kind === "program" ? school.program.programKey : null;
-
-  useEffect(() => {
-    // Free text has no directory row, so there is no pool to ask for — an
-    // empty one, not an error.
-    if (!programKey) return;
-    let stale = false;
-    void opponentRosterForDual(programKey).then((result) => {
-      if (stale || "error" in result) return;
-      // Stamped with `schoolKey` itself, never a second spelling of it: the
-      // stamp and the pool's gate have to be the same string or the gate
-      // silently never matches — an empty pool on every school, which looks
-      // exactly like a school with nobody saved.
-      setFetchedRoster({ forKey: schoolKey, candidates: result.candidates });
-    });
-    return () => {
-      stale = true;
-    };
-  }, [programKey, schoolKey]);
-
   // The one place the school and its saved roster are joined, and the only
-  // thing the popups are given — see `OpponentPool`.
-  const pool = useMemo(
-    () => opponentPoolFor(schoolKey, schoolName, fetchedRoster),
-    [schoolKey, schoolName, fetchedRoster],
+  // thing the popups are given — see `OpponentPool` and `useOpponentPool`.
+  const pool = useOpponentPool(
+    school.kind === "program" ? school.program.programKey : null,
+    schoolKey,
+    schoolName,
   );
 
   /**

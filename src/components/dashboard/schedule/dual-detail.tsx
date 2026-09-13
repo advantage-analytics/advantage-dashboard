@@ -8,6 +8,7 @@
  * See `./README.md` for the full live/dormant map.
  */
 
+import { DOUBLES_SLOTS, SINGLES_SLOTS } from "@/lib/schedule/courts";
 import Link from "next/link";
 import { DualTicks } from "@/components/dashboard/schedule/dual-ticks";
 import { EventGlyphRow } from "@/components/dashboard/schedule/event-glyph-row";
@@ -41,10 +42,6 @@ import type { EventDetail, EventEntry } from "@/lib/schedule/types";
 const COLUMNS =
   "grid-cols-[32px_minmax(0,1fr)_minmax(0,1fr)_140px_112px_13px] gap-x-5";
 const HEADERS = ["Line", "Player", "Opponent", "Result", "", ""];
-
-/** A college dual's full card, always drawn whole. */
-const SINGLES_SLOTS = ["S1", "S2", "S3", "S4", "S5", "S6"];
-const DOUBLES_SLOTS = ["D1", "D2", "D3"];
 
 /**
  * A dual's event page: the Schedule drawer's identity header, then one table
@@ -95,48 +92,31 @@ export function DualDetail({
     (entry) => entry.forfeit === null && entryState(entry) === "empty",
   );
 
-  const rows = (slots: string[], group: EventEntry[]) => {
-    // Entries by their slot; anything without a recognised slot keeps its
-    // lineup position after the fixed card, so no line is ever dropped.
+  const rows = (slots: readonly string[], group: EventEntry[]) => {
+    // Entries by their slot, then anything without a recognised slot after
+    // the fixed card, so no line is ever dropped. A dual saves with all nine
+    // lines set, so a court with no entry is skipped rather than drawn empty.
     const bySlot = new Map(group.map((entry) => [entry.slot, entry]));
-    const extra = group.filter(
-      (entry) => !entry.slot || !slots.includes(entry.slot),
-    );
-    // A dual saves with all nine lines set, so every court has its entry; a
-    // slot with none is skipped rather than drawn as a gap to fill.
-    return [
+    const ordered = [
       ...slots.flatMap((slot) => {
         const entry = bySlot.get(slot);
-        return entry
-          ? [
-              <LineRow
-                key={entry.id}
-                entry={entry}
-                match={entry.matches[0] ?? null}
-                label={slot}
-                round={null}
-                canEdit={canEdit}
-                columns={COLUMNS}
-                viewer={viewer}
-                split
-              />,
-            ]
-          : [];
+        return entry ? [entry] : [];
       }),
-      ...extra.map((entry) => (
-        <LineRow
-          key={entry.id}
-          entry={entry}
-          match={entry.matches[0] ?? null}
-          label={entry.slot ?? "—"}
-          round={null}
-          canEdit={canEdit}
-          columns={COLUMNS}
-          viewer={viewer}
-          split
-        />
-      )),
+      ...group.filter((entry) => !entry.slot || !slots.includes(entry.slot)),
     ];
+    return ordered.map((entry) => (
+      <LineRow
+        key={entry.id}
+        entry={entry}
+        match={entry.matches[0] ?? null}
+        label={entry.slot ?? "—"}
+        round={null}
+        canEdit={canEdit}
+        columns={COLUMNS}
+        viewer={viewer}
+        split
+      />
+    ));
   };
 
   return (
@@ -226,14 +206,20 @@ export function DualDetail({
   );
 }
 
-/** "2–2" beside a group's heading, with an optional quiet qualifier. */
-function Tally({ entries, note }: { entries: EventEntry[]; note?: string }) {
+/** Lines won and lost in a group — played and not won is lost. */
+function groupRecord(entries: EventEntry[]): { won: number; lost: number } {
   const won = entries.filter((entry) => lineWon(entry) === true).length;
   // Played AND not won — `lineWon` alone answers `false` for a court nobody
   // has played.
   const lost = entries.filter(
     (entry) => entryPlayed(entry) && lineWon(entry) !== true,
   ).length;
+  return { won, lost };
+}
+
+/** "2–2" beside a group's heading, with an optional quiet qualifier. */
+function Tally({ entries, note }: { entries: EventEntry[]; note?: string }) {
+  const { won, lost } = groupRecord(entries);
   return (
     <span className="inline-flex items-baseline gap-2.5">
       <span className="tabular text-[12px] text-[var(--ink-900)]">
@@ -250,11 +236,7 @@ function Tally({ entries, note }: { entries: EventEntry[]; note?: string }) {
  * three courts do not add up to one point without it.
  */
 function teamPointNote(entries: EventEntry[]): string | undefined {
-  const won = entries.filter((entry) => lineWon(entry) === true).length;
-  const lost = entries.filter(
-    (entry) => entryPlayed(entry) && lineWon(entry) !== true,
-  ).length;
-
+  const { won, lost } = groupRecord(entries);
   if (won >= 2) return "point ours";
   if (lost >= 2) return "point theirs";
   return undefined;

@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ChevronDown, CircleCheck, Plus, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useListboxNav } from "@/hooks/use-listbox-nav";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { splitNames } from "@/lib/schedule/format";
 import {
+  opponentRosterForDual,
   saveOpponentPlayer,
   type OpponentRosterCandidate,
 } from "@/lib/schedule/actions";
@@ -120,6 +121,49 @@ export function opponentPoolFor(
       : null,
     candidates: fetched?.forKey === key ? fetched.candidates : [],
   };
+}
+
+/**
+ * The pool for the school on screen, with its saved roster fetched.
+ *
+ * The roster is stored WITH the school key it was fetched for — `dual-form`'s
+ * rule, ported: an in-flight request for School A must not land after a change
+ * of school and pose as School B's. The cleanup marks a superseded fetch
+ * stale, and `opponentPoolFor` drops any roster whose stamp no longer matches.
+ * Free text (no `programKey`) has no directory row, so there is nothing to
+ * ask for — an empty pool, not an error.
+ *
+ * `schoolKey` is the stamp itself, never a second spelling of it: the stamp
+ * and the pool's gate have to be the same string or the gate silently never
+ * matches — an empty pool on every school, which looks exactly like a school
+ * with nobody saved.
+ */
+export function useOpponentPool(
+  programKey: string | null,
+  schoolKey: string,
+  schoolName: string,
+): OpponentPool {
+  const [fetched, setFetched] = useState<{
+    forKey: string;
+    candidates: OpponentRosterCandidate[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (!programKey) return;
+    let stale = false;
+    void opponentRosterForDual(programKey).then((result) => {
+      if (stale || "error" in result) return;
+      setFetched({ forKey: schoolKey, candidates: result.candidates });
+    });
+    return () => {
+      stale = true;
+    };
+  }, [programKey, schoolKey]);
+
+  return useMemo(
+    () => opponentPoolFor(schoolKey, schoolName, fetched),
+    [schoolKey, schoolName, fetched],
+  );
 }
 
 /**

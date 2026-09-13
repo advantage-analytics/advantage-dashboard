@@ -12,8 +12,7 @@ import type { EntryMatch, EventEntry } from "@/lib/schedule/types";
  * `roundLongLabel` and `runFinish` — the two sentences the tournament page
  * writes about a run, pinned as pure functions.
  *
- * Hand-built entries rather than a loader, the same shape
- * `tests/opponent-meetings.spec.ts` uses, so a drift in `EventEntry` fails at
+ * Hand-built entries rather than a loader, so a drift in `EventEntry` fails at
  * compile time rather than at runtime. Nothing here renders: the point of
  * moving these out of `tournament-detail.tsx` was that a run's shape and its
  * one-line summary can be checked without a browser.
