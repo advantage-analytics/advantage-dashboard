@@ -114,8 +114,8 @@ export default async function TeamHomePage() {
 
   if (isDayZero) {
     return (
-      <div className="w-full flex-1 bg-[var(--surface-card)]">
-        <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4 px-14 pt-5 pb-8">
+      <div className="flex w-full flex-1 flex-col bg-[var(--surface-card)]">
+        <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col gap-4 px-14 pt-5 pb-8">
           <TeamDayZeroHome canManage={isStaff}>
             <TeamHomeRegions
               kpis={kpis}
