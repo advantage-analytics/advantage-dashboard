@@ -12,3 +12,8 @@ is the runner's. Newest entries at the bottom.
 
 - **gate:** mechanical pass (lint/typecheck/tests), completion review pass
 - **changed:** Removed the ` · {match.event}` suffix from the drawer's recent-match row in `player-drawer.tsx`; removed `RosterRecentMatch.event`, `DbMatchRow.tournament_name`, the select column, and the map assignment in `team-roster-server.ts`. `tests/team-roster-ids.spec.ts`'s fixture at ~163 builds an unrelated `DbRecentMatch` type from `team-home-server.ts` and needed no change — verified independently, not just taken on the subagent's word.
+
+## T3 · Never send a localhost link from a deployed build — done
+
+- **gate:** mechanical pass (lint/typecheck/tests), completion review pass
+- **changed:** `siteUrl()` in `src/lib/site-url.ts` now falls back through `VERCEL_ENV=production → VERCEL_PROJECT_PRODUCTION_URL` and `VERCEL_ENV=preview → VERCEL_URL` before ever reaching `http://localhost:3000`, and warns once via `console.warn` when the localhost fallback fires under `NODE_ENV=production`. `layout.tsx`'s `metadataBase` and the checkout route's redirect base now call `siteUrl()` instead of holding their own private fallback. Added `tests/site-url.spec.ts` (6 tests) pinning the behaviour. Note for the author: `NEXT_PUBLIC_SITE_URL` still needs to be set on Vercel (Preview and Production) — this task only stops the worst case when it's missing.
