@@ -417,6 +417,40 @@ export function AddPlayerDialog({
   const spotNote =
     spotTakenBy.length === 0 ? null : spotHeldNote(spotTakenBy, lineupSpot);
 
+  /**
+   * The optional invite that can follow either write, and the half-done
+   * handling both `submit()` and `restore()` need if it fails: the row is
+   * already live, so a failure here is reported, not thrown, and the caller
+   * leaves the dialog open with `alsoInvite` unchecked rather than close on a
+   * half-done action the coach would then wait on a reply that can't come.
+   *
+   * Returns the sentence to show on failure, or `null` on success — the
+   * caller still owns `setError`/`setAlsoInvite`/staying open, since exactly
+   * which name feeds which message differs by caller (`submit()` keeps its
+   * own pre-existing last-name/first-name split across the two branches;
+   * `restore()` uses the one name it has for both).
+   */
+  async function sendOptionalInvite(input: {
+    profileId: string;
+    email: string;
+    onRoster: string;
+    failureName: string;
+    warningName: string;
+  }): Promise<string | null> {
+    const invited = await inviteMember({
+      email: input.email,
+      role: "player",
+      playerId: input.profileId,
+    });
+    if (!invited.ok) {
+      return `${input.failureName} ${input.onRoster}, but the invitation did not send: ${invited.error}`;
+    }
+    if (invited.warning) {
+      return `${input.warningName} ${input.onRoster}. ${invited.warning}`;
+    }
+    return null;
+  }
+
   function submit() {
     setError(null);
     start(async () => {
@@ -435,25 +469,16 @@ export function AddPlayerDialog({
 
       setCreated({ profileId: result.profileId, form: formKey });
 
-      // The row exists now whatever happens next. If the invitation fails, say
-      // so and leave the dialog open — closing on a half-done action would
-      // report the whole thing as done, and the coach would wait for a reply
-      // that could not come.
       if (alsoInvite && result.profileId) {
-        const invited = await inviteMember({
+        const inviteError = await sendOptionalInvite({
+          profileId: result.profileId,
           email: email.trim(),
-          role: "player",
-          playerId: result.profileId,
+          onRoster: "is on the roster",
+          failureName: lastName.trim(),
+          warningName: firstName.trim(),
         });
-        if (!invited.ok) {
-          setError(
-            `${lastName.trim()} is on the roster, but the invitation did not send: ${invited.error}`,
-          );
-          setAlsoInvite(false);
-          return;
-        }
-        if (invited.warning) {
-          setError(`${firstName.trim()} is on the roster. ${invited.warning}`);
+        if (inviteError) {
+          setError(inviteError);
           setAlsoInvite(false);
           return;
         }
@@ -496,20 +521,15 @@ export function AddPlayerDialog({
 
       const address = email.trim();
       if (alsoInvite && address !== "") {
-        const invited = await inviteMember({
+        const inviteError = await sendOptionalInvite({
+          profileId: person.profileId,
           email: address,
-          role: "player",
-          playerId: person.profileId,
+          onRoster: "is back on the roster",
+          failureName: person.name,
+          warningName: person.name,
         });
-        if (!invited.ok) {
-          setError(
-            `${person.name} is back on the roster, but the invitation did not send: ${invited.error}`,
-          );
-          setAlsoInvite(false);
-          return;
-        }
-        if (invited.warning) {
-          setError(`${person.name} is back on the roster. ${invited.warning}`);
+        if (inviteError) {
+          setError(inviteError);
           setAlsoInvite(false);
           return;
         }
