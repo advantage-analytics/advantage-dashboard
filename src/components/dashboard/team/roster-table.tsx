@@ -520,7 +520,7 @@ function MemberRow({
             className="size-[26px] text-[9px]"
           />
         ) : (
-          <InitialsAvatar name={member.name} />
+          <InitialsAvatar name={member.name} photoUrl={member.avatarUrl} />
         )}
         <span className="flex min-w-0 items-baseline gap-1.5">
           {inLineupMode ? (

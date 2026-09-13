@@ -127,7 +127,14 @@ export default async function PlayerProfilePage({
         <ProfileIdentity
           profile={profile}
           isSelf={isSelf}
-          photoUrl={isSelf ? workspace.viewer.avatarUrl : null}
+          // The viewer's own from the workspace (fresh after a Profile
+          // change); anyone else's from the roster row this page already read.
+          photoUrl={
+            isSelf
+              ? workspace.viewer.avatarUrl
+              : (roster.members.find((m) => m.playerId === profile.playerId)
+                  ?.avatarUrl ?? null)
+          }
           actions={actions}
         />
 

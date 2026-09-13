@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
 import type { EventsPolicy, UploadPolicy } from "@/lib/workspace/types";
 
 /**
@@ -18,6 +19,8 @@ export interface TeamMember {
   name: string;
   email: string;
   role: MemberRole;
+  /** Their profile photo, or null to draw initials. */
+  avatarUrl: string | null;
 }
 
 export interface TeamInvite {
@@ -76,22 +79,24 @@ export async function getTeamSettings(
 ): Promise<TeamSettingsData | null> {
   const supabase = await createClient();
 
-  const [programResult, rosterResult, invitesResult] = await Promise.all([
-    supabase
-      .from("programs")
-      .select(
-        "id, school_name, team, conference, home_venue, default_surface, season, players_can_upload, upload_policy, events_policy, time_zone, crest_path",
-      )
-      .eq("id", programId)
-      .maybeSingle(),
-    supabase.rpc("program_roster", { p_program_id: programId }),
-    supabase
-      .from("program_invites")
-      .select("id, email, role, created_at, invited_by")
-      .eq("program_id", programId)
-      .is("accepted_at", null)
-      .order("created_at", { ascending: false }),
-  ]);
+  const [programResult, rosterResult, invitesResult, avatars] =
+    await Promise.all([
+      supabase
+        .from("programs")
+        .select(
+          "id, school_name, team, conference, home_venue, default_surface, season, players_can_upload, upload_policy, events_policy, time_zone, crest_path",
+        )
+        .eq("id", programId)
+        .maybeSingle(),
+      supabase.rpc("program_roster", { p_program_id: programId }),
+      supabase
+        .from("program_invites")
+        .select("id, email, role, created_at, invited_by")
+        .eq("program_id", programId)
+        .is("accepted_at", null)
+        .order("created_at", { ascending: false }),
+      getMemberAvatarUrls(supabase, programId),
+    ]);
 
   if (programResult.error || !programResult.data) {
     if (programResult.error) {
@@ -119,6 +124,7 @@ export async function getTeamSettings(
     name: member.display_name ?? member.email,
     email: member.email,
     role: member.role as MemberRole,
+    avatarUrl: avatars.get(member.user_id) ?? null,
   }));
 
   const invites = (
