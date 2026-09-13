@@ -24,10 +24,7 @@ master-detail split is retired; its detail is the peek drawer below.
    (12px tabular ink-700, 72px) · the name at 13/500 ink-900 with its 26px
    mark (program initials for a dual, the tournament mark for a tournament) ·
    context at 12px ink-600 · then the numbers and the outcome, **flush left in
-   fixed tracks** (see the alignment clause below). Canonical orders: **Matches** = Date · Opponent · Event (+ mono
-   round) · Score · Result · Analysis (the fluid cell, heading nothing) · ⋯ ·
-   chevron — the outcome closes the facts, and the lifecycle annotation trails
-   them because it is blank on eight rows in ten; **Roster** = # · Player ·
+   fixed tracks** (see the alignment clause below). Canonical orders: **Matches** = Date · Opponent · Result · Score · Event (+ mono round) · Analysis (the fluid cell, heading nothing) · ⋯ — the team table puts Player (13/500 ink-900) before Opponent (13/400 ink-700), and gives up Event while the match drawer is open. The glyph leads the score in a fixed track so the outcome sits at one x ("✓ 6-4, 3-6", the drawer's reading); Event trails the numbers as the least-scanned, widest text. The opponent carries no 26px mark — an initials circle read as a profile picture for someone not in the product (2026-09-13). _Supersedes: "Matches = Date · Opponent · Event (+ mono round) · Score · Result · Analysis (the fluid cell, heading nothing) · ⋯ · chevron — the outcome closes the facts, and the lifecycle annotation trails them because it is blank on eight rows in ten"_; **Roster** = # · Player ·
    Record · Form · Last match (Record leads Form: the number a coach ranks
    by first, the five-tick trail that qualifies it second); **Schedule** = Date · Event · Type · Venue ·
    Lines `n / 9` · Score · Result. Text and its header flush left; a numeric
@@ -39,7 +36,7 @@ master-detail split is retired; its detail is the peek drawer below.
    follows the score it belongs to. Header and value then share an x, which is
    the rule `EmptyMark` and `ResultMark` already follow inside a cell. The cost
    is that Schedule's rows no longer close on a hard right edge — Matches gets
-   one from its chevron and a container row may not have one (rule 3) — so
+   one from its ⋯ lane and a container row may not have one (rule 3) — so
    size the Result track to its widest content — "Not played", 60px, not the
    52px heading, which clips it — and let the column, not a gap, hold the
    remaining width. **Never center-align anything.**
@@ -84,9 +81,16 @@ master-detail split is retired; its detail is the peek drawer below.
    the third glyph (`circle-minus`, ink-500) rather than a fourth register.
 3. **The row-click law — containers peek, records open.** Decided by the
    noun, not the page. **Record rows** (matches, wherever they appear — Home,
-   Matches, inside an event drawer, a player's match list) navigate to the
+   inside an event drawer, a player's match list) navigate to the
    report: trailing `chevron-right` 13px, ink-300 → ink-900 on hover, held
    resting and hovered so nothing shifts; the hover wash is transient.
+   **One ruled exception: the Matches page** (2026-09-13). Its rows peek in
+   the match drawer (Peek Drawer, below) and carry no chevron, because that
+   page is where a player triages a season rather than opens one report;
+   ⌘-click on the row and the drawer's title still open the report, and a
+   match row anywhere else keeps its chevron and navigates.
+   _Supersedes: "Record rows (matches, wherever they appear — Home, Matches,
+   inside an event drawer, a player's match list) navigate to the report."_
    **Container rows** (events on Schedule, players on Roster) open the peek
    drawer (below) and carry **no chevron** — there is nothing to travel to;
    the wash persists on the selected row. `chevron-down` only when a row
@@ -215,7 +219,7 @@ master-detail split is retired; its detail is the peek drawer below.
 
 ### Peek Drawer (v3)
 
-The container-row destination — one 340px shell for Roster and Schedule.
+The container-row destination — one 340px shell for Roster, Schedule and (by the ruled exception in rule 3) Matches.
 `--surface-card`, hairline left edge, `--shadow-dropdown`; slides in 200ms
 `--ease-primary` while the table reflows to the remaining width (the flexible
 name column absorbs the loss — nothing else moves). **Opens on click, never
@@ -272,6 +276,19 @@ selected, no chevrons, no gutter.
   4×18px outcome ticks (singles · gap · doubles) → all nine lines at 36px as
   record rows ("Awaiting result" lines have no chevron; an unset line is a
   blue "+ Set line" row) → Enter results.
+- **Match body** (Matches page only): the match's name as the report link
+  ("Player vs Opponent" on a team, "vs Opponent" personal; wraps) over event ·
+  round → `ResultMark` + 16px score on a fixed 20px line (the tiebreak digit
+  must not raise the line box, or the glyph sits high) and a nowrap glyph row
+  (date · duration · surface) → the analysis state when there is one →
+  four snapshot figures once numbers exist, absent before → on a team match,
+  the scheduled line it counts toward, as one record row. **Footer: a ghost
+  "Open match" for every viewer, always**, with the one primary under it only
+  when an action applies ("Try again" on a failed analysis, for its uploader).
+  The ghost is keyed to nothing: gating it on a missing permission leaves a
+  permitted viewer with nothing left to do an empty footer, and the footer
+  changing shape by role reads as a different panel. The ⋯ (Edit · Delete)
+  follows the uploader, not the role. _Shipped:_ `matches/match-drawer.tsx`.
 - _Shipped:_ `schedule/static/event-drawer.tsx` and
   `team/player-drawer.tsx` — the roster's v3 delta (the Record column, the
   drawer, the retirement of the stat column and the action gutter) is closed.

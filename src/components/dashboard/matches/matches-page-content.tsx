@@ -1,7 +1,15 @@
 "use client";
 import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
 
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import {
+  useState,
+  useMemo,
+  useRef,
+  useEffect,
+  useCallback,
+  useSyncExternalStore,
+} from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Filter as FilterIcon } from "lucide-react";
@@ -23,6 +31,9 @@ import { normalizedPersonName } from "@/lib/data/person-name";
 import { providers } from "@/lib/providers";
 import { useUnseenReportIds } from "@/lib/ui/seen-reports";
 import { MatchesGrid, type SortField, type SortDir } from "./matches-grid";
+import { DRAWER_ATTR, MatchDrawer } from "./match-drawer";
+import { matchRowId } from "./match-card-list";
+import { MATCH_DRAWER_SLOT_ID } from "./match-drawer-slot";
 import type { MatchAnalysis } from "@/lib/data/match-analysis";
 import {
   MatchesFilterPanel,
@@ -442,6 +453,11 @@ function SortDropdown({
   );
 }
 
+/** The slot never changes once mounted, so there is nothing to subscribe to. */
+function noopSubscribe(): () => void {
+  return () => {};
+}
+
 /* ─── Main content ─── */
 export function MatchesPageContent({
   matches: serverMatches,
@@ -659,6 +675,148 @@ export function MatchesPageContent({
   const rangeStart = sorted.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(safePage * PAGE_SIZE, sorted.length);
 
+  /* ── The match drawer ────────────────────────────────────────────────────
+     The Roster's selection model, verbatim: click opens and selects, clicking
+     the selected row closes, ↑ ↓ step, Esc closes, and `?match=` is the one
+     deep link that lands open. `selectedId` is the washed row; `drawerId`
+     outlives it by the slide-out, so the rail can animate closed. Stepping
+     walks the whole filtered list and turns the page when it has to. */
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    const id = searchParams.get("match");
+    return id && serverMatches.some((m) => m.id === id) ? id : null;
+  });
+  const [drawerId, setDrawerId] = useState<string | null>(selectedId);
+  const [closing, setClosing] = useState(false);
+  const [openedByKeyboard, setOpenedByKeyboard] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const drawerIndex = drawerId
+    ? sorted.findIndex((m) => m.id === drawerId)
+    : -1;
+  const drawerMatch = drawerIndex >= 0 ? sorted[drawerIndex] : null;
+
+  // A match that left the list — deleted, or cut by a filter — takes the
+  // drawer with it rather than leaving it open on a row nobody can see.
+  if (drawerId && !drawerMatch) {
+    setSelectedId(null);
+    setDrawerId(null);
+    setClosing(false);
+  }
+
+  const finishClose = useCallback(() => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+    setDrawerId(null);
+    setClosing(false);
+  }, []);
+
+  const selectMatch = useCallback(
+    (match: DisplayMatch, viaKeyboard: boolean) => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+      setClosing(false);
+      setSelectedId(match.id);
+      setDrawerId(match.id);
+      setOpenedByKeyboard(viaKeyboard);
+    },
+    [],
+  );
+
+  const closeDrawer = useCallback(
+    (returnFocusTo: string | null) => {
+      setSelectedId(null);
+      setClosing(true);
+      // The animation's end normally finishes the close; this covers reduced
+      // motion and a rail hidden below `lg`, where no animation runs.
+      closeTimer.current = setTimeout(finishClose, 240);
+      if (returnFocusTo) {
+        document.getElementById(matchRowId(returnFocusTo))?.focus();
+      }
+    },
+    [finishClose],
+  );
+
+  const toggleMatch = useCallback(
+    (match: DisplayMatch, viaKeyboard: boolean) => {
+      if (selectedId === match.id) closeDrawer(viaKeyboard ? match.id : null);
+      else selectMatch(match, viaKeyboard);
+    },
+    [selectedId, selectMatch, closeDrawer],
+  );
+
+  const stepMatch = useCallback(
+    (direction: 1 | -1) => {
+      if (!selectedId) return;
+      const index = sorted.findIndex((m) => m.id === selectedId);
+      const next = sorted[index + direction];
+      if (!next) return;
+      setPage(Math.floor((index + direction) / PAGE_SIZE) + 1);
+      selectMatch(next, true);
+      requestAnimationFrame(() => {
+        document
+          .getElementById(matchRowId(next.id))
+          ?.scrollIntoView({ block: "nearest" });
+      });
+    },
+    [sorted, selectedId, selectMatch],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    };
+  }, []);
+
+  // Esc and the arrows work wherever focus is, standing down for fields, open
+  // menus and modal dialogs — the drawer's own dialog told apart by its attr.
+  useEffect(() => {
+    if (!selectedId) return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (
+        event.defaultPrevented ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      )
+        return;
+      const target = event.target as HTMLElement | null;
+      if (target) {
+        if (target.closest("input, textarea, select, [contenteditable=true]"))
+          return;
+        if (
+          target.closest(
+            `[role="dialog"]:not([${DRAWER_ATTR}] [role="dialog"])`,
+          )
+        )
+          return;
+        if (target.closest("[data-radix-popper-content-wrapper]")) return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeDrawer(selectedId);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        stepMatch(1);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        stepMatch(-1);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedId, closeDrawer, stepMatch]);
+
+  // The rail renders beside the page column, not inside it, so the table
+  // reflows the way the Roster's does. The page draws the slot; this reads it
+  // after hydration (the server has no document, so it renders no drawer).
+  const drawerSlot = useSyncExternalStore(
+    noopSubscribe,
+    () => document.getElementById(MATCH_DRAWER_SLOT_ID),
+    () => null,
+  );
+
   // Reset page when filters/query/lifecycle change
   useEffect(() => {
     setPage(1);
@@ -678,13 +836,23 @@ export function MatchesPageContent({
     if (page > 1) params.set("page", String(page));
     if (lifecycle !== "all") params.set("lifecycle", lifecycle);
     for (const f of filters) params.append(f.key, f.value);
+    if (selectedId) params.set("match", selectedId);
     const query = params.toString();
     window.history.replaceState(
       null,
       "",
       `${pathname}${query ? `?${query}` : ""}`,
     );
-  }, [search, sortField, sortDir, page, filters, lifecycle, pathname]);
+  }, [
+    search,
+    sortField,
+    sortDir,
+    page,
+    filters,
+    lifecycle,
+    selectedId,
+    pathname,
+  ]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -913,8 +1081,29 @@ export function MatchesPageContent({
           scope={scope}
           newMatchId={newMatchId}
           unseenIds={unseenIds}
+          selectedId={selectedId}
+          onToggle={toggleMatch}
+          drawerOpen={drawerMatch !== null}
         />
       )}
+
+      {drawerSlot &&
+        drawerMatch &&
+        createPortal(
+          <MatchDrawer
+            match={drawerMatch}
+            scope={scope}
+            index={drawerIndex}
+            total={sorted.length}
+            closing={closing}
+            autoFocus={openedByKeyboard}
+            onPrev={() => stepMatch(-1)}
+            onNext={() => stepMatch(1)}
+            onClose={() => closeDrawer(drawerMatch.id)}
+            onClosed={finishClose}
+          />,
+          drawerSlot,
+        )}
 
       {/* Footer — the range in micro type, and the way to the rest of the list
           as one quiet blue link (Platform Audit Pb2). "Older" because the list

@@ -3,7 +3,7 @@
 /**
  * DraftRow — a saved upload at the top of the Matches table (design 11c).
  *
- * The same eight tracks as a match row, with the honest gaps: Result and Score
+ * The same tracks as a match row, with the honest gaps: Result and Score
  * read an em-dash because there is nothing yet, and the opponent carries a grey
  * Draft pill — a row's exception is a grey pill, never a colour, which is what
  * separates it from the blue "New". Round has no answer either, so the Event
@@ -18,7 +18,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, MoreHorizontal } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -30,23 +30,20 @@ import {
   type DraftRow as DraftRowData,
 } from "@/lib/wizard/actions";
 import { formatShortDate } from "@/lib/ui/date-format";
-import {
-  ACTIONS_LANE,
-  LIST_GRID_COLS,
-  TEAM_LIST_GRID_COLS,
-  LIST_ROW_FRAME,
-} from "./match-card-list";
+import { ACTIONS_LANE, LIST_ROW_FRAME, listGridCols } from "./match-card-list";
 import { EmptyMark } from "@/components/ui/empty-mark";
-import { InitialsAvatar } from "@/components/ui/initials-avatar";
 
 export type { DraftRowData };
 
 export function DraftRow({
   draft,
   scope,
+  compact = false,
 }: {
   draft: DraftRowData;
   scope: "personal" | "team";
+  /** The team table beside the open drawer, with its Event track dropped. */
+  compact?: boolean;
 }): React.JSX.Element {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -64,12 +61,21 @@ export function DraftRow({
     });
   };
 
+  const resume = (
+    <Link
+      href={resumeHref}
+      className="relative z-[1] min-w-0 truncate text-[12px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+    >
+      Resume · step {draft.stepIndex + 1} of {draft.stepCount}
+    </Link>
+  );
+
   return (
     <div
       className={`${LIST_ROW_FRAME} group relative -mx-4 h-[52px] rounded-[var(--radius-element)] bg-[var(--surface-muted)] px-4 transition-opacity duration-200${
         pending ? "opacity-50" : ""
       }`}
-      style={scope === "team" ? TEAM_LIST_GRID_COLS : LIST_GRID_COLS}
+      style={listGridCols(scope, compact)}
       role="row"
     >
       {/* Date — when the draft was last touched. */}
@@ -84,41 +90,27 @@ export function DraftRow({
         <EmptyMark label="Roster player not available in draft summary" />
       )}
 
-      {/* Opponent — led by its mark like every name column; a draft with no
-          name yet holds the slot with a dashed ring so the names below still
-          start on one x. */}
+      {/* Opponent — the name, then the grey Draft pill. The whole row resumes. */}
       <Link
         href={resumeHref}
-        className="flex min-w-0 items-center gap-2.5 rounded-sm after:absolute after:inset-0 focus-visible:outline-none"
+        className="flex min-w-0 items-center gap-2 rounded-sm after:absolute after:inset-0 focus-visible:outline-none"
       >
-        {draft.playerName ? (
-          <InitialsAvatar name={draft.playerName} />
-        ) : (
-          <span
-            aria-hidden
-            className="size-[26px] shrink-0 rounded-full border border-dashed border-[var(--border-medium)]"
-          />
-        )}
         <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
           {draft.playerName ?? "Untitled match"}
         </span>
         <StatePill className="shrink-0">Draft</StatePill>
       </Link>
 
-      {/* Event — the draft's own progress, which is the only thing it can say
-          about itself that a finished match row cannot. */}
-      <Link
-        href={resumeHref}
-        className="relative z-[1] min-w-0 truncate text-[12px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-      >
-        Resume · step {draft.stepIndex + 1} of {draft.stepCount}
-      </Link>
-
-      {/* Score and Result — not yet. One mark, one size, centred under its own
+      {/* Result and Score — not yet. One mark, one size, centred under its own
           heading (law 1), so the two absences read as one "nothing yet". */}
-      <EmptyMark label="No score yet" />
       <EmptyMark label="Not played yet" />
-      <span />
+      <EmptyMark label="No score yet" />
+
+      {/* Event — the draft's own progress, which is the only thing it can say
+          about itself that a finished match row cannot. Beside the open team
+          drawer the Event track is gone, so it moves into the lifecycle cell. */}
+      {!(scope === "team" && compact) && resume}
+      {scope === "team" && compact ? resume : <span />}
 
       <span className={ACTIONS_LANE}>
         <Popover open={open} onOpenChange={setOpen}>
@@ -160,12 +152,6 @@ export function DraftRow({
           </PopoverContent>
         </Popover>
       </span>
-
-      <ChevronRight
-        className="size-[13px] text-[var(--ink-300)]"
-        strokeWidth={1.5}
-        aria-hidden="true"
-      />
     </div>
   );
 }

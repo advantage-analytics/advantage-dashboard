@@ -37,12 +37,11 @@ export function MatchesSkeleton(): React.JSX.Element {
           className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pt-3.5 pb-2.5`}
           style={LIST_GRID_COLS}
         >
-          {["Date", "Opponent", "Event", "Score", "Result"].map((label) => (
+          {["Date", "Opponent", "Result", "Score", "Event"].map((label) => (
             <span key={label} className="eyebrow-sm min-w-0 truncate">
               {label}
             </span>
           ))}
-          <span />
           <span />
           <span />
         </div>
@@ -54,14 +53,10 @@ export function MatchesSkeleton(): React.JSX.Element {
               style={LIST_GRID_COLS}
             >
               <Bar className="h-3 w-11" />
-              <span className="flex min-w-0 items-center gap-2.5">
-                <Bar className="size-[26px] shrink-0 rounded-full" />
-                <Bar className="h-3 w-28" />
-              </span>
-              <Bar className="h-3 w-36" />
-              <Bar className="h-3 w-20" />
+              <Bar className="h-3 w-28" />
               <Bar className="size-3.5 rounded-full" />
-              <span />
+              <Bar className="h-3 w-20" />
+              <Bar className="h-3 w-36" />
               <span />
               <span />
             </div>
