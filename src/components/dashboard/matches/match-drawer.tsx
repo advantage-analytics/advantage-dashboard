@@ -64,6 +64,15 @@ interface Details {
 const detailsCache = new Map<string, Details>();
 
 /**
+ * Drop one match's cached details. Called after an edit changes what the drawer
+ * shows — attaching a match to a scheduled line gives it a Schedule row — so
+ * the next open reads the row again instead of the pre-edit answer.
+ */
+export function forgetMatchDetails(matchId: string): void {
+  detailsCache.delete(matchId);
+}
+
+/**
  * `Pb3` — the selected match, as a dismissable right rail.
  *
  * The shell is `PeekDrawerFrame`, shared with a draft's drawer; the header's

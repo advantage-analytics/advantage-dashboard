@@ -1,33 +1,69 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CircleMinus, CirclePlus, Loader2 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { AdvSelect } from "@/components/ui/adv-select";
+import { ArrowUpRight, Info, Loader2, Plus } from "lucide-react";
 import { DateField, type DateFieldHandle } from "@/components/ui/date-field";
-import { cn } from "@/lib/utils";
+import { MenuSelect } from "@/components/ui/menu-select";
+import { advButton } from "@/lib/ui/adv-button";
 import {
-  eyebrowLabelCls,
-  ghostBtnCls,
-  primaryBtnCls,
+  SettingsField,
+  SettingsUnderlineInput,
+} from "@/components/dashboard/settings/settings-card";
+import {
+  DialogProblem,
+  RosterDialog,
+} from "@/components/dashboard/team/dialog-shell";
+import {
+  Answer,
+  WarningGlyph,
+} from "@/components/dashboard/matches/new-match-wizard/ImportIdentityNotice";
+import {
+  noteIconCls,
+  noteStripCls,
+  noticeEnterCls,
+  warningStripCls,
 } from "@/components/dashboard/matches/new-match-wizard/styles";
-import { validateSetScore } from "@/components/dashboard/matches/new-match-wizard/utils";
-import { ScoreCell } from "@/components/dashboard/matches/new-match-wizard/ScoreCell";
+import { useToast } from "@/components/dashboard/toast/toast-provider";
+import { forgetMatchDetails } from "@/components/dashboard/matches/match-drawer";
+import type { AnalysisStatus } from "@/lib/data/match-analysis";
+import type {
+  Backhand,
+  Hand,
+  MatchFormat,
+  MatchScore,
+} from "@/lib/matches/patch-match";
+import {
+  dayLabel,
+  eventContextLine,
+  formatLine,
+} from "@/lib/matches/edit-match-copy";
+import { attachMatchToLine } from "@/lib/schedule/attach-line";
+import { lineName, type AttachLine } from "@/lib/schedule/attach-line-state";
+import { AttachLinePicker } from "./attach-line-picker";
+import {
+  EditMatchScore,
+  firstInvalidSet,
+  type ScoreValue,
+} from "./edit-match-score";
+import { EditMatchPlayers, type PlayerFields } from "./edit-match-players";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { workspaceLabel } from "@/components/dashboard/matches/new-match-wizard/RosterMenu";
+import {
+  editMatchSuggestions,
+  playerStyleFor,
+  type EditRosterPlayer,
+  type KnownStyle,
+} from "@/lib/matches/edit-match-suggestions";
+import {
+  normalizeRound,
+  roundFits,
+  roundKindFor,
+  roundOptionsFor,
+} from "@/lib/matches/round-options";
 
 type FieldKey = "player1_name" | "player2_name" | "date";
-
-interface EditMatchDialogProps {
-  matchId: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
 
 interface RawMatch {
   id: string;
@@ -36,350 +72,456 @@ interface RawMatch {
   date: string;
   match_type: string | null;
   court_type: string | null;
+  player1_id: string | null;
   player1_name: string;
   player2_name: string;
-  score: {
-    player1: number[];
-    player2: number[];
-    player1_tiebreaks?: (number | null)[];
-    player2_tiebreaks?: (number | null)[];
-  } | null;
+  score: MatchScore | null;
+  format: MatchFormat | null;
+  duration: number | null;
+  player_hand: string | null;
+  player_backhand: string | null;
+  opponent_hand: string | null;
+  opponent_backhand: string | null;
+  program_id: string | null;
+  event_entry_id: string | null;
+  source_provider: string | null;
 }
 
-const MATCH_TYPES = ["Tournament", "Dual Match", "Practice"];
-const COURT_TYPES = ["hard", "clay", "grass", "carpet"];
-const MIN_SETS = 1;
-const MAX_SETS = 5;
-
-function needsTiebreak(p: number | null, o: number | null): boolean {
-  if (p === null || o === null) return false;
-  return (p === 7 && o === 6) || (p === 6 && o === 7);
+interface EventContext {
+  eventId: string;
+  eventName: string;
+  eventKind: "dual" | "tournament";
+  slot: string | null;
+  startsOn: string;
+  endsOn: string;
+  surface: string | null;
+  format: { best_of?: number; ad_scoring?: boolean | null } | null;
 }
 
-function toDateInputValue(iso: string): string {
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "";
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  } catch {
-    return "";
-  }
+interface Loaded {
+  match: RawMatch;
+  analysis: { status: AnalysisStatus } | null;
+  event: EventContext | null;
+  canAttach: boolean;
 }
 
-function clampInt(raw: string, max: number): number | null {
-  if (raw === "") return null;
-  const n = Number(raw);
-  if (Number.isNaN(n)) return null;
-  return Math.max(0, Math.min(max, Math.floor(n)));
+const FORM_ID = "edit-match-form";
+const NOT_SET = "__not-set";
+const MATCH_TYPE_OPTIONS = ["Tournament", "Dual Match", "Practice"].map(
+  (t) => ({ value: t, label: t }),
+);
+const COURT_TYPE_OPTIONS = ["hard", "clay", "grass", "carpet"].map((t) => ({
+  value: t,
+  label: t.charAt(0).toUpperCase() + t.slice(1),
+}));
+
+/**
+ * A menu's options with a stored value that is in none of them kept as its
+ * own first row, and "Not set" last — so opening the menu never wipes it.
+ */
+function withLegacy(
+  value: string,
+  options: readonly { value: string; label: string }[],
+) {
+  const legacy =
+    value !== "" && !options.some((o) => o.value === value)
+      ? [{ value, label: value }]
+      : [];
+  return [...legacy, ...options, { value: NOT_SET, label: "Not set" }];
+}
+const BEST_OF = [
+  { value: "1", label: "Best of 1" },
+  { value: "3", label: "Best of 3" },
+  { value: "5", label: "Best of 5" },
+] as const;
+const SCORING = [
+  { value: "no-ad", label: "No-ad" },
+  { value: "ad", label: "Ad" },
+] as const;
+const LETS = [
+  { value: "play-on", label: "Play on" },
+  { value: "replay", label: "Replay" },
+] as const;
+
+const asHand = (v: string | null): Hand | null =>
+  v === "right" || v === "left" ? v : null;
+const asBackhand = (v: string | null): Backhand | null =>
+  v === "one-handed" || v === "two-handed" ? v : null;
+
+/** The calendar day a stored match date means — its own date part. */
+function dayOf(iso: string): string {
+  return /^(\d{4}-\d{2}-\d{2})/.exec(iso)?.[1] ?? "";
 }
 
+const surname = (name: string) => name.trim().split(/\s+/).pop() || name.trim();
+
+/**
+ * Edit match — the P2 refined layout, with E1 for a match on the schedule and
+ * the "Add to an event" flow for a one-off team match (canvas: Edit Match
+ * Dialog › P2 refined, Event directions › E1, Add to an event 1–10).
+ *
+ * Top to bottom: the score (the upload wizard's cells), Players (name, hand,
+ * backhand), then Details — or, once the match is on a line, nothing but a
+ * closing line, because the event owns its date, round, type and surface and
+ * says so in the header instead of in four locked fields. Groups separate by
+ * space (40px), never by rules.
+ *
+ * Adding to an event is chosen here and committed by Save changes: the edit
+ * saves first, then `attach_match_to_event_line` runs. While a line is picked
+ * but unsaved, the header already reads as it will after Save, with Change in
+ * the slot Open takes afterwards, and the footer's left corner backs out.
+ */
 export function EditMatchDialog({
   matchId,
   open,
   onOpenChange,
-}: EditMatchDialogProps) {
+}: {
+  matchId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const router = useRouter();
-  const [loadingInitial, setLoadingInitial] = useState(true);
+  const { push } = useToast();
+
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<
     Partial<Record<FieldKey, string>>
   >({});
-  const [pendingRemoveAt, setPendingRemoveAt] = useState<number | null>(null);
 
   const [tournament, setTournament] = useState("");
   const [date, setDate] = useState("");
-  const [round, setRound] = useState("");
-  const [matchType, setMatchType] = useState<string>("");
-  const [courtType, setCourtType] = useState<string>("");
-  const [p1Name, setP1Name] = useState("");
-  const [p2Name, setP2Name] = useState("");
-  const [p1Scores, setP1Scores] = useState<(number | null)[]>([]);
-  const [p2Scores, setP2Scores] = useState<(number | null)[]>([]);
-  const [p1Tiebreaks, setP1Tiebreaks] = useState<(number | null)[]>([]);
-  const [p2Tiebreaks, setP2Tiebreaks] = useState<(number | null)[]>([]);
-
-  const p1NameRef = useRef<HTMLInputElement>(null);
-  const p2NameRef = useRef<HTMLInputElement>(null);
-  // Not an input ref: the date is a `DateField`, whose focusable thing is a
-  // segment inside its group. `DateFieldHandle` is the one method
-  // focus-first-invalid needs.
-  const dateRef = useRef<DateFieldHandle | null>(null);
-  // True while the date field is showing a blank segment. It is not derivable
-  // from `date`: react-stately reports complete dates only, so a half-cleared
-  // field leaves `date` holding the value being replaced. See the prop's own
-  // comment on `DateField`.
   const [dateIncomplete, setDateIncomplete] = useState(false);
-  const saveRef = useRef<HTMLButtonElement>(null);
-  const p1ScoreRefs = useRef<Record<number, HTMLInputElement | null>>({});
-  const p2ScoreRefs = useRef<Record<number, HTMLInputElement | null>>({});
-  const p1TiebreakRefs = useRef<Record<number, HTMLInputElement | null>>({});
-  const p2TiebreakRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const [round, setRound] = useState("");
+  const [matchType, setMatchType] = useState("");
+  const [courtType, setCourtType] = useState("");
+  const [player, setPlayer] = useState<PlayerFields>({
+    name: "",
+    hand: null,
+    backhand: null,
+  });
+  const [opponent, setOpponent] = useState<PlayerFields>({
+    name: "",
+    hand: null,
+    backhand: null,
+  });
+  const [score, setScore] = useState<ScoreValue>({
+    player: [],
+    opponent: [],
+    playerTiebreaks: [],
+    opponentTiebreaks: [],
+  });
+  const [format, setFormat] = useState<{
+    bestOf: number;
+    adScoring: boolean | null;
+    playOnLets: boolean | null;
+  }>({ bestOf: 3, adScoring: null, playOnLets: null });
 
-  // Enter-to-advance flow:
-  //   p1.set[i] → p2.set[i] → (if tiebreak) p1.tb[i] → p2.tb[i] → p1.set[i+1] …
-  //   On the last set's final cell, escape to the Save button.
-  const focusNextAfterScore = (side: "p1" | "p2", i: number) => {
-    if (side === "p1") {
-      p2ScoreRefs.current[i]?.focus();
-      return;
-    }
-    // side === "p2": after both players' set scores, check for tiebreak
-    if (needsTiebreak(p1Scores[i], p2Scores[i])) {
-      p1TiebreakRefs.current[i]?.focus();
-      return;
-    }
-    advanceToNextSetOrSave(i);
-  };
-
-  const focusNextAfterTiebreak = (side: "p1" | "p2", i: number) => {
-    if (side === "p1") {
-      p2TiebreakRefs.current[i]?.focus();
-      return;
-    }
-    advanceToNextSetOrSave(i);
-  };
-
-  const advanceToNextSetOrSave = (i: number) => {
-    const next = p1ScoreRefs.current[i + 1];
-    if (next) next.focus();
-    else saveRef.current?.focus();
-  };
-
-  const focusPrevFromScore = (side: "p1" | "p2", i: number) => {
-    if (side === "p2") {
-      p1ScoreRefs.current[i]?.focus();
-      return;
-    }
-    // side === "p1": jump back to previous set's last filled cell
-    if (i === 0) {
-      p1NameRef.current?.focus();
-      return;
-    }
-    const prev = i - 1;
-    if (needsTiebreak(p1Scores[prev], p2Scores[prev])) {
-      p2TiebreakRefs.current[prev]?.focus();
-    } else {
-      p2ScoreRefs.current[prev]?.focus();
-    }
-  };
-
-  const focusPrevFromTiebreak = (side: "p1" | "p2", i: number) => {
-    if (side === "p2") {
-      p1TiebreakRefs.current[i]?.focus();
-    } else {
-      p2ScoreRefs.current[i]?.focus();
-    }
-  };
-  // Two shapes, one map: the two name fields are real inputs, the date is a
-  // `DateField` handle. Both can be focused; only the element can be scrolled,
-  // so `focusField` branches instead of the map being widened to `any`.
-  const fieldRefs: Record<
-    FieldKey,
-    | React.RefObject<HTMLInputElement | null>
-    | React.RefObject<DateFieldHandle | null>
-  > = {
-    player1_name: p1NameRef,
-    player2_name: p2NameRef,
-    date: dateRef,
-  };
-
-  const focusField = (key: FieldKey) => {
-    const target = fieldRefs[key]?.current;
-    if (!target) return;
-    if (target instanceof HTMLElement) {
-      target.scrollIntoView({ block: "center", behavior: "smooth" });
-      target.focus({ preventScroll: true });
-      return;
-    }
-    // The handle focuses the first segment; the browser scrolls it into view.
-    target.focus();
-  };
-
-  // Per-set validation against tennis rules. The dialog shares the upload
-  // modal's validateSetScore so create/edit treat the same scores as legal.
-  const setValidations = p1Scores.map((p, i) =>
-    validateSetScore(p, p2Scores[i]),
+  const workspace = useWorkspace();
+  const [playerId, setPlayerId] = useState<string | null>(null);
+  const [roster, setRoster] = useState<EditRosterPlayer[] | null>(null);
+  /** Hands the dialog filled in, so the note can say where they came from. */
+  const [playerPrefill, setPlayerPrefill] = useState<KnownStyle | null>(null);
+  const [opponentPrefill, setOpponentPrefill] = useState<KnownStyle | null>(
+    null,
   );
-  const firstInvalid = setValidations.findIndex((v) => v.kind === "invalid");
-  const invalidMessage =
-    firstInvalid >= 0 ? setValidations[firstInvalid].message : null;
-  const hasInvalidSet = firstInvalid >= 0;
+
+  /** A line chosen but not saved (Add to an event, states 5–7). */
+  const [pendingLine, setPendingLine] = useState<AttachLine | null>(null);
+  const [picking, setPicking] = useState(false);
+  /** The pick to restore if Change is abandoned. */
+  const changeFrom = useRef<AttachLine | null>(null);
+
+  const p1Ref = useRef<HTMLInputElement>(null);
+  const p2Ref = useRef<HTMLInputElement>(null);
+  const dateRef = useRef<DateFieldHandle | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    let cancelled = false;
-    setLoadingInitial(true);
+    let live = true;
+    setLoaded(null);
     setLoadError(null);
     setError(null);
     setFieldErrors({});
-    setPendingRemoveAt(null);
-    fetch(`/api/matches/${matchId}`)
-      .then(async (res) => {
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body?.error ?? "Failed to load match");
-        }
-        return res.json();
-      })
-      .then(({ match }: { match: RawMatch }) => {
-        if (cancelled) return;
-        setTournament(match.tournament_name ?? "");
-        setDate(toDateInputValue(match.date));
-        setRound(match.round ?? "");
-        setMatchType(match.match_type ?? "");
-        setCourtType(match.court_type ?? "");
-        setP1Name(match.player1_name);
-        setP2Name(match.player2_name);
-
-        const s = match.score;
-        const setCount = s?.player1?.length || 1;
-        setP1Scores(
-          s?.player1?.slice(0, setCount) ?? Array(setCount).fill(null),
+    setPendingLine(null);
+    setPicking(false);
+    Promise.all([
+      fetch(`/api/matches/${matchId}`).then(async (res) => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body?.error ?? "Couldn't load the match.");
+        return body as Loaded;
+      }),
+      editMatchSuggestions({ matchId }).catch(() => null),
+    ])
+      .then(([data, suggestions]) => {
+        if (!live) return;
+        const m = data.match;
+        setPlayerId(m.player1_id);
+        setRoster(m.program_id ? (suggestions?.roster ?? []) : null);
+        setTournament(m.tournament_name ?? "");
+        setDate(dayOf(m.date));
+        setRound(normalizeRound(m.round) ?? "");
+        setMatchType(m.match_type ?? "");
+        setCourtType(m.court_type ?? "");
+        // Known hands fill only what the match left empty; a value already on
+        // the match is the record and is never replaced.
+        const withKnown = (
+          hand: Hand | null,
+          backhand: Backhand | null,
+          known: KnownStyle | null | undefined,
+        ) => {
+          const next = {
+            hand: hand ?? known?.hand ?? null,
+            backhand: backhand ?? known?.backhand ?? null,
+          };
+          const used =
+            !!known &&
+            ((hand === null && known.hand !== null) ||
+              (backhand === null && known.backhand !== null));
+          return { next, used };
+        };
+        const p = withKnown(
+          asHand(m.player_hand),
+          asBackhand(m.player_backhand),
+          suggestions?.playerStyle,
         );
-        setP2Scores(
-          s?.player2?.slice(0, setCount) ?? Array(setCount).fill(null),
+        const o = withKnown(
+          asHand(m.opponent_hand),
+          asBackhand(m.opponent_backhand),
+          suggestions?.opponentStyle,
         );
-        setP1Tiebreaks(
-          (s?.player1_tiebreaks ?? Array(setCount).fill(null)).map(
-            (v) => v ?? null,
-          ),
+        setPlayer({ name: m.player1_name, ...p.next });
+        setOpponent({ name: m.player2_name, ...o.next });
+        setPlayerPrefill(
+          p.used ? { ...suggestions!.playerStyle!, ...p.next } : null,
         );
-        setP2Tiebreaks(
-          (s?.player2_tiebreaks ?? Array(setCount).fill(null)).map(
-            (v) => v ?? null,
-          ),
+        setOpponentPrefill(
+          o.used ? { ...suggestions!.opponentStyle!, ...o.next } : null,
         );
-        setLoadingInitial(false);
+        const p1 = m.score?.player1 ?? [];
+        const sets = Math.max(p1.length, 1);
+        const pad = (arr: readonly (number | null)[] | undefined) =>
+          Array.from({ length: sets }, (_, i) => arr?.[i] ?? null);
+        setScore({
+          player: pad(m.score?.player1),
+          opponent: pad(m.score?.player2),
+          playerTiebreaks: pad(m.score?.player1_tiebreaks),
+          opponentTiebreaks: pad(m.score?.player2_tiebreaks),
+        });
+        setFormat({
+          bestOf: m.format?.best_of ?? 3,
+          adScoring: m.format?.ad_scoring ?? null,
+          playOnLets: m.format?.play_on_lets ?? null,
+        });
+        setLoaded(data);
       })
       .catch((err) => {
-        if (cancelled) return;
-        setLoadError(
-          err instanceof Error ? err.message : "Failed to load match",
-        );
-        setLoadingInitial(false);
+        if (live)
+          setLoadError(
+            err instanceof Error ? err.message : "Couldn't load the match.",
+          );
       });
     return () => {
-      cancelled = true;
+      live = false;
     };
   }, [matchId, open]);
 
-  const numSets = p1Scores.length;
+  const match = loaded?.match ?? null;
+  const event = loaded?.event ?? null;
+  const linked = event !== null;
+  const analyzed: "video" | "import" | null = loaded?.analysis
+    ? "video"
+    : match?.source_provider
+      ? "import"
+      : null;
+  const formatEditable = !!match && !linked && !analyzed && !pendingLine;
+  const roundKind = roundKindFor(matchType || null);
+  const storedRound = normalizeRound(match?.round ?? null);
+  /** A stored round that is in neither list ("Week 4"), kept so it isn't wiped. */
+  const legacyRound =
+    storedRound &&
+    !roundFits(storedRound, "tournament") &&
+    !roundFits(storedRound, "dual")
+      ? storedRound
+      : null;
+  /** The active workspace is this match's program — its name labels the roster. */
+  const inMatchProgram =
+    !!match?.program_id && workspace.active.id === match.program_id;
+  const playerChanged =
+    !!match && roster !== null && playerId !== match.player1_id;
 
-  // Clear both sides' tiebreak slots when set [i] no longer needs a tiebreak.
-  // Keeps stale 7-6 tiebreak numbers from persisting after the set is amended.
-  const clearTiebreaksAt = (i: number) => {
-    if (p1Tiebreaks[i] !== null) {
-      const t = [...p1Tiebreaks];
-      t[i] = null;
-      setP1Tiebreaks(t);
+  const styleNote = (
+    fields: PlayerFields,
+    prefill: KnownStyle | null,
+  ): string | null => {
+    if (!prefill) return null;
+    if (fields.hand !== prefill.hand || fields.backhand !== prefill.backhand) {
+      return null;
     }
-    if (p2Tiebreaks[i] !== null) {
-      const t = [...p2Tiebreaks];
-      t[i] = null;
-      setP2Tiebreaks(t);
-    }
+    const words = [
+      fields.hand === "right"
+        ? "Right"
+        : fields.hand === "left"
+          ? "Left"
+          : null,
+      fields.backhand
+        ? fields.hand
+          ? fields.backhand
+          : fields.backhand.charAt(0).toUpperCase() + fields.backhand.slice(1)
+        : null,
+    ].filter(Boolean);
+    return words.length ? `${words.join(", ")} · ${prefill.source}` : null;
   };
 
-  const lastSetHasData = (() => {
-    const i = numSets - 1;
-    if (i < 0) return false;
-    return (
-      p1Scores[i] !== null ||
-      p2Scores[i] !== null ||
-      p1Tiebreaks[i] !== null ||
-      p2Tiebreaks[i] !== null
-    );
-  })();
+  const latestPick = useRef<string | null>(null);
 
-  const addSet = () => {
-    if (numSets >= MAX_SETS) return;
-    setPendingRemoveAt(null);
-    setP1Scores([...p1Scores, null]);
-    setP2Scores([...p2Scores, null]);
-    setP1Tiebreaks([...p1Tiebreaks, null]);
-    setP2Tiebreaks([...p2Tiebreaks, null]);
-  };
-
-  const requestRemoveLastSet = () => {
-    if (numSets <= MIN_SETS) return;
-    const idx = numSets - 1;
-    // Empty last set removes immediately — no need to confirm a no-op.
-    if (!lastSetHasData) {
-      doRemoveLastSet(idx);
+  async function pickRosterPlayer(next: EditRosterPlayer) {
+    setPlayerId(next.playerId);
+    clearFieldError("player1_name");
+    // Hands the dialog filled in belonged to the previous player; typed ones stay.
+    const cleared = playerPrefill
+      ? {
+          hand: player.hand === playerPrefill.hand ? null : player.hand,
+          backhand:
+            player.backhand === playerPrefill.backhand ? null : player.backhand,
+        }
+      : { hand: player.hand, backhand: player.backhand };
+    setPlayer({ name: next.name, ...cleared });
+    setPlayerPrefill(null);
+    latestPick.current = next.playerId;
+    const known = await playerStyleFor({
+      matchId,
+      playerId: next.playerId,
+      playerName: next.name,
+    }).catch(() => null);
+    // A later pick, or nothing known, leaves the fields as they are.
+    if (!known || latestPick.current !== next.playerId) return;
+    const filled = {
+      hand: cleared.hand ?? known.hand,
+      backhand: cleared.backhand ?? known.backhand,
+    };
+    if (filled.hand === cleared.hand && filled.backhand === cleared.backhand) {
       return;
     }
-    setPendingRemoveAt(idx);
+    setPlayer((current) => ({
+      ...current,
+      hand: current.hand ?? known.hand,
+      backhand: current.backhand ?? known.backhand,
+    }));
+    setPlayerPrefill({ ...known, ...filled });
+  }
+  const invalidSet = firstInvalidSet(score);
+  const lineupBlocks = !!pendingLine?.lineupMismatch;
+
+  const close = () => {
+    if (!saving) onOpenChange(false);
   };
 
-  const doRemoveLastSet = (idx: number) => {
-    const next = idx;
-    setP1Scores(p1Scores.slice(0, next));
-    setP2Scores(p2Scores.slice(0, next));
-    setP1Tiebreaks(p1Tiebreaks.slice(0, next));
-    setP2Tiebreaks(p2Tiebreaks.slice(0, next));
-    setPendingRemoveAt(null);
+  const clearFieldError = (key: FieldKey) =>
+    setFieldErrors((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+
+  const focusField = (key: FieldKey) => {
+    if (key === "date") dateRef.current?.focus();
+    else (key === "player1_name" ? p1Ref : p2Ref).current?.focus();
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (saving || hasInvalidSet) return;
-    // The date used to be a native `required` input, so the browser blocked a
-    // submit with it empty. A `DateField` reports validity through ARIA only,
-    // so the emptiness check is the dialog's now — same message and the same
-    // focus move the server's `field: "date"` reply already produces.
-    if (!date) {
-      setFieldErrors({ date: "Date is required." });
+  function startChange() {
+    changeFrom.current = pendingLine;
+    setPendingLine(null);
+    setPicking(true);
+  }
+
+  function pickLine(line: AttachLine) {
+    changeFrom.current = null;
+    setPendingLine(line);
+    setPicking(false);
+  }
+
+  function closePicker() {
+    setPicking(false);
+    if (changeFrom.current) setPendingLine(changeFrom.current);
+    changeFrom.current = null;
+  }
+
+  async function submit(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (!match || saving || invalidSet || lineupBlocks) return;
+    const detailsSent = !linked && !pendingLine;
+    if (detailsSent && !date) {
+      setFieldErrors({ date: "Enter the date." });
       focusField("date");
       return;
     }
-    // A half-cleared date is the dangerous one, and `!date` cannot see it.
-    // Clear the year of `03/21/2026` and the field draws `03/21/yyyy` while
-    // `date` still holds `2026-03-21` — so without this the dialog would
-    // quietly save the date the person was replacing and report success. The
-    // native input it replaced could not reach this state.
-    if (dateIncomplete) {
+    if (detailsSent && dateIncomplete) {
       setFieldErrors({ date: "Finish the date." });
       focusField("date");
       return;
     }
+
     setSaving(true);
     setError(null);
     setFieldErrors({});
 
-    const payload = {
-      tournament_name: tournament,
-      date,
-      round,
-      match_type: matchType || null,
-      court_type: courtType || null,
-      player1_name: p1Name,
-      player2_name: p2Name,
+    const body: Record<string, unknown> = {
+      player2_name: opponent.name,
+      player_hand: player.hand,
+      player_backhand: player.backhand,
+      opponent_hand: opponent.hand,
+      opponent_backhand: opponent.backhand,
       score: {
-        player1: p1Scores.map((s) => s ?? 0),
-        player2: p2Scores.map((s) => s ?? 0),
-        player1_tiebreaks: p1Tiebreaks,
-        player2_tiebreaks: p2Tiebreaks,
+        player1: score.player.map((n) => n ?? 0),
+        player2: score.opponent.map((n) => n ?? 0),
+        player1_tiebreaks: score.playerTiebreaks,
+        player2_tiebreaks: score.opponentTiebreaks,
       },
     };
+    // A personal match types its player; a team match picks from the roster,
+    // and the server writes the name from that row. On a line, neither.
+    if (roster === null) body.player1_name = player.name;
+    else if (!linked && playerChanged && playerId) body.player1_id = playerId;
+    // A line owns these once the match is on it — and is about to, when one is
+    // picked. Sending them would only be overwritten or refused.
+    if (detailsSent) {
+      Object.assign(body, {
+        tournament_name: tournament,
+        date,
+        round: roundKind ? round || null : null,
+        match_type: matchType || null,
+        court_type: courtType || null,
+      });
+    }
+    if (formatEditable) {
+      body.format = {
+        best_of: format.bestOf,
+        ad_scoring: format.adScoring,
+        play_on_lets: format.playOnLets,
+      };
+    }
 
     try {
       const res = await fetch(`/api/matches/${matchId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const body: { error?: string; field?: string } = await res
+        const payload: { error?: string; field?: string } = await res
           .json()
           .catch(() => ({}));
-        const message = body?.error ?? "Failed to save match";
-        const field = body?.field as FieldKey | undefined;
-        if (field && field in fieldRefs) {
+        const message = payload.error ?? "Couldn't save the match.";
+        const field = payload.field as FieldKey | undefined;
+        if (
+          field === "player1_name" ||
+          field === "player2_name" ||
+          field === "date"
+        ) {
           setFieldErrors({ [field]: message });
           focusField(field);
         } else {
@@ -388,604 +530,546 @@ export function EditMatchDialog({
         setSaving(false);
         return;
       }
+
+      if (pendingLine) {
+        const attached = await attachMatchToLine({
+          matchId,
+          entryId: pendingLine.entryId,
+        });
+        if (!attached.ok) {
+          setError(
+            `Your other changes were saved, but it wasn't added to the event: ${attached.error}`,
+          );
+          setSaving(false);
+          router.refresh();
+          return;
+        }
+        push({
+          tone: "success",
+          title: `Added to ${attached.eventName} · ${attached.slot ?? attached.round ?? ""}`,
+          action: {
+            label: "Open in Schedule",
+            href: `/dashboard/team/schedule/${attached.eventId}`,
+          },
+        });
+      }
+
+      forgetMatchDetails(matchId);
+      setSaving(false);
       onOpenChange(false);
       router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save match");
+    } catch {
+      setError(
+        "Couldn't reach the server, so this may not have saved. Reload the page to check.",
+      );
       setSaving(false);
     }
-  };
+  }
+
+  // ── Header ────────────────────────────────────────────────────────────────
+  const contextFor = (facts: {
+    eventName: string;
+    eventKind: "dual" | "tournament";
+    slot: string | null;
+    round: string | null;
+    date: string;
+    surface: string | null;
+  }) => eventContextLine(facts);
+
+  let description: React.ReactNode = "Correct the score, players and details.";
+  if (match && event) {
+    description = (
+      <span className="flex flex-wrap items-baseline gap-x-2.5">
+        <span>
+          {contextFor({
+            eventName: event.eventName,
+            eventKind: event.eventKind,
+            slot: event.slot,
+            round: match.round,
+            date: dayOf(match.date) || event.startsOn,
+            surface: event.surface,
+          })}
+        </span>
+        <Link
+          href={`/dashboard/team/schedule/${event.eventId}`}
+          className="inline-flex items-center gap-0.5 font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
+        >
+          Open
+          <ArrowUpRight className="size-3" strokeWidth={2} aria-hidden />
+        </Link>
+      </span>
+    );
+  } else if (match && pendingLine) {
+    description = (
+      <span className="flex flex-wrap items-baseline gap-x-2.5">
+        <span>
+          {contextFor({
+            eventName: pendingLine.eventName,
+            eventKind: pendingLine.eventKind,
+            slot: pendingLine.slot,
+            round: pendingLine.round,
+            date:
+              pendingLine.eventKind === "dual" || !pendingLine.sameDay
+                ? pendingLine.startsOn
+                : date,
+            surface: pendingLine.surface,
+          })}
+        </span>
+        <button
+          type="button"
+          onClick={startChange}
+          disabled={saving}
+          className="cursor-pointer font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
+        >
+          Change
+        </button>
+      </span>
+    );
+  } else if (match) {
+    description = `${surname(player.name || match.player1_name)} vs ${surname(
+      opponent.name || match.player2_name,
+    )} · ${dayLabel(date || dayOf(match.date))}`;
+  }
+
+  // ── Closing lines ─────────────────────────────────────────────────────────
+  const formatSentence = match
+    ? formatLine({
+        format: {
+          bestOf: match.format?.best_of ?? null,
+          adScoring: match.format?.ad_scoring ?? null,
+          playOnLets: match.format?.play_on_lets ?? null,
+        },
+        analyzed,
+        linked,
+        durationMs: match.duration,
+      })
+    : null;
+
+  const eventWord = (kind: "dual" | "tournament") =>
+    kind === "dual" ? "dual" : "tournament";
+
+  const ready = loaded !== null && !loadError;
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
-      <DialogContent className="max-h-[90vh] max-w-xl gap-0 overflow-hidden rounded-2xl border-[#F3F3F3] bg-white p-0 shadow-[0px_6px_20px_0px_rgba(0,0,0,0.12)]">
-        <DialogHeader className="px-8 pt-5 pb-6">
-          <DialogTitle className="text-left text-[24px] leading-[1.2] font-light tracking-[-0.4px] text-[var(--ink-900)]">
-            Edit match
-          </DialogTitle>
-          <DialogDescription className="sr-only">
-            Update the match details and save.
-          </DialogDescription>
-        </DialogHeader>
-
-        {loadingInitial ? (
-          <div className="flex items-center justify-center px-8 py-12 text-[#888888]">
-            <Loader2
-              className="mr-2 size-3.5 animate-spin"
-              aria-hidden="true"
-            />
-            <span className="text-[12px]">Loading match…</span>
-          </div>
-        ) : loadError ? (
-          <div className="flex flex-col">
-            <div className="flex flex-col items-center gap-3 px-8 py-10 text-center">
-              <p className="text-[13px] font-medium text-[#0D0D0D]">
-                We couldn&apos;t load this match
-              </p>
-              <p className="max-w-[320px] text-[12px] leading-[1.5] text-[#888888]">
-                {loadError}. The match may have been removed, or your connection
-                dropped. Close this dialog and try again from the match list.
-              </p>
-            </div>
-            <div className="flex items-center justify-end border-t border-[#F3F3F3] bg-[#FAFAFA] px-8 py-3.5">
+    <RosterDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) close();
+      }}
+      title="Edit match"
+      description={loadError ? "Nothing was changed." : description}
+      footer={
+        ready ? (
+          <>
+            {pendingLine && (
               <button
                 type="button"
-                onClick={() => onOpenChange(false)}
-                className={primaryBtnCls}
+                onClick={() => setPendingLine(null)}
+                disabled={saving}
+                className="h-9 cursor-pointer text-[12px] font-medium text-[var(--ink-600)] transition-colors hover:text-[var(--ink-900)]"
               >
-                Close
+                Keep as one-off
               </button>
-            </div>
-          </div>
+            )}
+            <div className="flex-1" />
+            <button
+              type="button"
+              className={advButton("outline")}
+              disabled={saving}
+              onClick={close}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              form={FORM_ID}
+              className={advButton("primary")}
+              disabled={saving || !!invalidSet || lineupBlocks}
+            >
+              {saving && (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              )}
+              Save changes
+            </button>
+          </>
         ) : (
-          <form
-            onSubmit={handleSubmit}
-            onKeyDown={(e) => {
-              if (e.key !== "Enter") return;
-              if (!(e.metaKey || e.ctrlKey)) return;
-              if (saving || hasInvalidSet) return;
+          <>
+            <div className="flex-1" />
+            <button
+              type="button"
+              className={advButton("outline")}
+              onClick={close}
+            >
+              Close
+            </button>
+          </>
+        )
+      }
+    >
+      {loadError ? (
+        <DialogProblem message={loadError} />
+      ) : !match ? (
+        <p className="flex items-center gap-2 py-2 text-[12px] text-[var(--ink-500)]">
+          <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          Reading the match…
+        </p>
+      ) : (
+        <form
+          id={FORM_ID}
+          onSubmit={submit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
-              handleSubmit(e as unknown as React.FormEvent);
+              void submit();
+            }
+          }}
+          // The shell doesn't scroll; the body does. The negative margin keeps
+          // fields on the shell's inset while giving focus rings room.
+          className="-mx-6 flex max-h-[min(66vh,640px)] flex-col gap-10 overflow-y-auto px-6 py-0.5"
+        >
+          <EditMatchScore
+            value={score}
+            onChange={setScore}
+            playerName={player.name}
+            opponentName={opponent.name}
+            bestOf={format.bestOf}
+            disabled={saving}
+          />
+
+          <EditMatchPlayers
+            player={player}
+            opponent={opponent}
+            onPlayer={(next) => {
+              setPlayer(next);
+              clearFieldError("player1_name");
             }}
-            className="flex flex-col"
-          >
-            <div className="flex max-h-[60vh] flex-col gap-6 overflow-y-auto px-8 pb-6">
-              {/* Tournament — anchors the form as the primary input. Larger
-                  type pulls the eye here first; everything else is grouped
-                  below under hairline-divided sections. */}
-              <UnderlineField label="Tournament">
-                <input
-                  value={tournament}
-                  onChange={(e) => setTournament(e.target.value)}
-                  data-focus-ring="none" /* the rule below carries focus */
-                  className="w-full bg-transparent pb-1.5 text-[16px] font-medium tracking-[-0.3px] text-[#0D0D0D] outline-none placeholder:font-normal placeholder:text-[#AAAAAA]"
-                />
-              </UnderlineField>
+            onOpponent={(next) => {
+              setOpponent(next);
+              clearFieldError("player2_name");
+            }}
+            errors={{
+              player: fieldErrors.player1_name,
+              opponent: fieldErrors.player2_name,
+            }}
+            playerRef={p1Ref}
+            opponentRef={p2Ref}
+            disabled={saving}
+            roster={roster}
+            playerId={playerId}
+            onPickPlayer={(next) => void pickRosterPlayer(next)}
+            playerLocked={linked}
+            playerChanged={playerChanged}
+            playerNote={styleNote(player, playerPrefill)}
+            opponentNote={styleNote(opponent, opponentPrefill)}
+            rosterLabel={
+              inMatchProgram
+                ? `Roster · ${workspaceLabel(workspace.active)}`
+                : "Roster"
+            }
+            viewerId={workspace.viewer.id}
+            myPlayerId={inMatchProgram ? workspace.active.myPlayerId : null}
+          />
 
-              {/* Score block — editorial scoreboard */}
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <h4 className={eyebrowLabelCls}>Score</h4>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={requestRemoveLastSet}
-                      disabled={numSets <= MIN_SETS}
-                      aria-label="Remove a set"
-                      className="flex size-7 items-center justify-center rounded-full text-[#3B82F6] transition-colors duration-150 hover:bg-[#F5F5F5] hover:text-[#2563EB] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
-                    >
-                      <CircleMinus
-                        className="size-3.5"
-                        strokeWidth={1.75}
-                        aria-hidden="true"
-                      />
-                    </button>
-                    <span className="w-4 text-center text-[12px] font-medium text-[#525252] tabular-nums">
-                      {numSets}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={addSet}
-                      disabled={numSets >= MAX_SETS}
-                      aria-label="Add a set"
-                      className="flex size-7 items-center justify-center rounded-full text-[#3B82F6] transition-colors duration-150 hover:bg-[#F5F5F5] hover:text-[#2563EB] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
-                    >
-                      <CirclePlus
-                        className="size-3.5"
-                        strokeWidth={1.75}
-                        aria-hidden="true"
-                      />
-                    </button>
+          {linked || pendingLine ? (
+            <section className="flex flex-col gap-3">
+              {pendingLine?.lineupMismatch && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className={`${warningStripCls} pb-1.5 ${noticeEnterCls}`}
+                >
+                  <WarningGlyph />
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <p>
+                      <b className="font-medium">
+                        {lineName(pendingLine)}&rsquo;s lineup has{" "}
+                        {pendingLine.lineupMismatch}, not{" "}
+                        {player.name || "your player"}.
+                      </b>{" "}
+                      Whose result is this?
+                    </p>
+                    <div className="-ml-2.5 flex flex-col">
+                      <Answer onClick={() => setPendingLine(null)}>
+                        Keep it off the schedule
+                      </Answer>
+                      <Answer onClick={startChange}>Choose another line</Answer>
+                    </div>
                   </div>
                 </div>
-
-                {pendingRemoveAt !== null && (
-                  <div className="flex items-center justify-end gap-2 text-[11px] text-[#525252]">
+              )}
+              {pendingLine?.formatDiffers && !pendingLine.lineupMismatch && (
+                <div className={`${noteStripCls} ${noticeEnterCls}`}>
+                  <Info
+                    className={`${noteIconCls} text-[var(--ink-700)]`}
+                    strokeWidth={1.5}
+                    aria-hidden
+                  />
+                  <p className="flex-1">
+                    The {eventWord(pendingLine.eventKind)} is set to best of{" "}
+                    {pendingLine.eventBestOf}
+                    {pendingLine.eventAdScoring === null
+                      ? ""
+                      : pendingLine.eventAdScoring
+                        ? ", ad"
+                        : ", no-ad"}
+                    ; this match {analyzed ? "was analyzed" : "is recorded"} as
+                    best of {match.format?.best_of ?? 3}
+                    {match.format?.ad_scoring == null
+                      ? ""
+                      : match.format.ad_scoring
+                        ? ", ad"
+                        : ", no-ad"}
+                    . The match keeps its format, and the line shows the score
+                    as entered.
+                  </p>
+                </div>
+              )}
+              <div className="flex flex-col gap-1 text-[12px] leading-[1.5] text-[var(--ink-500)]">
+                {formatSentence && <span>{formatSentence}</span>}
+                {pendingLine ? (
+                  <span>
+                    Saving makes this the result for{" "}
+                    {lineName(pendingLine).toLowerCase().startsWith("singles")
+                      ? `singles line ${pendingLine.slot?.slice(1)}`
+                      : lineName(pendingLine)}
+                    . The date, line and surface will come from the{" "}
+                    {eventWord(pendingLine.eventKind)}.
+                  </span>
+                ) : (
+                  event && (
                     <span>
-                      Remove set {pendingRemoveAt + 1}? Scores will be cleared.
+                      The date, {event.eventKind === "dual" ? "line" : "round"}{" "}
+                      and surface come from the {eventWord(event.eventKind)}.
+                      Change them in Schedule.
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setPendingRemoveAt(null)}
-                      className="rounded-full px-2 py-0.5 text-[#525252] transition-colors duration-150 hover:bg-[#F5F5F5] hover:text-[#0D0D0D] focus-visible:outline-none"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => doRemoveLastSet(pendingRemoveAt)}
-                      className="rounded-full px-2 py-0.5 text-[#E51837] transition-colors duration-150 hover:bg-[rgba(229,24,55,0.08)] focus-visible:outline-none"
-                    >
-                      Remove
-                    </button>
-                  </div>
+                  )
                 )}
-
-                {/* Scoreboard frame */}
-                <div className="flex flex-col border-t border-[#F3F3F3] pt-4">
-                  {/* Set column headers */}
-                  <div className="flex justify-end pb-2">
-                    <div className="flex gap-4">
-                      {p1Scores.map((_, i) => {
-                        const hasTie = needsTiebreak(p1Scores[i], p2Scores[i]);
-                        return (
-                          <div key={i} className="flex items-center gap-1">
-                            <div className="w-7 text-center text-[9px] font-normal tracking-[2.5px] text-[#AAAAAA] uppercase tabular-nums">
-                              {i + 1}
-                            </div>
-                            {hasTie && (
-                              <span className="w-7 text-center text-[9px] font-normal tracking-[1px] text-[#AAAAAA] uppercase">
-                                Tie
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-5">
-                    {/* Player 1 row */}
-                    <PlayerRow
-                      side="p1"
-                      placeholder="Your name"
-                      value={p1Name}
-                      inputRef={p1NameRef}
-                      error={fieldErrors.player1_name ?? null}
-                      invalidSetIdx={
-                        firstInvalid >= 0 ? firstInvalid : undefined
-                      }
-                      scoreRefs={p1ScoreRefs}
-                      tiebreakRefs={p1TiebreakRefs}
-                      onEnterScoreValue={focusNextAfterScore}
-                      onEnterScoreEmpty={focusPrevFromScore}
-                      onEnterTiebreakValue={focusNextAfterTiebreak}
-                      onEnterTiebreakEmpty={focusPrevFromTiebreak}
-                      onChange={(v) => {
-                        setP1Name(v);
-                        if (fieldErrors.player1_name) {
-                          const next = { ...fieldErrors };
-                          delete next.player1_name;
-                          setFieldErrors(next);
-                        }
-                      }}
-                      scores={p1Scores}
-                      tiebreaks={p1Tiebreaks}
-                      opponentScores={p2Scores}
-                      onScoreChange={(i, v) => {
-                        const nextScore = clampInt(v, 99);
-                        const nextP1 = [...p1Scores];
-                        nextP1[i] = nextScore;
-                        setP1Scores(nextP1);
-                        if (!needsTiebreak(nextScore, p2Scores[i]))
-                          clearTiebreaksAt(i);
-                      }}
-                      onTiebreakChange={(i, v) => {
-                        const next = [...p1Tiebreaks];
-                        next[i] = clampInt(v, 999);
-                        setP1Tiebreaks(next);
-                      }}
-                    />
-
-                    {/* Player 2 row */}
-                    <PlayerRow
-                      side="p2"
-                      placeholder="Opponent name"
-                      value={p2Name}
-                      inputRef={p2NameRef}
-                      error={fieldErrors.player2_name ?? null}
-                      invalidSetIdx={
-                        firstInvalid >= 0 ? firstInvalid : undefined
-                      }
-                      scoreRefs={p2ScoreRefs}
-                      tiebreakRefs={p2TiebreakRefs}
-                      onEnterScoreValue={focusNextAfterScore}
-                      onEnterScoreEmpty={focusPrevFromScore}
-                      onEnterTiebreakValue={focusNextAfterTiebreak}
-                      onEnterTiebreakEmpty={focusPrevFromTiebreak}
-                      onChange={(v) => {
-                        setP2Name(v);
-                        if (fieldErrors.player2_name) {
-                          const next = { ...fieldErrors };
-                          delete next.player2_name;
-                          setFieldErrors(next);
-                        }
-                      }}
-                      scores={p2Scores}
-                      tiebreaks={p2Tiebreaks}
-                      opponentScores={p1Scores}
-                      onScoreChange={(i, v) => {
-                        const nextScore = clampInt(v, 99);
-                        const nextP2 = [...p2Scores];
-                        nextP2[i] = nextScore;
-                        setP2Scores(nextP2);
-                        if (!needsTiebreak(p1Scores[i], nextScore))
-                          clearTiebreaksAt(i);
-                      }}
-                      onTiebreakChange={(i, v) => {
-                        const next = [...p2Tiebreaks];
-                        next[i] = clampInt(v, 999);
-                        setP2Tiebreaks(next);
-                      }}
-                    />
-                  </div>
-
-                  {invalidMessage && (
-                    <div className="mt-3 flex justify-start">
-                      <div className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(229,24,55,0.18)] bg-[rgba(229,24,55,0.06)] py-1 pr-2.5 pl-2">
-                        <AlertCircle
-                          className="size-3 text-[#E51837]"
-                          strokeWidth={1.75}
-                          aria-hidden="true"
-                        />
-                        <span className="text-[12px] font-medium text-[#E51837]">
-                          Set {firstInvalid + 1}: {invalidMessage}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
+              </div>
+            </section>
+          ) : (
+            <section className="flex flex-col gap-3.5" aria-label="Details">
+              <div className="flex flex-col gap-2">
+                <span className="text-[11px] text-[var(--ink-600)]">Event</span>
+                {picking ? (
+                  <AttachLinePicker
+                    matchId={matchId}
+                    onPick={pickLine}
+                    onClose={closePicker}
+                  />
+                ) : (
+                  <SettingsUnderlineInput
+                    aria-label="Event"
+                    value={tournament}
+                    placeholder="Tournament, dual or practice"
+                    disabled={saving}
+                    onChange={(e) => setTournament(e.target.value)}
+                  />
+                )}
+                {match.program_id && !picking && (
+                  <span className="flex flex-wrap items-center gap-x-2 pt-0.5 text-[11px] text-[var(--ink-500)]">
+                    {loaded?.canAttach ? (
+                      <>
+                        <span>One-off · not on the schedule</span>
+                        <span className="text-[var(--ink-300)]">·</span>
+                        <button
+                          type="button"
+                          onClick={() => setPicking(true)}
+                          disabled={saving}
+                          className="inline-flex cursor-pointer items-center gap-[3px] text-[11px] font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
+                        >
+                          <Plus
+                            className="size-[11px]"
+                            strokeWidth={2}
+                            aria-hidden
+                          />
+                          Add to an event
+                        </button>
+                      </>
+                    ) : (
+                      <span>
+                        One-off · not on the schedule. A coach who runs the
+                        schedule can add it to an event.
+                      </span>
+                    )}
+                  </span>
+                )}
               </div>
 
-              {/* Metadata grid — the hairline border above does the section
-                  break; no eyebrow needed (each field is self-labeled). */}
-              <div className="grid grid-cols-1 gap-x-4 gap-y-5 border-t border-[#F3F3F3] pt-6 sm:grid-cols-2">
-                {/* `variant="bare"`: `UnderlineField` draws the rule and already
-                    thickens it to 2px on focus-within, so the primitive must
-                    not draw a second one — same arrangement the two selects
-                    below use with `kind="bare"`. Its segments carry
-                    `data-focus-ring="none"` of their own, so the wrapper's
-                    rule stays the one focus indicator. */}
-                <UnderlineField label="Date" error={fieldErrors.date ?? null}>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
+                <SettingsField
+                  label="Date"
+                  required
+                  labelless
+                  hint={
+                    fieldErrors.date && (
+                      <span className="text-[var(--danger)]">
+                        {fieldErrors.date}
+                      </span>
+                    )
+                  }
+                >
                   <DateField
                     label="Date"
-                    variant="bare"
+                    variant="underline"
                     handleRef={dateRef}
                     value={date}
                     required
+                    disabled={saving}
                     onChange={(next) => {
                       setDate(next);
-                      if (fieldErrors.date) {
-                        const cleared = { ...fieldErrors };
-                        delete cleared.date;
-                        setFieldErrors(cleared);
-                      }
+                      clearFieldError("date");
                     }}
                     onIncompleteChange={(incomplete) => {
                       setDateIncomplete(incomplete);
-                      // Filling the last blank segment clears the complaint
-                      // the way typing into an empty field clears the required
-                      // one — the error should not outlive the state it named.
-                      if (!incomplete && fieldErrors.date) {
-                        const cleared = { ...fieldErrors };
-                        delete cleared.date;
-                        setFieldErrors(cleared);
+                      if (!incomplete) clearFieldError("date");
+                    }}
+                  />
+                </SettingsField>
+
+                <div className="flex min-w-0 flex-col gap-2">
+                  <span className="text-[11px] text-[var(--ink-600)]">
+                    Match type
+                  </span>
+                  <MenuSelect
+                    label="Match type"
+                    variant="underline"
+                    placeholder="Not set"
+                    value={matchType || undefined}
+                    options={withLegacy(matchType, MATCH_TYPE_OPTIONS)}
+                    disabled={saving}
+                    onChange={(v) => {
+                      const next = v === NOT_SET ? "" : v;
+                      setMatchType(next);
+                      const kind = roundKindFor(next || null);
+                      // Keep a round only where it belongs: a code from the
+                      // new type's list, or a stored value that is in no list.
+                      if (!kind || !roundFits(normalizeRound(round), kind)) {
+                        setRound(
+                          kind && legacyRound && legacyRound === round
+                            ? round
+                            : "",
+                        );
                       }
                     }}
-                    className="w-full pb-1.5"
                   />
-                </UnderlineField>
-                <UnderlineField label="Round">
-                  <input
-                    value={round}
-                    onChange={(e) => setRound(e.target.value)}
-                    data-focus-ring="none" /* the rule below carries focus */
-                    className="w-full bg-transparent pb-1.5 text-[14px] text-[#0D0D0D] outline-none placeholder:text-[#AAAAAA]"
+                </div>
+                {roundKind && (
+                  <div className="flex min-w-0 flex-col gap-2">
+                    <span className="text-[11px] text-[var(--ink-600)]">
+                      {roundKind === "dual" ? "Line" : "Round"}
+                    </span>
+                    <MenuSelect
+                      label={roundKind === "dual" ? "Line" : "Round"}
+                      variant="underline"
+                      placeholder="Not set"
+                      value={round || undefined}
+                      width={220}
+                      options={[
+                        ...(legacyRound && legacyRound === round
+                          ? [{ value: legacyRound, label: legacyRound }]
+                          : []),
+                        ...roundOptionsFor(roundKind),
+                        { value: NOT_SET, label: "Not set" },
+                      ]}
+                      disabled={saving}
+                      onChange={(v) => setRound(v === NOT_SET ? "" : v)}
+                    />
+                  </div>
+                )}
+                <div className="flex min-w-0 flex-col gap-2">
+                  <span className="text-[11px] text-[var(--ink-600)]">
+                    Court surface
+                  </span>
+                  <MenuSelect
+                    label="Court surface"
+                    variant="underline"
+                    placeholder="Not set"
+                    value={courtType || undefined}
+                    options={withLegacy(courtType, COURT_TYPE_OPTIONS)}
+                    disabled={saving}
+                    onChange={(v) => setCourtType(v === NOT_SET ? "" : v)}
                   />
-                </UnderlineField>
-                {/* `kind="bare"`: `UnderlineField` already draws the rule and
-                    already thickens it to 2px blue on focus, so the select
-                    contributes only the chevron this dialog was missing —
-                    `appearance-none` had removed the browser's arrow and put
-                    nothing back. The 14px stays because it is what every other
-                    field in this dialog runs at; retiring it is a dialog-wide
-                    change, not a select change. */}
-                <UnderlineField label="Match type">
-                  <AdvSelect
-                    kind="bare"
-                    aria-label="Match type"
-                    value={matchType}
-                    onChange={(e) => setMatchType(e.target.value)}
-                    className="pb-1.5 text-[14px] text-[#0D0D0D]"
-                    /* `pb-1.5` is the gap to the rule below, so the select's
-                       text sits 3px above its own box centre — nudge the
-                       glyph up by the same amount or it reads as low. */
-                    chevronClassName="-translate-y-[calc(50%+3px)]"
-                  >
-                    <option value="">Select type</option>
-                    {MATCH_TYPES.map((t) => (
-                      <option key={t} value={t} className="text-[#0D0D0D]">
-                        {t}
-                      </option>
-                    ))}
-                  </AdvSelect>
-                </UnderlineField>
-                <UnderlineField label="Court surface">
-                  <AdvSelect
-                    kind="bare"
-                    aria-label="Court surface"
-                    value={courtType}
-                    onChange={(e) => setCourtType(e.target.value)}
-                    className="pb-1.5 text-[14px] text-[#0D0D0D] capitalize"
-                    chevronClassName="-translate-y-[calc(50%+3px)]"
-                  >
-                    <option value="">Select surface</option>
-                    {COURT_TYPES.map((t) => (
-                      <option
-                        key={t}
-                        value={t}
-                        className="text-[#0D0D0D] capitalize"
-                      >
-                        {t.charAt(0).toUpperCase() + t.slice(1)}
-                      </option>
-                    ))}
-                  </AdvSelect>
-                </UnderlineField>
-              </div>
-            </div>
-
-            {/* Server-error banner — docked above the footer so a 500 / network
-                failure stays visible even when the body has scrolled. */}
-            {error && (
-              <div className="border-t border-[rgba(229,24,55,0.18)] bg-[rgba(229,24,55,0.06)] px-8 py-3">
-                <div className="flex items-start gap-1.5">
-                  <AlertCircle
-                    className="mt-0.5 size-3 shrink-0 text-[#E51837]"
-                    strokeWidth={1.75}
-                    aria-hidden="true"
-                  />
-                  <p className="text-[12px] leading-[1.5] font-medium text-[#E51837]">
-                    {error}
-                  </p>
                 </div>
               </div>
-            )}
 
-            {/* Footer */}
-            <div className="flex items-center justify-between gap-2 border-t border-[#F3F3F3] bg-[#FAFAFA] px-8 py-3.5">
-              <SaveShortcutHint disabled={saving || hasInvalidSet} />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => onOpenChange(false)}
-                  disabled={saving}
-                  className={ghostBtnCls}
-                >
-                  Cancel
-                </button>
-                <button
-                  ref={saveRef}
-                  type="submit"
-                  disabled={saving || hasInvalidSet}
-                  title={
-                    hasInvalidSet
-                      ? "Fix the invalid set score to save"
-                      : undefined
-                  }
-                  className={cn(primaryBtnCls, "min-w-[84px]")}
-                >
-                  {saving ? (
-                    <span className="inline-flex items-center justify-center gap-1.5">
-                      <Loader2
-                        className="size-3.5 animate-spin"
-                        aria-hidden="true"
-                      />
-                      Saving…
+              {formatEditable && (
+                <div className="grid grid-cols-3 gap-x-4">
+                  <div className="flex min-w-0 flex-col gap-2">
+                    <span className="text-[11px] text-[var(--ink-600)]">
+                      Format
                     </span>
-                  ) : (
-                    "Save"
-                  )}
-                </button>
-              </div>
-            </div>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function SaveShortcutHint({ disabled }: { disabled: boolean }) {
-  const [isMac, setIsMac] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    type WithUaData = Navigator & {
-      userAgentData?: { platform?: string };
-    };
-    const nav = navigator as WithUaData;
-    const platform = nav.userAgentData?.platform ?? nav.platform ?? "";
-    setIsMac(/Mac/i.test(platform));
-  }, []);
-
-  // First paint avoids SSR mismatch by rendering nothing until platform settles.
-  if (isMac === null) return <span aria-hidden="true" />;
-
-  const kbdCls =
-    "inline-block px-1 py-0.5 rounded text-[10px] font-medium leading-none text-[#AAAAAA] bg-[var(--ink-100)]";
-
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "inline-flex items-center gap-1.5 text-[10px] font-medium tracking-[1.5px] text-[#AAAAAA] uppercase",
-        disabled && "opacity-50",
-      )}
-    >
-      {isMac ? (
-        <kbd className={kbdCls}>⌘↵</kbd>
-      ) : (
-        <>
-          <kbd className={kbdCls}>Ctrl</kbd>
-          <span className="text-[#CCCCCC]">+</span>
-          <kbd className={kbdCls}>↵</kbd>
-        </>
-      )}
-      <span>Save</span>
-    </span>
-  );
-}
-
-function UnderlineField({
-  label,
-  error,
-  children,
-}: {
-  label: string;
-  error?: string | null;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className={eyebrowLabelCls}>{label}</label>
-      <div className="group flex flex-col">
-        {children}
-        <div
-          className={
-            // Both branches thicken to 2px on focus, and that is load-bearing
-            // rather than symmetry: every child of this wrapper carries
-            // `data-focus-ring="none"`, so this rule is their ONLY focus
-            // indicator (focus.css, "the underline exception"). The error
-            // branch used to be a flat 1px that never changed — so a field
-            // that had just been rejected was also the one field on the
-            // dialog with no visible focus at all, which is the state a
-            // keyboard user is most likely to be in. It stays red: the error
-            // owns the colour, focus owns the weight.
-            error
-              ? "h-[1px] w-full bg-[#E51837] group-focus-within:h-[2px] motion-safe:transition-all motion-safe:duration-300"
-              : "h-[1px] w-full bg-[#F3F3F3] group-focus-within:h-[2px] group-focus-within:bg-[#3B82F6] motion-safe:transition-all motion-safe:duration-300"
-          }
-        />
-        {error && (
-          <span className="mt-1 text-[11px] leading-none text-[#E51837]">
-            {error}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-type Side = "p1" | "p2";
-
-interface PlayerRowProps {
-  placeholder: string;
-  value: string;
-  inputRef?: React.RefObject<HTMLInputElement | null>;
-  error?: string | null;
-  invalidSetIdx?: number;
-  onChange: (v: string) => void;
-  scores: (number | null)[];
-  tiebreaks: (number | null)[];
-  opponentScores: (number | null)[];
-  scoreRefs: React.RefObject<Record<number, HTMLInputElement | null>>;
-  tiebreakRefs: React.RefObject<Record<number, HTMLInputElement | null>>;
-  side: Side;
-  onScoreChange: (i: number, v: string) => void;
-  onTiebreakChange: (i: number, v: string) => void;
-  onEnterScoreValue: (side: Side, i: number, raw: string) => void;
-  onEnterScoreEmpty: (side: Side, i: number) => void;
-  onEnterTiebreakValue: (side: Side, i: number) => void;
-  onEnterTiebreakEmpty: (side: Side, i: number) => void;
-}
-
-function PlayerRow({
-  placeholder,
-  value,
-  inputRef,
-  error,
-  invalidSetIdx,
-  onChange,
-  scores,
-  tiebreaks,
-  opponentScores,
-  scoreRefs,
-  tiebreakRefs,
-  side,
-  onScoreChange,
-  onTiebreakChange,
-  onEnterScoreValue,
-  onEnterScoreEmpty,
-  onEnterTiebreakValue,
-  onEnterTiebreakEmpty,
-}: PlayerRowProps) {
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <div className="group/name flex max-w-[320px] min-w-0 flex-1 flex-col">
-        <input
-          ref={inputRef}
-          placeholder={placeholder}
-          aria-label={placeholder}
-          aria-required="true"
-          aria-invalid={error ? true : undefined}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          data-focus-ring="none" /* the rule below carries focus */
-          className="w-full bg-transparent pb-1.5 text-[16px] font-normal tracking-[-0.4px] text-[#0D0D0D] outline-none placeholder:font-normal placeholder:text-[#AAAAAA]"
-        />
-        <div
-          className={
-            error
-              ? "h-[1px] w-full bg-[#E51837]"
-              : "h-[1px] w-full bg-[#F3F3F3] group-focus-within/name:h-[2px] group-focus-within/name:bg-[#3B82F6] motion-safe:transition-all motion-safe:duration-300"
-          }
-        />
-        {error && (
-          <span className="mt-1 text-[11px] leading-none text-[#E51837]">
-            {error}
-          </span>
-        )}
-      </div>
-      <div className="flex gap-4 pt-1">
-        {scores.map((score, i) => {
-          const hasTie = needsTiebreak(scores[i], opponentScores[i]);
-          const isInvalid = invalidSetIdx === i;
-          return (
-            <div key={i} className="flex items-center gap-1">
-              <ScoreCell
-                refMap={scoreRefs}
-                i={i}
-                value={score}
-                maxLength={2}
-                invalid={isInvalid}
-                onValueChange={(v) => onScoreChange(i, v)}
-                onEnterValue={(raw) => onEnterScoreValue(side, i, raw)}
-                onEnterEmpty={() => onEnterScoreEmpty(side, i)}
-              />
-              {hasTie && (
-                <ScoreCell
-                  refMap={tiebreakRefs}
-                  i={i}
-                  value={tiebreaks[i] ?? null}
-                  maxLength={3}
-                  onValueChange={(v) => onTiebreakChange(i, v)}
-                  onEnterValue={() => onEnterTiebreakValue(side, i)}
-                  onEnterEmpty={() => onEnterTiebreakEmpty(side, i)}
-                />
+                    <MenuSelect
+                      label="Format"
+                      variant="underline"
+                      value={String(format.bestOf) as "1" | "3" | "5"}
+                      options={BEST_OF}
+                      disabled={saving}
+                      onChange={(v) =>
+                        setFormat((f) => ({ ...f, bestOf: Number(v) }))
+                      }
+                    />
+                  </div>
+                  <div className="flex min-w-0 flex-col gap-2">
+                    <span className="text-[11px] text-[var(--ink-600)]">
+                      Scoring
+                    </span>
+                    <MenuSelect
+                      label="Scoring"
+                      variant="underline"
+                      placeholder="Not set"
+                      value={
+                        format.adScoring === null
+                          ? undefined
+                          : format.adScoring
+                            ? "ad"
+                            : "no-ad"
+                      }
+                      options={SCORING}
+                      disabled={saving}
+                      onChange={(v) =>
+                        setFormat((f) => ({ ...f, adScoring: v === "ad" }))
+                      }
+                    />
+                  </div>
+                  <div className="flex min-w-0 flex-col gap-2">
+                    <span className="text-[11px] text-[var(--ink-600)]">
+                      Lets
+                    </span>
+                    <MenuSelect
+                      label="Lets"
+                      variant="underline"
+                      placeholder="Not set"
+                      value={
+                        format.playOnLets === null
+                          ? undefined
+                          : format.playOnLets
+                            ? "play-on"
+                            : "replay"
+                      }
+                      options={LETS}
+                      disabled={saving}
+                      onChange={(v) =>
+                        setFormat((f) => ({
+                          ...f,
+                          playOnLets: v === "play-on",
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
               )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
+
+              {formatSentence && (
+                <span className="text-[12px] leading-[1.5] text-[var(--ink-500)]">
+                  {formatSentence}
+                </span>
+              )}
+            </section>
+          )}
+
+          <DialogProblem message={error} />
+        </form>
+      )}
+    </RosterDialog>
   );
 }

@@ -92,6 +92,25 @@ be. Doubles teams and existing users depend on it.
 > login that filed it disappears. Design:
 > `docs/superpowers/specs/2026-09-01-account-deletion-team-retention-design.md`.
 
+> **A third reviewed exception, added 2026-09-13: `attach_match_to_event_line`.**
+>
+> The Edit Match dialog's "Add to an event" files an existing one-off team
+> match under a scheduled line. It writes `event_entry_id` — which
+> `matches_block_client_regraft` otherwise refuses to move on UPDATE — plus
+> the facts the line owns (`tournament_name`, `round`, `date`, `match_type`,
+> `court_type`). Allowed on the same terms as the two above: a single explicit
+> action by the match's own uploader, who must also run that program's
+> schedule; scoped to one match and one line in the same program; only from
+> no line to a line (never between lines, never off one); **never** `score`,
+> `format`, `player1_id` or `program_id`, and nothing under `match_stats`,
+> `points` or `shots`; and audit-logged to `program_audit_log` as
+> `match.attached`. The trigger accepts the transition only inside that
+> function (a transaction-local marker), so its checks — singles line, not
+> forfeited, no other match on the line or round — and the audit row cannot
+> be skipped by a bare client UPDATE. `guard_schedule_result` still refuses a
+> line with a saved outcome. Migration:
+> `supabase/migrations/20260913120000_attach_match_to_event_line.sql`.
+
 **These files are the integration, not UI.** Changing them to suit a layout is
 almost always the wrong fix:
 
