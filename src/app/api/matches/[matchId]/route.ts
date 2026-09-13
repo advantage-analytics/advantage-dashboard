@@ -154,24 +154,21 @@ export async function GET(
   if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const match = data as unknown as MatchRow;
 
+  // Attaching needs a team match that isn't on a line yet, in the workspace
+  // being viewed, by someone the events policy lets run the schedule. The
+  // database re-checks all of it (`attach_match_to_event_line`).
+  const attachable = !!match.program_id && !match.event_entry_id;
   const [analysis, event, workspace] = await Promise.all([
     analysisFor(supabase, matchId),
     match.event_entry_id
       ? eventContextFor(supabase, match.event_entry_id)
       : Promise.resolve(null),
-    // Only a team one-off can be attached, so only it needs the workspace.
-    match.program_id && !match.event_entry_id
-      ? getWorkspaceContext()
-      : Promise.resolve(null),
+    attachable ? getWorkspaceContext() : Promise.resolve(null),
   ]);
 
-  // Attaching needs a team match that isn't on a line yet, in the workspace
-  // being viewed, by someone the events policy lets run the schedule. The
-  // database re-checks all of it (`attach_match_to_event_line`).
   const active = workspace?.active;
   const canAttach =
-    !!match.program_id &&
-    !match.event_entry_id &&
+    attachable &&
     active?.kind === "team" &&
     active.id === match.program_id &&
     canManageTeamSchedule(active);

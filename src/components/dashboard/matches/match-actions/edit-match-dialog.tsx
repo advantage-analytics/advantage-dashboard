@@ -344,17 +344,22 @@ export function EditMatchDialog({
   const roundKind = roundKindFor(matchType || null);
   const storedRound = normalizeRound(match?.round ?? null);
   /**
-   * Details edited before a line was picked. Save sends none of them once a
-   * line is pending — the event owns them — so the dialog says which are lost.
+   * Details edited before a line was picked that Save won't send — the event
+   * owns them — so the dialog says which are lost. A tournament keeps the
+   * match's round and date, so those are sent and never listed.
    */
   const droppedDetails =
     match && pendingLine
       ? droppedDetailsLine(
           [
             tournament !== (match.tournament_name ?? "") && "event name",
-            date !== dayOf(match.date) && "date",
+            pendingLine.eventKind === "dual" &&
+              date !== dayOf(match.date) &&
+              "date",
             matchType !== (match.match_type ?? "") && "match type",
-            round !== (storedRound ?? "") && "round",
+            pendingLine.eventKind === "dual" &&
+              round !== (storedRound ?? "") &&
+              "round",
             courtType !== (match.court_type ?? "") && "surface",
             (format.bestOf !== (match.format?.best_of ?? 3) ||
               format.adScoring !== (match.format?.ad_scoring ?? null) ||
@@ -485,12 +490,16 @@ export function EditMatchDialog({
     e?.preventDefault();
     if (!match || saving || invalidSet || lineupBlocks) return;
     const detailsSent = !linked && !pendingLine;
-    if (detailsSent && !date) {
+    // A tournament keeps the match's own round, and its date when that falls
+    // in the event (`attach_match_to_event_line`), so those still save.
+    const tournamentLine = pendingLine?.eventKind === "tournament";
+    const dateSent = detailsSent || tournamentLine;
+    if (dateSent && !date) {
       setFieldErrors({ date: "Enter the date." });
       focusField("date");
       return;
     }
-    if (detailsSent && dateIncomplete) {
+    if (dateSent && dateIncomplete) {
       setFieldErrors({ date: "Finish the date." });
       focusField("date");
       return;
@@ -527,6 +536,14 @@ export function EditMatchDialog({
         round: roundKind ? round || null : null,
         match_type: matchType || null,
         court_type: courtType || null,
+      });
+    }
+    if (tournamentLine) {
+      Object.assign(body, {
+        date,
+        round: round || null,
+        // The attach sets it too; sent so the round is judged as a tournament's.
+        match_type: "Tournament",
       });
     }
     if (formatEditable) {
@@ -869,8 +886,10 @@ export function EditMatchDialog({
                     {lineName(pendingLine).toLowerCase().startsWith("singles")
                       ? `singles line ${pendingLine.slot?.slice(1)}`
                       : lineName(pendingLine)}
-                    . The date, line and surface will come from the{" "}
-                    {pendingLine.eventKind}.
+                    .{" "}
+                    {pendingLine.eventKind === "dual"
+                      ? "The date, line and surface will come from the dual."
+                      : "It keeps the round set here; the event name and surface come from the tournament."}
                   </span>
                 ) : (
                   event && (
@@ -895,6 +914,8 @@ export function EditMatchDialog({
                         ? { id: playerId, name: player.name }
                         : null
                     }
+                    round={round || null}
+                    date={date || null}
                     onPick={pickLine}
                     onClose={closePicker}
                   />

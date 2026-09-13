@@ -61,11 +61,17 @@ export async function findAttachableLines(input: {
   matchId: string;
   query?: string;
   /**
-   * The roster player picked in the dialog but not saved yet. Save writes the
-   * player before attaching, so lines are judged against this one. Used only
-   * when it is on this program's roster; the stored player otherwise.
+   * What the dialog holds but hasn't saved. Save writes the player, and for a
+   * tournament the round and date, before attaching — so lines are judged
+   * against these. They only shape the list shown: the PATCH validates the
+   * player against the roster, and the attach function re-checks the line.
    */
-  player?: { id: string; name: string } | null;
+  unsaved?: {
+    player?: { id: string; name: string } | null;
+    round?: string | null;
+    /** YYYY-MM-DD. */
+    date?: string | null;
+  };
 }): Promise<FindLinesResult> {
   const own = await ownTeamMatch(input.matchId);
   if (!own) {
@@ -80,18 +86,20 @@ export async function findAttachableLines(input: {
     getProgramSchedule(match.program_id!),
     supabase.rpc("program_roster_full", { p_program_id: match.program_id }),
   ]);
-  const matchDate = match.date.slice(0, 10);
-  const canonical = canonicalRosterIds((roster.data ?? []) as RosterIdRow[]);
-  const picked =
-    input.player && canonical.has(input.player.id) ? input.player : null;
+  const unsaved = input.unsaved ?? {};
+  const matchDate =
+    unsaved.date && /^\d{4}-\d{2}-\d{2}$/.test(unsaved.date)
+      ? unsaved.date
+      : match.date.slice(0, 10);
+  const picked = unsaved.player ?? null;
   const groups = attachLineGroups({
     events: schedule.events,
     entriesByEvent: schedule.entriesByEvent,
-    canonical,
+    canonical: canonicalRosterIds((roster.data ?? []) as RosterIdRow[]),
     query: input.query,
     match: {
       date: matchDate,
-      round: match.round,
+      round: unsaved.round !== undefined ? unsaved.round : match.round,
       player1Id: picked ? picked.id : match.player1_id,
       player1Name: picked ? picked.name : match.player1_name,
       bestOf: match.format?.best_of ?? 3,
@@ -150,7 +158,8 @@ export async function attachMatchToLine(input: {
       .from("matches")
       .update({ round: code })
       .eq("id", input.matchId)
-      .eq("created_by", user.id);
+      .eq("created_by", user.id)
+      .is("event_entry_id", null);
     if (roundError)
       return { ok: false, error: sentenceFor(roundError.message) };
   }

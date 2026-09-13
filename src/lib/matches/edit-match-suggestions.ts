@@ -133,13 +133,17 @@ async function styleForPlayer(
   scope: { matchId: string; programId: string | null; userId: string },
   player: { playerId: string | null; name: string },
 ): Promise<KnownStyle | null> {
-  // Independent reads, so they run together; the profile wins when it's theirs.
-  const [viewer, own, last] = await Promise.all([
-    isViewer(supabase, scope.programId, player.playerId, scope.userId),
-    ownProfileStyle(supabase, scope.userId),
-    lastPlayerStyle(supabase, scope, player),
-  ]);
-  return (viewer && own) || last;
+  if (
+    await isViewer(supabase, scope.programId, player.playerId, scope.userId)
+  ) {
+    // Their own match: the profile wins, the last match is the fallback.
+    const [own, last] = await Promise.all([
+      ownProfileStyle(supabase, scope.userId),
+      lastPlayerStyle(supabase, scope, player),
+    ]);
+    return own ?? last;
+  }
+  return lastPlayerStyle(supabase, scope, player);
 }
 
 export async function editMatchSuggestions(input: {

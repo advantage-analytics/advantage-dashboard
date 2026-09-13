@@ -37,12 +37,17 @@ type Groups = {
 export function AttachLinePicker({
   matchId,
   player = null,
+  round = null,
+  date = null,
   onPick,
   onClose,
 }: {
   matchId: string;
   /** The unsaved roster pick, when the player was changed in the dialog. */
   player?: { id: string; name: string } | null;
+  /** The dialog's round and date, which Save writes before attaching. */
+  round?: string | null;
+  date?: string | null;
   onPick: (line: AttachLine) => void;
   /** Closed without choosing. */
   onClose: () => void;
@@ -63,7 +68,11 @@ export function AttachLinePicker({
         findAttachableLines({
           matchId,
           query,
-          player: pickedId ? { id: pickedId, name: pickedName ?? "" } : null,
+          unsaved: {
+            player: pickedId ? { id: pickedId, name: pickedName! } : null,
+            round,
+            date,
+          },
         })
           .then((result) => {
             if (!live) return;
@@ -87,7 +96,7 @@ export function AttachLinePicker({
       live = false;
       window.clearTimeout(timer);
     };
-  }, [matchId, query, pickedId, pickedName]);
+  }, [matchId, query, pickedId, pickedName, round, date]);
 
   const nothingThatDay =
     groups !== null &&
