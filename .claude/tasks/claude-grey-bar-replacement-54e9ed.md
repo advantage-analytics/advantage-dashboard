@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Replace the court-guide box with a help-centre link
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/new-match-wizard/VideoRequirements.tsx
 - **done when:**
