@@ -97,7 +97,7 @@ ready).
 
 ## T7 · Restore server action, former-players loader and prop plumbing
 
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **needs:** T6
 - **files:** `src/components/dashboard/team/roster-actions.ts` (next to `archiveProgramPlayer`, ~L505-540), `src/lib/data/team-roster-server.ts` (`RosterMember` types ~L124-160, `shortDate`, the loader that calls `program_roster_full` ~L344), `src/app/dashboard/team/roster/page.tsx` (~L272 `RosterHeaderButtons`), `src/components/dashboard/team/roster-header-buttons.tsx` (props ~L21-40, `AddPlayerDialog` at ~L113), `src/components/dashboard/team/add-player-dialog.tsx` (props ~L122-141) — guess
