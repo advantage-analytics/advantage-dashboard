@@ -89,11 +89,17 @@ function actions(
             role === "anonymous"
               ? null
               : {
-                  active: { kind: "team", id: "program", role, eventsPolicy: "staff" },
+                  active: {
+                    kind: "team",
+                    id: "program",
+                    role,
+                    eventsPolicy: "staff",
+                  },
                   viewer: { id: "viewer" },
                 },
         };
-      if (name === "@/lib/workspace/types") return { canManageTeamSchedule, isProgramStaff };
+      if (name === "@/lib/workspace/types")
+        return { canManageTeamSchedule, isProgramStaff };
       return {};
     },
   });
