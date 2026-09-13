@@ -215,6 +215,26 @@ export function RosterInviteDialog({
         ) ?? null);
   const showTripwire = emailMatch !== null && normalized !== keptSeparate;
 
+  /**
+   * The duplicate the tripwire cannot see: a coach-managed row with no address
+   * on file. There is nothing to match a typed address against, and this
+   * dialog collects no name — the invitee's name only exists once their
+   * account accepts, and it need not match what the coach typed on the row.
+   * So instead of guessing, it asks: when one finished address is about to
+   * mint a new player and the roster holds rows with no email, name them and
+   * offer the link. "Someone new" answers it for that address only, the same
+   * way "Keep separate" does.
+   */
+  const unmailed = managedPlayers.filter((p) => !p.email?.trim());
+  const showUnmailedCheck =
+    !linked &&
+    !listed &&
+    role === "player" &&
+    LOOKS_LIKE_EMAIL.test(draft) &&
+    emailMatch === null &&
+    unmailed.length > 0 &&
+    normalized !== keptSeparate;
+
   function reset() {
     setTarget(initialTarget);
     setPickerOpen(false);
@@ -271,8 +291,17 @@ export function RosterInviteDialog({
       // The address comes off the profile. A coach who recorded a school
       // address gets it back rather than typing it again — and it stays
       // editable, because addresses change between August and September.
-      setEmail(player.email ?? "");
-      setEmailEdited(false);
+      // A row with no address on file keeps whatever was typed: that address
+      // is the only one this invitation has, and wiping it would send the
+      // coach back to retype it for the profile they just chose.
+      // But an address that came off the PREVIOUSLY chosen row is that
+      // person's, not something the coach typed, and must not follow them.
+      if (player.email) {
+        setEmail(player.email);
+        setEmailEdited(false);
+      } else if (target?.email && !emailEdited) {
+        setEmail("");
+      }
       // A roster row is a player. `create_program_invite` refuses any other
       // role for a targeted invitation, so the control states the rule rather
       // than offering a choice that would be rejected.
@@ -707,6 +736,59 @@ export function RosterInviteDialog({
                   className="cursor-pointer text-[11px] text-[var(--ink-500)] transition-colors hover:text-[var(--ink-900)]"
                 >
                   Keep separate
+                </button>
+              </span>
+            </DialogInfoRow>
+          )}
+
+          {showUnmailedCheck && (
+            <DialogInfoRow
+              tone="blue"
+              icon={
+                <AlertCircle
+                  className="size-3.5"
+                  strokeWidth={1.5}
+                  aria-hidden
+                />
+              }
+            >
+              <span className="block">
+                <b className="font-medium text-[var(--ink-900)]">
+                  Is this for someone already on your roster?
+                </b>{" "}
+                {unmailed.length === 1 ? (
+                  <>
+                    {unmailed[0].name} has no email on file. Link the invite so
+                    their profile and matches stay with them.
+                  </>
+                ) : (
+                  <>
+                    <span className="tabular">{unmailed.length}</span> players
+                    have no email on file. Link the invite to one of them so
+                    their profile and matches stay with them.
+                  </>
+                )}
+              </span>
+              <span className="mt-2 flex items-center gap-3.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    unmailed.length === 1
+                      ? pick(unmailed[0])
+                      : setPickerOpen(true)
+                  }
+                  className="cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
+                >
+                  {unmailed.length === 1
+                    ? `Link to ${unmailed[0].name}`
+                    : "Choose a player"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setKeptSeparate(normalized)}
+                  className="cursor-pointer text-[11px] text-[var(--ink-500)] transition-colors hover:text-[var(--ink-900)]"
+                >
+                  Someone new
                 </button>
               </span>
             </DialogInfoRow>
