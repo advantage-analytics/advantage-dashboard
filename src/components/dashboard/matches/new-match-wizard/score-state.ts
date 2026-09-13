@@ -55,24 +55,41 @@ export function updateScoreState<T extends FormData>(
   };
 }
 
+type Cells = readonly (number | null | undefined)[];
+
 /**
- * Who took a set, from its games alone — or null while it is still open.
+ * Who took a set — or null while it is still open.
  *
  * A set is over at 6 with a two-game lead, at 7-5, or at 7-6 (the tiebreak's
- * points don't change who took it). 1-0 is a match tiebreak played as a set.
- * Anything else — 5-4, 6-5, one side still blank — is unfinished.
+ * points don't change who took it). Anything else — 5-4, 6-5, one side still
+ * blank — is unfinished.
+ *
+ * 1-0 is the one shape the games can't settle alone. It is how a match
+ * tiebreak played in place of a set is stored, and it is also a deciding set
+ * one game in. The tiebreak's points tell them apart: a match tiebreak has
+ * them (SwingVision exports carry both sides'), a set that has barely started
+ * does not. So 1-0 is finished only once a point is recorded on either side.
+ * Zero-fill (`0`/`0`) is not a point — no match tiebreak ends 0-0.
  */
 export function setWinner(
   player: number | null | undefined,
   opponent: number | null | undefined,
+  tiebreak?: {
+    player: number | null | undefined;
+    opponent: number | null | undefined;
+  },
 ): "player" | "opponent" | null {
   if (player == null || opponent == null || player === opponent) return null;
   const high = Math.max(player, opponent);
   const low = Math.min(player, opponent);
+  const matchTiebreak =
+    high === 1 &&
+    low === 0 &&
+    ((tiebreak?.player ?? 0) > 0 || (tiebreak?.opponent ?? 0) > 0);
   const over =
     (high >= 6 && high - low >= 2) ||
     (high === 7 && (low === 5 || low === 6)) ||
-    (high === 1 && low === 0);
+    matchTiebreak;
   if (!over) return null;
   return player > opponent ? "player" : "opponent";
 }
@@ -88,8 +105,11 @@ export function setWinner(
  */
 export function scoreColumns(input: {
   bestOf: number;
-  playerScores: readonly (number | null | undefined)[];
-  opponentScores: readonly (number | null | undefined)[];
+  playerScores: Cells;
+  opponentScores: Cells;
+  /** The tiebreak points, which decide whether a 1-0 set is finished. */
+  playerTiebreaks?: Cells;
+  opponentTiebreaks?: Cells;
   /** Index of the last set holding any value, plus one. */
   filled: number;
 }): { displayed: number; decided: boolean } {
@@ -99,7 +119,10 @@ export function scoreColumns(input: {
   let opponent = 0;
   let finished = 0;
   for (let i = 0; i < bestOf; i++) {
-    const winner = setWinner(playerScores[i], opponentScores[i]);
+    const winner = setWinner(playerScores[i], opponentScores[i], {
+      player: input.playerTiebreaks?.[i],
+      opponent: input.opponentTiebreaks?.[i],
+    });
     if (!winner) break;
     finished = i + 1;
     if (winner === "player") player++;
@@ -115,6 +138,31 @@ export function scoreColumns(input: {
     displayed: Math.min(bestOf, Math.max(2, filled, finished + 1)),
     decided: false,
   };
+}
+
+/**
+ * The first set nobody has won — where "No, I'll finish the score" sends the
+ * cursor. Counted in play order, because a set can only be open once every
+ * set before it is finished; clamped to the last set of the format.
+ */
+export function firstOpenSet(input: {
+  bestOf: number;
+  playerScores: Cells;
+  opponentScores: Cells;
+  playerTiebreaks?: Cells;
+  opponentTiebreaks?: Cells;
+}): number {
+  let i = 0;
+  while (
+    i < input.bestOf - 1 &&
+    setWinner(input.playerScores[i], input.opponentScores[i], {
+      player: input.playerTiebreaks?.[i],
+      opponent: input.opponentTiebreaks?.[i],
+    })
+  ) {
+    i++;
+  }
+  return i;
 }
 
 /**
@@ -136,19 +184,16 @@ export function isStoppedResult(result: string): result is StoppedResult {
  * this: that one is a missing field, and `collectMatchCompletionRequirements`
  * already asks for it.
  */
-export function scoreUndecided({
-  bestOf,
-  playerScores,
-  opponentScores,
-}: {
+export function scoreUndecided(input: {
   bestOf: number;
-  playerScores: (number | null)[];
-  opponentScores: (number | null)[];
+  playerScores: Cells;
+  opponentScores: Cells;
+  playerTiebreaks?: Cells;
+  opponentTiebreaks?: Cells;
 }): boolean {
   const anyGames =
-    playerScores.some((n) => (n ?? 0) > 0) ||
-    opponentScores.some((n) => (n ?? 0) > 0);
+    input.playerScores.some((n) => (n ?? 0) > 0) ||
+    input.opponentScores.some((n) => (n ?? 0) > 0);
   if (!anyGames) return false;
-  return !scoreColumns({ bestOf, playerScores, opponentScores, filled: 0 })
-    .decided;
+  return !scoreColumns({ ...input, filled: 0 }).decided;
 }

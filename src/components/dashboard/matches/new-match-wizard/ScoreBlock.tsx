@@ -46,6 +46,7 @@ export const ScoreInput = ({
   tiebreak = false,
   invalid = false,
   onEnter,
+  set,
 }: {
   value: number | null;
   onValue: (v: string) => void;
@@ -55,11 +56,14 @@ export const ScoreInput = ({
   invalid?: boolean;
   /** Called on Enter; the keypress is always prevented so no form submits. */
   onEnter?: () => void;
+  /** Zero-based set index, so a caller can find one set's cells in the DOM. */
+  set?: number;
 }) => (
   <input
     ref={inputRef}
     type="text"
     inputMode="numeric"
+    data-set={set}
     maxLength={tiebreak ? 3 : 2}
     aria-label={label}
     aria-invalid={invalid || undefined}
@@ -131,6 +135,8 @@ export function ScoreBlock({
     bestOf,
     playerScores: formData.playerScores,
     opponentScores: formData.opponentScores,
+    playerTiebreaks: formData.playerTiebreaks,
+    opponentTiebreaks: formData.opponentTiebreaks,
     filled,
   });
   const ghost = !decided && displayed < bestOf;
@@ -202,6 +208,8 @@ export function ScoreBlock({
       bestOf,
       playerScores: formData.playerScores,
       opponentScores,
+      playerTiebreaks: formData.playerTiebreaks,
+      opponentTiebreaks: formData.opponentTiebreaks,
       filled: Math.max(filled, i + 1),
     });
     if (i + 1 < next.displayed) focusKey(key("p", i + 1));
@@ -263,6 +271,7 @@ export function ScoreBlock({
           {Array.from({ length: displayed }, (_, i) => (
             <span key={i} className="flex gap-3">
               <ScoreInput
+                set={i}
                 value={scores[i] ?? null}
                 onValue={(v) => setDigit(row, i, v)}
                 inputRef={(el) => {
@@ -273,6 +282,7 @@ export function ScoreBlock({
               {tie(i) && (
                 <ScoreInput
                   tiebreak
+                  set={i}
                   value={tbs[i] ?? null}
                   onValue={(v) => onTiebreakChange(row, i, v)}
                   inputRef={(el) => {

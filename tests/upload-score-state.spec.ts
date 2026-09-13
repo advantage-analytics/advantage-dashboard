@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   isStoppedResult,
+  firstOpenSet,
   scoreColumns,
   scoreUndecided,
   setWinner,
@@ -131,8 +132,16 @@ test.describe("setWinner", () => {
     expect(setWinner(3, 6)).toBe("opponent");
     expect(setWinner(7, 5)).toBe("player");
     expect(setWinner(6, 7)).toBe("opponent");
-    expect(setWinner(1, 0)).toBe("player");
+    expect(setWinner(1, 0, { player: 10, opponent: 8 })).toBe("player");
+    expect(setWinner(0, 1, { player: null, opponent: 11 })).toBe("opponent");
     expect(setWinner(8, 6)).toBe("player");
+  });
+
+  test("1-0 with no tiebreak points is a set one game in, not a match tiebreak", () => {
+    expect(setWinner(1, 0)).toBeNull();
+    expect(setWinner(1, 0, { player: null, opponent: null })).toBeNull();
+    // Zero-fill is not a point: no match tiebreak ends 0-0.
+    expect(setWinner(1, 0, { player: 0, opponent: 0 })).toBeNull();
   });
 
   test("an unfinished or half-entered set has no winner", () => {
@@ -245,10 +254,72 @@ test.describe("scoreUndecided — when Save asks whether the match ended early",
     ).toBe(false);
   });
 
+  test("a deciding set typed 1-0 still asks, until it carries tiebreak points", () => {
+    const split = {
+      bestOf,
+      playerScores: [6, 3, 1],
+      opponentScores: [4, 6, 0],
+    };
+    expect(scoreUndecided(split)).toBe(true);
+    expect(
+      scoreUndecided({
+        ...split,
+        playerTiebreaks: [null, null, 10],
+        opponentTiebreaks: [null, null, 7],
+      }),
+    ).toBe(false);
+  });
+
   test("only Retired and Unfinished count as an answer", () => {
     expect(isStoppedResult("Retired")).toBe(true);
     expect(isStoppedResult("Unfinished")).toBe(true);
     expect(isStoppedResult("")).toBe(false);
     expect(isStoppedResult("Rudy Wins")).toBe(false);
+  });
+});
+
+test.describe("firstOpenSet — where finishing the score starts", () => {
+  test("the first set nobody has won, in play order", () => {
+    expect(
+      firstOpenSet({ bestOf: 3, playerScores: [6], opponentScores: [4] }),
+    ).toBe(1);
+    expect(
+      firstOpenSet({
+        bestOf: 3,
+        playerScores: [7, 6],
+        opponentScores: [6, null],
+      }),
+    ).toBe(1);
+    expect(
+      firstOpenSet({ bestOf: 3, playerScores: [6, 3], opponentScores: [4, 6] }),
+    ).toBe(2);
+    expect(
+      firstOpenSet({ bestOf: 3, playerScores: [5], opponentScores: [4] }),
+    ).toBe(0);
+  });
+
+  test("a bare 1-0 is the open set; with points it is finished", () => {
+    const split = {
+      bestOf: 5,
+      playerScores: [6, 3, 1],
+      opponentScores: [4, 6, 0],
+    };
+    expect(firstOpenSet(split)).toBe(2);
+    expect(
+      firstOpenSet({
+        ...split,
+        playerTiebreaks: [null, null, 10],
+        opponentTiebreaks: [null, null, 6],
+      }),
+    ).toBe(3);
+  });
+
+  test("never past the format's last set", () => {
+    expect(
+      firstOpenSet({ bestOf: 3, playerScores: [6, 6], opponentScores: [4, 3] }),
+    ).toBe(2);
+    expect(
+      firstOpenSet({ bestOf: 1, playerScores: [6], opponentScores: [4] }),
+    ).toBe(0);
   });
 });

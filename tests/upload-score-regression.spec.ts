@@ -280,10 +280,8 @@ test.describe("upload score regression reproduction", () => {
     });
   });
 
-  test("saving a score nobody won asks whether the match ended early", async ({
-    page,
-  }) => {
-    const submissions: unknown[] = [];
+  /** A video upload walked to the score step, opponent and scoring answered. */
+  async function openVideoScoreStep(page: Page, submissions: unknown[]) {
     await mockVideoMetadata(page);
     await page.addInitScript(() =>
       localStorage.setItem(
@@ -313,6 +311,13 @@ test.describe("upload score regression reproduction", () => {
       .click();
     await page.getByRole("button", { name: "Choose", exact: true }).click();
     await page.getByRole("button", { name: "Ad", exact: true }).last().click();
+  }
+
+  test("saving a score nobody won asks whether the match ended early", async ({
+    page,
+  }) => {
+    const submissions: unknown[] = [];
+    await openVideoScoreStep(page, submissions);
     await page.getByLabel("Riley Reproduction, set 1").fill("6");
     await page.getByLabel("Casey Opponent, set 1").fill("4");
     await answerPlayerStyles(page);
@@ -345,6 +350,35 @@ test.describe("upload score regression reproduction", () => {
       result: "Retired",
       score: { player1: [6], player2: [4] },
     });
+  });
+
+  test("finishing the score skips an earlier set's blank tiebreak box", async ({
+    page,
+  }) => {
+    const submissions: unknown[] = [];
+    await openVideoScoreStep(page, submissions);
+    // Set 1 went to a tiebreak whose points nobody typed; set 2 is half done.
+    await page
+      .getByLabel("Riley Reproduction, set 1", { exact: true })
+      .fill("7");
+    await page.getByLabel("Casey Opponent, set 1", { exact: true }).fill("6");
+    await expect(
+      page.getByLabel("Riley Reproduction, set 1 tiebreak"),
+    ).toHaveValue("");
+    await page
+      .getByLabel("Riley Reproduction, set 2", { exact: true })
+      .fill("6");
+    await answerPlayerStyles(page);
+
+    await page.locator("[data-wizard-continue]").click();
+    await page
+      .getByRole("button", { name: "No, I’ll finish the score" })
+      .click();
+    // The empty cell of the unfinished set — not set 1's tiebreak box, which
+    // comes first on the card and is just as empty.
+    await expect(
+      page.getByLabel("Casey Opponent, set 2", { exact: true }),
+    ).toBeFocused();
   });
 
   test("one-set schedule preset retains newly entered sets", async ({

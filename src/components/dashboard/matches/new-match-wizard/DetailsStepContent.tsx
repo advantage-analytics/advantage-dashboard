@@ -108,7 +108,7 @@ import { formatHoursMinutes, setHasData } from "./utils";
 import { FORMAT_OPTIONS, Required, ScoreBlock } from "./ScoreBlock";
 import { AnimatedHeight } from "./AnimatedHeight";
 import { ScoreCheckNotice } from "./ScoreCheckNotice";
-import { isStoppedResult } from "./score-state";
+import { firstOpenSet, isStoppedResult } from "./score-state";
 
 export interface DetailsStepContentProps {
   formData: FormData;
@@ -1278,14 +1278,28 @@ function DetailsStepContentImpl({
                 onChange={() => onInputChange("result", "")}
                 onFinishScore={() => {
                   onScoreCheckDismiss();
-                  // The first empty cell, which is where the unfinished set is.
-                  Array.from(
+                  // Into the set nobody has won — its first empty cell (a
+                  // missing side, or a bare 1-0's tiebreak points), else its
+                  // first. Not simply the first empty cell on the card: an
+                  // earlier 7-6's optional tiebreak box and the dashed "add a
+                  // set" cell are both empty and neither is what's unfinished.
+                  const open = String(
+                    firstOpenSet({
+                      bestOf: parseInt(formData.bestOf, 10) || 3,
+                      playerScores: formData.playerScores,
+                      opponentScores: formData.opponentScores,
+                      playerTiebreaks: formData.playerTiebreaks,
+                      opponentTiebreaks: formData.opponentTiebreaks,
+                    }),
+                  );
+                  const cells = Array.from(
                     scoreRef.current?.querySelectorAll<HTMLInputElement>(
-                      'input[inputmode="numeric"]',
+                      "input[data-set]",
                     ) ?? [],
-                  )
-                    .find((cell) => cell.value === "")
-                    ?.focus();
+                  ).filter((cell) => cell.dataset.set === open);
+                  (
+                    cells.find((cell) => cell.value === "") ?? cells[0]
+                  )?.focus();
                 }}
               />
             </div>

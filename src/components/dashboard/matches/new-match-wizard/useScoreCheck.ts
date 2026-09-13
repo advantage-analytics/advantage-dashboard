@@ -29,6 +29,8 @@ export function useScoreCheck({
       bestOf: parseInt(formData.bestOf, 10) || 3,
       playerScores: formData.playerScores,
       opponentScores: formData.opponentScores,
+      playerTiebreaks: formData.playerTiebreaks,
+      opponentTiebreaks: formData.opponentTiebreaks,
     });
   const answered = isStoppedResult(formData.result);
   const visible = undecided && (asked || answered);
