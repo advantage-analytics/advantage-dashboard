@@ -8,7 +8,7 @@ import {
   GhostRule,
 } from "@/components/dashboard/home/day-zero-shape";
 import { LifecycleChips } from "./lifecycle-chips";
-import { LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-card-list";
+import { LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-list-layout";
 
 /**
  * Matches on the day the account holds no match: the same offer Home makes,

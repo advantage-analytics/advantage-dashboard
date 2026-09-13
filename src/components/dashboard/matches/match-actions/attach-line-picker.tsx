@@ -36,14 +36,19 @@ type Groups = {
  */
 export function AttachLinePicker({
   matchId,
+  player = null,
   onPick,
   onClose,
 }: {
   matchId: string;
+  /** The unsaved roster pick, when the player was changed in the dialog. */
+  player?: { id: string; name: string } | null;
   onPick: (line: AttachLine) => void;
   /** Closed without choosing. */
   onClose: () => void;
 }) {
+  const pickedId = player?.id ?? null;
+  const pickedName = player?.name ?? null;
   const [query, setQuery] = useState("");
   const [groups, setGroups] = useState<Groups | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +60,11 @@ export function AttachLinePicker({
     const timer = window.setTimeout(
       () => {
         setLoading(true);
-        findAttachableLines({ matchId, query })
+        findAttachableLines({
+          matchId,
+          query,
+          player: pickedId ? { id: pickedId, name: pickedName ?? "" } : null,
+        })
           .then((result) => {
             if (!live) return;
             if (result.ok) {
@@ -78,7 +87,7 @@ export function AttachLinePicker({
       live = false;
       window.clearTimeout(timer);
     };
-  }, [matchId, query]);
+  }, [matchId, query, pickedId, pickedName]);
 
   const nothingThatDay =
     groups !== null &&

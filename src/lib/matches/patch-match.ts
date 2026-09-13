@@ -44,6 +44,66 @@ export interface MatchScore {
   winner?: "player1" | "player2" | null;
 }
 
+/** The dialog's score cells: one entry per set, null where nothing is typed. */
+export interface ScoreCells {
+  player: readonly (number | null)[];
+  opponent: readonly (number | null)[];
+  playerTiebreaks: readonly (number | null)[];
+  opponentTiebreaks: readonly (number | null)[];
+}
+
+/**
+ * The score a save sends, or why it can't.
+ *
+ * An empty cell is never a 0: trailing sets with nothing typed are dropped,
+ * and a set with only one side's games refuses the save rather than becoming
+ * "6-0". A card left entirely empty sends no score — the stored one is left
+ * alone — unless the match had sets, in which case clearing them all is
+ * refused. (`score: null` means "don't send it".)
+ */
+export function scoreForSave(
+  cells: ScoreCells,
+  storedHadSets: boolean,
+):
+  | { ok: true; score: Omit<MatchScore, "winner"> | null }
+  | { ok: false; error: string } {
+  let sets = Math.max(cells.player.length, cells.opponent.length);
+  while (
+    sets > 0 &&
+    cells.player[sets - 1] == null &&
+    cells.opponent[sets - 1] == null
+  ) {
+    sets--;
+  }
+  if (sets === 0) {
+    return storedHadSets
+      ? { ok: false, error: "Enter the score." }
+      : { ok: true, score: null };
+  }
+  const player1: number[] = [];
+  const player2: number[] = [];
+  for (let i = 0; i < sets; i++) {
+    const p = cells.player[i];
+    const o = cells.opponent[i];
+    if (p == null || o == null) {
+      return { ok: false, error: `Set ${i + 1} needs both players' games.` };
+    }
+    player1.push(p);
+    player2.push(o);
+  }
+  const tiebreaks = (arr: readonly (number | null)[]) =>
+    Array.from({ length: sets }, (_, i) => arr[i] ?? null);
+  return {
+    ok: true,
+    score: {
+      player1,
+      player2,
+      player1_tiebreaks: tiebreaks(cells.playerTiebreaks),
+      player2_tiebreaks: tiebreaks(cells.opponentTiebreaks),
+    },
+  };
+}
+
 export interface MatchFormat {
   best_of?: number;
   ad_scoring?: boolean | null;
@@ -70,7 +130,7 @@ export type PatchResult =
   | { ok: false; error: string; field?: string };
 
 /** Fields a scheduled line decides. */
-export const EVENT_OWNED_FIELDS = [
+const EVENT_OWNED_FIELDS = [
   "tournament_name",
   "round",
   "date",
@@ -176,11 +236,22 @@ function parseScore(
     sameSets(stored.score.player2, player2);
 
   // The stored winner wins ties with the arithmetic: an unchanged score keeps
-  // it outright, and a changed one keeps it unless the new sets decide.
+  // it outright. A changed score keeps it only when the stored sets never
+  // decided the match — a retirement's winner, which no set count can see. A
+  // winner the old sets decided is the arithmetic's, and goes with them.
+  const storedWinner = stored.score?.winner ?? null;
+  const storedDecided = stored.score
+    ? decidedWinner(
+        stored.score.player1 ?? [],
+        stored.score.player2 ?? [],
+        Math.max(bestOf, 1),
+      )
+    : null;
+  const retirementWinner = storedDecided === null ? storedWinner : null;
   const winner =
-    unchanged && stored.score?.winner
-      ? stored.score.winner
-      : (decided ?? stored.score?.winner ?? null);
+    unchanged && storedWinner
+      ? storedWinner
+      : (decided ?? retirementWinner ?? null);
 
   return {
     player1,
@@ -228,14 +299,19 @@ export function normalizeMatchPatch(
   // A team match's player is a roster player, chosen by id. The route checks
   // the id against the program's roster and writes the name from that row;
   // here it is only refused where the dialog never offers it — a personal
-  // match, or one whose line decides its player.
+  // match, one whose line decides its player, or an analyzed one. `match_stats`
+  // is keyed on `is_player1`, not on a player id, so moving an analyzed
+  // match's player would silently hand every computed stat to someone else
+  // (`docs/ui-revamp-guardrails.md` §2).
   if ("player1_id" in body) {
-    if (!stored.teamMatch || stored.linked) {
+    if (!stored.teamMatch || stored.linked || stored.analyzed) {
       return {
         ok: false,
-        error: stored.linked
-          ? "This match's player comes from the lineup. Change it in Schedule."
-          : "Only a team match picks its player from the roster.",
+        error: !stored.teamMatch
+          ? "Only a team match picks its player from the roster."
+          : stored.linked
+            ? "This match's player comes from the lineup. Change it in Schedule."
+            : "This match was analyzed for its player, so the player can't change.",
         field: "player1_id",
       };
     }

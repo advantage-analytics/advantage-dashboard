@@ -9,8 +9,8 @@
  * x on every row and reads the way the match drawer draws it ("✓ 6-4, 3-6").
  * After the score it floated: a three-set score is wider than a two-set one.
  * Event trails the numbers — the least-scanned text, the widest, often blank
- * for practice — and is the column the team table gives up while the drawer is
- * open (`TEAM_LIST_GRID_COLS_COMPACT`); the drawer names the event instead.
+ * for practice — and is the column the team table collapses while the drawer
+ * is open (`TEAM_LIST_GRID_COLS_COMPACT`); the drawer names the event instead.
  *
  * No chevron track: a row opens the peek drawer rather than travelling. No ⋯
  * track either: Edit and Delete live in the drawer's header, one click away,

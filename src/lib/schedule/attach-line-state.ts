@@ -11,6 +11,7 @@
  */
 
 import { normalizedPersonName } from "@/lib/data/person-name";
+import { normalizeRound } from "@/lib/matches/round-options";
 import { resolveEntryResult } from "@/lib/schedule/entry-state";
 import type { EventEntry, EventKind, ProgramEvent } from "@/lib/schedule/types";
 
@@ -94,12 +95,11 @@ function lineFor(
   const hasLineup =
     entry.playerLabels.length > 0 || entry.playerUserIds.length > 0;
 
+  // A tournament round in its short code ("QF"), whatever spelling the match
+  // was saved with — attaching writes the code (`attachMatchToLine`), so the
+  // taken-round check must compare codes too.
   const round =
-    event.kind === "dual"
-      ? entry.slot
-      : match.round && match.round.trim() !== ""
-        ? match.round.trim()
-        : null;
+    event.kind === "dual" ? entry.slot : normalizeRound(match.round);
 
   let state: AttachLineState = "available";
   let reason: string | null = null;

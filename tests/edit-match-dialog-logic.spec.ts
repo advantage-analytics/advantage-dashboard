@@ -4,6 +4,7 @@ import {
   decidedWinner,
   normalizeMatchPatch,
   type StoredMatchForPatch,
+  scoreForSave,
 } from "@/lib/matches/patch-match";
 import {
   attachLineGroups,
@@ -14,6 +15,7 @@ import {
   eventContextLine,
   formatLine,
   resultLine,
+  droppedDetailsLine,
 } from "@/lib/matches/edit-match-copy";
 import type { EventEntry, ProgramEvent } from "@/lib/schedule/types";
 import { normalizeRound } from "@/lib/matches/round-options";
@@ -291,6 +293,38 @@ test.describe("attachLineGroups", () => {
       round: "R16",
       formatDiffers: true,
     });
+    // The wizard's long label reads as its code, so a taken QF is caught.
+    const takenMap = new Map([
+      [
+        "t",
+        [
+          entry({
+            id: "te",
+            eventId: "t",
+            slot: null,
+            matches: [
+              {
+                id: "qf",
+                round: "QF",
+                status: "manual",
+                score: null,
+                opponentLabels: [],
+                hasVideo: false,
+              },
+            ],
+          }),
+        ],
+      ],
+    ]);
+    const longLabel = attachLineGroups({
+      events: [tour],
+      entriesByEvent: takenMap,
+      match: { ...facts, round: "Quarterfinal" },
+    });
+    expect(longLabel.sameDay[0]).toMatchObject({
+      round: "QF",
+      state: "roundTaken",
+    });
   });
 
   test("lineName", () => {
@@ -405,5 +439,85 @@ test.describe("player1_id", () => {
       ok: false,
       field: "player1_id",
     });
+  });
+
+  test("an analyzed match keeps its player — its stats are keyed to the side", () => {
+    const team = { ...oneOff, teamMatch: true };
+    expect(
+      normalizeMatchPatch({ player1_id: "pp-2" }, { ...team, analyzed: true }),
+    ).toMatchObject({ ok: false, field: "player1_id" });
+  });
+});
+
+test.describe("scoreForSave", () => {
+  const cells = (player: (number | null)[], opponent: (number | null)[]) => ({
+    player,
+    opponent,
+    playerTiebreaks: player.map(() => null),
+    opponentTiebreaks: opponent.map(() => null),
+  });
+
+  test("an empty cell is never saved as a 0", () => {
+    expect(scoreForSave(cells([6, 6], [4, null]), true)).toEqual({
+      ok: false,
+      error: "Set 2 needs both players' games.",
+    });
+  });
+
+  test("trailing empty sets are dropped", () => {
+    expect(scoreForSave(cells([6, null], [4, null]), true)).toMatchObject({
+      ok: true,
+      score: { player1: [6], player2: [4], player1_tiebreaks: [null] },
+    });
+  });
+
+  test("an empty card leaves a scoreless match alone, and won't wipe a score", () => {
+    expect(scoreForSave(cells([null], [null]), false)).toEqual({
+      ok: true,
+      score: null,
+    });
+    expect(scoreForSave(cells([null], [null]), true)).toMatchObject({
+      ok: false,
+    });
+  });
+});
+
+test.describe("droppedDetailsLine", () => {
+  test("names what a picked line will drop, or nothing", () => {
+    expect(droppedDetailsLine([], "tournament")).toBeNull();
+    expect(droppedDetailsLine(["date"], "dual")).toBe(
+      "Your changes to the date won't be saved — the dual sets it.",
+    );
+    expect(droppedDetailsLine(["date", "round", "surface"], "tournament")).toBe(
+      "Your changes to the date, round and surface won't be saved — the tournament sets them.",
+    );
+  });
+});
+
+test.describe("score winner after an edit", () => {
+  test("a winner the old sets decided goes when the new sets don't decide", () => {
+    const stored = {
+      ...oneOff,
+      score: { player1: [6, 6], player2: [4, 4], winner: "player1" as const },
+    };
+    expect(
+      normalizeMatchPatch(
+        { score: { player1: [6, 4], player2: [4, 6] } },
+        stored,
+      ),
+    ).toMatchObject({ ok: true, update: { score: { winner: null } } });
+  });
+
+  test("a retirement's winner survives a score correction", () => {
+    const stored = {
+      ...oneOff,
+      score: { player1: [6, 2], player2: [4, 3], winner: "player2" as const },
+    };
+    expect(
+      normalizeMatchPatch(
+        { score: { player1: [6, 3], player2: [4, 3] } },
+        stored,
+      ),
+    ).toMatchObject({ ok: true, update: { score: { winner: "player2" } } });
   });
 });

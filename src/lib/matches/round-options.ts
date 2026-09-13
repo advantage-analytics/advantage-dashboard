@@ -12,7 +12,7 @@
 
 import { ROUND_ORDER } from "@/lib/schedule/format";
 
-export interface RoundOption {
+interface RoundOption {
   value: string;
   label: string;
 }
@@ -33,11 +33,12 @@ const TOURNAMENT_LABEL: Record<string, string> = {
   C3: "Consolation 3",
 };
 
-export const TOURNAMENT_ROUNDS: readonly RoundOption[] = ROUND_ORDER.map(
-  (code) => ({ value: code, label: TOURNAMENT_LABEL[code] ?? code }),
-);
+const TOURNAMENT_ROUNDS: readonly RoundOption[] = ROUND_ORDER.map((code) => ({
+  value: code,
+  label: TOURNAMENT_LABEL[code] ?? code,
+}));
 
-export const DUAL_LINES: readonly RoundOption[] = [
+const DUAL_LINES: readonly RoundOption[] = [
   ...[1, 2, 3, 4, 5, 6].map((n) => ({ value: `S${n}`, label: `Singles ${n}` })),
   ...[1, 2, 3].map((n) => ({ value: `D${n}`, label: `Doubles ${n}` })),
 ];
@@ -73,7 +74,7 @@ export function normalizeRound(
   return LONG_TO_CODE[trimmed.toLowerCase()] ?? trimmed;
 }
 
-export type RoundKind = "tournament" | "dual" | null;
+type RoundKind = "tournament" | "dual" | null;
 
 /** Which list a match type draws from; Practice and unset have no round. */
 export function roundKindFor(matchType: string | null | undefined): RoundKind {

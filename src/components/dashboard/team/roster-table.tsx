@@ -11,7 +11,7 @@ import { ResultMark } from "@/components/dashboard/result-mark";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { FormTicks } from "@/components/dashboard/shared/form-ticks";
 import { recordLabel } from "@/lib/data/player-profile";
-import { InitialsAvatar } from "@/components/ui/initials-avatar";
+import { PlayerMark } from "@/components/ui/player-mark";
 import { cn } from "@/lib/utils";
 import {
   inviteMember,
@@ -128,7 +128,6 @@ const ROW_SETTLE = { bounceStiffness: 600, bounceDamping: 50 };
  */
 export { COL, ROW, ROSTER_COLUMNS } from "./roster-table-layout";
 import { COL, ROW, ROSTER_COLUMNS } from "./roster-table-layout";
-import { PersonAvatar } from "@/components/ui/person-avatar";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 
 /**
@@ -513,15 +512,7 @@ function MemberRow({
       <SpotCell spot={spot} draggable={inLineupMode} lifted={lifted} />
 
       <span className={cn(COL.player, "flex min-w-0 items-center gap-2.5")}>
-        {isViewer ? (
-          <PersonAvatar
-            initials={viewer.initials}
-            photoUrl={viewer.avatarUrl}
-            className="size-[26px] text-[9px]"
-          />
-        ) : (
-          <InitialsAvatar name={member.name} />
-        )}
+        <PlayerMark name={member.name} viewer={isViewer ? viewer : null} />
         <span className="flex min-w-0 items-baseline gap-1.5">
           {inLineupMode ? (
             <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">

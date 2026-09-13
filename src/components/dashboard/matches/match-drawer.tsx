@@ -62,6 +62,8 @@ interface Details {
  * has no snapshot to cache yet.
  */
 const detailsCache = new Map<string, Details>();
+/** Open drawers, told when their match's details were dropped so they refetch. */
+const forgetListeners = new Set<(matchId: string) => void>();
 
 /**
  * Drop one match's cached details. Called after an edit changes what the drawer
@@ -70,6 +72,7 @@ const detailsCache = new Map<string, Details>();
  */
 export function forgetMatchDetails(matchId: string): void {
   detailsCache.delete(matchId);
+  for (const listener of forgetListeners) listener(matchId);
 }
 
 /**
@@ -512,6 +515,20 @@ function useMatchDetails(
     null,
   );
   const cached = detailsCache.get(match.id);
+  // Bumped when an edit drops this match's details while the drawer is open —
+  // the other deps don't change for a hand-scored match, so without it the
+  // open drawer kept its pre-edit answer until closed and reopened.
+  const [revision, setRevision] = useState(0);
+
+  useEffect(() => {
+    const listener = (id: string) => {
+      if (id === match.id) setRevision((r) => r + 1);
+    };
+    forgetListeners.add(listener);
+    return () => {
+      forgetListeners.delete(listener);
+    };
+  }, [match.id]);
 
   useEffect(() => {
     if (detailsCache.has(match.id)) return;
@@ -557,7 +574,7 @@ function useMatchDetails(
     return () => {
       cancelled = true;
     };
-  }, [match.id, match.analysis, scope]);
+  }, [match.id, match.analysis, scope, revision]);
 
   if (cached) return cached;
   return loaded?.id === match.id ? loaded.details : undefined;

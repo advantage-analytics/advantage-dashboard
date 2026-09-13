@@ -738,7 +738,10 @@ export function MatchesPageContent({
       setSelectedId(null);
       setClosing(true);
       // The animation's end normally finishes the close; this covers reduced
-      // motion and a rail hidden below `lg`, where no animation runs.
+      // motion and a rail hidden below `lg`, where no animation runs. A second
+      // close during the slide replaces the timer rather than orphaning it —
+      // an orphan would fire later and shut whatever drawer opened next.
+      if (closeTimer.current) clearTimeout(closeTimer.current);
       closeTimer.current = setTimeout(finishClose, 240);
       if (returnFocusTo) {
         document.getElementById(matchRowId(returnFocusTo))?.focus();

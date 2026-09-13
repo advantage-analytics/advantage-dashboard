@@ -156,7 +156,8 @@ function RosterPicker({
  *
  * On a team match, "Your player" is picked from the roster, and changing it
  * says what that does: the match's stats move with it. On a match that is on a
- * scheduled line the lineup decides the player, so it reads back instead.
+ * scheduled line the lineup decides the player, and an analyzed match keeps the
+ * player it was analyzed for, so both read back instead.
  * Hands the dialog filled in from something already known carry a grey note
  * saying where from, until either select is changed.
  */
@@ -172,7 +173,7 @@ export function EditMatchPlayers({
   roster,
   playerId,
   onPickPlayer,
-  playerLocked,
+  playerLock,
   playerChanged,
   playerNote,
   opponentNote,
@@ -192,8 +193,12 @@ export function EditMatchPlayers({
   roster: readonly EditRosterPlayer[] | null;
   playerId: string | null;
   onPickPlayer: (player: EditRosterPlayer) => void;
-  /** On a scheduled line — the lineup owns the player. */
-  playerLocked: boolean;
+  /**
+   * Why the player reads back instead of being picked: a scheduled line's
+   * lineup owns it, or the match was analyzed for that player and its stats
+   * would silently move with a change. Null when it can be picked.
+   */
+  playerLock: "lineup" | "analysis" | null;
   /** The roster pick differs from the saved player. */
   playerChanged: boolean;
   /** "Right, two-handed · from their last match", while prefilled. */
@@ -256,14 +261,14 @@ export function EditMatchPlayers({
     ) : null;
 
   let playerField: React.ReactNode;
-  if (playerLocked) {
+  if (playerLock) {
     playerField = (
       <div className="flex h-[34px] min-w-0 items-center gap-2 border-b border-dashed border-[var(--border-field)]">
         <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ink-700)]">
           {player.name}
         </span>
         <span className="shrink-0 text-[11px] text-[var(--ink-400)]">
-          from the lineup
+          {playerLock === "lineup" ? "from the lineup" : "analyzed for them"}
         </span>
       </div>
     );

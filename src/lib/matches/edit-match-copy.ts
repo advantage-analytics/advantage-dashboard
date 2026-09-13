@@ -20,6 +20,10 @@ export interface EventLineFacts {
   surface: string | null;
 }
 
+/** The last word of a name — "Stepanov" from "Ilya Stepanov". */
+export const surname = (name: string) =>
+  name.trim().split(/\s+/).pop() || name.trim();
+
 /** A calendar day read as that day, whatever the viewer's timezone. */
 export function dayLabel(day: string): string {
   const d = /^(\d{4}-\d{2}-\d{2})/.exec(day)?.[1];
@@ -44,13 +48,32 @@ export function eventContextLine(facts: EventLineFacts): string {
     .join(" · ");
 }
 
+/**
+ * "Your changes to the date and round won't be saved — the tournament sets
+ * them." Said once a line is picked, when details edited before picking are
+ * about to be dropped; null when nothing edited would be lost.
+ */
+export function droppedDetailsLine(
+  changed: readonly string[],
+  eventKind: "dual" | "tournament",
+): string | null {
+  if (changed.length === 0) return null;
+  const list =
+    changed.length === 1
+      ? changed[0]
+      : `${changed.slice(0, -1).join(", ")} and ${changed[changed.length - 1]}`;
+  const them = changed.length === 1 ? "it" : "them";
+  return `Your changes to the ${list} won't be saved — the ${eventKind} sets ${them}.`;
+}
+
 export interface FormatFacts {
   bestOf: number | null;
   adScoring: boolean | null;
   playOnLets: boolean | null;
 }
 
-function formatPhrase(f: FormatFacts): string {
+/** "best of 3, no-ad, play on lets" — the parts that are known. */
+export function formatPhrase(f: FormatFacts): string {
   return [
     f.bestOf ? `best of ${f.bestOf}` : null,
     f.adScoring === null ? null : f.adScoring ? "ad" : "no-ad",
@@ -123,8 +146,6 @@ export function resultLine(input: {
     sets.push([a, b]);
   }
   if (sets.length === 0) return null;
-  const surname = (name: string) =>
-    name.trim().split(/\s+/).pop() || name.trim();
   const toWin = Math.ceil(input.bestOf / 2);
   if (p >= toWin || o >= toWin) {
     const playerWon = p > o;

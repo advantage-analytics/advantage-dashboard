@@ -28,16 +28,22 @@ import {
 import { useToast } from "@/components/dashboard/toast/toast-provider";
 import { forgetMatchDetails } from "@/components/dashboard/matches/match-drawer";
 import type { AnalysisStatus } from "@/lib/data/match-analysis";
-import type {
-  Backhand,
-  Hand,
-  MatchFormat,
-  MatchScore,
+import {
+  BACKHANDS,
+  HANDS,
+  scoreForSave,
+  type Backhand,
+  type Hand,
+  type MatchFormat,
+  type MatchScore,
 } from "@/lib/matches/patch-match";
 import {
   dayLabel,
+  droppedDetailsLine,
   eventContextLine,
   formatLine,
+  formatPhrase,
+  surname,
 } from "@/lib/matches/edit-match-copy";
 import { attachMatchToLine } from "@/lib/schedule/attach-line";
 import { lineName, type AttachLine } from "@/lib/schedule/attach-line-state";
@@ -144,16 +150,14 @@ const LETS = [
 ] as const;
 
 const asHand = (v: string | null): Hand | null =>
-  v === "right" || v === "left" ? v : null;
+  HANDS.find((h) => h === v) ?? null;
 const asBackhand = (v: string | null): Backhand | null =>
-  v === "one-handed" || v === "two-handed" ? v : null;
+  BACKHANDS.find((b) => b === v) ?? null;
 
 /** The calendar day a stored match date means — its own date part. */
 function dayOf(iso: string): string {
   return /^(\d{4}-\d{2}-\d{2})/.exec(iso)?.[1] ?? "";
 }
-
-const surname = (name: string) => name.trim().split(/\s+/).pop() || name.trim();
 
 /**
  * Edit match — the P2 refined layout, with E1 for a match on the schedule and
@@ -339,6 +343,27 @@ export function EditMatchDialog({
   const formatEditable = !!match && !linked && !analyzed && !pendingLine;
   const roundKind = roundKindFor(matchType || null);
   const storedRound = normalizeRound(match?.round ?? null);
+  /**
+   * Details edited before a line was picked. Save sends none of them once a
+   * line is pending — the event owns them — so the dialog says which are lost.
+   */
+  const droppedDetails =
+    match && pendingLine
+      ? droppedDetailsLine(
+          [
+            tournament !== (match.tournament_name ?? "") && "event name",
+            date !== dayOf(match.date) && "date",
+            matchType !== (match.match_type ?? "") && "match type",
+            round !== (storedRound ?? "") && "round",
+            courtType !== (match.court_type ?? "") && "surface",
+            (format.bestOf !== (match.format?.best_of ?? 3) ||
+              format.adScoring !== (match.format?.ad_scoring ?? null) ||
+              format.playOnLets !== (match.format?.play_on_lets ?? null)) &&
+              "format",
+          ].filter((word): word is string => !!word),
+          pendingLine.eventKind,
+        )
+      : null;
   /** A stored round that is in neither list ("Week 4"), kept so it isn't wiped. */
   const legacyRound =
     storedRound &&
@@ -379,6 +404,12 @@ export function EditMatchDialog({
 
   async function pickRosterPlayer(next: EditRosterPlayer) {
     setPlayerId(next.playerId);
+    // A picked line was judged against the previous player's lineup; pick it
+    // again for this one rather than keep a stale verdict.
+    if (next.playerId !== playerId) {
+      setPendingLine(null);
+      changeFrom.current = null;
+    }
     clearFieldError("player1_name");
     // Hands the dialog filled in belonged to the previous player; typed ones stay.
     const cleared = playerPrefill
@@ -465,6 +496,12 @@ export function EditMatchDialog({
       return;
     }
 
+    const saved = scoreForSave(score, (match.score?.player1?.length ?? 0) > 0);
+    if (!saved.ok) {
+      setError(saved.error);
+      return;
+    }
+
     setSaving(true);
     setError(null);
     setFieldErrors({});
@@ -475,13 +512,8 @@ export function EditMatchDialog({
       player_backhand: player.backhand,
       opponent_hand: opponent.hand,
       opponent_backhand: opponent.backhand,
-      score: {
-        player1: score.player.map((n) => n ?? 0),
-        player2: score.opponent.map((n) => n ?? 0),
-        player1_tiebreaks: score.playerTiebreaks,
-        player2_tiebreaks: score.opponentTiebreaks,
-      },
     };
+    if (saved.score) body.score = saved.score;
     // A personal match types its player; a team match picks from the roster,
     // and the server writes the name from that row. On a line, neither.
     if (roster === null) body.player1_name = player.name;
@@ -567,21 +599,12 @@ export function EditMatchDialog({
   }
 
   // ── Header ────────────────────────────────────────────────────────────────
-  const contextFor = (facts: {
-    eventName: string;
-    eventKind: "dual" | "tournament";
-    slot: string | null;
-    round: string | null;
-    date: string;
-    surface: string | null;
-  }) => eventContextLine(facts);
-
   let description: React.ReactNode = "Correct the score, players and details.";
   if (match && event) {
     description = (
       <span className="flex flex-wrap items-baseline gap-x-2.5">
         <span>
-          {contextFor({
+          {eventContextLine({
             eventName: event.eventName,
             eventKind: event.eventKind,
             slot: event.slot,
@@ -603,7 +626,7 @@ export function EditMatchDialog({
     description = (
       <span className="flex flex-wrap items-baseline gap-x-2.5">
         <span>
-          {contextFor({
+          {eventContextLine({
             eventName: pendingLine.eventName,
             eventKind: pendingLine.eventKind,
             slot: pendingLine.slot,
@@ -644,9 +667,6 @@ export function EditMatchDialog({
         durationMs: match.duration,
       })
     : null;
-
-  const eventWord = (kind: "dual" | "tournament") =>
-    kind === "dual" ? "dual" : "tournament";
 
   const ready = loaded !== null && !loadError;
 
@@ -757,7 +777,13 @@ export function EditMatchDialog({
             roster={roster}
             playerId={playerId}
             onPickPlayer={(next) => void pickRosterPlayer(next)}
-            playerLocked={linked}
+            playerLock={
+              linked
+                ? "lineup"
+                : analyzed && roster !== null
+                  ? "analysis"
+                  : null
+            }
             playerChanged={playerChanged}
             playerNote={styleNote(player, playerPrefill)}
             opponentNote={styleNote(opponent, opponentPrefill)}
@@ -797,6 +823,19 @@ export function EditMatchDialog({
                   </div>
                 </div>
               )}
+              {droppedDetails && !pendingLine?.lineupMismatch && (
+                <div
+                  role="status"
+                  className={`${noteStripCls} ${noticeEnterCls}`}
+                >
+                  <Info
+                    className={`${noteIconCls} text-[var(--ink-700)]`}
+                    strokeWidth={1.5}
+                    aria-hidden
+                  />
+                  <p className="flex-1">{droppedDetails}</p>
+                </div>
+              )}
               {pendingLine?.formatDiffers && !pendingLine.lineupMismatch && (
                 <div className={`${noteStripCls} ${noticeEnterCls}`}>
                   <Info
@@ -805,20 +844,18 @@ export function EditMatchDialog({
                     aria-hidden
                   />
                   <p className="flex-1">
-                    The {eventWord(pendingLine.eventKind)} is set to best of{" "}
-                    {pendingLine.eventBestOf}
-                    {pendingLine.eventAdScoring === null
-                      ? ""
-                      : pendingLine.eventAdScoring
-                        ? ", ad"
-                        : ", no-ad"}
-                    ; this match {analyzed ? "was analyzed" : "is recorded"} as
-                    best of {match.format?.best_of ?? 3}
-                    {match.format?.ad_scoring == null
-                      ? ""
-                      : match.format.ad_scoring
-                        ? ", ad"
-                        : ", no-ad"}
+                    The {pendingLine.eventKind} is set to{" "}
+                    {formatPhrase({
+                      bestOf: pendingLine.eventBestOf,
+                      adScoring: pendingLine.eventAdScoring,
+                      playOnLets: null,
+                    })}
+                    ; this match {analyzed ? "was analyzed" : "is recorded"} as{" "}
+                    {formatPhrase({
+                      bestOf: match.format?.best_of ?? 3,
+                      adScoring: match.format?.ad_scoring ?? null,
+                      playOnLets: null,
+                    })}
                     . The match keeps its format, and the line shows the score
                     as entered.
                   </p>
@@ -833,14 +870,14 @@ export function EditMatchDialog({
                       ? `singles line ${pendingLine.slot?.slice(1)}`
                       : lineName(pendingLine)}
                     . The date, line and surface will come from the{" "}
-                    {eventWord(pendingLine.eventKind)}.
+                    {pendingLine.eventKind}.
                   </span>
                 ) : (
                   event && (
                     <span>
                       The date, {event.eventKind === "dual" ? "line" : "round"}{" "}
-                      and surface come from the {eventWord(event.eventKind)}.
-                      Change them in Schedule.
+                      and surface come from the {event.eventKind}. Change them
+                      in Schedule.
                     </span>
                   )
                 )}
@@ -853,6 +890,11 @@ export function EditMatchDialog({
                 {picking ? (
                   <AttachLinePicker
                     matchId={matchId}
+                    player={
+                      playerChanged && playerId
+                        ? { id: playerId, name: player.name }
+                        : null
+                    }
                     onPick={pickLine}
                     onClose={closePicker}
                   />
@@ -964,13 +1006,7 @@ export function EditMatchDialog({
                       placeholder="Not set"
                       value={round || undefined}
                       width={220}
-                      options={[
-                        ...(legacyRound && legacyRound === round
-                          ? [{ value: legacyRound, label: legacyRound }]
-                          : []),
-                        ...roundOptionsFor(roundKind),
-                        { value: NOT_SET, label: "Not set" },
-                      ]}
+                      options={withLegacy(round, roundOptionsFor(roundKind))}
                       disabled={saving}
                       onChange={(v) => setRound(v === NOT_SET ? "" : v)}
                     />

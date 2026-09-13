@@ -5,14 +5,12 @@ import { useMemo } from "react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { DraftRow, type DraftRowData } from "./draft-row";
 import { MatchCardGallery } from "./match-card-gallery";
+import { MatchCardList } from "./match-card-list";
 import {
-  MatchCardList,
   DATE_COL,
   DATE_COL_WITH_YEAR,
   LIST_ROW_FRAME,
   listGridCols,
-} from "./match-card-list";
-import {
   LIST_MIN_WIDTH,
   LIST_TRACK_TRANSITION,
   TEAM_LIST_MIN_WIDTH,

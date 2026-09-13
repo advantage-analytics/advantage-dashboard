@@ -7,28 +7,18 @@ import {
   eventCellFade,
   listGridCols,
 } from "./match-list-layout";
-export {
-  DATE_COL,
-  DATE_COL_WITH_YEAR,
-  LIST_GRID_COLS,
-  LIST_ROW_FRAME,
-  TEAM_LIST_GRID_COLS,
-  TEAM_LIST_GRID_COLS_COMPACT,
-  listGridCols,
-} from "./match-list-layout";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { formatShortDate } from "@/lib/ui/date-format";
 import { NewPill } from "@/components/ui/new-pill";
-import { InitialsAvatar } from "@/components/ui/initials-avatar";
-import { PersonAvatar } from "@/components/ui/person-avatar";
+import { PlayerMark } from "@/components/ui/player-mark";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { RowLifecycle } from "./row-state";
 import { cn } from "@/lib/utils";
 
 /**
- * Date · (Player) · Opponent · Result · Score · Event · lifecycle · ⋯
+ * Date · (Player) · Opponent · Result · Score · Event · lifecycle
  *
  * The order is `match-list-layout.ts`'s, and its comment says why the outcome
  * glyph now leads the score and Event trails the numbers.
@@ -169,15 +159,10 @@ export function MatchCardList({
           (`users` RLS is own-row only), so theirs is initials, as on Roster. */}
       {isTeam && (
         <span className="flex min-w-0 items-center gap-2.5">
-          {isViewerRow ? (
-            <PersonAvatar
-              initials={viewer.initials}
-              photoUrl={viewer.avatarUrl}
-              className="size-[26px] text-[9px]"
-            />
-          ) : (
-            <InitialsAvatar name={match.player1.name} />
-          )}
+          <PlayerMark
+            name={match.player1.name}
+            viewer={isViewerRow ? viewer : null}
+          />
           <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
             {match.player1.name}
           </span>

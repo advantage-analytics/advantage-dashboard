@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { getProgramSchedule } from "@/lib/data/schedule-server";
+import { normalizeRound } from "@/lib/matches/round-options";
 import { canonicalRosterIds, type RosterIdRow } from "@/lib/data/roster-ids";
 import {
   attachLineGroups,
@@ -59,6 +60,12 @@ async function ownTeamMatch(matchId: string) {
 export async function findAttachableLines(input: {
   matchId: string;
   query?: string;
+  /**
+   * The roster player picked in the dialog but not saved yet. Save writes the
+   * player before attaching, so lines are judged against this one. Used only
+   * when it is on this program's roster; the stored player otherwise.
+   */
+  player?: { id: string; name: string } | null;
 }): Promise<FindLinesResult> {
   const own = await ownTeamMatch(input.matchId);
   if (!own) {
@@ -74,16 +81,19 @@ export async function findAttachableLines(input: {
     supabase.rpc("program_roster_full", { p_program_id: match.program_id }),
   ]);
   const matchDate = match.date.slice(0, 10);
+  const canonical = canonicalRosterIds((roster.data ?? []) as RosterIdRow[]);
+  const picked =
+    input.player && canonical.has(input.player.id) ? input.player : null;
   const groups = attachLineGroups({
     events: schedule.events,
     entriesByEvent: schedule.entriesByEvent,
-    canonical: canonicalRosterIds((roster.data ?? []) as RosterIdRow[]),
+    canonical,
     query: input.query,
     match: {
       date: matchDate,
       round: match.round,
-      player1Id: match.player1_id,
-      player1Name: match.player1_name,
+      player1Id: picked ? picked.id : match.player1_id,
+      player1Name: picked ? picked.name : match.player1_name,
       bestOf: match.format?.best_of ?? 3,
       adScoring: match.format?.ad_scoring ?? null,
     },
@@ -118,6 +128,32 @@ export async function attachMatchToLine(input: {
   entryId: string;
 }): Promise<AttachResult> {
   const supabase = await createClient();
+  // The function compares and stores the match's round verbatim, and the
+  // wizard saves long labels ("Quarterfinal"). Write the short code first so a
+  // tournament's taken-round check and its outcome readers see one spelling.
+  // Own match only; a round in no known list passes through unchanged.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sign in again to add this match." };
+  const { data: current } = await supabase
+    .from("matches")
+    .select("round")
+    .eq("id", input.matchId)
+    .eq("created_by", user.id)
+    .is("event_entry_id", null)
+    .maybeSingle();
+  const stored = (current as { round: string | null } | null)?.round ?? null;
+  const code = normalizeRound(stored);
+  if (stored !== null && code !== null && code !== stored) {
+    const { error: roundError } = await supabase
+      .from("matches")
+      .update({ round: code })
+      .eq("id", input.matchId)
+      .eq("created_by", user.id);
+    if (roundError)
+      return { ok: false, error: sentenceFor(roundError.message) };
+  }
   const { data, error } = await supabase.rpc("attach_match_to_event_line", {
     p_match_id: input.matchId,
     p_entry_id: input.entryId,

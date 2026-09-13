@@ -159,7 +159,10 @@ export async function GET(
     match.event_entry_id
       ? eventContextFor(supabase, match.event_entry_id)
       : Promise.resolve(null),
-    getWorkspaceContext(),
+    // Only a team one-off can be attached, so only it needs the workspace.
+    match.program_id && !match.event_entry_id
+      ? getWorkspaceContext()
+      : Promise.resolve(null),
   ]);
 
   // Attaching needs a team match that isn't on a line yet, in the workspace
@@ -194,18 +197,18 @@ export async function PATCH(
     return badRequest("Invalid JSON body");
   }
 
-  const { data: existing, error: lookupError } = await loadOwnMatch(
-    supabase,
-    matchId,
-    user.id,
-  );
+  // The analysis read is harmless for a match that turns out not to be ours
+  // (it returns nothing), so it runs beside the ownership lookup.
+  const [{ data: existing, error: lookupError }, analysis] = await Promise.all([
+    loadOwnMatch(supabase, matchId, user.id),
+    analysisFor(supabase, matchId),
+  ]);
   if (lookupError)
     return NextResponse.json({ error: lookupError.message }, { status: 500 });
   if (!existing)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   const stored = existing as unknown as MatchRow;
 
-  const analysis = await analysisFor(supabase, matchId);
   const result = normalizeMatchPatch(body, {
     score: stored.score,
     format: stored.format,
