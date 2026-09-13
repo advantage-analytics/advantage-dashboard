@@ -20,26 +20,32 @@ import { ProgramUsageCard } from "@/components/dashboard/settings/program-usage-
  * one number would mean a coach's team upload silently eating a player's
  * personal allowance, which is not what the ledger does.
  *
- * The personal card is always here. The program card only exists inside a team
- * workspace, because outside one there is no program to meter.
+ * The personal card is always here, followed by one program card per team the
+ * viewer belongs to — every team, not only the active workspace, so a coach
+ * or player on two programs sees both ledgers without switching. The active
+ * team leads; the rest keep the switcher's order.
  */
 export default async function UsagePage() {
   const billingMonth = currentBillingMonth();
   const workspace = await getWorkspaceContext();
   if (!workspace) return null;
 
-  // Both reads are independent of each other, so they go together rather than
+  const teams = workspace.available
+    .filter((candidate) => candidate.kind === "team")
+    .sort(
+      (a, b) =>
+        Number(b.id === workspace.active.id) -
+        Number(a.id === workspace.active.id),
+    );
+
+  // Every read is independent of the others, so they go together rather than
   // one after the other; the workspace has to land first because it decides
-  // whether the program card exists at all.
-  const [personal, program] = await Promise.all([
+  // which program cards exist at all.
+  const [personal, ...programs] = await Promise.all([
     getPersonalUsage(workspace.viewer.id, billingMonth),
-    workspace.active.kind === "team"
-      ? getProgramUsage(
-          workspace.active.id,
-          billingMonth,
-          workspace.active.orgType,
-        )
-      : null,
+    ...teams.map((team) =>
+      getProgramUsage(team.id, billingMonth, team.orgType),
+    ),
   ]);
 
   const personalFraction = usageFraction(
@@ -74,13 +80,14 @@ export default async function UsagePage() {
         </span>
       </SettingsCard>
 
-      {program && (
+      {teams.map((team, index) => (
         <ProgramUsageCard
-          programName={workspace.active.name}
-          initial={program}
+          key={team.id}
+          program={team}
+          initial={programs[index]}
           currentMonth={billingMonth}
         />
-      )}
+      ))}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   canUploadForProgram,
   scheduleCapabilitiesFor,
+  type EventsPolicy,
   type ProgramRole,
   type ScheduleCapabilities,
   type Workspace,
@@ -11,6 +12,7 @@ import {
 function workspace(
   role: ProgramRole,
   kind: Workspace["kind"] = "team",
+  eventsPolicy: EventsPolicy = "staff",
 ): Workspace {
   return {
     id: "schedule-capabilities",
@@ -26,6 +28,7 @@ function workspace(
     playersCanUpload: kind === "team",
     memberUploadEnabled: true,
     uploadPolicy: "everyone",
+    eventsPolicy,
     myPlayerId: role === "player" && kind === "team" ? "player-1" : null,
   };
 }
@@ -90,5 +93,25 @@ test.describe("team Schedule capabilities", () => {
       canScore: false,
       canDelete: false,
     });
+  });
+
+  test("the events policy narrows who may manage the schedule", () => {
+    const manages = (policy: EventsPolicy) =>
+      (["owner", "coach", "staff", "player"] as const).filter(
+        (role) =>
+          scheduleCapabilitiesFor(workspace(role, "team", policy)).canCreate,
+      );
+
+    expect(manages("owner")).toEqual(["owner"]);
+    expect(manages("owner_coaches")).toEqual(["owner", "coach"]);
+    expect(manages("staff")).toEqual(["owner", "coach", "staff"]);
+
+    // Deleting keeps its own owner-or-coach rung under every policy.
+    expect(
+      scheduleCapabilitiesFor(workspace("coach", "team", "owner")).canDelete,
+    ).toBe(false);
+    expect(
+      scheduleCapabilitiesFor(workspace("owner", "team", "owner")).canDelete,
+    ).toBe(true);
   });
 });

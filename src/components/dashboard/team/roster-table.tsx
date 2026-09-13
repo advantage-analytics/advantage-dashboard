@@ -128,6 +128,8 @@ const ROW_SETTLE = { bounceStiffness: 600, bounceDamping: 50 };
  */
 export { COL, ROW, ROSTER_COLUMNS } from "./roster-table-layout";
 import { COL, ROW, ROSTER_COLUMNS } from "./roster-table-layout";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 
 /**
  * Horizontal padding belongs to the card; each row pulls 16px of it back so a
@@ -377,6 +379,7 @@ function MemberRow({
 }) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
+  const { viewer } = useWorkspace();
   const href = profileHref(member.playerId);
   const inLineupMode = lineup !== null;
   // Held by either hand: lifted with Space, or under the pointer mid-drag.
@@ -510,7 +513,15 @@ function MemberRow({
       <SpotCell spot={spot} draggable={inLineupMode} lifted={lifted} />
 
       <span className={cn(COL.player, "flex min-w-0 items-center gap-2.5")}>
-        <InitialsAvatar name={member.name} />
+        {isViewer ? (
+          <PersonAvatar
+            initials={viewer.initials}
+            photoUrl={viewer.avatarUrl}
+            className="size-[26px] text-[9px]"
+          />
+        ) : (
+          <InitialsAvatar name={member.name} />
+        )}
         <span className="flex min-w-0 items-baseline gap-1.5">
           {inLineupMode ? (
             <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">

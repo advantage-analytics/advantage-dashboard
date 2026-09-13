@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { isProgramStaff } from "@/lib/workspace/types";
+import { canManageTeamSchedule, isProgramStaff } from "@/lib/workspace/types";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 
@@ -89,11 +89,11 @@ function actions(
             role === "anonymous"
               ? null
               : {
-                  active: { kind: "team", id: "program", role },
+                  active: { kind: "team", id: "program", role, eventsPolicy: "staff" },
                   viewer: { id: "viewer" },
                 },
         };
-      if (name === "@/lib/workspace/types") return { isProgramStaff };
+      if (name === "@/lib/workspace/types") return { canManageTeamSchedule, isProgramStaff };
       return {};
     },
   });

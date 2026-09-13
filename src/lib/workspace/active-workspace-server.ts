@@ -3,8 +3,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { getInitials } from "@/lib/data/match-utils";
+import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
+import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import type { ProgramStatus } from "@/lib/services/programs/claim-state";
 import type {
+  EventsPolicy,
   ProgramOrgType,
   ProgramRole,
   Viewer,
@@ -12,6 +15,17 @@ import type {
   WorkspaceContextValue,
   UploadPolicy,
 } from "./types";
+
+/** A bucket object's public URL, or null when there is no object. */
+function publicUrlOrNull(
+  supabase: SupabaseClient,
+  bucket: string,
+  path: string | null,
+): string | null {
+  return path
+    ? supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl
+    : null;
+}
 
 /**
  * Resolve the viewer's workspaces for one request.
@@ -54,6 +68,8 @@ function personalWorkspace(viewer: Viewer): Workspace {
     // never consults it here because it answers on `kind` first.
     playersCanUpload: false,
     uploadPolicy: "everyone",
+    // No team schedule to manage; the neutral rung.
+    eventsPolicy: "staff",
     // The opposite default, for the opposite reason. There is no
     // `program_members` row to read here and the viewer is the only person in
     // this workspace, so false would not be cautious — it would assert that
@@ -125,7 +141,7 @@ async function listProgramWorkspaces(
     supabase
       .from("program_members")
       .select(
-        "role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, org_type, time_zone)",
+        "role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, time_zone, crest_path)",
       )
       .eq("user_id", userId)
       .order("joined_at"),
@@ -152,8 +168,10 @@ async function listProgramWorkspaces(
           status: string;
           players_can_upload: boolean;
           upload_policy: string;
+          events_policy: string;
           org_type: string;
           time_zone: string;
+          crest_path: string | null;
         }
       | undefined;
     if (!program) return [];
@@ -185,6 +203,11 @@ async function listProgramWorkspaces(
         timeZone: program.time_zone,
         role: row.role as ProgramRole,
         mark: program.school_name.trim().charAt(0).toUpperCase(),
+        crestUrl: publicUrlOrNull(
+          supabase,
+          PROGRAM_CRESTS_BUCKET,
+          program.crest_path,
+        ),
         // 'active' means the claim settled. 'claim_pending' is a live workspace
         // whose video submission waits — see /claim/review, which promises
         // exactly that.
@@ -201,6 +224,8 @@ async function listProgramWorkspaces(
         // The ladder the boolean above is the bottom rung of; the CHECK pins
         // the value set, so the cast is a naming ceremony.
         uploadPolicy: program.upload_policy as UploadPolicy,
+        // Same ceremony: the CHECK pins the three rungs.
+        eventsPolicy: program.events_policy as EventsPolicy,
         // This membership's own grant, from the row the join is already
         // reading. `Boolean(...)` rather than `?? true`: the column is NOT
         // NULL, so the coalesce would only ever fire when the select did not
@@ -231,6 +256,7 @@ function toViewer(
     created_at: string | null;
     onboarded_at: string | null;
   } | null,
+  avatarUrl: string | null,
 ): Viewer {
   const firstName = row?.first_name ?? null;
   const lastName = row?.last_name ?? null;
@@ -249,6 +275,7 @@ function toViewer(
     initials:
       (fullName && getInitials(fullName)) ||
       localPart.slice(0, 2).toUpperCase(),
+    avatarUrl,
     plan: row?.plan ?? "free",
     role: row?.role ?? null,
     // Formatted here rather than on each page: Profile and Plan both rendered
@@ -284,13 +311,22 @@ export const getWorkspaceContext = cache(
     const [{ data: row }, programs] = await Promise.all([
       supabase
         .from("users")
-        .select("first_name, last_name, plan, role, created_at, onboarded_at")
+        .select(
+          "first_name, last_name, plan, role, created_at, onboarded_at, avatar_path",
+        )
         .eq("id", user.id)
         .single(),
       listProgramWorkspaces(supabase, user.id),
     ]);
 
-    const viewer = toViewer(user.id, user.email ?? "", row);
+    const avatarPath = row?.avatar_path ?? null;
+    const avatarUrl = publicUrlOrNull(
+      supabase,
+      USER_AVATARS_BUCKET,
+      avatarPath,
+    );
+
+    const viewer = toViewer(user.id, user.email ?? "", row, avatarUrl);
 
     const available = [personalWorkspace(viewer), ...programs];
 

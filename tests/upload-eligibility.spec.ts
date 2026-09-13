@@ -48,6 +48,7 @@ function team(overrides: Partial<Workspace> = {}): Workspace {
     programStatus: "active",
     playersCanUpload: true,
     uploadPolicy: "everyone",
+    eventsPolicy: "staff",
     memberUploadEnabled: true,
     myPlayerId: null,
     ...overrides,
@@ -68,6 +69,7 @@ function personal(): Workspace {
     programStatus: null,
     playersCanUpload: false,
     uploadPolicy: "everyone",
+    eventsPolicy: "staff",
     memberUploadEnabled: true,
     myPlayerId: null,
   };

@@ -3,11 +3,11 @@
 /**
  * Writing to the schedule.
  *
- * Every action re-resolves the workspace server-side and refuses a caller who
- * is not staff here. RLS is the real gate — these policies exist on both new
- * tables — but a policy failure arrives as a zero-row write with no message,
- * and a coach who has been demoted deserves a sentence rather than a form that
- * silently does nothing.
+ * Every action re-resolves the workspace server-side and refuses a caller the
+ * program's events policy does not allow. RLS is the real gate — these
+ * policies exist on both new tables — but a policy failure arrives as a
+ * zero-row write with no message, and a coach who has been demoted deserves a
+ * sentence rather than a form that silently does nothing.
  */
 
 import { revalidatePath } from "next/cache";
@@ -22,7 +22,9 @@ import {
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import {
   canDeleteTeamScheduleEvent,
+  canManageTeamSchedule,
   isProgramStaff,
+  uploadPolicyLabel,
 } from "@/lib/workspace/types";
 import type { Discipline, EventSite, OutcomeKind, OutcomeSide } from "./types";
 import { validateLineup } from "./lineup-validation";
@@ -134,14 +136,21 @@ export interface RecordResultInput {
   theirTiebreaks: (number | null)[];
 }
 
-/** The staff check every action opens with. */
-async function requireStaff(): Promise<
+/**
+ * The check every action opens with: the program's events policy, the same
+ * ladder `can_manage_program_schedule` enforces in the database.
+ */
+async function requireScheduleManager(): Promise<
   { programId: string; userId: string } | ActionError
 > {
   const context = await getWorkspaceContext();
   if (!context) return { error: "Not signed in." };
-  if (!isProgramStaff(context.active)) {
-    return { error: "Only a program's staff can change its schedule." };
+  if (!canManageTeamSchedule(context.active)) {
+    return isProgramStaff(context.active)
+      ? {
+          error: `${context.active.name} limits schedule changes to ${uploadPolicyLabel(context.active.eventsPolicy).toLowerCase()}.`,
+        }
+      : { error: "Only a program's staff can change its schedule." };
   }
   return { programId: context.active.id, userId: context.viewer.id };
 }
@@ -169,7 +178,10 @@ export async function deleteEvent(
   const context = await getWorkspaceContext();
   if (!context) return { error: "Not signed in." };
   if (!canDeleteTeamScheduleEvent(context.active)) {
-    return { error: "Only an owner or coach can delete an event." };
+    return {
+      error:
+        "Only an owner or coach allowed to manage the schedule can delete an event.",
+    };
   }
   const supabase = await createClient();
   const { error } = await supabase.rpc("delete_schedule_event", {
@@ -185,7 +197,7 @@ export async function deleteEvent(
 export async function createDual(
   input: CreateDualInput,
 ): Promise<{ eventId: string } | ActionError> {
-  const auth = await requireStaff();
+  const auth = await requireScheduleManager();
   if (isError(auth)) return auth;
 
   if (!input.opponent.trim()) return { error: "Name the opponent first." };
@@ -303,7 +315,7 @@ export async function createDual(
 export async function createTournament(
   input: CreateTournamentInput,
 ): Promise<{ eventId: string } | ActionError> {
-  const auth = await requireStaff();
+  const auth = await requireScheduleManager();
   if (isError(auth)) return auth;
 
   if (!input.name.trim()) return { error: "Name the tournament first." };
@@ -500,7 +512,7 @@ export async function setOutcome(input: {
   round: string | null;
   outcome: { kind: OutcomeKind; side: OutcomeSide } | null;
 }): Promise<{ ok: true } | ActionError> {
-  const auth = await requireStaff();
+  const auth = await requireScheduleManager();
   if (isError(auth)) return auth;
   const supabase = await createClient();
   const { data: eventId, error } = await supabase.rpc("set_schedule_outcome", {
@@ -523,7 +535,7 @@ export async function setOutcome(input: {
 export async function updateDual(
   input: UpdateDualInput,
 ): Promise<{ eventId: string } | ActionError> {
-  const auth = await requireStaff();
+  const auth = await requireScheduleManager();
   if (isError(auth)) return auth;
 
   if (input.lines.length === 0)
@@ -602,7 +614,7 @@ export async function updateDual(
 export async function updateTournament(
   input: UpdateTournamentInput,
 ): Promise<{ eventId: string } | ActionError> {
-  const auth = await requireStaff();
+  const auth = await requireScheduleManager();
   if (isError(auth)) return auth;
 
   if (!input.name.trim()) return { error: "Name the tournament first." };
@@ -674,7 +686,7 @@ export async function updateTournament(
 export async function recordResult(
   input: RecordResultInput,
 ): Promise<{ matchId: string } | ActionError> {
-  const auth = await requireStaff();
+  const auth = await requireScheduleManager();
   if (isError(auth)) return auth;
 
   if (input.ourGames.length === 0) return { error: "Enter at least one set." };
@@ -854,7 +866,7 @@ export async function recordResult(
       // `.select("id")` because this file's own header says a policy failure
       // arrives as a zero-row write with no message, and then this write did
       // not check. The matches UPDATE policy is `auth.uid() = created_by`,
-      // but `canEdit` on the event page is `isProgramStaff`, so ANY staff
+      // but `canEdit` on the event page is `canManageTeamSchedule`, so ANY such
       // member reaches the score form. A coach correcting a score another
       // coach recorded got `updateError === null`, a revalidate, and a
       // returned matchId -- while the old score stayed on screen with nothing
@@ -966,7 +978,7 @@ export interface OpponentRosterCandidate {
 export async function opponentRosterForDual(
   opponentProgramKey: string,
 ): Promise<{ candidates: OpponentRosterCandidate[] } | ActionError> {
-  const auth = await requireStaff();
+  const auth = await requireScheduleManager();
   if (isError(auth)) return auth;
 
   const supabase = await createClient();
@@ -1040,7 +1052,7 @@ export async function saveOpponentPlayer(input: {
   opponentProgramKey: string;
   name: string;
 }): Promise<{ saved: boolean }> {
-  const auth = await requireStaff();
+  const auth = await requireScheduleManager();
   if (isError(auth)) return { saved: false };
 
   // Both names or nothing — the RPC requires them, and a single-token name
@@ -1090,7 +1102,7 @@ export async function setForfeit(
   entryId: string,
   side: "ours" | "theirs" | null,
 ): Promise<{ ok: true } | ActionError> {
-  const auth = await requireStaff();
+  const auth = await requireScheduleManager();
   if (isError(auth)) return auth;
 
   const supabase = await createClient();

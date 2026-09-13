@@ -19,6 +19,8 @@ import type {
 import type { SeatUsage } from "@/lib/data/teams-server";
 import { setActiveWorkspaceThen } from "@/lib/workspace/actions";
 import { capitalize, cn } from "@/lib/utils";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 
 const ROSTER_PATH = "/dashboard/team/roster";
 
@@ -59,6 +61,7 @@ export function TeamMembersCard({
   onMakeOwner: (member: TeamMember) => void;
   onError: (message: string | null) => void;
 }) {
+  const { viewer } = useWorkspace();
   const isOwner = viewerRole === "owner";
   const isStaff = viewerRole !== "player";
   const goToRoster = setActiveWorkspaceThen.bind(null, programId, ROSTER_PATH);
@@ -115,7 +118,15 @@ export function TeamMembersCard({
             isStaff && options.length === 0 && member.userId !== viewerId;
           return (
             <PersonRow key={member.userId}>
-              <Avatar22>{getInitials(member.name)}</Avatar22>
+              <PersonAvatar
+                initials={
+                  member.userId === viewerId
+                    ? viewer.initials
+                    : getInitials(member.name)
+                }
+                photoUrl={member.userId === viewerId ? viewer.avatarUrl : null}
+                className="size-[22px] text-[9px]"
+              />
               <span className="truncate text-[12px] font-medium text-[var(--ink-900)]">
                 {member.name}
               </span>
@@ -147,9 +158,7 @@ export function TeamMembersCard({
                       aria-hidden="true"
                     />
                   )}
-                  <StatePill className="w-[62px] justify-center">
-                    {capitalize(member.role)}
-                  </StatePill>
+                  <StatePill>{capitalize(member.role)}</StatePill>
                 </span>
               )}
             </PersonRow>
@@ -169,9 +178,7 @@ export function TeamMembersCard({
             <span className="text-[11px] text-[var(--ink-500)]">
               Sent {formatInviteDate(invite.createdAt)}
             </span>
-            <StatePill outline className="w-[62px] justify-center">
-              Invited
-            </StatePill>
+            <StatePill outline>Invited</StatePill>
           </PersonRow>
         ))}
 
@@ -241,18 +248,6 @@ function PersonRow({ children }: { children: React.ReactNode }) {
     <div className="flex items-center gap-2.5 border-t border-[var(--border-hairline)] py-[9px]">
       {children}
     </div>
-  );
-}
-
-/** The 22px mark the v3 person row leads with — smaller than a table's 26. */
-function Avatar22({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[9px] font-medium text-[var(--ink-700)]"
-    >
-      {children}
-    </span>
   );
 }
 

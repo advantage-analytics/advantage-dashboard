@@ -96,6 +96,7 @@ export function TeamDetail({
           draft.defaultSurface === "" ? null : draft.defaultSurface,
         season: draft.season,
         uploadPolicy: draft.uploadPolicy,
+        eventsPolicy: draft.eventsPolicy,
       });
       if (result.ok) setSaved(draft);
       else setError(result.error);
@@ -153,7 +154,10 @@ export function TeamDetail({
       {isStaff && (
         <TeamPoliciesCard
           uploadPolicy={draft.uploadPolicy}
-          onChange={(next) => set("uploadPolicy", next)}
+          onUploadPolicyChange={(next) => set("uploadPolicy", next)}
+          eventsPolicy={draft.eventsPolicy}
+          onEventsPolicyChange={(next) => set("eventsPolicy", next)}
+          canEditPolicies={isOwner}
         />
       )}
 

@@ -1,5 +1,6 @@
 import { YouPill } from "@/components/ui/new-pill";
 import { getInitials } from "@/lib/data/match-utils";
+import { PersonAvatar } from "@/components/ui/person-avatar";
 import { recordLabel } from "@/lib/data/player-profile";
 import { capitalize } from "@/lib/utils";
 import type { PlayerProfile } from "@/lib/data/player-profile-server";
@@ -20,10 +21,13 @@ import type { PlayerProfile } from "@/lib/data/player-profile-server";
 export function ProfileIdentity({
   profile,
   isSelf,
+  photoUrl,
   actions,
 }: {
   profile: PlayerProfile;
   isSelf: boolean;
+  /** The viewer's own photo, on their own page only; other players have none yet. */
+  photoUrl: string | null;
   actions: React.ReactNode;
 }) {
   const facts: React.ReactNode[] = [];
@@ -41,12 +45,11 @@ export function ProfileIdentity({
 
   return (
     <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-center lg:gap-5">
-      <span
-        aria-hidden
-        className="flex size-[76px] shrink-0 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[24px] font-normal text-[var(--ink-700)]"
-      >
-        {getInitials(profile.name)}
-      </span>
+      <PersonAvatar
+        initials={getInitials(profile.name)}
+        photoUrl={photoUrl}
+        className="size-[76px] bg-[var(--surface-muted)] text-[24px] font-normal"
+      />
 
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex items-center gap-2.5">

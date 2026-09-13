@@ -4,18 +4,19 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { AlertCircle } from "lucide-react";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
+import { AvatarControl } from "@/components/dashboard/settings/avatar-control";
 import {
+  SettingsCard,
+  SettingsCardTitle,
   SettingsField,
-  SettingsSectionHeading,
   SettingsUnderlineInput,
 } from "@/components/dashboard/settings/settings-card";
 import { SettingsSaveBar } from "@/components/dashboard/settings/settings-save-bar";
 import { saveProfile } from "@/components/dashboard/settings/actions";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
-import { AdvSelect } from "@/components/ui/adv-select";
+import { MenuSelect } from "@/components/ui/menu-select";
 import { DateField } from "@/components/ui/date-field";
 import { todayISO } from "@/lib/schedule/format";
-import { cn } from "@/lib/utils";
 
 /**
  * Settings › Profile.
@@ -146,7 +147,7 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
   )?.label;
 
   return (
-    <div className="flex max-w-[660px] flex-col gap-10">
+    <div className="flex max-w-[660px] flex-col gap-5">
       {error && (
         <SettingsAlert
           type="error"
@@ -155,12 +156,13 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
         />
       )}
 
-      {/* Identity strip */}
-      <div className="flex items-center gap-[18px] border-b border-[var(--border-hairline)] pb-6">
-        <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[16px] font-light text-[var(--ink-700)]">
-          {viewer.initials}
-        </span>
-        <div className="min-w-0 flex-1">
+      {/* Identity */}
+      <SettingsCard className="flex-row items-start gap-6 py-7">
+        <AvatarControl
+          initials={viewer.initials}
+          avatarUrl={viewer.avatarUrl}
+          onError={setError}
+        >
           <div className="text-title-lg truncate">{displayName}</div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {roleLabel && <IdentityPill>{roleLabel}</IdentityPill>}
@@ -173,37 +175,35 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
               </span>
             )}
           </div>
-        </div>
+        </AvatarControl>
 
         {/* Completeness. One line, and only while something is actually
             missing — a badge that says "0 fields left" is decoration. */}
         {missing.length > 0 && (
-          <div className="flex shrink-0 items-center gap-2.5 rounded-[8px] border border-[var(--border-card)] px-3 py-2">
+          <div className="mt-1.5 flex shrink-0 items-center gap-2 text-[11px]">
             <AlertCircle
               className="size-[13px] text-[var(--ink-600)]"
               strokeWidth={1.5}
               aria-hidden="true"
             />
-            <div>
-              <div className="text-[11px] text-[var(--ink-900)]">
-                {missing.length} field{missing.length === 1 ? "" : "s"} left
-              </div>
-              <div className="mt-px text-[11px] text-[var(--ink-500)]">
-                {FIELD_LABELS[missing[0]]}
-              </div>
-            </div>
+            <span className="text-[var(--ink-900)]">
+              {missing.length} field{missing.length === 1 ? "" : "s"} left
+            </span>
+            <span className="text-[var(--ink-500)]">
+              · {FIELD_LABELS[missing[0]]}
+            </span>
           </div>
         )}
-      </div>
+      </SettingsCard>
 
-      {/* 01 · General information */}
-      <section className="flex flex-col gap-[22px]">
-        <SettingsSectionHeading
-          number="01"
-          title="General information"
-          note="Only your name is visible to teammates"
-        />
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-x-7">
+      {/* General information */}
+      <SettingsCard className="gap-[18px]">
+        <SettingsCardTitle
+          trailing={<Note>Only your name is visible to teammates</Note>}
+        >
+          General information
+        </SettingsCardTitle>
+        <div className="grid grid-cols-1 gap-5 border-t border-[var(--border-hairline)] pt-4 sm:grid-cols-2 sm:gap-x-6">
           <ProfileField
             label={FIELD_LABELS.firstName}
             value={draft.firstName}
@@ -231,12 +231,12 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
             onChange={(value) => set("phone", value)}
           />
         </div>
-      </section>
+      </SettingsCard>
 
-      {/* 02 · Tennis profile */}
-      <section className="flex flex-col gap-[22px]">
-        <SettingsSectionHeading number="02" title="Tennis profile" />
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-x-7">
+      {/* Tennis profile */}
+      <SettingsCard className="gap-[18px]">
+        <SettingsCardTitle>Tennis profile</SettingsCardTitle>
+        <div className="grid grid-cols-1 gap-5 border-t border-[var(--border-hairline)] pt-4 sm:grid-cols-2 sm:gap-x-6">
           <ProfileSelect
             label={FIELD_LABELS.country}
             value={draft.country}
@@ -270,44 +270,34 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
           />
         </div>
 
-        <div className="flex flex-col gap-2.5">
-          <span className="text-[11px] text-[var(--ink-600)]">Role</span>
-          <div className="flex flex-wrap gap-2">
-            {ROLE_OPTIONS.map((option) => {
-              const isSelected = draft.role === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={isSelected}
-                  onClick={() => set("role", option.value)}
-                  className={cn(
-                    "cursor-pointer rounded-full border px-3.5 py-[5px] text-[12px] transition-colors duration-150",
-                    "focus-visible:outline-none",
-                    isSelected
-                      ? "border-[var(--blue)] bg-[var(--blue-soft)] text-[var(--ink-900)]"
-                      : "border-[var(--border-field)] text-[var(--ink-700)] hover:border-[var(--ink-300)]",
-                  )}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
+        {/* No rule above this row: the grid's last row already ends the
+            block, and a second line two pixels under it read as a double
+            border. */}
+        <div className="flex items-start gap-6">
+          <div className="min-w-0 flex-1">
+            <div className="text-[12px] text-[var(--ink-900)]">Role</div>
+            <div className="mt-0.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
+              How you describe yourself; roster and team tools come from your
+              workspace membership, not this setting. It never changes what you
+              pay for; that&apos;s{" "}
+              <Link
+                href="/dashboard/settings/plan"
+                className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
+              >
+                Plan
+              </Link>
+              .
+            </div>
           </div>
-          <span className="text-[11px] leading-[1.5] text-[var(--ink-500)]">
-            Role is how you describe yourself; roster and team tools come from
-            your workspace membership, not this setting. It never changes what
-            you pay for; that&apos;s{" "}
-            <Link
-              href="/dashboard/settings/plan"
-              className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
-            >
-              Plan
-            </Link>
-            .
-          </span>
+          <MenuSelect
+            label="Role"
+            value={draft.role || undefined}
+            options={ROLE_OPTIONS}
+            placeholder="Select role"
+            onChange={(value) => set("role", value)}
+          />
         </div>
-      </section>
+      </SettingsCard>
 
       <SettingsSaveBar
         isDirty={isDirty}
@@ -317,6 +307,10 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
       />
     </div>
   );
+}
+
+function Note({ children }: { children: React.ReactNode }) {
+  return <span className="text-[11px] text-[var(--ink-500)]">{children}</span>;
 }
 
 function IdentityPill({ children }: { children: React.ReactNode }) {
@@ -367,13 +361,7 @@ function ProfileField({
       // as `aria-label`, so the accessible name survives dropping the
       // `<label>` wrapper here.
       labelless={isDate}
-      marker={
-        missing && (
-          <span className="text-[10px] font-medium tracking-[1.2px] text-[var(--blue)] uppercase">
-            Missing
-          </span>
-        )
-      }
+      required={missing}
     >
       {isDate ? (
         // `emphasis` is the same prop name `SettingsUnderlineInput` takes
@@ -417,22 +405,17 @@ function ProfileSelect({
 }) {
   return (
     <SettingsField label={label}>
-      {/* `AdvSelect` rather than this file's own copy of the underline rule:
-          the copy recoloured on focus but never thickened to 2px, and it left
-          the browser's own arrow in place beside two sibling fields that had
-          none. Both are the primitive's job now. */}
-      <AdvSelect
-        aria-label={label}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">{placeholder}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </AdvSelect>
+      {/* `MenuSelect` — every settings select is this one, per the round-4
+          ruling: it carries the underline rule itself, so a plain `<select>`
+          never appears in these forms. */}
+      <MenuSelect
+        label={label}
+        variant="underline"
+        value={value || undefined}
+        options={options}
+        placeholder={placeholder}
+        onChange={onChange}
+      />
     </SettingsField>
   );
 }

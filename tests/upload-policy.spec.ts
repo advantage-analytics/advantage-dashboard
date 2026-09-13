@@ -32,6 +32,7 @@ function workspace(
     programStatus: "active",
     playersCanUpload: uploadPolicy === "everyone",
     uploadPolicy,
+    eventsPolicy: "staff",
     memberUploadEnabled,
     myPlayerId: null,
   };

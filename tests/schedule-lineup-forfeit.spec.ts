@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
-import { isProgramStaff } from "@/lib/workspace/types";
+import { canManageTeamSchedule, isProgramStaff } from "@/lib/workspace/types";
 import { planEntryChanges } from "@/lib/schedule/entry-plan";
 import { validateLineup } from "@/lib/schedule/lineup-validation";
 import { resolveEntryResult, resultWon } from "@/lib/schedule/entry-state";
@@ -213,11 +213,11 @@ function harness(rpcError = false) {
         if (name === "@/lib/workspace/active-workspace-server")
           return {
             getWorkspaceContext: async () => ({
-              active: { kind: "team", id: "program", role: "coach" },
+              active: { kind: "team", id: "program", role: "coach", eventsPolicy: "staff" },
               viewer: { id: "coach" },
             }),
           };
-        if (name === "@/lib/workspace/types") return { isProgramStaff };
+        if (name === "@/lib/workspace/types") return { canManageTeamSchedule, isProgramStaff };
         if (name === "@/lib/data/schedule-server")
           return { getEventDetail: async () => detail() };
         if (name === "./entry-plan") return { planEntryChanges };

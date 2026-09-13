@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { isProgramStaff } from "@/lib/workspace/types";
+import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { StaticEventChooser } from "@/components/dashboard/schedule/static/static-event-chooser";
 
 /**
@@ -24,7 +24,7 @@ export default async function NewEventPage() {
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");
-  if (!isProgramStaff(active)) redirect("/dashboard/team/schedule");
+  if (!canManageTeamSchedule(active)) redirect("/dashboard/team/schedule");
 
   return <StaticEventChooser />;
 }

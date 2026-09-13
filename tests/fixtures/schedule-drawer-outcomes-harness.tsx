@@ -43,6 +43,7 @@ const workspace: Workspace = {
   playersCanUpload: true,
   memberUploadEnabled: true,
   uploadPolicy: "everyone",
+  eventsPolicy: "staff",
   myPlayerId: role === "player" ? "player-browser" : null,
 };
 

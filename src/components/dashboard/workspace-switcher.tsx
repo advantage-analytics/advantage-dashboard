@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { MENU_LEAD_CLASS, MENU_ROW_CLASS } from "@/lib/ui/menu";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { setActiveWorkspace } from "@/lib/workspace/actions";
+import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
 import { squadDisambiguator, type Workspace } from "@/lib/workspace/types";
 
 /**
@@ -70,6 +71,27 @@ export function WorkspaceOptionList({
               "text-left disabled:cursor-not-allowed disabled:opacity-60",
             )}
           >
+            {/* 18px, the text's own line height, so the row stays the height
+                the menu's four-row scroll cap was measured against. */}
+            <WorkspaceMark
+              workspace={workspace}
+              className="size-[18px] rounded-[var(--radius-cell)] text-[9px]"
+            />
+
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)]",
+                isActive && "font-medium",
+              )}
+            >
+              {workspace.name}
+              {squad && (
+                <span className="text-[var(--ink-500)]"> · {squad}</span>
+              )}
+            </span>
+
+            {/* Trailing, in a fixed slot, so every name starts at the mark
+                and a tick appearing never shifts the text. */}
             <span className={MENU_LEAD_CLASS}>
               {pendingId === workspace.id ? (
                 <Loader2
@@ -84,24 +106,6 @@ export function WorkspaceOptionList({
                 />
               ) : null}
             </span>
-
-            <span
-              className={cn(
-                "min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)]",
-                isActive && "font-medium",
-              )}
-            >
-              {workspace.name}
-              {squad && (
-                <span className="text-[var(--ink-500)]"> · {squad}</span>
-              )}
-            </span>
-
-            {workspace.kind === "team" && (
-              <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
-                team
-              </span>
-            )}
           </button>
         );
       })}
