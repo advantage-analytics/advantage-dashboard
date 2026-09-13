@@ -38,6 +38,8 @@ interface MatchesGridProps {
   onToggle?: (id: string, viaKeyboard: boolean) => void;
   /** The drawer is open (or closing) beside the table. */
   drawerOpen?: boolean;
+  /** Drawn in the table body (and in place of the cards) when `matches` is empty. */
+  empty?: React.ReactNode;
 }
 
 export function MatchesGrid({
@@ -49,6 +51,7 @@ export function MatchesGrid({
   selectedId = null,
   onToggle,
   drawerOpen = false,
+  empty,
 }: MatchesGridProps): React.JSX.Element {
   // Only the team table gives a track up beside the drawer; the personal one
   // fits at 1440 with every column.
@@ -92,6 +95,9 @@ export function MatchesGrid({
             isNew={match.id === newMatchId}
           />
         ))}
+        {matches.length === 0 ? (
+          <div className="surface-card md:col-span-2">{empty}</div>
+        ) : null}
       </div>
 
       <div className="hidden lg:block">
@@ -166,6 +172,7 @@ export function MatchesGrid({
                   onToggle={onToggle}
                 />
               ))}
+              {matches.length === 0 ? empty : null}
             </div>
           </div>
         </div>

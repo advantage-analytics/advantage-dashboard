@@ -52,12 +52,15 @@ export function ScheduleTable({
   details,
   selectedId,
   onSelect,
+  empty,
 }: {
   rows: ScheduleRow[];
   details: Record<string, EventDetail>;
   selectedId: string | null;
   /** `viaKeyboard` is true for Enter/Space, so the rail can take focus. */
   onSelect: (eventId: string, viaKeyboard: boolean) => void;
+  /** Drawn under the column headers when `rows` is empty — the cut's empty state. */
+  empty?: React.ReactNode;
 }) {
   return (
     <div className="surface-card min-w-0 px-6 pt-0.5 pb-1.5">
@@ -73,6 +76,8 @@ export function ScheduleTable({
           </span>
         ))}
       </div>
+
+      {rows.length === 0 ? empty : null}
 
       {rows.map((row) => (
         <EventRow

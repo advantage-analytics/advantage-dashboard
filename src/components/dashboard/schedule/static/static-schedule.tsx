@@ -3,7 +3,7 @@ import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScheduleTitleRow } from "@/components/dashboard/team/list-page-heading";
-import { Filter as FilterIcon } from "lucide-react";
+import { Calendar, Filter as FilterIcon } from "lucide-react";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import {
   MatchesFilterPanel,
@@ -14,6 +14,7 @@ import {
   EventDrawer,
 } from "@/components/dashboard/schedule/static/event-drawer";
 import { ScheduleDayZero } from "./schedule-day-zero";
+import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import { Chip } from "./chip";
 import {
   ScheduleTable,
@@ -359,6 +360,7 @@ export function StaticSchedule({
   }, [selectedId, close, step]);
 
   const hasFacets = facets.kind !== null || facets.site !== null;
+  const emptyCut = emptyCutCopy(lifecycle, facets, hasFacets);
 
   /**
    * Day zero is the whole frame, not a panel inside it: the offer carries the
@@ -475,36 +477,25 @@ export function StaticSchedule({
           </div>
         ) : null}
 
-        {visible.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16">
-            <p
-              className="mb-1 text-[14px] font-medium"
-              style={{ color: "var(--ink-900)" }}
-            >
-              No events match
-            </p>
-            <button
-              type="button"
-              onClick={() =>
-                applyCut({
-                  lifecycle: "all",
-                  facets: { kind: null, site: null },
-                })
-              }
-              className="mt-1 text-[11px] font-medium"
-              style={{ color: "var(--blue)" }}
-            >
-              Clear all filters
-            </button>
-          </div>
-        ) : (
-          <ScheduleTable
-            rows={visible}
-            details={details}
-            selectedId={selectedId}
-            onSelect={toggle}
-          />
-        )}
+        {/* A cut that leaves nothing keeps the table — headers and card —
+            and says so in its body, rather than trading the card for a line
+            on the bare canvas (see `TableEmptyBody`). */}
+        <ScheduleTable
+          rows={visible}
+          details={details}
+          selectedId={selectedId}
+          onSelect={toggle}
+          empty={
+            <TableEmptyBody
+              icon={Calendar}
+              title={emptyCut.title}
+              action={{
+                label: emptyCut.label,
+                onClick: () => applyCut(emptyCut.undo),
+              }}
+            />
+          }
+        />
 
         {/* The season footer. It used to be drawn at day zero too, on the old
             rule that the frame never moves — but that rule went with the title
@@ -602,6 +593,43 @@ const FILTER_SECTIONS: FilterPanelSection<FacetKey>[] = [
     ],
   },
 ];
+
+/**
+ * What the table's empty body says when the pill and the filter leave no
+ * events: the cut, named, and the one link that undoes the narrowest part of
+ * it.
+ *
+ * Only reachable with a cut applied: an empty season is day zero, which
+ * returns before the table renders. So there are three cases — the pill
+ * alone, the filter alone, both. With a filter on, the link clears the filter
+ * and keeps the pill; with only the pill, it goes back to All.
+ */
+function emptyCutCopy(
+  lifecycle: Lifecycle,
+  facets: Facets,
+  hasFacets: boolean,
+): {
+  title: string;
+  label: string;
+  /** Handed to `applyCut` on click — returned as data so render calls nothing. */
+  undo: { lifecycle?: Lifecycle; facets?: Facets };
+} {
+  const cut = describeCut(facets);
+  const lowered = `${cut.charAt(0).toLowerCase()}${cut.slice(1)}`;
+
+  if (!hasFacets) {
+    return {
+      title: `No ${lifecycle} events`,
+      label: "Show all events",
+      undo: { lifecycle: "all" },
+    };
+  }
+  return {
+    title: lifecycle === "all" ? `No ${lowered}` : `No ${lifecycle} ${lowered}`,
+    label: "Clear filters",
+    undo: { facets: { kind: null, site: null } },
+  };
+}
 
 /** "Duals at home" — the applied cut, as one plain sentence. */
 function describeCut(facets: Facets): string {

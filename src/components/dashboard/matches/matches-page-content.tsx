@@ -13,8 +13,9 @@ import {
 import { createPortal } from "react-dom";
 import { useSearchParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Filter as FilterIcon } from "lucide-react";
+import { Filter as FilterIcon, GalleryHorizontalEnd } from "lucide-react";
 import { EmptyMatches } from "./empty-matches";
+import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import type { DraftRowData } from "./draft-row";
 import {
@@ -356,6 +357,56 @@ function SortDropdown({
       })}
     </FloatMenu>
   );
+}
+
+/** The chip's own name, as a heading reads it. */
+const LIFECYCLE_NOUN: Record<Exclude<LifecycleValue, "all">, string> = {
+  new: "new matches",
+  "in-progress": "matches in progress",
+  estimates: "estimates",
+};
+
+/**
+ * What the table's empty body says when the chip, the search and the filters
+ * leave no matches: the cut, named, and the one link that undoes the
+ * narrowest part of it.
+ *
+ * The heading names the chip and the search but not the filters: those can
+ * run to four facets, and the applied strip right above the table already
+ * spells them out in full. Only reachable with something applied — an empty
+ * workspace is day zero, which returns before the table renders.
+ */
+function emptyCutCopy({
+  lifecycle,
+  query,
+  hasFilters,
+  clearCut,
+  showAll,
+}: {
+  lifecycle: LifecycleValue;
+  query: string;
+  hasFilters: boolean;
+  clearCut: () => void;
+  showAll: () => void;
+}): Pick<React.ComponentProps<typeof TableEmptyBody>, "title" | "action"> {
+  const noun = lifecycle === "all" ? "matches" : LIFECYCLE_NOUN[lifecycle];
+
+  if (!hasFilters && !query) {
+    return {
+      title: `No ${noun}`,
+      action: { label: "Show all matches", onClick: showAll },
+    };
+  }
+  return {
+    title:
+      query && !hasFilters
+        ? `No ${noun} for “${query}”`
+        : `No ${noun} fit this filter`,
+    action: {
+      label: hasFilters ? "Clear filters" : "Clear search",
+      onClick: clearCut,
+    },
+  };
 }
 
 /** The slot never changes once mounted, so there is nothing to subscribe to. */
@@ -994,49 +1045,35 @@ export function MatchesPageContent({
       )}
 
       {/* Table / Grid */}
-      {sorted.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16">
-          <Search
-            className="mb-3 h-8 w-8"
-            strokeWidth={1.5}
-            style={{ color: "var(--ink-300)" }}
+      <MatchesGrid
+        matches={paginatedMatches}
+        drafts={drafts}
+        scope={scope}
+        newMatchId={newMatchId}
+        unseenIds={unseenIds}
+        selectedId={selectedId}
+        onToggle={toggleRow}
+        // Not while closing: the tracks widen as the rail shrinks, in the
+        // same 200ms, rather than waiting for it to finish and then jumping.
+        drawerOpen={(drawerMatch !== null || drawerDraft !== null) && !closing}
+        // A cut that leaves nothing keeps the table — headers and card — and
+        // says so in its body (see `TableEmptyBody`).
+        empty={
+          <TableEmptyBody
+            icon={GalleryHorizontalEnd}
+            {...emptyCutCopy({
+              lifecycle,
+              query: search.trim(),
+              hasFilters: filters.length > 0,
+              clearCut,
+              showAll: () => {
+                clearCut();
+                setLifecycle("all");
+              },
+            })}
           />
-          <p
-            className="mb-1 text-[14px] font-medium"
-            style={{ color: "var(--ink-900)" }}
-          >
-            No matches found
-          </p>
-          {(hasCut || lifecycle !== "all") && (
-            <div className="mt-1 flex flex-col items-center gap-2">
-              <button
-                onClick={() => {
-                  clearCut();
-                  setLifecycle("all");
-                }}
-                className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-              >
-                Clear all filters
-              </button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <MatchesGrid
-          matches={paginatedMatches}
-          drafts={drafts}
-          scope={scope}
-          newMatchId={newMatchId}
-          unseenIds={unseenIds}
-          selectedId={selectedId}
-          onToggle={toggleRow}
-          // Not while closing: the tracks widen as the rail shrinks, in the
-          // same 200ms, rather than waiting for it to finish and then jumping.
-          drawerOpen={
-            (drawerMatch !== null || drawerDraft !== null) && !closing
-          }
-        />
-      )}
+        }
+      />
 
       {drawerSlot &&
         drawerDraft &&
