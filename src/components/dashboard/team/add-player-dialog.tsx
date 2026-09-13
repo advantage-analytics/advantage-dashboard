@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { GitMerge, Loader2, Upload, Users } from "lucide-react";
-import type { RosterMember } from "@/lib/data/team-roster-server";
+import type { FormerPlayer, RosterMember } from "@/lib/data/team-roster-server";
 import {
   SettingsField,
   SettingsUnderlineInput,
@@ -124,6 +124,7 @@ export function AddPlayerDialog({
   onOpenChange,
   seatNote,
   roster,
+  former,
   initial,
 }: {
   open: boolean;
@@ -132,6 +133,12 @@ export function AddPlayerDialog({
   seatNote: string;
   /** Who is on the roster already, so a repeat can say who it would repeat. */
   roster: RosterMember[];
+  /**
+   * Everyone archived off this roster, so the form can recognize a name that
+   * has already been here and offer to restore it instead of quietly
+   * creating a second, historyless profile beside their old one.
+   */
+  former: FormerPlayer[];
   /**
    * A prefill for the next opening, applied on the closed→open transition.
    *

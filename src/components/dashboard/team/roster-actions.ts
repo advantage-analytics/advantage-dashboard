@@ -541,6 +541,47 @@ export async function archiveProgramPlayer(
 }
 
 /**
+ * Put an archived player back on the roster, matches and all.
+ *
+ * The way back from `archiveProgramPlayer`. `restore_program_player` clears
+ * `archived_at` on the same row rather than minting a new one, which is the
+ * whole point: `matches.player1_id` has no foreign key, so the profile id is
+ * what every one of that player's matches already carries, and reusing it is
+ * what makes the history reappear instead of staying orphaned under a row
+ * nothing points at anymore.
+ *
+ * Revalidates `SETTINGS_PATH` for the same reason `archiveProgramPlayer`
+ * does: a claimed profile gets re-seated into `program_members` on restore,
+ * and that seat count is what Settings › Teams shows.
+ */
+export async function restoreProgramPlayer(
+  profileId: string,
+): Promise<AddPlayerResult> {
+  const workspace = await getWorkspaceContext();
+  if (!workspace || workspace.active.kind !== "team") {
+    return { ok: false, error: "Switch to your team workspace to change it." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("restore_program_player", {
+    p_player_id: profileId,
+  });
+
+  if (error) {
+    const raw = error.message?.trim();
+    return {
+      ok: false,
+      error: raw && raw.length > 0 ? raw : "Couldn't restore that player.",
+    };
+  }
+
+  revalidatePath(ROSTER_PATH);
+  revalidatePath(SETTINGS_PATH);
+  revalidatePath(TEAM_HOME_PATH);
+  return { ok: true, profileId };
+}
+
+/**
  * What a merge would do, straight from the database.
  *
  * The dialog's numbers come from here rather than from the client counting rows

@@ -120,6 +120,7 @@ function route(
               if (options.fail) throw new Error("database failed");
               return options.roster ?? emptyRoster;
             },
+            getFormerPlayers: async () => [],
           };
         if (id.includes("join-requests-server"))
           return {
