@@ -44,6 +44,9 @@ export default function HomeAiInsight({
 }: HomeAiInsightProps) {
   const [claim, setClaim] = useState("");
   const [error, setError] = useState(false);
+  // The claim skeleton is a promise that a claim is arriving; once the stream
+  // ends (including a 204 "nothing worth saying") it must stop promising.
+  const [settled, setSettled] = useState(false);
 
   useEffect(() => {
     const cacheKey = `${CACHE_KEY}:${endpoint}:${cacheSignature}`;
@@ -51,12 +54,14 @@ export default function HomeAiInsight({
     if (cached) {
       setClaim(cached);
       setError(false);
+      setSettled(true);
       return;
     }
 
     // No cache for this data signature — reset to the loading state and re-fetch.
     setClaim("");
     setError(false);
+    setSettled(false);
     const controller = new AbortController();
 
     async function load() {
@@ -94,6 +99,7 @@ export default function HomeAiInsight({
         if ((err as Error)?.name === "AbortError") return;
         setError(true);
       }
+      if (!controller.signal.aborted) setSettled(true);
     }
 
     load();
@@ -124,11 +130,13 @@ export default function HomeAiInsight({
         <span className={HOME_CLAIM_CLASS} style={{ textWrap: "pretty" }}>
           {claim}
         </span>
-      ) : (
-        <div
-          className="h-5 w-[85%] animate-pulse rounded-full bg-[#F3F3F3]"
-          aria-hidden
-        />
+      ) : settled ? null : (
+        <div role="status" aria-label="Loading insight">
+          <div
+            className="h-[14px] w-[85%] rounded-[3px] bg-[var(--surface-skeleton)] motion-safe:animate-pulse"
+            aria-hidden="true"
+          />
+        </div>
       )}
 
       {/* Evidence — computed, never invented. Present even when the claim

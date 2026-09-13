@@ -34,6 +34,7 @@ import {
   HomeRecentBodyPending,
   HomeServesPending,
   HomeFooterPending,
+  FocusCardPending,
 } from "@/components/dashboard/loading/home-skeleton";
 import { HomeWidgetFrame } from "@/components/dashboard/home/home-widget-frame";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
@@ -96,7 +97,7 @@ export default async function Home() {
           }
           insight={region(
             "Advantage Intelligence",
-            null,
+            <FocusCardPending />,
             <Insight resources={resources} />,
           )}
           serves={
@@ -247,11 +248,21 @@ async function Insight({ resources }: { resources: HomeResources }) {
       </FocusCard>
     );
   const p = await performance;
-  if (!p) return null;
-  const evidence = buildInsightEvidenceWithCaption(p.kpiCards, p.matchCount);
-  // This card is conditional in the approved design. Do not reserve a fake
-  // populated card before its evidence establishes that it belongs here.
-  if (!evidence) return null;
+  const evidence = p
+    ? buildInsightEvidenceWithCaption(p.kpiCards, p.matchCount)
+    : null;
+  // Matches exist but none has analysed stats to build evidence from yet: the
+  // honest zero state (empty anatomy, one line on what arrives), never a
+  // fabricated finding and never a silently missing card.
+  if (!p || !evidence)
+    return (
+      <FocusCard
+        showStatisticsLink={false}
+        footer={{ left: "One thing to work on, once a match is analysed." }}
+      >
+        <FocusEmpty />
+      </FocusCard>
+    );
   return (
     <FocusCard
       footer={{
