@@ -16,8 +16,8 @@ import {
   TableCard,
   type DetailCount,
 } from "@/components/dashboard/schedule/event-page";
-import { LineRow } from "@/components/dashboard/schedule/line-row";
-import { AddResultButton } from "@/components/dashboard/schedule/add-result-button";
+import { LineRow, scoreHref } from "@/components/dashboard/schedule/line-row";
+import { RowAction } from "@/components/dashboard/schedule/row-action";
 import { TeamTotalsWidget } from "@/components/dashboard/schedule/team-totals-widget";
 import { runRecord } from "@/components/dashboard/schedule/run-strip";
 import { lineCoverageFrom, matchState } from "@/lib/schedule/entry-state";
@@ -28,7 +28,7 @@ import {
   siteTitle,
   surfaceTitle,
 } from "@/lib/schedule/format";
-import { runFinish } from "@/lib/schedule/tournament-run";
+import { nextRound, runFinish } from "@/lib/schedule/tournament-run";
 import { advButton } from "@/lib/ui/adv-button";
 import type { EventTeamTotals } from "@/lib/data/event-team-totals";
 import type { EntryMatch, EventDetail, EventEntry } from "@/lib/schedule/types";
@@ -126,7 +126,15 @@ export function TournamentDetail({
             >
               Edit tournament
             </Link>
-            <AddResultButton entries={entries} />
+            {/* The score flow, opened on the first entry still waiting. The
+                one place a result is written — the page picks the entry and
+                the round, so there is no dialog to ask them here. */}
+            <Link
+              href={`/dashboard/team/schedule/${event.id}/score`}
+              className={advButton("primary", "md")}
+            >
+              Add result
+            </Link>
           </>
         ) : null
       }
@@ -202,6 +210,18 @@ function EntryRun({ entry, canEdit }: { entry: EventEntry; canEdit: boolean }) {
         name
         label={entry.playerLabels.join(" / ") || "Unnamed entry"}
         note={runSubline(entry)}
+        right={
+          // The entry's NEXT round, which is what a run is waiting for; the
+          // rows below each open their own round for correction.
+          canEdit && entry.playerLabels.length > 0 ? (
+            <RowAction
+              href={scoreHref(entry.eventId, entry.id, nextRound(entry))}
+              ariaLabel={`Add result for ${entry.playerLabels.join(" / ")}`}
+            >
+              {entry.matches.length === 0 ? "Add first result" : "Add result"}
+            </RowAction>
+          ) : null
+        }
       />
       {segments.map((segment) => (
         <div key={segment.draw}>

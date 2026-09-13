@@ -6,9 +6,7 @@ import { cn } from "@/lib/utils";
 import { useListboxNav } from "@/hooks/use-listbox-nav";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { splitNames } from "@/lib/schedule/format";
-import { pairKey } from "@/lib/schedule/lineup-validation";
 import { addProgramPlayer } from "@/components/dashboard/team/roster-actions";
-import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 
 export interface RosterSelection {
@@ -26,10 +24,10 @@ export interface RosterSelection {
  * with that court attributed to nobody, with nothing on screen saying so. A
  * coach typing nine names by hand only has to slip once.
  *
- * Singles retain the free-text typeahead. Doubles use two explicit roster
- * choices and report each stable id beside its display label; this prevents
- * same-name athletes (and names containing a slash) from being reparsed into
- * a different identity upstream.
+ * Singles use this free-text typeahead. Doubles are picked from a checklist
+ * in `lineup-rows.tsx` that reports each stable id beside its display label,
+ * so same-name athletes (and names containing a slash) are never reparsed
+ * into a different identity upstream.
  *
  * ── Everyone, ranked or not ─────────────────────────────────────────────────
  * `seedLineup` seeds S1–S6 from RANKED players only, because roster join order
@@ -93,119 +91,21 @@ export function LineupNamePicker(props: {
   ladder: LadderPlayer[];
   onChange: (value: string) => void;
   onSelection: (selection: RosterSelection) => void;
-  usedPairSlots?: ReadonlyMap<string, string>;
   onAddPlayer: (player: LadderPlayer, value: string) => void;
   onOpenChange: (open: boolean) => void;
+  /** The court is marked "No player" — the field reads so, empty. */
+  noPlayer?: boolean;
+  /** Offers "No player" as the list's last row. */
+  onNoPlayer?: () => void;
+  /** Roster id → the other singles line that player already holds. */
+  takenOn?: ReadonlyMap<string, string>;
+  /** The earlier line this court's player is already on, if any. */
+  clashWith?: string;
 }) {
-  if (props.discipline === "doubles") {
-    return <DoublesRosterPicker {...props} />;
-  }
+  // Doubles no longer come through here: `lineup-rows.tsx`'s `PairPicker` is a
+  // pick-two checklist that reports stable ids beside their labels, which is
+  // the identity guarantee the two partner selects used to give.
   return <RosterTypeahead {...props} />;
-}
-
-function DoublesRosterPicker({
-  selectedIds,
-  slot,
-  ladder,
-  onSelection,
-  usedPairSlots = new Map(),
-}: {
-  selectedIds: string[];
-  slot: string;
-  ladder: LadderPlayer[];
-  onSelection: (selection: RosterSelection) => void;
-  usedPairSlots?: ReadonlyMap<string, string>;
-}) {
-  const ids = [selectedIds[0] ?? "", selectedIds[1] ?? ""];
-  const duplicate = ids[0] !== "" && ids[0] === ids[1];
-  const usedSlots = [...new Set(usedPairSlots.values())].join(", ");
-  const nameCounts = new Map<string, number>();
-  for (const player of ladder) {
-    const name = normalizedPersonName(player.name);
-    nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
-  }
-
-  function optionLabel(player: LadderPlayer): string {
-    const rank =
-      player.ladderPosition !== null ? ` · S${player.ladderPosition}` : "";
-    const identity =
-      (nameCounts.get(normalizedPersonName(player.name)) ?? 0) > 1
-        ? ` · roster ${player.userId.slice(-8)}`
-        : "";
-    return `${player.name}${rank}${identity}`;
-  }
-
-  function optionsFor(index: number): MenuOption<string>[] {
-    const unavailable = ids[1 - index];
-    return [
-      { value: "", label: "Choose player" },
-      ...ladder
-        .filter((player) => {
-          if (player.userId === unavailable) return false;
-          if (!unavailable) return true;
-          return !usedPairSlots.has(pairKey([player.userId, unavailable]));
-        })
-        .map((player) => ({
-          value: player.userId,
-          label: optionLabel(player),
-        })),
-    ];
-  }
-
-  function choose(index: number, userId: string) {
-    // A pair is ordered and dense. Clearing its first half clears the pair;
-    // otherwise an id selected as partner two would silently slide into the
-    // first position when the payload filters empty values.
-    if (index === 0 && userId === "") {
-      onSelection({ ids: [], labels: [] });
-      return;
-    }
-    const next = [...ids];
-    next[index] = userId;
-    const chosen = next
-      .map((id) => ladder.find((player) => player.userId === id))
-      .filter((player): player is LadderPlayer => Boolean(player));
-    onSelection({
-      ids: chosen.map((player) => player.userId),
-      labels: chosen.map((player) => player.name),
-    });
-  }
-
-  return (
-    <div className="grid min-w-0 grid-cols-2 gap-2">
-      {[0, 1].map((index) => (
-        <label key={index} className="min-w-0">
-          <span className="text-micro mb-1 block text-[var(--ink-500)]">
-            Partner {index + 1}
-          </span>
-          <MenuSelect
-            value={ids[index]}
-            label={`Our partner ${index + 1} at ${slot}`}
-            options={optionsFor(index)}
-            onChange={(userId) => choose(index, userId)}
-            disabled={index === 1 && ids[0] === ""}
-            className="w-full"
-            width="trigger"
-            note={
-              ids[1 - index]
-                ? "The partner already selected for this line is unavailable."
-                : undefined
-            }
-          />
-        </label>
-      ))}
-      <p
-        className="text-micro col-span-2 text-[var(--ink-500)]"
-        role={duplicate ? "alert" : undefined}
-      >
-        {duplicate
-          ? "Choose two distinct athletes for this doubles line."
-          : usedPairSlots.size > 0
-            ? `The partner already selected here is unavailable. The same two-player pairing, in either order, is already assigned on ${usedSlots}.`
-            : "Each partner is linked to their roster identity. A selected partner is unavailable in the other list."}
-      </p>
-    </div>
-  );
 }
 
 function RosterTypeahead({
@@ -216,6 +116,10 @@ function RosterTypeahead({
   onChange,
   onAddPlayer,
   onOpenChange,
+  noPlayer = false,
+  onNoPlayer,
+  takenOn,
+  clashWith,
 }: {
   /** The line's current label, " / "-joined. The field is controlled by it. */
   value: string;
@@ -239,6 +143,10 @@ function RosterTypeahead({
   onAddPlayer: (player: LadderPlayer, value: string) => void;
   /** Open — the row lifts its stacking on it, as it does for the popup. */
   onOpenChange: (open: boolean) => void;
+  noPlayer?: boolean;
+  onNoPlayer?: () => void;
+  takenOn?: ReadonlyMap<string, string>;
+  clashWith?: string;
 }) {
   const [open, setOpen] = useState(false);
   /**
@@ -269,8 +177,19 @@ function RosterTypeahead({
   // ranking, over our own ladder. An empty field lists everyone in ladder
   // order, which is how an unranked player is browsed to rather than guessed
   // at.
+  const listed = new Set<string>();
   const suggestions = ladder
+    // One row per roster id, whatever the caller handed in — the id is the
+    // row's React key and the identity a pick writes.
+    .filter((player) => {
+      if (listed.has(player.userId)) return false;
+      listed.add(player.userId);
+      return true;
+    })
     .filter((player) => !takenBefore.has(normalizedPersonName(player.name)))
+    // A player plays one singles line. Whoever holds another court is left
+    // out, and named below when the coach types toward them.
+    .filter((player) => !takenOn?.has(player.userId))
     .map((player) => {
       if (typed.length === 0) return { player, rank: 3 };
       const known = normalizedPersonName(player.name);
@@ -291,9 +210,29 @@ function RosterTypeahead({
     .slice(0, MAX_SUGGESTIONS)
     .map((entry) => entry.player);
 
-  // The escape row is always last and always present — "add your player" is
-  // the answer to an empty list as much as to a full one.
-  const count = suggestions.length + 1;
+  // Players left out because they are on another court, matching what is
+  // typed — said, so a missing name is not a mystery.
+  const elsewhere =
+    typed.length >= 2 && takenOn
+      ? ladder.filter(
+          (player) =>
+            takenOn.has(player.userId) &&
+            normalizedPersonName(player.name).includes(typed),
+        )
+      : [];
+
+  // The escape row is always present — "add your player" is the answer to an
+  // empty list as much as to a full one. "No player", where offered, comes
+  // after it: the last resort, never the row a bare arrow lands on first.
+  const addIndex = suggestions.length;
+  const noPlayerIndex = onNoPlayer ? addIndex + 1 : -1;
+  const count = suggestions.length + 1 + (onNoPlayer ? 1 : 0);
+
+  function chooseNoPlayer() {
+    onNoPlayer?.();
+    setOpen(false);
+    setError(null);
+  }
 
   /**
    * May Enter commit the highlighted row?
@@ -408,6 +347,7 @@ function RosterTypeahead({
     open,
     onSelect: (index) => {
       if (index < suggestions.length) place(suggestions[index].name);
+      else if (index === noPlayerIndex) chooseNoPlayer();
       else addTypedPlayer();
     },
     onDismiss: () => setOpen(false),
@@ -493,24 +433,44 @@ function RosterTypeahead({
           }
           onKeyDown(event);
         }}
-        placeholder={discipline === "doubles" ? "Name / Name" : "Name"}
+        placeholder={
+          noPlayer
+            ? "No player"
+            : discipline === "doubles"
+              ? "Name / Name"
+              : "Name"
+        }
         aria-label={`Our player at ${slot}`}
-        /* The row is the frame here — a ring inside a table cell boxes one
-           name of nine — and `LineRow`'s `rowRule` is what makes this legal:
-           the row's rule goes blue and it lifts a wash on `focus-within`, so
-           tabbing the lineup moves something on screen. Without that this
-           field would have no focus indicator at all, which is the one thing
-           `focus.css` says an opt-out may never cost. */
+        /* The line is the frame here — a ring inside a lineup cell boxes one
+           name of nine — and `lineup-rows.tsx` is what makes this legal: the
+           line lifts its wash on focus, so tabbing the lineup moves something
+           on screen. Without that this field would have no focus indicator at
+           all, which is the one thing `focus.css` says an opt-out may never
+           cost. */
         data-focus-ring="none"
-        className="w-full min-w-0 bg-transparent text-[13px] text-[var(--ink-900)] caret-[var(--blue)] outline-none placeholder:text-[var(--ink-300)]"
+        className={cn(
+          "block h-[26px] w-full min-w-0 bg-transparent text-[13px] leading-[26px] text-[var(--ink-700)] caret-[var(--blue)] outline-none",
+          noPlayer
+            ? "placeholder:text-[var(--ink-500)]"
+            : "placeholder:text-[var(--ink-300)]",
+        )}
       />
 
       {/* Said whether or not the list is open: the court is filled and linked
           to nobody, which is precisely the state that used to be invisible. */}
-      {!open && unmatched.length > 0 ? (
+      {!open && clashWith !== undefined ? (
         <span
-          className="text-micro mt-[3px] block truncate"
-          style={{ color: "var(--ink-500)" }}
+          className="text-micro pointer-events-none absolute top-[calc(100%-4px)] left-0 block max-w-full truncate"
+          style={{ color: "var(--ink-500)", lineHeight: 1 }}
+        >
+          already on {clashWith} · choose another player
+        </span>
+      ) : !open && unmatched.length > 0 ? (
+        <span
+          className="text-micro pointer-events-none absolute top-[calc(100%-4px)] left-0 block max-w-full truncate"
+          // Inline: `.text-micro` is unlayered and beats a Tailwind leading
+          // utility, and its 1.4 line box would hang past the 44px line.
+          style={{ color: "var(--ink-500)", lineHeight: 1 }}
         >
           {UNMATCHED_NOTE}
         </span>
@@ -586,6 +546,55 @@ function RosterTypeahead({
               {pending ? "Adding…" : ADD_ROW_LABEL}
             </span>
           </li>
+
+          {onNoPlayer ? (
+            <>
+              <li
+                aria-hidden
+                className="mx-1 my-1.5 h-px bg-[var(--border-hairline)]"
+              />
+              <li
+                id={optionId(noPlayerIndex)}
+                role="option"
+                aria-selected={activeIndex === noPlayerIndex}
+                onMouseEnter={() => setActiveIndex(noPlayerIndex)}
+                onClick={chooseNoPlayer}
+                className={cn(
+                  "flex h-[38px] cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-2.5",
+                  activeIndex === noPlayerIndex
+                    ? "bg-[var(--surface-subtle)]"
+                    : null,
+                )}
+              >
+                <span
+                  aria-hidden
+                  className="size-5 shrink-0 rounded-full border border-dashed border-[var(--ink-300)]"
+                />
+                <span className="truncate text-[12px] text-[var(--ink-900)]">
+                  No player
+                </span>
+                <span className="flex-1" />
+                <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
+                  Counts as a forfeit
+                </span>
+              </li>
+            </>
+          ) : null}
+
+          {elsewhere.length > 0 ? (
+            <li
+              role="presentation"
+              className="px-2.5 pt-1.5 pb-0.5 text-[11px] text-[var(--ink-500)]"
+            >
+              {elsewhere
+                .slice(0, 2)
+                .map(
+                  (player) =>
+                    `${player.name} is on ${takenOn?.get(player.userId)}`,
+                )
+                .join(" · ")}
+            </li>
+          ) : null}
 
           {error ? (
             <li

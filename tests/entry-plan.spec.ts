@@ -59,7 +59,6 @@ function line(overrides: Partial<LineupLineInput> = {}): LineupLineInput {
     playerUserIds: ["user-a"],
     playerLabels: ["Ana Vasquez"],
     opponentLabels: ["Rival Player"],
-    forfeit: null,
     ...overrides,
   };
 }
@@ -127,11 +126,14 @@ test.describe("planEntryChanges — a dual lineup", () => {
     expect(plan.refuse[0].reason).toContain("recorded match");
   });
 
-  /** A forfeit is an outcome too, and locks the line exactly as a match does. */
+  /**
+   * A legacy forfeit is an outcome too, and locks the line exactly as a match
+   * does. The lineup no longer writes one; saved rows still carry it.
+   */
   test("a renamed forfeited line refuses", () => {
     const plan = planEntryChanges(
       [entry({ id: "e-1", forfeit: "ours" })],
-      [line({ id: "e-1", forfeit: "ours", playerLabels: ["Dana Brooks"] })],
+      [line({ id: "e-1", playerLabels: ["Dana Brooks"] })],
     );
 
     expect(plan.update).toEqual([]);

@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { headToHeadRows } from "@/lib/data/opponents-server";
 import { getEventDetail } from "@/lib/data/schedule-server";
 import {
+  lineupForfeitSide,
   planEntryChanges,
   type EntryPlan,
   type IncomingEntry,
@@ -26,8 +27,15 @@ import {
   isProgramStaff,
   uploadPolicyLabel,
 } from "@/lib/workspace/types";
-import type { Discipline, EventSite, OutcomeKind, OutcomeSide } from "./types";
-import { validateLineup } from "./lineup-validation";
+import type {
+  Discipline,
+  EventSite,
+  MatchEnding,
+  OutcomeKind,
+  OutcomeSide,
+} from "./types";
+import { validateDualLineup, validateLineup } from "./lineup-validation";
+import { matchResultFor } from "./entry-state";
 
 export type ActionError = { error: string };
 
@@ -46,7 +54,18 @@ export interface LineupLineInput {
   playerUserIds: string[];
   playerLabels: string[];
   opponentLabels: string[];
-  forfeit?: "ours" | "theirs" | null;
+  /**
+   * A dual line our side cannot field. Its players are empty, and saving it
+   * records a forfeit for our side — the point goes to THEM. Absent on a
+   * tournament entry, and false on every named line.
+   */
+  noPlayer?: boolean;
+  /**
+   * A dual line the OPPONENT cannot field. Its opponent names are empty, and
+   * saving it records a forfeit for their side — the point goes to US. Never
+   * true alongside `noPlayer`.
+   */
+  opponentNoPlayer?: boolean;
 }
 
 /**
@@ -134,6 +153,11 @@ export interface RecordResultInput {
   theirGames: number[];
   ourTiebreaks: (number | null)[];
   theirTiebreaks: (number | null)[];
+  /**
+   * A match that stopped: who retired or defaulted, which decides the winner
+   * the games cannot. Absent or null for a match played out.
+   */
+  ending?: { kind: MatchEnding; side: OutcomeSide } | null;
 }
 
 /**
@@ -201,10 +225,13 @@ export async function createDual(
   if (isError(auth)) return auth;
 
   if (!input.opponent.trim()) return { error: "Name the opponent first." };
-  if (input.lines.length === 0)
-    return { error: "A dual needs at least one line." };
 
-  const lineupErrors = validateLineup(input.lines);
+  // Identity errors first: they name the athlete problem, which is the more
+  // specific thing to say about a line that is also incomplete.
+  const lineupErrors = [
+    ...validateLineup(input.lines),
+    ...validateDualLineup(input.lines),
+  ];
   if (lineupErrors.length > 0) return { error: lineupErrors[0].reason };
 
   const supabase = await createClient();
@@ -258,8 +285,9 @@ export async function createDual(
         player_labels: line.playerLabels,
         opponent_labels: line.opponentLabels,
         opponent_program_id: opponentProgramId,
-        // New builder results live in program_event_outcomes. The legacy
-        // column stays empty; saveBuilderForfeits records the selected side.
+        // Legacy column, always empty on a new row. Outcomes live in
+        // program_event_outcomes — a "No player" line's forfeit is written
+        // just below, every other outcome by `setOutcome` from the score flow.
         forfeit: null,
       })),
     );
@@ -271,12 +299,15 @@ export async function createDual(
     return { error: entryError.message };
   }
 
-  const outcomeFailure = await saveBuilderForfeits(
+  const forfeitFailure = await recordLineupForfeits(
     supabase,
     { id: event.id, programId: auth.programId },
-    input.lines,
+    input.lines.flatMap((line) => {
+      const side = lineupSideOf(line);
+      return side ? [{ slot: line.slot, side }] : [];
+    }),
   );
-  if (outcomeFailure) return outcomeFailure;
+  if (forfeitFailure) return forfeitFailure;
 
   // Give the opposing names an identity, so the next program to play them finds
   // the same people rather than typing a second copy.
@@ -467,39 +498,52 @@ function revalidateEvent(eventId: string): void {
   revalidatePath(`/dashboard/team/schedule/${eventId}`);
 }
 
-/** Record only new draft choices; unchanged settled lines never reach here. */
-async function saveBuilderForfeits(
+/** Which side a submitted line's "No player" forfeits, if either. */
+function lineupSideOf(line: LineupLineInput): OutcomeSide | null {
+  if (line.noPlayer) return "ours";
+  if (line.opponentNoPlayer) return "theirs";
+  return null;
+}
+
+/**
+ * The forfeits "No player" lines record — `'ours'` gives the point to THEM,
+ * `'theirs'` (the opponent has nobody) gives it to US.
+ *
+ * The one outcome the lineup writes. Everything else a line can end in is the
+ * score flow's (`setOutcome`). Addressed by slot, because a line inserted in
+ * this same save has no id the caller knows yet.
+ */
+async function recordLineupForfeits(
   supabase: Awaited<ReturnType<typeof createClient>>,
   event: { id: string; programId: string },
-  lines: LineupLineInput[],
+  forfeits: { slot: string; side: OutcomeSide }[],
 ): Promise<ActionError | null> {
-  const forfeits = lines.filter((line) => line.forfeit != null);
   if (forfeits.length === 0) return null;
+  const slots = forfeits.map((forfeit) => forfeit.slot);
+  const fail = (reason: string): ActionError => {
+    revalidateEvent(event.id);
+    return {
+      error: `The lineup was saved, but a No player forfeit was not: ${reason} Open the dual and save the lineup again.`,
+    };
+  };
   const { data: entries, error } = await supabase
     .from("program_event_entries")
     .select("id, slot")
     .eq("event_id", event.id)
     .eq("program_id", event.programId)
-    .in(
-      "slot",
-      forfeits.map((line) => line.slot),
-    );
-  const fail = (reason: string): ActionError => {
-    revalidateEvent(event.id);
-    return {
-      error: `The lineup was saved, but a forfeit was not: ${reason} Open the event from Schedule and review its outcomes before saving again.`,
-    };
-  };
+    .in("slot", slots);
   if (error) return fail(error.message);
-  for (const line of forfeits) {
-    const entry = entries?.find((row) => row.slot === line.slot);
-    if (!entry) return fail(`${line.slot} could not be found.`);
+  for (const { slot, side } of forfeits) {
+    const entry = (entries as { id: string; slot: string }[] | null)?.find(
+      (row) => row.slot === slot,
+    );
+    if (!entry) return fail(`${slot} could not be found.`);
     const { error: outcomeError } = await supabase.rpc("set_schedule_outcome", {
       p_program_id: event.programId,
       p_entry_id: entry.id,
       p_round: null,
       p_kind: "forfeit",
-      p_side: line.forfeit,
+      p_side: side,
     });
     if (outcomeError) return fail(scheduleWriteError(outcomeError).error);
   }
@@ -538,8 +582,8 @@ export async function updateDual(
   const auth = await requireScheduleManager();
   if (isError(auth)) return auth;
 
-  if (input.lines.length === 0)
-    return { error: "A dual needs at least one line." };
+  const lineupErrors = validateDualLineup(input.lines);
+  if (lineupErrors.length > 0) return { error: lineupErrors[0].reason };
 
   // Scoped on BOTH ids, and never on the client's `eventId` alone:
   // `getEventDetail` reads `program_events` filtered by `program_id` as well,
@@ -551,8 +595,40 @@ export async function updateDual(
   if (detail.event.kind !== "dual")
     return { error: "That event isn't a dual." };
 
-  const plan = planEntryChanges(detail.entries, input.lines);
+  // A "No player" line's forfeit — either side's — is the lineup's own, so
+  // the lineup may take it back: planned as an unsettled line, with the
+  // forfeit cleared below if the coach has since named someone (or moved the
+  // No player to the other side). Every other outcome still locks.
+  const savedSides = new Map(
+    detail.entries.flatMap((entry) => {
+      const side = lineupForfeitSide(entry);
+      return side ? [[entry.id, side] as const] : [];
+    }),
+  );
+  const plan = planEntryChanges(
+    detail.entries.map((entry) =>
+      savedSides.has(entry.id) ? { ...entry, outcomes: [] } : entry,
+    ),
+    input.lines,
+  );
   if (plan.refuse.length > 0) return { error: plan.refuse[0].reason };
+
+  const incomingById = new Map(
+    input.lines.flatMap((line) => (line.id ? [[line.id, line] as const] : [])),
+  );
+  // Saved lineup forfeits whose side changed — to nobody, the other side, or
+  // a line that is going away.
+  const clearIds = [...savedSides].flatMap(([id, side]) => {
+    const incoming = incomingById.get(id);
+    return incoming && lineupSideOf(incoming) === side ? [] : [id];
+  });
+  // Submitted No player lines that do not already carry that forfeit.
+  const forfeits = input.lines.flatMap((line) => {
+    const side = lineupSideOf(line);
+    if (!side) return [];
+    if (line.id && savedSides.get(line.id) === side) return [];
+    return [{ slot: line.slot, side }];
+  });
 
   const supabase = await createClient();
 
@@ -578,6 +654,19 @@ export async function updateDual(
 
   if (eventError) return { error: eventError.message };
 
+  // Cleared before the entry update: an outcome row is what makes a line
+  // settled, and its RESTRICT foreign key blocks a delete.
+  for (const entryId of clearIds) {
+    const { error: clearError } = await supabase.rpc("set_schedule_outcome", {
+      p_program_id: auth.programId,
+      p_entry_id: entryId,
+      p_round: null,
+      p_kind: null,
+      p_side: null,
+    });
+    if (clearError) return scheduleWriteError(clearError);
+  }
+
   const failure = await applyEntryPlan(
     supabase,
     plan,
@@ -598,14 +687,12 @@ export async function updateDual(
   );
   if (failure) return failure;
 
-  const outcomeFailure = await saveBuilderForfeits(
+  const forfeitFailure = await recordLineupForfeits(
     supabase,
     { id: detail.event.id, programId: auth.programId },
-    [...plan.update, ...plan.insert].map(
-      (change) => change.row as LineupLineInput,
-    ),
+    forfeits,
   );
-  if (outcomeFailure) return outcomeFailure;
+  if (forfeitFailure) return forfeitFailure;
 
   revalidateEvent(detail.event.id);
   return { eventId: detail.event.id };
@@ -781,12 +868,21 @@ export async function recordResult(
 
   const existing = existingRows?.[0];
 
+  const ending = input.ending ?? null;
   const scorePayload = {
     player1: input.ourGames,
     player2: input.theirGames,
     player1_tiebreaks: input.ourTiebreaks,
     player2_tiebreaks: input.theirTiebreaks,
+    // The side that did NOT stop takes the match. player1 is always ours, so
+    // our player retiring hands it to player2. Spelled `score.winner`, the key
+    // SwingVision imports already write; a match played out carries none, and
+    // an update drops a winner a correction no longer calls for.
+    ...(ending
+      ? { winner: ending.side === "ours" ? "player2" : "player1" }
+      : {}),
   };
+  const matchResult = matchResultFor(ending?.kind ?? null);
 
   /**
    * WHOSE match this is, not just what it is called.
@@ -861,6 +957,7 @@ export async function recordResult(
         player2_name: theirLabel,
         player1_id: playerUserId,
         score: scorePayload,
+        result: matchResult,
       })
       .eq("id", existing.id as string)
       // `.select("id")` because this file's own header says a policy failure
@@ -918,8 +1015,9 @@ export async function recordResult(
       play_on_lets: false,
     },
     score: scorePayload,
-    // The context string, not an outcome — who won is derived from the games.
-    result: "Final Score",
+    // The context string: "Final Score", or how a stopped match ended. Who won
+    // is the games, or `score.winner` when it stopped.
+    result: matchResult,
     match_type: entry.discipline === "doubles" ? "Doubles" : "Singles",
     court_type: event.surface ?? undefined,
     // NULL, not "manual". `analysisFor()` reads a non-null source_provider as
@@ -1085,94 +1183,4 @@ export async function saveOpponentPlayer(input: {
     // precondition, and never worth an error the coach has to read.
     return { saved: false };
   }
-}
-
-/**
- * Mark a line as forfeited, or clear a forfeit.
- *
- * `side` is `'ours'` or `'theirs'` — which side forfeited, determining who
- * gets the point. Getting the side wrong silently awards the point to the wrong
- * team. `null` clears the forfeit and returns the line to normal.
- *
- * A line that already has a match cannot be forfeited: a forfeit is the
- * alternative to a played match, not a second outcome on top of one. The
- * coach must delete the match first if they want to forfeit a played line.
- */
-export async function setForfeit(
-  entryId: string,
-  side: "ours" | "theirs" | null,
-): Promise<{ ok: true } | ActionError> {
-  const auth = await requireScheduleManager();
-  if (isError(auth)) return auth;
-
-  const supabase = await createClient();
-
-  const { data: entry, error: entryError } = await supabase
-    .from("program_event_entries")
-    .select("id, event_id, program_id")
-    .eq("id", entryId)
-    .single();
-
-  if (entryError || !entry) return { error: "That line no longer exists." };
-  if (entry.program_id !== auth.programId) {
-    return { error: "That line belongs to another program." };
-  }
-
-  // A forfeit is a DUAL LINE's outcome, and the column is at that grain: one
-  // entry, one court, one point. A tournament entry is a whole run of matches,
-  // so a forfeit on one would stamp "Forfeited" across every round, blank
-  // every round's score and offer "Clear forfeit" once per round — the same
-  // one-answer-for-many-rounds failure `matchState` documents. There is no
-  // round-level forfeit to fall back on, so refuse rather than half-support it.
-  // Guarded on SETTING only. Clearing has to work on any event kind, or a row
-  // that reached this state some other way — a direct write, a future bulk
-  // insert — would be unrepairable through the UI, and the guard would be the
-  // reason. Refuse to create the state; never refuse to undo it.
-  if (side !== null) {
-    const { data: event } = await supabase
-      .from("program_events")
-      .select("kind")
-      .eq("id", entry.event_id)
-      .maybeSingle();
-
-    if (event?.kind !== "dual") {
-      return { error: "Only a dual line can be forfeited." };
-    }
-  }
-
-  // Setting a forfeit on a line that already has a match is a contradiction:
-  // the match says the line was played, the forfeit says it was not. Only
-  // allow clearing (side === null) on a line with matches.
-  if (side !== null) {
-    const { data: existingMatches } = await supabase
-      .from("matches")
-      .select("id")
-      .eq("event_entry_id", entryId)
-      .limit(1);
-
-    if (existingMatches && existingMatches.length > 0) {
-      return {
-        error:
-          "This line already has a match recorded. Remove it before forfeiting.",
-      };
-    }
-  }
-
-  const { data: updated, error: updateError } = await supabase
-    .from("program_event_entries")
-    .update({ forfeit: side, updated_at: new Date().toISOString() })
-    .eq("id", entryId)
-    .eq("program_id", auth.programId)
-    .select("id");
-
-  if (updateError) return scheduleWriteError(updateError);
-  if (!updated?.length)
-    return {
-      error:
-        "This line could not be changed. Refresh and check your staff access.",
-    };
-
-  revalidatePath("/dashboard/team/schedule");
-  revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);
-  return { ok: true };
 }

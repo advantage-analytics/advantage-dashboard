@@ -10,8 +10,29 @@
  */
 
 import { matchWon } from "./entry-state";
-import { drawOfRound, roundLongLabel, roundRank } from "./format";
+import { drawOfRound, ROUND_ORDER, roundLongLabel, roundRank } from "./format";
 import type { EventEntry } from "./types";
+
+/**
+ * The round after the last one recorded, so the common case is pre-picked.
+ *
+ * One ladder, `ROUND_ORDER` — the same one the run is sorted by. A second
+ * list would let the score page offer a round the sort does not know, which
+ * sends that match to the end of the run. And a round already recorded is
+ * never the default: `recordResult` de-duplicates on (entry, round) and would
+ * UPDATE the recorded quarter-final with the semi-final's score, losing the
+ * earlier result with no error.
+ */
+export function nextRound(entry: EventEntry): string {
+  const last = entry.matches[entry.matches.length - 1]?.round;
+  if (!last) {
+    return entry.draw?.toLowerCase().includes("qualif") ? "Q1" : "R32";
+  }
+  const index = ROUND_ORDER.indexOf(last);
+  return index >= 0 && index < ROUND_ORDER.length - 1
+    ? ROUND_ORDER[index + 1]
+    : last;
+}
 
 /**
  * An entry's matches bucketed by the draw each round belongs to, in the order

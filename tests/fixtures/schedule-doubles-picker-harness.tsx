@@ -1,14 +1,14 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { NewDualDataProvider } from "@/components/dashboard/schedule/static/dual-school-step";
-import {
-  DualLineupStep,
-  setDraftForfeit,
-} from "@/components/dashboard/schedule/static/dual-build-step";
+import { DualLineupStep } from "@/components/dashboard/schedule/static/dual-build-step";
+import { LineupProgress } from "@/components/dashboard/schedule/static/lineup-rows";
+import { isDraftLineSet } from "@/lib/schedule/lineup-validation";
 import { opponentPoolFor } from "@/components/dashboard/schedule/static/opponent-popup";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { LineupLine } from "@/lib/schedule/types";
 import { resultLabelFromOutcome } from "@/components/dashboard/schedule/result-choice";
+import { applySinglesOrder } from "@/lib/schedule/singles-order";
 
 const ladder: LadderPlayer[] = [
   {
@@ -23,7 +23,27 @@ const ladder: LadderPlayer[] = [
   },
   { userId: "casey-lee", name: "Casey Lee", ladderPosition: 3 },
   { userId: "jordan-lee", name: "Jordan Lee", ladderPosition: 4 },
+  { userId: "riley-chen", name: "Riley Chen", ladderPosition: 5 },
+  { userId: "drew-park", name: "Drew Park", ladderPosition: 6 },
 ];
+
+const OPPONENT_ROSTER = [
+  { playerId: "opp-1", name: "Morgan Reed", lineupSpot: 1, priorMeetings: 0 },
+  { playerId: "opp-2", name: "Sam Ortiz", lineupSpot: 2, priorMeetings: 0 },
+  { playerId: "opp-3", name: "Taylor Park", lineupSpot: 3, priorMeetings: 0 },
+];
+
+/** `?s2=1` adds a second singles line, Riley Chen against nobody named yet. */
+const S2_LINE: LineupLine = {
+  key: "S2",
+  slot: "S2",
+  discipline: "singles",
+  ourIds: ["riley-chen"],
+  ourLabels: ["Riley Chen"],
+  theirLabels: [],
+  noPlayer: false,
+  theirNoPlayer: false,
+};
 
 const initialLines: LineupLine[] = [
   {
@@ -33,7 +53,8 @@ const initialLines: LineupLine[] = [
     ourIds: ["11111111-1111-4111-8111-111111111111"],
     ourLabels: ["Alex Kim"],
     theirLabels: ["Morgan Reed"],
-    forfeit: null,
+    noPlayer: false,
+    theirNoPlayer: false,
   },
   {
     key: "D1",
@@ -42,7 +63,8 @@ const initialLines: LineupLine[] = [
     ourIds: [],
     ourLabels: [],
     theirLabels: ["Morgan Reed", "Sam Ortiz"],
-    forfeit: null,
+    noPlayer: false,
+    theirNoPlayer: false,
   },
   {
     key: "D2",
@@ -51,7 +73,8 @@ const initialLines: LineupLine[] = [
     ourIds: ["22222222-2222-4222-8222-222222222222", "casey-lee"],
     ourLabels: ["Alex Kim", "Casey Lee"],
     theirLabels: ["Taylor Park", "Robin Shah"],
-    forfeit: null,
+    noPlayer: false,
+    theirNoPlayer: false,
   },
   {
     key: "D3",
@@ -60,7 +83,8 @@ const initialLines: LineupLine[] = [
     ourIds: ["11111111-1111-4111-8111-111111111111", "jordan-lee"],
     ourLabels: ["Alex Kim", "Jordan Lee"],
     theirLabels: ["Avery Stone", "Jamie Fox"],
-    forfeit: null,
+    noPlayer: false,
+    theirNoPlayer: false,
   },
 ];
 
@@ -73,7 +97,12 @@ declare global {
 window.doublesSelections = [];
 
 function Harness() {
-  const [lines, setLines] = useState(initialLines);
+  const [lines, setLines] = useState(() =>
+    new URLSearchParams(window.location.search).get("s2")
+      ? [initialLines[0], S2_LINE, ...initialLines.slice(1)]
+      : initialLines,
+  );
+  const scope = useRef<HTMLDivElement>(null);
   const outcome = new URLSearchParams(window.location.search).get("outcome");
   const locked = {
     D3: "played" as const,
@@ -97,7 +126,9 @@ function Harness() {
       labels: patch.ourLabels,
     });
     setLines((current) =>
-      current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
+      current.map((line) =>
+        line.key === key ? { ...line, ...patch, noPlayer: false } : line,
+      ),
     );
   }
 
@@ -115,22 +146,85 @@ function Harness() {
         directoryTotal: 0,
       }}
     >
-      <DualLineupStep
-        lines={lines}
-        locked={locked}
-        pool={opponentPoolFor("text:Test Opponent", "Test Opponent", null)}
-        laddered
-        onOurLabels={() => undefined}
-        onOurSelection={(key, selection) =>
-          updateLine(key, {
-            ourIds: selection.ids,
-            ourLabels: selection.labels,
-          })
+      <div ref={scope}>
+        <DualLineupStep
+          lines={lines}
+          locked={locked}
+          pool={
+            // `?roster=1` gives the opponent a saved roster to pick from.
+            new URLSearchParams(window.location.search).get("roster")
+              ? opponentPoolFor("program:test", "Test Opponent", {
+                  forKey: "program:test",
+                  candidates: OPPONENT_ROSTER,
+                })
+              : opponentPoolFor("text:Test Opponent", "Test Opponent", null)
+          }
+          onOurLabels={(key, value) =>
+            setLines((current) =>
+              current.map((line) =>
+                line.key === key
+                  ? {
+                      ...line,
+                      ourIds: [],
+                      ourLabels: value ? [value] : [],
+                      noPlayer: false,
+                    }
+                  : line,
+              ),
+            )
+          }
+          onOurSelection={(key, selection) =>
+            updateLine(key, {
+              ourIds: selection.ids,
+              ourLabels: selection.labels,
+            })
+          }
+          onTheirLabels={(key, value) =>
+            setLines((current) =>
+              current.map((line) =>
+                line.key === key
+                  ? { ...line, theirLabels: [value], theirNoPlayer: false }
+                  : line,
+              ),
+            )
+          }
+          onTheirNoPlayer={(key) =>
+            setLines((current) =>
+              current.map((line) =>
+                line.key === key && !line.noPlayer
+                  ? { ...line, theirLabels: [], theirNoPlayer: true }
+                  : line,
+              ),
+            )
+          }
+          onNoPlayer={(key) =>
+            setLines((current) =>
+              current.map((line) =>
+                line.key === key
+                  ? {
+                      ...line,
+                      ourIds: [],
+                      ourLabels: [],
+                      theirLabels: [],
+                      noPlayer: true,
+                      theirNoPlayer: false,
+                    }
+                  : line,
+              ),
+            )
+          }
+          onSinglesOrder={(order) =>
+            setLines((current) => applySinglesOrder(current, order, locked))
+          }
+        />
+      </div>
+      <LineupProgress
+        set={
+          lines.filter((line) => isDraftLineSet(line) || line.key in locked)
+            .length
         }
-        onTheirLabels={() => undefined}
-        onForfeit={(key, side) =>
-          setLines((current) => setDraftForfeit(current, key, side, locked))
-        }
+        total={lines.length}
+        scope={scope}
       />
       <output aria-label="Lineup state">{JSON.stringify(lines)}</output>
       <output aria-label="D1 roster ids">

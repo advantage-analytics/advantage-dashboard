@@ -126,6 +126,12 @@ export interface MatchScore {
   player2: number[];
   player1_tiebreaks?: (number | null)[];
   player2_tiebreaks?: (number | null)[];
+  /**
+   * Who took a match the games do not decide — a retirement or a default,
+   * where the side that stopped can be ahead on sets. SwingVision imports
+   * write it too. When present it IS the answer; sets are the fallback.
+   */
+  winner?: "player1" | "player2";
 }
 
 /**
@@ -184,7 +190,25 @@ export function setTally(
 }
 
 /**
- * Who took the match, by counting sets — or null where the score cannot say.
+ * The side that took the match — THE rule, which every "who won" reader
+ * shares: the stored `winner` when a retirement or a default decided it (the
+ * side that stopped can lead on sets), otherwise the set count. Null where
+ * the score cannot say: no score, or level sets.
+ */
+export function scoreWinner(
+  score: MatchScore | null | undefined,
+): "player1" | "player2" | null {
+  if (score?.winner === "player1" || score?.winner === "player2") {
+    return score.winner;
+  }
+  const sets = setTally(score ?? null);
+  if (!sets || sets.player1 === sets.player2) return null;
+  return sets.player1 > sets.player2 ? "player1" : "player2";
+}
+
+/**
+ * Who took the match, from the viewer's seat — `scoreWinner` turned into a
+ * yes/no, or null where the score cannot say.
  *
  * Null and false are different answers and some callers need them apart. A
  * scoreboard has already decided to show a result, so "no score" and "lost"
@@ -196,12 +220,8 @@ export function matchOutcome(
   score: MatchScore | null,
   isUserPlayer1: boolean,
 ): boolean | null {
-  const sets = setTally(score);
-  if (!sets) return null;
-  if (sets.player1 === sets.player2) return null;
-  return isUserPlayer1
-    ? sets.player1 > sets.player2
-    : sets.player2 > sets.player1;
+  const winner = scoreWinner(score);
+  return winner === null ? null : (winner === "player1") === isUserPlayer1;
 }
 
 /**

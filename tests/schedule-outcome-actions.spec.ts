@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { matchResultFor } from "@/lib/schedule/entry-state";
 import { readFileSync } from "node:fs";
 import { canManageTeamSchedule, isProgramStaff } from "@/lib/workspace/types";
 import { runInNewContext } from "node:vm";
@@ -98,6 +99,7 @@ function actions(
                   viewer: { id: "viewer" },
                 },
         };
+      if (name === "./entry-state") return { matchResultFor };
       if (name === "@/lib/workspace/types")
         return { canManageTeamSchedule, isProgramStaff };
       return {};

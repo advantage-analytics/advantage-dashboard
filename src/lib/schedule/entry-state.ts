@@ -13,10 +13,12 @@ import {
   isInFlight,
   isWorking,
 } from "@/lib/data/match-analysis";
+import { scoreWinner } from "@/lib/data/match-utils";
 import type {
   EntryMatch,
   EntryResult,
   EventEntry,
+  MatchEnding,
   OutcomeKind,
   ResolvedOutcome,
 } from "./types";
@@ -141,31 +143,6 @@ export type EntryState =
   | "withdrawn";
 
 /**
- * Sets won by each side, from the game counts.
- *
- * `player1` is always our side: the wizard writes `player1_name = playerName`
- * and `recordResult` follows it. Counting sets rather than reading a column is
- * not a shortcut — `matches.result` holds a CONTEXT string ("Final Score",
- * "Unfinished"), never an outcome, and `transformDbMatch` derives the winner
- * exactly this way for the matches list.
- */
-function setsWon(match: EntryMatch): { us: number; them: number } | null {
-  const ours = match.score?.player1 ?? [];
-  const theirs = match.score?.player2 ?? [];
-  if (ours.length === 0 || theirs.length === 0) return null;
-
-  let us = 0;
-  let them = 0;
-  for (let index = 0; index < ours.length; index++) {
-    const our = ours[index];
-    const their = theirs[index] ?? 0;
-    if (our > their) us++;
-    else if (their > our) them++;
-  }
-  return { us, them };
-}
-
-/**
  * Can this line be sent for video analysis?
  *
  * No, if it is doubles. `job-request.ts` rejects a doubles match_type outright
@@ -191,9 +168,11 @@ export function supportsVideo(
 
 /** Did we win this match? Null when it has no score, or the sets are level. */
 export function matchWon(match: EntryMatch): boolean | null {
-  const sets = setsWon(match);
-  if (!sets || sets.us === sets.them) return null;
-  return sets.us > sets.them;
+  // The app's one rule: a retirement or a default's stored winner (the side
+  // that stopped may be ahead — 3-6, 2-1 ret. is the other player's line),
+  // then sets.
+  const winner = scoreWinner(match.score);
+  return winner === null ? null : winner === "player1";
 }
 
 /**
@@ -444,4 +423,33 @@ export function readyMatchIdsFrom(entries: EventEntry[]): string[] {
       )
       .map((match) => match.id),
   );
+}
+
+/**
+ * `matches.result` → how the match ended. The column is a context string
+ * ("Final Score", "Unfinished", …); only the two words the score flow writes
+ * for a stopped match mean an ending.
+ */
+export function matchEndingFrom(
+  result: string | null | undefined,
+): MatchEnding | null {
+  if (result === "Retired") return "retired";
+  if (result === "Defaulted") return "defaulted";
+  return null;
+}
+
+/** The `matches.result` word for an ending, and "Final Score" for none. */
+export function matchResultFor(ending: MatchEnding | null): string {
+  if (ending === "retired") return "Retired";
+  if (ending === "defaulted") return "Defaulted";
+  return "Final Score";
+}
+
+/** The short mark a stopped match's score carries: "ret." or "def.". */
+export function endingMark(
+  ending: MatchEnding | null | undefined,
+): string | null {
+  if (ending === "retired") return "ret.";
+  if (ending === "defaulted") return "def.";
+  return null;
 }

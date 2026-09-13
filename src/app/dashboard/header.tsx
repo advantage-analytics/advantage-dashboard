@@ -83,6 +83,17 @@ const SCHEDULE_CRUMB = {
 const ROSTER_PROFILE_PAGE = /^\/dashboard\/team\/roster\/[^/]+$/;
 
 /**
+ * An event and its two flows: `/dashboard/team/schedule/<id>`, `/<id>/edit`,
+ * `/<id>/score`. Those pages publish "Schedule › vs Stanford (› Edit)" through
+ * `EventHeaderSlot`, because only the page's server read knows the event's
+ * name; like the profile route, the slot stays empty until it lands. The
+ * create screens (`/new…`) and a single match (`/single/<id>`) are not events
+ * and keep the static trail below.
+ */
+const EVENT_PAGE =
+  /^\/dashboard\/team\/schedule\/(?!new(?:\/|$)|single(?:\/|$))[^/]+(?:\/(?:edit|score))?$/;
+
+/**
  * The crumb for any page that is simply a navigation destination.
  *
  * Labels come from the shared route table rather than a second list here. The
@@ -100,12 +111,11 @@ function getStaticBreadcrumbs(
     return [MATCHES_CRUMB, { label: "New match" }];
   }
 
-  // The schedule subtree: a leaf crumb for the four create screens (the
-  // table lives in nav.ts with the other route labels), and just the linked
-  // Schedule crumb for every other page under it — the event and single-match
-  // detail pages name themselves in their own body's <h1>, so a leaf here
-  // would restate it: same philosophy as the destination rule below, the
-  // crumb slot doesn't compete with a display-type title for the same fact.
+  // The schedule subtree: a leaf crumb for the create screens (the table
+  // lives in nav.ts with the other route labels), and just the linked
+  // Schedule crumb for the single-match page. An event and its edit and score
+  // flows never reach here — they publish their own trail with the event's
+  // name (`EVENT_PAGE` above).
   if (pathname.startsWith(`${SCHEDULE_HREF}/`)) {
     const leaf = scheduleLeaf(pathname);
     return leaf ? [SCHEDULE_CRUMB, { label: leaf }] : [SCHEDULE_CRUMB];
@@ -247,7 +257,9 @@ export function Header({
   // — see `header-slot.tsx`. The profile route is the one that does, and it
   // also holds the slot empty while the page is still on its way.
   const pageOwnsSlot =
-    headerSlot !== null || ROSTER_PROFILE_PAGE.test(pathname);
+    headerSlot !== null ||
+    ROSTER_PROFILE_PAGE.test(pathname) ||
+    EVENT_PAGE.test(pathname);
 
   /**
    * The leading slot answers "where am I" once, never twice.

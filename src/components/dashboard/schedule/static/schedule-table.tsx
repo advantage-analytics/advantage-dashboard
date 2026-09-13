@@ -165,16 +165,12 @@ function EventRow({
         )}
       </span>
 
-      {/* Lines with a result over lines on the card. "Not set" is a dual whose
-          lineup has no lines yet; a tournament with no entries has nothing to
-          count and prints the dash. */}
+      {/* Lines with a result over lines on the card. A tournament with no
+          entries has nothing to count and prints the dash; a dual always has
+          its nine. */}
       <span className="tabular text-[12px]" style={{ color: "var(--ink-600)" }}>
         {row.entryCount === 0 ? (
-          isDual ? (
-            "Not set"
-          ) : (
-            <EmptyMark label="No entries yet" />
-          )
+          <EmptyMark label="No entries yet" />
         ) : (
           `${row.playedCount} / ${row.entryCount}`
         )}

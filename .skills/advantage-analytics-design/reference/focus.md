@@ -142,12 +142,12 @@ selector on:
 | every `DateSegment` — the focused segment fills Signal Blue with white text | `ui/date-field.tsx`                               |
 
 The opt-out is earned by an actual on-focus change, never by looking like an
-underline. `schedule/add-result-row.tsx`'s round `<select>`,
+underline. The (since deleted) `schedule/add-result-row.tsx` round `<select>`,
 `schedule/add-result-dialog.tsx`'s `SELECT_CLS` and `schedule/score-entry.tsx`'s
-opponent input all draw a hairline that never changes — no thickening, no
-recolour, nothing — so they keep the neutral ring: remove it there and the
-field drops from one indicator to zero, which is precisely the failure this
-file exists to prevent.
+opponent input all drew a hairline that never changed — no thickening, no
+recolour, nothing — so they kept the neutral ring: removing it there would have
+dropped the field from one indicator to zero, which is precisely the failure
+this file exists to prevent.
 
 A _standing_ rule fails the test for the same reason, even a bold one.
 "Already blue" is not "changes on focus": a `border-b-2 border-[var(--blue)]`

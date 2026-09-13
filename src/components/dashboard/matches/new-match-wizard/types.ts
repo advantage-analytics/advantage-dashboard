@@ -4,7 +4,8 @@
 
 import type { ProviderKind } from "@/lib/services/upload";
 import type { VideoProbe } from "@/lib/video/probe";
-import type { EventSite } from "@/lib/schedule/types";
+import type { Discipline, EventSite, MatchEnding } from "@/lib/schedule/types";
+import type { RetiredSide } from "./score-state";
 
 /** Wizard step identifiers */
 /**
@@ -36,6 +37,12 @@ export interface FormData {
   adScoring?: boolean;
   playOnLets: boolean;
   result: string;
+  /**
+   * Who stopped a Retired match — the follow-up to "Yes, a player retired".
+   * Unset for every other result. Written as `score.winner` (the side that did
+   * NOT retire), never as its own column.
+   */
+  retiredSide?: RetiredSide;
   date: string;
   time: string;
   playerName: string;
@@ -171,6 +178,11 @@ export interface MatchData {
     player2: number[];
     player1_tiebreaks?: (number | null)[];
     player2_tiebreaks?: (number | null)[];
+    /**
+     * Set only when the score cannot decide the match: a retirement. The same
+     * key and spelling SwingVision imports already write.
+     */
+    winner?: "player1" | "player2";
   };
   // New metadata fields
   created_by: string;
@@ -442,8 +454,20 @@ export interface EventPreset {
    * answer that looks like a real one.
    */
   adScoring: boolean | null;
-  /** Already recorded courtside, so the wizard does not ask again. */
-  score: { player1: number[]; player2: number[] } | null;
+  /**
+   * Already recorded courtside, so the wizard does not ask again. `winner` is
+   * set when the line stopped (retired or defaulted) — the games alone would
+   * name the wrong side, so a fill keeps it.
+   */
+  score: {
+    player1: number[];
+    player2: number[];
+    winner?: "player1" | "player2";
+  } | null;
+  /** How the line's match ended when it stopped — "retired" or "defaulted". */
+  ending?: MatchEnding | null;
+  /** The line's discipline; a doubles line names two opponents. */
+  discipline?: Discipline;
   /** Doubles lines cannot be video-analysed — job-request.ts refuses them. */
   supportsVideo: boolean;
   /** Where Cancel and success return to. */
@@ -469,7 +493,7 @@ export interface EventPreset {
 
 /** One row of the pinned bar's lineup menu (design 10a). */
 export interface LineChoice {
-  /** 'S1'…'D3', or a tournament round. */
+  /** 'S1'…'D3', or `#n` for a tournament entry — its position, never a round. */
   slot: string;
   /** Who holds the line. Null where nobody is assigned. */
   playerName: string | null;

@@ -51,7 +51,7 @@ export function MatchesTitleRow({
         }`;
 
   return (
-    <div className="flex items-end gap-4">
+    <div className="flex items-end gap-2.5">
       <div>
         <h1 className="text-display">Matches</h1>
         <div className="mt-[9px] flex h-[18px] items-baseline gap-3">

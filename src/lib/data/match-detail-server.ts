@@ -8,6 +8,7 @@ import {
 } from "@/lib/data/match-stats-server";
 import { getMyPlayerIds, isMe } from "@/lib/data/player-identity-server";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
+import { scoreWinner } from "@/lib/data/match-utils";
 import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
 import type { Match, SetScore } from "@/lib/data/types";
 
@@ -27,6 +28,8 @@ interface DbMatch {
     player2: number[];
     player1_tiebreaks?: (number | null)[];
     player2_tiebreaks?: (number | null)[];
+    /** Set when the games don't decide it — a retirement or default. */
+    winner?: "player1" | "player2";
   } | null;
   result: string | null;
   match_type: string | null;
@@ -82,16 +85,6 @@ function buildSets(row: DbMatch): SetScore[] {
   });
 }
 
-function determineWinner(sets: SetScore[]): "player1" | "player2" {
-  let player1Sets = 0;
-  let player2Sets = 0;
-  for (const set of sets) {
-    if (set.player1 > set.player2) player1Sets++;
-    else if (set.player2 > set.player1) player2Sets++;
-  }
-  return player1Sets > player2Sets ? "player1" : "player2";
-}
-
 type PlayerProfile = { hand: string | null; backhand: string | null };
 
 /**
@@ -141,7 +134,9 @@ function transformDbMatchToMatch(
   profiles: Map<string, PlayerProfile>,
 ): Match {
   const sets = buildSets(row);
-  const winner = determineWinner(sets);
+  // The shared rule (a stored winner, then sets). A level score has always
+  // read as player2 here.
+  const winner = scoreWinner(row.score) ?? "player2";
   const finalScore = sets.map((s) => `${s.player1}-${s.player2}`).join(", ");
   const { isUserPlayer1 } = resolveYouSide(row, playerIds);
   const userWon = isUserPlayer1 ? winner === "player1" : winner === "player2";

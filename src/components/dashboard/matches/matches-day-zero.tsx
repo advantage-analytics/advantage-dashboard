@@ -8,7 +8,7 @@ import {
   GhostRule,
 } from "@/components/dashboard/home/day-zero-shape";
 import { LifecycleChips } from "./lifecycle-chips";
-import { LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-card-list";
+import { LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-list-layout";
 
 /**
  * Matches on the day the account holds no match: the same offer Home makes,
@@ -68,31 +68,22 @@ import { LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-card-list";
  * not.
  */
 
-const COLUMNS = [
-  "Date",
-  "Opponent",
-  "Event",
-  "Score",
-  "Result",
-  "",
-  "",
-  "",
-] as const;
+const COLUMNS = ["Date", "Opponent", "Result", "Score", "Event", ""] as const;
 
 /**
  * Proportional rules for the five columns that carry a value, in
  * `LIST_GRID_COLS` order. Result is a 14px dot — `ResultMark`'s own footprint,
- * flush left where the glyph sits; the three columns after it — lifecycle, the
- * actions lane, the chevron — draw nothing, the same as a settled real row.
+ * flush left where the glyph sits; the column after Event — lifecycle — draws
+ * nothing, the same as a settled real row.
  */
 type Rule = React.ComponentProps<typeof GhostRule>;
 
 const ROW_RULES: readonly Rule[] = [
   { width: "70%" }, // Date
   { width: "55%", tone: "200", shape: "tall" }, // Opponent — the name
-  { width: "60%" }, // Event
-  { width: "65%" }, // Score
   { width: "14px", shape: "dot" }, // Result — ResultMark's footprint
+  { width: "65%" }, // Score
+  { width: "60%" }, // Event
 ];
 
 function GhostRow({ opacity }: { opacity: number }) {
@@ -105,9 +96,7 @@ function GhostRow({ opacity }: { opacity: number }) {
       {ROW_RULES.map((rule, i) => (
         <GhostRule key={i} {...rule} />
       ))}
-      {/* Lifecycle, actions lane, chevron — blank, the same as a settled row. */}
-      <span />
-      <span />
+      {/* Lifecycle — blank, the same as a settled row. */}
       <span />
     </div>
   );

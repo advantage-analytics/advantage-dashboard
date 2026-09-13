@@ -163,7 +163,7 @@ test("an upload-entitled player gets one noun-specific footer through the full k
   ).toBeFocused();
 });
 
-test("owner, coach, and staff retain the primary for open duals and tournaments", async ({
+test("owner, coach, and staff get the ghost open link with the primary under it", async ({
   page,
 }) => {
   for (const role of ["owner", "coach", "staff"] as const) {
@@ -177,7 +177,7 @@ test("owner, coach, and staff retain the primary for open duals and tournaments"
     await expect(
       page.getByRole("button", { name: "Event actions" }),
     ).toHaveCount(1);
-    await expect(page.getByRole("link", { name: "Open dual" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Open dual" })).toHaveCount(1);
 
     await page.getByRole("dialog").press("ArrowDown");
     await expect(
@@ -188,11 +188,11 @@ test("owner, coach, and staff retain the primary for open duals and tournaments"
     );
     await expect(
       page.getByRole("link", { name: "Open tournament" }),
-    ).toHaveCount(0);
+    ).toHaveCount(1);
   }
 });
 
-test("a settled dual has no substitute primary for staff-capable viewers", async ({
+test("a settled dual keeps only the ghost open link for staff-capable viewers", async ({
   page,
 }) => {
   await openSchedule(page, "coach");
@@ -204,8 +204,7 @@ test("a settled dual has no substitute primary for staff-capable viewers", async
   await expect(page.getByRole("link", { name: "Enter results" })).toHaveCount(
     0,
   );
-  await expect(page.getByRole("link", { name: "Open dual" })).toHaveCount(0);
-  await expect(page.locator("[data-schedule-drawer-footer]")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Open dual" })).toHaveCount(1);
 });
 
 test("staff can open both existing edit-route branches while players see no write menu", async ({
