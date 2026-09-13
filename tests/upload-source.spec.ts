@@ -161,6 +161,30 @@ const stepModule = (() => {
         return { setActiveWorkspaceInPlace: async () => true };
       if (id === "@/components/dashboard/workspace-provider")
         return { useWorkspace: () => context };
+      // A photo-or-initials circle. Its own render logic isn't under test
+      // here — only that the wizard hands it the right initials and photo.
+      if (id === "@/components/ui/person-avatar")
+        return {
+          PersonAvatar: ({
+            initials,
+            photoUrl,
+          }: {
+            initials: string;
+            photoUrl?: string | null;
+          }) =>
+            React.createElement("span", {
+              "data-person-avatar": "",
+              "data-initials": initials,
+              "data-photo-url": photoUrl ?? "",
+            }),
+        };
+      // A crest-or-letter square. Which workspace it was handed isn't under
+      // test here — only the wizard's own ordering and labels are.
+      if (id === "@/components/dashboard/workspace-mark")
+        return {
+          WorkspaceMark: () =>
+            React.createElement("span", { "data-workspace-mark": "" }),
+        };
       // Everything below is the REAL module: the ordering, the kind lookup and
       // the class composition are the things under test.
       if (id === "@/lib/utils") return { cn };
