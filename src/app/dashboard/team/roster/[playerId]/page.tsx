@@ -124,7 +124,12 @@ export default async function PlayerProfilePage({
       )}
 
       <div className="mx-auto flex max-w-screen-2xl flex-col gap-5 px-6 pt-5 pb-8 sm:px-14">
-        <ProfileIdentity profile={profile} isSelf={isSelf} actions={actions} />
+        <ProfileIdentity
+          profile={profile}
+          isSelf={isSelf}
+          photoUrl={isSelf ? workspace.viewer.avatarUrl : null}
+          actions={actions}
+        />
 
         {profile.matchesPlayed === 0 ? (
           <ProfileDayZero

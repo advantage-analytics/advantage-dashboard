@@ -17,7 +17,12 @@ import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import { programDisplayName } from "@/lib/data/programs-server";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
 import type { MemberRole } from "@/lib/data/team-settings-server";
-import type { UploadPolicy, Viewer, Workspace } from "@/lib/workspace/types";
+import type {
+  EventsPolicy,
+  UploadPolicy,
+  Viewer,
+  Workspace,
+} from "@/lib/workspace/types";
 
 /**
  * The writes Settings › Team performs.
@@ -121,6 +126,8 @@ export interface TeamSettingsInput {
   season: string;
   /** The whole ladder; `players_can_upload` is derived from it in SQL. */
   uploadPolicy: UploadPolicy;
+  /** Owner-only to change; the RPC refuses anyone else in words. */
+  eventsPolicy: EventsPolicy;
 }
 
 /**
@@ -148,6 +155,7 @@ export async function saveTeamSettings(
     p_season: input.season,
     p_players_can_upload: input.uploadPolicy === "everyone",
     p_upload_policy: input.uploadPolicy,
+    p_events_policy: input.eventsPolicy,
   });
 
   if (error) {
@@ -567,9 +575,11 @@ export async function removeMember(userId: string): Promise<ActionResult> {
  * it that Settings could contradict an hour later.
  *
  * It re-reads the row and writes it back through the same RPC rather than
- * patching one column, because `update_program_settings` is where the staff
- * check lives. The read is the program's own row, which staff may read; the
- * write is refused in SQL if they may not.
+ * patching one column, because `update_program_settings` is where the
+ * permission check lives — staff to read the row, but owner-only
+ * (`upload_policy_owner_only`) once the resolved policy actually changes.
+ * The dialog only calls this when `canChangeUploadPolicy` is true, so a
+ * non-owner never reaches the write the RPC would refuse.
  */
 export async function setPlayersCanUpload(
   next: boolean,

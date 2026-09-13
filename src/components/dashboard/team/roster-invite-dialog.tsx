@@ -182,6 +182,8 @@ export function RosterInviteDialog({
    * a team workspace, so `active.name` is the school.
    */
   const { active } = useWorkspace();
+  // The upload rule is the owner's to change; see the switch below.
+  const canChangeUploadPolicy = active.role === "owner";
 
   const linked = target !== null;
 
@@ -285,7 +287,11 @@ export function RosterInviteDialog({
       // The permission first, because it is the rule the invitations are about
       // to be sent under. A failure here stops the run: sending a squad an
       // invitation on terms the coach just declined is worse than sending none.
-      if (role === "player" && canUpload !== playersCanUpload) {
+      if (
+        role === "player" &&
+        canChangeUploadPolicy &&
+        canUpload !== playersCanUpload
+      ) {
         const permission = await setPlayersCanUpload(canUpload);
         if (!permission.ok) {
           setError(permission.error);
@@ -634,7 +640,9 @@ export function RosterInviteDialog({
           {/* The permission these invitations arrive under, stated at the
               moment it becomes true for somebody and settable there. Staff are
               not covered by it — they may always upload for anyone — so the
-              row appears only when players are what is being invited. */}
+              row appears only when players are what is being invited.
+              Changing it is the owner's alone (`update_program_settings`
+              refuses anyone else), so other staff see the switch locked. */}
           {role === "player" && (
             <div className="flex items-center gap-3 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3 py-2.5">
               <span className="flex min-w-0 flex-col gap-0.5">
@@ -645,12 +653,14 @@ export function RosterInviteDialog({
                   {canUpload
                     ? "On. Their uploads come out of the program's hours."
                     : "Off. Their matches still appear when you send them."}
+                  {!canChangeUploadPolicy && " Only the owner can change this."}
                 </span>
               </span>
               <span className="ml-auto">
                 <AdvSwitch
                   checked={canUpload}
                   onCheckedChange={setCanUpload}
+                  disabled={!canChangeUploadPolicy}
                   label="Let players send their own video"
                 />
               </span>

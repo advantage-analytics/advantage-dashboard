@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { isProgramStaff } from "@/lib/workspace/types";
+import { canManageTeamSchedule } from "@/lib/workspace/types";
 import {
   eventDetailFrom,
   getProgramSchedule,
@@ -50,7 +50,7 @@ export default async function EventPage({
   const detail = eventDetailFrom(schedule, eventId);
   if (!detail) notFound();
 
-  const canEdit = isProgramStaff(active);
+  const canEdit = canManageTeamSchedule(active);
 
   const totals = await getEventTeamTotals(readyMatchIdsFrom(detail.entries));
 

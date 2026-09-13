@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { isProgramStaff } from "@/lib/workspace/types";
+import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { getLadder } from "@/lib/data/roster-server";
 import { getTeamSettings } from "@/lib/data/team-settings-server";
 import { NewTournamentFlow } from "@/components/dashboard/schedule/static/new-tournament-flow";
@@ -40,7 +40,7 @@ export default async function NewTournamentPage() {
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");
-  if (!isProgramStaff(active)) redirect("/dashboard/team/schedule");
+  if (!canManageTeamSchedule(active)) redirect("/dashboard/team/schedule");
 
   const [roster, settings] = await Promise.all([
     getLadder(active.id),

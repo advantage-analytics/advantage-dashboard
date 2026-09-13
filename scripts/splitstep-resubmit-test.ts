@@ -244,6 +244,7 @@ async function main(): Promise<void> {
     programStatus: null,
     playersCanUpload: false,
     uploadPolicy: "everyone",
+    eventsPolicy: "staff",
     memberUploadEnabled: true,
     myPlayerId: null,
   };

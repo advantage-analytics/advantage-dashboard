@@ -6,7 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
-import { SettingsSectionHeading } from "@/components/dashboard/settings/settings-card";
+import {
+  SettingsCard,
+  SettingsCardTitle,
+} from "@/components/dashboard/settings/settings-card";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { isProPlan } from "@/lib/user/roles";
 import { teamLabel } from "@/lib/workspace/types";
@@ -151,48 +154,41 @@ function PlanContent() {
     }
   }, [isPro]);
 
+  // The strip names the tier as a person would say it: Free, Lifetime (the
+  // one-time Pro purchase) or Pilot (a program). That already answers "how
+  // long does this last", so there is no separate Access column to repeat it.
   const facts = [
-    { label: "Plan", value: isTeam ? "Program" : isPro ? "Pro" : "Free" },
+    { label: "Plan", value: isTeam ? "Pilot" : isPro ? "Lifetime" : "Free" },
     isTeam ? { label: "Squad", value: teamLabel(active.team) ?? "—" } : null,
     { label: "Member since", value: viewer.memberSince ?? "—" },
-    {
-      label: "Access",
-      value: isPro || isTeam ? "Lifetime" : "—",
-      muted: !(isPro || isTeam),
-    },
   ].filter((fact): fact is NonNullable<typeof fact> => fact !== null);
 
   return (
-    <div className="flex max-w-[640px] flex-col gap-9">
-      {/* The facts strip: hairline-separated columns, one large light number
+    <div className="flex max-w-[640px] flex-col gap-5">
+      {/* The facts card: hairline-separated columns, one large light value
           each. Analysis hours are pointedly not here — they are on Usage, which
-          the page subtitle links to. */}
-      <section className="grid grid-cols-2 gap-y-6 border-b border-[var(--border-hairline)] pb-6 sm:grid-cols-4 sm:gap-y-0">
-        {facts.map((fact, index) => (
-          <div
-            key={fact.label}
-            className={cn(
-              "flex flex-col gap-2",
-              index === 0
-                ? "pr-6"
-                : "sm:border-l sm:border-[var(--ink-100)] sm:px-6",
-              index === facts.length - 1 && "sm:pr-0",
-            )}
-          >
-            <span className="eyebrow">{fact.label}</span>
-            <span
-              className={cn(
-                "tabular text-[22px] leading-[1.15] font-light tracking-[-0.4px]",
-                "muted" in fact && fact.muted
-                  ? "text-[var(--ink-400)]"
-                  : "text-[var(--ink-900)]",
-              )}
+          the page subtitle links to. Zero card padding so the dividers run the
+          card's full height instead of stopping short; each cell pads itself. */}
+      <SettingsCard className="overflow-hidden p-0">
+        <dl
+          className={cn(
+            "grid divide-y divide-[var(--border-hairline)] sm:divide-x sm:divide-y-0",
+            facts.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
+          )}
+        >
+          {facts.map((fact) => (
+            <div
+              key={fact.label}
+              className="flex min-w-0 flex-col gap-1.5 px-6 py-5"
             >
-              {fact.value}
-            </span>
-          </div>
-        ))}
-      </section>
+              <dt className="eyebrow whitespace-nowrap">{fact.label}</dt>
+              <dd className="tabular text-[22px] leading-[1.15] font-light tracking-[-0.4px] whitespace-nowrap text-[var(--ink-900)]">
+                {fact.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </SettingsCard>
 
       {banner && (
         <SettingsAlert
@@ -206,17 +202,17 @@ function PlanContent() {
       )}
 
       {/* A program is a workspace, not something bought from this screen.
-          Showing the personal Free/Pro cards here put two answers to "what plan
-          am I on?" side by side — the strip saying Program, a card below saying
-          Free — so inside a team workspace the cards step aside and the strip
+          Showing the personal Free/Pro rows here put two answers to "what plan
+          am I on?" side by side — the strip saying Pilot, a card below saying
+          Free — so inside a team workspace the card steps aside and the strip
           is the only answer. The personal plan is still reachable, from the
           workspace it belongs to. */}
       {isTeam ? (
-        <section className="flex flex-col gap-3">
+        <SettingsCard className="gap-2">
           <div className="text-[12px] text-[var(--ink-900)]">
             Program plans are arranged with us directly.
           </div>
-          <div className="max-w-[520px] text-[11px] leading-[1.6] text-[var(--ink-500)]">
+          <div className="text-[11px] leading-[1.6] text-[var(--ink-500)]">
             Seats, shared analysis hours and billing for {active.name} are set
             up with support rather than bought here —{" "}
             <a
@@ -228,67 +224,78 @@ function PlanContent() {
             . Your own Free or Pro plan is separate and unaffected; switch to
             your personal workspace to change it.
           </div>
-        </section>
+        </SettingsCard>
       ) : (
         <>
-          <section className="flex flex-col gap-5">
-            <SettingsSectionHeading number="01" title="Choose your plan" />
+          {/* Free and Pro as two rows in one card, not two cards — a card
+              inside a card is not a shape the design system has. */}
+          <SettingsCard>
+            <SettingsCardTitle className="pb-2">
+              Choose your plan
+            </SettingsCardTitle>
 
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-              {PLANS.map((plan) => {
-                const isCurrent = plan.id === (isPro ? "pro" : "free");
-                const isSelected = plan.id === selectedPlan;
-                return (
-                  <button
-                    key={plan.id}
-                    type="button"
-                    onClick={() => setSelectedPlan(plan.id)}
-                    aria-pressed={isSelected}
+            {PLANS.map((plan) => {
+              const isCurrent = plan.id === (isPro ? "pro" : "free");
+              const isSelected = plan.id === selectedPlan;
+              return (
+                <button
+                  key={plan.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  onClick={() => setSelectedPlan(plan.id)}
+                  className="flex w-full cursor-pointer items-start gap-6 border-t border-[var(--border-hairline)] py-3 text-left focus-visible:outline-none"
+                >
+                  <span
+                    aria-hidden="true"
                     className={cn(
-                      "flex cursor-pointer flex-col gap-2.5 rounded-[14px] border p-[18px] text-left transition-colors duration-200",
-                      "focus-visible:outline-none",
+                      "mt-0.5 flex size-[13px] shrink-0 items-center justify-center rounded-full border transition-colors duration-150",
                       isSelected
-                        ? "border-[var(--blue)] shadow-[var(--shadow-card-emphasis)]"
-                        : "border-[var(--border-card)] hover:border-[var(--ink-300)]",
+                        ? "border-[var(--blue)]"
+                        : "border-[var(--ink-300)]",
                     )}
                   >
+                    <span
+                      className={cn(
+                        "size-[6px] rounded-full transition-colors duration-150",
+                        isSelected ? "bg-[var(--blue)]" : "bg-transparent",
+                      )}
+                    />
+                  </span>
+                  <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
-                      <span className="text-[13px] font-medium text-[var(--ink-900)]">
+                      <span className="text-[12px] text-[var(--ink-900)]">
                         {plan.name}
                       </span>
                       {isCurrent && (
-                        <span className="text-[10px] font-medium tracking-[1.5px] text-[var(--blue)] uppercase">
+                        <span className="inline-flex h-[18px] items-center rounded-full bg-[var(--surface-subtle)] px-[7px] text-[10px] font-medium whitespace-nowrap text-[var(--ink-700)]">
                           Current
                         </span>
                       )}
                     </span>
-                    <span className="text-[26px] font-light text-[var(--ink-900)]">
-                      {plan.price}
-                      {plan.note && (
-                        <span className="ml-1 text-[12px] text-[var(--ink-500)]">
-                          {plan.note}
-                        </span>
-                      )}
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      className="h-px bg-[var(--border-hairline)]"
-                    />
-                    <span className="text-[11px] leading-[1.6] text-[var(--ink-600)]">
+                    <span className="mt-0.5 block text-[11px] leading-[1.5] text-[var(--ink-500)]">
                       {plan.summary}
                     </span>
-                  </button>
-                );
-              })}
-            </div>
+                  </span>
+                  <span className="tabular shrink-0 text-[13px] text-[var(--ink-900)]">
+                    {plan.price}
+                    {plan.note && (
+                      <span className="ml-1 text-[11px] text-[var(--ink-500)]">
+                        {plan.note}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
 
-            <p className="text-[11px] text-[var(--ink-500)]">
+            <span className="mt-3.5 border-t border-[var(--border-hairline)] pt-3.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
               Changing plan never changes your role. Pro is a one-time payment —
               there is no subscription to cancel.
-            </p>
-          </section>
+            </span>
+          </SettingsCard>
 
-          <section className="flex items-center gap-4 border-t border-[var(--border-hairline)] pt-5">
+          <SettingsCard className="flex-row items-center gap-4">
             <div className="min-w-0 flex-1">
               <div className="text-[12px] text-[var(--ink-900)]">
                 Billing is handled by Stripe.
@@ -310,7 +317,7 @@ function PlanContent() {
             >
               {isPro ? "You're on Pro" : "Upgrade to Pro"}
             </SettingsButton>
-          </section>
+          </SettingsCard>
         </>
       )}
     </div>

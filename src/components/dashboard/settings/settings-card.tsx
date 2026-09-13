@@ -231,10 +231,10 @@ export function SettingsUnderlineInput({
 }) {
   return (
     <input
-      data-focus-ring="none" /* the border-b above carries focus */
+      data-focus-ring="none" /* the rule goes 2px blue on focus, like MenuSelect */
       className={cn(
         "h-[34px] bg-transparent text-[13px] text-[var(--ink-900)] transition-colors outline-none",
-        "placeholder:text-[var(--ink-400)] focus:border-[var(--blue)]",
+        "placeholder:text-[var(--ink-400)] focus:border-b-2 focus:border-[var(--blue)]",
         emphasis
           ? "border-b-2 border-[var(--blue)]"
           : "border-b border-[var(--border-field)]",

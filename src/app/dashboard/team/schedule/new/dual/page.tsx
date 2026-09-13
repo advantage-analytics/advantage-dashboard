@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { isProgramStaff } from "@/lib/workspace/types";
+import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { createClient } from "@/lib/supabase/server";
 import { getLadder } from "@/lib/data/roster-server";
 import { getTeamSettings } from "@/lib/data/team-settings-server";
@@ -113,7 +113,7 @@ export default async function NewDualPage() {
   // A hidden menu item is not authorization. A player who types this URL gets
   // the schedule they are allowed to read, not a form whose every write the
   // database would refuse.
-  if (!isProgramStaff(active)) redirect("/dashboard/team/schedule");
+  if (!canManageTeamSchedule(active)) redirect("/dashboard/team/schedule");
 
   const [ladder, settings, conferenceTable, schedule, total] =
     await Promise.all([

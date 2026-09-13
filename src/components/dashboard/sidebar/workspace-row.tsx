@@ -20,6 +20,7 @@ import {
 } from "@/lib/workspace/types";
 import { PANEL_WIDTH } from "./sidebar-state";
 import { RailTooltip } from "./rail-tooltip";
+import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
 
 /**
  * The workspace row — the only thing at the top of both widths, and also the
@@ -123,15 +124,10 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
     >
       {/* Same 40px column as every nav row, so the mark does not move. */}
       <span className="flex size-10 shrink-0 items-center justify-center">
-        <span
-          aria-hidden="true"
-          className={cn(
-            "flex size-[26px] items-center justify-center rounded-[6px] text-[11px] font-medium text-white",
-            active.kind === "team" ? "bg-[var(--ink-900)]" : "bg-[var(--blue)]",
-          )}
-        >
-          {active.mark}
-        </span>
+        <WorkspaceMark
+          workspace={active}
+          className="size-[26px] rounded-[6px] text-[11px]"
+        />
       </span>
 
       <span
@@ -246,17 +242,10 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
                     "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]",
                 )}
               >
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "flex size-[22px] shrink-0 items-center justify-center rounded-[6px] text-[10px] font-medium text-white",
-                    workspace.kind === "team"
-                      ? "bg-[var(--ink-900)]"
-                      : "bg-[var(--blue)]",
-                  )}
-                >
-                  {workspace.mark}
-                </span>
+                <WorkspaceMark
+                  workspace={workspace}
+                  className="size-[22px] rounded-[6px] text-[10px]"
+                />
 
                 <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)]">
                   {workspace.name}

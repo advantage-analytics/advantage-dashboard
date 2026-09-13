@@ -399,7 +399,7 @@ function ScoreForm({
                 // indicator WCAG 2.4.7 asks for — so the neutral field ring from
                 // `focus.css` would be a second, redundant one stacked on top.
                 data-focus-ring="none"
-                className="max-w-[320px] border-b border-[var(--border-hairline)] bg-transparent pb-1.5 text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)] focus:border-[var(--blue)]"
+                className="max-w-[320px] border-b border-[var(--border-hairline)] bg-transparent pb-1.5 text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)] focus:border-b-2 focus:border-[var(--blue)]"
               />
               <span className="text-micro">
                 A doubles line takes both names, separated by a slash.

@@ -65,6 +65,8 @@ import {
 } from "@/lib/workspace/types";
 import type { MatchSubject, RosterOption } from "./useUploadMatchWizard";
 import { noteStripCls } from "./styles";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
 
 export interface SourceStepContentProps {
   selectedProvider: ProviderId | null;
@@ -379,15 +381,10 @@ function SourceStepContentImpl({
 
   const workspaceRow = (
     <>
-      <span
-        aria-hidden="true"
-        className={cn(
-          "inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-button)] text-[13px] font-medium text-white",
-          isTeam ? "bg-[var(--ink-900)]" : "bg-[var(--blue)]",
-        )}
-      >
-        {active.mark}
-      </span>
+      <WorkspaceMark
+        workspace={active}
+        className="size-10 rounded-[var(--radius-button)] text-[13px]"
+      />
       <FieldText
         value={workspaceLabel(active)}
         subline={workspaceSubline(active)}
@@ -418,7 +415,7 @@ function SourceStepContentImpl({
     <span
       aria-hidden="true"
       className={cn(
-        "inline-flex size-10 shrink-0 items-center justify-center rounded-full text-[13px] font-medium",
+        "inline-flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-[13px] font-medium",
         isTeam && !subject
           ? "bg-[var(--surface-subtle)]"
           : "bg-[var(--surface-muted)] text-[var(--ink-700)]",
@@ -429,7 +426,11 @@ function SourceStepContentImpl({
       ) : subject?.kind === "roster" ? (
         getInitials(subject.name)
       ) : (
-        uploaderInitials
+        <PersonAvatar
+          initials={uploaderInitials}
+          photoUrl={viewer.avatarUrl}
+          className="size-full text-[13px]"
+        />
       )}
     </span>
   );
@@ -549,17 +550,10 @@ function SourceStepContentImpl({
                       !isActive && "hover:bg-[var(--surface-subtle)]",
                     )}
                   >
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        "inline-flex size-[22px] shrink-0 items-center justify-center rounded-[var(--radius-button)] text-[10px] font-medium text-white",
-                        workspace.kind === "team"
-                          ? "bg-[var(--ink-900)]"
-                          : "bg-[var(--blue)]",
-                      )}
-                    >
-                      {workspace.mark}
-                    </span>
+                    <WorkspaceMark
+                      workspace={workspace}
+                      className="size-[22px] rounded-[var(--radius-button)] text-[10px]"
+                    />
                     <span className="text-[12px] font-medium text-[var(--ink-900)]">
                       {workspaceLabel(workspace)}
                     </span>

@@ -6,8 +6,8 @@
  * Every read here runs as the signed-in user through the server client, so
  * RLS answers "what may this person see" — nothing below restates a policy.
  * The staff-only reads (a program's schedule, an opponent's pooled roster)
- * additionally ask `isProgramStaff`, the same predicate the schedule's own
- * actions use, because a player may open the wizard and must not be offered
+ * additionally ask `canManageTeamSchedule`, the same predicate the schedule's
+ * own actions use, because a player may open the wizard and must not be offered
  * a line they cannot attach to (`matches_block_client_regraft`).
  *
  * Design: Upload Wizard v5 — 3d/7a (the schedule offer), 6b (your events),
@@ -16,7 +16,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { isProgramStaff } from "@/lib/workspace/types";
+import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { getProgramSchedule } from "@/lib/data/schedule-server";
 import { headToHeadRows } from "@/lib/data/opponents-server";
 import { normalizedPersonName } from "@/lib/data/person-name";
@@ -70,7 +70,7 @@ export async function findLineOffers(input: {
 }): Promise<LineOffer[]> {
   const workspace = await getWorkspaceContext();
   if (!workspace || workspace.active.kind !== "team") return [];
-  if (!isProgramStaff(workspace.active)) return [];
+  if (!canManageTeamSchedule(workspace.active)) return [];
   if (!input.date) return [];
 
   const schedule = await getProgramSchedule(workspace.active.id);
@@ -301,7 +301,7 @@ export async function opponentRosterForLine(input: {
 }): Promise<OpponentRosterRow[]> {
   const workspace = await getWorkspaceContext();
   if (!workspace || workspace.active.kind !== "team") return [];
-  if (!isProgramStaff(workspace.active)) return [];
+  if (!canManageTeamSchedule(workspace.active)) return [];
   const supabase = await createClient();
 
   const { data: program } = await supabase

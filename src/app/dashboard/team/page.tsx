@@ -1,7 +1,11 @@
 import { Suspense, type ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
+import {
+  canManageTeamSchedule,
+  canUploadForProgram,
+  isProgramStaff,
+} from "@/lib/workspace/types";
 import {
   getTeamHomePresence,
   getTeamHomeResources,
@@ -75,7 +79,11 @@ export default async function TeamHomePage() {
   const dual = region(
     "Dual",
     <DualPending />,
-    <Dual resources={resources} canSchedule={isStaff} isPreview={isDayZero} />,
+    <Dual
+      resources={resources}
+      canSchedule={canManageTeamSchedule(active)}
+      isPreview={isDayZero}
+    />,
   );
   const movers = region(
     "Top movers",

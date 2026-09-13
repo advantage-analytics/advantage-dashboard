@@ -438,6 +438,7 @@ function team(): Workspace {
     programStatus: "active",
     playersCanUpload: true,
     uploadPolicy: "everyone",
+    eventsPolicy: "staff",
     memberUploadEnabled: true,
     myPlayerId: null,
   };

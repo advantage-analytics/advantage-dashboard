@@ -39,6 +39,7 @@ import { WorkspaceOptionList } from "@/components/dashboard/workspace-switcher";
 import { useRequestLogout } from "@/components/dashboard/logout-dialog";
 import { HeaderGreeting } from "@/components/dashboard/header-greeting";
 import { MENU_ROW_CLASS, MENU_RULE_CLASS } from "@/lib/ui/menu";
+import { PersonAvatar } from "@/components/ui/person-avatar";
 
 interface MatchCrumb {
   tournamentName: string;
@@ -554,12 +555,11 @@ export function Header({
                   )}
                   aria-label="Account menu"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="flex size-[26px] items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[9px] font-medium text-[var(--ink-700)]"
-                  >
-                    {viewer.initials}
-                  </span>
+                  <PersonAvatar
+                    initials={viewer.initials}
+                    photoUrl={viewer.avatarUrl}
+                    className="size-[26px] text-[9px]"
+                  />
                   <ChevronDown
                     className={cn(
                       "size-3 transition-transform duration-200",
@@ -589,12 +589,11 @@ export function Header({
                     claiming a padded band beneath it — the chips are facts about
                     the person, and a row of their own read as a third section. */}
                 <div className="flex items-center gap-3 px-3 py-2.5">
-                  <span
-                    aria-hidden="true"
-                    className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[11px] font-medium text-[var(--ink-700)]"
-                  >
-                    {viewer.initials}
-                  </span>
+                  <PersonAvatar
+                    initials={viewer.initials}
+                    photoUrl={viewer.avatarUrl}
+                    className="size-9 text-[11px]"
+                  />
                   <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
                     <div className="flex min-w-0 items-center gap-1.5">
                       <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
