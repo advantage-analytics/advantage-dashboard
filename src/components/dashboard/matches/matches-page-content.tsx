@@ -1,5 +1,6 @@
 "use client";
 import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
+import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 
 import {
   useState,
@@ -295,71 +296,6 @@ function SortDropdown({
   onSort: (field: SortField) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [focusIdx, setFocusIdx] = useState(-1);
-  const ref = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const listboxId = "sort-listbox";
-
-  // Close on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node))
-        setOpen(false);
-    }
-    if (open) document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open]);
-
-  const closeAndReturn = useCallback(() => {
-    setOpen(false);
-    triggerRef.current?.focus();
-  }, []);
-
-  // Scoped keyboard handler
-  function handleContainerKeyDown(e: React.KeyboardEvent) {
-    if (!open) return;
-    if (e.key === "Escape") {
-      e.preventDefault();
-      closeAndReturn();
-      return;
-    }
-    if (e.key === "Tab") {
-      setOpen(false);
-      return;
-    }
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setFocusIdx((prev) => {
-        const next = prev < SORT_OPTIONS.length - 1 ? prev + 1 : 0;
-        optionRefs.current[next]?.focus();
-        return next;
-      });
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setFocusIdx((prev) => {
-        const next = prev > 0 ? prev - 1 : SORT_OPTIONS.length - 1;
-        optionRefs.current[next]?.focus();
-        return next;
-      });
-    }
-    if (e.key === "Home") {
-      e.preventDefault();
-      setFocusIdx(0);
-      optionRefs.current[0]?.focus();
-    }
-    if (e.key === "End") {
-      e.preventDefault();
-      const last = SORT_OPTIONS.length - 1;
-      setFocusIdx(last);
-      optionRefs.current[last]?.focus();
-    }
-  }
-
-  useEffect(() => {
-    if (!open) setFocusIdx(-1);
-  }, [open]);
 
   const activeLabel =
     SORT_OPTIONS.find((o) => o.field === sortField)?.label ?? "Date";
@@ -380,75 +316,45 @@ function SortDropdown({
         : "Newest first"
       : `${activeLabel} ${dirLabel}`;
 
-  return (
-    <div className="relative" ref={ref} onKeyDown={handleContainerKeyDown}>
-      <SortTrigger
-        ref={triggerRef}
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-controls={open ? listboxId : undefined}
-        title={`Sorted by ${activeLabel}, ${dirLabel}`}
-        engaged={open}
-      >
-        {sortPhrase}
-      </SortTrigger>
+  // The chosen row is marked by FloatMenu's blue check, as on Schedule. Its
+  // second line carries the direction the old ↑/↓ glyph did, and that
+  // choosing it again reverses it — `onSort` flips the active field.
+  const chosenNote = `${sortField === "date" ? sortPhrase : dirLabel} · again to reverse`;
 
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
-            id={listboxId}
-            role="listbox"
-            aria-label="Sort options"
-            className="absolute top-full right-0 z-20 mt-1.5 min-w-[160px] rounded-xl border px-1.5 py-1.5"
-            style={{
-              background: "var(--surface-card)",
-              borderColor: "var(--border-medium)",
-              boxShadow: "var(--shadow-dropdown)",
+  return (
+    <FloatMenu
+      open={open}
+      onOpenChange={setOpen}
+      width={172}
+      sideOffset={6}
+      label="Sort options"
+      trigger={
+        <SortTrigger
+          aria-expanded={open}
+          aria-haspopup="menu"
+          title={`Sorted by ${activeLabel}, ${dirLabel}`}
+          engaged={open}
+        >
+          {sortPhrase}
+        </SortTrigger>
+      }
+    >
+      {SORT_OPTIONS.map((opt) => {
+        const chosen = sortField === opt.field;
+        return (
+          <FloatMenuItem
+            key={opt.field}
+            label={opt.label}
+            description={chosen ? chosenNote : undefined}
+            chosen={chosen}
+            onSelect={() => {
+              onSort(opt.field);
+              setOpen(false);
             }}
-          >
-            {SORT_OPTIONS.map((opt, idx) => {
-              const isActive = sortField === opt.field;
-              return (
-                <button
-                  key={opt.field}
-                  ref={(el) => {
-                    optionRefs.current[idx] = el;
-                  }}
-                  role="option"
-                  aria-selected={isActive}
-                  tabIndex={idx === focusIdx ? 0 : -1}
-                  onClick={() => {
-                    onSort(opt.field);
-                    setOpen(false);
-                  }}
-                  className={`flex w-full items-center justify-between rounded-[var(--radius-element)] px-2.5 py-2 text-xs transition-colors duration-150 ${isActive ? "" : "hover:bg-[var(--surface-subtle)]"}`}
-                  style={{
-                    background: isActive ? "var(--surface-subtle)" : undefined,
-                    color: isActive ? "var(--ink-900)" : "var(--ink-700)",
-                    fontWeight: isActive ? 500 : 400,
-                  }}
-                >
-                  {opt.label}
-                  {isActive && (
-                    <span
-                      className="text-[10px]"
-                      style={{ color: "var(--ink-500)" }}
-                    >
-                      {sortDir === "asc" ? "↑" : "↓"}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+          />
+        );
+      })}
+    </FloatMenu>
   );
 }
 

@@ -3,12 +3,8 @@ import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScheduleTitleRow } from "@/components/dashboard/team/list-page-heading";
-import { Check, Filter as FilterIcon } from "lucide-react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Filter as FilterIcon } from "lucide-react";
+import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import {
   MatchesFilterPanel,
   type FilterPanelSection,
@@ -673,54 +669,36 @@ function SortMenu({
     options.find((option) => option.value === value) ?? options[0];
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+    <FloatMenu
+      open={open}
+      onOpenChange={setOpen}
+      width={172}
+      sideOffset={6}
+      label="Sort order"
+      trigger={
         <SortTrigger
           aria-expanded={open}
+          aria-haspopup="menu"
           aria-label={`Sort: ${current.label}`}
           engaged={open}
           className="cursor-pointer"
         >
           {current.label}
         </SortTrigger>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        sideOffset={6}
-        className="w-[172px] rounded-xl border-[var(--border-medium)] p-1.5 shadow-[var(--shadow-dropdown)]"
-      >
-        {options.map((option) => {
-          const active = option.value === value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              role="menuitemradio"
-              aria-checked={active}
-              onClick={() => {
-                onChange(option.value);
-                setOpen(false);
-              }}
-              className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-element)] px-2 text-left text-[12px] transition-colors duration-100 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none"
-              style={{
-                color: "var(--ink-900)",
-                fontWeight: active ? 500 : 400,
-              }}
-            >
-              <span className="flex-1">{option.label}</span>
-              {active ? (
-                <Check
-                  className="size-3"
-                  strokeWidth={2}
-                  style={{ color: "var(--ink-700)" }}
-                  aria-hidden="true"
-                />
-              ) : null}
-            </button>
-          );
-        })}
-      </PopoverContent>
-    </Popover>
+      }
+    >
+      {options.map((option) => (
+        <FloatMenuItem
+          key={option.value}
+          label={option.label}
+          chosen={option.value === value}
+          onSelect={() => {
+            onChange(option.value);
+            setOpen(false);
+          }}
+        />
+      ))}
+    </FloatMenu>
   );
 }
 

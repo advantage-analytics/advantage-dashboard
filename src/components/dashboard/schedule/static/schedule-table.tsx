@@ -4,7 +4,8 @@ import { ResultMark } from "@/components/dashboard/result-mark";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
 import { dualScore } from "@/lib/schedule/entry-state";
-import { formatEventDay, siteTitle } from "@/lib/schedule/format";
+import { siteTitle } from "@/lib/schedule/format";
+import { formatShortDate } from "@/lib/ui/date-format";
 import { cn } from "@/lib/utils";
 import type { EventDetail, ScheduleRow } from "@/lib/schedule/types";
 
@@ -137,7 +138,10 @@ function EventRow({
         className="tabular text-[12px] whitespace-nowrap"
         style={{ color: "var(--ink-700)" }}
       >
-        {formatEventDay(row.startsOn)}
+        {/* Matches' date text ("Aug 23", year once it isn't this year). The
+            `T00:00:00` keeps a bare YYYY-MM-DD local — parsed alone it is UTC
+            midnight, which reads as the day before west of Greenwich. */}
+        {formatShortDate(`${row.startsOn.slice(0, 10)}T00:00:00`)}
       </span>
 
       <span className="flex min-w-0 items-center gap-2.5">
