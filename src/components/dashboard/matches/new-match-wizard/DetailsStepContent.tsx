@@ -359,6 +359,9 @@ function SelectCell<T extends string | boolean>({
         <PopoverTrigger asChild>
           <button
             type="button"
+            // The footer's missing-fields pill finds the field by this; not an
+            // aria-label, which would replace the chosen value as its name.
+            data-field={label}
             className={cn(
               UNDERLINE_CLS,
               "cursor-pointer",

@@ -91,6 +91,11 @@ restating the numbers.
   that already says the same thing.
 - The first sentence may be set `font-medium` in `--ink-900` (grey) or the
   warning ink (yellow) as the lead; the rest stays plain.
+- **Required fields still empty** are not a strip: the wizard footer carries a
+  22px red pill — `TriangleAlert` 12px centred, "5 required left", 11px medium
+  `--danger` on an 8% `--danger` wash with a 20% border (`MissingFieldsPill`).
+  It never names the fields (the page marks them); clicking it scrolls to and
+  focuses the first empty one, and it disappears when none are left.
 
 **`Notice`** — two registers, both radius 8, no headings, no borders (the
 bordered warning register is **Warning question** — the fourth register: the system cannot go on until the
