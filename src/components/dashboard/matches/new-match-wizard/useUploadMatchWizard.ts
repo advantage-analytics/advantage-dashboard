@@ -98,6 +98,8 @@ export interface ImportIdentityState {
   message: string | null;
   confirm: () => void;
   reject: () => void;
+  /** Withdraw the answer and ask again — the step blocks until it is re-answered. */
+  change: () => void;
 }
 
 /**
@@ -2723,6 +2725,7 @@ export function useUploadMatchWizard({
       message: identityMessage,
       confirm: confirmImportIdentity,
       reject: rejectImportIdentity,
+      change: resetIdentityAnswer,
     },
 
     // Step navigation

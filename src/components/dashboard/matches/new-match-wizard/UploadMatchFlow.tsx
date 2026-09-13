@@ -1168,9 +1168,11 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
               workspaceKind={
                 workspaces.active.kind === "team" ? "team" : "personal"
               }
+              confirmed={importIdentity.confirmed}
               rejected={importIdentity.rejected}
               onConfirm={importIdentity.confirm}
               onReject={importIdentity.reject}
+              onChangeAnswer={importIdentity.change}
               /* Clearing the file is the reset: `handleRemoveFile` bumps the
                  file generation, which drops the parse, the answer and this
                  notice with it. */
