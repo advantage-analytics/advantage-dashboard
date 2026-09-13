@@ -1,29 +1,11 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { PRO_PLAN } from "@/lib/user/plan";
 
 /**
- * Paid entitlement lives in `users.plan`, not `users.role`.
- *
- * Migration 20260806144035 split the two and said why: `role` carried both a
- * profile persona (player/coach/parent/academy) AND the marker `'founder'` for
- * a paid account, so saving the profile form silently cleared Pro. It added
- * `users.plan`, backfilled it, and documented `plan` as the column billing
- * writes — but the app was never moved across, so this file kept writing
- * `role = 'founder'` and the Plan page kept reading it. Round 4 finishes the
- * migration: billing writes `plan`, every reader reads `plan`, and `role` is
- * persona-only in code as well as in the comment.
- *
- * Legacy `role = 'founder'` values are left alone. The migration already set
- * `plan = 'pro'` for every one of them, so nothing needs them, and the next
- * profile save replaces them with a persona.
+ * SERVER ONLY — imports the service-role client. Why entitlement lives in
+ * `users.plan` and not `users.role` is documented in `plan.ts`, which also
+ * holds the pure helpers (`isProPlan`, `PRO_PLAN`) that client code may import.
  */
-
-/** `users.plan` value for a paid account. Constrained to 'free' | 'pro' in SQL. */
-export const PRO_PLAN = "pro";
-
-/** Whether a `users.plan` value entitles the account to Pro features. */
-export function isProPlan(plan: string | null | undefined): boolean {
-  return plan === PRO_PLAN;
-}
 
 /**
  * Upgrade a user to the paid Pro tier (admin operation, bypasses RLS).

@@ -11,7 +11,7 @@ import {
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
-import { isProPlan } from "@/lib/user/roles";
+import { isProPlan } from "@/lib/user/plan";
 import { teamLabel } from "@/lib/workspace/types";
 import { SUPPORT_EMAIL } from "@/lib/constants";
 
@@ -27,7 +27,7 @@ import { SUPPORT_EMAIL } from "@/lib/constants";
  * Entitlement is read from `viewer.plan`, never from `users.role`. The old
  * subscription page read `role === 'founder'`, which the Profile page in this
  * same area overwrites with a persona — so saving your profile downgraded you
- * on screen. See `lib/user/roles.ts`.
+ * on screen. See `lib/user/plan.ts`.
  *
  * Still a client page because the Stripe round trip lands back on it with
  * `?success=true` and has to poll for the webhook.
