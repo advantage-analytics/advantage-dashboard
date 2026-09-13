@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { AnimatedHeight } from "./AnimatedHeight";
 import { DetailsStepContent } from "./DetailsStepContent";
@@ -289,6 +289,29 @@ export function MatchStep() {
   } = useUploadWizard();
   const workspaces = useWorkspace();
 
+  // `DetailsStepContent` is `memo()`-wrapped — it's the largest step body — so
+  // this has to be the same object across renders that don't actually change
+  // it, or the memo never bails and the whole ~1,800-line tree re-renders on
+  // every unrelated wizard state change.
+  const subject = useMemo(
+    () => ({
+      name: formData.playerName || whoPlayed.uploaderName || "You",
+      isSelf: !preset && whoPlayed.subject?.kind !== "roster",
+      playerId:
+        whoPlayed.subject?.kind === "roster"
+          ? whoPlayed.subject.playerId
+          : (preset?.playerUserId ?? null),
+      userId: workspaces.viewer.id,
+    }),
+    [
+      formData.playerName,
+      whoPlayed.uploaderName,
+      whoPlayed.subject,
+      preset,
+      workspaces.viewer.id,
+    ],
+  );
+
   return (
     <DetailsStepContent
       formData={formData}
@@ -298,15 +321,7 @@ export function MatchStep() {
       onTiebreakChange={handleTiebreakChange}
       isProcessingProvider={isProcessingProvider}
       workspaceKind={workspaceKind}
-      subject={{
-        name: formData.playerName || whoPlayed.uploaderName || "You",
-        isSelf: !preset && whoPlayed.subject?.kind !== "roster",
-        playerId:
-          whoPlayed.subject?.kind === "roster"
-            ? whoPlayed.subject.playerId
-            : (preset?.playerUserId ?? null),
-        userId: workspaces.viewer.id,
-      }}
+      subject={subject}
       preset={preset}
       attachedLine={attachedLine}
       onAttach={attachLine}

@@ -97,30 +97,14 @@ export function ImportIdentityNotice({
   // `ScoreCheckNotice`: a yellow box turning grey in place reads as a glitch.
   if (confirmed) {
     return (
-      <div
-        key="confirmed"
-        role="status"
-        aria-live="polite"
-        className={`${noteStripCls} ${noticeEnterCls}`}
-      >
-        <Check
-          className={`${noteIconCls} text-[var(--ink-700)]`}
-          strokeWidth={2}
-          aria-hidden="true"
-        />
-        <p className="flex-1">
-          {personal
+      <SettledNotice
+        message={
+          personal
             ? "You’re player 1 in this export."
-            : `${athleteName} is player 1 in this export.`}
-        </p>
-        <button
-          type="button"
-          onClick={onChangeAnswer}
-          className="cursor-pointer text-[11px] text-[var(--ink-600)] transition-colors duration-150 hover:text-[var(--ink-900)]"
-        >
-          Change
-        </button>
-      </div>
+            : `${athleteName} is player 1 in this export.`
+        }
+        onChange={onChangeAnswer}
+      />
     );
   }
 
@@ -168,6 +152,45 @@ export function ImportIdentityNotice({
           </Answer>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The settled state a warning question collapses to once answered: a grey
+ * line with a check, the settled sentence, and a "Change" button to ask again.
+ *
+ * Shared with `ScoreCheckNotice`, the other warning question in this wizard —
+ * both a confirmed import identity and a settled score answer collapse to
+ * this exact shell, only the sentence differs.
+ */
+export function SettledNotice({
+  message,
+  onChange,
+}: {
+  message: string;
+  onChange: () => void;
+}) {
+  return (
+    <div
+      key="settled"
+      role="status"
+      aria-live="polite"
+      className={`${noteStripCls} ${noticeEnterCls}`}
+    >
+      <Check
+        className={`${noteIconCls} text-[var(--ink-700)]`}
+        strokeWidth={2}
+        aria-hidden="true"
+      />
+      <p className="flex-1">{message}</p>
+      <button
+        type="button"
+        onClick={onChange}
+        className="cursor-pointer text-[11px] text-[var(--ink-600)] transition-colors duration-150 hover:text-[var(--ink-900)]"
+      >
+        Change
+      </button>
     </div>
   );
 }

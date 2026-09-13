@@ -1,11 +1,5 @@
-import { Check } from "lucide-react";
-import { Answer, WarningGlyph } from "./ImportIdentityNotice";
-import {
-  noteIconCls,
-  noteStripCls,
-  noticeEnterCls,
-  warningStripCls,
-} from "./styles";
+import { Answer, SettledNotice, WarningGlyph } from "./ImportIdentityNotice";
+import { noticeEnterCls, warningStripCls } from "./styles";
 import type { StoppedResult } from "./score-state";
 
 const SETTLED: Record<StoppedResult, string> = {
@@ -38,30 +32,14 @@ export function ScoreCheckNotice({
   /** Withdraws the answer and asks again. */
   onChange: () => void;
 }) {
-  // Each state is its own element (`key`), never the same box restyled: the
+  // Each state is its own element type, never the same box restyled: the
   // yellow question and the grey line would otherwise morph into each other.
   if (answer) {
     return (
-      <div
-        key="settled"
-        role="status"
-        aria-live="polite"
-        className={`${noteStripCls} ${noticeEnterCls}`}
-      >
-        <Check
-          className={`${noteIconCls} text-[var(--ink-700)]`}
-          strokeWidth={2}
-          aria-hidden="true"
-        />
-        <p className="flex-1">{SETTLED[answer]} The score stays as entered.</p>
-        <button
-          type="button"
-          onClick={onChange}
-          className="cursor-pointer text-[11px] text-[var(--ink-600)] transition-colors duration-150 hover:text-[var(--ink-900)]"
-        >
-          Change
-        </button>
-      </div>
+      <SettledNotice
+        message={`${SETTLED[answer]} The score stays as entered.`}
+        onChange={onChange}
+      />
     );
   }
 
