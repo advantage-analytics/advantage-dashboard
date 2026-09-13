@@ -135,8 +135,6 @@ export function ScoreBlock({
     bestOf,
     playerScores: formData.playerScores,
     opponentScores: formData.opponentScores,
-    playerTiebreaks: formData.playerTiebreaks,
-    opponentTiebreaks: formData.opponentTiebreaks,
     filled,
   });
   const ghost = !decided && displayed < bestOf;
@@ -208,8 +206,6 @@ export function ScoreBlock({
       bestOf,
       playerScores: formData.playerScores,
       opponentScores,
-      playerTiebreaks: formData.playerTiebreaks,
-      opponentTiebreaks: formData.opponentTiebreaks,
       filled: Math.max(filled, i + 1),
     });
     if (i + 1 < next.displayed) focusKey(key("p", i + 1));

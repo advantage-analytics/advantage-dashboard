@@ -1278,25 +1278,20 @@ function DetailsStepContentImpl({
                 onChange={() => onInputChange("result", "")}
                 onFinishScore={() => {
                   onScoreCheckDismiss();
-                  // Into the set nobody has won — its first empty cell (a
-                  // missing side, or a bare 1-0's tiebreak points), else its
-                  // first. Not simply the first empty cell on the card: an
+                  // Into the set nobody has won — its first empty cell, else
+                  // its first. Not simply the first empty cell on the card: an
                   // earlier 7-6's optional tiebreak box and the dashed "add a
                   // set" cell are both empty and neither is what's unfinished.
-                  const open = String(
-                    firstOpenSet({
-                      bestOf: parseInt(formData.bestOf, 10) || 3,
-                      playerScores: formData.playerScores,
-                      opponentScores: formData.opponentScores,
-                      playerTiebreaks: formData.playerTiebreaks,
-                      opponentTiebreaks: formData.opponentTiebreaks,
-                    }),
-                  );
+                  const open = firstOpenSet({
+                    bestOf: parseInt(formData.bestOf, 10) || 3,
+                    playerScores: formData.playerScores,
+                    opponentScores: formData.opponentScores,
+                  });
                   const cells = Array.from(
                     scoreRef.current?.querySelectorAll<HTMLInputElement>(
-                      "input[data-set]",
+                      `input[data-set="${open}"]`,
                     ) ?? [],
-                  ).filter((cell) => cell.dataset.set === open);
+                  );
                   (
                     cells.find((cell) => cell.value === "") ?? cells[0]
                   )?.focus();

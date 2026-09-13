@@ -93,7 +93,7 @@ export function ImportIdentityNotice({
     );
   }
 
-  // Each state is its own element (`key`), never the same box restyled — see
+  // Each state is its own element type, never the same box restyled — see
   // `ScoreCheckNotice`: a yellow box turning grey in place reads as a glitch.
   if (confirmed) {
     return (
@@ -173,7 +173,6 @@ export function SettledNotice({
 }) {
   return (
     <div
-      key="settled"
       role="status"
       aria-live="polite"
       className={`${noteStripCls} ${noticeEnterCls}`}

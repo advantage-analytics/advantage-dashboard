@@ -2305,8 +2305,6 @@ export function useUploadMatchWizard({
         bestOf: parseInt(formData.bestOf, 10) || 3,
         playerScores: formData.playerScores,
         opponentScores: formData.opponentScores,
-        playerTiebreaks: formData.playerTiebreaks,
-        opponentTiebreaks: formData.opponentTiebreaks,
       });
       if (undecided && !isStoppedResult(formData.result)) {
         setError("Finish the score, or say whether the match ended early.");
