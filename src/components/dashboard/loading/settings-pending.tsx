@@ -245,7 +245,7 @@ const SAMPLE = {
 
 /** Profile: identity card, General information, Tennis profile. */
 export function SettingsProfilePending() {
-  const { active, viewer } = useWorkspace();
+  const { viewer } = useWorkspace();
 
   return (
     <Column label="Loading profile" width={660}>
@@ -254,23 +254,11 @@ export function SettingsProfilePending() {
           <Box className="size-20 rounded-full" />
           <div className="min-w-0 flex-1">
             <Text className="text-title-lg truncate">{viewer.name}</Text>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {active.kind === "team" && (
-                <span
-                  className={cn(
-                    "rounded-full px-2.5 py-[3px] text-[11px] text-transparent select-none",
-                    SKELETON_BG,
-                  )}
-                >
-                  {active.name}
-                </span>
-              )}
-              {viewer.memberSince && (
-                <Text className="mono text-[11px]">
-                  since {viewer.memberSince}
-                </Text>
-              )}
-            </div>
+            {viewer.memberSince && (
+              <Text className="mono mt-1 text-[11px]">
+                since {viewer.memberSince}
+              </Text>
+            )}
             <div className="mt-3 flex flex-wrap items-center gap-3">
               {viewer.avatarUrl ? (
                 <>

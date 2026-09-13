@@ -34,6 +34,11 @@ import { todayISO } from "@/lib/schedule/format";
  * disagree with one of them, and editing it would let a parent account (with
  * guardian consent on file) relabel itself.
  *
+ * Nor is there a team. The identity card belongs to the account, so it reads
+ * the same in every workspace; a pill naming only the *active* team changed on
+ * every switch, vanished in Personal, and could not tell two squads at one
+ * school apart. Memberships, with their roles, are listed under Settings › Teams.
+ *
  * The row arrives as a prop. Fetching it in an effect meant the page rendered
  * an empty form and a "7 fields left" badge for one paint on every visit, and
  * needed a `loaded` flag to suppress it — for data the server had already
@@ -107,7 +112,7 @@ const BACKHAND_OPTIONS = [
 export type ProfileDraft = Record<FieldName, string>;
 
 export function ProfileForm({ initial }: { initial: ProfileDraft }) {
-  const { active, viewer } = useWorkspace();
+  const { viewer } = useWorkspace();
 
   const [saved, setSaved] = useState<ProfileDraft>(initial);
   const [draft, setDraft] = useState<ProfileDraft>(initial);
@@ -155,16 +160,11 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
           onError={setError}
         >
           <div className="text-title-lg truncate">{displayName}</div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {active.kind === "team" && (
-              <IdentityPill>{active.name}</IdentityPill>
-            )}
-            {viewer.memberSince && (
-              <span className="mono text-[11px] text-[var(--ink-500)]">
-                since {viewer.memberSince}
-              </span>
-            )}
-          </div>
+          {viewer.memberSince && (
+            <div className="mono mt-1 text-[11px] text-[var(--ink-500)]">
+              since {viewer.memberSince}
+            </div>
+          )}
         </AvatarControl>
 
         {/* Completeness. One line, and only while something is actually
@@ -273,14 +273,6 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
 
 function Note({ children }: { children: React.ReactNode }) {
   return <span className="text-[11px] text-[var(--ink-500)]">{children}</span>;
-}
-
-function IdentityPill({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded-full bg-[var(--surface-subtle)] px-2.5 py-[3px] text-[11px] text-[var(--ink-600)]">
-      {children}
-    </span>
-  );
 }
 
 function ProfileField({
