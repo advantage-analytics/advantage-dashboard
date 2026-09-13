@@ -62,8 +62,8 @@ test.describe("upload score regression reproduction", () => {
     expect(
       await observeScores(page, "Riley Reproduction", "Casey Opponent"),
     ).toEqual({
-      player: ["6", "6", "6"],
-      opponent: ["4", "3", "2"],
+      player: ["6", "3", "6"],
+      opponent: ["4", "6", "2"],
     });
 
     await answerPlayerStyles(page);
@@ -71,7 +71,7 @@ test.describe("upload score regression reproduction", () => {
     await page.locator("[data-wizard-continue]").click();
     await expect.poll(() => submissions.length).toBe(1);
     expect(submissions[0]).toMatchObject({
-      score: { player1: [6, 6, 6], player2: [4, 3, 2] },
+      score: { player1: [6, 3, 6], player2: [4, 6, 2] },
     });
   });
 
@@ -119,9 +119,11 @@ test.describe("upload score regression reproduction", () => {
     const playerSecond = page.getByLabel(`${player}, set 2`);
     const opponentSecond = page.getByLabel(`${opponent}, set 2`);
     await expect(playerSecond).toBeFocused();
-    await playerSecond.press("6");
+    await playerSecond.press("3");
     await expect(opponentSecond).toBeFocused();
-    await opponentSecond.press("3");
+    // 6-4, 3-6: the sets are split, so set 3 opens by itself and takes focus.
+    await expect(page.getByLabel(`${player}, set 3`)).toHaveCount(0);
+    await opponentSecond.press("6");
 
     const playerThird = page.getByLabel(`${player}, set 3`);
     const opponentThird = page.getByLabel(`${opponent}, set 3`);
@@ -265,8 +267,8 @@ test.describe("upload score regression reproduction", () => {
     expect(
       await observeScores(page, "Riley Reproduction", "Casey Opponent"),
     ).toEqual({
-      player: ["6", "6", "6"],
-      opponent: ["4", "3", "2"],
+      player: ["6", "3", "6"],
+      opponent: ["4", "6", "2"],
     });
 
     await answerPlayerStyles(page);
@@ -274,7 +276,74 @@ test.describe("upload score regression reproduction", () => {
     await page.locator("[data-wizard-continue]").click();
     await expect.poll(() => submissions.length).toBe(1);
     expect(submissions[0]).toMatchObject({
-      score: { player1: [6, 6, 6], player2: [4, 3, 2] },
+      score: { player1: [6, 3, 6], player2: [4, 6, 2] },
+    });
+  });
+
+  test("saving a score nobody won asks whether the match ended early", async ({
+    page,
+  }) => {
+    const submissions: unknown[] = [];
+    await mockVideoMetadata(page);
+    await page.addInitScript(() =>
+      localStorage.setItem(
+        "uploadFormData",
+        JSON.stringify({ playerName: "Riley Reproduction" }),
+      ),
+    );
+    await captureMatchSubmission(page, submissions);
+    await page.goto(`${baseURL}/wizard-reproduction?mode=new`);
+
+    await chooseSource(page, "Advantage Intelligence");
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "match.mp4",
+      mimeType: "video/mp4",
+      buffer: Buffer.from("fixture-video"),
+    });
+    await expect(page.getByText(/checked/)).toBeVisible();
+    await page.locator("[data-wizard-continue]").click();
+    await page.getByRole("radio", { name: "Fixed" }).click();
+    await page.getByRole("radio", { name: "Top of frame" }).click();
+    await page.locator("[data-wizard-continue]").click();
+    await page
+      .getByRole("textbox", { name: "Opponent", exact: true })
+      .fill("Casey Opponent");
+    await page
+      .getByRole("button", { name: /New opponent.*Casey Opponent/ })
+      .click();
+    await page.getByRole("button", { name: "Choose", exact: true }).click();
+    await page.getByRole("button", { name: "Ad", exact: true }).last().click();
+    await page.getByLabel("Riley Reproduction, set 1").fill("6");
+    await page.getByLabel("Casey Opponent, set 1").fill("4");
+    await answerPlayerStyles(page);
+
+    const question = page.getByText("This score doesn’t finish the match.");
+    const save = page.locator("[data-wizard-continue]");
+    await expect(question).toHaveCount(0);
+
+    // Save asks instead of saving, and holds until there is an answer.
+    await save.click();
+    await expect(question).toBeVisible();
+    await expect(save).toBeDisabled();
+    expect(submissions).toHaveLength(0);
+
+    // "No" hands the score back rather than recording anything.
+    await page
+      .getByRole("button", { name: "No, I’ll finish the score" })
+      .click();
+    await expect(question).toHaveCount(0);
+    await expect(page.getByLabel("Riley Reproduction, set 2")).toBeFocused();
+
+    await save.click();
+    await page.getByRole("button", { name: "Yes, a player retired" }).click();
+    await expect(page.getByText("Marked as retired.")).toBeVisible();
+    await expect(save).toBeEnabled();
+
+    await save.click();
+    await expect.poll(() => submissions.length).toBe(1);
+    expect(submissions[0]).toMatchObject({
+      result: "Retired",
+      score: { player1: [6], player2: [4] },
     });
   });
 
@@ -295,8 +364,8 @@ test.describe("upload score regression reproduction", () => {
     expect(
       await observeScores(page, "Riley Reproduction", "Casey Opponent"),
     ).toEqual({
-      player: ["6", "6", "6"],
-      opponent: ["4", "3", "2"],
+      player: ["6", "3", "6"],
+      opponent: ["4", "6", "2"],
     });
 
     await answerPlayerStyles(page);
@@ -304,7 +373,7 @@ test.describe("upload score regression reproduction", () => {
     await page.locator("[data-wizard-continue]").click();
     await expect.poll(() => submissions.length).toBe(1);
     expect(submissions[0]).toMatchObject({
-      score: { player1: [6, 6, 6], player2: [4, 3, 2] },
+      score: { player1: [6, 3, 6], player2: [4, 6, 2] },
     });
   });
 });
@@ -347,9 +416,10 @@ async function enterSecondAndThirdSets(
   player: string,
   opponent: string,
 ) {
-  await page.getByLabel(`${player}, set 2`).fill("6");
+  // A split — 6-4, 3-6 — is what opens set 3; straight sets would end at two.
+  await page.getByLabel(`${player}, set 2`).fill("3");
   await expect(page.getByLabel(`${opponent}, set 2`)).toBeFocused();
-  await page.getByLabel(`${opponent}, set 2`).fill("3");
+  await page.getByLabel(`${opponent}, set 2`).fill("6");
   const playerThirdSet = `${player}, set 3`;
   await expect(page.getByLabel(playerThirdSet)).toBeFocused();
   await page.getByLabel(playerThirdSet).fill("6");

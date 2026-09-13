@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 import { expect, test } from "@playwright/test";
@@ -69,15 +69,17 @@ const noticeModule = (() => {
   // of what this spec checks.
   const loadSibling = (relative: string) => {
     const siblingExports: Record<string, unknown> = {};
-    const compiled = ts.transpileModule(
-      readFileSync(resolve(`${WIZARD}/${relative}.tsx`), "utf8"),
-      {
-        compilerOptions: {
-          module: ts.ModuleKind.CommonJS,
-          jsx: ts.JsxEmit.ReactJSX,
-        },
+    // Components are .tsx; the shared class strings (`styles`) are .ts.
+    const path = [`${relative}.tsx`, `${relative}.ts`]
+      .map((file) => resolve(`${WIZARD}/${file}`))
+      .find((file) => existsSync(file));
+    if (!path) throw new Error(`unexpected sibling import: ${relative}`);
+    const compiled = ts.transpileModule(readFileSync(path, "utf8"), {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        jsx: ts.JsxEmit.ReactJSX,
       },
-    ).outputText;
+    }).outputText;
     runInNewContext(compiled, {
       exports: siblingExports,
       require: stubRequire,

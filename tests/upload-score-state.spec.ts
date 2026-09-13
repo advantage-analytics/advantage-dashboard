@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 
-import { updateScoreState } from "@/components/dashboard/matches/new-match-wizard/score-state";
+import {
+  isStoppedResult,
+  scoreColumns,
+  scoreUndecided,
+  setWinner,
+  updateScoreState,
+} from "@/components/dashboard/matches/new-match-wizard/score-state";
 import { DEFAULT_FORM_DATA } from "@/components/dashboard/matches/new-match-wizard/types";
 import { getAdjustedScores } from "@/components/dashboard/matches/new-match-wizard/utils";
 
@@ -116,5 +122,133 @@ test.describe("updateScoreState", () => {
     expect(
       getAdjustedScores(state.opponentScores, state.bestOf, state.numberOfSets),
     ).toEqual([4, 5, 6]);
+  });
+});
+
+test.describe("setWinner", () => {
+  test("a set is won at 6 by two, at 7-5, at 7-6, or as a 1-0 match tiebreak", () => {
+    expect(setWinner(6, 4)).toBe("player");
+    expect(setWinner(3, 6)).toBe("opponent");
+    expect(setWinner(7, 5)).toBe("player");
+    expect(setWinner(6, 7)).toBe("opponent");
+    expect(setWinner(1, 0)).toBe("player");
+    expect(setWinner(8, 6)).toBe("player");
+  });
+
+  test("an unfinished or half-entered set has no winner", () => {
+    expect(setWinner(5, 4)).toBeNull();
+    expect(setWinner(6, 5)).toBeNull();
+    expect(setWinner(6, null)).toBeNull();
+    expect(setWinner(null, null)).toBeNull();
+    expect(setWinner(3, 3)).toBeNull();
+  });
+});
+
+test.describe("scoreColumns", () => {
+  const cols = (
+    bestOf: number,
+    player: (number | null)[],
+    opponent: (number | null)[],
+  ) => {
+    let filled = 0;
+    player.forEach((p, i) => {
+      if (p != null || opponent[i] != null) filled = i + 1;
+    });
+    return scoreColumns({
+      bestOf,
+      playerScores: player,
+      opponentScores: opponent,
+      filled,
+    });
+  };
+
+  test("a best-of-3 split 1-1 opens a third set", () => {
+    expect(cols(3, [6, 3], [4, 6])).toEqual({ displayed: 3, decided: false });
+  });
+
+  test("a best-of-3 won 2-0 ends at two sets, with nothing to add", () => {
+    expect(cols(3, [6, 6], [4, 3])).toEqual({ displayed: 2, decided: true });
+  });
+
+  test("a set still being typed doesn't open the next one", () => {
+    expect(cols(3, [6, 6], [4, null])).toEqual({
+      displayed: 2,
+      decided: false,
+    });
+    expect(cols(3, [6, 5], [4, 4])).toEqual({ displayed: 2, decided: false });
+  });
+
+  test("a set that already holds a score is never hidden, even after the match is decided", () => {
+    expect(cols(3, [6, 6, 2], [4, 3, 1])).toEqual({
+      displayed: 3,
+      decided: true,
+    });
+  });
+
+  test("best of 5 keeps opening sets until someone has three", () => {
+    expect(cols(5, [6, 6], [4, 3])).toEqual({ displayed: 3, decided: false });
+    expect(cols(5, [6, 6, 6], [4, 3, 2])).toEqual({
+      displayed: 3,
+      decided: true,
+    });
+    expect(cols(5, [6, 3, 6, 3], [4, 6, 2, 6])).toEqual({
+      displayed: 5,
+      decided: false,
+    });
+  });
+
+  test("best of 1 is one set", () => {
+    expect(cols(1, [null], [null])).toEqual({ displayed: 1, decided: false });
+    expect(cols(1, [6], [4])).toEqual({ displayed: 1, decided: true });
+  });
+});
+
+test.describe("scoreUndecided — when Save asks whether the match ended early", () => {
+  const bestOf = 3;
+
+  test("an empty score is a missing field, not an early end", () => {
+    expect(
+      scoreUndecided({
+        bestOf,
+        playerScores: [null, null],
+        opponentScores: [null, null],
+      }),
+    ).toBe(false);
+  });
+
+  test("one set, a split and a half-typed set are all undecided", () => {
+    expect(
+      scoreUndecided({ bestOf, playerScores: [6], opponentScores: [4] }),
+    ).toBe(true);
+    expect(
+      scoreUndecided({ bestOf, playerScores: [6, 3], opponentScores: [4, 6] }),
+    ).toBe(true);
+    expect(
+      scoreUndecided({
+        bestOf,
+        playerScores: [6, 3],
+        opponentScores: [4, null],
+      }),
+    ).toBe(true);
+  });
+
+  test("a won match is decided", () => {
+    expect(
+      scoreUndecided({ bestOf, playerScores: [6, 6], opponentScores: [4, 3] }),
+    ).toBe(false);
+    expect(
+      scoreUndecided({
+        bestOf,
+        playerScores: [6, 3, 7],
+        opponentScores: [4, 6, 6],
+      }),
+    ).toBe(false);
+  });
+
+  test("only Retired and Unfinished count as an answer", () => {
+    expect(isStoppedResult("Retired")).toBe(true);
+    expect(isStoppedResult("Unfinished")).toBe(true);
+    expect(isStoppedResult("")).toBe(false);
+    expect(isStoppedResult("Rudy Wins")).toBe(false);
   });
 });

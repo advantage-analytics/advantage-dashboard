@@ -390,6 +390,62 @@ test.describe("claim state, reused rather than recomputed", () => {
   });
 });
 
+test.describe("a program still being confirmed", () => {
+  test("refuses video, and says so whether or not the caller named the source", () => {
+    for (const recordsVideo of [undefined, true]) {
+      const result = refused(
+        uploadEligibility({
+          workspace: team({ programStatus: "claim_pending" }),
+          viewerId: VIEWER,
+          athlete: pick("pp-ava"),
+          roster: ROSTER,
+          recordsVideo,
+        }),
+      );
+      expect(result.reason).toBe("pending-approval");
+      expect(result.message).toBe(PENDING_APPROVAL_NOTICE);
+    }
+  });
+
+  test("lets a SwingVision import through, with every other rule still asked", () => {
+    expect(
+      uploadEligibility({
+        workspace: team({ programStatus: "claim_pending" }),
+        viewerId: VIEWER,
+        athlete: pick("pp-ava"),
+        roster: ROSTER,
+        recordsVideo: false,
+      }).ok,
+    ).toBe(true);
+    // The athlete rule still stands behind it.
+    expect(
+      refused(
+        uploadEligibility({
+          workspace: team({ programStatus: "claim_pending" }),
+          viewerId: VIEWER,
+          athlete: null,
+          roster: ROSTER,
+          recordsVideo: false,
+        }),
+      ).reason,
+    ).toBe("athlete-required");
+  });
+
+  test("a suspended program is still refused for an import", () => {
+    expect(
+      refused(
+        uploadEligibility({
+          workspace: team({ programStatus: "suspended" }),
+          viewerId: VIEWER,
+          athlete: pick("pp-ava"),
+          roster: ROSTER,
+          recordsVideo: false,
+        }),
+      ).reason,
+    ).toBe("workspace-unavailable");
+  });
+});
+
 // ─── 3. Ownership supplies no athlete; a real profile does ───────────────────
 
 test.describe("an owner and the athlete", () => {
@@ -1335,11 +1391,12 @@ function completeDetails(h: ReturnType<typeof uploadWizardHarness>) {
   h.render();
 }
 
-test.describe("wizard handlers: a pending team cannot progress or create", () => {
-  test("Continue and Save match both stop, with the approval notice", async () => {
+test.describe("wizard handlers: a pending team cannot send video", () => {
+  test("Continue and Save match both stop for video, with the approval notice", async () => {
     const h = uploadWizardHarness({
       team: true,
       workspace: { programStatus: "claim_pending" },
+      props: { initialProvider: "splitstep" },
     });
     await h.flush();
     h.current.whoPlayed.choose({

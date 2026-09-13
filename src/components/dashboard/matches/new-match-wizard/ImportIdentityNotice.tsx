@@ -1,4 +1,10 @@
 import { Check, TriangleAlert } from "lucide-react";
+import {
+  noteIconCls,
+  noteStripCls,
+  noticeEnterCls,
+  warningStripCls,
+} from "./styles";
 import type { IdentityMatchStatus } from "./types";
 
 export interface ImportIdentityNoticeProps {
@@ -87,19 +93,22 @@ export function ImportIdentityNotice({
     );
   }
 
+  // Each state is its own element (`key`), never the same box restyled — see
+  // `ScoreCheckNotice`: a yellow box turning grey in place reads as a glitch.
   if (confirmed) {
     return (
       <div
+        key="confirmed"
         role="status"
         aria-live="polite"
-        className="flex animate-in items-center gap-2.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-2.5 duration-200 fade-in slide-in-from-top-1 motion-reduce:animate-none"
+        className={`${noteStripCls} ${noticeEnterCls}`}
       >
         <Check
-          className="size-3.5 shrink-0 text-[var(--ink-700)]"
+          className={`${noteIconCls} text-[var(--ink-700)]`}
           strokeWidth={2}
           aria-hidden="true"
         />
-        <p className="flex-1 text-[12px] leading-[1.5] text-[var(--ink-700)]">
+        <p className="flex-1">
           {personal
             ? "You’re player 1 in this export."
             : `${athleteName} is player 1 in this export.`}
@@ -107,7 +116,7 @@ export function ImportIdentityNotice({
         <button
           type="button"
           onClick={onChangeAnswer}
-          className="cursor-pointer text-[12px] text-[var(--ink-600)] transition-colors duration-150 hover:text-[var(--ink-900)]"
+          className="cursor-pointer text-[11px] text-[var(--ink-600)] transition-colors duration-150 hover:text-[var(--ink-900)]"
         >
           Change
         </button>
@@ -135,12 +144,13 @@ export function ImportIdentityNotice({
 
   return (
     <div
+      key="asking"
       role="status"
       aria-live="polite"
-      className="flex items-start gap-2.5 rounded-[var(--radius-element)] border border-[var(--warning-border)] bg-[var(--warning-bg)] pt-3 pr-3.5 pb-2 pl-3.5 text-[12px] leading-[1.5] text-[var(--warning-text)]"
+      className={`${warningStripCls} pb-1.5`}
     >
       <WarningGlyph />
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p>
           <b className="font-medium">
             {personal ? "Are you player 1?" : `Is ${athleteName} player 1?`}
@@ -149,7 +159,7 @@ export function ImportIdentityNotice({
             ? "This export doesn’t name one."
             : `This export lists ${importedName}.`}
         </p>
-        <div className="-ml-3 flex flex-col gap-0.5">
+        <div className="-ml-2.5 flex flex-col">
           <Answer onClick={onConfirm}>
             {personal ? "Yes, I’m player 1" : `Yes, ${athleteName} is player 1`}
           </Answer>
@@ -162,11 +172,12 @@ export function ImportIdentityNotice({
   );
 }
 
-function WarningGlyph() {
+/** Shared with `ScoreCheckNotice`, the other warning question in this wizard. */
+export function WarningGlyph() {
   return (
     <TriangleAlert
-      className="mt-0.5 size-[15px] shrink-0"
-      strokeWidth={1.75}
+      className={noteIconCls}
+      strokeWidth={1.5}
       aria-hidden="true"
     />
   );
@@ -192,23 +203,21 @@ function Warning({
     <div
       role="status"
       aria-live="polite"
-      className={`flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-[var(--radius-element)] border border-[var(--warning-border)] bg-[var(--warning-bg)] px-3.5 py-2.5 text-[12px] leading-[1.5] text-[var(--warning-text)] ${
-        settle
-          ? "animate-in duration-200 fade-in slide-in-from-top-1 motion-reduce:animate-none"
-          : ""
+      className={`${warningStripCls} flex-wrap gap-x-3 gap-y-1.5 ${
+        settle ? noticeEnterCls : ""
       }`}
     >
       <WarningGlyph />
       <p className="min-w-[14rem] flex-1">
         <b className="font-medium">{lead}</b> {body}
       </p>
-      <div className="flex items-center gap-3.5">{children}</div>
+      <div className="flex items-center gap-3">{children}</div>
     </div>
   );
 }
 
 /** A stacked answer: a full-width text row that washes on hover and press. */
-function Answer({
+export function Answer({
   onClick,
   children,
 }: {
@@ -219,11 +228,11 @@ function Answer({
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-button)] px-3 py-2 text-left text-[12px] text-[var(--warning-text)] transition-colors duration-150 hover:bg-[var(--warning-border)]/60 active:bg-[var(--warning-border)]"
+      className="group flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-button)] px-2.5 py-1.5 text-left text-[11px] text-[var(--warning-text)] transition-[background-color,transform] duration-150 ease-out hover:bg-[var(--warning-border)]/60 active:scale-[0.99] active:bg-[var(--warning-border)] motion-reduce:active:scale-100"
     >
       <span
         aria-hidden="true"
-        className="size-3.5 shrink-0 rounded-full border-[1.5px] border-[var(--warning-text)]/35 transition-colors duration-150 group-hover:border-[var(--warning-text)]"
+        className="size-3 shrink-0 rounded-full border-[1.5px] border-[var(--warning-text)]/35 transition-colors duration-150 group-hover:border-[var(--warning-text)]"
       />
       {children}
     </button>
@@ -241,7 +250,7 @@ function Strong({
     <button
       type="button"
       onClick={onClick}
-      className="cursor-pointer text-[12px] font-medium whitespace-nowrap text-[var(--warning-text)] underline decoration-[var(--warning-border)] underline-offset-[3px] transition-colors duration-150 hover:decoration-[var(--warning-text)]"
+      className="cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--warning-text)] underline decoration-[var(--warning-border)] underline-offset-[3px] transition-colors duration-150 hover:decoration-[var(--warning-text)]"
     >
       {children}
     </button>
@@ -259,7 +268,7 @@ function Quiet({
     <button
       type="button"
       onClick={onClick}
-      className="cursor-pointer text-[12px] whitespace-nowrap text-[var(--warning-text)] opacity-70 transition-opacity duration-150 hover:opacity-100"
+      className="cursor-pointer text-[11px] whitespace-nowrap text-[var(--warning-text)] opacity-70 transition-opacity duration-150 hover:opacity-100"
     >
       {children}
     </button>

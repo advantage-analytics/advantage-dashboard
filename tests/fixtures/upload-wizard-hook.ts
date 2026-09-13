@@ -265,10 +265,11 @@ export function uploadWizardHarness(
       useWorkspace: () => workspace,
     },
     "@/lib/services/upload": {
+      // "splitstep" is the real video id, so a test can pass it typed.
       getProviderKind: (id: string) =>
-        id === "video" ? "processing" : "import",
+        id === "video" || id === "splitstep" ? "processing" : "import",
       providerKindOrNull: (id: string) =>
-        id === "video" ? "processing" : "import",
+        id === "video" || id === "splitstep" ? "processing" : "import",
       isProviderSupported: () => true,
       getProviderStrategy: () => ({
         validateFile: (file: File) =>
@@ -452,7 +453,9 @@ export function parsedNames(
       opponentName,
       playerScores: [6],
       opponentScores: [4],
-      bestOf: "3",
+      // One set is the whole match in a best of 1 — a 6-4 in a best of 3
+      // would stop at the "did it end early?" question.
+      bestOf: "1",
       adScoring: true,
     },
   };

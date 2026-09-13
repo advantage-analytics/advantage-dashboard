@@ -111,6 +111,7 @@ export function formatScoreboardStatus(
   if (!matchContext) return "FINAL";
   const c = matchContext.toLowerCase();
   if (c.includes("unfinished")) return "UNFINISHED";
+  if (c.includes("retired")) return "RETIRED";
   if (c.includes("withdrew") || c.includes("withdrawn")) return "WITHDREW";
   if (c.includes("default")) return "DEFAULTED";
   return "FINAL";

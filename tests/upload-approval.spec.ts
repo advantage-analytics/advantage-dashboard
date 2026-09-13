@@ -72,10 +72,12 @@ function continueBlockedFor(
 }
 
 test.describe("T13 — pending approval at every entry", () => {
-  test("fresh Source: the provider step refuses, Continue is blocked, and the click handler no-ops", async () => {
+  test("fresh Source: choosing video refuses, Continue is blocked, and the click handler no-ops", async () => {
     const h = uploadWizardHarness({
       team: true,
       workspace: { programStatus: "claim_pending" },
+      // Pending holds back video only; a SwingVision import is covered below.
+      props: { initialProvider: "splitstep" },
     });
     await h.flush();
     h.current.whoPlayed.choose({
@@ -246,6 +248,7 @@ test.describe("T13 — retry and submit both re-read, without unlocking a decide
     const h = uploadWizardHarness({
       team: true,
       workspace: { programStatus: "claim_pending" },
+      props: { initialProvider: "splitstep" },
     });
     await h.flush();
     h.current.whoPlayed.choose({
@@ -272,13 +275,13 @@ test.describe("T13 — retry and submit both re-read, without unlocking a decide
     });
   });
 
-  test("submitting re-reads approval fresh: an approval granted while the tab sat open unblocks the write", async () => {
+  test("a team still being confirmed can import a SwingVision match", async () => {
     const h = uploadWizardHarness({
       team: true,
       workspace: { programStatus: "claim_pending" },
-      // The workspace's own reading is stale ("claim_pending"); the live
-      // re-read on submit says the claim has since settled.
-      programStatusReads: ["active"],
+      // A fresh read on submit still says pending — and it still passes,
+      // because an import spends no allowance and needs nobody's review.
+      programStatusReads: ["claim_pending"],
     });
     await h.flush();
     h.current.whoPlayed.choose({
@@ -287,12 +290,7 @@ test.describe("T13 — retry and submit both re-read, without unlocking a decide
       name: "Player athlete",
     });
     h.render();
-    // The memo still trusts the workspace's own stale reading until
-    // something re-reads it.
-    expect(h.current.eligibility).toMatchObject({
-      ok: false,
-      reason: "pending-approval",
-    });
+    expect(h.current.eligibility.ok).toBe(true);
 
     const file = await h.pick("match.csv");
     file.resolve({
@@ -303,7 +301,9 @@ test.describe("T13 — retry and submit both re-read, without unlocking a decide
         opponentName: "Casey Opponent",
         playerScores: [6],
         opponentScores: [4],
-        bestOf: "3",
+        // One set is the whole match in a best of 1 — a 6-4 in a best of 3
+        // would stop at the "did it end early?" question.
+        bestOf: "1",
         adScoring: true,
       },
     });
@@ -316,7 +316,7 @@ test.describe("T13 — retry and submit both re-read, without unlocking a decide
 
     await h.current.handleCreateMatch();
     h.render();
-    // The write went through: the fresh read, not the stale memo, decided it.
+    // The write went through, pending or not.
     expect(h.writes.length).toBeGreaterThan(0);
   });
 
@@ -346,7 +346,9 @@ test.describe("T13 — retry and submit both re-read, without unlocking a decide
         opponentName: "Casey Opponent",
         playerScores: [6],
         opponentScores: [4],
-        bestOf: "3",
+        // One set is the whole match in a best of 1 — a 6-4 in a best of 3
+        // would stop at the "did it end early?" question.
+        bestOf: "1",
         adScoring: true,
       },
     });
@@ -457,7 +459,9 @@ test.describe("T13 — an existing match's eligibility stays with its own worksp
         opponentName: "Casey Opponent",
         playerScores: [6],
         opponentScores: [4],
-        bestOf: "3",
+        // One set is the whole match in a best of 1 — a 6-4 in a best of 3
+        // would stop at the "did it end early?" question.
+        bestOf: "1",
         adScoring: true,
       },
     });

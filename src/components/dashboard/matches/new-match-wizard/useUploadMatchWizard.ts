@@ -81,7 +81,12 @@ import {
   STORAGE_KEYS,
   MatchMetadata,
 } from "./utils";
-import { updateScoreState, type ScoreArrayField } from "./score-state";
+import {
+  isStoppedResult,
+  scoreUndecided,
+  updateScoreState,
+  type ScoreArrayField,
+} from "./score-state";
 import {
   buildImportIdentityConfirmationKey,
   collectMatchCompletionRequirements,
@@ -1501,8 +1506,13 @@ export function useUploadMatchWizard({
       subject: matchSubject,
       roster: eligibilityWorkspace.kind === "team" ? teamRoster : undefined,
       attachesToLine: Boolean(lineTarget?.entryId) && !lineTarget?.matchId,
+      // A team still being confirmed may import, not send video. Before a
+      // source is picked nothing is refused on this ground: the Source row's
+      // own note says it the moment Advantage Intelligence is chosen.
+      recordsVideo: isProcessingProvider,
     }),
     [
+      isProcessingProvider,
       eligibilityWorkspace,
       viewer.id,
       preset,
@@ -2288,6 +2298,18 @@ export function useUploadMatchWizard({
         setError(`Complete the required fields: ${missing.labels.join(", ")}.`);
         return;
       }
+      // The write-time half of the flow's "did it end early?" question: a
+      // score nobody won is saved only as Retired or Unfinished, never as a
+      // plain final score that just happens to be missing a set.
+      const undecided = scoreUndecided({
+        bestOf: parseInt(formData.bestOf, 10) || 3,
+        playerScores: formData.playerScores,
+        opponentScores: formData.opponentScores,
+      });
+      if (undecided && !isStoppedResult(formData.result)) {
+        setError("Finish the score, or say whether the match ended early.");
+        return;
+      }
 
       setIsCreating(true);
       setError(null);
@@ -2419,9 +2441,32 @@ export function useUploadMatchWizard({
           opponentPlayerId,
         };
 
+        const stopped = undecided && isStoppedResult(formData.result);
+        const decidedResult = isStoppedResult(formData.result)
+          ? ""
+          : formData.result;
+        let setsPlayed = 1;
+        for (let i = 0; i < 5; i++) {
+          if (
+            formData.playerScores[i] != null ||
+            formData.opponentScores[i] != null
+          )
+            setsPlayed = i + 1;
+        }
+
         const matchData = buildMatchData(
           matchId,
-          { ...formData, eventName },
+          {
+            ...formData,
+            eventName,
+            // An early-end answer left over from before the score was
+            // finished would label a decided match "Retired".
+            result: stopped ? formData.result : decidedResult,
+            // A match that stopped keeps the sets it played. Padding it out
+            // to the format writes 0-0 sets that never happened, and the match
+            // pages would print "6-4, 0-0, 0-0".
+            ...(stopped ? { numberOfSets: setsPlayed } : {}),
+          },
           winner,
           loser,
           isPrivateMatch,
@@ -2448,6 +2493,7 @@ export function useUploadMatchWizard({
                 score: matchRow.score,
                 player1_name: matchRow.player1_name,
                 player2_name: matchRow.player2_name,
+                ...(stopped ? { result: matchRow.result } : {}),
                 // Only when one was resolved. Spreading it unconditionally would
                 // write null over an identity a previous pass established, which
                 // is worse than never having set it — the opponent's profile

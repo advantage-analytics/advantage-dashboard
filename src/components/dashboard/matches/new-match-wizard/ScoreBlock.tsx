@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { scoreColumns } from "./score-state";
 import type { FormData } from "./types";
 import { setHasData } from "./utils";
 
@@ -103,7 +104,7 @@ export function ScoreBlock({
   >;
   playerName: string;
   opponentName: string;
-  /** "Best of 3 · no-ad" when a line declared the format. */
+  /** "Best of 3 · No-Ad" when a line declared the format. */
   fromLine: boolean;
   onScoreChange: (
     player: "player" | "opponent",
@@ -123,10 +124,16 @@ export function ScoreBlock({
   for (let i = 0; i < bestOf; i++) {
     if (setHasData(formData, i)) filled = i + 1;
   }
-  // Two columns to start, one more than is filled after that, never past the
-  // format. The dashed column after the last is how a set gets added.
-  const displayed = Math.min(bestOf, Math.max(2, filled + 1));
-  const ghost = displayed < bestOf;
+  // Columns follow the match: two to start, one more once every set so far
+  // is finished, and none once someone has won it (`scoreColumns`). The dashed
+  // column after the last is how a set gets added while the match is open.
+  const { displayed, decided } = scoreColumns({
+    bestOf,
+    playerScores: formData.playerScores,
+    opponentScores: formData.opponentScores,
+    filled,
+  });
+  const ghost = !decided && displayed < bestOf;
 
   const refs = useRef<Record<string, HTMLInputElement | null>>({});
   const key = (row: "p" | "o", i: number, tb = false) =>
@@ -182,8 +189,22 @@ export function ScoreBlock({
       focusKey(key("p", i, true));
       return;
     }
-    if (row === "player") focusKey(key("o", i));
-    else if (i + 1 < displayed || ghost) focusKey(key("p", i + 1));
+    if (row === "player") {
+      focusKey(key("o", i));
+      return;
+    }
+    // Where the opponent's digit sends focus depends on what it just did to
+    // the match, so measure the columns with it in place: a split opens the
+    // next set, a clinched match has nowhere left to go.
+    const opponentScores = [...formData.opponentScores];
+    opponentScores[i] = typed;
+    const next = scoreColumns({
+      bestOf,
+      playerScores: formData.playerScores,
+      opponentScores,
+      filled: Math.max(filled, i + 1),
+    });
+    if (i + 1 < next.displayed) focusKey(key("p", i + 1));
   };
 
   // Enter in a tiebreak cell: player -> opponent tiebreak (same set);
@@ -212,8 +233,8 @@ export function ScoreBlock({
     formData.adScoring === undefined
       ? ""
       : formData.adScoring
-        ? " · ad"
-        : " · no-ad"
+        ? " · Ad"
+        : " · No-Ad"
   }`;
 
   // A render function, not a component: declared inside render, a component

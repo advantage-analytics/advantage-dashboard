@@ -47,6 +47,7 @@ import { WizardShell, CONTENT_CLS } from "./WizardShell";
 import { useWizardKeys } from "./useWizardKeys";
 import { SourceStepContent } from "./SourceStepContent";
 import { FileStepContent } from "./FileStepContent";
+import { AnimatedHeight } from "./AnimatedHeight";
 import { ImportIdentityNotice } from "./ImportIdentityNotice";
 import { EligibilityNotice } from "./EligibilityNotice";
 import {
@@ -57,6 +58,8 @@ import { TrimStepContent } from "./TrimStepContent";
 import { DetailsStepContent } from "./DetailsStepContent";
 import { PinnedLineBar } from "./PinnedLineBar";
 import { WizardNotice } from "./WizardNotice";
+import { noteIconCls, warningStripCls } from "./styles";
+import { isStoppedResult, scoreUndecided } from "./score-state";
 
 /** Where the flow returns to when it is dismissed or finished. */
 const PERSONAL_EXIT_HREF = "/dashboard/matches";
@@ -349,17 +352,19 @@ function UploadMatchSuccess({
               : "Sent for analysis. Results are added as soon as they're ready."}
         </p>
 
-        {/* Prominent keep-open warning — body-size text so it cannot be missed.
-            Only shown while at least one upload is actively transferring bytes.
+        {/* Keep-open warning — the standard yellow strip, the wizard's register
+            for what must not be missed. Only shown while at least one upload is
+            actively transferring bytes.
             The footnote below this block covers the navigation nuance for
             readers who want the fine print. */}
         {uploading.length > 0 && (
-          <div className="flex w-full max-w-[440px] items-start gap-2.5 rounded-[8px] border border-[var(--warning-border)] bg-[var(--warning-bg)] px-3.5 py-3">
+          <div className={`${warningStripCls} w-full max-w-[440px]`}>
             <TriangleAlert
-              className="mt-0.5 size-4 shrink-0 text-[var(--warning-text)]"
+              className={noteIconCls}
               strokeWidth={1.5}
+              aria-hidden="true"
             />
-            <p className="text-[13px] leading-[1.5] text-[var(--warning-text)]">
+            <p>
               Keep this tab open —{" "}
               {uploading.length > 1
                 ? "your videos are uploading"
@@ -785,6 +790,34 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     return name.trim().split(/\s+/)[0] || null;
   }, [whoPlayed.subject, preset, formData.playerName]);
 
+  /**
+   * "Did it end early?" — a score nobody has won, met at Save.
+   *
+   * Asked at Save rather than as the score is typed: 6-4 with an empty second
+   * set is what every match looks like halfway through entry, and a question
+   * that appears between sets is a nag. Once asked it stays while the score is
+   * still undecided, and an answer already recorded (a SwingVision export that
+   * stopped writes "Unfinished") shows as the settled line from the start.
+   */
+  const [scoreCheckAsked, setScoreCheckAsked] = useState(false);
+  const undecided =
+    step === "match" &&
+    scoreUndecided({
+      bestOf: parseInt(formData.bestOf, 10) || 3,
+      playerScores: formData.playerScores,
+      opponentScores: formData.opponentScores,
+    });
+  const stoppedAnswered = isStoppedResult(formData.result);
+  const scoreCheckVisible = undecided && (scoreCheckAsked || stoppedAnswered);
+  const dismissScoreCheck = useCallback(() => setScoreCheckAsked(false), []);
+  const handleSaveMatch = useCallback(() => {
+    if (undecided && !stoppedAnswered) {
+      setScoreCheckAsked(true);
+      return;
+    }
+    handleCreateMatch();
+  }, [undecided, stoppedAnswered, handleCreateMatch]);
+
   const continueHandler =
     step === "provider"
       ? handleProviderContinue
@@ -792,7 +825,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
         ? handleFileContinue
         : step === "trim"
           ? handleTrimContinue
-          : handleCreateMatch;
+          : handleSaveMatch;
 
   const currentStepIndex = stepOrder.indexOf(step);
   // A preset IS the line it came from; the name is what reads at the use
@@ -963,10 +996,15 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     eligibility.reason === "roster-unknown" &&
     !whoPlayed.loadFailed;
 
+  // `pending-approval` on step 1 is excluded the same way: the Source row's
+  // grey note under Advantage Intelligence already says it, email included,
+  // and a second box repeating it is noise. Continue stays off regardless —
+  // `eligibilityBlocked` below reads the refusal, not the notice.
   const eligibilityNoticeVisible =
     (step === "provider" || step === "file") &&
     !eligibility.ok &&
     eligibility.reason !== "athlete-required" &&
+    !(step === "provider" && eligibility.reason === "pending-approval") &&
     !rosterStillLoading;
 
   // One value, two ways forward: the footer button below is disabled by it and
@@ -977,13 +1015,18 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   const continueDisabled = wizardContinueBlocked({
     step,
     busy: stepBusy !== null,
-    missingMatchAnswers: missing.labels.length > 0,
+    // The early-end question, once on screen, is one more unanswered field.
+    missingMatchAnswers:
+      missing.labels.length > 0 || (scoreCheckVisible && !stoppedAnswered),
     importIdentityBlocked: identityNoticeVisible && importIdentity.blocked,
     // `|| rosterStillLoading` is the one deliberate exception to T7's
     // "the visible notice decides the gate": there is nothing to explain
     // during a read that is simply still running, but there is also nothing
     // to continue to.
-    eligibilityBlocked: eligibilityNoticeVisible || rosterStillLoading,
+    eligibilityBlocked:
+      eligibilityNoticeVisible ||
+      rosterStillLoading ||
+      (!eligibility.ok && eligibility.reason === "pending-approval"),
   });
 
   useWizardKeys({
@@ -1163,29 +1206,34 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
             }
           />
           {identityNoticeVisible && importIdentity.comparison && (
-            <ImportIdentityNotice
-              comparison={importIdentity.comparison}
-              workspaceKind={
-                workspaces.active.kind === "team" ? "team" : "personal"
-              }
-              confirmed={importIdentity.confirmed}
-              rejected={importIdentity.rejected}
-              onConfirm={importIdentity.confirm}
-              onReject={importIdentity.reject}
-              onChangeAnswer={importIdentity.change}
-              /* Clearing the file is the reset: `handleRemoveFile` bumps the
+            // Around the notice, not its condition: it arrives with its own
+            // fade after a parse, and the wrapper smooths the collapse after
+            // an answer (and the reopen after Change).
+            <AnimatedHeight>
+              <ImportIdentityNotice
+                comparison={importIdentity.comparison}
+                workspaceKind={
+                  workspaces.active.kind === "team" ? "team" : "personal"
+                }
+                confirmed={importIdentity.confirmed}
+                rejected={importIdentity.rejected}
+                onConfirm={importIdentity.confirm}
+                onReject={importIdentity.reject}
+                onChangeAnswer={importIdentity.change}
+                /* Clearing the file is the reset: `handleRemoveFile` bumps the
                  file generation, which drops the parse, the answer and this
                  notice with it. */
-              onChangeFile={handleRemoveFile}
-              /* Step 1 owns the who-played question, so "Change player" is
+                onChangeFile={handleRemoveFile}
+                /* Step 1 owns the who-played question, so "Change player" is
                  Back — and only where there is a choice: a preset already
                  named the athlete, and a personal workspace has one. */
-              onChangePlayer={
-                workspaces.active.kind === "team" && !preset
-                  ? handleBack
-                  : undefined
-              }
-            />
+                onChangePlayer={
+                  workspaces.active.kind === "team" && !preset
+                    ? handleBack
+                    : undefined
+                }
+              />
+            </AnimatedHeight>
           )}
           {eligibilityNoticeVisible && !eligibility.ok && (
             <EligibilityNotice
@@ -1240,6 +1288,8 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
           onDetach={detachLine}
           exportRead={parsingState.parseSuccess}
           error={error}
+          scoreCheckVisible={scoreCheckVisible}
+          onScoreCheckDismiss={dismissScoreCheck}
         />
       )}
     </WizardShell>

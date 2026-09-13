@@ -15,13 +15,14 @@
  * trigger and RLS alone. Each caller asks with whatever it has in hand and
  * gets back either the attribution to write or one named reason it must not.
  *
- * PROVIDER-INDEPENDENT, and that is the point of its existence. The video
- * seams already have `explainVideoRefusal()` and `reserveQuota()`, which
- * answer "may this workspace's allowance be spent" — but a SwingVision import
- * spends no allowance and asked nobody, so a program still waiting on its
- * claim could take an import it must not take. The rule here is about
- * recording a match at all, so it never reads `canSubmitVideo` and never
- * mentions minutes. The two layers are meant to stack: once wired, the video
+ * PROVIDER-INDEPENDENT, with one exception. The video seams already have
+ * `explainVideoRefusal()` and `reserveQuota()`, which answer "may this
+ * workspace's allowance be spent". The rule here is about recording a match
+ * at all — role, line, athlete, a suspended or unclaimed program — so it
+ * never reads `canSubmitVideo` and never mentions minutes. The exception is a
+ * program still being confirmed: it may import SwingVision matches (decided
+ * 2026-09-12 — an import spends nothing and needs no review) but not send
+ * video, which is the one input, `recordsVideo`, that names the source. The two layers are meant to stack: once wired, the video
  * seams will ask this first and then their own question, in that order.
  *
  * Pure. No I/O, no clock, no Supabase — the caller resolves the workspace, the
@@ -38,8 +39,13 @@
  *    recomputed: `programStatusFor()` in `services/programs/claim-state.ts`
  *    already maps every claim state to it, which is why a program whose claim
  *    is still in its `objection_window` reads `active` here and is eligible.
- *    Only `claim_pending` is "awaiting approval"; `suspended` and `unclaimed`
- *    are unavailable, which is a different sentence. A reading the caller
+ *    Only `claim_pending` is "awaiting approval", and it holds back VIDEO
+ *    only: a SwingVision import spends no allowance and needs nobody's
+ *    review, so a program still being confirmed can record imported matches
+ *    (`recordsVideo: false`). The flag defaults to true, so every server seam
+ *    — all of them video — keeps refusing without having to say so.
+ *    `suspended` and `unclaimed` are unavailable for every source, which is a
+ *    different sentence. A reading the caller
  *    could not obtain is `unknown`, and unknown does not pass — a lookup that
  *    failed is not an approval.
  * 3. ROLE — `canUploadForProgram()`, verbatim. The policy ladder and the two
@@ -174,6 +180,12 @@ export interface UploadEligibilityInput {
   roster: readonly RosterIdentity[] | null | undefined;
   /** True when the match attaches to a scheduled line (`event_entry_id`). */
   attachesToLine?: boolean;
+  /**
+   * False for an import (SwingVision), which a program awaiting approval may
+   * still record. Omitted means video — the safe reading for a caller that
+   * didn't say.
+   */
+  recordsVideo?: boolean;
 }
 
 export type UploadEligibility =
@@ -198,8 +210,8 @@ export type UploadEligibility =
  * cannot say different things about the same program.
  */
 export const PENDING_APPROVAL_NOTICE =
-  "Your team is awaiting approval. You can upload matches once your claim " +
-  "has been approved.";
+  "Your team is still being confirmed. Video analysis opens as soon as it " +
+  "is; SwingVision imports work now.";
 
 /**
  * The trigger's own sentence, capitalised the way `explainWriteFailure()`
@@ -326,6 +338,7 @@ export function uploadEligibility(
         true,
       );
     case "claim_pending":
+      if (input.recordsVideo === false) break;
       return refusal("pending-approval", PENDING_APPROVAL_NOTICE);
     case "suspended":
       return refusal(
