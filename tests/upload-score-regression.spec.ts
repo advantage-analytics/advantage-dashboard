@@ -139,19 +139,21 @@ test.describe("upload score regression reproduction", () => {
     await opponentFirst.press("Backspace");
     await expect(opponentFirst).toHaveValue("");
     await opponentFirst.press("6");
-    await expect(playerSecond).toBeFocused();
 
     const playerTiebreak = page.getByLabel(`${player}, set 1 tiebreak`);
     const opponentTiebreak = page.getByLabel(`${opponent}, set 1 tiebreak`);
-    await playerTiebreak.click();
+    await expect(playerTiebreak).toBeFocused();
     await playerTiebreak.press("1");
     await expect(playerTiebreak).toBeFocused();
     await playerTiebreak.press("0");
     await expect(playerTiebreak).toHaveValue("10");
     await expect(playerTiebreak).toBeFocused();
-    await opponentTiebreak.click();
+    await playerTiebreak.press("Enter");
+    await expect(opponentTiebreak).toBeFocused();
     await opponentTiebreak.press("8");
     await expect(opponentTiebreak).toBeFocused();
+    await opponentTiebreak.press("Enter");
+    await expect(playerSecond).toBeFocused();
   });
 
   test("reducing format keeps entered scores until the loss is confirmed", async ({

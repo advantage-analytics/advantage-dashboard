@@ -83,7 +83,7 @@ ready).
 
 ## T7 · Focus into tiebreak cells and leave them only on Enter
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/new-match-wizard/ScoreBlock.tsx, tests/upload-score-regression.spec.ts
 - **done when:**
