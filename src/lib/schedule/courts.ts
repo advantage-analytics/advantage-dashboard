@@ -36,6 +36,16 @@ export const DUAL_SLOT_ORDER = [
   "D3",
 ] as const;
 
+/** The six singles courts, S1–S6, in order. */
+export const SINGLES_SLOTS = DUAL_SLOT_ORDER.slice(0, 6);
+/** The three doubles courts, D1–D3, in order. */
+export const DOUBLES_SLOTS = DUAL_SLOT_ORDER.slice(6);
+
+/** A court's discipline, read off its slot — "D…" is doubles. */
+export function slotDiscipline(slot: string): "singles" | "doubles" {
+  return slot.startsWith("D") ? "doubles" : "singles";
+}
+
 /**
  * Where this court sits, or `-1` for anything that is not one of the nine.
  *

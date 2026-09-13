@@ -214,7 +214,8 @@ arithmetic in a pure module so a test can hold it. _Shipped:_
 ```
 
 Sizes **(v3)**: 16px rail nav (`size-4`) · 15px header chrome · 14px
-inline/actions (`size-3.5`) · 13px menu items and metadata glyphs (ink-400) ·
+inline/actions (`size-3.5`) · 13px menu items and metadata glyphs (ink-400; a destructive
+row's glyph and label turn `--danger` only on hover/focus — see Dropdown / Menu) ·
 12px chevrons (`size-3`) · 28–32px empty states (`size-8`).
 
 The full icon Glyph Registry is in [`reference/chrome.md`](reference/chrome.md).

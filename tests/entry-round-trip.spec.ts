@@ -13,7 +13,6 @@ import {
   buildDualPayloadLines,
   filledDualLines,
   lockedByKeyFromSeed,
-  lockedForfeitFromSeed,
   seedDualLines,
   seededIdsFromSeed,
 } from "@/components/dashboard/schedule/static/dual-build-step";
@@ -191,11 +190,7 @@ test.describe("round trip — a dual, loaded and saved unchanged", () => {
     const seed = dualSeed(detail);
     const lines = seedDualLines(ladder, seed);
     const filled = filledDualLines(lines, lockedByKeyFromSeed(seed));
-    return buildDualPayloadLines(
-      filled,
-      seededIdsFromSeed(seed),
-      lockedForfeitFromSeed(seed),
-    );
+    return buildDualPayloadLines(filled, seededIdsFromSeed(seed));
   }
 
   test("loading the event and saving it unchanged plans nothing", () => {
@@ -278,11 +273,7 @@ test.describe("round trip — a dual, loaded and saved unchanged", () => {
     function payloadFor(seed: ReturnType<typeof dualSeed>): LineupLineInput[] {
       const lines = seedDualLines(ladder, seed);
       const filled = filledDualLines(lines, lockedByKeyFromSeed(seed));
-      return buildDualPayloadLines(
-        filled,
-        seededIdsFromSeed(seed),
-        lockedForfeitFromSeed(seed),
-      );
+      return buildDualPayloadLines(filled, seededIdsFromSeed(seed));
     }
 
     test("a line’s position is its court, not its place among the filled ones", () => {
@@ -303,7 +294,6 @@ test.describe("round trip — a dual, loaded and saved unchanged", () => {
         playerUserIds: ["u-ana"],
         playerLabels: ["Ana Vasquez"],
         opponentLabels: ["Rival One"],
-        forfeit: null,
       });
 
       const plan = planEntryChanges(gapped, payload);

@@ -87,10 +87,11 @@ const ICON_BUTTON =
   "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40";
 
 /**
- * The leading glyph on each Options-menu row: neutral at rest and on hover —
- * never `--blue` (`FloatMenuItem`'s default) or `--danger` (the Remove row's
- * label still turns danger on hover; its icon does not). Shared by all three
- * rows so a later tweak to size, colour or stroke weight is one edit.
+ * The leading glyph on each Options-menu row: neutral ink-400 — never `--blue`
+ * (`FloatMenuItem`'s default). Shared by all three rows so a later tweak to
+ * size, colour or stroke weight is one edit. The Remove row adds
+ * `group-hover`/`group-focus-visible` danger, so its label and icon turn red
+ * together at the moment of intent (DS › Dropdown / Menu).
  */
 const MENU_ROW_ICON = "size-[13px] shrink-0 text-[var(--ink-400)]";
 
@@ -455,15 +456,15 @@ function MemberMenu({
                   : removeMember(member.userId as string),
               )
             }
-            className="group flex w-full items-start gap-2.5 rounded-[var(--radius-element)] px-2 py-2 text-left transition-colors hover:bg-[var(--surface-subtle)] disabled:opacity-50"
+            className="group flex w-full items-start gap-2.5 rounded-[var(--radius-element)] px-2 py-2 text-left transition-colors hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none disabled:opacity-50"
           >
             <Trash2
-              className={`mt-0.5 ${MENU_ROW_ICON}`}
+              className={`mt-0.5 ${MENU_ROW_ICON} transition-colors group-hover:text-[var(--danger)] group-focus-visible:text-[var(--danger)]`}
               strokeWidth={1.5}
               aria-hidden
             />
             <span className="min-w-0 flex-1">
-              <span className="block text-[12px] text-[var(--ink-700)] group-hover:text-[var(--danger)]">
+              <span className="block text-[12px] text-[var(--ink-700)] group-hover:text-[var(--danger)] group-focus-visible:text-[var(--danger)]">
                 Remove from roster
               </span>
               {member.profileId && (

@@ -213,6 +213,17 @@ option, its popup is the browser's not ours, and drawn as an underline on a
 would not tell a coach what they are choosing ("Staff", "Owner and coaches"),
 and leave it off when it would ("Clay").
 
+**Destructive rows rest grey, turn red on intent** (2026-09-13, in-repo — the
+Roster drawer's Options menu and the Schedule drawer's event menu). A delete /
+remove row sits last, below a hairline, and at rest reads exactly like its
+siblings: label in the menu's own ink, 13px leading glyph (`Trash2`) in
+`--ink-400`. On pointer hover **and** keyboard focus the label and the glyph
+turn `--danger` together, over the usual `--surface-subtle` wash; the 11px
+`--ink-500` consequence line stays grey. No standing red label, no red icon at
+rest — red marks the moment of intent, not the row's existence. Menu-row glyphs
+are never `--blue` either (that colour is reserved for "chosen"). The confirm
+step — `danger-solid` in an `AlertDialog` — is where red stands.
+
 The header's account menu predates the primitives and still carries its own
 classes; migrate it to `FloatMenu` rather than copying them.
 

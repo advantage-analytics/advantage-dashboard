@@ -174,3 +174,71 @@ test.describe("presetFor · the preset one entry builds", () => {
     expect(preset.opponentSchool).toBe("Rival State");
   });
 });
+
+test.describe("tournament entries · for the score flow", () => {
+  const TOURNAMENT: ProgramEvent = {
+    ...EVENT,
+    id: "t-1",
+    kind: "tournament",
+    name: "Fall Invitational",
+  };
+
+  function run(
+    position: number,
+    rounds: string[],
+    overrides: Partial<EventEntry> = {},
+  ): EventEntry {
+    return entry({
+      position,
+      id: `run-${position}`,
+      eventId: TOURNAMENT.id,
+      slot: null,
+      matches: rounds.map((round, index) => ({
+        ...match(`run-${position}-${index}`),
+        round,
+      })),
+      ...overrides,
+    });
+  }
+
+  test("two entries that opened in the same round are two rows, by position", () => {
+    // Listed under a round, both of these read "R32" and de-duplicated to one.
+    const choices = lineupChoices(
+      TOURNAMENT,
+      [run(0, ["R32"]), run(1, ["R32"], { playerLabels: ["Dana Brooks"] })],
+      PROGRAMS,
+    );
+    expect(choices.map((choice) => choice.slot)).toEqual(["#1", "#2"]);
+    expect(choices.map((choice) => choice.preset?.entryId)).toEqual([
+      "run-0",
+      "run-1",
+    ]);
+  });
+
+  test("a row presets the NEXT round, never one already recorded", () => {
+    const [choice] = lineupChoices(
+      TOURNAMENT,
+      [run(0, ["R32", "R16"])],
+      PROGRAMS,
+    );
+    expect(choice.preset?.round).toBe("QF");
+    expect(choice.preset?.score).toBeNull();
+    expect(choice.state).toBe("open");
+  });
+
+  test("presetFor takes an asked round, and a dual's slot still wins", () => {
+    const qualifier = run(0, ["Q1"]);
+    const atQ1 = presetFor(
+      TOURNAMENT,
+      qualifier,
+      qualifier.matches[0],
+      PROGRAMS,
+      "Q1",
+    );
+    expect(atQ1).toMatchObject({ round: "Q1", eventKind: "tournament" });
+    expect(atQ1.score).toEqual(qualifier.matches[0].score);
+
+    const dualLine = entry({ position: 2 });
+    expect(presetFor(EVENT, dualLine, null, PROGRAMS, "QF").round).toBe("S3");
+  });
+});

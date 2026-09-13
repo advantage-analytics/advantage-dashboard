@@ -7,6 +7,8 @@ import {
   type AnalysisStatus,
 } from "@/lib/data/match-analysis";
 import { viewerSide } from "@/lib/data/viewer-side";
+// The shared rule: a stored winner (retired, defaulted) first, then sets.
+import { didUserWin } from "@/lib/data/match-utils";
 
 export interface DbRecentMatch {
   id: string;
@@ -23,6 +25,7 @@ export interface DbRecentMatch {
     player2: number[];
     player1_tiebreaks?: (number | null)[];
     player2_tiebreaks?: (number | null)[];
+    winner?: "player1" | "player2";
   } | null;
   result: string | null;
   match_type: string | null;
@@ -122,20 +125,6 @@ function formatDisplayDate(isoDate: string): string {
   } catch {
     return isoDate;
   }
-}
-
-function didUserWin(
-  score: DbRecentMatch["score"],
-  isUserPlayer1: boolean,
-): boolean {
-  if (!score?.player1?.length || !score?.player2?.length) return false;
-  let p1Sets = 0;
-  let p2Sets = 0;
-  score.player1.forEach((s, i) => {
-    if (s > (score.player2[i] ?? 0)) p1Sets++;
-    else if ((score.player2[i] ?? 0) > s) p2Sets++;
-  });
-  return isUserPlayer1 ? p1Sets > p2Sets : p2Sets > p1Sets;
 }
 
 /** Cheap record count from the base rows Personal Home already resolved. */

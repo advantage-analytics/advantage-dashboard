@@ -935,10 +935,8 @@ export const RAIL_SCHOOLS: DirectorySchool[] = [
 /**
  * `2b`'s nine lines, exactly as the artboard states them.
  *
- * `LineupLine` is the dormant builder's own line shape (`lineup-editor.tsx`),
- * whose `forfeit` doc comment already names this artboard's
- * "— no available player" as the one forfeit a builder can set. Using it means
- * the re-wiring hands these rows straight to `LineupEditor`.
+ * `LineupLine` is the dormant builder's own line shape (`lineup-editor.tsx`).
+ * Using it means the re-wiring hands these rows straight to `LineupEditor`.
  *
  * ── Stated, not seeded ─────────────────────────────────────────────────────
  * `dual-form.tsx`'s `seedLineup()` fills S1–S6 from `ladder[0..5]` and pairs
@@ -961,7 +959,8 @@ export const DUAL_DRAFT_LINES: LineupLine[] = [
     ourIds: [],
     ourLabels: ["Dana Brooks"],
     theirLabels: [],
-    forfeit: null,
+    noPlayer: false,
+    theirNoPlayer: false,
   },
   {
     key: "S2",
@@ -970,7 +969,8 @@ export const DUAL_DRAFT_LINES: LineupLine[] = [
     ourIds: [],
     ourLabels: ["Marcus Reid"],
     theirLabels: [],
-    forfeit: null,
+    noPlayer: false,
+    theirNoPlayer: false,
   },
   {
     key: "S3",
@@ -979,7 +979,8 @@ export const DUAL_DRAFT_LINES: LineupLine[] = [
     ourIds: [],
     ourLabels: ["Rafael Osei"],
     theirLabels: [],
-    forfeit: null,
+    noPlayer: false,
+    theirNoPlayer: false,
   },
   {
     key: "S4",
@@ -988,7 +989,8 @@ export const DUAL_DRAFT_LINES: LineupLine[] = [
     ourIds: [],
     ourLabels: ["Sam Tanaka"],
     theirLabels: [],
-    forfeit: null,
+    noPlayer: false,
+    theirNoPlayer: false,
   },
   {
     key: "S5",
@@ -997,20 +999,20 @@ export const DUAL_DRAFT_LINES: LineupLine[] = [
     ourIds: [],
     ourLabels: ["Jules Moreau"],
     theirLabels: [],
-    forfeit: null,
+    noPlayer: false,
+    theirNoPlayer: false,
   },
   {
-    // The forfeited line. Nobody named on either side, which is what
-    // `LineupLine.forfeit` and `line-row.tsx` both already treat as the shape
-    // of a forfeit — and `"ours"` is the only side a builder can set: it
-    // awards the point to THEM.
+    // `2b` draws S6 forfeited for want of an available player: "No player",
+    // which the save records as a forfeit for our side.
     key: "S6",
     slot: "S6",
     discipline: "singles",
     ourIds: [],
     ourLabels: [],
     theirLabels: [],
-    forfeit: "ours",
+    noPlayer: true,
+    theirNoPlayer: false,
   },
   {
     key: "D1",
@@ -1019,7 +1021,8 @@ export const DUAL_DRAFT_LINES: LineupLine[] = [
     ourIds: [],
     ourLabels: ["Brooks", "Reid"],
     theirLabels: [],
-    forfeit: null,
+    noPlayer: false,
+    theirNoPlayer: false,
   },
   {
     key: "D2",
@@ -1028,7 +1031,8 @@ export const DUAL_DRAFT_LINES: LineupLine[] = [
     ourIds: [],
     ourLabels: ["Osei", "Tanaka"],
     theirLabels: [],
-    forfeit: null,
+    noPlayer: false,
+    theirNoPlayer: false,
   },
   {
     // Adeyemi pairs into D3 and appears in no singles line — see the header
@@ -1039,7 +1043,8 @@ export const DUAL_DRAFT_LINES: LineupLine[] = [
     ourIds: [],
     ourLabels: ["Moreau", "Adeyemi"],
     theirLabels: [],
-    forfeit: null,
+    noPlayer: false,
+    theirNoPlayer: false,
   },
 ];
 

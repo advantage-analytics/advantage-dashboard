@@ -52,6 +52,8 @@ import type { EventFormat } from "@/lib/schedule/types";
  */
 export function EventPageFrame({
   title,
+  mark,
+  subline,
   actions,
   facts,
   detail,
@@ -60,6 +62,14 @@ export function EventPageFrame({
 }: {
   /** The heading. A dual passes its own `vs` prefix — see `EventTitle`. */
   title: React.ReactNode;
+  /**
+   * The event's crest (`EventMark` at 48px), drawn left of the title as the
+   * Schedule drawer draws it. With a mark, `facts` sits under the title inside
+   * the same identity block rather than under the whole header row.
+   */
+  mark?: React.ReactNode;
+  /** A 12px ink-600 qualifier on the title's baseline — a dual's conference. */
+  subline?: React.ReactNode;
   /** Right-aligned on the title baseline. Ghost + primary, both `advButton()`. */
   actions?: React.ReactNode;
   /** `EventFacts`, drawn directly under the title. */
@@ -73,13 +83,38 @@ export function EventPageFrame({
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pt-5 pb-8">
       <div>
-        <div className="flex items-start justify-between gap-6">
-          <h1 className="text-display min-w-0">{title}</h1>
+        <div
+          className={cn(
+            "flex justify-between gap-6",
+            mark ? "items-center" : "items-start",
+          )}
+        >
+          {mark ? (
+            <div className="flex min-w-0 items-center gap-3.5">
+              {mark}
+              <div className="flex min-w-0 flex-col gap-1">
+                <div className="flex min-w-0 items-baseline gap-2.5">
+                  <h1 className="text-display min-w-0">{title}</h1>
+                  {subline ? (
+                    <span
+                      className="shrink-0 text-[12px]"
+                      style={{ color: "var(--ink-600)" }}
+                    >
+                      {subline}
+                    </span>
+                  ) : null}
+                </div>
+                {facts}
+              </div>
+            </div>
+          ) : (
+            <h1 className="text-display min-w-0">{title}</h1>
+          )}
           {actions ? (
             <div className="flex shrink-0 items-center gap-2">{actions}</div>
           ) : null}
         </div>
-        {facts}
+        {mark ? null : facts}
       </div>
 
       {detail ? (
@@ -192,7 +227,8 @@ export function EventFacts({
   /** "Hard". Null when the event never recorded one; the fact is omitted. */
   surface?: string | null;
   /** `{ n: 9, noun: "lines" }` for a dual, `{ n: 3, noun: "entries" }` above. */
-  count: { n: number; noun: string };
+  /** Omitted on a dual, whose table already shows its nine lines. */
+  count?: { n: number; noun: string };
   /** Null while an event carries no format at all — capsule omitted. */
   format?: EventFormat | null;
 }) {
@@ -231,15 +267,17 @@ export function EventFacts({
         </span>
       ) : null}
 
-      <span className="inline-flex items-center gap-1.5">
-        <Rows3
-          className="size-[13px] shrink-0"
-          strokeWidth={1.5}
-          style={{ color: "var(--ink-500)" }}
-          aria-hidden="true"
-        />
-        <span className="tabular">{count.n}</span> {count.noun}
-      </span>
+      {count ? (
+        <span className="inline-flex items-center gap-1.5">
+          <Rows3
+            className="size-[13px] shrink-0"
+            strokeWidth={1.5}
+            style={{ color: "var(--ink-500)" }}
+            aria-hidden="true"
+          />
+          <span className="tabular">{count.n}</span> {count.noun}
+        </span>
+      ) : null}
 
       {format ? <FormatCapsule format={format} /> : null}
     </div>
@@ -434,23 +472,27 @@ export const TABLE_ROW_CLS =
 export function TableCard({
   columns,
   headers,
+  top,
   children,
 }: {
   /** e.g. `"grid-cols-[56px_52px_minmax(0,1fr)_120px_130px]"`. */
   columns: string;
   headers: string[];
+  /** A band inside the card above the column headings — the dual's score. */
+  top?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="surface-card min-w-0 px-6 pt-0.5 pb-1.5">
+      {top}
       <div
         className={cn(
           "grid items-center gap-4 border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
           columns,
         )}
       >
-        {headers.map((label) => (
-          <span key={label} className="eyebrow-sm">
+        {headers.map((label, index) => (
+          <span key={index} className="eyebrow-sm">
             {label}
           </span>
         ))}
@@ -475,7 +517,7 @@ export function GroupHead({
   name,
 }: {
   label: string;
-  note?: string;
+  note?: React.ReactNode;
   right?: React.ReactNode;
   /**
    * The label is a PERSON, not a category — a tournament entry's player.

@@ -1,3 +1,9 @@
+declare global {
+  interface Window {
+    routerReplaces?: string[];
+  }
+}
+
 export function useRouter() {
   return {
     refresh() {
@@ -5,6 +11,9 @@ export function useRouter() {
     },
     push(href: string) {
       window.routerPushes.push(href);
+    },
+    replace(href: string) {
+      (window.routerReplaces ??= []).push(href);
     },
   };
 }

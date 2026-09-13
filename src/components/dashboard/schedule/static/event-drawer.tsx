@@ -2,15 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import {
-  Calendar,
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-  MapPin,
-  Plus,
-  X,
-} from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, X } from "lucide-react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
@@ -19,6 +11,8 @@ import {
 } from "@/components/dashboard/shared/chrome-tooltip";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
+import { DualTicks } from "@/components/dashboard/schedule/dual-ticks";
+import { EventGlyphRow } from "@/components/dashboard/schedule/event-glyph-row";
 import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
 import { EventActionsMenu } from "@/components/dashboard/schedule/static/event-actions-menu";
 import { advButton } from "@/lib/ui/adv-button";
@@ -32,12 +26,7 @@ import {
   resultWon,
 } from "@/lib/schedule/entry-state";
 import { LINE_STATUS } from "@/lib/schedule/line-status";
-import {
-  formatEventDatesLong,
-  roundRank,
-  siteTitle,
-  surfaceTitle,
-} from "@/lib/schedule/format";
+import { roundRank } from "@/lib/schedule/format";
 import { cn } from "@/lib/utils";
 import type { OpponentProgram } from "@/lib/data/schedule-server";
 import type { EntryMatch, EventDetail, EventEntry } from "@/lib/schedule/types";
@@ -59,10 +48,10 @@ const ICON_BUTTON =
  * mark and conference; one nowrap glyph row — date, venue, court surface; the
  * score row, where the nine ticks ARE the score (singles, then doubles) with
  * the figures confirming at the left, winner's number in ink-900; then every
- * line — played lines with their score, a line awaiting its result, an unset
- * line as a blue "+ Set line"; and "Enter results" full width while lines are
- * still open. A player instead gets one full-width ghost "Open dual" or
- * "Open tournament" footer and no write menu.
+ * line — played lines with their score, a line awaiting its result, a line
+ * our side forfeited for want of a player; and "Enter results" full width while lines are
+ * still open, stacked under the roster's full-width ghost "Open dual" or
+ * "Open tournament", which every viewer gets. A player has no write menu.
  *
  * ── Row-click law, the other half ──────────────────────────────────────────
  * Lineup lines GAIN the chevron the event rows lost: each is a match and opens
@@ -149,33 +138,24 @@ export function EventDrawer({
   const singles = entries.filter((entry) => entry.discipline === "singles");
   const doubles = entries.filter((entry) => entry.discipline === "doubles");
   const eventHref = `/dashboard/team/schedule/${event.id}`;
-  const viewerOnly =
-    capabilities.canView && !capabilities.canEdit && !capabilities.canScore;
 
   // "While lines are open": a line with neither a decided played score nor a
   // non-played outcome. `entryPlayed` is the shared answer, so recording the
   // new outcome row closes a dual just as a legacy forfeit did, and clearing
   // it opens the line again. A tournament stays open — rounds get added as
   // they are played.
+  // Has anything on this event been decided — a played score or a recorded
+  // outcome? Nothing yet is the empty state, not a board of blanks.
+  const anyDecided = entries.some((entry) => entryPlayed(entry));
+
   const linesOpen = isDual
     ? entries.some((entry) => !entryPlayed(entry))
     : true;
 
   const subline = isDual ? (opponent?.conference ?? null) : event.host;
-  // The pin names where the event is. A dual's host is its venue when the
-  // builder recorded one; otherwise the side of the trip is all we know.
-  const venue = isDual
-    ? (event.host ?? siteTitle(event.site))
-    : siteTitle(event.site);
-  const footerAction = viewerOnly ? (
-    <Link href={eventHref} className={cn(advButton("ghost", "md"), "w-full")}>
-      {isDual ? "Open dual" : "Open tournament"}
-    </Link>
-  ) : capabilities.canScore && linesOpen ? (
-    <Link href={eventHref} className={cn(advButton("primary", "md"), "w-full")}>
-      Enter results
-    </Link>
-  ) : null;
+  // The roster's footer: the ghost "open" link for every viewer, with the
+  // primary stacked under it only while there is something to score.
+  const canEnterResults = capabilities.canScore && linesOpen;
 
   useEffect(() => {
     if (autoFocus) panelRef.current?.focus({ preventScroll: true });
@@ -283,16 +263,21 @@ export function EventDrawer({
           data-schedule-drawer-body=""
           className={cn(
             "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6",
-            footerAction ? "pb-4" : "pb-[22px]",
+            "pb-4",
           )}
         >
           <div className="flex shrink-0 items-center gap-3.5">
             <EventMark kind={event.kind} name={event.name} size={48} />
             <div className="flex min-w-0 flex-col gap-1">
-              <div className="text-title-lg">{event.name}</div>
+              {/* One line, truncated: the drawer is 340px and a wrapped name
+                  pushes the facts and score down a row. `title` carries the
+                  full name on hover; the event page shows it whole. */}
+              <div className="text-title-lg truncate" title={event.name}>
+                {event.name}
+              </div>
               {subline ? (
                 <span
-                  className="text-[12px]"
+                  className="truncate text-[12px]"
                   style={{ color: "var(--ink-600)" }}
                 >
                   {subline}
@@ -301,80 +286,41 @@ export function EventDrawer({
             </div>
           </div>
 
-          <div className="-mt-2.5 flex shrink-0 flex-nowrap items-center gap-3 overflow-hidden">
-            <span className="text-micro inline-flex items-center gap-[5px] whitespace-nowrap">
-              <Calendar
-                className="size-3"
-                strokeWidth={1.5}
-                style={{ color: "var(--ink-400)" }}
-                aria-hidden="true"
-              />
-              <span className="tabular">
-                {formatEventDatesLong(event.startsOn, event.endsOn)}
-              </span>
-            </span>
-            <span className="text-micro inline-flex items-center gap-[5px] whitespace-nowrap">
-              <MapPin
-                className="size-3"
-                strokeWidth={1.5}
-                style={{ color: "var(--ink-400)" }}
-                aria-hidden="true"
-              />
-              {venue}
-            </span>
-            {event.surface ? (
-              <span className="text-micro inline-flex items-center gap-[5px] whitespace-nowrap">
-                {/* eslint-disable-next-line @next/next/no-img-element -- a static SVG in /public */}
-                <img
-                  src="/icons/tennis-court-icon.svg"
-                  alt=""
-                  className="block size-3 opacity-90"
-                />
-                {surfaceTitle(event.surface)}
-              </span>
-            ) : null}
-          </div>
+          <EventGlyphRow event={event} className="-mt-2.5" />
 
+          {/* Always drawn for a dual: nine slots, ghosts until decided, so
+              the board's size reads before any line is played. */}
           {isDual ? <ScoreRow singles={singles} doubles={doubles} /> : null}
-
           {isDual ? (
             <>
+              {/* A dual is saved with all nine lines set, so both groups are
+                  always drawn — there is no half-built lineup to explain. */}
               <Section label="Singles">
                 {singles.map((entry) => (
-                  <DualLine
-                    key={entry.id}
-                    entry={entry}
-                    eventHref={eventHref}
-                    canEdit={capabilities.canEdit}
-                  />
+                  <DualLine key={entry.id} entry={entry} />
                 ))}
-                {/* A dual with no lines at all: one row where the lineup would
-                    start, pointing at the event page — the same shape as an
-                    unset line, one level up. */}
-                {entries.length === 0 ? (
-                  <SetLineRow
-                    slot="S1"
-                    eventHref={eventHref}
-                    canEdit={capabilities.canEdit}
-                    label="Set lineup"
-                  />
-                ) : null}
               </Section>
-              {doubles.length > 0 ? (
-                <Section label="Doubles">
-                  {doubles.map((entry) => (
-                    <DualLine
-                      key={entry.id}
-                      entry={entry}
-                      eventHref={eventHref}
-                      canEdit={capabilities.canEdit}
-                    />
-                  ))}
-                </Section>
-              ) : null}
+              <Section label="Doubles">
+                {doubles.map((entry) => (
+                  <DualLine key={entry.id} entry={entry} />
+                ))}
+              </Section>
             </>
           ) : (
             <>
+              {entries.length === 0 ? (
+                <Section label="Entries">
+                  <EmptyNote>
+                    No entries yet. Each player&apos;s latest round appears here
+                    once they are entered.
+                  </EmptyNote>
+                </Section>
+              ) : !anyDecided ? (
+                <EmptyNote>
+                  No results yet. Each entry&apos;s latest round appears here
+                  once one is played.
+                </EmptyNote>
+              ) : null}
               {singles.length > 0 ? (
                 <Section label="Singles">
                   {singles.map((entry) => (
@@ -389,36 +335,32 @@ export function EventDrawer({
                   ))}
                 </Section>
               ) : null}
-              {entries.length === 0 ? (
-                <Section label="Entries">
-                  <div className={cn(ROW, "cursor-default")}>
-                    <span
-                      className="mono text-[11px]"
-                      style={{ color: "var(--ink-500)" }}
-                    >
-                      —
-                    </span>
-                    <span
-                      className="text-[12px]"
-                      style={{ color: "var(--ink-700)" }}
-                    >
-                      No entries yet
-                    </span>
-                  </div>
-                </Section>
-              ) : null}
             </>
           )}
         </div>
 
-        {footerAction ? (
-          <div
-            data-schedule-drawer-footer=""
-            className="shrink-0 bg-[var(--surface-card)] px-[22px] pb-[22px]"
+        <div
+          data-schedule-drawer-footer=""
+          className="flex shrink-0 flex-col gap-3 bg-[var(--surface-card)] px-[22px] pb-[22px]"
+        >
+          <Link
+            href={eventHref}
+            className={cn(advButton("ghost", "md"), "w-full")}
           >
-            {footerAction}
-          </div>
-        ) : null}
+            {isDual ? "Open dual" : "Open tournament"}
+          </Link>
+          {canEnterResults ? (
+            // Straight into the score flow — the one place results are
+            // written. The page sends anyone who may not score back to the
+            // event, so this needs no second gate of its own.
+            <Link
+              href={`${eventHref}/score`}
+              className={cn(advButton("primary", "md"), "w-full")}
+            >
+              Enter results
+            </Link>
+          ) : null}
+        </div>
       </div>
     </aside>
   );
@@ -430,7 +372,7 @@ export function EventDrawer({
  * Every tick and the two figures come off `lineWon()` / `dualScore()`, the
  * same answers the rows below draw, so the rail and the lines cannot disagree
  * about one court. A forfeit is a decided line and takes a colour; an
- * undecided one keeps the artboard's grey. The winner's figure sits in
+ * undecided or missing line is a Form Ticks ghost. The winner's figure sits in
  * ink-900 and the other in ink-500; before anything is on the board both are
  * ink-300, because a 0–0 in full ink reads as a result.
  */
@@ -463,35 +405,8 @@ function ScoreRow({
         </span>
         <span style={{ color: themColor }}>{score.them}</span>
       </span>
-      <div className="flex items-center gap-1" aria-hidden="true">
-        {singles.map((entry) => (
-          <Tick key={entry.id} entry={entry} />
-        ))}
-        {singles.length > 0 && doubles.length > 0 ? (
-          <span className="w-2" />
-        ) : null}
-        {doubles.map((entry) => (
-          <Tick key={entry.id} entry={entry} />
-        ))}
-      </div>
+      <DualTicks singles={singles} doubles={doubles} />
     </div>
-  );
-}
-
-function Tick({ entry }: { entry: EventEntry }) {
-  const won = lineWon(entry, entry.matches[0] ?? null);
-  return (
-    <span
-      className="h-[18px] w-1 rounded-[1.5px]"
-      style={{
-        background:
-          won === null
-            ? "var(--ink-300)"
-            : won
-              ? "var(--success)"
-              : "var(--danger)",
-      }}
-    />
   );
 }
 
@@ -529,20 +444,12 @@ const ROW_LINK = cn(
  *   played      → score, outcome glyph, chevron; the row opens the match page
  *   awaiting    → players named, no result yet: "Awaiting result"
  *   non-played  → kind chip + side-derived result glyph, with no report link
- *   unset       → nobody named: the blue "+ Set line", pointing at the event
+ *   no player   → a forfeit our side recorded in the lineup: non-played, above
  *
  * Names join with the artboard's middle dot — "Lee · Chen" — rather than the
  * event page's slash. It is a drawn separator; the page's is the other one.
  */
-function DualLine({
-  entry,
-  eventHref,
-  canEdit,
-}: {
-  entry: EventEntry;
-  eventHref: string;
-  canEdit: boolean;
-}) {
+function DualLine({ entry }: { entry: EventEntry }) {
   const name = entry.playerLabels.join(" · ");
   const result = resolveEntryResult(entry, null);
 
@@ -561,17 +468,6 @@ function DualLine({
     );
   }
 
-  if (entry.playerLabels.length === 0) {
-    return (
-      <SetLineRow
-        slot={entry.slot}
-        eventHref={eventHref}
-        canEdit={canEdit}
-        label="Set line"
-      />
-    );
-  }
-
   return (
     <div className={ROW}>
       <Slot>{entry.slot}</Slot>
@@ -581,13 +477,7 @@ function DualLine({
       >
         {name}
       </span>
-      <span
-        className="text-micro col-span-3 text-right whitespace-nowrap"
-        style={{ color: "var(--ink-600)" }}
-      >
-        <span className="mr-1.5 inline-block size-[5px] rounded-full bg-[var(--ink-300)]" />
-        Awaiting result
-      </span>
+      <AwaitingResult />
     </div>
   );
 }
@@ -611,13 +501,7 @@ function TournamentLine({ entry }: { entry: EventEntry }) {
         >
           {name || "—"}
         </span>
-        <span
-          className="text-micro col-span-3 text-right whitespace-nowrap"
-          style={{ color: "var(--ink-600)" }}
-        >
-          <span className="mr-1.5 inline-block size-[5px] rounded-full bg-[var(--ink-300)]" />
-          Awaiting result
-        </span>
+        <AwaitingResult />
       </div>
     );
   }
@@ -745,54 +629,38 @@ function PlayedLine({
 }
 
 /**
- * "+ Set line" — the blue row for a slot nobody is named on. Points at the
- * event page, where the line is edited; a reader who cannot edit sees the
- * slot standing empty instead of an action they are not allowed to take.
+ * A line with players named and no result yet, as the roster's recent-match
+ * row draws an unrecorded result: "No result" where the score lands, an en
+ * dash where the mark lands, and no chevron — there is no match to open.
  */
-function SetLineRow({
-  slot,
-  eventHref,
-  canEdit,
-  label,
-}: {
-  slot: string | null;
-  eventHref: string;
-  canEdit: boolean;
-  label: string;
-}) {
-  const notSet = (
-    <span
-      className="text-micro col-span-3 text-right whitespace-nowrap"
-      style={{ color: "var(--ink-400)" }}
-    >
-      Not set
-    </span>
-  );
-
-  if (!canEdit) {
-    return (
-      <div className={ROW}>
-        <Slot>{slot}</Slot>
-        <span className="text-[12px]" style={{ color: "var(--ink-700)" }}>
-          —
-        </span>
-        {notSet}
-      </div>
-    );
-  }
-
+function AwaitingResult() {
   return (
-    <Link href={eventHref} className={ROW_LINK}>
-      <Slot>{slot}</Slot>
+    <>
       <span
-        className="inline-flex items-center gap-1.5 text-[12px] font-medium"
-        style={{ color: "var(--blue)" }}
+        className="text-right text-[11px]"
+        style={{ color: "var(--ink-400)" }}
       >
-        <Plus className="size-3" strokeWidth={1.5} aria-hidden="true" />
-        {label}
+        No result
       </span>
-      {notSet}
-    </Link>
+      {/* The roster's unrecorded-result mark: an en dash in the mark column. */}
+      <span
+        aria-hidden="true"
+        className="text-center text-[11px]"
+        style={{ color: "var(--ink-400)" }}
+      >
+        –
+      </span>
+      <span />
+    </>
+  );
+}
+
+/** The roster drawer's empty sentence: what will arrive, in one line. */
+function EmptyNote({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="shrink-0 text-[12px] leading-[1.6] text-[var(--ink-500)]">
+      {children}
+    </p>
   );
 }
 

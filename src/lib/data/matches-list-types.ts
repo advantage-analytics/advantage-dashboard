@@ -1,5 +1,6 @@
 import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
 import type { MatchAnalysis } from "@/lib/data/match-analysis";
+import { scoreWinner } from "@/lib/data/match-utils";
 
 export interface DbMatch {
   id: string;
@@ -14,6 +15,8 @@ export interface DbMatch {
     player2: number[];
     player1_tiebreaks?: (number | null)[];
     player2_tiebreaks?: (number | null)[];
+    /** Set when the games don't decide it — a retirement or default. */
+    winner?: "player1" | "player2";
   } | null;
   result: string | null;
   match_type: string | null;
@@ -99,13 +102,6 @@ export function transformDbMatch(
     player2Tiebreak: row.score?.player2_tiebreaks?.[i] ?? null,
   }));
 
-  let p1Sets = 0;
-  let p2Sets = 0;
-  for (const set of sets) {
-    if (set.player1 > set.player2) p1Sets++;
-    else if (set.player2 > set.player1) p2Sets++;
-  }
-
   return {
     id: row.id,
     tournamentName: row.tournament_name ?? "Unknown Event",
@@ -121,7 +117,9 @@ export function transformDbMatch(
     player2: { name: row.player2_name },
     score: {
       sets,
-      winner: p1Sets > p2Sets ? "player1" : "player2",
+      // The shared rule (a stored winner, then sets). A level score has always
+      // read as player2 here.
+      winner: scoreWinner(row.score) ?? "player2",
     },
   };
 }

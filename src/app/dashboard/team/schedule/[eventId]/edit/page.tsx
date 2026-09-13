@@ -7,6 +7,7 @@ import { getTeamSettings } from "@/lib/data/team-settings-server";
 import { getEventDetail } from "@/lib/data/schedule-server";
 import { NewDualDataProvider } from "@/components/dashboard/schedule/static/dual-school-step";
 import { NewDualFlow } from "@/components/dashboard/schedule/static/new-dual-flow";
+import { EventHeaderSlot } from "@/components/dashboard/schedule/event-header-slot";
 import { NewTournamentFlow } from "@/components/dashboard/schedule/static/new-tournament-flow";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
 import type { EventDetail } from "@/lib/schedule/types";
@@ -90,12 +91,20 @@ export default async function EditEventPage({
     ]);
 
     return (
-      <NewTournamentFlow
-        mode="edit"
-        event={detail}
-        roster={roster}
-        defaultSurface={settings?.program.defaultSurface ?? null}
-      />
+      <>
+        <EventHeaderSlot
+          eventId={eventId}
+          name={detail.event.name}
+          kind={detail.event.kind}
+          leaf="Edit"
+        />
+        <NewTournamentFlow
+          mode="edit"
+          event={detail}
+          roster={roster}
+          defaultSurface={settings?.program.defaultSurface ?? null}
+        />
+      </>
     );
   }
 
@@ -106,29 +115,37 @@ export default async function EditEventPage({
   ]);
 
   return (
-    <NewDualDataProvider
-      data={{
-        ladder,
-        defaultSurface: settings?.program.defaultSurface ?? null,
-        // Step one's own, and step one cannot be reached from an edit. Stated
-        // as empty rather than read: a conference table and a directory count
-        // fetched for a screen nobody can open are round trips paid for
-        // nothing.
-        ourConference: settings?.program.conference ?? null,
-        ourTeam: settings?.program.team ?? null,
-        ourDivision: null,
-        ourProgramKey: null,
-        conferencePrograms: [],
-        historyEntries: [],
-        directoryTotal: null,
-      }}
-    >
-      <NewDualFlow
-        mode="edit"
-        event={detail}
-        opponentProgram={opponentProgram}
+    <>
+      <EventHeaderSlot
+        eventId={eventId}
+        name={detail.event.name}
+        kind={detail.event.kind}
+        leaf="Edit"
       />
-    </NewDualDataProvider>
+      <NewDualDataProvider
+        data={{
+          ladder,
+          defaultSurface: settings?.program.defaultSurface ?? null,
+          // Step one's own, and step one cannot be reached from an edit. Stated
+          // as empty rather than read: a conference table and a directory count
+          // fetched for a screen nobody can open are round trips paid for
+          // nothing.
+          ourConference: settings?.program.conference ?? null,
+          ourTeam: settings?.program.team ?? null,
+          ourDivision: null,
+          ourProgramKey: null,
+          conferencePrograms: [],
+          historyEntries: [],
+          directoryTotal: null,
+        }}
+      >
+        <NewDualFlow
+          mode="edit"
+          event={detail}
+          opponentProgram={opponentProgram}
+        />
+      </NewDualDataProvider>
+    </>
   );
 }
 

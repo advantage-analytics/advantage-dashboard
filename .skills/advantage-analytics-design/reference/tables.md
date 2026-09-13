@@ -118,7 +118,8 @@ master-detail split is retired; its detail is the peek drawer below.
    `radius-element` row, inset 8px from the card edge; the lifecycle cell
    swaps for a `⋯` trigger (`MoreHorizontal`, stroke 1.75 — the one
    exception to strokeWidth 1.5 in the product) in a 28px radius-element
-   square, opening a 12px-radius float menu with destructive last and a
+   square, opening a 12px-radius float menu with destructive last (grey at rest, `--danger` on hover/focus —
+   [chrome.md › Dropdown / Menu](chrome.md#dropdown--menu)) and a
    `detail` line on consequential items ("Coach and teammates lose this
    match"). Keep to 2–3, revealed on hover / focus-within. Container rows
    have no action gutter — the Roster's Upload lives in the drawer.

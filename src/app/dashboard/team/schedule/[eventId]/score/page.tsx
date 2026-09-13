@@ -1,21 +1,29 @@
+import { EventHeaderSlot } from "@/components/dashboard/schedule/event-header-slot";
 import { notFound, redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { canManageTeamSchedule } from "@/lib/workspace/types";
+import {
+  canManageTeamSchedule,
+  canUploadForProgram,
+} from "@/lib/workspace/types";
 import { getEventDetail, programNamesFor } from "@/lib/data/schedule-server";
 import { entryState, outcomeForRound } from "@/lib/schedule/entry-state";
+import { roundRank } from "@/lib/schedule/format";
 import { lineupChoices, presetFor } from "@/lib/schedule/line-choices";
+import { outcomeKey } from "@/lib/schedule/score-seed";
+import { nextRound } from "@/lib/schedule/tournament-run";
 import { ScoreOnlyFlow } from "@/components/dashboard/schedule/score-only-flow";
 import type { EventPreset } from "@/components/dashboard/matches/new-match-wizard/types";
 
 /**
- * Scoring an event's lines, one after another.
+ * Scoring an event's lines, one after another — the ONE place a result or a
+ * non-played outcome is recorded for a dual line or a tournament entry.
  *
- * The event page's inline `ScoreEntry` row is right for correcting one line in
- * place. It is the wrong shape for a coach on the bus home with nine results
- * on a piece of paper — that person wants the upload wizard's room with the
- * video half switched off, and the next line handed to them when they finish
- * one. Same `recordResult`, same tiebreak encoding, a different amount of
- * furniture around it.
+ * The event pages link here from their header and from every line; nothing
+ * scores in place. A coach on the bus home with nine results on a piece of
+ * paper wants the upload wizard's room with the video half switched off, and
+ * the next line handed to them when they finish one; a coach correcting one
+ * line arrives with `?entry=` and leaves with "Save and close". Same
+ * `recordResult`, same tiebreak encoding, one amount of furniture.
  *
  * The gate mirrors `/dashboard/team/upload`'s, one line for one line, with the
  * one difference that a non-staff viewer lands back on the event they came
@@ -24,16 +32,23 @@ import type { EventPreset } from "@/components/dashboard/matches/new-match-wizar
  * `event_entry_id` unless `is_program_staff`, and `recordResult` opens with its
  * own `requireStaff`. A player offered this form would fill it in and be
  * refused at the end.
+ *
+ * A tournament entry is a whole run with one match per round, so the round is
+ * a real question here where a dual line's slot answers it. It is asked in
+ * the URL (`?round=`), not in client state: `recordResult` de-duplicates on
+ * (entry, round) and UPDATES a round it already holds, so the form for a
+ * recorded round must open with that round's score in it — which only the
+ * server can seed. The flow's Round control navigates back here.
  */
 export default async function ScoreEventPage({
   params,
   searchParams,
 }: {
   params: Promise<{ eventId: string }>;
-  searchParams: Promise<{ entry?: string }>;
+  searchParams: Promise<{ entry?: string; round?: string }>;
 }) {
   const { eventId } = await params;
-  const { entry: requestedEntryId } = await searchParams;
+  const { entry: requestedEntryId, round: requestedRound } = await searchParams;
 
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
@@ -48,22 +63,8 @@ export default async function ScoreEventPage({
   const detail = await getEventDetail(active.id, eventId);
   if (!detail) notFound();
 
-  // Duals only, and structurally rather than by nobody linking here.
-  //
-  // This flow scores ONE line and takes its round from the entry — a dual
-  // line's slot IS its round, so there is nothing to ask. A tournament entry
-  // is a whole run with one match per round, so the round is a real question,
-  // and answering it from the entry's existing matches would hand
-  // `recordResult` a round it already holds: it de-duplicates on
-  // (entry, round) and would UPDATE the recorded quarter-final with the
-  // semi-final's score, losing the earlier result with no error. That question
-  // is asked properly by `AddResultDialog`, which the tournament page opens
-  // from its own header — so a tournament lands there, not here.
-  if (detail.event.kind !== "dual") {
-    redirect(`/dashboard/team/schedule/${eventId}`);
-  }
-
   const { event, entries } = detail;
+  const tournament = event.kind === "tournament";
 
   const programs = await programNamesFor(
     entries
@@ -91,33 +92,75 @@ export default async function ScoreEventPage({
   // Nothing to score: every line is forfeited, or the lineup was never set.
   if (!entry) redirect(`/dashboard/team/schedule/${eventId}`);
 
-  const preset: EventPreset = presetFor(
-    event,
-    entry,
-    entry.matches[0] ?? null,
-    programs,
-  );
+  // The round, for a tournament: `?round=` when it names one on the ladder,
+  // otherwise the next one to record. A dual ignores it — its slot is its
+  // round, and `presetFor` takes the slot first.
+  const round = tournament
+    ? requestedRound && roundRank(requestedRound) !== Number.MAX_SAFE_INTEGER
+      ? requestedRound.toUpperCase()
+      : nextRound(entry)
+    : null;
+  const match = tournament
+    ? (entry.matches.find((item) => item.round === round) ?? null)
+    : (entry.matches[0] ?? null);
 
+  const preset: EventPreset = presetFor(event, entry, match, programs, round);
+
+  // Saved outcomes, keyed the way the flow looks them up: per line on a dual,
+  // per (entry, round) on a tournament.
   const outcomes = Object.fromEntries(
-    scoreable.map((candidate) => {
-      const resolved = outcomeForRound(candidate, null);
-      return [
-        candidate.id,
-        resolved
-          ? { kind: resolved.outcome.kind, side: resolved.outcome.side }
-          : null,
-      ];
+    scoreable.flatMap((candidate) => {
+      if (!tournament) {
+        const resolved = outcomeForRound(candidate, null);
+        return [
+          [
+            outcomeKey(candidate.id, null),
+            resolved
+              ? { kind: resolved.outcome.kind, side: resolved.outcome.side }
+              : null,
+          ],
+        ];
+      }
+      return (candidate.outcomes ?? []).map((outcome) => [
+        outcomeKey(candidate.id, outcome.round),
+        { kind: outcome.kind, side: outcome.side },
+      ]);
     }),
   );
 
+  // Every round an entry already holds something for — a match or an
+  // outcome — so the Round control can say so before a coach overwrites it.
+  const recordedRounds = Object.fromEntries(
+    scoreable.map((candidate) => [
+      candidate.id,
+      [
+        ...candidate.matches.map((item) => item.round),
+        ...(candidate.outcomes ?? []).map((item) => item.round),
+      ].filter((value): value is string => value !== null),
+    ]),
+  );
+
   return (
-    <ScoreOnlyFlow
-      preset={preset}
-      lineup={lineupChoices(event, entries, programs, {
-        includeNonPlayed: true,
-      })}
-      outcomes={outcomes}
-      eventHref={`/dashboard/team/schedule/${eventId}`}
-    />
+    <>
+      <EventHeaderSlot
+        eventId={eventId}
+        name={event.name}
+        kind={event.kind}
+        leaf="Add score"
+      />
+      {/* Keyed on the URL's answer: the flow seeds its current line once, so
+          a Round change (a `router.replace` back here) must remount it. */}
+      <ScoreOnlyFlow
+        key={`${entry.id}:${round ?? ""}`}
+        preset={preset}
+        lineup={lineupChoices(event, entries, programs, {
+          includeNonPlayed: true,
+        })}
+        outcomes={outcomes}
+        recordedRounds={recordedRounds}
+        eventHref={`/dashboard/team/schedule/${eventId}`}
+        canUpload={canUploadForProgram(active)}
+      />
+    </>
   );
 }

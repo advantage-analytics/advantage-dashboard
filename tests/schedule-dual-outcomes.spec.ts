@@ -114,7 +114,6 @@ test("dual outcomes render their shared kind and side vocabulary with the pure 4
 
   await expect(page.getByText("4–3", { exact: true })).toBeVisible();
   await expect(page.getByText("Final", { exact: true })).toBeVisible();
-  await expect(page.getByText("1 of 3 lines", { exact: true })).toBeVisible();
 
   for (const [slot, kind, result] of [
     ["S1", "Forfeited", "Won"],
@@ -127,10 +126,18 @@ test("dual outcomes render their shared kind and side vocabulary with the pure 4
     const row = line(page, slot);
     await expect(row.getByText(kind, { exact: true })).toBeVisible();
     await expect(row.getByText(result, { exact: true })).toHaveCount(1);
+    // Nothing is scored in place: the row links into the score flow, preset
+    // on this line.
     await expect(
-      row.getByRole("button", { name: "Edit result" }),
-    ).toBeVisible();
-    await expect(row.getByRole("link", { name: "Report" })).toHaveCount(0);
+      row.getByRole("link", { name: "Edit result" }),
+    ).toHaveAttribute(
+      "href",
+      `/dashboard/team/schedule/dual-outcomes/score?entry=entry-${slot.toLowerCase()}`,
+    );
+    await expect(row.getByRole("button", { name: "Edit result" })).toHaveCount(
+      0,
+    );
+    await expect(row.getByRole("link", { name: "View report" })).toHaveCount(0);
   }
 });
 
@@ -140,9 +147,12 @@ test("played report navigation and unanswered scoring remain intact", async ({
   await open(page, "?normal");
 
   await expect(
-    line(page, "S1").getByRole("button", { name: "Add result" }),
-  ).toBeVisible();
+    line(page, "S1").getByRole("link", { name: "Add result" }),
+  ).toHaveAttribute(
+    "href",
+    /\/dashboard\/team\/schedule\/[^/]+\/score\?entry=/,
+  );
   await expect(
-    line(page, "S2").getByRole("link", { name: "Report" }),
+    line(page, "S2").getByRole("link", { name: "View report" }),
   ).toHaveAttribute("href", "/dashboard/matches/normal-ready-match");
 });

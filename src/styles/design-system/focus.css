@@ -66,14 +66,12 @@
    because the rule under them thickens to 2px `--blue` on focus, and `boxed`
    keeps the ring because its border does not change.
 
-   It is NOT yet every native `<select>` in the product. Three still draw their
-   own — two in `schedule/add-result-dialog.tsx` and one in
-   `schedule/add-result-row.tsx`
-   (plus the deliberately `opacity-0` one in
-   `settings/settings-inline-select.tsx`, which is a different pattern). Those
-   all KEEP the ring, correctly: each sits under a hairline that never changes,
-   so the rule below applies to them unaltered. Migrating them is a live task,
-   not a finished one — do not read this paragraph as saying it is done.
+   The three native `<select>`s that used to draw their own — two in
+   `schedule/add-result-dialog.tsx`, one in `schedule/add-result-row.tsx` —
+   left with those files when scoring moved to the one score flow. The
+   deliberately `opacity-0` one in `settings/settings-inline-select.tsx` is a
+   different pattern and remains. Check with a search before assuming no other
+   native `<select>` has appeared since.
 
    The opt-out is NOT safe merely because a field looks like an underline —
    only because something visibly changes on it at focus. `schedule/
