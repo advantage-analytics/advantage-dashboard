@@ -110,7 +110,7 @@ ready).
 
 ## T8 · Add player dialog offers Restore for a removed player
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T7
 - **files:** `src/components/dashboard/team/add-player-dialog.tsx` (header comment ~L56-90, `sameName` check ~L301-315, `submit()` ~L320-365, footer ~L378-400, notes ~L435/471), new `tests/former-player-match.spec.ts` (precedent `tests/date-value.spec.ts` — pure spec, no browser) — guess
