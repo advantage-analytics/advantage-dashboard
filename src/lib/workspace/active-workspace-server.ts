@@ -16,6 +16,17 @@ import type {
   UploadPolicy,
 } from "./types";
 
+/** A bucket object's public URL, or null when there is no object. */
+function publicUrlOrNull(
+  supabase: SupabaseClient,
+  bucket: string,
+  path: string | null,
+): string | null {
+  return path
+    ? supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl
+    : null;
+}
+
 /**
  * Resolve the viewer's workspaces for one request.
  *
@@ -192,11 +203,11 @@ async function listProgramWorkspaces(
         timeZone: program.time_zone,
         role: row.role as ProgramRole,
         mark: program.school_name.trim().charAt(0).toUpperCase(),
-        crestUrl: program.crest_path
-          ? supabase.storage
-              .from(PROGRAM_CRESTS_BUCKET)
-              .getPublicUrl(program.crest_path).data.publicUrl
-          : null,
+        crestUrl: publicUrlOrNull(
+          supabase,
+          PROGRAM_CRESTS_BUCKET,
+          program.crest_path,
+        ),
         // 'active' means the claim settled. 'claim_pending' is a live workspace
         // whose video submission waits — see /claim/review, which promises
         // exactly that.
@@ -309,10 +320,11 @@ export const getWorkspaceContext = cache(
     ]);
 
     const avatarPath = row?.avatar_path ?? null;
-    const avatarUrl = avatarPath
-      ? supabase.storage.from(USER_AVATARS_BUCKET).getPublicUrl(avatarPath).data
-          .publicUrl
-      : null;
+    const avatarUrl = publicUrlOrNull(
+      supabase,
+      USER_AVATARS_BUCKET,
+      avatarPath,
+    );
 
     const viewer = toViewer(user.id, user.email ?? "", row, avatarUrl);
 

@@ -286,7 +286,7 @@ function SessionRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3.5 border-t border-[var(--border-hairline)] py-3">
+    <div className="flex items-center gap-3.5 border-t border-[var(--border-hairline)] py-3 first:border-t-0">
       <Icon
         className="size-3.5 shrink-0 text-[var(--ink-600)]"
         strokeWidth={1.5}

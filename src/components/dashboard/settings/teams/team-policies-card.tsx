@@ -22,12 +22,22 @@ const UPLOAD_POLICY_NOTE: Record<UploadPolicy, string> = {
   everyone: "Players as well, where their row allows it",
 };
 
-const UPLOAD_POLICY_OPTIONS: readonly MenuOption<UploadPolicy>[] =
-  UPLOAD_POLICIES.map((policy) => ({
+/** One ladder's rungs as a MenuSelect's options — the label, then its note. */
+function buildPolicyOptions<Policy extends UploadPolicy>(
+  policies: readonly Policy[],
+  notes: Record<Policy, string>,
+): readonly MenuOption<Policy>[] {
+  return policies.map((policy) => ({
     value: policy,
     label: uploadPolicyLabel(policy),
-    description: UPLOAD_POLICY_NOTE[policy],
+    description: notes[policy],
   }));
+}
+
+const UPLOAD_POLICY_OPTIONS = buildPolicyOptions(
+  UPLOAD_POLICIES,
+  UPLOAD_POLICY_NOTE,
+);
 
 /**
  * The events ladder: the same rungs and labels as uploads, minus "everyone" —
@@ -39,12 +49,15 @@ const EVENTS_POLICY_NOTE: Record<EventsPolicy, string> = {
   staff: "Anyone on the coaching staff",
 };
 
-const EVENTS_POLICY_OPTIONS: readonly MenuOption<EventsPolicy>[] =
-  EVENTS_POLICIES.map((policy) => ({
-    value: policy,
-    label: uploadPolicyLabel(policy),
-    description: EVENTS_POLICY_NOTE[policy],
-  }));
+const EVENTS_POLICY_OPTIONS = buildPolicyOptions(
+  EVENTS_POLICIES,
+  EVENTS_POLICY_NOTE,
+);
+
+/** Appends the owner-only caveat unless the viewer can edit this row. */
+function withOwnerNote(base: string, canEdit: boolean): string {
+  return canEdit ? base : `${base} Only the owner can change this.`;
+}
 
 /**
  * Who may upload team matches, who may create events, and the one fixed rule.
@@ -76,11 +89,10 @@ export function TeamPoliciesCard({
 
       <SettingsCardRow
         label="Who can upload team matches"
-        description={
-          canEditPolicies
-            ? "On-behalf uploads always show “added by”."
-            : "On-behalf uploads always show “added by”. Only the owner can change this."
-        }
+        description={withOwnerNote(
+          "On-behalf uploads always show “added by”.",
+          canEditPolicies,
+        )}
         control={
           <MenuSelect
             label="Who can upload team matches"
@@ -95,11 +107,10 @@ export function TeamPoliciesCard({
 
       <SettingsCardRow
         label="Who can create events"
-        description={
-          canEditPolicies
-            ? "Covers editing, scoring and deleting events too."
-            : "Covers editing, scoring and deleting events too. Only the owner can change this."
-        }
+        description={withOwnerNote(
+          "Covers editing, scoring and deleting events too.",
+          canEditPolicies,
+        )}
         control={
           <MenuSelect
             label="Who can create events"
