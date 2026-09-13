@@ -1337,66 +1337,79 @@ export function useUploadMatchWizard({
     let cancelled = false;
 
     (async () => {
-      // The open invitations ride along so the picker can show who has been
-      // asked but has not yet claimed their profile. Staff-only under RLS: a
-      // player's read returns nothing, and the rows render without the state.
-      const [
-        { data, error: rosterError },
-        { data: invites },
-        { data: ownRows },
-      ] = await Promise.all([
-        supabase.rpc("program_roster_full", {
-          p_program_id: eligibilityWorkspace.id,
-        }),
-        supabase
-          .from("program_invites")
-          .select("player_id, email")
-          .eq("program_id", eligibilityWorkspace.id)
-          .is("accepted_at", null),
-        supabase
-          .from("program_players")
-          .select(
-            "id, program_id, first_name, last_name, email, class_year, lineup_spot, claimed_by_user_id",
-          )
-          .eq("program_id", eligibilityWorkspace.id)
-          .eq("claimed_by_user_id", viewer.id)
-          .is("archived_at", null)
-          .is("merged_into_id", null)
-          .limit(1),
-      ]);
-      if (cancelled) return;
+      try {
+        // The open invitations ride along so the picker can show who has been
+        // asked but has not yet claimed their profile. Staff-only under RLS: a
+        // player's read returns nothing, and the rows render without the state.
+        const [
+          { data, error: rosterError },
+          { data: invites },
+          { data: ownRows },
+        ] = await Promise.all([
+          supabase.rpc("program_roster_full", {
+            p_program_id: eligibilityWorkspace.id,
+          }),
+          supabase
+            .from("program_invites")
+            .select("player_id, email")
+            .eq("program_id", eligibilityWorkspace.id)
+            .is("accepted_at", null),
+          supabase
+            .from("program_players")
+            .select(
+              "id, program_id, first_name, last_name, email, class_year, lineup_spot, claimed_by_user_id",
+            )
+            .eq("program_id", eligibilityWorkspace.id)
+            .eq("claimed_by_user_id", viewer.id)
+            .is("archived_at", null)
+            .is("merged_into_id", null)
+            .limit(1),
+        ]);
+        if (cancelled) return;
 
-      if (rosterError) {
+        if (rosterError) {
+          console.error("[wizard] could not load the roster", {
+            error: rosterError.message,
+          });
+          setTeamRoster(null);
+          setRosterLoadFailed(true);
+          return;
+        }
+
+        const invitedByPlayer = new Map<string, string>();
+        for (const invite of (invites ?? []) as {
+          player_id: string | null;
+          email: string;
+        }[]) {
+          if (invite.player_id)
+            invitedByPlayer.set(invite.player_id, invite.email);
+        }
+
+        const own = ((ownRows ?? []) as OwnProfileRow[])[0] ?? null;
+        setRosterLoadFailed(false);
+        setTeamRoster(
+          eligibleRosterOptions(
+            (data ?? []) as RosterFullRow[],
+            own,
+            eligibilityWorkspace.id,
+            viewer.id,
+          ).map((row) => ({
+            ...row,
+            invitedEmail: invitedByPlayer.get(row.playerId) ?? null,
+          })),
+        );
+      } catch (err) {
+        // Any of the three `Promise.all` calls can throw (network failure,
+        // an aborted request) rather than resolve with an `error` field —
+        // without this, that leaves `teamRoster` null and `loadFailed` false
+        // forever, which reads as a permanent "Loading the roster…".
+        if (cancelled) return;
         console.error("[wizard] could not load the roster", {
-          error: rosterError.message,
+          error: err instanceof Error ? err.message : String(err),
         });
         setTeamRoster(null);
         setRosterLoadFailed(true);
-        return;
       }
-
-      const invitedByPlayer = new Map<string, string>();
-      for (const invite of (invites ?? []) as {
-        player_id: string | null;
-        email: string;
-      }[]) {
-        if (invite.player_id)
-          invitedByPlayer.set(invite.player_id, invite.email);
-      }
-
-      const own = ((ownRows ?? []) as OwnProfileRow[])[0] ?? null;
-      setRosterLoadFailed(false);
-      setTeamRoster(
-        eligibleRosterOptions(
-          (data ?? []) as RosterFullRow[],
-          own,
-          eligibilityWorkspace.id,
-          viewer.id,
-        ).map((row) => ({
-          ...row,
-          invitedEmail: invitedByPlayer.get(row.playerId) ?? null,
-        })),
-      );
     })();
 
     return () => {

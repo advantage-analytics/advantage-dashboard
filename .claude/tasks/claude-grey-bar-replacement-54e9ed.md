@@ -45,7 +45,7 @@ ready).
 
 ## T3 · Guard the wizard roster fetch so a thrown error surfaces instead of hanging
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts
 - **done when:**
