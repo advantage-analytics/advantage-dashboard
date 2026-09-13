@@ -1,7 +1,8 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import type { MenuOption } from "@/components/ui/menu-select";
+import { SettingsField } from "@/components/dashboard/settings/settings-card";
+import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import type { RosterMember } from "@/lib/data/team-roster-server";
 
 /**
@@ -20,7 +21,7 @@ import type { RosterMember } from "@/lib/data/team-roster-server";
  */
 
 /** Four years and the fifth that redshirts and grad transfers actually use. */
-export const CLASS_YEARS = [
+const CLASS_YEARS = [
   "Freshman",
   "Sophomore",
   "Junior",
@@ -35,19 +36,14 @@ export const CLASS_YEARS = [
  * a constraint, and there is no swap control. `program_players` carries no
  * unique index on the column, so the note below is the whole of the check.
  */
-export const LINEUP_SPOTS = Array.from({ length: 9 }, (_, i) => i + 1);
+const LINEUP_SPOTS = Array.from({ length: 9 }, (_, i) => i + 1);
 
 /**
  * "Not set" as a `MenuSelect` row. The form state keeps `""` for it — that is
  * what the save path turns into `null` — but a menu row needs a value of its
- * own, so the dialogs map this back with `fromMenu`.
+ * own, so `PlayerMenuField` maps it back before the caller sees it.
  */
 const NOT_SET = "__not-set";
-
-/** A picked row back into form state: the sentinel is `""`. */
-export function fromMenu(value: string): string {
-  return value === NOT_SET ? "" : value;
-}
 
 /**
  * The options with a stored value that is in none of them kept as its own
@@ -83,6 +79,43 @@ export function lineupSpotOptions(value: string): MenuOption<string>[] {
     value,
     LINEUP_SPOTS.map((spot) => ({ value: String(spot), label: `#${spot}` })),
     (stored) => `#${stored}`,
+  );
+}
+
+/**
+ * Class year or Lineup spot: a caption over an underline `MenuSelect`, in the
+ * form's `""`-means-unset vocabulary.
+ *
+ * `labelless`, because `SettingsField`'s `<label>` forwards every click inside
+ * it to the trigger button, so picking a row would reopen the menu it just
+ * closed. The select carries its own accessible name.
+ */
+export function PlayerMenuField({
+  label,
+  value,
+  options,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  /** From `classYearOptions` / `lineupSpotOptions`, called with `value`. */
+  options: MenuOption<string>[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <SettingsField label={label} labelless>
+      <MenuSelect
+        label={label}
+        variant="underline"
+        placeholder="Not set"
+        value={value || undefined}
+        options={options}
+        disabled={disabled}
+        onChange={(next) => onChange(next === NOT_SET ? "" : next)}
+      />
+    </SettingsField>
   );
 }
 

@@ -19,11 +19,10 @@ import {
   DialogProblem,
   RosterDialog,
 } from "@/components/dashboard/team/dialog-shell";
-import { MenuSelect } from "@/components/ui/menu-select";
 import {
+  PlayerMenuField,
   RosterNote,
   classYearOptions,
-  fromMenu,
   lineupSpotOptions,
   nameList,
   spotHeldNote,
@@ -681,31 +680,18 @@ export function AddPlayerDialog({
       <RosterNote icon={RotateCcw} note={restoreNote} />
 
       <div className="grid grid-cols-2 gap-4">
-        {/* A caption span, not `SettingsField`: its `<label>` forwards every
-            click inside it to the trigger button, so picking a row would
-            reopen the menu it just closed. */}
-        <div className="flex min-w-0 flex-col gap-2">
-          <span className="text-[11px] text-[var(--ink-600)]">Class year</span>
-          <MenuSelect
-            label="Class year"
-            variant="underline"
-            placeholder="Not set"
-            value={classYear || undefined}
-            options={classYearOptions(classYear)}
-            onChange={(value) => setClassYear(fromMenu(value))}
-          />
-        </div>
-        <div className="flex min-w-0 flex-col gap-2">
-          <span className="text-[11px] text-[var(--ink-600)]">Lineup spot</span>
-          <MenuSelect
-            label="Lineup spot"
-            variant="underline"
-            placeholder="Not set"
-            value={lineupSpot || undefined}
-            options={lineupSpotOptions(lineupSpot)}
-            onChange={(value) => changeLineupSpot(fromMenu(value))}
-          />
-        </div>
+        <PlayerMenuField
+          label="Class year"
+          value={classYear}
+          options={classYearOptions(classYear)}
+          onChange={setClassYear}
+        />
+        <PlayerMenuField
+          label="Lineup spot"
+          value={lineupSpot}
+          options={lineupSpotOptions(lineupSpot)}
+          onChange={changeLineupSpot}
+        />
       </div>
 
       {/* Full width rather than in the field's hint slot: the cell is half of a

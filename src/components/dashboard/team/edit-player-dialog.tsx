@@ -17,11 +17,10 @@ import {
   DialogProblem,
   RosterDialog,
 } from "@/components/dashboard/team/dialog-shell";
-import { MenuSelect } from "@/components/ui/menu-select";
 import {
+  PlayerMenuField,
   RosterNote,
   classYearOptions,
-  fromMenu,
   lineupSpotOptions,
   spotHeldNote,
   spotHolders,
@@ -276,39 +275,23 @@ export function EditPlayerDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {/* Caption spans, not `SettingsField`: its `<label>` forwards
-                every click inside it to the trigger button, so picking a row
-                would reopen the menu it just closed. The option builders keep
-                a stored value outside the list as its own row, so opening the
-                dialog cannot silently change it to "Not set". */}
-            <div className="flex min-w-0 flex-col gap-2">
-              <span className="text-[11px] text-[var(--ink-600)]">
-                Class year
-              </span>
-              <MenuSelect
-                label="Class year"
-                variant="underline"
-                placeholder="Not set"
-                value={fields.classYear || undefined}
-                options={classYearOptions(fields.classYear)}
-                disabled={pending}
-                onChange={(value) => edit("classYear", fromMenu(value))}
-              />
-            </div>
-            <div className="flex min-w-0 flex-col gap-2">
-              <span className="text-[11px] text-[var(--ink-600)]">
-                Lineup spot
-              </span>
-              <MenuSelect
-                label="Lineup spot"
-                variant="underline"
-                placeholder="Not set"
-                value={fields.lineupSpot || undefined}
-                options={lineupSpotOptions(fields.lineupSpot)}
-                disabled={pending}
-                onChange={(value) => edit("lineupSpot", fromMenu(value))}
-              />
-            </div>
+            {/* The option builders keep a stored value outside the list as
+                its own row, so opening the dialog cannot silently change it
+                to "Not set". */}
+            <PlayerMenuField
+              label="Class year"
+              value={fields.classYear}
+              options={classYearOptions(fields.classYear)}
+              disabled={pending}
+              onChange={(value) => edit("classYear", value)}
+            />
+            <PlayerMenuField
+              label="Lineup spot"
+              value={fields.lineupSpot}
+              options={lineupSpotOptions(fields.lineupSpot)}
+              disabled={pending}
+              onChange={(value) => edit("lineupSpot", value)}
+            />
           </div>
 
           <RosterNote icon={Users} note={spotNote} />
