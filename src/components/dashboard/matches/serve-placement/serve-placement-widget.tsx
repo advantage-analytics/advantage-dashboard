@@ -1,11 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { ChevronDown, HelpCircle, Maximize2, Target, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+// Serve type is a data encoding, so its colours come from the viz palette:
+// first serve is --viz-you, second serve --viz-you-mid. The violet that used
+// to mark a second serve was retired with player attribution — SKILL.md
+// §"Court Visualization Colors" states the replacement outright.
+import { VIZ_BLUE, VIZ_BLUE_MID } from "@/lib/design/data-viz";
 import { useVisualFilters } from "@/hooks/use-visual-filters";
 import { FilterPills } from "@/components/dashboard/matches/visuals/filter-pills";
 import {
@@ -30,46 +42,53 @@ import {
   type DotMeta,
 } from "@/components/dashboard/matches/visuals/half-court-svg";
 
-export type ServeResult = "won" | "lost" | "ace" | "doubleFault";
+import {
+  BASELINE_Y,
+  CENTER_X,
+  COURT_H,
+  COURT_W,
+  DOUBLES_LEFT,
+  DOUBLES_RIGHT,
+  REAL_COURT_LENGTH,
+  REAL_HALF_DOUBLES,
+  REAL_NET_Y,
+  SERVICE_Y,
+  SINGLES_LEFT,
+  SINGLES_RIGHT,
+  ZONES,
+  ZONE_LINES_X,
+  classifyPointResult,
+  classifyZone,
+  computeZoneStats,
+  deriveZoneFromX,
+  getPointSide,
+  isFirstServePoint,
+  mapRealCoordsToServeDot,
+  normalizeLanding,
+  pointToServeDot,
+  type ServeDot,
+  type ServePointInput,
+  type ServeResult,
+  type ZoneKey,
+  type ZoneStats,
+} from "@/lib/data/serve-zones";
 
-export interface ServeDot {
-  id?: string; // stable point id — enables exit animation when filtered out
-  x: number;
-  y: number;
-  isFirstServe: boolean;
-  result?: ServeResult;
-  setNumber?: number;
-  pointScore?: string | null;
-  gameScore?: string | null;
-}
+// The pure geometry and classification live in `lib/data/serve-zones.ts` so a
+// server loader can read a serve map; re-exported here so every existing
+// caller of this module keeps its import path.
+export {
+  computeZoneStats,
+  mapRealCoordsToServeDot,
+  normalizeLanding,
+  pointToServeDot,
+  type ServeDot,
+  type ServePointInput,
+  type ServeResult,
+  type ZoneKey,
+  type ZoneStats,
+};
 
 export type ColorMode = "serveType" | "result";
-
-export interface ServePointInput {
-  id: string;
-  serverIsPlayer1: boolean;
-  firstShotLandingX: number | null;
-  firstShotLandingY: number | null;
-  firstShotZone?: string | null;
-  firstShotSpin?: string | null;
-  firstShotType?: string | null;
-  firstShotResult?: string | null; // SwingVision In/Out/Net for the serve shot
-  resultType?: string | null;
-  wonByPlayer1?: boolean;
-  setNumber?: number;
-  pointScore?: string | null;
-  gameScore?: string | null;
-  // Return (second shot of the point when the first serve was in). Optional —
-  // only the match-detail card supplies these; the home widget skips Return.
-  secondShotLandingX?: number | null;
-  secondShotLandingY?: number | null;
-  secondShotContactX?: number | null;
-  secondShotContactY?: number | null;
-  secondShotType?: string | null;
-  secondShotSpin?: string | null;
-  secondShotResult?: string | null; // SwingVision In/Out/Net for the return shot
-  rallyLength?: number;
-}
 
 export const FIRST_SERVE_COLOR = "rgba(59,130,246,0.65)";
 export const SECOND_SERVE_COLOR = "rgba(139,92,246,0.8)";
@@ -97,7 +116,11 @@ const RESULT_LEGEND: LegendItem[] = [
   { key: "won", color: RESULT_COLORS.won, label: "Won" },
   { key: "lost", color: RESULT_COLORS.lost, label: "Lost" },
   { key: "ace", color: RESULT_COLORS.ace, label: "Ace" },
-  { key: "doubleFault", color: RESULT_COLORS.doubleFault, label: "Double Fault" },
+  {
+    key: "doubleFault",
+    color: RESULT_COLORS.doubleFault,
+    label: "Double Fault",
+  },
 ];
 
 type ReturnStroke = "forehand" | "backhand";
@@ -147,7 +170,11 @@ const RETURN_LEGEND: ReturnLegendItem[] = (
   color: RETURN_OUTCOME_COLORS[outcome],
   shape: stroke === "backhand" ? "triangle" : "circle",
   label: `${stroke === "forehand" ? "Forehand" : "Backhand"} ${
-    outcome === "outnet" ? "Out / Net" : outcome === "won" ? "Point Won" : "Point Lost"
+    outcome === "outnet"
+      ? "Out / Net"
+      : outcome === "won"
+        ? "Point Won"
+        : "Point Lost"
   }`,
 }));
 
@@ -165,95 +192,16 @@ function dotLegendKey(dot: ServeDot, mode: ColorMode): string {
   return dot.isFirstServe ? "first" : "second";
 }
 
-const COURT_W = 447;
-const COURT_H = 350;
-
-const DOUBLES_LEFT = 37.4;
-const DOUBLES_RIGHT = 410.9;
 const DOUBLES_TOP = 0;
-const SINGLES_LEFT = 84.2;
-const SINGLES_RIGHT = 362.4;
-const SERVICE_Y = 155;
-const BASELINE_Y = 331;
-const CENTER_X = (SINGLES_LEFT + SINGLES_RIGHT) / 2;
-const BOX_HALF = (SINGLES_RIGHT - SINGLES_LEFT) / 2;
 const ALLEY_LABEL_X = (DOUBLES_LEFT + SINGLES_LEFT) / 2; // 60.8 — left doubles alley midpoint
-
-const ZONE_LINES_X = [
-  SINGLES_LEFT + BOX_HALF / 3,
-  SINGLES_LEFT + (BOX_HALF * 2) / 3,
-  CENTER_X + BOX_HALF / 3,
-  CENTER_X + (BOX_HALF * 2) / 3,
-];
 
 const COURT_COLOR = "#D6E4F9";
 const SOLID_W = 1.5;
 const DASHED_W = 1;
 
-const REAL_HALF_DOUBLES = 5.485;
-const REAL_SERVICE_Y = 5.485;
-const REAL_NET_Y = 11.885;
-const REAL_COURT_LENGTH = 23.77;
-
-/**
- * SwingVision records landing coordinates in a fixed world frame. When the
- * server is at the far end (after end-changes on odd games), ly exceeds
- * REAL_NET_Y and lx is mirrored. Flip both so every serve plots in the same
- * canonical half-court [SERVICE_Y .. NET].
- */
-function normalizeLanding(lx: number, ly: number): { lx: number; ly: number } {
-  if (ly > REAL_NET_Y) {
-    return { lx: -lx, ly: REAL_COURT_LENGTH - ly };
-  }
-  return { lx, ly };
-}
-
 const EASE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
 
-export function mapRealCoordsToServeDot(
-  lx: number,
-  ly: number,
-  isFirstServe: boolean,
-  servedIn = false,
-): ServeDot {
-  const n = normalizeLanding(lx, ly);
-  const DOUBLES_HALF_W = (DOUBLES_RIGHT - DOUBLES_LEFT) / 2;
-  const cx = CENTER_X + (n.lx / REAL_HALF_DOUBLES) * DOUBLES_HALF_W;
-  const yFrac = (n.ly - REAL_SERVICE_Y) / (REAL_NET_Y - REAL_SERVICE_Y);
-  const cy = SERVICE_Y + yFrac * (BASELINE_Y - SERVICE_Y);
-  // When SwingVision flags the serve as In, trust that ruling and keep the dot
-  // inside the service box (boundary-landing serves can otherwise read as out
-  // due to coord imputation or float precision). Otherwise clamp to the full
-  // canvas so faults — long, wide, or into the net — render at their real spot.
-  const [minX, maxX, minY, maxY] = servedIn
-    ? [SINGLES_LEFT + 2, SINGLES_RIGHT - 2, SERVICE_Y + 2, BASELINE_Y - 2]
-    : [4, COURT_W - 4, 4, COURT_H - 4];
-  const clampedX = Math.max(minX, Math.min(maxX, cx));
-  const clampedY = Math.max(minY, Math.min(maxY, cy));
-  return {
-    x: (clampedX - SINGLES_LEFT) / (SINGLES_RIGHT - SINGLES_LEFT),
-    y: (clampedY - SERVICE_Y) / (BASELINE_Y - SERVICE_Y),
-    isFirstServe,
-  };
-}
-
 /* ── Point classification helpers ─────────────────────────── */
-
-const SCORE_MAP: Record<string, number> = { "0": 0, "15": 1, "30": 2, "40": 3, A: 3, AD: 3 };
-
-function getPointSide(p: ServePointInput): "deuce" | "ad" {
-  const s = (p.pointScore ?? "").toUpperCase().trim();
-  if (s === "DEUCE" || s === "40-40") return "deuce";
-  if (/^AD?-|-AD?$/.test(s)) return "ad";
-  const parts = s.split("-");
-  return ((SCORE_MAP[parts[0]?.trim() ?? ""] ?? 0) + (SCORE_MAP[parts[1]?.trim() ?? ""] ?? 0)) % 2 === 0
-    ? "deuce"
-    : "ad";
-}
-
-function isFirstServePoint(p: ServePointInput): boolean {
-  return !(p.firstShotType?.toLowerCase().includes("second") ?? false);
-}
 
 // Return view: which serve did the returner actually return? A faulted first
 // serve (Out/Net) is followed by a second-serve rally, so the return is on
@@ -262,21 +210,17 @@ function isReturnOnFirstServe(p: ServePointInput): boolean {
   return p.firstShotType === "First Serve" && p.firstShotResult === "In";
 }
 
-type PointResult = "ace" | "doubleFault" | "won" | "lost";
-
-function classifyPointResult(p: ServePointInput): PointResult {
-  if (p.resultType === "Double Fault") return "doubleFault";
-  if (p.resultType === "Ace") return "ace";
-  const won = (p.wonByPlayer1 && p.serverIsPlayer1) || (!p.wonByPlayer1 && !p.serverIsPlayer1);
-  return won ? "won" : "lost";
-}
-
-function classifyReturnDot(p: ServePointInput): { stroke: ReturnStroke; outcome: ReturnOutcome } {
+function classifyReturnDot(p: ServePointInput): {
+  stroke: ReturnStroke;
+  outcome: ReturnOutcome;
+} {
   const typeLower = (p.secondShotType ?? "").toLowerCase();
   // SwingVision uses both full ("Backhand") and abbreviated ("BH Volley") labels,
   // so match the "bh" prefix too — otherwise a backhand volley return reads as a forehand.
   const stroke: ReturnStroke =
-    typeLower.includes("backhand") || typeLower.startsWith("bh") ? "backhand" : "forehand";
+    typeLower.includes("backhand") || typeLower.startsWith("bh")
+      ? "backhand"
+      : "forehand";
 
   const shotResult = p.secondShotResult;
   let outcome: ReturnOutcome;
@@ -291,75 +235,13 @@ function classifyReturnDot(p: ServePointInput): { stroke: ReturnStroke; outcome:
   return { stroke, outcome };
 }
 
-function deriveZoneFromX(lx: number): string {
-  const a = Math.abs(lx);
-  return a >= 2.74 ? "wide" : a >= 1.37 ? "body" : "t";
-}
-
 /* ── Zone tooltip (preview + fullscreen) ──────────────────── */
 
-type ZoneKey = "deuce-wide" | "deuce-body" | "deuce-t" | "ad-t" | "ad-body" | "ad-wide";
-
-const ZONES: { key: ZoneKey; label: string; x1: number; x2: number }[] = [
-  { key: "deuce-wide", label: "Wide", x1: SINGLES_LEFT, x2: ZONE_LINES_X[0] },
-  { key: "deuce-body", label: "Body", x1: ZONE_LINES_X[0], x2: ZONE_LINES_X[1] },
-  { key: "deuce-t", label: "T", x1: ZONE_LINES_X[1], x2: CENTER_X },
-  { key: "ad-t", label: "T", x1: CENTER_X, x2: ZONE_LINES_X[2] },
-  { key: "ad-body", label: "Body", x1: ZONE_LINES_X[2], x2: ZONE_LINES_X[3] },
-  { key: "ad-wide", label: "Wide", x1: ZONE_LINES_X[3], x2: SINGLES_RIGHT },
-];
-
-function classifyZone(x: number): ZoneKey {
-  const cx = SINGLES_LEFT + x * (SINGLES_RIGHT - SINGLES_LEFT);
-  for (const z of ZONES) if (cx >= z.x1 && cx < z.x2) return z.key;
-  return cx < CENTER_X ? "deuce-t" : "ad-t";
-}
-
-interface ZoneStats {
-  count: number;
-  pct: number;
-  first: number;
-  second: number;
-  won: number;
-  lost: number;
-  ace: number;
-  doubleFault: number;
-  winPct: number;
-}
-
-function emptyZoneStats(): ZoneStats {
-  return { count: 0, pct: 0, first: 0, second: 0, won: 0, lost: 0, ace: 0, doubleFault: 0, winPct: 0 };
-}
-
-function computeZoneStats(dots: ServeDot[]): Record<ZoneKey, ZoneStats> | null {
-  if (dots.length === 0) return null;
-  const result: Record<ZoneKey, ZoneStats> = {
-    "deuce-wide": emptyZoneStats(),
-    "deuce-body": emptyZoneStats(),
-    "deuce-t": emptyZoneStats(),
-    "ad-t": emptyZoneStats(),
-    "ad-body": emptyZoneStats(),
-    "ad-wide": emptyZoneStats(),
-  };
-  for (const d of dots) {
-    const z = classifyZone(d.x);
-    const zs = result[z];
-    zs.count++;
-    if (d.isFirstServe) zs.first++;
-    else zs.second++;
-    if (d.result) zs[d.result]++;
-  }
-  const total = dots.length;
-  for (const key of Object.keys(result) as ZoneKey[]) {
-    const zs = result[key];
-    zs.pct = Math.round((zs.count / total) * 100);
-    const resolved = zs.won + zs.lost + zs.ace + zs.doubleFault;
-    zs.winPct = resolved > 0 ? Math.round(((zs.won + zs.ace) / resolved) * 100) : 0;
-  }
-  return result;
-}
-
-const L = { stroke: COURT_COLOR, strokeWidth: SOLID_W, strokeLinecap: "round" as const };
+const L = {
+  stroke: COURT_COLOR,
+  strokeWidth: SOLID_W,
+  strokeLinecap: "round" as const,
+};
 
 interface HalfCourtWithZonesProps {
   dots: ServeDot[];
@@ -375,11 +257,15 @@ function HalfCourtWithZones({
   const [activeZone, setActiveZone] = useState<ZoneKey | null>(null);
   const [hoveredDotIdx, setHoveredDotIdx] = useState<number | null>(null);
   const visibleDots = useMemo(
-    () => (hiddenKeys && hiddenKeys.size > 0 ? dots.filter((d) => !hiddenKeys.has(dotLegendKey(d, colorMode))) : dots),
+    () =>
+      hiddenKeys && hiddenKeys.size > 0
+        ? dots.filter((d) => !hiddenKeys.has(dotLegendKey(d, colorMode)))
+        : dots,
     [dots, hiddenKeys, colorMode],
   );
   const stats = useMemo(() => computeZoneStats(visibleDots), [visibleDots]);
-  const hoveredDot = hoveredDotIdx != null ? visibleDots[hoveredDotIdx] ?? null : null;
+  const hoveredDot =
+    hoveredDotIdx != null ? (visibleDots[hoveredDotIdx] ?? null) : null;
   // Keep just-removed serves mounted briefly so they fade out instead of popping.
   const exitingDots = useDotExit(visibleDots).filter((d) => d.exiting);
 
@@ -387,7 +273,7 @@ function HalfCourtWithZones({
     <div className="relative w-full">
       <svg
         viewBox={`-1 -1 ${COURT_W + 2} ${COURT_H + 2}`}
-        className="w-full h-full"
+        className="h-full w-full"
         preserveAspectRatio="xMidYMid meet"
         role="img"
         aria-label="Serve placement court diagram showing where serves landed"
@@ -399,14 +285,56 @@ function HalfCourtWithZones({
         <CourtDotStyles />
         <rect x="0" y="0" width={COURT_W} height={COURT_H} fill="#EFF4FF" />
 
-        <line x1={DOUBLES_LEFT} y1={DOUBLES_TOP} x2={DOUBLES_RIGHT} y2={DOUBLES_TOP} {...L} />
-        <line x1={DOUBLES_LEFT} y1={DOUBLES_TOP} x2={DOUBLES_LEFT} y2={BASELINE_Y} {...L} />
-        <line x1={DOUBLES_RIGHT} y1={DOUBLES_TOP} x2={DOUBLES_RIGHT} y2={BASELINE_Y} {...L} />
-        <line x1={SINGLES_LEFT} y1={DOUBLES_TOP} x2={SINGLES_LEFT} y2={BASELINE_Y} {...L} />
-        <line x1={SINGLES_RIGHT} y1={DOUBLES_TOP} x2={SINGLES_RIGHT} y2={BASELINE_Y} {...L} />
-        <line x1={SINGLES_LEFT} y1={SERVICE_Y} x2={SINGLES_RIGHT} y2={SERVICE_Y} {...L} />
+        <line
+          x1={DOUBLES_LEFT}
+          y1={DOUBLES_TOP}
+          x2={DOUBLES_RIGHT}
+          y2={DOUBLES_TOP}
+          {...L}
+        />
+        <line
+          x1={DOUBLES_LEFT}
+          y1={DOUBLES_TOP}
+          x2={DOUBLES_LEFT}
+          y2={BASELINE_Y}
+          {...L}
+        />
+        <line
+          x1={DOUBLES_RIGHT}
+          y1={DOUBLES_TOP}
+          x2={DOUBLES_RIGHT}
+          y2={BASELINE_Y}
+          {...L}
+        />
+        <line
+          x1={SINGLES_LEFT}
+          y1={DOUBLES_TOP}
+          x2={SINGLES_LEFT}
+          y2={BASELINE_Y}
+          {...L}
+        />
+        <line
+          x1={SINGLES_RIGHT}
+          y1={DOUBLES_TOP}
+          x2={SINGLES_RIGHT}
+          y2={BASELINE_Y}
+          {...L}
+        />
+        <line
+          x1={SINGLES_LEFT}
+          y1={SERVICE_Y}
+          x2={SINGLES_RIGHT}
+          y2={SERVICE_Y}
+          {...L}
+        />
         <line x1={0} y1={BASELINE_Y} x2={COURT_W} y2={BASELINE_Y} {...L} />
-        <line x1={CENTER_X} y1={SERVICE_Y} x2={CENTER_X} y2={BASELINE_Y} {...L} />
+        <line
+          x1={CENTER_X}
+          y1={SERVICE_Y}
+          x2={CENTER_X}
+          y2={BASELINE_Y}
+          {...L}
+        />
 
         {ZONE_LINES_X.map((x, i) => (
           <line
@@ -521,9 +449,15 @@ function HalfCourtWithZones({
                   width={z.x2 - z.x1}
                   height={BASELINE_Y - SERVICE_Y}
                   fill={isActive ? "rgba(59,130,246,0.06)" : "transparent"}
-                  style={{ cursor: "pointer", transition: "fill 0.15s ease", outline: "none" }}
+                  style={{
+                    cursor: "pointer",
+                    transition: "fill 0.15s ease",
+                    outline: "none",
+                  }}
                   onPointerEnter={() => setActiveZone(z.key)}
-                  onClick={() => setActiveZone((prev) => (prev === z.key ? null : z.key))}
+                  onClick={() =>
+                    setActiveZone((prev) => (prev === z.key ? null : z.key))
+                  }
                   onFocus={() => setActiveZone(z.key)}
                   onBlur={() => setActiveZone(null)}
                   onKeyDown={(e) => {
@@ -544,7 +478,7 @@ function HalfCourtWithZones({
                     y={SERVICE_Y - 1}
                     width={z.x2 - z.x1}
                     height={2}
-                    fill="#3B82F6"
+                    fill={VIZ_BLUE}
                     opacity={0.6}
                     style={{ pointerEvents: "none" }}
                   />
@@ -568,12 +502,18 @@ function HalfCourtWithZones({
               stroke="rgba(255,255,255,0.4)"
               strokeWidth={1}
               filter={isHovered ? "url(#dot-glow)" : undefined}
-              style={{ cursor: "pointer", transition: "all 0.15s ease", animationDelay: dotStagger(i) }}
+              style={{
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+                animationDelay: dotStagger(i),
+              }}
               onPointerEnter={() => {
                 setHoveredDotIdx(i);
                 setActiveZone(null);
               }}
-              onPointerLeave={() => setHoveredDotIdx((prev) => (prev === i ? null : prev))}
+              onPointerLeave={() =>
+                setHoveredDotIdx((prev) => (prev === i ? null : prev))
+              }
             />
           );
         })}
@@ -593,7 +533,11 @@ function HalfCourtWithZones({
       {hoveredDot ? (
         <DotTooltip dot={hoveredDot} />
       ) : activeZone && stats && stats[activeZone].count > 0 ? (
-        <ZoneTooltip activeZone={activeZone} stats={stats[activeZone]} colorMode={colorMode} />
+        <ZoneTooltip
+          activeZone={activeZone}
+          stats={stats[activeZone]}
+          colorMode={colorMode}
+        />
       ) : null}
     </div>
   );
@@ -629,11 +573,12 @@ function DotTooltipBody({
   pointScore,
   gameScore,
 }: DotTooltipBodyProps) {
-  const translateX = xPct < 20 ? "8px" : xPct > 80 ? "calc(-100% - 8px)" : "-50%";
+  const translateX =
+    xPct < 20 ? "8px" : xPct > 80 ? "calc(-100% - 8px)" : "-50%";
   const translateY = "calc(-100% - 10px)";
   return (
     <div
-      className="absolute pointer-events-none z-20 bg-white rounded-xl shadow-tooltip py-2.5 px-3 flex flex-col gap-2 w-[172px] overflow-hidden border border-[#F3F3F3]"
+      className="pointer-events-none absolute z-20 flex w-[172px] flex-col gap-2 overflow-hidden rounded-xl border border-[#F3F3F3] bg-white px-3 py-2.5 shadow-tooltip"
       style={{
         left: `${xPct}%`,
         top: `${yPct}%`,
@@ -641,15 +586,17 @@ function DotTooltipBody({
       }}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 min-w-0">
+        <span className="flex min-w-0 items-center gap-1.5">
           <span
-            className="size-[6px] rounded-full shrink-0"
+            className="size-[6px] shrink-0 rounded-full"
             style={{ backgroundColor: serveTypeColor }}
           />
-          <span className="text-[11px] font-medium text-[#0D0D0D] truncate">{serveTypeLabel}</span>
+          <span className="truncate text-[11px] font-medium text-[#0D0D0D]">
+            {serveTypeLabel}
+          </span>
         </span>
         {setNumber != null && (
-          <span className="text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[1px] tabular-nums shrink-0">
+          <span className="shrink-0 text-[9px] font-medium tracking-[1px] text-[#AAAAAA] uppercase tabular-nums">
             Set {setNumber}
           </span>
         )}
@@ -658,17 +605,20 @@ function DotTooltipBody({
         <>
           <div className="h-px bg-[#F3F3F3]" />
           <div className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1.5 min-w-0">
+            <span className="flex min-w-0 items-center gap-1.5">
               <span
-                className="size-[6px] rounded-full shrink-0"
+                className="size-[6px] shrink-0 rounded-full"
                 style={{ backgroundColor: resultColor }}
               />
-              <span className="text-[10px] font-medium truncate" style={{ color: resultColor }}>
+              <span
+                className="truncate text-[10px] font-medium"
+                style={{ color: resultColor }}
+              >
                 {resultLabel}
               </span>
             </span>
             {(gameScore || pointScore) && (
-              <span className="text-[9px] font-normal text-[#AAAAAA] tabular-nums shrink-0">
+              <span className="shrink-0 text-[9px] font-normal text-[#AAAAAA] tabular-nums">
                 {[gameScore, pointScore].filter(Boolean).join(" • ")}
               </span>
             )}
@@ -687,7 +637,7 @@ function DotTooltip({ dot }: { dot: ServeDot }) {
       xPct={(cx / COURT_W) * 100}
       yPct={(cy / COURT_H) * 100}
       serveTypeLabel={dot.isFirstServe ? "1st Serve" : "2nd Serve"}
-      serveTypeColor={dot.isFirstServe ? "#3B82F6" : "#8B5CF6"}
+      serveTypeColor={dot.isFirstServe ? VIZ_BLUE : VIZ_BLUE_MID}
       resultLabel={dot.result ? RESULT_LABELS[dot.result] : null}
       resultColor={dot.result ? RESULT_COLORS[dot.result] : undefined}
       setNumber={dot.setNumber}
@@ -746,12 +696,12 @@ function ZoneTooltip({
       ? RESULT_COLORS.won
       : RESULT_COLORS.lost
     : stats.first >= stats.second
-      ? "#3B82F6"
-      : "#8B5CF6";
+      ? VIZ_BLUE
+      : VIZ_BLUE_MID;
 
   return (
     <div
-      className="absolute pointer-events-none z-10 bg-white rounded-xl shadow-tooltip py-2.5 px-3 flex flex-col gap-2 w-[168px] overflow-hidden border border-[#F3F3F3]"
+      className="pointer-events-none absolute z-10 flex w-[168px] flex-col gap-2 overflow-hidden rounded-xl border border-[#F3F3F3] bg-white px-3 py-2.5 shadow-tooltip"
       style={{
         left: `${xPct}%`,
         top: `${yPct}%`,
@@ -759,11 +709,11 @@ function ZoneTooltip({
       }}
     >
       <div className="flex items-baseline justify-between">
-        <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px]">
+        <span className="text-[10px] font-medium tracking-[1.5px] text-[#AAAAAA] uppercase">
           {side} {zone.label}
         </span>
         <span
-          className="text-[16px] font-light tabular-nums tracking-[-0.3px]"
+          className="text-[16px] font-light tracking-[-0.3px] tabular-nums"
           style={{ color: accentColor }}
         >
           {headerPct}%
@@ -773,9 +723,24 @@ function ZoneTooltip({
       <div className="flex flex-col gap-1.5">
         {isResult ? (
           <>
-            <TooltipRow color={RESULT_COLORS.won} label="Won" count={stats.won} total={stats.count} />
-            <TooltipRow color={RESULT_COLORS.lost} label="Lost" count={stats.lost} total={stats.count} />
-            <TooltipRow color={RESULT_COLORS.ace} label="Aces" count={stats.ace} total={stats.count} />
+            <TooltipRow
+              color={RESULT_COLORS.won}
+              label="Won"
+              count={stats.won}
+              total={stats.count}
+            />
+            <TooltipRow
+              color={RESULT_COLORS.lost}
+              label="Lost"
+              count={stats.lost}
+              total={stats.count}
+            />
+            <TooltipRow
+              color={RESULT_COLORS.ace}
+              label="Aces"
+              count={stats.ace}
+              total={stats.count}
+            />
             <TooltipRow
               color={RESULT_COLORS.doubleFault}
               label="Double Faults"
@@ -785,8 +750,18 @@ function ZoneTooltip({
           </>
         ) : (
           <>
-            <TooltipRow color="#3B82F6" label="1st Serve" count={stats.first} total={stats.count} />
-            <TooltipRow color="#8B5CF6" label="2nd Serve" count={stats.second} total={stats.count} />
+            <TooltipRow
+              color={VIZ_BLUE}
+              label="1st Serve"
+              count={stats.first}
+              total={stats.count}
+            />
+            <TooltipRow
+              color={VIZ_BLUE_MID}
+              label="2nd Serve"
+              count={stats.second}
+              total={stats.count}
+            />
           </>
         )}
       </div>
@@ -808,11 +783,14 @@ function TooltipRow({
   return (
     <div className="flex items-center justify-between">
       <span className="flex items-center gap-1.5">
-        <span className="size-[5px] rounded-full shrink-0" style={{ backgroundColor: color }} />
+        <span
+          className="size-[5px] shrink-0 rounded-full"
+          style={{ backgroundColor: color }}
+        />
         <span className="text-[10px] text-[#525252]">{label}</span>
       </span>
-      <span className="text-[10px] tabular-nums font-medium" style={{ color }}>
-        {count} <span className="text-[#AAAAAA] font-normal">of {total}</span>
+      <span className="text-[10px] font-medium tabular-nums" style={{ color }}>
+        {count} <span className="font-normal text-[#AAAAAA]">of {total}</span>
       </span>
     </div>
   );
@@ -833,16 +811,22 @@ function FullscreenEmptyState({
     <div
       role={hasData ? "status" : "region"}
       aria-live={hasData ? "polite" : undefined}
-      className="flex flex-col items-center gap-3 text-center max-w-[280px] px-6"
+      className="flex max-w-[280px] flex-col items-center gap-3 px-6 text-center"
     >
-      <div className="bg-[#F5F5F5] p-4 rounded-full">
-        <Target className="h-8 w-8 text-[#888888]" strokeWidth={1.5} aria-hidden />
+      <div className="rounded-full bg-[#F5F5F5] p-4">
+        <Target
+          className="h-8 w-8 text-[#888888]"
+          strokeWidth={1.5}
+          aria-hidden
+        />
       </div>
       <div className="flex flex-col gap-1">
         <p className="text-[13px] font-medium text-[#0D0D0D]">
-          {hasData ? `No ${noun} match your filters` : `No ${nounNoData} data yet`}
+          {hasData
+            ? `No ${noun} match your filters`
+            : `No ${nounNoData} data yet`}
         </p>
-        <p className="text-[12px] text-[#888888] leading-[1.5]">
+        <p className="text-[12px] leading-[1.5] text-[#888888]">
           {hasData
             ? `Every ${nounNoData} was excluded by the active filters. Reset to the default view.`
             : mode === "return"
@@ -854,7 +838,7 @@ function FullscreenEmptyState({
         <button
           type="button"
           onClick={onReset}
-          className="mt-1 inline-flex items-center px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-full shadow-none transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 cursor-pointer"
+          className="mt-1 inline-flex cursor-pointer items-center rounded-full bg-[#3B82F6] px-3 py-1.5 text-[10px] font-medium tracking-[1.5px] text-white uppercase shadow-none transition-colors duration-200 hover:bg-[#2563EB] focus-visible:outline-none"
         >
           Reset filters
         </button>
@@ -888,7 +872,7 @@ function LegendSwatch({
   }
   return (
     <span
-      className="w-[7px] h-[7px] rounded-full shrink-0"
+      className="h-[7px] w-[7px] shrink-0 rounded-full"
       style={{ backgroundColor: color, opacity: hidden ? 0.3 : 1 }}
       aria-hidden
     />
@@ -897,9 +881,13 @@ function LegendSwatch({
 
 function LegendDot({ color, label }: { color: string; label: string }) {
   return (
-    <div className="flex gap-1.5 items-center">
-      <div className="w-[7px] h-[7px] rounded-full" style={{ backgroundColor: color }} aria-hidden />
-      <span className="text-[10px] font-normal text-[#AAAAAA] tracking-[1px] uppercase">
+    <div className="flex items-center gap-1.5">
+      <div
+        className="h-[7px] w-[7px] rounded-full"
+        style={{ backgroundColor: color }}
+        aria-hidden
+      />
+      <span className="text-[10px] font-normal tracking-[1px] text-[#AAAAAA] uppercase">
         {label}
       </span>
     </div>
@@ -908,8 +896,13 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 
 /* ── Filter pipeline ──────────────────────────────────────── */
 
-function resolveOptions(g: FilterGroupConfig, ctx: FilterContextData): FilterOption[] {
-  return g.options.map((o) => (isDynamicOption(o) ? { value: o.value, label: ctx[o.labelKey] } : o));
+function resolveOptions(
+  g: FilterGroupConfig,
+  ctx: FilterContextData,
+): FilterOption[] {
+  return g.options.map((o) =>
+    isDynamicOption(o) ? { value: o.value, label: ctx[o.labelKey] } : o,
+  );
 }
 
 function filterReturnPoints(
@@ -924,7 +917,8 @@ function filterReturnPoints(
   const spinSet = new Set(filters.spin ?? []);
 
   return points.filter((p) => {
-    if (p.secondShotLandingX == null || p.secondShotLandingY == null) return false;
+    if (p.secondShotLandingX == null || p.secondShotLandingY == null)
+      return false;
 
     // Player filter on the RETURNER (opposite of server).
     const returner = p.serverIsPlayer1 ? "player2" : "player1";
@@ -958,7 +952,10 @@ function filterPoints(
   const playerSet = new Set(filters.player ?? []);
   const typeSet = new Set(filters.type ?? []);
   // `result` + `other` are a single inclusion set (the only way to express DF is via `other`).
-  const resultSet = new Set([...(filters.result ?? []), ...(filters.other ?? [])]);
+  const resultSet = new Set([
+    ...(filters.result ?? []),
+    ...(filters.other ?? []),
+  ]);
   const spinSet = new Set(filters.spin ?? []);
   const sideSet = new Set(filters.side ?? []);
   const zoneSet = new Set(filters.zone ?? []);
@@ -978,7 +975,8 @@ function filterPoints(
     if (!sideSet.has(side)) return false;
 
     let z = p.firstShotZone?.toLowerCase();
-    if (!z && p.firstShotLandingX != null) z = deriveZoneFromX(p.firstShotLandingX);
+    if (!z && p.firstShotLandingX != null)
+      z = deriveZoneFromX(p.firstShotLandingX);
     if (!z || !zoneSet.has(z)) return false;
 
     // Spin is optional in SwingVision data. When the user has at least one spin
@@ -992,61 +990,22 @@ function filterPoints(
   });
 }
 
-// Keep serves landing within the service box plus a ~20cm line-call tolerance,
-// expressed in the dot's normalized [0,1] box coordinates. x spans the ~8.23m
-// singles width; y spans the service-box depth (REAL_NET_Y − REAL_SERVICE_Y, ~6.4m).
-const SERVE_LINE_TOL_M = 0.2;
-const SERVE_BOX_W_M = 8.23;
-const SERVE_BOX_D_M = REAL_NET_Y - REAL_SERVICE_Y;
-const SERVE_TOL_X = SERVE_LINE_TOL_M / SERVE_BOX_W_M;
-const SERVE_TOL_Y = SERVE_LINE_TOL_M / SERVE_BOX_D_M;
-
-export function pointToServeDot(p: ServePointInput): ServeDot | null {
-  if (p.firstShotLandingX == null || p.firstShotLandingY == null) return null;
-  const servedIn = p.firstShotResult === "In";
-  const result = classifyPointResult(p);
-  const base = mapRealCoordsToServeDot(
-    p.firstShotLandingX,
-    p.firstShotLandingY,
-    isFirstServePoint(p),
-    servedIn,
-  );
-
-  // Data-quality gate for serves NOT flagged "In" (these would otherwise plot
-  // outside the box). Keep double faults regardless — a DF's out/net 2nd serve
-  // is real and meaningful. For everything else (first-serve faults, and rows
-  // whose coords land outside the box without an out/net result), keep only when
-  // the landing is within the box plus a ~20cm line-call tolerance — so near-line
-  // serves (possible missed calls) stay, while clearly-out serves are dropped.
-  if (!servedIn && result !== "doubleFault") {
-    const inBoxWithTolerance =
-      base.x >= -SERVE_TOL_X &&
-      base.x <= 1 + SERVE_TOL_X &&
-      base.y >= -SERVE_TOL_Y &&
-      base.y <= 1 + SERVE_TOL_Y;
-    if (!inBoxWithTolerance) return null;
-  }
-
-  return {
-    ...base,
-    id: p.id,
-    result,
-    setNumber: p.setNumber,
-    pointScore: p.pointScore ?? null,
-    gameScore: p.gameScore ?? null,
-  };
-}
-
-function pointToReturnCourtDots(p: ServePointInput, colorMode: ColorMode = "result"): CourtDot[] {
+function pointToReturnCourtDots(
+  p: ServePointInput,
+  colorMode: ColorMode = "result",
+): CourtDot[] {
   if (p.secondShotLandingX == null || p.secondShotLandingY == null) return [];
 
   const isFirstServe = isFirstServePoint(p);
   const { stroke, outcome } = classifyReturnDot(p);
   const color =
     colorMode === "serveType"
-      ? (isReturnOnFirstServe(p) ? FIRST_SERVE_COLOR : SECOND_SERVE_COLOR)
+      ? isReturnOnFirstServe(p)
+        ? FIRST_SERVE_COLOR
+        : SECOND_SERVE_COLOR
       : RETURN_OUTCOME_COLORS[outcome];
-  const shape: "circle" | "triangle" = stroke === "backhand" ? "triangle" : "circle";
+  const shape: "circle" | "triangle" =
+    stroke === "backhand" ? "triangle" : "circle";
 
   const meta: DotMeta = {
     resultLabel: RETURN_OUTCOME_LABEL[outcome],
@@ -1074,7 +1033,10 @@ function pointToReturnCourtDots(p: ServePointInput, colorMode: ColorMode = "resu
   const landingCy = FULL_SVG_FAR_BASELINE + (landing.ly / REAL_NET_Y) * farH;
   const landingDot: CourtDot = {
     cx: Math.max(4, Math.min(COURT_W - 4, landingCx)),
-    cy: Math.max(FULL_SVG_FAR_BASELINE + 4, Math.min(FULL_SVG_NET_Y - 4, landingCy)),
+    cy: Math.max(
+      FULL_SVG_FAR_BASELINE + 4,
+      Math.min(FULL_SVG_NET_Y - 4, landingCy),
+    ),
     color,
     opacity: 0.85,
     id: p.id,
@@ -1089,11 +1051,15 @@ function pointToReturnCourtDots(p: ServePointInput, colorMode: ColorMode = "resu
     return [landingDot];
   }
   const contactNorm = didFlip
-    ? { lx: -p.secondShotContactX, ly: REAL_COURT_LENGTH - p.secondShotContactY }
+    ? {
+        lx: -p.secondShotContactX,
+        ly: REAL_COURT_LENGTH - p.secondShotContactY,
+      }
     : { lx: p.secondShotContactX, ly: p.secondShotContactY };
   const nearH = FULL_SVG_NEAR_BASELINE - FULL_SVG_NET_Y;
   const nearSpanY = REAL_COURT_LENGTH - REAL_NET_Y;
-  const contactCx = CENTER_X - (contactNorm.lx / REAL_HALF_DOUBLES) * (COURT_W / 2);
+  const contactCx =
+    CENTER_X - (contactNorm.lx / REAL_HALF_DOUBLES) * (COURT_W / 2);
   const contactCy =
     FULL_SVG_NET_Y + ((contactNorm.ly - REAL_NET_Y) / nearSpanY) * nearH;
   // A return is struck behind the net — a contact computed on/in front of the net
@@ -1151,7 +1117,9 @@ function ServePlacementFullscreen({
   const vizType = config.type;
   const [colorMode, setColorMode] = useState<ColorMode>("serveType");
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
-  const [manuallyExpanded, setManuallyExpanded] = useState<Set<string>>(new Set());
+  const [manuallyExpanded, setManuallyExpanded] = useState<Set<string>>(
+    new Set(),
+  );
   const [mobileRailOpen, setMobileRailOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
@@ -1184,7 +1152,8 @@ function ServePlacementFullscreen({
       for (const g of row) {
         if (!g) continue;
         // Player defaults to just player1; all other groups start fully selected.
-        init[g.key] = g.key === "player" ? ["player1"] : g.options.map((o) => o.value);
+        init[g.key] =
+          g.key === "player" ? ["player1"] : g.options.map((o) => o.value);
       }
     }
     return init;
@@ -1234,7 +1203,10 @@ function ServePlacementFullscreen({
   );
 
   const filtered = useMemo(
-    () => (vizType === "return" ? filterReturnPoints(points, filters) : filterPoints(points, filters)),
+    () =>
+      vizType === "return"
+        ? filterReturnPoints(points, filters)
+        : filterPoints(points, filters),
     [points, filters, vizType],
   );
   const dots = useMemo(() => {
@@ -1253,7 +1225,9 @@ function ServePlacementFullscreen({
       const { stroke, outcome } = classifyReturnDot(p);
       const key =
         colorMode === "serveType"
-          ? (isReturnOnFirstServe(p) ? "first" : "second")
+          ? isReturnOnFirstServe(p)
+            ? "first"
+            : "second"
           : returnLegendKey(stroke, outcome);
       if (hiddenKeys.has(key)) continue;
       for (const d of pointToReturnCourtDots(p, colorMode)) out.push(d);
@@ -1270,7 +1244,11 @@ function ServePlacementFullscreen({
   const [pinnedReturnId, setPinnedReturnId] = useState<string | null>(null);
   const hoveredReturnLandingDot = useMemo(() => {
     if (!hoveredReturnId) return null;
-    return returnDots.find((d) => d.pairId === hoveredReturnId && d.variant === "landing") ?? null;
+    return (
+      returnDots.find(
+        (d) => d.pairId === hoveredReturnId && d.variant === "landing",
+      ) ?? null
+    );
   }, [hoveredReturnId, returnDots]);
   // Count distinct points (one point = one landing + optional contact dot).
   const plottedCount = vizType === "return" ? filtered.length : dots.length;
@@ -1291,8 +1269,7 @@ function ServePlacementFullscreen({
       if (e.key === "Escape") {
         if (shortcutsOpen) setShortcutsOpen(false);
         else onClose();
-      }
-      else if (e.key === "1") handleColorModeChange("serveType");
+      } else if (e.key === "1") handleColorModeChange("serveType");
       else if (e.key === "2") handleColorModeChange("result");
       else if (e.key === "r" || e.key === "R") resetFiltersToInitial();
       else if (e.key === "?") setShortcutsOpen((v) => !v);
@@ -1315,7 +1292,9 @@ function ServePlacementFullscreen({
         const { stroke, outcome } = classifyReturnDot(p);
         const k =
           colorMode === "serveType"
-            ? (isReturnOnFirstServe(p) ? "first" : "second")
+            ? isReturnOnFirstServe(p)
+              ? "first"
+              : "second"
             : returnLegendKey(stroke, outcome);
         counts[k] = (counts[k] ?? 0) + 1;
       }
@@ -1329,7 +1308,9 @@ function ServePlacementFullscreen({
   }, [dots, filtered, colorMode, vizType]);
 
   const sectionedGroups = useMemo(() => {
-    const flat = config.rows.flatMap((row) => row.filter(Boolean) as FilterGroupConfig[]);
+    const flat = config.rows.flatMap(
+      (row) => row.filter(Boolean) as FilterGroupConfig[],
+    );
     const byKey = new Map(flat.map((g) => [g.key, g]));
     const pick = (keys: string[]) =>
       keys.map((k) => byKey.get(k)).filter(Boolean) as FilterGroupConfig[];
@@ -1357,25 +1338,29 @@ function ServePlacementFullscreen({
       exit={prefersReduced ? undefined : { opacity: 0 }}
       transition={{ duration: 0.25, ease: EASE }}
     >
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
+      <div
+        className="absolute inset-0 bg-black/50"
+        onClick={onClose}
+        aria-hidden="true"
+      />
 
       <motion.div
-        className="relative z-10 flex flex-col m-4 sm:m-6 bg-white rounded-2xl shadow-[0px_8px_32px_rgba(0,0,0,0.25)] overflow-hidden flex-1"
+        className="relative z-10 m-4 flex flex-1 flex-col overflow-hidden rounded-2xl bg-white shadow-[0px_8px_32px_rgba(0,0,0,0.25)] sm:m-6"
         initial={prefersReduced ? undefined : { scale: 0.96, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={prefersReduced ? undefined : { scale: 0.96, opacity: 0 }}
         transition={{ duration: 0.25, ease: EASE }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 h-14 shrink-0 border-b border-[#F3F3F3]">
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[#F3F3F3] px-5">
           <div className="flex items-baseline gap-3">
-            <h2 className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
+            <h2 className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
               Serve Placement
             </h2>
-            <span className="text-[10px] font-normal text-[#AAAAAA] uppercase tracking-[1px]">
+            <span className="text-[10px] font-normal tracking-[1px] text-[#AAAAAA] uppercase">
               {contextLabel}
             </span>
-            <span className="text-[10px] font-medium text-[#525252] uppercase tracking-[1px] tabular-nums">
+            <span className="text-[10px] font-medium tracking-[1px] text-[#525252] uppercase tabular-nums">
               <motion.span
                 key={plottedCount}
                 initial={prefersReduced ? undefined : { opacity: 0.4, y: -2 }}
@@ -1385,24 +1370,25 @@ function ServePlacementFullscreen({
               >
                 {plottedCount}
               </motion.span>
-              <span className="text-[#AAAAAA] font-normal ml-1">
-                {vizType === "return" ? "return" : "serve"}{plottedCount !== 1 ? "s" : ""}
+              <span className="ml-1 font-normal text-[#AAAAAA]">
+                {vizType === "return" ? "return" : "serve"}
+                {plottedCount !== 1 ? "s" : ""}
               </span>
             </span>
           </div>
-          <div className="flex items-center gap-1 relative">
+          <div className="relative flex items-center gap-1">
             <button
               type="button"
               onClick={() => setShortcutsOpen((v) => !v)}
               aria-expanded={shortcutsOpen}
               aria-label="Show keyboard shortcuts"
-              className="cursor-pointer h-7 w-7 rounded-lg flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-[#888888] transition-colors duration-200 hover:bg-[#F5F5F5] hover:text-[#0D0D0D] focus-visible:outline-none"
             >
               <HelpCircle className="size-3.5" strokeWidth={1.5} />
             </button>
             <button
               onClick={onClose}
-              className="cursor-pointer h-7 w-7 rounded-lg flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-[#888888] transition-colors duration-200 hover:bg-[#F5F5F5] hover:text-[#0D0D0D] focus-visible:outline-none"
               aria-label="Close fullscreen view"
             >
               <X className="size-3.5" strokeWidth={1.5} />
@@ -1417,9 +1403,9 @@ function ServePlacementFullscreen({
                 <div
                   role="dialog"
                   aria-label="Keyboard shortcuts"
-                  className="absolute right-0 top-full mt-2 z-20 bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)] border border-[#E5E5EA] py-2.5 px-3 w-[200px] flex flex-col gap-1.5"
+                  className="absolute top-full right-0 z-20 mt-2 flex w-[200px] flex-col gap-1.5 rounded-xl border border-[#E5E5EA] bg-white px-3 py-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]"
                 >
-                  <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mb-1">
+                  <span className="mb-1 text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
                     Keyboard
                   </span>
                   <ShortcutRow keys={["1"]} action="Color by 1st / 2nd" />
@@ -1433,7 +1419,7 @@ function ServePlacementFullscreen({
         </div>
 
         {/* Controls bar */}
-        <div className="flex items-center gap-4 px-5 py-4 shrink-0 border-b border-[#F3F3F3]">
+        <div className="flex shrink-0 items-center gap-4 border-b border-[#F3F3F3] px-5 py-4">
           <div className="flex items-center rounded-full bg-[#F5F5F5] p-0.5">
             {(["serve", "return"] as const).map((tab) => (
               <button
@@ -1446,8 +1432,8 @@ function ServePlacementFullscreen({
                 }}
                 aria-pressed={vizType === tab}
                 className={cn(
-                  "rounded-full px-3.5 h-7 text-[11px] font-medium transition-all duration-200 cursor-pointer",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
+                  "h-7 cursor-pointer rounded-full px-3.5 text-[11px] font-medium transition-all duration-200",
+                  "focus-visible:outline-none",
                   vizType === tab
                     ? "bg-white text-[#0D0D0D] shadow-[0px_1px_3px_rgba(0,0,0,0.08)]"
                     : "text-[#71717A] hover:text-[#525252]",
@@ -1457,23 +1443,23 @@ function ServePlacementFullscreen({
               </button>
             ))}
           </div>
-          <div className="w-px h-4 bg-[#E5E5EA]" />
+          <div className="h-4 w-px bg-[#E5E5EA]" />
           <span className="text-[11px] font-normal text-[#71717A]">
             Color by
           </span>
           <div className="flex items-center rounded-full bg-[#F5F5F5] p-0.5">
-            {([
+            {[
               { mode: "serveType" as ColorMode, label: "1st / 2nd" },
               { mode: "result" as ColorMode, label: "Win / Loss" },
-            ]).map(({ mode, label }) => (
+            ].map(({ mode, label }) => (
               <button
                 key={mode}
                 type="button"
                 onClick={() => handleColorModeChange(mode)}
                 aria-pressed={colorMode === mode}
                 className={cn(
-                  "rounded-full px-3.5 h-7 text-[11px] font-medium transition-all duration-200 cursor-pointer",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
+                  "h-7 cursor-pointer rounded-full px-3.5 text-[11px] font-medium transition-all duration-200",
+                  "focus-visible:outline-none",
                   colorMode === mode
                     ? "bg-white text-[#0D0D0D] shadow-[0px_1px_3px_rgba(0,0,0,0.08)]"
                     : "text-[#71717A] hover:text-[#525252]",
@@ -1484,7 +1470,7 @@ function ServePlacementFullscreen({
             ))}
           </div>
           {vizType === "serve" && (
-            <span className="text-[11px] font-normal text-[#AAAAAA] ml-auto hidden sm:inline">
+            <span className="ml-auto hidden text-[11px] font-normal text-[#AAAAAA] sm:inline">
               {colorMode === "serveType"
                 ? "Zone labels show % of serves"
                 : "Zone labels show win rate"}
@@ -1493,10 +1479,10 @@ function ServePlacementFullscreen({
         </div>
 
         {/* Court + filter rail */}
-        <div className="flex-1 flex flex-col lg:flex-row min-h-0">
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           <div
             className={cn(
-              "flex-1 bg-[#EFF4FF] flex items-center justify-center min-h-0",
+              "flex min-h-0 flex-1 items-center justify-center bg-[#EFF4FF]",
               // The return court is tall and height-bound — give it minimal
               // vertical padding so it scales up to fill the frame.
               vizType === "return" ? "px-4 py-2" : "p-6",
@@ -1505,9 +1491,7 @@ function ServePlacementFullscreen({
             {plottedCount === 0 ? (
               <FullscreenEmptyState
                 hasData={points.some((p) =>
-                  vizType === "return"
-                    ? p.secondShotLandingX != null
-                    : true,
+                  vizType === "return" ? p.secondShotLandingX != null : true,
                 )}
                 mode={vizType}
                 onReset={resetFiltersToInitial}
@@ -1515,7 +1499,9 @@ function ServePlacementFullscreen({
             ) : vizType === "return" ? (
               <div
                 className="relative h-full max-h-full max-w-full"
-                style={{ aspectRatio: `447 / ${700 + FULL_SVG_PAD_TOP + FULL_SVG_PAD_BOTTOM}` }}
+                style={{
+                  aspectRatio: `447 / ${700 + FULL_SVG_PAD_TOP + FULL_SVG_PAD_BOTTOM}`,
+                }}
               >
                 <FullCourtSVG
                   dots={returnDotsForSVG}
@@ -1531,26 +1517,32 @@ function ServePlacementFullscreen({
                   onBackgroundClick={() => setPinnedReturnId(null)}
                   halfLabels={{ top: "PLACEMENT", bottom: "CONTACT" }}
                 />
-                {hoveredReturnLandingDot && <ReturnDotTooltip dot={hoveredReturnLandingDot} />}
+                {hoveredReturnLandingDot && (
+                  <ReturnDotTooltip dot={hoveredReturnLandingDot} />
+                )}
               </div>
             ) : (
               <div className="w-full max-w-[640px]">
-                <HalfCourtWithZones dots={dots} colorMode={colorMode} hiddenKeys={hiddenKeys} />
+                <HalfCourtWithZones
+                  dots={dots}
+                  colorMode={colorMode}
+                  hiddenKeys={hiddenKeys}
+                />
               </div>
             )}
           </div>
 
           <aside
-            className="w-full lg:w-[280px] shrink-0 border-t lg:border-t-0 lg:border-l border-[#F3F3F3] overflow-y-auto"
+            className="w-full shrink-0 overflow-y-auto border-t border-[#F3F3F3] lg:w-[280px] lg:border-t-0 lg:border-l"
             aria-label="Filters"
           >
-            <div className="flex items-center justify-between px-5 h-11 border-b border-[#F3F3F3] sticky top-0 bg-white z-10">
+            <div className="sticky top-0 z-10 flex h-11 items-center justify-between border-b border-[#F3F3F3] bg-white px-5">
               <button
                 type="button"
                 onClick={() => setMobileRailOpen((v) => !v)}
                 aria-expanded={mobileRailOpen}
                 aria-controls="serve-placement-filter-body"
-                className="flex lg:hidden items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm"
+                className="flex cursor-pointer items-center gap-1.5 rounded-sm focus-visible:outline-none lg:hidden"
               >
                 <span className="text-[12px] font-medium text-[#0D0D0D]">
                   Filters
@@ -1568,7 +1560,7 @@ function ServePlacementFullscreen({
                   strokeWidth={1.75}
                 />
               </button>
-              <span className="hidden lg:flex items-center gap-1.5">
+              <span className="hidden items-center gap-1.5 lg:flex">
                 <span className="text-[12px] font-medium text-[#0D0D0D]">
                   Filters
                 </span>
@@ -1581,7 +1573,7 @@ function ServePlacementFullscreen({
               {activeFilterCount > 0 && (
                 <button
                   onClick={clearAllFilters}
-                  className="cursor-pointer text-[11px] font-medium text-[#3B82F6] hover:text-[#2563EB] transition-colors duration-200"
+                  className="cursor-pointer text-[11px] font-medium text-[#3B82F6] transition-colors duration-200 hover:text-[#2563EB]"
                 >
                   Deselect all
                 </button>
@@ -1589,14 +1581,21 @@ function ServePlacementFullscreen({
             </div>
             <div
               id="serve-placement-filter-body"
-              className={cn("flex-col", mobileRailOpen ? "flex" : "hidden", "lg:flex")}
+              className={cn(
+                "flex-col",
+                mobileRailOpen ? "flex" : "hidden",
+                "lg:flex",
+              )}
             >
               {sectionedGroups.map((section, i) => (
                 <div
                   key={section.label}
-                  className={cn("px-5 py-4 flex flex-col gap-3", i > 0 && "border-t border-[#F3F3F3]")}
+                  className={cn(
+                    "flex flex-col gap-3 px-5 py-4",
+                    i > 0 && "border-t border-[#F3F3F3]",
+                  )}
                 >
-                  <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
+                  <span className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
                     {section.label}
                   </span>
                   <div className="flex flex-col gap-3">
@@ -1605,7 +1604,8 @@ function ServePlacementFullscreen({
                       const total = g.options.length;
                       const allSelected = selected.length === total;
                       const noneSelected = selected.length === 0;
-                      const expanded = !allSelected || manuallyExpanded.has(g.key);
+                      const expanded =
+                        !allSelected || manuallyExpanded.has(g.key);
                       const summary = noneSelected
                         ? "None"
                         : allSelected
@@ -1630,13 +1630,20 @@ function ServePlacementFullscreen({
                             }
                             aria-expanded={expanded}
                             className={cn(
-                              "flex items-center justify-between gap-2 rounded-sm cursor-pointer",
-                              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
+                              "flex cursor-pointer items-center justify-between gap-2 rounded-sm",
+                              "focus-visible:outline-none",
                             )}
                           >
-                            <span className="text-[12px] font-medium text-[#525252]">{g.label}</span>
+                            <span className="text-[12px] font-medium text-[#525252]">
+                              {g.label}
+                            </span>
                             <span className="flex items-center gap-1.5">
-                              <span className={cn("text-[10px] font-medium tabular-nums", summaryTone)}>
+                              <span
+                                className={cn(
+                                  "text-[10px] font-medium tabular-nums",
+                                  summaryTone,
+                                )}
+                              >
                                 {summary}
                               </span>
                               <ChevronDown
@@ -1668,8 +1675,8 @@ function ServePlacementFullscreen({
         </div>
 
         {/* Footer: legend */}
-        <div className="flex items-center justify-between px-5 py-4 min-h-[60px] shrink-0">
-          <div className="flex gap-4 items-start flex-wrap">
+        <div className="flex min-h-[60px] shrink-0 items-center justify-between px-5 py-4">
+          <div className="flex flex-wrap items-start gap-4">
             {legend.map(({ key, color, label, shape }) => {
               const hidden = hiddenKeys.has(key);
               const count = legendCounts[key] ?? 0;
@@ -1682,14 +1689,14 @@ function ServePlacementFullscreen({
                   disabled={empty}
                   aria-pressed={!hidden}
                   className={cn(
-                    "flex gap-1.5 items-center transition-opacity duration-200 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
+                    "flex items-center gap-1.5 rounded-sm transition-opacity duration-200 focus-visible:outline-none",
                     empty ? "cursor-not-allowed opacity-40" : "cursor-pointer",
                   )}
                 >
                   <LegendSwatch color={color} shape={shape} hidden={hidden} />
                   <span
                     className={cn(
-                      "text-[10px] font-normal text-[#AAAAAA] tracking-[1px] uppercase whitespace-nowrap",
+                      "text-[10px] font-normal tracking-[1px] whitespace-nowrap text-[#AAAAAA] uppercase",
                       hidden && "line-through opacity-50",
                     )}
                   >
@@ -1700,11 +1707,13 @@ function ServePlacementFullscreen({
             })}
           </div>
           <div
-            className="hidden md:flex items-center text-[11px] font-normal text-[#AAAAAA]"
+            className="hidden items-center text-[11px] font-normal text-[#AAAAAA] md:flex"
             aria-hidden
           >
             <span>
-              {vizType === "return" ? "Hover a point for details" : "Hover a zone for details"}
+              {vizType === "return"
+                ? "Hover a point for details"
+                : "Hover a zone for details"}
             </span>
           </div>
         </div>
@@ -1725,7 +1734,7 @@ function ShortcutRow({ keys, action }: { keys: string[]; action: string }) {
             <kbd
               key={k}
               className={cn(
-                "inline-block px-1 py-0.5 rounded text-[10px] font-medium leading-none text-[#AAAAAA] bg-[#F0F0F0]",
+                "inline-block rounded bg-[var(--ink-100)] px-1 py-0.5 text-[10px] leading-none font-medium text-[#AAAAAA]",
                 isWordKey && "[font-variant-caps:small-caps]",
               )}
             >
@@ -1761,31 +1770,35 @@ export function ServePlacementWidget({
   return (
     <section
       aria-labelledby="serve-placement-heading"
-      className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-card-elevated overflow-hidden"
+      className="overflow-hidden rounded-[14px] border border-[#F3F3F3] bg-white shadow-card-elevated"
     >
-      <div className="flex items-center justify-between h-14 px-5">
+      <div className="flex h-14 items-center justify-between px-5">
         <h2
           id="serve-placement-heading"
-          className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]"
+          className="text-[10px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase"
         >
           Serve Placement
         </h2>
-        <p className="text-[10px] font-normal text-[#AAAAAA] uppercase tracking-[1px]">
+        <p className="text-[10px] font-normal tracking-[1px] text-[#AAAAAA] uppercase">
           {contextLabel}
         </p>
       </div>
 
-      <div className="bg-[#EFF4FF] h-[300px] sm:h-[350px] md:h-[415px]">
-        <div className="flex items-center justify-center p-6 h-full">
-          <div className="w-full max-w-[447px] relative">
+      <div className="h-[300px] bg-[#EFF4FF] sm:h-[350px] md:h-[415px]">
+        <div className="flex h-full items-center justify-center p-6">
+          <div className="relative w-full max-w-[447px]">
             <HalfCourtWithZones dots={overlay ? [] : dots} />
-            {overlay && <div className="absolute inset-0 flex items-center justify-center">{overlay}</div>}
+            {overlay && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                {overlay}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       <div className="flex items-center justify-between px-5 py-4">
-        <div className="flex gap-4 items-start">
+        <div className="flex items-start gap-4">
           <LegendDot color={FIRST_SERVE_COLOR} label="First Serve" />
           <LegendDot color={SECOND_SERVE_COLOR} label="Second Serve" />
         </div>
@@ -1794,11 +1807,11 @@ export function ServePlacementWidget({
           onClick={() => setFullscreen(true)}
           disabled={!canExpand}
           className={cn(
-            "flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[2.5px] transition-colors duration-200 rounded-sm",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
+            "flex items-center gap-1.5 rounded-sm text-[10px] font-medium tracking-[2.5px] uppercase transition-colors duration-200",
+            "focus-visible:outline-none",
             canExpand
-              ? "text-[#3B82F6] hover:text-[#2563EB] cursor-pointer"
-              : "text-[#CCCCCC] cursor-not-allowed",
+              ? "cursor-pointer text-[#3B82F6] hover:text-[#2563EB]"
+              : "cursor-not-allowed text-[#CCCCCC]",
           )}
           aria-label="Expand serve placement to fullscreen"
         >

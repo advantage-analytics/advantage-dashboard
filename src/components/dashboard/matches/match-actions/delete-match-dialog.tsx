@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { buttonVariants } from "@/components/ui/button";
+import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
 interface DeleteMatchDialogProps {
@@ -60,25 +60,28 @@ export function DeleteMatchDialog({
   };
 
   return (
-    <AlertDialog open={open} onOpenChange={(next) => !loading && onOpenChange(next)}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => !loading && onOpenChange(next)}
+    >
       <AlertDialogContent
-        className="max-w-md rounded-2xl border-[#F0F0F0] p-6 gap-3"
+        className="max-w-md gap-3 rounded-2xl border-[var(--border-hairline)] p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <AlertDialogHeader className="gap-2 text-left">
-          <AlertDialogTitle className="text-[18px] font-medium text-[#1D1D1F] tracking-[-0.4px]">
+          <AlertDialogTitle className="text-[16px] font-medium tracking-[-0.4px] text-[var(--ink-900)]">
             Delete this match?
           </AlertDialogTitle>
           <AlertDialogDescription className="text-[13px] leading-[20px] text-[#525252]">
             This permanently removes{" "}
             <span className="font-medium text-[#0D0D0D]">{matchLabel}</span>,
-            its statistics, every recorded point and shot, and the uploaded file.
-            This cannot be undone.
+            its statistics, every recorded point and shot, and the uploaded
+            file. This cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
         {error && (
-          <p className="text-[12px] text-[#E51837] bg-[rgba(229,24,55,0.06)] px-3 py-2 rounded-md">
+          <p className="rounded-md bg-[rgba(229,24,55,0.06)] px-3 py-2 text-[12px] text-[#E51837]">
             {error}
           </p>
         )}
@@ -87,7 +90,7 @@ export function DeleteMatchDialog({
           <AlertDialogCancel
             disabled={loading}
             className={cn(
-              "rounded-[6px] border-[#EAECF0] bg-white text-[#525252] hover:bg-[#F5F5F5] h-9 px-4 text-[13px] font-medium shadow-none"
+              "h-9 rounded-[6px] border-[#EAECF0] bg-white px-4 text-[13px] font-medium text-[#525252] shadow-none hover:bg-[#F5F5F5]",
             )}
           >
             Cancel
@@ -99,8 +102,8 @@ export function DeleteMatchDialog({
             }}
             disabled={loading}
             className={cn(
-              buttonVariants({ variant: "destructive" }),
-              "rounded-[6px] bg-[#E51837] hover:bg-[#C81530] h-9 px-4 text-[13px] font-medium shadow-[0_1px_3px_rgba(229,24,55,0.25)]"
+              advButton("danger-solid"),
+              "shadow-[0_1px_3px_rgba(229,24,55,0.25)]",
             )}
           >
             {loading ? (

@@ -1,0 +1,247 @@
+"use client";
+
+import { cn } from "@/lib/utils";
+
+/**
+ * The card the round-4 settings pages are built from: hairline border, card
+ * radius, resting shadow, 24px of horizontal padding.
+ *
+ * Card-wrapped rather than flat on purpose. CLAUDE.md's "widgetless by default"
+ * is about page layout; these pages are lists of unrelated groups — a quota
+ * meter, a roster, three toggles — and a hairline rule between them reads as
+ * "still the same thing", which is exactly wrong.
+ */
+export function SettingsCard({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col rounded-[14px] border border-[var(--border-card)] px-6 py-[18px] shadow-[var(--shadow-card)]",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** The card's own heading: 13px medium, with optional trailing content. */
+export function SettingsCardTitle({
+  children,
+  trailing,
+  className,
+}: {
+  children: React.ReactNode;
+  trailing?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex items-center gap-2.5", className)}>
+      <span className="text-[13px] font-medium text-[var(--ink-900)]">
+        {children}
+      </span>
+      {trailing && (
+        <div className="flex flex-1 items-center justify-end gap-2.5">
+          {trailing}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One row inside a card — label and optional description on the left, control
+ * on the right, hairline above.
+ *
+ * `align` exists because a two-line row with a radio stack beside it has to
+ * align to the top, while a one-line row with a toggle has to align to centre;
+ * getting that wrong is the difference between a settings page and a ransom
+ * note.
+ */
+export function SettingsCardRow({
+  label,
+  description,
+  control,
+  align = "center",
+  className,
+}: {
+  label: React.ReactNode;
+  description?: React.ReactNode;
+  control?: React.ReactNode;
+  align?: "center" | "start";
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex gap-6 border-t border-[var(--border-hairline)] py-3",
+        align === "start" ? "items-start" : "items-center",
+        className,
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="text-[12px] text-[var(--ink-900)]">{label}</div>
+        {description && (
+          <div className="mt-0.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
+            {description}
+          </div>
+        )}
+      </div>
+      {control}
+    </div>
+  );
+}
+
+/** The closing note some cards carry: 11px, muted, above a hairline. */
+export function SettingsCardFootnote({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <span className="mt-3.5 border-t border-[var(--border-hairline)] pt-3.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
+      {children}
+    </span>
+  );
+}
+
+/**
+ * A numbered page section heading — `01 · General information`.
+ *
+ * Profile, Account and Plan each grew their own copy of this when
+ * `settings-section.tsx` was deleted; profile's was the superset, so this is
+ * that one, exported.
+ */
+export function SettingsSectionHeading({
+  number,
+  title,
+  note,
+}: {
+  number: string;
+  title: string;
+  /** Right-aligned aside, e.g. "Only your name is visible to teammates". */
+  note?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-baseline gap-3">
+      <span className="mono text-[11px] text-[var(--ink-400)]">{number}</span>
+      <span className="text-[14px] text-[var(--ink-900)]">{title}</span>
+      {note && (
+        <span className="ml-auto text-[11px] text-[var(--ink-500)]">
+          {note}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The round-4 form field: 11px caption over an underlined control.
+ *
+ * Takes its control as children so one wrapper serves inputs and selects
+ * alike — Profile and Team had four near-identical copies of this label/rule
+ * pair between them, already differing by 2px of input height.
+ */
+export function SettingsField({
+  label,
+  hint,
+  marker,
+  required = false,
+  labelless = false,
+  children,
+}: {
+  label: string;
+  hint?: React.ReactNode;
+  /** Right of the caption, e.g. the blue MISSING tag on an empty field. */
+  marker?: React.ReactNode;
+  /**
+   * The form cannot submit without this field. Draws the conventional red
+   * asterisk against the caption and says "required" to assistive tech.
+   *
+   * Mark only what the submit button actually gates on. A form where every
+   * field wears one has said nothing; the asterisk earns its ink by being
+   * rare, and an optional field says so in its hint instead ("Optional — …")
+   * rather than in its caption.
+   */
+  required?: boolean;
+  /**
+   * Renders the outer wrapper as a `<div>` instead of a `<label>`.
+   *
+   * The default `<label>` gives a plain `<input>`/`<select>` its accessible
+   * name for free by nesting, which is why every other call site leaves this
+   * false. `DateField`'s segments are `[tabindex]` divs, not labelable
+   * elements, so a wrapping `<label>` cannot reach them — instead it forwards
+   * every click to the first labelable descendant, which for `DateField` is
+   * its real `<button>` (the calendar trigger). Click a date segment with
+   * this on and the click lands on the calendar button, focus never reaches
+   * the segment, and typed digits go nowhere. `DateField` already takes its
+   * own `label` prop and sets it as `aria-label`, so opting out here costs no
+   * accessible name — verify in the a11y tree, not by reading the markup.
+   */
+  labelless?: boolean;
+  children: React.ReactNode;
+}) {
+  const Wrapper = labelless ? "div" : "label";
+  return (
+    <Wrapper className="flex flex-col gap-2">
+      <span className="flex items-center gap-2">
+        <span className="text-[11px] text-[var(--ink-600)]">
+          {label}
+          {required && (
+            <>
+              {/* Tight to the word, not a flex sibling: an asterisk is
+                  punctuation on the caption, and a gap would read it as a
+                  separate mark. */}
+              <span aria-hidden="true" className="ml-0.5 text-[var(--danger)]">
+                *
+              </span>
+              <span className="sr-only"> (required)</span>
+            </>
+          )}
+        </span>
+        {marker}
+      </span>
+      {children}
+      {hint && (
+        <span className="text-[11px] text-[var(--ink-500)]">{hint}</span>
+      )}
+    </Wrapper>
+  );
+}
+
+/**
+ * The underline input itself. Separate from `SettingsField` because the Team
+ * page pairs the same rule with a `<select>`, and a wrapper that owned the
+ * input could not do that.
+ */
+export function SettingsUnderlineInput({
+  mono,
+  emphasis,
+  className,
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement> & {
+  mono?: boolean;
+  /** Swap the hairline for a 2px blue rule — a field the page is asking for. */
+  emphasis?: boolean;
+}) {
+  return (
+    <input
+      data-focus-ring="none" /* the border-b above carries focus */
+      className={cn(
+        "h-[34px] bg-transparent text-[13px] text-[var(--ink-900)] transition-colors outline-none",
+        "placeholder:text-[var(--ink-400)] focus:border-[var(--blue)]",
+        emphasis
+          ? "border-b-2 border-[var(--blue)]"
+          : "border-b border-[var(--border-field)]",
+        mono && "mono",
+        className,
+      )}
+      {...props}
+    />
+  );
+}

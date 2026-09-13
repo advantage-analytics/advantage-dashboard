@@ -1,0 +1,310 @@
+import { cache } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
+import { createClient } from "@/lib/supabase/server";
+import { getInitials } from "@/lib/data/match-utils";
+import type { ProgramStatus } from "@/lib/services/programs/claim-state";
+import type {
+  ProgramOrgType,
+  ProgramRole,
+  Viewer,
+  Workspace,
+  WorkspaceContextValue,
+  UploadPolicy,
+} from "./types";
+
+/**
+ * Resolve the viewer's workspaces for one request.
+ *
+ * Wrapped in React `cache()` for the same reason `getMatchDetailData()` is —
+ * the layout and the pages beneath it both need this, and without it every
+ * segment refetches the user row. One fetch per request, shared.
+ *
+ * The active workspace is a cookie, not a URL segment. That keeps every
+ * existing route path intact; the cost is that a shared `/dashboard/matches`
+ * link resolves per-viewer. When sharing becomes a real workflow the upgrade is
+ * `/dashboard/w/[workspaceId]/…`, and this function is where it starts.
+ */
+
+const WORKSPACE_COOKIE = "advantage_workspace";
+
+/** A cookie naming a workspace the viewer no longer belongs to falls back here. */
+function personalWorkspace(viewer: Viewer): Workspace {
+  return {
+    // Not an invention: `processing_usage` already keys an individual's
+    // allowance by user id with account_type 'individual', so this IS the
+    // account id that ledger uses. A synthetic row would be a second source of
+    // truth for something already keyed.
+    id: viewer.id,
+    kind: "personal",
+    name: "Personal",
+    team: null,
+    orgType: null,
+    // A personal workspace has no program row and so no stated zone; the
+    // server's own is UTC on Vercel and nobody's in particular anywhere else,
+    // so this says UTC rather than pretending to know.
+    timeZone: "UTC",
+    role: "owner",
+    mark: viewer.initials,
+    canSubmitVideo: true,
+    // No program row, so no status to carry — see `Workspace.programStatus`.
+    programStatus: null,
+    // A program-wide policy about *other* people, in a workspace whose only
+    // member is its owner. False is the honest value; `canUploadForProgram()`
+    // never consults it here because it answers on `kind` first.
+    playersCanUpload: false,
+    uploadPolicy: "everyone",
+    // The opposite default, for the opposite reason. There is no
+    // `program_members` row to read here and the viewer is the only person in
+    // this workspace, so false would not be cautious — it would assert that
+    // this person is barred from sending their own video, which nothing has
+    // ever said. `/dashboard/matches/new` has no such gate.
+    memberUploadEnabled: true,
+    // No program, so no profile row to point at. The footer link that reads
+    // this only exists on a team workspace anyway.
+    myPlayerId: null,
+  };
+}
+
+/**
+ * The claimed profile row per program for one login — `program_players.id`
+ * keyed by `program_id`.
+ *
+ * Mirrors arm 1 of `program_roster_full`: live (not archived, not merged)
+ * rows bound to this user. Readable under RLS by any member of the program.
+ * Never fatal — a failed read leaves the map empty, and the caller falls back
+ * to the user id, which is what arm 3 of that function would answer.
+ */
+async function claimedProfilesByProgram(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<Map<string, string>> {
+  const { data, error } = await supabase
+    .from("program_players")
+    .select("id, program_id")
+    .eq("claimed_by_user_id", userId)
+    .is("archived_at", null)
+    .is("merged_into_id", null);
+
+  if (error) {
+    console.error("[workspace] could not load claimed profiles", {
+      error: error.message,
+    });
+    return new Map();
+  }
+
+  const byProgram = new Map<string, string>();
+  for (const row of data ?? []) {
+    if (!byProgram.has(row.program_id)) byProgram.set(row.program_id, row.id);
+  }
+  return byProgram;
+}
+
+/**
+ * Team workspaces the viewer belongs to.
+ *
+ * Filtered to `userId` explicitly. RLS alone is NOT enough here: the select
+ * policy is `user_id = auth.uid() OR is_program_staff(program_id)`, so a coach
+ * reading this table gets the whole roster back. Every one of those rows maps
+ * to the same program id, and the cookie lookup downstream takes the first
+ * match by `joined_at` — so a coach who joined after one of their players
+ * resolved as `role: 'player'` and lost every staff control on their own team,
+ * with the workspace name still correct on screen.
+ *
+ * `canSubmitVideo` comes from the program's claim state, not from the
+ * membership: a program still in review can invite people and build a roster
+ * but must not spend the vendor budget, because that spend cannot be taken
+ * back. `programStatusFor()` maps a claim to `claim_pending`, which is exactly
+ * the state that withholds it.
+ */
+async function listProgramWorkspaces(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<Workspace[]> {
+  const [{ data, error }, claimedProfiles] = await Promise.all([
+    supabase
+      .from("program_members")
+      .select(
+        "role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, org_type, time_zone)",
+      )
+      .eq("user_id", userId)
+      .order("joined_at"),
+    claimedProfilesByProgram(supabase, userId),
+  ]);
+
+  if (error) {
+    // Never fatal: a viewer who cannot load their programs should still get
+    // their personal workspace rather than a broken dashboard.
+    console.error("[workspace] could not load program memberships", {
+      error: error.message,
+    });
+    return [];
+  }
+
+  return (data ?? []).flatMap((row) => {
+    const program = (
+      Array.isArray(row.programs) ? row.programs[0] : row.programs
+    ) as
+      | {
+          id: string;
+          school_name: string;
+          team: string | null;
+          status: string;
+          players_can_upload: boolean;
+          upload_policy: string;
+          org_type: string;
+          time_zone: string;
+        }
+      | undefined;
+    if (!program) return [];
+
+    return [
+      {
+        id: program.id,
+        kind: "team" as const,
+        name: program.school_name,
+        // Null for a custom org (club/high school/academy), which fields no
+        // squad — `teamLabel(null)` then renders the name alone rather than
+        // inventing "Men's" for a workspace that never chose one.
+        team:
+          program.team === "womens"
+            ? ("womens" as const)
+            : program.team === "mens"
+              ? ("mens" as const)
+              : null,
+        // NOT NULL with default 'college' in the schema, and the CHECK pins
+        // the value set, so the cast is a naming ceremony rather than a guess.
+        // The quota tier hangs off this — see `quotaTierFor()`.
+        orgType: program.org_type as ProgramOrgType,
+        // NOT NULL with default 'UTC', so a program that never set one still
+        // reads as a real zone. Rides on the workspace for the reason the
+        // fields around it do: "what day is it for this program" has to be
+        // answerable with only a `Workspace` in hand, and a page computing it
+        // from the server's own clock gets UTC on Vercel — which is nobody's
+        // today. See `zonedDayString` in `lib/data/match-utils.ts`.
+        timeZone: program.time_zone,
+        role: row.role as ProgramRole,
+        mark: program.school_name.trim().charAt(0).toUpperCase(),
+        // 'active' means the claim settled. 'claim_pending' is a live workspace
+        // whose video submission waits — see /claim/review, which promises
+        // exactly that.
+        canSubmitVideo: program.status === "active",
+        // The same column, raw, for the reader that needs to know WHICH
+        // non-active state this is. The CHECK pins the value set, so the cast
+        // is a naming ceremony — see `Workspace.programStatus`.
+        programStatus: program.status as ProgramStatus,
+        // The program's own answer to "anyone, or coaches?" from Team
+        // settings. Read here rather than at the page, so the upload page's
+        // gate and the switcher's `landingPath()` are looking at one value
+        // resolved once per request — see `Workspace.playersCanUpload`.
+        playersCanUpload: program.players_can_upload,
+        // The ladder the boolean above is the bottom rung of; the CHECK pins
+        // the value set, so the cast is a naming ceremony.
+        uploadPolicy: program.upload_policy as UploadPolicy,
+        // This membership's own grant, from the row the join is already
+        // reading. `Boolean(...)` rather than `?? true`: the column is NOT
+        // NULL, so the coalesce would only ever fire when the select did not
+        // return what it asked for, and a permission that fails open on a
+        // broken read is the wrong way round. See
+        // `Workspace.memberUploadEnabled` for why staff never feel it.
+        memberUploadEnabled: Boolean(row.upload_enabled),
+        // A player's matches carry their claimed profile's id; a player-role
+        // member who never claimed one is listed under their user id (arm 3
+        // of `program_roster_full`). Staff have no player page of their own.
+        myPlayerId:
+          row.role === "player"
+            ? (claimedProfiles.get(program.id) ?? userId)
+            : null,
+      },
+    ];
+  });
+}
+
+function toViewer(
+  id: string,
+  email: string,
+  row: {
+    first_name: string | null;
+    last_name: string | null;
+    plan: string | null;
+    role: string | null;
+    created_at: string | null;
+    onboarded_at: string | null;
+  } | null,
+): Viewer {
+  const firstName = row?.first_name ?? null;
+  const lastName = row?.last_name ?? null;
+
+  const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
+  const localPart = email.split("@")[0] ?? email;
+
+  return {
+    id,
+    email,
+    name: fullName || localPart,
+    // Trimmed and nulled rather than defaulted: see `Viewer.firstName`.
+    firstName: firstName?.trim() || null,
+    // The shared rule, which also handles single-word and "A & B" names the
+    // inline version here did not.
+    initials:
+      (fullName && getInitials(fullName)) ||
+      localPart.slice(0, 2).toUpperCase(),
+    plan: row?.plan ?? "free",
+    role: row?.role ?? null,
+    // Formatted here rather than on each page: Profile and Plan both rendered
+    // "Mon YYYY" from their own client-side fetch of this same column, in two
+    // copies that were not pinned to the same timezone.
+    memberSince: row?.created_at
+      ? new Date(row.created_at).toLocaleDateString("en-US", {
+          month: "short",
+          year: "numeric",
+          timeZone: "UTC",
+        })
+      : null,
+    // Null both for a genuinely un-onboarded account and for a missing profile
+    // row — either way the dashboard layout sends them to /onboarding, which
+    // is the screen that knows how to finish the setup.
+    onboardedAt: row?.onboarded_at ?? null,
+  };
+}
+
+export const getWorkspaceContext = cache(
+  async (): Promise<WorkspaceContextValue | null> => {
+    const supabase = await createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    // Own row only — `users` RLS is a blanket `auth.uid() = id`, which is also
+    // why other members' names need a SECURITY DEFINER lookup rather than a
+    // select from here.
+    // Memberships depend only on the authenticated id, not the profile row.
+    const [{ data: row }, programs] = await Promise.all([
+      supabase
+        .from("users")
+        .select("first_name, last_name, plan, role, created_at, onboarded_at")
+        .eq("id", user.id)
+        .single(),
+      listProgramWorkspaces(supabase, user.id),
+    ]);
+
+    const viewer = toViewer(user.id, user.email ?? "", row);
+
+    const available = [personalWorkspace(viewer), ...programs];
+
+    const cookieStore = await cookies();
+    const requested = cookieStore.get(WORKSPACE_COOKIE)?.value;
+
+    // Validate against membership rather than trusting the cookie. A stale or
+    // hand-edited value must land on the personal workspace, never on someone
+    // else's program.
+    const active =
+      available.find((workspace) => workspace.id === requested) ?? available[0];
+
+    return { active, available, viewer };
+  },
+);
+
+export { WORKSPACE_COOKIE };

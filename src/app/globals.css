@@ -1,13 +1,27 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* Advantage Design System v2 token layer — additive, collides with nothing
+   below. See src/styles/design-system/index.css for what was adapted on import. */
+@import "../styles/design-system/index.css";
 
+/* shadcn's oklch colour layer was removed here: it was a SECOND palette
+   competing with the design system's own (--ink-*, --surface-*, --blue*), it
+   painted `--primary` black where advButton() is Signal Blue, and because it
+   resolved through variables no hex ever appeared — so no colour check could
+   see it. `scripts/check-design-drift.mjs` check 4 keeps it out.
+
+   What deliberately stayed: --font-sans / --font-mono (next/font wiring, not
+   colour) and --radius with its --radius-* steps, which 65 `rounded-*`
+   utilities across the app resolve through. Deleting those would silently
+   reshape every one of them. */
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-inter);
-  --font-mono: var(--font-inter);
+  /* Was var(--font-inter) — so `font-mono` rendered Inter and Roboto Mono was
+     shipped to every visitor unused. Machine values only: timestamps, quota
+     readouts, job ids. Never stats. */
+  --font-mono: var(--font-roboto-mono);
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-base: 1rem;
@@ -21,101 +35,67 @@
   --font-size-7xl: 4.5rem;
   --font-size-8xl: 6rem;
   --font-size-9xl: 8rem;
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --shadow-card: 0px 2px 8px 0px rgba(0,0,0,0.06);
-  --shadow-card-elevated: 0px 6px 20px 0px rgba(0,0,0,0.12);
-  --shadow-tooltip: 0px 4px 12px 0px rgba(0,0,0,0.12);
+  --shadow-card: 0px 2px 8px 0px rgba(0, 0, 0, 0.06);
+  --shadow-card-elevated: 0px 6px 20px 0px rgba(0, 0, 0, 0.12);
+  --shadow-tooltip: 0px 4px 12px 0px rgba(0, 0, 0, 0.12);
 }
 
 /* Tokens consumed via Tailwind arbitrary values like `border-[var(--color-border-card)]`.
    They live in a non-inline @theme so Tailwind v4 tracks them and emits their :root
    definitions — Turbopack dev mode strips unreferenced/loose :root --color-* vars. */
 @theme {
-  --color-border-card: #F3F3F3;
-  --color-surface-card: #FFFFFF;
-  --color-surface-muted: #FAFAFA;
+  --color-border-card: #f3f3f3;
+  --color-surface-card: #ffffff;
+  --color-surface-muted: #fafafa;
   --color-text-body: #525252;
-  --color-success: #5DB955;
-  --color-error-strong: #E51837;
-  --color-radar-grid: #EFEFEF;
+  --color-success: #5db955;
+  --color-error-strong: #e51837;
+  --color-radar-grid: #efefef;
   --color-accent-blue-ring: rgba(59, 130, 246, 0.4);
-  --color-player-1: #3B82F6;
-  --color-player-1-bar-tint: #BFD5FB;
-  --color-player-2: #A855F7;
-  --color-player-2-bar-tint: #DDC7F7;
+  --color-player-1: #3b82f6;
+  --color-player-1-bar-tint: #bfd5fb;
+  --color-player-2: #64748b;
+  --color-player-2-bar-tint: #cbd5e1;
 
   /* Ink scale — neutral text/border ramp used across settings + dashboard */
-  --color-ink-900: #0D0D0D;
+  --color-ink-900: #0d0d0d;
   --color-ink-700: #525252;
   --color-ink-500: #888888;
-  --color-ink-400: #AAAAAA;
-  --color-ink-300: #CCCCCC;
-  --color-ink-200: #E5E5EA;
-  --color-ink-100: #F3F3F3;
-  --color-ink-border: #EAECF0;
+  --color-ink-400: #aaaaaa;
+  --color-ink-300: #cccccc;
+  --color-ink-200: #e5e5ea;
+  --color-ink-100: #f3f3f3;
+  --color-ink-border: #eaecf0;
 
   /* Accent blue + tints */
-  --color-blue: #3B82F6;
-  --color-blue-hover: #2563EB;
+  --color-blue: #3b82f6;
+  --color-blue-hover: #2563eb;
   --color-blue-tint-04: rgba(59, 130, 246, 0.04);
   --color-blue-tint-08: rgba(59, 130, 246, 0.08);
   --color-blue-tint-12: rgba(59, 130, 246, 0.12);
-  --color-blue-ring-30: rgba(59, 130, 246, 0.30);
-  --color-blue-ring-40: rgba(59, 130, 246, 0.40);
-
-  /* Tonal blue ink — for headings/body sitting on blue-tint backgrounds.
-     Avoids the gray-on-color washout. Verified ≥4.5:1 on blue-tint-08 over white. */
-  --color-blue-ink-deep: oklch(0.36 0.13 263);
-  --color-blue-ink-mid: oklch(0.55 0.10 263);
+  --color-blue-ring-30: rgba(59, 130, 246, 0.3);
+  --color-blue-ring-40: rgba(59, 130, 246, 0.4);
 
   /* Success tints */
-  --color-success-hover: #4EA84A;
+  --color-success-hover: #4ea84a;
   --color-success-tint-04: rgba(93, 185, 85, 0.04);
   --color-success-tint-12: rgba(115, 230, 104, 0.12);
-  --color-success-tint-20: rgba(93, 185, 85, 0.20);
+  --color-success-tint-20: rgba(93, 185, 85, 0.2);
 
   /* Danger tints */
-  --color-danger-hover: #C41530;
+  --color-danger-hover: #c41530;
   --color-danger-tint-15: rgba(229, 24, 55, 0.15);
-  --color-danger-tint-70: rgba(229, 24, 55, 0.70);
+  --color-danger-tint-70: rgba(229, 24, 55, 0.7);
 
   /* Selected card elevation — same shadow as default; selection signaled via border-2 */
   --shadow-selected: 0px 2px 8px 0px rgba(0, 0, 0, 0.06);
 
   /* Raised surface — chips, kbd keycaps, active pills. One step above surface-card. */
-  --color-surface-raised: #FFFFFF;
+  --color-surface-raised: #ffffff;
 
   /* Subtle bottom-edge shadow for keycap-style elements. */
   --color-shadow-keycap: rgba(15, 23, 42, 0.04);
@@ -127,42 +107,38 @@
   /* Inverted ink scale, lower rungs lightened for WCAG AA on #0E0E10 surface.
      Contrast ratios: 900=18.6, 700=9.2, 500=5.4, 400=5.0 (AA), 300=3.6 (AA Large /
      decorative only — never use for body copy). */
-  --color-ink-900: #F5F5F5;
-  --color-ink-700: #B5B5B5;
-  --color-ink-500: #8A8A8A;
+  --color-ink-900: #f5f5f5;
+  --color-ink-700: #b5b5b5;
+  --color-ink-500: #8a8a8a;
   --color-ink-400: #828282;
-  --color-ink-300: #6A6A6A;
-  --color-ink-200: #2E2E2E;
-  --color-ink-100: #1F1F1F;
-  --color-ink-border: #2A2A2A;
+  --color-ink-300: #6a6a6a;
+  --color-ink-200: #2e2e2e;
+  --color-ink-100: #1f1f1f;
+  --color-ink-border: #2a2a2a;
 
   /* Lighter error red so danger copy clears AA on dark surfaces */
-  --color-error-strong: #FF6478;
-  --color-danger-hover: #FF8294;
+  --color-error-strong: #ff6478;
+  --color-danger-hover: #ff8294;
   --color-danger-tint-15: rgba(255, 100, 120, 0.18);
-  --color-danger-tint-70: rgba(255, 100, 120, 0.70);
+  --color-danger-tint-70: rgba(255, 100, 120, 0.7);
 
   /* Success holds — #5DB955 already clears 8:1 on dark */
 
-  --color-surface-card: #0E0E10;
+  --color-surface-card: #0e0e10;
   --color-surface-muted: #161618;
-  --color-surface-raised: #1F1F1F;
-  --color-border-card: #1F1F1F;
-  --color-text-body: #B5B5B5;
+  --color-surface-raised: #1f1f1f;
+  --color-border-card: #1f1f1f;
+  --color-text-body: #b5b5b5;
   --color-shadow-keycap: rgba(0, 0, 0, 0.45);
 
   /* Blues lighten slightly so they read on dark surfaces */
-  --color-blue: #60A5FA;
-  --color-blue-hover: #93C5FD;
+  --color-blue: #60a5fa;
+  --color-blue-hover: #93c5fd;
   --color-blue-tint-04: rgba(96, 165, 250, 0.06);
-  --color-blue-tint-08: rgba(96, 165, 250, 0.10);
+  --color-blue-tint-08: rgba(96, 165, 250, 0.1);
   --color-blue-tint-12: rgba(96, 165, 250, 0.16);
-  --color-blue-ring-30: rgba(96, 165, 250, 0.30);
-  --color-blue-ring-40: rgba(96, 165, 250, 0.40);
-
-  /* Tonal blue ink — lifted so it reads on the dark blue-tint background */
-  --color-blue-ink-deep: oklch(0.88 0.06 263);
-  --color-blue-ink-mid: oklch(0.72 0.08 263);
+  --color-blue-ring-30: rgba(96, 165, 250, 0.3);
+  --color-blue-ring-40: rgba(96, 165, 250, 0.4);
 
   --shadow-card: 0px 2px 8px 0px rgba(0, 0, 0, 0.45);
   --shadow-selected: 0px 2px 8px 0px rgba(0, 0, 0, 0.45);
@@ -170,96 +146,39 @@
 
 :root {
   /* Auth design tokens */
-  --color-bg-dark: #FAFAFA;
-  --color-bg-panel: #FFFFFF;
-  --color-accent-blue: #3B82F6;
-  --color-accent-blue-hover: #2563EB;
-  --color-text-primary: #0D0D0D;
-  --color-text-secondary: #71717A;
+  --color-bg-dark: #fafafa;
+  --color-bg-panel: #ffffff;
+  --color-accent-blue: #3b82f6;
+  --color-accent-blue-hover: #2563eb;
+  --color-text-primary: #0d0d0d;
+  --color-text-secondary: #71717a;
   --color-text-muted: #888888;
-  --color-text-dim: #AAAAAA;
-  --color-text-faint: #BBBBBB;
+  --color-text-dim: #aaaaaa;
+  --color-text-faint: #bbbbbb;
   --color-border-subtle: rgba(0, 0, 0, 0.1);
   --color-border-faint: rgba(0, 0, 0, 0.05);
-  --color-error: #FF453A;
+  --color-error: #ff453a;
   --color-error-bg: rgba(255, 69, 58, 0.08);
   --color-accent-blue-glow: rgba(59, 130, 246, 0.15);
 
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0 0 15);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
 }
 
 @layer base {
+  /* Tailwind's `border` utility sets width only, so this supplies the default
+     colour every bordered element inherits. It used to @apply shadcn's
+     `border-border` / `outline-ring` — the last two consumers of that layer,
+     and invisible to the drift checker because it reads .ts/.tsx, not CSS.
+     The build caught them; Vercel would have too. */
   * {
-    @apply border-border outline-ring/50;
+    border-color: var(--border-medium);
+    outline-color: var(--blue-ring-40);
   }
   html,
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply font-sans;
+    background-color: var(--surface-page);
+    color: var(--ink-900);
     font-family: var(--font-inter) !important;
     overscroll-behavior: none;
     overflow-x: hidden;
@@ -270,10 +189,6 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-}
-
-.btn-primary {
-  @apply px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition;
 }
 
 /* Plain-CSS classes outside any @layer get stripped by Tailwind v4 + Turbopack
@@ -300,6 +215,45 @@
   }
 }
 
+/*
+ * The KPI strip shows fewer tiles rather than narrower ones — see
+ * `KpiTileStrip` in src/components/dashboard/shared/kpi-tile.tsx.
+ *
+ * A tile needs 184px to hold "BREAK POINTS SAVED", the longest default label,
+ * on one line inside its 20px padding. Below 920px of strip the fifth tile
+ * goes; below 736px the fourth. That keeps every tile's height identical at
+ * every width, which is the whole point: a wrapping label made the strip grow
+ * a row taller on a tablet and nowhere else.
+ *
+ * A container query, not a media query, because the sidebar takes either 64px
+ * or 232px of the window: the same 1280px window holds five tiles with the
+ * rail and four with the panel open.
+ *
+ * Plain CSS rather than Tailwind variants: `@min-[…]/name:` composed with an
+ * arbitrary `[&>*:nth-child(4)]` variant silently emitted no rule at all, and
+ * a layout that quietly does nothing is worse than one written out here.
+ * Outside `@layer` so it beats the tile's own `display` utility.
+ */
+.adv-kpi-strip {
+  container: adv-kpi-strip / inline-size;
+}
+
+.adv-kpi-strip > * > *:nth-child(n + 4) {
+  display: none;
+}
+
+@container adv-kpi-strip (min-width: 736px) {
+  .adv-kpi-strip > * > *:nth-child(4) {
+    display: flex;
+  }
+}
+
+@container adv-kpi-strip (min-width: 920px) {
+  .adv-kpi-strip > * > *:nth-child(5) {
+    display: flex;
+  }
+}
+
 .report-page {
   width: 612px;
   height: 792px;
@@ -313,8 +267,17 @@
 }
 
 .font-clash {
-  font-family: "Clash Display", ui-sans-serif, system-ui, -apple-system,
-    "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji" !important;
+  font-family:
+    "Clash Display",
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    "Apple Color Emoji",
+    "Segoe UI Emoji" !important;
 }
 
 @keyframes scroll {
@@ -330,75 +293,89 @@
   animation: scroll 40s linear infinite;
 }
 
-/* Upload/match modal: matches Safari native overlay scrollbar style */
-.upload-modal-scroll::-webkit-scrollbar {
-  width: 6px;
-}
-
-.upload-modal-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.upload-modal-scroll::-webkit-scrollbar-thumb {
-  background: rgba(13, 13, 15, 0.12);
-  border-radius: 100px;
-  transition: background 200ms ease-out;
-}
-
-.upload-modal-scroll:hover::-webkit-scrollbar-thumb,
-.upload-modal-scrolling::-webkit-scrollbar-thumb {
-  background: rgba(13, 13, 15, 0.25);
-}
-
-.upload-modal-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(13, 13, 15, 0.12) transparent;
-}
-
 /* Auth brand panel mesh gradient */
 .brand-mesh-gradient {
   background:
-    radial-gradient(ellipse 80% 70% at 10% 15%, #60A5FA 0%, transparent 50%),
-    radial-gradient(ellipse 65% 80% at 85% 10%, #38BDF8 0%, transparent 45%),
-    radial-gradient(ellipse 70% 60% at 40% 50%, #7BA4F7 0%, transparent 50%),
-    radial-gradient(ellipse 60% 70% at 80% 70%, #818CF8 0%, transparent 45%),
-    radial-gradient(ellipse 55% 55% at 50% 35%, #93C5FD 0%, transparent 45%),
-    radial-gradient(ellipse 70% 60% at 15% 80%, #4F8EF7 0%, transparent 45%),
-    radial-gradient(ellipse 50% 50% at 70% 45%, #A78BFA 0%, transparent 40%),
-    linear-gradient(135deg, #5B8DEF, #7BA4F7, #818CF8);
+    radial-gradient(ellipse 80% 70% at 10% 15%, #60a5fa 0%, transparent 50%),
+    radial-gradient(ellipse 65% 80% at 85% 10%, #38bdf8 0%, transparent 45%),
+    radial-gradient(ellipse 70% 60% at 40% 50%, #7ba4f7 0%, transparent 50%),
+    radial-gradient(ellipse 60% 70% at 80% 70%, #818cf8 0%, transparent 45%),
+    radial-gradient(ellipse 55% 55% at 50% 35%, #93c5fd 0%, transparent 45%),
+    radial-gradient(ellipse 70% 60% at 15% 80%, #4f8ef7 0%, transparent 45%),
+    radial-gradient(ellipse 50% 50% at 70% 45%, #a78bfa 0%, transparent 40%),
+    linear-gradient(135deg, #5b8def, #7ba4f7, #818cf8);
 }
 
 /* Auth page animations */
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  20%, 60% { transform: translateX(-4px); }
-  40%, 80% { transform: translateX(4px); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Page enter transition — CSS-based so server HTML is visible at paint time */
 @keyframes page-enter {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-page-enter {
   animation: page-enter 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }
 
+/* The 340px rail beside a table — the roster's player drawer and the
+   schedule's event drawer share this pair (Updated Design System 20f): "the
+   drawer slides in from the right edge over 200ms (--ease-primary), the table
+   reflows to the remaining width". Width is what animates, because the reflow
+   is the point: a transform would slide the panel over a table that had
+   already jumped. Named for the roster, where it was first built. */
+@keyframes roster-drawer-in {
+  from {
+    width: 0;
+  }
+  to {
+    width: 340px;
+  }
+}
+@keyframes roster-drawer-out {
+  from {
+    width: 340px;
+  }
+  to {
+    width: 0;
+  }
+}
+
 /* Upload modal animations */
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideDown {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-fadeIn {
@@ -410,19 +387,40 @@
 }
 
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes successPop {
-  0%   { opacity: 0; transform: scale(0.6); }
-  60%  { opacity: 1; transform: scale(1.06); }
-  100% { opacity: 1; transform: scale(1); }
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @keyframes successRise {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-success-pop {
@@ -437,9 +435,15 @@
    field and lands focus on the modal's Continue button — a 1-shot ring pulse
    so the user notices the wizard is ready to commit. SKILL.md curve, 200ms. */
 @keyframes chord-ring-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.55); }
-  60%  { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
-  100% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.55);
+  }
+  60% {
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+  }
 }
 
 .animate-chord-pulse {
@@ -454,15 +458,60 @@
 
 /* New match highlight pulse */
 @keyframes highlight-new-match {
-  0% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3); }
-  100% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0); }
+  0% {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0);
+  }
+}
+
+/* Toasts enter from below their resting place, on the design system's primary
+   curve. Opacity alone reads as a flash; 6px of rise reads as arrival.
+
+   A CLASS, not `animate-[toast-in_200ms_cubic-bezier(0.25,0.46,0.45,0.94)]`.
+   Tailwind's arbitrary animation utility cannot carry a `cubic-bezier(...)`:
+   the commas inside the parens end the arbitrary value, and the utility is
+   dropped ENTIRELY — no error, no class, no animation, and a build that passes.
+   `animate-[highlight-new-match_1.5s_ease-out_0.4s_both]` works only because
+   its easing is a bare keyword. Downgrading to `ease-out` would have compiled
+   and quietly abandoned the one curve the design system specifies, so the
+   animation moves here instead, beside `settings-shimmer` which is a class for
+   the same reason.
+
+   Reduced motion keeps the toast and drops the travel. A failure notice is the
+   only warning a person gets that a background upload died, and a motion
+   preference must never suppress it. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.toast-enter {
+  animation: toast-in 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-enter {
+    animation: none;
+  }
 }
 
 /* Settings skeleton — directional shimmer for hairline form fields.
    Stagger via inline --shimmer-delay so a wave scans down the form. */
 @keyframes settings-shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .settings-skeleton-bar {
@@ -487,5 +536,118 @@
     animation: none;
     background-image: none;
     background-color: var(--color-ink-100);
+  }
+}
+
+/* The filled portion of a track whose work is actually moving right now.
+   A static bar at 42% is indistinguishable from one that stalled at 42% twenty
+   minutes ago, and an upload can legitimately sit on the same percent for a
+   minute at a time — the heartbeat that feeds it writes at most every 2 points.
+   So liveness has to come from the track itself, not the number.
+   Follows settings-shimmer's mechanics; the fill colour stays inline so the
+   same class works for any tone. */
+@keyframes progress-sheen {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.progress-fill-live {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 35%,
+    rgba(255, 255, 255, 0.5) 50%,
+    transparent 65%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: progress-sheen 1.6s ease-in-out infinite;
+  will-change: background-position;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill-live {
+    animation: none;
+    background-image: none;
+  }
+}
+
+/* ── The matches list's rotating analysis copy ─────────────────────────────
+   A match takes tens of minutes to analyse, and the row that is waiting says
+   so in a phrase that changes every few seconds. Every phrase describes what
+   the finished report will cover — never what the engine is doing this second,
+   which nothing tells us: `stageNote` is declared on the analysis type and no
+   writer has ever set it, and the vendor sends its transitions with no
+   sub-step detail. Coverage is true for the whole wait; a live account would
+   not be.
+
+   The copy is a delight, so it yields when there is no room for it. The cell
+   is the row's fluid track, which is 319px at a 1440 viewport but 159px at
+   1280 and 96px at 1024 — and every phrase but the status word needs more than
+   96px. So the rotation is gated on the cell's own width rather than the
+   viewport's: above 150px it runs, below it the plain status word stands
+   alone. A truncated half-sentence would be worse than no sentence.
+
+   Under reduced motion the gate never opens at all, so the plain word is what
+   shows — the fallback is the same in both cases, which is why it is a
+   `no-preference` wrapper rather than a `reduce` override fighting it. */
+.row-lifecycle {
+  container-type: inline-size;
+  /* A phrase wider than the cell would otherwise overrun into the actions lane
+     and chevron. Clip at the cell edge — on the CELL, not the roll, whose
+     crossfade lifts each line 4px and needs the vertical room. The row is 52px
+     tall, so the fade is never clipped. */
+  overflow: hidden;
+}
+
+.analysis-copy-roll {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @container (min-width: 150px) {
+    .analysis-copy-plain {
+      display: none;
+    }
+    .analysis-copy-roll {
+      position: relative;
+      display: block;
+      height: 12px;
+    }
+  }
+}
+
+/* Each phrase holds for an eighth of the cycle and crosses over in the gap:
+   up 4px on the way out, up from 4px on the way in, so the change reads as one
+   line replacing another rather than two lines dissolving into each other. */
+.analysis-copy-roll > span {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  white-space: nowrap;
+  opacity: 0;
+  animation: analysis-copy-cycle 24s var(--ease-primary) infinite;
+}
+
+@keyframes analysis-copy-cycle {
+  0%,
+  1.5% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  3%,
+  10.5% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  12.5%,
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
   }
 }

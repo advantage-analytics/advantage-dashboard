@@ -80,7 +80,11 @@ export default function Error({
   return (
     <ErrorState
       icon={AlertCircle}
-      title={escalated ? "Still having trouble loading this match" : "This match couldn't load"}
+      title={
+        escalated
+          ? "Still having trouble loading this match"
+          : "This match couldn't load"
+      }
       description={description}
       primaryAction={{
         type: "button",

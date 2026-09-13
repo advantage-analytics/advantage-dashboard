@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe/client";
 import { STRIPE_CONFIG } from "@/lib/stripe/config";
-import { PRO_ROLE } from "@/lib/user/roles";
+import { isProPlan } from "@/lib/user/roles";
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,21 +20,21 @@ export async function POST(request: NextRequest) {
     // Check if the user has already purchased Pro
     const { data: userData, error: userError } = await supabase
       .from("users")
-      .select("role")
+      .select("plan")
       .eq("id", user.id)
       .single();
 
     if (userError) {
       return NextResponse.json(
         { error: "Failed to fetch user data", details: userError.message },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
-    if (userData?.role === PRO_ROLE) {
+    if (isProPlan(userData?.plan)) {
       return NextResponse.json(
         { error: "You already have the Pro plan" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -61,8 +61,8 @@ export async function POST(request: NextRequest) {
             "Thank you for upgrading to Pro! You'll get unlimited access to all features.",
         },
       },
-      success_url: `${baseUrl}/dashboard/settings/subscription?success=true`,
-      cancel_url: `${baseUrl}/dashboard/settings/subscription?canceled=true`,
+      success_url: `${baseUrl}/dashboard/settings/plan?success=true`,
+      cancel_url: `${baseUrl}/dashboard/settings/plan?canceled=true`,
       invoice_creation: {
         enabled: true,
       },
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     console.error("Error creating checkout session:", error);
     return NextResponse.json(
       { error: "Failed to create checkout session", details: message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

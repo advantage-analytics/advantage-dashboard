@@ -1,0 +1,539 @@
+"use client";
+
+import { useEffect, useRef, useState, useTransition } from "react";
+import { GitMerge, Loader2, Upload, Users } from "lucide-react";
+import type { RosterMember } from "@/lib/data/team-roster-server";
+import {
+  SettingsField,
+  SettingsUnderlineInput,
+} from "@/components/dashboard/settings/settings-card";
+import { advButton } from "@/lib/ui/adv-button";
+import { normalizedPersonName } from "@/lib/data/person-name";
+import { addProgramPlayer } from "@/components/dashboard/team/roster-actions";
+import { inviteMember } from "@/components/dashboard/settings/team-actions";
+import {
+  DialogInfoRow,
+  DialogProblem,
+  RosterDialog,
+} from "@/components/dashboard/team/dialog-shell";
+import {
+  CLASS_YEARS,
+  LINEUP_SPOTS,
+  RosterNote,
+  UnderlineSelect,
+  nameList,
+  spotHeldNote,
+  spotHolders,
+} from "@/components/dashboard/team/player-fields";
+
+/**
+ * Design 6c — put a player on the roster now.
+ *
+ * The counterpart to inviting, and the reason it is the page's blue action:
+ * this always works. An invite sends email and waits on somebody else; this
+ * creates the row on submit, so a coach can record matches for a freshman who
+ * will never open the app. No login, no seat.
+ *
+ * ── Why the email is optional, and why it still matters ─────────────────────
+ * A coach usually knows a player's address and often does not. Made required,
+ * it would block the whole point of the feature on a detail. Left out, the
+ * duplicate tripwire has nothing to match on later, and the coach ends up with
+ * two rows for one athlete. So: optional, with a hint saying what it buys.
+ *
+ * ── "Also send an invite to claim this profile" ─────────────────────────────
+ * The optional half that makes a lone Add button viable. Ticking it creates the
+ * row AND sends an invitation targeting it, so the athlete's login binds to the
+ * row the coach just made rather than minting a second one. It needs the email,
+ * so it is disabled until there is one — a checkbox that silently does nothing
+ * is worse than one that says why it cannot.
+ *
+ * ── Validation ─────────────────────────────────────────────────────────────
+ * Presence only, and loosely. `add_program_player` carries the real rules —
+ * both names, the email shape, and the two duplicate checks — and its messages
+ * are written for people, so they render as-is. A second set of rules here
+ * would be a second answer able to drift from the enforced one.
+ *
+ * ── The two notes, and why neither is `DialogProblem` ───────────────────────
+ * Both answer the same shape of question — "wait, do we already have this?" —
+ * about something the coach cannot see from inside a dialog. Neither refuses
+ * anything: no disabled options, no gated submit, no extra confirm. That row
+ * is red, `role="alert"`, and reserved for what `add_program_player` actually
+ * refused; these are quiet lines in neutral ink, the same "question, not an
+ * alarm" register as the roster table's Possible duplicate chip. Neither
+ * carries a live-region role — see `RosterNote` in `player-fields.tsx` for
+ * where the announcing happens and why it cannot happen on the visible node.
+ *
+ * *The taken lineup spot.* `spotHeldNote` and the fields it reads now live in
+ * `player-fields.tsx`, because Edit player raises the same note against the
+ * same rule and two copies of "a shared spot is allowed" could disagree about
+ * whether it is.
+ *
+ * *The name already on the roster.* Two athletes can genuinely share a name,
+ * and a coach adding the same freshman twice looks identical from here — so
+ * the note names the match and shows the address on their row, which is the
+ * one field that tells the two apart. `normalizedPersonName` is the roster's
+ * own duplicate rule (and `merge_program_players`'), not a second, looser one:
+ * a warning the merge path would then refuse to act on is worse than none.
+ *
+ * It shows the *matched player's* email; it does not check the one being
+ * typed. The address collision has real teeth — a partial unique index plus
+ * two checks inside `add_program_player` — and re-stating those here is the
+ * drift the Validation note above is about. They still arrive as sentences in
+ * `DialogProblem`.
+ */
+
+/** The field that tells two same-named rows apart, or the absence of it. */
+function emailNote(person: RosterMember): string {
+  return person.email?.trim() || "no email on file";
+}
+
+/**
+ * The add path's own sentence, built where the file's other prose helpers live.
+ *
+ * Returned as a string, not JSX, because it is said twice — once on screen and
+ * once in the live region — and two renderings of one sentence is two things
+ * that can drift. Its lineup-spot counterpart is `spotHeldNote`, shared with
+ * Edit player from `player-fields.tsx`.
+ */
+function duplicateNameNote(matches: RosterMember[]): string {
+  const who =
+    matches.length === 1
+      ? `${matches[0].name} is already on this roster`
+      : `${matches.length} people on this roster are already called ${matches[0].name}`;
+  return `${who} — ${matches
+    .map(emailNote)
+    .join(", ")}. If this is somebody else, you can still add them.`;
+}
+
+/**
+ * What a caller already knows about the person being added.
+ *
+ * The receiving end of a hand-off: a coach who has typed an address into
+ * Invite and then decides the athlete has no account yet should not retype it
+ * here. Every field is optional and none is authoritative — the coach can
+ * overwrite all of them before submitting.
+ */
+export type AddPlayerInitial = {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+};
+
+export function AddPlayerDialog({
+  open,
+  onOpenChange,
+  seatNote,
+  roster,
+  initial,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** What the program's allowance looks like right now, stated by the caller. */
+  seatNote: string;
+  /** Who is on the roster already, so a repeat can say who it would repeat. */
+  roster: RosterMember[];
+  /**
+   * A prefill for the next opening, applied on the closed→open transition.
+   *
+   * Not a controlled value: once the dialog is open the fields are the coach's,
+   * and a later change to this prop does not reach back into them.
+   */
+  initial?: AddPlayerInitial;
+}) {
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [classYear, setClassYear] = useState("");
+  const [lineupSpot, setLineupSpot] = useState("");
+  const [email, setEmail] = useState("");
+  const [alsoInvite, setAlsoInvite] = useState(false);
+  /**
+   * The coach saying, out loud, that a shared line is what they meant.
+   *
+   * Not validation, and deliberately not `DialogProblem`: sharing a spot is
+   * legal — `program_players` carries no unique index on it, for the reshuffle
+   * reason `spotHeldNote` states — so nothing here refuses the write. What it
+   * refuses is the *accidental* one, where the note above went by unread. Same
+   * quiet register as that note: neutral ink, no alert role, one tick.
+   *
+   * It resets whenever the spot changes, not just on close. Acknowledging #3
+   * says nothing about #5, and an acknowledgement that survives the change
+   * would let the second, unread collision through on the first one's tick.
+   */
+  const [spotAcknowledged, setSpotAcknowledged] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  /**
+   * The profile this dialog just created, and the form that produced it.
+   *
+   * `add_program_player` revalidates the roster before returning, so on the
+   * invite-failure path — the one path that succeeds at the write and stays
+   * open — the refreshed `roster` prop already contains the row we just
+   * wrote, with the fields that produced it still on screen. Both notes would
+   * then warn the coach off their own successful write, directly above the red
+   * error about it. Excluding that one row is narrower than suppressing the
+   * notes: a genuine second holder of the same line, or a same-named teammate
+   * who was already there, is still named.
+   *
+   * Keyed on the form, not on the id alone, because the exclusion is only ever
+   * true of the values that wrote the row. Held on the id, it outlives them:
+   * the coach clears the address the invite choked on, submits again, and the
+   * note that would have said "already on this roster" stays suppressed —
+   * while `add_program_player` cannot catch it either, because both its
+   * duplicate checks sit behind an email that is now empty. A silent second
+   * row for one athlete, which is the thing this note exists to prevent.
+   *
+   * The key is every argument `addProgramPlayer` was handed, including the two
+   * no note reads, because the two ways of being wrong do not cost the same. A
+   * field left out means an edit that changes what would be written leaves the
+   * exclusion standing — the silent duplicate above. A field left in means an
+   * edit that changes nothing either note says brings both notes back against
+   * the row just created: noisy, and true. Prefer the noise.
+   */
+  const [created, setCreated] = useState<{
+    profileId: string | null;
+    form: string;
+  } | null>(null);
+
+  /**
+   * Applying `initial`, and why it is an effect keyed on the open edge.
+   *
+   * This component stays mounted whether or not it is showing — the same fact
+   * `close()` below is written around — so a `useState` initializer would run
+   * once, on the first mount, and never again. A coach who cancels and reopens
+   * would get an empty form the second time, and a hand-off arriving while the
+   * dialog was already mounted-but-closed would never be seen at all.
+   *
+   * The edge, not `open` itself: re-running on every render where `open` is
+   * true would overwrite whatever the coach had typed the moment any parent
+   * re-rendered. `wasOpen` is a ref rather than state because nothing renders
+   * differently for it; it only decides whether this is the transition.
+   *
+   * It runs after `reset()` has already emptied the form — every exit path
+   * calls that — so the prefill is what the fields hold, and `reset()` itself
+   * stays "clear to empty" rather than "clear to `initial`". That split is
+   * deliberate: Cancel leaves no residue behind it, and the next open re-applies
+   * the prefill from the prop that still says it.
+   */
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    const opening = open && !wasOpen.current;
+    wasOpen.current = open;
+    if (!opening || !initial) return;
+    if (initial.firstName) setFirstName(initial.firstName);
+    if (initial.lastName) setLastName(initial.lastName);
+    if (initial.email) setEmail(initial.email);
+    // `initial` is read only on the open edge; a change to it while the dialog
+    // is already open is deliberately not applied.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  function reset() {
+    setFirstName("");
+    setLastName("");
+    setClassYear("");
+    setLineupSpot("");
+    setEmail("");
+    setAlsoInvite(false);
+    setSpotAcknowledged(false);
+    setError(null);
+    setCreated(null);
+  }
+
+  /**
+   * Every way out of this dialog, so none of them can forget the reset.
+   *
+   * Escape and the overlay reach it through Radix; the shell's X is
+   * hand-rolled but calls `RosterDialog`'s `onOpenChange`, so it lands in the
+   * same wrapper. Cancel did not — it called *this* component's `onOpenChange`
+   * prop, the parent's setter, one level above the wrapper that carries the
+   * reset. And this component stays mounted whether or not it is showing, so
+   * what Cancel skipped was not cleaned up later: it left the form, and the
+   * exclusion above, standing into the next time the dialog opened.
+   *
+   * Refused while the write is in flight, which is why Cancel is disabled with
+   * it. The component outlives the close, so a reset that lands mid-request is
+   * undone by the `setCreated`/`setError` still to come — the dialog would
+   * reopen holding a red error from an attempt the coach cancelled, and
+   * retyping the same athlete would revive the exclusion for a row no longer
+   * on screen.
+   */
+  function close() {
+    if (pending) return;
+    reset();
+    onOpenChange(false);
+  }
+
+  /** The one place the spot changes, so the acknowledgement cannot outlive it. */
+  function changeLineupSpot(next: string) {
+    setLineupSpot(next);
+    setSpotAcknowledged(false);
+  }
+
+  const formKey = [
+    firstName.trim(),
+    lastName.trim(),
+    classYear,
+    lineupSpot,
+    email.trim(),
+  ].join("\u0000");
+
+  const createdProfileId =
+    created !== null && created.form === formKey ? created.profileId : null;
+
+  const others =
+    createdProfileId === null
+      ? roster
+      : roster.filter((person) => person.profileId !== createdProfileId);
+
+  // The exclusion is passed rather than pre-filtered so the shared helper —
+  // which Edit player uses to keep the note off the row it is editing — is the
+  // one place that decides what "somebody else" means.
+  const spotTakenBy = spotHolders(roster, lineupSpot, createdProfileId);
+
+  const ready =
+    firstName.trim() !== "" &&
+    lastName.trim() !== "" &&
+    (spotTakenBy.length === 0 || spotAcknowledged);
+
+  // Half a name matches every Maya on the squad, which is a warning about
+  // nothing while somebody is still typing — so this stays empty until both
+  // halves are there, and the note is gone again the moment one is cleared.
+  const typedName =
+    firstName.trim() === "" || lastName.trim() === ""
+      ? ""
+      : normalizedPersonName(firstName, lastName);
+
+  const sameName =
+    typedName === ""
+      ? []
+      : others.filter(
+          (person) =>
+            person.role === "player" &&
+            normalizedPersonName(person.name) === typedName,
+        );
+
+  const nameNote = sameName.length === 0 ? null : duplicateNameNote(sameName);
+  const spotNote =
+    spotTakenBy.length === 0 ? null : spotHeldNote(spotTakenBy, lineupSpot);
+
+  function submit() {
+    setError(null);
+    start(async () => {
+      const result = await addProgramPlayer({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        classYear: classYear || null,
+        lineupSpot: lineupSpot ? Number(lineupSpot) : null,
+        email: email.trim() || null,
+      });
+
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+
+      setCreated({ profileId: result.profileId, form: formKey });
+
+      // The row exists now whatever happens next. If the invitation fails, say
+      // so and leave the dialog open — closing on a half-done action would
+      // report the whole thing as done, and the coach would wait for a reply
+      // that could not come.
+      if (alsoInvite && result.profileId) {
+        const invited = await inviteMember({
+          email: email.trim(),
+          role: "player",
+          playerId: result.profileId,
+        });
+        if (!invited.ok) {
+          setError(
+            `${lastName.trim()} is on the roster, but the invitation did not send: ${invited.error}`,
+          );
+          setAlsoInvite(false);
+          return;
+        }
+        if (invited.warning) {
+          setError(`${firstName.trim()} is on the roster. ${invited.warning}`);
+          setAlsoInvite(false);
+          return;
+        }
+      }
+
+      reset();
+      onOpenChange(false);
+    });
+  }
+
+  return (
+    <RosterDialog
+      open={open}
+      onOpenChange={(next) => {
+        // `close()` is a no-op while pending, so Escape and the overlay leave
+        // the dialog open rather than half-closing it. The success path inside
+        // `submit()` resets directly for the same reason — it runs while the
+        // transition is still pending, and `close()` would refuse it.
+        if (next) onOpenChange(true);
+        else close();
+      }}
+      title="Add a player"
+      description="A coach-managed profile — no login needed. You upload their matches; Advantage builds their stats the same."
+      footer={
+        <>
+          <div className="flex-1" />
+          <button
+            type="button"
+            className={advButton("outline")}
+            disabled={pending}
+            onClick={close}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={advButton("primary")}
+            disabled={!ready || pending}
+            onClick={submit}
+          >
+            {pending && (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+            )}
+            Add to roster
+          </button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-2 gap-4">
+        <SettingsField label="First name" required>
+          <SettingsUnderlineInput
+            aria-required
+            value={firstName}
+            autoFocus
+            onChange={(event) => setFirstName(event.target.value)}
+          />
+        </SettingsField>
+        <SettingsField label="Last name" required>
+          <SettingsUnderlineInput
+            aria-required
+            value={lastName}
+            onChange={(event) => setLastName(event.target.value)}
+          />
+        </SettingsField>
+      </div>
+
+      {/* The accessible copy, and the reason it is a separate node: mounted
+          for as long as the dialog is, so a sentence arriving later is a
+          *change* to a region assistive tech is already watching — the only
+          kind it announces. `sr-only` is absolutely positioned, so it is out
+          of flow and adds nothing to the dialog's 18px rhythm, which is what
+          lets it sit here in reading order rather than being hoisted somewhere
+          it would be read out of context.
+
+          Directly under the pair of fields it is about, and full width for the
+          same reason as the spot note below: an address in a 212px cell wraps
+          to three lines and shoves everything under it around as the coach
+          types. GitMerge rather than a person glyph — it is the mark the
+          roster row already carries for this exact question. */}
+      <RosterNote icon={GitMerge} note={nameNote} />
+
+      <div className="grid grid-cols-2 gap-4">
+        <SettingsField label="Class year">
+          <UnderlineSelect
+            ariaLabel="Class year"
+            value={classYear}
+            onChange={setClassYear}
+          >
+            <option value="">Not set</option>
+            {CLASS_YEARS.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </UnderlineSelect>
+        </SettingsField>
+        <SettingsField label="Lineup spot">
+          <UnderlineSelect
+            ariaLabel="Lineup spot"
+            value={lineupSpot}
+            onChange={changeLineupSpot}
+          >
+            <option value="">Not set</option>
+            {LINEUP_SPOTS.map((spot) => (
+              <option key={spot} value={String(spot)}>
+                #{spot}
+              </option>
+            ))}
+          </UnderlineSelect>
+        </SettingsField>
+      </div>
+
+      {/* Full width rather than in the field's hint slot: the cell is half of a
+          440px dialog, and a name wrapped over three lines would shove the
+          email field down every time a coach changed the spot. */}
+      <RosterNote icon={Users} note={spotNote} />
+
+      {/* The note's confirm, borrowing the invite checkbox's grammar wholesale
+          rather than inventing a second one: same accent, same 12px label over
+          an 11px sub-line. It sits directly under the sentence it answers, and
+          exists only while that sentence does — a free spot asks nothing. */}
+      {spotTakenBy.length > 0 && (
+        <label className="flex cursor-pointer items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={spotAcknowledged}
+            onChange={(event) => setSpotAcknowledged(event.target.checked)}
+            className="mt-px size-4 shrink-0 cursor-pointer accent-[var(--blue)]"
+          />
+          <span>
+            <span className="block text-[12px] text-[var(--ink-700)]">
+              Yes — share #{lineupSpot} with {nameList(spotTakenBy)} for now.
+            </span>
+            <span className="mt-0.5 block text-[11px] leading-[1.5] text-[var(--ink-500)]">
+              Nobody is moved off the line. You can change either player&rsquo;s
+              spot later.
+            </span>
+          </span>
+        </label>
+      )}
+
+      <SettingsField
+        label="Email"
+        hint="Optional — so they can claim this profile later"
+      >
+        <SettingsUnderlineInput
+          type="email"
+          value={email}
+          placeholder="name@school.edu"
+          onChange={(event) => setEmail(event.target.value)}
+        />
+      </SettingsField>
+
+      <label className="flex cursor-pointer items-start gap-2.5">
+        <input
+          type="checkbox"
+          checked={alsoInvite}
+          disabled={email.trim() === ""}
+          onChange={(event) => setAlsoInvite(event.target.checked)}
+          className="mt-px size-4 shrink-0 cursor-pointer accent-[var(--blue)] disabled:cursor-not-allowed disabled:opacity-40"
+        />
+        <span>
+          <span className="block text-[12px] text-[var(--ink-700)]">
+            Also send an invite to claim this profile
+          </span>
+          <span className="mt-0.5 block text-[11px] leading-[1.5] text-[var(--ink-500)]">
+            {email.trim() === ""
+              ? "Needs an email address above."
+              : "They keep every match you have uploaded when they take over."}
+          </span>
+        </span>
+      </label>
+
+      <DialogProblem message={error} />
+
+      <DialogInfoRow
+        icon={<Upload className="size-3.5" strokeWidth={1.5} aria-hidden />}
+      >
+        No seat used until they claim it — {seatNote}. Matches you upload will
+        credit you as the person who added them.
+      </DialogInfoRow>
+    </RosterDialog>
+  );
+}

@@ -1,6 +1,23 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+/**
+ * Refreshes the Supabase session cookie on every matched request.
+ *
+ * This exists because Server Components can *read* cookies but cannot write
+ * them. `@supabase/ssr` rotates a refresh token by setting a new cookie, so
+ * without a middleware doing it, the session never slides — it simply expires
+ * and the user is bounced to /login mid-visit.
+ *
+ * It deliberately does NOT redirect. Route protection already lives in the
+ * Server Component layouts that own each area — `dashboard/layout.tsx`,
+ * `dashboard/team/layout.tsx` and `admin/layout.tsx` — where the guard sits
+ * next to the workspace/role lookup it depends on. Duplicating that policy
+ * here would mean two places encoding who may see what, kept in agreement by
+ * remembering. An earlier version of this file did redirect, and its path
+ * allowlist had already drifted: it would have bounced the Stripe and vendor
+ * webhooks, the cron endpoint and the whole anonymous /claim funnel to /login.
+ */
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -31,37 +48,17 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // Do not run code between createServerClient and
-  // supabase.auth.getClaims(). A simple mistake could make it very hard to debug
-  // issues with users being randomly logged out.
+  // Do not run code between createServerClient and supabase.auth.getClaims().
+  // A simple mistake could make it very hard to debug issues with users being
+  // randomly logged out.
+  //
+  // The call looks unused — its return value is discarded on purpose. Reading
+  // the claims is what triggers the refresh-and-set-cookie path above, so
+  // removing it would turn this middleware into an expensive no-op.
+  await supabase.auth.getClaims();
 
-  // IMPORTANT: If you remove getClaims() and you use server-side rendering
-  // with the Supabase client, your users may be randomly logged out.
-  const { data } = await supabase.auth.getClaims();
-  const user = data?.claims;
-
-  const publicPaths = ["/login", "/sign-up", "/sign-up-success", "/forgot-password", "/update-password", "/callback", "/confirm", "/error", "/check-email"];
-  const isPublicPath = publicPaths.some(p => request.nextUrl.pathname.startsWith(p));
-
-  if (!user && !isPublicPath) {
-    // no user, potentially respond by redirecting the user to the login page
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
-  }
-
-  // IMPORTANT: You *must* return the supabaseResponse object as it is.
-  // If you're creating a new response object with NextResponse.next() make sure to:
-  // 1. Pass the request in it, like so:
-  //    const myNewResponse = NextResponse.next({ request })
-  // 2. Copy over the cookies, like so:
-  //    myNewResponse.cookies.setAll(supabaseResponse.cookies.getAll())
-  // 3. Change the myNewResponse object to fit your needs, but avoid changing
-  //    the cookies!
-  // 4. Finally:
-  //    return myNewResponse
-  // If this is not done, you may be causing the browser and server to go out
-  // of sync and terminate the user's session prematurely!
-
+  // You *must* return this exact object. If you build a different response,
+  // copy the cookies onto it first (`res.cookies.setAll(...)`) or the browser
+  // and server fall out of sync and the session terminates early.
   return supabaseResponse;
 }

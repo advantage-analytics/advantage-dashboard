@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe/client";
-import { upgradeUserToPro, PRO_ROLE } from "@/lib/user/roles";
+import { upgradeUserToPro, isProPlan } from "@/lib/user/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type Stripe from "stripe";
 
@@ -8,7 +8,7 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
 if (!webhookSecret) {
   throw new Error(
-    "STRIPE_WEBHOOK_SECRET is not defined in environment variables"
+    "STRIPE_WEBHOOK_SECRET is not defined in environment variables",
   );
 }
 
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     console.error("Webhook signature verification failed:", message);
     return NextResponse.json(
       { error: `Webhook Error: ${message}` },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     const { data: existingUser, error: fetchError } = await supabase
       .from("users")
-      .select("id, role")
+      .select("id, plan")
       .eq("id", userId)
       .single();
 
@@ -62,11 +62,11 @@ export async function POST(request: NextRequest) {
       });
       return NextResponse.json(
         { error: "User not found", details: fetchError?.message },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
-    if (existingUser.role === PRO_ROLE) {
+    if (isProPlan(existingUser.plan)) {
       console.log(`User ${userId} already has Pro, skipping update`);
       return NextResponse.json({ received: true, message: "Already Pro" });
     }
@@ -75,8 +75,8 @@ export async function POST(request: NextRequest) {
 
     if (!result.success) {
       return NextResponse.json(
-        { error: "Failed to update user role", details: result.error },
-        { status: 500 }
+        { error: "Failed to update user plan", details: result.error },
+        { status: 500 },
       );
     }
   }

@@ -1,65 +1,153 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="light only">
-  <meta name="supported-color-schemes" content="light">
-  <title>Sign in — Advantage Analytics</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>Sign in — Advantage</title>
+  <!--[if mso]>
+  <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
+  <![endif]-->
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
-    body { margin:0; padding:0; background-color:#FAFAFA;
+    body { margin:0; padding:0; width:100% !important; background:#FAFAFA;
+      -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;
       -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
-    img { border:0; line-height:100%; outline:none; text-decoration:none; }
-    a { color:#3B82F6; }
-    .wrapper { width:100%; background-color:#FAFAFA; padding:40px 0; }
-    .container { max-width:600px; margin:0 auto; background-color:#FFFFFF;
-      border:1px solid #F3F3F3; border-radius:14px;
-      box-shadow:0px 2px 8px 0px rgba(0,0,0,0.06); overflow:hidden; }
-    .px { padding-left:40px; padding-right:40px; }
-    .cta:hover { background-color:#2563EB !important; }
+    table { border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt; }
+    img { border:0; line-height:100%; outline:none; text-decoration:none; -ms-interpolation-mode:bicubic; }
+    a { text-decoration:none; }
+    .btn:hover { background:#2563EB !important; }
     @media only screen and (max-width:600px) {
-      .wrapper { padding:20px 0; }
-      .container { border-radius:0; border-left:none; border-right:none; }
-      .px { padding-left:24px !important; padding-right:24px !important; }
-      .cta { display:block !important; }
+      .container { width:100% !important; }
+      .px { padding-left:28px !important; padding-right:28px !important; }
+      .h1 { font-size:22px !important; line-height:30px !important; }
+      /* The code has to shrink or the digits wrap out of the panel. */
+      .code { font-size:26px !important; letter-spacing:6px !important; }
+    }
+    @media (prefers-color-scheme: dark) {
+      .bg { background:#0A0A0B !important; }
+      .card { background:#0E0E10 !important; border-color:#2E2E2E !important; box-shadow:none !important; }
+      .ink { color:#F5F5F5 !important; }
+      .ink2 { color:#B5B5B5 !important; }
+      .ink3 { color:#9A9A9A !important; }
+      .ink4 { color:#828282 !important; }
+      .rule { border-color:#1F1F1F !important; }
+      .tone { background:#1A1A1C !important; }
+      .accent { color:#60A5FA !important; }
+      /* The filled CTA keeps #3B82F6 — white text on the lifted dark blue
+         would drop below 3:1. Only unfilled blue lifts. */
+      .logo-light { display:none !important; }
+      .logo-dark { display:inline-block !important; width:140px !important; max-height:none !important; }
     }
 </style>
+
+  <!-- Inter sits in its own <style> block, deliberately after the layout rules.
+       Gmail strips @font-face and can discard the whole block it lives in, so the
+       expendable thing goes last: losing this costs the font and leaves the
+       responsive rules above untouched. Hidden from Outlook, which ignores
+       @font-face and drops to Times New Roman when it sees one. Order relative to
+       usage doesn't matter — @font-face registers at parse time.
+       One file covers all three weights; Inter v20 is a variable font. -->
+  <!--[if !mso]><!-->
+  <style>
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:300; font-display:swap;
+      src:url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2) format('woff2'); }
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:400; font-display:swap;
+      src:url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2) format('woff2'); }
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:500; font-display:swap;
+      src:url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2) format('woff2'); }
+  </style>
+  <!--<![endif]-->
 </head>
-<body style="margin:0; padding:0; background-color:#FAFAFA; font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
-  <div class="wrapper" style="width:100%; background-color:#FAFAFA; padding:40px 0;">
-    <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0"
-      style="max-width:600px; margin:0 auto; background-color:#FFFFFF; border:1px solid #F3F3F3; border-radius:14px; box-shadow:0px 2px 8px 0px rgba(0,0,0,0.06); overflow:hidden;">
-      <tr><td class="px" style="padding:36px 40px 0;">
-        <img src="{{ .SiteURL }}/logos/logo-email.png" alt="Advantage Analytics" width="150" height="27" style="display:block; border:0; height:auto;">
-      </td></tr>
-      <tr><td class="px" style="padding:28px 40px 0;">
-        <div style="font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size:10px; font-weight:500; text-transform:uppercase; letter-spacing:2.5px; color:#AAAAAA;">Sign in</div>
-        <h1 style="margin:12px 0 0; font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size:22px; font-weight:400; letter-spacing:-0.4px; line-height:1.3; color:#0D0D0D;">Your sign-in link</h1>
-      </td></tr>
-      <tr><td class="px" style="padding:20px 40px 8px;">
-        <p style="margin:0 0 16px; font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size:14px; line-height:1.65; color:#525252;">Use the button below to sign in to Advantage Analytics. No password needed.</p>
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 4px;">
-          <tr><td>
-            <a class="cta" href="{{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=magiclink&next=/dashboard" target="_blank"
-              style="display:inline-block; background-color:#3B82F6; color:#ffffff !important; font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size:14px; font-weight:600; letter-spacing:0.2px; text-decoration:none; padding:14px 30px; border-radius:6px; box-shadow:0 1px 3px rgba(57,134,243,0.25);">Sign in</a>
-          </td></tr>
+<body class="bg" style="margin:0; padding:0; background:#FAFAFA;">
+  <span style="display:none !important; visibility:hidden; opacity:0; color:transparent; height:0; width:0; overflow:hidden; mso-hide:all;">Your sign-in link for Advantage Analytics. No password needed.</span>
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="bg" style="background:#FAFAFA;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" class="container" style="width:600px; max-width:600px;">
+
+          <tr>
+            <td class="card" style="background:#FFFFFF; border:1px solid #F3F3F3; border-radius:14px; box-shadow:0px 2px 8px 0px rgba(0,0,0,0.06);">
+
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr>
+                  <td class="px" style="padding:44px 44px 0 44px;">
+                    <img class="logo-light" src="https://advantage-analytics.com/email/advantage-wordmark.png" width="140" height="25" alt="Advantage" style="display:block; width:140px; height:auto; border:0; outline:none;">
+                    <img class="logo-dark" src="https://advantage-analytics.com/email/advantage-wordmark-white.png" width="140" height="25" alt="Advantage" style="display:none; width:0; max-height:0; overflow:hidden; border:0; outline:none;">
+                  </td>
+                </tr>
+
+                <!-- v2 retired the rule under eyebrows; whitespace separates. -->
+                <tr>
+                  <td class="px" style="padding:36px 44px 0 44px;">
+                    <p class="ink4" style="margin:0 0 12px 0; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:10px; font-weight:500; letter-spacing:2.5px; color:#AAAAAA;">SIGN IN</p>
+                    <h1 class="h1 ink" style="margin:0; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:24px; line-height:32px; font-weight:300; letter-spacing:-0.5px; color:#0D0D0D;">Your sign-in link</h1>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td class="px" style="padding:20px 44px 0 44px;">
+                    <p class="ink2" style="margin:0; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:15px; line-height:26px; color:#525252;">Use the button below to sign in to Advantage Analytics. No password needed.</p>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td class="px" style="padding:28px 44px 0 44px;">
+                    <!--[if mso]>
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ if .RedirectTo }}{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink{{ else }}{{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=magiclink&next=/dashboard{{ end }}" style="height:45px;v-text-anchor:middle;width:130px;" arcsize="13%" strokecolor="#3B82F6" fillcolor="#3B82F6">
+                    <w:anchorlock/><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:500;">Sign in</center>
+                    </v:roundrect>
+                    <![endif]-->
+                    <!--[if !mso]><!-- -->
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td class="btn" bgcolor="#3B82F6" align="center" style="border-radius:6px; box-shadow:0 1px 3px rgba(57,134,243,0.25);">
+                          <a href="{{ if .RedirectTo }}{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink{{ else }}{{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=magiclink&next=/dashboard{{ end }}" target="_blank" style="display:block; padding:14px 30px; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:14px; font-weight:500; letter-spacing:0.5px; color:#FFFFFF; border-radius:6px; white-space:nowrap;">Sign in</a>
+                        </td>
+                      </tr>
+                    </table>
+                    <!--<![endif]-->
+                  </td>
+                </tr>
+
+                <tr>
+                  <td class="px" style="padding:26px 44px 0 44px;">
+                    <p class="ink3" style="margin:0 0 6px 0; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:12px; line-height:20px; color:#71717A;">If the button doesn't work, paste this link into your browser:</p>
+                    <p style="margin:0; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:12px; line-height:20px; word-break:break-all;"><a class="accent" href="{{ if .RedirectTo }}{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink{{ else }}{{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=magiclink&next=/dashboard{{ end }}" style="color:#3B82F6;">{{ if .RedirectTo }}{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink{{ else }}{{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=magiclink&next=/dashboard{{ end }}</a></p>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td class="px" style="padding:20px 44px 0 44px;">
+                    <p class="ink3" style="margin:0; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:12px; line-height:20px; color:#71717A;">This link expires in 1 hour. If you didn't request this link, you can safely ignore this email.</p>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td class="px" style="padding:36px 44px 44px 44px;">
+                    <div class="rule" style="border-top:1px solid #F3F3F3; padding-top:24px;">
+                      <p class="ink3" style="margin:0; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:12px; line-height:20px; color:#71717A;">Need help? Reach us at <a class="accent" href="mailto:team@advantage-analytics.com" style="color:#3B82F6;">team@advantage-analytics.com</a>.</p>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding:24px 40px 8px 40px;">
+              <p class="ink4" style="margin:0; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:11px; line-height:17px; color:#AAAAAA;">&copy; 2026 Advantage Analytics LLC &middot; advantage-analytics.com</p>
+            </td>
+          </tr>
+
         </table>
-        <p style="margin:20px 0 0; font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size:12px; line-height:1.6; color:#888888;">If the button doesn't work, copy and paste this link into your browser:</p><p style="margin:8px 0 0; font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size:12px; line-height:1.5; word-break:break-all;"><a href="{{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=magiclink&next=/dashboard" style="color:#3B82F6; text-decoration:none;">{{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=magiclink&next=/dashboard</a></p>
-        <p style="margin:16px 0 0; font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size:12px; line-height:1.6; color:#888888;">This link expires in 1 hour. If you didn't request this link, you can safely ignore this email.</p>
-      </td></tr>
-      <tr><td class="px" style="padding:0 40px;">
-        <div style="height:1px; background-color:#F3F3F3; margin:32px 0 0;"></div>
-      </td></tr>
-      <tr><td class="px" style="padding:24px 40px 36px;">
-        <p style="margin:0 0 6px; font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size:12px; line-height:1.6; color:#888888;">
-          Need help? Reach us at <a href="mailto:team@advantage-analytics.com" style="color:#3B82F6; text-decoration:none;">team@advantage-analytics.com</a>.
-        </p>
-        <p style="margin:0; font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size:11px; line-height:1.6; color:#AAAAAA;">
-          © 2026 Advantage Analytics LLC. All rights reserved.
-        </p>
-      </td></tr>
-    </table>
-  </div>
+
+      </td>
+    </tr>
+  </table>
 </body>
 </html>

@@ -66,7 +66,7 @@ export function SummaryStatsRow({
 
   return (
     <motion.div
-      className="bg-white overflow-hidden"
+      className="overflow-hidden bg-white"
       variants={containerVariants}
       initial="hidden"
       animate="visible"
@@ -78,24 +78,24 @@ export function SummaryStatsRow({
             className="flex flex-row items-center justify-start"
             variants={itemVariants}
           >
-            <div className="w-[2px] h-12 bg-[#D9D9D9] mr-6" />
+            <div className="mr-6 h-12 w-[2px] bg-[var(--ink-300)]" />
             <div className="flex flex-col items-start justify-start">
-              <p className="text-xs font-normal text-[#888888] mb-1 text-center">
+              <p className="mb-1 text-center text-xs font-normal text-[#888888]">
                 {stat.label}
               </p>
               {stat.isFormatted ? (
                 <p className="text-2xl font-medium text-[#0D0D0D]">
                   {stat.hours}
-                  <span className="text-xs font-medium text-[#888888] ml-0.5">
+                  <span className="ml-0.5 text-xs font-medium text-[#888888]">
                     HR
                   </span>{" "}
                   {stat.mins}
-                  <span className="text-xs font-medium text-[#888888] ml-0.5">
+                  <span className="ml-0.5 text-xs font-medium text-[#888888]">
                     MIN
                   </span>
                 </p>
               ) : (
-                <p className="text-2xl font-medium text-[#0D0D0D] text-center">
+                <p className="text-center text-2xl font-medium text-[#0D0D0D]">
                   {stat.value}
                 </p>
               )}

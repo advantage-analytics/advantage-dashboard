@@ -1,83 +1,186 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import AccentLine from "@/components/auth/accent-line";
+import { Mail } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import FormHeader from "@/components/auth/form-header";
+import AuthButton from "@/components/auth/auth-button";
+import AuthFooter, { AUTH_LINK } from "@/components/auth/auth-footer";
+import { ErrorText } from "@/components/auth/form-error";
+import { toAuthError } from "@/lib/auth/error-messages";
+import {
+  formatCountdown,
+  readRecoveryHandoff,
+  recoveryRedirectTo,
+  writeRecoveryHandoff,
+  LINK_TTL_SECONDS,
+  RESEND_COOLDOWN_SECONDS,
+  type RecoveryHandoff,
+} from "@/lib/auth/recovery-handoff";
+
+/** What happens next, which the shipped screen never said. */
+const STEPS = [
+  "Open the link from your inbox",
+  "Choose a new password",
+  "Sign in and pick up where you left off",
+];
 
 export default function Page() {
+  const [handoff, setHandoff] = useState<RecoveryHandoff | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [isResending, setIsResending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Both the address and the clock are client-only. Reading them in an effect
+  // keeps the server and first client render identical — a countdown rendered
+  // during SSR is a guaranteed hydration mismatch.
+  useEffect(() => {
+    setHandoff(readRecoveryHandoff());
+    setNow(Date.now());
+  }, []);
+
+  // Depend on the timestamp, not the handoff object, so a re-read that returns
+  // an equal-valued object doesn't restart the timer.
+  const sentAt = handoff?.sentAt ?? null;
+
+  // Only tick while there is something left to count. With no handoff both
+  // countdown branches render fixed copy, and past the TTL they do again — a
+  // 1s re-render for the rest of the tab's life that cannot change a pixel.
+  // Resend rewrites sentAt, which re-runs this effect and restarts the timer.
+  useEffect(() => {
+    if (sentAt === null) return;
+    const expiresAt = sentAt + LINK_TTL_SECONDS * 1000;
+    if (Date.now() >= expiresAt) return;
+    const id = setInterval(() => {
+      const tick = Date.now();
+      setNow(tick);
+      if (tick >= expiresAt) clearInterval(id);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [sentAt]);
+
+  const elapsed = handoff ? Math.floor((now - handoff.sentAt) / 1000) : null;
+  const expiresIn = elapsed === null ? null : LINK_TTL_SECONDS - elapsed;
+  const resendIn = elapsed === null ? null : RESEND_COOLDOWN_SECONDS - elapsed;
+  const canResend = resendIn !== null && resendIn <= 0 && !isResending;
+
+  const handleResend = async () => {
+    if (!handoff || !canResend) return;
+    setError(null);
+    setIsResending(true);
+    try {
+      const supabase = createClient();
+      const { error: resendError } = await supabase.auth.resetPasswordForEmail(
+        handoff.email,
+        { redirectTo: recoveryRedirectTo(window.location.origin) },
+      );
+      if (resendError) throw resendError;
+      setHandoff(writeRecoveryHandoff(handoff.email));
+      setNow(Date.now());
+    } catch (err: unknown) {
+      setError(toAuthError(err).message);
+    } finally {
+      setIsResending(false);
+    }
+  };
+
   return (
     <div
-      className="flex w-full max-w-[360px] flex-col items-center gap-[24px]"
+      className="flex w-full max-w-[360px] flex-col gap-[24px]"
       style={{ animation: "fadeUp 0.5s ease-out" }}
     >
-      {/* Accent line */}
-      <div className="w-full">
-        <AccentLine />
-      </div>
+      <FormHeader
+        eyebrow="Account recovery"
+        title="Check Your Email."
+        description={
+          <>
+            We sent a single-use recovery link.{" "}
+            {expiresIn !== null && expiresIn > 0 ? (
+              <>
+                It expires in{" "}
+                <span className="mono tabular text-[12px] text-[var(--ink-900)]">
+                  {formatCountdown(expiresIn)}
+                </span>
+                .
+              </>
+            ) : expiresIn !== null ? (
+              "That one has expired — send yourself a new one."
+            ) : (
+              "It expires an hour after it was sent."
+            )}
+          </>
+        }
+      />
 
-      {/* Email icon */}
-      <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[rgba(0,0,0,0.03)]">
-        <svg
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="var(--color-accent-blue)"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <rect x="2" y="4" width="20" height="16" rx="2" />
-          <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-        </svg>
-      </div>
-
-      {/* Header */}
-      <div className="flex w-full flex-col gap-[12px]">
-        <h2 className="text-[28px] font-light leading-[1.1] tracking-[-0.5px] text-[var(--color-text-primary)]">
-          Check Your Email.
-        </h2>
-        <p className="text-[12px] leading-[1.5] text-[var(--color-text-muted)]">
-          A recovery link has been sent to help you reset your password.
-        </p>
-        <p className="text-[13px] leading-[1.6] text-[var(--color-text-secondary)]">
-          We&apos;ve sent a password recovery link to your email address. Please
-          check your inbox and follow the instructions to reset your password.
-        </p>
-      </div>
-
-      {/* Actions */}
-      <div className="flex w-full flex-col items-center gap-[18px]">
-        <button
-          type="button"
-          onClick={() => window.open("mailto:", "_blank")}
-          className="flex h-[44px] w-full items-center justify-center rounded-[6px] border border-[rgba(59,130,246,0.25)] bg-[rgba(59,130,246,0.08)] text-[13px] font-medium tracking-[1px] text-[var(--color-accent-blue)] transition-all duration-200 hover:border-[var(--color-accent-blue)] active:scale-[0.97]"
-        >
-          Open Email App
-        </button>
-
-        <Link href="/login" className="flex items-center gap-[6px]">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="var(--color-text-dim)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="19" y1="12" x2="5" y2="12" />
-            <polyline points="12 19 5 12 12 5" />
-          </svg>
-          <span className="text-[12px] text-[var(--color-text-secondary)]">
-            Back to Sign In
+      {handoff ? (
+        <div className="flex items-center gap-[10px] rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-[16px] py-[12px]">
+          <Mail
+            size={14}
+            strokeWidth={1.5}
+            className="shrink-0 text-[var(--ink-600)]"
+            aria-hidden="true"
+          />
+          <span className="mono truncate text-[12px] text-[var(--ink-900)]">
+            {handoff.email}
           </span>
-        </Link>
+        </div>
+      ) : null}
 
-        <p className="text-center text-[11px] leading-[1.6] text-[var(--color-text-dim)]">
-          Didn&apos;t receive the email? Check your spam folder or request a new
-          link.
-        </p>
+      <ol className="flex flex-col">
+        {STEPS.map((step, index) => (
+          <li
+            key={step}
+            className="flex items-baseline gap-[12px] border-t border-[var(--border-hairline)] py-[10px]"
+          >
+            <span className="mono tabular text-[11px] text-[var(--ink-500)]">
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <span className="text-body-sm">{step}</span>
+          </li>
+        ))}
+      </ol>
+
+      <div className="flex flex-col gap-[16px]">
+        {error ? <ErrorText>{error}</ErrorText> : null}
+
+        <AuthButton onClick={() => window.open("mailto:", "_blank")}>
+          Open Email App
+        </AuthButton>
+
+        <AuthFooter>
+          <span className="text-body-sm">
+            Wrong address?{" "}
+            <Link href="/forgot-password" className={AUTH_LINK}>
+              Use a different one
+            </Link>
+          </span>
+          <span className="text-micro">
+            {resendIn !== null && resendIn > 0 ? (
+              <>
+                Resend in{" "}
+                <span className="mono tabular text-[var(--ink-900)]">
+                  {formatCountdown(resendIn)}
+                </span>{" "}
+                · nothing after a minute, check spam.
+              </>
+            ) : handoff ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={!canResend}
+                  className={`${AUTH_LINK} disabled:pointer-events-none disabled:opacity-50`}
+                >
+                  {isResending ? "Resending..." : "Resend the link"}
+                </button>{" "}
+                · nothing after a minute, check spam.
+              </>
+            ) : (
+              "Nothing after a minute? Check your spam folder."
+            )}
+          </span>
+        </AuthFooter>
       </div>
     </div>
   );

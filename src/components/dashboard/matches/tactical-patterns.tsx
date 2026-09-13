@@ -23,16 +23,16 @@ export function TacticalPatterns({ items }: TacticalPatternsProps) {
   return (
     <section
       aria-labelledby="tactical-patterns-heading"
-      className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] p-5 flex flex-col gap-5"
+      className="flex flex-col gap-5 rounded-[14px] border border-[#F3F3F3] bg-white p-5 shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]"
     >
       <div className="flex items-baseline justify-between">
         <p
           id="tactical-patterns-heading"
-          className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] leading-[15px]"
+          className="text-[10px] leading-[15px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase"
         >
           Tactical Patterns
         </p>
-        <p className="text-[10px] font-normal text-[#AAAAAA] tabular-nums leading-[15px]">
+        <p className="text-[10px] leading-[15px] font-normal text-[#AAAAAA] tabular-nums">
           {visible.length} identified
         </p>
       </div>
@@ -61,33 +61,33 @@ export function TacticalPatterns({ items }: TacticalPatternsProps) {
             >
               <div className="flex items-center gap-3 self-stretch">
                 <div
-                  className="w-px h-full rounded-full shrink-0 opacity-70 group-hover:opacity-100 transition-opacity duration-200"
+                  className="h-full w-px shrink-0 rounded-full opacity-70 transition-opacity duration-200 group-hover:opacity-100"
                   style={{ backgroundColor: accentColor }}
                   aria-hidden="true"
                 />
-                <span className="text-[10px] font-medium text-[#AAAAAA] tabular-nums tracking-[1px] uppercase">
+                <span className="text-[10px] font-medium tracking-[1px] text-[#AAAAAA] uppercase tabular-nums">
                   {index}
                 </span>
               </div>
 
-              <div className="flex flex-col gap-1 min-w-0">
-                <p className="text-[13px] font-medium text-[#0D0D0D] leading-[20px]">
+              <div className="flex min-w-0 flex-col gap-1">
+                <p className="text-[13px] leading-[20px] font-medium text-[#0D0D0D]">
                   {item.name}
                 </p>
                 {item.description && (
-                  <p className="text-[11px] font-normal text-[#71717A] leading-[1.5] max-w-[60ch]">
+                  <p className="max-w-[60ch] text-[11px] leading-[1.5] font-normal text-[#71717A]">
                     {item.description}
                   </p>
                 )}
               </div>
 
-              <div className="flex flex-col gap-1 items-end text-right">
-                <p className="text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] leading-[15px]">
+              <div className="flex flex-col items-end gap-1 text-right">
+                <p className="text-[9px] leading-[15px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase">
                   {categoryLabel}
                 </p>
-                <p className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-none tabular-nums">
+                <p className="text-[28px] leading-none font-light tracking-[-0.5px] text-[#0D0D0D] tabular-nums">
                   {pct}
-                  <span className="text-[14px] font-light text-[#AAAAAA] tracking-normal ml-0.5">
+                  <span className="ml-0.5 text-[14px] font-light tracking-normal text-[#AAAAAA]">
                     %
                   </span>
                 </p>

@@ -5,14 +5,14 @@
  * Performs authentication, validation, and storage operations.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 import {
   createUploadService,
-  getProviderStrategy,
+  getImportProviderStrategy,
   isProviderSupported,
   ProviderId,
-} from '@/lib/services/upload';
+} from "@/lib/services/upload";
 
 /** Response type for upload API */
 interface UploadApiResponse {
@@ -33,7 +33,7 @@ interface UploadApiResponse {
  * - providerId: Provider identifier (e.g., 'swing-vision')
  */
 export async function POST(
-  request: NextRequest
+  request: NextRequest,
 ): Promise<NextResponse<UploadApiResponse>> {
   try {
     // 1. Initialize Supabase client and authenticate
@@ -45,36 +45,36 @@ export async function POST(
 
     if (authError || !user) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
       );
     }
 
     // 2. Parse form data
     const formData = await request.formData();
-    const file = formData.get('file') as File | null;
-    const matchId = formData.get('matchId') as string | null;
-    const providerId = formData.get('providerId') as string | null;
+    const file = formData.get("file") as File | null;
+    const matchId = formData.get("matchId") as string | null;
+    const providerId = formData.get("providerId") as string | null;
 
     // 3. Validate required fields
     if (!file) {
       return NextResponse.json(
-        { success: false, error: 'No file provided' },
-        { status: 400 }
+        { success: false, error: "No file provided" },
+        { status: 400 },
       );
     }
 
     if (!matchId) {
       return NextResponse.json(
-        { success: false, error: 'No matchId provided' },
-        { status: 400 }
+        { success: false, error: "No matchId provided" },
+        { status: 400 },
       );
     }
 
     if (!providerId) {
       return NextResponse.json(
-        { success: false, error: 'No providerId provided' },
-        { status: 400 }
+        { success: false, error: "No providerId provided" },
+        { status: 400 },
       );
     }
 
@@ -82,18 +82,31 @@ export async function POST(
     if (!isProviderSupported(providerId)) {
       return NextResponse.json(
         { success: false, error: `Unsupported provider: ${providerId}` },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // 5. Get provider strategy and validate file
-    const strategy = getProviderStrategy(providerId as ProviderId);
+    // 5. Get provider strategy and validate file. This route handles parseable
+    //    files only — a processing provider's video never comes through here,
+    //    so getImportProviderStrategy throwing is the correct outcome.
+    let strategy;
+    try {
+      strategy = getImportProviderStrategy(providerId as ProviderId);
+    } catch (err) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: err instanceof Error ? err.message : "Unsupported provider",
+        },
+        { status: 400 },
+      );
+    }
     const validationResult = strategy.validateFile(file);
 
     if (!validationResult.success) {
       return NextResponse.json(
         { success: false, error: validationResult.error },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -109,7 +122,7 @@ export async function POST(
     if (!uploadResult.success) {
       return NextResponse.json(
         { success: false, error: uploadResult.error },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -117,9 +130,9 @@ export async function POST(
     // Get all files for this match to pass to the Edge Function
     try {
       const { data: matchFiles } = await supabase
-        .from('match_files')
-        .select('storage_path, file_name')
-        .eq('match_id', matchId);
+        .from("match_files")
+        .select("storage_path, file_name")
+        .eq("match_id", matchId);
 
       if (matchFiles && matchFiles.length > 0) {
         const fileNames = matchFiles
@@ -128,27 +141,29 @@ export async function POST(
 
         // Fetch source_provider from match record
         const { data: match } = await supabase
-          .from('matches')
-          .select('source_provider')
-          .eq('id', matchId)
+          .from("matches")
+          .select("source_provider")
+          .eq("id", matchId)
           .single();
 
         // Call Edge Function asynchronously (don't wait for response)
-        supabase.functions.invoke('process-match', {
-          body: {
-            matchId,
-            userId: user.id,
-            fileNames,
-            sourceProvider: match?.source_provider || null,
-          },
-        }).catch((err) => {
-          // Log error but don't fail the upload
-          console.error('Error triggering process-match Edge Function:', err);
-        });
+        supabase.functions
+          .invoke("process-match", {
+            body: {
+              matchId,
+              userId: user.id,
+              fileNames,
+              sourceProvider: match?.source_provider || null,
+            },
+          })
+          .catch((err) => {
+            // Log error but don't fail the upload
+            console.error("Error triggering process-match Edge Function:", err);
+          });
       }
     } catch (err) {
       // Log error but don't fail the upload
-      console.error('Error fetching match files for Edge Function:', err);
+      console.error("Error fetching match files for Edge Function:", err);
     }
 
     // 8. Return success response
@@ -158,13 +173,13 @@ export async function POST(
       storagePath: uploadResult.storagePath,
     });
   } catch (error) {
-    console.error('Upload API error:', error);
+    console.error("Upload API error:", error);
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: error instanceof Error ? error.message : "Internal server error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

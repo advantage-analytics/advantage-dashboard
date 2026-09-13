@@ -1,0 +1,1055 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
+import { expect, test } from "@playwright/test";
+
+import { dualScore } from "@/lib/schedule/entry-state";
+import {
+  ALL_PROGRAM_SCHOOLS,
+  CONFERENCE_SCHOOLS,
+  DIRECTORY_TERM,
+  DIRECTORY_TOTAL,
+  DUAL_DRAFT_EVENT,
+  DUAL_DRAFT_LINES,
+  DUAL_DRAFT_OPPONENT_SHORT,
+  DUAL_DRAFT_SAVED_ROSTER,
+  DUAL_DRAFT_TYPED_NAME,
+  EVENT_DETAILS,
+  OUR_CONFERENCE,
+  OUR_DIVISION,
+  PROGRAM_NAME,
+  RAIL_SCHOOLS,
+  SCHEDULE_ROWS,
+  SEASON_FACTS,
+  SEASON_LABEL,
+  TOURNAMENT_FIELD,
+  USER_NAME,
+} from "@/lib/schedule/fixtures";
+import { formatEventDay, siteTitle } from "@/lib/schedule/format";
+import { SCHEDULE_COLUMNS } from "@/components/dashboard/schedule/static/schedule-table";
+import { LINE_STATUS } from "@/lib/schedule/line-status";
+import { formatOpponentRecord } from "@/lib/schedule/opponent-history";
+import { divisionLabel, teamLabel } from "@/lib/data/programs-server";
+import { LINE_PLAY_OPTIONS } from "@/components/dashboard/schedule/static/dual-build-step";
+
+/**
+ * The copy record for the four rebuilt schedule routes — what it guards, and
+ * what it does not.
+ *
+ * `/dashboard/team/schedule`, `.../new`, `.../new/dual` and `.../new/tournament`
+ * were rebuilt character-for-character from ten artboards in
+ * `Events & Lineups.dc.html` — `7e 7d 7c 4c`, `3b`, `2c 2b 2d 2e` and `3c` —
+ * first against `src/lib/schedule/fixtures.ts`, the design's sample content as
+ * data, and then re-wired to the database one route at a time: T15 the
+ * schedule, T18 the chooser, T19–T20 the tournament builder, T21–T23 the dual
+ * builder. The whole point of the rebuild was the punctuation as much as the
+ * words: an en dash between two figures, `·` between two clauses, a STRAIGHT
+ * apostrophe, `↵` on a card, `—` where a value is absent. Every one of those is
+ * a character a reviewer's eye slides straight over.
+ *
+ * ── What this spec guards now: the design record, not the live screen ──────
+ * It asserts two ways, and neither is a rendered page.
+ *
+ *   1. Over `fixtures.ts`'s exports. No route renders that module any more —
+ *      this file is its only importer, anywhere — so those assertions pin the
+ *      design's content as transcribed: a 3–1 season, a Ridgeline dual on
+ *      09-26, five "Ridg" schools, nine stated lines. `PROGRAM_NAME`,
+ *      `USER_NAME` and `SEASON_LABEL` never had a consumer under `src/` at
+ *      all. They are kept because the record is worth keeping intact — it is
+ *      what the artboards say, in the app's own types, and the reference for
+ *      the next time a screen is held against its artboard — not because a
+ *      user sees any of it. Each block that reads the record says so.
+ *   2. Over component source text, through `screen()` / `drawn()` below.
+ *      Those pin the copy the live screens still draw as literals — section
+ *      labels, prompts, separators, the sentences the artboards wrote. Where a
+ *      route's re-wiring turned a drawn literal into a computed value, the
+ *      assertion was retired with a `RETIRED` note giving the reason (the
+ *      re-wiring's rule 9: retire, never weaken); where a literal is still
+ *      drawn but now known to be wrong for real data, it is held and its note
+ *      names the finding. Every `drawn()` here was re-checked against its
+ *      component at the end of the run, and each still lands on a rendered
+ *      text node, attribute or copy-table entry.
+ *
+ * So a green run means: the transcription is intact, and every pinned literal
+ * is still in its component's source. It does not mean a user sees the
+ * artboard — nothing here mounts a component — and `npm test` passing is not
+ * evidence that a screen matches its design. For that, open the route.
+ *
+ * ── Why every expected string below is written out by hand ─────────────────
+ * **This spec is an independent second copy of the design's strings.** Each
+ * expectation was transcribed from the artboard markup, not imported from the
+ * module it checks. A spec that read `SEASON_FACTS` and asserted it equalled
+ * `SEASON_FACTS` would pass forever and catch nothing; so would one that built
+ * a subline with the same helpers the component builds it with. So on every
+ * assertion here exactly one side comes from the app — a fixture export, a
+ * formatter's return value, or the component's own source text — and the other
+ * side is a literal typed out of the capture.
+ *
+ * The characters are the design's own, verified at byte level against the
+ * capture: `·` is U+00B7, `–` is U+2013, `—` is U+2014, `↵` is U+21B5, and the
+ * apostrophes are U+0027. The artboards use straight quotes throughout; do not
+ * "upgrade" any of them to curly here, and note that `entities()` below
+ * deliberately does NOT decode `&rsquo;`, so an apostrophe that drifts curly
+ * fails rather than passing.
+ *
+ * ── Why the components are read as text ────────────────────────────────────
+ * `playwright.config.ts` configures no browser and no `webServer` on purpose,
+ * and nothing in this repo can mount a React component. Copy that lives inline
+ * in JSX is therefore checked by reading the component's source — the same
+ * thing `generate-map.spec.ts`, `splitstep-derivation.spec.ts` and
+ * `splitstep-transcript.spec.ts` already do. Nothing here writes to any file.
+ */
+
+const SCREENS = path.join(
+  __dirname,
+  "..",
+  "src",
+  "components",
+  "dashboard",
+  "schedule",
+  "static",
+);
+/** The shared primitives a screen draws through — `EmptyMark`. */
+const UI = path.join(__dirname, "..", "src", "components", "ui");
+/** `ResultMark`, the one outcome register, sits a level up from the screens. */
+const DASHBOARD = path.join(__dirname, "..", "src", "components", "dashboard");
+/** The Matches zero state retains the supported SwingVision file-import entry point. */
+const MATCHES = path.join(DASHBOARD, "matches");
+
+/**
+ * One screen's source, reduced to something a designed sentence survives in.
+ *
+ * Four passes, and the order matters:
+ *
+ *   1. **Comments go first, and they are the load-bearing pass.** These files
+ *      quote the artboards at length in their own doc blocks — `2b`'s header
+ *      carries "— no available player", and the tournament builder's names the
+ *      controls it draws — so a `toContain` over the raw file would pass on
+ *      prose about the copy after the copy itself had been deleted. The
+ *      empty `{ }` a removed JSX comment leaves behind goes with it, or it
+ *      lands in the middle of a sentence the design wrote as one.
+ *   2. `{" "}`, JSX's explicit space, written wherever a line break would
+ *      otherwise swallow the space between two interpolations.
+ *   3. The entity escapes a lint rule forces on to a literal apostrophe in JSX
+ *      text (`&#39;` in the tournament builder, `&apos;` in the other two).
+ *      Both ARE U+0027; only the SOURCE is normalized, never an expectation.
+ *      `&rsquo;` is left alone deliberately — see the header.
+ *   4. Whitespace, because prettier wraps a designed sentence at its margin and
+ *      leaves the indent in the middle of it.
+ *
+ * The result is then returned TWICE over, the second copy with its JSX tags
+ * removed. Neither view alone is enough: copy that rides in an attribute
+ * (`label="Starts"`, `note="Save as a different player"`) is inside a tag and
+ * only survives the first, while a sentence broken across
+ * `<span className="tabular">` only reads whole in the second. The tag pattern
+ * requires a letter after `<` and forbids a `<` or `>` inside, so
+ * `index < suggestions.length` is never mistaken for a tag.
+ */
+function screen(file: string, root = SCREENS): string {
+  const source = readFileSync(path.join(root, file), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1")
+    // The braces a removed JSX comment leaves behind, which would otherwise
+    // land in the middle of a sentence the design wrote as one.
+    .replace(/\{\s*\}/g, " ")
+    .replace(/\{" "\}/g, " ")
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ");
+
+  const text = source.replace(/<\/?[A-Za-z][^<>]*>/g, " ").replace(/\s+/g, " ");
+
+  return `${source}\n${text}`;
+}
+
+/**
+ * Assert one transcribed string is still on the screen.
+ *
+ * A boolean rather than `toContain` so a failure prints the missing string and
+ * not the whole normalized file — the useful half of the diff is the
+ * expectation, which is the design's.
+ */
+function drawn(source: string, file: string, expected: string): void {
+  expect(
+    source.includes(expected),
+    `${file} no longer draws ${JSON.stringify(expected)}`,
+  ).toBe(true);
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+
+test.describe("/dashboard/team/schedule · Tc2 Tc2c", () => {
+  // The page was redrawn from `Platform Audit.dc.html` — `Tc2` (an event
+  // selected, its detail as a right rail) and `Tc2c` (the resting state, no
+  // drawer). The `7e 7d 7c 4c` frames this block used to guard drew a left
+  // drawer of events beside a lineup pane; that shape is gone, and with it
+  // `dual-widget.tsx`. Every `drawn()` below was transcribed from the two
+  // new artboards; each retired string carries the reason.
+  const schedule =
+    screen("static-schedule.tsx") + screen("../../team/list-page-heading.tsx");
+  const matchesEmpty = screen("empty-matches.tsx", MATCHES);
+  const dayZero = screen("schedule-day-zero.tsx");
+  const table =
+    screen("schedule-table.tsx") + screen("schedule-table-layout.ts");
+  const drawer = screen("event-drawer.tsx");
+  const drawerActions = screen("event-actions-menu.tsx");
+  const emptyMark = screen("empty-mark.tsx", UI);
+  const resultMark = screen("result-mark.tsx", DASHBOARD);
+
+  test("the season this app is signed in to", () => {
+    // Design record, all four — see the header. The shell prints the real
+    // workspace and user, and the season line has been `seasonSummaryFrom()`'s
+    // since T14; none of these has a consumer under `src/`. They pin the
+    // transcription, not a screen.
+    expect(PROGRAM_NAME).toBe("Meridian State");
+    expect(USER_NAME).toBe("Elena Vasquez");
+    expect(SEASON_LABEL).toBe("2026–27");
+    // The footer's sentence — en dash between the figures, `·` between the
+    // clauses. `Tc2` draws the same four figures `7d` did.
+    expect(SEASON_FACTS).toBe("3–1 in duals · 31 of 36 lines analyzed");
+  });
+
+  test("Tc2's rows, as the design record states them", () => {
+    // Design record — see the header. `SCHEDULE_ROWS` stopped reaching any
+    // component when T15 re-pointed the route at `getProgramSchedule()`.
+    expect(SCHEDULE_ROWS.map((row) => row.name)).toEqual([
+      "Ridgeline University",
+      "Fairmont A&M",
+      "State College of Ash",
+      "Harlow Valley",
+    ]);
+
+    // The Date cell, as the formatter actually renders it. The design's
+    // weekday labels are what fix the fixture calendar to 2025.
+    expect(SCHEDULE_ROWS.map((row) => formatEventDay(row.startsOn))).toEqual([
+      "Fri 26 Sep",
+      "Sat 20 Sep",
+      "Sat 13 Sep",
+      "Sat 6 Sep",
+    ]);
+    // The Venue cell.
+    expect(SCHEDULE_ROWS.map((row) => siteTitle(row.site))).toEqual([
+      "Home",
+      "Away",
+      "Home",
+      "Away",
+    ]);
+
+    // The upcoming dual carries no score; the three completed ones carry the
+    // team scores the Score column draws.
+    expect(SCHEDULE_ROWS.map((row) => row.teamScore)).toEqual([
+      null,
+      { us: 5, them: 2 },
+      { us: 6, them: 1 },
+      { us: 4, them: 3 },
+    ]);
+  });
+
+  test("the page's own words", () => {
+    drawn(schedule, "static-schedule.tsx", "Schedule");
+    // The summary line: workspace · season · events · upcoming, `·` throughout.
+    drawn(schedule, "static-schedule.tsx", " season");
+    drawn(schedule, "static-schedule.tsx", '"event" : "events"');
+    drawn(schedule, "static-schedule.tsx", " upcoming");
+    expect(
+      schedule.includes("Import"),
+      "static-schedule.tsx must not restore the nonworking Schedule Import action",
+    ).toBe(false);
+    drawn(matchesEmpty, "empty-matches.tsx", "Import from SwingVision");
+    drawn(matchesEmpty, "empty-matches.tsx", 'href="/dashboard/matches/new"');
+    drawn(schedule, "static-schedule.tsx", "New event");
+    // The three lifecycle pills. No counts inside them (Data Table law 7) —
+    // the summary line carries the season's numbers.
+    drawn(schedule, "static-schedule.tsx", '"All"');
+    drawn(schedule, "static-schedule.tsx", '"Upcoming"');
+    drawn(schedule, "static-schedule.tsx", '"Completed"');
+    drawn(schedule, "static-schedule.tsx", "Newest first");
+    drawn(schedule, "static-schedule.tsx", "Oldest first");
+    // The footer: "Season 3–1 in duals · 31 of 36 lines analyzed".
+    drawn(schedule, "static-schedule.tsx", "Season ");
+    drawn(schedule, "static-schedule.tsx", " in duals · ");
+    drawn(schedule, "static-schedule.tsx", "lines analyzed");
+    drawn(schedule, "static-schedule.tsx", "Set next lineup");
+    // RETIRED 'Select an event', 'Pick a dual or tournament on the left…',
+    //   'Jump to', 'Next', 'Last', ' · lineup not set', 'tomorrow' — `7d`'s
+    //   prompt pane left the page with the left drawer it prompted about. The
+    //   resting state is now `Tc2c`: the table itself, nothing selected.
+  });
+
+  test("the table's own words", () => {
+    // The seven eyebrow headers, in the date-first grammar.
+    for (const header of [
+      "Date",
+      "Event",
+      "Type",
+      "Venue",
+      "Lines",
+      "Score",
+      "Result",
+    ]) {
+      drawn(table, "schedule-table.tsx", header);
+    }
+    drawn(table, "schedule-table.tsx", '"Dual" : "Tournament"');
+    // A dual whose lineup has no lines yet.
+    drawn(table, "schedule-table.tsx", '"Not set"');
+    // Lines with a result over lines on the card — "8 / 9", spaces and all.
+    drawn(
+      table,
+      "schedule-table.tsx",
+      "${row.playedCount} / ${row.entryCount}",
+    );
+    // EN DASH between the halves of a team score, not a hyphen.
+    drawn(table, "schedule-table.tsx", "${us}–${them}");
+    // The outcome words moved into `ResultMark`, the product's one register —
+    // the table draws the glyph and the mark carries "Won"/"Lost"/"Level" as
+    // its accessible name. "Not played" is still the table's own word.
+    drawn(table, "schedule-table.tsx", "ResultMark");
+    for (const word of ["Won", "Lost", "Level"]) {
+      drawn(resultMark, "result-mark.tsx", word);
+    }
+    drawn(table, "schedule-table.tsx", "Not played");
+    // The em dash a cell with no value draws — through the shared `EmptyMark`,
+    // one mark centred under its own heading, the same one the Roster draws.
+    drawn(table, "schedule-table.tsx", "EmptyMark");
+    drawn(emptyMark, "ui/empty-mark.tsx", "—");
+  });
+
+  test("4c's nine lines, and the 5–2 they add up to", () => {
+    // Design record — see the header. `EVENT_DETAILS` is `eventDetailFrom()`'s
+    // shape over the design's Fairmont dual; the live rail reads the database.
+    const fairmont = EVENT_DETAILS[SCHEDULE_ROWS[1].id];
+    expect(fairmont, "4c has no detail to draw").toBeTruthy();
+
+    expect(fairmont.event.name).toBe("Fairmont A&M");
+    expect(formatEventDay(fairmont.event.startsOn)).toBe("Sat 20 Sep");
+    expect(siteTitle(fairmont.event.site)).toBe("Away");
+    expect(fairmont.event.surface).toBe("hard");
+
+    expect(fairmont.entries.map((entry) => entry.slot)).toEqual([
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5",
+      "S6",
+      "D1",
+      "D2",
+      "D3",
+    ]);
+    expect(
+      fairmont.entries.map((entry) => entry.playerLabels.join(" / ")),
+    ).toEqual([
+      "D. Brooks",
+      "M. Reid",
+      "R. Osei",
+      "L. Moreau",
+      "S. Tanaka",
+      "K. Sato",
+      // A pair is one entry; " / " is the event page's separator. The rail
+      // joins the same two labels with the `Tc2` middle dot instead.
+      "Brooks / Osei",
+      "Reid / Tanaka",
+      "Moreau / Sato",
+    ]);
+    expect(
+      fairmont.entries.map((entry) => entry.opponentLabels.join(" / ")),
+    ).toEqual([
+      "A. Castillo",
+      "J. Park",
+      "T. Nguyen",
+      "D. Ferro",
+      "R. Alvarez",
+      "J. Abara",
+      "Castillo / Ferro",
+      "Park / Alvarez",
+      "Ferro / Nguyen",
+    ]);
+
+    // S2 is `4c`'s `6-7³`: the tiebreak digit rides against whoever LOST the
+    // set, which on this line is us. Put it on the other side and the row
+    // renders a score nobody played, with nothing looking broken.
+    const s2 = fairmont.entries[1].matches[0];
+    expect(s2.score).toEqual({
+      player1: [4, 6],
+      player2: [6, 7],
+      player1_tiebreaks: [null, 3],
+      player2_tiebreaks: [null, null],
+    });
+
+    // The score the rail's score row draws.
+    const score = dualScore(fairmont.entries);
+    expect(score.us).toBe(5);
+    expect(score.them).toBe(2);
+  });
+
+  test("the drawer's own words", () => {
+    // The 44px header: ‹ › stepping, "Event 2 / 8", overflow actions, close.
+    drawn(drawer, "event-drawer.tsx", "Previous event");
+    drawn(drawer, "event-drawer.tsx", "Next event");
+    drawn(drawer, "event-drawer.tsx", "Event");
+    drawn(drawer, "event-drawer.tsx", "{index + 1} / {total}");
+    drawn(drawerActions, "event-actions-menu.tsx", "Event actions");
+    drawn(drawerActions, "event-actions-menu.tsx", "Edit event");
+    drawn(drawerActions, "event-actions-menu.tsx", "Delete event");
+    drawn(drawer, "event-drawer.tsx", "Close");
+    drawn(drawer, "event-drawer.tsx", "Esc");
+    drawn(drawer, "event-drawer.tsx", "Singles");
+    drawn(drawer, "event-drawer.tsx", "Doubles");
+    // " · " between a pair's two names — the rail's separator, not the page's.
+    drawn(drawer, "event-drawer.tsx", 'entry.playerLabels.join(" · ")');
+    // The three states a line can be in besides played.
+    drawn(drawer, "event-drawer.tsx", "Awaiting result");
+    drawn(drawer, "event-drawer.tsx", "Set line");
+    drawn(drawer, "event-drawer.tsx", "Not set");
+    drawn(drawer, "event-drawer.tsx", "Enter results");
+    // EN DASH between the two figures of the score row.
+    drawn(drawer, "event-drawer.tsx", "–");
+    // A forfeited line's chip is `LINE_STATUS`'s word, not the rail's own.
+    expect(LINE_STATUS.forfeited?.label).toBe("Forfeited");
+    // RETIRED 'View report', 'Coming soon', ' matches · ', ' singles, ' —
+    //   `dual-widget.tsx` is deleted with the pane it drew. Each line in the
+    //   rail is a match and opens the match page itself (row-click law 19a–c),
+    //   so no cell carries a report link or a promise about doubles video.
+    // RETIRED 'Upcoming' / 'Completed' / 'None yet' / 'Duals and tournaments
+    //   list here, newest first.' — the left drawer is gone; Upcoming and
+    //   Completed survive as the page's lifecycle pills, asserted above.
+  });
+
+  test("day zero's own words", () => {
+    // Day zero moved out of `static-schedule.tsx` into a file of its own when
+    // it was rebuilt on the composition Matches draws — the offer over the
+    // page's own anatomy, dimmed and `inert`. The page now renders one line of
+    // it, so the words are read where they live.
+    drawn(schedule, "static-schedule.tsx", "<ScheduleDayZero");
+
+    drawn(
+      dayZero,
+      "schedule-day-zero.tsx",
+      "Every dual and tournament lands here.",
+    );
+    drawn(
+      dayZero,
+      "schedule-day-zero.tsx",
+      "A dual builds its own lineup card — every slot becomes a real match the moment you set the line.",
+    );
+    drawn(dayZero, "schedule-day-zero.tsx", "New dual");
+    drawn(dayZero, "schedule-day-zero.tsx", "New tournament");
+    drawn(dayZero, "schedule-day-zero.tsx", "Add a one-off match");
+    // What a player is told instead of a pair of buttons they may not press.
+    drawn(
+      dayZero,
+      "schedule-day-zero.tsx",
+      "Your coaching staff schedule the program's duals and tournaments.",
+    );
+    // The column labels are the payload: the ghost table draws the real
+    // header, imported from the table it stands in for.
+    expect(SCHEDULE_COLUMNS).toEqual([
+      "Date",
+      "Event",
+      "Type",
+      "Venue",
+      "Lines",
+      "Score",
+      "Result",
+    ]);
+
+    // RETIRED 'No events yet' — a 24px line over one sentence was the shape
+    //   the old table-page law prescribed (title, primary and footer
+    //   unchanged; chips and table absent). That law was rewritten because it
+    //   left two day-zero pages one click apart looking like two products;
+    //   the heading is now the offer's own 30px sentence, above.
+    // RETIRED 'Create a dual and the lineup card builds itself — every slot
+    //   becomes a real match the moment you set the line.' — the same clause
+    //   survives as the conditions line under the pair, reworded to state what
+    //   a dual creates rather than to instruct ('A dual builds its own lineup
+    //   card…', asserted above). It is fine print now, not the page's sentence.
+    // RETIRED 'One-off match in Matches' — the label named a destination that
+    //   was never where the link went: it opened `/new/single`, the wizard
+    //   under the schedule, and a team workspace's rail had no Matches entry
+    //   to arrive at. 'Add a one-off match' says what the link does.
+    //   Both halves of that have since changed and the label still holds:
+    //   `/new/single` is retired (it forced every one-off match to video) and
+    //   the link now opens `/dashboard/matches/new`, which TEAM_NAV does carry
+    //   a Matches entry for.
+    // RETIRED the '·' separator between the empty-state links — there are no
+    //   longer three blue words in a row to separate. Two buttons carry the
+    //   paths and the third rides the conditions sentence.
+    // RETIRED 'What a dual creates', '9 lines · none set', 'Opponent, format
+    //   and lets are typed once and inherit down every line.', 'The team score
+    //   adds itself up as lines resolve.' — `7e`'s nine-line scaffold was drawn
+    //   for the old half-width pane, and neither law since has had room for it.
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── */
+
+test.describe("/dashboard/team/schedule/new · 3b", () => {
+  const chooser = screen("static-event-chooser.tsx");
+  const file = "static-event-chooser.tsx";
+
+  test("the two cards, and what each says it creates", () => {
+    drawn(chooser, file, "What are you adding?");
+    drawn(
+      chooser,
+      file,
+      "Both are events the team shows up to — they hold a date, a site and the matches played under them.",
+    );
+
+    drawn(chooser, file, "Dual match");
+    drawn(
+      chooser,
+      file,
+      "Six singles and three doubles against one opponent, shared under one event.",
+    );
+    // Quoted so the trailing and leading spaces around the tabular `9` are
+    // pinned too — "Creates 9 lines · one team score" is one drawn sentence.
+    drawn(chooser, file, '"Creates "');
+    drawn(chooser, file, '" lines · one team score"');
+
+    drawn(chooser, file, "Tournament");
+    drawn(
+      chooser,
+      file,
+      "Players entered into draws; matches get added by round as they're played.",
+    );
+    drawn(chooser, file, "Creates entries · draws by round");
+  });
+
+  test("the aside and the footer", () => {
+    // Two em dashes and two straight apostrophes in one sentence.
+    drawn(
+      chooser,
+      file,
+      "One player's own match — a challenge, practice set or outside entry — isn't an event.",
+    );
+    drawn(chooser, file, "Add a one-off match");
+    drawn(chooser, file, "Cancel");
+    drawn(chooser, file, "Continue");
+    // The footer names the selection; `3b` opens on the dual.
+    drawn(chooser, file, "Dual selected");
+    drawn(chooser, file, "Tournament selected");
+    // RETIRED 'Add it in Matches' — the label named a rail entry a team
+    //   workspace does not have; `schedule-day-zero.tsx` already uses
+    //   'Add a one-off match' for the same `/new/single` destination.
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── */
+
+test.describe("/dashboard/team/schedule/new/dual · 2c 2b 2d 2e", () => {
+  const step1 = screen("dual-school-step.tsx");
+  const step2 = screen("dual-build-step.tsx");
+  const popup = screen("opponent-popup.tsx");
+  /** Our side of a lineup court, split out of step two's row. */
+  const picker = screen("lineup-name-picker.tsx");
+  /**
+   * The flow's own file, since T15.
+   *
+   * `new-dual-flow.tsx` frames all three steps on `WizardShell`, so the words
+   * that used to be a step body's chrome — the eyebrow, each screen's title,
+   * the footer's status line and the primary's label — are read from here
+   * rather than from the two bodies. What each body still draws itself, it is
+   * still asserted for below.
+   */
+  const flow = screen("new-dual-flow.tsx");
+
+  test("2c's directory, as the artboard states it", () => {
+    // Design record — see the header. Every expectation below reads
+    // `fixtures.ts`, so each is still true of the module it names; what
+    // changed is the audience. Step one has listed real programs and counted
+    // the real directory since T21, and the `seasonRecord` slot is not drawn
+    // at all — `programs` holds no such figure.
+    expect(DIRECTORY_TERM).toBe("Ridg");
+    // "5 of 1,940". A formatted string rather than a number, so the comma is
+    // the design's and not the render locale's.
+    expect(DIRECTORY_TOTAL).toBe("1,940");
+    expect(OUR_CONFERENCE).toBe("Big Ten");
+    expect(OUR_DIVISION).toBe("D-I");
+
+    expect(CONFERENCE_SCHOOLS.map((s) => s.program.schoolName)).toEqual([
+      "Ridgeline University",
+      "Ridgemont Tech",
+    ]);
+    expect(ALL_PROGRAM_SCHOOLS.map((s) => s.program.schoolName)).toEqual([
+      "Ridgeway College",
+      "Ridge Valley State",
+      "Ridgefield Academy",
+    ]);
+
+    // The opponent's OWN season record — a figure this app holds nowhere, so
+    // it is a literal and drifts silently if it changes. En dash on all five.
+    expect(CONFERENCE_SCHOOLS.map((s) => s.seasonRecord)).toEqual([
+      "18–4",
+      "11–10",
+    ]);
+    expect(ALL_PROGRAM_SCHOOLS.map((s) => s.seasonRecord)).toEqual([
+      "14–7",
+      "9–12",
+      "16–5",
+    ]);
+
+    // The mono cell is month and day, no year — "04-12", not "12 Apr".
+    expect(CONFERENCE_SCHOOLS[1].history.lastPlayedOn?.slice(5)).toBe("04-12");
+    expect(ALL_PROGRAM_SCHOOLS[0].history.lastPlayedOn?.slice(5)).toBe("09-30");
+  });
+
+  test("the subline vocabulary the rows are built from", () => {
+    // "Men's" opens every subline on `2c` and `2b` — STRAIGHT apostrophe.
+    expect(teamLabel("mens")).toBe("Men's");
+    // Four rows print a conference; the fifth prints a division.
+    expect(divisionLabel("D1")).toBe("D-I");
+    expect(divisionLabel("D3")).toBe("D-III");
+
+    // The four head-to-head phrases the two artboards draw, each read off the
+    // fixture row that draws it. En dash between the figures throughout.
+    //
+    // The formatter is live vocabulary; the rows it is read off are the design
+    // record — see the header. `2b`'s rail has listed the real conference and
+    // this program's real record since T22, so the phrases below pin the
+    // transcription, and `formatOpponentRecord()` is what the live sublines
+    // still go through.
+    expect(formatOpponentRecord(CONFERENCE_SCHOOLS[0].history)).toBe(
+      "never played",
+    );
+    expect(formatOpponentRecord(CONFERENCE_SCHOOLS[1].history)).toBe(
+      "you lead 2–1",
+    );
+    expect(formatOpponentRecord(ALL_PROGRAM_SCHOOLS[0].history)).toBe(
+      "you lead 1–0",
+    );
+    expect(formatOpponentRecord(RAIL_SCHOOLS[1].history)).toBe("you lead 3–1");
+    expect(formatOpponentRecord(RAIL_SCHOOLS[2].history)).toBe("split 1–1");
+    expect(formatOpponentRecord(RAIL_SCHOOLS[3].history)).toBe("you lead 5–2");
+    expect(formatOpponentRecord(RAIL_SCHOOLS[5].history)).toBe("you lead 2–0");
+  });
+
+  test("2c's own words", () => {
+    // RETIRED 'New dual · step 1 of 2' — the eyebrow is `WizardShell`'s now,
+    //   and it counts three steps rather than two: the school, the four facts
+    //   and the nine courts (T15). It prints "Step 1 of 3" from `stepIndex`
+    //   and `stepCount`, so there is no literal on any screen to pin — the
+    //   shell's own chrome is not this spec's record.
+    // RETIRED 'Which school are you playing?' — the title moved to the shell
+    //   with the eyebrow, and was rewritten with it: `flow` below pins the
+    //   sentence that replaced it.
+    // RETIRED 'Region' — the pill is gone from the screen, not renamed. Nothing
+    //   in `programs` backs a region and no mapping invents one, so the wired
+    //   step drops the control rather than drawing a filter that cannot filter.
+    //   The two pills beside it — conference and division — are now real.
+    drawn(step1, "dual-school-step.tsx", "Clear");
+    drawn(step1, "dual-school-step.tsx", "Your conference");
+    drawn(step1, "dual-school-step.tsx", "All programs");
+    // STRAIGHT double quotes around the term, as the artboard writes them.
+    drawn(step1, "dual-school-step.tsx", 'Add "');
+    drawn(
+      step1,
+      "dual-school-step.tsx",
+      '" as an unlisted school or club side',
+    );
+    drawn(
+      step1,
+      "dual-school-step.tsx",
+      "No program record — their lineup gets typed by hand.",
+    );
+    // U+21B5, the return glyph at the end of the free-text row.
+    drawn(step1, "dual-school-step.tsx", "↵");
+    // The em dash a row with no last-played date falls back to.
+    drawn(step1, "dual-school-step.tsx", '"—"');
+    // RETIRED '· date, site and lineup come next' — the footer that printed
+    //   it is `WizardShell`'s. The line it stood in is now the shell's status
+    //   slot, which step one leaves empty: the pinned bar on the next screen
+    //   says what was chosen, so a sentence naming what comes after it would
+    //   be the flow describing its own step indicator.
+    // RETIRED 'Cancel' and 'Continue' — both are the shell's buttons
+    //   (`new-match-wizard/WizardShell.tsx`), drawn once for every wizard on
+    //   the platform rather than by each step. Step one hands the shell a
+    //   `cancelHref` and no `back`, and the shell decides which of the two it
+    //   draws. Step three's label IS this flow's, and is pinned below.
+  });
+
+  test("the flow's own words — the three steps' titles and ledes", () => {
+    // Not the artboards': `2c`'s title was rewritten and `2b`'s single frame
+    // became two steps when the flow adopted `WizardShell` (T15), so these
+    // three pairs are the new copy, transcribed here the same way — one side
+    // typed out by hand, the other the component's source.
+    drawn(flow, "new-dual-flow.tsx", "Who are you playing?");
+    drawn(
+      flow,
+      "new-dual-flow.tsx",
+      "The school decides the lineup you fill in later. Pick a program, or type any opponent the directory never had.",
+    );
+    // STRAIGHT apostrophe in "it's", as everywhere else in this record.
+    drawn(flow, "new-dual-flow.tsx", "When it's played, and how.");
+    drawn(
+      flow,
+      "new-dual-flow.tsx",
+      "Four facts the whole dual inherits. Every one of the nine lines is created under them.",
+    );
+    drawn(flow, "new-dual-flow.tsx", "The lineup.");
+    // Em dash before the clause about subs.
+    drawn(
+      flow,
+      "new-dual-flow.tsx",
+      "Six singles and three doubles. Your side is seeded from the ladder — type over a name to put a sub on.",
+    );
+
+    // The footer, which is the flow's and no longer either body's. The count
+    // line and the primary each read one of two words since T19 gave the edit
+    // route the same flow — the create half is unchanged, and the edit half is
+    // pinned beside it so a rename of either is a failure here rather than a
+    // "Create dual" button on a dual that already exists.
+    drawn(flow, "new-dual-flow.tsx", '"Saves" : "Creates"');
+    drawn(flow, "new-dual-flow.tsx", '"line" : "lines"');
+    drawn(flow, "new-dual-flow.tsx", " vs ");
+    drawn(flow, "new-dual-flow.tsx", "Create dual");
+    drawn(flow, "new-dual-flow.tsx", "Creating…");
+    drawn(flow, "new-dual-flow.tsx", "Save changes");
+    drawn(flow, "new-dual-flow.tsx", "Saving…");
+    drawn(flow, "new-dual-flow.tsx", "Continue");
+  });
+
+  test("2b's draft, as the fields print it", () => {
+    // Design record — see the header. Step two's date, site, surface and
+    // format are controlled inputs (T22), its rail lists the real conference,
+    // the school is whichever step one chose, and the nine lines are seeded
+    // from `getLadder` and edited in place (T23) — so `DUAL_DRAFT_EVENT`,
+    // `RAIL_SCHOOLS` and `DUAL_DRAFT_LINES` describe the artboard, and no
+    // `DUAL_DRAFT_*` export has a consumer under `src/`.
+    //
+    // "09-26", month and day, the same slice `2c`'s last-played cell takes.
+    expect(DUAL_DRAFT_EVENT.startsOn.slice(5)).toBe("09-26");
+    expect(siteTitle(DUAL_DRAFT_EVENT.site)).toBe("Home");
+    // The dataset's own lowercase; `2b` title-cases it in the field cell.
+    expect(DUAL_DRAFT_EVENT.surface).toBe("hard");
+    // Best of 3, no-ad — explicit, never a default standing in for a null.
+    expect(DUAL_DRAFT_EVENT.format).toEqual({ bestOf: 3, adScoring: false });
+
+    expect(RAIL_SCHOOLS.map((s) => s.program.schoolName)).toEqual([
+      "Ridgeline University",
+      "Fairmont A&M",
+      "Crestwood College",
+      "Northlake State",
+      "Ashford University",
+      "Merritt College",
+    ]);
+    expect(RAIL_SCHOOLS.map((s) => s.seasonRecord)).toEqual([
+      "18–4",
+      "15–7",
+      "12–9",
+      "9–12",
+      "14–6",
+      "7–14",
+    ]);
+
+    expect(DUAL_DRAFT_LINES.map((line) => line.slot)).toEqual([
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5",
+      "S6",
+      "D1",
+      "D2",
+      "D3",
+    ]);
+    expect(DUAL_DRAFT_LINES.map((line) => line.ourLabels.join(" / "))).toEqual([
+      "Dana Brooks",
+      "Marcus Reid",
+      "Rafael Osei",
+      "Sam Tanaka",
+      "Jules Moreau",
+      // The forfeited line names nobody on either side.
+      "",
+      "Brooks / Reid",
+      "Osei / Tanaka",
+      "Moreau / Adeyemi",
+    ]);
+    expect(DUAL_DRAFT_LINES[5].forfeit).toBe("ours");
+  });
+
+  test("2b's own words", () => {
+    // RETIRED 'Dual' — the eyebrow over the "vs <school>" header, which left
+    //   with `DualBuildStep` when the builder became two steps of the flow
+    //   (T15). The school is pinned above the column by `PinnedEventBar`
+    //   instead, under its own swords glyph, and the eyebrow slot is the
+    //   shell's "Step N of 3".
+    // RETIRED 'Opponent' and '· type to search all' — the 320px opponent rail
+    //   left with the design when `dual-build-step.tsx` was split into a draft
+    //   hook and two step bodies (T14). Both strings were the rail's: the
+    //   eyebrow over its list, and the placeholder in its drawn search field.
+    //   Re-choosing the school is step one's job again, so nothing renames
+    //   them — the pane they sat in is gone, and the builder is one column.
+    drawn(step2, "dual-build-step.tsx", "Date");
+    drawn(step2, "dual-build-step.tsx", "Site");
+    drawn(step2, "dual-build-step.tsx", "Surface");
+    drawn(step2, "dual-build-step.tsx", "Format");
+    // "Best of 3 sets" over "No-ad scoring" — the sets half in the cell, the
+    // scoring half under the underline.
+    drawn(step2, "dual-build-step.tsx", "Best of ");
+    drawn(step2, "dual-build-step.tsx", " sets");
+    drawn(step2, "dual-build-step.tsx", '"No-ad scoring"');
+    drawn(step2, "dual-build-step.tsx", '"Ad scoring"');
+
+    drawn(step2, "dual-build-step.tsx", "Lineup · singles");
+    drawn(step2, "dual-build-step.tsx", "six required · from your ladder");
+    drawn(step2, "dual-build-step.tsx", "Lineup · doubles");
+    drawn(
+      step2,
+      "dual-build-step.tsx",
+      "three required · pairs carried from singles",
+    );
+    drawn(step2, "dual-build-step.tsx", "Add name");
+    drawn(step2, "dual-build-step.tsx", "Add pair");
+    // Explicit draft choices never describe an unanswered line as played.
+    drawn(step2, "dual-build-step.tsx", "Normal play");
+    expect(LINE_PLAY_OPTIONS.map((option) => option.label)).toEqual([
+      "Normal play",
+      "We lost — our side forfeited",
+      "We won — opponent forfeited",
+    ]);
+    drawn(
+      step2,
+      "dual-build-step.tsx",
+      "All nine lines are expected — forfeit a line only when a team can't field a player for it.",
+    );
+
+    // Our side of a court is a roster typeahead rather than a bare input
+    // (`lineup-name-picker.tsx`), so its two sentences are pinned here too.
+    // Neither is the artboard's — `2b` draws a filled lineup and no field
+    // affordance at all — but both are drawn copy, and the first is the whole
+    // point of the control: the roster is reachable without spelling it, and
+    // a coach whose player is missing has somewhere to go. STRAIGHT
+    // apostrophe in "Don't", as everywhere else in this record.
+    drawn(
+      picker,
+      "lineup-name-picker.tsx",
+      "Don't see your player? Add your player",
+    );
+    // A court filled with a name the roster does not know still saves — this
+    // is the screen finally SAYING so, which is the defect being closed.
+    drawn(
+      picker,
+      "lineup-name-picker.tsx",
+      "not on your roster · no player linked",
+    );
+    drawn(
+      picker,
+      "lineup-name-picker.tsx",
+      "Type a first and last name to add a player.",
+    );
+    drawn(picker, "lineup-name-picker.tsx", "Adding…");
+    // MOVED 'Creates ', '"line" : "lines"', ' vs ' and 'Create dual' — the
+    //   footer they were drawn in belonged to `DualBuildStep`, the composite
+    //   that framed these two bodies; the flow's shell draws them now, and
+    //   they are pinned against `new-dual-flow.tsx` above.
+    // RETIRED 'Cancel' — `WizardShell`'s, like step one's. Steps two and three
+    //   are handed a `back` rather than a `cancelHref`, so what the shell
+    //   draws in that corner is "Back": leaving from the lineup is a step back
+    //   to the facts and then out, not a second exit beside the first.
+  });
+
+  test("2d and 2e — the add-opponent popup", () => {
+    // What `2d` has typed, and the saved name it surfaces under it.
+    expect(DUAL_DRAFT_TYPED_NAME).toBe("Alexis Cast");
+    expect(DUAL_DRAFT_SAVED_ROSTER).toEqual([
+      {
+        playerId: "fixture-opponent-player-alexis-castellano",
+        name: "Alexis Castellano",
+        lineupSpot: 2,
+        priorMeetings: 2,
+      },
+    ]);
+    // The short form `2d` writes twice, where `2e`'s toast writes the school
+    // in full. The design's own inconsistency — still recorded here, but no
+    // longer rendered: the wired popup reads one `OpponentPool.schoolName` in
+    // both places, because `programs` holds no short form and the rule that
+    // would derive one ("Fairmont" for "Fairmont A&M") is wrong for most rows.
+    // Held rather than retired: it is still true of `fixtures.ts`.
+    expect(DUAL_DRAFT_OPPONENT_SHORT).toBe("Ridgeline");
+
+    drawn(
+      popup,
+      "opponent-popup.tsx",
+      "already has a close name saved. Pick one.",
+    );
+    drawn(
+      popup,
+      "opponent-popup.tsx",
+      "Saved · ${school} #${candidate.lineupSpot}",
+    );
+    drawn(popup, "opponent-popup.tsx", '"1 prior meeting"');
+    drawn(popup, "opponent-popup.tsx", "prior meetings");
+    drawn(popup, "opponent-popup.tsx", "Save as a different player");
+    // The browse heading, which `2d` has no frame for: the popup lists the
+    // opponent's saved roster before a character is typed now, so the line
+    // above ("already has a close name saved") is the FILTERED state's and
+    // this is the unfiltered one. STRAIGHT apostrophe, as everywhere here.
+    drawn(
+      popup,
+      "opponent-popup.tsx",
+      "'s saved roster. Pick one, or type a name.",
+    );
+    // `2e`'s toast, in full — "Saved to Ridgeline University roster". Still
+    // drawn, but no longer on every path: only once `saveOpponentPlayer`
+    // reports a row exists. `2e` collapsed three outcomes into this one
+    // sentence over a frame whose line resolves to a name the roster already
+    // held; the two below are the other two, and they are the dormant
+    // `opponent-name-cell.tsx`'s own split restored.
+    drawn(popup, "opponent-popup.tsx", "Saved to ${schoolName} roster");
+    // A name the pool already had — nothing was written.
+    drawn(popup, "opponent-popup.tsx", "On ${schoolName}'s saved roster");
+    // No program to save to, or the RPC refused. The line has the name; the
+    // card claims nothing more than that.
+    drawn(popup, "opponent-popup.tsx", "Added to this lineup");
+    // The field's placeholders, singles and doubles.
+    drawn(popup, "opponent-popup.tsx", '"Name / Name"');
+    drawn(popup, "opponent-popup.tsx", '"Name"');
+    // The highlighted card carries the return glyph.
+    drawn(popup, "opponent-popup.tsx", "↵");
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── */
+
+test.describe("/dashboard/team/schedule/new/tournament · 3c", () => {
+  // `3c` drew one frame — a roster rail beside a weekend and an entries table.
+  // It is two steps of `WizardShell` now (T16): the weekend, then the field as
+  // ONE list over the roster, each row carrying its own draw and seed. The rail,
+  // the `+` control, the separate entries table and the info callout are gone
+  // from the screen; each retired string below carries the reason.
+  const builder = screen("static-tournament-builder.tsx");
+  const file = "static-tournament-builder.tsx";
+  const flow = screen("new-tournament-flow.tsx");
+
+  test("3c's roster rail and the field it feeds", () => {
+    // Design record — see the header. The list has been `getLadder()`'s since
+    // T19; `TOURNAMENT_FIELD` has no consumer under `src/`.
+    expect(TOURNAMENT_FIELD.map((row) => row.player.name)).toEqual([
+      "Dana Brooks",
+      "Marcus Reid",
+      "Rafael Osei",
+      "Sam Tanaka",
+      "Jules Moreau",
+      "Lena Adeyemi",
+    ]);
+    // S1…S6, in the order the artboard draws them.
+    expect(TOURNAMENT_FIELD.map((row) => row.player.ladderPosition)).toEqual([
+      1, 2, 3, 4, 5, 6,
+    ]);
+    // The three checked rows, and the three drawn with a `+`.
+    expect(TOURNAMENT_FIELD.map((row) => row.entry?.draw ?? null)).toEqual([
+      "Main draw",
+      "Main draw",
+      "Qualifying",
+      null,
+      null,
+      null,
+    ]);
+    expect(TOURNAMENT_FIELD.map((row) => row.entry?.seed ?? null)).toEqual([
+      3,
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]);
+  });
+
+  test("3c's own words", () => {
+    // RETIRED 'Roster' — the rail is gone, not renamed. The field step IS the
+    //   roster now, so an eyebrow naming it would label the whole step.
+    // RETIRED 'Add a player to the field' — the rail's search field went with
+    //   the rail. A player is entered on their own row by picking a draw, so
+    //   there is no second list to search into.
+    // RETIRED '${spot} · qualifying', '${spot} · entered · seed ${entry.seed}'
+    //   and '${spot} · entered' — the rail's state line reported back what a
+    //   click on the rail had done in the other pane. One list has nothing to
+    //   report to: the draw cell and the seed cell on the row ARE the state,
+    //   and the ladder spot is drawn beside the name rather than folded into a
+    //   sentence about it.
+
+    drawn(builder, file, "Tournament · name");
+    // Still drawn, as the name field's placeholder now rather than as text: a
+    // new tournament opens unnamed, and this is the string the empty cell shows.
+    drawn(builder, file, "Buckeye Fall Classic");
+    drawn(builder, file, "Starts");
+    drawn(builder, file, "Ends");
+    // RETIRED '10-03' — the Starts cell is an `<input type="date">` bound to the
+    //   draft now, so `3c`'s drawn sample date is no longer a literal in this
+    //   file. A date input has no placeholder to keep it in.
+    // RETIRED '10-05' — the same, on the Ends cell.
+    // Not moved onto `TOURNAMENT_DETAIL`, which still carries the design's
+    //   '2025-10-03'/'2025-10-05': nothing renders that fixture, so an
+    //   assertion over it could not fail for anything this screen does.
+    drawn(builder, file, "Neutral");
+    // "Bo3 · ad" — best of 3, AD scoring, which is the opposite of the dual's.
+    drawn(builder, file, "Bo3 · ad");
+
+    // RETIRED '3 Big Ten programs are in this field — matches against them
+    //   count toward conference seeding.' — a claim nothing in this app can
+    //   compute: no table records which programs attend a tournament, and T25
+    //   recorded it (finding 6) as still being printed for real programs in any
+    //   conference. The frame it sat in is gone, and it is not re-drawn: a
+    //   sentence that cannot be true of the data is not copy worth carrying
+    //   into a new screen.
+    // RETIRED 'Entries · singles' and 'added from the roster' — the header over
+    //   the second table, which no longer exists. The field is the roster, so
+    //   there is nothing for a header to say it was added from.
+
+    drawn(builder, file, '"Main draw"');
+    drawn(builder, file, '"Qualifying"');
+    drawn(builder, file, '"Unseeded"');
+    drawn(builder, file, "Seed ${entry.seed}");
+    // A qualifier holds no seed, and `3c` draws an em dash rather than a word.
+    // The same glyph is the draw cell's first option — the one that takes a
+    // player back out of the field.
+    drawn(builder, file, '"—"');
+    drawn(
+      builder,
+      file,
+      "Include each athlete who is competing, then choose where they enter the singles draw. Seeds are optional.",
+    );
+    // RETIRED 'Cancel' — `WizardShell`'s, like the dual flow's. The shell is
+    //   handed a `cancelHref` on step one and a `back` on step two, and decides
+    //   which of the two it draws.
+  });
+
+  test("the flow's own words — the two steps' titles and ledes", () => {
+    // Not the artboard's: `3c`'s single frame became two steps when the screen
+    // adopted `WizardShell` (T16), so both pairs are new copy, transcribed here
+    // the same way — one side typed out by hand, the other the component's
+    // source.
+    drawn(flow, "new-tournament-flow.tsx", "The weekend.");
+    drawn(
+      flow,
+      "new-tournament-flow.tsx",
+      "Name it, say when and where. A tournament holds entries rather than lines — the field comes next.",
+    );
+    drawn(flow, "new-tournament-flow.tsx", "The field.");
+    // STRAIGHT apostrophe in "they'll", as everywhere else in this record.
+    drawn(
+      flow,
+      "new-tournament-flow.tsx",
+      "Add players from the roster. An entry says where they start, not what they'll play.",
+    );
+
+    // The footer, which is the flow's and no longer the builder's. The count
+    // line and the primary each read one of two words since T20 gave the edit
+    // route the same flow — the create half is unchanged, and the edit half is
+    // pinned beside it so a rename of either is a failure here rather than a
+    // "Create tournament" button on a tournament that already exists.
+    drawn(flow, "new-tournament-flow.tsx", '"Saves" : "Creates"');
+    drawn(flow, "new-tournament-flow.tsx", '"entry" : "entries"');
+    drawn(
+      flow,
+      "new-tournament-flow.tsx",
+      "and no matches — a match exists once it's played",
+    );
+    drawn(flow, "new-tournament-flow.tsx", "Create tournament");
+    drawn(flow, "new-tournament-flow.tsx", "Creating…");
+    drawn(flow, "new-tournament-flow.tsx", "Save changes");
+    drawn(flow, "new-tournament-flow.tsx", "Saving…");
+    drawn(flow, "new-tournament-flow.tsx", "Continue");
+  });
+});

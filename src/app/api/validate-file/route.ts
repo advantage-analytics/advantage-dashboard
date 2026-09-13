@@ -20,7 +20,7 @@ interface ValidateFileResponse {
 }
 
 export async function POST(
-  request: NextRequest
+  request: NextRequest,
 ): Promise<NextResponse<ValidateFileResponse>> {
   try {
     const body: ValidateFileRequest = await request.json();
@@ -32,7 +32,7 @@ export async function POST(
           success: false,
           error: "File data and file name are required",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -77,7 +77,7 @@ export async function POST(
             ...validationResult,
             error: errorMessage,
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -89,7 +89,7 @@ export async function POST(
           success: false,
           error: error.message || "Failed to validate file. Please try again.",
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
   } catch (error: any) {
@@ -99,7 +99,7 @@ export async function POST(
         success: false,
         error: error.message || "Failed to validate file",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

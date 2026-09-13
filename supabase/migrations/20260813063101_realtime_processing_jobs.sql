@@ -1,0 +1,21 @@
+-- Publish processing_jobs so the UI can follow a job without polling.
+--
+-- Until now the matches list rendered server-side with no revalidation, so an
+-- upload's progress bar was a snapshot from page load. A 39-minute transfer
+-- showed nothing at all unless the user refreshed by hand.
+--
+-- match_stats (20260601015608) is the precedent. The difference is that this
+-- one is for UPDATEs, not INSERTs: under the default replica identity the `new`
+-- record is complete but `old` carries only the primary key, so a subscription
+-- must filter on new-row values. Filtering on created_by does that.
+--
+-- No RLS change is needed. Realtime authorises postgres_changes off the SELECT
+-- policy, and "Users can view own processing jobs" (20260802083544) is already
+-- scoped to auth.uid() = created_by, so a subscriber receives only their own
+-- rows. The client must still call supabase.realtime.setAuth(token) before
+-- subscribing or the socket joins as anon and silently receives nothing —
+-- see the comment in recent-activity.tsx, which learned that the hard way.
+--
+-- One channel covers the whole lifecycle: the browser writes upload progress
+-- here, and so do the submit route and the results webhook.
+alter publication supabase_realtime add table public.processing_jobs;

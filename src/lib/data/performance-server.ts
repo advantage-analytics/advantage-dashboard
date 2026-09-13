@@ -1,4 +1,9 @@
+import { meanOfPresent, num, pct, presentPairs } from "./aggregate";
+import type { EvidenceCard } from "@/lib/ui/insight-evidence";
 import { createClient } from "@/lib/supabase/server";
+import { getPersonalMatchData } from "@/lib/data/personal-matches-server";
+import { getMyPlayerIds } from "@/lib/data/player-identity-server";
+import { viewerSide } from "./viewer-side";
 
 interface WinLossView {
   wins: number;
@@ -48,10 +53,10 @@ export interface PerformanceProfileDimension {
  * home AI-insight card (which renders them as deterministic evidence chips), so the
  * prose and the chips always reflect the same underlying stats.
  */
-export function getTopKpiMovers(
-  kpiCards: KpiCardData[],
+export function getTopKpiMovers<T extends EvidenceCard>(
+  kpiCards: readonly T[],
   n: number,
-): KpiCardData[] {
+): T[] {
   return kpiCards
     .filter((k) => k.change !== 0 && k.value !== "—")
     .sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
@@ -79,7 +84,23 @@ export interface OverallPerformanceData {
   kpiCards: KpiCardData[];
   winRate: { value: number; change: number; sparkline: number[] };
   form: ("W" | "L")[];
+  /** Every match the viewer filed, including video still being analysed. */
   matchCount: number;
+  /**
+   * Matches that carry a `match_stats` row on the viewer's side — the ones a
+   * report actually exists for. The Home title's "N matches analyzed" and the
+   * Focus card's "from N analyzed matches" read this, not `matchCount`: the
+   * two differ on exactly the days the difference matters, when a video is in
+   * the pipeline and its stats have not landed yet.
+   */
+  analyzedMatchCount: number;
+  /**
+   * Matches the viewer won — the matches card's "M matches · W won". A subset
+   * of `matchCount`: it counts only decided scores where the viewer is one of
+   * the two players, so a filed video with no result yet is a match but not a
+   * win or a loss.
+   */
+  wonCount: number;
   heatmap: HeatmapDay[];
   performanceProfile: PerformanceProfileDimension[];
 }
@@ -88,6 +109,8 @@ interface DbMatch {
   id: string;
   date: string;
   player1_id: string | null;
+  /** Needed to tell "I was player two" from "not my match at all". */
+  player2_id: string | null;
   player1_name: string | null;
   player2_name: string | null;
   score: {
@@ -117,6 +140,25 @@ interface DbMatchStats {
   avg_rally_length: number | null;
 }
 
+/**
+ * `barColor` is presentation, and it does not belong in a data loader.
+ *
+ * These two values ARE the viz palette's you/opponent pair (`--viz-you`
+ * `#3B82F6`, `--viz-opp` `#64748B`), and the tidy-looking fix is to import
+ * `VIZ_BLUE` / `VIZ_SLATE` from `@/lib/design/data-viz`. That was tried and
+ * reverted: it makes `src/lib/data/` depend on the design layer, so a palette
+ * change would reach into a query module and a loader could not be reasoned
+ * about without the design system loaded. Deepening the coupling is a worse
+ * outcome than the literals, which at least keep the violation visible and
+ * confined to two arrays.
+ *
+ * The real fix is for the loader to emit a ROLE — `"serve" | "return" |
+ * "pressure"` — and for the card to map role to hue, at which point
+ * `OverallPerformanceData.barColor` (`src/lib/data/types.ts`) disappears. That
+ * is cheap today, because the only consumer is
+ * `statistics/performance-ratings-card.tsx`, which sits behind
+ * `ComingSoonPage`. It gets more expensive the day Statistics ships.
+ */
 const DEFAULT_PERFORMANCE: OverallPerformanceData = {
   views: [
     { wins: 0, losses: 0, label: "Overall Record" },
@@ -124,9 +166,9 @@ const DEFAULT_PERFORMANCE: OverallPerformanceData = {
     { wins: 0, losses: 0, label: "Last 7 Days" },
   ],
   performanceRatings: [
-    { label: "Serve Rating", value: 0, barColor: "#666666" },
-    { label: "Return Rating", value: 0, barColor: "#4A90E2" },
-    { label: "Under Pressure Rating", value: 0, barColor: "#666666" },
+    { label: "Serve Rating", value: 0, barColor: "#64748B" },
+    { label: "Return Rating", value: 0, barColor: "#3B82F6" },
+    { label: "Under Pressure Rating", value: 0, barColor: "#64748B" },
   ],
   recentPerformance: [
     { label: "First Serve In Percentage", value: 0, change: 0 },
@@ -137,6 +179,8 @@ const DEFAULT_PERFORMANCE: OverallPerformanceData = {
   winRate: { value: 0, change: 0, sparkline: [] },
   form: [],
   matchCount: 0,
+  analyzedMatchCount: 0,
+  wonCount: 0,
   heatmap: [],
   performanceProfile: [
     { label: "SERVE", current: 0, previous: 0 },
@@ -150,10 +194,28 @@ const DEFAULT_PERFORMANCE: OverallPerformanceData = {
   ],
 };
 
+/**
+ * Which side of a match the viewer played, or null when it is not theirs.
+ *
+ * `player1_id` used to be compared to a single user id, and everything else
+ * inferred: `isUserPlayer1 ? player1Won : !player1Won`. That treats an UNKNOWN
+ * player one as proof the viewer was player two, so a row with a null or
+ * foreign `player1_id` inverted — a match our side won counted as a loss.
+ *
+ * It matters more now. A coach uploading for a roster athlete writes that
+ * athlete's PROFILE id here, so these rows are reliably somebody else's — this
+ * page is the personal workspace and they do not belong in it at all. Returning
+ * null lets the callers skip them instead of counting them upside down.
+ *
+ * The last clause covers legacy personal matches, uploaded before player ids
+ * were populated: the uploader is the only evidence of whose match it is. It is
+ * deliberately last, so an id always wins when there is one.
+ */
 function calculateWinLoss(
   matches: DbMatch[],
-  userId: string,
-  daysAgo?: number
+  playerIds: readonly string[],
+  viewerId: string,
+  daysAgo?: number,
 ): { wins: number; losses: number } {
   const cutoffDate = daysAgo
     ? new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000)
@@ -167,15 +229,17 @@ function calculateWinLoss(
     if (!match.score?.player1 || !match.score?.player2) continue;
 
     const p1Sets = match.score.player1.filter(
-      (s, i) => s > (match.score?.player2[i] ?? 0)
+      (s, i) => s > (match.score?.player2[i] ?? 0),
     ).length;
     const p2Sets = match.score.player2.filter(
-      (s, i) => s > (match.score?.player1[i] ?? 0)
+      (s, i) => s > (match.score?.player1[i] ?? 0),
     ).length;
 
+    const side = viewerSide(match, playerIds, viewerId);
+    if (side === null) continue;
+
     const player1Won = p1Sets > p2Sets;
-    const isUserPlayer1 = match.player1_id === userId;
-    const userWon = isUserPlayer1 ? player1Won : !player1Won;
+    const userWon = side === "player1" ? player1Won : !player1Won;
 
     if (userWon) wins++;
     else losses++;
@@ -187,74 +251,129 @@ function calculateWinLoss(
 function calculateAverageRating(
   stats: DbMatchStats[],
   userId: string,
-  matchPlayerMap: Map<string, boolean>
+  matchPlayerMap: Map<string, boolean>,
 ): { serve: number; return_: number; pressure: number } {
   if (stats.length === 0) return { serve: 0, return_: 0, pressure: 0 };
 
+  // THREE measures, THREE divisors. One shared `count` meant a match that
+  // measured serve but not returns still incremented the divisor for returns,
+  // after adding a hard zero to their sum — so a video-derived match (whose
+  // `serve_rating` is null because its formula needs the ace count) dragged
+  // down averages it had contributed nothing to.
+  //
+  // The `?? 0` this replaces was worse than the divisor: `(firstRet ?? 0 +
+  // secondRet ?? 0) / 2` HALVES a present value whose partner is absent.
+  // `break_points_saved_pct` is null whenever the player faced no break
+  // points, which is an ordinary thing to do, so a real converted-percentage
+  // was reported at half its value. `meanOfPresent` — already imported, and
+  // already used by `calculatePerformanceProfile` further down — is the rule
+  // this file states everywhere else: absent is not zero.
   let serveSum = 0;
+  let serveCount = 0;
   let returnSum = 0;
+  let returnCount = 0;
   let pressureSum = 0;
-  let count = 0;
+  let pressureCount = 0;
 
   for (const stat of stats) {
     const isUserPlayer1 = matchPlayerMap.get(stat.match_id);
     if (isUserPlayer1 === undefined) continue;
     if (stat.is_player1 !== isUserPlayer1) continue;
 
-    const serveRating = parseFloat(stat.serve_rating ?? "0");
-    const returnWonPct =
-      (parseFloat(stat.first_return_won_pct ?? "0") +
-        parseFloat(stat.second_return_won_pct ?? "0")) /
-      2;
-    const pressurePct =
-      (parseFloat(stat.break_points_saved_pct ?? "0") +
-        parseFloat(stat.break_points_converted_pct ?? "0")) /
-      2;
+    const serveRating = pct(stat.serve_rating);
+    const returnWonPct = meanOfPresent([
+      pct(stat.first_return_won_pct),
+      pct(stat.second_return_won_pct),
+    ]);
+    const pressurePct = meanOfPresent([
+      pct(stat.break_points_saved_pct),
+      pct(stat.break_points_converted_pct),
+    ]);
 
-    serveSum += serveRating;
-    returnSum += returnWonPct * 3; // Scale to ~150-200 range
-    pressureSum += pressurePct * 3;
-    count++;
+    // No all-null guard needed any more: a match that measured nothing now
+    // increments no divisor, which is what that guard was standing in for.
+    if (serveRating !== null) {
+      serveSum += serveRating;
+      serveCount++;
+    }
+    if (returnWonPct !== null) {
+      returnSum += returnWonPct * 3; // Scale to ~150-200 range
+      returnCount++;
+    }
+    if (pressurePct !== null) {
+      pressureSum += pressurePct * 3;
+      pressureCount++;
+    }
   }
 
-  if (count === 0) return { serve: 0, return_: 0, pressure: 0 };
-
   return {
-    serve: Math.round(serveSum / count),
-    return_: Math.round(returnSum / count),
-    pressure: Math.round(pressureSum / count),
+    serve: serveCount === 0 ? 0 : Math.round(serveSum / serveCount),
+    return_: returnCount === 0 ? 0 : Math.round(returnSum / returnCount),
+    pressure: pressureCount === 0 ? 0 : Math.round(pressureSum / pressureCount),
   };
 }
 
 function calculateRecentPerformance(
   stats: DbMatchStats[],
   matchPlayerMap: Map<string, boolean>,
-  orderedMatchIds: string[]
+  orderedMatchIds: string[],
 ): RecentPerformanceStat[] {
   if (stats.length === 0) {
     return DEFAULT_PERFORMANCE.recentPerformance;
   }
 
   // Build a map of matchId → user's stats
+  // `number | null` per field: a match can measure the first serve and not the
+  // second, and flattening that null to 0 is the difference between "we did
+  // not measure it" and "you won none of them".
   const matchStatsMap = new Map<
     string,
-    { firstServeIn: number; firstServeWon: number; secondServeWon: number }
+    {
+      firstServeIn: number | null;
+      firstServeWon: number | null;
+      secondServeWon: number | null;
+    }
   >();
   for (const stat of stats) {
     const isUserPlayer1 = matchPlayerMap.get(stat.match_id);
     if (isUserPlayer1 === undefined) continue;
     if (stat.is_player1 !== isUserPlayer1) continue;
 
+    // A match that measured none of these is not a match with three zeroes —
+    // it is a match with no serve data, and the loop below looks for "the two
+    // most recent matches that have stats". Recording it would make an
+    // unmeasured match satisfy that search and compare against nothing.
+    const firstServeIn = pct(stat.first_serve_pct);
+    const firstServeWon = pct(stat.first_serve_won_pct);
+    const secondServeWon = pct(stat.second_serve_won_pct);
+    if (
+      firstServeIn === null &&
+      firstServeWon === null &&
+      secondServeWon === null
+    ) {
+      continue;
+    }
+
+    // Nulls are CARRIED, not flattened to 0. The guard above only skips a
+    // match that measured none of the three, so `?? 0` here published a hard
+    // zero for whichever one was individually missing — and that combination
+    // is real, not hypothetical: `suppress_derived_match_stats` nulls
+    // `second_serves_in` for every derived match while leaving
+    // `first_serve_pct` populated. The only consumer is the home-insight
+    // prompt, so it surfaced as the model writing prose about a 0% second
+    // serve and a 55-point collapse that never happened.
     matchStatsMap.set(stat.match_id, {
-      firstServeIn: parseFloat(stat.first_serve_pct ?? "0"),
-      firstServeWon: parseFloat(stat.first_serve_won_pct ?? "0"),
-      secondServeWon: parseFloat(stat.second_serve_won_pct ?? "0"),
+      firstServeIn,
+      firstServeWon,
+      secondServeWon,
     });
   }
 
   // Find the two most recent matches that have stats
-  let latestStats: (typeof matchStatsMap extends Map<string, infer V> ? V : never) | undefined;
-  let previousStats: (typeof matchStatsMap extends Map<string, infer V> ? V : never) | undefined;
+  let latestStats:
+    (typeof matchStatsMap extends Map<string, infer V> ? V : never) | undefined;
+  let previousStats:
+    (typeof matchStatsMap extends Map<string, infer V> ? V : never) | undefined;
   for (const matchId of orderedMatchIds) {
     const s = matchStatsMap.get(matchId);
     if (!s) continue;
@@ -268,39 +387,35 @@ function calculateRecentPerformance(
 
   if (!latestStats) return DEFAULT_PERFORMANCE.recentPerformance;
 
-  const firstServeInChange = previousStats
-    ? latestStats.firstServeIn - previousStats.firstServeIn
-    : 0;
-  const firstServeWonChange = previousStats
-    ? latestStats.firstServeWon - previousStats.firstServeWon
-    : 0;
-  const secondServeWonChange = previousStats
-    ? latestStats.secondServeWon - previousStats.secondServeWon
-    : 0;
+  // Per field, not per match. A measure the latest match did not record is
+  // omitted; a change is reported only when BOTH matches recorded it, because
+  // subtracting from an absent baseline invents a swing.
+  const measures = [
+    { label: "First Serve In Percentage", key: "firstServeIn" },
+    { label: "First Serve Won Percentage", key: "firstServeWon" },
+    { label: "Second Serve Won Percentage", key: "secondServeWon" },
+  ] as const;
 
-  return [
-    {
-      label: "First Serve In Percentage",
-      value: Math.round(latestStats.firstServeIn),
-      change: Math.round(firstServeInChange * 10) / 10,
-    },
-    {
-      label: "First Serve Won Percentage",
-      value: Math.round(latestStats.firstServeWon),
-      change: Math.round(firstServeWonChange * 10) / 10,
-    },
-    {
-      label: "Second Serve Won Percentage",
-      value: Math.round(latestStats.secondServeWon),
-      change: Math.round(secondServeWonChange * 10) / 10,
-    },
-  ];
+  const out: RecentPerformanceStat[] = [];
+  for (const { label, key } of measures) {
+    const latest = latestStats[key];
+    if (latest === null) continue;
+    const previous = previousStats?.[key] ?? null;
+    out.push({
+      label,
+      value: Math.round(latest),
+      change: previous === null ? 0 : Math.round((latest - previous) * 10) / 10,
+    });
+  }
+
+  return out;
 }
 
 function calculateForm(
   matches: DbMatch[],
-  userId: string,
-  count: number
+  playerIds: readonly string[],
+  viewerId: string,
+  count: number,
 ): ("W" | "L")[] {
   const form: ("W" | "L")[] = [];
   for (const match of matches) {
@@ -308,21 +423,27 @@ function calculateForm(
     if (!match.score?.player1 || !match.score?.player2) continue;
 
     const p1Sets = match.score.player1.filter(
-      (s, i) => s > (match.score?.player2[i] ?? 0)
+      (s, i) => s > (match.score?.player2[i] ?? 0),
     ).length;
     const p2Sets = match.score.player2.filter(
-      (s, i) => s > (match.score?.player1[i] ?? 0)
+      (s, i) => s > (match.score?.player1[i] ?? 0),
     ).length;
 
+    const side = viewerSide(match, playerIds, viewerId);
+    if (side === null) continue;
+
     const player1Won = p1Sets > p2Sets;
-    const isUserPlayer1 = match.player1_id === userId;
-    form.push((isUserPlayer1 ? player1Won : !player1Won) ? "W" : "L");
+    form.push((side === "player1" ? player1Won : !player1Won) ? "W" : "L");
   }
   // Reverse so oldest is first (left) and newest is last (right)
   return form.reverse();
 }
 
-function calculateHeatmap(matches: DbMatch[], userId: string): HeatmapDay[] {
+function calculateHeatmap(
+  matches: DbMatch[],
+  playerIds: readonly string[],
+  viewerId: string,
+): HeatmapDay[] {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth();
@@ -348,14 +469,18 @@ function calculateHeatmap(matches: DbMatch[], userId: string): HeatmapDay[] {
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const dayMatches = dayMap.get(dateStr) ?? [];
     const summaries: HeatmapMatchSummary[] = dayMatches.map((m) => {
-      const isP1 = m.player1_id === userId;
-      const opponent = isP1 ? (m.player2_name ?? "Opponent") : (m.player1_name ?? "Opponent");
+      const isP1 = viewerSide(m, playerIds, viewerId) !== "player2";
+      const opponent = isP1
+        ? (m.player2_name ?? "Opponent")
+        : (m.player1_name ?? "Opponent");
       const p1Sets = m.score?.player1 ?? [];
       const p2Sets = m.score?.player2 ?? [];
       const p1Won = p1Sets.filter((s, i) => s > (p2Sets[i] ?? 0)).length;
       const p2Won = p2Sets.filter((s, i) => s > (p1Sets[i] ?? 0)).length;
       const won = isP1 ? p1Won > p2Won : p2Won > p1Won;
-      const scoreStr = p1Sets.map((s, i) => `${s}-${p2Sets[i] ?? 0}`).join(", ");
+      const scoreStr = p1Sets
+        .map((s, i) => `${s}-${p2Sets[i] ?? 0}`)
+        .join(", ");
       return { id: m.id, opponent, won, score: scoreStr || "–" };
     });
     result.push({
@@ -376,7 +501,12 @@ interface KpiSpec {
   category: KpiCategory;
   format: KpiFormat;
   description: string;
-  pick: (s: DbMatchStats) => number;
+  /**
+   * Null when the statistic was not measured for that match. NOT zero — a
+   * withheld ace count is not a match in which the player hit no aces, and
+   * averaging it as zero corrupts the headline, the sparkline and the delta.
+   */
+  pick: (s: DbMatchStats) => number | null;
   lowerIsBetter?: boolean;
 }
 
@@ -384,11 +514,13 @@ const KPI_SPECS: KpiSpec[] = [
   // Serve
   {
     key: "first-serve-pct",
-    label: "1ST SERVE PERCENTAGE",
+    // "1st serve", as the Home strip's frame (Platform Audit Pa2) labels it —
+    // the tile's value is the percentage, the label need not say so twice.
+    label: "1ST SERVE",
     category: "Serve",
     format: "percent",
     description: "Percentage of first serves that landed in the service box",
-    pick: (s) => parseFloat(s.first_serve_pct ?? "0"),
+    pick: (s) => pct(s.first_serve_pct),
   },
   {
     key: "first-serve-won",
@@ -396,7 +528,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Serve",
     format: "percent",
     description: "Percentage of points won on your first serve",
-    pick: (s) => parseFloat(s.first_serve_won_pct ?? "0"),
+    pick: (s) => pct(s.first_serve_won_pct),
   },
   {
     key: "second-serve-won",
@@ -404,7 +536,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Serve",
     format: "percent",
     description: "Percentage of points won on your second serve",
-    pick: (s) => parseFloat(s.second_serve_won_pct ?? "0"),
+    pick: (s) => pct(s.second_serve_won_pct),
   },
   {
     key: "service-games-won",
@@ -412,15 +544,16 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Serve",
     format: "percent",
     description: "Percentage of service games held",
-    pick: (s) => parseFloat(s.service_games_won_pct ?? s.serve_rating ?? "0"),
+    pick: (s) => pct(s.service_games_won_pct) ?? pct(s.serve_rating),
   },
   {
     key: "breakpoints-saved",
-    label: "BREAKPOINTS SAVED",
+    // Two words, as everywhere else the product writes it.
+    label: "BREAK POINTS SAVED",
     category: "Serve",
     format: "percent",
     description: "Percentage of break points defended on serve",
-    pick: (s) => parseFloat(s.break_points_saved_pct ?? "0"),
+    pick: (s) => pct(s.break_points_saved_pct),
   },
   {
     key: "aces",
@@ -428,7 +561,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Serve",
     format: "count",
     description: "Serves the returner doesn't touch",
-    pick: (s) => s.aces ?? 0,
+    pick: (s) => num(s.aces),
   },
   {
     key: "double-faults",
@@ -436,7 +569,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Serve",
     format: "count",
     description: "Missed second serves; point lost",
-    pick: (s) => s.double_faults ?? 0,
+    pick: (s) => num(s.double_faults),
     lowerIsBetter: true,
   },
   // Return
@@ -446,7 +579,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Return",
     format: "percent",
     description: "Percentage of points won returning first serves",
-    pick: (s) => parseFloat(s.first_return_won_pct ?? "0"),
+    pick: (s) => pct(s.first_return_won_pct),
   },
   {
     key: "second-return-won",
@@ -454,7 +587,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Return",
     format: "percent",
     description: "Percentage of points won returning second serves",
-    pick: (s) => parseFloat(s.second_return_won_pct ?? "0"),
+    pick: (s) => pct(s.second_return_won_pct),
   },
   {
     key: "return-games-won",
@@ -462,7 +595,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Return",
     format: "percent",
     description: "Percentage of opponent service games broken",
-    pick: (s) => parseFloat(s.return_games_won_pct ?? "0"),
+    pick: (s) => pct(s.return_games_won_pct),
   },
   {
     key: "breakpoints-converted",
@@ -470,7 +603,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Return",
     format: "percent",
     description: "Percentage of break point opportunities converted",
-    pick: (s) => parseFloat(s.break_points_converted_pct ?? "0"),
+    pick: (s) => pct(s.break_points_converted_pct),
   },
   // Other
   {
@@ -479,7 +612,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Other",
     format: "percent",
     description: "Percentage of all points won",
-    pick: (s) => parseFloat(s.total_points_won_pct ?? "0"),
+    pick: (s) => pct(s.total_points_won_pct),
   },
   {
     key: "winners",
@@ -487,7 +620,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Other",
     format: "count",
     description: "Point-ending shots not touched",
-    pick: (s) => s.winners ?? 0,
+    pick: (s) => num(s.winners),
   },
   {
     key: "unforced-errors",
@@ -495,7 +628,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Other",
     format: "count",
     description: "Shots into the net or out of bounds",
-    pick: (s) => s.unforced_errors ?? 0,
+    pick: (s) => num(s.unforced_errors),
     lowerIsBetter: true,
   },
   {
@@ -504,7 +637,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Other",
     format: "decimal",
     description: "Average shots per point",
-    pick: (s) => s.avg_rally_length ?? 0,
+    pick: (s) => num(s.avg_rally_length),
   },
 ];
 
@@ -518,7 +651,7 @@ function calculateKpiCards(
   stats: DbMatchStats[],
   matchPlayerMap: Map<string, boolean>,
   orderedMatchIds: string[],
-  matchMetaMap: Map<string, { date: string; opponent: string }>
+  matchMetaMap: Map<string, { date: string; opponent: string }>,
 ): KpiCardData[] {
   const statByMatch = new Map<string, DbMatchStats>();
   for (const stat of stats) {
@@ -543,14 +676,18 @@ function calculateKpiCards(
   // (e.g. first match still processing in the edge function). The placeholder
   // keeps the KPI strip populated so the customizer's 5-tile default stays intact.
   return KPI_SPECS.map((spec) => {
-    const values = orderedStats.map(spec.pick);
-    const hasData = values.length > 0;
-    const sparkline = values.slice(0, 8).reverse();
+    // Matches that did not measure this statistic are dropped rather than
+    // counted as zero. Paired with their ids so the sparkline tooltip cannot
+    // shift onto the wrong match — filtering the values alone would offset the
+    // metadata by one for every gap.
+    const measured = presentPairs(orderedStats.map(spec.pick), orderedIds);
+    const hasData = measured.length > 0;
+    const window = measured.slice(0, 8);
+    const sparkline = window.map((m) => m.value).reverse();
     // Same slice+reverse window as `sparkline` so points[k].value === sparkline[k].
-    const points = values
-      .slice(0, 8)
-      .map((value, i) => {
-        const meta = matchMetaMap.get(orderedIds[i]);
+    const points = window
+      .map(({ value, meta: id }) => {
+        const meta = matchMetaMap.get(id);
         return {
           value,
           date: meta?.date ?? "",
@@ -559,13 +696,13 @@ function calculateKpiCards(
       })
       .reverse();
     const change =
-      values.length >= 2
-        ? Math.round((values[0] - values[1]) * 10) / 10
+      measured.length >= 2
+        ? Math.round((measured[0].value - measured[1].value) * 10) / 10
         : 0;
     return {
       key: spec.key,
       label: spec.label,
-      value: hasData ? formatKpiValue(values[0], spec.format) : "—",
+      value: hasData ? formatKpiValue(measured[0].value, spec.format) : "—",
       change,
       changeLabel: "last 30 days",
       sparkline,
@@ -580,7 +717,8 @@ function calculateKpiCards(
 
 function calculateWinRateSparkline(
   matches: DbMatch[],
-  userId: string
+  playerIds: readonly string[],
+  viewerId: string,
 ): { value: number; change: number; sparkline: number[] } {
   if (matches.length === 0) return { value: 0, change: 0, sparkline: [] };
 
@@ -589,14 +727,15 @@ function calculateWinRateSparkline(
   for (const match of [...matches].reverse()) {
     if (!match.score?.player1 || !match.score?.player2) continue;
     const p1Sets = match.score.player1.filter(
-      (s, i) => s > (match.score?.player2[i] ?? 0)
+      (s, i) => s > (match.score?.player2[i] ?? 0),
     ).length;
     const p2Sets = match.score.player2.filter(
-      (s, i) => s > (match.score?.player1[i] ?? 0)
+      (s, i) => s > (match.score?.player1[i] ?? 0),
     ).length;
+    const side = viewerSide(match, playerIds, viewerId);
+    if (side === null) continue;
     const player1Won = p1Sets > p2Sets;
-    const isUserPlayer1 = match.player1_id === userId;
-    results.push(isUserPlayer1 ? player1Won : !player1Won);
+    results.push(side === "player1" ? player1Won : !player1Won);
   }
 
   if (results.length === 0) return { value: 0, change: 0, sparkline: [] };
@@ -617,37 +756,40 @@ function calculateWinRateSparkline(
   let recentTotal = 0;
   for (const match of recentMatches) {
     if (!match.score?.player1 || !match.score?.player2) continue;
+    const side = viewerSide(match, playerIds, viewerId);
+    if (side === null) continue;
     recentTotal++;
     const p1Sets = match.score.player1.filter(
-      (s, i) => s > (match.score?.player2[i] ?? 0)
+      (s, i) => s > (match.score?.player2[i] ?? 0),
     ).length;
     const p2Sets = match.score.player2.filter(
-      (s, i) => s > (match.score?.player1[i] ?? 0)
+      (s, i) => s > (match.score?.player1[i] ?? 0),
     ).length;
     const player1Won = p1Sets > p2Sets;
-    const isUserPlayer1 = match.player1_id === userId;
-    if (isUserPlayer1 ? player1Won : !player1Won) recentWins++;
+    if (side === "player1" ? player1Won : !player1Won) recentWins++;
   }
   const olderMatches = matches.filter((m) => new Date(m.date) < cutoff);
   let olderWins = 0;
   let olderTotal = 0;
   for (const match of olderMatches) {
     if (!match.score?.player1 || !match.score?.player2) continue;
+    const side = viewerSide(match, playerIds, viewerId);
+    if (side === null) continue;
     olderTotal++;
     const p1Sets = match.score.player1.filter(
-      (s, i) => s > (match.score?.player2[i] ?? 0)
+      (s, i) => s > (match.score?.player2[i] ?? 0),
     ).length;
     const p2Sets = match.score.player2.filter(
-      (s, i) => s > (match.score?.player1[i] ?? 0)
+      (s, i) => s > (match.score?.player1[i] ?? 0),
     ).length;
     const player1Won = p1Sets > p2Sets;
-    const isUserPlayer1 = match.player1_id === userId;
-    if (isUserPlayer1 ? player1Won : !player1Won) olderWins++;
+    if (side === "player1" ? player1Won : !player1Won) olderWins++;
   }
 
   const recentRate = recentTotal > 0 ? (recentWins / recentTotal) * 100 : 0;
   const olderRate = olderTotal > 0 ? (olderWins / olderTotal) * 100 : 0;
-  const change = olderTotal > 0 ? Math.round((recentRate - olderRate) * 10) / 10 : 0;
+  const change =
+    olderTotal > 0 ? Math.round((recentRate - olderRate) * 10) / 10 : 0;
 
   return { value: currentRate, change, sparkline: sparkline.slice(-8) };
 }
@@ -655,7 +797,7 @@ function calculateWinRateSparkline(
 function calculatePerformanceProfile(
   stats: DbMatchStats[],
   matchPlayerMap: Map<string, boolean>,
-  orderedMatchIds: string[]
+  orderedMatchIds: string[],
 ): PerformanceProfileDimension[] {
   const dimensions = [
     "SERVE",
@@ -687,28 +829,42 @@ function calculatePerformanceProfile(
   const recentStats = userStats.slice(0, Math.min(3, userStats.length));
   const olderStats = userStats.slice(3, Math.min(6, userStats.length));
 
-  const avg = (arr: DbMatchStats[], fn: (s: DbMatchStats) => number) => {
-    if (arr.length === 0) return 0;
-    return arr.reduce((sum, s) => sum + fn(s), 0) / arr.length;
-  };
+  // A match missing the inputs is excluded from the mean rather than scored 0.
+  // serve_rating in particular goes NULL for every video-derived match, because
+  // its formula contains the ace count.
+  const avg = (arr: DbMatchStats[], fn: (s: DbMatchStats) => number | null) =>
+    meanOfPresent(arr.map(fn)) ?? 0;
 
-  const serveScore = (s: DbMatchStats) =>
-    Math.min(100, parseFloat(s.serve_rating ?? "0") / 2.5);
+  const serveScore = (s: DbMatchStats) => {
+    const rating = pct(s.serve_rating);
+    return rating === null ? null : Math.min(100, rating / 2.5);
+  };
+  // `meanOfPresent`, not a local pair helper. The one that lived here spelled
+  // the identical rule -- `(a ?? b) + (b ?? a) / 2` collapses to the present
+  // value when one side is null -- in a second place where it could drift.
   const returnScore = (s: DbMatchStats) =>
-    (parseFloat(s.first_return_won_pct ?? "0") +
-      parseFloat(s.second_return_won_pct ?? "0")) /
-    2;
+    meanOfPresent([pct(s.first_return_won_pct), pct(s.second_return_won_pct)]);
   const clutchScore = (s: DbMatchStats) =>
-    (parseFloat(s.break_points_saved_pct ?? "0") +
-      parseFloat(s.break_points_converted_pct ?? "0")) /
-    2;
+    meanOfPresent([
+      pct(s.break_points_saved_pct),
+      pct(s.break_points_converted_pct),
+    ]);
 
   const currentServe = Math.round(avg(recentStats, serveScore));
-  const previousServe = olderStats.length > 0 ? Math.round(avg(olderStats, serveScore)) : currentServe;
+  const previousServe =
+    olderStats.length > 0
+      ? Math.round(avg(olderStats, serveScore))
+      : currentServe;
   const currentReturn = Math.round(avg(recentStats, returnScore));
-  const previousReturn = olderStats.length > 0 ? Math.round(avg(olderStats, returnScore)) : currentReturn;
+  const previousReturn =
+    olderStats.length > 0
+      ? Math.round(avg(olderStats, returnScore))
+      : currentReturn;
   const currentClutch = Math.round(avg(recentStats, clutchScore));
-  const previousClutch = olderStats.length > 0 ? Math.round(avg(olderStats, clutchScore)) : currentClutch;
+  const previousClutch =
+    olderStats.length > 0
+      ? Math.round(avg(olderStats, clutchScore))
+      : currentClutch;
 
   return [
     { label: "SERVE", current: currentServe, previous: previousServe },
@@ -730,24 +886,29 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
 
   if (!user) return DEFAULT_PERFORMANCE;
 
-  const { data: matches } = await supabase
-    .from("matches")
-    .select("id, date, player1_id, player1_name, player2_name, score")
-    .eq("created_by", user.id)
-    .order("date", { ascending: false });
+  // Both reads come from `getPersonalMatchData`, shared with the season strip
+  // on the same page — see that module for why the pair lives there. Its
+  // projection carries `player2_id` because `viewerSide` needs both halves to
+  // tell "I was player two" from "this is not my match at all".
+  const [{ matches: personalMatches, stats: personalStats }, myPlayerIds] =
+    await Promise.all([getPersonalMatchData(user.id), getMyPlayerIds()]);
+  const matches = personalMatches;
 
-  if (!matches || matches.length === 0) return DEFAULT_PERFORMANCE;
+  if (matches.length === 0) return DEFAULT_PERFORMANCE;
 
-  const typedMatches = matches as DbMatch[];
-  const overall = calculateWinLoss(typedMatches, user.id);
-  const last30 = calculateWinLoss(typedMatches, user.id, 30);
-  const last7 = calculateWinLoss(typedMatches, user.id, 7);
+  const typedMatches = matches as unknown as DbMatch[];
+  const overall = calculateWinLoss(typedMatches, myPlayerIds, user.id);
+  const last30 = calculateWinLoss(typedMatches, myPlayerIds, user.id, 30);
+  const last7 = calculateWinLoss(typedMatches, myPlayerIds, user.id, 7);
 
-  const matchIds = matches.map((m) => m.id);
   const matchPlayerMap = new Map<string, boolean>();
   const matchMetaMap = new Map<string, { date: string; opponent: string }>();
   for (const m of matches) {
-    const isP1 = m.player1_id === user.id;
+    // A match that is not the viewer's at all stays out of the map entirely, so
+    // the stat loops below skip it rather than reading the wrong side's row.
+    const side = viewerSide(m, myPlayerIds, user.id);
+    if (side === null) continue;
+    const isP1 = side === "player1";
     matchPlayerMap.set(m.id, isP1);
     matchMetaMap.set(m.id, {
       date: m.date,
@@ -755,22 +916,25 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
     });
   }
 
-  const { data: stats } = await supabase
-    .from("match_stats_with_percentages")
-    .select(
-      "match_id, is_player1, first_serve_pct, first_serve_won_pct, second_serve_won_pct, serve_rating, first_return_won_pct, second_return_won_pct, break_points_saved_pct, break_points_converted_pct, service_games_won_pct, return_games_won_pct, total_points_won_pct, aces, double_faults, winners, unforced_errors, avg_rally_length"
-    )
-    .in("match_id", matchIds);
-
-  const typedStats = (stats as DbMatchStats[]) ?? [];
+  const typedStats = personalStats as unknown as DbMatchStats[];
   const orderedMatchIds = matches.map((m) => m.id);
 
   const ratings = calculateAverageRating(typedStats, user.id, matchPlayerMap);
   const recentPerf = calculateRecentPerformance(
     typedStats,
     matchPlayerMap,
-    orderedMatchIds
+    orderedMatchIds,
   );
+
+  // A match is analysed when a stats row exists for the side the viewer played.
+  // Keyed by match id, not counted per row, so a match that somehow carries
+  // both sides' rows for the viewer still counts once.
+  const analyzedMatchIds = new Set<string>();
+  for (const stat of typedStats) {
+    if (matchPlayerMap.get(stat.match_id) === stat.is_player1) {
+      analyzedMatchIds.add(stat.match_id);
+    }
+  }
 
   return {
     views: [
@@ -779,25 +943,31 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
       { ...last7, label: "Last 7 Days" },
     ],
     performanceRatings: [
-      { label: "Serve Rating", value: ratings.serve, barColor: "#666666" },
-      { label: "Return Rating", value: ratings.return_, barColor: "#4A90E2" },
-      { label: "Under Pressure Rating", value: ratings.pressure, barColor: "#666666" },
+      { label: "Serve Rating", value: ratings.serve, barColor: "#64748B" },
+      { label: "Return Rating", value: ratings.return_, barColor: "#3B82F6" },
+      {
+        label: "Under Pressure Rating",
+        value: ratings.pressure,
+        barColor: "#64748B",
+      },
     ],
     recentPerformance: recentPerf,
     kpiCards: calculateKpiCards(
       typedStats,
       matchPlayerMap,
       orderedMatchIds,
-      matchMetaMap
+      matchMetaMap,
     ),
-    winRate: calculateWinRateSparkline(typedMatches, user.id),
-    form: calculateForm(typedMatches, user.id, 5),
+    winRate: calculateWinRateSparkline(typedMatches, myPlayerIds, user.id),
+    form: calculateForm(typedMatches, myPlayerIds, user.id, 5),
     matchCount: typedMatches.length,
-    heatmap: calculateHeatmap(typedMatches, user.id),
+    analyzedMatchCount: analyzedMatchIds.size,
+    wonCount: overall.wins,
+    heatmap: calculateHeatmap(typedMatches, myPlayerIds, user.id),
     performanceProfile: calculatePerformanceProfile(
       typedStats,
       matchPlayerMap,
-      orderedMatchIds
+      orderedMatchIds,
     ),
   };
 }

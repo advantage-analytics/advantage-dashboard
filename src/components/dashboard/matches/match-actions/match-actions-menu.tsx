@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { EditMatchDialog } from "./edit-match-dialog";
 import { DeleteMatchDialog } from "./delete-match-dialog";
@@ -30,7 +34,7 @@ export function MatchActionsMenu({
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 
   const triggerClasses =
-    "inline-flex items-center justify-center h-7 w-7 rounded-lg text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 data-[state=open]:bg-[#F5F5F5] data-[state=open]:text-[#0D0D0D]";
+    "inline-flex items-center justify-center h-7 w-7 rounded-lg text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none data-[state=open]:bg-[#F5F5F5] data-[state=open]:text-[#0D0D0D]";
 
   return (
     <>
@@ -42,21 +46,35 @@ export function MatchActionsMenu({
           onClick={stop}
           className={cn(triggerClasses, className)}
         >
-          <MoreHorizontal className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+          <MoreHorizontal
+            className="size-3.5"
+            strokeWidth={1.75}
+            aria-hidden="true"
+          />
         </PopoverTrigger>
         <PopoverContent
           align="end"
           sideOffset={6}
-          className="p-1 min-w-[180px] rounded-xl border-[#E5E5EA] shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]"
+          className="min-w-[180px] rounded-xl border-[#E5E5EA] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]"
           onClick={stop}
           onPointerDown={stop}
+          onCloseAutoFocus={(event) => {
+            // Let the newly opened dialog own focus.
+            if (editOpen || deleteOpen) event.preventDefault();
+          }}
         >
           <MenuButton
             onSelect={() => {
               setOpen(false);
               setEditOpen(true);
             }}
-            icon={<Pencil className="size-3.5" strokeWidth={1.5} aria-hidden="true" />}
+            icon={
+              <Pencil
+                className="size-3.5"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+            }
             label="Edit match"
           />
           <MenuDivider />
@@ -65,7 +83,13 @@ export function MatchActionsMenu({
               setOpen(false);
               setDeleteOpen(true);
             }}
-            icon={<Trash2 className="size-3.5" strokeWidth={1.5} aria-hidden="true" />}
+            icon={
+              <Trash2
+                className="size-3.5"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+            }
             label="Delete match"
             destructive
           />
@@ -93,7 +117,7 @@ export function MatchActionsMenu({
 }
 
 function MenuDivider() {
-  return <div className="h-px bg-[#E5E5EA] mx-2 my-1" aria-hidden="true" />;
+  return <div className="mx-2 my-1 h-px bg-[#E5E5EA]" aria-hidden="true" />;
 }
 
 function MenuButton({
@@ -116,14 +140,16 @@ function MenuButton({
         onSelect();
       }}
       className={cn(
-        "flex w-full items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-normal text-left transition-colors duration-100",
+        "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-normal transition-colors duration-100",
         "focus-visible:outline-none",
         destructive
           ? "text-[#E51837] hover:bg-[rgba(229,24,55,0.08)] focus-visible:bg-[rgba(229,24,55,0.08)] active:bg-[rgba(229,24,55,0.12)]"
-          : "text-[#1D1D1F] hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] active:bg-[#EBEBEB]"
+          : "text-[var(--ink-900)] hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] active:bg-[var(--ink-200)]",
       )}
     >
-      <span className={destructive ? "text-[#E51837]" : "text-[#8A8A8E]"}>{icon}</span>
+      <span className={destructive ? "text-[#E51837]" : "text-[#8A8A8E]"}>
+        {icon}
+      </span>
       {label}
     </button>
   );

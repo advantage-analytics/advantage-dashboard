@@ -1,0 +1,1166 @@
+"use server";
+
+/**
+ * Writing to the schedule.
+ *
+ * Every action re-resolves the workspace server-side and refuses a caller who
+ * is not staff here. RLS is the real gate — these policies exist on both new
+ * tables — but a policy failure arrives as a zero-row write with no message,
+ * and a coach who has been demoted deserves a sentence rather than a form that
+ * silently does nothing.
+ */
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { headToHeadRows } from "@/lib/data/opponents-server";
+import { getEventDetail } from "@/lib/data/schedule-server";
+import {
+  planEntryChanges,
+  type EntryPlan,
+  type IncomingEntry,
+} from "./entry-plan";
+import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import {
+  canDeleteTeamScheduleEvent,
+  isProgramStaff,
+} from "@/lib/workspace/types";
+import type { Discipline, EventSite, OutcomeKind, OutcomeSide } from "./types";
+import { validateLineup } from "./lineup-validation";
+
+export type ActionError = { error: string };
+
+export interface LineupLineInput {
+  /**
+   * The `program_event_entries` row this line came from, when a form loaded an
+   * existing lineup. Absent on a line typed fresh, and ignored entirely by
+   * `createDual` — it exists so `planEntryChanges` can match a submitted line
+   * to a saved one by identity rather than by slot, which is what lets a coach
+   * rename a slot without the save reading as "deleted S1, inserted S2".
+   */
+  id?: string;
+  discipline: Discipline;
+  slot: string;
+  position: number;
+  playerUserIds: string[];
+  playerLabels: string[];
+  opponentLabels: string[];
+  forfeit?: "ours" | "theirs" | null;
+}
+
+/**
+ * The opponent's program id from the directory key the picker handed over.
+ *
+ * **Null when it resolves to nothing, and null when it resolves to us.** A
+ * program does not play itself, and the directory contains the caller's own
+ * row — the picker can offer it — so the self-check is part of resolving, not
+ * a thing each caller remembers to add afterwards. It was written out three
+ * times before this existed, which made forgetting it in a fourth the path of
+ * least resistance.
+ *
+ * `programs` is world-readable and `program_key` is unique across all 1,940
+ * rows, so this is a lookup rather than a search.
+ */
+async function resolveOpponentProgramId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  programKey: string,
+  ourProgramId: string,
+): Promise<string | null> {
+  const { data: program } = await supabase
+    .from("programs")
+    .select("id")
+    .eq("program_key", programKey)
+    .maybeSingle();
+
+  const id = (program as { id: string } | null)?.id ?? null;
+  return id === ourProgramId ? null : id;
+}
+
+export interface CreateDualInput {
+  opponent: string;
+  /**
+   * `programs.program_key` when the coach picked the opponent out of the
+   * directory, null when they typed a name. Not the uuid: `search_programs`
+   * returns the key and nothing else, and widening a shipped SECURITY DEFINER
+   * function's return shape to carry an id is the change 20260822090500 warns
+   * lands two things broken at once. Resolved server-side instead.
+   */
+  opponentProgramKey: string | null;
+  date: string;
+  site: EventSite;
+  surface: string;
+  bestOf: number;
+  adScoring: boolean | null;
+  lines: LineupLineInput[];
+}
+
+export interface TournamentEntryInput {
+  /** See `LineupLineInput.id` — the saved row this entry came from, if any. */
+  id?: string;
+  discipline: Discipline;
+  position: number;
+  draw: string | null;
+  seed: number | null;
+  playerUserIds: string[];
+  playerLabels: string[];
+}
+
+export interface CreateTournamentInput {
+  name: string;
+  startsOn: string;
+  endsOn: string;
+  site: EventSite;
+  surface: string;
+  host: string | null;
+  bestOf: number;
+  /**
+   * Ad or no-ad. Not optional even though a tournament has no single format in
+   * theory: the vision pipeline refuses a job without it, and leaving it null
+   * meant every tournament video failed submission after the coach had gone.
+   */
+  adScoring: boolean;
+  entries: TournamentEntryInput[];
+}
+
+export interface RecordResultInput {
+  entryId: string;
+  /** 'R16' for a tournament. Null on a dual line, whose slot is its round. */
+  round: string | null;
+  opponentLabels: string[];
+  opponentSchool?: string | null;
+  /** Game counts, ours first. A 7-6 set is 7 here — never the tiebreak points. */
+  ourGames: number[];
+  theirGames: number[];
+  ourTiebreaks: (number | null)[];
+  theirTiebreaks: (number | null)[];
+}
+
+/** The staff check every action opens with. */
+async function requireStaff(): Promise<
+  { programId: string; userId: string } | ActionError
+> {
+  const context = await getWorkspaceContext();
+  if (!context) return { error: "Not signed in." };
+  if (!isProgramStaff(context.active)) {
+    return { error: "Only a program's staff can change its schedule." };
+  }
+  return { programId: context.active.id, userId: context.viewer.id };
+}
+
+function isError(value: unknown): value is ActionError {
+  return typeof value === "object" && value !== null && "error" in value;
+}
+
+function scheduleWriteError(error: {
+  code?: string;
+  message: string;
+}): ActionError {
+  return {
+    error:
+      error.code === "40001" || error.code === "40P01"
+        ? "This line changed while you were saving. Refresh the event and try again."
+        : error.message,
+  };
+}
+
+/** Eligibility and audit are atomic in Postgres, including direct deletes. */
+export async function deleteEvent(
+  eventId: string,
+): Promise<{ ok: true } | ActionError> {
+  const context = await getWorkspaceContext();
+  if (!context) return { error: "Not signed in." };
+  if (!canDeleteTeamScheduleEvent(context.active)) {
+    return { error: "Only an owner or coach can delete an event." };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_schedule_event", {
+    p_program_id: context.active.id,
+    p_event_id: eventId,
+  });
+  if (error) return scheduleWriteError(error);
+  revalidatePath("/dashboard/team/schedule");
+  revalidatePath(`/dashboard/team/schedule/${eventId}`);
+  return { ok: true };
+}
+
+export async function createDual(
+  input: CreateDualInput,
+): Promise<{ eventId: string } | ActionError> {
+  const auth = await requireStaff();
+  if (isError(auth)) return auth;
+
+  if (!input.opponent.trim()) return { error: "Name the opponent first." };
+  if (input.lines.length === 0)
+    return { error: "A dual needs at least one line." };
+
+  const lineupErrors = validateLineup(input.lines);
+  if (lineupErrors.length > 0) return { error: lineupErrors[0].reason };
+
+  const supabase = await createClient();
+
+  // The directory row behind the typed name, where there is one. `programs` is
+  // world-readable and `program_key` is unique across all 1,940 rows, so this is
+  // a lookup rather than a search. A key that resolves to nothing leaves the
+  // dual pointing at free text, which is the same state every dual was in
+  // before this column existed — degraded, never blocked.
+  const opponentProgramId = input.opponentProgramKey
+    ? await resolveOpponentProgramId(
+        supabase,
+        input.opponentProgramKey,
+        auth.programId,
+      )
+    : null;
+
+  const { data: event, error: eventError } = await supabase
+    .from("program_events")
+    .insert({
+      program_id: auth.programId,
+      kind: "dual",
+      name: input.opponent.trim(),
+      // A dual is one day, so the span collapses. The check constraint would
+      // reject ends_on < starts_on, and this is the only shape that satisfies
+      // it without inventing a second date nobody entered.
+      starts_on: input.date,
+      ends_on: input.date,
+      site: input.site,
+      surface: input.surface || null,
+      format: { best_of: input.bestOf, ad_scoring: input.adScoring },
+      created_by: auth.userId,
+    })
+    .select("id")
+    .single();
+
+  if (eventError || !event) {
+    return { error: eventError?.message ?? "Couldn't create the dual." };
+  }
+
+  const { error: entryError } = await supabase
+    .from("program_event_entries")
+    .insert(
+      input.lines.map((line) => ({
+        event_id: event.id,
+        program_id: auth.programId,
+        discipline: line.discipline,
+        slot: line.slot,
+        position: line.position,
+        player_user_ids: line.playerUserIds,
+        player_labels: line.playerLabels,
+        opponent_labels: line.opponentLabels,
+        opponent_program_id: opponentProgramId,
+        // New builder results live in program_event_outcomes. The legacy
+        // column stays empty; saveBuilderForfeits records the selected side.
+        forfeit: null,
+      })),
+    );
+
+  if (entryError) {
+    // Roll the event back rather than leaving a dual with no lines, which reads
+    // on the schedule as an event somebody forgot to finish.
+    await supabase.from("program_events").delete().eq("id", event.id);
+    return { error: entryError.message };
+  }
+
+  const outcomeFailure = await saveBuilderForfeits(
+    supabase,
+    { id: event.id, programId: auth.programId },
+    input.lines,
+  );
+  if (outcomeFailure) return outcomeFailure;
+
+  // Give the opposing names an identity, so the next program to play them finds
+  // the same people rather than typing a second copy.
+  //
+  // Best-effort ON PURPOSE, after the entries are safely written. Every arm of
+  // `contribute_opponent_player` can legitimately refuse — most often because
+  // that program now manages its own roster, which is exactly when an outsider
+  // must not write to it — and a refused contribution is not a reason to lose a
+  // dual the coach just spent five minutes entering. The lineup is the record;
+  // the identities are an enrichment on top of it.
+  if (opponentProgramId) {
+    await Promise.all(
+      [...new Set(input.lines.flatMap((line) => line.opponentLabels))].map(
+        async (label) => {
+          const parts = label.trim().split(/\s+/);
+          if (parts.length < 2) return;
+          try {
+            await supabase.rpc("contribute_opponent_player", {
+              p_program_id: auth.programId,
+              p_opponent_program_id: opponentProgramId,
+              p_first_name: parts.slice(0, -1).join(" "),
+              p_last_name: parts[parts.length - 1],
+            });
+          } catch {
+            // See above: a refusal here costs an identity, never the fixture.
+          }
+        },
+      ),
+    );
+  }
+
+  revalidatePath("/dashboard/team/schedule");
+  return { eventId: event.id as string };
+}
+
+export async function createTournament(
+  input: CreateTournamentInput,
+): Promise<{ eventId: string } | ActionError> {
+  const auth = await requireStaff();
+  if (isError(auth)) return auth;
+
+  if (!input.name.trim()) return { error: "Name the tournament first." };
+  if (input.endsOn < input.startsOn) {
+    return { error: "The tournament can't end before it starts." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: event, error: eventError } = await supabase
+    .from("program_events")
+    .insert({
+      program_id: auth.programId,
+      kind: "tournament",
+      name: input.name.trim(),
+      starts_on: input.startsOn,
+      ends_on: input.endsOn,
+      site: input.site,
+      surface: input.surface || null,
+      host: input.host || null,
+      format: { best_of: input.bestOf, ad_scoring: input.adScoring },
+      created_by: auth.userId,
+    })
+    .select("id")
+    .single();
+
+  if (eventError || !event) {
+    return { error: eventError?.message ?? "Couldn't create the tournament." };
+  }
+
+  if (input.entries.length > 0) {
+    const { error: entryError } = await supabase
+      .from("program_event_entries")
+      .insert(
+        input.entries.map((entry) => ({
+          event_id: event.id,
+          program_id: auth.programId,
+          discipline: entry.discipline,
+          // No slot: a tournament entry has a draw, not a court.
+          slot: null,
+          position: entry.position,
+          draw: entry.draw,
+          seed: entry.seed,
+          player_user_ids: entry.playerUserIds,
+          player_labels: entry.playerLabels,
+        })),
+      );
+
+    if (entryError) {
+      await supabase.from("program_events").delete().eq("id", event.id);
+      return { error: entryError.message };
+    }
+  }
+
+  revalidatePath("/dashboard/team/schedule");
+  return { eventId: event.id as string };
+}
+
+/**
+ * Editing an event that already exists.
+ *
+ * `updateDual` and `updateTournament` are `createDual`/`createTournament` a
+ * second time — the same staff gate, the same `program_events` columns — plus
+ * the one thing creating has no need of: deciding what may happen to lines the
+ * rest of the product has already built on. That decision is
+ * `planEntryChanges` in `entry-plan.ts`, pure and specced, and this half only
+ * carries it out.
+ *
+ * **The plan is consulted before ANY write, the event row included.** A save
+ * that renamed the tournament and then discovered it could not move a scored
+ * entry would leave the coach with half their edit applied and no way to see
+ * which half. Refusal is total.
+ */
+
+/** `{ eventId }` and everything `createDual` takes except who we are playing. */
+export type UpdateDualInput = Omit<
+  CreateDualInput,
+  "opponent" | "opponentProgramKey"
+> & {
+  eventId: string;
+};
+
+export type UpdateTournamentInput = CreateTournamentInput & { eventId: string };
+
+/**
+ * Columns for one entry row, given the submitted row. Kind-specific, because a
+ * dual line has a slot and an opponent and a tournament entry has a draw and a
+ * seed, and writing the union of both would put nulls into columns the other
+ * kind means something by.
+ */
+type EntryColumns = (row: IncomingEntry) => Record<string, unknown>;
+
+/**
+ * Carry out a plan whose `refuse` list the caller has already found empty.
+ *
+ * Deletes first, then updates, then inserts: a lineup edit that swaps two slots
+ * would otherwise collide with the unique-ish shape of the old rows while both
+ * spellings exist. There is no transaction here — PostgREST gives one per
+ * statement — so the ordering is what keeps a partial failure legible rather
+ * than a rollback.
+ */
+async function applyEntryPlan(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  plan: EntryPlan,
+  event: { id: string; programId: string },
+  columns: EntryColumns,
+): Promise<ActionError | null> {
+  if (plan.delete.length > 0) {
+    const { error } = await supabase
+      .from("program_event_entries")
+      .delete()
+      .in(
+        "id",
+        plan.delete.map((row) => row.id),
+      )
+      // Scoped again at the write, not just at the read that produced the plan.
+      // The ids came from a read this action did itself, so this is belt and
+      // braces — but it is the cheap kind, and it is what makes the statement
+      // safe to read in isolation.
+      .eq("program_id", event.programId);
+    if (error) return { error: error.message };
+  }
+
+  for (const row of plan.update) {
+    const { error } = await supabase
+      .from("program_event_entries")
+      .update({ ...columns(row.row), updated_at: new Date().toISOString() })
+      .eq("id", row.id)
+      .eq("program_id", event.programId);
+    if (error) return { error: error.message };
+  }
+
+  if (plan.insert.length > 0) {
+    const { error } = await supabase.from("program_event_entries").insert(
+      plan.insert.map((row) => ({
+        event_id: event.id,
+        program_id: event.programId,
+        ...columns(row.row),
+      })),
+    );
+    if (error) return { error: error.message };
+  }
+
+  return null;
+}
+
+function revalidateEvent(eventId: string): void {
+  revalidatePath("/dashboard/team/schedule");
+  revalidatePath(`/dashboard/team/schedule/${eventId}`);
+}
+
+/** Record only new draft choices; unchanged settled lines never reach here. */
+async function saveBuilderForfeits(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  event: { id: string; programId: string },
+  lines: LineupLineInput[],
+): Promise<ActionError | null> {
+  const forfeits = lines.filter((line) => line.forfeit != null);
+  if (forfeits.length === 0) return null;
+  const { data: entries, error } = await supabase
+    .from("program_event_entries")
+    .select("id, slot")
+    .eq("event_id", event.id)
+    .eq("program_id", event.programId)
+    .in(
+      "slot",
+      forfeits.map((line) => line.slot),
+    );
+  const fail = (reason: string): ActionError => {
+    revalidateEvent(event.id);
+    return {
+      error: `The lineup was saved, but a forfeit was not: ${reason} Open the event from Schedule and review its outcomes before saving again.`,
+    };
+  };
+  if (error) return fail(error.message);
+  for (const line of forfeits) {
+    const entry = entries?.find((row) => row.slot === line.slot);
+    if (!entry) return fail(`${line.slot} could not be found.`);
+    const { error: outcomeError } = await supabase.rpc("set_schedule_outcome", {
+      p_program_id: event.programId,
+      p_entry_id: entry.id,
+      p_round: null,
+      p_kind: "forfeit",
+      p_side: line.forfeit,
+    });
+    if (outcomeError) return fail(scheduleWriteError(outcomeError).error);
+  }
+  return null;
+}
+
+/** A null outcome clears the saved result at this exact line/round. */
+export async function setOutcome(input: {
+  entryId: string;
+  round: string | null;
+  outcome: { kind: OutcomeKind; side: OutcomeSide } | null;
+}): Promise<{ ok: true } | ActionError> {
+  const auth = await requireStaff();
+  if (isError(auth)) return auth;
+  const supabase = await createClient();
+  const { data: eventId, error } = await supabase.rpc("set_schedule_outcome", {
+    p_program_id: auth.programId,
+    p_entry_id: input.entryId,
+    p_round: input.round,
+    p_kind: input.outcome?.kind ?? null,
+    p_side: input.outcome?.side ?? null,
+  });
+  if (error) return scheduleWriteError(error);
+  if (typeof eventId !== "string") {
+    return {
+      error: "The outcome was not saved. Refresh the event and try again.",
+    };
+  }
+  revalidateEvent(eventId);
+  return { ok: true };
+}
+
+export async function updateDual(
+  input: UpdateDualInput,
+): Promise<{ eventId: string } | ActionError> {
+  const auth = await requireStaff();
+  if (isError(auth)) return auth;
+
+  if (input.lines.length === 0)
+    return { error: "A dual needs at least one line." };
+
+  // Scoped on BOTH ids, and never on the client's `eventId` alone:
+  // `getEventDetail` reads `program_events` filtered by `program_id` as well,
+  // so an event belonging to another program comes back null and is
+  // indistinguishable from one that does not exist — which is the answer a
+  // caller poking at ids deserves.
+  const detail = await getEventDetail(auth.programId, input.eventId);
+  if (!detail) return { error: "That event no longer exists." };
+  if (detail.event.kind !== "dual")
+    return { error: "That event isn't a dual." };
+
+  const plan = planEntryChanges(detail.entries, input.lines);
+  if (plan.refuse.length > 0) return { error: plan.refuse[0].reason };
+
+  const supabase = await createClient();
+
+  // The opponent is not editable here, so a line added to an existing dual
+  // inherits the school every other line already points at rather than
+  // re-resolving a directory key this action does not take.
+  const opponentProgramId = detail.entries[0]?.opponentProgramId ?? null;
+
+  const { error: eventError } = await supabase
+    .from("program_events")
+    .update({
+      // A dual is one day, so the span collapses — `createDual`'s rule, kept
+      // here so an edited date cannot leave `ends_on` on the old day.
+      starts_on: input.date,
+      ends_on: input.date,
+      site: input.site,
+      surface: input.surface || null,
+      format: { best_of: input.bestOf, ad_scoring: input.adScoring },
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", detail.event.id)
+    .eq("program_id", auth.programId);
+
+  if (eventError) return { error: eventError.message };
+
+  const failure = await applyEntryPlan(
+    supabase,
+    plan,
+    { id: detail.event.id, programId: auth.programId },
+    (row) => {
+      const line = row as LineupLineInput;
+      return {
+        discipline: line.discipline,
+        slot: line.slot,
+        position: line.position,
+        player_user_ids: line.playerUserIds,
+        player_labels: line.playerLabels,
+        opponent_labels: line.opponentLabels,
+        opponent_program_id: opponentProgramId,
+        forfeit: null,
+      };
+    },
+  );
+  if (failure) return failure;
+
+  const outcomeFailure = await saveBuilderForfeits(
+    supabase,
+    { id: detail.event.id, programId: auth.programId },
+    [...plan.update, ...plan.insert].map(
+      (change) => change.row as LineupLineInput,
+    ),
+  );
+  if (outcomeFailure) return outcomeFailure;
+
+  revalidateEvent(detail.event.id);
+  return { eventId: detail.event.id };
+}
+
+export async function updateTournament(
+  input: UpdateTournamentInput,
+): Promise<{ eventId: string } | ActionError> {
+  const auth = await requireStaff();
+  if (isError(auth)) return auth;
+
+  if (!input.name.trim()) return { error: "Name the tournament first." };
+  if (input.endsOn < input.startsOn) {
+    return { error: "The tournament can't end before it starts." };
+  }
+
+  const detail = await getEventDetail(auth.programId, input.eventId);
+  if (!detail) return { error: "That event no longer exists." };
+  if (detail.event.kind !== "tournament") {
+    return { error: "That event isn't a tournament." };
+  }
+
+  const plan = planEntryChanges(detail.entries, input.entries);
+  if (plan.refuse.length > 0) return { error: plan.refuse[0].reason };
+
+  const supabase = await createClient();
+
+  const { error: eventError } = await supabase
+    .from("program_events")
+    .update({
+      name: input.name.trim(),
+      starts_on: input.startsOn,
+      ends_on: input.endsOn,
+      site: input.site,
+      surface: input.surface || null,
+      host: input.host || null,
+      format: { best_of: input.bestOf, ad_scoring: input.adScoring },
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", detail.event.id)
+    .eq("program_id", auth.programId);
+
+  if (eventError) return { error: eventError.message };
+
+  const failure = await applyEntryPlan(
+    supabase,
+    plan,
+    { id: detail.event.id, programId: auth.programId },
+    (row) => {
+      const entry = row as TournamentEntryInput;
+      return {
+        discipline: entry.discipline,
+        // No slot: a tournament entry has a draw, not a court.
+        slot: null,
+        position: entry.position,
+        draw: entry.draw,
+        seed: entry.seed,
+        player_user_ids: entry.playerUserIds,
+        player_labels: entry.playerLabels,
+      };
+    },
+  );
+  if (failure) return failure;
+
+  revalidateEvent(detail.event.id);
+  return { eventId: detail.event.id };
+}
+
+/**
+ * Record how a line went — and, in doing so, mint its match.
+ *
+ * This is the only place a match is created from an event, and it is what makes
+ * "an entry becomes a match the first moment anyone records how it went" true
+ * rather than aspirational. For a tournament entry it is called once per round,
+ * which is why the round arrives as a parameter instead of being read off the
+ * entry: one entry, several matches, one per row of the run.
+ */
+export async function recordResult(
+  input: RecordResultInput,
+): Promise<{ matchId: string } | ActionError> {
+  const auth = await requireStaff();
+  if (isError(auth)) return auth;
+
+  if (input.ourGames.length === 0) return { error: "Enter at least one set." };
+
+  const supabase = await createClient();
+
+  const { data: entry, error: entryError } = await supabase
+    .from("program_event_entries")
+    .select(
+      "id, event_id, program_id, slot, player_labels, player_user_ids, discipline, forfeit",
+    )
+    .eq("id", input.entryId)
+    .single();
+
+  if (entryError || !entry) return { error: "That line no longer exists." };
+  if (entry.program_id !== auth.programId) {
+    return { error: "That line belongs to another program." };
+  }
+  // A forfeited line must never mint a match. The forfeit is the outcome —
+  // recording a score under it would be a second answer about a line that is
+  // already decided, and the two would disagree everywhere one of them is
+  // counted. Clear the forfeit first if the line was actually played.
+  if (entry.forfeit) {
+    return {
+      error: "This line is forfeited. Clear the forfeit before adding a score.",
+    };
+  }
+
+  const { data: event } = await supabase
+    .from("program_events")
+    .select("name, starts_on, site, surface, format, kind")
+    .eq("id", entry.event_id)
+    .single();
+
+  if (!event) return { error: "That event no longer exists." };
+
+  const ourLabel = (entry.player_labels as string[] | null)?.join(" / ") ?? "";
+  const theirLabel = input.opponentLabels.join(" / ");
+  if (!ourLabel || !theirLabel) {
+    return { error: "Both sides need a name before a result can be saved." };
+  }
+
+  const format = (event.format ?? {}) as {
+    best_of?: number;
+    ad_scoring?: boolean | null;
+  };
+
+  // A forged round must not bypass the dual's single-result grain.
+  const round =
+    event.kind === "dual" ? (entry.slot as string | null) : input.round;
+  if (event.kind === "tournament" && !round) {
+    return { error: "Choose a tournament round before saving the score." };
+  }
+  let outcomeQuery = supabase
+    .from("program_event_outcomes")
+    .select("id")
+    .eq("entry_id", entry.id);
+  outcomeQuery =
+    event.kind === "dual"
+      ? outcomeQuery.is("round", null)
+      : outcomeQuery.eq("round", round!);
+  const { data: outcomes, error: outcomeError } = await outcomeQuery.limit(1);
+  if (outcomeError)
+    return {
+      error: "Couldn't check this line's outcome. Refresh and try again.",
+    };
+  if (outcomes?.length) {
+    return { error: "Clear the saved outcome before adding a score." };
+  }
+
+  // Never mint a second match for the same line.
+  //
+  // A dual line has at most one match ever; a tournament entry has one per
+  // ROUND. Both collapse to "one match per (entry, round)", so a repeat call —
+  // a coach scoring courtside while the upload wizard holds a snapshot taken
+  // before that score existed — updates the row instead of duplicating it.
+  //
+  // Without this the wizard silently created a twin: same line, same players,
+  // a different score, and a team total counting the line twice. That is
+  // exactly the duplicate 22e's "fills 3 of 9" receipt promises cannot happen.
+  //
+  // `limit(1)` on an array, NOT maybeSingle(): where a duplicate already exists
+  // maybeSingle() errors, the error gets swallowed, and this would mint a
+  // THIRD row — a de-duplicator that makes things worse the one time it
+  // actually matters.
+  const { data: existingRows } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("event_entry_id", entry.id)
+    .eq("round", round ?? "")
+    .limit(1);
+
+  const existing = existingRows?.[0];
+
+  const scorePayload = {
+    player1: input.ourGames,
+    player2: input.theirGames,
+    player1_tiebreaks: input.ourTiebreaks,
+    player2_tiebreaks: input.theirTiebreaks,
+  };
+
+  /**
+   * WHOSE match this is, not just what it is called.
+   *
+   * `player1_name` is a label off the entry; `player1_id` is the account, and
+   * it is half of the `matches` SELECT policy:
+   *
+   *   auth.uid() in (created_by, player1_id, player2_id)
+   *     or (program_id is not null and user_program_role(program_id) is not null)
+   *
+   * Leaving it null used to mean a player could not read their own recorded
+   * match: under the older policy the program clause required staff, or a
+   * player on a program with `roster_visible` set — a column that defaulted to
+   * false — so every clause failed and the line rendered with a blank score on
+   * the player's own schedule. `20260830120000_matches_visible_to_members`
+   * widened the program clause to any member, which covers that case now. The
+   * id still matters: it is what keeps the pair in Compare, which counts only
+   * non-null ids, and it is the only clause that survives a player leaving the
+   * program.
+   *
+   * Singles slots map one entry to one account. A doubles line has two
+   * accounts and one column, so there is no non-arbitrary choice and null is
+   * the honest answer — the same rule the upload wizard's preset follows.
+   */
+  const playerUserId =
+    entry.discipline === "doubles"
+      ? null
+      : (((entry.player_user_ids as string[] | null) ?? [])[0] ?? null);
+
+  /**
+   * The opponent's name, back onto the entry the line is drawn from.
+   *
+   * The entry's copy is not what `line-row.tsx` prints when a match exists —
+   * that prefers `match.opponentLabels` — but it IS what `dualSeed` seeds the
+   * edit form from, and what a matchless row and `lineupChoices` fall back to.
+   * So a correction that fixed a misspelling on the match left the editor
+   * still offering the old spelling, ready to write it back on the next save.
+   *
+   * ── Only on a dual when correcting ──────────────────────────────────────
+   * A tournament entry has ONE `opponent_labels` column and one `recordResult`
+   * per round, so the column means "the last round filed" (stated at
+   * `tournament-detail.tsx`'s `SchoolsFaced`). Syncing on a correction breaks
+   * that: fix a typo in the R32 score after R16 is recorded, and the entry
+   * reverts to naming R32's opponent — a round-old school on the rail, from an
+   * edit that was only ever about a score. A dual line has exactly one round
+   * (its court), so it has no later round to clobber.
+   */
+  const syncEntryOpponent = async () => {
+    if (
+      input.opponentSchool === undefined &&
+      input.opponentLabels.length === 0
+    ) {
+      return;
+    }
+    await supabase
+      .from("program_event_entries")
+      .update({
+        opponent_labels: input.opponentLabels,
+        ...(input.opponentSchool !== undefined
+          ? { opponent_school: input.opponentSchool }
+          : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", entry.id);
+  };
+
+  if (existing?.id) {
+    const { data: updated, error: updateError } = await supabase
+      .from("matches")
+      .update({
+        player1_name: ourLabel,
+        player2_name: theirLabel,
+        player1_id: playerUserId,
+        score: scorePayload,
+      })
+      .eq("id", existing.id as string)
+      // `.select("id")` because this file's own header says a policy failure
+      // arrives as a zero-row write with no message, and then this write did
+      // not check. The matches UPDATE policy is `auth.uid() = created_by`,
+      // but `canEdit` on the event page is `isProgramStaff`, so ANY staff
+      // member reaches the score form. A coach correcting a score another
+      // coach recorded got `updateError === null`, a revalidate, and a
+      // returned matchId -- while the old score stayed on screen with nothing
+      // to explain it.
+      .select("id");
+
+    if (updateError) return scheduleWriteError(updateError);
+
+    if (!updated || updated.length === 0) {
+      return {
+        error:
+          "That result was recorded by someone else on the staff, and only " +
+          "they can change it. Ask them to correct it.",
+      };
+    }
+
+    // Duals only — see `syncEntryOpponent`. `input.round` is null exactly when
+    // the line's round is its own court, which is what a dual line is.
+    if (input.round === null) await syncEntryOpponent();
+
+    revalidatePath("/dashboard/team/schedule");
+    revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);
+    return { matchId: existing.id as string };
+  }
+
+  const matchId = crypto.randomUUID();
+
+  const { error: matchError } = await supabase.from("matches").insert({
+    id: matchId,
+    // player1 is always our side. Everything downstream — the set ordering sent
+    // to the vision pipeline, transformDbMatch's winner, matchWon here — reads
+    // it that way, and flipping it silently attributes the match to the
+    // opponent with nothing on screen looking wrong.
+    player1_name: ourLabel,
+    player2_name: theirLabel,
+    player1_id: playerUserId,
+    program_id: auth.programId,
+    event_entry_id: entry.id,
+    tournament_name: event.name,
+    round,
+    // Midday, not bare midnight. `matches.date` is timestamptz, so a plain
+    // "2026-08-20" lands at 00:00Z and renders as the 19th for every reader
+    // west of Greenwich — which is all of them. Noon puts the whole Americas
+    // safely inside the right day.
+    date: `${event.starts_on}T12:00:00`,
+    format: {
+      best_of: format.best_of ?? 3,
+      ad_scoring: format.ad_scoring ?? null,
+      play_on_lets: false,
+    },
+    score: scorePayload,
+    // The context string, not an outcome — who won is derived from the games.
+    result: "Final Score",
+    match_type: entry.discipline === "doubles" ? "Doubles" : "Singles",
+    court_type: event.surface ?? undefined,
+    // NULL, not "manual". `analysisFor()` reads a non-null source_provider as
+    // an IMPORT and resolves it to `imported`, which is in READY — so a line
+    // scored by hand would report as analysed, and the match page would skip
+    // its short-circuit and render a page of zeroes (guardrails 3.3). Null is
+    // what "nobody produced this, somebody typed it" actually means, and it is
+    // the branch manualAnalysis() is waiting for.
+    source_provider: null,
+    analysis_method: "manual",
+    created_by: auth.userId,
+    private: false,
+  });
+
+  if (matchError) return scheduleWriteError(matchError);
+
+  await syncEntryOpponent();
+
+  revalidatePath("/dashboard/team/schedule");
+  revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);
+  return { matchId };
+}
+
+/**
+ * One row the add-opponent popover can offer against a typed name.
+ *
+ * `name` is the pooled roster's exact spelling, and it is what a pick WRITES
+ * into the line — the popover may match loosely to *suggest*, but resolving a
+ * line means adopting this string verbatim, so the submit-time
+ * `contribute_opponent_player` call converges on the same row instead of
+ * minting a near-duplicate (`roster-match.ts` states the exact-write rule).
+ */
+export interface OpponentRosterCandidate {
+  playerId: string;
+  name: string;
+  lineupSpot: number | null;
+  /** This program's matches against them — `headToHeadRows`' count, so a
+   *  match attributed to somebody else can never inflate it. Usually 0 or 1. */
+  priorMeetings: number;
+}
+
+/**
+ * The pooled roster behind the dual's current opponent, for the lineup
+ * popover's saved-name dedupe.
+ *
+ * A read in a file headed "writing to the schedule", on purpose: it exists
+ * solely so the popover can stop a coach from writing a second copy of a name
+ * the pool already holds, it is gated by the same staff check as every write
+ * here, and its one caller is the dual builder those writes serve. The heavy
+ * lifting is `opponents-server.ts`'s — `pooled_roster` for the rows,
+ * `headToHeadRows` for the meeting counts.
+ *
+ * `opponent_player_id` is selected for counting meetings and nothing else —
+ * never a policy, never a join that widens access (20260823090000's rule).
+ */
+export async function opponentRosterForDual(
+  opponentProgramKey: string,
+): Promise<{ candidates: OpponentRosterCandidate[] } | ActionError> {
+  const auth = await requireStaff();
+  if (isError(auth)) return auth;
+
+  const supabase = await createClient();
+
+  const opponentProgramId = await resolveOpponentProgramId(
+    supabase,
+    opponentProgramKey,
+    auth.programId,
+  );
+  // A key that resolves to nothing, or to ourselves, has no roster to offer.
+  // Same non-answer as an opted-out pool: an empty list, never an error.
+  if (!opponentProgramId) return { candidates: [] };
+
+  const [{ data: rosterRows }, { data: matchRows }] = await Promise.all([
+    supabase.rpc("pooled_roster", { p_program_id: opponentProgramId }),
+    supabase
+      .from("matches")
+      .select("id, player2_name, opponent_player_id")
+      .eq("program_id", auth.programId),
+  ]);
+
+  const matches = (matchRows ?? []) as {
+    id: string;
+    player2_name: string | null;
+    opponent_player_id: string | null;
+  }[];
+
+  const candidates = (
+    (rosterRows ?? []) as {
+      id: string;
+      first_name: string;
+      last_name: string;
+      lineup_spot: number | null;
+    }[]
+  )
+    .map((row) => {
+      const name = `${row.first_name} ${row.last_name}`.trim();
+      return {
+        playerId: row.id,
+        name,
+        lineupSpot: row.lineup_spot,
+        // A one-player roster, so identity-or-exact-name attribution — and its
+        // refusal to let two blanks match — stays `headToHeadRows`' one rule.
+        priorMeetings: headToHeadRows(matches, [{ id: row.id, name }]).length,
+      };
+    })
+    // Lineup order, unranked last — the same sort the Opponents page uses, so
+    // "#2" here is the same #2 a coach sees there.
+    .sort((a, b) => {
+      if (a.lineupSpot === b.lineupSpot) return a.name.localeCompare(b.name);
+      if (a.lineupSpot === null) return 1;
+      if (b.lineupSpot === null) return -1;
+      return a.lineupSpot - b.lineupSpot;
+    });
+
+  return { candidates };
+}
+
+/**
+ * The popover's "save as a different player" — `contribute_opponent_player`,
+ * best-effort, with `createDual`'s refusal handling: every arm of the RPC can
+ * legitimately refuse (most often "that program manages its own roster"), and
+ * a refusal costs the pool an identity, never the coach their typed name.
+ *
+ * Returns whether a row actually exists on that roster afterwards, because the
+ * caller shows "Saved to {school} roster" and must not claim a save that did
+ * not happen. `{ saved: false }` is a total answer, not an error — the line
+ * keeps its plain label either way.
+ */
+export async function saveOpponentPlayer(input: {
+  opponentProgramKey: string;
+  name: string;
+}): Promise<{ saved: boolean }> {
+  const auth = await requireStaff();
+  if (isError(auth)) return { saved: false };
+
+  // Both names or nothing — the RPC requires them, and a single-token name
+  // ("Kim") is not an identity anyone else would converge on.
+  const parts = input.name.trim().split(/\s+/);
+  if (parts.length < 2) return { saved: false };
+
+  const supabase = await createClient();
+
+  const opponentProgramId = await resolveOpponentProgramId(
+    supabase,
+    input.opponentProgramKey,
+    auth.programId,
+  );
+  if (!opponentProgramId) return { saved: false };
+
+  try {
+    const { data: contributed, error } = await supabase.rpc(
+      "contribute_opponent_player",
+      {
+        p_program_id: auth.programId,
+        p_opponent_program_id: opponentProgramId,
+        p_first_name: parts.slice(0, -1).join(" "),
+        p_last_name: parts[parts.length - 1],
+      },
+    );
+    return { saved: !error && Boolean(contributed) };
+  } catch {
+    // See createDual's contribute loop: an identity is an enrichment, never a
+    // precondition, and never worth an error the coach has to read.
+    return { saved: false };
+  }
+}
+
+/**
+ * Mark a line as forfeited, or clear a forfeit.
+ *
+ * `side` is `'ours'` or `'theirs'` — which side forfeited, determining who
+ * gets the point. Getting the side wrong silently awards the point to the wrong
+ * team. `null` clears the forfeit and returns the line to normal.
+ *
+ * A line that already has a match cannot be forfeited: a forfeit is the
+ * alternative to a played match, not a second outcome on top of one. The
+ * coach must delete the match first if they want to forfeit a played line.
+ */
+export async function setForfeit(
+  entryId: string,
+  side: "ours" | "theirs" | null,
+): Promise<{ ok: true } | ActionError> {
+  const auth = await requireStaff();
+  if (isError(auth)) return auth;
+
+  const supabase = await createClient();
+
+  const { data: entry, error: entryError } = await supabase
+    .from("program_event_entries")
+    .select("id, event_id, program_id")
+    .eq("id", entryId)
+    .single();
+
+  if (entryError || !entry) return { error: "That line no longer exists." };
+  if (entry.program_id !== auth.programId) {
+    return { error: "That line belongs to another program." };
+  }
+
+  // A forfeit is a DUAL LINE's outcome, and the column is at that grain: one
+  // entry, one court, one point. A tournament entry is a whole run of matches,
+  // so a forfeit on one would stamp "Forfeited" across every round, blank
+  // every round's score and offer "Clear forfeit" once per round — the same
+  // one-answer-for-many-rounds failure `matchState` documents. There is no
+  // round-level forfeit to fall back on, so refuse rather than half-support it.
+  // Guarded on SETTING only. Clearing has to work on any event kind, or a row
+  // that reached this state some other way — a direct write, a future bulk
+  // insert — would be unrepairable through the UI, and the guard would be the
+  // reason. Refuse to create the state; never refuse to undo it.
+  if (side !== null) {
+    const { data: event } = await supabase
+      .from("program_events")
+      .select("kind")
+      .eq("id", entry.event_id)
+      .maybeSingle();
+
+    if (event?.kind !== "dual") {
+      return { error: "Only a dual line can be forfeited." };
+    }
+  }
+
+  // Setting a forfeit on a line that already has a match is a contradiction:
+  // the match says the line was played, the forfeit says it was not. Only
+  // allow clearing (side === null) on a line with matches.
+  if (side !== null) {
+    const { data: existingMatches } = await supabase
+      .from("matches")
+      .select("id")
+      .eq("event_entry_id", entryId)
+      .limit(1);
+
+    if (existingMatches && existingMatches.length > 0) {
+      return {
+        error:
+          "This line already has a match recorded. Remove it before forfeiting.",
+      };
+    }
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from("program_event_entries")
+    .update({ forfeit: side, updated_at: new Date().toISOString() })
+    .eq("id", entryId)
+    .eq("program_id", auth.programId)
+    .select("id");
+
+  if (updateError) return scheduleWriteError(updateError);
+  if (!updated?.length)
+    return {
+      error:
+        "This line could not be changed. Refresh and check your staff access.",
+    };
+
+  revalidatePath("/dashboard/team/schedule");
+  revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);
+  return { ok: true };
+}

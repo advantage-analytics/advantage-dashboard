@@ -75,16 +75,16 @@ export function AiInsightCard({
               aria-labelledby="ai-insight-heading"
               className="flex flex-col"
             >
-              <div className="flex items-center h-14 px-5">
+              <div className="flex h-14 items-center px-5">
                 <h2
                   id="ai-insight-heading"
-                  className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] leading-[15px]"
+                  className="text-[10px] leading-[15px] font-medium tracking-[2.5px] text-[#AAAAAA] uppercase"
                 >
                   AI Insight
                 </h2>
               </div>
 
-              <div className="px-5 pb-5 flex flex-col gap-4">
+              <div className="flex flex-col gap-4 px-5 pb-5">
                 {children}
 
                 <div className="flex items-center gap-4">
@@ -92,7 +92,7 @@ export function AiInsightCard({
                   <button
                     type="button"
                     onClick={dismiss}
-                    className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA] transition-colors duration-200 hover:text-[#525252] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm"
+                    className="rounded-sm text-[9px] font-medium tracking-[1.5px] text-[#AAAAAA] uppercase transition-colors duration-200 hover:text-[#525252] focus-visible:outline-none active:scale-[0.97]"
                   >
                     Dismiss
                   </button>
@@ -112,7 +112,7 @@ export function AiInsightCard({
             opacity: 1,
             transition: { duration: 0.2, delay: 0.1, ease: EASE_CURVE },
           }}
-          className="flex items-center gap-1.5 self-start px-3 py-2 text-[9px] font-medium uppercase tracking-[1.5px] text-[#3B82F6] transition-colors duration-200 hover:text-[#2563EB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm"
+          className="flex items-center gap-1.5 self-start rounded-sm px-3 py-2 text-[9px] font-medium tracking-[1.5px] text-[#3B82F6] uppercase transition-colors duration-200 hover:text-[#2563EB] focus-visible:outline-none"
         >
           <MessageSquare className="size-3" aria-hidden />
           Show AI Insight

@@ -1,4 +1,5 @@
-import { formatDuration } from "@/components/dashboard/home/upload-match-modal/utils";
+import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
+import type { MatchAnalysis } from "@/lib/data/match-analysis";
 
 export interface DbMatch {
   id: string;
@@ -23,6 +24,8 @@ export interface DbMatch {
 }
 
 export interface DisplayMatch {
+  /** Matches API currently permits only the uploader to edit or delete. */
+  canManage?: boolean;
   id: string;
   tournamentName: string;
   date: string;
@@ -37,8 +40,28 @@ export interface DisplayMatch {
   player2: { name: string };
   player2Hand?: string;
   player2Backhand?: string;
+  /**
+   * Processing state, attached by the page after transform. Optional because
+   * the transform itself only knows about the `matches` row — analysis lives in
+   * `processing_jobs` and is joined in one level up.
+   */
+  analysis?: MatchAnalysis;
   score: {
-    sets: { player1: number; player2: number; tiebreak?: boolean }[];
+    /**
+     * The two `*Tiebreak` numbers are the POINTS. Which slot holds what is
+     * disputed — production stores both, each side's own points — so see
+     * `ScoreLineSet` in `@/lib/ui/score-format` rather than trusting a
+     * one-line summary here. `tiebreakOf()` there is the one place that knows
+     * which of the pair a given surface raises, and it is right under either
+     * reading; `<ScoreLine>` and the match page's boxed scoreboard both call
+     * it rather than restating it.
+     */
+    sets: {
+      player1: number;
+      player2: number;
+      player1Tiebreak?: number | null;
+      player2Tiebreak?: number | null;
+    }[];
     winner: "player1" | "player2";
   };
 }
@@ -58,16 +81,18 @@ export function formatDisplayDate(isoDate: string): string {
 
 export function transformDbMatch(
   row: DbMatch,
-  _userId: string
+  _userId: string,
 ): DisplayMatch | null {
   if (!row.score?.player1?.length || !row.score?.player2?.length) return null;
 
   const sets = row.score.player1.map((p1Score, i) => ({
     player1: p1Score,
     player2: row.score?.player2[i] ?? 0,
-    tiebreak:
-      (row.score?.player1_tiebreaks?.[i] ?? 0) > 0 ||
-      (row.score?.player2_tiebreaks?.[i] ?? 0) > 0,
+    // The tiebreak POINTS, carried through rather than reduced to a "this set
+    // had a breaker" flag: the list row prints them as the superscript in
+    // "6-7³".
+    player1Tiebreak: row.score?.player1_tiebreaks?.[i] ?? null,
+    player2Tiebreak: row.score?.player2_tiebreaks?.[i] ?? null,
   }));
 
   let p1Sets = 0;

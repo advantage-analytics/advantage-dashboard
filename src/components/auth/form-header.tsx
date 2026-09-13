@@ -1,37 +1,38 @@
-import AccentLine from "./accent-line";
+import type { ReactNode } from "react";
 
 interface FormHeaderProps {
+  /** Sentence-case kicker naming the job — "Sign in", "Account recovery". */
+  eyebrow: string;
+  /** The product's Title Case page title, full stop included. */
   title: string;
-  description: string;
-  subtitle: string;
-  icon?: React.ReactNode;
+  /**
+   * Exactly one support line. The set spec allows no second paragraph: the
+   * as-built pages ran a 12px description above a 13px subtitle that restated
+   * it, which pushed the first field below the fold on a laptop.
+   *
+   * A node rather than a string so a page can inline a machine value — the
+   * check-email line carries a live mono countdown — without splitting the
+   * ladder into two paragraphs to do it.
+   */
+  description: ReactNode;
 }
 
+/**
+ * The header ladder shared by every auth page: eyebrow → title-lg → one line.
+ *
+ * Replaces the old 28px/300 heading, which was a size that does not exist on
+ * the v2 type scale, and the decorative accent rule above it.
+ */
 export default function FormHeader({
+  eyebrow,
   title,
   description,
-  subtitle,
-  icon,
 }: FormHeaderProps) {
   return (
-    <>
-      <AccentLine />
-      {icon && (
-        <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[rgba(0,0,0,0.03)]">
-          {icon}
-        </div>
-      )}
-      <div className="flex flex-col gap-[8px]">
-        <h2 className="text-[28px] font-light leading-[1.1] tracking-[-0.5px] text-[var(--color-text-primary)]">
-          {title}
-        </h2>
-        <p className="text-[12px] leading-[1.5] text-[var(--color-text-muted)]">
-          {description}
-        </p>
-        <p className="text-[13px] leading-[1.6] text-[var(--color-text-secondary)]">
-          {subtitle}
-        </p>
-      </div>
-    </>
+    <div className="flex flex-col gap-[8px]">
+      <span className="eyebrow">{eyebrow}</span>
+      <h1 className="text-title-lg pt-[4px]">{title}</h1>
+      <p className="text-body max-w-[46ch]">{description}</p>
+    </div>
   );
 }

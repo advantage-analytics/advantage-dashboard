@@ -1,0 +1,184 @@
+"use client";
+
+import type { LucideIcon } from "lucide-react";
+import { AdvSelect } from "@/components/ui/adv-select";
+import type { RosterMember } from "@/lib/data/team-roster-server";
+
+/**
+ * The five fields a roster profile is made of, and the notes they raise.
+ *
+ * Add player and Edit player are the same form twice — one against a row that
+ * does not exist yet and one against a row that does — so the vocabulary they
+ * share lives here rather than in whichever of them was written first. The
+ * lineup-spot note in particular: a second implementation of "somebody already
+ * holds #3" is a second sentence able to disagree with the first about whether
+ * that is a problem, and the whole point of the note is that it is not one.
+ *
+ * Extracted from `add-player-dialog.tsx`, unchanged. Its longer commentary on
+ * why these notes are quiet rather than red still lives there, next to the
+ * duplicate-name note that only the add path raises.
+ */
+
+/** Four years and the fifth that redshirts and grad transfers actually use. */
+export const CLASS_YEARS = [
+  "Freshman",
+  "Sophomore",
+  "Junior",
+  "Senior",
+  "Graduate",
+] as const;
+
+/**
+ * Nine, because a dual line-up is six singles and three doubles.
+ *
+ * Not unique per program on purpose: a coach mid-reshuffle would be blocked by
+ * a constraint, and there is no swap control. `program_players` carries no
+ * unique index on the column, so the note below is the whole of the check.
+ */
+export const LINEUP_SPOTS = Array.from({ length: 9 }, (_, i) => i + 1);
+
+/**
+ * The underline `<select>`, matching `SettingsUnderlineInput`'s rule.
+ *
+ * A thin adapter over `AdvSelect` now, kept only for its callback shape: the
+ * two roster dialogs pass `onChange={setClassYear}` — a plain setter, not an
+ * event handler — and rewriting both call sites to unwrap the event would be
+ * churn for no gain. Everything visual belongs to the primitive.
+ *
+ * What that fixed here: this component set `appearance-none` and put nothing
+ * back where the browser's arrow had been, so the control read as static
+ * text; and its rule recoloured on focus without thickening to the 2px the
+ * design system asks for.
+ */
+export function UnderlineSelect({
+  value,
+  onChange,
+  children,
+  ariaLabel,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+  ariaLabel: string;
+  disabled?: boolean;
+}) {
+  return (
+    <AdvSelect
+      aria-label={ariaLabel}
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {children}
+    </AdvSelect>
+  );
+}
+
+/**
+ * The quiet line under a field: an icon and a sentence, no fill, neutral ink.
+ *
+ * Deliberately not `DialogProblem`. That row is red and `role="alert"`, and it
+ * is reserved for what the database refused; these are observations a coach is
+ * free to ignore — the register the roster table's "Possible duplicate" chip
+ * already uses for the same kind of question.
+ *
+ * Renders both halves of the note, because the visible half alone is not the
+ * whole component. A live region that arrives already populated is one
+ * assistive tech never announces — it reports *changes* to a region it was
+ * already watching — so the sentence is announced by an `sr-only` region that
+ * stays mounted whether or not there is a sentence yet, and the visible copy is
+ * `aria-hidden` so each one is not read twice.
+ *
+ * Both halves live here rather than at the call sites so that invariant cannot
+ * drift: mount the region conditionally, or write `&&` where `?? ""` belongs,
+ * and the note silently announces nothing — no type error, no failing test.
+ * Pass `note={null}` for "no note"; do not wrap this in a conditional.
+ *
+ * The fragment keeps the two elements siblings in the caller's layout, and each
+ * note owns its own region on purpose: `aria-atomic` re-reads a region whole,
+ * so a shared one would repeat the name sentence every time the spot changed.
+ */
+export function RosterNote({
+  icon: Icon,
+  note,
+}: {
+  icon: LucideIcon;
+  /** A prepared sentence, not nodes: the live region has to say the same one. */
+  note: string | null;
+}) {
+  return (
+    <>
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {note ?? ""}
+      </div>
+      {note === null ? null : (
+        <p
+          aria-hidden
+          className="-mt-1 flex items-start gap-2 text-[11px] leading-[1.6] text-[var(--ink-600)]"
+        >
+          <Icon
+            className="mt-[3px] size-3.5 shrink-0"
+            strokeWidth={1.5}
+            aria-hidden
+          />
+          <span>{note}</span>
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * "Maya Chen" · "Maya Chen and Alex Ruiz" · "Maya Chen and 2 others".
+ *
+ * Exported because Add player's occupied-spot confirm says the same names
+ * directly under the note `spotHeldNote` builds from them. The two sentences
+ * are deliberately separate — Edit player raises the note and no confirm — but
+ * the JOINER is a product decision they must agree on: stop at two names, spell
+ * the remainder "and N others". Two copies could drift, and the note and its
+ * own confirm disagreeing about how many names to list is the visible cost.
+ */
+export function nameList(names: string[]): string {
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names[0]} and ${names.length - 1} others`;
+}
+
+/**
+ * Who else is on this line, for the note that says a shared spot is allowed.
+ *
+ * `exclude` is the profile the form is about — the row being edited, or the row
+ * an add just wrote. Without it the note names the very player on screen and
+ * warns a coach off their own unchanged lineup spot.
+ *
+ * "Not set" is `""`, which `Number("")` would turn into 0 and match nothing —
+ * but the empty check says so outright rather than relying on that. A member
+ * with no line has `null`, which is never equal to a number, so the same filter
+ * covers the whole roster.
+ */
+export function spotHolders(
+  roster: RosterMember[],
+  spot: string,
+  exclude: string | null,
+): string[] {
+  if (spot === "") return [];
+  return roster
+    .filter(
+      (person) =>
+        person.lineupSpot === Number(spot) &&
+        (exclude === null || person.profileId !== exclude),
+    )
+    .map((person) => person.name);
+}
+
+/**
+ * A spot is deliberately not unique per program, so picking one somebody
+ * already holds is legal and often correct — a coach mid-reshuffle enters the
+ * new line before clearing the old one. The note says whose line it is and
+ * nothing else.
+ */
+export function spotHeldNote(names: string[], spot: string): string {
+  const holds = names.length === 1 ? "already holds" : "already hold";
+  return `${nameList(names)} ${holds} #${spot}. Spots can be shared while you reshuffle — you can still use this one.`;
+}
