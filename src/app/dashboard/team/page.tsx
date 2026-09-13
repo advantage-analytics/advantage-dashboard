@@ -24,6 +24,7 @@ import { DualHistory } from "@/components/dashboard/team/dual-history";
 import { CourtRecord } from "@/components/dashboard/team/court-record";
 import { FocusCard } from "@/components/dashboard/home/focus-card";
 import { FocusEmpty } from "@/components/dashboard/home/focus-empty";
+import { FocusCardPending } from "@/components/dashboard/loading/home-skeleton";
 import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
 import { TeamSetupLine } from "@/components/dashboard/team/team-setup-line";
 import { TeamDayZeroHome } from "@/components/dashboard/team/team-day-zero-home";
@@ -94,7 +95,7 @@ export default async function TeamHomePage() {
   );
   const insight = region(
     "Advantage Intelligence",
-    null,
+    <FocusCardPending />,
     <Insight
       resources={resources}
       programId={active.id}
@@ -302,14 +303,19 @@ async function Insight({
         />
       </FocusCard>
     );
-  return matchCount === 0 ? (
+  return (
     <FocusCard
-      showStatisticsLink={!isPreview}
-      footer={{ left: "One thing to work on, after the first dual." }}
+      showStatisticsLink={!isPreview && matchCount > 0}
+      footer={{
+        left:
+          matchCount === 0
+            ? "One thing to work on, after the first dual."
+            : "One thing to work on, once a match is analysed.",
+      }}
     >
       <FocusEmpty />
     </FocusCard>
-  ) : null;
+  );
 }
 async function Footer({ resources }: { resources: Resources }) {
   const usage = await resources.usage;

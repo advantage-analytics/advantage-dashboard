@@ -1,3 +1,4 @@
+import { FocusCard } from "@/components/dashboard/home/focus-card";
 import { HomeWidgetFrame } from "@/components/dashboard/home/home-widget-frame";
 import { SeasonTitleFrame } from "@/components/dashboard/home/season-title";
 import { KpiTileStrip } from "@/components/dashboard/shared/kpi-tile";
@@ -175,6 +176,31 @@ export function HomeActivityPending() {
     >
       <HomeActivityBodyPending />
     </HomeWidgetFrame>
+  );
+}
+/**
+ * The Advantage Intelligence card while its evidence is still being computed.
+ * The real chrome (mark, engine name) renders immediately so the column keeps
+ * its shape; only the claim, evidence run and footer pulse. Shared by Home and
+ * Team Home — a `null` fallback here made the card pop in after its siblings.
+ */
+export function FocusCardPending() {
+  return (
+    <FocusCard showStatisticsLink={false}>
+      <div role="status" aria-label="Loading Advantage Intelligence">
+        <div
+          aria-hidden="true"
+          className="flex flex-col gap-3 motion-safe:animate-pulse"
+        >
+          <Bar className="h-[14px] w-[72%]" />
+          <div className="flex flex-col gap-2">
+            <Bar className="h-2.5" />
+            <Bar className="h-2.5 w-[86%]" />
+          </div>
+          <Footer />
+        </div>
+      </div>
+    </FocusCard>
   );
 }
 export function HomeFooterPending() {
