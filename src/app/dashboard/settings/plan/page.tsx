@@ -14,6 +14,7 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { isProPlan } from "@/lib/user/roles";
 import { teamLabel } from "@/lib/workspace/types";
 import { SUPPORT_EMAIL } from "@/lib/constants";
+import { SettingsPlanPending } from "@/components/dashboard/loading/settings-pending";
 
 /**
  * Settings › Plan — what the account is entitled to.
@@ -326,7 +327,7 @@ function PlanContent() {
 
 export default function PlanPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<SettingsPlanPending />}>
       <PlanContent />
     </Suspense>
   );

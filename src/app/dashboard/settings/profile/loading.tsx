@@ -1,1 +1,1 @@
-export { SettingsFormSkeleton as default } from "@/components/dashboard/loading/page-skeletons";
+export { SettingsProfilePending as default } from "@/components/dashboard/loading/settings-pending";
