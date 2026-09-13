@@ -119,6 +119,9 @@ export default async function TeamHomePage() {
       isPreview={isDayZero}
     />,
   );
+  const setupLine = isStaff
+    ? region("Getting set up", null, <Setup resources={resources} />)
+    : null;
 
   if (isDayZero) {
     return (
@@ -147,6 +150,7 @@ export default async function TeamHomePage() {
         <TeamTitlePending action={action} />,
         <Title resources={resources} action={action} />,
       )}
+      setupLine={setupLine}
       kpis={kpis}
       dual={dual}
       movers={movers}
@@ -156,7 +160,7 @@ export default async function TeamHomePage() {
       footer={region(
         "Team usage",
         <HomeFooterPending />,
-        <Footer resources={resources} isStaff={isStaff} />,
+        <Footer resources={resources} />,
       )}
     />
   );
@@ -307,27 +311,16 @@ async function Insight({
     </FocusCard>
   ) : null;
 }
-async function Footer({
-  resources,
-  isStaff,
-}: {
-  resources: Resources;
-  isStaff: boolean;
-}) {
+async function Footer({ resources }: { resources: Resources }) {
   const usage = await resources.usage;
   return (
-    <>
-      <Suspense fallback={null}>
-        {isStaff && <Setup resources={resources} />}
-      </Suspense>
-      <UsageFooter
-        usedSeconds={usage.usedSeconds}
-        capSeconds={usage.capSeconds}
-        billingMonth={usage.billingMonth}
-        dualWeekends
-        note="free through Dec 31, 2026"
-      />
-    </>
+    <UsageFooter
+      usedSeconds={usage.usedSeconds}
+      capSeconds={usage.capSeconds}
+      billingMonth={usage.billingMonth}
+      dualWeekends
+      note="free through Dec 31, 2026"
+    />
   );
 }
 async function Setup({ resources }: { resources: Resources }) {

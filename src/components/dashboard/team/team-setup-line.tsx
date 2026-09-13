@@ -2,8 +2,8 @@ import Link from "next/link";
 import type { TeamSetupProgress } from "@/lib/data/team-home-server";
 
 /**
- * "Getting set up · 1 of 3 · A dual on the schedule. Add a dual" — one quiet
- * line above the usage footer, in the personal Home's `SetupLine` register.
+ * "Getting set up · 1 of 3 · A dual on the schedule. Add a dual" — a quiet
+ * status bar right under the title row, above the KPI strip.
  *
  * This replaces round 45's three-card checklist. Platform Audit Ta3 has no
  * slot for a card row, and CJ asked for the personal Home's treatment: the
@@ -11,6 +11,15 @@ import type { TeamSetupProgress } from "@/lib/data/team-home-server";
  * shows what it will hold, so what is left to say is which of three steps
  * remain and where the next one is. Staff only — every step is a write the
  * database refuses a player.
+ *
+ * Promoted here from the footer (below the usage line, past five waiting-
+ * state cards) because that placement buried the one thing a coach with an
+ * empty roster or an empty schedule actually needs to see first. The bar
+ * uses `--ink-100` — the same neutral the page's own hairlines and ghost
+ * placeholders draw with — rather than a bordered card or a blue-tinted
+ * banner: a card competes with the KPI strip directly below it, and a tinted
+ * banner or a second button reads as a second primary action next to the
+ * title row's "New match". A plain link keeps it to one accent, one purpose.
  *
  * Renders nothing once all three are done. The line leaves once and does not
  * come back, which is what makes the populated page the end of setup rather
@@ -54,12 +63,16 @@ export function TeamSetupLine({ setup }: { setup: TeamSetupProgress }) {
       : `${next.phrase.charAt(0).toUpperCase()}${next.phrase.slice(1)}.`;
 
   return (
-    <div className="flex flex-wrap items-baseline gap-2.5">
+    <div
+      className="flex flex-wrap items-center gap-2.5 rounded-[8px] px-3.5 py-2.5"
+      style={{ background: "var(--ink-100)" }}
+    >
       <span className="eyebrow">Getting set up</span>
       <span className="mono tabular text-[11px] text-[var(--ink-500)]">
         {done} of {STEPS.length}
       </span>
       <span className="text-micro">{sentence}</span>
+      <div className="flex-1" />
       <Link
         href={next.href}
         className="rounded-sm text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:outline-none"
