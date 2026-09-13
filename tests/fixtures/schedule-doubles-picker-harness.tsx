@@ -139,9 +139,9 @@ function Harness() {
         defaultSurface: null,
         ourConference: null,
         ourTeam: "mens",
-        ourDivision: "D-I",
+        ourDivision: "D1",
         ourProgramKey: "our-program",
-        conferencePrograms: [],
+        directory: [],
         historyEntries: [],
         directoryTotal: 0,
       }}

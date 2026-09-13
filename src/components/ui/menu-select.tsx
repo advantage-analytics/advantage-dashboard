@@ -38,6 +38,8 @@ export function MenuSelect<T extends string>({
   className,
   width,
   placeholder,
+  align,
+  scroll = false,
 }: {
   /** Accessible name — the visible caption or row label sits beside it. */
   label: string;
@@ -61,6 +63,18 @@ export function MenuSelect<T extends string>({
   width?: number | "trigger";
   /** Shown, in the empty-field ink, when `value` is unset. */
   placeholder?: string;
+  /**
+   * Opens toward the trigger's start edge instead of the variant's default.
+   * A pill that leads a row of controls, rather than ending one, wants its
+   * menu to open under itself and not back across the page.
+   */
+  align?: "start" | "end";
+  /**
+   * Caps the menu at 360px (or the room left in the viewport, whichever is
+   * less) and scrolls the rest. For option lists a data set decides the
+   * length of — a division's conferences run to forty — rather than a design.
+   */
+  scroll?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const current = options.find((option) => option.value === value);
@@ -125,8 +139,13 @@ export function MenuSelect<T extends string>({
       onOpenChange={setOpen}
       trigger={trigger}
       label={label}
-      align={variant === "underline" ? "start" : "end"}
+      align={align ?? (variant === "underline" ? "start" : "end")}
       width={width ?? (variant === "underline" ? "trigger" : 232)}
+      className={
+        scroll
+          ? "max-h-[min(360px,var(--radix-popover-content-available-height))] overflow-y-auto"
+          : undefined
+      }
     >
       {options.map((option) => (
         <MenuSelectRow

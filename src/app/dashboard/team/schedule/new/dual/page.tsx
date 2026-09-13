@@ -4,40 +4,26 @@ import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { createClient } from "@/lib/supabase/server";
 import { getLadder } from "@/lib/data/roster-server";
 import { getTeamSettings } from "@/lib/data/team-settings-server";
-import { getConferenceTable } from "@/lib/data/opponents-server";
+import { getOpponentDirectory } from "@/lib/data/opponents-server";
 import { getProgramSchedule } from "@/lib/data/schedule-server";
 import { opponentDualHistory } from "@/lib/schedule/opponent-history";
-import { divisionLabel } from "@/lib/data/programs-server";
 import { NewDualDataProvider } from "@/components/dashboard/schedule/static/dual-school-step";
 import { NewDualFlow } from "@/components/dashboard/schedule/static/new-dual-flow";
-import type { ConferenceProgram } from "@/lib/data/opponents-server";
-import type { ProgramSearchResult } from "@/lib/data/programs-server";
 
 /**
- * A conference row, as the directory row every downstream consumer expects.
- *
- * Both lists on step one hand back a `ProgramSearchResult`, because the caller
- * has to be able to treat a conference row and a search hit as the same thing —
- * and because `programKey` on it is what makes the opponent aggregatable.
- * `conference` is the table's own, which is the whole reason these rows are in
- * it; `ownerDisplay` is null because nothing here asked for it. The owner
- * projection belongs to the claim flow's definer RPC, and no part of this
- * screen shows who runs the other program.
+ * This program's `programs.program_key`, so step one can drop it from the
+ * directory. Read on its own rather than off the directory: the directory is
+ * college rows of one squad, and a program outside either still needs to be
+ * kept from scheduling a dual against itself.
  */
-function toDirectoryRow(
-  program: ConferenceProgram,
-  conference: string | null,
-): ProgramSearchResult {
-  return {
-    programKey: program.programKey,
-    schoolName: program.schoolName,
-    team: program.teamKey,
-    division: program.division,
-    conference,
-    state: program.state,
-    status: program.status,
-    ownerDisplay: null,
-  };
+async function ownProgramKey(programId: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("programs")
+    .select("program_key")
+    .eq("id", programId)
+    .maybeSingle();
+  return (data as { program_key: string | null } | null)?.program_key ?? null;
 }
 
 /**
@@ -88,9 +74,11 @@ async function directoryTotal(): Promise<number | null> {
  * flow, as it always did.
  *
  * ── Reading again, as of the schedule re-wiring ────────────────────────────
- * Four loaders in parallel — the ladder, the team settings, the conference
- * table and the whole program schedule — plus `opponentDualHistory()` over the
- * last of them, and the directory count above. Step one lists real programs
+ * Loaders in parallel — the ladder, the team settings, this squad's whole
+ * college directory (chained on the settings, which name the squad), the
+ * program's own directory key and the whole program schedule — plus
+ * `opponentDualHistory()` over the last of them, and the directory count
+ * above. Step one lists real programs
  * and real head-to-head records off the back of it; the ladder and the default
  * surface are read here for step two, which owns no route of its own.
  *
@@ -115,11 +103,18 @@ export default async function NewDualPage() {
   // database would refuse.
   if (!canManageTeamSchedule(active)) redirect("/dashboard/team/schedule");
 
-  const [ladder, settings, conferenceTable, schedule, total] =
+  const settingsRead = getTeamSettings(active.id);
+  const [ladder, settings, directory, ourProgramKey, schedule, total] =
     await Promise.all([
       getLadder(active.id),
-      getTeamSettings(active.id),
-      getConferenceTable(active.id),
+      settingsRead,
+      // Chained on the settings rather than after the whole batch: the
+      // directory is narrowed to this program's squad, and waiting for the
+      // other four reads to learn it would serialise the slowest read here.
+      settingsRead.then((read) =>
+        getOpponentDirectory(read?.program.team ?? null),
+      ),
+      ownProgramKey(active.id),
       // Read for the head-to-head half of every subline on step one. Staff-only
       // screen, and every member reads the program's matches in any case, so the
       // partial-read caveat `opponent-history.ts` documents cannot bite here.
@@ -127,12 +122,11 @@ export default async function NewDualPage() {
       directoryTotal(),
     ]);
 
-  // The viewer's own row is in the conference table, flagged rather than
-  // filtered — `getConferenceTable` says so. Step one wants it gone from the
-  // list (a program does not play itself) but wants its division, which the
-  // conference row is the only place to get without a second read.
+  // The viewer's own row is in the directory — same squad, a college. Step
+  // one drops it from the list (a program does not play itself) but opens the
+  // Division menu on its division, and this is the one read that carries it.
   const self =
-    conferenceTable.programs.find((program) => program.isSelf) ?? null;
+    directory.find((program) => program.programKey === ourProgramKey) ?? null;
 
   return (
     <NewDualDataProvider
@@ -144,17 +138,13 @@ export default async function NewDualPage() {
         // could actually play. Null when the settings read came back empty,
         // which step one reads as "do not narrow": see `NewDualData`.
         ourTeam: settings?.program.team ?? null,
-        ourDivision: divisionLabel(self?.division ?? null),
-        // Off the loader, not off `self`: the conference table is empty for a
-        // program with no `conference`, and a key read out of it would then be
-        // null — which makes step one's `programKey !== ourProgramKey` filter
-        // match every row and let a coach schedule a dual against themselves.
-        ourProgramKey: conferenceTable.ourProgramKey,
-        conferencePrograms: conferenceTable.programs
-          .filter((program) => !program.isSelf)
-          .map((program) =>
-            toDirectoryRow(program, conferenceTable.conference),
-          ),
+        ourDivision: self?.division ?? null,
+        // Its own read, not off `self`: `self` exists only for a college row
+        // of the squad, and a null key here would make step one's
+        // `programKey !== ourProgramKey` filter drop nothing — letting a coach
+        // schedule a dual against themselves.
+        ourProgramKey,
+        directory,
         // Entries rather than the Map itself: the array needs no assumption
         // about what the server/client serializer carries, and step one rebuilds
         // it in one `useMemo`.

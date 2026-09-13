@@ -10,7 +10,10 @@ import {
   type MatchScore,
 } from "@/lib/data/match-utils";
 import { programDisplayName, teamLabel } from "@/lib/data/programs-server";
-import type { ProgramStatus } from "@/lib/data/programs-server";
+import type {
+  ProgramSearchResult,
+  ProgramStatus,
+} from "@/lib/data/programs-server";
 
 /**
  * Who a program is about to play, and what is known about them.
@@ -293,6 +296,71 @@ export const getConferenceTable = cache(async function getConferenceTable(
       toProgram(row, programId),
     ),
   };
+});
+
+/** PostgREST's `max_rows` — a single select never returns more than this. */
+const DIRECTORY_PAGE = 1000;
+
+/**
+ * The college directory a new dual picks its opponent from, whole.
+ *
+ * Step one browses it by Division and Conference, so the two menus and the
+ * list under them are drawn from memory rather than a round trip per change —
+ * and the Conference menu can only list the conferences a division actually
+ * has if every row of that division is on hand. One squad is under 1,100 rows
+ * of six short columns.
+ *
+ * `team` narrows to the squad this program could play; null reads both, which
+ * is `NewDualData.ourTeam`'s honest failure. College rows only: `programs` is
+ * RLS-readable for the viewer's own custom orgs too, and those are not in any
+ * division a coach would browse.
+ *
+ * Paged, because the women's directory alone is past `max_rows` and a single
+ * select would silently stop at the cap — the missing schools would simply
+ * not be in the list, with nothing on screen to say so.
+ */
+export const getOpponentDirectory = cache(async function getOpponentDirectory(
+  team: "mens" | "womens" | null,
+): Promise<ProgramSearchResult[]> {
+  const supabase = await createClient();
+  const rows: DbProgramRow[] = [];
+
+  for (let from = 0; ; from += DIRECTORY_PAGE) {
+    let query = supabase
+      .from("programs")
+      .select(
+        "id, program_key, school_name, team, division, state, conference, status",
+      )
+      .eq("org_type", "college")
+      // `program_key` breaks ties so a page boundary cannot fall between two
+      // schools of the same name and list one twice and the other never.
+      .order("school_name", { ascending: true })
+      .order("program_key", { ascending: true })
+      .range(from, from + DIRECTORY_PAGE - 1);
+    if (team) query = query.eq("team", team);
+
+    const { data, error } = await query;
+    if (error) {
+      console.error("[new dual] could not read the program directory", {
+        error: error.message,
+      });
+      return [];
+    }
+    const page = (data ?? []) as DbProgramRow[];
+    rows.push(...page);
+    if (page.length < DIRECTORY_PAGE) break;
+  }
+
+  return rows.map((row) => ({
+    programKey: row.program_key,
+    schoolName: row.school_name,
+    team: row.team === "womens" ? "womens" : "mens",
+    division: row.division,
+    conference: row.conference,
+    state: row.state,
+    status: row.status as ProgramStatus,
+    ownerDisplay: null,
+  }));
 });
 
 /**

@@ -134,7 +134,7 @@ export default async function EditEventPage({
           ourTeam: settings?.program.team ?? null,
           ourDivision: null,
           ourProgramKey: null,
-          conferencePrograms: [],
+          directory: [],
           historyEntries: [],
           directoryTotal: null,
         }}
