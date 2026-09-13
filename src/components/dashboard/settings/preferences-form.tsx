@@ -42,13 +42,10 @@ const REPORT_OPTIONS: readonly { value: ReportEntryPoint; label: string }[] = [
  */
 export function PreferencesForm({
   initial,
-  role,
   plan,
   showTeamDigest,
 }: {
   initial: Preferences;
-  /** From `users.role` — what shapes the app, never what you pay for. */
-  role: string | null;
   /** From `users.plan` — what you pay for, never what you see. */
   plan: string;
   /** The digest is a program artefact; outside a team there is nothing to send. */
@@ -159,18 +156,12 @@ export function PreferencesForm({
         />
       </SettingsCard>
 
-      {/* Role and plan, stated side by side and edited nowhere near each other.
-          They were one column once, which is how changing a role could change
-          what somebody paid for. */}
+      {/* Plan is stated here and changed on its own page. Team roles live
+          under Settings › Teams, per team. */}
       <SettingsCard className="flex-row items-center gap-4">
         <div className="min-w-0 flex-1">
           <div className="text-[12px] text-[var(--ink-900)]">
-            Role:{" "}
-            <b className="font-medium">{role ? capitalize(role) : "Not set"}</b>{" "}
-            · Plan: <b className="font-medium">{capitalize(plan)}</b>
-          </div>
-          <div className="mt-0.5 text-[11px] text-[var(--ink-500)]">
-            Separate columns — editing your profile can never touch your plan.
+            Plan: <b className="font-medium">{capitalize(plan)}</b>
           </div>
         </div>
         <Link

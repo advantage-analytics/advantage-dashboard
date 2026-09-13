@@ -124,10 +124,9 @@ async function finishJoin(programId: string): Promise<never> {
 /**
  * The persona an invitation implies, for a profile that has not chosen one.
  *
- * `users.role` is a persona (`PERSONA_ROLES` in settings/actions.ts: player,
- * coach, parent, academy), not a program role, so `staff` lands as "coach" —
- * the persona the profile form offers someone who runs a program rather than
- * plays for one. A `const` record, looked up by own property only: a bare
+ * `users.role` is a persona (player, coach, parent, academy), not a program
+ * role, so `staff` lands as "coach" — the persona for someone who runs a
+ * program rather than plays for one. A `const` record, looked up by own property only: a bare
  * index would resolve prototype keys, and a role the database grows later
  * should write nothing rather than something.
  */

@@ -13,8 +13,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * persona-only in code as well as in the comment.
  *
  * Legacy `role = 'founder'` values are left alone. The migration already set
- * `plan = 'pro'` for every one of them, so nothing needs them, and the next
- * profile save replaces them with a persona.
+ * `plan = 'pro'` for every one of them, so nothing needs them. Settings no
+ * longer edits `role` at all; only onboarding writes it.
  */
 
 /** `users.plan` value for a paid account. Constrained to 'free' | 'pro' in SQL. */

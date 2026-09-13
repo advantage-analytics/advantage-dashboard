@@ -289,7 +289,7 @@ export interface Viewer {
   plan: string;
   /**
    * `users.role` — the self-described persona (player/coach/parent/academy).
-   * Shown on the profile and preferences pages; it gates nothing (team
+   * Written by onboarding only and shown nowhere in Settings; it gates nothing (team
    * surfaces key off `Workspace.role` above) and is never what the account
    * is entitled to. See `lib/user/roles.ts` for why those two had to be split.
    */

@@ -3,9 +3,8 @@ import { getPreferences } from "@/lib/data/preferences-server";
 import { PreferencesForm } from "@/components/dashboard/settings/preferences-form";
 
 /**
- * Role and plan both come off the workspace context. The page used to call
- * `auth.getUser()` itself and then re-select the same `users` row for `role` —
- * a second query, serialized after the one the layout had already paid for.
+ * Plan comes off the workspace context, so the page needs no `users` query of
+ * its own.
  */
 export default async function PreferencesPage() {
   const [preferences, workspace] = await Promise.all([
@@ -16,7 +15,6 @@ export default async function PreferencesPage() {
   return (
     <PreferencesForm
       initial={preferences}
-      role={workspace?.viewer.role ?? null}
       plan={workspace?.viewer.plan ?? "free"}
       showTeamDigest={workspace?.active.kind === "team"}
     />

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { AlertCircle } from "lucide-react";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { AvatarControl } from "@/components/dashboard/settings/avatar-control";
@@ -27,9 +26,13 @@ import { todayISO } from "@/lib/schedule/format";
  * appeared every visit until the last field was filled.
  *
  * Editing is a draft with one commit, which is what the save bar exists for.
- * Role lives here and pays for nothing: a self-description, never what you
- * owe. It gates nothing either — roster and team surfaces key off the
- * workspace's `program_members.role`, not this column.
+ *
+ * There is no Role here. `users.role` is the persona onboarding records
+ * (player/coach/parent/academy) and gates nothing; the roles that do — owner,
+ * coach, staff, player — are per team, in `program_members`, and shown under
+ * Settings › Teams. A single self-described role beside them could only
+ * disagree with one of them, and editing it would let a parent account (with
+ * guardian consent on file) relabel itself.
  *
  * The row arrives as a prop. Fetching it in an effect meant the page rendered
  * an empty form and a "7 fields left" badge for one paint on every visit, and
@@ -48,7 +51,6 @@ const FIELDS = [
   "state",
   "hand",
   "backhand",
-  "role",
 ] as const;
 
 type FieldName = (typeof FIELDS)[number];
@@ -62,7 +64,6 @@ const FIELD_LABELS: Record<FieldName, string> = {
   state: "State / region",
   hand: "Playing hand",
   backhand: "Backhand",
-  role: "Role",
 };
 
 const COUNTRY_OPTIONS = [
@@ -103,13 +104,6 @@ const BACKHAND_OPTIONS = [
   { value: "two-handed", label: "Two-handed" },
 ];
 
-const ROLE_OPTIONS = [
-  { value: "coach", label: "Coach" },
-  { value: "player", label: "Player" },
-  { value: "parent", label: "Parent" },
-  { value: "academy", label: "Academy" },
-];
-
 export type ProfileDraft = Record<FieldName, string>;
 
 export function ProfileForm({ initial }: { initial: ProfileDraft }) {
@@ -142,9 +136,6 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
 
   const displayName =
     `${draft.firstName} ${draft.lastName}`.trim() || viewer.name;
-  const roleLabel = ROLE_OPTIONS.find(
-    (option) => option.value === draft.role,
-  )?.label;
 
   return (
     <div className="flex max-w-[660px] flex-col gap-5">
@@ -165,7 +156,6 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
         >
           <div className="text-title-lg truncate">{displayName}</div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {roleLabel && <IdentityPill>{roleLabel}</IdentityPill>}
             {active.kind === "team" && (
               <IdentityPill>{active.name}</IdentityPill>
             )}
@@ -267,34 +257,6 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
             options={BACKHAND_OPTIONS}
             placeholder="Select backhand"
             onChange={(value) => set("backhand", value)}
-          />
-        </div>
-
-        {/* No rule above this row: the grid's last row already ends the
-            block, and a second line two pixels under it read as a double
-            border. */}
-        <div className="flex items-start gap-6">
-          <div className="min-w-0 flex-1">
-            <div className="text-[12px] text-[var(--ink-900)]">Role</div>
-            <div className="mt-0.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
-              How you describe yourself; roster and team tools come from your
-              workspace membership, not this setting. It never changes what you
-              pay for; that&apos;s{" "}
-              <Link
-                href="/dashboard/settings/plan"
-                className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
-              >
-                Plan
-              </Link>
-              .
-            </div>
-          </div>
-          <MenuSelect
-            label="Role"
-            value={draft.role || undefined}
-            options={ROLE_OPTIONS}
-            placeholder="Select role"
-            onChange={(value) => set("role", value)}
           />
         </div>
       </SettingsCard>
