@@ -19,6 +19,15 @@ import type { EmailMessage } from "../send";
  * let the link lapse is not asking the review queue to consider them — they are
  * asking one named coach to press resend — so `expiredInviteNudgeEmail` goes to
  * that coach rather than into the queue.
+ *
+ * The fourth faces the other direction. The receipt tells the requester their
+ * ask was recorded; `joinRequestOwnerNoticeEmail` tells the program's owner
+ * that it exists, because a request nobody is told about waits exactly as long
+ * as one that was never filed.
+ *
+ * The fifth closes the far end of the same loop. `memberJoinedOwnerEmail` tells
+ * the owner that an invitation was accepted — the one event in this family that
+ * is good news, and the one the roster page otherwise records in silence.
  */
 
 export interface InviteRequestReceivedInput {
@@ -59,6 +68,185 @@ export function inviteRequestReceivedEmail(
     html: renderEmail(content),
     text: renderText(content),
     tags: { type: "invite_request_received" },
+  };
+}
+
+export interface JoinRequestOwnerNoticeInput {
+  /**
+   * The program owner's account address, resolved server-side from the
+   * `program_members` row with `role = 'owner'` — never anything the request
+   * form carried.
+   */
+  to: string;
+  /** "Elena Vasquez", "Elena", or null — the greeting reads without it. */
+  ownerName: string | null;
+  programName: string;
+  /** The address the requester typed. Unverified: it is what they will be invited at. */
+  requesterEmail: string;
+  /** Optional on the form, so the copy has to survive its absence. */
+  requesterName: string | null;
+}
+
+/**
+ * The notice to the program's owner that someone asked to join.
+ *
+ * Recipient is the OWNER only, by the author's wording — even though coaches
+ * and staff can also approve from the roster page. That is the narrowest
+ * reading, chosen on purpose: mailing every approver on every request turns
+ * one ask into three emails, and a coach who wants the notice can be added
+ * once the owner has said so. If that turns out wrong, widen the recipient
+ * list in `requestInvite()`, not here — this template is per-recipient.
+ *
+ * It fires only when a NEW open request was created. The unique index
+ * collapses a resubmitted form into the row already on file, and the send is
+ * gated on that distinction, so a second click cannot mail the owner twice.
+ *
+ * Nothing internal goes in it: no request id, no program id. The CTA is the
+ * roster page, which is where the request is approved and where the row
+ * already shows — a link straight to an approve action would be a one-click
+ * grant sitting in an inbox.
+ */
+export function joinRequestOwnerNoticeEmail(
+  input: JoinRequestOwnerNoticeInput,
+): EmailMessage {
+  const { to, ownerName, programName, requesterEmail, requesterName } = input;
+
+  const owner = ownerName?.trim();
+  const requester = requesterName?.trim();
+  // "Elena Vasquez (elena@…)" when they gave a name, the bare address when
+  // they did not — the address is the one thing the row always has.
+  const who = requester ? `${requester} (${requesterEmail})` : requesterEmail;
+
+  const content: EmailContent = {
+    preheader: `${who} asked to join ${programName}.`,
+    eyebrow: "Join request",
+    heading: `${requester ?? requesterEmail} asked to join ${programName}`,
+    body: [
+      `Hi${owner ? ` ${owner}` : ""} — ${who} has asked to join ${programName} on Advantage.`,
+      "Nothing has changed on your roster. Approving sends them an invitation and reserves a seat; declining closes the request and lets them know.",
+    ],
+    facts: [
+      { label: "Program", value: programName },
+      ...(requester ? [{ label: "Name", value: requester }] : []),
+      { label: "Email", value: requesterEmail },
+    ],
+    cta: {
+      label: "Review the request",
+      url: `${siteUrl()}/dashboard/team/roster`,
+    },
+    note: "You decide who joins, not us. If you don't recognise this person, declining is the whole of what you need to do.",
+  };
+
+  return {
+    to,
+    subject: `${requester ?? requesterEmail} asked to join ${programName}`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "join_request_owner_notice" },
+  };
+}
+
+/**
+ * Mirrors `program_members_role_check`. Owner is here where `InviteRole` has
+ * none, because this template announces a membership that already exists
+ * rather than one being offered — and an owner joining their own program is a
+ * row this copy would otherwise have no word for.
+ */
+export type JoinedRole = "owner" | "coach" | "staff" | "player";
+
+const JOINED_ROLE_NOUN: Record<JoinedRole, string> = {
+  owner: "the owner",
+  coach: "a coach",
+  staff: "staff",
+  player: "a player",
+};
+
+const JOINED_ROLE_LABEL: Record<JoinedRole, string> = {
+  owner: "Owner",
+  coach: "Coach",
+  staff: "Staff",
+  player: "Player",
+};
+
+export interface MemberJoinedOwnerInput {
+  /**
+   * The program owner's account address, resolved server-side with
+   * `getProgramOwner()` — never anything the accepting session carried.
+   */
+  to: string;
+  /** "Elena Vasquez", "Elena", or null — the greeting reads without it. */
+  ownerName: string | null;
+  programName: string;
+  /** The joiner's own account address. Always present; the name may not be. */
+  joinerEmail: string;
+  /** Null when their profile has no name yet, so the copy names the address. */
+  joinerName: string | null;
+  /**
+   * Read back off the `program_members` row the accept just wrote, never from
+   * an argument the accepting caller could choose. Null when the row could not
+   * be read or carries a role this copy has not learned — the sentence drops
+   * the standing rather than inventing one.
+   */
+  role: JoinedRole | null;
+}
+
+/**
+ * Somebody the program invited has finished joining it.
+ *
+ * The other half of `programInviteEmail`. An invitation leaves the coach with
+ * no way to know whether it landed: the roster row changes silently, so the
+ * only way to find out is to go and look. A coach who invites six players at
+ * the start of a season checks the page repeatedly, or stops checking and
+ * misses the one that never arrived.
+ *
+ * Recipient is the OWNER only, matching `joinRequestOwnerNoticeEmail` and for
+ * the same reason — one join should not fan out into three emails. Widen it in
+ * `join-actions.ts`, not here; this template is per-recipient.
+ *
+ * It announces a membership that already exists, so there is nothing to
+ * approve and nothing internal to carry: no invite id, no token, no program
+ * id. The CTA is the roster page, which is where the new row already shows.
+ */
+export function memberJoinedOwnerEmail(
+  input: MemberJoinedOwnerInput,
+): EmailMessage {
+  const { to, ownerName, programName, joinerEmail, joinerName, role } = input;
+
+  const owner = ownerName?.trim();
+  const joiner = joinerName?.trim();
+  // "Jordan Ellis (jordan@…)" when the profile has a name, the bare address
+  // when it does not — the address is the one thing the account always has.
+  const who = joiner ? `${joiner} (${joinerEmail})` : joinerEmail;
+  const name = joiner ?? joinerEmail;
+  const asRole = role ? ` as ${JOINED_ROLE_NOUN[role]}` : "";
+
+  const content: EmailContent = {
+    preheader: `${who} accepted their invitation to ${programName}.`,
+    eyebrow: "New member",
+    heading: `${name} joined ${programName}`,
+    body: [
+      `Hi${owner ? ` ${owner}` : ""} — ${who} accepted their invitation and is now on ${programName}${asRole}.`,
+      "They can sign in from now on, and any match they log shows up on your roster. Nothing else is waiting on you.",
+    ],
+    facts: [
+      { label: "Program", value: programName },
+      ...(joiner ? [{ label: "Name", value: joiner }] : []),
+      { label: "Email", value: joinerEmail },
+      ...(role ? [{ label: "Role", value: JOINED_ROLE_LABEL[role] }] : []),
+    ],
+    cta: {
+      label: "View the roster",
+      url: `${siteUrl()}/dashboard/team/roster`,
+    },
+    note: "If this wasn't somebody you invited, you can remove them from the roster page.",
+  };
+
+  return {
+    to,
+    subject: `${name} joined ${programName}`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "member_joined_owner" },
   };
 }
 

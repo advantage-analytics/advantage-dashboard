@@ -7,17 +7,25 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validatePassword } from "@/lib/auth/error-messages";
 import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
-import { expiredInviteNudgeEmail, sendEmail } from "@/lib/services/email";
+import {
+  expiredInviteNudgeEmail,
+  memberJoinedOwnerEmail,
+  sendEmail,
+  type JoinedRole,
+} from "@/lib/services/email";
+import { programDisplayName } from "@/lib/data/programs-server";
 import {
   acceptPendingWithSession,
   acceptWithSession,
   accountExists,
+  displayName,
   loadInvite,
   resolveJoinState,
   type AcceptOutcome,
   type InviteRecord,
 } from "./invite-acceptance";
 import { joinHref, signInThenHref } from "./join-links";
+import { getProgramOwner } from "./program-owner";
 
 /**
  * The ways an invitation is accepted, and the one that is refused.
@@ -150,12 +158,15 @@ const PERSONA_FOR_ROLE = {
  * holding the service role, not auth metadata a crafted signup could imitate.
  * Best effort throughout: a miss costs one redundant onboarding screen or a
  * blank persona field, never the membership.
+ *
+ * Returns that read-back role so the owner notice below can name the standing
+ * without asking the database the same question a second time.
  */
 async function adoptMembership(
   admin: ReturnType<typeof createAdminClient>,
   userId: string,
   programId: string,
-): Promise<void> {
+): Promise<string | null> {
   // The stamp and the read-back share no data, so they go out together; only
   // the persona write waits on the read.
   const [{ error: stampError }, { data: membership, error: memberError }] =
@@ -189,7 +200,7 @@ async function adoptMembership(
     Object.prototype.hasOwnProperty.call(PERSONA_FOR_ROLE, memberRole)
       ? PERSONA_FOR_ROLE[memberRole as keyof typeof PERSONA_FOR_ROLE]
       : null;
-  if (!persona) return;
+  if (!persona) return memberRole;
 
   const { error: roleError } = await admin
     .from("users")
@@ -199,6 +210,106 @@ async function adoptMembership(
   if (roleError) {
     console.error("[join] could not set the account's persona", {
       message: roleError.message,
+    });
+  }
+
+  // Handed back rather than re-read: the membership row was already fetched
+  // above, and the owner notice needs exactly the standing the database wrote.
+  return memberRole;
+}
+
+/** The `program_members` roles this notice has a word for. */
+const NOTICE_ROLES = {
+  owner: true,
+  coach: true,
+  staff: true,
+  player: true,
+} as const;
+
+/**
+ * Tell the owner that somebody finished joining, best effort.
+ *
+ * Sits between the confirmed membership and `finishJoin`, which redirects by
+ * throwing — anything after that call never runs. Failing it must not fail the
+ * accept: the person is already a member whether or not the mail leaves, so
+ * every miss here logs and returns. `sendEmail` never throws, so there is
+ * nothing to catch.
+ *
+ * Three things it refuses to do:
+ *
+ *  - **Mail anyone the caller named.** The recipient comes from
+ *    `getProgramOwner()`, the same server-side lookup the join-request notice
+ *    uses, so an accept cannot be turned into a way to mail an address of the
+ *    accepter's choosing.
+ *  - **Mail the owner about themselves.** An owner accepting an invitation to
+ *    their own program (a second squad's invite, a re-invite) would otherwise
+ *    get "you joined your program" in their own inbox.
+ *  - **Invent a standing.** `role` is the value read back off the membership
+ *    row, not an argument; a role this copy has not learned passes as null and
+ *    the sentence simply drops it.
+ */
+async function notifyOwnerOfJoin(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  programId: string,
+  memberRole: string | null,
+): Promise<void> {
+  const owner = await getProgramOwner(programId);
+  // An unclaimed or mid-claim program has nobody to tell, and an owner does not
+  // need announcing to themselves.
+  if (!owner || owner.userId === userId) return;
+
+  const [{ data: joiner }, { data: program }] = await Promise.all([
+    admin
+      .from("users")
+      .select("email, first_name, last_name")
+      .eq("id", userId)
+      .maybeSingle(),
+    admin
+      .from("programs")
+      .select("school_name, team")
+      .eq("id", programId)
+      .maybeSingle(),
+  ]);
+
+  const joinerEmail = (joiner?.email as string | null)?.trim();
+  // Nothing to name them by. A notice that says "somebody joined" is worse
+  // than the roster row the owner can already read.
+  if (!joinerEmail) {
+    console.warn("[join] new member has no address to announce", { programId });
+    return;
+  }
+
+  const role =
+    memberRole !== null &&
+    Object.prototype.hasOwnProperty.call(NOTICE_ROLES, memberRole)
+      ? (memberRole as JoinedRole)
+      : null;
+
+  const sent = await sendEmail(
+    memberJoinedOwnerEmail({
+      to: owner.email,
+      ownerName: owner.name,
+      // Same fallback as `loadInvite`: a program row that went missing should
+      // not take the whole notice down with it.
+      programName: program
+        ? programDisplayName(
+            program.school_name as string,
+            program.team as string | null,
+          )
+        : "your program",
+      joinerEmail,
+      joinerName: displayName(
+        (joiner?.first_name as string | null) ?? null,
+        (joiner?.last_name as string | null) ?? null,
+      ),
+      role,
+    }),
+  );
+
+  if (!sent.ok) {
+    console.warn("[join] member-joined notice not delivered", {
+      message: sent.error,
     });
   }
 }
@@ -220,7 +331,10 @@ export async function acceptInvite(token: string): Promise<JoinActionResult> {
   if (!outcome.ok) return { ok: false, error: describe(outcome) };
 
   if (user?.id) {
-    await adoptMembership(createAdminClient(), user.id, outcome.programId);
+    const admin = createAdminClient();
+    const role = await adoptMembership(admin, user.id, outcome.programId);
+    // Before `finishJoin`, which redirects by throwing.
+    await notifyOwnerOfJoin(admin, user.id, outcome.programId, role);
   }
   return finishJoin(outcome.programId);
 }
@@ -264,7 +378,9 @@ export async function acceptPendingInvite(
   if (!outcome.ok) return { ok: false, error: describe(outcome) };
 
   if (user?.id) {
-    await adoptMembership(createAdminClient(), user.id, outcome.programId);
+    const admin = createAdminClient();
+    const role = await adoptMembership(admin, user.id, outcome.programId);
+    await notifyOwnerOfJoin(admin, user.id, outcome.programId, role);
   }
   return finishJoin(outcome.programId);
 }
@@ -352,7 +468,9 @@ export async function createAccountAndAccept(
   // because `createUser` succeeded. See `adoptMembership` for why that order is
   // the whole point.
   if (created?.user?.id) {
-    await adoptMembership(admin, created.user.id, outcome.programId);
+    const joinerId = created.user.id;
+    const role = await adoptMembership(admin, joinerId, outcome.programId);
+    await notifyOwnerOfJoin(admin, joinerId, outcome.programId, role);
   }
   return finishJoin(outcome.programId);
 }

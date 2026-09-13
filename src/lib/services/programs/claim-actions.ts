@@ -1,6 +1,7 @@
 "use server";
 
 import { createHash, randomBytes } from "node:crypto";
+import { after } from "next/server";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -8,11 +9,13 @@ import {
   sendEmail,
   claimVerifyAddressEmail,
   inviteRequestReceivedEmail,
+  joinRequestOwnerNoticeEmail,
 } from "@/lib/services/email";
 import { programDisplayName } from "@/lib/data/programs-server";
 import { checkClaimEmail } from "./domain-match";
 import { toClaimRole, type ClaimRoleValue } from "./claim-roles";
 import { nextClaimStatus, type ClaimStatus } from "./claim-state";
+import { getProgramOwner } from "./program-owner";
 import { siteUrl } from "@/lib/site-url";
 
 export type ActionOutcome = { ok: true } | { ok: false; error: string };
@@ -987,7 +990,7 @@ async function fileRequest(row: {
   note?: string | null;
   schoolName?: string | null;
   team?: string | null;
-}): Promise<ActionOutcome> {
+}): Promise<FileRequestOutcome> {
   const db = createAdminClient();
   const { error } = await db.from("program_requests").insert({
     kind: row.kind,
@@ -1003,16 +1006,27 @@ async function fileRequest(row: {
   if (error) {
     // The partial unique index collapses repeat clicks into the one row the
     // reviewer already has. Telling someone their second request "failed"
-    // would be wrong — it is already filed.
-    if (error.code === "23505") return { ok: true };
+    // would be wrong — it is already filed. `created: false` is for the
+    // caller's own bookkeeping (it decides whether a notice fires) and must
+    // never surface to the requester — see `requestInvite`.
+    if (error.code === "23505") return { ok: true, created: false };
     console.error("[claim] could not file request", {
       kind: row.kind,
       error: error.message,
     });
     return { ok: false, error: "We could not record that. Try again." };
   }
-  return { ok: true };
+  return { ok: true, created: true };
 }
+
+/**
+ * `ActionOutcome` plus one internal fact: did this call insert a row, or did
+ * the unique index fold it into one already open? The public actions collapse
+ * this back to a plain `ActionOutcome` before returning, so the distinction
+ * never reaches the form.
+ */
+type FileRequestOutcome =
+  { ok: true; created: boolean } | { ok: false; error: string };
 
 /** The bits of a program the request actions need, resolved from its key. */
 async function programForKey(
@@ -1067,11 +1081,60 @@ export async function requestInvite(input: {
 
   if (!filed.ok) return filed;
 
+  // The owner notice — the one email here that DOES key on whether a new row
+  // was created, because that is the only thing that stops a resubmitted form
+  // from mailing the owner twice (the unique index folds the repeat into the
+  // row already on file; `created: false` is how we know it did). Keying on
+  // it is safe ONLY because the whole send lives in `after()`: the lookup, the
+  // render and the request to Resend all run once this action's response has
+  // already left, so a first submission and a duplicate return the same value
+  // at the same moment. Await it here and the extra round-trips on the
+  // `created` branch would leak, through timing, whether that (address,
+  // program) pair already had a request open — the oracle the receipt below
+  // was designed to avoid.
+  //
+  // The recipient is resolved from `program_members`, never from the form: an
+  // anonymous action cannot be allowed to choose who our mail reaches. A
+  // program with no owner yet (unclaimed, mid-claim) has nobody to tell, and
+  // the request still sits in the admin queue exactly as before.
+  if (filed.created) {
+    const programName = programDisplayName(program.schoolName, program.team);
+    const requesterName = input.name?.trim() || null;
+    const programId = program.id;
+    const programKey = input.programKey;
+
+    after(async () => {
+      const owner = await getProgramOwner(programId);
+      if (!owner) return;
+
+      const sent = await sendEmail(
+        joinRequestOwnerNoticeEmail({
+          to: owner.email,
+          ownerName: owner.name,
+          programName,
+          // Normalised the way `fileRequest` stored it, so the address in the
+          // mail is the one the owner will see on the roster row.
+          requesterEmail: email.toLowerCase(),
+          requesterName,
+        }),
+      );
+
+      if (!sent.ok) {
+        // Same shape as the receipt: the row is already written and the
+        // roster page shows it regardless. `sendEmail` logged the cause.
+        console.warn("[claim] join-request owner notice not sent", {
+          programKey,
+        });
+      }
+    });
+  }
+
   // The receipt — deliberately NOT a mail relay, and deliberately NOT a timing
   // oracle. This action is anonymous and unauthenticated: mailing whatever
   // address the form carried would let anyone send our mail to any inbox, and
-  // gating the send on "did this call create a new request row" would leak,
-  // through timing, whether that (address, program) pair already had one open.
+  // awaiting a send gated on "did this call create a new request row" would
+  // leak, through timing, whether that (address, program) pair already had
+  // one open.
   //
   // So the send turns on TWO facts, and BOTH are about the CALLER alone:
   //
@@ -1179,12 +1242,14 @@ export async function raiseObjection(input: {
     }
   }
 
-  return fileRequest({
+  const filed = await fileRequest({
     kind: "ownership_dispute",
     programId: program.id as string,
     email,
     note: input.note,
   });
+  // Collapse the internal `created` flag: the form only ever learns "recorded".
+  return filed.ok ? { ok: true } : filed;
 }
 
 /** F3.1 — the program is not in the directory. */
@@ -1201,10 +1266,12 @@ export async function submitUnlistedProgram(input: {
 
   // This used to console.log and return success while the form told the user
   // "we have {school}, we'll email you". Now it is a row somebody can act on.
-  return fileRequest({
+  const filed = await fileRequest({
     kind: "unlisted_program",
     email,
     schoolName: school,
     team: input.team,
   });
+  // Collapse the internal `created` flag: the form only ever learns "recorded".
+  return filed.ok ? { ok: true } : filed;
 }
