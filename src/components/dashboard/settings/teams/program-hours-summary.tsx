@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { AlertTriangle, ChevronRight } from "lucide-react";
-import { SettingsCard } from "@/components/dashboard/settings/settings-card";
+import {
+  SETTINGS_HOURS_FIGURE,
+  SettingsCard,
+} from "@/components/dashboard/settings/settings-card";
 import { YouPill } from "@/components/ui/new-pill";
 import type { ProgramUsage } from "@/lib/data/usage-server";
 import type { MemberRole } from "@/lib/data/team-settings-server";
@@ -81,10 +84,7 @@ export function ProgramHoursSummary({
       <div className="flex flex-wrap items-baseline gap-2">
         {/* Proportional figures on purpose — `tabular-nums` loosens a
             standalone number at this size; it is for columns. */}
-        <span
-          className="text-[24px] leading-[1.2] font-light tracking-[-0.4px]"
-          style={{ color: figureColor }}
-        >
+        <span className={SETTINGS_HOURS_FIGURE} style={{ color: figureColor }}>
           {formatHoursLong(left)}
         </span>
         <span className="text-[12px] text-[var(--ink-500)]">

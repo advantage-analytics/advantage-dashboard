@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
 import {
+  SETTINGS_FACT_FIGURE,
   SettingsCard,
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
@@ -183,7 +184,12 @@ function PlanContent() {
               className="flex min-w-0 flex-col gap-1.5 px-6 py-5"
             >
               <dt className="eyebrow whitespace-nowrap">{fact.label}</dt>
-              <dd className="tabular text-[22px] leading-[1.15] font-light tracking-[-0.4px] whitespace-nowrap text-[var(--ink-900)]">
+              <dd
+                className={cn(
+                  SETTINGS_FACT_FIGURE,
+                  "tabular whitespace-nowrap text-[var(--ink-900)]",
+                )}
+              >
                 {fact.value}
               </dd>
             </div>
