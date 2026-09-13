@@ -1,11 +1,6 @@
 import { Answer, SettledNotice, WarningGlyph } from "./ImportIdentityNotice";
 import { noticeEnterCls, warningStripCls } from "./styles";
-import type { StoppedResult } from "./score-state";
-
-const SETTLED: Record<StoppedResult, string> = {
-  Retired: "Marked as retired.",
-  Unfinished: "Marked as unfinished.",
-};
+import type { RetiredSide, StoppedResult } from "./score-state";
 
 /**
  * "Did it end early?" — asked when Save meets a score nobody has won.
@@ -15,31 +10,87 @@ const SETTLED: Record<StoppedResult, string> = {
  * which, so the wizard asks rather than guessing, and only once they try to
  * save — asking while they are still moving between sets would nag.
  *
+ * "Yes, a player retired" asks one thing more: who. A retirement has a winner
+ * and an unfinished match does not, and the score alone cannot say which side
+ * stayed on court. It is the same yellow question again, not a control inside
+ * the settled line — the answer is still missing, so the page still says so.
+ *
  * The DS warning question (`primitives.md` › Warning question): stacked text
  * answers on amber, a settled answer collapses to a grey line that keeps
  * "Change". "No" isn't an answer to record — it hands focus back to the score.
  */
 export function ScoreCheckNotice({
   answer,
+  retiredSide,
+  playerName,
+  opponentName,
   onAnswer,
+  onRetiredSide,
   onFinishScore,
   onChange,
 }: {
   answer: StoppedResult | null;
+  retiredSide: RetiredSide | undefined;
+  playerName: string;
+  opponentName: string;
   onAnswer: (result: StoppedResult) => void;
+  onRetiredSide: (side: RetiredSide) => void;
   /** "No, I'll finish the score" — dismiss and put the cursor in the score. */
   onFinishScore: () => void;
-  /** Withdraws the answer and asks again. */
+  /** Withdraws the answer (and who retired) and asks again. */
   onChange: () => void;
 }) {
+  // A blank name would render " retired" — the rows still have to be tellable apart.
+  const names: Record<RetiredSide, string> = {
+    player: playerName.trim() || "Your player",
+    opponent: opponentName.trim() || "The opponent",
+  };
+
   // Each state is its own element type, never the same box restyled: the
   // yellow question and the grey line would otherwise morph into each other.
-  if (answer) {
+  if (answer === "Unfinished") {
     return (
       <SettledNotice
-        message={`${SETTLED[answer]} The score stays as entered.`}
+        message="Marked as unfinished. The score stays as entered."
         onChange={onChange}
       />
+    );
+  }
+
+  if (answer === "Retired" && retiredSide) {
+    return (
+      <SettledNotice
+        message={`Marked as retired by ${names[retiredSide]}. The score stays as entered.`}
+        onChange={onChange}
+      />
+    );
+  }
+
+  if (answer === "Retired") {
+    return (
+      <div
+        key="who-retired"
+        role="status"
+        aria-live="polite"
+        className={`${warningStripCls} pb-1.5 ${noticeEnterCls}`}
+      >
+        <WarningGlyph />
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <p>
+            <b className="font-medium">Who retired?</b> The other player takes
+            the win.
+          </p>
+          <div className="-ml-2.5 flex flex-col">
+            <Answer onClick={() => onRetiredSide("opponent")}>
+              {names.opponent} retired
+            </Answer>
+            <Answer onClick={() => onRetiredSide("player")}>
+              {names.player} retired
+            </Answer>
+            <Answer onClick={onChange}>Go back</Answer>
+          </div>
+        </div>
+      </div>
     );
   }
 

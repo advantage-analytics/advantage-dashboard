@@ -1,7 +1,10 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  asksIfEndedEarly,
   isStoppedResult,
+  scoreCheckAnswered,
+  retiredWinner,
   firstOpenSet,
   scoreGames,
   scoreColumns,
@@ -266,6 +269,28 @@ test.describe("scoreUndecided — when Save asks whether the match ended early",
     expect(isStoppedResult("Unfinished")).toBe(true);
     expect(isStoppedResult("")).toBe(false);
     expect(isStoppedResult("Rudy Wins")).toBe(false);
+  });
+
+  test("Retired is only an answer once it says who retired", () => {
+    expect(scoreCheckAnswered({ result: "Unfinished" })).toBe(true);
+    expect(scoreCheckAnswered({ result: "Retired" })).toBe(false);
+    expect(
+      scoreCheckAnswered({ result: "Retired", retiredSide: "opponent" }),
+    ).toBe(true);
+    expect(scoreCheckAnswered({ result: "", retiredSide: "player" })).toBe(
+      false,
+    );
+  });
+
+  test("a SwingVision import is never asked", () => {
+    expect(asksIfEndedEarly("swing-vision")).toBe(false);
+    expect(asksIfEndedEarly("splitstep")).toBe(true);
+    expect(asksIfEndedEarly(null)).toBe(true);
+  });
+
+  test("the side that did not retire takes the win", () => {
+    expect(retiredWinner("opponent")).toBe("player1");
+    expect(retiredWinner("player")).toBe("player2");
   });
 });
 

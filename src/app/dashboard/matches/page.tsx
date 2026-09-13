@@ -14,6 +14,7 @@ import { MatchesPageContent } from "@/components/dashboard/matches/matches-page-
 import { MatchesTitleRow } from "@/components/dashboard/matches/matches-title-row";
 import { MatchesDayZero } from "@/components/dashboard/matches/matches-day-zero";
 import { MatchesSkeleton } from "@/components/dashboard/matches/matches-skeleton";
+import { MatchDrawerSlot } from "@/components/dashboard/matches/match-drawer-slot";
 import { listMatchDrafts } from "@/lib/wizard/actions";
 
 /**
@@ -86,8 +87,8 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   // a door the next page closes.
   if (matches.length === 0 && drafts.length === 0) {
     return (
-      <div className="flex w-full flex-1 flex-col bg-white">
-        <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-14 pt-5 pb-8">
+      <div className="flex w-full flex-1 bg-[var(--surface-card)]">
+        <div className="flex min-w-0 flex-1 flex-col px-14 pt-5 pb-6">
           <MatchesDayZero
             scope={isTeam ? "team" : "personal"}
             canUpload={isTeam ? canUploadForProgram(workspace.active) : true}
@@ -103,9 +104,11 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   const scope = isTeam ? "team" : "personal";
   const canUpload = !isTeam || canUploadForProgram(workspace.active);
   const scopeKey = `${user.id}:${workspace.active.id}`;
+  // A row: the page column, then the slot the match drawer portals into — so
+  // the rail sits beside the column and the table reflows, as on the Roster.
   return (
-    <div className="w-full flex-1 bg-white">
-      <div className="mx-auto flex max-w-screen-2xl flex-col gap-6 px-6 pt-5 pb-6 lg:px-14">
+    <div className="flex w-full flex-1 bg-[var(--surface-card)]">
+      <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pt-5 pb-6">
         <WidgetBoundary key={`title:${scopeKey}`} label="Match summary">
           <Suspense
             fallback={<MatchesTitleRow scope={scope} canUpload={canUpload} />}
@@ -129,6 +132,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
           </Suspense>
         </WidgetBoundary>
       </div>
+      <MatchDrawerSlot />
     </div>
   );
 }

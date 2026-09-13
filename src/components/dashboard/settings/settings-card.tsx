@@ -225,6 +225,8 @@ export function SettingsUnderlineInput({
   className,
   ...props
 }: React.InputHTMLAttributes<HTMLInputElement> & {
+  /** React 19 passes `ref` as a prop; the spread below lands it on the input. */
+  ref?: React.Ref<HTMLInputElement>;
   mono?: boolean;
   /** Swap the hairline for a 2px blue rule — a field the page is asking for. */
   emphasis?: boolean;

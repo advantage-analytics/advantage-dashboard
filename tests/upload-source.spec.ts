@@ -226,6 +226,39 @@ const stepModule = (() => {
         );
         return note;
       }
+      // The roster menu is rendered for real too: it is the For menu's rows,
+      // shared with the Edit Match dialog.
+      if (id === "./RosterMenu") {
+        const menu: Record<string, unknown> = {};
+        runInNewContext(
+          ts.transpileModule(
+            readFileSync(resolve(`${WIZARD}/RosterMenu.tsx`), "utf8"),
+            {
+              compilerOptions: {
+                module: ts.ModuleKind.CommonJS,
+                jsx: ts.JsxEmit.ReactJSX,
+                target: ts.ScriptTarget.ES2022,
+              },
+            },
+          ).outputText,
+          {
+            exports: menu,
+            require: (dep: string) => {
+              if (dep === "react/jsx-runtime") return jsx;
+              if (dep === "lucide-react") return icons;
+              if (dep === "@/lib/utils") return { cn };
+              if (dep === "@/lib/data/match-utils") return { getInitials };
+              if (dep === "@/components/ui/state-pill")
+                return {
+                  StatePill: ({ children }: { children: React.ReactNode }) =>
+                    React.createElement("span", { "data-pill": "" }, children),
+                };
+              throw new Error(`unexpected import in the roster menu: ${dep}`);
+            },
+          },
+        );
+        return menu;
+      }
       throw new Error(`unexpected import in the source step: ${id}`);
     },
   });

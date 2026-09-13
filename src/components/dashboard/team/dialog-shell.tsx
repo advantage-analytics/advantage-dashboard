@@ -51,7 +51,8 @@ export function RosterDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
-  description: string;
+  /** Usually a sentence; the Edit Match dialog puts its event line and one link here. */
+  description: React.ReactNode;
   /** 520 for add, invite, edit and merge; 480 for review requests; 440 kept for a narrower future case. */
   width?: 440 | 480 | 520 | 560;
   children: React.ReactNode;
