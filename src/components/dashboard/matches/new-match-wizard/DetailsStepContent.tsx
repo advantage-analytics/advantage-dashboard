@@ -108,7 +108,7 @@ import { formatHoursMinutes, setHasData } from "./utils";
 import { FORMAT_OPTIONS, Required, ScoreBlock } from "./ScoreBlock";
 import { AnimatedHeight } from "./AnimatedHeight";
 import { ScoreCheckNotice } from "./ScoreCheckNotice";
-import { firstOpenSet, isStoppedResult } from "./score-state";
+import { firstOpenSet, isStoppedResult, scoreGames } from "./score-state";
 
 export interface DetailsStepContentProps {
   formData: FormData;
@@ -1282,11 +1282,7 @@ function DetailsStepContentImpl({
                   // its first. Not simply the first empty cell on the card: an
                   // earlier 7-6's optional tiebreak box and the dashed "add a
                   // set" cell are both empty and neither is what's unfinished.
-                  const open = firstOpenSet({
-                    bestOf: parseInt(formData.bestOf, 10) || 3,
-                    playerScores: formData.playerScores,
-                    opponentScores: formData.opponentScores,
-                  });
+                  const open = firstOpenSet(scoreGames(formData));
                   const cells = Array.from(
                     scoreRef.current?.querySelectorAll<HTMLInputElement>(
                       `input[data-set="${open}"]`,

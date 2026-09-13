@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { isStoppedResult, scoreUndecided } from "./score-state";
+import { isStoppedResult, scoreGames, scoreUndecided } from "./score-state";
 import type { FormData as MatchFormData, Step } from "./types";
 
 /**
@@ -23,13 +23,7 @@ export function useScoreCheck({
   handleCreateMatch: () => void;
 }) {
   const [asked, setAsked] = useState(false);
-  const undecided =
-    step === "match" &&
-    scoreUndecided({
-      bestOf: parseInt(formData.bestOf, 10) || 3,
-      playerScores: formData.playerScores,
-      opponentScores: formData.opponentScores,
-    });
+  const undecided = step === "match" && scoreUndecided(scoreGames(formData));
   const answered = isStoppedResult(formData.result);
   const visible = undecided && (asked || answered);
 

@@ -83,6 +83,7 @@ import {
 } from "./utils";
 import {
   isStoppedResult,
+  scoreGames,
   scoreUndecided,
   updateScoreState,
   type ScoreArrayField,
@@ -2301,11 +2302,7 @@ export function useUploadMatchWizard({
       // The write-time half of the flow's "did it end early?" question: a
       // score nobody won is saved only as Retired or Unfinished, never as a
       // plain final score that just happens to be missing a set.
-      const undecided = scoreUndecided({
-        bestOf: parseInt(formData.bestOf, 10) || 3,
-        playerScores: formData.playerScores,
-        opponentScores: formData.opponentScores,
-      });
+      const undecided = scoreUndecided(scoreGames(formData));
       if (undecided && !isStoppedResult(formData.result)) {
         setError("Finish the score, or say whether the match ended early.");
         return;

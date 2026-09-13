@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   isStoppedResult,
   firstOpenSet,
+  scoreGames,
   scoreColumns,
   scoreUndecided,
   setWinner,
@@ -288,7 +289,7 @@ test.describe("firstOpenSet — where finishing the score starts", () => {
     ).toBe(0);
   });
 
-  test("a 7-6 set is finished whether or not its tiebreak points were typed", () => {
+  test("a 7-6 set is finished on its games", () => {
     expect(
       firstOpenSet({
         bestOf: 3,
@@ -306,4 +307,10 @@ test.describe("firstOpenSet — where finishing the score starts", () => {
       firstOpenSet({ bestOf: 1, playerScores: [6], opponentScores: [4] }),
     ).toBe(0);
   });
+});
+
+test("scoreGames reads an unparseable format as best of 3", () => {
+  const scores = { playerScores: [6], opponentScores: [4] };
+  expect(scoreGames({ bestOf: "5", ...scores }).bestOf).toBe(5);
+  expect(scoreGames({ bestOf: "", ...scores }).bestOf).toBe(3);
 });

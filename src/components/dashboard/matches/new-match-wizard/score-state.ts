@@ -64,6 +64,17 @@ export interface ScoreGames {
   opponentScores: Cells;
 }
 
+/** The form's score, read the one way: an unparseable format is best of 3. */
+export function scoreGames(
+  formData: Pick<FormData, "bestOf" | "playerScores" | "opponentScores">,
+): ScoreGames {
+  return {
+    bestOf: parseInt(formData.bestOf, 10) || 3,
+    playerScores: formData.playerScores,
+    opponentScores: formData.opponentScores,
+  };
+}
+
 /**
  * Who took a set, from its games alone — or null while it is still open.
  *
@@ -76,9 +87,7 @@ export interface ScoreGames {
  * arrives with games and no tiebreak points at all (`EventPreset.score`), the
  * scorecard itself opens the TB column and moves focus there the moment 1-0 is
  * typed (`isTiebreakSet`), and stored matches keep only the losing side's
- * points, which for a 10-0 is a zero. Requiring points here refused real,
- * finished matches to catch a deciding set typed one game in — a shape the
- * scorecard already reads as a match tiebreak.
+ * points, which for a 10-0 is a zero.
  */
 export function setWinner(
   player: number | null | undefined,
@@ -98,8 +107,8 @@ export function setWinner(
 /**
  * The match so far, in play order: sets finished before the first open one,
  * and whether someone has already won. The one walk over the sets that
- * `scoreColumns` and `firstOpenSet` both read, so they cannot disagree about
- * where the match stands.
+ * `scoreColumns`, `firstOpenSet` and `scoreUndecided` all read, so they cannot
+ * disagree about where the match stands.
  */
 function progress({ bestOf, playerScores, opponentScores }: ScoreGames): {
   finished: number;
@@ -137,12 +146,13 @@ export function scoreColumns(
 ): { displayed: number; decided: boolean } {
   const { bestOf, filled } = input;
   const { finished, decided } = progress(input);
-  return decided
-    ? { displayed: Math.min(bestOf, Math.max(filled, finished)), decided }
-    : {
-        displayed: Math.min(bestOf, Math.max(2, filled, finished + 1)),
-        decided,
-      };
+  return {
+    displayed: Math.min(
+      bestOf,
+      decided ? Math.max(filled, finished) : Math.max(2, filled, finished + 1),
+    ),
+    decided,
+  };
 }
 
 /**
