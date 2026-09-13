@@ -29,3 +29,15 @@ ready).
   - [ ] Behaviour and gating are untouched: `canToggleSend`/`canEdit`/`canRemove`, the switch's optimistic write, `onEdit`, the archive-vs-remove branch and `w-[248px]` all read the same in the diff — only the three rows' JSX and the `lucide-react` import change.
   - [ ] `npm run typecheck` and `npm run lint` pass.
 - **notes:** "Neutral" is deliberate: `FloatMenuItem`'s icon slot defaults to `--blue` and `schedule/static/event-actions-menu.tsx` paints `Trash2` in `--danger` — do not copy either. This menu is hand-built on `Popover`; migrating it to `FloatMenu` (chrome.md says every dropdown should be) is out of scope here and belongs on its own branch.
+
+## T2 · Drop the event/school suffix from the drawer's recent-match rows
+
+- **status:** todo
+- **model:** sonnet
+- **files:** src/components/dashboard/team/player-drawer.tsx (recent-matches row, ~line 758), src/lib/data/team-roster-server.ts (`RosterRecentMatch.event`, `DbRecentMatch.tournament_name`, the select at ~367, the map at ~575), tests/team-roster-ids.spec.ts (fixture at ~163) — guess
+- **done when:**
+  - [ ] In the drawer's Recent matches list, each row's middle cell renders only `match.opponent`; the ` · {match.event}` suffix and its conditional are gone, and no row shows a trailing or leading "·"
+  - [ ] Result mark, `ScoreLine`, date and chevron in that row are unchanged (same grid, same classes)
+  - [ ] `RosterRecentMatch` no longer declares `event`, and the roster loader no longer selects or maps `tournament_name` for recent matches; `tests/team-roster-ids.spec.ts`'s recent-match fixture is updated to match and `npm run typecheck` passes
+  - [ ] The `SetupLine`/identity line ("#3 singles · Freshman") and the chart tooltip ("opponent · date") in the same drawer still render their "·" — nothing outside the recent-matches row changes
+- **notes:** `match.event` is `matches.tournament_name`, which for a dual holds the opposing program's name (`src/lib/schedule/actions.ts:896`) — that is the "school name". The player-profile page uses its own loader and is out of scope. Not a duplicate of T1; both touch player-drawer.tsx but different sections.
