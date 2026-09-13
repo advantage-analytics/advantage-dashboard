@@ -70,7 +70,7 @@ ready).
 
 ## T5 · Email the program owner when an invitee accepts and joins
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** `src/lib/services/email/templates/invite-request.ts` (or a sibling `member-joined.ts`), `src/lib/services/email/index.ts`, `src/lib/services/programs/join-actions.ts` (guess — the three accept actions `acceptInvite`, `acceptPendingInvite` and `createAccountAndAccept` all pass through `adoptMembership(admin, …)` then `finishJoin(programId)`, which is the one funnel after membership is confirmed; the admin client is already in hand there)
 - **needs:** T4
