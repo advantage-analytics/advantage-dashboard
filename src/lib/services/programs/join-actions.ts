@@ -27,6 +27,7 @@ import {
 } from "./invite-acceptance";
 import { joinHref, signInThenHref } from "./join-links";
 import { getProgramOwner } from "./program-owner";
+import { wantsNotification } from "@/lib/services/notifications/should-notify";
 
 /**
  * The ways an invitation is accepted, and the one that is refused.
@@ -263,6 +264,8 @@ function notifyOwnerOfJoin(
     // An unclaimed or mid-claim program has nobody to tell, and an owner does
     // not need announcing to themselves.
     if (!owner || owner.userId === userId) return;
+    // "Team activity" on Settings › Preferences — the owner's, not the joiner's.
+    if (!(await wantsNotification(owner.userId, "notifyTeamActivity"))) return;
 
     const [{ data: joiner }, { data: program }] = await Promise.all([
       admin

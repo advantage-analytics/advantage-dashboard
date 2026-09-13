@@ -61,6 +61,7 @@ import {
 } from "@/lib/services/splitstep/resubmit-job";
 import { gradeResults } from "@/lib/services/splitstep/grade-results";
 import { deriveAndPublish } from "@/lib/services/splitstep/derive-and-publish";
+import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -587,7 +588,17 @@ export async function POST(request: NextRequest) {
       // resubmitJob() itself enforces the rest: one automatic attempt per
       // chain, the 3-attempt ceiling, no non-terminal duplicate, and that the
       // source blob still exists.
-      if (!retryable) return;
+      // "Email me if analysis fails" — only once the failure is final. A
+      // download failure about to be retried is not yet news; the child job
+      // will report its own outcome.
+      if (!retryable) {
+        await notifyAnalysisOutcome({
+          supabase,
+          jobId: failedJobId,
+          outcome: "failed",
+        });
+        return;
+      }
 
       const result = await resubmitJob({
         supabase,
@@ -606,6 +617,11 @@ export async function POST(request: NextRequest) {
           failedJobId,
           reason: result.reason,
           message: result.message,
+        });
+        await notifyAnalysisOutcome({
+          supabase,
+          jobId: failedJobId,
+          outcome: "failed",
         });
       }
     });

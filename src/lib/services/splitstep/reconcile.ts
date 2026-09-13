@@ -28,6 +28,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { normaliseKey, parseWebhookPayload } from "./webhook-payload";
 import { releaseQuota } from "./quota";
 import { isDownloadFailure, resubmitJob } from "./resubmit-job";
+import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
 import { resolveSplitstepVendorApiConfig } from "./deployment-config";
 
 const LOG = "[splitstep-reconcile]";
@@ -351,7 +352,12 @@ async function applyPolledFailure(params: {
         jobId,
         reason: result.reason,
       });
+      await notifyAnalysisOutcome({ supabase, jobId, outcome: "failed" });
     }
+  } else {
+    // Final, same as the webhook's branch: the uploader's "Email me if
+    // analysis fails". Deduped per job, so a webhook landing later is silent.
+    await notifyAnalysisOutcome({ supabase, jobId, outcome: "failed" });
   }
 
   return true;

@@ -15,6 +15,7 @@
 
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { persistTranscript } from "./persist-transcript";
+import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
 import type { Transcript } from "./derivation";
 
 const LOG = "[splitstep:derive]";
@@ -65,6 +66,7 @@ export async function deriveAndPublish(params: {
         .update({ status: "derivation_failed", error_message: written.reason })
         .eq("id", jobId);
       console.error(`${LOG} refused`, { jobId, reason: written.reason });
+      await notifyAnalysisOutcome({ supabase, jobId, outcome: "failed" });
       return { ok: false, reason: written.reason };
     }
 
@@ -109,6 +111,7 @@ export async function deriveAndPublish(params: {
         matchId,
         error: error.message,
       });
+      await notifyAnalysisOutcome({ supabase, jobId, outcome: "failed" });
       return { ok: false, reason: `${fn} failed: ${error.message}` };
     }
 
@@ -116,6 +119,12 @@ export async function deriveAndPublish(params: {
       .from("processing_jobs")
       .update({ status: "completed", error_message: null })
       .eq("id", jobId);
+
+    // The uploader's "Email me when analysis is ready". Here and not in the
+    // webhook's completed branch, because this write is what makes the report
+    // page readable — and here rather than in each caller so a re-run from the
+    // CLI announces itself the same way. Deduped per job; never throws.
+    await notifyAnalysisOutcome({ supabase, jobId, outcome: "ready" });
 
     // `unreconciled` is reachable now (ACCEPT_UNRECONCILED_FOLD): the fold did
     // not reproduce the entered score and the rows were written anyway, with
@@ -150,6 +159,7 @@ export async function deriveAndPublish(params: {
         () => undefined,
       );
     console.error(`${LOG} threw`, { jobId, reason });
+    await notifyAnalysisOutcome({ supabase, jobId, outcome: "failed" });
     return { ok: false, reason };
   }
 }

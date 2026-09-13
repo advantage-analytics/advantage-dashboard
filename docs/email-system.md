@@ -1,7 +1,7 @@
 # Transactional email
 
-**Status:** current as of 2026-08-24. Every claim below was verified against the
-tree at `splitstep-integration` @ `f871bd5`.
+**Status:** current as of 2026-09-13 (notification switches, allowance alert,
+analysis emails wired).
 **Read alongside:** the doc comment on [`src/lib/services/email/index.ts`](../src/lib/services/email/index.ts) — it is the authoritative list of which emails exist and what fires each one. Update it there; this doc does not duplicate it.
 
 How this application sends mail, what a new email has to look like, and the rules
@@ -120,7 +120,16 @@ phone.
 5. **Call it from a server action or route handler**, after the row it announces
    is already written, and handle `{ ok: false }`.
 6. **If a Settings switch drives it**, gate the send on the preference and append
-   `preferenceNote("<the switch's exact label>")` to the `note`.
+   `preferenceNote("<the switch's exact label>")` to the `note`. The gate is
+   `wantsNotification(userId, key)` / `getNotificationPrefs(userIds)` from
+   `src/lib/services/notifications/should-notify.ts` — service-role reads, so
+   they work from a webhook or an `after()` block where the recipient is not the
+   caller. An absent `user_preferences` row answers with the column defaults.
+7. **If the trigger can fire twice for one event** (a redelivered webhook, a
+   derivation re-run, a threshold every later upload crosses again), call
+   `claimSend("<type>:<subject>[:<period>]")` before rendering and send only when
+   it returns true. It inserts into `notification_sends`; the second caller finds
+   the row.
 
 ---
 
@@ -196,16 +205,17 @@ that file.
 Inherited from the pilot branch (merged in PR #131), each waiting on one call
 site or one decision:
 
-- **`analysisReadyEmail` / `analysisFailedEmail`** exist and nothing sends them.
-  The call belongs at the point a job becomes readable — the derivation publish
-  step on `splitstep-derivation`. The guards are already in place:
-  `user_preferences` treats absent rows as defaults (ready on, failed on,
-  digest off), and `sendEmail()` checks suppression. The templates take a
-  `statsPending` flag — with derivation's `timeline` status, that flag is what
-  distinguishes "your report is ready" from "processing finished, numbers to
-  follow".
+- ~~`analysisReadyEmail` / `analysisFailedEmail`~~ — **wired 2026-09-13**
+  (`services/notifications/analysis-mail.ts`). Ready fires from
+  `deriveAndPublish()` once `completed` is written; failed fires from the
+  webhook's and the poller's failed branches only once the failure is final
+  (an auto-resubmitted download failure is not news yet) and from every
+  `derivation_failed` path. Both key `analysis_<outcome>:<job_id>` in
+  `notification_sends`.
 - **`teamDigestEmail` + `digestIsWorthSending`** exist and nothing schedules
-  them. Needs a Monday cron — and Vercel crons run in Production only.
+  them. Needs a Monday cron — and Vercel crons run in Production only. Its
+  switch is hidden from Settings › Preferences until then (the column stays);
+  re-add the row in `preferences-form.tsx` when the cron lands.
 - **Sending volume against the free tier.** Resend's free plan allows 3,000
   sends a month and **100 a day**; over the cap it pauses rather than billing.
   Every wired send today is triggered by one human action, so the daily limit

@@ -32,6 +32,7 @@ import {
 import { resolveSplitstepDeploymentConfig } from "@/lib/services/splitstep/deployment-config";
 import { createVideoUrlStrategy } from "@/lib/services/splitstep/video-url";
 import { releaseQuota, reserveQuota } from "@/lib/services/splitstep/quota";
+import { notifyUsageThreshold } from "@/lib/services/notifications/usage-alert-mail";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
 import {
@@ -127,6 +128,10 @@ export async function POST(request: NextRequest) {
 
     releaseQuota(jobId) {
       return releaseQuota(adminClient(), jobId);
+    },
+
+    notifyUsageThreshold(params) {
+      after(() => notifyUsageThreshold(params));
     },
 
     async updateJob(jobId, patch) {
