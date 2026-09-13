@@ -2430,7 +2430,12 @@ export function useUploadMatchWizard({
           ? await supabase
               .from("matches")
               .update({
-                score: matchRow.score,
+                // A retired or defaulted line's winner rides on the score, and
+                // the typed form does not carry it — writing the form's score
+                // alone would hand the line back to whoever led on games.
+                score: preset?.score?.winner
+                  ? { ...matchRow.score, winner: preset.score.winner }
+                  : matchRow.score,
                 player1_name: matchRow.player1_name,
                 player2_name: matchRow.player2_name,
                 // Only when one was resolved. Spreading it unconditionally would

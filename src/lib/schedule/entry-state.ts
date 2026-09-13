@@ -17,6 +17,7 @@ import type {
   EntryMatch,
   EntryResult,
   EventEntry,
+  MatchEnding,
   OutcomeKind,
   ResolvedOutcome,
 } from "./types";
@@ -191,6 +192,12 @@ export function supportsVideo(
 
 /** Did we win this match? Null when it has no score, or the sets are level. */
 export function matchWon(match: EntryMatch): boolean | null {
+  // A retirement or a default names its winner; the games cannot, because the
+  // side that stopped may be ahead (3-6, 2-1 ret. is the other player's line).
+  const winner = match.score?.winner;
+  if (winner === "player1" || winner === "player2") {
+    return winner === "player1";
+  }
   const sets = setsWon(match);
   if (!sets || sets.us === sets.them) return null;
   return sets.us > sets.them;
@@ -444,4 +451,33 @@ export function readyMatchIdsFrom(entries: EventEntry[]): string[] {
       )
       .map((match) => match.id),
   );
+}
+
+/**
+ * `matches.result` → how the match ended. The column is a context string
+ * ("Final Score", "Unfinished", …); only the two words the score flow writes
+ * for a stopped match mean an ending.
+ */
+export function matchEndingFrom(
+  result: string | null | undefined,
+): MatchEnding | null {
+  if (result === "Retired") return "retired";
+  if (result === "Defaulted") return "defaulted";
+  return null;
+}
+
+/** The `matches.result` word for an ending, and "Final Score" for none. */
+export function matchResultFor(ending: MatchEnding | null): string {
+  if (ending === "retired") return "Retired";
+  if (ending === "defaulted") return "Defaulted";
+  return "Final Score";
+}
+
+/** The short mark a stopped match's score carries: "ret." or "def.". */
+export function endingMark(
+  ending: MatchEnding | null | undefined,
+): string | null {
+  if (ending === "retired") return "ret.";
+  if (ending === "defaulted") return "def.";
+  return null;
 }

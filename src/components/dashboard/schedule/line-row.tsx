@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { PersonAvatar } from "@/components/ui/person-avatar";
@@ -10,10 +9,9 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { scoreSetsFrom } from "@/lib/ui/score-format";
-import { ScoreEntry } from "@/components/dashboard/schedule/score-entry";
 import { RowAction } from "@/components/dashboard/schedule/row-action";
 import {
-  outcomeForRound,
+  endingMark,
   resolveEntryResult,
   resultState,
   resultWon,
@@ -21,6 +19,7 @@ import {
   type EntryState,
 } from "@/lib/schedule/entry-state";
 import { LINE_STATUS } from "@/lib/schedule/line-status";
+import { lineupForfeitSide } from "@/lib/schedule/entry-plan";
 import type { EntryMatch, EventEntry } from "@/lib/schedule/types";
 
 /**
@@ -30,6 +29,11 @@ import type { EntryMatch, EventEntry } from "@/lib/schedule/types";
  * they are the same claim in the same vocabulary — slot, outcome, matchup,
  * score, and one action that depends only on what the line is waiting for.
  * Two spellings of that action is two screens disagreeing about one job.
+ *
+ * Nothing is scored in place. "Add result" and "Edit result" are links into
+ * the event's `/score` flow with this line (and, on a tournament, this round)
+ * preset — the one place a result is written, so a row cannot grow a second
+ * form with its own rules.
  */
 export function LineRow({
   entry,
@@ -77,10 +81,7 @@ export function LineRow({
    */
   viewer?: LineViewer | null;
 }) {
-  const [scoring, setScoring] = useState(false);
-
   const result = resolveEntryResult(entry, round);
-  const outcome = outcomeForRound(entry, round);
   const isNonPlayed = result.kind === "non-played";
 
   // A non-played line with no player on our side renders "— no available
@@ -100,19 +101,6 @@ export function LineRow({
   // one row per round, so asking the entry would give sibling rounds one state.
   const state = resultState(result);
 
-  if (scoring) {
-    return (
-      <ScoreEntry
-        entryId={entry.id}
-        ourLabel={entry.playerLabels[0] ?? "Our player"}
-        round={round}
-        initialOpponent={theirLabel}
-        initialOutcome={outcome?.outcome ?? null}
-        onDone={() => setScoring(false)}
-      />
-    );
-  }
-
   const action = (
     <Action
       state={state}
@@ -120,34 +108,39 @@ export function LineRow({
       entryId={entry.id}
       matchId={match?.id ?? null}
       videoAllowed={supportsVideo(entry, round)}
-      canEdit={canEdit}
-      onScore={() => setScoring(true)}
+      // A "No player" forfeit, either side's, is the lineup's own answer: it
+      // changes through Edit dual, not the score flow.
+      canEdit={canEdit && lineupForfeitSide(entry) === null}
+      scoreHref={scoreHref(entry.eventId, entry.id, round)}
     />
   );
 
   if (split) {
     const sets = isNonPlayed || !match ? [] : scoreSetsFrom(match.score);
-    const unset = entry.playerLabels.length === 0 && !isNonPlayed;
+    // A dual saves with every line set, so a line with nobody on it is the
+    // "No player" forfeit — there is no unset line to offer to fill.
+    const noPlayer = entry.playerLabels.length === 0;
+    const theirNoPlayer = lineupForfeitSide(entry) === "theirs";
     return (
       <div className={`${SPLIT_ROW} ${columns}`}>
         <SlotLabel>{label}</SlotLabel>
 
-        {unset ? (
-          <span className="flex">
-            <EmptyMark label="Line not set" />
+        <span className="flex min-w-0 items-center gap-2.5">
+          <PlayerAvatars
+            labels={entry.playerLabels}
+            userIds={entry.playerUserIds}
+            viewer={viewer}
+          />
+          <span
+            className={
+              noPlayer
+                ? "truncate text-[13px] text-[var(--ink-500)]"
+                : "truncate text-[13px] font-medium text-[var(--ink-900)]"
+            }
+          >
+            {noPlayer ? "No player" : ourLabel || "—"}
           </span>
-        ) : (
-          <span className="flex min-w-0 items-center gap-2.5">
-            <PlayerAvatars
-              labels={entry.playerLabels}
-              userIds={entry.playerUserIds}
-              viewer={viewer}
-            />
-            <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
-              {ourLabel || "—"}
-            </span>
-          </span>
-        )}
+        </span>
 
         <span
           className="flex min-w-0 truncate text-[12px]"
@@ -155,6 +148,15 @@ export function LineRow({
         >
           {theirLabel ? (
             <span className="truncate">{theirLabel}</span>
+          ) : theirNoPlayer ? (
+            <span className="truncate text-[var(--ink-500)]">
+              No player · we win by forfeit
+            </span>
+          ) : noPlayer ? (
+            // The lineup's own words for our forfeit, so the two screens agree.
+            <span className="truncate text-[var(--ink-500)]">
+              They win by forfeit
+            </span>
           ) : (
             <EmptyMark label="No opponent yet" />
           )}
@@ -178,17 +180,15 @@ export function LineRow({
               style={{ color: "var(--ink-900)" }}
             />
           ) : null}
+          {sets.length > 0 && endingMark(match?.ending) ? (
+            // How a stopped match ended rides on its score, as on a scoresheet.
+            <span className="text-[11px] whitespace-nowrap text-[var(--ink-500)]">
+              {endingMark(match?.ending)}
+            </span>
+          ) : null}
         </span>
 
-        <span className="flex min-w-0">
-          {unset ? (
-            canEdit ? (
-              <SetLineAction eventId={entry.eventId} />
-            ) : null
-          ) : (
-            action
-          )}
-        </span>
+        <span className="flex min-w-0">{action}</span>
 
         <span className="flex">
           {match ? (
@@ -237,16 +237,39 @@ export function LineRow({
         ) : null}
       </span>
 
-      {/* A non-played line carries no set score — never an invented one. */}
-      <ScoreLine
-        sets={isNonPlayed ? [] : match ? scoreSetsFrom(match.score) : []}
-        className="tabular text-right text-[13px]"
-        style={{ color: "var(--ink-900)" }}
-      />
+      {/* A non-played line carries no set score — never an invented one. One
+          grid cell either way: the score, and "ret."/"def." when it stopped. */}
+      <span className="text-right">
+        <ScoreLine
+          sets={isNonPlayed ? [] : match ? scoreSetsFrom(match.score) : []}
+          className="tabular text-right text-[13px]"
+          style={{ color: "var(--ink-900)" }}
+        />
+        {!isNonPlayed && endingMark(match?.ending) ? (
+          <span className="ml-1.5 text-[11px] text-[var(--ink-500)]">
+            {endingMark(match?.ending)}
+          </span>
+        ) : null}
+      </span>
 
       <span className="flex justify-end text-right">{action}</span>
     </div>
   );
+}
+
+/**
+ * The score flow, opened on this line. The round rides along on a tournament
+ * so the flow opens on THIS row's round rather than the next one to record —
+ * "Edit result" on the R32 must not open a blank quarter-final.
+ */
+export function scoreHref(
+  eventId: string,
+  entryId: string,
+  round: string | null,
+): string {
+  const query = new URLSearchParams({ entry: entryId });
+  if (round) query.set("round", round);
+  return `/dashboard/team/schedule/${eventId}/score?${query.toString()}`;
 }
 
 function Action({
@@ -256,7 +279,7 @@ function Action({
   matchId,
   videoAllowed,
   canEdit,
-  onScore,
+  scoreHref,
 }: {
   state: EntryState;
   match: EntryMatch | null;
@@ -265,7 +288,8 @@ function Action({
   matchId: string | null;
   videoAllowed: boolean;
   canEdit: boolean;
-  onScore: () => void;
+  /** The score flow with this line preset — where a result is written. */
+  scoreHref: string;
 }) {
   if (state === "forfeited" || state === "defaulted" || state === "withdrawn") {
     const status = LINE_STATUS[state]!;
@@ -275,7 +299,7 @@ function Action({
     return (
       <span className="flex items-center justify-end gap-2">
         <StatusChip tone={status.tone}>{status.label}</StatusChip>
-        <RowAction onClick={onScore}>Edit result</RowAction>
+        <RowAction href={scoreHref}>Edit result</RowAction>
       </span>
     );
   }
@@ -283,7 +307,7 @@ function Action({
   if (state === "empty") {
     if (!canEdit) return null;
 
-    return <RowAction onClick={onScore}>Add result</RowAction>;
+    return <RowAction href={scoreHref}>Add result</RowAction>;
   }
 
   // The waiting states — working, waiting, failed — and their words come from
@@ -348,18 +372,6 @@ function SlotLabel({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * "+ Set line" — the dual page's unset-line action, pointing at the edit flow
- * where lines are set. The drawer's blue row, as a row action.
- */
-function SetLineAction({ eventId }: { eventId: string }) {
-  return (
-    <RowAction href={`/dashboard/team/schedule/${eventId}/edit`}>
-      + Set line
-    </RowAction>
-  );
-}
-
-/**
  * One 26px avatar per player on the line (Data Table law 1), overlapping by
  * 8px with a card-coloured ring on a doubles pair. The viewer's own avatar is
  * their photo; everyone else's is initials — the roster's rule, since the
@@ -393,41 +405,5 @@ function PlayerAvatars({
         );
       })}
     </span>
-  );
-}
-
-/**
- * A lineup slot the dual has no entry for at all. Every dual draws its full
- * card — six singles, three doubles — so a missing line still holds its row:
- * dashes where the facts go and, for someone who may set lines, the action.
- */
-export function UnsetLineRow({
-  slot,
-  eventId,
-  canEdit,
-  columns,
-}: {
-  slot: string;
-  eventId: string;
-  canEdit: boolean;
-  columns: string;
-}) {
-  return (
-    <div className={`${SPLIT_ROW} ${columns}`}>
-      <SlotLabel>{slot}</SlotLabel>
-      <span className="flex">
-        <EmptyMark label="Line not set" />
-      </span>
-      <span className="flex">
-        <EmptyMark />
-      </span>
-      <span className="flex">
-        <EmptyMark />
-      </span>
-      <span className="flex min-w-0">
-        {canEdit ? <SetLineAction eventId={eventId} /> : null}
-      </span>
-      <span />
-    </div>
   );
 }

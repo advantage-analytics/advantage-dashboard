@@ -19,7 +19,6 @@ import {
 } from "@/components/dashboard/schedule/event-page";
 import {
   LineRow,
-  UnsetLineRow,
   type LineViewer,
 } from "@/components/dashboard/schedule/line-row";
 import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
@@ -103,30 +102,26 @@ export function DualDetail({
     const extra = group.filter(
       (entry) => !entry.slot || !slots.includes(entry.slot),
     );
+    // A dual saves with all nine lines set, so every court has its entry; a
+    // slot with none is skipped rather than drawn as a gap to fill.
     return [
-      ...slots.map((slot) => {
+      ...slots.flatMap((slot) => {
         const entry = bySlot.get(slot);
-        return entry ? (
-          <LineRow
-            key={entry.id}
-            entry={entry}
-            match={entry.matches[0] ?? null}
-            label={slot}
-            round={null}
-            canEdit={canEdit}
-            columns={COLUMNS}
-            viewer={viewer}
-            split
-          />
-        ) : (
-          <UnsetLineRow
-            key={slot}
-            slot={slot}
-            eventId={event.id}
-            canEdit={canEdit}
-            columns={COLUMNS}
-          />
-        );
+        return entry
+          ? [
+              <LineRow
+                key={entry.id}
+                entry={entry}
+                match={entry.matches[0] ?? null}
+                label={slot}
+                round={null}
+                canEdit={canEdit}
+                columns={COLUMNS}
+                viewer={viewer}
+                split
+              />,
+            ]
+          : [];
       }),
       ...extra.map((entry) => (
         <LineRow

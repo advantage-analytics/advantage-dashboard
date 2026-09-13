@@ -26,7 +26,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { siteLabel } from "@/lib/schedule/format";
+import { siteTitle } from "@/lib/schedule/format";
 import type { EventPreset, LineChoice } from "./types";
 import {
   floatMenuCls,
@@ -40,7 +40,9 @@ const STATE_LABEL: Record<LineChoice["state"], string> = {
   result: "Result in · no video",
   video: "Video in",
   open: "Awaiting result",
-  unset: "Line not set",
+  // Unpickable: nobody on it (a dual's "No player" forfeit), or a result that
+  // is not a match. See `stateLabel`.
+  unset: "Not available",
 };
 
 function formatDayShort(date: string): string {
@@ -117,7 +119,7 @@ export function PinnedLineBar({
             strokeWidth={1.5}
             aria-hidden="true"
           />
-          {siteLabel(preset.site)}
+          {siteTitle(preset.site)}
         </span>
       )}
       <span className="flex-1" />
@@ -147,7 +149,11 @@ export function PinnedLineBar({
             {preset.eventKind === "dual" ? " dual" : ""} · lineup
           </span>
           {lineup.map((line) => {
-            const isCurrent = line.slot === preset.round;
+            // By entry, not by slot: a tournament entry's slot is a position
+            // label and its round changes, so the slot never equals the round.
+            const isCurrent = line.preset
+              ? line.preset.entryId === preset.entryId
+              : line.slot === preset.round;
             const disabled = !line.preset;
             return (
               <button
@@ -184,7 +190,11 @@ export function PinnedLineBar({
                       : "text-[var(--ink-500)]",
                   )}
                 >
-                  {isCurrent ? "" : STATE_LABEL[line.state]}
+                  {isCurrent
+                    ? ""
+                    : line.state === "unset" && !line.playerName
+                      ? "No player"
+                      : STATE_LABEL[line.state]}
                 </span>
                 {isCurrent ? (
                   <Check

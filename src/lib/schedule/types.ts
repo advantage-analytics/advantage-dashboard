@@ -15,6 +15,9 @@ export type EventSite = "home" | "away" | "neutral";
 export type Discipline = "singles" | "doubles";
 
 export type OutcomeKind = "forfeit" | "default" | "withdrawal";
+/** A match that stopped before the score decided it. */
+export type MatchEnding = "retired" | "defaulted";
+
 /** The side that forfeited, defaulted or withdrew, NOT the winner. */
 export type OutcomeSide = "ours" | "theirs";
 
@@ -93,7 +96,19 @@ export interface EntryMatch {
     player2: number[];
     player1_tiebreaks?: (number | null)[];
     player2_tiebreaks?: (number | null)[];
+    /**
+     * Who took a match the games do not decide — a retirement or a default,
+     * where the side that stopped can be ahead. The key SwingVision imports
+     * already write; `matchWon` reads it before counting sets.
+     */
+    winner?: "player1" | "player2";
   } | null;
+  /**
+   * How a match that did not finish ended, from `matches.result`: "Retired"
+   * or "Defaulted". Null for a match played out. The score still stands —
+   * it is the score when play stopped.
+   */
+  ending?: MatchEnding | null;
   opponentLabels: string[];
   /** Has a processing job, i.e. video was actually sent. */
   hasVideo: boolean;
@@ -160,12 +175,17 @@ export interface LineupLine {
   ourLabels: string[];
   theirLabels: string[];
   /**
-   * Which side forfeited this line, or null for a normal line.
-   *
-   * `"ours"` awards the point to THEM. Getting that backwards would hand a
-   * team a point it did not win with nothing on screen looking broken.
+   * Our side has nobody for this court. `ourIds` and `ourLabels` are empty
+   * whenever it is true, and saving the dual records a forfeit for our side —
+   * the point goes to THEM. Kept with the court, like the opponent.
    */
-  forfeit: OutcomeSide | null;
+  noPlayer: boolean;
+  /**
+   * The opponent has nobody for this court. `theirLabels` is empty whenever it
+   * is true, and saving records a forfeit for THEIR side — the point goes to
+   * us. Never true alongside `noPlayer`.
+   */
+  theirNoPlayer: boolean;
 }
 
 /** One row on the schedule page. Everything here is computed, nothing stored. */

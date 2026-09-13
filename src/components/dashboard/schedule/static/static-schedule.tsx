@@ -2,7 +2,6 @@
 import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { ScheduleTitleRow } from "@/components/dashboard/team/list-page-heading";
 import { Check, Filter as FilterIcon } from "lucide-react";
 import {
@@ -72,8 +71,9 @@ interface Facets {
  *
  * Title with a one-line summary and primary New event, the
  * All · Upcoming · Completed pills with Filters and sort, one white event
- * table at full width in the date-first grammar, and a season footer with
- * "Set next lineup". `Tc2c` is the page a coach lands on: no event selected,
+ * table at full width in the date-first grammar, and a season footer. (Its
+ * "Set next lineup" link went when a dual stopped saving without every line
+ * set.) `Tc2c` is the page a coach lands on: no event selected,
  * no drawer. `Tc2` is the same page after a row is clicked — the event's
  * detail arrives as a dismissable 340px rail beside the full-width list, not
  * as a permanent half-screen split.
@@ -364,22 +364,6 @@ export function StaticSchedule({
 
   const hasFacets = facets.kind !== null || facets.site !== null;
 
-  // "Set next lineup" — the soonest dual still ahead whose lineup has a gap:
-  // no lines at all, or a line nobody is named on. Rows arrive newest first,
-  // so the soonest upcoming one is the FIRST match walking the reverse.
-  const nextDual = [...rows]
-    .reverse()
-    .find((row) => row.kind === "dual" && isUpcoming(row, today));
-  const nextLineupHref =
-    canCreate &&
-    nextDual &&
-    (nextDual.entryCount === 0 ||
-      (details[nextDual.id]?.entries ?? []).some(
-        (entry) => entry.forfeit === null && entry.playerLabels.length === 0,
-      ))
-      ? `/dashboard/team/schedule/${nextDual.id}`
-      : null;
-
   /**
    * Day zero is the whole frame, not a panel inside it: the offer carries the
    * page's one primary, so the title row and the season footer stand down
@@ -535,15 +519,6 @@ export function StaticSchedule({
           <span className="text-micro" style={{ color: "var(--ink-500)" }}>
             Season {tabularNumerals(seasonFacts(season))}
           </span>
-          <div className="flex-1" />
-          {nextLineupHref ? (
-            <Link
-              href={nextLineupHref}
-              className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-            >
-              Set next lineup
-            </Link>
-          ) : null}
         </div>
       </div>
 

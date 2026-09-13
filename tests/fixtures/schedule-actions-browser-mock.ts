@@ -6,6 +6,7 @@ declare global {
     failNextOutcome?: string;
     failNextScore?: string;
     failNextDelete?: string;
+    opponentRoster?: string[];
   }
 }
 
@@ -47,4 +48,19 @@ export async function deleteEvent(eventId: string) {
     return { error };
   }
   return { ok: true as const };
+}
+
+export async function opponentRosterForDual() {
+  return {
+    candidates: (window.opponentRoster ?? []).map((name, index) => ({
+      playerId: `roster-${index}`,
+      name,
+      lineupSpot: null,
+      priorMeetings: 0,
+    })),
+  };
+}
+
+export async function saveOpponentPlayer() {
+  return { saved: false };
 }

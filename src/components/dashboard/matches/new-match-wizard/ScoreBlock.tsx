@@ -76,6 +76,7 @@ export function ScoreBlock({
   playerName,
   opponentName,
   fromLine,
+  opponentSlot,
   onScoreChange,
   onTiebreakChange,
   onSetsChange,
@@ -92,8 +93,13 @@ export function ScoreBlock({
   >;
   playerName: string;
   opponentName: string;
-  /** "Best of 3 · no-ad" when a line declared the format. */
+  /** "Best of 3 · No-Ad" when a line declared the format. */
   fromLine: boolean;
+  /**
+   * Drawn in place of the opponent's name on their row — the score page names
+   * an opponent the lineup left blank right where the name reads.
+   */
+  opponentSlot?: React.ReactNode;
   onScoreChange: (
     player: "player" | "opponent",
     index: number,
@@ -181,8 +187,8 @@ export function ScoreBlock({
     formData.adScoring === undefined
       ? ""
       : formData.adScoring
-        ? " · ad"
-        : " · no-ad"
+        ? " · Ad"
+        : " · No-Ad"
   }`;
 
   // A render function, not a component: declared inside render, a component
@@ -199,14 +205,18 @@ export function ScoreBlock({
     const r = row === "player" ? "p" : "o";
     return (
       <div className="flex items-center gap-4">
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate text-[14px]",
-            muted ? "text-[var(--ink-600)]" : "text-[var(--ink-900)]",
-          )}
-        >
-          {name}
-        </span>
+        {row === "opponent" && opponentSlot ? (
+          <span className="relative flex min-w-0 flex-1">{opponentSlot}</span>
+        ) : (
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate text-[14px]",
+              muted ? "text-[var(--ink-600)]" : "text-[var(--ink-900)]",
+            )}
+          >
+            {name}
+          </span>
+        )}
         <span className="flex gap-3">
           {Array.from({ length: displayed }, (_, i) => (
             <span key={i} className="flex gap-3">

@@ -1,6 +1,4 @@
-"use client";
-
-import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
+import type { MenuOption } from "@/components/ui/menu-select";
 import type {
   EntryOutcome,
   OutcomeKind,
@@ -41,35 +39,4 @@ export function outcomeFromResultChoice(value: ResultChoiceValue): {
   if (value === "played" || value === "clear") return null;
   const [side, kind] = value.split("-") as [OutcomeSide, OutcomeKind];
   return { kind, side };
-}
-
-export function ResultChoice({
-  value,
-  onChange,
-  canClear,
-  disabled = false,
-}: {
-  value: ResultChoiceValue;
-  onChange: (value: ResultChoiceValue) => void;
-  canClear: boolean;
-  disabled?: boolean;
-}) {
-  const options: readonly MenuOption<ResultChoiceValue>[] = canClear
-    ? [
-        ...RESULT_CHOICE_OPTIONS,
-        { value: "clear", label: "Clear saved outcome" },
-      ]
-    : RESULT_CHOICE_OPTIONS;
-
-  return (
-    <MenuSelect
-      label="Result type"
-      value={value}
-      options={options}
-      onChange={onChange}
-      variant="underline"
-      width={280}
-      disabled={disabled}
-    />
-  );
 }

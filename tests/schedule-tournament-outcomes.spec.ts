@@ -104,15 +104,6 @@ function row(page: import("@playwright/test").Page, round: string) {
   return page.getByText(round, { exact: true }).locator("..");
 }
 
-async function chooseClear(page: import("@playwright/test").Page) {
-  await page.getByRole("button", { name: "Result type" }).last().click();
-  await page
-    .getByRole("menuitemradio", { name: "Clear saved outcome", exact: true })
-    .last()
-    .click();
-  await page.getByRole("button", { name: "Clear outcome" }).click();
-}
-
 test("renders played and outcome-only rounds in the established ladder order", async ({
   page,
 }) => {
@@ -140,36 +131,27 @@ test("renders played and outcome-only rounds in the established ladder order", a
   );
 });
 
-test("keeps each outcome edit and clear action scoped to its own round", async ({
+test("each round's result action opens the score flow at that round", async ({
   page,
 }) => {
   await open(page);
 
-  await row(page, "Q1").getByRole("button", { name: "Edit result" }).click();
-  await chooseClear(page);
-  await expect
-    .poll(() => page.evaluate(() => window.actionCalls))
-    .toEqual([
-      {
-        action: "setOutcome",
-        input: { entryId: "tournament-entry", round: "Q1", outcome: null },
-      },
-    ]);
-
-  await row(page, "QF").getByRole("button", { name: "Edit result" }).click();
-  await chooseClear(page);
-  await expect
-    .poll(() => page.evaluate(() => window.actionCalls))
-    .toEqual([
-      {
-        action: "setOutcome",
-        input: { entryId: "tournament-entry", round: "Q1", outcome: null },
-      },
-      {
-        action: "setOutcome",
-        input: { entryId: "tournament-entry", round: "QF", outcome: null },
-      },
-    ]);
+  // Nothing is scored in place. Each row links into the score flow with its
+  // own round, so "Edit result" on Q1 can never open a blank quarter-final —
+  // clearing and replacing a round is the flow's job, pinned in
+  // `schedule-score-flow-outcomes.spec.ts`.
+  for (const round of ["Q1", "QF"]) {
+    await expect(
+      row(page, round).getByRole("link", { name: "Edit result" }),
+    ).toHaveAttribute(
+      "href",
+      `/dashboard/team/schedule/tournament-outcomes/score?entry=tournament-entry&round=${round}`,
+    );
+  }
+  await expect(page.getByRole("button", { name: "Edit result" })).toHaveCount(
+    0,
+  );
+  expect(await page.evaluate(() => window.actionCalls)).toEqual([]);
 });
 
 test("outcome-only rounds never enter match analysis totals", () => {

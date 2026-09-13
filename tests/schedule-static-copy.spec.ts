@@ -30,7 +30,6 @@ import { SCHEDULE_COLUMNS } from "@/components/dashboard/schedule/static/schedul
 import { LINE_STATUS } from "@/lib/schedule/line-status";
 import { formatOpponentRecord } from "@/lib/schedule/opponent-history";
 import { divisionLabel, teamLabel } from "@/lib/data/programs-server";
-import { LINE_PLAY_OPTIONS } from "@/components/dashboard/schedule/static/dual-build-step";
 
 /**
  * The copy record for the four rebuilt schedule routes — what it guards, and
@@ -270,7 +269,8 @@ test.describe("/dashboard/team/schedule · Tc2 Tc2c", () => {
     drawn(schedule, "static-schedule.tsx", "Season ");
     drawn(schedule, "static-schedule.tsx", " in duals · ");
     drawn(schedule, "static-schedule.tsx", "lines analyzed");
-    drawn(schedule, "static-schedule.tsx", "Set next lineup");
+    // RETIRED 'Set next lineup' — a dual cannot be saved with a line unset,
+    //   so there is no next lineup with a gap to point at.
     // RETIRED 'Select an event', 'Pick a dual or tournament on the left…',
     //   'Jump to', 'Next', 'Last', ' · lineup not set', 'tomorrow' — `7d`'s
     //   prompt pane left the page with the left drawer it prompted about. The
@@ -291,8 +291,8 @@ test.describe("/dashboard/team/schedule · Tc2 Tc2c", () => {
       drawn(table, "schedule-table.tsx", header);
     }
     drawn(table, "schedule-table.tsx", '"Dual" : "Tournament"');
-    // A dual whose lineup has no lines yet.
-    drawn(table, "schedule-table.tsx", '"Not set"');
+    // RETIRED '"Not set"' — a dual is saved with all nine lines set, so no
+    //   dual reaches the table with none.
     // Lines with a result over lines on the card — "8 / 9", spaces and all.
     drawn(
       table,
@@ -400,11 +400,10 @@ test.describe("/dashboard/team/schedule · Tc2 Tc2c", () => {
     drawn(drawer, "event-drawer.tsx", 'entry.playerLabels.join(" · ")');
     // The three states a line can be in besides played.
     drawn(drawer, "event-drawer.tsx", "No result");
-    // The empty states: a tournament with nothing decided, a dual with no lineup.
+    // The empty state: a tournament with nothing decided.
     drawn(drawer, "event-drawer.tsx", "No results yet.");
-    drawn(drawer, "event-drawer.tsx", "No lineup yet.");
-    drawn(drawer, "event-drawer.tsx", "Set line");
-    drawn(drawer, "event-drawer.tsx", "Not set");
+    // RETIRED 'No lineup yet.', 'Set line', 'Set lineup' and 'Not set' — a
+    //   dual cannot be saved with a line unset, so the rail never shows one.
     drawn(drawer, "event-drawer.tsx", "Enter results");
     // EN DASH between the two figures of the score row.
     drawn(drawer, "event-drawer.tsx", "–");
@@ -546,6 +545,8 @@ test.describe("/dashboard/team/schedule/new/dual · 2c 2b 2d 2e", () => {
   const popup = screen("opponent-popup.tsx");
   /** Our side of a lineup court, split out of step two's row. */
   const picker = screen("lineup-name-picker.tsx");
+  /** The lineup step's rows — "Grey well". */
+  const rows = screen("lineup-rows.tsx");
   /**
    * The flow's own file, since T15.
    *
@@ -690,11 +691,20 @@ test.describe("/dashboard/team/schedule/new/dual · 2c 2b 2d 2e", () => {
       "Four facts the whole dual inherits. Every one of the nine lines is created under them.",
     );
     drawn(flow, "new-dual-flow.tsx", "The lineup.");
-    // Em dash before the clause about subs.
+    // "Grey well" (Dual Lineup Step canvas, Final): two ledes — the ladder's,
+    // and one for a program nobody has ranked, which seeds no one.
+    // RETIRED 'Six singles and three doubles. Your side is seeded from the
+    //   ladder — type over a name to put a sub on.' — subs are dragged in from
+    //   below "Not in the lineup" now, not typed over.
     drawn(
       flow,
       "new-dual-flow.tsx",
-      "Six singles and three doubles. Your side is seeded from the ladder — type over a name to put a sub on.",
+      "Seeded from your ladder — drag a grip to reorder, or below the line to bench. Who are they sending?",
+    );
+    drawn(
+      flow,
+      "new-dual-flow.tsx",
+      "Pick a player for each line — drag a grip to reorder, or below the line to bench. Who are they sending?",
     );
 
     // The footer, which is the flow's and no longer either body's. The count
@@ -762,13 +772,12 @@ test.describe("/dashboard/team/schedule/new/dual · 2c 2b 2d 2e", () => {
       "Rafael Osei",
       "Sam Tanaka",
       "Jules Moreau",
-      // The forfeited line names nobody on either side.
+      // `2b` draws S6 forfeited: nobody named on either side.
       "",
       "Brooks / Reid",
       "Osei / Tanaka",
       "Moreau / Adeyemi",
     ]);
-    expect(DUAL_DRAFT_LINES[5].forfeit).toBe("ours");
   });
 
   test("2b's own words", () => {
@@ -794,28 +803,42 @@ test.describe("/dashboard/team/schedule/new/dual · 2c 2b 2d 2e", () => {
     drawn(step2, "dual-build-step.tsx", '"No-ad scoring"');
     drawn(step2, "dual-build-step.tsx", '"Ad scoring"');
 
-    drawn(step2, "dual-build-step.tsx", "Lineup · singles");
-    drawn(step2, "dual-build-step.tsx", "six required · from your ladder");
-    drawn(step2, "dual-build-step.tsx", "Lineup · doubles");
-    drawn(
-      step2,
-      "dual-build-step.tsx",
-      "three required · pairs carried from singles",
-    );
-    drawn(step2, "dual-build-step.tsx", "Add name");
-    drawn(step2, "dual-build-step.tsx", "Add pair");
-    // Explicit draft choices never describe an unanswered line as played.
-    drawn(step2, "dual-build-step.tsx", "Normal play");
-    expect(LINE_PLAY_OPTIONS.map((option) => option.label)).toEqual([
-      "Normal play",
-      "We lost — our side forfeited",
-      "We won — opponent forfeited",
-    ]);
-    drawn(
-      step2,
-      "dual-build-step.tsx",
-      "All nine lines are expected — forfeit a line only when a team can't field a player for it.",
-    );
+    // The lineup's rows moved to `lineup-rows.tsx` with "Grey well".
+    // RETIRED 'Lineup · singles', 'six required · from your ladder',
+    //   'Lineup · doubles', 'three required · pairs carried from singles',
+    //   'Add name', 'Add pair' and the footnote 'All nine lines are expected —
+    //   forfeit a line only when a team can't field a player for it.' — the
+    //   headings are "Singles"/"Doubles" with a set count, a waiting opponent
+    //   is a grey well, and a line nobody can play is "No player", which the
+    //   save records as our forfeit. Every other outcome is the score flow's.
+    // RETIRED 'A forfeit records the result — no match is played.', 'Normal
+    //   play', 'We forfeit' and '<School> forfeits' — the line's `···` play
+    //   menu left when the score flow became the one place a result is written.
+    drawn(step2, "dual-build-step.tsx", '"Singles"');
+    drawn(step2, "dual-build-step.tsx", '"Doubles"');
+    // Our side's count, "5 of 6 set" — a dual saves only at all nine.
+    drawn(rows, "lineup-rows.tsx", " set");
+    drawn(rows, "lineup-rows.tsx", "No pair");
+    drawn(rows, "lineup-rows.tsx", "Counts as a forfeit");
+    // RETIRED 'Forfeit · <School> takes the point' and 'No player · their
+    //   forfeit' — a school name truncated the point away; both sides now say
+    //   who wins, in 12px grey.
+    drawn(rows, "lineup-rows.tsx", "They win by forfeit");
+    drawn(rows, "lineup-rows.tsx", '"Opponent"');
+    drawn(rows, "lineup-rows.tsx", '"Opponent pair"');
+    drawn(rows, "lineup-rows.tsx", "Not in the lineup");
+    drawn(rows, "lineup-rows.tsx", "Choose pair");
+    drawn(rows, "lineup-rows.tsx", "Choose partner");
+    drawn(rows, "lineup-rows.tsx", " · pick two");
+    // RETIRED ' named' — the heading counts lines set, not opponents named.
+    drawn(picker, "lineup-name-picker.tsx", "No player");
+    drawn(picker, "lineup-name-picker.tsx", "Counts as a forfeit");
+    // The footer's progress pill beside a disabled Create dual — grey, never
+    // red, and a button that takes the coach to the next line still to set.
+    // RETIRED 'Choose a player or No player' and 'every line needs a player,
+    //   or No player' — the red marks a blocked Continue used to draw.
+    drawn(rows, "lineup-rows.tsx", " lines set");
+    drawn(rows, "lineup-rows.tsx", "still to set.");
 
     // Our side of a court is a roster typeahead rather than a bare input
     // (`lineup-name-picker.tsx`), so its two sentences are pinned here too.

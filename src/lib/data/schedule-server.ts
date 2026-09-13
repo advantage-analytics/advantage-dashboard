@@ -15,6 +15,7 @@ import {
   dualScore,
   entryPlayed,
   lineCoverageFrom,
+  matchEndingFrom,
   outcomeForRound,
   outcomeForMatch,
 } from "@/lib/schedule/entry-state";
@@ -39,7 +40,7 @@ const ENTRY_COLUMNS =
   "id, event_id, discipline, slot, position, draw, seed, player_user_ids, player_labels, opponent_labels, opponent_school, opponent_program_id, forfeit";
 
 const MATCH_COLUMNS =
-  "id, event_entry_id, round, score, player2_name, source_provider";
+  "id, event_entry_id, round, score, result, player2_name, source_provider";
 
 const OUTCOME_COLUMNS =
   "id, entry_id, event_id, program_id, round, kind, side, actor_user_id, recorded_at";
@@ -77,7 +78,8 @@ interface DbEntryMatch {
   id: string;
   event_entry_id: string | null;
   round: string | null;
-  score: { player1: number[]; player2: number[] } | null;
+  score: EntryMatch["score"];
+  result: string | null;
   player2_name: string | null;
 }
 
@@ -238,6 +240,7 @@ export async function readScheduleWithClient(
       // an event line is until somebody uploads one.
       status: analysis?.status ?? "manual",
       score: match.score,
+      ending: matchEndingFrom(match.result),
       opponentLabels: match.player2_name ? [match.player2_name] : [],
       hasVideo: analysis !== undefined,
     };

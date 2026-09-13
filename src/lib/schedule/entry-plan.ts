@@ -21,7 +21,7 @@
  */
 
 import type { LineupLineInput, TournamentEntryInput } from "./actions";
-import type { EventEntry } from "./types";
+import type { EventEntry, OutcomeSide } from "./types";
 import { validateLineup } from "./lineup-validation";
 
 /**
@@ -102,6 +102,51 @@ export function isSettled(entry: EventEntry): boolean {
   );
 }
 
+/**
+ * A dual line the lineup itself settled, and whose side: "No player" on one
+ * side of the court, and the forfeit it records — and nothing else.
+ *
+ * `'ours'` — nobody on our side (no players), the point to THEM.
+ * `'theirs'` — the opponent has nobody (no opponent names), the point to US.
+ * `null` — not a lineup forfeit.
+ *
+ * The one outcome a lineup may write, so it is the one a lineup may take back.
+ * `updateDual` plans such a line as unsettled (naming someone clears the
+ * forfeit) and the builder draws it as an editable "No player" rather than a
+ * locked result. Anything more — a match, a legacy forfeit, a second outcome,
+ * or a name on the side that forfeited — is a result from the score flow, and
+ * stays settled.
+ */
+export function lineupForfeitSide(entry: EventEntry): OutcomeSide | null {
+  const outcomes = entry.outcomes ?? [];
+  if (
+    entry.slot === null ||
+    entry.matches.length > 0 ||
+    entry.forfeit !== null ||
+    outcomes.length !== 1 ||
+    outcomes[0].round !== null ||
+    outcomes[0].kind !== "forfeit"
+  ) {
+    return null;
+  }
+  if (outcomes[0].side === "ours") {
+    return entry.playerLabels.length === 0 && entry.playerUserIds.length === 0
+      ? "ours"
+      : null;
+  }
+  return entry.opponentLabels.length === 0 ? "theirs" : null;
+}
+
+/** Our side has nobody — see `lineupForfeitSide`. */
+export function isNoPlayerLine(entry: EventEntry): boolean {
+  return lineupForfeitSide(entry) === "ours";
+}
+
+/** The opponent has nobody — see `lineupForfeitSide`. */
+export function isOpponentNoPlayerLine(entry: EventEntry): boolean {
+  return lineupForfeitSide(entry) === "theirs";
+}
+
 /** Why a settled entry cannot be touched, in the coach's own vocabulary. */
 function settledReason(entry: EventEntry, dropped: boolean): string {
   const slot = existingSlotKey(entry);
@@ -147,8 +192,7 @@ function changed(entry: EventEntry, row: IncomingEntry): boolean {
   // scheme reads as edited, and if that line is settled the save is refused
   // over a court nobody touched.
   if ((entry.slot ?? "") !== row.slot) return true;
-  if (!sameList(entry.opponentLabels, row.opponentLabels)) return true;
-  return entry.forfeit !== (row.forfeit ?? null);
+  return !sameList(entry.opponentLabels, row.opponentLabels);
 }
 
 /**

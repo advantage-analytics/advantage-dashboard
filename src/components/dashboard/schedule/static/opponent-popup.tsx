@@ -216,6 +216,8 @@ export function OpponentPopup({
   draftName,
   onCommit,
   onActiveChange,
+  noPlayer = false,
+  onNoPlayer,
 }: {
   /** The line's current opposing label(s), " / "-joined. Empty until resolved. */
   value: string;
@@ -229,6 +231,13 @@ export function OpponentPopup({
   onCommit: (value: string) => void;
   /** Open, or holding the confirmation — the row lifts its stacking on it. */
   onActiveChange: (active: boolean) => void;
+  /** The opponent has nobody on this court — the cell reads "No player". */
+  noPlayer?: boolean;
+  /**
+   * Offers "No player" as the popup's last row: the opponent cannot field
+   * this court, and the save records their forfeit.
+   */
+  onNoPlayer?: () => void;
 }) {
   // Destructured from the one object rather than taken as two props: this is
   // the read side of the coupling, and it cannot pull a name and a roster from
@@ -296,10 +305,21 @@ export function OpponentPopup({
    * the ↵. Loose ON PURPOSE, and only ever for the suggestion — what gets
    * written is the roster's own spelling, verbatim. See the header.
    */
+  // A pair's first name, already placed ahead of the caret, is not offered
+  // again for the partner — nobody partners themselves.
+  const placed = new Set(
+    segments
+      .slice(0, -1)
+      .map((part) => normalizedPersonName(part))
+      .filter(Boolean),
+  );
   const options = ((): readonly OpponentRosterCandidate[] => {
     if (!open || !hasRoster) return [];
-    if (typed.length < 2) return candidates.slice(0, MAX_SUGGESTIONS);
-    return candidates
+    const pool = candidates.filter(
+      (candidate) => !placed.has(normalizedPersonName(candidate.name)),
+    );
+    if (typed.length < 2) return pool.slice(0, MAX_SUGGESTIONS);
+    return pool
       .map((candidate) => {
         const saved = normalizedPersonName(candidate.name);
         const rank =
@@ -321,7 +341,13 @@ export function OpponentPopup({
   // The last row, and only once there is typed text to name on it. Browsing
   // the pool with an empty field has no "different player" to offer yet.
   const showNewCard = hasRoster && typed.length >= 2;
-  const rowCount = options.length + (showNewCard ? 1 : 0);
+  // "No player" comes last, after every name — the last resort, never the
+  // row a bare arrow lands on first.
+  const noPlayerIndex = onNoPlayer
+    ? options.length + (showNewCard ? 1 : 0)
+    : -1;
+  const rowCount =
+    options.length + (showNewCard ? 1 : 0) + (onNoPlayer ? 1 : 0);
 
   /**
    * Has the coach actually put the cursor on a row?
@@ -545,7 +571,15 @@ export function OpponentPopup({
 
   function activateRow(index: number) {
     if (index < options.length) pickSaved(options[index]);
+    else if (index === noPlayerIndex) chooseNoPlayer();
     else saveAsNew();
+  }
+
+  /** The opponent has nobody here. Nothing to contribute, nothing to toast. */
+  function chooseNoPlayer() {
+    onNoPlayer?.();
+    setOpen(false);
+    saveToken.current += 1;
   }
 
   function onKeyDown(event: React.KeyboardEvent) {
@@ -556,7 +590,10 @@ export function OpponentPopup({
       // …except Enter on a highlight the coach never chose. See `walked`:
       // this falls through to the free-text handling below, which is what
       // Enter on this field meant before there was ever a list on it.
-      const chosen = typed.length >= 2 || walked;
+      // Typing never arms "No player": a name typed with no saved match must
+      // not commit the opponent's forfeit on Enter.
+      const chosen =
+        (typed.length >= 2 && activeIndex !== noPlayerIndex) || walked;
       if (!(event.key === "Enter" && !chosen)) {
         if (
           event.key === "ArrowDown" ||
@@ -597,7 +634,8 @@ export function OpponentPopup({
     }
   }
 
-  const resolved = value.trim() !== "";
+  // "No player" is an answer too: the well goes quiet the way a name does.
+  const resolved = value.trim() !== "" || noPlayer;
 
   return (
     <>
@@ -615,23 +653,37 @@ export function OpponentPopup({
         }}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="flex w-full min-w-0 cursor-pointer items-center rounded-[3px] text-left outline-none focus-visible:shadow-[var(--focus-ring)]"
+        aria-label={resolved ? undefined : addLabel}
+        // The lineup step's "Grey well": a named opponent reads as plain text,
+        // and only a line still waiting draws the well — so the screen gets
+        // quieter as it fills. `lineup-rows.tsx` walks focus to the next
+        // `empty` well after a name lands.
+        data-opponent-well={resolved ? "named" : "empty"}
+        className={
+          resolved
+            ? "flex w-full min-w-0 cursor-pointer items-center rounded-[3px] text-left outline-none focus-visible:shadow-[var(--focus-ring)]"
+            : cn(
+                "flex h-7 w-[180px] min-w-0 cursor-pointer items-center rounded-[var(--radius-button)] border px-2.5 text-left transition-colors duration-[var(--duration-hover)] outline-none",
+                open
+                  ? "border-[var(--blue)] bg-[var(--surface-card)] shadow-[0_0_0_3px_var(--blue-glow)]"
+                  : "border-transparent bg-[var(--surface-subtle)] hover:bg-[var(--ink-100)] focus-visible:shadow-[var(--focus-ring)]",
+              )
+        }
       >
         {resolved ? (
-          // `2e`'s resolved cell — 13px ink-900, the same weight and colour as
-          // our own player's name in column two of the same row.
           <span
-            className="min-w-0 truncate text-[13px]"
-            style={{ color: "var(--ink-900)" }}
+            // 12px grey, not a name's 13px: it is the line's consequence, and
+            // matches our own forfeit's "They win by forfeit" in this column.
+            className={cn(
+              "min-w-0 truncate",
+              noPlayer ? "text-[12px]" : "text-[13px]",
+            )}
+            style={{ color: noPlayer ? "var(--ink-500)" : "var(--ink-900)" }}
           >
-            {value}
+            {noPlayer ? "No player · we win by forfeit" : value}
           </span>
         ) : (
-          <span
-            className="inline-flex items-center gap-1 text-[11px]"
-            style={{ color: "var(--ink-400)" }}
-          >
-            <Plus size={9} strokeWidth={1.5} className="shrink-0" />
+          <span className="truncate text-[12px] text-[var(--ink-400)]">
             {addLabel}
           </span>
         )}
@@ -682,9 +734,17 @@ export function OpponentPopup({
           {rowCount > 0 ? (
             <div className="p-3">
               <div className="text-micro" style={{ color: "var(--ink-600)" }}>
-                {showNewCard
-                  ? `${schoolName} already has a close name saved. Pick one.`
-                  : `${schoolName}'s saved roster. Pick one, or type a name.`}
+                {hasRoster
+                  ? showNewCard
+                    ? `${schoolName} already has a close name saved. Pick one.`
+                    : discipline === "doubles"
+                      ? placed.size > 0
+                        ? `Pick a partner from ${schoolName}'s saved roster, or type one.`
+                        : `${schoolName}'s saved roster. Pick two, or type "Name / Name".`
+                      : `${schoolName}'s saved roster. Pick one, or type a name.`
+                  : discipline === "doubles"
+                    ? `Type both names as "Name / Name", or:`
+                    : "Type a name, or:"}
               </div>
               <ul
                 ref={listRef}
@@ -721,6 +781,43 @@ export function OpponentPopup({
                     title={activeSegment}
                     note="Save as a different player"
                   />
+                ) : null}
+
+                {onNoPlayer ? (
+                  <li
+                    id={optionId(noPlayerIndex)}
+                    role="option"
+                    aria-selected={activeIndex === noPlayerIndex}
+                    data-active={
+                      activeIndex === noPlayerIndex ? "true" : undefined
+                    }
+                    onMouseEnter={() => {
+                      setActiveIndex(noPlayerIndex);
+                      setWalked(true);
+                    }}
+                    onClick={chooseNoPlayer}
+                    className={cn(
+                      // Pinned under a scrolled roster, so the way out is
+                      // always on screen.
+                      "sticky bottom-0 flex h-[38px] shrink-0 cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] bg-[var(--surface-card)] px-2.5",
+                      hasRoster &&
+                        "mt-0.5 border-t border-[var(--border-hairline)]",
+                      activeIndex === noPlayerIndex &&
+                        "bg-[var(--surface-subtle)]",
+                    )}
+                  >
+                    <span
+                      aria-hidden
+                      className="size-5 shrink-0 rounded-full border border-dashed border-[var(--ink-300)]"
+                    />
+                    <span className="truncate text-[12px] text-[var(--ink-900)]">
+                      No player
+                    </span>
+                    <span className="flex-1" />
+                    <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
+                      Counts as their forfeit
+                    </span>
+                  </li>
                 ) : null}
               </ul>
             </div>

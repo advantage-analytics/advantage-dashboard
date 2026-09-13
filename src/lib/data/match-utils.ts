@@ -125,6 +125,12 @@ export interface MatchScore {
   player2: number[];
   player1_tiebreaks?: (number | null)[];
   player2_tiebreaks?: (number | null)[];
+  /**
+   * Who took a match the games do not decide — a retirement or a default,
+   * where the side that stopped can be ahead on sets. SwingVision imports
+   * write it too. When present it IS the answer; sets are the fallback.
+   */
+  winner?: "player1" | "player2";
 }
 
 /**
@@ -183,7 +189,8 @@ export function setTally(
 }
 
 /**
- * Who took the match, by counting sets — or null where the score cannot say.
+ * Who took the match: the stored `winner` when the match stopped, otherwise by
+ * counting sets — or null where the score cannot say.
  *
  * Null and false are different answers and some callers need them apart. A
  * scoreboard has already decided to show a result, so "no score" and "lost"
@@ -195,6 +202,10 @@ export function matchOutcome(
   score: MatchScore | null,
   isUserPlayer1: boolean,
 ): boolean | null {
+  // A stored winner first — the schedule's `matchWon` reads it the same way.
+  if (score?.winner === "player1" || score?.winner === "player2") {
+    return (score.winner === "player1") === isUserPlayer1;
+  }
   const sets = setTally(score);
   if (!sets) return null;
   if (sets.player1 === sets.player2) return null;

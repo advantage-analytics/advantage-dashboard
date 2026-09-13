@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { ChevronDown, ChevronRight, ChevronUp, Plus, X } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, X } from "lucide-react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
@@ -48,8 +48,8 @@ const ICON_BUTTON =
  * mark and conference; one nowrap glyph row — date, venue, court surface; the
  * score row, where the nine ticks ARE the score (singles, then doubles) with
  * the figures confirming at the left, winner's number in ink-900; then every
- * line — played lines with their score, a line awaiting its result, an unset
- * line as a blue "+ Set line"; and "Enter results" full width while lines are
+ * line — played lines with their score, a line awaiting its result, a line
+ * our side forfeited for want of a player; and "Enter results" full width while lines are
  * still open, stacked under the roster's full-width ghost "Open dual" or
  * "Open tournament", which every viewer gets. A player has no write menu.
  *
@@ -147,7 +147,6 @@ export function EventDrawer({
   // Has anything on this event been decided — a played score or a recorded
   // outcome? Nothing yet is the empty state, not a board of blanks.
   const anyDecided = entries.some((entry) => entryPlayed(entry));
-  const canSetLineup = isDual && entries.length === 0 && capabilities.canEdit;
 
   const linesOpen = isDual
     ? entries.some((entry) => !entryPlayed(entry))
@@ -292,51 +291,20 @@ export function EventDrawer({
           {/* Always drawn for a dual: nine slots, ghosts until decided, so
               the board's size reads before any line is played. */}
           {isDual ? <ScoreRow singles={singles} doubles={doubles} /> : null}
-          {isDual && entries.length === 0 ? (
-            <EmptyNote>
-              No lineup yet. Each line appears here once the lineup is set.
-            </EmptyNote>
-          ) : null}
-
           {isDual ? (
             <>
-              {/* No eyebrow over nothing: a reader of an empty dual has
-                  only the sentence. */}
-              {singles.length > 0 || canSetLineup ? (
-                <Section label="Singles">
-                  {singles.map((entry) => (
-                    <DualLine
-                      key={entry.id}
-                      entry={entry}
-                      eventHref={eventHref}
-                      canEdit={capabilities.canEdit}
-                    />
-                  ))}
-                  {/* A dual with no lines at all: for an editor, one row where
-                    the lineup would start, pointing at the event page. A
-                    reader has the sentence above and nothing to act on. */}
-                  {canSetLineup ? (
-                    <SetLineRow
-                      slot="S1"
-                      eventHref={eventHref}
-                      canEdit={capabilities.canEdit}
-                      label="Set lineup"
-                    />
-                  ) : null}
-                </Section>
-              ) : null}
-              {doubles.length > 0 ? (
-                <Section label="Doubles">
-                  {doubles.map((entry) => (
-                    <DualLine
-                      key={entry.id}
-                      entry={entry}
-                      eventHref={eventHref}
-                      canEdit={capabilities.canEdit}
-                    />
-                  ))}
-                </Section>
-              ) : null}
+              {/* A dual is saved with all nine lines set, so both groups are
+                  always drawn — there is no half-built lineup to explain. */}
+              <Section label="Singles">
+                {singles.map((entry) => (
+                  <DualLine key={entry.id} entry={entry} />
+                ))}
+              </Section>
+              <Section label="Doubles">
+                {doubles.map((entry) => (
+                  <DualLine key={entry.id} entry={entry} />
+                ))}
+              </Section>
             </>
           ) : (
             <>
@@ -382,8 +350,11 @@ export function EventDrawer({
             {isDual ? "Open dual" : "Open tournament"}
           </Link>
           {canEnterResults ? (
+            // Straight into the score flow — the one place results are
+            // written. The page sends anyone who may not score back to the
+            // event, so this needs no second gate of its own.
             <Link
-              href={eventHref}
+              href={`${eventHref}/score`}
               className={cn(advButton("primary", "md"), "w-full")}
             >
               Enter results
@@ -473,20 +444,12 @@ const ROW_LINK = cn(
  *   played      → score, outcome glyph, chevron; the row opens the match page
  *   awaiting    → players named, no result yet: "Awaiting result"
  *   non-played  → kind chip + side-derived result glyph, with no report link
- *   unset       → nobody named: the blue "+ Set line", pointing at the event
+ *   no player   → a forfeit our side recorded in the lineup: non-played, above
  *
  * Names join with the artboard's middle dot — "Lee · Chen" — rather than the
  * event page's slash. It is a drawn separator; the page's is the other one.
  */
-function DualLine({
-  entry,
-  eventHref,
-  canEdit,
-}: {
-  entry: EventEntry;
-  eventHref: string;
-  canEdit: boolean;
-}) {
+function DualLine({ entry }: { entry: EventEntry }) {
   const name = entry.playerLabels.join(" · ");
   const result = resolveEntryResult(entry, null);
 
@@ -501,17 +464,6 @@ function DualLine({
         name={name}
         entry={entry}
         match={result.match}
-      />
-    );
-  }
-
-  if (entry.playerLabels.length === 0) {
-    return (
-      <SetLineRow
-        slot={entry.slot}
-        eventHref={eventHref}
-        canEdit={canEdit}
-        label="Set line"
       />
     );
   }
@@ -672,58 +624,6 @@ function PlayedLine({
         style={{ color: "var(--ink-300)" }}
         aria-hidden="true"
       />
-    </Link>
-  );
-}
-
-/**
- * "+ Set line" — the blue row for a slot nobody is named on. Points at the
- * event page, where the line is edited; a reader who cannot edit sees the
- * slot standing empty instead of an action they are not allowed to take.
- */
-function SetLineRow({
-  slot,
-  eventHref,
-  canEdit,
-  label,
-}: {
-  slot: string | null;
-  eventHref: string;
-  canEdit: boolean;
-  label: string;
-}) {
-  const notSet = (
-    <span
-      className="text-micro col-span-3 text-right whitespace-nowrap"
-      style={{ color: "var(--ink-400)" }}
-    >
-      Not set
-    </span>
-  );
-
-  if (!canEdit) {
-    return (
-      <div className={ROW}>
-        <Slot>{slot}</Slot>
-        <span className="text-[12px]" style={{ color: "var(--ink-700)" }}>
-          —
-        </span>
-        {notSet}
-      </div>
-    );
-  }
-
-  return (
-    <Link href={eventHref} className={ROW_LINK}>
-      <Slot>{slot}</Slot>
-      <span
-        className="inline-flex items-center gap-1.5 text-[12px] font-medium"
-        style={{ color: "var(--blue)" }}
-      >
-        <Plus className="size-3" strokeWidth={1.5} aria-hidden="true" />
-        {label}
-      </span>
-      {notSet}
     </Link>
   );
 }

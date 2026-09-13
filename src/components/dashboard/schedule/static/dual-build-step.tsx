@@ -2,16 +2,18 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { cn } from "@/lib/utils";
 import { DateField } from "@/components/ui/date-field";
 import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import { resultLabelFromOutcome } from "@/components/dashboard/schedule/result-choice";
 import {
-  OpponentPopup,
   opponentPoolFor,
   type OpponentPool,
 } from "@/components/dashboard/schedule/static/opponent-popup";
-import { LineupNamePicker } from "@/components/dashboard/schedule/static/lineup-name-picker";
+import {
+  DoublesLineup,
+  LineupHeading,
+  SinglesLineup,
+} from "@/components/dashboard/schedule/static/lineup-rows";
 import { useNewDualData } from "@/components/dashboard/schedule/static/dual-school-step";
 import { programDisplayName } from "@/lib/data/programs-server";
 import {
@@ -29,7 +31,15 @@ import {
   type EventFormatValue,
 } from "@/lib/schedule/format";
 import { rosterIdsForLabels } from "@/lib/schedule/roster-match";
-import { pairKey } from "@/lib/schedule/lineup-validation";
+import {
+  draftClashes,
+  draftOurNames,
+  isDraftLineSet,
+} from "@/lib/schedule/lineup-validation";
+import {
+  applySinglesOrder,
+  type SinglesOccupant,
+} from "@/lib/schedule/singles-order";
 import { courtIndex } from "@/lib/schedule/courts";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
@@ -220,8 +230,8 @@ const DOUBLES_SLOTS = ["D1", "D2", "D3"];
  * stated rather than seeded because `2b` draws S6 forfeited while pairing
  * Adeyemi into D3, so no derivation can satisfy both halves of the drawing —
  * a contradiction recorded as item 24 in the regression note. A real ladder
- * resolves it by being real: the coach forfeits S6 themselves if nobody can
- * play it.
+ * resolves it by being real: if nobody can play S6, the coach leaves it empty
+ * and records the forfeit on the event page's score flow.
  */
 function seedLineup(ladder: LadderPlayer[]): LineupLine[] {
   // Only players the program actually ranked. `getLadder` returns the whole
@@ -241,7 +251,8 @@ function seedLineup(ladder: LadderPlayer[]): LineupLine[] {
       ourIds: player ? [player.userId] : [],
       ourLabels: player ? [player.name] : [],
       theirLabels: [],
-      forfeit: null,
+      noPlayer: false,
+      theirNoPlayer: false,
     };
   });
 
@@ -260,7 +271,8 @@ function seedLineup(ladder: LadderPlayer[]): LineupLine[] {
       ourIds: pair.map((player) => player.userId),
       ourLabels: pair.map((player) => player.name),
       theirLabels: [],
-      forfeit: null,
+      noPlayer: false,
+      theirNoPlayer: false,
     };
   });
 
@@ -276,8 +288,7 @@ function seedLineup(ladder: LadderPlayer[]): LineupLine[] {
  * simply not applied.
  *
  * Every field is optional and every absent field means "leave the ladder's
- * seed alone" — `forfeit: null` is therefore a real value ("not forfeited"),
- * distinguished from absence, so a seed can take a forfeit back.
+ * seed alone".
  */
 export interface DualLineSeed {
   /** `"S1"`…`"D3"` — the same string `seedLineup()` puts on `key` and `slot`. */
@@ -298,55 +309,25 @@ export interface DualLineSeed {
   ourIds?: string[];
   ourLabels?: string[];
   theirLabels?: string[];
-  /**
-   * Which side forfeited, as the SAVED row states it.
-   *
-   * Both sides round-trip. For a saved outcome row this remains the legacy
-   * column's value; the lock carries the outcome's display label.
-   */
-  forfeit?: "ours" | "theirs" | null;
+  /** Saved as "No player" — see `LineupLine.noPlayer`. */
+  noPlayer?: boolean;
+  /** Saved as the opponent's "No player" — see `LineupLine.theirNoPlayer`. */
+  theirNoPlayer?: boolean;
   /**
    * This line is settled and may not be edited — `isSettled` in
    * `entry-plan.ts` is the same question, asked server-side at save.
    *
-   * `"played"` — a `matches` row points at it. `"forfeited"` — a side gave the
-   * point away. Either way `planEntryChanges` REFUSES the whole save if the
-   * submission moves it, so the row is drawn read-only rather than offered as
-   * an edit that will be rejected after the coach has retyped it. Absent means
-   * a free line.
+   * `"played"` — a `matches` row points at it. Otherwise the saved outcome's
+   * own words ("We won — opponent forfeited"), legacy forfeits included.
+   * Either way `planEntryChanges` REFUSES the whole save if the submission
+   * moves it, so the row is drawn read-only rather than offered as an edit
+   * that will be rejected after the coach has retyped it. Absent means a free
+   * line.
    */
   locked?: DualLineLock;
 }
 
-export type DualLineLock =
-  "played" | "forfeited" | ReturnType<typeof resultLabelFromOutcome>;
-
-/** One keyed draft change; settled rows can only reopen after an explicit clear. */
-export function setDraftForfeit(
-  lines: LineupLine[],
-  key: string,
-  side: LineupLine["forfeit"],
-  locked: Record<string, DualLineLock>,
-): LineupLine[] {
-  if (locked[key]) return lines;
-  return lines.map((line) =>
-    line.key === key ? { ...line, forfeit: side } : line,
-  );
-}
-
-export const LINE_PLAY_OPTIONS = [
-  { value: "normal", label: "Normal play", description: "No result recorded." },
-  {
-    value: "ours",
-    label: resultLabelFromOutcome({ kind: "forfeit", side: "ours" }),
-    description: "The point goes to the opponent.",
-  },
-  {
-    value: "theirs",
-    label: resultLabelFromOutcome({ kind: "forfeit", side: "theirs" }),
-    description: "The point goes to us.",
-  },
-] as const;
+export type DualLineLock = "played" | ReturnType<typeof resultLabelFromOutcome>;
 
 /**
  * The facts and lines a caller can open the builder on.
@@ -418,17 +399,6 @@ export function lockedByKeyFromSeed(
   return locked;
 }
 
-/** A settled line's forfeit exactly as it was saved — see `DualLineSeed.forfeit`. */
-export function lockedForfeitFromSeed(
-  initial?: DualDraftSeed,
-): Map<string, "ours" | "theirs" | null> {
-  return new Map(
-    (initial?.lines ?? [])
-      .filter((row) => row.locked)
-      .map((row) => [row.key, row.forfeit ?? null] as const),
-  );
-}
-
 /** The nine courts, seeded from the ladder and overlaid with `initial.lines`. */
 export function seedDualLines(
   ladder: LadderPlayer[],
@@ -451,7 +421,8 @@ export function seedDualLines(
         ourIds: [],
         ourLabels: [],
         theirLabels: [],
-        forfeit: null,
+        noPlayer: false,
+        theirNoPlayer: false,
       };
     }
     const ourLabels = seed.ourLabels ?? line.ourLabels;
@@ -462,14 +433,16 @@ export function seedDualLines(
       // compatibility with older callers that supplied labels alone.
       ourIds: seed.ourIds ?? rosterIdsForLabels(ourLabels.join(" / "), ladder),
       theirLabels: seed.theirLabels ?? line.theirLabels,
-      forfeit: seed.forfeit === undefined ? line.forfeit : seed.forfeit,
+      noPlayer: seed.noPlayer ?? false,
+      theirNoPlayer: seed.theirNoPlayer ?? false,
     };
   });
 }
 
 /**
- * The lines that count toward the write — our side named, or a forfeit either
- * side already carries. See `useDualDraft`'s `lineCount`.
+ * The lines that count toward the write — set (a player, a pair, or No
+ * player), or already settled. A dual saves only when all nine are here; see
+ * `useDualDraft`'s `lineCount` and `validateDualLineup`.
  */
 export function filledDualLines(
   lines: LineupLine[],
@@ -478,18 +451,16 @@ export function filledDualLines(
   return lines
     .map((line) => ({
       line,
-      ours:
-        line.discipline === "doubles"
-          ? line.ourLabels.map((label) => label.trim()).filter(Boolean)
-          : splitNames(line.ourLabels.join(" / ")),
-      theirs: splitNames(line.theirLabels.join(" / ")),
+      ours: line.noPlayer ? [] : draftOurNames(line),
+      theirs:
+        line.noPlayer || line.theirNoPlayer
+          ? []
+          : splitNames(line.theirLabels.join(" / ")),
     }))
     .filter(
       (row) =>
-        row.ours.length > 0 ||
-        row.line.forfeit !== null ||
-        // A settled line always submits, whatever is on it. An opponent
-        // forfeit names nobody on either side, and dropping it here would
+        isDraftLineSet(row.line) ||
+        // A settled line always submits, whatever is on it: dropping it would
         // submit a lineup missing a line the save is not allowed to delete.
         lockedByKey[row.line.key] !== undefined,
     );
@@ -507,7 +478,6 @@ export function filledDualLines(
 export function buildDualPayloadLines(
   filled: { line: LineupLine; ours: string[]; theirs: string[] }[],
   seededIds: Map<string, string>,
-  lockedForfeit: Map<string, "ours" | "theirs" | null>,
 ): LineupLineInput[] {
   return filled.map((row) => ({
     // Absent on a line the coach typed into an empty court — a fresh line
@@ -523,16 +493,32 @@ export function buildDualPayloadLines(
     // order is fixed, so the position of a line is a fact about its slot and
     // nothing else.
     position: courtIndex(row.line.slot),
-    // A result does not erase the lineup. Retain identities and labels when
-    // choosing, clearing, or round-tripping either side's forfeit.
-    playerUserIds: row.line.ourIds,
+    // A result does not erase the lineup: a settled line hands back the
+    // identities and labels it was saved with.
+    playerUserIds: row.line.noPlayer ? [] : row.line.ourIds,
     playerLabels: row.ours,
     opponentLabels: row.theirs,
-    // A settled line hands back the side it was saved with, untouched.
-    forfeit: lockedForfeit.has(row.line.key)
-      ? (lockedForfeit.get(row.line.key) ?? null)
-      : row.line.forfeit,
+    noPlayer: row.line.noPlayer,
+    opponentNoPlayer: row.line.theirNoPlayer,
   }));
+}
+
+/**
+ * The ladder plus players added from a court, each id once.
+ *
+ * A player added mid-lineup is held locally until the route re-renders, and
+ * `addProgramPlayer`'s revalidation then hands the same player back inside
+ * `ladder`. Appending blindly listed them twice — two rows under one React key
+ * in every picker, and a player who could be chosen twice.
+ */
+export function withAddedPlayers(
+  ladder: LadderPlayer[],
+  added: LadderPlayer[],
+): LadderPlayer[] {
+  if (added.length === 0) return ladder;
+  const known = new Set(ladder.map((player) => player.userId));
+  const fresh = added.filter((player) => !known.has(player.userId));
+  return fresh.length === 0 ? ladder : [...ladder, ...fresh];
 }
 
 /**
@@ -602,18 +588,6 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
     [initial?.lines],
   );
 
-  /**
-   * A settled line's forfeit exactly as it was saved, including `"theirs"`.
-   *
-   * The row is read-only, so what it submits must equal what it loaded or
-   * `planEntryChanges` reports it changed and refuses the whole save. Outcome
-   * rows keep this legacy column null while the lock names their result.
-   */
-  const lockedForfeit = useMemo(
-    () => lockedForfeitFromSeed(initial),
-    [initial?.lines],
-  );
-
   // Seeded once. See the header.
   const [lines, setLines] = useState<LineupLine[]>(() =>
     seedDualLines(ladder, initial),
@@ -634,7 +608,7 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
 
   /** The ladder as this flow now knows it — see `extraPlayers`. */
   const roster = useMemo(
-    () => (extraPlayers.length === 0 ? ladder : [...ladder, ...extraPlayers]),
+    () => withAddedPlayers(ladder, extraPlayers),
     [ladder, extraPlayers],
   );
 
@@ -725,6 +699,7 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
               ...line,
               ourLabels: [value],
               ourIds: rosterIdsForLabels(value, against),
+              noPlayer: false,
             }
           : line,
       ),
@@ -743,6 +718,31 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
               ...line,
               ourIds: selection.ids,
               ourLabels: selection.labels,
+              noPlayer: false,
+            }
+          : line,
+      ),
+    );
+  }
+
+  /**
+   * "No player" on one court: nobody on our side, and nobody to name on
+   * theirs — the save records a forfeit for us. Choosing a player afterwards
+   * (`editOurLabels`, `selectOurPlayers`, a drag) takes it back.
+   */
+  function setNoPlayer(key: string) {
+    if (lockedByKey[key]) return;
+    setLines((current) =>
+      current.map((line) =>
+        line.key === key
+          ? {
+              ...line,
+              ourIds: [],
+              ourLabels: [],
+              theirLabels: [],
+              noPlayer: true,
+              // One side forfeits a court, never both.
+              theirNoPlayer: false,
             }
           : line,
       ),
@@ -752,23 +752,55 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
   function editTheirLabels(key: string, value: string) {
     setLines((current) =>
       current.map((line) =>
-        line.key === key ? { ...line, theirLabels: [value] } : line,
+        line.key === key
+          ? { ...line, theirLabels: [value], theirNoPlayer: false }
+          : line,
       ),
     );
   }
 
-  /** Draft choices never clear a saved outcome or erase line assignments. */
-  function setForfeited(key: string, side: LineupLine["forfeit"]) {
-    setLines((current) => setDraftForfeit(current, key, side, lockedByKey));
+  /**
+   * "No player" across the net: the opponent has nobody for this court, and
+   * the save records THEIR forfeit — the point to us. Naming an opponent
+   * afterwards (`editTheirLabels`) takes it back. Not offered while our own
+   * side is No player: one side forfeits a court, never both.
+   */
+  function setTheirNoPlayer(key: string) {
+    if (lockedByKey[key]) return;
+    setLines((current) =>
+      current.map((line) =>
+        line.key === key && !line.noPlayer
+          ? { ...line, theirLabels: [], theirNoPlayer: true }
+          : line,
+      ),
+    );
   }
 
-  // A line counts once our side is named, and a forfeited line counts with
-  // nobody named on either side — `dual-form.tsx`'s rule, which is why the
-  // footer reads 9 over a lineup whose S6 is forfeited. Dropping it would
-  // write eight lines under a dual that has nine points to give, and
-  // `dualScore` would read a decided 4–3 as a 4–3 out of eight.
+  /**
+   * A new singles order from the lineup's drag — S1…S6's occupants, in order.
+   *
+   * The one lineup write that spans lines, so it is taken as a whole order and
+   * applied by the singles lines' own order (`applySinglesOrder`), never by a
+   * slot string or an index a row computed. Opponents stay on their lines.
+   * Refused while any singles line is settled.
+   */
+  function setSinglesOrder(order: SinglesOccupant[]) {
+    setLines((current) => applySinglesOrder(current, order, lockedByKey));
+  }
+
+  // A line counts once it is set — a player, a pair, or No player — and a
+  // settled line counts whoever is on it. The dual saves at nine of nine: a
+  // hole would read as unfinished and as forfeited at once, and `dualScore`
+  // would read a decided 4–3 as a 4–3 out of eight.
   const filled = filledDualLines(lines, lockedByKey);
-  const lineCount = filled.length;
+  // A player already on another line of the same kind is a line still to
+  // set, not a set one — see `lineupClashes`.
+  const clashes = draftClashes(lines);
+  const lineCount = filled.filter(
+    (row) =>
+      !clashes.has(row.line.slot) || lockedByKey[row.line.key] !== undefined,
+  ).length;
+  const lineTotal = lines.length;
 
   // The name the dual is recorded under — squad-qualified for a directory
   // pick, so a school fielding both sides is two opponents and not one, and
@@ -792,7 +824,7 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
    * where a reorder reads as a rename and the save is refused.
    */
   function payloadLines(): LineupLineInput[] {
-    return buildDualPayloadLines(filled, seededIds, lockedForfeit);
+    return buildDualPayloadLines(filled, seededIds);
   }
 
   /**
@@ -858,8 +890,11 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
     editOurLabels,
     selectOurPlayers,
     editTheirLabels,
-    setForfeited,
+    setNoPlayer,
+    setTheirNoPlayer,
+    setSinglesOrder,
     lineCount,
+    lineTotal,
     opponentName,
     submit,
     pending,
@@ -957,52 +992,47 @@ export function DualFactsStep({
 }
 
 /**
- * The nine courts: six singles, three doubles, and the note under them.
+ * The nine courts: six singles and three doubles — "Grey well" from the Dual
+ * Lineup Step canvas.
  *
- * A body, not a screen — see `DualFactsStep`. Everything here is real: an
- * input per side, a live Forfeit toggle, and an `OpponentPopup` on each
- * opponent cell.
+ * A body, not a screen — see `DualFactsStep`. The rows live in
+ * `lineup-rows.tsx`: singles reorder by their grip and across "Not in the
+ * lineup", doubles are picked as pairs. How a line finished is not asked
+ * here — that is the event page's score flow.
  *
  * The two blocks are cut out of the one `lines` array rather than held apart,
  * so the array `submit()` sends and the rows on screen are the same nine
  * objects in the same order.
  *
- * Each popup is handed an `OpponentPool` — the school and ITS saved roster as
- * one value — so a popup cannot dedupe against a different school's pool. See
- * `OpponentPool` for why the mistake is not expressible, and `LineupBlock`'s
- * row key for the other half of the same contract.
+ * Each opponent cell is handed an `OpponentPool` — the school and ITS saved
+ * roster as one value — so a popup cannot dedupe against a different school's
+ * pool, and the pool's key rides in every row's React key.
  */
 export function DualLineupStep({
   lines,
   locked,
   pool,
-  laddered,
   onOurLabels,
   onOurSelection,
   onTheirLabels,
-  onForfeit,
+  onNoPlayer,
+  onTheirNoPlayer,
+  onSinglesOrder,
 }: {
   lines: LineupLine[];
   /**
    * Courts the save may not move, by line key — `useDualDraft().locked`.
    *
-   * Empty on a new dual: nothing has been played yet, so nothing is settled.
-   * On an edit it is the same question `planEntryChanges` asks server-side,
-   * asked early so a settled line is drawn read-only instead of accepting an
-   * edit the save is going to refuse.
+   * Empty on a new dual. On an edit it is the same question
+   * `planEntryChanges` asks server-side, asked early so a settled line is
+   * drawn read-only instead of accepting an edit the save will refuse.
    */
   locked?: Record<string, DualLineLock>;
   /** The school and its saved roster. `pool.key` rides in every row's key. */
   pool: OpponentPool;
-  /** Whether the program has a ladder — the singles note's only variable. */
-  laddered: boolean;
   /**
-   * Our side of one court.
-   *
-   * `added` is a player the picker just created, handed over on the same call
-   * that names them so the id can be resolved before the widened roster has
-   * rendered — see `editOurLabels`. Optional, so a caller that only ever
-   * edits text passes a two-argument function unchanged.
+   * Our side of one court. `added` is a player the picker just created,
+   * handed over on the same call that names them — see `editOurLabels`.
    */
   onOurLabels: (key: string, value: string, added?: LadderPlayer) => void;
   onOurSelection: (
@@ -1010,27 +1040,29 @@ export function DualLineupStep({
     selection: { ids: string[]; labels: string[] },
   ) => void;
   onTheirLabels: (key: string, value: string) => void;
-  onForfeit: (key: string, side: LineupLine["forfeit"]) => void;
+  /** `useDualDraft().setNoPlayer` — nobody on our side of this court. */
+  onNoPlayer: (key: string) => void;
+  /** `useDualDraft().setTheirNoPlayer` — the opponent has nobody here. */
+  onTheirNoPlayer: (key: string) => void;
+  /** `useDualDraft().setSinglesOrder` — a drag's whole new singles order. */
+  onSinglesOrder: (order: SinglesOccupant[]) => void;
 }) {
   const singles = lines.filter((line) => line.discipline === "singles");
   const doubles = lines.filter((line) => line.discipline === "doubles");
 
   // Read from context rather than taken as a prop: the flow already provides
-  // it, and a required prop here would be a required prop on every caller for
-  // a value they all read from the same place.
+  // it, and every caller would read it from the same place.
   const { ladder } = useNewDualData();
 
   /**
-   * Players added from a court since this step mounted.
-   *
-   * Held here as well as in `useDualDraft` because the two answer different
-   * questions from the one event — this one is "who may the list offer, and
-   * whose name is NOT a stranger", `useDualDraft`'s is "which id does this
-   * label resolve to". There is exactly one path that appends to either.
+   * Players added from a court since this step mounted — held here as well as
+   * in `useDualDraft` because the two answer different questions: this one is
+   * "who may the pickers and the bench offer", the hook's is "which id does
+   * this label resolve to". There is exactly one path that appends to either.
    */
   const [added, setAdded] = useState<LadderPlayer[]>([]);
   const roster = useMemo(
-    () => (added.length === 0 ? ladder : [...ladder, ...added]),
+    () => withAddedPlayers(ladder, added),
     [ladder, added],
   );
 
@@ -1043,54 +1075,57 @@ export function DualLineupStep({
     onOurLabels(key, value, player);
   }
 
+  const shared = {
+    locked,
+    pool,
+    roster,
+    onOurLabels,
+    onOurSelection,
+    onAddPlayer,
+    onTheirLabels,
+    onNoPlayer,
+    onTheirNoPlayer,
+    clashes: draftClashes(lines),
+    opponentSinglesNames: singles.flatMap((line) =>
+      line.noPlayer || line.theirNoPlayer
+        ? []
+        : splitNames(line.theirLabels.join(" / ")),
+    ),
+  };
+
   return (
     <>
-      <LineupBlock
-        title="Lineup · singles"
-        // `2b`'s own note, and `dual-form.tsx`'s alternative for the
-        // program the artboard never drew: a ladder nobody has ordered
-        // seeds nothing, so promising six names "from your ladder" over
-        // six empty courts would be the screen claiming a source it does
-        // not have.
-        note={
-          laddered
-            ? "six required · from your ladder"
-            : "six required · type a name on each court"
-        }
-        lines={singles}
-        locked={locked}
-        addLabel="Add name"
-        pool={pool}
-        roster={roster}
-        onAddPlayer={onAddPlayer}
-        onOurLabels={onOurLabels}
-        onOurSelection={onOurSelection}
-        onTheirLabels={onTheirLabels}
-        onForfeit={onForfeit}
-      />
-
-      <div>
-        <LineupBlock
-          title="Lineup · doubles"
-          note="three required · pairs carried from singles"
-          lines={doubles}
-          locked={locked}
-          addLabel="Add pair"
-          pool={pool}
-          roster={roster}
-          onAddPlayer={onAddPlayer}
-          onOurLabels={onOurLabels}
-          onOurSelection={onOurSelection}
-          onTheirLabels={onTheirLabels}
-          onForfeit={onForfeit}
+      <div className="flex flex-col gap-1">
+        <LineupHeading
+          title="Singles"
+          set={setCount(singles, locked, shared.clashes)}
+          total={singles.length}
         />
-        <div className="text-micro mt-2.5" style={{ color: "var(--ink-500)" }}>
-          All nine lines are expected — forfeit a line only when a team
-          can&apos;t field a player for it.
-        </div>
+        <SinglesLineup {...shared} lines={singles} onOrder={onSinglesOrder} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <LineupHeading
+          title="Doubles"
+          set={setCount(doubles, locked, shared.clashes)}
+          total={doubles.length}
+        />
+        <DoublesLineup {...shared} lines={doubles} />
       </div>
     </>
   );
+}
+
+/** Lines that are set, or settled — the headings' count. */
+function setCount(
+  lines: LineupLine[],
+  locked: Record<string, DualLineLock> | undefined,
+  clashes: ReadonlyMap<string, string>,
+): number {
+  return lines.filter(
+    (line) =>
+      locked?.[line.key] !== undefined ||
+      (isDraftLineSet(line) && !clashes.has(line.slot)),
+  ).length;
 }
 
 /**
@@ -1178,313 +1213,6 @@ function FieldCell({
         {children}
       </span>
       {footnote}
-    </div>
-  );
-}
-
-/** Six singles or three doubles, under a ruled heading. */
-function LineupBlock({
-  title,
-  note,
-  lines,
-  locked,
-  addLabel,
-  pool,
-  roster,
-  onOurLabels,
-  onOurSelection,
-  onAddPlayer,
-  onTheirLabels,
-  onForfeit,
-}: {
-  title: string;
-  note: string;
-  lines: LineupLine[];
-  /** Settled courts by line key — see `DualLineupStep`. */
-  locked?: Record<string, DualLineLock>;
-  addLabel: string;
-  /** The school and its saved roster. `pool.key` rides in every row's key. */
-  pool: OpponentPool;
-  /** OUR ladder, including anyone added from a court — see `DualLineupStep`. */
-  roster: LadderPlayer[];
-  onOurLabels: (key: string, value: string, added?: LadderPlayer) => void;
-  onOurSelection: (
-    key: string,
-    selection: { ids: string[]; labels: string[] },
-  ) => void;
-  onAddPlayer: (key: string, player: LadderPlayer, value: string) => void;
-  onTheirLabels: (key: string, value: string) => void;
-  onForfeit: (key: string, side: LineupLine["forfeit"]) => void;
-}) {
-  return (
-    <div>
-      <div className="flex items-baseline gap-2.5 border-b border-[var(--border-hairline)] pb-[9px]">
-        <span className="eyebrow">{title}</span>
-        <span className="text-micro" style={{ color: "var(--ink-500)" }}>
-          {note}
-        </span>
-      </div>
-      <div className="mt-1 flex flex-col">
-        {lines.map((line, index) => (
-          <LineRow
-            // The school's key rides in the row key on purpose: every name on
-            // this row was typed against ONE school, and
-            // `contribute_opponent_player` matches by name WITHIN the target
-            // program, so a name that survived a change of school could
-            // attach to a real, different person at the new one. This key
-            // remounts the row and drops the resolved name with it.
-            key={`${pool.key}:${line.key}`}
-            line={line}
-            locked={locked?.[line.key]}
-            addLabel={addLabel}
-            pool={pool}
-            roster={roster}
-            onOurLabels={onOurLabels}
-            onOurSelection={onOurSelection}
-            usedPairSlots={
-              new Map(
-                lines
-                  .filter(
-                    (other) =>
-                      other.key !== line.key && other.ourIds.length === 2,
-                  )
-                  .map((other) => [pairKey(other.ourIds), other.slot]),
-              )
-            }
-            onAddPlayer={onAddPlayer}
-            onTheirLabels={onTheirLabels}
-            onForfeit={onForfeit}
-            last={index === lines.length - 1}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-const LINE_GRID =
-  "grid grid-cols-[34px_1fr_20px_1fr_240px] items-center gap-2.5";
-
-/**
- * The rule and hover wash under every row but the last — `2b` draws the last
- * row of each block without either. One function so the editable row and the
- * settled one below cannot drift into two different blocks.
- *
- * ── The row is where this lineup answers focus ──────────────────────────────
- * The name and opponent cells inside a row are bare inputs that opt out of the
- * field ring (`data-focus-ring="none"`), because a ring boxed inside one cell
- * of a nine-row grid reads as a stray rectangle. That opt-out is only legal if
- * something else visibly changes at focus, and nothing did: tabbing through
- * the lineup moved nothing on screen, which is the exact failure `focus.css`
- * exists to prevent. So the ROW takes it — its rule goes blue and it lifts the
- * same wash hover uses.
- *
- * The last row keeps a transparent border rather than none, so colouring it on
- * focus cannot shift the grid by a pixel.
- */
-function rowRule(last: boolean) {
-  return [
-    last
-      ? "border-b border-transparent"
-      : "border-b border-[var(--border-hairline)]",
-    "rounded-[var(--radius-element)]",
-    "transition-colors duration-[var(--duration-hover)]",
-    "hover:bg-[var(--surface-subtle)]",
-    "focus-within:border-[var(--blue)] focus-within:bg-[var(--surface-subtle)]",
-  ];
-}
-
-/**
- * One line.
- *
- * Non-played results retain the saved assignments as text. Draft forfeits
- * offer the three play choices; a saved result has no editable controls.
- *
- * ── Both names are the line's, and this row is the only thing that can set
- *    either ────────────────────────────────────────────────────────────────
- * The lineup itself lives upstream now, because `createDual` has to be able to
- * read it. What does NOT move upstream is the ability to address a row: the
- * failure this screen has to be incapable of is a name landing on a line
- * nobody meant, and a keyed map is where that happens — one stale key, one
- * index off by one, and a name typed on S1 is submitted under D3. So every
- * handler this row hands out is a closure over THIS row's `line.key`, made
- * here. The popup and the input are given a plain `(value) => void` and no
- * line id, no index and no way to reach a sibling; the key is never a value
- * either of them holds.
- *
- * `active` lifts the row while its opponent popup is open. The play selector
- * stays visible so each side's choice is discoverable without hovering.
- */
-function LineRow({
-  line,
-  locked,
-  addLabel,
-  pool,
-  roster,
-  onOurLabels,
-  onOurSelection,
-  usedPairSlots,
-  onAddPlayer,
-  onTheirLabels,
-  onForfeit,
-  last,
-}: {
-  line: LineupLine;
-  /** Settled, and how — the row is then read-only. See `DualLineSeed.locked`. */
-  locked?: DualLineLock;
-  addLabel: string;
-  pool: OpponentPool;
-  /** OUR ladder, ranked and unranked — what the name picker offers. */
-  roster: LadderPlayer[];
-  onOurLabels: (key: string, value: string, added?: LadderPlayer) => void;
-  onOurSelection: (
-    key: string,
-    selection: { ids: string[]; labels: string[] },
-  ) => void;
-  usedPairSlots: ReadonlyMap<string, string>;
-  onAddPlayer: (key: string, player: LadderPlayer, value: string) => void;
-  onTheirLabels: (key: string, value: string) => void;
-  onForfeit: (key: string, side: LineupLine["forfeit"]) => void;
-  last: boolean;
-}) {
-  const forfeited = line.forfeit !== null;
-  const [active, setActive] = useState(false);
-  // Our picker's own open state, held apart from the opponent popup's: two
-  // controls writing one flag would have whichever closed last say the row is
-  // resting while the other is still up.
-  const [picking, setPicking] = useState(false);
-
-  // A settled court. Drawn in place — the lineup has to read as nine courts —
-  // but with nothing on it a save could move: no name inputs, no opponent
-  // popup, no Forfeit toggle, just the two sides as they were recorded and one
-  // ink-500 micro saying why the row is closed. `planEntryChanges` refuses a
-  // submission that moves this line, and a refusal is total, so an editable row
-  // here would take a coach's retyped lineup and then reject the whole save.
-  if (locked) {
-    return (
-      <div className={cn(LINE_GRID, "py-[7px]", rowRule(last))}>
-        <span className="mono text-[11px]" style={{ color: "var(--ink-600)" }}>
-          {line.slot}
-        </span>
-
-        <span className="truncate text-[13px] text-[var(--ink-900)]">
-          {line.ourLabels.join(" / ") || "—"}
-        </span>
-
-        <span className="text-micro text-[var(--ink-400)]">vs</span>
-
-        <span className="truncate text-[13px] text-[var(--ink-900)]">
-          {line.theirLabels.join(" / ") || "—"}
-        </span>
-
-        <span
-          className="text-micro text-right"
-          style={{ color: "var(--ink-500)" }}
-        >
-          {locked === "forfeited"
-            ? resultLabelFromOutcome({
-                kind: "forfeit",
-                side: line.forfeit ?? "theirs",
-              })
-            : locked === "played"
-              ? "Played"
-              : locked}
-          {locked !== "played" && (
-            <span className="mt-1 block">
-              Clear the outcome on the event to edit.
-            </span>
-          )}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={cn(
-        LINE_GRID,
-        "py-[7px]",
-        // The popup's containing block: `2d` anchors it to `right:0` of the
-        // row, so the row is what it is positioned against.
-        "relative",
-        active || picking ? "z-20" : null,
-        rowRule(last),
-      )}
-    >
-      <span className="mono text-[11px]" style={{ color: "var(--ink-600)" }}>
-        {line.slot}
-      </span>
-
-      {forfeited ? (
-        // The one string a forfeited builder line prints, and the one
-        // `line-row.tsx` prints for the same state on the event page.
-        <span className="text-[13px]" style={{ color: "var(--ink-500)" }}>
-          {line.ourLabels.join(" / ") || "—"}
-        </span>
-      ) : (
-        // `2b` draws our side as plain text because the artboard draws a
-        // filled lineup. It is a real field under the same 13px ink-900 — the
-        // ladder seeds it, and typing over a seeded name is how a sub goes on.
-        //
-        // A typeahead over the roster rather than a bare input since the
-        // lineup defects: the field still takes free text, but the roster is
-        // now reachable without spelling it, and a name matching nobody says
-        // so instead of saving a court attributed to no player. Both handlers
-        // are closures over THIS row's key — see this component's header.
-        <LineupNamePicker
-          value={line.ourLabels.join(" / ")}
-          selectedIds={line.ourIds}
-          slot={line.slot}
-          discipline={line.discipline}
-          ladder={roster}
-          onChange={(value) => onOurLabels(line.key, value)}
-          onSelection={(selection) => onOurSelection(line.key, selection)}
-          usedPairSlots={usedPairSlots}
-          onAddPlayer={(player, value) => onAddPlayer(line.key, player, value)}
-          onOpenChange={setPicking}
-        />
-      )}
-
-      <span className="text-micro" style={{ color: "var(--ink-400)" }}>
-        vs
-      </span>
-
-      {forfeited ? (
-        <span className="text-[13px] text-[var(--ink-500)]">
-          {line.theirLabels.join(" / ") || "—"}
-        </span>
-      ) : (
-        // `2d`/`2e`. The trigger `2b` draws is this component's closed state,
-        // unchanged — 11px ink-400, a 9px plus, and the block's own
-        // "Add name"/"Add pair".
-        <OpponentPopup
-          value={line.theirLabels.join(" / ")}
-          addLabel={addLabel}
-          discipline={line.discipline}
-          // The school and ITS saved roster, as one value — the pinned bar's
-          // name, `2d`'s dedupe and `2e`'s confirmation all read this one
-          // object, so none of them can name a different school than the pool
-          // the name was matched against. (The rail this once also fed was
-          // deleted with the single-frame builder; the object is still the
-          // reason a school change cannot leave a stale name behind.)
-          pool={pool}
-          draftName=""
-          onCommit={(value) => onTheirLabels(line.key, value)}
-          onActiveChange={setActive}
-        />
-      )}
-
-      <MenuSelect
-        label={`Play choice for ${line.slot}`}
-        value={line.forfeit ?? "normal"}
-        options={LINE_PLAY_OPTIONS}
-        onChange={(value) =>
-          onForfeit(line.key, value === "normal" ? null : value)
-        }
-        note="A forfeit records a result without a played match."
-        width={280}
-        className="w-full"
-      />
     </div>
   );
 }

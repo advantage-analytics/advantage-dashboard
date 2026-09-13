@@ -1,7 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 import { ROUND_ORDER, roundLongLabel } from "@/lib/schedule/format";
-import { groupByDraw, runFinish } from "@/lib/schedule/tournament-run";
+import {
+  groupByDraw,
+  nextRound,
+  runFinish,
+} from "@/lib/schedule/tournament-run";
 import type { EntryMatch, EventEntry } from "@/lib/schedule/types";
 
 /**
@@ -164,5 +168,42 @@ test.describe("groupByDraw", () => {
     expect(groupByDraw(run).map((segment) => segment.draw)).toEqual([
       "Flight B",
     ]);
+  });
+});
+
+test.describe("nextRound", () => {
+  function runOf(rounds: string[], draw: string | null = null): EventEntry {
+    return {
+      id: "entry",
+      eventId: "event",
+      discipline: "singles",
+      slot: null,
+      position: 0,
+      draw,
+      seed: null,
+      playerUserIds: [],
+      playerLabels: ["Ana Vasquez"],
+      opponentLabels: [],
+      opponentSchool: null,
+      forfeit: null,
+      matches: rounds.map((round, index) => ({
+        id: `m-${index}`,
+        round,
+        status: "imported",
+        score: { player1: [6], player2: [3] },
+        opponentLabels: [],
+        hasVideo: false,
+      })),
+    };
+  }
+
+  test("a fresh main-draw entry starts at R32, a qualifier at Q1", () => {
+    expect(nextRound(runOf([]))).toBe("R32");
+    expect(nextRound(runOf([], "Qualifying"))).toBe("Q1");
+  });
+
+  test("the round after the last one recorded", () => {
+    expect(nextRound(runOf(["R32", "R16"]))).toBe("QF");
+    expect(nextRound(runOf(["Q1", "Q2"]))).toBe("Q3");
   });
 });

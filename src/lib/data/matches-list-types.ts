@@ -14,6 +14,8 @@ export interface DbMatch {
     player2: number[];
     player1_tiebreaks?: (number | null)[];
     player2_tiebreaks?: (number | null)[];
+    /** Set when the games don't decide it — a retirement or default. */
+    winner?: "player1" | "player2";
   } | null;
   result: string | null;
   match_type: string | null;
@@ -117,7 +119,10 @@ export function transformDbMatch(
     player2: { name: row.player2_name },
     score: {
       sets,
-      winner: p1Sets > p2Sets ? "player1" : "player2",
+      // A stored winner first: a retired or defaulted match names who took
+      // it, and the side that stopped can be ahead on sets. The schedule's
+      // `matchWon` reads it the same way.
+      winner: row.score?.winner ?? (p1Sets > p2Sets ? "player1" : "player2"),
     },
   };
 }

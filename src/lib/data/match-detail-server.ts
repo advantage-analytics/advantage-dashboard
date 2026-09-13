@@ -27,6 +27,8 @@ interface DbMatch {
     player2: number[];
     player1_tiebreaks?: (number | null)[];
     player2_tiebreaks?: (number | null)[];
+    /** Set when the games don't decide it — a retirement or default. */
+    winner?: "player1" | "player2";
   } | null;
   result: string | null;
   match_type: string | null;
@@ -141,7 +143,8 @@ function transformDbMatchToMatch(
   profiles: Map<string, PlayerProfile>,
 ): Match {
   const sets = buildSets(row);
-  const winner = determineWinner(sets);
+  // A retired or defaulted match stores who took it; the sets can say otherwise.
+  const winner = row.score?.winner ?? determineWinner(sets);
   const finalScore = sets.map((s) => `${s.player1}-${s.player2}`).join(", ");
   const { isUserPlayer1 } = resolveYouSide(row, playerIds);
   const userWon = isUserPlayer1 ? winner === "player1" : winner === "player2";

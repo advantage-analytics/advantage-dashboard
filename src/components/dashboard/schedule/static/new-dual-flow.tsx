@@ -70,7 +70,7 @@
  *                see `dualSeed` below and `DualLineSeed.id` for why a lineup
  *                submitted without ids is a lineup `planEntryChanges` reads as
  *                nine deletes and nine inserts.
- *   settled      lines with a match or a forfeit are drawn read-only. The save
+ *   settled      lines with a match or a saved outcome are drawn read-only. The save
  *                would refuse to move them anyway, and a refusal is total, so
  *                an editable row would take a whole retyped lineup and then
  *                reject it.
@@ -92,6 +92,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { WizardShell } from "@/components/dashboard/matches/new-match-wizard/WizardShell";
 import { useWizardKeys } from "@/components/dashboard/matches/new-match-wizard/useWizardKeys";
 import { PinnedEventBar } from "@/components/dashboard/schedule/static/pinned-event-bar";
+import { LineupProgress } from "@/components/dashboard/schedule/static/lineup-rows";
 import { DualSchoolStep } from "@/components/dashboard/schedule/static/dual-school-step";
 import {
   DualFactsStep,
@@ -103,7 +104,12 @@ import {
 } from "@/components/dashboard/schedule/static/dual-build-step";
 import { divisionLabel } from "@/lib/data/programs-server";
 import { formatValueOf } from "@/lib/schedule/format";
-import { isSettled } from "@/lib/schedule/entry-plan";
+import {
+  isNoPlayerLine,
+  isOpponentNoPlayerLine,
+  isSettled,
+  lineupForfeitSide,
+} from "@/lib/schedule/entry-plan";
 import { outcomeForRound } from "@/lib/schedule/entry-state";
 import { resultLabelFromOutcome } from "@/components/dashboard/schedule/result-choice";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
@@ -126,9 +132,17 @@ const COPY: Record<Step, { title: string; lede: string }> = {
   },
   3: {
     title: "The lineup.",
-    lede: "Six singles and three doubles. Your side is seeded from the ladder — type over a name to put a sub on.",
+    lede: "Seeded from your ladder — drag a grip to reorder, or below the line to bench. Who are they sending?",
   },
 };
+
+/**
+ * Step three's lede for a program nobody has ranked. `seedLineup` seeds no one
+ * from an unordered ladder, so promising "seeded from your ladder" over six
+ * empty lines would be the screen claiming a source it does not have.
+ */
+const UNLADDERED_LINEUP_LEDE =
+  "Pick a player for each line — drag a grip to reorder, or below the line to bench. Who are they sending?";
 
 /** The one place a `ChosenSchool` is built out of step one's two answers. */
 function chosenFrom(
@@ -193,6 +207,9 @@ interface DualEditTarget {
  * loaded line — see `DualLineSeed.id`.
  */
 function dualLineLock(entry: EventEntry): DualLineLock | undefined {
+  // "No player", on either side, is the lineup's own answer and stays
+  // editable here.
+  if (lineupForfeitSide(entry) !== null) return undefined;
   const result = outcomeForRound(entry, null);
   if (result) {
     return resultLabelFromOutcome(result.outcome);
@@ -218,7 +235,8 @@ export function dualSeed({ event, entries }: EventDetail): DualDraftSeed {
               ourIds: entry.playerUserIds,
               ourLabels: entry.playerLabels,
               theirLabels: entry.opponentLabels,
-              forfeit: entry.forfeit,
+              noPlayer: isNoPlayerLine(entry),
+              theirNoPlayer: isOpponentNoPlayerLine(entry),
               // The same question `planEntryChanges` asks at save, asked here
               // so the row is drawn read-only rather than refused later.
               locked: dualLineLock(entry),
@@ -394,8 +412,11 @@ function DualDraftFlow({
     editOurLabels,
     selectOurPlayers,
     editTheirLabels,
-    setForfeited,
+    setNoPlayer,
+    setTheirNoPlayer,
+    setSinglesOrder,
     lineCount,
+    lineTotal,
     opponentName,
     submit,
     pending,
@@ -413,11 +434,13 @@ function DualDraftFlow({
   const eventHref = edit
     ? `/dashboard/team/schedule/${edit.detail.event.id}`
     : SCHEDULE_HREF;
-  // `createDual` refuses a dual with no lines, so the button is asleep until
-  // there is one to write — and asleep again while the write is in flight, so
-  // a second click cannot create a second dual.
+  // Asleep until all nine lines are set — the design system's rule for a
+  // primary that commits a draft — and again while the write is in flight, so
+  // a second click cannot create a second dual. `LineupProgress` beside it
+  // says why it is asleep, and takes the coach to the line still to set.
+  const complete = lineCount === lineTotal;
   const continueDisabled = lastStep
-    ? pending || lineCount === 0
+    ? pending || !complete
     : draft.date.trim() === "";
 
   const onContinue = useCallback(() => {
@@ -461,7 +484,9 @@ function DualDraftFlow({
       stepIndex={step - 1}
       stepCount={3}
       title={COPY[step].title}
-      description={COPY[step].lede}
+      description={
+        step === 3 && !laddered ? UNLADDERED_LINEUP_LEDE : COPY[step].lede
+      }
       pinned={
         /* The answer step one gave, pinned for the two steps that inherit it —
            and the way back to change it. The facts join it as they are
@@ -489,7 +514,7 @@ function DualDraftFlow({
       }
       contentRef={contentRef}
       contentKey={step}
-      contentClassName={step === 2 ? "mt-9" : "mt-9 flex flex-col gap-[22px]"}
+      contentClassName={step === 2 ? "mt-9" : "mt-9 flex flex-col gap-7"}
       back={canGoBack ? back : undefined}
       // Only ever reached when there is no Back — the shell draws one or the
       // other. On an edit that is step two, and its way out is the event.
@@ -502,13 +527,22 @@ function DualDraftFlow({
           <span className="text-[11px]" style={{ color: "var(--danger)" }}>
             {error}
           </span>
-        ) : lastStep ? (
+        ) : lastStep && complete ? (
           <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
             {edit ? "Saves" : "Creates"}{" "}
             <span className="tabular">{lineCount}</span>{" "}
             {lineCount === 1 ? "line" : "lines"} vs{" "}
             {edit ? edit.detail.event.name : opponentName}
           </span>
+        ) : null
+      }
+      secondary={
+        lastStep && !complete ? (
+          <LineupProgress
+            set={lineCount}
+            total={lineTotal}
+            scope={contentRef}
+          />
         ) : null
       }
       continueLabel={
@@ -533,11 +567,12 @@ function DualDraftFlow({
           // Empty on a create — nothing has been played yet.
           locked={locked}
           pool={pool}
-          laddered={laddered}
           onOurLabels={editOurLabels}
           onOurSelection={selectOurPlayers}
           onTheirLabels={editTheirLabels}
-          onForfeit={setForfeited}
+          onNoPlayer={setNoPlayer}
+          onTheirNoPlayer={setTheirNoPlayer}
+          onSinglesOrder={setSinglesOrder}
         />
       )}
     </WizardShell>

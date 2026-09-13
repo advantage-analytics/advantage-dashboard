@@ -5,6 +5,22 @@ import { getPersonalMatchData } from "@/lib/data/personal-matches-server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { viewerSide } from "./viewer-side";
 
+/**
+ * Did player1 take this match? The stored `winner` when a retirement or a
+ * default decided it — the side that stopped can lead on sets — and the set
+ * count otherwise, as every tally here always counted it.
+ */
+function player1Took(score: NonNullable<DbMatch["score"]>): boolean {
+  if (score.winner) return score.winner === "player1";
+  const p1Sets = score.player1.filter(
+    (s, i) => s > (score.player2[i] ?? 0),
+  ).length;
+  const p2Sets = score.player2.filter(
+    (s, i) => s > (score.player1[i] ?? 0),
+  ).length;
+  return p1Sets > p2Sets;
+}
+
 interface WinLossView {
   wins: number;
   losses: number;
@@ -116,6 +132,8 @@ interface DbMatch {
   score: {
     player1: number[];
     player2: number[];
+    /** Set when a retirement or default decided it, not the games. */
+    winner?: "player1" | "player2";
   } | null;
 }
 
@@ -228,17 +246,10 @@ function calculateWinLoss(
     if (cutoffDate && new Date(match.date) < cutoffDate) continue;
     if (!match.score?.player1 || !match.score?.player2) continue;
 
-    const p1Sets = match.score.player1.filter(
-      (s, i) => s > (match.score?.player2[i] ?? 0),
-    ).length;
-    const p2Sets = match.score.player2.filter(
-      (s, i) => s > (match.score?.player1[i] ?? 0),
-    ).length;
-
     const side = viewerSide(match, playerIds, viewerId);
     if (side === null) continue;
 
-    const player1Won = p1Sets > p2Sets;
+    const player1Won = player1Took(match.score);
     const userWon = side === "player1" ? player1Won : !player1Won;
 
     if (userWon) wins++;
@@ -422,17 +433,10 @@ function calculateForm(
     if (form.length >= count) break;
     if (!match.score?.player1 || !match.score?.player2) continue;
 
-    const p1Sets = match.score.player1.filter(
-      (s, i) => s > (match.score?.player2[i] ?? 0),
-    ).length;
-    const p2Sets = match.score.player2.filter(
-      (s, i) => s > (match.score?.player1[i] ?? 0),
-    ).length;
-
     const side = viewerSide(match, playerIds, viewerId);
     if (side === null) continue;
 
-    const player1Won = p1Sets > p2Sets;
+    const player1Won = player1Took(match.score);
     form.push((side === "player1" ? player1Won : !player1Won) ? "W" : "L");
   }
   // Reverse so oldest is first (left) and newest is last (right)
@@ -477,7 +481,12 @@ function calculateHeatmap(
       const p2Sets = m.score?.player2 ?? [];
       const p1Won = p1Sets.filter((s, i) => s > (p2Sets[i] ?? 0)).length;
       const p2Won = p2Sets.filter((s, i) => s > (p1Sets[i] ?? 0)).length;
-      const won = isP1 ? p1Won > p2Won : p2Won > p1Won;
+      const winner = m.score?.winner;
+      const won = winner
+        ? (winner === "player1") === isP1
+        : isP1
+          ? p1Won > p2Won
+          : p2Won > p1Won;
       const scoreStr = p1Sets
         .map((s, i) => `${s}-${p2Sets[i] ?? 0}`)
         .join(", ");
@@ -726,15 +735,9 @@ function calculateWinRateSparkline(
   const results: boolean[] = [];
   for (const match of [...matches].reverse()) {
     if (!match.score?.player1 || !match.score?.player2) continue;
-    const p1Sets = match.score.player1.filter(
-      (s, i) => s > (match.score?.player2[i] ?? 0),
-    ).length;
-    const p2Sets = match.score.player2.filter(
-      (s, i) => s > (match.score?.player1[i] ?? 0),
-    ).length;
     const side = viewerSide(match, playerIds, viewerId);
     if (side === null) continue;
-    const player1Won = p1Sets > p2Sets;
+    const player1Won = player1Took(match.score);
     results.push(side === "player1" ? player1Won : !player1Won);
   }
 
@@ -759,13 +762,7 @@ function calculateWinRateSparkline(
     const side = viewerSide(match, playerIds, viewerId);
     if (side === null) continue;
     recentTotal++;
-    const p1Sets = match.score.player1.filter(
-      (s, i) => s > (match.score?.player2[i] ?? 0),
-    ).length;
-    const p2Sets = match.score.player2.filter(
-      (s, i) => s > (match.score?.player1[i] ?? 0),
-    ).length;
-    const player1Won = p1Sets > p2Sets;
+    const player1Won = player1Took(match.score);
     if (side === "player1" ? player1Won : !player1Won) recentWins++;
   }
   const olderMatches = matches.filter((m) => new Date(m.date) < cutoff);
@@ -776,13 +773,7 @@ function calculateWinRateSparkline(
     const side = viewerSide(match, playerIds, viewerId);
     if (side === null) continue;
     olderTotal++;
-    const p1Sets = match.score.player1.filter(
-      (s, i) => s > (match.score?.player2[i] ?? 0),
-    ).length;
-    const p2Sets = match.score.player2.filter(
-      (s, i) => s > (match.score?.player1[i] ?? 0),
-    ).length;
-    const player1Won = p1Sets > p2Sets;
+    const player1Won = player1Took(match.score);
     if (side === "player1" ? player1Won : !player1Won) olderWins++;
   }
 

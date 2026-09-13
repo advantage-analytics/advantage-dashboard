@@ -20,6 +20,7 @@ import {
   supportsVideo as entrySupportsVideo,
 } from "@/lib/schedule/entry-state";
 import { compareEntryOrder } from "@/lib/schedule/courts";
+import { nextRound } from "@/lib/schedule/tournament-run";
 
 /**
  * The preset for one entry (and, optionally, one of its matches) within an
@@ -28,19 +29,25 @@ import { compareEntryOrder } from "@/lib/schedule/courts";
  *
  * `programs` is the resolved `programNamesFor` map for every opponent
  * program behind the event's entries, keyed by `programId`.
+ *
+ * `round` is for a tournament entry, whose round is a real question: a dual
+ * line's slot IS its round and wins outright. Without one the preset takes
+ * the match's round, and with neither it is null — the score flow refuses to
+ * save a tournament result with no round, and the server does too.
  */
 export function presetFor(
   event: ProgramEvent,
   entry: EventEntry,
   match: EventEntry["matches"][number] | null,
   programs: Map<string, { key: string; school: string }>,
+  round: string | null = null,
 ): EventPreset {
   return {
     entryId: entry.id,
     eventId: event.id,
     eventName: event.name,
     matchId: match?.id ?? null,
-    round: entry.slot ?? match?.round ?? null,
+    round: entry.slot ?? round ?? match?.round ?? null,
     playerName: entry.playerLabels.join(" / "),
     // Singles only. A doubles line has two accounts and one `player1_id`
     // column, so there is no non-arbitrary answer and null is the honest
@@ -54,6 +61,8 @@ export function presetFor(
     bestOf: event.format.bestOf,
     adScoring: event.format.adScoring,
     score: match?.score ?? null,
+    ending: match?.ending ?? null,
+    discipline: entry.discipline,
     supportsVideo: entrySupportsVideo(entry),
     eventHref: `/dashboard/team/schedule/${event.id}`,
     site: event.site,
@@ -76,6 +85,12 @@ export function presetFor(
  * legal to attach more video to a scored line), an unset one is listed but
  * not pickable. Non-played lines stay unset for upload by default; the score
  * flow opts into them so a saved outcome can be cleared or changed.
+ *
+ * A tournament entry is listed under `#n` (its position), never under a
+ * round: two entries whose first match was the R32 are two rows, and the
+ * de-duplication at the end is by that label. Its preset points at the NEXT
+ * round to record (`nextRound`), so switching to it from the score flow's
+ * Change menu never lands on a result already saved.
  */
 export function lineupChoices(
   event: ProgramEvent,
@@ -89,14 +104,17 @@ export function lineupChoices(
       // why a dual is never ordered by the stored integer.
       .sort(compareEntryOrder)
       .flatMap((entry): LineChoice[] => {
-        const slot =
-          entry.slot ?? entry.matches[0]?.round ?? `#${entry.position + 1}`;
+        const tournament = entry.slot === null;
+        const slot = entry.slot ?? `#${entry.position + 1}`;
         const playerName = entry.playerLabels.join(" / ") || null;
-        const nonPlayed = outcomeForRound(entry, null);
+        const round = tournament ? nextRound(entry) : null;
+        const nonPlayed = outcomeForRound(entry, round);
         if (!playerName || (nonPlayed && !options.includeNonPlayed)) {
           return [{ slot, playerName, state: "unset", preset: null }];
         }
-        const match = entry.matches[0] ?? null;
+        const match = tournament
+          ? (entry.matches.find((item) => item.round === round) ?? null)
+          : (entry.matches[0] ?? null);
         const state: LineChoice["state"] = nonPlayed
           ? "result"
           : !match
@@ -109,7 +127,7 @@ export function lineupChoices(
             slot,
             playerName,
             state,
-            preset: presetFor(event, entry, match, programs),
+            preset: presetFor(event, entry, match, programs, round),
           },
         ];
       })
