@@ -455,10 +455,24 @@ function MemberMenu({
                   : removeMember(member.userId as string),
               )
             }
-            className="flex w-full items-center gap-2.5 rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)] disabled:opacity-50"
+            className="group flex w-full items-start gap-2.5 rounded-[var(--radius-element)] px-2 py-2 text-left transition-colors hover:bg-[var(--surface-subtle)] disabled:opacity-50"
           >
-            <Trash2 className={MENU_ROW_ICON} strokeWidth={1.5} aria-hidden />
-            Remove from roster
+            <Trash2
+              className={`mt-0.5 ${MENU_ROW_ICON}`}
+              strokeWidth={1.5}
+              aria-hidden
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[12px] text-[var(--ink-700)] group-hover:text-[var(--danger)]">
+                Remove from roster
+              </span>
+              {member.profileId && (
+                <span className="block text-[11px] leading-[1.5] text-[var(--ink-500)]">
+                  Their matches stay. Adding them again offers to restore this
+                  profile.
+                </span>
+              )}
+            </span>
           </button>
         )}
       </PopoverContent>

@@ -124,7 +124,7 @@ ready).
 
 ## T9 · Say in the drawer's Remove row that matches are kept and the player can be restored
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** `src/components/dashboard/team/player-drawer.tsx` (`MemberMenu`'s Remove row, ~L440-462) — guess
 - **done when:**
