@@ -57,7 +57,7 @@ ready).
 
 ## T4 · Find and fix why the ZZ Test Program roster never resolves in the upload wizard
 
-- **status:** blocked
+- **status:** done
 - **model:** fable
 - **needs:** T3
 - **files:** src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts, supabase/migrations/20260822090500_program_roster_full.sql (reference — live DB is truth), src/lib/workspace/active-workspace-server.ts, src/lib/workspace/types.ts

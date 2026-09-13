@@ -1495,6 +1495,46 @@ test.describe("wizard handlers: only eligible roster subjects are offered or ins
     expect(h.current.step).toBe("provider");
     expect(h.current.error).toBeNull();
   });
+
+  // T4 · the ZZ Test Program "Loading the roster…" hang. Its cause was a
+  // guard of `!askWhoPlayed` on the roster effect: a preset (a resumed team
+  // draft carries one) made `askWhoPlayed` false, the fetch never ran, and the
+  // picker — which renders on the workspace kind alone — showed the loading
+  // copy forever with no request in flight. The fetch must key on the
+  // workspace, never on whether the answer is already known.
+  test("a team workspace with a preset still loads the roster (T4)", async () => {
+    const h = uploadWizardHarness({
+      team: true,
+      props: { preset: preset({ matchId: "m-existing" }) },
+    });
+    expect(h.current.whoPlayed.required).toBe(false);
+    await h.flush();
+    expect(h.rosterRpcCallCount).toBeGreaterThan(0);
+    expect(h.current.whoPlayed.roster).not.toBeNull();
+    expect(h.current.whoPlayed.loadFailed).toBe(false);
+  });
+
+  test("a program with nobody on the roster resolves to an empty list, not a pending one (T4)", async () => {
+    // Only the owner's own staff seat comes back — arm 2 of the RPC — which
+    // the picker filters out. That is the empty state, and it must read as
+    // `[]`, never as `null` (which the picker draws as still loading).
+    const h = uploadWizardHarness({
+      team: true,
+      workspace: { role: "owner" },
+      roster: [
+        rosterRow("user", {
+          user_id: "user",
+          display_name: "Riley Player",
+          role: "owner",
+          managed_by: "self",
+        }),
+      ],
+    });
+    await h.flush();
+    expect(h.rosterRpcCallCount).toBeGreaterThan(0);
+    expect(h.current.whoPlayed.roster).toEqual([]);
+    expect(h.current.whoPlayed.loadFailed).toBe(false);
+  });
 });
 
 test.describe("wizard handlers: what reaches the write", () => {
