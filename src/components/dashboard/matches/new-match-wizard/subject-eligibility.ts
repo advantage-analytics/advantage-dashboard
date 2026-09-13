@@ -198,6 +198,8 @@ export interface WizardEligibilityInput {
   attachesToLine?: boolean;
   /** A fresher `programs.status`, when the caller re-read it (T13). */
   approval?: ProgramApprovalReading;
+  /** False for a SwingVision import — see `UploadEligibilityInput`. */
+  recordsVideo?: boolean;
 }
 
 export function wizardUploadEligibility(
@@ -212,6 +214,7 @@ export function wizardUploadEligibility(
     roster,
     attachesToLine: input.attachesToLine,
     approval: input.approval,
+    recordsVideo: input.recordsVideo,
   });
 
   if (result.ok) {

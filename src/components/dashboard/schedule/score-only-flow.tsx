@@ -1060,6 +1060,7 @@ function OpponentInRow({
         draftName=""
         onCommit={onChange}
         onActiveChange={() => {}}
+        variant="underline"
       />
     );
   }

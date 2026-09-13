@@ -55,7 +55,29 @@ export async function updateSession(request: NextRequest) {
   // The call looks unused — its return value is discarded on purpose. Reading
   // the claims is what triggers the refresh-and-set-cookie path above, so
   // removing it would turn this middleware into an expensive no-op.
-  await supabase.auth.getClaims();
+  //
+  // `getClaims()` reports every `AuthError` (network, expired, bad signature)
+  // as a `{ data: null, error }` return, which is why the result is not
+  // checked. What it *throws* is narrower: `validateExp` raises a plain
+  // `Error("Missing exp claim")` / `Error("JWT has expired")` while decoding
+  // the cookie's access token, before any network call, and `getClaims`
+  // rethrows anything that is not an `AuthError`. So this catch is reached only
+  // by a cookie whose token cannot be validated — a stale, foreign-project or
+  // hand-made one — never by a valid session. Without it that one cookie took
+  // down every route in `src/proxy.ts`'s matcher with a 500 until it was gone.
+  //
+  // Deliberately no cookie clearing here and no redirect. Downstream
+  // `getUser()` in the owning layouts already rejects the bad token and sends
+  // the browser to /login; clearing here would add a second place that decides
+  // session validity. Log the message and path only — never a cookie value.
+  try {
+    await supabase.auth.getClaims();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(
+      `[updateSession] auth cookie could not be validated (${message}) on ${request.nextUrl.pathname}; leaving it for the layout's getUser() to reject`,
+    );
+  }
 
   // You *must* return this exact object. If you build a different response,
   // copy the cookies onto it first (`res.cookies.setAll(...)`) or the browser

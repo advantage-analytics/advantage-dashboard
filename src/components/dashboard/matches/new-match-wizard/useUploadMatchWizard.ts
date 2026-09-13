@@ -81,7 +81,13 @@ import {
   STORAGE_KEYS,
   MatchMetadata,
 } from "./utils";
-import { updateScoreState, type ScoreArrayField } from "./score-state";
+import {
+  isStoppedResult,
+  scoreGames,
+  scoreUndecided,
+  updateScoreState,
+  type ScoreArrayField,
+} from "./score-state";
 import {
   buildImportIdentityConfirmationKey,
   collectMatchCompletionRequirements,
@@ -98,6 +104,8 @@ export interface ImportIdentityState {
   message: string | null;
   confirm: () => void;
   reject: () => void;
+  /** Withdraw the answer and ask again — the step blocks until it is re-answered. */
+  change: () => void;
 }
 
 /**
@@ -1337,66 +1345,79 @@ export function useUploadMatchWizard({
     let cancelled = false;
 
     (async () => {
-      // The open invitations ride along so the picker can show who has been
-      // asked but has not yet claimed their profile. Staff-only under RLS: a
-      // player's read returns nothing, and the rows render without the state.
-      const [
-        { data, error: rosterError },
-        { data: invites },
-        { data: ownRows },
-      ] = await Promise.all([
-        supabase.rpc("program_roster_full", {
-          p_program_id: eligibilityWorkspace.id,
-        }),
-        supabase
-          .from("program_invites")
-          .select("player_id, email")
-          .eq("program_id", eligibilityWorkspace.id)
-          .is("accepted_at", null),
-        supabase
-          .from("program_players")
-          .select(
-            "id, program_id, first_name, last_name, email, class_year, lineup_spot, claimed_by_user_id",
-          )
-          .eq("program_id", eligibilityWorkspace.id)
-          .eq("claimed_by_user_id", viewer.id)
-          .is("archived_at", null)
-          .is("merged_into_id", null)
-          .limit(1),
-      ]);
-      if (cancelled) return;
+      try {
+        // The open invitations ride along so the picker can show who has been
+        // asked but has not yet claimed their profile. Staff-only under RLS: a
+        // player's read returns nothing, and the rows render without the state.
+        const [
+          { data, error: rosterError },
+          { data: invites },
+          { data: ownRows },
+        ] = await Promise.all([
+          supabase.rpc("program_roster_full", {
+            p_program_id: eligibilityWorkspace.id,
+          }),
+          supabase
+            .from("program_invites")
+            .select("player_id, email")
+            .eq("program_id", eligibilityWorkspace.id)
+            .is("accepted_at", null),
+          supabase
+            .from("program_players")
+            .select(
+              "id, program_id, first_name, last_name, email, class_year, lineup_spot, claimed_by_user_id",
+            )
+            .eq("program_id", eligibilityWorkspace.id)
+            .eq("claimed_by_user_id", viewer.id)
+            .is("archived_at", null)
+            .is("merged_into_id", null)
+            .limit(1),
+        ]);
+        if (cancelled) return;
 
-      if (rosterError) {
+        if (rosterError) {
+          console.error("[wizard] could not load the roster", {
+            error: rosterError.message,
+          });
+          setTeamRoster(null);
+          setRosterLoadFailed(true);
+          return;
+        }
+
+        const invitedByPlayer = new Map<string, string>();
+        for (const invite of (invites ?? []) as {
+          player_id: string | null;
+          email: string;
+        }[]) {
+          if (invite.player_id)
+            invitedByPlayer.set(invite.player_id, invite.email);
+        }
+
+        const own = ((ownRows ?? []) as OwnProfileRow[])[0] ?? null;
+        setRosterLoadFailed(false);
+        setTeamRoster(
+          eligibleRosterOptions(
+            (data ?? []) as RosterFullRow[],
+            own,
+            eligibilityWorkspace.id,
+            viewer.id,
+          ).map((row) => ({
+            ...row,
+            invitedEmail: invitedByPlayer.get(row.playerId) ?? null,
+          })),
+        );
+      } catch (err) {
+        // Any of the three `Promise.all` calls can throw (network failure,
+        // an aborted request) rather than resolve with an `error` field —
+        // without this, that leaves `teamRoster` null and `loadFailed` false
+        // forever, which reads as a permanent "Loading the roster…".
+        if (cancelled) return;
         console.error("[wizard] could not load the roster", {
-          error: rosterError.message,
+          error: err instanceof Error ? err.message : String(err),
         });
         setTeamRoster(null);
         setRosterLoadFailed(true);
-        return;
       }
-
-      const invitedByPlayer = new Map<string, string>();
-      for (const invite of (invites ?? []) as {
-        player_id: string | null;
-        email: string;
-      }[]) {
-        if (invite.player_id)
-          invitedByPlayer.set(invite.player_id, invite.email);
-      }
-
-      const own = ((ownRows ?? []) as OwnProfileRow[])[0] ?? null;
-      setRosterLoadFailed(false);
-      setTeamRoster(
-        eligibleRosterOptions(
-          (data ?? []) as RosterFullRow[],
-          own,
-          eligibilityWorkspace.id,
-          viewer.id,
-        ).map((row) => ({
-          ...row,
-          invitedEmail: invitedByPlayer.get(row.playerId) ?? null,
-        })),
-      );
     })();
 
     return () => {
@@ -1486,8 +1507,13 @@ export function useUploadMatchWizard({
       subject: matchSubject,
       roster: eligibilityWorkspace.kind === "team" ? teamRoster : undefined,
       attachesToLine: Boolean(lineTarget?.entryId) && !lineTarget?.matchId,
+      // A team still being confirmed may import, not send video. Before a
+      // source is picked nothing is refused on this ground: the Source row's
+      // own note says it the moment Advantage Intelligence is chosen.
+      recordsVideo: isProcessingProvider,
     }),
     [
+      isProcessingProvider,
       eligibilityWorkspace,
       viewer.id,
       preset,
@@ -2273,6 +2299,14 @@ export function useUploadMatchWizard({
         setError(`Complete the required fields: ${missing.labels.join(", ")}.`);
         return;
       }
+      // The write-time half of the flow's "did it end early?" question: a
+      // score nobody won is saved only as Retired or Unfinished, never as a
+      // plain final score that just happens to be missing a set.
+      const undecided = scoreUndecided(scoreGames(formData));
+      if (undecided && !isStoppedResult(formData.result)) {
+        setError("Finish the score, or say whether the match ended early.");
+        return;
+      }
 
       setIsCreating(true);
       setError(null);
@@ -2404,9 +2438,32 @@ export function useUploadMatchWizard({
           opponentPlayerId,
         };
 
+        const stopped = undecided && isStoppedResult(formData.result);
+        const decidedResult = isStoppedResult(formData.result)
+          ? ""
+          : formData.result;
+        let setsPlayed = 1;
+        for (let i = 0; i < 5; i++) {
+          if (
+            formData.playerScores[i] != null ||
+            formData.opponentScores[i] != null
+          )
+            setsPlayed = i + 1;
+        }
+
         const matchData = buildMatchData(
           matchId,
-          { ...formData, eventName },
+          {
+            ...formData,
+            eventName,
+            // An early-end answer left over from before the score was
+            // finished would label a decided match "Retired".
+            result: stopped ? formData.result : decidedResult,
+            // A match that stopped keeps the sets it played. Padding it out
+            // to the format writes 0-0 sets that never happened, and the match
+            // pages would print "6-4, 0-0, 0-0".
+            ...(stopped ? { numberOfSets: setsPlayed } : {}),
+          },
           winner,
           loser,
           isPrivateMatch,
@@ -2438,6 +2495,7 @@ export function useUploadMatchWizard({
                   : matchRow.score,
                 player1_name: matchRow.player1_name,
                 player2_name: matchRow.player2_name,
+                ...(stopped ? { result: matchRow.result } : {}),
                 // Only when one was resolved. Spreading it unconditionally would
                 // write null over an identity a previous pass established, which
                 // is worse than never having set it — the opponent's profile
@@ -2715,6 +2773,7 @@ export function useUploadMatchWizard({
       message: identityMessage,
       confirm: confirmImportIdentity,
       reject: rejectImportIdentity,
+      change: resetIdentityAnswer,
     },
 
     // Step navigation

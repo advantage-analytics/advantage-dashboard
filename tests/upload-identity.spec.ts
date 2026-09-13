@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 import { expect, test } from "@playwright/test";
@@ -48,9 +48,11 @@ const WIZARD = "src/components/dashboard/matches/new-match-wizard";
 interface NoticeProps {
   comparison: IdentityMatchStatus;
   workspaceKind: "personal" | "team";
+  confirmed: boolean;
   rejected: boolean;
   onConfirm: () => void;
   onReject: () => void;
+  onChangeAnswer: () => void;
   onChangeFile: () => void;
   onChangePlayer?: () => void;
 }
@@ -67,15 +69,17 @@ const noticeModule = (() => {
   // of what this spec checks.
   const loadSibling = (relative: string) => {
     const siblingExports: Record<string, unknown> = {};
-    const compiled = ts.transpileModule(
-      readFileSync(resolve(`${WIZARD}/${relative}.tsx`), "utf8"),
-      {
-        compilerOptions: {
-          module: ts.ModuleKind.CommonJS,
-          jsx: ts.JsxEmit.ReactJSX,
-        },
+    // Components are .tsx; the shared class strings (`styles`) are .ts.
+    const path = [`${relative}.tsx`, `${relative}.ts`]
+      .map((file) => resolve(`${WIZARD}/${file}`))
+      .find((file) => existsSync(file));
+    if (!path) throw new Error(`unexpected sibling import: ${relative}`);
+    const compiled = ts.transpileModule(readFileSync(path, "utf8"), {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        jsx: ts.JsxEmit.ReactJSX,
       },
-    ).outputText;
+    }).outputText;
     runInNewContext(compiled, {
       exports: siblingExports,
       require: stubRequire,
@@ -160,9 +164,11 @@ function render(props: Partial<NoticeProps> & Pick<NoticeProps, "comparison">) {
   const html = renderToStaticMarkup(
     React.createElement(Notice, {
       workspaceKind: "personal",
+      confirmed: false,
       rejected: false,
       onConfirm: () => {},
       onReject: () => {},
+      onChangeAnswer: () => {},
       onChangeFile: () => {},
       ...props,
     }),
@@ -185,21 +191,22 @@ function render(props: Partial<NoticeProps> & Pick<NoticeProps, "comparison">) {
   return { html, text, buttons } satisfies Rendered;
 }
 
-const CONFIRM = "Yes, this is player 1";
-const REJECT = "No, they are not player 1";
+const CONFIRM = "Yes, I'm player 1";
+const REJECT = "No, I'm not player 1";
 
-// ─── 1. Copy, in both workspace kinds ──────────────────────────────────────
+// ─── 1. The question, in both workspace kinds ──────────────────────────────
 
-test("a personal mismatch names the export's player and the profile's", () => {
+test("a personal mismatch asks the uploader and names the export's player", () => {
   const { text, buttons } = render({
     comparison: comparisonOf("Riley Reproduction", "Taylor Imported"),
     workspaceKind: "personal",
   });
 
-  expect(text).toContain("Taylor Imported");
-  expect(text).toContain("Riley Reproduction");
-  expect(text).toContain("Are you player 1 in this export?");
-  expect(buttons.map((b) => b.label)).toContain(CONFIRM);
+  expect(text).toContain("Are you player 1?");
+  expect(text).toContain("This export lists Taylor Imported.");
+  // Two stacked answers, each naming its subject — "No" can't read as denying
+  // the export's player. Escape hatches wait for the answer.
+  expect(buttons.map((b) => b.label)).toEqual([CONFIRM, REJECT]);
 });
 
 test("a team mismatch asks about the chosen athlete by name", () => {
@@ -209,42 +216,97 @@ test("a team mismatch asks about the chosen athlete by name", () => {
     onChangePlayer: () => {},
   });
 
-  // Both names, and the team question — not the personal one, which would tell
-  // a coach that their own profile names the athlete.
-  expect(text).toContain("This export names M. Webb Jr as player 1");
-  expect(text).toContain("Is that Marcus Webb?");
-  expect(text).not.toContain("your profile");
+  // The team question — never "you", which would ask the coach about
+  // themselves.
+  expect(text).toContain("Is Marcus Webb player 1?");
+  expect(text).toContain("This export lists M. Webb Jr.");
+  expect(text).not.toMatch(/\byou|your profile/i);
   expect(buttons.map((b) => b.label)).toEqual([
-    CONFIRM,
-    REJECT,
+    "Yes, Marcus Webb is player 1",
+    "No, it's someone else",
+  ]);
+});
+
+// ─── 2. An answer collapses, and keeps a way back ──────────────────────────
+
+test("Yes collapses to a settled line that can be changed", () => {
+  const { html, text, buttons } = render({
+    comparison: comparisonOf("Riley Reproduction", "Taylor Imported"),
+    confirmed: true,
+  });
+
+  expect(text).toBe("You're player 1 in this export. Change");
+  expect(buttons.map((b) => b.label)).toEqual(["Change"]);
+  // Settled, so it leaves the warning register.
+  expect(html).not.toContain("warning-bg");
+});
+
+test("a team Yes names the athlete", () => {
+  const { text } = render({
+    comparison: comparisonOf("Marcus Webb", "M. Webb Jr"),
+    workspaceKind: "team",
+    confirmed: true,
+  });
+  expect(text).toContain("Marcus Webb is player 1 in this export.");
+});
+
+test("No stays a warning, with the answer and the file both changeable", () => {
+  const { html, text, buttons } = render({
+    comparison: comparisonOf("Riley Reproduction", "Taylor Imported"),
+    rejected: true,
+  });
+
+  expect(html).toContain("warning-bg");
+  expect(text).toContain("This export can't be used for you.");
+  expect(text).toContain("choose one where you're player 1");
+  // No offer to reinterpret the file from the other side — the parser has one
+  // perspective and the wizard must not pretend otherwise.
+  expect(text.toLowerCase()).not.toMatch(
+    /swap|flip|rename|use the other player/,
+  );
+  expect(buttons.map((b) => b.label)).toEqual([
+    "Change answer",
     "Choose another file",
+  ]);
+});
+
+test("a team No also offers another player, where there is a choice", () => {
+  const { text, buttons } = render({
+    comparison: comparisonOf("Marcus Webb", "Taylor Imported"),
+    workspaceKind: "team",
+    rejected: true,
+    onChangePlayer: () => {},
+  });
+  expect(text).toContain("can't be used for Marcus Webb");
+  expect(text).toContain("choose one where Marcus Webb is player 1");
+  expect(buttons.map((b) => b.label)).toEqual([
+    "Change answer",
     "Change player",
+    "Choose another file",
   ]);
 });
 
 test("only a team upload with a choice to make offers Change player", () => {
-  // A personal workspace has exactly one athlete, and a preset already named
-  // one: neither gets an action that leads nowhere.
   const { buttons } = render({
     comparison: comparisonOf("Riley Reproduction", "Taylor Imported"),
     workspaceKind: "personal",
+    rejected: true,
   });
   expect(buttons.map((b) => b.label)).not.toContain("Change player");
 });
 
-// ─── 2. Missing names are said out loud, never rendered as a blank ─────────
+// ─── 3. Missing names are said out loud, never rendered as a blank ─────────
 
-test("an export with no player 1 says so, and still names the athlete", () => {
+test("an export with no player 1 says so", () => {
   const comparison = comparisonOf("Riley Reproduction", "   ");
   expect(comparison.reason).toBe("missing-name");
 
   const { text, buttons } = render({ comparison, workspaceKind: "personal" });
 
-  expect(text).toContain("This export is missing a player name");
-  expect(text).toContain("doesn't name a player 1");
-  expect(text).toContain("Riley Reproduction");
+  expect(text).toContain("Are you player 1?");
+  expect(text).toContain("This export doesn't name one.");
   // No fabricated subject, and no empty gap where a name should be.
-  expect(text).not.toMatch(/names\s+as player 1/);
+  expect(text).not.toMatch(/lists\s*\./);
   expect(text).not.toContain("undefined");
   expect(buttons.map((b) => b.label)).toContain(CONFIRM);
 });
@@ -273,8 +335,8 @@ test("a team upload with no athlete chosen asks for the player, not a confirmati
   expect(text).not.toContain("Dana Coach");
   // Confirming here is refused by the hook, so it is not offered.
   expect(buttons.map((b) => b.label)).toEqual([
-    "Change player",
     "Choose another file",
+    "Change player",
   ]);
 });
 
@@ -288,33 +350,9 @@ test("both names missing still reads as a sentence", () => {
   expect(text).toContain("doesn't name a player 1 either");
 });
 
-// ─── 3. A negative answer explains the export, and swaps nothing ───────────
+// ─── 4. Announced, and answered in text ────────────────────────────────────
 
-test("No sends the person back for a correctly oriented export", () => {
-  const { text, buttons } = render({
-    comparison: comparisonOf("Marcus Webb", "Taylor Imported"),
-    workspaceKind: "team",
-    rejected: true,
-    onChangePlayer: () => {},
-  });
-
-  expect(text).toContain("can't be used for Marcus Webb");
-  expect(text).toContain("choose an export where Marcus Webb is player 1");
-  expect(text).toContain(
-    "Renaming the players here would leave the statistics on the other player",
-  );
-  // No offer to reinterpret the file from the other side — the parser has one
-  // perspective and the wizard must not pretend otherwise.
-  expect(text.toLowerCase()).not.toMatch(/swap|flip|use the other player/);
-  expect(buttons.map((b) => b.label)).toEqual([
-    "Choose another file",
-    "Change player",
-  ]);
-});
-
-// ─── 4. Announced, and one primary action ──────────────────────────────────
-
-test("every state is a polite live region with a single primary action", () => {
+test("every state is a polite live region answered in text, never a button", () => {
   const states: Rendered[] = [
     render({
       comparison: comparisonOf("Riley Reproduction", "Taylor Imported"),
@@ -331,6 +369,10 @@ test("every state is a polite live region with a single primary action", () => {
       onChangePlayer: () => {},
     }),
     render({
+      comparison: comparisonOf("Riley Reproduction", "Taylor Imported"),
+      confirmed: true,
+    }),
+    render({
       comparison: comparisonOf("Marcus Webb", "Taylor Imported"),
       rejected: true,
     }),
@@ -340,9 +382,8 @@ test("every state is a polite live region with a single primary action", () => {
     expect(html).toContain('role="status"');
     expect(html).toContain('aria-live="polite"');
     expect(html).toContain('aria-hidden="true"'); // the glyph is not read out
-    expect(
-      buttons.filter((b) => b.variant === "advbtn-primary").length,
-    ).toBeLessThanOrEqual(1);
+    // No button chrome on the notice — the answers are text.
+    expect(html).not.toContain("advbtn-");
     // Every action is reachable and named; none is an icon-only mystery.
     for (const b of buttons) expect(b.label.length).toBeGreaterThan(0);
   }
@@ -388,23 +429,37 @@ test("the footer button and the Enter key are handed the same value", () => {
   // `useWizardKeys` refuses plain Enter on `continueDisabled`; `WizardShell`
   // disables the button with it. One variable, read twice — asserted here
   // because the alternative is two inline expressions that drift apart.
+  // The value is computed once in `useWizardGates`, handed to the keyboard
+  // hook by `UploadWizardProvider`, and read by the footer button through the
+  // context in `UploadMatchFlow` — one variable, three readers.
+  const gates = readFileSync(resolve(`${WIZARD}/useWizardGates.ts`), "utf8");
+  const provider = readFileSync(
+    resolve(`${WIZARD}/UploadWizardProvider.tsx`),
+    "utf8",
+  );
   const flow = readFileSync(resolve(`${WIZARD}/UploadMatchFlow.tsx`), "utf8");
-  expect(flow).toContain("const continueDisabled = wizardContinueBlocked({");
-  const keys = flow.slice(flow.indexOf("useWizardKeys({"));
-  expect(keys.slice(0, keys.indexOf("});"))).toContain("continueDisabled,");
+  expect(gates).toContain("const continueDisabled = wizardContinueBlocked({");
+  const keys = provider.slice(provider.indexOf("useWizardKeys({"));
+  expect(keys.slice(0, keys.indexOf("});"))).toContain(
+    "continueDisabled: gates.continueDisabled,",
+  );
   expect(flow).toContain("continueDisabled={continueDisabled}");
   // The disable is scoped to the notice being on screen, so a disabled
   // Continue always has the explanation — and the two answers — beside it.
   // Every other reason the import can be blocked keeps the handler's sentence.
-  expect(flow).toContain(
+  expect(gates).toContain(
     "importIdentityBlocked: identityNoticeVisible && importIdentity.blocked,",
   );
-  expect(flow).toMatch(
+  expect(gates).toMatch(
     /identityNoticeVisible =\s*step === "file" &&\s*!isProcessingProvider &&/,
   );
   // The notice is a sibling of the file step's content, never wrapped around
   // it: T17's video requirements and the drop zone's error strip stay visible.
-  expect(flow).toMatch(/<\/FileStepContent>|\/>\s*\{identityNoticeVisible/);
+  const steps = readFileSync(
+    resolve(`${WIZARD}/UploadWizardSteps.tsx`),
+    "utf8",
+  );
+  expect(steps).toMatch(/<\/FileStepContent>|\/>\s*<IdentityQuestion \/>/);
   // And the handler re-checks the same fact at the write, so a stale render
   // cannot let Enter through.
   const hook = readFileSync(

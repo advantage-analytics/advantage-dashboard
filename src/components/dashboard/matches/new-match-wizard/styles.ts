@@ -71,6 +71,32 @@ export const noteStripCls =
   "flex items-start gap-2 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3 py-2.5 text-[11px] leading-[1.6] text-[var(--ink-700)]";
 
 /**
+ * The note strip's yellow twin, at the same size. One size for every notice
+ * in the wizard — 11px text at 1.6, a 13px glyph (`noteIconCls`), 8px gap,
+ * 8px radius — so colour carries the meaning and size never does. The
+ * padding is a pixel short of the grey strip's on each side because the
+ * border is that pixel. Yellow is for what the person has to answer or must
+ * not miss; a wait or a fact is the grey strip.
+ * (`primitives.md` › Notice strips.)
+ */
+export const warningStripCls =
+  "flex items-start gap-2 rounded-[var(--radius-element)] border border-[var(--warning-border)] bg-[var(--warning-bg)] px-[11px] py-[9px] text-[11px] leading-[1.6] text-[var(--warning-text)]";
+
+/**
+ * How a notice state arrives — the settled line after an answer, the question
+ * again after Change. 200ms on `--ease-out-expo` (a response to a click: moves
+ * at once, then settles), a 4px drop, and a 2px blur that clears as it lands so
+ * the swap from the old state reads as one change rather than two boxes.
+ * `animation-duration`, never `duration-*`: that one is a transition duration
+ * on every property. Reduced motion keeps the fade and drops the movement.
+ */
+export const noticeEnterCls =
+  "animate-in fade-in blur-in-[2px] slide-in-from-top-1 animation-duration-200 ease-[var(--ease-out-expo)] motion-reduce:blur-in-0 motion-reduce:slide-in-from-top-0";
+
+/** The glyph beside either strip: 13px, stroke 1.5, nudged to the first line. */
+export const noteIconCls = "mt-0.5 size-[13px] shrink-0";
+
+/**
  * The float menu — EntitySelect grammar: radius 12, 6px padding, hairline,
  * dropdown shadow. Rows are 38px with an 8px radius and a surface-subtle
  * wash on hover and on keyboard focus.

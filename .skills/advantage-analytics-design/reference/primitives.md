@@ -70,31 +70,88 @@ matches"). Renders nothing without real numbers. The engine's name lives in
 the dark tooltip + `aria-label`, never as visible chrome text — icon-first
 rules apply to the chip too.
 
-**`Notice`** — two registers, both radius 8, no headings, no borders. Note
-strip: passive fact (seat counts, policy effects), surface-subtle, one 13px
-icon max, 11px text, optional quiet blue action — never buttons. Suggestion:
-the system proposes an action — blue-tint-08 wash, bold lead names the
-finding, body states the consequence, Accept (blue 500) + Decline (quiet,
-never red). A suggestion earns its tint by carrying an action; a passive fact
-never gets one. The same object hosts the applied-filter strip (Data Table
-rule 6) and the wizard's slot suggestion (`SlotLine`, below) — the latter as a
-grey strip, not a suggestion tint, since attaching to a line is reversible.
+**Notice strips — one size.** Every notice is the same size whatever its
+colour: **11px text at 1.6 line height, a 13px glyph at stroke 1.5** nudged
+`mt-0.5` to the first line, an 8px gap, radius-element (8px). Grey is
+`--surface-subtle` with `--ink-700` text and a `px-3 py-2.5` pad; yellow is the
+warning triple with a 1px `--warning-border` and a pad one pixel smaller
+(`px-[11px] py-[9px]`) so both strips measure the same. Colour carries the
+meaning, size never does: no 12/16px "louder" warning, no 13px body-size alert.
+In the wizard the classes are `noteStripCls`, `warningStripCls` and
+`noteIconCls` (`new-match-wizard/styles.ts`); build on those rather than
+restating the numbers.
 
-**Mode** — the third register, and the only one that is not about a record:
-the surface below has temporarily become an editor, and this says which
-editor and how to work it. `--blue-tint-08` wash inside a `--blue-tint-12`
-border at `radius-element`, one line, `px-3.5 py-2.5`: the mode's own 14px
-glyph · a bold lead naming the mode ("Setting the lineup.") · the gesture in
-plain words with the keyboard path in real `Kbd` chips · and, pushed right, a
-quiet 11px line saying what is **not** committed yet ("Nothing is saved until
-Save lineup."). It earns the tint the way a suggestion does — by being about
-an action — but it proposes nothing and has no buttons of its own; the mode's
-Cancel and primary live in the page's action slot, which they have taken over
-for the duration. It arrives with the mode from just above its slot and
-leaves faster than it came, and the surface below is a layout-animated
-sibling so it slides rather than jumps. **Stated once, above the thing it
-changes** — never a hint per row, and never a second banner for the same
-mode. Reorder Mode's banner is the shipped case.
+- **Grey for a wait or a fact** — nothing is wrong and nothing is the person's
+  to fix: what an export includes, a team still being confirmed (the note sits
+  under the source it's about, Continue stays off, and it ends with a
+  `mailto:` link to team@advantage-analytics.com), an error that already
+  happened (grey with a red `XCircle`).
+- **Yellow for what must be answered or must not be missed** — a Warning
+  question, "keep this tab open". Never stack a yellow strip under a grey one
+  that already says the same thing.
+- The first sentence may be set `font-medium` in `--ink-900` (grey) or the
+  warning ink (yellow) as the lead; the rest stays plain.
+- **Required fields still empty** are not a strip: the wizard footer carries a
+  22px red pill — `TriangleAlert` 12px centred, "5 required left", 11px medium
+  `--danger` on an 8% `--danger` wash with a 20% border (`MissingFieldsPill`).
+  It never names the fields (the page marks them); clicking it scrolls to and
+  focuses the first empty one, and it disappears when none are left.
+
+**`Notice`** — two registers, both radius 8, no headings, no borders (the
+bordered warning register is **Warning question** — the fourth register: the system cannot go on until the
+person answers a question whose wrong answer breaks something silently (the
+wizard's player-1 check is the shipped case — `ImportIdentityNotice.tsx`). It has
+three states, and the answer is what moves between them.
+
+1. **Asking.** The warning triple — `--warning-bg` wash, `--warning-border`
+   hairline, `--warning-text` ink — at the standard strip size (above). A 13px `TriangleAlert`,
+   then a bold lead that _is_ the question ("Are you player 1?") and one plain
+   clause of evidence ("This export lists Beau Perez."). Beneath it, **the
+   answers stacked as full-width text rows**, never buttons: 11px, `px-2.5 py-1.5`,
+   radius-button, a 12px open circle (`--warning-text` at 35%) before the label.
+   Hover washes the row with `--warning-border` at 60% and darkens the circle to
+   `--warning-text`; press deepens the wash to full `--warning-border`. Two
+   answers, affirmative first (the early-end score check has three: two Yeses
+   that record how it ended, and "No, I'll finish the score", which records
+   nothing and hands focus back). No escape hatches here — they arrive with No.
+2. **Answered, and it's settled** (Yes). The question collapses to one line and
+   **leaves the warning register**: the grey strip, 13px `Check` in
+   `--ink-700`, the answer restated as a fact ("You're player 1 in this
+   export."), and a quiet `--ink-600` **Change** pushed right that reopens the
+   question.
+3. **Answered, and it's still a problem** (No). One line that **stays amber**,
+   because the work still can't continue: bold lead naming the consequence
+   ("This export can't be used for you."), one clause on the fix, then pushed
+   right — the quiet answers at 70% opacity (**Change answer**, and **Change
+   player** where there is a choice) and the one strong answer last (**Choose
+   another file**, 11px medium, `--warning-border` underline darkening on hover).
+
+Both collapses — and the question reopening after Change — arrive with the
+wizard's `noticeEnterCls`: fade, a 4px drop and a 2px blur that clears as it
+lands, 200ms on `--ease-out-expo` (a response to a click moves at once and
+settles). Timed with `animation-duration-200`, **never `duration-200`**, which
+sets a transition duration on every property and makes the yellow box fade its
+border and wash into the grey one. Each state is its own element (a React
+`key`), so the settled line mounts fresh rather than restyling the question in
+place. The notice sits in `AnimatedHeight`, so the page below glides (220ms,
+same curve, clipped with a 4px clip margin) instead of snapping up while the
+line fades in. Answer rows press to `scale(0.99)`. Reduced motion keeps the fade
+and drops the drop, the blur, the press and the height glide. Every state is a
+polite `role="status"` live region. The one-line form wraps its answers beneath
+the sentence on a narrow column.
+
+- **Answers name their subject.** "Yes, I'm player 1" / "No, I'm not player 1"
+  when the question is "you"; "Yes, Marcus Webb is player 1" / "No, it's someone
+  else" when it names the athlete. "No, they are not player 1" failed review
+  because nobody could tell who "they" was.
+- **No button chrome on amber** — not blue (a second accent on a warning
+  surface), not white (a hole punched in the wash), not a `--warning-text` fill
+  (reads as alarm), not a tonal yellow button. Text rows keep the question the
+  loudest thing in the box.
+- **Don't push the risky answer.** Where a wrong "Yes" is the silent failure,
+  the two rows are identical in weight.
+- **Every answer keeps a way back.** A collapsed state always carries Change;
+  the person should never have to remove a file to undo a click.
 
 **`Avatar` + `StatePill`** — profile ≠ account, and the avatar says which:
 self-managed = unmarked initials (default, no chip); coach-managed = border

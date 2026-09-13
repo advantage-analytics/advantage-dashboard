@@ -17,7 +17,11 @@ import {
   explainVideoRefusal,
   type Workspace,
 } from "@/lib/workspace/types";
-import { noteStripCls } from "@/components/dashboard/matches/new-match-wizard/styles";
+import {
+  noteIconCls,
+  noteStripCls,
+} from "@/components/dashboard/matches/new-match-wizard/styles";
+import { SUPPORT_EMAIL } from "@/lib/constants";
 
 /**
  * Step 1's three selects — Workspace, For, Source — rendered for real.
@@ -194,6 +198,34 @@ const stepModule = (() => {
       if (id === "@/lib/workspace/types")
         return { canUploadForProgram, explainVideoRefusal };
       if (id === "./styles") return { noteStripCls };
+      // The pending-team note is rendered for real: its copy and email link
+      // are part of what the Source step says.
+      if (id === "./PendingTeamNote") {
+        const note: Record<string, unknown> = {};
+        runInNewContext(
+          ts.transpileModule(
+            readFileSync(resolve(`${WIZARD}/PendingTeamNote.tsx`), "utf8"),
+            {
+              compilerOptions: {
+                module: ts.ModuleKind.CommonJS,
+                jsx: ts.JsxEmit.ReactJSX,
+                target: ts.ScriptTarget.ES2022,
+              },
+            },
+          ).outputText,
+          {
+            exports: note,
+            require: (dep: string) => {
+              if (dep === "react/jsx-runtime") return jsx;
+              if (dep === "lucide-react") return icons;
+              if (dep === "@/lib/constants") return { SUPPORT_EMAIL };
+              if (dep === "./styles") return { noteIconCls, noteStripCls };
+              throw new Error(`unexpected import in the pending note: ${dep}`);
+            },
+          },
+        );
+        return note;
+      }
       throw new Error(`unexpected import in the source step: ${id}`);
     },
   });

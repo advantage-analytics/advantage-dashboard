@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
  *      criterion 1: an unset `value` renders the placeholder in the
  *      empty-field ink with NO row marked chosen — never a guessed default,
  *      never the raw value printed, never an "Unknown" row.
- *   2. Source assertions on `DetailsStepContent.tsx`, `UploadMatchFlow.tsx`
+ *   2. Source assertions on `DetailsStepContent.tsx`, `useWizardGates.ts`
  *      and `lib/wizard/actions.ts` for the wiring claims that a static render
  *      of one component can't observe on its own: which function gates Save,
  *      who sees the profile-save button, and that the profile write is
@@ -247,10 +247,10 @@ test("both players get required underline MenuSelect fields for hand and backhan
 
   // Both fields are wrapped in the labelled, required `Cell` — the underline
   // vocabulary the rest of the Context grid already uses.
-  expect(detailsSrc).toContain('<Cell label="Hand" required');
-  expect(detailsSrc).toContain('<Cell label="Backhand" required');
-  expect(detailsSrc.match(/<Cell label="Hand" required/g)?.length).toBe(2);
-  expect(detailsSrc.match(/<Cell label="Backhand" required/g)?.length).toBe(2);
+  expect(detailsSrc.match(/<Cell\s+label="Hand"\s+required/g)?.length).toBe(2);
+  expect(detailsSrc.match(/<Cell\s+label="Backhand"\s+required/g)?.length).toBe(
+    2,
+  );
 
   // No "Unknown" row offered as an option, and the old optional framing is
   // gone. (The doc comment above legitimately names the forbidden pattern in
@@ -269,17 +269,20 @@ test("the backhand field reserves extra menu width so its longer labels don't wr
   expect(detailsSrc.match(/width=\{220\}/g)?.length).toBe(2);
 });
 
-test("narrow layouts stack the name and the two style fields instead of wrapping option text", () => {
-  // Both player rows switch from a stacked column to a row only at `sm:`,
-  // rather than staying side-by-side (and cramped) at every width.
+test("both player rows share one grid, stacking only below sm", () => {
+  // One three-column grid owns both rows, so the opponent's selects sit
+  // exactly under the player's; each row is a subgrid of it.
   expect(detailsSrc).toContain(
-    'className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-6"',
+    "sm:grid sm:grid-cols-[200px_minmax(0,1fr)_minmax(0,1fr)]",
   );
-  expect(
-    detailsSrc.match(
-      /className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-6"/g,
-    )?.length,
-  ).toBe(2);
+  const row =
+    /className="flex flex-col gap-3 sm:col-span-3 sm:grid sm:grid-cols-subgrid sm:items-start[^"]*"/g;
+  expect(detailsSrc.match(row)?.length).toBe(2);
+  // Below sm the headings are gone, so every cell brings its own label back.
+  expect(detailsSrc.match(/labelClassName="sm:hidden"/g)?.length).toBe(4);
+  // Nothing takes a fourth column: the hint and the save action sit under
+  // the name.
+  expect(detailsSrc).not.toContain("sm:pt-[11px]");
 });
 
 test("the opponent's editable name carries a visible edit affordance; the subject's locked name carries none", () => {
@@ -296,9 +299,7 @@ test("the opponent's editable name carries a visible edit affordance; the subjec
   // button's own onClick, which is unrelated to the name's editability.
   const subjectNameSpan = detailsSrc.slice(
     detailsSrc.indexOf("The workspace's own player"),
-    detailsSrc.indexOf(
-      '<div className="flex flex-1 flex-col gap-3 sm:flex-row sm:gap-4">',
-    ),
+    detailsSrc.indexOf("{playerProvenance &&"),
   );
   expect(subjectNameSpan).not.toContain("<Pencil");
   expect(subjectNameSpan).not.toContain("onClick");
@@ -338,9 +339,10 @@ test("missing hand or backhand answers are collected by the one shared requireme
   expect(beforeProcessingGate).toContain('labels.push("opponent backhand")');
 });
 
-// ─── UploadMatchFlow.tsx: the visible gate consumes the same function ──────
+// ─── useWizardGates.ts: the visible gate consumes the same function ────────
 
-const flowSrc = readFileSync(`${WIZARD}/UploadMatchFlow.tsx`, "utf8");
+// The page's gate hook — `UploadMatchFlow` composes it through the provider.
+const flowSrc = readFileSync(`${WIZARD}/useWizardGates.ts`, "utf8");
 
 test("the footer's missing-answers counter and the write-time gate share one function, so a missing style blocks both", () => {
   expect(flowSrc).toContain(
@@ -348,7 +350,7 @@ test("the footer's missing-answers counter and the write-time gate share one fun
   );
   const missingBlock = flowSrc.slice(
     flowSrc.indexOf("const missing = useMemo("),
-    flowSrc.indexOf("// Work in progress, per step."),
+    flowSrc.indexOf("const stepBusy = stepBusyLabel("),
   );
   expect(missingBlock).toContain("collectMatchCompletionRequirements({");
   expect(missingBlock).toContain("playerHand: formData.playerHand,");
@@ -374,7 +376,7 @@ test("the profile-save action is offered only to the subject who IS the uploader
   // there is exactly one call site, and it is gated on `subject.isSelf`.
   expect(detailsSrc.match(/Save to your profile/g)?.length).toBe(1);
   const saveBlock = detailsSrc.slice(
-    detailsSrc.indexOf("subject.isSelf &&\n            (playerHand"),
+    detailsSrc.search(/subject\.isSelf &&\s+\(playerHand/),
   );
   expect(saveBlock.slice(0, 60)).toContain("subject.isSelf");
 

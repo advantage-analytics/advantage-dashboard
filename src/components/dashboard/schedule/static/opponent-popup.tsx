@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { CircleCheck, Plus, Search } from "lucide-react";
+import { ChevronDown, CircleCheck, Plus, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useListboxNav } from "@/hooks/use-listbox-nav";
 import { normalizedPersonName } from "@/lib/data/person-name";
@@ -218,6 +218,7 @@ export function OpponentPopup({
   onActiveChange,
   noPlayer = false,
   onNoPlayer,
+  variant = "well",
 }: {
   /** The line's current opposing label(s), " / "-joined. Empty until resolved. */
   value: string;
@@ -238,6 +239,13 @@ export function OpponentPopup({
    * this court, and the save records their forfeit.
    */
   onNoPlayer?: () => void;
+  /**
+   * `well` is the lineup's grey cell. `underline` is a form field — the score
+   * page's opponent row, where the name is typed where it will read: 240px,
+   * a hairline that turns 2px Signal Blue while open, and the popup opening
+   * under it from the left.
+   */
+  variant?: "well" | "underline";
 }) {
   // Destructured from the one object rather than taken as two props: this is
   // the read side of the coupling, and it cannot pull a name and a roster from
@@ -659,18 +667,44 @@ export function OpponentPopup({
         // quieter as it fills. `lineup-rows.tsx` walks focus to the next
         // `empty` well after a name lands.
         data-opponent-well={resolved ? "named" : "empty"}
+        // The underline field's rule thickens to 2px blue on focus — that is
+        // its indicator, so the neutral ring would be a second one.
+        data-focus-ring={variant === "underline" ? "none" : undefined}
         className={
-          resolved
-            ? "flex w-full min-w-0 cursor-pointer items-center rounded-[3px] text-left outline-none focus-visible:shadow-[var(--focus-ring)]"
-            : cn(
-                "flex h-7 w-[180px] min-w-0 cursor-pointer items-center rounded-[var(--radius-button)] border px-2.5 text-left transition-colors duration-[var(--duration-hover)] outline-none",
+          variant === "underline"
+            ? cn(
+                "flex h-[30px] w-[240px] max-w-full min-w-0 cursor-pointer items-center gap-2 bg-transparent text-left outline-none",
                 open
-                  ? "border-[var(--blue)] bg-[var(--surface-card)] shadow-[0_0_0_3px_var(--blue-glow)]"
-                  : "border-transparent bg-[var(--surface-subtle)] hover:bg-[var(--ink-100)] focus-visible:shadow-[var(--focus-ring)]",
+                  ? "border-b-2 border-[var(--blue)]"
+                  : "border-b border-[var(--border-medium)] hover:border-[var(--ink-300)] focus-visible:border-b-2 focus-visible:border-[var(--blue)]",
               )
+            : resolved
+              ? "flex w-full min-w-0 cursor-pointer items-center rounded-[3px] text-left outline-none focus-visible:shadow-[var(--focus-ring)]"
+              : cn(
+                  "flex h-7 w-[180px] min-w-0 cursor-pointer items-center rounded-[var(--radius-button)] border px-2.5 text-left transition-colors duration-[var(--duration-hover)] outline-none",
+                  open
+                    ? "border-[var(--blue)] bg-[var(--surface-card)] shadow-[0_0_0_3px_var(--blue-glow)]"
+                    : "border-transparent bg-[var(--surface-subtle)] hover:bg-[var(--ink-100)] focus-visible:shadow-[var(--focus-ring)]",
+                )
         }
       >
-        {resolved ? (
+        {variant === "underline" ? (
+          <>
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate text-[14px]",
+                resolved ? "text-[var(--ink-900)]" : "text-[var(--ink-400)]",
+              )}
+            >
+              {resolved ? value : addLabel}
+            </span>
+            <ChevronDown
+              className="size-3 shrink-0 text-[var(--ink-400)]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+          </>
+        ) : resolved ? (
           <span
             // 12px grey, not a name's 13px: it is the line's consequence, and
             // matches our own forfeit's "They win by forfeit" in this column.
@@ -696,7 +730,10 @@ export function OpponentPopup({
           aria-label={
             discipline === "doubles" ? "Add opposing pair" : "Add opposing name"
           }
-          className="absolute top-[calc(100%+8px)] right-0 w-[286px] overflow-hidden rounded-[var(--radius-dropdown)] border border-[var(--border-medium)] bg-[var(--surface-card)] text-left shadow-[var(--shadow-dropdown)]"
+          className={cn(
+            "absolute top-[calc(100%+8px)] w-[286px] overflow-hidden rounded-[var(--radius-dropdown)] border border-[var(--border-medium)] bg-[var(--surface-card)] text-left shadow-[var(--shadow-dropdown)]",
+            variant === "underline" ? "left-0 z-20" : "right-0",
+          )}
         >
           <div className="flex items-center gap-2 border-b border-[var(--border-hairline)] px-3 py-[9px]">
             <Search

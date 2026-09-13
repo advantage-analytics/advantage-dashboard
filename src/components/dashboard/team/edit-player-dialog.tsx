@@ -18,10 +18,10 @@ import {
   RosterDialog,
 } from "@/components/dashboard/team/dialog-shell";
 import {
-  CLASS_YEARS,
-  LINEUP_SPOTS,
+  PlayerMenuField,
   RosterNote,
-  UnderlineSelect,
+  classYearOptions,
+  lineupSpotOptions,
   spotHeldNote,
   spotHolders,
 } from "@/components/dashboard/team/player-fields";
@@ -275,54 +275,23 @@ export function EditPlayerDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <SettingsField label="Class year">
-              <UnderlineSelect
-                ariaLabel="Class year"
-                value={fields.classYear}
-                disabled={pending}
-                onChange={(value) => edit("classYear", value)}
-              >
-                <option value="">Not set</option>
-                {/* A class year typed straight into the database — or carried
-                    over from the player's own profile before this row had one —
-                    need not be one of the five. Kept as an option so opening
-                    the dialog cannot silently change it to "Not set". */}
-                {!CLASS_YEARS.some((year) => year === fields.classYear) &&
-                  fields.classYear !== "" && (
-                    <option value={fields.classYear}>{fields.classYear}</option>
-                  )}
-                {CLASS_YEARS.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </UnderlineSelect>
-            </SettingsField>
-            <SettingsField label="Lineup spot">
-              <UnderlineSelect
-                ariaLabel="Lineup spot"
-                value={fields.lineupSpot}
-                disabled={pending}
-                onChange={(value) => edit("lineupSpot", value)}
-              >
-                <option value="">Not set</option>
-                {/* Same reason as the class year above: a spot outside 1–9 is
-                    legal in the column and must survive being looked at. */}
-                {fields.lineupSpot !== "" &&
-                  !LINEUP_SPOTS.some(
-                    (option) => String(option) === fields.lineupSpot,
-                  ) && (
-                    <option value={fields.lineupSpot}>
-                      #{fields.lineupSpot}
-                    </option>
-                  )}
-                {LINEUP_SPOTS.map((option) => (
-                  <option key={option} value={String(option)}>
-                    #{option}
-                  </option>
-                ))}
-              </UnderlineSelect>
-            </SettingsField>
+            {/* The option builders keep a stored value outside the list as
+                its own row, so opening the dialog cannot silently change it
+                to "Not set". */}
+            <PlayerMenuField
+              label="Class year"
+              value={fields.classYear}
+              options={classYearOptions(fields.classYear)}
+              disabled={pending}
+              onChange={(value) => edit("classYear", value)}
+            />
+            <PlayerMenuField
+              label="Lineup spot"
+              value={fields.lineupSpot}
+              options={lineupSpotOptions(fields.lineupSpot)}
+              disabled={pending}
+              onChange={(value) => edit("lineupSpot", value)}
+            />
           </div>
 
           <RosterNote icon={Users} note={spotNote} />

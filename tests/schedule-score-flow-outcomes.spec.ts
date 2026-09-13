@@ -146,6 +146,25 @@ test("a played score saves as a match played out", async ({ page }) => {
   await expect(page.getByText("Line 2 of 3", { exact: true })).toBeVisible();
 });
 
+test("the score advances like the upload wizard, tiebreak included", async ({
+  page,
+}) => {
+  await openFlow(page);
+  await page.getByLabel("Jordan Lee, set 1").focus();
+  await page.keyboard.type("7");
+  await expect(page.getByLabel("Casey Chen, set 1")).toBeFocused();
+  // 7-6 opens the tiebreak cells, and focus lands in ours.
+  await page.keyboard.type("6");
+  await expect(page.getByLabel("Jordan Lee, set 1 tiebreak")).toBeFocused();
+  // Tiebreak cells are left on Enter, never on a digit.
+  await page.keyboard.type("5");
+  await expect(page.getByLabel("Jordan Lee, set 1 tiebreak")).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByLabel("Casey Chen, set 1 tiebreak")).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByLabel("Jordan Lee, set 2")).toBeFocused();
+});
+
 test("Retired keeps the score and asks who, in place of the line", async ({
   page,
 }) => {

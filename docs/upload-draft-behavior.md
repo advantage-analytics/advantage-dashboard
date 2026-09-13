@@ -34,8 +34,8 @@ The wizard has two independent persistence mechanisms that are easy to conflate:
   round-trip, and no row. It exists so a browser refresh or an accidental navigation
   doesn't lose in-progress typing, and `DashboardShell` sweeps it the moment the route
   leaves `/dashboard/matches/new` (§4).
-- **Save draft** — the footer button (`UploadMatchFlow.tsx:965-968`) that calls
-  `handleSaveDraft` (`UploadMatchFlow.tsx:685-693`), which writes a `match_drafts` row via
+- **Save draft** — the footer button (`SaveDraftButton` in `UploadWizardFooter.tsx`) that
+  calls `handleSaveDraft` (`useDraftSaving.ts`), which writes a `match_drafts` row via
   the `saveMatchDraft` server action (`src/lib/wizard/actions.ts:433-480`) and then
   navigates away. This is the only durable persistence a draft has.
 
@@ -54,15 +54,15 @@ jsonb column holding the whole `MatchDraft` object — `step`, `provider`, `form
 Shipped. Clicking "Save draft":
 
 1. Writes the current `formData` and selected provider to `localStorage`
-   (`UploadMatchFlow.tsx:686-688`) — the same local keys the autosave effect uses.
+   (`useDraftSaving.ts`, `handleSaveDraft`) — the same local keys the autosave effect uses.
 2. Sets `STORAGE_KEYS.DRAFT_KEPT` (`"uploadDraftKept"`) in `localStorage`
-   (`UploadMatchFlow.tsx:690`), a signal read only by `DashboardShell` (§4).
+   (`useDraftSaving.ts`), a signal read only by `DashboardShell` (§4).
 3. Calls `saveDraft()` (`useUploadMatchWizard.ts:899-930`), which upserts one
    `match_drafts` row keyed on a client-generated `crypto.randomUUID()` the first time,
    and on the existing `draftId` thereafter (`useUploadMatchWizard.ts:900`,
    `actions.ts:433-480`, `onConflict: "id"`). Every subsequent Save draft on the same
    wizard session updates that same row rather than creating a new one.
-4. Navigates to `exitHref` **only when step 3 succeeded** (`UploadMatchFlow.tsx`,
+4. Navigates to `exitHref` **only when step 3 succeeded** (`useDraftSaving.ts`,
    `handleSaveDraft`: `const saved = await saveDraft(); if (!saved) return;`). A refused
    write keeps the wizard exactly where it is — see §3, now a description of the fix
    rather than of the gap.
@@ -142,7 +142,7 @@ a `match_drafts` row, so nothing durable is created to discard. The Matches tabl
 list is presumed to offer its own delete affordance calling `deleteMatchDraft`
 (`actions.ts:482-485`, a plain `.delete().eq("id", id)`); that call site was not located
 inside the wizard component tree searched for this document and is out of scope for this
-document's review of `useUploadMatchWizard.ts`/`UploadMatchFlow.tsx`.
+document's review of `useUploadMatchWizard.ts`/`useDraftSaving.ts`.
 
 `clearStorageData()` (`utils.ts:508-514`) removes all four local keys, including
 `DRAFT_KEPT`, and is what a plain exit relies on via `DashboardShell` (§4) — but it never
@@ -204,7 +204,7 @@ still-open draft — cannot occur.
 ## 3. Save-failure behavior (fixed in T21)
 
 Shipped, and it now matches the design's proposed contract. `handleSaveDraft`
-(`UploadMatchFlow.tsx`) does:
+(`useDraftSaving.ts`) does:
 
 ```
 localStorage.setItem(STORAGE_KEYS.DRAFT_KEPT, "1");
@@ -246,7 +246,7 @@ A plain Cancel/close leaves no `DRAFT_KEPT` flag, so the shell wipes `uploadForm
 `uploadedFile`, and `selectedProvider` the moment the route changes — this is what makes
 a cancelled wizard actually forget the answers rather than resurface them on the next
 unrelated visit to `/dashboard/matches/new`. Save draft sets the flag first
-(`UploadMatchFlow.tsx:690`) specifically to suppress this sweep, and the wizard's own
+(`useDraftSaving.ts`) specifically to suppress this sweep, and the wizard's own
 mount effect removes the flag again on the next open
 (`useUploadMatchWizard.ts:941`), so a second plain departure after a resumed draft clears
 storage exactly as before.
@@ -316,11 +316,11 @@ result. The remaining two are still unbuilt, and nothing here authorizes buildin
 
 > **Recommendation: Distinguish local recovery from durable save, explicitly.** The
 > autosave effect (`useUploadMatchWizard.ts:890-897`) and Save draft
-> (`UploadMatchFlow.tsx:685-693`) currently write to overlapping `localStorage` keys and
+> (`useDraftSaving.ts`, `handleSaveDraft`) currently write to overlapping `localStorage` keys and
 > can be conflated by a reader of the code (both call `saveFormDataToStorage`). A future
 > pass should either rename the autosave's keys to make clear they are ephemeral
 > browser-only recovery state with no server counterpart, or gate the header's "Draft
-> saved" status copy (`UploadMatchFlow.tsx:669-675`) so it only reflects the durable
+> saved" status copy (`useDraftSaving.ts`, the `usePublishHeaderStatus` call) so it only reflects the durable
 > `match_drafts` write, not the local autosave tick — today that status string can read
 > "Draft saved" from local autosave alone, before the user has ever clicked the Save
 > draft button. T21 narrowed this only at the failure end — the status now reads "Draft
