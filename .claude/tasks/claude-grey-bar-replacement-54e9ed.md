@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Keep the trim rail from painting over the wizard footer
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/new-match-wizard/WizardShell.tsx, src/components/dashboard/matches/new-match-wizard/TrimStepContent.tsx
 - **done when:**

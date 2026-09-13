@@ -898,7 +898,7 @@ function TrimStepContentImpl({
           </span>
         </div>
 
-        <div className="relative">
+        <div className="relative py-0.5">
           {/* Live frame at the handle being dragged. Sits above the rail on its
               own layer so showing it never reflows the strip. */}
           {dragging && dragging !== "window" ? (
