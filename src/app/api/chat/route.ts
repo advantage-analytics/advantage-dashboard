@@ -39,17 +39,34 @@ function buildSystemPrompt(ctx: MatchContext): string {
       : "No key moments recorded.";
 
   const formatInsights = (
-    player: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> } | undefined
+    player:
+      | {
+          strengths?: Array<{
+            name: string;
+            value: number;
+            description: string;
+          }>;
+          weaknesses?: Array<{
+            name: string;
+            value: number;
+            description: string;
+          }>;
+        }
+      | undefined,
   ) => {
     if (!player) return "  No insights available.";
     const lines: string[] = [];
     if (player.strengths?.length) {
       lines.push("  Strengths:");
-      player.strengths.forEach((s) => lines.push(`    - ${s.name} (${s.value}%): ${s.description}`));
+      player.strengths.forEach((s) =>
+        lines.push(`    - ${s.name} (${s.value}%): ${s.description}`),
+      );
     }
     if (player.weaknesses?.length) {
       lines.push("  Areas to improve:");
-      player.weaknesses.forEach((w) => lines.push(`    - ${w.name} (${w.value}%): ${w.description}`));
+      player.weaknesses.forEach((w) =>
+        lines.push(`    - ${w.name} (${w.value}%): ${w.description}`),
+      );
     }
     return lines.length > 0 ? lines.join("\n") : "  No insights available.";
   };

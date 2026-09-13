@@ -1,20 +1,24 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { StatisticsComingSoon } from "@/components/dashboard/statistics/statistics-coming-soon";
+import { ComingSoonPage } from "@/components/dashboard/coming-soon";
 
-export default async function StatisticsPage() {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims) redirect("/login");
+export const metadata = { title: "Statistics" };
 
+/**
+ * Aggregate trends across every match you have logged — not finalised, so the
+ * page says so rather than showing a half-answer.
+ *
+ * Why this is a coming-soon and not a day zero: those are different states
+ * with different treatments (SKILL.md → Empty State). A day zero dims the
+ * page's own shape, because the shape is finished and only the data is
+ * missing. This page's shape is not settled, so an offer promising what it
+ * will look like is a promise it cannot keep.
+ */
+export default function StatisticsPage() {
   return (
-    <div className="flex-1 w-full bg-white">
-      <div className="mx-auto max-w-screen-2xl px-6 sm:px-8 py-8 sm:py-10">
-        <h1 className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[36px]">
-          Statistics
-        </h1>
-        <StatisticsComingSoon />
-      </div>
-    </div>
+    <ComingSoonPage
+      title="Statistics"
+      heading="Season statistics are still being built."
+      description="Serve, return and rally numbers, rolled up across every match you've sent, with a selector to compare one stretch of the season against another."
+      action={{ label: "View your matches", href: "/dashboard/matches" }}
+    />
   );
 }

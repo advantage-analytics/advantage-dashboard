@@ -6,10 +6,10 @@ This guide explains how to connect a real LLM to the Advantage Intelligence chat
 
 ## 1. Choose a Provider
 
-| Provider | SDK | Key env var | Model used |
-|----------|-----|-------------|------------|
+| Provider      | SDK                 | Key env var         | Model used        |
+| ------------- | ------------------- | ------------------- | ----------------- |
 | **Anthropic** | `@anthropic-ai/sdk` | `ANTHROPIC_API_KEY` | `claude-opus-4-6` |
-| **OpenAI** | `openai` | `OPENAI_API_KEY` | `gpt-4o` |
+| **OpenAI**    | `openai`            | `OPENAI_API_KEY`    | `gpt-4o`          |
 
 Pick one and follow the steps below.
 
@@ -87,10 +87,10 @@ No code changes are needed — the adapter at `src/lib/llm/adapter.ts` handles t
 
 Each chat message sends the full match context (~500 tokens) + conversation history + the user's question, and receives ~300 tokens.
 
-| Provider | Input | Output | ~Cost per message |
-|----------|-------|--------|-------------------|
-| Claude Opus 4.6 | $15 / 1M tokens | $75 / 1M tokens | ~$0.03 |
-| GPT-4o | $5 / 1M tokens | $15 / 1M tokens | ~$0.008 |
+| Provider        | Input           | Output          | ~Cost per message |
+| --------------- | --------------- | --------------- | ----------------- |
+| Claude Opus 4.6 | $15 / 1M tokens | $75 / 1M tokens | ~$0.03            |
+| GPT-4o          | $5 / 1M tokens  | $15 / 1M tokens | ~$0.008           |
 
 Prices are approximate and subject to change. Check the provider's pricing page for current rates.
 

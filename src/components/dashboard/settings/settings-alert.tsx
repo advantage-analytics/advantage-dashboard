@@ -56,8 +56,18 @@ export function SettingsAlert({
 }: SettingsAlertProps): React.ReactElement {
   const config = alertConfig[type];
   const Icon = config.icon;
+  // Latest-value ref so the auto-dismiss timer isn't torn down and restarted
+  // every time the parent passes a new onDismiss identity.
+  //
+  // Written in an effect, not during render: mutating a ref while rendering is
+  // unsafe under concurrent rendering, where a render can be discarded or
+  // replayed (react-hooks/refs). This effect is declared before the timer
+  // effect below so the timer always observes the committed value; on first
+  // mount useRef's initial argument already holds it.
   const onDismissRef = useRef(onDismiss);
-  onDismissRef.current = onDismiss;
+  useEffect(() => {
+    onDismissRef.current = onDismiss;
+  });
 
   useEffect(() => {
     if (!onDismissRef.current || !AUTO_DISMISS_TYPES.includes(type)) return;
@@ -73,17 +83,17 @@ export function SettingsAlert({
       role={isError ? "alert" : "status"}
       aria-live={isError ? "assertive" : "polite"}
       className={cn(
-        "flex items-start gap-3 px-4 py-3 rounded-lg border animate-in fade-in slide-in-from-top-1 duration-200",
+        "flex animate-in items-start gap-3 rounded-lg border px-4 py-3 duration-200 fade-in slide-in-from-top-1",
         config.bg,
-        config.border
+        config.border,
       )}
     >
       <Icon
-        className={cn("size-3.5 flex-shrink-0 mt-0.5", config.iconColor)}
+        className={cn("mt-0.5 size-3.5 flex-shrink-0", config.iconColor)}
         strokeWidth={1.5}
         aria-hidden="true"
       />
-      <p className={cn("text-[12px] flex-1 leading-relaxed", config.text)}>
+      <p className={cn("flex-1 text-[12px] leading-relaxed", config.text)}>
         {message}
       </p>
       {onDismiss && (
@@ -91,8 +101,8 @@ export function SettingsAlert({
           onClick={onDismiss}
           aria-label="Dismiss alert"
           className={cn(
-            "size-4 flex-shrink-0 rounded flex items-center justify-center hover:bg-black/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-blue)]/40",
-            config.text
+            "flex size-4 flex-shrink-0 items-center justify-center rounded transition-colors hover:bg-black/5 focus-visible:outline-none",
+            config.text,
           )}
         >
           <X className="size-3" strokeWidth={1.5} />

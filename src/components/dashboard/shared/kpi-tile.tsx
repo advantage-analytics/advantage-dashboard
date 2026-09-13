@@ -15,6 +15,7 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import type { KpiFormat } from "@/lib/data/performance-server";
+import { PlaceholderSparkline } from "./placeholder-sparkline";
 
 // Lazy-loaded so Recharts is only pulled in when a tile actually renders a
 // detail popover (home KPI strip) — keeps the shared tile light elsewhere.
@@ -25,13 +26,7 @@ const KpiDetailChart = dynamic(() => import("./kpi-detail-chart"), {
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
-function Sparkline({
-  data,
-  positive,
-}: {
-  data: number[];
-  positive: boolean;
-}) {
+function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
   const id = useId();
   const shouldReduceMotion = useReducedMotion();
   const width = 80;
@@ -87,7 +82,11 @@ function Sparkline({
         fill={`url(#${areaId})`}
         initial={shouldReduceMotion ? false : { opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.8, ease: EASE_OUT, delay: 0.2 }}
+        transition={
+          shouldReduceMotion
+            ? { duration: 0 }
+            : { duration: 0.8, ease: EASE_OUT, delay: 0.2 }
+        }
       />
       <motion.polyline
         points={polylinePoints}
@@ -98,7 +97,9 @@ function Sparkline({
         strokeLinejoin="round"
         initial={shouldReduceMotion ? false : { pathLength: 0 }}
         animate={{ pathLength: 1 }}
-        transition={shouldReduceMotion ? { duration: 0 } : { duration: 1, ease: EASE_OUT }}
+        transition={
+          shouldReduceMotion ? { duration: 0 } : { duration: 1, ease: EASE_OUT }
+        }
       />
     </svg>
   );
@@ -121,12 +122,21 @@ function ValueTransition({
     <AnimatePresence mode="popLayout" initial={false}>
       <motion.span
         key={valueKey}
-        initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 6, filter: "blur(2px)" }}
+        initial={
+          shouldReduceMotion
+            ? { opacity: 1 }
+            : { opacity: 0, y: 6, filter: "blur(2px)" }
+        }
         animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
         exit={
           shouldReduceMotion
             ? { opacity: 0, transition: { duration: 0.1 } }
-            : { opacity: 0, y: -6, filter: "blur(2px)", transition: { duration: 0.2, ease: EASE_OUT } }
+            : {
+                opacity: 0,
+                y: -6,
+                filter: "blur(2px)",
+                transition: { duration: 0.2, ease: EASE_OUT },
+              }
         }
         transition={{ duration: 0.5, ease: EASE_OUT, delay }}
         className={className}
@@ -170,6 +180,14 @@ export interface KpiTileProps {
   detail?: { value: number; date: string; opponent: string }[];
   /** Value formatting hint passed to the detail chart's tooltip/axis. */
   format?: KpiFormat;
+  /**
+   * Draw the grey placeholder curve while `sparkline` has fewer than two
+   * points — a tile holding its first value, with "1 more match for a
+   * trend" beneath. Keeps the tile's silhouette the same at zero, one and
+   * many matches; the day-zero strip draws the same curve. Off by default so
+   * a tile that simply has no series (match detail) stays blank.
+   */
+  ghostSparkline?: boolean;
 }
 
 const MotionLink = motion.create(Link);
@@ -187,6 +205,7 @@ export function KpiTile({
   href,
   detail,
   format,
+  ghostSparkline = false,
 }: KpiTileProps) {
   const hasDetail = !!detail && detail.length > 0;
   const [detailOpen, setDetailOpen] = useState(false);
@@ -222,7 +241,6 @@ export function KpiTile({
       ? "text-[#5DB955]"
       : "text-[#E51837]";
   const arrow = !trend ? "" : isNeutral ? "→" : trend.change > 0 ? "↑" : "↓";
-  const sign = !trend || isNeutral ? "" : trend.change > 0 ? "+" : "";
 
   const sharedMotion = {
     initial: skipAnimation ? false : { opacity: 0, y: 8 },
@@ -233,9 +251,11 @@ export function KpiTile({
       : `${label}: ${value}`,
   } as const;
 
-  const baseClass = "flex-1 flex flex-col gap-3 px-5 py-5 min-w-0";
+  // `.adv-kpi`: flex:1, min-width 0, 12px gap, 20px padding, overflow hidden.
+  const baseClass =
+    "flex-1 flex flex-col gap-3 px-5 py-5 min-w-0 overflow-hidden";
   const linkClass = href
-    ? "cursor-pointer hover:bg-[#FAFAFA] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] focus-visible:ring-inset"
+    ? "cursor-pointer hover:bg-[#FAFAFA] transition-colors duration-200 focus-visible:outline-none"
     : hasDetail
       ? "hover:bg-[#FAFAFA] transition-colors duration-200"
       : "";
@@ -244,8 +264,15 @@ export function KpiTile({
     <>
       <Tooltip>
         <TooltipTrigger asChild>
+          {/* One line, always, so the tile's height never changes with its
+              width — `KpiTileStrip` drops to four and then three tiles before
+              any default label would run out of room. `truncate` is the
+              backstop for a custom pick like "BREAK POINTS CONVERTED" in a
+              narrow tile: an ellipsis rather than the clip that used to cut
+              "SERVICE GAMES WON" to "SERVICE GAME", which read as a different
+              statistic. */}
           <p
-            className={`text-[9px] font-normal text-[var(--color-text-dim)] uppercase tracking-[2.5px] whitespace-nowrap w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm ${description ? "cursor-help" : ""}`}
+            className={`max-w-full truncate rounded-sm text-[9px] font-normal tracking-[2.5px] text-[var(--color-text-dim)] uppercase focus-visible:outline-none ${description ? "cursor-help" : ""}`}
             tabIndex={description ? 0 : undefined}
           >
             {label}
@@ -260,44 +287,56 @@ export function KpiTile({
       <div className="flex items-end overflow-hidden">
         <ValueTransition
           valueKey={value}
-          className="text-[28px] font-light text-[var(--color-text-primary)] tracking-[-0.5px] leading-none tabular-nums inline-block"
+          className="inline-block text-[28px] leading-none font-light tracking-[-0.5px] text-[var(--color-text-primary)] tabular-nums"
         >
           {value}
         </ValueTransition>
-        {sparkline && sparkline.length >= 2 && (
+        {sparkline && sparkline.length >= 2 ? (
           <>
-            <div aria-hidden className="flex-1 max-w-12" />
+            {/* Uncapped: the DS's `.adv-kpi-spark{margin-left:auto}` pushes the
+                sparkline to the tile's right edge. A 48px cap used to hold it
+                beside the value, which only coincided with the design at one
+                tile width. */}
+            <div aria-hidden className="flex-1" />
             <Sparkline data={sparkline} positive={isGood} />
           </>
-        )}
+        ) : ghostSparkline ? (
+          <>
+            <div aria-hidden className="flex-1" />
+            <PlaceholderSparkline index={index} />
+          </>
+        ) : null}
       </div>
       {trend ? (
         <div className="flex items-center gap-1.5 overflow-hidden">
+          {/* Arrow and magnitude share one 11px/500 run (`.adv-kpi-trend`);
+              the glyph was a separate 10px/600 weight before. */}
           <ValueTransition
             valueKey={arrow}
-            className={`text-[10px] font-semibold inline-block ${trendColor}`}
+            className={`inline-block text-[11px] font-medium ${trendColor}`}
             delay={0.1}
           >
             {arrow}
           </ValueTransition>
           <ValueTransition
             valueKey={`${trend.change}`}
-            className={`text-[11px] font-medium inline-block ${trendColor}`}
+            className={`inline-block text-[11px] font-medium ${trendColor}`}
             delay={0.1}
           >
-            {sign}
-            {trend.change}
+            {Math.abs(trend.change)}
           </ValueTransition>
           <span className="text-[10px] font-normal text-[var(--color-text-muted)]">
             {trend.changeLabel}
           </span>
         </div>
       ) : subtext ? (
-        <p className="text-[10px] font-normal text-[var(--color-text-muted)] truncate tabular-nums">
+        <p className="truncate text-[10px] font-normal text-[var(--color-text-muted)] tabular-nums">
           {subtext}
         </p>
       ) : hintText ? (
-        <p className="text-[10px] font-normal text-[var(--color-text-dim)]">{hintText}</p>
+        <p className="text-[10px] font-normal text-[var(--color-text-dim)]">
+          {hintText}
+        </p>
       ) : (
         <div aria-hidden className="h-[15px]" />
       )}
@@ -347,9 +386,49 @@ export function KpiTile({
   );
 }
 
-export function KpiTileStrip({ children }: { children: ReactNode }) {
+export function KpiTileStrip({
+  children,
+  collapse = false,
+  ariaLabel,
+}: {
+  children: ReactNode;
+  /**
+   * Names the region for a screen reader — "Season summary", "Program
+   * summary". Without it the strip is a run of unlabelled tile groups with
+   * nothing saying what they are a summary OF, which is most of the meaning
+   * on a page whose first screen is this strip.
+   */
+  ariaLabel?: string;
+  /**
+   * Show fewer tiles rather than narrower ones as the strip loses width.
+   *
+   * A tile needs 184px to hold "BREAK POINTS SAVED", Home's longest label, on
+   * one line inside its 20px padding. With this on, the fifth tile goes below
+   * 920px of strip and the fourth below 736px — so every tile keeps the same
+   * height at every width, which is the point: a label that wrapped made the
+   * whole strip a row taller on a tablet and nowhere else.
+   *
+   * A container query, not a media query, because the sidebar takes either
+   * 64px or 232px of the window: the same 1280px window holds five tiles with
+   * the rail and four with the panel open. Hidden tiles stay mounted, so a
+   * customised selection survives a resize; the strip only decides what fits.
+   *
+   * Off by default, and off for match detail — a strip of four whose labels
+   * run to "First serve points won" would start dropping statistics from the
+   * page a player opened to read them. There the label ellipsizes instead.
+   *
+   * The rule itself is `.adv-kpi-strip` in globals.css: it needs a container
+   * query over `nth-child`, which is one composition Tailwind's variants drop
+   * on the floor.
+   */
+  collapse?: boolean;
+}) {
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden">
+    <div
+      role={ariaLabel ? "group" : undefined}
+      aria-label={ariaLabel}
+      className={`${collapse ? "adv-kpi-strip" : ""}bg-white overflow-hidden rounded-[14px] border border-[#F3F3F3] shadow-card`}
+    >
       <div className="flex flex-wrap sm:flex-nowrap">{children}</div>
     </div>
   );

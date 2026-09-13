@@ -1,15 +1,35 @@
 "use client";
+import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
 
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useSearchParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, X } from "lucide-react";
+import { Search, Filter as FilterIcon } from "lucide-react";
 import { EmptyMatches } from "./empty-matches";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
+import type { DraftRowData } from "./draft-row";
+import {
+  isAnalysisFailed,
+  isAnalysisReady,
+  isInFlight,
+  isLiveUpdating,
+} from "@/lib/data/match-analysis";
+import {
+  useLiveMatchAnalysis,
+  withLiveAnalysis,
+} from "@/hooks/use-live-match-analysis";
+import { matchesFilterGroups } from "@/lib/data/match-filters";
+import { normalizedPersonName } from "@/lib/data/person-name";
 import { providers } from "@/lib/providers";
-import { MatchesGrid } from "./matches-grid";
-import { ViewToggle, type MatchView } from "./view-toggle";
-import { CreateMatchButton } from "./create-match-button";
+import { useUnseenReportIds } from "@/lib/ui/seen-reports";
+import { MatchesGrid, type SortField, type SortDir } from "./matches-grid";
+import type { MatchAnalysis } from "@/lib/data/match-analysis";
+import {
+  MatchesFilterPanel,
+  type FilterOption,
+  type FilterPanelSection,
+} from "./matches-filter-panel";
+import { LifecycleChips, type LifecycleValue } from "./lifecycle-chips";
 
 function providerName(id: string): string {
   return providers.find((p) => p.id === id)?.name ?? id;
@@ -17,212 +37,235 @@ function providerName(id: string): string {
 
 interface MatchesPageContentProps {
   matches: DisplayMatch[];
+  /** The viewer's saved drafts in this workspace, newest first. */
+  drafts?: DraftRowData[];
+  /** Signed-in user, for the live job subscription. Absent = no subscription. */
+  userId?: string;
+  /** Which workspace this list belongs to. Only the empty state reads it. */
+  scope?: "personal" | "team";
 }
 
-type SortField = "date" | "opponent" | "event" | "result";
-type SortDir = "asc" | "desc";
-type FilterKey = "result" | "matchType" | "courtType" | "source";
+type FilterKey =
+  | "result"
+  | "matchType"
+  | "courtType"
+  | "source"
+  | "analysis"
+  /** Team scope only — see `FILTER_GROUPS`. */
+  | "player"
+  /** A scouting axis (who you played), not a lifecycle one — grouped apart in the panel. */
+  | "hand"
+  | "backhand";
+
+/**
+ * Whether a stored filter value and a chip mean the same thing.
+ *
+ * Exact for every group but `player`, whose values are people's names and so
+ * answer to the same rule the list itself filters by. The chip list keeps ONE
+ * raw spelling per person, so a value stored from a different spelling — an
+ * older bookmark, or a newer upload that changed which spelling wins the label
+ * — would otherwise render its chip unchecked while the list stayed filtered,
+ * and clicking it would append a second filter rather than clearing the first.
+ *
+ * Values stay raw rather than normalized so URLs written before this still
+ * resolve; the normalization happens on comparison instead.
+ */
+function sameValue(key: FilterKey, a: string, b: string): boolean {
+  return key === "player"
+    ? normalizedPersonName(a) === normalizedPersonName(b)
+    : a === b;
+}
+
+const FILTER_KEYS: FilterKey[] = [
+  "result",
+  "matchType",
+  "courtType",
+  "source",
+  "analysis",
+  "player",
+  "hand",
+  "backhand",
+];
+
+/**
+ * Collapses the nine job statuses into the four buckets a player actually
+ * filters by. This is the analysis queue's filter, folded into the chip row
+ * that was already here.
+ */
+function analysisGroup(match: DisplayMatch): string | null {
+  const status = match.analysis?.status;
+  if (!status) return null;
+  if (isInFlight(status)) return "In progress";
+  if (isAnalysisFailed(status)) return "Failed";
+  if (status === "manual") return "No video";
+  return "Ready";
+}
+
+const ANALYSIS_GROUP_ORDER = ["In progress", "Ready", "Failed", "No video"];
+
+/**
+ * The "Estimates" view — statistics the engine published but could not defend
+ * at full confidence, to be read as "Estimate · Review data" in the row.
+ *
+ * No analysis state carries that marker yet: Phase 2 derivation withholds the
+ * aggregates it cannot stand behind (`timeline`) rather than publishing them
+ * flagged, so today nothing qualifies and the view is honestly empty. The
+ * predicate exists so the pill is wired to the fact the moment a low-confidence
+ * flag lands on `MatchAnalysis`, instead of to a status list that would need
+ * re-deriving then.
+ */
+function isEstimate(_analysis: MatchAnalysis | undefined): boolean {
+  return false;
+}
 
 interface ActiveFilter {
   key: FilterKey;
   value: string;
 }
 
-const FILTER_CHIPS: { key: FilterKey; label: string; title?: string; getValues: (matches: DisplayMatch[]) => string[]; displayValue?: (val: string) => string }[] = [
+/**
+ * Design 18a's three fixed 2-option facets — segmented, not checklists, so
+ * they're single-select by construction (see `matches-filter-panel.tsx`).
+ * `HAND_OPTIONS`/`BACKHAND_OPTIONS` also back `describeFilters`'s scouting
+ * sentence below, which needs the same value → phrase mapping.
+ */
+const RESULT_OPTIONS: FilterOption[] = [
+  { value: null, label: "All" },
+  { value: "Won", label: "Won" },
+  { value: "Loss", label: "Lost" },
+];
+const HAND_OPTIONS: FilterOption[] = [
+  { value: null, label: "Any" },
+  { value: "right", label: "Right" },
+  { value: "left", label: "Left" },
+];
+const BACKHAND_OPTIONS: FilterOption[] = [
+  { value: null, label: "Any" },
+  { value: "one-handed", label: "One-hand" },
+  { value: "two-handed", label: "Two-hand" },
+];
+
+/** For every facet's stored value → its human label, used uniformly by `describeFilters`. */
+function displayValueFor(key: FilterKey, value: string): string {
+  if (key === "result")
+    return RESULT_OPTIONS.find((o) => o.value === value)?.label ?? value;
+  const group = FILTER_GROUPS.find((g) => g.key === key);
+  return group?.displayValue ? group.displayValue(value) : value;
+}
+
+/**
+ * The applied-filter strip's sentence. Hand + backhand together get the
+ * curated scouting phrase; anything else falls back to a plain joined list of
+ * each facet's own display label — honest, if less like a sentence, rather
+ * than a template guessing at combinations it was never written for.
+ */
+function describeFilters(filters: ActiveFilter[]): string {
+  const hand = filters.find((f) => f.key === "hand")?.value;
+  const backhand = filters.find((f) => f.key === "backhand")?.value;
+  const rest = filters.filter((f) => f.key !== "hand" && f.key !== "backhand");
+  const parts: string[] = [];
+
+  if (hand && backhand) {
+    parts.push(
+      `${hand === "left" ? "Left" : "Right"}-handed opponents with a ${backhand === "one-handed" ? "one" : "two"}-handed backhand`,
+    );
+  } else if (hand) {
+    parts.push(`${hand === "left" ? "Left" : "Right"}-handed opponents`);
+  } else if (backhand) {
+    parts.push(
+      `Opponents with a ${backhand === "one-handed" ? "one" : "two"}-handed backhand`,
+    );
+  }
+
+  parts.push(...rest.map((f) => displayValueFor(f.key, f.value)));
+  return parts.join(" · ");
+}
+
+/**
+ * The open, data-driven checklist facets only — Result/Hand/Backhand moved to
+ * the fixed segmented constants above, since a segmented control needs a
+ * known-ahead-of-time option list, not one read off the matches.
+ */
+const FILTER_GROUPS: {
+  key: FilterKey;
+  label: string;
+  getValues: (matches: DisplayMatch[]) => string[];
+  displayValue?: (val: string) => string;
+  /** Omitted outside a team workspace — a personal list is one player already. */
+  teamOnly?: boolean;
+}[] = [
   {
-    key: "result",
-    label: "Result",
-    title: "Filter by match result",
-    getValues: () => ["Won", "Loss"],
+    // First, because inside a program "who" is the question asked before any
+    // other. The list shows the whole squad — every member reads the program's
+    // matches, staff and player alike — and until now the only way to read one
+    // person's season was to scroll.
+    // It reads `player1` because that is always the program's side of the row:
+    // `recordResult` and the upload wizard both put the opponent in `player2`.
+    key: "player",
+    label: "Roster",
+    teamOnly: true,
+    // Deduplicated by the app's name rule, not by raw string: a season
+    // recorded under both "Dana Brooks" and "Dana  Brooks" otherwise offers two
+    // chips that render identically — HTML collapses the double space — and
+    // each shows half her matches with nothing on screen saying so. The label
+    // keeps the first spelling seen; the filter below compares by the same rule,
+    // so either spelling's rows come back under the one chip.
+    getValues: (matches) => {
+      const byName = new Map<string, string>();
+      for (const m of matches) {
+        const key = normalizedPersonName(m.player1.name);
+        if (key && !byName.has(key)) byName.set(key, m.player1.name);
+      }
+      return [...byName.values()].sort((a, b) =>
+        normalizedPersonName(a).localeCompare(normalizedPersonName(b)),
+      );
+    },
   },
   {
     key: "matchType",
-    label: "Match Type",
-    title: "Filter by match type",
-    getValues: (matches) => [...new Set(matches.map((m) => m.matchType))].sort(),
+    label: "Match type",
+    getValues: (matches) =>
+      [...new Set(matches.map((m) => m.matchType))].sort(),
   },
   {
     key: "courtType",
-    label: "Court Type",
-    title: "Filter by court surface",
-    getValues: (matches) => [...new Set(matches.map((m) => m.courtType).filter(Boolean) as string[])].sort(),
+    label: "Court",
+    getValues: (matches) =>
+      [
+        ...new Set(matches.map((m) => m.courtType).filter(Boolean) as string[]),
+      ].sort(),
   },
   {
     key: "source",
     label: "Source",
-    title: "Data source provider",
-    getValues: (matches) => [...new Set(matches.map((m) => m.sourceProvider).filter(Boolean) as string[])].sort(),
+    getValues: (matches) =>
+      [
+        ...new Set(
+          matches.map((m) => m.sourceProvider).filter(Boolean) as string[],
+        ),
+      ].sort(),
     displayValue: providerName,
+  },
+  {
+    key: "analysis",
+    label: "Analysis",
+    getValues: (matches) => {
+      const present = new Set(
+        matches.map(analysisGroup).filter(Boolean) as string[],
+      );
+      // Fixed order — these are pipeline stages, so alphabetising them would
+      // scramble the sequence a reader expects.
+      return ANALYSIS_GROUP_ORDER.filter((group) => present.has(group));
+    },
   },
 ];
 
-const PAGE_SIZES = [10, 25, 50] as const;
-
-/* ─── Individual filter chip with its own dropdown ─── */
-function FilterChip({
-  filterKey,
-  label,
-  title,
-  values,
-  activeValues,
-  onToggle,
-  displayValue,
-}: {
-  filterKey: FilterKey;
-  label: string;
-  title?: string;
-  values: string[];
-  activeValues: string[];
-  onToggle: (key: FilterKey, value: string) => void;
-  displayValue?: (val: string) => string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [focusIdx, setFocusIdx] = useState(-1);
-  const ref = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const listboxId = `filter-${filterKey}-listbox`;
-
-  // Close on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    if (open) document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open]);
-
-  // Return focus to trigger when closing
-  const closeAndReturn = useCallback(() => {
-    setOpen(false);
-    triggerRef.current?.focus();
-  }, []);
-
-  // Scoped keyboard handler on the container
-  function handleContainerKeyDown(e: React.KeyboardEvent) {
-    if (!open) return;
-    if (e.key === "Escape") { e.preventDefault(); closeAndReturn(); return; }
-    if (e.key === "Tab") { setOpen(false); return; }
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setFocusIdx((prev) => {
-        const next = prev < values.length - 1 ? prev + 1 : 0;
-        optionRefs.current[next]?.focus();
-        return next;
-      });
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setFocusIdx((prev) => {
-        const next = prev > 0 ? prev - 1 : values.length - 1;
-        optionRefs.current[next]?.focus();
-        return next;
-      });
-    }
-    if (e.key === "Home") {
-      e.preventDefault();
-      setFocusIdx(0);
-      optionRefs.current[0]?.focus();
-    }
-    if (e.key === "End") {
-      e.preventDefault();
-      const last = values.length - 1;
-      setFocusIdx(last);
-      optionRefs.current[last]?.focus();
-    }
-  }
-
-  // Reset focus index when closing
-  useEffect(() => {
-    if (!open) setFocusIdx(-1);
-  }, [open]);
-
-  if (values.length === 0) return null;
-
-  const hasActive = activeValues.length > 0;
-
-  return (
-    <div className="relative" ref={ref} onKeyDown={handleContainerKeyDown}>
-      <button
-        ref={triggerRef}
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-controls={open ? listboxId : undefined}
-        title={title}
-        className={`flex items-center gap-1.5 h-8 px-3.5 rounded-full text-xs font-medium transition-[color,background-color] duration-200 ${
-          hasActive
-            ? "ring-1 ring-inset ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
-            : "ring-1 ring-inset ring-[#EAECF0] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6]"
-        }`}
-      >
-        {label}
-        {hasActive && (
-          <span className="min-w-[16px] h-4 flex items-center justify-center rounded-full bg-[#3B82F6] text-white text-[10px] font-semibold px-1">
-            {activeValues.length}
-          </span>
-        )}
-        <ChevronDown
-          className={`w-3 h-3 transition-transform duration-200 ${open ? "rotate-180" : ""} ${
-            hasActive ? "text-[#3B82F6]" : "text-[#888888]"
-          }`}
-        />
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
-            id={listboxId}
-            role="listbox"
-            aria-label={`${label} options`}
-            aria-multiselectable="true"
-            className="absolute top-full left-0 mt-1.5 min-w-[160px] bg-white border border-[#E5E5EA] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)] z-20 py-1.5 px-1.5"
-          >
-            {values.map((val, idx) => {
-              const isActive = activeValues.includes(val);
-              return (
-                <button
-                  key={val}
-                  ref={(el) => { optionRefs.current[idx] = el; }}
-                  role="option"
-                  aria-selected={isActive}
-                  tabIndex={idx === focusIdx ? 0 : -1}
-                  onClick={() => onToggle(filterKey, val)}
-                  className={`flex items-center gap-2 w-full px-2.5 py-2 text-xs rounded-lg transition-[background-color,color] duration-200 ${
-                    isActive
-                      ? "bg-[#EBF2FD] text-[#3B82F6] font-medium"
-                      : "text-[#525252] hover:bg-[#F5F5F5]"
-                  }`}
-                >
-                  <span
-                    className={`w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                      isActive
-                        ? "border-[#3B82F6] bg-[#3B82F6]"
-                        : "border-[#EAECF0]"
-                    }`}
-                  >
-                    {isActive && (
-                      <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
-                        <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
-                  </span>
-                  {displayValue ? displayValue(val) : val}
-                </button>
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
+/**
+ * Ten rows a page. The frame's footer is a range and one quiet "Older matches"
+ * link (Platform Audit Pb2) — no page-size control, so the size is a constant
+ * rather than a preference.
+ */
+const PAGE_SIZE = 10;
 
 /* ─── Sort dropdown ─── */
 const SORT_OPTIONS: { field: SortField; label: string }[] = [
@@ -251,7 +294,8 @@ function SortDropdown({
   // Close on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     }
     if (open) document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -265,8 +309,15 @@ function SortDropdown({
   // Scoped keyboard handler
   function handleContainerKeyDown(e: React.KeyboardEvent) {
     if (!open) return;
-    if (e.key === "Escape") { e.preventDefault(); closeAndReturn(); return; }
-    if (e.key === "Tab") { setOpen(false); return; }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeAndReturn();
+      return;
+    }
+    if (e.key === "Tab") {
+      setOpen(false);
+      return;
+    }
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setFocusIdx((prev) => {
@@ -300,27 +351,38 @@ function SortDropdown({
     if (!open) setFocusIdx(-1);
   }, [open]);
 
-  const activeLabel = SORT_OPTIONS.find((o) => o.field === sortField)?.label ?? "Date";
-  const dirLabel = sortField === "date"
-    ? (sortDir === "asc" ? "Oldest" : "Newest")
-    : (sortDir === "asc" ? "A–Z" : "Z–A");
+  const activeLabel =
+    SORT_OPTIONS.find((o) => o.field === sortField)?.label ?? "Date";
+  const dirLabel =
+    sortField === "date"
+      ? sortDir === "asc"
+        ? "Oldest"
+        : "Newest"
+      : sortDir === "asc"
+        ? "A–Z"
+        : "Z–A";
+  // One quiet phrase, the canvas register: "Newest first" for the default date
+  // sort, "{Field} A–Z" for the text fields.
+  const sortPhrase =
+    sortField === "date"
+      ? sortDir === "asc"
+        ? "Oldest first"
+        : "Newest first"
+      : `${activeLabel} ${dirLabel}`;
 
   return (
     <div className="relative" ref={ref} onKeyDown={handleContainerKeyDown}>
-      <button
+      <SortTrigger
         ref={triggerRef}
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-controls={open ? listboxId : undefined}
         title={`Sorted by ${activeLabel}, ${dirLabel}`}
-        className="flex items-center gap-1.5 h-8 px-3.5 rounded-full ring-1 ring-inset ring-[#EAECF0] text-xs font-medium text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6] transition-[color,background-color] duration-200"
+        engaged={open}
       >
-        <ArrowUpDown className="w-3.5 h-3.5" />
-        {activeLabel}
-        <span className="text-[10px] text-[#888888]">{dirLabel}</span>
-        <ChevronDown className={`w-3 h-3 text-[#888888] transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
-      </button>
+        {sortPhrase}
+      </SortTrigger>
 
       <AnimatePresence>
         {open && (
@@ -332,27 +394,43 @@ function SortDropdown({
             id={listboxId}
             role="listbox"
             aria-label="Sort options"
-            className="absolute top-full right-0 mt-1.5 min-w-[160px] bg-white border border-[#E5E5EA] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)] z-20 py-1.5 px-1.5"
+            className="absolute top-full right-0 z-20 mt-1.5 min-w-[160px] rounded-xl border px-1.5 py-1.5"
+            style={{
+              background: "var(--surface-card)",
+              borderColor: "var(--border-medium)",
+              boxShadow: "var(--shadow-dropdown)",
+            }}
           >
             {SORT_OPTIONS.map((opt, idx) => {
               const isActive = sortField === opt.field;
               return (
                 <button
                   key={opt.field}
-                  ref={(el) => { optionRefs.current[idx] = el; }}
+                  ref={(el) => {
+                    optionRefs.current[idx] = el;
+                  }}
                   role="option"
                   aria-selected={isActive}
                   tabIndex={idx === focusIdx ? 0 : -1}
-                  onClick={() => { onSort(opt.field); setOpen(false); }}
-                  className={`flex items-center justify-between w-full px-2.5 py-2 text-xs rounded-lg transition-[background-color,color] duration-200 ${
-                    isActive
-                      ? "bg-[#EBF2FD] text-[#3B82F6] font-medium"
-                      : "text-[#525252] hover:bg-[#F5F5F5]"
-                  }`}
+                  onClick={() => {
+                    onSort(opt.field);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between rounded-[var(--radius-element)] px-2.5 py-2 text-xs transition-colors duration-150 ${isActive ? "" : "hover:bg-[var(--surface-subtle)]"}`}
+                  style={{
+                    background: isActive ? "var(--surface-subtle)" : undefined,
+                    color: isActive ? "var(--ink-900)" : "var(--ink-700)",
+                    fontWeight: isActive ? 500 : 400,
+                  }}
                 >
                   {opt.label}
                   {isActive && (
-                    <span className="text-[10px] text-[#3B82F6]">{sortDir === "asc" ? "↑" : "↓"}</span>
+                    <span
+                      className="text-[10px]"
+                      style={{ color: "var(--ink-500)" }}
+                    >
+                      {sortDir === "asc" ? "↑" : "↓"}
+                    </span>
                   )}
                 </button>
               );
@@ -365,111 +443,98 @@ function SortDropdown({
 }
 
 /* ─── Main content ─── */
-export function MatchesPageContent({ matches }: MatchesPageContentProps): React.JSX.Element {
+export function MatchesPageContent({
+  matches: serverMatches,
+  drafts = [],
+  userId,
+  scope = "personal",
+}: MatchesPageContentProps): React.JSX.Element {
   const searchParams = useSearchParams();
   const pathname = usePathname();
 
-  const [view, setView] = useState<MatchView>(() => (searchParams.get("view") as MatchView) || "list");
-  const [userSetView, setUserSetView] = useState(false);
+  // Live job state, merged over what the server rendered. Without this the bar
+  // is a snapshot from page load — a long upload appears frozen, and a job that
+  // finishes while the tab is open never says so.
+  //
+  // Merged before everything below so filtering, sorting and grouping all see
+  // the live status: a job that fails mid-view should leave the "In progress"
+  // group without a refresh, not just change colour.
+  // Only subscribe when there is something to follow. Otherwise every visit to
+  // this page holds a WebSocket and a 25-second heartbeat for a channel that
+  // will never deliver a message, against a per-project connection cap.
+  //
+  // Trade-off: a match that enters flight from ANOTHER tab will not light up
+  // here without a refresh. Acceptable — uploads start from this app, in the
+  // tab the user is already looking at.
+  // isLiveUpdating, not isInFlight. A match parked at `processed` is in flight
+  // but nothing will move it until Phase 2 ships, so subscribing for it would
+  // hold the socket described above open forever rather than briefly.
+  const hasInFlight = serverMatches.some(
+    (m) => m.analysis && isLiveUpdating(m.analysis.status),
+  );
+  const livePatches = useLiveMatchAnalysis({
+    by: "user",
+    userId: hasInFlight ? userId : undefined,
+  });
+  const matches = useMemo(() => {
+    if (livePatches.size === 0) return serverMatches;
+    return serverMatches.map((m) => {
+      const patch = livePatches.get(m.id);
+      if (!patch || !m.analysis) return m;
+      return { ...m, analysis: withLiveAnalysis(m.analysis, patch) };
+    });
+  }, [serverMatches, livePatches]);
 
-  // Auto-switch to gallery on narrow screens (< 1024px) unless user explicitly chose a view
-  useEffect(() => {
-    const mql = window.matchMedia("(max-width: 1023px)");
-    function handleChange(e: MediaQueryListEvent | MediaQueryList) {
-      if (!userSetView) {
-        setView(e.matches ? "gallery" : "list");
-      }
-    }
-    handleChange(mql);
-    mql.addEventListener("change", handleChange);
-    return () => mql.removeEventListener("change", handleChange);
-  }, [userSetView]);
+  /* Layout is decided by the viewport alone — there is no view control any
+     more. Seven columns need the width, so under 1024px the same matches render
+     as cards instead. That choice is made in CSS inside MatchesGrid, so it
+     needs no state, no listener, and no URL parameter here. */
 
-  const handleViewChange = useCallback((v: MatchView) => {
-    setView(v);
-    setUserSetView(true);
-  }, []);
+  // No search box in the filter row — the header owns search (⌘K), and a
+  // second control here was the drift Pb2 removed (Updated Design System
+  // 19g). The command palette still lands on this page with `?q=<name>` for
+  // an opponent or event it found, so the query survives as a cut this list
+  // states in words in the applied-filter strip, with the same "Clear filter"
+  // as any other. It has no input of its own.
   const [search, setSearch] = useState(() => searchParams.get("q") || "");
-  const [sortField, setSortField] = useState<SortField>(() => (searchParams.get("sort") as SortField) || "date");
-  const [sortDir, setSortDir] = useState<SortDir>(() => (searchParams.get("dir") as SortDir) || "desc");
+  const [sortField, setSortField] = useState<SortField>(
+    () => (searchParams.get("sort") as SortField) || "date",
+  );
+  const [sortDir, setSortDir] = useState<SortDir>(
+    () => (searchParams.get("dir") as SortDir) || "desc",
+  );
   const [filters, setFilters] = useState<ActiveFilter[]>(() => {
     const result: ActiveFilter[] = [];
-    for (const key of ["result", "matchType", "courtType", "source"] as FilterKey[]) {
+    for (const key of FILTER_KEYS) {
       for (const value of searchParams.getAll(key)) {
+        // Deduplicated on the way in, by the same rule the chips use. A URL
+        // written before the Player chips collapsed to one spelling per person
+        // can carry both — `?player=Dana+Brooks&player=Dana++Brooks` — and two
+        // entries for one chip make the badge out-count the checked chips and
+        // render two pills that look identical in the empty state.
+        if (
+          result.some((f) => f.key === key && sameValue(key, f.value, value))
+        ) {
+          continue;
+        }
         result.push({ key, value });
       }
     }
     return result;
   });
-  const [page, setPage] = useState(() => Number(searchParams.get("page")) || 1);
-  const [pageSize, setPageSize] = useState<number>(() => {
-    const ps = Number(searchParams.get("pageSize"));
-    return (PAGE_SIZES as readonly number[]).includes(ps) ? ps : 10;
+  const [lifecycle, setLifecycle] = useState<LifecycleValue>(() => {
+    const v = searchParams.get("lifecycle");
+    return v === "new" || v === "in-progress" || v === "estimates" ? v : "all";
   });
-  const [pageSizeOpen, setPageSizeOpen] = useState(false);
-  const pageSizeRef = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
-
-  // Close page-size dropdown on outside click; scoped keyboard nav
-  const [pageSizeFocusIdx, setPageSizeFocusIdx] = useState(-1);
-  const pageSizeOptionRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const pageSizeTriggerRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!pageSizeOpen) { setPageSizeFocusIdx(-1); return; }
-    function handleClick(e: MouseEvent) {
-      if (pageSizeRef.current && !pageSizeRef.current.contains(e.target as Node)) {
-        setPageSizeOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [pageSizeOpen]);
-
-  function handlePageSizeKeyDown(e: React.KeyboardEvent) {
-    if (!pageSizeOpen) return;
-    if (e.key === "Escape") { e.preventDefault(); setPageSizeOpen(false); pageSizeTriggerRef.current?.focus(); return; }
-    if (e.key === "Tab") { setPageSizeOpen(false); return; }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setPageSizeFocusIdx((prev) => {
-        const next = prev > 0 ? prev - 1 : PAGE_SIZES.length - 1;
-        pageSizeOptionRefs.current[next]?.focus();
-        return next;
-      });
-    }
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setPageSizeFocusIdx((prev) => {
-        const next = prev < PAGE_SIZES.length - 1 ? prev + 1 : 0;
-        pageSizeOptionRefs.current[next]?.focus();
-        return next;
-      });
-    }
-    if (e.key === "Home") {
-      e.preventDefault();
-      setPageSizeFocusIdx(0);
-      pageSizeOptionRefs.current[0]?.focus();
-    }
-    if (e.key === "End") {
-      e.preventDefault();
-      const last = PAGE_SIZES.length - 1;
-      setPageSizeFocusIdx(last);
-      pageSizeOptionRefs.current[last]?.focus();
-    }
-  }
-
-  // "/" shortcut to focus search
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "/" && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement)) {
-        e.preventDefault();
-        searchRef.current?.focus();
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  const readyMatchIds = useMemo(
+    () =>
+      matches
+        .filter((m) => !m.analysis || isAnalysisReady(m.analysis.status))
+        .map((m) => m.id),
+    [matches],
+  );
+  const unseenIds = useUnseenReportIds(readyMatchIds);
+  const [page, setPage] = useState(() => Number(searchParams.get("page")) || 1);
 
   // Track newly created match for highlight animation
   const [newMatchId, setNewMatchId] = useState<string | null>(null);
@@ -485,28 +550,34 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
       }
     }
     window.addEventListener("match-created", handleMatchCreated);
-    return () => window.removeEventListener("match-created", handleMatchCreated);
+    return () =>
+      window.removeEventListener("match-created", handleMatchCreated);
   }, []);
 
   // Filter matches
   const filtered = useMemo(() => {
     let result = matches;
 
-    // Search
+    // The palette's `?q=` — two needles, because one query names two kinds of
+    // thing. Names go through the app's own rule so a row stored as
+    // "Dana  Brooks" is reachable by her name; tournament and round are not
+    // people and keep the plain contains. The plain needle is trimmed either
+    // way — a trailing space used to empty the whole list.
     if (search.trim()) {
-      const q = search.toLowerCase();
+      const q = search.trim().toLowerCase();
+      const person = normalizedPersonName(search);
       result = result.filter(
         (m) =>
           m.tournamentName.toLowerCase().includes(q) ||
-          m.player1.name.toLowerCase().includes(q) ||
-          m.player2.name.toLowerCase().includes(q) ||
-          (m.round?.toLowerCase().includes(q) ?? false)
+          normalizedPersonName(m.player1.name).includes(person) ||
+          normalizedPersonName(m.player2.name).includes(person) ||
+          (m.round?.toLowerCase().includes(q) ?? false),
       );
     }
 
-    // Filters
-    for (const filter of filters) {
-      result = result.filter((m) => {
+    // Alternatives within a facet, intersection across facets.
+    result = result.filter((match) =>
+      matchesFilterGroups(match, filters, (m, filter) => {
         switch (filter.key) {
           case "result":
             return filter.value === "Won"
@@ -518,14 +589,38 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
             return m.courtType === filter.value;
           case "source":
             return m.sourceProvider === filter.value;
+          case "analysis":
+            return analysisGroup(m) === filter.value;
+          case "hand":
+            return m.player2Hand === filter.value;
+          case "backhand":
+            return m.player2Backhand === filter.value;
+          case "player":
+            return (
+              normalizedPersonName(m.player1.name) ===
+              normalizedPersonName(filter.value)
+            );
           default:
             return true;
         }
-      });
+      }),
+    );
+
+    // Lifecycle — independent of the panel (v3's Data Table law 6): chips
+    // answer "what's the state of this match", the panel answers everything
+    // else, and the two never gate on the same predicate.
+    if (lifecycle === "new") {
+      result = result.filter((m) => unseenIds.has(m.id));
+    } else if (lifecycle === "in-progress") {
+      result = result.filter(
+        (m) => !!m.analysis && isInFlight(m.analysis.status),
+      );
+    } else if (lifecycle === "estimates") {
+      result = result.filter((m) => isEstimate(m.analysis));
     }
 
     return result;
-  }, [matches, search, filters]);
+  }, [matches, search, filters, lifecycle, unseenIds]);
 
   // Sort matches
   const sorted = useMemo(() => {
@@ -555,19 +650,19 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
   }, [filtered, sortField, sortDir]);
 
   // Pagination
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const paginatedMatches = sorted.slice(
-    (safePage - 1) * pageSize,
-    safePage * pageSize
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
   );
-  const rangeStart = sorted.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
-  const rangeEnd = Math.min(safePage * pageSize, sorted.length);
+  const rangeStart = sorted.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(safePage * PAGE_SIZE, sorted.length);
 
-  // Reset page when filters/search change
+  // Reset page when filters/query/lifecycle change
   useEffect(() => {
     setPage(1);
-  }, [search, filters, pageSize]);
+  }, [search, filters, lifecycle]);
 
   // Sync state to URL
   const isInitialMount = useRef(true);
@@ -578,15 +673,18 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
     }
     const params = new URLSearchParams();
     if (search) params.set("q", search);
-    if (view !== "list") params.set("view", view);
     if (sortField !== "date") params.set("sort", sortField);
     if (sortDir !== "desc") params.set("dir", sortDir);
     if (page > 1) params.set("page", String(page));
-    if (pageSize !== 10) params.set("pageSize", String(pageSize));
+    if (lifecycle !== "all") params.set("lifecycle", lifecycle);
     for (const f of filters) params.append(f.key, f.value);
     const query = params.toString();
-    window.history.replaceState(null, "", `${pathname}${query ? `?${query}` : ""}`);
-  }, [search, view, sortField, sortDir, page, pageSize, filters, pathname]);
+    window.history.replaceState(
+      null,
+      "",
+      `${pathname}${query ? `?${query}` : ""}`,
+    );
+  }, [search, sortField, sortDir, page, filters, lifecycle, pathname]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -597,114 +695,211 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
     }
   }
 
-
   const toggleFilter = useCallback((key: FilterKey, value: string) => {
     setFilters((prev) => {
-      const exists = prev.some((f) => f.key === key && f.value === value);
-      if (exists) return prev.filter((f) => !(f.key === key && f.value === value));
+      const exists = prev.some(
+        (f) => f.key === key && sameValue(key, f.value, value),
+      );
+      if (exists)
+        return prev.filter(
+          (f) => !(f.key === key && sameValue(key, f.value, value)),
+        );
       return [...prev, { key, value }];
     });
   }, []);
 
-  // Get active values per filter key
-  function activeValuesFor(key: FilterKey): string[] {
-    return filters.filter((f) => f.key === key).map((f) => f.value);
-  }
+  /**
+   * A segmented facet's click always replaces, never toggles — that's what
+   * keeps Result/Hand/Backhand single-select. Selecting the neutral option
+   * ("All"/"Any", `value === null`) just clears the key.
+   */
+  const selectSegment = useCallback((key: FilterKey, value: string | null) => {
+    setFilters((prev) => {
+      const withoutKey = prev.filter((f) => f.key !== key);
+      return value === null ? withoutKey : [...withoutKey, { key, value }];
+    });
+  }, []);
+
+  const segmentedValue = useCallback(
+    (key: FilterKey) => filters.find((f) => f.key === key)?.value ?? null,
+    [filters],
+  );
+
+  const clearFilters = useCallback(() => setFilters([]), []);
+
+  const isFilterActive = useCallback(
+    (key: FilterKey, value: string) =>
+      filters.some((f) => f.key === key && sameValue(key, f.value, value)),
+    [filters],
+  );
+
+  // Values are read off the matches, so a category with nothing to offer drops
+  // out of the panel rather than opening onto an empty list. Order matches
+  // design 18a: Player (team scope) → Result → the data-driven checklists →
+  // Analysis → Opponent last, behind its own divider.
+  const filterSections: FilterPanelSection<FilterKey>[] = useMemo(() => {
+    const checklistSection = (
+      group: (typeof FILTER_GROUPS)[number],
+    ): FilterPanelSection<FilterKey> | null => {
+      if (group.teamOnly && scope !== "team") return null;
+      const values = group.getValues(matches);
+      if (values.length === 0) return null;
+      return {
+        label: group.label,
+        checklist: { key: group.key, values, displayValue: group.displayValue },
+      };
+    };
+
+    const byKey = new Map(FILTER_GROUPS.map((g) => [g.key, g]));
+    const sections: FilterPanelSection<FilterKey>[] = [];
+
+    const playerSection = checklistSection(byKey.get("player")!);
+    if (playerSection) sections.push(playerSection);
+
+    sections.push({
+      label: "Result",
+      segmented: [{ key: "result", options: RESULT_OPTIONS }],
+    });
+
+    for (const key of ["matchType", "courtType", "source"] as const) {
+      const section = checklistSection(byKey.get(key)!);
+      if (section) sections.push(section);
+    }
+
+    const analysisSection = checklistSection(byKey.get("analysis")!);
+    if (analysisSection) sections.push(analysisSection);
+
+    const handHasData = matches.some((m) => m.player2Hand);
+    const backhandHasData = matches.some((m) => m.player2Backhand);
+    if (handHasData || backhandHasData) {
+      sections.push({
+        label: "Opponent",
+        segmented: [
+          ...(handHasData
+            ? [
+                {
+                  key: "hand" as FilterKey,
+                  rowLabel: "Hand",
+                  options: HAND_OPTIONS,
+                },
+              ]
+            : []),
+          ...(backhandHasData
+            ? [
+                {
+                  key: "backhand" as FilterKey,
+                  rowLabel: "Backhand",
+                  options: BACKHAND_OPTIONS,
+                },
+              ]
+            : []),
+        ],
+      });
+    }
+
+    return sections;
+  }, [matches, scope]);
+
+  // Whether the strip has anything to state. The palette's query is a cut the
+  // same as any facet, and the strip is the one place it is visible.
+  const hasCut = filters.length > 0 || search.trim().length > 0;
+  const clearCut = () => {
+    clearFilters();
+    setSearch("");
+  };
 
   if (matches.length === 0) {
-    return <EmptyMatches />;
+    return <EmptyMatches scope={scope} />;
   }
 
   return (
-    <div>
-      {/* Toolbar: filters, search, sort, view toggle — wraps on medium screens */}
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-5">
-        {/* Left: filter chips */}
+    <div className="flex flex-col gap-6">
+      {/* Toolbar — the view pills left; Filters and the sort right. Nothing
+          else lives in this row (19g). Wraps on medium screens. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <LifecycleChips active={lifecycle} onSelect={setLifecycle} />
+
         <div className="flex items-center gap-2">
-          {FILTER_CHIPS.map((chip) => (
-            <FilterChip
-              key={chip.key}
-              filterKey={chip.key}
-              label={chip.label}
-              title={chip.title}
-              values={chip.getValues(matches)}
-              activeValues={activeValuesFor(chip.key)}
-              onToggle={toggleFilter}
-              displayValue={chip.displayValue}
-            />
-          ))}
+          <MatchesFilterPanel
+            sections={filterSections}
+            hasActive={filters.length > 0}
+            isChecklistActive={isFilterActive}
+            onToggleChecklist={toggleFilter}
+            segmentedValue={segmentedValue}
+            onSelectSegment={selectSegment}
+            onClear={clearFilters}
+            resultCount={sorted.length}
+            totalCount={matches.length}
+          />
 
-          {/* Clear all filters + results count */}
-          {filters.length > 0 && (
-            <button
-              onClick={() => setFilters([])}
-              className="text-xs text-[#888888] hover:text-[#525252] transition-[color] duration-200 ml-1"
-            >
-              Clear filters
-            </button>
-          )}
-          {(search || filters.length > 0) && (
-            <p className="text-xs text-[#AAAAAA] ml-1" aria-live="polite">
-              {sorted.length} {sorted.length === 1 ? "match" : "matches"}
-            </p>
-          )}
-        </div>
-
-        {/* Right: search, sort, view toggle */}
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#CCCCCC]" />
-            <input
-              ref={searchRef}
-              type="text"
-              placeholder="Search"
-              aria-label="Search matches"
-              aria-keyshortcuts="/"
-              title="Search by event, opponent, or round"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-8 w-48 pl-8 pr-8 rounded-full ring-1 ring-inset ring-[#EAECF0] text-xs text-[#0D0D0D] placeholder:text-[#CCCCCC] focus:outline-none focus:ring-[#3B82F6] focus:ring-2 transition-[color,background-color] duration-200 bg-white"
-            />
-            {!search && (
-              <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-[#CCCCCC] pointer-events-none">/</kbd>
-            )}
-          </div>
-
-          <SortDropdown sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-
-          <ViewToggle view={view} onViewChange={handleViewChange} />
+          <SortDropdown
+            sortField={sortField}
+            sortDir={sortDir}
+            onSort={toggleSort}
+          />
         </div>
       </div>
+
+      {/* Applied-filter strip — the panel closes on apply, this states the cut
+          in words. Never chips, never a badge (v3's Data Table law 6). */}
+      {hasCut && (
+        <div
+          className="flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
+          style={{ background: "var(--surface-subtle)" }}
+        >
+          <FilterIcon
+            className="size-[13px] shrink-0"
+            strokeWidth={1.5}
+            style={{ color: "var(--ink-500)" }}
+            aria-hidden="true"
+          />
+          <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
+            {[
+              ...(search.trim() ? [`Matching “${search.trim()}”`] : []),
+              ...(filters.length > 0 ? [describeFilters(filters)] : []),
+            ].join(" · ")}
+          </span>
+          <span
+            className="size-[3px] rounded-full"
+            style={{ background: "var(--ink-300)" }}
+            aria-hidden="true"
+          />
+          <span className="text-micro tabular">
+            {sorted.length} of {matches.length}
+          </span>
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={clearCut}
+            className="text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+          >
+            Clear filter
+          </button>
+        </div>
+      )}
 
       {/* Table / Grid */}
       {sorted.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16">
-          <Search className="h-8 w-8 text-[#D9D9D9] mb-3" />
-          <p className="text-[14px] font-medium text-[#0D0D0D] mb-1">No matches found</p>
-          {(filters.length > 0 || search) && (
-            <div className="flex flex-col items-center gap-2 mt-1">
-              <div className="flex items-center gap-1.5 flex-wrap justify-center">
-                {search && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#F5F5F5] text-[11px] text-[#525252]">
-                    &ldquo;{search}&rdquo;
-                  </span>
-                )}
-                {filters.map((f) => (
-                  <span key={`${f.key}-${f.value}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#EBF2FD] text-[11px] text-[#3B82F6]">
-                    {f.value}
-                    <button
-                      onClick={() => toggleFilter(f.key, f.value)}
-                      className="hover:text-[#1D4ED8] transition-[color] duration-200"
-                      aria-label={`Remove ${f.value} filter`}
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
+          <Search
+            className="mb-3 h-8 w-8"
+            strokeWidth={1.5}
+            style={{ color: "var(--ink-300)" }}
+          />
+          <p
+            className="mb-1 text-[14px] font-medium"
+            style={{ color: "var(--ink-900)" }}
+          >
+            No matches found
+          </p>
+          {(hasCut || lifecycle !== "all") && (
+            <div className="mt-1 flex flex-col items-center gap-2">
               <button
-                onClick={() => setFilters([])}
-                className="text-xs text-[#888888] hover:text-[#3B82F6] underline underline-offset-2 transition-[color] duration-200"
+                onClick={() => {
+                  clearCut();
+                  setLifecycle("all");
+                }}
+                className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
               >
                 Clear all filters
               </button>
@@ -714,103 +909,49 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
       ) : (
         <MatchesGrid
           matches={paginatedMatches}
-          view={view}
-          sortField={sortField}
-          sortDir={sortDir}
-          onSort={toggleSort}
+          drafts={drafts}
+          scope={scope}
           newMatchId={newMatchId}
+          unseenIds={unseenIds}
         />
       )}
 
-      {/* Pagination */}
+      {/* Footer — the range in micro type, and the way to the rest of the list
+          as one quiet blue link (Platform Audit Pb2). "Older" because the list
+          is newest-first; "Newer" appears once there is something newer to go
+          back to. No rule of its own: whitespace separates it from the card. */}
       {sorted.length > 0 && (
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#F0F0F0]">
-          <div className="flex items-center gap-3 text-xs text-[#888888]">
-            <span className="tabular-nums">
-              {rangeStart}–{rangeEnd} of {sorted.length}
-            </span>
-            <span className="text-[#D9D9D9]">&middot;</span>
-            <div className="flex items-center gap-2">
-              <span>Results per page</span>
-              <div className="relative" ref={pageSizeRef} onKeyDown={handlePageSizeKeyDown}>
-                <button
-                  ref={pageSizeTriggerRef}
-                  onClick={() => setPageSizeOpen(!pageSizeOpen)}
-                  aria-expanded={pageSizeOpen}
-                  aria-haspopup="listbox"
-                  aria-controls={pageSizeOpen ? "pagesize-listbox" : undefined}
-                  className="flex items-center gap-1 h-8 px-2.5 rounded-full ring-1 ring-inset ring-[#EAECF0] bg-white text-xs font-medium text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6] transition-[color,background-color] duration-200 tabular-nums"
-                >
-                  {pageSize}
-                  <ChevronDown
-                    className={`w-3 h-3 text-[#888888] transition-transform duration-200 ${
-                      pageSizeOpen ? "rotate-180" : ""
-                    }`}
-                  />
-                </button>
-                <AnimatePresence>
-                  {pageSizeOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 4 }}
-                      transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
-                      id="pagesize-listbox"
-                      role="listbox"
-                      aria-label="Results per page"
-                      className="absolute bottom-full left-0 mb-1.5 min-w-[56px] bg-white border border-[#E5E5EA] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)] z-20 py-1 px-1"
-                    >
-                      {PAGE_SIZES.map((size, idx) => (
-                        <button
-                          key={size}
-                          ref={(el) => { pageSizeOptionRefs.current[idx] = el; }}
-                          role="option"
-                          aria-selected={pageSize === size}
-                          tabIndex={idx === pageSizeFocusIdx ? 0 : -1}
-                          onClick={() => {
-                            setPageSize(size);
-                            setPageSizeOpen(false);
-                          }}
-                          className={`flex items-center justify-center w-full px-2 py-1.5 text-xs tabular-nums rounded-lg transition-[background-color,color] duration-200 ${
-                            pageSize === size
-                              ? "bg-[#EBF2FD] text-[#3B82F6] font-medium"
-                              : "text-[#525252] hover:bg-[#F5F5F5]"
-                          }`}
-                        >
-                          {size}
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5">
+        <nav className="flex items-center gap-2" aria-label="Pages">
+          <span className="text-micro tabular">
+            {rangeStart}–{rangeEnd} of {sorted.length}
+          </span>
+          <div className="flex-1" />
+          {safePage > 1 && (
             <button
+              type="button"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={safePage <= 1}
-              aria-label="Previous page"
-              title="Previous page"
-              className="flex items-center justify-center w-8 h-8 rounded-full ring-1 ring-inset ring-[#EAECF0] text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6] disabled:opacity-30 disabled:pointer-events-none transition-[color,background-color] duration-200"
+              className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
             >
-              <ChevronLeft className="w-3.5 h-3.5" />
+              Newer matches
             </button>
-            <span className="text-xs text-[#525252] tabular-nums px-2">
-              {safePage} / {totalPages}
-            </span>
+          )}
+          {safePage > 1 && safePage < totalPages && (
+            <span
+              className="size-[3px] rounded-full"
+              style={{ background: "var(--ink-300)" }}
+              aria-hidden="true"
+            />
+          )}
+          {safePage < totalPages && (
             <button
+              type="button"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={safePage >= totalPages}
-              aria-label="Next page"
-              title="Next page"
-              className="flex items-center justify-center w-8 h-8 rounded-full ring-1 ring-inset ring-[#EAECF0] text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6] disabled:opacity-30 disabled:pointer-events-none transition-[color,background-color] duration-200"
+              className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
             >
-              <ChevronRight className="w-3.5 h-3.5" />
+              Older matches
             </button>
-          </div>
-        </div>
+          )}
+        </nav>
       )}
     </div>
   );

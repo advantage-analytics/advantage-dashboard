@@ -75,7 +75,6 @@ interface DbShot {
   landing_y: number | null;
 }
 
-
 const SERVE_RESULT_TYPES = new Set(["Ace", "Service Winner", "Double Fault"]);
 
 function buildEventType(resultType: string): string {
@@ -189,7 +188,8 @@ export async function getMatchPointsFromSupabase(
     const firstShot: DbShot | undefined = pickServeShot(pointShots);
     const secondShot: DbShot | undefined = pickReturnShot(pointShots);
 
-    const lastShot = pointShots.length > 0 ? pointShots[pointShots.length - 1] : undefined;
+    const lastShot =
+      pointShots.length > 0 ? pointShots[pointShots.length - 1] : undefined;
     const resultType = point.result_type ?? "";
 
     // Expose raw world-frame coordinates. Downstream renderers normalize them

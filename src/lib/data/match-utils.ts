@@ -1,3 +1,5 @@
+import { formatScoreText, scoreSetsFrom } from "@/lib/ui/score-format";
+
 /**
  * Extract initials from a player name
  * Handles both single names and "Name & Partner" formats
@@ -52,9 +54,10 @@ export function shortName(name: string, maxLen = 14): string {
 /**
  * Format duration in minutes to "XHR YMIN" format
  */
-export function formatDuration(
-  minutes: number
-): { hours: number; mins: number } {
+export function formatDuration(minutes: number): {
+  hours: number;
+  mins: number;
+} {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   return { hours, mins };
@@ -79,9 +82,19 @@ export function formatPlayerStyle(
   }
 
   const b = backhand?.trim().toLowerCase();
-  if (b === "one-handed" || b === "one handed" || b === "1-handed" || b === "1 handed") {
+  if (
+    b === "one-handed" ||
+    b === "one handed" ||
+    b === "1-handed" ||
+    b === "1 handed"
+  ) {
     parts.push("1-HANDED BACKHAND");
-  } else if (b === "two-handed" || b === "two handed" || b === "2-handed" || b === "2 handed") {
+  } else if (
+    b === "two-handed" ||
+    b === "two handed" ||
+    b === "2-handed" ||
+    b === "2 handed"
+  ) {
     parts.push("2-HANDED BACKHAND");
   }
 
@@ -92,7 +105,9 @@ export function formatPlayerStyle(
  * Map a match's raw `result` / `matchContext` string into the uppercase eyebrow
  * label shown in the scoreboard rail ("FINAL", "UNFINISHED", etc.).
  */
-export function formatScoreboardStatus(matchContext: string | undefined): string {
+export function formatScoreboardStatus(
+  matchContext: string | undefined,
+): string {
   if (!matchContext) return "FINAL";
   const c = matchContext.toLowerCase();
   if (c.includes("unfinished")) return "UNFINISHED";
@@ -113,17 +128,79 @@ export interface MatchScore {
 }
 
 /**
- * Build a per-set score string from the user's perspective, e.g. "6-4 3-6 7-5".
+ * A per-set score from the user's perspective, as plain text — "6-4, 3-6, 7-5".
  * Returns "" when the score is missing or malformed.
+ *
+ * The spelling is not this function's to decide: it is `formatScoreText`'s, in
+ * `@/lib/ui/score-format`, which is the one place the product's score notation
+ * lives. All this adds is the shape the loaders actually hold — a raw
+ * `matches.score` row plus "is the user player 1" — so that the
+ * perspective-flip is spelled `swap: !isUserPlayer1` once here rather than at
+ * every call site.
+ *
+ * Tiebreaks are deliberately absent. A superscript cannot survive a plain
+ * string, and `formatScoreText` drops it rather than inventing a second
+ * notation; render `<ScoreLine>` wherever markup is allowed.
+ *
+ * Until round 44 this returned a LEGACY space-joined form ("6-4 3-6 7-5") that
+ * two of its three callers patched back with `.replaceAll(" ", ", ")`, while
+ * the third rendered the old spacing on screen. Both the downgrade and the
+ * patches are gone — do not add either back.
  */
 export function buildScoreString(
   score: MatchScore | null,
   isUserPlayer1: boolean,
 ): string {
   if (!score?.player1?.length || !score?.player2?.length) return "";
-  const userScores = isUserPlayer1 ? score.player1 : score.player2;
-  const oppScores = isUserPlayer1 ? score.player2 : score.player1;
-  return userScores.map((s, i) => `${s}-${oppScores[i] ?? 0}`).join(" ");
+  return formatScoreText(scoreSetsFrom(score, { swap: !isUserPlayer1 }));
+}
+
+/**
+ * Sets taken by each side, from the game counts — or null where the score
+ * cannot say.
+ *
+ * Extracted from `matchOutcome` below, which now reads it, so that a surface
+ * needing the tally itself (Team Home's "sets won" tile) does not add a third
+ * spelling of "who took this set". Counting games rather than reading a column
+ * is not a shortcut: `matches.result` holds a CONTEXT string ("Final Score"),
+ * never an outcome.
+ *
+ * A set neither side took — level games, which the schema permits on an
+ * unfinished set — is counted for nobody, so the two halves need not add up to
+ * the number of sets played.
+ */
+export function setTally(
+  score: MatchScore | null,
+): { player1: number; player2: number } | null {
+  if (!score?.player1?.length || !score?.player2?.length) return null;
+  let p1Sets = 0;
+  let p2Sets = 0;
+  score.player1.forEach((s, i) => {
+    if (s > (score.player2[i] ?? 0)) p1Sets++;
+    else if ((score.player2[i] ?? 0) > s) p2Sets++;
+  });
+  return { player1: p1Sets, player2: p2Sets };
+}
+
+/**
+ * Who took the match, by counting sets — or null where the score cannot say.
+ *
+ * Null and false are different answers and some callers need them apart. A
+ * scoreboard has already decided to show a result, so "no score" and "lost"
+ * both render as a loss and `didUserWin` below is the right shape for it. A
+ * strip of form ticks has not decided anything, and collapsing the two would
+ * draw a red tick for a match nobody scored.
+ */
+export function matchOutcome(
+  score: MatchScore | null,
+  isUserPlayer1: boolean,
+): boolean | null {
+  const sets = setTally(score);
+  if (!sets) return null;
+  if (sets.player1 === sets.player2) return null;
+  return isUserPlayer1
+    ? sets.player1 > sets.player2
+    : sets.player2 > sets.player1;
 }
 
 /**
@@ -134,14 +211,60 @@ export function didUserWin(
   score: MatchScore | null,
   isUserPlayer1: boolean,
 ): boolean {
-  if (!score?.player1?.length || !score?.player2?.length) return false;
-  let p1Sets = 0;
-  let p2Sets = 0;
-  score.player1.forEach((s, i) => {
-    if (s > (score.player2[i] ?? 0)) p1Sets++;
-    else if ((score.player2[i] ?? 0) > s) p2Sets++;
+  return matchOutcome(score, isUserPlayer1) === true;
+}
+
+/**
+ * A signed change, as the product draws it: an arrow, a magnitude and a colour.
+ *
+ * Colour is not decoration here. A bare "↓ 5" beside a percentage is a fact
+ * whose direction a reader has to parse from a glyph; green and red say it
+ * before they read anything. Green/red is reserved for outcome elsewhere in
+ * this app, and a trend IS an outcome — the rate got better or it got worse.
+ *
+ * Zero is neither, and gets the neutral ink rather than a colour it has not
+ * earned.
+ */
+export function formatDelta(delta: number): { label: string; color: string } {
+  const rounded = Math.round(delta);
+  if (rounded > 0) return { label: `↑ ${rounded}`, color: "var(--viz-good)" };
+  if (rounded < 0) {
+    return { label: `↓ ${Math.abs(rounded)}`, color: "var(--viz-bad)" };
+  }
+  return { label: "→ 0", color: "var(--ink-500)" };
+}
+
+/**
+ * The calendar day an instant falls on in `timeZone`, as YYYY-MM-DD.
+ *
+ * Shared by every caller that has to answer "what day is it" — or "is this
+ * today" — in a zone that is not necessarily the server's own. Reading a
+ * `Date`'s local getters (`getFullYear()`/`getMonth()`/`getDate()`) answers
+ * that in the SERVER's zone, which on Vercel is UTC regardless of whose
+ * "today" is actually being asked about. `team-home-server.ts` (`localDay`)
+ * and `team-roster-server.ts` (`isToday`) both compute through here rather
+ * than each keeping its own copy — two definitions of "today" is how a
+ * claimed-profile pill ends up showing on one page and not the other for the
+ * same person on the same afternoon.
+ */
+export function zonedDayString(now: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((piece) => piece.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+/** "2026-08-08T…" → "Aug 8". */
+export function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
   });
-  return isUserPlayer1 ? p1Sets > p2Sets : p2Sets > p1Sets;
 }
 
 /**

@@ -1,0 +1,447 @@
+/**
+ * What a line is waiting for, and who won it.
+ *
+ * The schedule row, the event table and the upload queue all ask these
+ * questions about the same line. Three surfaces answering them three ways is
+ * the failure `lib/data/match-analysis.ts` was consolidated to prevent, so this
+ * is the one spelling of both.
+ */
+
+import {
+  isAnalysisFailed,
+  isAnalysisReady,
+  isInFlight,
+  isWorking,
+} from "@/lib/data/match-analysis";
+import type {
+  EntryMatch,
+  EntryResult,
+  EventEntry,
+  OutcomeKind,
+  ResolvedOutcome,
+} from "./types";
+
+/** Exact round lookup: a tournament result never leaks into a sibling round. */
+export function outcomeForRound(
+  entry: EventEntry,
+  round: string | null,
+): ResolvedOutcome | null {
+  const outcome = entry.outcomes?.find((item) => item.round === round);
+  if (outcome) return { source: "outcome", outcome };
+  if (round === null && entry.forfeit !== null) {
+    return {
+      source: "legacy",
+      outcome: { kind: "forfeit", side: entry.forfeit, round: null },
+    };
+  }
+  return null;
+}
+
+/**
+ * A dual keeps its result in two places that key it differently, and both
+ * spellings are load-bearing:
+ *
+ * - `program_event_outcomes` keys a dual outcome on `round = null`. The
+ *   database enforces it (`program_event_outcomes_round_check`).
+ * - `matches.round` carries the line's **slot** (`S1`…`D3`). That is what
+ *   `recordResult` writes, what the upload wizard puts in its Round field,
+ *   and what every dual match in the live database holds.
+ *
+ * So a dual caller asks with `round === null` — the outcome grain — and the
+ * match lookup has to understand that means "this line's match". Translating
+ * once, here, is what keeps the two grains from being re-guessed at each call
+ * site; asking `matches.find(m => m.round === null)` on a dual silently finds
+ * nothing and renders a scored line as unanswered.
+ *
+ * A tournament is unaffected: its entries carry no slot, and its rounds are
+ * ladder positions that never equal one.
+ */
+function outcomeRoundOf(entry: EventEntry, matchRound: string | null) {
+  return matchRound !== null && matchRound === entry.slot ? null : matchRound;
+}
+
+/** The outcome covering this match's line, asked at the outcome's own grain. */
+export function outcomeForMatch(
+  entry: EventEntry,
+  match: EntryMatch,
+): ResolvedOutcome | null {
+  return outcomeForRound(entry, outcomeRoundOf(entry, match.round));
+}
+
+/** The match answering this line at the caller's round grain. */
+export function matchForRound(
+  entry: EventEntry,
+  round: string | null,
+): EntryMatch | null {
+  return (
+    entry.matches.find((item) => outcomeRoundOf(entry, item.round) === round) ??
+    null
+  );
+}
+
+/** Non-played results take precedence in inconsistent input, as legacy forfeits did. */
+export function resolveEntryResult(
+  entry: EventEntry,
+  round: string | null,
+): EntryResult {
+  const outcome = outcomeForRound(entry, round);
+  if (outcome) return { kind: "non-played", ...outcome };
+  const match = matchForRound(entry, round);
+  return match ? { kind: "played", match } : { kind: "unanswered" };
+}
+
+export function resultWon(result: EntryResult): boolean | null {
+  if (result.kind === "non-played") return result.outcome.side === "theirs";
+  return result.kind === "played" ? matchWon(result.match) : null;
+}
+
+const OUTCOME_STATE = {
+  forfeit: "forfeited",
+  default: "defaulted",
+  withdrawal: "withdrawn",
+} as const satisfies Record<OutcomeKind, EntryState>;
+
+export function resultState(result: EntryResult): EntryState {
+  if (result.kind === "non-played") return OUTCOME_STATE[result.outcome.kind];
+  return result.kind === "played" ? matchState(result.match) : "empty";
+}
+
+export type EntryState =
+  /** Nobody has recorded anything. No match row exists yet. */
+  | "empty"
+  /** Played and scored, but no video was ever sent. */
+  | "no-video"
+  /**
+   * Sent, and nothing is moving yet.
+   *
+   * Exactly the two idle-in-flight states, `uploaded` and `processed` — the
+   * ones `isWorking` excludes because nothing is running. `queued` is NOT here:
+   * the vendor has it, so it reads as working and pulses, which is what it does
+   * on the match page too.
+   *
+   * Without this state both fell through to `no-video`, which told a coach
+   * there was no video for a line they had just uploaded one for, and hid a job
+   * whose submission had failed and needed a retry.
+   */
+  | "waiting"
+  /** Something is happening right now — this is the state that pulses. */
+  | "working"
+  /** There is a report to read. */
+  | "ready"
+  | "failed"
+  /**
+   * One side forfeited — the line is decided without a match ever being played.
+   *
+   * `entry.forfeit` says WHICH side: `'ours'` awards the point to them,
+   * `'theirs'` awards it to us. A forfeited line must never mint a match, enter
+   * the analysis pipeline, or carry an invented set score.
+   */
+  | "forfeited"
+  | "defaulted"
+  | "withdrawn";
+
+/**
+ * Sets won by each side, from the game counts.
+ *
+ * `player1` is always our side: the wizard writes `player1_name = playerName`
+ * and `recordResult` follows it. Counting sets rather than reading a column is
+ * not a shortcut — `matches.result` holds a CONTEXT string ("Final Score",
+ * "Unfinished"), never an outcome, and `transformDbMatch` derives the winner
+ * exactly this way for the matches list.
+ */
+function setsWon(match: EntryMatch): { us: number; them: number } | null {
+  const ours = match.score?.player1 ?? [];
+  const theirs = match.score?.player2 ?? [];
+  if (ours.length === 0 || theirs.length === 0) return null;
+
+  let us = 0;
+  let them = 0;
+  for (let index = 0; index < ours.length; index++) {
+    const our = ours[index];
+    const their = theirs[index] ?? 0;
+    if (our > their) us++;
+    else if (their > our) them++;
+  }
+  return { us, them };
+}
+
+/**
+ * Can this line be sent for video analysis?
+ *
+ * No, if it is doubles. `job-request.ts` rejects a doubles match_type outright
+ * with "Video analysis supports singles matches only", so offering a doubles
+ * line an Upload button produces a 422 the coach only meets after picking a
+ * multi-gigabyte file. A doubles line can still take a SwingVision export —
+ * that path parses numbers and never goes near the vision pipeline.
+ *
+ * No, if it is forfeited. A forfeited line has no match to analyse.
+ *
+ * The frames in round 22 draw a doubles video (`doubles2.mp4 → D2`) because
+ * they were designed before the vendor's singles-only limit was known. This is
+ * the correction.
+ */
+export function supportsVideo(
+  entry: EventEntry,
+  round: string | null = null,
+): boolean {
+  return (
+    entry.discipline === "singles" && outcomeForRound(entry, round) === null
+  );
+}
+
+/** Did we win this match? Null when it has no score, or the sets are level. */
+export function matchWon(match: EntryMatch): boolean | null {
+  const sets = setsWon(match);
+  if (!sets || sets.us === sets.them) return null;
+  return sets.us > sets.them;
+}
+
+/**
+ * Did we win this line via forfeit?
+ *
+ * `'theirs'` = opponent forfeited = point to us = we won.
+ * `'ours'` = our side forfeited = point to them = we lost.
+ * Null when the line is not forfeited.
+ */
+export function forfeitWon(entry: EventEntry): boolean | null {
+  const result = outcomeForRound(entry, null);
+  return result?.outcome.kind === "forfeit"
+    ? result.outcome.side === "theirs"
+    : null;
+}
+
+/**
+ * Has this line been played at all — is there a decided match under it?
+ *
+ * A forfeited line counts as decided: the point is awarded, and the line is
+ * done. This is what makes `dualScore`'s `decided` turn true once every line
+ * is either played or forfeited.
+ *
+ * **Only ever an answer about the rows it was handed.** To this function, and
+ * to everything built on it, a line RLS withheld and a line nobody has played
+ * are the same line: `entry.matches` is empty either way, and there is nothing
+ * in the entry to tell them apart. That is not a defect to fix here — the
+ * distinction genuinely is not in the data — but it is a false `false` waiting
+ * for any caller that reduces a whole card to one figure.
+ *
+ * `program_event_entries` and `matches` used to be readable at different
+ * widths, which made that hazard real: a player read every line of a dual and
+ * received one match. `20260830120000_matches_visible_to_members` closed it at
+ * the policy level — every member of a program reads that program's matches —
+ * so the two now come back together and there is no narrowed read left to
+ * guard against. Widen `matches` no further than `program_event_entries`
+ * without re-reading this comment.
+ */
+export function entryPlayed(entry: EventEntry): boolean {
+  if (entry.forfeit !== null || entry.outcomes?.length) return true;
+  return entry.matches.some((match) => matchWon(match) !== null);
+}
+
+/**
+ * Who took this line — the one spelling of it.
+ *
+ * **A forfeit outranks any match.** That precedence is the whole point of this
+ * function: `forfeitWon` shares the lookup but not the ordering, and the
+ * ordering is where the rule actually lives. Four surfaces re-derived it
+ * inline before this existed and one of them — Team Home's dual sheet — had
+ * it backwards, so the same dual read one way on the event page and another
+ * way on the home page, neither looking broken.
+ *
+ * `match` names ONE of the entry's matches, for a caller rendering a single
+ * row: a tournament entry is a whole run, and asking about the entry gives
+ * every round the loudest round's answer, exactly as `matchState` warns. Pass
+ * it and the answer is about that match; omit it and a tournament entry is
+ * "won" if any match was.
+ *
+ * Null means undecided — no forfeit, and no match with a settled score.
+ */
+export function lineWon(
+  entry: EventEntry,
+  match?: EntryMatch | null,
+): boolean | null {
+  // Ask at the outcome's grain, not the match's: on a dual those differ.
+  const outcome = match
+    ? outcomeForMatch(entry, match)
+    : outcomeForRound(entry, null);
+  if (outcome) return outcome.outcome.side === "theirs";
+  const forfeit = forfeitWon(entry);
+  if (forfeit !== null) return forfeit;
+  if (match !== undefined) return match ? matchWon(match) : null;
+  return (
+    entry.outcomes?.some((o) => o.side === "theirs") === true ||
+    entry.matches.some(
+      (m) =>
+        resultWon(resolveEntryResult(entry, outcomeRoundOf(entry, m.round))) ===
+        true,
+    )
+  );
+}
+
+/**
+ * Did our side take this line, counted over the whole entry?
+ *
+ * The zero-argument case of `lineWon`, kept as a boolean because every caller
+ * here has already established the line is decided via `entryPlayed`.
+ */
+function entryWon(entry: EventEntry): boolean {
+  return lineWon(entry) === true;
+}
+
+/**
+ * What ONE match is waiting for.
+ *
+ * A tournament entry is a whole run and renders one row per round, so a row
+ * asking `entryState` about its entry gets an answer about a different match:
+ * one failed round stamped "Analysis failed" on every other round, and one
+ * ready round gave videoless rounds a "Report" link into an empty stats page
+ * while suppressing their "Add video" action. A dual is unaffected — one match
+ * per entry — which is why it survived review.
+ *
+ * Defers to `isWorking` / `isAnalysisReady` rather than testing status strings
+ * itself, so a state that pulses here is a state that animates on the match
+ * page. `uploaded` is the one that catches people out: in flight, but with
+ * nothing moving, so it reads as `no-video`'s neighbour rather than `working`.
+ */
+export function matchState(match: EntryMatch): EntryState {
+  if (isAnalysisFailed(match.status)) return "failed";
+  if (isWorking(match.status)) return "working";
+  if (isAnalysisReady(match.status) && match.hasVideo) return "ready";
+  if (match.hasVideo && isInFlight(match.status)) return "waiting";
+  return "no-video";
+}
+
+/**
+ * What a whole line is waiting for — the loudest thing any of its matches is.
+ *
+ * Written over `matchState` so the rules exist once. The precedence order is
+ * the same one this used to spell out inline: failed, then working, then
+ * ready, then waiting, and no-video when none of them apply. It is the right
+ * answer for a summary (the schedule list, the upload queue) and the wrong one
+ * for a single row — use `matchState` there.
+ *
+ * A forfeited entry shortcuts before match analysis: a forfeit is decided, and
+ * nothing about the matches underneath matters.
+ */
+const STATE_PRECEDENCE = ["failed", "working", "ready", "waiting"] as const;
+
+export function entryState(
+  entry: EventEntry,
+  round?: string | null,
+): EntryState {
+  if (round !== undefined) return resultState(resolveEntryResult(entry, round));
+  const lineOutcome = outcomeForRound(entry, null);
+  if (lineOutcome) return OUTCOME_STATE[lineOutcome.outcome.kind];
+  const matches = entry.matches.filter(
+    (match) => !outcomeForMatch(entry, match),
+  );
+  if (matches.length === 0) {
+    // Summary only. A round row must always pass its round explicitly.
+    const kinds = entry.outcomes?.map((o) => o.kind) ?? [];
+    const kind = (["forfeit", "default", "withdrawal"] as const).find((k) =>
+      kinds.includes(k),
+    );
+    return kind ? OUTCOME_STATE[kind] : "empty";
+  }
+  const states = matches.map(matchState);
+  return STATE_PRECEDENCE.find((s) => states.includes(s)) ?? "no-video";
+}
+
+/**
+ * A dual's team score, computed from the lines.
+ *
+ * ITA rules: six singles points, and ONE doubles point to whoever takes two of
+ * the three doubles. Never stored — a stored team score is a number that stops
+ * agreeing with the rows above it the first time a result is corrected.
+ *
+ * A forfeited line counts as a decided point for the non-forfeiting side, so a
+ * dual whose nine lines include forfeits still totals 9 and reads `decided`
+ * once every line is either played or forfeited.
+ *
+ * **Counted over the entries given, and it cannot tell that they are all of
+ * them.** Every branch here goes through `entryPlayed` / `entryWon`, so a read
+ * RLS narrowed would produce a confident, wrong, low score: 0–1 on a dual won
+ * 4–3, with `decided` false and six played lines counted as unplayed. No such
+ * read exists today — the `matches` policy is now as wide as the entries' —
+ * but do not call this on behalf of a reader who may not see every line. See
+ * `entryPlayed` above.
+ */
+export function dualScore(entries: EventEntry[]): {
+  us: number;
+  them: number;
+  decided: boolean;
+} {
+  const singles = entries.filter((entry) => entry.discipline === "singles");
+  const doubles = entries.filter((entry) => entry.discipline === "doubles");
+
+  let us = singles.filter(entryWon).length;
+  let them = singles.filter(
+    (entry) => entryPlayed(entry) && !entryWon(entry),
+  ).length;
+
+  const doublesWon = doubles.filter(entryWon).length;
+  const doublesLost = doubles.filter(
+    (entry) => entryPlayed(entry) && !entryWon(entry),
+  ).length;
+  if (doublesWon >= 2) us += 1;
+  else if (doublesLost >= 2) them += 1;
+
+  return {
+    us,
+    them,
+    decided: entries.length > 0 && entries.every(entryPlayed),
+  };
+}
+
+/**
+ * One event's lines analyzed, over its lines owed.
+ *
+ * Exported because two surfaces print this ratio — the season strip, which
+ * sums it, and the schedule pane's "Last" jump row, which prints one event's.
+ * Two spellings of "analyzed" is two chances to disagree on the same screen,
+ * which is exactly what the hard-coded "8 of 9" it replaces did.
+ *
+ * A forfeited line is owed nothing and counts toward neither half, and an entry
+ * with no match yet still owes one — `Math.max(1, …)`, the same arithmetic
+ * `getUploadQueue` uses below, so "nothing left to upload" and "N of M
+ * analyzed" cannot contradict each other.
+ */
+export function lineCoverageFrom(entries: EventEntry[]): {
+  analyzed: number;
+  total: number;
+} {
+  let analyzed = 0;
+  let total = 0;
+
+  for (const entry of entries) {
+    if (outcomeForRound(entry, null)) continue;
+    const matches = entry.matches.filter(
+      (match) => !outcomeForRound(entry, match.round),
+    );
+    total += matches.length || (entry.outcomes?.length ? 0 : 1);
+    analyzed += matches.filter((match) => isAnalysisReady(match.status)).length;
+  }
+
+  return { analyzed, total };
+}
+
+/**
+ * Match ids an event's team-totals query may read.
+ *
+ * A non-played result is the line's answer and therefore excludes any match
+ * sitting underneath the same line/round, just as `resolveEntryResult` and
+ * `lineCoverageFrom` exclude it on screen. The write actions prevent that
+ * contradictory state, but keeping the precedence at this read boundary
+ * prevents stale or legacy data from leaking analysis figures into a line the
+ * page correctly presents as forfeited, defaulted or withdrawn.
+ */
+export function readyMatchIdsFrom(entries: EventEntry[]): string[] {
+  return entries.flatMap((entry) =>
+    entry.matches
+      .filter(
+        (match) =>
+          outcomeForMatch(entry, match) === null &&
+          isAnalysisReady(match.status),
+      )
+      .map((match) => match.id),
+  );
+}

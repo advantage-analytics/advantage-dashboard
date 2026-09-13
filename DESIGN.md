@@ -1,340 +1,229 @@
----
-name: Advantage Analytics
-description: A pro-level training room for tennis competitors, rendered as quiet, data-first interface.
-colors:
-  signal-blue: "#3B82F6"
-  signal-blue-deep: "#2563EB"
-  signal-blue-soft: "#EBF2FD"
-  signal-blue-pressed: "#EFF4FF"
-  win-green: "#5DB955"
-  loss-red: "#E51837"
-  player-violet: "#A855F7"
-  viz-amber: "#E0902E"
-  viz-green-deep: "#3E9A45"
-  viz-green-mid: "#84C97E"
-  viz-green-light: "#ABDCA6"
-  viz-slate-deep: "#475569"
-  viz-slate: "#64748B"
-  viz-slate-light: "#94A3B8"
-  ink: "#0D0D0D"
-  ink-dialog: "#1D1D1F"
-  ink-secondary: "#525252"
-  ink-tertiary: "#71717A"
-  ink-muted: "#888888"
-  ink-label: "#AAAAAA"
-  ink-disabled: "#CCCCCC"
-  surface: "#FFFFFF"
-  surface-page: "#FAFAFA"
-  surface-subtle: "#F5F5F5"
-  surface-field: "#F7F7F7"
-  surface-dark: "#0D0D0D"
-  hairline: "#F3F3F3"
-  hairline-medium: "#E5E5EA"
-  border-field: "#EAECF0"
-  win-tint: "rgba(115,230,104,0.15)"
-  loss-tint: "rgba(229,24,55,0.15)"
-typography:
-  display:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "30px"
-    fontWeight: 300
-    lineHeight: "36px"
-    letterSpacing: "-0.6px"
-  headline:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "28px"
-    fontWeight: 300
-    lineHeight: "1.1"
-    letterSpacing: "-0.5px"
-  title:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "16px"
-    fontWeight: 400
-    lineHeight: "1.5"
-    letterSpacing: "-0.4px"
-  body:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "13px"
-    fontWeight: 400
-    lineHeight: "1.5"
-  body-sm:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "12px"
-    fontWeight: 400
-    lineHeight: "1.5"
-  label:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "10px"
-    fontWeight: 500
-    letterSpacing: "2.5px"
-  score:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "40px"
-    fontWeight: 700
-    letterSpacing: "-1px"
-rounded:
-  cell: "4px"
-  button: "6px"
-  element: "8px"
-  dropdown: "12px"
-  card: "14px"
-  modal: "16px"
-  pill: "9999px"
-spacing:
-  xxs: "4px"
-  xs: "8px"
-  sm: "12px"
-  md: "16px"
-  lg: "20px"
-  xl: "24px"
-  xxl: "32px"
-components:
-  button-primary:
-    backgroundColor: "{colors.signal-blue}"
-    textColor: "{colors.surface}"
-    rounded: "{rounded.button}"
-    padding: "0 16px"
-    height: "36px"
-    typography: "{typography.body}"
-  button-primary-hover:
-    backgroundColor: "{colors.signal-blue-deep}"
-    textColor: "{colors.surface}"
-  button-ghost:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink-secondary}"
-    rounded: "{rounded.pill}"
-    padding: "6px 12px"
-    typography: "{typography.label}"
-  card:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.card}"
-    padding: "20px"
-  input-underline:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink}"
-    padding: "0 0 10px 0"
-    typography: "{typography.body-sm}"
-  section-eyebrow:
-    textColor: "{colors.ink-label}"
-    typography: "{typography.label}"
-  nav-item:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink-secondary}"
-    rounded: "{rounded.element}"
-    padding: "0 14px"
-    height: "36px"
-    typography: "{typography.body}"
-  nav-item-active:
-    backgroundColor: "{colors.signal-blue-soft}"
-    textColor: "{colors.signal-blue}"
-  badge-win:
-    backgroundColor: "{colors.win-tint}"
-    textColor: "{colors.win-green}"
-    rounded: "{rounded.button}"
-    padding: "4px 6px"
-  badge-loss:
-    backgroundColor: "{colors.loss-tint}"
-    textColor: "{colors.loss-red}"
-    rounded: "{rounded.button}"
-    padding: "4px 6px"
----
+# Advantage Design System v2
 
-# Design System: Advantage Analytics
+> **v3 exists and is the current authority on component behaviour.** Claude
+> Design project `abcb65f6-4e66-44bc-b9de-b3b47f4313c1` — _Advantage Design
+> System v3_. It ships 36 primitives against v2's 21 — the 15 additions are
+> `DataTable`, `Score`, `Delta`, `ResultMark`, `InsightCard` (+ `EngineChip`),
+> `Notice`, `Avatar` (+ `StatePill`), `Radio`, `EntitySelect`, `ActivityTray`,
+> `SlotLine`, `ScoreGrid`, `FieldRow`, `StepBar`, `InlineFacts` — plus
+> `guidelines/*.card.html`, an importable app-shell template and its own
+> `SKILL.md`. In the project, `readme.md` is the current-state rulebook and
+> `CHANGELOG.md` the decision trail (Rounds 10–20 and a platform audit as of
+> 2026-09-04). This document still describes the v2 import, which is what the
+> repo's tokens came from; where v3 and v2 disagree about a component, **v3
+> wins** — and v3 changes no token value, so the ledger below stands. The full
+> rule set (icon-rail chrome, dark tooltip, the table laws and peek drawer, the
+> wizard primitives) is transcribed into
+> [`.skills/advantage-analytics-design/SKILL.md`](.skills/advantage-analytics-design/SKILL.md)'s
+> practical sections rather than duplicated here — this file stays the token
+> ledger. Four v2 statements below are superseded and marked in place: nav
+> active state, hairlines between rows, the Statistics → Trends rename, and
+> where the Home greeting lives.
+>
+> Corrections already taken from v3:
+>
+> - **Secondary buttons hover to a surface wash, never to blue.** `outline` and
+>   `ghost` were turning their border and label blue, which reads as a second
+>   primary. v3's `.adv-btn-outline:hover` is `background: var(--surface-subtle)`
+>   and nothing else. Fixed in `src/lib/ui/adv-button.ts`,
+>   `settings-button.tsx` and `retry-submission.tsx`.
+> - **`danger` and `danger-solid` are real variants**, now transcribed into
+>   `advButton()`. `danger-solid` is for confirmed destruction only — an action
+>   whose cost the person has already read.
+>
+> v3's own non-negotiables worth repeating here: Signal Blue is the single
+> accent and should stay under ~10% of any screen; nav active state is a neutral
+> wash, not blue; people-state chips are grey, never blue; a dialog carries one
+> primary, never two.
+>
+> **Provenance.** Imported from the Claude Design project _Advantage Design
+> System v2_ (`932d1406-360f-4a6e-8617-5a3c600ecb67`), which was rebuilt from
+> this codebase on the `splitstep-integration` branch. It replaces the previous
+> v1 `DESIGN.md`/`DESIGN.json` — v2 deliberately did not source those, treating
+> them as outdated. `DESIGN.json` has since been deleted from the repo, and
+> `PRODUCT.md`'s non-duplicated sections were folded into the end of this file.
+>
+> Tokens live at [`src/styles/design-system/`](src/styles/design-system/) and are
+> imported by `globals.css`. Two of the four files are adapted rather than
+> verbatim; each documents what was left out and why. The practical build
+> reference is still
+> [`.skills/advantage-analytics-design/SKILL.md`](.skills/advantage-analytics-design/SKILL.md).
+>
+> **The component library is not imported.** v2 ships 21 React primitives that
+> overlap the existing shadcn set in `src/components/ui/`. Porting them is the UI
+> revamp itself, one component at a time — see
+> [`docs/ui-revamp-guardrails.md`](docs/ui-revamp-guardrails.md) first.
+>
+> **Deferred on purpose — available, not rolled out:**
+>
+> - **Dark mode.** The `.dark` ramp below is defined and `@custom-variant dark`
+>   is wired, but no component reads these tokens yet, so nothing renders dark.
+>   It arrives surface by surface as pages are reworked, not as a switch.
+> - **The v2 shadow values.** `--shadow-card-elevated` and `--shadow-tooltip`
+>   still hold this app's original values, deliberately — v2's differ and a bulk
+>   swap would restyle every elevated card and tooltip at once. Use
+>   `--shadow-card-emphasis` / `--shadow-dropdown` explicitly on a page you are
+>   already reworking.
 
-## 1. Overview
+Design system for **Advantage Analytics** — performance intelligence for competitive tennis. Players (college athletes, serious club players, coaches, parents of juniors) upload match video or SwingVision exports and get trustworthy statistical breakdowns, court visualizations and AI match commentary. The brand voice: **Modern. Athletic. Innovative.** A pro-level training room, not a consumer app.
 
-**Creative North Star: "The Pro Training Room"**
+v2 is rebuilt from the live product code on the `splitstep-integration` branch — the "Advantage Intelligence" era, where the source of truth becomes the player's own match video processed asynchronously by a vision pipeline (vendor never named in UI copy).
 
-Advantage Analytics is a competitor's tool, not a consumer app. The interface is the equivalent of a high-performance training room: clean walls, exact equipment, no decoration. Numbers breathe. Type is light. Lines are hairline. The accent is one shade of blue, used only when the screen needs to issue a command or claim a win. Nothing else fights for attention because there's nothing else to say.
+## v2 vs v1 — what changed
 
-The system is monochrome with a single chromatic voice. Cool neutrals (`#FAFAFA` to `#0D0D0D`) carry every surface, every divider, every body word. Signal Blue (`#3B82F6`) carries action and emphasis only. Win Green and Loss Red carry match outcome and nothing else. Color is functional, never decorative. Density is allowed when it serves comprehension; ornamentation is forbidden everywhere.
+1. **Dark mode exists.** v1 was "light mode only." v2 ships a full `.dark` scope: inverted ink scale (incl. ink-600), lifted blues (#60A5FA) and danger (#FF6478), player attribution lifted with alpha tints, role-based viz re-ramped (density dark→bright, court #16283F), heavier shadows — all WCAG-AA-verified on #0E0E10. Light remains the default and the product's primary face.
+2. **A numbered ink scale.** v1's ad-hoc named grays (ink-secondary/tertiary/muted/label) became a formal ramp — `--ink-900 … --ink-100` — that inverts cleanly in dark mode. Review decisions: `ink-600` #71717A added as the muted-but-readable step (any gray that must be read is ≥600 — 4.5:1+; 500/400 are decorative); `ink-border` merged into `ink-200` (near-twins); legacy names (`ink-dialog`, `ink-tertiary`, `ink-faint`) survive as aliases of 900/600/300.
+3. **A second typeface.** v1: "Inter only." v2 adds **Roboto Mono** (400–700) for timestamps, quota readouts and job IDs. Clash Display exists in the code as an unused vestige — intentionally not shipped.
+4. **The async lifecycle is component vocabulary.** Advantage Intelligence introduces states v1 never needed: uploading → uploaded → queued → processing → analyzing → ready | failed, plus the real "video processed, analysis pending" state and confidence surfacing (high = silent, medium = one quiet line, low = banner + Review score). `StatusChip` and the Matches-list progress rows encode this. Rule inherited from the spec: **never promise an ETA** — show state or nothing.
+5. **One sanctioned gradient.** v1 banned gradient surfaces outright. v2 keeps the ban with a single exception the product shipped: the auth brand panel's blue mesh (`.brand-mesh-gradient`). It appears nowhere else. _(v3 adds one chart-only exception: the sparkline's area fill, the stroke colour fading 18%→0 under the line — never on chrome.)_
+6. **Tint ramps replace one-off hexes.** A deliberately small blue set — wash 8% + selection 12% (4% retired as an alias) + 30/40% rings — success 4/12/20%, danger 15/70%. Blue tints are for interactive states only (nav active, selection); informational capsules are neutral — surface-subtle + ink text (the `--blue-ink-*` aliases and globals.css's tonal blue ink were removed 2026-09-03; nothing used them).
+7. **Keycap kbd + raised surface.** `--surface-raised` + `--shadow-keycap` give shortcut chips a physical keycap treatment (v1's kbd was a flat gray chip).
+8. **Elevation as four roles.** rest → lift → float → top (review S2): card / card-emphasis / dropdown / floating. `card-elevated` and `tooltip` retired into lift/float (legacy names alias); keycap + cta-glow reclassified as component details, not elevation.
+9. **Player attribution formalized.** You own Signal Blue; the opponent recedes to cool slate #64748B (violet retired from attribution in review — it survives only in multi-series viz ramps). Each side has bar-tint + AA text values; legends are the 2×12 tick + ink name (the system's one mark vocabulary), comparison bars are 4px (review L3+B2).
+10. **IA direction (from the UX brief, recommended not shipped):** Statistics → **Trends**, new **Ask** surface, jobs tray, workspace switcher for teams. Components here (SidebarNav, StatusChip) are built to serve that roadmap; the UI kit replicates what exists today. _(v3 records the outcome: the Trends rename did not ship — Statistics is Statistics, wired under its old name; Ask shipped as a first-class nav destination; the activity tray and the workspace switcher shipped as chrome.)_
 
-This system explicitly rejects: SwingVision's mass-market warmth, gamification badges and streak meters, playful illustrations, glassmorphism and neon, gradient-heavy surfaces, warm or earthy tones. If a player on the WTA bench would feel patronized by it, it does not belong here.
+## Content fundamentals
 
-**Key Characteristics:**
-- Light mode only, cool-neutral palette, single accent.
-- `font-light` (300) for hero numbers; `font-medium` (500) for eyebrows; semibold (600) reserved for stat values; bold (700) reserved for match scores.
-- Hairline `#F3F3F3` rules carry hierarchy more than borders or shadows do.
-- Tabular numerics throughout (`font-variant-numeric: tabular-nums`).
-- Two motion curves only, both ease-out exponential (no bounce, no elastic).
-- Inter only. Lucide only.
+- **Terse, specific, zero cheerleading.** No hand-holding, no gamification, no exclamation marks. "Design for the player who knows what a second-serve percentage means."
+- **Claim → evidence → so-what.** Every AI insight is a falsifiable claim backed by real computed numbers (`InsightStatChip`), never LLM-invented figures: _"You won 78% of first-serve points but landed only 54% of first serves — the serve, not the rally, decided the 2nd set."_
+- **Sentence case** for UI copy and titles ("Upload a match", "Forgot Password?"); **uppercase eyebrows** for section labels. Buttons are verb-first: "Sign In", "Save changes", "View report".
+- **Second person**, present tense: "Your first-serve percentage dropped six points."
+- **No emoji, ever.** Unicode arrows (↑ ↓ →) only as trend glyphs.
+- **Honest uncertainty.** Low-confidence stats are labeled estimates with a path to correct ("Review score"); failures get plain language + a support path, never raw vendor errors. Waiting states say "in line — we'll notify you", never fake progress.
+- **Empty is a state, not a gap to fill.** A region with no data shows what it will be — its labels, its axis, a mark where the value goes — plus one way to make it appear. It never shows a loading skeleton (a skeleton promises something arriving; a permanent one is a status message that isn't true) and never shows fabricated numbers, names or scores: those are claims about this account, and the day the real figure lands at a different value the page has already told a different story. A single clearly quoted **example**, labelled in its own card header, is the one form that can be defended — but it was built for Home's Focus card and rejected there, because it left that card the only one in its column carrying finished prose while its neighbours all showed structure. Treat it as available and expensive, not as the default. Write `—` for an unmeasured value; `0%` is a statement about the athlete. Full rules: SKILL.md → Empty State.
+- **Naming:** the analysis engine is **"Advantage Intelligence"** in every user-visible string. The vendor (SplitStep) is internal-only. Greeting: "Good afternoon, {first name}" _(v3: on Home it lives in the header's breadcrumb slot, and the body opens on "Your season")_. Auth flavor line: "Built by former collegiate players. Designed for competitive advantage."
 
-## 2. Colors: The Cool-Neutral Spectrum
+## Visual foundations
 
-A monochrome system. One accent. Two semantic outcome colors. No tertiary palette.
+- **Monochrome with one chromatic voice.** Cool neutrals #FAFAFA→#0D0D0D carry every surface and word. Signal Blue #3B82F6 = action/emphasis only, ≤10% of any screen (one CTA, one active nav, one focus ring). Win Green #5DB955 / Loss Red #E51837 = match outcome ONLY — never mood, success toasts excepted (a save "wins the point"). Form errors use iOS-red #FF453A, not Loss Red — a typo never feels like losing; the two reds never share a surface (both confirmed in review). Avoid bare win-green under 12px (2.5:1 on white) — keep it on tints or beside neutral text.
+- **Backgrounds:** flat #FAFAFA page, white cards. No imagery, no textures, no patterns. The one gradient is the auth mesh panel. _(v3 states the rule that was implicit: grey is a page you scan, white is chrome or a task you're inside — `--surface-page` for browsing surfaces, `--surface-card` for the rail, header, a fixed context column, the peek drawer, dialogs, the wizard and the cards themselves. Cards never nest.)_ Surface slots consolidated in review (U2): seven distinct — page/card (+ muted/raised, which diverge in dark), subtle (hover + disabled fills), ink-100 (hairline/borders/skeleton/chart grid), medium (menu borders); field/skeleton/radar-grid are aliases now.
+- **Hairlines divide rows** (#F3F3F3) inside cards and tables — not borders or shadows. _(Superseded in v3: hairlines sit under table **headers** only, never between rows and never around a cell to signal importance; rows separate by the rounded hover wash — SKILL.md → Data Table rule 9.)_ Card headers are quiet (review H3): eyebrow + optional 11px blue text action, no rule below — whitespace separates header from content. Signature pattern: a standalone 10px/2.5px-tracked uppercase eyebrow opens every section (no rule; whitespace does the separating).
+- **Type:** Inter 300 for heroes and big numbers — the display ladder is five twin-free steps (review D2): 16 title · 24 title-lg · 30 display (headline merged in) · 40 score · 56 brand-hero. 400 body at 13px, 500 eyebrows. Scoreboards and stat values are 400 (review W3) — ink contrast (900 vs 500/300) separates lead from trail, never weight; numerals never exceed 400. Roboto Mono (confirmed in review) for machine values only — timestamps, quotas, job IDs — never stats. `tabular-nums` on any number compared to another. Body copy ≤75ch. No weight above 600.
+- **Elevation:** flat by default — four roles: rest (shadow-card, 2/8 · 6%) · lift (emphasis — hover/selection) · float (dropdown — menus, tooltips, modals) · top (floating — dark toasts, dragged). Shadow is earned, never decoration. Cards never nest.
+- **Radii:** six shapes (review R2) — 4 cell · 6 button/badge · 8 element · 12 floating (dropdowns, tooltips, video) · 14 surface (cards AND modals) · pill (chips, filter pills, avatars — never standard CTAs or icon buttons). Score-card 10 and modal 16 retired into 12/14; legacy names alias.
+- **Motion:** three ease-out curves (`--ease-primary` .25,.46,.45,.94 · `--ease-out-expo` .23,1,.32,1 · `--ease-chart` .2,0,.4,1). 200ms hovers, 300ms page-enter (+8px rise), 400–600ms reveals. Press = scale 0.97 (buttons) / 0.998 (rows). No bounce, no elastic. Reduced motion: keep opacity, drop transforms.
+- **Spacing (review P2):** two tiers — the 4px grid (4/8/12/16/20/24/32/40) is layout spacing (12 eyebrow→title, 20 card padding, 24 sections, 32/40 page x/y); half-steps 2/6/10 are component-internal only (10 toggle→label; label→input moved to grid 8 in review F2), never between elements on a page. Never invent new spacers — combine.
+- **Hover:** background washes (#F5F5F5 controls, #FAFAFA rows) and text darkening — a blue word rests on `--blue` and darkens to `--blue-hover`, the same pair as a filled button; never ink on hover. `--blue-text`, the darker resting blue for words, was retired 2026-09-03 (design owner's call: two blues read as an off tone) and is now an alias of `--blue`. Never underlines, never color inversions. Nav active = blue-soft wash + blue label (confirmed in review) — _superseded in v3: active nav is a neutral `surface-subtle` wash + ink-900 glyph and label, no stripe, no blue; blue is for actions and where you already are is not one. The rule is shipped in `sidebar/rail-item.tsx`._ Tabs/switchers are unchanged — underline style, 2px blue rule, same vocabulary as Input focus (a tab is a choice, not a location).
+- **Focus:** `--focus-ring` = `0 0 0 2px var(--blue-ring-40)` on buttons, links, tabs and pills. `<input>`, `<textarea>` and native `<select>` take `--focus-ring-field` = `0 0 0 1px var(--field-ring), 0 0 0 2px var(--field-ring-30)` — a separate token so fields and actionable controls _can_ diverge, not because they currently do: as of **2026-08-26 both resolve to the same blue** (`--field-ring` aliases `--blue-ring-*`). A neutral grey (`--ink-500`) sat here briefly and was reverted at the design owner's explicit call — one consistent focus colour across every control outweighed conserving the accent per field. The reversion owed no new contrast work: `--blue` already clears WCAG 1.4.11's 3:1 floor against both surfaces the old grey was measured on — 3.68:1 on white, 3.38:1 on #F5F5F5 (`--surface-field`) — independent of why it sits here now. Two layers on the field ring regardless of colour, because the 30% band alone composites too faint to read alone; the opaque 1px layer is what you actually see, the band only softens its edge. `design-system/focus.css` applies both rings automatically by tag, so a field needs no focus class of its own; Radix's `SelectTrigger` is a `<button>` and so takes the ring via the button path, not the field one — same colour today, but a different token, so a future split still works. The file is imported outside any `@layer`, so a Tailwind `focus-visible:ring-*` utility never overrides it — it is discarded. Override by token, not by class.
+- **Underline inputs opt out of the ring, not into a second vocabulary.** A field whose own rule visibly changes on focus (thickens, recolours, or both) needs no ring on top of it — that change is already the one indicator WCAG 2.4.7 (AA) requires, and a surrounding ring is explicitly _not_ required once something else on the control clearly shows focus. These opt out with `data-focus-ring="none"`, same as the wrapper-ring case below: auth's `form-field.tsx`, the settings underline input (`SettingsUnderlineInput` / `UnderlineSelect` / `ProfileSelect`), the schedule lineup editor's `NameField`, and the match-edit dialog's underline fields. The opt-out is earned by an actual on-focus change, not by looking like an underline — `schedule/field-row.tsx`'s defaults row draws a hairline that never changes, so it keeps the neutral ring; that ring is the only indicator it has.
+- **The wrapper-ring pattern:** where an input sits inside a bordered box and the box is what reads as the field, the ring is drawn on the box — otherwise it lands inset, floating inside the border. The inner control opts out with `data-focus-ring="none"`, a rule inside `focus.css` scoped to `:focus-visible` rather than an inline `style={{ boxShadow: "none" }}`: inline would suppress the focus ring _and_ any shadow the component ever sets for its own reasons, unconditionally, and invisibly to anyone grepping for focus. Which selector draws the ring depends on what else the box holds, and one of the three live cases is a deliberate exception — SKILL.md → Focus specifies all three, and is the copy to follow.
+- **Transparency/blur:** none decoratively; blur only as a rare sticky-bar legibility shield.
+- **Data-viz:** role-based palette in `src/styles/design-system/colors.css` (review M1) — You = blue steps (`--viz-you*`), Opponent/context = slate steps (`--viz-opp*`), Good/Bad = the outcome pair (`--viz-good/bad` + softs), amber `--viz-key` for key moments ONLY (break points, momentum shifts), heatmap #F2F2F2→#3B82F6, court fill #D6E4F9. Violet and surface hues retired — categories (e.g. by-surface breakdowns) are text labels + your blue, never hue-coded. Charts only, never chrome — v3's one exception is the upload wizard's quota meter, whose `--viz-you-mid` fill is data-viz (the hours are the player's own), not action.
+- **Anti-patterns (banned):** glassmorphism, neon, gradient text, warm/earthy tones, bouncy animation, badges/streaks/confetti, colored left-border stripes, nested cards, emoji icons, weights 800+, hero-metric cards outside the KPI strip.
 
-### Primary
-- **Signal Blue** (`#3B82F6`): The single chromatic voice. Used for primary CTAs, the active nav state, focus rings, link text, the upload-match progress bar, the heatmap peak, the radar player line. Nothing else gets blue.
-- **Signal Blue Deep** (`#2563EB`): Hover state for Signal Blue surfaces and link text only.
-- **Signal Blue Soft** (`#EBF2FD`): The active nav-item background and the welcome-banner tint. The only large-area use of blue in the system.
+## Effects tokens — the shipped set
 
-### Secondary (semantic outcome only)
-- **Win Green** (`#5DB955`): Wins, positive deltas, complete-state checks. Not decorative. Not used for "success" buttons or generic confirmations.
-- **Loss Red** (`#E51837`): Losses, negative deltas, the danger zone. Not used for inline errors of routine forms (those use the muted text gray plus a small red rule).
+Every custom property `src/styles/design-system/effects.css` defines, with its
+live value and where the reasoning lives. `focus.css` defines **no** tokens: it
+only consumes the two rings and adds the `data-focus-ring="none"` opt-out
+attribute. The file headers record what was deliberately _not_ imported from v2.
 
-### Player attribution (charts only)
-- **Player Violet** (`#A855F7`): Secondary player / opponent in multi-line charts. Never appears outside data-viz contexts.
+The five shadows are printed here because nothing else in this file carries
+their values:
 
-### Neutral
-- **Ink** (`#0D0D0D`): Headings, emphasis, primary content. Never `#000`.
-- **Ink Secondary** (`#525252`): Descriptions, body copy, ghost button text.
-- **Ink Tertiary** (`#71717A`): Scores, metadata.
-- **Ink Muted** (`#888888`): Placeholders, disabled-but-readable text.
-- **Ink Label** (`#AAAAAA`): The 10px uppercase eyebrow labels everywhere.
-- **Ink Disabled** (`#CCCCCC`): Dividers in disabled context, minimal text.
-- **Surface** (`#FFFFFF`): Cards, panels, modals.
-- **Surface Page** (`#FAFAFA`): Page backgrounds, hover wash on rows.
-- **Surface Subtle** (`#F5F5F5`): Hover backgrounds, icon containers.
-- **Surface Field** (`#F7F7F7`): Disabled fields.
-- **Hairline** (`#F3F3F3`): The system's primary structural rule. Card borders, section dividers, hairline rules between settings sections. This color, more than any other, defines the rhythm.
-- **Hairline Medium** (`#E5E5EA`): Dropdown borders, modal borders.
-- **Border Field** (`#EAECF0`): Button outlines and the boxed-input variants (rare; underline is preferred).
+| Shadow token             | Shipped value                                                                 | Role                                                   |
+| ------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `--shadow-card-emphasis` | `0px 4px 16px 0px rgba(0,0,0,0.10)`                                           | lift — Visual foundations · SKILL.md Shadows           |
+| `--shadow-dropdown`      | `0 8px 30px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)`                     | float — Visual foundations · SKILL.md Shadows          |
+| `--shadow-floating`      | `0px 8px 32px rgba(0,0,0,0.25), 0px 0px 0px 1px rgba(255,255,255,0.06) inset` | top — Visual foundations · SKILL.md Shadows            |
+| `--shadow-keycap`        | `0 1px 0 rgba(15,23,42,0.04)`                                                 | detail, not elevation — v2 vs v1 §7 · SKILL.md Shadows |
+| `--shadow-cta-glow`      | `0 1px 3px rgba(57,134,243,0.25)`                                             | detail, not elevation — v2 vs v1 §8 · SKILL.md Shadows |
 
-### Data Visualization (charts only)
+The other nine are accounted for without being re-printed, deliberately: the
+three `--ease-*` curves under Motion above, the four `--duration-*` steps
+(150/200/300/400ms) in SKILL.md's Duration Scale, and `--focus-ring` /
+`--focus-ring-field` under Focus above. A value copied to a third place is a
+value that goes stale in two — this section is the ledger that nothing in
+`effects.css` is undocumented, not a second copy of it.
 
-The closed palette above governs all UI chrome. Charts are the one sanctioned exception: a multi-series line chart or a court dot-plot needs more separable hues than two outcome colors can provide. These tokens live in `src/lib/design/data-viz.ts` and may appear **only** in data-viz contexts (Recharts series, inline SVG fills) — never on buttons, text, borders, or other chrome. Every value is anchored to the brand palette.
+Two things in `effects.css` are **deliberately undocumented** as build guidance:
 
-- **Outcome** — won/lost in any chart reuse the brand outcome colors exactly: **Win Green `#5DB955`** and **Loss Red `#E51837`**. A green dot on the court is the same green as a "WON" badge. This is non-negotiable.
-- **Amber** (`#E0902E`): the one warm hue in the system, data-viz only. Means "a free or decisive point / key event" — aces, unforced errors, break of serve. Calmer than neon amber so it sits quietly on a light court. This is the *only* sanctioned exception to "no warm tones," and it never leaves a chart.
-- **Green ramp** (return-family series, derived from Win Green): `#3E9A45` deep → `#5DB955` base → `#84C97E` mid → `#ABDCA6` light.
-- **Cool slate** (neutral / context series, cool-tinted not pure gray): `#475569` deep, `#64748B`, `#94A3B8` light. Also the court's double-fault dot.
-- **Surfaces** (categorical): Hard = Signal Blue `#3B82F6`, Grass = Win Green `#5DB955`, Clay = slate `#94A3B8`, Indoor = violet `#8B5CF6`, Carpet = slate `#64748B`.
-- **Player attribution**: Player 1 = Signal Blue `#3B82F6`, Player 2 = Player Violet `#A855F7` (see above).
+- **The `.dark` block.** It re-declares three of the five shadows —
+  `--shadow-card-emphasis` to one layer at 0.5, `--shadow-dropdown` to 0.5 and
+  0.3, `--shadow-keycap` to 0.45 — and leaves `--shadow-floating` and
+  `--shadow-cta-glow` on their light values. None of it renders: dark mode is
+  deferred (the blockquote at the top of this file), so these are staged values,
+  not shipped ones,
+  and nothing in SKILL.md tells you to build against them.
+- **`@keyframes adv-status-pulse`.** Not a token, and not general vocabulary —
+  it belongs to `src/components/ui/status-chip.tsx`'s live dot. Opacity only, so
+  it costs no layout, and the component disables it outright under reduced
+  motion rather than the stylesheet softening it.
 
-### Named Rules
+## Iconography
 
-**The One Voice Rule.** Signal Blue carries no more than 10% of any screen. The page may have one CTA, one active nav highlight, one focus ring at a time. If two blue elements compete on the same surface, one of them is wrong.
+- **Lucide only**, strokeWidth 1.5. Sizes: 14px inline/nav (`size-3.5`), 15px header chrome, 12/16/20px supporting, 32px empty states. Never emoji, never hand-rolled SVGs.
+- **A list of facts is marked with a 14px `Check`, not a bar.** The join flow's sharing terms and the guardian consent acknowledgments both draw one before each row (`TermMark` in SKILL.md's v3 primitives). They previously used a 2 × 12px rule, which read as a rendering artefact at `--ink-300` rather than as a mark. Blue where the row describes something gained, ink where nothing moves — and ink, never blue, in any list sitting above a checkbox, because `AuthCheckbox` sets Signal Blue with a white check and the accent has to stay on the control that records consent.
+- Product marks live in `/public/icons` (tennis-court, tournament, verified ×2). Provider logos: SwingVision, ATP.
+- Logos in `/public/logos`. The design project renames them; the art is the same and already here:
 
-**The Outcome-Only Rule.** Green means winning; red means losing. They never appear as mood, status, or affirmation. A "saved successfully" toast uses Win Green only because complete-state on a profile maps to the same idea: the player got the point.
+  | v2 name                            | In this repo             | Size                                           |
+  | ---------------------------------- | ------------------------ | ---------------------------------------------- |
+  | `logo-wordmark.svg` (sidebar)      | `logo4.svg`              | 141×24 — exact match                           |
+  | `logo-mark.svg` (collapsed swoosh) | `logo3.svg`              | 46×31 (v2 exports at 30×21; SVG, so it scales) |
+  | `logo.svg` (auth lockup)           | `logo.svg`               | 320×57                                         |
+  | alternates                         | `logo2.svg`, `logo5.svg` |                                                |
 
-**The Hairline Rule.** Hierarchy comes from `#F3F3F3` rules and whitespace, not from borders or shadows. If a section needs a card to feel real, the structure is wrong: simplify the page, not the chrome.
+  Nothing needs pulling from the design project. White-on-dark via `filter: brightness(0) invert(1)`.
 
-**The Data-Viz Rule.** Chart hues come exclusively from `src/lib/design/data-viz.ts`. Never inline a raw hex in a chart component. Won/lost always reuse the brand outcome colors. If a chart needs a new role, add a named token to that module so the palette stays documented and closed.
+## Component library — in the design project, not the repo
 
-## 3. Typography
+v2 ships 21 React primitives with `.d.ts` + `.prompt.md` per component:
 
-**Display Font:** Inter (system-ui fallback)
-**Body Font:** Inter (system-ui fallback)
-**Label Font:** Inter (system-ui fallback)
+- `actions/` — **Button**, **IconButton**
+- `forms/` — **Input**, **Select**, **Checkbox**, **Switch**, **Textarea**
+- `display/` — **Card**, **Eyebrow**, **Badge**, **Kbd**, **Skeleton**, **Tooltip**
+- `navigation/` — **SidebarNav**, **Tabs**, **Breadcrumb**
+- `overlays/` — **Dialog**
+- `data/` — **KpiTile** (+ **KpiStrip**), **StatusChip**, **InsightStatChip**, **FormPills**
 
-**Character:** A single sans, used at three weights. Light (300) carries every hero, headline, and large number. Normal (400) and Medium (500) carry body and labels. Bold (700) is reserved for match scores in the match detail view. The voice comes from weight contrast and precise letter-spacing, not typeface variety.
+Plus 18 specimen cards under `guidelines/` and an interactive UI kit
+(`ui_kits/dashboard/` — login → home → matches → match report).
 
-### Hierarchy
-- **Display** (300, 30px, 36px line-height, `-0.6px`): Page heading. Home greeting, settings page title, matches list title. Always paired with a 10px uppercase eyebrow above it at `gap-3`.
-- **Headline** (300, 28px, 1.1, `-0.5px`): Large numbers, KPI hero values, brand panel hero on auth, empty- and error-state titles.
-- **Title** (400, 16px, 1.5, `-0.4px`): Event names, tournament names, dialog titles.
-- **Body** (400, 13px, 1.5): Standard interface body, nav items.
-- **Body Small** (400, 12px, 1.5): Descriptions, helper text, activity messages.
-- **Label** (500, 10px, `2.5px`, uppercase): Section eyebrows, card headers, field labels in the auth and upload-modal vocabularies. The most-used token in the system.
-- **Score** (700, 40px, `-1px`): Match scores in the match detail view only. The only place 700 weight appears.
+v3 keeps all 21 and adds 15 (36 total), each with the same `.jsx` + `.d.ts` +
+`.prompt.md` trio: `Radio`, `EntitySelect`, `ScoreGrid`, `InlineFacts`
+(`forms/`) · `Notice`, `Avatar` (+ `StatePill`), `FieldRow` (`display/`) ·
+`StepBar` (`navigation/`) · `ActivityTray` (`overlays/`) · `DataTable`,
+`Score`, `ResultMark`, `Delta`, `InsightCard` (+ `EngineChip`), `SlotLine`
+(`data/`) — plus `templates/dashboard/`, an importable app shell composed from
+the bundle. Spec'd but not yet primitives there: the peek drawer, status pills,
+the segmented set switcher, the quota meter. The repo's transcriptions so far:
+`ui/badge.tsx`, `ui/state-pill.tsx`, `ui/status-chip.tsx`, `ui/kbd.tsx`,
+`lib/ui/adv-button.ts`, `lib/ui/adv-field.ts`.
 
-### Supplementary scale
+These overlap the existing shadcn primitives in `src/components/ui/`, so they
+are **not** imported wholesale. Port them one at a time as surfaces are
+redesigned, checking `docs/ui-revamp-guardrails.md` for the components the video
+pipeline depends on.
 
-Finer-grained steps the core scale omits. These are intentional and load-bearing — use them only for the roles named, and never introduce a size outside this documented set. The hierarchy is: Display (30) → Headline (28) → Title Large (22–24) → Title (16) → Data (14) → Body (13) → Body Small (12) → Micro (11) → Label (10) → Micro Label (9), plus Score (40) for the match-detail scoreboard.
+**StatusChip** is the one with no v1 equivalent: it encodes the Advantage
+Intelligence job lifecycle from `processing_jobs`. Treatment is a quiet inline
+dot + text, no container — chosen over chip/pill variants in review. The repo's
+current equivalent is the analysis column in `match-card-list.tsx`.
 
-- **Title Large** (300, 22–24px, `-0.4px`): Modal/dialog hero titles (upload, edit-match) and large settings stat values. 24px for full modals, 22px for settings figures.
-- **Scoreboard** (600, 18px and 14px, `tabular-nums`, `-0.3px`): Tennis set scores. 18px for the prominent match-detail summary row; 14px for set digits in match cards and lists. Losing-set scores may recede in color but never below legibility.
-- **Data** (400–500, 14px): The canonical underline-input text size (auth, settings, upload, edit dialogs) and compact data values (player names in match rows, inline stat figures).
-- **Micro** (400–500, 11px): Dense secondary metadata — filter chips, table sub-labels, compact captions where 12px is too large.
-- **Micro Label** (500–600, 9px): The smallest tier. Inline form pills (the 5×5 win/loss squares), micro-badges. Uppercase variants keep their `tracking`.
+## Product context — folded from the former `PRODUCT.md`
 
-### Named Rules
+**Users.** Competitive tennis players and their support network — college
+players, serious club players, coaches, parents tracking junior athletes. Not
+casual players: they are actively working to gain a competitive edge, and they
+come to the dashboard for confidence in their data.
 
-**The Eyebrow Rule.** Every section opens with a `text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]` eyebrow followed by a hairline rule. This is non-negotiable; it is the typographic spine of the product.
+**Purpose.** Turn raw match data into actionable performance analytics. Success
+looks like a player checking the dashboard before practice and walking onto
+court knowing exactly which pattern to drill.
 
-**The Tabular Rule.** Any number a player will compare against another number gets `tabular-nums`. Stats, scores, percentages, prices, dates with widths that vary. If columns of numbers are not aligned, the system has lost.
+Brand personality, anti-references and the one-accent rule are already this
+file's subject (see the header and Visual foundations). The one `PRODUCT.md`
+section with no counterpart here follows.
 
-**The 65–75ch Rule.** Body copy never extends past 75 characters per line. Settings descriptions, AI commentary, helper text — all clamped via `max-w-prose` or fixed column widths.
+## Accessibility & inclusion
 
-## 4. Elevation
-
-The system is flat by default. Cards lift only when they're a destination (the welcome banner, a modal, a stat hero), not when they're decoration. Most "section" boundaries are carried by hairline rules, not surfaces.
-
-### Shadow Vocabulary
-
-- **shadow-card** (`box-shadow: 0px 2px 8px 0px rgba(0,0,0,0.06)`): Default card. Almost imperceptible; reads as a slight lift from the surface, not a drop shadow.
-- **shadow-card-emphasis** (`0px 4px 16px 0px rgba(0,0,0,0.10)`): Cards that earn emphasis (the active plan card with a 3px blue ring, hovered KPI tiles).
-- **shadow-card-raised** (`0px 6px 20px 0px rgba(0,0,0,0.12)`): Activity feed and similarly content-heavy cards that need to feel like a discrete object.
-- **shadow-dropdown** (`0 8px 30px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)`): Menus, popovers, the profile dropdown in the dashboard header.
-- **shadow-floating** (`0px 8px 32px rgba(0,0,0,0.25), 0px 0px 0px 1px rgba(255,255,255,0.06) inset`): Dark floating UI only (the processing toast on `#0D0D0D`).
-
-### Named Rules
-
-**The Flat-By-Default Rule.** Cards begin flat. Shadow is added only when the surface needs to claim attention (an active selection, a hovered KPI, a modal). Never as default decoration.
-
-**The No-Layered-Cards Rule.** Cards inside cards are forbidden. If a section needs an inner container, use a hairline rule and whitespace, not a second card.
-
-## 5. Components
-
-The component vocabulary is **refined and restrained**. Hairline borders, light type, subtle shadow only when earned. Every interactive element has a focus ring. Every shape uses one of seven radii.
-
-### Buttons
-- **Shape:** `rounded-[6px]` for action buttons; `rounded-full` for small uppercase pills (filter chips, segmented controls).
-- **Primary CTA:** Signal Blue background, white text, `text-[13px] font-medium`, `h-9 px-4`, subtle blue glow `shadow-[0_1px_3px_rgba(57,134,243,0.25)]`. Hover swaps to `#2563EB` with `transition-colors duration-200`.
-- **Primary Pill (small):** Signal Blue, `text-[10px] font-medium uppercase tracking-[1.5px]`, `rounded-full px-3 py-1.5`. Used for "Recommended" badges, contextual prompts.
-- **Ghost:** White surface, `border border-[#EAECF0]`, ink-secondary text, `rounded-full` for pill ghosts and `rounded-[6px]` for action ghosts. Hover wash to `#F5F5F5`.
-- **Outline (action):** Same as Ghost but `rounded-[6px]` with hover-blue text and border. Used for the password reset button.
-- **Danger:** Red `text-[#E51837]`, transparent background, `border border-[#E51837]/20`. Confirmed-danger variant is solid `bg-[#E51837]` white text.
-- **Press feedback:** `active:scale-[0.97]` on primary; `active:scale-[0.998]` on rows.
-
-### Underline Inputs (canonical input style)
-- **Style:** Transparent background, no boxed border. Ink text, `placeholder:text-[#AAAAAA]`. Above each input sits a 10px uppercase eyebrow label. Below each input sits a 1px `#F3F3F3` rule.
-- **Focus:** Rule animates to 2px height and `#3B82F6` color over 300ms. The rule color is the focus indicator; no separate ring.
-- **Hover:** Rule shifts from `#F3F3F3` to `#E5E5EA`.
-- **Error:** Rule is solid `#E51837`.
-- **Disabled:** Eyebrow drops to `#CCCCCC`, text drops to `#888888`, rule stays `#F3F3F3`.
-- This is the input vocabulary across **auth pages, the upload-match modal, and settings**. Boxed inputs exist (`SettingsInput` legacy variant) but are deprecated.
-
-### Cards
-- **Corner Style:** `rounded-[14px]` (radius-card).
-- **Background:** `#FFFFFF` on `#FAFAFA` page background.
-- **Border:** `border border-[#F3F3F3]`.
-- **Shadow:** `shadow-card` by default; promote to `shadow-card-emphasis` on hover or selection only.
-- **Internal Padding:** `p-5` (20px) standard; `px-6 py-4` for cards with their own header bar.
-
-### Section Eyebrow + Rule
-The signature pattern. A `text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]` label, a `gap-3` (12px) gap, then a `flex-1 h-px bg-[#F3F3F3]` rule. Optional right-aligned action chip on the same baseline. Used to open every settings section, every match detail section, every page heading.
-
-### Sidebar Nav Item
-- **Style:** `h-9 rounded-lg pl-[13px] pr-3.5 gap-3`, `text-[13px]` body.
-- **Default:** `text-[#8A8A8E]` icon and label, hover wash to `#F5F5F5`, label shifts to `#3C3C43`.
-- **Active:** `bg-[#EBF2FD]` background, `text-[#3B82F6]` label and icon, no shadow. The settings sidebar adds a 2px blue left rail at `top-1/2 -translate-y-1/2 h-6` for editorial emphasis.
-
-### Status Badges (Win / Loss)
-- **Shape:** `rounded-[6px]` (radius-badge).
-- **Win:** `bg-[rgba(115,230,104,0.15)] text-[#5DB955]`.
-- **Loss:** `bg-[rgba(229,24,55,0.15)] text-[#E51837]`.
-- **Type:** `text-[10px] font-semibold` for inline pills; the small form pills (5×5 squares in match detail) use `text-[9px] font-semibold` and `rounded-[3px]`.
-
-### Tooltip
-Floating box, no caret. `bg-white border border-[#F3F3F3] rounded-xl shadow-card`. Anchored visually by hover ring or scale on the trigger element, never by an arrow.
-
-### Keyboard Shortcut Chip
-Inline `<kbd>` with `inline-block px-1 py-0.5 rounded text-[10px] font-medium leading-none text-[#AAAAAA] bg-[#F0F0F0]`. macOS modifiers concatenate (`⌘K`). Word-named keys (`esc`, `enter`) get `[font-variant-caps:small-caps]` so the lowercase glyphs sit at cap-height.
-
-## 6. Do's and Don'ts
-
-### Do:
-- **Do** lead every section with a 10px uppercase eyebrow + hairline rule.
-- **Do** use `tabular-nums` on every number a player will read alongside another number.
-- **Do** respect `prefers-reduced-motion`: skip transforms, keep opacity.
-- **Do** use Signal Blue exclusively for action and emphasis, on no more than 10% of the screen.
-- **Do** use Win Green for winning and Loss Red for losing only. Anywhere else, including form errors and saved confirmations, those colors are a misuse.
-- **Do** prefer underline inputs (auth + upload-modal + settings vocabulary) over boxed inputs.
-- **Do** keep cards flat at rest. Promote to `shadow-card-emphasis` only on hover, selection, or active state.
-- **Do** size icons at `size-3.5` with `strokeWidth={1.5}`. Lucide only.
-
-### Don't:
-- **Don't** use bounce or elastic animations. The two custom curves (`[0.25, 0.46, 0.45, 0.94]` primary, `[0.23, 1, 0.32, 1]` spring-like) are the only options.
-- **Don't** apply glassmorphism or backdrop blur as decoration. Blur is allowed only as a sticky-bar legibility shield (rare).
-- **Don't** use neon accents, gradient text, or gradient-heavy surfaces.
-- **Don't** use warm tones, browns, or earthy colors anywhere.
-- **Don't** ship gamification — no streak meters, no achievement badges, no celebratory confetti, no "level up" microcopy.
-- **Don't** use border-left or border-right greater than 1px as a colored stripe on cards or alerts. Full borders, background tints, leading numbers, or nothing.
-- **Don't** nest cards. A card inside a card is always a structural smell.
-- **Don't** invent decoration colors. The palette is closed.
-- **Don't** use emoji as icons. Lucide vector glyphs only.
-- **Don't** apply font weights other than 300, 400, 500, 600, 700. No 800/900. No italics outside long-form quotation.
-- **Don't** use SwingVision as a visual reference. It is the named anti-reference for this product.
-- **Don't** ship a hero-metric template (big number, small label, gradient accent, supporting stats). The KPI strip is the system's only blessed metric layout.
+- **Target:** WCAG 2.1 AA.
+- **Contrast:** 4.5:1 for normal text, 3:1 for large text — the ink-scale notes
+  above encode which grays clear it.
+- **Focus indicators:** every interactive element rings automatically via
+  `design-system/focus.css` — see the Focus section above; components write no
+  focus class of their own.
+- **Motion:** respect `prefers-reduced-motion` — skip transforms, keep opacity.
+- **Keyboard:** all interactive elements reachable and operable via keyboard.
+- **Screen readers:** semantic HTML, ARIA labels on icons and custom controls.

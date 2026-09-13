@@ -20,7 +20,7 @@ export interface ChatMessage {
  */
 export async function getLLMStream(
   systemPrompt: string,
-  messages: ChatMessage[]
+  messages: ChatMessage[],
 ): Promise<AsyncIterable<string>> {
   const provider = process.env.LLM_PROVIDER ?? "";
 
@@ -40,7 +40,7 @@ export async function getLLMStream(
 
 async function anthropicStream(
   systemPrompt: string,
-  messages: ChatMessage[]
+  messages: ChatMessage[],
 ): Promise<AsyncIterable<string>> {
   const { default: Anthropic } = await import("@anthropic-ai/sdk");
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -70,7 +70,7 @@ async function anthropicStream(
 
 async function openaiStream(
   systemPrompt: string,
-  messages: ChatMessage[]
+  messages: ChatMessage[],
 ): Promise<AsyncIterable<string>> {
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({

@@ -1,0 +1,73 @@
+# The gate that cannot be bypassed.
+#
+# Local hooks (.githooks/) are a fast convenience and can be skipped with
+# --no-verify — and they do NOT run at all inside Claude Code's agent
+# worktrees, which pin core.hooksPath per-worktree. Since the feature pipeline
+# and /task-next both commit from worktrees, this workflow is the only check
+# every commit is guaranteed to face.
+#
+# No secrets required, on purpose. The 9 live-database specs guard on
+# `test.skip(!HAVE_ENV, SKIP_REASON)`, so a keyless checkout runs the other 54
+# and skips those cleanly. Adding secrets here would buy little and put a
+# service-role key in CI.
+#
+# `npm run build` is deliberately absent: Vercel already builds every push, and
+# reproducing it here would need the Supabase keys this workflow avoids.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, splitstep-integration]
+
+# A new push supersedes the run in flight for the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # `npm ci` needs the lockfile, which IS tracked despite the stale
+      # "# lock files" entry that used to sit in .gitignore.
+      - run: npm ci
+
+      # Ordered cheapest-first so the common failure reports in seconds.
+      # `if: always()` on the rest means one red step still surfaces every
+      # other problem in the same run, instead of one fix at a time.
+      - name: Format
+        run: npm run format:check
+
+      - name: Lint
+        if: always()
+        run: npm run lint
+
+      - name: Typecheck
+        if: always()
+        run: npm run typecheck
+
+      # Most specs are unit tests over library code, but 12 of them really do
+      # drive a browser, and a fresh runner has no Playwright binaries. The
+      # comment at the top of playwright.config.ts ("these tests do not need
+      # browser binaries") is about not needing a `webServer`, and misled the
+      # first version of this workflow into skipping this step — CI failed with
+      # "Executable doesn't exist at .../chromium_headless_shell".
+      #
+      # Chromium only: the config declares no `projects`, so that is the default
+      # and the sole browser anything here launches.
+      - name: Install Playwright Chromium
+        if: always()
+        run: npx playwright install --with-deps chromium
+
+      - name: Test
+        if: always()
+        run: npm test

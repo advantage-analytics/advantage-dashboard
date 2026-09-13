@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the template, which carries no values.
+!.env.example
 
 # venv files
 .venv
@@ -44,11 +46,60 @@ yarn-error.log*
 next-env.d.ts
 
 # claude code
-.claude/
-.mcp.json
+#
+# Shared team config is tracked — the hooks, the review agents, and the three
+# skills written for this repo. Personal state is not: settings.local.json
+# holds one person's permission allowlist, launch.json points at their own
+# worktree paths, and worktrees/ is a working directory.
+#
+# .claude/skills/ holds only project-authored skills, tracked individually
+# below. Generic design-review skills (critique, polish, harden, etc.) come
+# from the user-level `impeccable` skill instead of a per-repo install —
+# nothing here reinstalls or references them. Add a new project skill to this
+# list when you write it — the default is ignored.
+.claude/*
+!.claude/settings.json
+!.claude/pipeline/
+!.claude/agents/
+!.claude/hooks/
+!.claude/skills/
+!.claude/tasks/
+.claude/skills/*
+!.claude/skills/create-migration/
+!.claude/skills/pr-check/
+!.claude/skills/trace-route/
+!.claude/skills/task-next/
+!.claude/skills/task-add/
+!.claude/skills/feature-new/
+!.claude/skills/feature-next/
+!.claude/skills/azure-storage/
+!.claude/skills/stripe-cli/
+
+# .mcp.json IS tracked, so every teammate gets identical MCP config from a clone.
+#
+# It carries no credential and — checked, not assumed — never did: every value in
+# it is a ${VAR} reference, including the Figma server's
+# `--figma-api-key=${FIGMA_API_KEY}` that this repo's own comments used to
+# describe as an inline key. Ignoring the file was never buying any secrecy.
+#
+# Keep it that way: a server needing a secret gets ${ENV_VAR} expansion, not a
+# literal and not a re-ignore. .claude/hooks/guard-secrets.sh still asks before
+# reading this file IF it ever does contain something key-shaped, and
+# .githooks/pre-commit scans staged content for the same.
+
+# Agent scratch: SDD ledgers, review packages, task briefs and reports. Never
+# committed — but /task-next commits with `git add -A`, so an un-ignored
+# .superpowers/ would ride into a task's commit.
+.superpowers/
 
 # lock files
-package-lock.json
+#
+# package-lock.json is deliberately NOT ignored. It has been tracked since
+# before this rule existed — .gitignore has no effect on an already-tracked
+# file, so the old entry never did anything except mislead. `npm ci` (CI, and
+# the instruction bootstrap-worktree.sh prints in a fresh worktree) requires it.
+#
+# The other two stay ignored so a second, competing lockfile cannot appear.
 yarn.lock
 pnpm-lock.yaml
 
@@ -61,9 +112,45 @@ pnpm-lock.yaml
 
 # playwright
 .playwright-mcp/
+/test-results/
+/playwright-report/
 
 # agents
 .agents
 
 # design references
 figma/design-refs/
+
+# supabase cli
+#
+# `supabase/.temp/` is the CLI's local link state — project ref, pooler URL,
+# and the service versions it saw last. Any `--linked` command writes it,
+# including ones a gate subagent runs, so it turns up mid-run in a tree that
+# has to be clean before a task commits. Regenerated on demand.
+supabase/.temp/
+
+# codex
+#
+# `.codex/` is the Codex mirror of this repo's Claude setup —
+# the same repo guidance and the same three reviewer subagents, in Codex's own
+# file conventions. A Codex session writes them into whatever worktree it runs
+# in, so it turns up mid-run in a tree that has to be clean before a task
+# commits, and `/task-next`'s `git add -A` would otherwise sweep it into an
+# unrelated task's commit. Ignored rather than tracked.
+#
+# NOTE: `AGENTS.md` itself IS tracked (commit 9a58e98) — it is the guidance
+# Codex and Gemini read, and only the machine-specific `.codex/` dir is not.
+.codex/
+
+# analysis output
+#
+# `analysis/data/*.csv` is derived, not authored: `scripts/splitstep_json_to_csv.py`
+# reproduces all three byte-for-byte from `tests/fixtures/splitstep/*.json`, both
+# of which ARE committed, using nothing outside the Python standard library.
+#
+#   python3 scripts/splitstep_json_to_csv.py tests/fixtures/splitstep/*.json -o analysis/data
+#
+# That is ~1.1 MB of regenerable stroke data that would otherwise sit in a public
+# repository's history forever. The notebook documents the same command in its
+# first cell, so a fresh clone is one line away from running it.
+analysis/data/

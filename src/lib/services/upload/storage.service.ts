@@ -5,11 +5,17 @@
  * Implements IStorageService interface for testability.
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
-import { IStorageService, UploadResult } from './types';
+import { SupabaseClient } from "@supabase/supabase-js";
+import { IStorageService, UploadResult } from "./types";
 
-/** Storage bucket name for match data */
-const MATCH_DATA_BUCKET = 'match-data';
+/**
+ * Storage bucket name for match data.
+ *
+ * Exported because match deletion has to remove what this service writes, and a
+ * second literal in the delete path is the shape of bug that leaves files behind
+ * without anything looking wrong.
+ */
+export const MATCH_DATA_BUCKET = "match-data";
 
 /**
  * Supabase Storage Service Implementation
@@ -26,13 +32,13 @@ export class SupabaseStorageService implements IStorageService {
   async upload(
     path: string,
     file: File | Blob,
-    options?: { upsert?: boolean }
+    options?: { upsert?: boolean },
   ): Promise<UploadResult> {
     try {
       const { data, error } = await this.supabase.storage
         .from(MATCH_DATA_BUCKET)
         .upload(path, file, {
-          cacheControl: '3600',
+          cacheControl: "3600",
           upsert: options?.upsert ?? false,
         });
 
@@ -50,7 +56,7 @@ export class SupabaseStorageService implements IStorageService {
     } catch (err) {
       return {
         success: false,
-        error: err instanceof Error ? err.message : 'Unknown upload error',
+        error: err instanceof Error ? err.message : "Unknown upload error",
       };
     }
   }
@@ -72,7 +78,7 @@ export class SupabaseStorageService implements IStorageService {
     } catch (err) {
       return {
         success: false,
-        error: err instanceof Error ? err.message : 'Unknown delete error',
+        error: err instanceof Error ? err.message : "Unknown delete error",
       };
     }
   }
@@ -83,9 +89,9 @@ export class SupabaseStorageService implements IStorageService {
   async exists(path: string): Promise<boolean> {
     try {
       // Extract folder and filename from path
-      const pathParts = path.split('/');
+      const pathParts = path.split("/");
       const fileName = pathParts.pop();
-      const folderPath = pathParts.join('/');
+      const folderPath = pathParts.join("/");
 
       const { data, error } = await this.supabase.storage
         .from(MATCH_DATA_BUCKET)
@@ -116,6 +122,8 @@ export class SupabaseStorageService implements IStorageService {
 /**
  * Factory function to create storage service
  */
-export function createStorageService(supabase: SupabaseClient): IStorageService {
+export function createStorageService(
+  supabase: SupabaseClient,
+): IStorageService {
   return new SupabaseStorageService(supabase);
 }

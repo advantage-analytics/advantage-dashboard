@@ -1,0 +1,2782 @@
+"use client";
+
+/**
+ * Custom hook for managing Upload Match wizard state and logic
+ *
+ * Orchestrates the multi-step upload wizard, including:
+ * - Step navigation
+ * - File upload via the upload service
+ * - Form data persistence
+ * - Match creation
+ */
+
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { capitalize } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import {
+  getProviderStrategy,
+  getProviderKind,
+  isProviderSupported,
+  providerKindOrNull,
+  IProcessingProviderStrategy,
+  ProviderId,
+  ProviderKind,
+  ValidationResult,
+} from "@/lib/services/upload";
+import { getParser, hasParser } from "@/lib/services/upload/parsers";
+import { providers } from "@/lib/providers";
+import {
+  createProcessingJob,
+  uploadAndSubmitVideo,
+  type VideoUploadEvent,
+} from "@/lib/services/splitstep/submit-match-video";
+import { currentBillingMonth } from "@/lib/services/splitstep/config";
+import {
+  accountTypeFor,
+  monthlyCapSecondsFor,
+} from "@/lib/services/splitstep/quota";
+import { formatResetDate } from "@/lib/data/usage-format";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import type { Workspace } from "@/lib/workspace/types";
+import type { ProgramApprovalReading } from "@/lib/workspace/upload-eligibility";
+import type {
+  RosterFullRow,
+  RosterPlayerOption,
+} from "@/lib/data/roster-shared";
+import {
+  draftResumeStep,
+  eligibleRosterOptions,
+  identityAthleteFor,
+  rosterSubjectOrNull,
+  wizardUploadEligibility,
+  type MatchSubject,
+  type OwnProfileRow,
+  type RosterSubject,
+  type WizardEligibility,
+} from "./subject-eligibility";
+import {
+  Step,
+  FormData as MatchFormData,
+  UploadedFile,
+  ParsingState,
+  VideoProbeSummary,
+  DEFAULT_FORM_DATA,
+  STEP_ORDER_BY_KIND,
+  type EventPreset,
+  type LineOffer,
+  type MatchDraft,
+  type IdentityMatchStatus,
+} from "./types";
+import { deleteMatchDraft, saveMatchDraft } from "@/lib/wizard/actions";
+import {
+  determineWinner,
+  buildMatchData,
+  getAdjustedScores,
+  formatFileSize,
+  clearStorageData,
+  loadFormDataFromStorage,
+  loadUploadedFileFromStorage,
+  saveFormDataToStorage,
+  STORAGE_KEYS,
+  MatchMetadata,
+} from "./utils";
+import { updateScoreState, type ScoreArrayField } from "./score-state";
+import {
+  buildImportIdentityConfirmationKey,
+  collectMatchCompletionRequirements,
+  evaluateImportedIdentityMatch,
+} from "./validation";
+
+export interface ImportIdentityState {
+  /** Original parser perspective, never rewritten by display-name edits. */
+  parsedNames: { playerName: string; opponentName: string } | null;
+  comparison: IdentityMatchStatus | null;
+  confirmed: boolean;
+  rejected: boolean;
+  blocked: boolean;
+  message: string | null;
+  confirm: () => void;
+  reject: () => void;
+}
+
+/**
+ * Turn a refused write into a sentence the player can act on.
+ *
+ * `42501` is insufficient_privilege, and on `matches` it arrives from two very
+ * different places. The guard triggers — `matches_block_client_regraft` —
+ * raise it deliberately, with a written explanation of what they refused:
+ * filing under a program you do not belong to, attaching to a line you do not
+ * run, or naming somebody who is not on that program's roster. That text IS
+ * the answer, so it is shown as-is rather than buried under "Database error:",
+ * which is how a coach picking the wrong teammate used to be told about it.
+ *
+ * Postgres' own RLS wording ("new row violates row-level security policy for
+ * table \"matches\"") is not something to put in front of a player, so it
+ * keeps a plain sentence instead. Every other code falls through to the raw
+ * message, which is still the most useful thing to show for a failure nobody
+ * anticipated.
+ */
+function explainWriteFailure(error: {
+  code?: string;
+  message?: string;
+  details?: string;
+}): string {
+  const message = error.message?.trim() ?? "";
+
+  if (error.code === "42501") {
+    if (!message || message.toLowerCase().includes("row-level security")) {
+      return (
+        "You do not have permission to save this match here. If you were " +
+        "filing it for a teammate, pick them from the roster and try again."
+      );
+    }
+    // The triggers write lowercase sentences, the way an error message reads
+    // inside SQL. Give it a capital so it reads as UI copy.
+    return capitalize(message);
+  }
+
+  return `Database error: ${message || error.details || JSON.stringify(error)}`;
+}
+
+/**
+ * Undo the match row this wizard just created, and report what it left behind.
+ *
+ * Both rollback sites below delete the row and then announce the failure, and
+ * the announcement carries a link to that row — so the delete's outcome IS the
+ * answer to "is there still a match to open?". `.select("id")` is what makes
+ * that outcome legible: PostgREST returns `error: null` for a DELETE that RLS
+ * filtered down to nothing, so without the projection a refused rollback and a
+ * completed one are indistinguishable, and the toast would guess wrong in one
+ * direction or the other.
+ *
+ * Returns true when the row is confirmed gone.
+ */
+async function rollbackCreatedMatch(
+  supabase: ReturnType<typeof createClient>,
+  matchId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("matches")
+    .delete()
+    .eq("id", matchId)
+    .select("id");
+
+  if (error) {
+    console.error("Match rollback failed:", error);
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
+}
+
+/**
+ * The rollback-then-announce ritual both failure sites share: undo the match
+ * row (unless it predates this upload), then dispatch `match-upload-failed`
+ * with `matchId` attached ONLY if a viewable row survived. One function so
+ * the invariant the comments above describe — a dead link is worse than no
+ * link — cannot drift between the two catch blocks.
+ */
+async function rollbackAndAnnounceFailure(params: {
+  supabase: ReturnType<typeof createClient>;
+  matchId: string;
+  /** True when the row predates this upload and must never be deleted. */
+  reusingMatch: boolean;
+  error: string;
+}): Promise<void> {
+  const { supabase, matchId, reusingMatch, error } = params;
+  const matchIsViewable = reusingMatch
+    ? true
+    : !(await rollbackCreatedMatch(supabase, matchId));
+  window.dispatchEvent(
+    new CustomEvent("match-upload-failed", {
+      detail: {
+        ...(matchIsViewable ? { matchId } : {}),
+        error,
+      },
+    }),
+  );
+}
+
+/**
+ * The source a new match starts on.
+ *
+ * Resolved from the registry by KIND rather than named, so the wizard stays
+ * written against "your own video" instead of against a particular vendor.
+ */
+const DEFAULT_PROVIDER_ID: ProviderId | null =
+  providers.find(
+    (p) => p.available !== false && providerKindOrNull(p.id) === "processing",
+  )?.id ?? null;
+
+/**
+ * Where a line that CANNOT take video starts instead.
+ *
+ * A doubles line was handed the processing provider like every other preset,
+ * and a preset opens on the file step, so there was no way to choose anything
+ * else. The coach picked a multi-gigabyte file and met
+ * "Video analysis supports singles matches only" from `job-request.ts` after
+ * the upload — a 422 at the end of the most expensive step, with an orphaned
+ * blob and a job stuck at `uploaded`.
+ *
+ * `supportsVideo()` already knows this at page-build time, and the import
+ * provider is a real path for a doubles line: it parses numbers and never goes
+ * near the vision pipeline. Its step order also skips the video step, so the
+ * wizard asks for a file instead of a video and the "Add file" label the
+ * schedule row already shows becomes true.
+ */
+const DEFAULT_IMPORT_PROVIDER_ID: ProviderId | null =
+  providers.find(
+    (p) => p.available !== false && providerKindOrNull(p.id) === "import",
+  )?.id ?? null;
+
+/**
+ * The flow the progress bar starts on, before anyone has chosen anything.
+ *
+ * Read off DEFAULT_PROVIDER_ID's kind so the first paint draws the same number
+ * of segments the mount effect is about to select. See `progressKind`.
+ */
+const DEFAULT_PROVIDER_KIND: ProviderKind = DEFAULT_PROVIDER_ID
+  ? getProviderKind(DEFAULT_PROVIDER_ID)
+  : "import";
+
+export interface UseUploadMatchWizardProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /**
+   * Fired once the match row is committed, before the wizard is dismissed.
+   *
+   * `onOpenChange(false)` alone cannot tell "the user backed out" from "the
+   * match was created" — the modal doesn't care, but the full-page flow has to
+   * show a success state for one and navigate away for the other.
+   */
+  onCreated?: (matchId: string) => void;
+  /**
+   * Video transfer lifecycle, for whoever is still on screen to render.
+   *
+   * The wizard unmounts the moment a match is created, but the upload keeps
+   * running in a background closure for up to a couple of hours. So progress
+   * cannot live in this hook's state — it has to be handed to an owner that
+   * outlives the wizard, which is what this is for.
+   */
+  onVideoUpload?: (event: VideoUploadEvent) => void;
+  /**
+   * Set in a team workspace: the event line this upload belongs to.
+   *
+   * When present the wizard stops being a match CREATOR and becomes a match
+   * FILLER — the line already exists, so provider, players, date, surface,
+   * format and often the score all arrive answered, and the only thing left is
+   * the video and the two questions no lineup can know.
+   */
+  preset?: EventPreset | null;
+  /**
+   * A saved draft to resume. Seeds the form, the source and the step; the
+   * file has to be picked again, so a video flow lands on the file step.
+   */
+  draft?: MatchDraft | null;
+  /**
+   * A source named by the link that opened the wizard (`?source=`).
+   *
+   * It preselects the Source field and **does not skip step one**. That step
+   * is not a provider picker — it asks three things, and one of them is For,
+   * the field that decides `matches.player1_id`. A wrong id there does not
+   * mislabel a row, it hands read access to the wrong person and attributes
+   * every statistic to them (see `SourceStepContent`'s Attribution note), so
+   * nothing may carry a viewer past it unreviewed.
+   *
+   * Ranked below a preset and a draft, which each carry a whole match, and
+   * above the stored provider, which is a stale choice where this is a fresh
+   * one. Not persisted, for the same reason the default is not: arriving by
+   * link is not the same as having chosen in the picker.
+   */
+  initialProvider?: ProviderId | null;
+  /**
+   * A player named by the link that opened the wizard (`?player=`), already
+   * checked against the active program's roster server-side.
+   *
+   * Same rank and the same limit as `initialProvider`: it answers the For
+   * field and nothing else — Source is still asked, and step one still opens.
+   *
+   * `playerId` is a `program_players.id`, which is what `player1_id` wants for
+   * a roster athlete. A miss resolves to null on the server and opens an
+   * unseeded wizard; nothing here may fall back to the uploader's own login
+   * id, which is the attribution bug `MatchSubject` exists to prevent.
+   */
+  initialSubject?: RosterSubject | null;
+}
+
+/**
+ * The video-upload event stream.
+ *
+ * Defined in `lib/services/splitstep/submit-match-video.ts` now that two
+ * wizards emit it, and re-exported here so existing importers do not move.
+ */
+export type {
+  VideoUploadEvent,
+  VideoUploadProgress,
+} from "@/lib/services/splitstep/submit-match-video";
+
+/**
+ * One roster row offered by the who-played picker.
+ *
+ * `playerId` is `program_players.id` — the id a roster player's matches carry,
+ * claimed or not (see `program_roster_full`). It is NOT a login id, and the two
+ * must never be swapped: `player1_id` is half the SELECT policy on `matches`.
+ * `userId` — the login that claimed this profile, when one has — is used only
+ * to drop the uploader's own row; "Myself" already stands for them.
+ *
+ * The shape (and the filter/name-fallback/sort that produces it) is
+ * `roster-shared.ts`'s, shared with `getLadder()`.
+ */
+export type RosterOption = RosterPlayerOption & {
+  /**
+   * The address an open invitation is waiting on, when the profile has one
+   * out. The roster picker draws that person as a dashed ring and their email
+   * until they claim the profile — the invite is the only thing that says who
+   * they are yet. Null with no open invite, and always null for a viewer the
+   * `program_invites` policy does not admit (players), who see the same row
+   * without the invite state.
+   */
+  invitedEmail: string | null;
+};
+
+/**
+ * WHOSE match a team upload records — defined beside the pure eligibility
+ * wiring in `subject-eligibility.ts`, re-exported here so the picker and the
+ * route keep importing it from the hook. See that file for why `self` is not
+ * an answer in a team workspace.
+ */
+export type { MatchSubject, RosterSubject, WizardEligibility };
+
+export interface UseUploadMatchWizardReturn {
+  // State
+  step: Step;
+  selectedProvider: ProviderId | null;
+  uploadedFile: UploadedFile | null;
+  isOver: boolean;
+  isCreating: boolean;
+  isUploading: boolean;
+  error: string | null;
+  uploadError: string | null;
+  formData: MatchFormData;
+  parsingState: ParsingState;
+  importIdentity: ImportIdentityState;
+
+  // Provider flow shape
+  /** Step sequence for the selected provider's kind. */
+  stepOrder: Step[];
+  /**
+   * Segments for the progress bar. Tracks the flow you have entered rather than
+   * the live selection, so choosing a provider never resizes the bar above the
+   * step you are choosing it on.
+   */
+  progressTotalSteps: number;
+  /** True when the selected provider analyses video rather than parsing a file. */
+  isProcessingProvider: boolean;
+
+  // Video analysis (processing providers only)
+  videoProbe: VideoProbeSummary | null;
+  videoWarnings: string[];
+  isProbing: boolean;
+  /** Provider-owned media rules, so the wizard never names a vendor. */
+  minTrimSeconds: number;
+  /**
+   * Seconds left in this month's allowance, for the trim step's cost note.
+   * Undefined while it loads, and for providers that do not bill.
+   */
+  remainingQuotaSeconds?: number;
+  /** This month's allowance for the active workspace — 2h personal, 75h program. */
+  quotaCapSeconds: number;
+  /** When the allowance comes back, already formatted — "Sep 1". */
+  quotaResetsOn: string;
+  /** What the file picker accepts, for whichever provider is selected. */
+  acceptString: string;
+  requirementChips: readonly string[];
+  onVideoPick: (file: File | null) => void;
+  handleTrimChange: (startSeconds: number, endSeconds: number) => void;
+  handleRemoveVideo: () => void;
+
+  // Step navigation
+  handleProviderSelect: (providerId: string | null) => void;
+  handleProviderContinue: () => void;
+  /** Leaves the file step for whatever follows it in the kind's order. */
+  handleFileContinue: () => void;
+  handleTrimContinue: () => void;
+  handleBack: () => void;
+  /**
+   * The first step this flow shows. A line preset arrives with step 1
+   * answered, so it opens on the file step and Back there is Cancel.
+   */
+  firstStep: Step;
+
+  // The schedule offer on the details step (design 3d/7a)
+  /** The lineup slot accepted with Attach, or null. */
+  attachedLine: LineOffer | null;
+  /** Accept an offer: fills opponent, date, court, format, scoring, event. */
+  attachLine: (offer: LineOffer) => void;
+  /** Empty those fields again, touching nothing typed by hand. */
+  detachLine: () => void;
+
+  // Drafts (design 11c)
+  /** Write the draft row. Returns false when it could not be saved. */
+  saveDraft: () => Promise<boolean>;
+  draftSaving: boolean;
+  /**
+   * Why the last `saveDraft()` failed, or null when the last one worked.
+   *
+   * Lives here rather than in the component because the hook is what knows
+   * the write was refused: a caller that only ever awaited the promise and
+   * navigated away is the defect this exists to make impossible to repeat.
+   * The wizard stays open and the answers stay in state; only the durable row
+   * is missing.
+   */
+  draftSaveError: string | null;
+  /** When the form last changed — for "Draft saved · 2 min ago". */
+  lastChangedAt: number | null;
+
+  // File handling
+  setIsOver: (isOver: boolean) => void;
+  handleDrop: React.DragEventHandler<HTMLDivElement>;
+  handleFileChange: React.ChangeEventHandler<HTMLInputElement>;
+  handleRemoveFile: () => void;
+
+  // Form handling
+  handleInputChange: (
+    field: keyof MatchFormData,
+    value: string | number | boolean | null | undefined,
+  ) => void;
+  /**
+   * Applies a format change after DetailsStepContent has confirmed any score
+   * loss. Format reductions discard only sets outside the new format.
+   */
+  handleFormatChange: (bestOf: string) => void;
+  /**
+   * The "who played this match" question, asked ONLY in a team workspace with
+   * no preset. A personal workspace has exactly one candidate (the uploader),
+   * and a preset already answered it — the lineup named the player. Everywhere
+   * else `required` is false and nothing here renders.
+   */
+  whoPlayed: {
+    /** True in a team workspace with no preset — the wizard must ask. */
+    required: boolean;
+    /**
+     * The ELIGIBLE roster: the program's live players, the viewer's own
+     * profile included when they genuinely hold one (see
+     * `eligibleRosterOptions`). Nobody else is offered — there is no "Myself"
+     * row for staff, because a staff login is not an athlete. Null while
+     * loading and after a failed load; `loadFailed` tells those apart.
+     */
+    roster: RosterOption[] | null;
+    /** True when the roster read failed. `reload()` asks again. */
+    loadFailed: boolean;
+    reload: () => void;
+    /**
+     * The uploader's display name — for the details step's "You" label in a
+     * personal workspace, and for the picker's aria text. Not an option.
+     */
+    uploaderName: string | null;
+    /** The current answer. Null until chosen, which gates Continue. */
+    subject: MatchSubject | null;
+    /**
+     * Records the answer and pre-fills the player-name field from it. In a
+     * team workspace only a roster player on the loaded list is accepted;
+     * anything else is ignored rather than installed.
+     */
+    choose: (subject: MatchSubject) => void;
+  };
+  /**
+   * May this match be recorded here, and for whom — `uploadEligibility()`
+   * over the wizard's own state (`subject-eligibility.ts`). Every handler
+   * that moves forward or writes asks it first; it is exposed so the page
+   * can show the same refusal, with Retry where `retryable` is true (T13).
+   */
+  eligibility: WizardEligibility;
+  /**
+   * Retry a retryable refusal (`eligibility.retryable`) — re-reads the
+   * program's approval or the roster, whichever failed. A no-op otherwise:
+   * a decided refusal is fixed by changing something, not asking again.
+   */
+  retryEligibility: () => void;
+  handleScoreChange: (
+    player: "player" | "opponent",
+    index: number,
+    value: string,
+  ) => void;
+  handleTiebreakChange: (
+    player: "player" | "opponent",
+    index: number,
+    value: string,
+  ) => void;
+
+  // Match creation
+  handleCreateMatch: () => Promise<void>;
+}
+
+// Helper to get current date in YYYY-MM-DD format.
+// Use LOCAL date components (not toISOString, which is UTC) so the default date matches
+// the user's local day — otherwise an evening upload behind UTC defaults to tomorrow.
+/**
+ * The schedule's surface ("hard", "clay", "grass", or a court option already
+ * spelled out) to the value the details step's Court field stores.
+ */
+function surfaceToCourtType(surface: string): string {
+  const s = surface.trim().toLowerCase();
+  if (s.includes("indoor")) return "Indoor Hard Court";
+  if (s.includes("clay")) return "Clay Court";
+  if (s.includes("grass")) return "Grass Court";
+  if (s.includes("hard")) return "Outdoor Hard Court";
+  return surface;
+}
+
+function getCurrentDate(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// Helper to get current time in HH:MM format
+function getCurrentTime(): string {
+  const now = new Date();
+  return now.toTimeString().slice(0, 5);
+}
+
+// Get default form data with current date/time
+function getDefaultFormData(): MatchFormData {
+  return {
+    ...DEFAULT_FORM_DATA,
+    date: getCurrentDate(),
+    time: getCurrentTime(),
+  };
+}
+
+export function useUploadMatchWizard({
+  open,
+  onOpenChange,
+  onCreated,
+  onVideoUpload,
+  preset,
+  draft,
+  initialProvider,
+  initialSubject,
+}: UseUploadMatchWizardProps): UseUploadMatchWizardReturn {
+  const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+  // The workspace this match will belong to and be billed against. Resolved
+  // server-side once per request by the dashboard layout, so reading it here
+  // costs nothing and cannot disagree with the sidebar's switcher.
+  const { active: activeWorkspace, viewer } = useWorkspace();
+
+  // State
+  const [step, setStep] = useState<Step>("provider");
+  /**
+   * The flow the progress bar measures. NOT `stepOrder`.
+   *
+   * The provider is chosen on the step the bar sits above, and a processing
+   * provider adds the Video step. A bar read off the live selection therefore
+   * resized every segment the instant a row was clicked — three flex segments
+   * became four, every boundary jumped, and the page underneath had not
+   * changed. It moved on mount too, the moment the default provider landed.
+   *
+   * So the bar measures the flow you have ENTERED: committed by the step
+   * transition that leaves the provider step, which is the only place the kind
+   * can still change.
+   *
+   * A preset and a `?source=` link are the two exceptions, and they are the
+   * same exception: both decide the flow before the first paint, so the bar
+   * can be built at the right length instead of resizing into it.
+   */
+  const [progressKind, setProgressKind] = useState<ProviderKind>(() => {
+    if (preset && !preset.supportsVideo) return "import";
+    if (initialProvider) return getProviderKind(initialProvider);
+    return DEFAULT_PROVIDER_KIND;
+  });
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(
+    null,
+  );
+  const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
+  const [isOver, setIsOver] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isPrivateMatch] = useState(true);
+  const [formData, setFormData] = useState<MatchFormData>(getDefaultFormData);
+  /**
+   * Must step 1 ask WHO PLAYED? Only a team workspace with no preset: the
+   * personal wizard's uploader IS the player, and a preset arrives with the
+   * answer. When true, `matchSubject` gates Continue on the provider step —
+   * a match created without it belongs to nobody's season, or worse, to the
+   * wrong person's.
+   */
+  const askWhoPlayed = !preset && activeWorkspace.kind === "team";
+  /**
+   * Seeded from a `?player=` link, which is initial state and not a
+   * synchronisation problem: the answer is known before the first paint, so
+   * nothing has to run after mount to install it.
+   */
+  const [matchSubject, setMatchSubject] = useState<MatchSubject | null>(
+    initialSubject ?? null,
+  );
+  /**
+   * The same answer, readable from a callback that outlives the render it was
+   * scheduled in.
+   *
+   * The profile read below resolves whenever the network says so, and what it
+   * must not do is attach the UPLOADER's handedness to a roster athlete. Asking
+   * "which subject is chosen right now" at the moment it lands is
+   * order-independent; the alternative — guarding at each place a subject is
+   * written — needs a new clause per path and fails silently when one is
+   * missed (correct name, someone else's handedness).
+   */
+  const matchSubjectRef = useRef<MatchSubject | null>(initialSubject ?? null);
+  /**
+   * A seeded player's name, as a primitive.
+   *
+   * The effect below reads it, and depending on the prop OBJECT instead would
+   * re-run that whole effect — three localStorage reads, a step reset and two
+   * network round trips — every time this Server Component re-renders and
+   * mints a fresh but identical seed.
+   */
+  const seededPlayerName = initialSubject?.name ?? null;
+  const applyMatchSubject = useCallback((subject: MatchSubject | null) => {
+    matchSubjectRef.current = subject;
+    setMatchSubject(subject);
+  }, []);
+  /**
+   * The eligible roster, for the who-played picker and for checking a
+   * preset's player. Null while loading and after a failed load —
+   * `rosterLoadFailed` says which, and `uploadEligibility()` refuses both as
+   * `roster-unknown` (retryable) rather than passing anyone.
+   */
+  const [teamRoster, setTeamRoster] = useState<RosterOption[] | null>(null);
+  const [rosterLoadFailed, setRosterLoadFailed] = useState(false);
+  /** Bumped by `reloadRoster()`; the roster effect depends on it. */
+  const [rosterAttempt, setRosterAttempt] = useState(0);
+  /** The uploader's profile name, for the personal wizard's "You" label. */
+  const [uploaderName, setUploaderName] = useState<string | null>(null);
+  // The lineup slot the schedule offered and the person accepted (3d/7a).
+  // Its fields are filled into the form, and the values they replaced are
+  // kept so Detach can put them back without touching anything typed since.
+  const [attachedLine, setAttachedLine] = useState<LineOffer | null>(null);
+  // A parse can finish after attaching or detaching a line. Read its current
+  // scoring declaration, not the line from when the file was picked.
+  const attachedLineRef = useRef<LineOffer | null>(null);
+  const detachSnapshot = useRef<Partial<MatchFormData> | null>(null);
+  // The draft row this flow writes to. Minted on the first Save draft, or
+  // carried in by a resume.
+  const [draftId, setDraftId] = useState<string | null>(draft?.id ?? null);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
+  const [lastChangedAt, setLastChangedAt] = useState<number | null>(null);
+  const [parsingState, setParsingState] = useState<ParsingState>({
+    isParsing: false,
+    parseError: null,
+    parseWarnings: [],
+    parseSuccess: false,
+  });
+
+  // Video-analysis state. Only populated for processing providers; the probe
+  // result is kept so the Video step can show the user why their file passed
+  // and the trim rail knows the true duration.
+  const [videoProbe, setVideoProbe] = useState<VideoProbeSummary | null>(null);
+  const [videoWarnings, setVideoWarnings] = useState<string[]>([]);
+  const [isProbing, setIsProbing] = useState(false);
+  // The picked File itself rides along on `uploadedFile.file`, held in memory
+  // only — a File cannot be serialised to localStorage, so a resumed draft
+  // requires re-picking the video.
+
+  // Every pick (including a re-picked draft file) is a new parse generation.
+  // Invalidate before the first await, so an older validation or parse cannot
+  // replace the new file, its names, errors, or busy state.
+  const fileGenerationRef = useRef(0);
+  /**
+   * In-flight guard for {@link handleCreateMatch}.
+   *
+   * `isCreating` is state, so it cannot disable the Continue button within
+   * the tick a click arrives in — and since T13 the handler awaits a fresh
+   * `programs.status` read before it ever reaches `setIsCreating(true)`. A
+   * second click during that round trip would re-enter and, if both
+   * eligibility rechecks pass, file the same match twice. A ref closes the
+   * window synchronously; `isCreating` still drives what the button looks
+   * like.
+   */
+  const creatingRef = useRef(false);
+  const [parsedImport, setParsedImport] = useState<{
+    generation: number;
+    playerName: string;
+    opponentName: string;
+  } | null>(null);
+  const [identityAnswer, setIdentityAnswer] = useState<{
+    key: string;
+    confirmed: boolean;
+  } | null>(null);
+  const resetIdentityAnswer = useCallback(() => setIdentityAnswer(null), []);
+  const resetFileGeneration = useCallback(() => {
+    const generation = ++fileGenerationRef.current;
+    setParsedImport(null);
+    setIdentityAnswer(null);
+    setUploadedFile(null);
+    setUploadError(null);
+    setIsUploading(false);
+    setIsProbing(false);
+    setParsingState({
+      isParsing: false,
+      parseError: null,
+      parseWarnings: [],
+      parseSuccess: false,
+    });
+    return generation;
+  }, []);
+
+  // Which flow we're in. Falls back to the import order before a provider is
+  // chosen, which is correct: the Provider step is shared by both.
+  const providerKind: ProviderKind = selectedProvider
+    ? getProviderKind(selectedProvider)
+    : "import";
+  // STEP_ORDER_BY_KIND is a module const, so indexing it already returns a
+  // stable reference — memoizing would allocate a closure to prevent an
+  // identity change that cannot happen.
+  const stepOrder = STEP_ORDER_BY_KIND[providerKind];
+  const isProcessingProvider = providerKind === "processing";
+
+  // Compare against the selected identity, never the editable display field.
+  // Viewer data is server-provided and also exists on preset/draft paths that
+  // skip the optional profile-prefill request below. In a team workspace with
+  // nothing chosen this is null and "", not the viewer — see
+  // `identityAthleteFor` for why the confirmation key must not hold a login.
+  const { id: identityAthleteId, name: identityAthleteName } =
+    identityAthleteFor({
+      workspace: activeWorkspace,
+      viewer,
+      preset,
+      subject: matchSubject,
+    });
+  const identityComparison = parsedImport
+    ? evaluateImportedIdentityMatch({
+        athleteId: identityAthleteId,
+        importedAthleteId: null,
+        athleteName: identityAthleteName ?? "",
+        importedName: parsedImport.playerName,
+      })
+    : null;
+  const identityKey =
+    identityComparison && parsedImport
+      ? buildImportIdentityConfirmationKey({
+          ...identityComparison,
+          workspaceId: `${activeWorkspace.kind}:${activeWorkspace.id}`,
+          fileGenerationId: `${selectedProvider}:${parsedImport.generation}`,
+        })
+      : null;
+  const identityConfirmed =
+    identityKey !== null &&
+    identityAnswer?.key === identityKey &&
+    identityAnswer.confirmed;
+  const identityRejected =
+    identityKey !== null &&
+    identityAnswer?.key === identityKey &&
+    !identityAnswer.confirmed;
+  const importIdentityBlocked =
+    !isProcessingProvider &&
+    (!parsedImport ||
+      !parsingState.parseSuccess ||
+      identityRejected ||
+      (identityComparison?.requiresConfirmation === true &&
+        !identityConfirmed) ||
+      (askWhoPlayed && !matchSubject));
+  const identityMessage = !importIdentityBlocked
+    ? null
+    : identityRejected
+      ? "Choose a different file or player. The selected athlete must be player 1 in the export."
+      : !parsedImport
+        ? "Choose a file and wait for its player names to be read."
+        : askWhoPlayed && !matchSubject
+          ? "Choose the player this match belongs to."
+          : "Confirm that player 1 in this export is the selected athlete before continuing.";
+  const confirmImportIdentity = useCallback(() => {
+    if (
+      !identityKey ||
+      !parsedImport ||
+      parsedImport.generation !== fileGenerationRef.current ||
+      (askWhoPlayed && !matchSubject)
+    )
+      return;
+    setIdentityAnswer({ key: identityKey, confirmed: true });
+    setError(null);
+  }, [identityKey, parsedImport, askWhoPlayed, matchSubject]);
+  const rejectImportIdentity = useCallback(() => {
+    if (
+      !identityKey ||
+      !parsedImport ||
+      parsedImport.generation !== fileGenerationRef.current
+    )
+      return;
+    setIdentityAnswer({ key: identityKey, confirmed: false });
+  }, [identityKey, parsedImport]);
+
+  // A workspace/preset switch must not carry file results into a different
+  // event or revive a confirmation when the user switches back. Form values
+  // remain under the existing event seeding rules.
+  useEffect(() => {
+    resetFileGeneration();
+    return () => {
+      fileGenerationRef.current += 1;
+    };
+  }, [
+    open,
+    activeWorkspace.id,
+    activeWorkspace.kind,
+    preset?.entryId,
+    draft?.id,
+    resetFileGeneration,
+  ]);
+  useEffect(() => {
+    resetIdentityAnswer();
+  }, [identityAthleteId, identityAthleteName, resetIdentityAnswer]);
+
+  /**
+   * The allowance this upload will be billed against.
+   *
+   * Keyed by the ACTIVE WORKSPACE, not the signed-in user: `Workspace.id` is
+   * `processing_usage.account_id` — the user's id for a personal workspace, the
+   * program's for a team one — and the two tiers have different caps. Reading
+   * the personal ledger while a coach sits in a program showed 2 hours against
+   * a 75-hour budget.
+   */
+  const quotaAccountType = accountTypeFor(activeWorkspace);
+  // Cap by tier, not by ledger: a custom org files under the program ledger
+  // (`quotaAccountType` above, which the remaining-quota read filters on) but
+  // draws the individual figure until a paid plan raises it — quotaTierFor().
+  const quotaCapSeconds = monthlyCapSecondsFor(activeWorkspace);
+  // "Sep 1". Settings › Usage already answers "when does this come back" from
+  // the same billing-month key, so the wizard asks it rather than re-deriving.
+  const quotaResetsOn = formatResetDate(currentBillingMonth());
+
+  /**
+   * Seconds left in this month's allowance, for the trim step's cost warning
+   * and the footer meter.
+   *
+   * Advisory only — reserve_processing_quota() is still the authority and
+   * refuses with a 429 at submit time. This mirrors its arithmetic exactly:
+   * unreleased rows for the current month, actual_seconds where a job finished
+   * and the reservation standing in until then. Getting it wrong here shows a
+   * misleading number; it cannot let anything through.
+   */
+  const [remainingQuotaSeconds, setRemainingQuotaSeconds] = useState<
+    number | undefined
+  >(undefined);
+
+  useEffect(() => {
+    if (!isProcessingProvider) return;
+    let cancelled = false;
+
+    (async () => {
+      const { data, error } = await supabase
+        .from("processing_usage")
+        .select("reserved_seconds, actual_seconds")
+        .eq("account_id", activeWorkspace.id)
+        .eq("account_type", quotaAccountType)
+        .eq("billing_month", currentBillingMonth())
+        .eq("released", false);
+
+      if (error || cancelled) return;
+
+      const used = (data ?? []).reduce(
+        (n, row) => n + (row.actual_seconds ?? row.reserved_seconds ?? 0),
+        0,
+      );
+      setRemainingQuotaSeconds(Math.max(0, quotaCapSeconds - used));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isProcessingProvider,
+    supabase,
+    activeWorkspace.id,
+    quotaAccountType,
+    quotaCapSeconds,
+  ]);
+
+  // Media rules, trim floor and billing all come from the provider rather than
+  // from a vendor config the wizard imports directly — the wizard is written
+  // against `kind`, so it must not know whose thresholds these are.
+  const processingStrategy =
+    selectedProvider && isProcessingProvider
+      ? (getProviderStrategy(selectedProvider) as IProcessingProviderStrategy)
+      : null;
+
+  // Cached on modal open so handleCreateMatch doesn't pay an auth round-trip
+  // at click time. Why: getUser() can take 100–300ms over the network and the
+  // user has been authenticated since they opened the dashboard.
+  const cachedUserIdRef = useRef<string | null>(null);
+  /** Whether a preset has seeded the step yet — see the preset branch below. */
+  const seededRef = useRef(false);
+
+  // The wizard autosaves as you answer (design 11c): every change lands in
+  // localStorage a moment later, and the header says so. A draft ROW is
+  // written only by Save draft — the footer action decides where you go, not
+  // whether the answers are kept.
+  useEffect(() => {
+    if (!open) return;
+    const handle = window.setTimeout(() => {
+      saveFormDataToStorage(formData);
+      setLastChangedAt(Date.now());
+    }, 400);
+    return () => window.clearTimeout(handle);
+  }, [open, formData]);
+
+  const saveDraft = useCallback(async (): Promise<boolean> => {
+    const id = draftId ?? crypto.randomUUID();
+    const order = STEP_ORDER_BY_KIND[progressKind];
+    setDraftSaving(true);
+    try {
+      const saved = await saveMatchDraft({
+        id,
+        step,
+        stepIndex: Math.max(0, order.indexOf(step)),
+        stepCount: order.length,
+        provider: selectedProvider,
+        formData,
+        fileName: uploadedFile?.name ?? null,
+        preset: preset ?? null,
+        attachedLine,
+      });
+      if (!saved) {
+        // Every reason `saveMatchDraft` returns null — no workspace context,
+        // no signed-in user, an RLS refusal, a database error — reaches the
+        // person as the same sentence, because the answer is the same one:
+        // nothing durable was written, the answers are still here, try again.
+        setDraftSaveError(
+          "We couldn't save your draft. Your answers are still here — try again.",
+        );
+        return false;
+      }
+      setDraftId(saved.id);
+      setDraftSaveError(null);
+      return true;
+    } finally {
+      setDraftSaving(false);
+    }
+  }, [
+    draftId,
+    progressKind,
+    step,
+    selectedProvider,
+    formData,
+    uploadedFile,
+    preset,
+    attachedLine,
+  ]);
+
+  // Load data from localStorage when modal opens
+  useEffect(() => {
+    if (!open) return;
+
+    // A draft kept by "Save draft" has been picked back up, so the next
+    // departure from the wizard clears storage the ordinary way again. Before
+    // the preset early-return below: the footer offers Save draft on a preset
+    // flow too, and a flag left standing there would stop the shell clearing
+    // storage on every later exit.
+    localStorage.removeItem(STORAGE_KEYS.DRAFT_KEPT);
+
+    // A team upload never resumes a personal draft. The line it is filling is
+    // named in the URL, and restoring a half-finished personal match over it
+    // would put another player's opponent and score on somebody else's court.
+    if (preset) {
+      // This is where a preset answers the source question implicitly, which
+      // is why it may only be built where the answer is a fact — see the bar
+      // on `EventPreset`. `job-request.ts` refusing a doubles line is what
+      // makes `supportsVideo: false` one.
+      const presetProvider = preset.supportsVideo
+        ? DEFAULT_PROVIDER_ID
+        : DEFAULT_IMPORT_PROVIDER_ID;
+      setSelectedProvider(presetProvider);
+      setFormData((prev) => ({
+        ...prev,
+        ...(draft?.formData ?? {}),
+        eventName: preset.eventName ?? "",
+        eventKind: preset.eventKind ?? prev.eventKind,
+        round: preset.round ?? "",
+        playerName: preset.playerName,
+        opponentName: preset.opponentName,
+        opponentSource: preset.opponentName ? ("event" as const) : undefined,
+        date: preset.date,
+        dateSource: "event" as const,
+        courtType: preset.surface
+          ? surfaceToCourtType(preset.surface)
+          : prev.courtType,
+        bestOf: String(preset.bestOf),
+        adScoring: preset.adScoring ?? undefined,
+        matchType:
+          preset.eventKind === "dual"
+            ? "Dual Match"
+            : preset.eventKind === "tournament"
+              ? "Tournament"
+              : preset.supportsVideo
+                ? "Singles"
+                : "Doubles",
+        opponentProgramKey: preset.opponentProgramKey ?? undefined,
+        opponentSchool: preset.opponentSchool ?? undefined,
+        ...(preset.score
+          ? {
+              playerScores: preset.score.player1,
+              opponentScores: preset.score.player2,
+              numberOfSets: preset.score.player1.length,
+            }
+          : {}),
+      }));
+      // A line arrives with step 1 answered, so the flow opens on the file
+      // (design 7b). Only on the first seed: switching lines from the pinned
+      // bar re-runs this effect and must leave the step where it is.
+      if (!seededRef.current) {
+        seededRef.current = true;
+        setProgressKind(preset.supportsVideo ? "processing" : "import");
+        setStep("file");
+      }
+      return;
+    }
+
+    // A draft being resumed outranks whatever localStorage has: it is the
+    // explicit thing the person clicked Resume on.
+    if (draft) {
+      const draftProvider =
+        draft.provider && isProviderSupported(draft.provider)
+          ? (draft.provider as ProviderId)
+          : DEFAULT_PROVIDER_ID;
+      setSelectedProvider(draftProvider);
+      setFormData({ ...getDefaultFormData(), ...draft.formData });
+      if (draft.attachedLine) {
+        attachedLineRef.current = draft.attachedLine;
+        setAttachedLine(draft.attachedLine);
+      }
+      if (draftProvider) {
+        const kind = getProviderKind(draftProvider);
+        setProgressKind(kind);
+        // The file never survives a draft, so resume lands where it is picked
+        // again — never past it, whatever step the draft recorded. Nor does
+        // the who-played answer, so a team draft lands one step earlier, on
+        // the picker: see `draftResumeStep`.
+        setStep(draftResumeStep(askWhoPlayed));
+      }
+      return;
+    }
+
+    const existingProvider = localStorage.getItem(
+      STORAGE_KEYS.SELECTED_PROVIDER,
+    );
+    let resumedProvider = false;
+    if (initialProvider) {
+      // The link named a source. It outranks the stored one — that is a stale
+      // choice, this is the one just made — and the step still opens, because
+      // it carries two answers besides this one. The progress bar was already
+      // built at this kind's length in the initialiser above, so nothing here
+      // resizes it.
+      setSelectedProvider(initialProvider);
+    } else if (existingProvider && isProviderSupported(existingProvider)) {
+      setSelectedProvider(existingProvider as ProviderId);
+      resumedProvider = true;
+    } else if (DEFAULT_PROVIDER_ID) {
+      // Your own video is the default source — it is what most people came to
+      // do, and the alternative is an import from somewhere else. Deliberately
+      // NOT written to storage: a default is not a choice, and persisting it
+      // would make the next visit resume past the step that offers it.
+      setSelectedProvider(DEFAULT_PROVIDER_ID);
+    }
+
+    const storedFormData = loadFormDataFromStorage();
+    if (storedFormData || seededPlayerName) {
+      // Merge over defaults so newly added fields (e.g. player hand/backhand)
+      // pick up their preselected values when stored data predates them.
+      //
+      // A seeded player's name outranks the stored one, and last: storage can
+      // hold whoever the previous visit was for, and a name left disagreeing
+      // with the id chosen in the For field is the mismatch the details step
+      // exists to make impossible.
+      setFormData({
+        ...getDefaultFormData(),
+        ...storedFormData,
+        ...(seededPlayerName ? { playerName: seededPlayerName } : {}),
+      });
+    }
+
+    const storedFile = loadUploadedFileFromStorage();
+    if (storedFile) {
+      setUploadedFile(storedFile);
+    }
+
+    // Resume past Provider when the user previously got that far — otherwise an
+    // accidental close means a wasted click on reopen. Both kinds resume on the
+    // file step: the File can't be persisted, so it has to be picked again.
+    //
+    // NOT in a team workspace: the who-played answer lives only in memory, so a
+    // resumed draft that skipped the provider step would create a match with
+    // nobody chosen — or silently fall back to the uploader, which is exactly
+    // the attribution bug this question exists to prevent. The provider choice
+    // itself still resumes; only the step does not jump.
+    if (resumedProvider && existingProvider && !askWhoPlayed) {
+      const resumedKind = getProviderKind(existingProvider as ProviderId);
+      setProgressKind(resumedKind);
+      setStep(STEP_ORDER_BY_KIND[resumedKind][1]);
+    } else {
+      // A `?source=` link keeps the kind the initialiser already built the bar
+      // at; everything else starts on the default flow. Writing the default
+      // unconditionally here was what made a linked import wizard count four
+      // steps and then drop to three on the first Continue.
+      setProgressKind(
+        initialProvider
+          ? getProviderKind(initialProvider)
+          : DEFAULT_PROVIDER_KIND,
+      );
+      setStep("provider");
+    }
+
+    // Prefill the user's own name from their profile so a returning player
+    // doesn't retype it for every match. Skips if any stored data exists for
+    // playerName (the user has already typed something they want preserved).
+    let cancelled = false;
+    (async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (cancelled || !user) return;
+        cachedUserIdRef.current = user.id;
+        const { data: profile } = await supabase
+          .from("users")
+          .select("first_name, last_name, hand, backhand")
+          .eq("id", user.id)
+          .single();
+        if (cancelled) return;
+        const fullName = [profile?.first_name, profile?.last_name]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+        // Kept regardless of whether the prefill below applies — the
+        // who-played picker's "Myself" row reads it back.
+        setUploaderName(fullName || null);
+        // The uploader's own hand and backhand, "from your profile". Only
+        // where the form has none yet, and only where the match is still the
+        // uploader's own — a coach's profile says nothing about the athlete
+        // they upload for. The subject is read from the ref at the moment this
+        // resolves rather than tested per seeding path: a link's pick and a
+        // coach picking a row while this request was in flight are the same
+        // fact by then, and the second was landing the coach's handedness on
+        // the athlete before this line read it.
+        const hand =
+          profile?.hand === "right" || profile?.hand === "left"
+            ? profile.hand
+            : undefined;
+        const backhand =
+          profile?.backhand === "one-handed" ||
+          profile?.backhand === "two-handed"
+            ? profile.backhand
+            : undefined;
+        setFormData((prev) => ({
+          ...prev,
+          playerName:
+            prev.playerName.trim() || !fullName ? prev.playerName : fullName,
+          ...(matchSubjectRef.current?.kind !== "roster" &&
+          prev.playerHand === undefined &&
+          prev.playerBackhand === undefined &&
+          (hand || backhand)
+            ? {
+                playerHand: hand,
+                playerBackhand: backhand,
+                playerStyleSource: "profile" as const,
+              }
+            : {}),
+        }));
+      } catch {
+        // Profile prefill is purely a convenience — a fetch failure shouldn't surface.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, supabase, preset, draft, askWhoPlayed, seededPlayerName]);
+
+  /**
+   * The workspace an EXISTING match belongs to — pinned the moment a preset
+   * or an accepted line first names one (`matchId`), and never re-read from
+   * the live switcher after that.
+   *
+   * The workspace switcher can change `activeWorkspace` on this same mounted
+   * page without navigating away (`setActiveWorkspaceInPlace`), so a coach
+   * who reuses a scored line and then switches programs would otherwise have
+   * that match's roster, approval and attribution re-decided against the
+   * NEWLY selected program — the client repeating the mistake T15/T16 fixed
+   * server-side with `billingWorkspaceFor(match.program_id)`. Cleared the
+   * moment nothing existing is in play (no `matchId`), so a fresh preset or a
+   * detached line still tracks the live workspace like any other new upload.
+   *
+   * Set from an effect, not during render — a ref read/write while
+   * rendering is what `react-hooks/refs` exists to catch, since it can
+   * silently disagree with what actually painted. The one-render lag this
+   * costs is free: on the render where an existing match FIRST appears,
+   * `activeWorkspace` and the eventual pin are the same workspace anyway: no
+   * switch has happened yet.
+   */
+  const activeWorkspaceRef = useRef(activeWorkspace);
+  useEffect(() => {
+    activeWorkspaceRef.current = activeWorkspace;
+  }, [activeWorkspace]);
+  const existingMatchId = (preset ?? attachedLine)?.matchId ?? null;
+  const [pinnedMatchWorkspace, setPinnedMatchWorkspace] =
+    useState<Workspace | null>(null);
+  useEffect(() => {
+    if (existingMatchId) {
+      setPinnedMatchWorkspace((prev) => prev ?? activeWorkspaceRef.current);
+    } else {
+      setPinnedMatchWorkspace((prev) => (prev === null ? prev : null));
+    }
+  }, [existingMatchId]);
+  /**
+   * The workspace eligibility, the roster fetch and the who-played reset all
+   * reason about — the pinned one while an existing match is in play, the
+   * live one otherwise.
+   */
+  const eligibilityWorkspace = pinnedMatchWorkspace ?? activeWorkspace;
+
+  /**
+   * A fresher `programs.status` than `eligibilityWorkspace` carries — the
+   * `approval` input `wizardUploadEligibility()` documents. `undefined`
+   * trusts the workspace's own; `"unknown"` is a read that failed, which
+   * blocks with `retryable: true` rather than falling back to a stale pass.
+   * Reset whenever the eligibility workspace changes, so a pending program
+   * A's fresh "active" reading can never survive as program B's.
+   */
+  const [approvalReading, setApprovalReading] = useState<
+    ProgramApprovalReading | undefined
+  >(undefined);
+  useEffect(() => {
+    setApprovalReading(undefined);
+  }, [eligibilityWorkspace.id]);
+  /** Guards a slow read from clobbering a faster, later one. */
+  const approvalRequestRef = useRef(0);
+  /**
+   * Re-read the program's live status. Returns the reading (not only sets
+   * it) so `handleCreateMatch` can decide on THIS call's answer rather than
+   * the state it schedules — the two can disagree by a render.
+   */
+  const refreshApproval = useCallback(async (): Promise<
+    ProgramApprovalReading | undefined
+  > => {
+    if (eligibilityWorkspace.kind !== "team") return undefined;
+    const programId = eligibilityWorkspace.id;
+    const token = ++approvalRequestRef.current;
+    const { data, error: statusError } = await supabase
+      .from("programs")
+      .select("status")
+      .eq("id", programId)
+      .maybeSingle();
+    const reading: ProgramApprovalReading =
+      statusError || !data
+        ? "unknown"
+        : (data.status as ProgramApprovalReading);
+    if (approvalRequestRef.current === token) setApprovalReading(reading);
+    return reading;
+  }, [eligibilityWorkspace.kind, eligibilityWorkspace.id, supabase]);
+  /**
+   * "Returning to the page" re-check: a program's approval can change while
+   * this tab sits in the background (a claim gets approved, or a violation
+   * suspends it), and the workspace's own `programStatus` is only as fresh
+   * as the request that built it. Re-reading when the tab regains focus
+   * means an approval granted while the coach was away lifts the notice
+   * without a manual reload, and a suspension does not keep offering
+   * Continue on a stale "active".
+   */
+  useEffect(() => {
+    if (!open || eligibilityWorkspace.kind !== "team") return;
+    // Guarded, not assumed: the wizard hook specs run it outside a DOM
+    // (`tests/fixtures/upload-wizard-hook.ts` executes real effects with no
+    // `document`/`window`), and this re-check is a nicety on top of the
+    // submit-time reread below, not something either environment may crash
+    // without.
+    if (typeof document === "undefined" || typeof window === "undefined")
+      return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshApproval();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [open, eligibilityWorkspace.kind, refreshApproval]);
+
+  /**
+   * The eligible roster — behind the who-played picker, and behind the check
+   * a preset's player gets before anything is written.
+   *
+   * Fetched through the same SECURITY DEFINER RPC the ladder page uses
+   * (`program_roster_full`), which returns nothing to a non-member — so a
+   * stale workspace cannot leak another program's names. The filter, name
+   * fallback and ladder sort are `rosterPlayerOptions()` in
+   * `lib/data/roster-shared.ts`, shared with `getLadder()` so the two RPC
+   * consumers cannot drift.
+   *
+   * Plus one direct read of `program_players`: the viewer's own live profile
+   * on this program. The RPC's player arm drops a profile claimed by staff,
+   * so an owner or coach who also plays would otherwise have no row of their
+   * own to pick — and no "Myself" to fall back on, since that is exactly the
+   * fallback this wizard no longer has. `eligibleRosterOptions()` folds it in
+   * on the same terms as everyone else. Readable under the roster's own
+   * SELECT policy (`program_id in user_program_ids()`).
+   *
+   * A failed RPC leaves the roster NULL and flags it, rather than reading as
+   * an empty program: `uploadEligibility()` refuses on null as
+   * `roster-unknown` (retryable), and `reloadRoster()` asks again. Runs for
+   * every team workspace, preset or not — a preset's player is checked
+   * against this list too.
+   */
+  useEffect(() => {
+    if (!open || eligibilityWorkspace.kind !== "team") return;
+    let cancelled = false;
+
+    (async () => {
+      // The open invitations ride along so the picker can show who has been
+      // asked but has not yet claimed their profile. Staff-only under RLS: a
+      // player's read returns nothing, and the rows render without the state.
+      const [
+        { data, error: rosterError },
+        { data: invites },
+        { data: ownRows },
+      ] = await Promise.all([
+        supabase.rpc("program_roster_full", {
+          p_program_id: eligibilityWorkspace.id,
+        }),
+        supabase
+          .from("program_invites")
+          .select("player_id, email")
+          .eq("program_id", eligibilityWorkspace.id)
+          .is("accepted_at", null),
+        supabase
+          .from("program_players")
+          .select(
+            "id, program_id, first_name, last_name, email, class_year, lineup_spot, claimed_by_user_id",
+          )
+          .eq("program_id", eligibilityWorkspace.id)
+          .eq("claimed_by_user_id", viewer.id)
+          .is("archived_at", null)
+          .is("merged_into_id", null)
+          .limit(1),
+      ]);
+      if (cancelled) return;
+
+      if (rosterError) {
+        console.error("[wizard] could not load the roster", {
+          error: rosterError.message,
+        });
+        setTeamRoster(null);
+        setRosterLoadFailed(true);
+        return;
+      }
+
+      const invitedByPlayer = new Map<string, string>();
+      for (const invite of (invites ?? []) as {
+        player_id: string | null;
+        email: string;
+      }[]) {
+        if (invite.player_id)
+          invitedByPlayer.set(invite.player_id, invite.email);
+      }
+
+      const own = ((ownRows ?? []) as OwnProfileRow[])[0] ?? null;
+      setRosterLoadFailed(false);
+      setTeamRoster(
+        eligibleRosterOptions(
+          (data ?? []) as RosterFullRow[],
+          own,
+          eligibilityWorkspace.id,
+          viewer.id,
+        ).map((row) => ({
+          ...row,
+          invitedEmail: invitedByPlayer.get(row.playerId) ?? null,
+        })),
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    open,
+    eligibilityWorkspace.kind,
+    eligibilityWorkspace.id,
+    viewer.id,
+    supabase,
+    rosterAttempt,
+  ]);
+
+  /**
+   * Reset the who-played answer when the workspace CHANGES while the wizard is
+   * open — a stale matchSubject from workspace A would otherwise write that
+   * program's player1_id into workspace B's match row.
+   *
+   * The id is compared against the last one this ran for rather than keyed on
+   * alone, because an effect keyed on `eligibilityWorkspace.id` also fires on
+   * mount, where nothing has changed. That extra fire is not free: it clears
+   * an answer a `?player=` link had already installed as initial state, which
+   * made the seed depend on being written by a later-declared effect — the
+   * feature held in place by source order inside a 2,000-line hook, with no
+   * type error and no test if anyone reordered it.
+   *
+   * Keyed on `eligibilityWorkspace`, not the raw switcher: while an existing
+   * match pins that value, a live workspace switch must not clear the answer
+   * out from under it (see `pinnedMatchWorkspace` above).
+   */
+  const subjectWorkspaceRef = useRef(eligibilityWorkspace.id);
+  useEffect(() => {
+    if (!open) return;
+    if (subjectWorkspaceRef.current === eligibilityWorkspace.id) return;
+    subjectWorkspaceRef.current = eligibilityWorkspace.id;
+    applyMatchSubject(null);
+    setTeamRoster(null);
+  }, [open, eligibilityWorkspace.id, applyMatchSubject]);
+
+  /**
+   * A subject the loaded roster does not have returns to selection.
+   *
+   * Covers the seeds and the survivors: a `?player=` link the server checked
+   * against a roster that has since changed, a pick made while the roster was
+   * still loading, a profile archived or merged while the wizard sat open,
+   * and — after `reloadRoster()` — anyone the fresh list no longer names.
+   * The answer becomes null and the picker asks again. It never becomes the
+   * uploader: `rosterSubjectOrNull` has no such branch.
+   */
+  useEffect(() => {
+    if (!open || eligibilityWorkspace.kind !== "team" || preset) return;
+    const current = matchSubjectRef.current;
+    if (rosterSubjectOrNull(current, teamRoster) !== current) {
+      applyMatchSubject(null);
+    }
+  }, [open, eligibilityWorkspace.kind, preset, teamRoster, applyMatchSubject]);
+
+  const reloadRoster = useCallback(() => {
+    setRosterLoadFailed(false);
+    setTeamRoster(null);
+    setRosterAttempt((n) => n + 1);
+  }, []);
+
+  /**
+   * May this match be recorded here, and for whom. Asked fresh on every
+   * render from the live state, so a handler cannot read a stale answer, and
+   * exposed on the return so the page can show the same sentence.
+   *
+   * `attachesToLine` is true only for a NEW row that will carry
+   * `event_entry_id` — filling a line's existing match is an update the
+   * regraft trigger does not gate on staff, and neither does this.
+   */
+  const lineTarget = preset ?? attachedLine;
+  /**
+   * Every input `wizardUploadEligibility()` needs except the approval
+   * reading — shared between the live memo below and `handleCreateMatch`'s
+   * fresh re-check, so the two can never build the decision from different
+   * facts. `workspace` is `eligibilityWorkspace`, not the raw switcher — see
+   * `pinnedMatchWorkspace` above.
+   */
+  const eligibilityInput = useMemo(
+    () => ({
+      workspace: eligibilityWorkspace,
+      viewerId: viewer.id,
+      preset,
+      subject: matchSubject,
+      roster: eligibilityWorkspace.kind === "team" ? teamRoster : undefined,
+      attachesToLine: Boolean(lineTarget?.entryId) && !lineTarget?.matchId,
+    }),
+    [
+      eligibilityWorkspace,
+      viewer.id,
+      preset,
+      matchSubject,
+      teamRoster,
+      lineTarget,
+    ],
+  );
+  const eligibility = useMemo(
+    () =>
+      wizardUploadEligibility({
+        ...eligibilityInput,
+        approval: approvalReading,
+      }),
+    [eligibilityInput, approvalReading],
+  );
+  /**
+   * Retry a retryable refusal — re-reads whichever lookup failed (the
+   * program's approval, or the roster) without touching anything else. A
+   * no-op for a decided refusal (`retryable: false`): the fix there is
+   * changing something, not asking again.
+   */
+  const retryEligibility = useCallback(() => {
+    if (eligibility.ok || !eligibility.retryable) return;
+    if (eligibility.reason === "approval-unknown") {
+      void refreshApproval();
+    } else if (eligibility.reason === "roster-unknown") {
+      reloadRoster();
+    }
+  }, [eligibility, refreshApproval, reloadRoster]);
+
+  /**
+   * Record the answer AND pre-fill the player-name field from it, so the
+   * details step shows the name already settled instead of asking again.
+   *
+   * The id travels with the choice, never with the text: a name is not
+   * evidence of an identity, and `player1_id` is half the SELECT policy on
+   * `matches`.
+   *
+   * In a team workspace only a roster player can be installed: `self` is
+   * refused outright (a staff login is not an athlete, and the picker no
+   * longer offers it), and a roster id the loaded list does not carry is
+   * refused too. A pick made before the list has loaded is accepted and
+   * re-checked by the effect above once it has.
+   */
+  const chooseMatchSubject = useCallback(
+    (subject: MatchSubject) => {
+      if (eligibilityWorkspace.kind === "team") {
+        if (subject.kind !== "roster") return;
+        if (teamRoster && rosterSubjectOrNull(subject, teamRoster) === null)
+          return;
+      }
+      resetIdentityAnswer();
+      applyMatchSubject(subject);
+      setFormData((prev) => ({
+        ...prev,
+        playerName:
+          subject.kind === "roster" ? subject.name : (uploaderName ?? ""),
+        // A profile's hand and backhand belong to the uploader. Picking a
+        // roster player drops them — an owner picking their OWN profile too,
+        // since that row is a roster choice like any other and the details
+        // step reads the profile again for it.
+        ...(prev.playerStyleSource === "profile" && subject.kind === "roster"
+          ? {
+              playerHand: undefined,
+              playerBackhand: undefined,
+              playerStyleSource: undefined,
+            }
+          : {}),
+      }));
+    },
+    [
+      eligibilityWorkspace.kind,
+      teamRoster,
+      uploaderName,
+      applyMatchSubject,
+      resetIdentityAnswer,
+    ],
+  );
+
+  // Step navigation handlers
+  const handleProviderSelect = useCallback(
+    (providerId: string | null) => {
+      resetFileGeneration();
+      // Validate provider ID before setting
+      if (providerId && isProviderSupported(providerId)) {
+        setSelectedProvider(providerId as ProviderId);
+        localStorage.setItem(STORAGE_KEYS.SELECTED_PROVIDER, providerId);
+      } else {
+        setSelectedProvider(null);
+        localStorage.removeItem(STORAGE_KEYS.SELECTED_PROVIDER);
+      }
+      // Clear any previous upload errors when changing provider
+      setUploadError(null);
+      setUploadedFile(null);
+    },
+    [resetFileGeneration],
+  );
+
+  const handleProviderContinue = useCallback(() => {
+    if (!selectedProvider) return;
+    // Belt as well as braces. The preset above already opens a doubles line on
+    // the import provider, but nothing else stops a processing provider being
+    // selected for one, and the cost of getting it wrong is paid entirely by
+    // the coach — a full video upload, then a 422.
+    if (preset && !preset.supportsVideo && isProcessingProvider) return;
+    // May this match be recorded here, and for whom — the pending program,
+    // the restricted role, the missing or off-roster athlete all stop here,
+    // with the contract's own sentence. A reading not yet obtained (roster
+    // still loading, status unknown) stops too, silently: nothing has been
+    // decided, and the page offers Retry for those rather than an error.
+    if (!eligibility.ok) {
+      if (!eligibility.retryable) setError(eligibility.message);
+      return;
+    }
+    setError(null);
+    // Both kinds drop their file next; the order decides what follows it.
+    setProgressKind(providerKind);
+    setStep(stepOrder[1]);
+  }, [
+    selectedProvider,
+    stepOrder,
+    providerKind,
+    preset,
+    isProcessingProvider,
+    eligibility,
+  ]);
+
+  // Where the file step goes depends on the kind: a video still needs its
+  // check, an export is already read. Derived from the order rather than
+  // hardcoded, like handleBack.
+  const handleFileContinue = useCallback(() => {
+    if (
+      !selectedProvider ||
+      !uploadedFile?.file ||
+      isUploading ||
+      isProbing ||
+      parsingState.isParsing ||
+      uploadError
+    )
+      return;
+    // Asked again here, not only on step 1: a preset opens on this step, and
+    // the roster can have changed under a subject chosen a step ago.
+    if (!eligibility.ok) {
+      if (!eligibility.retryable) setError(eligibility.message);
+      return;
+    }
+    if (
+      importIdentityBlocked ||
+      (!isProcessingProvider &&
+        parsedImport?.generation !== fileGenerationRef.current)
+    ) {
+      setError(identityMessage);
+      return;
+    }
+    setError(null);
+    const index = stepOrder.indexOf("file");
+    if (index >= 0 && index + 1 < stepOrder.length)
+      setStep(stepOrder[index + 1]);
+  }, [
+    stepOrder,
+    selectedProvider,
+    uploadedFile,
+    isUploading,
+    isProbing,
+    parsingState.isParsing,
+    uploadError,
+    eligibility,
+    importIdentityBlocked,
+    isProcessingProvider,
+    parsedImport,
+    identityMessage,
+  ]);
+
+  const handleTrimContinue = useCallback(() => {
+    setStep("match");
+  }, []);
+
+  /**
+   * Pick and validate a video, entirely locally.
+   *
+   * Nothing uploads here. The probe reads resolution, duration and frame rate
+   * from the file itself so an unusable video is refused at pick time rather
+   * than after a twenty-minute upload.
+   */
+  const onVideoPick = useCallback(
+    async (file: File | null) => {
+      if (!file || !selectedProvider) return;
+
+      const generation = resetFileGeneration();
+      setUploadError(null);
+      setVideoWarnings([]);
+      setVideoProbe(null);
+      setUploadedFile(null);
+      setIsProbing(true);
+
+      try {
+        const strategy = getProviderStrategy(selectedProvider);
+        const result: ValidationResult = await strategy.validateFile(file);
+        if (generation !== fileGenerationRef.current) return;
+
+        if (!result.success) {
+          setUploadError(result.error || "This video can't be analysed.");
+          return;
+        }
+
+        const summary = result.details?.video ?? null;
+
+        setVideoProbe(summary);
+        setVideoWarnings(result.warnings ?? []);
+        setUploadedFile({
+          name: file.name,
+          size: formatFileSize(file.size),
+          status: "ready",
+          file,
+          type: file.type,
+        });
+
+        // The recording's own timestamp is the match's date, labelled "from the
+        // file" on the details step. Only where nothing more authoritative set
+        // it: an event line's date outranks the camera's clock.
+        const recorded = new Date(file.lastModified);
+        const fileDate =
+          Number.isFinite(file.lastModified) && file.lastModified > 0
+            ? {
+                date: `${recorded.getFullYear()}-${String(recorded.getMonth() + 1).padStart(2, "0")}-${String(recorded.getDate()).padStart(2, "0")}`,
+                time: `${String(recorded.getHours()).padStart(2, "0")}:${String(recorded.getMinutes()).padStart(2, "0")}`,
+              }
+            : null;
+
+        // Default the trim to the whole video. The user narrows it on the rail;
+        // starting at the full extent means a straight-through flow still submits
+        // a valid window.
+        setFormData((prev) => {
+          const end = summary?.durationSeconds ?? prev.videoEndSeconds;
+          return {
+            ...prev,
+            ...(fileDate && prev.dateSource !== "event"
+              ? { ...fileDate, dateSource: "file" as const }
+              : {}),
+            videoStartSeconds: 0,
+            videoEndSeconds: end,
+            // Same rule as handleTrimChange: the untrimmed clip is the starting
+            // window, so it is also the starting duration. It narrows with the
+            // handles.
+            duration:
+              end !== undefined
+                ? Math.max(0, Math.round(end)) * 1000
+                : prev.duration,
+          };
+        });
+      } catch (err) {
+        if (generation !== fileGenerationRef.current) return;
+        setUploadError(
+          err instanceof Error ? err.message : "Couldn't read this video.",
+        );
+      } finally {
+        if (generation === fileGenerationRef.current) setIsProbing(false);
+      }
+    },
+    [selectedProvider, resetFileGeneration],
+  );
+
+  /** Set the trim window. Values are seconds into the original video. */
+  const handleTrimChange = useCallback(
+    (startSeconds: number, endSeconds: number) => {
+      setFormData((prev) => ({
+        ...prev,
+        videoStartSeconds: startSeconds,
+        videoEndSeconds: endSeconds,
+        // The window IS the match: it was trimmed to the first serve and the
+        // final point, so how long it runs is how long the match took. Typing
+        // that a second time only creates a chance to disagree with the
+        // "analysed window" printed two screens later.
+        duration: Math.max(0, Math.round(endSeconds - startSeconds)) * 1000,
+      }));
+    },
+    [],
+  );
+
+  const handleRemoveVideo = useCallback(() => {
+    resetFileGeneration();
+    setVideoProbe(null);
+    setVideoWarnings([]);
+    setUploadedFile(null);
+    setUploadError(null);
+    setFormData((prev) => ({
+      ...prev,
+      videoStartSeconds: undefined,
+      videoEndSeconds: undefined,
+      // The duration came from the window; without a video there is no window.
+      duration: 0,
+    }));
+  }, [resetFileGeneration]);
+
+  /**
+   * Accept the schedule's offer (design 7a). Six fields fill from the line
+   * and the event; what they replace is kept for Detach. The line's identity
+   * rides on `attachedLine`, which handleCreateMatch reads exactly as it reads
+   * a preset — `event_entry_id` on insert, the existing match on update.
+   */
+  const attachLine = useCallback((offer: LineOffer) => {
+    attachedLineRef.current = offer;
+    setFormData((prev) => {
+      detachSnapshot.current = {
+        opponentName: prev.opponentName,
+        opponentSource: prev.opponentSource,
+        date: prev.date,
+        dateSource: prev.dateSource,
+        courtType: prev.courtType,
+        bestOf: prev.bestOf,
+        adScoring: prev.adScoring,
+        eventName: prev.eventName,
+        eventKind: prev.eventKind,
+        round: prev.round,
+        matchType: prev.matchType,
+        opponentProgramKey: prev.opponentProgramKey,
+        opponentSchool: prev.opponentSchool,
+      };
+      return {
+        ...prev,
+        opponentName: offer.opponentName || prev.opponentName,
+        opponentSource: offer.opponentName
+          ? ("event" as const)
+          : prev.opponentSource,
+        date: offer.date,
+        dateSource: "event" as const,
+        courtType: offer.surface
+          ? surfaceToCourtType(offer.surface)
+          : prev.courtType,
+        bestOf: String(offer.bestOf),
+        // Null stays undefined: the pipeline refuses a job without a real
+        // answer, and a dual that declared nothing has not answered.
+        adScoring: offer.adScoring ?? prev.adScoring,
+        eventName: offer.eventName,
+        eventKind: offer.eventKind,
+        round: offer.slot ?? prev.round,
+        matchType: offer.eventKind === "dual" ? "Dual Match" : "Tournament",
+        opponentProgramKey: offer.opponentProgramKey ?? undefined,
+        opponentSchool: offer.opponentSchool ?? undefined,
+      };
+    });
+    setAttachedLine(offer);
+  }, []);
+
+  const detachLine = useCallback(() => {
+    const snapshot = detachSnapshot.current;
+    detachSnapshot.current = null;
+    attachedLineRef.current = null;
+    setAttachedLine(null);
+    if (snapshot) setFormData((prev) => ({ ...prev, ...snapshot }));
+  }, []);
+
+  // Derived from the active order rather than a hardcoded map, so adding a step
+  // to STEP_ORDER_BY_KIND is the only edit a new flow needs.
+  const firstStep: Step = preset ? "file" : "provider";
+
+  const handleBack = useCallback(() => {
+    const index = stepOrder.indexOf(step);
+    if (index > stepOrder.indexOf(firstStep)) {
+      setStep(stepOrder[index - 1]);
+    }
+  }, [step, stepOrder, firstStep]);
+
+  // Close keeps localStorage intact so an accidental ✕ doesn't destroy in-flight
+  // typing. Storage is cleared only after a successful create (see handleCreateMatch)
+  // or when the user explicitly removes the file. Reopening picks up where they left off.
+  const handleClose = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
+
+  // File handling
+  const onDrop = useCallback(
+    async (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+      if (!selectedProvider) {
+        setUploadError("Please select a provider first");
+        return;
+      }
+
+      const file = files[0];
+      const generation = resetFileGeneration();
+      const isCurrent = () => generation === fileGenerationRef.current;
+
+      // Basic file type validation using provider strategy. Awaited because
+      // processing providers validate asynchronously (they probe media metadata);
+      // awaiting an import provider's synchronous result is a no-op.
+      try {
+        const strategy = getProviderStrategy(selectedProvider);
+        const validationResult: ValidationResult =
+          await strategy.validateFile(file);
+        if (!isCurrent()) return;
+
+        if (!validationResult.success) {
+          setUploadError(validationResult.error || "Invalid file");
+          return;
+        }
+      } catch (err) {
+        if (!isCurrent()) return;
+        setUploadError(err instanceof Error ? err.message : "Validation error");
+        return;
+      }
+
+      // For SwingVision files, validate structure using Python script
+      if (selectedProvider === "swing-vision" && file.name.endsWith(".xlsx")) {
+        setIsUploading(true);
+        setUploadError(null);
+
+        try {
+          // Convert file to base64 for API
+          const reader = new FileReader();
+          const fileData = await new Promise<string>((resolve, reject) => {
+            reader.onload = () => {
+              const result = reader.result as string;
+              resolve(result);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+
+          if (!isCurrent()) return;
+
+          // Call validation API
+          const response = await fetch("/api/validate-file", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              file: fileData,
+              fileName: file.name,
+            }),
+          });
+
+          const validationResult = await response.json();
+          if (!isCurrent()) return;
+
+          if (!validationResult.success) {
+            // Use the error message directly from the API (already formatted)
+            const errorMessage =
+              validationResult.error || "File validation failed";
+            setUploadError(errorMessage);
+            setIsUploading(false);
+            return;
+          }
+
+          // Validation passed
+          setUploadError(null);
+        } catch (err) {
+          if (!isCurrent()) return;
+          console.error("Validation API error:", err);
+          setUploadError(
+            err instanceof Error
+              ? `Validation error: ${err.message}`
+              : "Failed to validate file. Please try again.",
+          );
+          setIsUploading(false);
+          return;
+        } finally {
+          if (isCurrent()) setIsUploading(false);
+        }
+      }
+
+      // Set file data for display
+      const fileData: UploadedFile = {
+        name: file.name,
+        size: formatFileSize(file.size),
+        status: "Ready",
+        file: file,
+      };
+      setUploadedFile(fileData);
+
+      // Store file reference in localStorage (metadata only, not the actual file)
+      const fileDataForStorage = {
+        name: file.name,
+        size: fileData.size,
+        status: "Ready",
+        type: file.type,
+      };
+      localStorage.setItem(
+        STORAGE_KEYS.UPLOADED_FILE,
+        JSON.stringify(fileDataForStorage),
+      );
+
+      // Attempt to parse file if parser exists for this provider
+      const parserExists = await hasParser(selectedProvider);
+      if (!isCurrent()) return;
+      if (parserExists) {
+        setParsingState({
+          isParsing: true,
+          parseError: null,
+          parseWarnings: [],
+          parseSuccess: false,
+        });
+
+        try {
+          const parser = await getParser(selectedProvider);
+          if (!isCurrent()) return;
+          if (parser) {
+            const parseResult = await parser.parse(file);
+            if (!isCurrent()) return;
+
+            if (parseResult.success && parseResult.data) {
+              /**
+               * THE EVENT OUTRANKS THE FILE.
+               *
+               * With a preset, these answers came from the event and the
+               * pinned bar tells the coach in as many words that they are not
+               * re-asked here. A parsed file may FILL BLANKS; it may not
+               * overwrite.
+               *
+               * This only became reachable when doubles lines started opening on
+               * the import provider: every preset used to get the processing
+               * provider, which has no parser, so this block never ran for one.
+               * Now it does, and a SwingVision export names one account holder
+               * and one opponent — so an unguarded merge replaced a doubles
+               * line's "Chen / Alvarez" with a single name and its courtside
+               * score with the file's. The line still carries `event_entry_id`,
+               * so the schedule would render that court under the wrong names,
+               * and `reusingMatch` would write it over the recorded result.
+               *
+               * Scores are held only when the event actually supplied one — a
+               * line that has been played but not yet scored is a genuine blank
+               * the file should fill. Tiebreaks travel with the score they
+               * belong to, or they end up describing a different match's sets.
+               */
+              setParsedImport({
+                generation,
+                playerName: parseResult.data.playerName ?? "",
+                opponentName: parseResult.data.opponentName ?? "",
+              });
+              const eventOwns = Boolean(preset);
+              const eventScored = Boolean(preset?.score);
+              // An event-owned date does not imply event-owned scoring: when
+              // the event left scoring blank, each replacement file may fill it.
+              const eventOwnsScoring =
+                (preset ?? attachedLineRef.current)?.adScoring != null;
+              // The who-played picker owns the player name exactly the way an
+              // event does: the id travelled with the picked row, and a parsed
+              // export names the ACCOUNT HOLDER — usually the uploader, not the
+              // athlete the coach picked. Letting the file overwrite the name
+              // would leave `player1_id` pointing at one person and
+              // `player1_name` reading as another, with nothing on screen
+              // looking wrong.
+              const subjectOwnsName =
+                eventOwns || !askWhoPlayed || matchSubjectRef.current !== null;
+
+              setFormData((prev) => ({
+                ...prev,
+                playerName:
+                  subjectOwnsName && prev.playerName.trim()
+                    ? prev.playerName
+                    : parseResult.data?.playerName || prev.playerName,
+                opponentName:
+                  (eventOwns || prev.opponentSource === "event") &&
+                  prev.opponentName.trim()
+                    ? prev.opponentName
+                    : parseResult.data?.opponentName || prev.opponentName,
+                playerScores: eventScored
+                  ? prev.playerScores
+                  : parseResult.data?.playerScores || prev.playerScores,
+                opponentScores: eventScored
+                  ? prev.opponentScores
+                  : parseResult.data?.opponentScores || prev.opponentScores,
+                playerTiebreaks: eventScored
+                  ? prev.playerTiebreaks
+                  : parseResult.data?.playerTiebreaks || prev.playerTiebreaks,
+                opponentTiebreaks: eventScored
+                  ? prev.opponentTiebreaks
+                  : parseResult.data?.opponentTiebreaks ||
+                    prev.opponentTiebreaks,
+                // Format comes off the event, which declared it once for every
+                // line, rather than off one player's export of one match.
+                bestOf:
+                  eventOwns || prev.dateSource === "event"
+                    ? prev.bestOf
+                    : parseResult.data?.bestOf || prev.bestOf,
+                numberOfSets: eventScored
+                  ? prev.numberOfSets
+                  : (parseResult.data?.numberOfSets ?? prev.numberOfSets),
+                adScoring: eventOwnsScoring
+                  ? prev.adScoring
+                  : parseResult.data?.adScoring !== undefined
+                    ? parseResult.data.adScoring
+                    : prev.adScoring,
+                // Not seeded by a preset, so the file is the only source.
+                result: parseResult.data?.result || prev.result,
+                duration: parseResult.data?.duration || prev.duration,
+                // Preserve existing date/time if parser didn't provide them
+                date: prev.date,
+                time: prev.time,
+              }));
+
+              setParsingState({
+                isParsing: false,
+                parseError: null,
+                parseWarnings: parseResult.warnings,
+                parseSuccess: true,
+              });
+            } else {
+              // Without the parsed identity, this import cannot be confirmed.
+              setParsingState({
+                isParsing: false,
+                parseError: parseResult.error || "Failed to parse file",
+                parseWarnings: parseResult.warnings,
+                parseSuccess: false,
+              });
+            }
+          }
+        } catch (err) {
+          if (!isCurrent()) return;
+          const message = err instanceof Error ? err.message : "Parsing error";
+          setParsingState({
+            isParsing: false,
+            parseError: message,
+            parseWarnings: [],
+            parseSuccess: false,
+          });
+        }
+      }
+      // `preset` is read inside: with a preset the event's answers win over the
+      // parsed file, so a stale closure here would silently restore the
+      // overwrite. Same for the who-played answer, which owns the player name
+      // the same way.
+    },
+    [selectedProvider, preset, askWhoPlayed, resetFileGeneration],
+  );
+
+  const handleDrop: React.DragEventHandler<HTMLDivElement> = useCallback(
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsOver(false);
+      onDrop(e.dataTransfer?.files ?? null);
+    },
+    [onDrop],
+  );
+
+  const handleFileChange: React.ChangeEventHandler<HTMLInputElement> =
+    useCallback(
+      (e) => {
+        onDrop(e.target.files);
+        e.currentTarget.value = "";
+      },
+      [onDrop],
+    );
+
+  const handleRemoveFile = useCallback(() => {
+    resetFileGeneration();
+    localStorage.removeItem(STORAGE_KEYS.UPLOADED_FILE);
+  }, [resetFileGeneration]);
+
+  // Form handling
+  const handleInputChange = useCallback(
+    (
+      field: keyof MatchFormData,
+      value: string | number | boolean | null | undefined,
+    ) => {
+      setFormData((prev) => {
+        const next = { ...prev, [field]: value };
+        // When bestOf changes, reset numberOfSets so it uses the new format's default
+        if (field === "bestOf") {
+          next.numberOfSets = undefined;
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleFormatChange = useCallback((bestOf: string) => {
+    const formatLimit = Number.parseInt(bestOf, 10);
+    if (![1, 3, 5].includes(formatLimit)) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      bestOf,
+      // Keep only the data the newly selected format can represent. This is
+      // reached only after the details step has asked about populated sets.
+      playerScores: prev.playerScores.slice(0, formatLimit),
+      opponentScores: prev.opponentScores.slice(0, formatLimit),
+      playerTiebreaks: prev.playerTiebreaks.slice(0, formatLimit),
+      opponentTiebreaks: prev.opponentTiebreaks.slice(0, formatLimit),
+      numberOfSets: undefined,
+    }));
+  }, []);
+
+  const updateScoreArray = useCallback(
+    (field: ScoreArrayField, index: number, value: string, max?: number) => {
+      setFormData((prev) => updateScoreState(prev, field, index, value, max));
+    },
+    [],
+  );
+
+  const handleScoreChange = useCallback(
+    (player: "player" | "opponent", index: number, value: string) => {
+      updateScoreArray(
+        player === "player" ? "playerScores" : "opponentScores",
+        index,
+        value,
+      );
+    },
+    [updateScoreArray],
+  );
+
+  // Tiebreaks rarely exceed 20; clamp to 99 as a safety bound.
+  const handleTiebreakChange = useCallback(
+    (player: "player" | "opponent", index: number, value: string) => {
+      updateScoreArray(
+        player === "player" ? "playerTiebreaks" : "opponentTiebreaks",
+        index,
+        value,
+        99,
+      );
+    },
+    [updateScoreArray],
+  );
+
+  // Match creation
+  const handleCreateMatch = useCallback(async () => {
+    if (creatingRef.current) return;
+    creatingRef.current = true;
+    try {
+      if (!formData || !uploadedFile?.file) {
+        setError("Please complete all required fields and upload a file.");
+        return;
+      }
+
+      if (!selectedProvider) {
+        setError("Please select a provider.");
+        return;
+      }
+
+      // The last ask, at the write — and the one place this re-reads the
+      // program's approval fresh rather than trusting the memo, because a
+      // submit is the moment "recheck eligibility" (T13) most matters: a claim
+      // approved or suspended while this tab sat open must not be decided on
+      // whatever `programs.status` looked like when the page loaded. The same
+      // decision the two Continue handlers made, from the same
+      // `eligibilityInput`, with just the approval reading replaced by this
+      // call's own answer — a program that went pending, a profile archived, a
+      // roster that failed to load since — none of them get a row. A retryable
+      // refusal is a reading not yet obtained, and it is shown as the
+      // contract's sentence here too, because there is no later step.
+      const freshApproval = await refreshApproval();
+      const freshEligibility = wizardUploadEligibility({
+        ...eligibilityInput,
+        approval: freshApproval ?? approvalReading,
+      });
+      if (!freshEligibility.ok) {
+        setError(freshEligibility.message);
+        return;
+      }
+      if (
+        isUploading ||
+        isProbing ||
+        parsingState.isParsing ||
+        uploadError ||
+        importIdentityBlocked ||
+        (!isProcessingProvider &&
+          parsedImport?.generation !== fileGenerationRef.current)
+      ) {
+        setError(
+          identityMessage ??
+            uploadError ??
+            "Wait for the file check to finish.",
+        );
+        return;
+      }
+      const missing = collectMatchCompletionRequirements({
+        ...formData,
+        isProcessingProvider,
+        playerSubjectIsRoster: matchSubject?.kind === "roster",
+        adScoring: formData.adScoring ?? undefined,
+        fixedCamera: formData.fixedCamera ?? undefined,
+        initialTopPlayerIsPlayer1:
+          formData.initialTopPlayerIsPlayer1 ?? undefined,
+        hasAnySetScore:
+          formData.playerScores.some((n) => (n ?? 0) > 0) ||
+          formData.opponentScores.some((n) => (n ?? 0) > 0),
+      });
+      if (missing.labels.length > 0) {
+        setError(`Complete the required fields: ${missing.labels.join(", ")}.`);
+        return;
+      }
+
+      setIsCreating(true);
+      setError(null);
+
+      try {
+        // Use the userId cached on modal open. Falls back to auth.getUser() only
+        // if the cache hasn't populated yet (race against modal open).
+        let userId = cachedUserIdRef.current;
+        if (!userId) {
+          const {
+            data: { user },
+            error: authError,
+          } = await supabase.auth.getUser();
+          if (authError || !user) throw new Error("Not authenticated");
+          userId = user.id;
+          cachedUserIdRef.current = userId;
+        }
+
+        // A preset line that has already been scored HAS a match — reuse it.
+        // Minting a second would give one court two results and count it twice in
+        // the dual's team score, which is the duplicate 22e's "fills 3 of 9"
+        // receipt exists to rule out.
+        // A line reached either way — pinned by the page, or offered on the
+        // details step and accepted — is the same destination.
+        const line = preset ?? attachedLine;
+        const matchId = line?.matchId ?? crypto.randomUUID();
+        const reusingMatch = Boolean(line?.matchId);
+
+        const adjustedPlayerScores = getAdjustedScores(
+          formData.playerScores,
+          formData.bestOf,
+          formData.numberOfSets,
+        );
+        const adjustedOpponentScores = getAdjustedScores(
+          formData.opponentScores,
+          formData.bestOf,
+          formData.numberOfSets,
+        );
+        // WHOSE match this is, which in a team workspace is not the uploader.
+        //
+        // The id `uploadEligibility()` resolved and nothing else: the picked
+        // roster profile's (`program_players.id`, the id
+        // `matches_block_client_regraft` checks against the roster), the
+        // viewer's own in a personal workspace, or null for a doubles line
+        // (`wizardUploadEligibility`). There is deliberately no `?? userId`
+        // here. Falling back to the uploader was the bug this replaces: it
+        // attributed an athlete's match to their coach, and since `player1_id`
+        // is half the `matches` SELECT policy, it also handed the coach read
+        // access the athlete then lost. `userId` below is the UPLOADER, and it
+        // goes to `created_by` only. From `freshEligibility`, not the memo —
+        // the value this call just re-decided the write on.
+        const playerUserId = freshEligibility.attribution;
+
+        const { winner, loser } = determineWinner(
+          adjustedPlayerScores,
+          adjustedOpponentScores,
+          parseInt(formData.bestOf),
+          playerUserId,
+          formData.playerName,
+          formData.opponentName,
+        );
+
+        const eventName =
+          formData.eventName ||
+          `${formData.playerName} vs ${formData.opponentName}`;
+
+        // Give the opponent an identity, when the uploader named their program.
+        //
+        // Best-effort and never blocking: `contribute_opponent_player` refuses
+        // when that program manages its own roster — correctly, since an outsider
+        // must not write to a live roster — and a refusal costs an opponent
+        // profile a data point, not the upload. The match is the record.
+        // A row picked from the opponent's roster already IS an identity, and it
+        // travelled with the click. Only a typed name goes through the RPC.
+        let opponentPlayerId: string | null = formData.opponentPlayerId ?? null;
+        if (
+          !opponentPlayerId &&
+          activeWorkspace.kind === "team" &&
+          formData.opponentProgramKey
+        ) {
+          try {
+            const { data: program } = await supabase
+              .from("programs")
+              .select("id")
+              .eq("program_key", formData.opponentProgramKey)
+              .maybeSingle();
+
+            const opponentProgramId =
+              (program as { id: string } | null)?.id ?? null;
+            const parts = formData.opponentName.trim().split(/\s+/);
+
+            // Both names or nothing. `contribute_opponent_player` requires them,
+            // and a single-token name ("Kim") is not an identity anyone else
+            // would converge on.
+            if (
+              opponentProgramId &&
+              opponentProgramId !== activeWorkspace.id &&
+              parts.length >= 2
+            ) {
+              const { data: contributed } = await supabase.rpc(
+                "contribute_opponent_player",
+                {
+                  p_program_id: activeWorkspace.id,
+                  p_opponent_program_id: opponentProgramId,
+                  p_first_name: parts.slice(0, -1).join(" "),
+                  p_last_name: parts[parts.length - 1],
+                },
+              );
+              opponentPlayerId = (contributed as string | null) ?? null;
+            }
+          } catch {
+            // See above — an identity is an enrichment, never a precondition.
+          }
+        }
+
+        const metadata: MatchMetadata = {
+          userId,
+          sourceProvider: selectedProvider,
+          // Video providers run computer-vision analysis; file imports carry
+          // electronic line-calling data the provider already computed.
+          analysisMethod: isProcessingProvider ? "ai" : "elc",
+          matchType: formData.matchType,
+          courtType: formData.courtType,
+          // NULL for a personal workspace, which is what the column means. The
+          // jobs route reads this back to pick the ledger, so a team upload has
+          // to carry the program or it silently bills the uploader.
+          programId:
+            activeWorkspace.kind === "team" ? activeWorkspace.id : null,
+          opponentPlayerId,
+        };
+
+        const matchData = buildMatchData(
+          matchId,
+          { ...formData, eventName },
+          winner,
+          loser,
+          isPrivateMatch,
+          metadata,
+        );
+
+        // Camera context is only meaningful for video analysis.
+        const matchRow = isProcessingProvider
+          ? {
+              ...matchData,
+              fixed_camera: formData.fixedCamera ?? null,
+              initial_top_player_is_player1:
+                formData.initialTopPlayerIsPlayer1 ?? null,
+            }
+          : matchData;
+
+        // Fill vs create. A preset line whose match exists gets its score and the
+        // camera answers written onto the row it already has; everything else
+        // inserts. `event_entry_id` is what ties a new one back to its line.
+        const { data: written, error: matchError } = reusingMatch
+          ? await supabase
+              .from("matches")
+              .update({
+                score: matchRow.score,
+                player1_name: matchRow.player1_name,
+                player2_name: matchRow.player2_name,
+                // Only when one was resolved. Spreading it unconditionally would
+                // write null over an identity a previous pass established, which
+                // is worse than never having set it — the opponent's profile
+                // would lose the match rather than never gain it.
+                ...(opponentPlayerId
+                  ? { opponent_player_id: opponentPlayerId }
+                  : {}),
+                ...(isProcessingProvider
+                  ? {
+                      fixed_camera: formData.fixedCamera ?? null,
+                      initial_top_player_is_player1:
+                        formData.initialTopPlayerIsPlayer1 ?? null,
+                    }
+                  : {}),
+              })
+              .eq("id", matchId)
+              // `.select()` so an update that matched NO ROW is visible. This is
+              // a browser-client write against a policy of `auth.uid() =
+              // created_by`, and a coach filling a line somebody else recorded
+              // is not the creator — so RLS silently filtered the row out and
+              // PostgREST returned success with `error: null`. The score
+              // correction was discarded, and `fixed_camera` /
+              // `initial_top_player_is_player1` never persisted, which is
+              // exactly the fallback `/api/splitstep/jobs` reads when the wizard
+              // could not answer the camera questions. The submission then 400s
+              // permanently with nothing explaining why.
+              .select("id")
+          : await supabase
+              .from("matches")
+              .insert({ ...matchRow, event_entry_id: line?.entryId ?? null })
+              .select("id");
+
+        if (matchError) {
+          console.error("Supabase insert error:", matchError);
+          throw new Error(explainWriteFailure(matchError));
+        }
+
+        if (!written || written.length === 0) {
+          throw new Error(
+            reusingMatch
+              ? "This match belongs to someone else on the program, so we could not " +
+                  "save the changes. Ask whoever recorded it to make them, or record " +
+                  "a new result for this line."
+              : "The match could not be saved. Nothing was uploaded — try again.",
+          );
+        }
+
+        // Match row is in. Close the modal now so the user can move on; the file
+        // upload (1–10s for typical .xlsx) and downstream processing run in the
+        // background. The home page already shows a "match processing" toast
+        // driven by the match-created event + sessionStorage flag, so this is the
+        // user's signal that work is in flight.
+        clearStorageData();
+        // The draft, if one was saved, is done with. Best-effort: a row left
+        // behind is a stale Resume in the list, not a wrong match.
+        if (draftId) void deleteMatchDraft(draftId).catch(() => undefined);
+        // Store the real matchId (recent-activity reads this back as the id to poll for
+        // processing completion). Storing a literal "true" made the first-upload poll
+        // target a bogus id and never detect completion.
+        //
+        // Skipped for draft video jobs: the "analyzing" toast resolves on a
+        // match_stats INSERT, and a draft has nothing uploaded to produce one. It
+        // would sit spinning forever and reappear on every page load.
+        if (!isProcessingProvider) {
+          sessionStorage.setItem("match-processing", matchId);
+        }
+        window.dispatchEvent(
+          new CustomEvent("match-created", { detail: { matchId } }),
+        );
+        onCreated?.(matchId);
+
+        // Close the modal FIRST, then refresh after it has finished closing. The modal is
+        // a Radix dialog that locks <body> (pointer-events + scroll) while open. A
+        // refresh that re-renders the subtree hosting this open dialog tears it down
+        // mid-close so Radix never restores <body>, freezing the whole page. (Home's
+        // day-zero state used to be a separate subtree that unmounted wholesale on the
+        // first upload, which is how this was found.) Deferring past the 200ms close
+        // animation lets the dialog unmount and unlock <body> before anything swaps.
+        onOpenChange(false);
+        setTimeout(() => router.refresh(), 300);
+
+        // Video providers (e.g. Advantage Intelligence): record job & upload video
+        // to Azure. The sequence itself lives in
+        // `lib/services/splitstep/submit-match-video.ts` so the team upload
+        // wizard runs the same one per video rather than keeping a second copy of
+        // the invariants in guardrails 3.1.
+        if (processingStrategy) {
+          const startSeconds = formData.videoStartSeconds ?? 0;
+          const endSeconds = formData.videoEndSeconds ?? 0;
+          const videoFileToUpload = uploadedFile?.file;
+
+          let jobId: string;
+          try {
+            const job = await createProcessingJob({
+              supabase,
+              matchId,
+              userId,
+              provider: selectedProvider,
+              startSeconds,
+              endSeconds,
+              billableSeconds: processingStrategy.billableSeconds(
+                startSeconds,
+                endSeconds,
+              ),
+              hasFile: Boolean(videoFileToUpload),
+            });
+            jobId = job.id;
+          } catch (jobErr) {
+            console.error("Processing job insert error:", jobErr);
+            // Roll back the match row so the user gets a clean retry — but ONLY
+            // one this wizard just created. A personal match row exists purely to
+            // carry its video, so removing it is the clean retry; an event line's
+            // match is a recorded result that predates this upload, and deleting
+            // it would destroy a score somebody entered courtside.
+            //
+            // `matchId` then rides on the failure event ONLY if that row survived
+            // — see the note at the transfer-failure dispatch below.
+            await rollbackAndAnnounceFailure({
+              supabase,
+              matchId,
+              reusingMatch,
+              error:
+                jobErr instanceof Error
+                  ? jobErr.message
+                  : "Couldn't queue this match for analysis",
+            });
+            return;
+          }
+
+          // Background: the wizard has already closed by now.
+          if (videoFileToUpload) {
+            void uploadAndSubmitVideo({
+              supabase,
+              jobId,
+              matchId,
+              file: videoFileToUpload,
+              answers: {
+                initialTopPlayerIsPlayer1: formData.initialTopPlayerIsPlayer1,
+                adScoring: formData.adScoring,
+                fixedCamera: formData.fixedCamera,
+              },
+              onEvent: (event) => onVideoUpload?.(event),
+              onTransferFailed: (message) => {
+                /**
+                 * THE RULE FOR `matchId` ON THIS EVENT, stated once here because
+                 * all three dispatch sites answer to it:
+                 *
+                 * `matchId` is a PROMISE THAT THE MATCH IS THERE. The listener
+                 * turns it into "Open the match" on the failure toast, so sending
+                 * one for a row that is gone is worse than sending none — the
+                 * person clicks the only thing the notice offers and lands on
+                 * "Match not found", which reads as a second, unrelated fault.
+                 *
+                 * This site keeps it: the transfer is what failed, and the match
+                 * row and its processing job are both still standing. The two
+                 * rollback sites send it only when their delete left the row in
+                 * place. Nothing else about the event changes.
+                 */
+                window.dispatchEvent(
+                  new CustomEvent("match-upload-failed", {
+                    detail: { matchId, error: message },
+                  }),
+                );
+              },
+            });
+          }
+
+          return;
+        }
+
+        // Background upload. On failure, surface via a custom event so the
+        // toast/banner system can react without the modal needing to stay open.
+        const fileToUpload = uploadedFile.file;
+        const providerId = selectedProvider;
+        void (async () => {
+          try {
+            const fd = new FormData();
+            fd.append("file", fileToUpload);
+            fd.append("matchId", matchId);
+            fd.append("providerId", providerId);
+            const response = await fetch("/api/upload", {
+              method: "POST",
+              body: fd,
+            });
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+              throw new Error(result.error || "Upload failed");
+            }
+          } catch (err) {
+            console.error("Background file upload error:", err);
+            // Roll back the phantom match row so the user has a clean retry path.
+            // Same exemption as above: never delete a row that already carried a
+            // result before this upload started.
+            //
+            // And the same rule for the link: an import match with no file behind
+            // it is a row of zeroes, so once the rollback removes it there is
+            // nothing to offer.
+            await rollbackAndAnnounceFailure({
+              supabase,
+              matchId,
+              reusingMatch,
+              error: err instanceof Error ? err.message : "Upload failed",
+            });
+          }
+        })();
+      } catch (e: any) {
+        console.error("Error creating match:", e);
+        const errorMessage =
+          e?.message ||
+          e?.error?.message ||
+          e?.details ||
+          e?.hint ||
+          JSON.stringify(e) ||
+          "Failed to create match. Please try again.";
+        setError(errorMessage);
+      } finally {
+        setIsCreating(false);
+      }
+    } finally {
+      creatingRef.current = false;
+    }
+    // activeWorkspace is in here on purpose: a coach who switches workspaces
+    // with the wizard open must not create the match against the one they left.
+  }, [
+    formData,
+    uploadedFile,
+    selectedProvider,
+    isProcessingProvider,
+    supabase,
+    isPrivateMatch,
+    onOpenChange,
+    onCreated,
+    router,
+    activeWorkspace.id,
+    activeWorkspace.kind,
+    preset,
+    attachedLine,
+    draftId,
+    eligibilityInput,
+    approvalReading,
+    refreshApproval,
+    matchSubject,
+    isUploading,
+    isProbing,
+    parsingState.isParsing,
+    uploadError,
+    importIdentityBlocked,
+    parsedImport,
+    identityMessage,
+  ]);
+
+  return {
+    // State
+    step,
+    selectedProvider,
+    uploadedFile,
+    isOver,
+    isCreating,
+    isUploading,
+    error,
+    uploadError,
+    formData,
+    parsingState,
+    importIdentity: {
+      parsedNames: parsedImport
+        ? {
+            playerName: parsedImport.playerName,
+            opponentName: parsedImport.opponentName,
+          }
+        : null,
+      comparison: identityComparison,
+      confirmed: identityConfirmed,
+      rejected: identityRejected,
+      blocked: importIdentityBlocked,
+      message: identityMessage,
+      confirm: confirmImportIdentity,
+      reject: rejectImportIdentity,
+    },
+
+    // Step navigation
+    handleProviderSelect,
+    handleProviderContinue,
+    handleFileContinue,
+    handleTrimContinue,
+    handleBack,
+    firstStep,
+
+    // The schedule offer
+    attachedLine,
+    attachLine,
+    detachLine,
+
+    // Drafts
+    saveDraft,
+    draftSaving,
+    draftSaveError,
+    lastChangedAt,
+
+    // File handling
+    setIsOver,
+    handleDrop,
+    handleFileChange,
+    handleRemoveFile,
+
+    // Provider flow shape
+    stepOrder,
+    progressTotalSteps: STEP_ORDER_BY_KIND[progressKind].length,
+    isProcessingProvider,
+
+    // Video analysis
+    videoProbe,
+    videoWarnings,
+    isProbing,
+    minTrimSeconds: processingStrategy?.minTrimSeconds ?? 0,
+    remainingQuotaSeconds,
+    quotaCapSeconds,
+    quotaResetsOn,
+    // Every strategy has one — the file picker on step 2 serves both kinds.
+    acceptString: selectedProvider
+      ? getProviderStrategy(selectedProvider).getAcceptString()
+      : "",
+    requirementChips: processingStrategy?.requirementChips ?? [],
+    onVideoPick,
+    handleTrimChange,
+    handleRemoveVideo,
+
+    // Form handling
+    handleInputChange,
+    handleFormatChange,
+    whoPlayed: {
+      required: askWhoPlayed,
+      roster: teamRoster,
+      loadFailed: rosterLoadFailed,
+      reload: reloadRoster,
+      uploaderName,
+      subject: matchSubject,
+      choose: chooseMatchSubject,
+    },
+    eligibility,
+    retryEligibility,
+    handleScoreChange,
+    handleTiebreakChange,
+
+    // Match creation
+    handleCreateMatch,
+  };
+}

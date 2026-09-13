@@ -1,0 +1,271 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { advButton } from "@/lib/ui/adv-button";
+import { ResultMark } from "@/components/dashboard/result-mark";
+import { StatusChip } from "@/components/ui/status-chip";
+import { ScoreLine } from "@/components/dashboard/score-line";
+import { scoreSetsFrom } from "@/lib/ui/score-format";
+import { EventShell } from "@/components/dashboard/schedule/event-shell";
+import { SingleScoreEntry } from "@/components/dashboard/schedule/single-score-entry";
+import { matchWon } from "@/lib/schedule/entry-state";
+import { LINE_STATUS, type LineStatus } from "@/lib/schedule/line-status";
+import { formatEventDay } from "@/lib/schedule/format";
+import {
+  isAnalysisFailed,
+  isAnalysisReady,
+  isInFlight,
+  isWorking,
+} from "@/lib/data/match-analysis";
+import type { TeamSingleMatch } from "@/lib/data/single-match-server";
+
+/**
+ * 25i and 25j — a single match, empty and finished.
+ *
+ * One renderer, like the dual: the transition between "nothing recorded" and "a
+ * report to read" is the thing being designed, and a separate empty screen
+ * would have to be dismissed.
+ *
+ * Deliberately thin. The full stat surface lives at /dashboard/matches/[id] and
+ * this does not duplicate it — the primary action once analysis lands is to go
+ * there.
+ */
+export function SingleDetail({
+  match,
+  canEdit,
+}: {
+  match: TeamSingleMatch;
+  canEdit: boolean;
+}) {
+  const [scoring, setScoring] = useState(false);
+
+  const won = matchWon({
+    id: match.id,
+    round: match.round,
+    status: match.status,
+    score: match.score,
+    opponentLabels: [],
+    hasVideo: match.hasVideo,
+  });
+  // Doubles as this page's "has anyone recorded a result yet" test, which is
+  // what the old score STRING was silently doing — an empty string meant an
+  // unplayed line. Empty sets say the same thing without a formatter deciding
+  // it.
+  const sets = scoreSetsFrom(match.score);
+  const scored = sets.length > 0;
+  const ready = isAnalysisReady(match.status) && match.hasVideo;
+  const working = isWorking(match.status);
+  const waiting = match.hasVideo && isInFlight(match.status) && !working;
+  const failed = isAnalysisFailed(match.status);
+
+  const facts = [match.context, match.surface].filter(Boolean) as string[];
+
+  return (
+    <EventShell>
+      <div className="flex items-end gap-12">
+        <div className="min-w-0 flex-1">
+          <span className="eyebrow">
+            Single match
+            {match.matchType
+              ? ` · ${match.matchType.toLowerCase()}`
+              : ""} · {formatEventDay(match.date.slice(0, 10))}
+            {won !== null ? " · final" : ""}
+          </span>
+
+          {/* The page's h1 — the matchup, including the d./f./vs verb, because
+              that is what names this page. */}
+          <h1 className="mt-2 flex items-baseline gap-3">
+            <span
+              className="text-[30px] leading-[34px] font-light tracking-[-0.6px]"
+              style={{ color: "var(--ink-900)" }}
+            >
+              {match.playerName}{" "}
+              <span style={{ color: "var(--ink-600)" }}>
+                {won === null ? "vs" : won ? "d." : "f."}
+              </span>{" "}
+              {match.opponentName}
+            </span>
+            {won !== null ? <ResultMark won={won} /> : null}
+          </h1>
+
+          {facts.length > 0 ? (
+            <div className="mt-3 flex items-center gap-2.5">
+              {facts.map((fact, index) => (
+                <span key={fact} className="flex items-center gap-2.5">
+                  {index > 0 ? (
+                    <span style={{ color: "var(--ink-300)" }}>·</span>
+                  ) : null}
+                  <span
+                    className="text-[13px]"
+                    style={{ color: "var(--ink-700)" }}
+                  >
+                    {fact}
+                  </span>
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        {scored ? (
+          <div className="flex shrink-0 flex-col items-end gap-2.5">
+            <ScoreLine
+              sets={sets}
+              className="tabular text-[40px] leading-[40px] font-light"
+              style={{ color: "var(--ink-900)" }}
+            />
+            {ready ? (
+              <Link
+                href={`/dashboard/matches/${match.id}`}
+                className={advButton("primary", "sm")}
+              >
+                View report
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      {ready || working || waiting || failed ? (
+        <div className="mt-[26px] flex items-center gap-2 border-t border-[var(--border-hairline)] pt-3.5">
+          {failed ? (
+            <WaitingChip status={LINE_STATUS.failed} />
+          ) : ready ? (
+            // "Analysis ready" and nothing more. 25j says "confidence high",
+            // but the five quality scores the vendor returns sit unqueryable in
+            // raw_webhook_payload (guardrails 5), so there is no confidence to
+            // report — printing one would be the page making it up.
+            <StatusChip tone="win">Analysis ready</StatusChip>
+          ) : working ? (
+            <WaitingChip status={LINE_STATUS.working} />
+          ) : (
+            <WaitingChip status={LINE_STATUS.waiting} />
+          )}
+        </div>
+      ) : null}
+
+      {match.summary ? (
+        <div className="mt-4 flex max-w-[640px] flex-col gap-2 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-4 py-3.5">
+          <span className="eyebrow">From the report</span>
+          <span
+            className="text-[13px] leading-[1.55]"
+            style={{ color: "var(--ink-700)" }}
+          >
+            {match.summary}
+          </span>
+        </div>
+      ) : null}
+
+      {scored ? null : (
+        <div className="mt-7 max-w-[560px]">
+          {scoring ? (
+            <div className="border-t border-[var(--border-hairline)]">
+              <SingleScoreEntry
+                matchId={match.id}
+                playerName={match.playerName}
+                onDone={() => setScoring(false)}
+              />
+            </div>
+          ) : (
+            <Row label="Score">
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => setScoring(true)}
+                  className="cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+                >
+                  Add score
+                </button>
+              ) : null}
+            </Row>
+          )}
+
+          <Row label="Video">
+            {match.hasVideo ? (
+              <span className="text-micro" style={{ color: "var(--ink-500)" }}>
+                sent
+              </span>
+            ) : canEdit ? (
+              <Link
+                href={`/dashboard/team/upload?match=${match.id}`}
+                className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+              >
+                Upload video
+              </Link>
+            ) : null}
+          </Row>
+
+          <div className="border-t border-[var(--border-hairline)]" />
+
+          <p className="text-micro mt-3.5" style={{ color: "var(--ink-500)" }}>
+            both optional until it&rsquo;s played — the match simply waits
+          </p>
+        </div>
+      )}
+
+      {scored && !match.hasVideo && canEdit ? (
+        <div className="mt-6 max-w-[560px]">
+          <Row label="Video">
+            <Link
+              href={`/dashboard/team/upload?match=${match.id}`}
+              className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+            >
+              Upload video
+            </Link>
+          </Row>
+          <div className="border-t border-[var(--border-hairline)]" />
+        </div>
+      ) : null}
+
+      {ready ? (
+        <p className="text-micro mt-4" style={{ color: "var(--ink-500)" }}>
+          counts toward {match.playerName}&rsquo;s season alongside dual and
+          tournament matches — same report, same trends
+        </p>
+      ) : null}
+    </EventShell>
+  );
+}
+
+/**
+ * One of the three waiting chips, in the words `LINE_STATUS` keeps.
+ *
+ * This page derives its states from the `match-analysis` predicates rather than
+ * from `EntryState` — it is one match, not a line in an event — but the three
+ * waiting states it lands on are the same three the event page's rows and Team
+ * Home's dual sheet show, so the word, the tone and the pulse come from the
+ * same map they read instead of being typed here a third time. `ready` has no
+ * entry: what this page says once a report exists is its own (above).
+ *
+ * The map is `Partial<Record<EntryState, …>>`, so a lookup is optional at the
+ * type level. A missing entry renders nothing at all rather than a stand-in
+ * word — a chip with the wrong word is a coach told the wrong thing about a
+ * job, which is the failure the shared map exists to prevent.
+ */
+function WaitingChip({ status }: { status: LineStatus | undefined }) {
+  if (!status) return null;
+
+  return (
+    <StatusChip tone={status.tone} live={status.live}>
+      {status.label}
+    </StatusChip>
+  );
+}
+
+function Row({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 border-t border-[var(--border-hairline)] py-3.5">
+      <span className="flex-1 text-[13px]" style={{ color: "var(--ink-700)" }}>
+        {label}
+      </span>
+      {children}
+    </div>
+  );
+}
