@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Focus, Minus, Move, Plus } from "lucide-react";
 import { RosterDialog } from "@/components/dashboard/team/dialog-shell";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
@@ -60,7 +60,8 @@ export function ImageAdjustDialog({
   const [dragging, setDragging] = useState(false);
   const [custom, setCustom] = useState("");
   const [baking, setBaking] = useState(false);
-  const bounds = useMemo(() => (image ? artworkBounds(image) : null), [image]);
+  // Found once per decode — the scan draws the image and reads every pixel.
+  const [bounds, setBounds] = useState<ArtworkBounds | null>(null);
 
   // Decode when the file changes; release the previous one.
   useEffect(() => {
@@ -78,6 +79,7 @@ export function ImageAdjustDialog({
       // A transparent file opens already centred on its artwork — the common
       // case needs no drag at all. Anything else opens as a centre crop.
       const initialBounds = result ? artworkBounds(result) : null;
+      setBounds(initialBounds);
       setAdjustment(
         result && initialBounds
           ? centredOnArtwork(result, initialBounds, "#FFFFFF")
@@ -91,6 +93,7 @@ export function ImageAdjustDialog({
       cancelled = true;
       decoded?.release();
       setImage(null);
+      setBounds(null);
       setFailed(false);
     };
   }, [file]);

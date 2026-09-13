@@ -61,6 +61,18 @@ export function baseScale(image: { width: number; height: number }): number {
  * reports 0×0 through `<img>`, so the file is re-written with the viewBox's
  * dimensions before a second attempt.
  */
+/**
+ * The image already on file, as a `File` the adjust dialog can open — "Adjust"
+ * re-places the saved photo or crest rather than asking for it again. Throws
+ * when the fetch fails; the caller says so in its own words.
+ */
+export async function fetchImageFile(url: string, name: string): Promise<File> {
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const blob = await response.blob();
+  return new File([blob], name, { type: blob.type });
+}
+
 export async function decodeImage(file: File): Promise<DecodedImage | null> {
   let blob: Blob = file;
   let decoded = await loadImage(blob);

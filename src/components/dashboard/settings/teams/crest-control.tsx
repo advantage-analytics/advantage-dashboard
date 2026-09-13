@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { Camera } from "lucide-react";
 import { ImageAdjustDialog } from "@/components/dashboard/settings/image-adjust-dialog";
+import { fetchImageFile } from "@/lib/ui/image-adjust";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import {
   removeProgramCrest,
@@ -69,9 +70,7 @@ export function CrestControl({
     if (!crestUrl) return;
     onError(null);
     try {
-      const response = await fetch(crestUrl, { cache: "no-store" });
-      const blob = await response.blob();
-      setAdjusting(new File([blob], "crest", { type: blob.type }));
+      setAdjusting(await fetchImageFile(crestUrl, "crest"));
     } catch {
       onError("Couldn't load the current crest. Upload it again instead.");
     }

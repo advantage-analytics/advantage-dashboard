@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { Camera } from "lucide-react";
 import { ImageAdjustDialog } from "@/components/dashboard/settings/image-adjust-dialog";
+import { fetchImageFile } from "@/lib/ui/image-adjust";
 import {
   removeAvatar,
   uploadAvatar,
@@ -71,9 +72,7 @@ export function AvatarControl({
     if (!avatarUrl) return;
     onError(null);
     try {
-      const response = await fetch(avatarUrl, { cache: "no-store" });
-      const blob = await response.blob();
-      setAdjusting(new File([blob], "avatar", { type: blob.type }));
+      setAdjusting(await fetchImageFile(avatarUrl, "avatar"));
     } catch {
       onError("Couldn't load the current photo. Upload it again instead.");
     }

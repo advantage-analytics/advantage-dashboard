@@ -342,7 +342,6 @@ export async function leaveProgram(programId: string): Promise<LeaveResult> {
     (data ?? []) as {
       left_program: boolean;
       profile_id: string | null;
-      matches_repointed: number;
     }[]
   )[0];
   if (!row?.left_program) {
