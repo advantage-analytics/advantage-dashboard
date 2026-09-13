@@ -36,15 +36,10 @@ export async function notifyUsageThreshold(params: {
 
   try {
     const billingMonth = currentBillingMonth(now);
-    if (
-      !(await claimSend(`usage_${severity}:${workspace.id}:${billingMonth}`))
-    ) {
-      return;
-    }
 
     // Straight off the tables, not `program_roster`: that RPC answers only a
     // member (`user_program_ids()` keys on `auth.uid()`), and the admin client
-    // has no uid — it returned nobody, after the month's key was spent.
+    // has no uid, so it returned nobody.
     const db = createAdminClient();
     const { data: members, error } = await db
       .from("program_members")
@@ -81,12 +76,28 @@ export async function notifyUsageThreshold(params: {
     }));
 
     const prefs = await getNotificationPrefs(staff.map((row) => row.user_id));
+    const recipients = staff.flatMap((person) => {
+      const to = person.email?.trim();
+      return to && prefs.get(person.user_id)?.notifyUsageAlerts
+        ? [{ ...person, to }]
+        : [];
+    });
+    if (recipients.length === 0) return;
+
+    // Claimed only once there is somebody to tell. Claimed first, a failed
+    // lookup — or a program whose staff all had the switch off — spent the
+    // month's key with nothing sent, and every later upload stayed silent.
+    // A redelivery or concurrent submission still races on the primary key.
+    if (
+      !(await claimSend(`usage_${severity}:${workspace.id}:${billingMonth}`))
+    ) {
+      return;
+    }
+
     const programName = programDisplayName(workspace.name, workspace.team);
 
     let sent = 0;
-    for (const person of staff) {
-      const to = person.email?.trim();
-      if (!to || !prefs.get(person.user_id)?.notifyUsageAlerts) continue;
+    for (const { to, ...person } of recipients) {
       const result = await sendEmail(
         usageAlertEmail({
           to,
