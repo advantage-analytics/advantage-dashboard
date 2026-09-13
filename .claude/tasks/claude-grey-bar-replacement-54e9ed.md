@@ -68,19 +68,6 @@ ready).
   - [ ] Program members who are not the current user still appear in the roster after the fix (the fix does not silently narrow results to the caller's own row)
 - **notes:** ZZ Test Program (recreated 2026-08-26) has clajersongimena as sole owner and no matches — an empty roster is legitimate, but must resolve to `[]`, not hang. Verify schema against the live DB via Supabase MCP, not the migrations folder. Read `docs/ui-revamp-guardrails.md` first — "who played" is one of three wizard inputs that silently misattributes stats when wrong.
 
-## T5 · Quiet the file step after a video is checked
-
-- **status:** todo
-- **model:** sonnet
-- **files:** src/components/dashboard/matches/new-match-wizard/FileStepContent.tsx, src/components/dashboard/matches/new-match-wizard/VideoRequirements.tsx (header comment only)
-- **done when:**
-  - [ ] With a checked video and no probe warnings, nothing beneath the file card uses `noteStripCls`: the "Nothing is uploading yet. The upload starts when the match is saved — trimming and details come first." sentence keeps its wording but renders as one unboxed `text-micro` line directly under the card, with no `Info` glyph and no `--surface-subtle` wash.
-  - [ ] Probe `warnings` and `parsingState.parseWarnings` render inside a single `WizardNotice` (the subtree's existing amber warning register) — one banner regardless of count, each warning on its own line — instead of one grey `noteStripCls` strip per warning.
-  - [ ] When `isVideo && hasFile`, `<VideoRequirements />` is not rendered; before a file is chosen it renders exactly as today. The export branch (`FoundInExport` / "What the export needs") is unchanged.
-  - [ ] The render-order comment in `FileStepContent.tsx` and the matching sentence in `VideoRequirements.tsx`'s header comment are rewritten to describe the new behaviour.
-  - [ ] The drop-zone `error` strip, the `parsingState.parseError` strip, `noteStripCls` in `styles.ts`, and its call sites in Source/Trim/Details steps are untouched; `npm run typecheck` and `npm run lint` pass.
-- **notes:** Read `docs/ui-revamp-guardrails.md` first. Interpretation, flagged for veto: (1) the timing sentence stays (it's a true, useful fact) but unboxed, since it repeats the drop-zone's own busy text moments earlier — the boxed duplicate is the redundancy being removed. (2) Warnings move into `WizardNotice`'s existing amber register instead of inventing a new color — `parseError` stays grey since there's no error-register Notice primitive and it belongs to the export flow, not video. (3) Hiding `VideoRequirements` after a checked video mirrors the export path (which already swaps to `FoundInExport` once read) — reasoning being a recorded video's framing can't change after the fact. T1's "View all requirements" link is unaffected; it only disappears once a file is checked.
-
 ## T6 · Stop a malformed auth cookie from crashing the session-refresh proxy
 
 - **status:** todo
