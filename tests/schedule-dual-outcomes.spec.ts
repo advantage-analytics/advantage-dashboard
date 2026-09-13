@@ -114,7 +114,6 @@ test("dual outcomes render their shared kind and side vocabulary with the pure 4
 
   await expect(page.getByText("4–3", { exact: true })).toBeVisible();
   await expect(page.getByText("Final", { exact: true })).toBeVisible();
-  await expect(page.getByText("1 of 3 lines", { exact: true })).toBeVisible();
 
   for (const [slot, kind, result] of [
     ["S1", "Forfeited", "Won"],
@@ -130,7 +129,7 @@ test("dual outcomes render their shared kind and side vocabulary with the pure 4
     await expect(
       row.getByRole("button", { name: "Edit result" }),
     ).toBeVisible();
-    await expect(row.getByRole("link", { name: "Report" })).toHaveCount(0);
+    await expect(row.getByRole("link", { name: "View report" })).toHaveCount(0);
   }
 });
 
@@ -143,6 +142,6 @@ test("played report navigation and unanswered scoring remain intact", async ({
     line(page, "S1").getByRole("button", { name: "Add result" }),
   ).toBeVisible();
   await expect(
-    line(page, "S2").getByRole("link", { name: "Report" }),
+    line(page, "S2").getByRole("link", { name: "View report" }),
   ).toHaveAttribute("href", "/dashboard/matches/normal-ready-match");
 });

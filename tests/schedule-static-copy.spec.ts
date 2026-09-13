@@ -399,7 +399,10 @@ test.describe("/dashboard/team/schedule · Tc2 Tc2c", () => {
     // " · " between a pair's two names — the rail's separator, not the page's.
     drawn(drawer, "event-drawer.tsx", 'entry.playerLabels.join(" · ")');
     // The three states a line can be in besides played.
-    drawn(drawer, "event-drawer.tsx", "Awaiting result");
+    drawn(drawer, "event-drawer.tsx", "No result");
+    // The empty states: a tournament with nothing decided, a dual with no lineup.
+    drawn(drawer, "event-drawer.tsx", "No results yet.");
+    drawn(drawer, "event-drawer.tsx", "No lineup yet.");
     drawn(drawer, "event-drawer.tsx", "Set line");
     drawn(drawer, "event-drawer.tsx", "Not set");
     drawn(drawer, "event-drawer.tsx", "Enter results");

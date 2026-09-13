@@ -130,7 +130,7 @@ test("renders played and outcome-only rounds in the established ladder order", a
     row(page, "R16").getByText("6-2, 6-3", { exact: true }),
   ).toBeVisible();
   await expect(
-    row(page, "R16").getByRole("link", { name: "Report" }),
+    row(page, "R16").getByRole("link", { name: "View report" }),
   ).toHaveAttribute("href", "/dashboard/matches/played-r16");
   await expect(
     row(page, "QF").getByText("Withdrawn", { exact: true }),

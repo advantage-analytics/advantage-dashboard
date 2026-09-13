@@ -1,6 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
+import { ChevronRight } from "lucide-react";
+import { EmptyMark } from "@/components/ui/empty-mark";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { getInitials } from "@/lib/data/match-utils";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
@@ -35,6 +40,8 @@ export function LineRow({
   columns,
   showSchool = true,
   last,
+  split = false,
+  viewer = null,
 }: {
   entry: EventEntry;
   /** The match this row shows. Absent on a line nobody has recorded yet. */
@@ -55,6 +62,20 @@ export function LineRow({
    */
   showSchool?: boolean;
   last?: boolean;
+  /**
+   * The dual page's record-row layout (Data Table laws): our player and the
+   * opponent in their own columns, Score and Result flush left with an em dash
+   * where nothing is decided, the lifecycle action, and a chevron to the match
+   * when there is one. The tournament page keeps the one-cell matchup.
+   */
+  split?: boolean;
+  /**
+   * The signed-in person, so their own line shows their photo — the roster's
+   * rule: our only photo is the viewer's, everyone else is initials.
+   * `ids` covers both id spaces a line's player can carry (auth uid and the
+   * claimed `program_players.id`).
+   */
+  viewer?: LineViewer | null;
 }) {
   const [scoring, setScoring] = useState(false);
 
@@ -92,13 +113,109 @@ export function LineRow({
     );
   }
 
+  const action = (
+    <Action
+      state={state}
+      match={match}
+      entryId={entry.id}
+      matchId={match?.id ?? null}
+      videoAllowed={supportsVideo(entry, round)}
+      canEdit={canEdit}
+      onScore={() => setScoring(true)}
+    />
+  );
+
+  if (split) {
+    const sets = isNonPlayed || !match ? [] : scoreSetsFrom(match.score);
+    const unset = entry.playerLabels.length === 0 && !isNonPlayed;
+    return (
+      <div className={`${SPLIT_ROW} ${columns}`}>
+        <SlotLabel>{label}</SlotLabel>
+
+        {unset ? (
+          <span className="flex">
+            <EmptyMark label="Line not set" />
+          </span>
+        ) : (
+          <span className="flex min-w-0 items-center gap-2.5">
+            <PlayerAvatars
+              labels={entry.playerLabels}
+              userIds={entry.playerUserIds}
+              viewer={viewer}
+            />
+            <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
+              {ourLabel || "—"}
+            </span>
+          </span>
+        )}
+
+        <span
+          className="flex min-w-0 truncate text-[12px]"
+          style={{ color: "var(--ink-600)" }}
+        >
+          {theirLabel ? (
+            <span className="truncate">{theirLabel}</span>
+          ) : (
+            <EmptyMark label="No opponent yet" />
+          )}
+        </span>
+
+        {/* Result: the outcome mark, then the score it belongs to, in one
+            fixed track so neither floats alone. An undecided line is one
+            dash; a non-played line is its mark with no invented score. Each
+            cell is one element — `EmptyMark` is a fragment whose sr-only
+            sibling would otherwise become a grid item of its own. */}
+        <span className="flex items-center gap-2">
+          {won === null ? (
+            <EmptyMark label="No result yet" />
+          ) : (
+            <ResultMark won={won} />
+          )}
+          {sets.length > 0 ? (
+            <ScoreLine
+              sets={sets}
+              className="tabular text-[13px] whitespace-nowrap"
+              style={{ color: "var(--ink-900)" }}
+            />
+          ) : null}
+        </span>
+
+        <span className="flex min-w-0">
+          {unset ? (
+            canEdit ? (
+              <SetLineAction eventId={entry.eventId} />
+            ) : null
+          ) : (
+            action
+          )}
+        </span>
+
+        <span className="flex">
+          {match ? (
+            <Link
+              href={`/dashboard/matches/${match.id}`}
+              aria-label={`Open ${label} match`}
+              className="rounded-[4px] text-[var(--ink-300)] transition-colors duration-[var(--duration-hover)] outline-none hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)]"
+            >
+              <ChevronRight
+                className="size-[13px]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+            </Link>
+          ) : null}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div
       className={`grid ${columns} items-center gap-4 py-[11px] ${
         last ? "" : "border-b border-[var(--border-hairline)]"
       }`}
     >
-      <span className="mono text-[11px]" style={{ color: "var(--ink-600)" }}>
+      <span className="mono text-[11px]" style={{ color: "var(--ink-500)" }}>
         {label}
       </span>
 
@@ -127,17 +244,7 @@ export function LineRow({
         style={{ color: "var(--ink-900)" }}
       />
 
-      <span className="flex justify-end text-right">
-        <Action
-          state={state}
-          match={match}
-          entryId={entry.id}
-          matchId={match?.id ?? null}
-          videoAllowed={supportsVideo(entry, round)}
-          canEdit={canEdit}
-          onScore={() => setScoring(true)}
-        />
-      </span>
+      <span className="flex justify-end text-right">{action}</span>
     </div>
   );
 }
@@ -193,7 +300,7 @@ function Action({
 
   if (state === "ready" && match) {
     return (
-      <RowAction href={`/dashboard/matches/${match.id}`}>Report</RowAction>
+      <RowAction href={`/dashboard/matches/${match.id}`}>View report</RowAction>
     );
   }
 
@@ -219,5 +326,108 @@ function Action({
     >
       {videoAllowed ? "Add video" : "Add file"}
     </RowAction>
+  );
+}
+
+export interface LineViewer {
+  ids: string[];
+  avatarUrl: string | null;
+  initials: string;
+}
+
+const SPLIT_ROW =
+  "-mx-4 grid h-[52px] items-center gap-x-5 rounded-[var(--radius-element)] px-4 transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)]";
+
+/** The lineup list's line label: 11px mono ink-500 (primitives → Dual). */
+function SlotLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="mono text-[11px]" style={{ color: "var(--ink-500)" }}>
+      {children}
+    </span>
+  );
+}
+
+/**
+ * "+ Set line" — the dual page's unset-line action, pointing at the edit flow
+ * where lines are set. The drawer's blue row, as a row action.
+ */
+function SetLineAction({ eventId }: { eventId: string }) {
+  return (
+    <RowAction href={`/dashboard/team/schedule/${eventId}/edit`}>
+      + Set line
+    </RowAction>
+  );
+}
+
+/**
+ * One 26px avatar per player on the line (Data Table law 1), overlapping by
+ * 8px with a card-coloured ring on a doubles pair. The viewer's own avatar is
+ * their photo; everyone else's is initials — the roster's rule, since the
+ * viewer's is the only photo the page has.
+ */
+function PlayerAvatars({
+  labels,
+  userIds,
+  viewer,
+}: {
+  labels: string[];
+  userIds: string[];
+  viewer: LineViewer | null;
+}) {
+  return (
+    <span className="flex shrink-0">
+      {labels.map((name, index) => {
+        const isViewer =
+          viewer !== null && viewer.ids.includes(userIds[index] ?? "");
+        return (
+          <PersonAvatar
+            key={`${name}-${index}`}
+            initials={isViewer ? viewer.initials : getInitials(name)}
+            photoUrl={isViewer ? viewer.avatarUrl : null}
+            className={
+              index > 0
+                ? "-ml-2 size-[26px] text-[9px] shadow-[0_0_0_2px_var(--surface-card)]"
+                : "size-[26px] text-[9px]"
+            }
+          />
+        );
+      })}
+    </span>
+  );
+}
+
+/**
+ * A lineup slot the dual has no entry for at all. Every dual draws its full
+ * card — six singles, three doubles — so a missing line still holds its row:
+ * dashes where the facts go and, for someone who may set lines, the action.
+ */
+export function UnsetLineRow({
+  slot,
+  eventId,
+  canEdit,
+  columns,
+}: {
+  slot: string;
+  eventId: string;
+  canEdit: boolean;
+  columns: string;
+}) {
+  return (
+    <div className={`${SPLIT_ROW} ${columns}`}>
+      <SlotLabel>{slot}</SlotLabel>
+      <span className="flex">
+        <EmptyMark label="Line not set" />
+      </span>
+      <span className="flex">
+        <EmptyMark />
+      </span>
+      <span className="flex">
+        <EmptyMark />
+      </span>
+      <span className="flex min-w-0">
+        {canEdit ? <SetLineAction eventId={eventId} /> : null}
+      </span>
+      <span />
+    </div>
   );
 }

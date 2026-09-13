@@ -3,15 +3,12 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
 import {
   eventDetailFrom,
+  getOpponentPrograms,
   getProgramSchedule,
 } from "@/lib/data/schedule-server";
 import { getEventTeamTotals } from "@/lib/data/event-team-totals-server";
 import { readyMatchIdsFrom } from "@/lib/schedule/entry-state";
-import {
-  opponentDualHistory,
-  opponentHistoryFor,
-  opponentMeetings,
-} from "@/lib/schedule/opponent-history";
+import { EventHeaderSlot } from "@/components/dashboard/schedule/event-header-slot";
 import { DualDetail } from "@/components/dashboard/schedule/dual-detail";
 import { TournamentDetail } from "@/components/dashboard/schedule/tournament-detail";
 
@@ -25,13 +22,10 @@ import { TournamentDetail } from "@/components/dashboard/schedule/tournament-det
  * a component that is two components with a flag.
  *
  * **The season, not the event.** This reads `getProgramSchedule` and slices the
- * event out of it with `eventDetailFrom` rather than calling `getEventDetail`,
- * because a dual's rail asks a question no single event can answer: the
- * head-to-head record against this opponent is counted over every dual the
- * program has ever played against that name. Reading the event alone and then
- * reading the season for the rail would be two reads where the second already
- * contains the first, and `getProgramSchedule` is `cache()`d, so Team Home and
- * this page share one round trip.
+ * event out of it with `eventDetailFrom` rather than calling `getEventDetail`:
+ * `getProgramSchedule` is `cache()`d, so Team Home, the Schedule and this page
+ * share one round trip. Team totals are read for a tournament only; a dual's
+ * page is its lines.
  */
 export default async function EventPage({
   params,
@@ -52,26 +46,50 @@ export default async function EventPage({
 
   const canEdit = canManageTeamSchedule(active);
 
-  const totals = await getEventTeamTotals(readyMatchIdsFrom(detail.entries));
-
   if (detail.event.kind !== "dual") {
+    const totals = await getEventTeamTotals(readyMatchIdsFrom(detail.entries));
     return (
-      <TournamentDetail detail={detail} canEdit={canEdit} totals={totals} />
+      <>
+        <EventHeaderSlot
+          eventId={eventId}
+          name={detail.event.name}
+          kind={detail.event.kind}
+        />
+        <TournamentDetail detail={detail} canEdit={canEdit} totals={totals} />
+      </>
     );
   }
 
+  // The conference printed beside the opponent's name — the drawer's subline.
+  const opponentProgramId = detail.entries.find(
+    (entry) => entry.opponentProgramId,
+  )?.opponentProgramId;
+  const opponent = opponentProgramId
+    ? ((await getOpponentPrograms([opponentProgramId]))[opponentProgramId] ??
+      null)
+    : null;
+
   return (
-    <DualDetail
-      detail={detail}
-      canEdit={canEdit}
-      totals={totals}
-      history={opponentHistoryFor(
-        opponentDualHistory(schedule),
-        detail.event.name,
-      )}
-      meetings={opponentMeetings(schedule, detail.event.name, {
-        excludeEventId: eventId,
-      })}
-    />
+    <>
+      <EventHeaderSlot
+        eventId={eventId}
+        name={detail.event.name}
+        kind={detail.event.kind}
+      />
+      <DualDetail
+        detail={detail}
+        canEdit={canEdit}
+        conference={opponent?.conference ?? null}
+        viewer={{
+          // A lineup can name the viewer by auth uid or by their claimed
+          // program player id — `matches.player1_id`'s two id spaces.
+          ids: [workspace.viewer.id, active.myPlayerId].filter(
+            (id): id is string => Boolean(id),
+          ),
+          avatarUrl: workspace.viewer.avatarUrl,
+          initials: workspace.viewer.initials,
+        }}
+      />
+    </>
   );
 }

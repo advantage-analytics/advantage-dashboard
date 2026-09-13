@@ -1,3 +1,4 @@
+import { EventHeaderSlot } from "@/components/dashboard/schedule/event-header-slot";
 import { notFound, redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
@@ -111,13 +112,21 @@ export default async function ScoreEventPage({
   );
 
   return (
-    <ScoreOnlyFlow
-      preset={preset}
-      lineup={lineupChoices(event, entries, programs, {
-        includeNonPlayed: true,
-      })}
-      outcomes={outcomes}
-      eventHref={`/dashboard/team/schedule/${eventId}`}
-    />
+    <>
+      <EventHeaderSlot
+        eventId={eventId}
+        name={event.name}
+        kind={event.kind}
+        leaf="Add score"
+      />
+      <ScoreOnlyFlow
+        preset={preset}
+        lineup={lineupChoices(event, entries, programs, {
+          includeNonPlayed: true,
+        })}
+        outcomes={outcomes}
+        eventHref={`/dashboard/team/schedule/${eventId}`}
+      />
+    </>
   );
 }

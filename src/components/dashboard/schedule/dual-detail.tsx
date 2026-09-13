@@ -9,59 +9,61 @@
  */
 
 import Link from "next/link";
+import { DualTicks } from "@/components/dashboard/schedule/dual-ticks";
+import { EventGlyphRow } from "@/components/dashboard/schedule/event-glyph-row";
 import {
-  DetailLine,
-  EventFacts,
   EventPageFrame,
   EventTitle,
   GroupHead,
   TableCard,
-  type DetailCount,
 } from "@/components/dashboard/schedule/event-page";
-import { LineRow } from "@/components/dashboard/schedule/line-row";
-import { TeamTotalsWidget } from "@/components/dashboard/schedule/team-totals-widget";
-import { HeadToHeadWidget } from "@/components/dashboard/schedule/head-to-head-widget";
+import {
+  LineRow,
+  UnsetLineRow,
+  type LineViewer,
+} from "@/components/dashboard/schedule/line-row";
+import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
 import {
   dualScore,
   entryPlayed,
   entryState,
-  lineCoverageFrom,
   lineWon,
 } from "@/lib/schedule/entry-state";
-import {
-  formatEventDatesLong,
-  siteTitle,
-  surfaceTitle,
-} from "@/lib/schedule/format";
 import { advButton } from "@/lib/ui/adv-button";
-import type { EventTeamTotals } from "@/lib/data/event-team-totals";
-import type {
-  OpponentDualHistory,
-  OpponentMeeting,
-} from "@/lib/schedule/opponent-history";
 import type { EventDetail, EventEntry } from "@/lib/schedule/types";
 
 /**
- * The dual's five columns, stated once and handed to both `TableCard` and every
- * `LineRow` under it — line, outcome, matchup, score, status.
+ * The dual's columns, stated once and handed to `TableCard` and every row:
+ * line · player · opponent · result · action · chevron. The names share the
+ * slack; Result (mark, then score) and the action are fixed tracks, so the
+ * scores and the actions start on the same x on every row and the action sits
+ * against the chevron rather than floating mid-row.
  */
-const COLUMNS = "grid-cols-[56px_52px_minmax(0,1fr)_120px_130px]";
-const HEADERS = ["Line", "Result", "Match", "Score", "Status"];
+const COLUMNS =
+  "grid-cols-[32px_minmax(0,1fr)_minmax(0,1fr)_140px_112px_13px] gap-x-5";
+const HEADERS = ["Line", "Player", "Opponent", "Result", "", ""];
+
+/** A college dual's full card, always drawn whole. */
+const SINGLES_SLOTS = ["S1", "S2", "S3", "S4", "S5", "S6"];
+const DOUBLES_SLOTS = ["D1", "D2", "D3"];
 
 /**
- * A dual, on the T5 event frame — empty and filled by ONE renderer.
+ * A dual's event page: the Schedule drawer's identity header, then one table
+ * card whose top band is the dual score.
  *
- * The transition between them is the thing being designed: a dual stops being
- * empty when its rows have scores in them, and a separate "nothing played yet"
- * screen would have to be dismissed. That holds for the rail too — the widgets
- * render with dashes rather than being swapped for an empty state, which is why
- * nothing below branches on `entries.length`.
+ * The header is the drawer's — the 48px crest, the name with the opponent's
+ * conference beside it, the date · venue · surface glyph row — so a coach who
+ * opens the page from the drawer lands on the same event, spelled the same
+ * way.
  *
- * Everything the page draws arrives computed. `totals`, `history` and
- * `meetings` are the route's reads (`getEventTeamTotals`, `opponentDualHistory`
- * / `opponentMeetings`); the shape, the facts row and the table card are
- * `event-page.tsx`'s, so a dual and a tournament cannot drift apart a gap at a
- * time.
+ * The score band leads the card: the team score at 40px, the nine courts as
+ * the drawer's form strip at twice its size, and how far the dual has got.
+ * Each group's tally sits in its own heading row, beside the lines that make
+ * it.
+ *
+ * The table always holds six singles and three doubles rows. A slot the
+ * lineup has no entry for keeps its row, so the card never changes shape as a
+ * dual fills in — empty and filled are ONE renderer.
  *
  * Every member of the program sees the same data — the membership-only RLS
  * policy hands every member the program's matches.
@@ -69,17 +71,15 @@ const HEADERS = ["Line", "Result", "Match", "Score", "Status"];
 export function DualDetail({
   detail,
   canEdit,
-  totals,
-  history,
-  meetings,
+  conference = null,
+  viewer = null,
 }: {
   detail: EventDetail;
   canEdit: boolean;
-  /** Summed over this dual's analysed matches. Null when nothing is measured. */
-  totals: EventTeamTotals | null;
-  history: OpponentDualHistory;
-  /** Prior decided duals against this opponent, this one excluded. */
-  meetings: OpponentMeeting[];
+  /** The opponent program's conference, where the dual resolved one. */
+  conference?: string | null;
+  /** The signed-in person, so their own line shows their photo. */
+  viewer?: LineViewer | null;
 }) {
   const { event, entries } = detail;
 
@@ -88,17 +88,7 @@ export function DualDetail({
 
   const score = dualScore(entries);
   const anyPlayed = score.us > 0 || score.them > 0;
-
-  // Counted over `entryState`, which is the one spelling of what a line is
-  // waiting for — the same answer the row's own action gives, so the summary
-  // and the rows underneath it cannot disagree.
-  const needFile = entries.filter(
-    (entry) => entryState(entry) === "no-video",
-  ).length;
-  const working = entries.filter(
-    (entry) => entryState(entry) === "working",
-  ).length;
-  const ready = entries.filter((entry) => entryState(entry) === "ready").length;
+  const decidedLines = entries.filter((entry) => entryPlayed(entry)).length;
 
   // The primary is whatever is actually next: while a line has no result at
   // all, that is a score; once every line is in, it is the video.
@@ -106,24 +96,60 @@ export function DualDetail({
     (entry) => entry.forfeit === null && entryState(entry) === "empty",
   );
 
-  const counts: DetailCount[] = [
-    {
-      kind: "action",
-      n: needFile,
-      label: needFile === 1 ? "line needs a file" : "lines need a file",
-      href: "/dashboard/team/upload",
-    },
-    { kind: "live", n: working, label: "analyzing" },
-    {
-      kind: "done",
-      n: ready,
-      label: ready === 1 ? "report ready" : "reports ready",
-    },
-  ];
+  const rows = (slots: string[], group: EventEntry[]) => {
+    // Entries by their slot; anything without a recognised slot keeps its
+    // lineup position after the fixed card, so no line is ever dropped.
+    const bySlot = new Map(group.map((entry) => [entry.slot, entry]));
+    const extra = group.filter(
+      (entry) => !entry.slot || !slots.includes(entry.slot),
+    );
+    return [
+      ...slots.map((slot) => {
+        const entry = bySlot.get(slot);
+        return entry ? (
+          <LineRow
+            key={entry.id}
+            entry={entry}
+            match={entry.matches[0] ?? null}
+            label={slot}
+            round={null}
+            canEdit={canEdit}
+            columns={COLUMNS}
+            viewer={viewer}
+            split
+          />
+        ) : (
+          <UnsetLineRow
+            key={slot}
+            slot={slot}
+            eventId={event.id}
+            canEdit={canEdit}
+            columns={COLUMNS}
+          />
+        );
+      }),
+      ...extra.map((entry) => (
+        <LineRow
+          key={entry.id}
+          entry={entry}
+          match={entry.matches[0] ?? null}
+          label={entry.slot ?? "—"}
+          round={null}
+          canEdit={canEdit}
+          columns={COLUMNS}
+          viewer={viewer}
+          split
+        />
+      )),
+    ];
+  };
 
   return (
     <EventPageFrame
+      mark={<EventMark kind={event.kind} name={event.name} size={48} />}
       title={<EventTitle vs name={event.name} />}
+      subline={conference}
+      facts={<EventGlyphRow event={event} />}
       actions={
         canEdit ? (
           <>
@@ -146,122 +172,95 @@ export function DualDetail({
           </>
         ) : null
       }
-      facts={
-        <EventFacts
-          date={formatEventDatesLong(event.startsOn, event.endsOn)}
-          site={siteTitle(event.site)}
-          surface={event.surface ? surfaceTitle(event.surface) : null}
-          count={{
-            n: entries.length,
-            noun: entries.length === 1 ? "line" : "lines",
-          }}
-          format={event.format}
-        />
-      }
-      detail={
-        <DetailLine
-          score={
-            <span
-              // ink-300 until a point is actually on the board. A 0–0 in full
-              // ink reads as a result rather than as an absence of one.
-              style={{
-                color: anyPlayed ? "var(--ink-900)" : "var(--ink-300)",
-              }}
-            >
-              {score.us}–{score.them}
-            </span>
-          }
-          mark={
-            score.decided && score.us !== score.them
-              ? score.us > score.them
-              : null
-          }
-          state={score.decided ? "Final" : anyPlayed ? undefined : "Not played"}
-          counts={counts}
-        />
-      }
-      rail={
-        <div className="flex flex-col gap-4">
-          <TeamTotalsWidget
-            totals={totals}
-            coverage={lineCoverageFrom(entries)}
-          />
-          <HeadToHeadWidget history={history} meetings={meetings} />
-        </div>
-      }
     >
-      <TableCard columns={COLUMNS} headers={HEADERS}>
-        <GroupHead label="Singles" note={courtsNote(singles, "courts")} />
-        {singles.map((entry, index) => (
-          <LineRow
-            key={entry.id}
-            entry={entry}
-            match={entry.matches[0] ?? null}
-            label={entry.slot ?? `S${index + 1}`}
-            round={null}
-            canEdit={canEdit}
-            columns={COLUMNS}
-            showSchool={false}
-            // Every row `last`: inside the card the rows carry no rules between
-            // them — the header's single hairline is the only one, which is the
-            // table law `TableCard` draws.
-            last
-          />
-        ))}
+      <TableCard
+        columns={COLUMNS}
+        headers={HEADERS}
+        top={
+          <div className="flex items-center gap-4 border-b border-[var(--border-hairline)] pt-5 pb-[18px]">
+            <span
+              className="tabular text-[40px] leading-none font-light tracking-[-0.6px] whitespace-nowrap"
+              aria-label={`Dual score ${score.us} to ${score.them}`}
+            >
+              {/* ink-300 until a point is on the board: a 0–0 in full ink
+                  reads as a result rather than as an absence of one. */}
+              <span
+                style={{
+                  color: anyPlayed ? "var(--ink-900)" : "var(--ink-300)",
+                }}
+              >
+                {score.us}
+              </span>
+              <span className="mx-1" style={{ color: "var(--ink-300)" }}>
+                –
+              </span>
+              <span
+                style={{
+                  color: anyPlayed ? "var(--ink-500)" : "var(--ink-300)",
+                }}
+              >
+                {score.them}
+              </span>
+            </span>
+            <span
+              aria-hidden="true"
+              className="h-7 w-px bg-[var(--border-hairline)]"
+            />
+            <DualTicks singles={singles} doubles={doubles} size="lg" />
+            <span
+              className="tabular text-[13px]"
+              style={{ color: "var(--ink-600)" }}
+            >
+              {score.decided
+                ? "Final"
+                : `${decidedLines} of ${SINGLES_SLOTS.length + DOUBLES_SLOTS.length} lines decided`}
+            </span>
+          </div>
+        }
+      >
+        <GroupHead label="Singles" note={<Tally entries={singles} />} />
+        {rows(SINGLES_SLOTS, singles)}
 
-        <GroupHead label="Doubles" note={doublesNote(doubles)} />
-        {doubles.map((entry, index) => (
-          <LineRow
-            key={entry.id}
-            entry={entry}
-            match={entry.matches[0] ?? null}
-            label={entry.slot ?? `D${index + 1}`}
-            round={null}
-            canEdit={canEdit}
-            columns={COLUMNS}
-            showSchool={false}
-            last
-          />
-        ))}
+        <GroupHead
+          label="Doubles"
+          note={<Tally entries={doubles} note={teamPointNote(doubles)} />}
+        />
+        {rows(DOUBLES_SLOTS, doubles)}
       </TableCard>
     </EventPageFrame>
   );
 }
 
-/**
- * "won 4 of 6 courts" — lines won over lines in the group.
- *
- * Courts, NOT `dualScore`: the heading counts the courts a group holds, where
- * the number in the detail line counts the team points three doubles courts add
- * up to. The denominator is the group's real size rather than a hard-coded 6 or
- * 3, so a dual that fields a different number of lines still describes itself.
- */
-function courtsNote(entries: EventEntry[], noun?: string): string | undefined {
-  if (entries.length === 0) return undefined;
+/** "2–2" beside a group's heading, with an optional quiet qualifier. */
+function Tally({ entries, note }: { entries: EventEntry[]; note?: string }) {
   const won = entries.filter((entry) => lineWon(entry) === true).length;
-  return `won ${won} of ${entries.length}${noun ? ` ${noun}` : ""}`;
+  // Played AND not won — `lineWon` alone answers `false` for a court nobody
+  // has played.
+  const lost = entries.filter(
+    (entry) => entryPlayed(entry) && lineWon(entry) !== true,
+  ).length;
+  return (
+    <span className="inline-flex items-baseline gap-2.5">
+      <span className="tabular text-[12px] text-[var(--ink-900)]">
+        {won}–{lost}
+      </span>
+      {note ? <span>{note}</span> : null}
+    </span>
+  );
 }
 
 /**
- * The doubles heading, which says who the ONE doubles point went to.
- *
- * Two of three courts takes it — the ITA rule `dualScore` applies — and it is
- * said here because the courts a coach reads in this group do not add up to the
- * number in the detail line without it.
+ * Who the ONE doubles point went to. Two of three courts takes it — the ITA
+ * rule `dualScore` applies — and it is said beside the Doubles tally because
+ * three courts do not add up to one point without it.
  */
-function doublesNote(entries: EventEntry[]): string | undefined {
-  const base = courtsNote(entries);
-  if (!base) return undefined;
-
+function teamPointNote(entries: EventEntry[]): string | undefined {
   const won = entries.filter((entry) => lineWon(entry) === true).length;
-  // Played AND not won — `lineWon` alone answers `false` for a court nobody has
-  // played, which would hand the opponent the doubles point before the doubles
-  // were played.
   const lost = entries.filter(
     (entry) => entryPlayed(entry) && lineWon(entry) !== true,
   ).length;
 
-  if (won >= 2) return `${base} — the team point is ours`;
-  if (lost >= 2) return `${base} — the team point is theirs`;
-  return base;
+  if (won >= 2) return "point ours";
+  if (lost >= 2) return "point theirs";
+  return undefined;
 }
