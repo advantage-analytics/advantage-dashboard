@@ -283,6 +283,30 @@ export function AddPlayerDialog({
     profileId: string | null;
     form: string;
   } | null>(null);
+  /**
+   * The archived profile `restore()` was last asked to bring back, frozen at
+   * the moment of the click — the fix for a gap the `former` prop alone
+   * cannot close.
+   *
+   * `restoreProgramPlayer` revalidates the roster the same way
+   * `addProgramPlayer` does, so on the invite-failure path the refreshed
+   * `former` array no longer contains this profile: it is live again, no
+   * longer "former." Deriving `restorable` from `former` alone would then
+   * make the note and the Restore button vanish mid-error, leaving only "Add
+   * to roster" on screen — which a coach clicking it, with an email that
+   * does not match what is now on file, turns into the exact silent second
+   * profile this whole feature exists to prevent (`add_program_player`'s
+   * duplicate check only fires against a live row's own email).
+   *
+   * Keyed on the form for the same reason `created` is: an edit that changes
+   * what would be restored must drop this, or a coach who clears the field
+   * and means someone else would have their new person's row read as a
+   * dangling retry target instead.
+   */
+  const [restoreTarget, setRestoreTarget] = useState<{
+    form: string;
+    person: FormerPlayer;
+  } | null>(null);
 
   /**
    * Applying `initial`, and why it is an effect keyed on the open edge.
@@ -327,6 +351,7 @@ export function AddPlayerDialog({
     setSpotAcknowledged(false);
     setError(null);
     setCreated(null);
+    setRestoreTarget(null);
   }
 
   /**
@@ -403,14 +428,22 @@ export function AddPlayerDialog({
         );
 
   /**
-   * The archived profile on offer, if the typed fields look like one.
+   * The archived profile on offer, if the typed fields look like one — or,
+   * failing that, the one `restore()` was last asked to bring back for this
+   * exact form, per `restoreTarget` above.
    *
-   * Keyed on typed values only, so the `formKey` exclusion above already covers
-   * the one path that succeeds and stays open: after a restore, `created` holds
-   * this profile's id against this form, and the note is gone anyway because the
-   * player is no longer archived.
+   * The fallback matters on the one path that succeeds and stays open: once
+   * `restoreProgramPlayer` clears `archived_at`, the freshly-revalidated
+   * `former` prop no longer carries this profile, so `formerPlayerMatch`
+   * alone would return `null` here — dropping the note and the Restore
+   * button out from under a coach mid-retry, with only "Add to roster" left
+   * to click.
    */
-  const restorable = formerPlayerMatch(former, { firstName, lastName, email });
+  const restorable =
+    formerPlayerMatch(former, { firstName, lastName, email }) ??
+    (restoreTarget !== null && restoreTarget.form === formKey
+      ? restoreTarget.person
+      : null);
 
   const nameNote = sameName.length === 0 ? null : duplicateNameNote(sameName);
   const restoreNote = restorable === null ? null : formerPlayerNote(restorable);
@@ -495,9 +528,12 @@ export function AddPlayerDialog({
    * Deliberately a mirror of `submit()` rather than a branch inside it — one
    * RPC instead of the other, then the same optional invite with the same
    * half-done handling, and the same "revalidate happened, so record what we
-   * wrote" bookkeeping. `created` is what makes a retry safe: the invite is the
-   * half that can fail after the row is already live, and a second click must
-   * not call `restore_program_player` again on a row it already un-archived.
+   * wrote" bookkeeping. `created` is what makes a retry *safe*: the invite is
+   * the half that can fail after the row is already live, and a second click
+   * must not call `restore_program_player` again on a row it already
+   * un-archived. `restoreTarget` is what makes a retry *reachable* — without
+   * it, that same revalidation would remove the row from `former` and take
+   * the Restore button down with it.
    *
    * The invite is skipped without an address rather than refused: the checkbox
    * is already disabled while the field is empty, and an archived player who
@@ -509,6 +545,11 @@ export function AddPlayerDialog({
    */
   function restore(person: FormerPlayer) {
     setError(null);
+    // Frozen now, before the RPC that will make `former` stop matching this
+    // person — see `restoreTarget` above for why. Set unconditionally, not
+    // only on the branch that actually calls the RPC: a retry after a failed
+    // invite must keep the same frozen target, not drop it a render early.
+    setRestoreTarget({ form: formKey, person });
     startRestore(async () => {
       if (createdProfileId !== person.profileId) {
         const result = await restoreProgramPlayer(person.profileId);
