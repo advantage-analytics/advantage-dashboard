@@ -23,6 +23,7 @@ import type { DraftRow as DraftRowData } from "@/lib/wizard/actions";
 import { formatShortDate } from "@/lib/ui/date-format";
 import { cn } from "@/lib/utils";
 import { LIST_ROW_FRAME, listGridCols, matchRowId } from "./match-card-list";
+import { LIST_TRACK_TRANSITION, eventCellFade } from "./match-list-layout";
 
 export type { DraftRowData };
 
@@ -51,6 +52,7 @@ export function DraftRow({
 }): React.JSX.Element {
   const router = useRouter();
   const href = draftHref(draft.id, scope);
+  const eventHidden = scope === "team" && compact;
 
   const resume = (
     <Link
@@ -86,7 +88,8 @@ export function DraftRow({
       }}
       className={cn(
         LIST_ROW_FRAME,
-        "group relative -mx-4 h-[52px] cursor-pointer rounded-[var(--radius-element)] px-4 transition-colors duration-200 hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none",
+        LIST_TRACK_TRANSITION,
+        "group relative -mx-4 h-[52px] cursor-pointer rounded-[var(--radius-element)] px-4 hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none",
         selected && "bg-[var(--surface-muted)]",
       )}
       style={listGridCols(scope, compact)}
@@ -119,15 +122,19 @@ export function DraftRow({
       <EmptyMark label="No score yet" />
 
       {/* Event — the way back in. Beside the open team drawer the Event track
-          is gone, so it moves into the lifecycle cell. */}
-      {scope === "team" && compact ? (
-        resume
-      ) : (
-        <>
-          {resume}
-          <span />
-        </>
-      )}
+          collapses, so the link fades out of it and takes the lifecycle cell
+          instead; `inert` keeps the faded copy out of the tab order. */}
+      <span
+        aria-hidden={eventHidden || undefined}
+        inert={eventHidden}
+        className={cn(
+          "grid min-w-0 overflow-hidden",
+          eventCellFade(eventHidden),
+        )}
+      >
+        {resume}
+      </span>
+      {eventHidden ? resume : <span />}
     </div>
   );
 }

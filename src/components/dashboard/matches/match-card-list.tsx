@@ -1,7 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { LIST_ROW_FRAME, listGridCols } from "./match-list-layout";
+import {
+  LIST_ROW_FRAME,
+  LIST_TRACK_TRANSITION,
+  eventCellFade,
+  listGridCols,
+} from "./match-list-layout";
 export {
   DATE_COL,
   DATE_COL_WITH_YEAR,
@@ -16,6 +21,9 @@ import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { formatShortDate } from "@/lib/ui/date-format";
 import { NewPill } from "@/components/ui/new-pill";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { RowLifecycle } from "./row-state";
 import { cn } from "@/lib/utils";
 
@@ -110,6 +118,12 @@ export function MatchCardList({
   const isWin = match.score.winner === "player1";
   const href = `/dashboard/matches/${match.id}`;
   const isTeam = scope === "team";
+  const eventHidden = isTeam && compact;
+  const { viewer, active } = useWorkspace();
+  const playerId = match.player1.id ?? null;
+  const isViewerRow =
+    playerId !== null &&
+    (playerId === viewer.id || playerId === active.myPlayerId);
 
   return (
     <div
@@ -135,7 +149,8 @@ export function MatchCardList({
       }}
       className={cn(
         LIST_ROW_FRAME,
-        "group relative -mx-4 h-[52px] cursor-pointer rounded-[var(--radius-element)] px-4 transition-colors duration-200 hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none",
+        LIST_TRACK_TRANSITION,
+        "group relative -mx-4 h-[52px] cursor-pointer rounded-[var(--radius-element)] px-4 hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none",
         selected && "bg-[var(--surface-muted)]",
         isNew && "animate-[highlight-new-match_1.5s_ease-out_0.4s_both]",
       )}
@@ -149,9 +164,23 @@ export function MatchCardList({
         {formatShortDate(match.date)}
       </span>
 
+      {/* Player — the roster's name column: the 26px mark, then the name.
+          Your own rows carry your photo; a teammate's photo is not readable
+          (`users` RLS is own-row only), so theirs is initials, as on Roster. */}
       {isTeam && (
-        <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
-          {match.player1.name}
+        <span className="flex min-w-0 items-center gap-2.5">
+          {isViewerRow ? (
+            <PersonAvatar
+              initials={viewer.initials}
+              photoUrl={viewer.avatarUrl}
+              className="size-[26px] text-[9px]"
+            />
+          ) : (
+            <InitialsAvatar name={match.player1.name} />
+          )}
+          <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
+            {match.player1.name}
+          </span>
         </span>
       )}
 
@@ -183,23 +212,28 @@ export function MatchCardList({
       />
 
       {/* Event — the occasion, with the round trailing it in mono. The round
-          never truncates; a tournament losing its tail is the smaller loss. */}
-      {!(isTeam && compact) && (
-        <span
-          className="flex min-w-0 items-baseline gap-1 text-[12px]"
-          style={{ color: "var(--ink-600)" }}
-        >
-          <span className="min-w-0 truncate">{match.tournamentName}</span>
-          {match.round && (
-            <span
-              className="mono shrink-0 text-[11px]"
-              style={{ color: "var(--ink-400)" }}
-            >
-              · {match.round}
-            </span>
-          )}
-        </span>
-      )}
+          never truncates; a tournament losing its tail is the smaller loss.
+          Beside the open team drawer its track collapses to nothing and the
+          cell fades, rather than leaving the tree — see
+          `TEAM_LIST_GRID_COLS_COMPACT`. */}
+      <span
+        aria-hidden={eventHidden || undefined}
+        className={cn(
+          "flex min-w-0 items-baseline gap-1 overflow-hidden text-[12px]",
+          eventCellFade(eventHidden),
+        )}
+        style={{ color: "var(--ink-600)" }}
+      >
+        <span className="min-w-0 truncate">{match.tournamentName}</span>
+        {match.round && (
+          <span
+            className="mono shrink-0 text-[11px]"
+            style={{ color: "var(--ink-400)" }}
+          >
+            · {match.round}
+          </span>
+        )}
+      </span>
 
       {/* Lifecycle — silent on a settled row; the upload's chip and bar, or the
           one word that explains an exception, on the rest. `grid` blockifies

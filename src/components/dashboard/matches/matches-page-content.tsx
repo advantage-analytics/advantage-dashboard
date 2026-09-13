@@ -1110,7 +1110,11 @@ export function MatchesPageContent({
           unseenIds={unseenIds}
           selectedId={selectedId}
           onToggle={toggleRow}
-          drawerOpen={drawerMatch !== null || drawerDraft !== null}
+          // Not while closing: the tracks widen as the rail shrinks, in the
+          // same 200ms, rather than waiting for it to finish and then jumping.
+          drawerOpen={
+            (drawerMatch !== null || drawerDraft !== null) && !closing
+          }
         />
       )}
 

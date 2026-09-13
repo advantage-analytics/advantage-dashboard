@@ -14,9 +14,12 @@ import {
 } from "./match-card-list";
 import {
   LIST_MIN_WIDTH,
+  LIST_TRACK_TRANSITION,
   TEAM_LIST_MIN_WIDTH,
   TEAM_LIST_MIN_WIDTH_COMPACT,
+  eventCellFade,
 } from "./match-list-layout";
+import { cn } from "@/lib/utils";
 
 export type SortField = "date" | "opponent" | "event" | "result";
 export type SortDir = "asc" | "desc";
@@ -47,13 +50,13 @@ interface MatchesGridProps {
  * carries an empty label to keep the header's column count in step with the
  * row's.
  */
-function columnsFor(scope: "personal" | "team", compact: boolean): string[] {
+function columnsFor(scope: "personal" | "team"): string[] {
   if (scope === "personal") {
     return ["Date", "Opponent", "Result", "Score", "Event", ""];
   }
-  return compact
-    ? ["Date", "Player", "Opponent", "Result", "Score", ""]
-    : ["Date", "Player", "Opponent", "Result", "Score", "Event", ""];
+  // Event stays in the team header beside the drawer: its track collapses and
+  // the label fades with the cells under it (`TEAM_LIST_GRID_COLS_COMPACT`).
+  return ["Date", "Player", "Opponent", "Result", "Score", "Event", ""];
 }
 
 export function MatchesGrid({
@@ -118,24 +121,38 @@ export function MatchesGrid({
             of dividers (SKILL 8a). */}
         <div className="surface-card overflow-x-auto" style={cardStyle}>
           <div
-            className={
+            className={cn(
+              LIST_TRACK_TRANSITION,
               scope === "personal"
                 ? LIST_MIN_WIDTH
                 : compact
                   ? TEAM_LIST_MIN_WIDTH_COMPACT
-                  : TEAM_LIST_MIN_WIDTH
-            }
+                  : TEAM_LIST_MIN_WIDTH,
+            )}
           >
             {/* Column headers — flush at the card inset, hairline underneath. */}
             <div
-              className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pt-3.5 pb-2.5`}
+              className={cn(
+                LIST_ROW_FRAME,
+                LIST_TRACK_TRANSITION,
+                "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
+              )}
               style={listGridCols(scope, compact)}
               role="row"
             >
-              {columnsFor(scope, compact).map((label, i) => (
+              {columnsFor(scope).map((label, i) => (
                 <span
                   key={label || `col-${i}`}
-                  className="eyebrow-sm min-w-0 truncate"
+                  aria-hidden={
+                    (label === "Event" && scope === "team" && compact) ||
+                    undefined
+                  }
+                  className={cn(
+                    "eyebrow-sm min-w-0 truncate",
+                    label === "Event" &&
+                      scope === "team" &&
+                      eventCellFade(compact),
+                  )}
                   role="columnheader"
                 >
                   {label}
