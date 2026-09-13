@@ -241,6 +241,15 @@ const SAMPLE = {
   month: "Sep 2026",
 } as const;
 
+/** Preferences' in-card group label — real copy, since it is chrome. */
+function GroupLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="pt-3 pb-1 text-[11px] font-medium text-[var(--ink-500)]">
+      {children}
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------- pages */
 
 /** Profile: identity card, General information, Tennis profile. */
@@ -544,24 +553,44 @@ export function SettingsPlanPending() {
 /** Preferences: Notifications toggles, Defaults, the plan row. */
 export function SettingsPreferencesPending() {
   const { active, viewer } = useWorkspace();
+  const showTeamNotifications =
+    active.kind === "team" &&
+    (active.role === "owner" || active.role === "coach");
 
   return (
     <Column label="Loading preferences">
       <SettingsCard>
         <SettingsCardTitle className="pb-2">Notifications</SettingsCardTitle>
+        <GroupLabel>Your matches</GroupLabel>
         <CardRow
           label="Email me when analysis is ready"
           description="Processing has no fixed turnaround — this is how you'll know."
           control={<Toggle />}
         />
-        <CardRow label="Email me if analysis fails" control={<Toggle />} />
-        {active.kind === "team" && (
-          <CardRow
-            label="Weekly team digest"
-            description="Coaches only — Monday summary of the weekend's results."
-            control={<Toggle />}
-          />
+        <CardRow
+          label="Email me if analysis fails"
+          description="Including why, and whether your video is still held for a retry."
+          control={<Toggle />}
+        />
+        {showTeamNotifications && (
+          <>
+            <GroupLabel>Your team</GroupLabel>
+            <CardRow
+              label="Team activity"
+              description="Someone asks to join, accepts an invitation, or leaves the team."
+              control={<Toggle />}
+            />
+            <CardRow
+              label="Analysis allowance alerts"
+              description="Once at 80% of the month's video analysis time, and once when it's spent."
+              control={<Toggle />}
+            />
+          </>
         )}
+        <Text className="mt-3.5 text-[11px] leading-[1.5]">
+          Invitations, claim decisions, ownership changes and account security
+          emails always send.
+        </Text>
       </SettingsCard>
 
       <SettingsCard>

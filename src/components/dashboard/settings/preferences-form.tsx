@@ -212,14 +212,17 @@ export function PreferencesForm({
 }
 
 /**
- * The small caps label that splits one card of switches into who they are
- * for. `SettingsSectionHeading` is a page-level `01 · Title` and too loud
- * for a divider inside a card; this is the same 11px muted register as a row
- * description, in caps, sitting above the row it introduces.
+ * The label that splits one card of switches into who they are for.
+ * `SettingsSectionHeading` is a page-level `01 · Title` and too loud for a
+ * divider inside a card; this is the 11px muted register of a row
+ * description, one weight up, sitting above the row it introduces.
+ *
+ * Sentence case, not tracked caps: "YOUR MATCHES" shouted over rows whose
+ * own labels are quiet 12px sentences, and read as a second card title.
  */
 function NotificationGroup({ label }: { label: string }) {
   return (
-    <div className="pt-3 pb-1 text-[10px] font-medium tracking-[0.08em] text-[var(--ink-400)] uppercase first-of-type:pt-0">
+    <div className="pt-3 pb-1 text-[11px] font-medium text-[var(--ink-500)] first-of-type:pt-0">
       {label}
     </div>
   );
