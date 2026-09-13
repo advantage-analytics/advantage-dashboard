@@ -42,3 +42,28 @@ ready).
   - [ ] Both trim handles remain fully draggable after the change: dragging the right handle leftward updates the END timecode and the "x of y" header, and dragging the left handle rightward updates START — no pointer-event regression from the new stacking/padding.
   - [ ] `npm run lint` and `npm run typecheck` pass; the Provider, Match, Video and Confirm steps render with the same footer position as before (no visual change outside the trim step and the shared bottom padding).
 - **notes:** Root cause is two-fold: (1) the footer has no `z-index`, so the rail's `z-[1]`/`z-[3]` bracket and handles — which sit in the root stacking context because their `relative` ancestor sets no z-index — paint above the sticky footer once they scroll into its band; (2) the content column's only bottom buffer is `pb-10` (40px), less than the 64px footer, so the trim step's last row can sit under the footer at rest. Do not use `overflow-hidden` on the rail wrapper — that clips the intentional 2px handle/bracket overhang. Keep `RAIL_HEIGHT_PX = 52` unchanged. Read `docs/ui-revamp-guardrails.md` first; the wizard's three critical inputs are out of scope and must not be touched.
+
+## T3 · Guard the wizard roster fetch so a thrown error surfaces instead of hanging
+
+- **status:** todo
+- **model:** sonnet
+- **files:** src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts
+- **done when:**
+  - [ ] The async body of the roster-loading `useEffect` (~lines 1335–1412) is wrapped in `try/catch` (or `.catch`), and the catch branch calls the same failure setter the existing `rosterError` path uses, so `whoPlayed.loadFailed` becomes `true` when any of the three `Promise.all` calls rejects — not only when one resolves with an `error` field
+  - [ ] The failure state is reset (`setRosterLoadFailed(false)`) when a fresh load begins, so `reloadRoster()` (~line 1458) can go from "The roster couldn't be loaded." back to a successful list rather than sticking on the error
+  - [ ] A stale-response guard is in place: if the effect re-runs (workspace change / unmount) before an in-flight fetch settles, the settled result does not overwrite the newer state (existing cancelled-flag pattern if one is present, else add one)
+  - [ ] `npm run typecheck` and `npm run lint` pass; no change to `SourceStepContent.tsx` is needed because the existing `roster === null && loadFailed` branch already renders the error copy
+- **notes:** Symptom fix only — converts the permanent "Loading the roster…" into the existing "couldn't be loaded." copy when the fetch throws. Root cause for ZZ Test Program is T4. Do not touch the RPC or any migration in this task.
+
+## T4 · Find and fix why the ZZ Test Program roster never resolves in the upload wizard
+
+- **status:** todo
+- **model:** fable
+- **needs:** T3
+- **files:** src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts, supabase/migrations/20260822090500_program_roster_full.sql (reference — live DB is truth), src/lib/workspace/active-workspace-server.ts, src/lib/workspace/types.ts
+- **done when:**
+  - [ ] The actual failing call is identified and named in the commit message with evidence: either (a) the `program_roster_full` RPC / `program_invites` / `program_players` query returns an error or rejects for the ZZ Test Program owner (captured via `execute_sql` as that user or from the browser network tab), or (b) `eligibilityWorkspace.kind` resolves to something other than `"team"` for the program so the effect returns early — with the specific value observed
+  - [ ] With the ZZ Test Program workspace active, the wizard's "Who played" step renders either the member list or the roster empty-state within one load — "Loading the roster…" is no longer the terminal state (verified via the dashboard screenshot harness or a logged-in browser session, screenshot attached)
+  - [ ] If the fix touches `program_roster_full` or any RLS policy / `user_program_ids()`, the DDL is applied to the live database AND committed as a new file under `supabase/migrations/`, and the RPC still returns zero rows for a user who is not a member of the program (checked with `execute_sql`)
+  - [ ] Program members who are not the current user still appear in the roster after the fix (the fix does not silently narrow results to the caller's own row)
+- **notes:** ZZ Test Program (recreated 2026-08-26) has clajersongimena as sole owner and no matches — an empty roster is legitimate, but must resolve to `[]`, not hang. Verify schema against the live DB via Supabase MCP, not the migrations folder. Read `docs/ui-revamp-guardrails.md` first — "who played" is one of three wizard inputs that silently misattributes stats when wrong.
