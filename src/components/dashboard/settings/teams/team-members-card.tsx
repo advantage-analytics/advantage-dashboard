@@ -158,9 +158,7 @@ export function TeamMembersCard({
                       aria-hidden="true"
                     />
                   )}
-                  <StatePill className="w-[62px] justify-center">
-                    {capitalize(member.role)}
-                  </StatePill>
+                  <StatePill>{capitalize(member.role)}</StatePill>
                 </span>
               )}
             </PersonRow>
@@ -180,9 +178,7 @@ export function TeamMembersCard({
             <span className="text-[11px] text-[var(--ink-500)]">
               Sent {formatInviteDate(invite.createdAt)}
             </span>
-            <StatePill outline className="w-[62px] justify-center">
-              Invited
-            </StatePill>
+            <StatePill outline>Invited</StatePill>
           </PersonRow>
         ))}
 
