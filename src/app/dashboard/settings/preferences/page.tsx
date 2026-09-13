@@ -16,7 +16,10 @@ export default async function PreferencesPage() {
     <PreferencesForm
       initial={preferences}
       plan={workspace?.viewer.plan ?? "free"}
-      showTeamDigest={workspace?.active.kind === "team"}
+      showTeamNotifications={
+        workspace?.active.kind === "team" &&
+        (workspace.active.role === "owner" || workspace.active.role === "coach")
+      }
     />
   );
 }

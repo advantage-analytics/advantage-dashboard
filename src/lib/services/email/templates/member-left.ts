@@ -1,5 +1,10 @@
 import { siteUrl } from "@/lib/site-url";
-import { renderEmail, renderText, type EmailContent } from "../shell";
+import {
+  preferenceNote,
+  renderEmail,
+  renderText,
+  type EmailContent,
+} from "../shell";
 import type { EmailMessage } from "../send";
 
 /**
@@ -55,6 +60,7 @@ export function memberLeftOwnerEmail(
       label: "View the roster",
       url: `${siteUrl()}/dashboard/team/roster`,
     },
+    note: preferenceNote("Team activity"),
   };
 
   return {

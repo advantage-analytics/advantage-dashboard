@@ -137,6 +137,16 @@ export interface SubmitJobDeps {
   }): Promise<QuotaReservation>;
   /** `releaseQuota()` — hands a reservation back on any failure past it. */
   releaseQuota(jobId: string): Promise<void>;
+  /**
+   * `notifyUsageThreshold()` — the allowance email at 80% / spent, once a
+   * reservation has succeeded. Fire-and-forget: the route runs it in
+   * `after()`, and its failure must never touch the submission.
+   */
+  notifyUsageThreshold(params: {
+    workspace: Workspace;
+    usedSeconds: number;
+    capSeconds: number;
+  }): void;
   /** A partial update of the job row, keyed on its id. */
   updateJob(
     jobId: string,
@@ -569,6 +579,17 @@ export async function handleSubmitJob(
     // a submission the vendor has already accepted, because a bookkeeping
     // fixup failed, would be far worse than the orphan it is fixing.
     deps.afterSubmitted({ jobId: job.id, externalJobId });
+
+    // Only now that the vendor holds the job is the reservation really spent.
+    // Announced any earlier, a submission that failed and handed its minutes
+    // back would still have mailed the staff — and, because the notifier
+    // claims one send per threshold per month, would have silenced the real
+    // crossing later. Deduped inside the notifier; cheap on every submission.
+    deps.notifyUsageThreshold({
+      workspace: billingWorkspace,
+      usedSeconds: reservation.usedSeconds,
+      capSeconds: reservation.capSeconds,
+    });
 
     return NextResponse.json({
       jobId: job.id,

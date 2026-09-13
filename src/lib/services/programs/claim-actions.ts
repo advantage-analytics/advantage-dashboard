@@ -16,6 +16,7 @@ import { checkClaimEmail } from "./domain-match";
 import { toClaimRole, type ClaimRoleValue } from "./claim-roles";
 import { nextClaimStatus, type ClaimStatus } from "./claim-state";
 import { getProgramOwner } from "./program-owner";
+import { wantsNotification } from "@/lib/services/notifications/should-notify";
 import { siteUrl } from "@/lib/site-url";
 
 export type ActionOutcome = { ok: true } | { ok: false; error: string };
@@ -1115,6 +1116,10 @@ export async function requestInvite(input: {
     after(async () => {
       const owner = await getProgramOwner(programId);
       if (!owner) return;
+      // "Team activity" on Settings › Preferences. Checked here, after the
+      // response has left, so the switch's state leaks through no timing.
+      if (!(await wantsNotification(owner.userId, "notifyTeamActivity")))
+        return;
 
       const sent = await sendEmail(
         joinRequestOwnerNoticeEmail({

@@ -206,6 +206,7 @@ function harness(input: {
       releaseQuota: async (jobId) => {
         h.released.push(jobId);
       },
+      notifyUsageThreshold: () => {},
       updateJob: async (jobId, patch) => {
         h.patches.push({ jobId, patch });
         return { error: null };

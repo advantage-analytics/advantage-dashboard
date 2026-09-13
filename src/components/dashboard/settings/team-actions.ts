@@ -15,6 +15,7 @@ import {
   sendEmail,
 } from "@/lib/services/email";
 import { getProgramOwner } from "@/lib/services/programs/program-owner";
+import { wantsNotification } from "@/lib/services/notifications/should-notify";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import { programDisplayName } from "@/lib/data/programs-server";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
@@ -352,7 +353,13 @@ export async function leaveProgram(programId: string): Promise<LeaveResult> {
   const owner = await getProgramOwner(programId);
   let ownerNotified: string | null = null;
 
-  if (owner && owner.userId !== member.viewer.id) {
+  // Skipped when the owner turned "Team activity" off: `ownerNotified` stays
+  // null and the dialog says nothing about mail, which is the truth.
+  if (
+    owner &&
+    owner.userId !== member.viewer.id &&
+    (await wantsNotification(owner.userId, "notifyTeamActivity"))
+  ) {
     const sent = await sendEmail(
       memberLeftOwnerEmail({
         to: owner.email,

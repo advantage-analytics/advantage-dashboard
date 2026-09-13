@@ -13,7 +13,7 @@ import type { ActionResult } from "@/components/dashboard/settings/actions";
  *
  * It takes a complete `Preferences` for that reason, not a patch. With a
  * `Partial` the missing keys had to be filled from the TS defaults, so a
- * one-key call quietly reset the other five to something the caller never
+ * one-key call quietly reset the other seven to something the caller never
  * chose. The form holds the whole object anyway.
  *
  * RLS restricts this to `auth.uid() = user_id` in all three directions, so the
@@ -39,6 +39,8 @@ export async function savePreferences(
       notify_analysis_ready: next.notifyAnalysisReady,
       notify_analysis_failed: next.notifyAnalysisFailed,
       weekly_team_digest: next.weeklyTeamDigest,
+      notify_team_activity: next.notifyTeamActivity,
+      notify_usage_alerts: next.notifyUsageAlerts,
       default_workspace: next.defaultWorkspace,
       match_report_opens_at: next.matchReportOpensAt,
       stat_definitions_on_hover: next.statDefinitionsOnHover,

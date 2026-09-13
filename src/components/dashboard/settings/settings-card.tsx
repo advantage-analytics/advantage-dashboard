@@ -100,11 +100,22 @@ export function SettingsCardRow({
 /** The closing note some cards carry: 11px, muted, above a hairline. */
 export function SettingsCardFootnote({
   children,
+  className,
 }: {
   children: React.ReactNode;
+  /**
+   * Pass `border-t-0 pt-0` when the content above already ends in a hairline
+   * (a row list); the rule is only for closing a figure or a paragraph.
+   */
+  className?: string;
 }) {
   return (
-    <span className="mt-3.5 border-t border-[var(--border-hairline)] pt-3.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
+    <span
+      className={cn(
+        "mt-3.5 border-t border-[var(--border-hairline)] pt-3.5 text-[11px] leading-[1.5] text-[var(--ink-500)]",
+        className,
+      )}
+    >
       {children}
     </span>
   );
