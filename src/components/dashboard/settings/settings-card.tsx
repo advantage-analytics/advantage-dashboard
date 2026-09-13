@@ -3,15 +3,12 @@
 import { cn } from "@/lib/utils";
 
 /**
- * The two light figure sizes settings pages print a headline number at — the
- * Plan facts (22px) and Program hours left (24px). Neither is a step on the
- * SKILL.md type scale; each lives here once so the page and its skeleton
- * share the size instead of each carrying the literal.
+ * The Plan facts' 22px light figure. Not a step on the SKILL.md type scale, so
+ * it lives here once and the page and its skeleton share it instead of each
+ * carrying the literal. (Program hours' 24px figure is `.text-title-lg`.)
  */
 export const SETTINGS_FACT_FIGURE =
   "text-[22px] leading-[1.15] font-light tracking-[-0.4px]";
-export const SETTINGS_HOURS_FIGURE =
-  "text-[24px] leading-[1.2] font-light tracking-[-0.4px]";
 
 /**
  * The card the round-4 settings pages are built from: hairline border, card

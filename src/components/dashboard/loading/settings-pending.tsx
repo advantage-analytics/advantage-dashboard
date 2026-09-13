@@ -5,7 +5,6 @@ import { ChevronDown } from "lucide-react";
 import { useParams } from "next/navigation";
 import {
   SETTINGS_FACT_FIGURE,
-  SETTINGS_HOURS_FIGURE,
   SettingsCard,
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
@@ -777,7 +776,7 @@ export function SettingsTeamDetailPending() {
           <Text className="text-[11px]">Resets Oct 1 · in 18 days</Text>
         </div>
         <div className="flex flex-wrap items-baseline gap-2">
-          <Text className={SETTINGS_HOURS_FIGURE}>{SAMPLE.hours}</Text>
+          <Text className="text-title-lg">{SAMPLE.hours}</Text>
           <Text className="text-[12px]">left of {SAMPLE.hours}</Text>
         </div>
         <Box className="h-1.5 w-full rounded-[3px]" />
