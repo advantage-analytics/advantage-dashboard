@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Add neutral icons to the roster drawer's Options menu
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/team/player-drawer.tsx (guess — the Options popover inside `PlayerDrawer`, ~lines 353–455)
 - **done when:**

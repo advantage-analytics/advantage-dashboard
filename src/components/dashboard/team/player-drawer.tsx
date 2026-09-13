@@ -9,6 +9,9 @@ import {
   ChevronRight,
   ChevronUp,
   MoreHorizontal,
+  Pencil,
+  Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import {
@@ -365,12 +368,19 @@ function MemberMenu({
       >
         {canToggleSend ? (
           <div className="flex items-start gap-3 rounded-[var(--radius-element)] px-2 py-2">
-            <span className="min-w-0 flex-1">
-              <span className="block text-[12px] font-medium text-[var(--ink-900)]">
-                Can send video
-              </span>
-              <span className="block text-[11px] leading-[1.5] text-[var(--ink-500)]">
-                Spends the program&apos;s analysis time
+            <span className="flex min-w-0 flex-1 items-start gap-2.5">
+              <Upload
+                className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-400)]"
+                strokeWidth={1.5}
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[12px] font-medium text-[var(--ink-900)]">
+                  Can send video
+                </span>
+                <span className="block text-[11px] leading-[1.5] text-[var(--ink-500)]">
+                  Spends the program&apos;s analysis time
+                </span>
               </span>
             </span>
             <AdvSwitch
@@ -416,8 +426,13 @@ function MemberMenu({
               onError(null);
               onEdit();
             }}
-            className="block w-full rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
+            className="flex w-full items-center gap-2.5 rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
           >
+            <Pencil
+              className="size-[13px] shrink-0 text-[var(--ink-400)]"
+              strokeWidth={1.5}
+              aria-hidden
+            />
             Edit player
           </button>
         )}
@@ -436,8 +451,13 @@ function MemberMenu({
                   : removeMember(member.userId as string),
               )
             }
-            className="block w-full rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)] disabled:opacity-50"
+            className="flex w-full items-center gap-2.5 rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)] disabled:opacity-50"
           >
+            <Trash2
+              className="size-[13px] shrink-0 text-[var(--ink-400)]"
+              strokeWidth={1.5}
+              aria-hidden
+            />
             Remove from roster
           </button>
         )}
