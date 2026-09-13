@@ -23,19 +23,24 @@
  * `NODE_ENV === "production"` (a deployed build that's missing the site-url
  * config), warn once so the gap doesn't ship silently.
  */
+/** Which Vercel-provided var names this deployment, by `VERCEL_ENV`. */
+const VERCEL_HOST_VAR = {
+  production: "VERCEL_PROJECT_PRODUCTION_URL",
+  preview: "VERCEL_URL",
+} as const;
+
 export function siteUrl(): string {
   const configured = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "");
   if (configured) return configured;
 
-  if (process.env.VERCEL_ENV === "production") {
-    const host = process.env.VERCEL_PROJECT_PRODUCTION_URL;
-    if (host) return `https://${host}`;
-  }
-
-  if (process.env.VERCEL_ENV === "preview") {
-    const host = process.env.VERCEL_URL;
-    if (host) return `https://${host}`;
-  }
+  const env = process.env.VERCEL_ENV;
+  const hostVar =
+    env !== undefined &&
+    Object.prototype.hasOwnProperty.call(VERCEL_HOST_VAR, env)
+      ? VERCEL_HOST_VAR[env as keyof typeof VERCEL_HOST_VAR]
+      : undefined;
+  const host = hostVar ? process.env[hostVar] : undefined;
+  if (host) return `https://${host}`;
 
   if (process.env.NODE_ENV === "production") {
     console.warn(

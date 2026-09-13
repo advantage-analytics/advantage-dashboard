@@ -1028,6 +1028,15 @@ async function fileRequest(row: {
 type FileRequestOutcome =
   { ok: true; created: boolean } | { ok: false; error: string };
 
+/**
+ * Collapse the internal `created` flag: a caller that doesn't key behaviour
+ * on it — everything but `requestInvite`'s owner notice — only ever learns
+ * "recorded".
+ */
+function toActionOutcome(filed: FileRequestOutcome): ActionOutcome {
+  return filed.ok ? { ok: true } : filed;
+}
+
 /** The bits of a program the request actions need, resolved from its key. */
 async function programForKey(
   programKey: string,
@@ -1248,8 +1257,7 @@ export async function raiseObjection(input: {
     email,
     note: input.note,
   });
-  // Collapse the internal `created` flag: the form only ever learns "recorded".
-  return filed.ok ? { ok: true } : filed;
+  return toActionOutcome(filed);
 }
 
 /** F3.1 — the program is not in the directory. */
@@ -1272,6 +1280,5 @@ export async function submitUnlistedProgram(input: {
     schoolName: school,
     team: input.team,
   });
-  // Collapse the internal `created` flag: the form only ever learns "recorded".
-  return filed.ok ? { ok: true } : filed;
+  return toActionOutcome(filed);
 }

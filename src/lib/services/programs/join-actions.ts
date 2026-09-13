@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
@@ -229,11 +230,14 @@ const NOTICE_ROLES = {
 /**
  * Tell the owner that somebody finished joining, best effort.
  *
- * Sits between the confirmed membership and `finishJoin`, which redirects by
- * throwing — anything after that call never runs. Failing it must not fail the
- * accept: the person is already a member whether or not the mail leaves, so
- * every miss here logs and returns. `sendEmail` never throws, so there is
- * nothing to catch.
+ * Runs in `after()`, so it never sits on the critical path in front of
+ * `finishJoin`'s redirect — the same reason `requestInvite()`'s owner notice
+ * in `claim-actions.ts` defers its send. Called before `finishJoin` regardless
+ * (which redirects by throwing, so nothing queued after that call would ever
+ * run); `after()` itself is what makes the deferred body survive the throw.
+ * Failing it must not fail the accept: the person is already a member whether
+ * or not the mail leaves, so every miss here logs and returns. `sendEmail`
+ * never throws, so there is nothing to catch.
  *
  * Three things it refuses to do:
  *
@@ -248,70 +252,88 @@ const NOTICE_ROLES = {
  *    row, not an argument; a role this copy has not learned passes as null and
  *    the sentence simply drops it.
  */
-async function notifyOwnerOfJoin(
+function notifyOwnerOfJoin(
   admin: ReturnType<typeof createAdminClient>,
   userId: string,
   programId: string,
   memberRole: string | null,
+): void {
+  after(async () => {
+    const owner = await getProgramOwner(programId);
+    // An unclaimed or mid-claim program has nobody to tell, and an owner does
+    // not need announcing to themselves.
+    if (!owner || owner.userId === userId) return;
+
+    const [{ data: joiner }, { data: program }] = await Promise.all([
+      admin
+        .from("users")
+        .select("email, first_name, last_name")
+        .eq("id", userId)
+        .maybeSingle(),
+      admin
+        .from("programs")
+        .select("school_name, team")
+        .eq("id", programId)
+        .maybeSingle(),
+    ]);
+
+    const joinerEmail = (joiner?.email as string | null)?.trim();
+    // Nothing to name them by. A notice that says "somebody joined" is worse
+    // than the roster row the owner can already read.
+    if (!joinerEmail) {
+      console.warn("[join] new member has no address to announce", {
+        programId,
+      });
+      return;
+    }
+
+    const role =
+      memberRole !== null &&
+      Object.prototype.hasOwnProperty.call(NOTICE_ROLES, memberRole)
+        ? (memberRole as JoinedRole)
+        : null;
+
+    const sent = await sendEmail(
+      memberJoinedOwnerEmail({
+        to: owner.email,
+        ownerName: owner.name,
+        // Same fallback as `loadInvite`: a program row that went missing
+        // should not take the whole notice down with it.
+        programName: program
+          ? programDisplayName(
+              program.school_name as string,
+              program.team as string | null,
+            )
+          : "your program",
+        joinerEmail,
+        joinerName: displayName(
+          (joiner?.first_name as string | null) ?? null,
+          (joiner?.last_name as string | null) ?? null,
+        ),
+        role,
+      }),
+    );
+
+    if (!sent.ok) {
+      console.warn("[join] member-joined notice not delivered", {
+        message: sent.error,
+      });
+    }
+  });
+}
+
+/**
+ * The one thing every accept path does once membership is confirmed: settle
+ * the profile (persona, onboarded flag) and tell the owner. Three call sites
+ * shared this pair verbatim; a future step belongs here once, not in each.
+ */
+async function adoptMembershipAndNotify(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  programId: string,
 ): Promise<void> {
-  const owner = await getProgramOwner(programId);
-  // An unclaimed or mid-claim program has nobody to tell, and an owner does not
-  // need announcing to themselves.
-  if (!owner || owner.userId === userId) return;
-
-  const [{ data: joiner }, { data: program }] = await Promise.all([
-    admin
-      .from("users")
-      .select("email, first_name, last_name")
-      .eq("id", userId)
-      .maybeSingle(),
-    admin
-      .from("programs")
-      .select("school_name, team")
-      .eq("id", programId)
-      .maybeSingle(),
-  ]);
-
-  const joinerEmail = (joiner?.email as string | null)?.trim();
-  // Nothing to name them by. A notice that says "somebody joined" is worse
-  // than the roster row the owner can already read.
-  if (!joinerEmail) {
-    console.warn("[join] new member has no address to announce", { programId });
-    return;
-  }
-
-  const role =
-    memberRole !== null &&
-    Object.prototype.hasOwnProperty.call(NOTICE_ROLES, memberRole)
-      ? (memberRole as JoinedRole)
-      : null;
-
-  const sent = await sendEmail(
-    memberJoinedOwnerEmail({
-      to: owner.email,
-      ownerName: owner.name,
-      // Same fallback as `loadInvite`: a program row that went missing should
-      // not take the whole notice down with it.
-      programName: program
-        ? programDisplayName(
-            program.school_name as string,
-            program.team as string | null,
-          )
-        : "your program",
-      joinerEmail,
-      joinerName: displayName(
-        (joiner?.first_name as string | null) ?? null,
-        (joiner?.last_name as string | null) ?? null,
-      ),
-      role,
-    }),
-  );
-
-  if (!sent.ok) {
-    console.warn("[join] member-joined notice not delivered", {
-      message: sent.error,
-    });
-  }
+  const role = await adoptMembership(admin, userId, programId);
+  notifyOwnerOfJoin(admin, userId, programId, role);
 }
 
 /** Already signed in as the invited address. Nothing to collect. */
@@ -332,9 +354,8 @@ export async function acceptInvite(token: string): Promise<JoinActionResult> {
 
   if (user?.id) {
     const admin = createAdminClient();
-    const role = await adoptMembership(admin, user.id, outcome.programId);
     // Before `finishJoin`, which redirects by throwing.
-    await notifyOwnerOfJoin(admin, user.id, outcome.programId, role);
+    await adoptMembershipAndNotify(admin, user.id, outcome.programId);
   }
   return finishJoin(outcome.programId);
 }
@@ -379,8 +400,7 @@ export async function acceptPendingInvite(
 
   if (user?.id) {
     const admin = createAdminClient();
-    const role = await adoptMembership(admin, user.id, outcome.programId);
-    await notifyOwnerOfJoin(admin, user.id, outcome.programId, role);
+    await adoptMembershipAndNotify(admin, user.id, outcome.programId);
   }
   return finishJoin(outcome.programId);
 }
@@ -468,9 +488,7 @@ export async function createAccountAndAccept(
   // because `createUser` succeeded. See `adoptMembership` for why that order is
   // the whole point.
   if (created?.user?.id) {
-    const joinerId = created.user.id;
-    const role = await adoptMembership(admin, joinerId, outcome.programId);
-    await notifyOwnerOfJoin(admin, joinerId, outcome.programId, role);
+    await adoptMembershipAndNotify(admin, created.user.id, outcome.programId);
   }
   return finishJoin(outcome.programId);
 }

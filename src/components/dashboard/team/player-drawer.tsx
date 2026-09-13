@@ -86,6 +86,14 @@ import type {
 const ICON_BUTTON =
   "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40";
 
+/**
+ * The leading glyph on each Options-menu row: neutral at rest and on hover —
+ * never `--blue` (`FloatMenuItem`'s default) or `--danger` (the Remove row's
+ * label still turns danger on hover; its icon does not). Shared by all three
+ * rows so a later tweak to size, colour or stroke weight is one edit.
+ */
+const MENU_ROW_ICON = "size-[13px] shrink-0 text-[var(--ink-400)]";
+
 /** The drawer's `role="dialog"` carries this so the window key handler can tell it from a modal. */
 export const DRAWER_ATTR = "data-roster-drawer";
 
@@ -370,7 +378,7 @@ function MemberMenu({
           <div className="flex items-start gap-3 rounded-[var(--radius-element)] px-2 py-2">
             <span className="flex min-w-0 flex-1 items-start gap-2.5">
               <Upload
-                className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-400)]"
+                className={`mt-0.5 ${MENU_ROW_ICON}`}
                 strokeWidth={1.5}
                 aria-hidden
               />
@@ -428,11 +436,7 @@ function MemberMenu({
             }}
             className="flex w-full items-center gap-2.5 rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
           >
-            <Pencil
-              className="size-[13px] shrink-0 text-[var(--ink-400)]"
-              strokeWidth={1.5}
-              aria-hidden
-            />
+            <Pencil className={MENU_ROW_ICON} strokeWidth={1.5} aria-hidden />
             Edit player
           </button>
         )}
@@ -453,11 +457,7 @@ function MemberMenu({
             }
             className="flex w-full items-center gap-2.5 rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)] disabled:opacity-50"
           >
-            <Trash2
-              className="size-[13px] shrink-0 text-[var(--ink-400)]"
-              strokeWidth={1.5}
-              aria-hidden
-            />
+            <Trash2 className={MENU_ROW_ICON} strokeWidth={1.5} aria-hidden />
             Remove from roster
           </button>
         )}
