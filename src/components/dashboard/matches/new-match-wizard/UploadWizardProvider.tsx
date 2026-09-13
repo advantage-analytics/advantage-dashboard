@@ -147,6 +147,7 @@ export function UploadWizardProvider({
   const scoreCheck = useScoreCheck({
     step,
     formData: wizard.formData,
+    provider: wizard.selectedProvider,
     handleCreateMatch: wizard.handleCreateMatch,
   });
   const gates = useWizardGates(wizard, scoreCheck.unanswered);

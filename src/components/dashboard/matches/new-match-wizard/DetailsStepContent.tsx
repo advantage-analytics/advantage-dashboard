@@ -1274,8 +1274,18 @@ function DetailsStepContentImpl({
                 answer={
                   isStoppedResult(formData.result) ? formData.result : null
                 }
-                onAnswer={(result) => onInputChange("result", result)}
-                onChange={() => onInputChange("result", "")}
+                retiredSide={formData.retiredSide}
+                playerName={subject.name}
+                opponentName={formData.opponentName}
+                onAnswer={(result) => {
+                  onInputChange("result", result);
+                  onInputChange("retiredSide", undefined);
+                }}
+                onRetiredSide={(side) => onInputChange("retiredSide", side)}
+                onChange={() => {
+                  onInputChange("result", "");
+                  onInputChange("retiredSide", undefined);
+                }}
                 onFinishScore={() => {
                   onScoreCheckDismiss();
                   // Into the set nobody has won — its first empty cell, else
