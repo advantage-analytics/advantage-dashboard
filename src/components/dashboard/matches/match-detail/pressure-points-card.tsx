@@ -98,16 +98,8 @@ function computeRows(points: MatchPoint[]): Row[] {
   ];
 
   if (mpServeTotal > 0 || mpReturnTotal > 0) {
-    rows.push({
-      label: "Match Points Serving",
-      won: mpServeWon,
-      total: mpServeTotal,
-    });
-    rows.push({
-      label: "Match Points Returning",
-      won: mpReturnWon,
-      total: mpReturnTotal,
-    });
+    rows.push({ label: "Match Points Serving", won: mpServeWon, total: mpServeTotal });
+    rows.push({ label: "Match Points Returning", won: mpReturnWon, total: mpReturnTotal });
   }
 
   if (deuceTotal > 0) {
@@ -115,11 +107,7 @@ function computeRows(points: MatchPoint[]): Row[] {
   }
 
   if (tiebreakTotal > 0) {
-    rows.push({
-      label: "Tiebreak Points Won",
-      won: tiebreakWon,
-      total: tiebreakTotal,
-    });
+    rows.push({ label: "Tiebreak Points Won", won: tiebreakWon, total: tiebreakTotal });
   }
 
   return rows;
@@ -137,11 +125,14 @@ export function PressurePointsCard({ points }: PressurePointsCardProps) {
   const headingId = "pressure-points-heading";
 
   return (
-    <section aria-labelledby={headingId} className="surface-card flex flex-col">
-      <div className="flex h-14 items-center px-5">
+    <section
+      aria-labelledby={headingId}
+      className="surface-card flex flex-col"
+    >
+      <div className="flex items-center h-14 px-5">
         <h2
           id={headingId}
-          className="text-[10px] leading-[15px] font-medium tracking-[2.5px] text-[var(--color-text-dim)] uppercase"
+          className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[15px]"
         >
           Pressure Points
         </h2>
@@ -155,14 +146,14 @@ export function PressurePointsCard({ points }: PressurePointsCardProps) {
               key={r.label}
               className="flex items-center gap-3 text-[11px] leading-[16px]"
             >
-              <span className="min-w-0 flex-1 truncate font-light text-[var(--color-text-body)]">
+              <span className="flex-1 min-w-0 font-light text-[var(--color-text-body)] truncate">
                 {r.label}
               </span>
-              <span className="w-[56px] shrink-0 text-right font-normal text-[var(--color-text-secondary)] tabular-nums">
+              <span className="font-normal text-[var(--color-text-secondary)] w-[56px] text-right tabular-nums shrink-0">
                 {r.total > 0 ? `${r.won}/${r.total}` : "—"}
               </span>
               <span
-                className="w-[40px] shrink-0 text-right font-medium tabular-nums"
+                className="font-medium w-[40px] text-right tabular-nums shrink-0"
                 style={{ color: pctColor(pct) }}
               >
                 {pct !== null ? `${pct}%` : "—"}

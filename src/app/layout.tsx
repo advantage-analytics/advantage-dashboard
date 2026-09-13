@@ -12,10 +12,7 @@ const inter = Inter({
 
 const mono = Roboto_Mono({
   subsets: ["latin"],
-  // Not `--font-mono`: that name is also a Tailwind theme key, and globals.css
-  // was resolving it to Inter — so Roboto Mono was downloaded for every visitor
-  // and never rendered. The theme key now points here instead.
-  variable: "--font-roboto-mono",
+  variable: "--font-mono",
   weight: ["400", "500", "600", "700"],
   display: "swap",
 });
@@ -58,9 +55,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${mono.variable}`}>
-      <body className="min-h-dvh bg-[var(--surface-page)] text-[var(--ink-900)]">
-        {children}
-      </body>
+<body className="min-h-dvh bg-background text-foreground">{children}</body>
     </html>
   );
 }

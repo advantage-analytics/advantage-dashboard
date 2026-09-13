@@ -32,11 +32,7 @@ export function ErrorState({
 }) {
   const shouldReduceMotion = useReducedMotion();
   const anim = shouldReduceMotion
-    ? {
-        initial: false as const,
-        animate: { opacity: 1, y: 0 },
-        transition: { duration: 0 },
-      }
+    ? { initial: false as const, animate: { opacity: 1, y: 0 }, transition: { duration: 0 } }
     : {
         initial: { opacity: 0, y: 8 },
         animate: { opacity: 1, y: 0 },
@@ -44,18 +40,21 @@ export function ErrorState({
       };
 
   return (
-    <div className="flex w-full flex-1 items-start justify-center px-6 pt-24 pb-16">
+    <div className="flex-1 w-full flex items-start justify-center pt-24 pb-16 px-6">
       <motion.div
         {...anim}
-        className="flex max-w-[420px] flex-col items-center text-center"
-      >
-        <Icon className="size-6 text-[#AAAAAA]" strokeWidth={1.5} aria-hidden />
+        className="flex flex-col items-center text-center max-w-[420px]">
+        <Icon
+          className="text-[#AAAAAA] size-6"
+          strokeWidth={1.5}
+          aria-hidden
+        />
 
-        <h1 className="mt-5 text-[28px] leading-[34px] font-light tracking-[-0.5px] text-[#0D0D0D]">
+        <h1 className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-[34px] mt-5">
           {title}
         </h1>
 
-        <p className="mt-3 text-[13px] leading-[1.6] font-normal text-[#888888]">
+        <p className="text-[13px] font-normal text-[#888888] leading-[1.6] mt-3">
           {description}
         </p>
 
@@ -64,14 +63,14 @@ export function ErrorState({
             <button
               onClick={primaryAction.onClick}
               disabled={primaryAction.loading}
-              className="rounded-[6px] bg-[#3B82F6] px-5 py-2 text-[13px] font-medium text-white transition-colors duration-200 hover:bg-[#2563EB] focus-visible:outline-none active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60"
+              className="px-5 py-2 bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-60 disabled:cursor-not-allowed text-white text-[13px] font-medium rounded-[6px] transition-colors duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
             >
               {primaryAction.loading ? "Retrying…" : primaryAction.label}
             </button>
           ) : (
             <Link
               href={primaryAction.href}
-              className="rounded-[6px] bg-[#3B82F6] px-5 py-2 text-[13px] font-medium text-white transition-colors duration-200 hover:bg-[#2563EB] focus-visible:outline-none active:scale-[0.97]"
+              className="px-5 py-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[13px] font-medium rounded-[6px] transition-colors duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
             >
               {primaryAction.label}
             </Link>
@@ -80,7 +79,7 @@ export function ErrorState({
           {secondaryAction ? (
             <Link
               href={secondaryAction.href}
-              className="text-[12px] font-medium text-[#888888] underline-offset-4 transition-colors duration-200 hover:text-[#525252] focus-visible:underline focus-visible:outline-none"
+              className="text-[12px] font-medium text-[#888888] hover:text-[#525252] transition-colors duration-200 focus-visible:outline-none focus-visible:underline underline-offset-4"
             >
               {secondaryAction.label}
             </Link>
@@ -88,7 +87,7 @@ export function ErrorState({
         </div>
 
         {meta && meta.length > 0 ? (
-          <dl className="mt-12 flex w-full flex-col gap-2 border-t border-[var(--border-hairline)] pt-5">
+          <dl className="mt-12 pt-5 border-t border-[#F0F0F0] w-full flex flex-col gap-2">
             {meta.map((item) => (
               <MetaRow key={item.label} item={item} />
             ))}
@@ -98,7 +97,7 @@ export function ErrorState({
         {helpLink ? (
           <Link
             href={helpLink.href}
-            className="mt-5 text-[12px] font-normal text-[#888888] underline-offset-4 transition-colors duration-200 hover:text-[#525252] focus-visible:underline focus-visible:outline-none"
+            className="mt-5 text-[12px] font-normal text-[#888888] hover:text-[#525252] transition-colors duration-200 focus-visible:outline-none focus-visible:underline underline-offset-4"
           >
             {helpLink.label} →
           </Link>
@@ -114,12 +113,10 @@ function MetaRow({ item }: { item: MetaItem }) {
   if (!item.copyable) {
     return (
       <div className="flex items-center justify-center gap-2 text-[11px]">
-        <dt className="font-medium tracking-[1.5px] text-[#AAAAAA] uppercase">
+        <dt className="text-[#AAAAAA] uppercase tracking-[1.5px] font-medium">
           {item.label}
         </dt>
-        <dd className="tracking-[0.3px] text-[#525252] tabular-nums select-all">
-          {item.value}
-        </dd>
+        <dd className="tabular-nums tracking-[0.3px] text-[#525252] select-all">{item.value}</dd>
       </div>
     );
   }
@@ -136,17 +133,15 @@ function MetaRow({ item }: { item: MetaItem }) {
 
   return (
     <div className="flex items-center justify-center gap-2 text-[11px]">
-      <dt className="font-medium tracking-[1.5px] text-[#AAAAAA] uppercase">
+      <dt className="text-[#AAAAAA] uppercase tracking-[1.5px] font-medium">
         {item.label}
       </dt>
-      <dd className="tracking-[0.3px] text-[#525252] tabular-nums select-all">
-        {item.value}
-      </dd>
+      <dd className="tabular-nums tracking-[0.3px] text-[#525252] select-all">{item.value}</dd>
       <button
         type="button"
         onClick={copy}
         aria-label={copied ? "Copied" : `Copy ${item.label.toLowerCase()}`}
-        className="ml-0.5 rounded-[4px] p-1 text-[#AAAAAA] transition-colors duration-150 hover:bg-[#F5F5F5] hover:text-[#525252] focus-visible:outline-none"
+        className="ml-0.5 p-1 rounded-[4px] text-[#AAAAAA] hover:text-[#525252] hover:bg-[#F5F5F5] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-1"
       >
         {copied ? (
           <Check className="size-3" strokeWidth={2} />

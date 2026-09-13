@@ -10,16 +10,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { AdvSelect } from "@/components/ui/adv-select";
-import { DateField, type DateFieldHandle } from "@/components/ui/date-field";
 import { cn } from "@/lib/utils";
 import {
   eyebrowLabelCls,
   ghostBtnCls,
   primaryBtnCls,
-} from "@/components/dashboard/matches/new-match-wizard/styles";
-import { validateSetScore } from "@/components/dashboard/matches/new-match-wizard/utils";
-import { ScoreCell } from "@/components/dashboard/matches/new-match-wizard/ScoreCell";
+} from "@/components/dashboard/home/upload-match-modal/styles";
+import { validateSetScore } from "@/components/dashboard/home/upload-match-modal/utils";
+import { ScoreCell } from "@/components/dashboard/home/upload-match-modal/ScoreCell";
 
 type FieldKey = "player1_name" | "player2_name" | "date";
 
@@ -76,19 +74,13 @@ function clampInt(raw: string, max: number): number | null {
   return Math.max(0, Math.min(max, Math.floor(n)));
 }
 
-export function EditMatchDialog({
-  matchId,
-  open,
-  onOpenChange,
-}: EditMatchDialogProps) {
+export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialogProps) {
   const router = useRouter();
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<
-    Partial<Record<FieldKey, string>>
-  >({});
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
   const [pendingRemoveAt, setPendingRemoveAt] = useState<number | null>(null);
 
   const [tournament, setTournament] = useState("");
@@ -105,15 +97,7 @@ export function EditMatchDialog({
 
   const p1NameRef = useRef<HTMLInputElement>(null);
   const p2NameRef = useRef<HTMLInputElement>(null);
-  // Not an input ref: the date is a `DateField`, whose focusable thing is a
-  // segment inside its group. `DateFieldHandle` is the one method
-  // focus-first-invalid needs.
-  const dateRef = useRef<DateFieldHandle | null>(null);
-  // True while the date field is showing a blank segment. It is not derivable
-  // from `date`: react-stately reports complete dates only, so a half-cleared
-  // field leaves `date` holding the value being replaced. See the prop's own
-  // comment on `DateField`.
-  const [dateIncomplete, setDateIncomplete] = useState(false);
+  const dateRef = useRef<HTMLInputElement>(null);
   const saveRef = useRef<HTMLButtonElement>(null);
   const p1ScoreRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const p2ScoreRefs = useRef<Record<number, HTMLInputElement | null>>({});
@@ -175,39 +159,17 @@ export function EditMatchDialog({
       p2ScoreRefs.current[i]?.focus();
     }
   };
-  // Two shapes, one map: the two name fields are real inputs, the date is a
-  // `DateField` handle. Both can be focused; only the element can be scrolled,
-  // so `focusField` branches instead of the map being widened to `any`.
-  const fieldRefs: Record<
-    FieldKey,
-    | React.RefObject<HTMLInputElement | null>
-    | React.RefObject<DateFieldHandle | null>
-  > = {
+  const fieldRefs: Record<FieldKey, React.RefObject<HTMLInputElement | null>> = {
     player1_name: p1NameRef,
     player2_name: p2NameRef,
     date: dateRef,
   };
 
-  const focusField = (key: FieldKey) => {
-    const target = fieldRefs[key]?.current;
-    if (!target) return;
-    if (target instanceof HTMLElement) {
-      target.scrollIntoView({ block: "center", behavior: "smooth" });
-      target.focus({ preventScroll: true });
-      return;
-    }
-    // The handle focuses the first segment; the browser scrolls it into view.
-    target.focus();
-  };
-
   // Per-set validation against tennis rules. The dialog shares the upload
   // modal's validateSetScore so create/edit treat the same scores as legal.
-  const setValidations = p1Scores.map((p, i) =>
-    validateSetScore(p, p2Scores[i]),
-  );
+  const setValidations = p1Scores.map((p, i) => validateSetScore(p, p2Scores[i]));
   const firstInvalid = setValidations.findIndex((v) => v.kind === "invalid");
-  const invalidMessage =
-    firstInvalid >= 0 ? setValidations[firstInvalid].message : null;
+  const invalidMessage = firstInvalid >= 0 ? setValidations[firstInvalid].message : null;
   const hasInvalidSet = firstInvalid >= 0;
 
   useEffect(() => {
@@ -238,29 +200,19 @@ export function EditMatchDialog({
 
         const s = match.score;
         const setCount = s?.player1?.length || 1;
-        setP1Scores(
-          s?.player1?.slice(0, setCount) ?? Array(setCount).fill(null),
-        );
-        setP2Scores(
-          s?.player2?.slice(0, setCount) ?? Array(setCount).fill(null),
-        );
+        setP1Scores(s?.player1?.slice(0, setCount) ?? Array(setCount).fill(null));
+        setP2Scores(s?.player2?.slice(0, setCount) ?? Array(setCount).fill(null));
         setP1Tiebreaks(
-          (s?.player1_tiebreaks ?? Array(setCount).fill(null)).map(
-            (v) => v ?? null,
-          ),
+          (s?.player1_tiebreaks ?? Array(setCount).fill(null)).map((v) => v ?? null)
         );
         setP2Tiebreaks(
-          (s?.player2_tiebreaks ?? Array(setCount).fill(null)).map(
-            (v) => v ?? null,
-          ),
+          (s?.player2_tiebreaks ?? Array(setCount).fill(null)).map((v) => v ?? null)
         );
         setLoadingInitial(false);
       })
       .catch((err) => {
         if (cancelled) return;
-        setLoadError(
-          err instanceof Error ? err.message : "Failed to load match",
-        );
+        setLoadError(err instanceof Error ? err.message : "Failed to load match");
         setLoadingInitial(false);
       });
     return () => {
@@ -328,25 +280,6 @@ export function EditMatchDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (saving || hasInvalidSet) return;
-    // The date used to be a native `required` input, so the browser blocked a
-    // submit with it empty. A `DateField` reports validity through ARIA only,
-    // so the emptiness check is the dialog's now — same message and the same
-    // focus move the server's `field: "date"` reply already produces.
-    if (!date) {
-      setFieldErrors({ date: "Date is required." });
-      focusField("date");
-      return;
-    }
-    // A half-cleared date is the dangerous one, and `!date` cannot see it.
-    // Clear the year of `03/21/2026` and the field draws `03/21/yyyy` while
-    // `date` still holds `2026-03-21` — so without this the dialog would
-    // quietly save the date the person was replacing and report success. The
-    // native input it replaced could not reach this state.
-    if (dateIncomplete) {
-      setFieldErrors({ date: "Finish the date." });
-      focusField("date");
-      return;
-    }
     setSaving(true);
     setError(null);
     setFieldErrors({});
@@ -381,7 +314,9 @@ export function EditMatchDialog({
         const field = body?.field as FieldKey | undefined;
         if (field && field in fieldRefs) {
           setFieldErrors({ [field]: message });
-          focusField(field);
+          const target = fieldRefs[field]?.current;
+          target?.scrollIntoView({ block: "center", behavior: "smooth" });
+          target?.focus({ preventScroll: true });
         } else {
           setError(message);
         }
@@ -398,9 +333,9 @@ export function EditMatchDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
-      <DialogContent className="max-h-[90vh] max-w-xl gap-0 overflow-hidden rounded-2xl border-[#F3F3F3] bg-white p-0 shadow-[0px_6px_20px_0px_rgba(0,0,0,0.12)]">
+      <DialogContent className="max-w-xl rounded-2xl border-[#F3F3F3] shadow-[0px_6px_20px_0px_rgba(0,0,0,0.12)] bg-white p-0 gap-0 overflow-hidden max-h-[90vh]">
         <DialogHeader className="px-8 pt-5 pb-6">
-          <DialogTitle className="text-left text-[24px] leading-[1.2] font-light tracking-[-0.4px] text-[var(--ink-900)]">
+          <DialogTitle className="text-left text-[24px] font-light text-[#1D1D1F] tracking-[-0.5px] leading-[30px]">
             Edit match
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -409,25 +344,22 @@ export function EditMatchDialog({
         </DialogHeader>
 
         {loadingInitial ? (
-          <div className="flex items-center justify-center px-8 py-12 text-[#888888]">
-            <Loader2
-              className="mr-2 size-3.5 animate-spin"
-              aria-hidden="true"
-            />
+          <div className="px-8 py-12 flex items-center justify-center text-[#888888]">
+            <Loader2 className="size-3.5 animate-spin mr-2" aria-hidden="true" />
             <span className="text-[12px]">Loading match…</span>
           </div>
         ) : loadError ? (
           <div className="flex flex-col">
-            <div className="flex flex-col items-center gap-3 px-8 py-10 text-center">
+            <div className="px-8 py-10 flex flex-col items-center gap-3 text-center">
               <p className="text-[13px] font-medium text-[#0D0D0D]">
                 We couldn&apos;t load this match
               </p>
-              <p className="max-w-[320px] text-[12px] leading-[1.5] text-[#888888]">
+              <p className="text-[12px] text-[#888888] max-w-[320px] leading-[1.5]">
                 {loadError}. The match may have been removed, or your connection
                 dropped. Close this dialog and try again from the match list.
               </p>
             </div>
-            <div className="flex items-center justify-end border-t border-[#F3F3F3] bg-[#FAFAFA] px-8 py-3.5">
+            <div className="border-t border-[#F3F3F3] bg-[#FAFAFA] px-8 py-3.5 flex items-center justify-end">
               <button
                 type="button"
                 onClick={() => onOpenChange(false)}
@@ -449,7 +381,7 @@ export function EditMatchDialog({
             }}
             className="flex flex-col"
           >
-            <div className="flex max-h-[60vh] flex-col gap-6 overflow-y-auto px-8 pb-6">
+            <div className="flex flex-col gap-6 overflow-y-auto px-8 pb-6 max-h-[60vh]">
               {/* Tournament — anchors the form as the primary input. Larger
                   type pulls the eye here first; everything else is grouped
                   below under hairline-divided sections. */}
@@ -457,8 +389,7 @@ export function EditMatchDialog({
                 <input
                   value={tournament}
                   onChange={(e) => setTournament(e.target.value)}
-                  data-focus-ring="none" /* the rule below carries focus */
-                  className="w-full bg-transparent pb-1.5 text-[16px] font-medium tracking-[-0.3px] text-[#0D0D0D] outline-none placeholder:font-normal placeholder:text-[#AAAAAA]"
+                  className="w-full bg-transparent text-[18px] font-medium tracking-[-0.3px] text-[#0D0D0D] outline-none placeholder:text-[#AAAAAA] placeholder:font-normal pb-1.5"
                 />
               </UnderlineField>
 
@@ -472,13 +403,9 @@ export function EditMatchDialog({
                       onClick={requestRemoveLastSet}
                       disabled={numSets <= MIN_SETS}
                       aria-label="Remove a set"
-                      className="flex size-7 items-center justify-center rounded-full text-[#3B82F6] transition-colors duration-150 hover:bg-[#F5F5F5] hover:text-[#2563EB] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+                      className="size-7 flex items-center justify-center rounded-full text-[#3B82F6] hover:text-[#2563EB] hover:bg-[#F5F5F5] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
                     >
-                      <CircleMinus
-                        className="size-3.5"
-                        strokeWidth={1.75}
-                        aria-hidden="true"
-                      />
+                      <CircleMinus className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
                     </button>
                     <span className="w-4 text-center text-[12px] font-medium text-[#525252] tabular-nums">
                       {numSets}
@@ -488,13 +415,9 @@ export function EditMatchDialog({
                       onClick={addSet}
                       disabled={numSets >= MAX_SETS}
                       aria-label="Add a set"
-                      className="flex size-7 items-center justify-center rounded-full text-[#3B82F6] transition-colors duration-150 hover:bg-[#F5F5F5] hover:text-[#2563EB] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+                      className="size-7 flex items-center justify-center rounded-full text-[#3B82F6] hover:text-[#2563EB] hover:bg-[#F5F5F5] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
                     >
-                      <CirclePlus
-                        className="size-3.5"
-                        strokeWidth={1.75}
-                        aria-hidden="true"
-                      />
+                      <CirclePlus className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -507,14 +430,14 @@ export function EditMatchDialog({
                     <button
                       type="button"
                       onClick={() => setPendingRemoveAt(null)}
-                      className="rounded-full px-2 py-0.5 text-[#525252] transition-colors duration-150 hover:bg-[#F5F5F5] hover:text-[#0D0D0D] focus-visible:outline-none"
+                      className="px-2 py-0.5 rounded-full text-[#525252] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
                     >
                       Cancel
                     </button>
                     <button
                       type="button"
                       onClick={() => doRemoveLastSet(pendingRemoveAt)}
-                      className="rounded-full px-2 py-0.5 text-[#E51837] transition-colors duration-150 hover:bg-[rgba(229,24,55,0.08)] focus-visible:outline-none"
+                      className="px-2 py-0.5 rounded-full text-[#E51837] hover:bg-[rgba(229,24,55,0.08)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E51837]/40"
                     >
                       Remove
                     </button>
@@ -530,11 +453,11 @@ export function EditMatchDialog({
                         const hasTie = needsTiebreak(p1Scores[i], p2Scores[i]);
                         return (
                           <div key={i} className="flex items-center gap-1">
-                            <div className="w-7 text-center text-[9px] font-normal tracking-[2.5px] text-[#AAAAAA] uppercase tabular-nums">
+                            <div className="w-7 text-center text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px] tabular-nums">
                               {i + 1}
                             </div>
                             {hasTie && (
-                              <span className="w-7 text-center text-[9px] font-normal tracking-[1px] text-[#AAAAAA] uppercase">
+                              <span className="w-7 text-center text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[1px]">
                                 Tie
                               </span>
                             )}
@@ -552,9 +475,7 @@ export function EditMatchDialog({
                       value={p1Name}
                       inputRef={p1NameRef}
                       error={fieldErrors.player1_name ?? null}
-                      invalidSetIdx={
-                        firstInvalid >= 0 ? firstInvalid : undefined
-                      }
+                      invalidSetIdx={firstInvalid >= 0 ? firstInvalid : undefined}
                       scoreRefs={p1ScoreRefs}
                       tiebreakRefs={p1TiebreakRefs}
                       onEnterScoreValue={focusNextAfterScore}
@@ -577,8 +498,7 @@ export function EditMatchDialog({
                         const nextP1 = [...p1Scores];
                         nextP1[i] = nextScore;
                         setP1Scores(nextP1);
-                        if (!needsTiebreak(nextScore, p2Scores[i]))
-                          clearTiebreaksAt(i);
+                        if (!needsTiebreak(nextScore, p2Scores[i])) clearTiebreaksAt(i);
                       }}
                       onTiebreakChange={(i, v) => {
                         const next = [...p1Tiebreaks];
@@ -594,9 +514,7 @@ export function EditMatchDialog({
                       value={p2Name}
                       inputRef={p2NameRef}
                       error={fieldErrors.player2_name ?? null}
-                      invalidSetIdx={
-                        firstInvalid >= 0 ? firstInvalid : undefined
-                      }
+                      invalidSetIdx={firstInvalid >= 0 ? firstInvalid : undefined}
                       scoreRefs={p2ScoreRefs}
                       tiebreakRefs={p2TiebreakRefs}
                       onEnterScoreValue={focusNextAfterScore}
@@ -619,8 +537,7 @@ export function EditMatchDialog({
                         const nextP2 = [...p2Scores];
                         nextP2[i] = nextScore;
                         setP2Scores(nextP2);
-                        if (!needsTiebreak(p1Scores[i], nextScore))
-                          clearTiebreaksAt(i);
+                        if (!needsTiebreak(p1Scores[i], nextScore)) clearTiebreaksAt(i);
                       }}
                       onTiebreakChange={(i, v) => {
                         const next = [...p2Tiebreaks];
@@ -631,14 +548,10 @@ export function EditMatchDialog({
                   </div>
 
                   {invalidMessage && (
-                    <div className="mt-3 flex justify-start">
-                      <div className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(229,24,55,0.18)] bg-[rgba(229,24,55,0.06)] py-1 pr-2.5 pl-2">
-                        <AlertCircle
-                          className="size-3 text-[#E51837]"
-                          strokeWidth={1.75}
-                          aria-hidden="true"
-                        />
-                        <span className="text-[12px] font-medium text-[#E51837]">
+                    <div className="flex justify-start mt-3">
+                      <div className="inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 bg-[rgba(229,24,55,0.06)] border border-[rgba(229,24,55,0.18)] rounded-full">
+                        <AlertCircle className="size-3 text-[#E51837]" strokeWidth={1.75} aria-hidden="true" />
+                        <span className="text-[#E51837] text-[12px] font-medium">
                           Set {firstInvalid + 1}: {invalidMessage}
                         </span>
                       </div>
@@ -649,68 +562,40 @@ export function EditMatchDialog({
 
               {/* Metadata grid — the hairline border above does the section
                   break; no eyebrow needed (each field is self-labeled). */}
-              <div className="grid grid-cols-1 gap-x-4 gap-y-5 border-t border-[#F3F3F3] pt-6 sm:grid-cols-2">
-                {/* `variant="bare"`: `UnderlineField` draws the rule and already
-                    thickens it to 2px on focus-within, so the primitive must
-                    not draw a second one — same arrangement the two selects
-                    below use with `kind="bare"`. Its segments carry
-                    `data-focus-ring="none"` of their own, so the wrapper's
-                    rule stays the one focus indicator. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5 pt-6 border-t border-[#F3F3F3]">
                 <UnderlineField label="Date" error={fieldErrors.date ?? null}>
-                  <DateField
-                    label="Date"
-                    variant="bare"
-                    handleRef={dateRef}
+                  <input
+                    ref={dateRef}
+                    type="date"
                     value={date}
-                    required
-                    onChange={(next) => {
-                      setDate(next);
+                    onChange={(e) => {
+                      setDate(e.target.value);
                       if (fieldErrors.date) {
-                        const cleared = { ...fieldErrors };
-                        delete cleared.date;
-                        setFieldErrors(cleared);
+                        const next = { ...fieldErrors };
+                        delete next.date;
+                        setFieldErrors(next);
                       }
                     }}
-                    onIncompleteChange={(incomplete) => {
-                      setDateIncomplete(incomplete);
-                      // Filling the last blank segment clears the complaint
-                      // the way typing into an empty field clears the required
-                      // one — the error should not outlive the state it named.
-                      if (!incomplete && fieldErrors.date) {
-                        const cleared = { ...fieldErrors };
-                        delete cleared.date;
-                        setFieldErrors(cleared);
-                      }
-                    }}
-                    className="w-full pb-1.5"
+                    required
+                    aria-invalid={fieldErrors.date ? true : undefined}
+                    className="w-full appearance-none bg-transparent text-[14px] outline-none text-[#0D0D0D] pb-1.5"
                   />
                 </UnderlineField>
                 <UnderlineField label="Round">
                   <input
                     value={round}
                     onChange={(e) => setRound(e.target.value)}
-                    data-focus-ring="none" /* the rule below carries focus */
-                    className="w-full bg-transparent pb-1.5 text-[14px] text-[#0D0D0D] outline-none placeholder:text-[#AAAAAA]"
+                    className="w-full bg-transparent text-[14px] outline-none text-[#0D0D0D] placeholder:text-[#AAAAAA] pb-1.5"
                   />
                 </UnderlineField>
-                {/* `kind="bare"`: `UnderlineField` already draws the rule and
-                    already thickens it to 2px blue on focus, so the select
-                    contributes only the chevron this dialog was missing —
-                    `appearance-none` had removed the browser's arrow and put
-                    nothing back. The 14px stays because it is what every other
-                    field in this dialog runs at; retiring it is a dialog-wide
-                    change, not a select change. */}
                 <UnderlineField label="Match type">
-                  <AdvSelect
-                    kind="bare"
-                    aria-label="Match type"
+                  <select
                     value={matchType}
                     onChange={(e) => setMatchType(e.target.value)}
-                    className="pb-1.5 text-[14px] text-[#0D0D0D]"
-                    /* `pb-1.5` is the gap to the rule below, so the select's
-                       text sits 3px above its own box centre — nudge the
-                       glyph up by the same amount or it reads as low. */
-                    chevronClassName="-translate-y-[calc(50%+3px)]"
+                    className={cn(
+                      "w-full appearance-none bg-transparent text-[14px] outline-none pb-1.5 cursor-pointer",
+                      matchType ? "text-[#0D0D0D]" : "text-[#AAAAAA]"
+                    )}
                   >
                     <option value="">Select type</option>
                     {MATCH_TYPES.map((t) => (
@@ -718,30 +603,27 @@ export function EditMatchDialog({
                         {t}
                       </option>
                     ))}
-                  </AdvSelect>
+                  </select>
                 </UnderlineField>
                 <UnderlineField label="Court surface">
-                  <AdvSelect
-                    kind="bare"
-                    aria-label="Court surface"
+                  <select
                     value={courtType}
                     onChange={(e) => setCourtType(e.target.value)}
-                    className="pb-1.5 text-[14px] text-[#0D0D0D] capitalize"
-                    chevronClassName="-translate-y-[calc(50%+3px)]"
+                    className={cn(
+                      "w-full appearance-none bg-transparent text-[14px] outline-none pb-1.5 cursor-pointer capitalize",
+                      courtType ? "text-[#0D0D0D]" : "text-[#AAAAAA]"
+                    )}
                   >
                     <option value="">Select surface</option>
                     {COURT_TYPES.map((t) => (
-                      <option
-                        key={t}
-                        value={t}
-                        className="text-[#0D0D0D] capitalize"
-                      >
+                      <option key={t} value={t} className="text-[#0D0D0D] capitalize">
                         {t.charAt(0).toUpperCase() + t.slice(1)}
                       </option>
                     ))}
-                  </AdvSelect>
+                  </select>
                 </UnderlineField>
               </div>
+
             </div>
 
             {/* Server-error banner — docked above the footer so a 500 / network
@@ -749,12 +631,8 @@ export function EditMatchDialog({
             {error && (
               <div className="border-t border-[rgba(229,24,55,0.18)] bg-[rgba(229,24,55,0.06)] px-8 py-3">
                 <div className="flex items-start gap-1.5">
-                  <AlertCircle
-                    className="mt-0.5 size-3 shrink-0 text-[#E51837]"
-                    strokeWidth={1.75}
-                    aria-hidden="true"
-                  />
-                  <p className="text-[12px] leading-[1.5] font-medium text-[#E51837]">
+                  <AlertCircle className="size-3 text-[#E51837] mt-0.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                  <p className="text-[12px] font-medium text-[#E51837] leading-[1.5]">
                     {error}
                   </p>
                 </div>
@@ -762,7 +640,7 @@ export function EditMatchDialog({
             )}
 
             {/* Footer */}
-            <div className="flex items-center justify-between gap-2 border-t border-[#F3F3F3] bg-[#FAFAFA] px-8 py-3.5">
+            <div className="border-t border-[#F3F3F3] bg-[#FAFAFA] px-8 py-3.5 flex items-center justify-between gap-2">
               <SaveShortcutHint disabled={saving || hasInvalidSet} />
               <div className="flex items-center gap-2">
                 <button
@@ -777,19 +655,12 @@ export function EditMatchDialog({
                   ref={saveRef}
                   type="submit"
                   disabled={saving || hasInvalidSet}
-                  title={
-                    hasInvalidSet
-                      ? "Fix the invalid set score to save"
-                      : undefined
-                  }
+                  title={hasInvalidSet ? "Fix the invalid set score to save" : undefined}
                   className={cn(primaryBtnCls, "min-w-[84px]")}
                 >
                   {saving ? (
                     <span className="inline-flex items-center justify-center gap-1.5">
-                      <Loader2
-                        className="size-3.5 animate-spin"
-                        aria-hidden="true"
-                      />
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
                       Saving…
                     </span>
                   ) : (
@@ -821,14 +692,14 @@ function SaveShortcutHint({ disabled }: { disabled: boolean }) {
   if (isMac === null) return <span aria-hidden="true" />;
 
   const kbdCls =
-    "inline-block px-1 py-0.5 rounded text-[10px] font-medium leading-none text-[#AAAAAA] bg-[var(--ink-100)]";
+    "inline-block px-1 py-0.5 rounded text-[10px] font-medium leading-none text-[#AAAAAA] bg-[#F0F0F0]";
 
   return (
     <span
       aria-hidden="true"
       className={cn(
-        "inline-flex items-center gap-1.5 text-[10px] font-medium tracking-[1.5px] text-[#AAAAAA] uppercase",
-        disabled && "opacity-50",
+        "inline-flex items-center gap-1.5 text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px]",
+        disabled && "opacity-50"
       )}
     >
       {isMac ? (
@@ -861,24 +732,13 @@ function UnderlineField({
         {children}
         <div
           className={
-            // Both branches thicken to 2px on focus, and that is load-bearing
-            // rather than symmetry: every child of this wrapper carries
-            // `data-focus-ring="none"`, so this rule is their ONLY focus
-            // indicator (focus.css, "the underline exception"). The error
-            // branch used to be a flat 1px that never changed — so a field
-            // that had just been rejected was also the one field on the
-            // dialog with no visible focus at all, which is the state a
-            // keyboard user is most likely to be in. It stays red: the error
-            // owns the colour, focus owns the weight.
             error
-              ? "h-[1px] w-full bg-[#E51837] group-focus-within:h-[2px] motion-safe:transition-all motion-safe:duration-300"
-              : "h-[1px] w-full bg-[#F3F3F3] group-focus-within:h-[2px] group-focus-within:bg-[#3B82F6] motion-safe:transition-all motion-safe:duration-300"
+              ? "h-[1px] w-full bg-[#E51837]"
+              : "h-[1px] w-full bg-[#F3F3F3] motion-safe:transition-all motion-safe:duration-300 group-focus-within:h-[2px] group-focus-within:bg-[#3B82F6]"
           }
         />
         {error && (
-          <span className="mt-1 text-[11px] leading-none text-[#E51837]">
-            {error}
-          </span>
+          <span className="text-[11px] text-[#E51837] leading-none mt-1">{error}</span>
         )}
       </div>
     </div>
@@ -929,8 +789,8 @@ function PlayerRow({
   onEnterTiebreakEmpty,
 }: PlayerRowProps) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div className="group/name flex max-w-[320px] min-w-0 flex-1 flex-col">
+    <div className="flex justify-between items-start gap-4">
+      <div className="group/name flex flex-col flex-1 min-w-0 max-w-[320px]">
         <input
           ref={inputRef}
           placeholder={placeholder}
@@ -939,20 +799,17 @@ function PlayerRow({
           aria-invalid={error ? true : undefined}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          data-focus-ring="none" /* the rule below carries focus */
-          className="w-full bg-transparent pb-1.5 text-[16px] font-normal tracking-[-0.4px] text-[#0D0D0D] outline-none placeholder:font-normal placeholder:text-[#AAAAAA]"
+          className="w-full bg-transparent text-[16px] font-normal tracking-[-0.4px] text-[#0D0D0D] outline-none placeholder:text-[#AAAAAA] placeholder:font-normal pb-1.5"
         />
         <div
           className={
             error
               ? "h-[1px] w-full bg-[#E51837]"
-              : "h-[1px] w-full bg-[#F3F3F3] group-focus-within/name:h-[2px] group-focus-within/name:bg-[#3B82F6] motion-safe:transition-all motion-safe:duration-300"
+              : "h-[1px] w-full bg-[#F3F3F3] motion-safe:transition-all motion-safe:duration-300 group-focus-within/name:h-[2px] group-focus-within/name:bg-[#3B82F6]"
           }
         />
         {error && (
-          <span className="mt-1 text-[11px] leading-none text-[#E51837]">
-            {error}
-          </span>
+          <span className="text-[11px] text-[#E51837] leading-none mt-1">{error}</span>
         )}
       </div>
       <div className="flex gap-4 pt-1">
@@ -989,3 +846,4 @@ function PlayerRow({
     </div>
   );
 }
+

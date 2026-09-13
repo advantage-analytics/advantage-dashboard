@@ -4,116 +4,38 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
+import { CircleAlert } from "lucide-react";
 import FormHeader from "./form-header";
 import FormField from "./form-field";
-import AuthButton from "./auth-button";
-import AuthFooter, { AUTH_LINK } from "./auth-footer";
-import FormError from "./form-error";
-import {
-  toAuthError,
-  validateEmail,
-  type AuthError,
-} from "@/lib/auth/error-messages";
-import {
-  AUTH_NEXT_COOKIE,
-  AUTH_NEXT_MAX_AGE_SECONDS,
-} from "@/lib/auth/auth-next-cookie";
-import { safeNext } from "@/lib/auth/safe-next";
+import { REQUEST_ACCESS_URL } from "@/lib/constants";
 
-/**
- * Google's brand mark. Hoisted out of the component because it is static and
- * LoginForm re-renders on every keystroke — no reason to rebuild four paths
- * each time someone types a character of their email.
- */
-const GOOGLE_MARK = (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 18 18"
-    xmlns="http://www.w3.org/2000/svg"
-    aria-hidden="true"
-  >
-    <g fill="none" fillRule="evenodd">
-      <path
-        d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"
-        fill="#4285F4"
-      />
-      <path
-        d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
-        fill="#34A853"
-      />
-      <path
-        d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"
-        fill="#FBBC05"
-      />
-      <path
-        d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"
-        fill="#EA4335"
-      />
-    </g>
-  </svg>
-);
-
-/**
- * @param next Where to land after a successful sign-in — the login page reads
- *   it from `?next=`. Clamped again here rather than trusted: `safeNext` is
- *   idempotent, and both navigations below are same-file, so the guarantee
- *   that no attacker-controlled origin reaches them should be too.
- */
-export function LoginForm({ next }: { next?: string }) {
+export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<AuthError | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const destination = safeNext(next ?? null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-
-    const emailProblem = validateEmail(email);
-    if (emailProblem) {
-      setError({ field: "email", message: emailProblem });
-      return;
-    }
-
     const supabase = createClient();
     setIsLoading(true);
+    setError(null);
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { error: signInError } =
+        await supabase.auth.signInWithPassword({ email, password });
       if (signInError) throw signInError;
-      // The requested destination if there was one — an invite link parks
-      // `/join/<token>` here so the accept page is what opens after sign-in —
-      // otherwise the home dashboard, even if the profile is incomplete.
-      router.push(destination);
+      // Always land on the home dashboard, even if the profile is incomplete.
+      router.push("/dashboard");
     } catch (err: unknown) {
-      setError(toAuthError(err));
+      setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleGoogleOAuth = async () => {
-    setError(null);
-    // The destination never rides in `redirectTo`. Supabase puts that URL in
-    // the authorize request it receives and logs, and an invitation's
-    // destination carries the invite token — a credential meant to exist in
-    // the email and nowhere else. A first-party cookie crosses the round trip
-    // on the browser's own navigation back to `/callback`, which reads it,
-    // clamps it and clears it. `redirectTo` stays the one fixed value it has
-    // always been, so the project's redirect allow-list is untouched.
-    //
-    // Written on EVERY attempt, cleared when there is nothing to carry: an
-    // attempt abandoned at Google's consent screen must not steer the next
-    // sign-in from this browser — on a shared machine, somebody else's.
-    const secure = window.location.protocol === "https:" ? "; Secure" : "";
-    const carry = destination !== "/dashboard";
-    document.cookie = `${AUTH_NEXT_COOKIE}=${carry ? encodeURIComponent(destination) : ""}; Path=/; Max-Age=${carry ? AUTH_NEXT_MAX_AGE_SECONDS : 0}; SameSite=Lax${secure}`;
     const supabase = createClient();
     const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -127,7 +49,7 @@ export function LoginForm({ next }: { next?: string }) {
       },
     });
     if (oauthError) {
-      setError(toAuthError(oauthError));
+      setError(oauthError.message);
       return;
     }
     if (data?.url) {
@@ -142,14 +64,15 @@ export function LoginForm({ next }: { next?: string }) {
       style={{ animation: "fadeUp 0.5s ease-out" }}
     >
       <FormHeader
-        eyebrow="Sign in"
         title="Welcome Back."
-        description="Your matches, your numbers, and whatever your program has sent for you."
+        description="Enter your credentials to access your athlete dashboard and performance insights."
+        subtitle="Match analytics for collegiate programs and competitive players."
       />
 
+      {/* Fields */}
       <div className="flex flex-col gap-[20px]">
         <FormField
-          label="Email"
+          label="EMAIL"
           id="login-email"
           placeholder="name@university.edu"
           type="email"
@@ -157,60 +80,119 @@ export function LoginForm({ next }: { next?: string }) {
           onChange={(e) => setEmail(e.target.value)}
           required
           autoComplete="email"
-          error={error?.field === "email" ? error.message : null}
+          hasError={!!error}
         />
         <FormField
-          label="Password"
+          label="PASSWORD"
           id="login-password"
           type="password"
           placeholder="••••••••••••"
+          rightLabel={{ text: "Forgot Password?", href: "/forgot-password" }}
           showPasswordToggle
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
           autoComplete="current-password"
-          error={error?.field === "password" ? error.message : null}
+          hasError={!!error}
         />
 
-        {/* Below the field it belongs to, not competing with its label. */}
-        <div className="flex">
-          <Link href="/forgot-password" className={`text-[11px] ${AUTH_LINK}`}>
-            Forgot your password?
-          </Link>
-        </div>
+        {/* Error message */}
+        {error ? (
+          <div
+            className="flex w-full items-center gap-[8px] rounded-[6px] bg-[var(--color-error-bg)] px-[12px] py-[10px]"
+            style={{ animation: "shake 0.4s ease-in-out" }}
+            role="alert"
+          >
+            <CircleAlert
+              size={16}
+              className="shrink-0"
+              style={{ color: "var(--color-error)" }}
+            />
+            <span className="text-[12px] leading-[1.4] text-[var(--color-error)]">
+              {error}
+            </span>
+          </div>
+        ) : null}
       </div>
 
-      <div className="flex flex-col gap-[16px]">
-        <FormError error={error} inlineFields={["email", "password"]} />
-
-        <AuthButton type="submit" disabled={isLoading}>
+      {/* Actions */}
+      <div className="flex flex-col gap-[18px]">
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="flex h-[44px] w-full items-center justify-center rounded-[6px] bg-[var(--color-accent-blue)] text-[13px] font-medium tracking-[1px] text-white transition-all duration-200 hover:bg-[var(--color-accent-blue-hover)] hover:shadow-[0_0_20px_var(--color-accent-blue-glow)] active:scale-[0.97] disabled:pointer-events-none disabled:opacity-60"
+        >
           {isLoading ? "Signing In..." : "Sign In"}
-        </AuthButton>
+        </button>
 
-        <div className="flex items-center gap-[12px]">
-          <div className="h-[1px] flex-1 bg-[var(--border-hairline)]" />
-          <span className="text-micro">or</span>
-          <div className="h-[1px] flex-1 bg-[var(--border-hairline)]" />
+        {/* Divider */}
+        <div className="flex items-center gap-[16px]">
+          <div className="h-[1px] flex-1 bg-[var(--color-border-faint)]" />
+          <span className="text-[10px] font-medium tracking-[3px] text-[var(--color-text-faint)]">
+            OR
+          </span>
+          <div className="h-[1px] flex-1 bg-[var(--color-border-faint)]" />
         </div>
 
-        {/* Google's own button, kept at its branded treatment — a peer option. */}
+        {/* Google OAuth */}
         <button
           type="button"
           onClick={handleGoogleOAuth}
-          className="flex h-[44px] w-full items-center justify-center gap-[12px] rounded-[var(--radius-button)] bg-[#f2f2f2] text-[13px] font-medium text-[#3c4043] transition-colors duration-[var(--duration-hover)] hover:bg-[#e8e8e8] active:scale-[0.97] motion-reduce:active:scale-100"
+          className="flex h-[44px] w-full items-center justify-center gap-3 rounded-[6px] bg-[#f2f2f2] text-[13px] font-medium text-[#3c4043] transition-all duration-200 hover:bg-[#e8e8e8] active:scale-[0.97]"
         >
-          {GOOGLE_MARK}
-          Continue with Google
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 18 18"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <g fill="none" fillRule="evenodd">
+              <path
+                d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"
+                fill="#4285F4"
+              />
+              <path
+                d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
+                fill="#34A853"
+              />
+              <path
+                d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"
+                fill="#FBBC05"
+              />
+              <path
+                d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"
+                fill="#EA4335"
+              />
+            </g>
+          </svg>
+          Sign in with Google
         </button>
 
-        <AuthFooter>
-          <span className="text-body-sm">
-            New here?{" "}
-            <Link href="/sign-up" className={AUTH_LINK}>
-              Create an account
+        {/* Footer links */}
+        <div className="flex flex-col items-center gap-[8px]">
+          <div className="flex items-center gap-[6px]">
+            <span className="text-[12px] text-[var(--color-text-muted)]">
+              Don&apos;t have an account?
+            </span>
+            <Link
+              href="/sign-up"
+              className="text-[12px] text-[var(--color-accent-blue)]"
+            >
+              Sign up
             </Link>
-          </span>
-        </AuthFooter>
+          </div>
+          <div className="flex items-center gap-[6px]">
+            <span className="text-[12px] text-[var(--color-text-muted)]">
+              Bringing a team?
+            </span>
+            <a
+              href={REQUEST_ACCESS_URL}
+              className="text-[12px] text-[var(--color-accent-blue)]"
+            >
+              Request access.
+            </a>
+          </div>
+        </div>
       </div>
     </form>
   );
