@@ -777,13 +777,12 @@ export function PlayerDrawer({
                   )}
                   <span className="truncate text-[12px] text-[var(--ink-900)]">
                     {match.opponent}
-                    {match.event ? ` · ${match.event}` : ""}
                   </span>
                   {/* `playedSets` is display-only and belongs here, not in the
                       loader: `matches.score` genuinely stores trailing `0-0`
                       sets and nothing may rewrite them. The track is
                       `minmax(72px,max-content)` so a real three-setter pushes
-                      the truncating opponent/event cell instead of being
+                      the truncating opponent cell instead of being
                       clipped — the score is the column that must stay whole. */}
                   <ScoreLine
                     sets={playedSets(match.sets)}

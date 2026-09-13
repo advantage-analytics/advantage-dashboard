@@ -89,8 +89,6 @@ export interface RosterRecentMatch {
   id: string;
   /** Already shortened: "Ana Castillo" → "A. Castillo". */
   opponent: string;
-  /** The tournament or dual it belonged to, when the row recorded one. */
-  event: string | null;
   /** Oriented so `player1` is this member — see `RosterMatch.sets`. */
   sets: ScoreLineSet[];
   won: boolean | null;
@@ -248,7 +246,6 @@ interface DbMatchRow {
   player2_name: string | null;
   score: MatchScore | null;
   date: string | null;
-  tournament_name: string | null;
 }
 
 /**
@@ -364,7 +361,7 @@ export const getRosterData = cache(async function getRosterData(
       const { data, error } = await supabase
         .from("matches")
         .select(
-          "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name",
+          "id, player1_id, player2_id, player1_name, player2_name, score, date",
         )
         .eq("program_id", programId)
         // `nullsFirst` is not a detail here: Postgres puts NULLs first on a
@@ -572,7 +569,6 @@ export const getRosterData = cache(async function getRosterData(
           (r.isPlayer1 ? r.match.player2_name : r.match.player1_name) ??
             "Unknown",
         ),
-        event: r.match.tournament_name,
         sets: scoreSetsFrom(r.match.score, { swap: !r.isPlayer1 }),
         won: r.won,
         date: r.match.date ? shortDate(r.match.date) : "",

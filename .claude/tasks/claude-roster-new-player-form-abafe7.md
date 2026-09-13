@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Drop the event/school suffix from the drawer's recent-match rows
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/team/player-drawer.tsx (recent-matches row, ~line 758), src/lib/data/team-roster-server.ts (`RosterRecentMatch.event`, `DbRecentMatch.tournament_name`, the select at ~367, the map at ~575), tests/team-roster-ids.spec.ts (fixture at ~163) — guess
 - **done when:**
