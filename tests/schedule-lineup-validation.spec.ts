@@ -81,11 +81,17 @@ function actions(entries: EventEntry[] = []) {
       if (name === "@/lib/workspace/active-workspace-server")
         return {
           getWorkspaceContext: async () => ({
-            active: { kind: "team", id: "program", role: "coach", eventsPolicy: "staff" },
+            active: {
+              kind: "team",
+              id: "program",
+              role: "coach",
+              eventsPolicy: "staff",
+            },
             viewer: { id: "viewer" },
           }),
         };
-      if (name === "@/lib/workspace/types") return { canManageTeamSchedule, isProgramStaff };
+      if (name === "@/lib/workspace/types")
+        return { canManageTeamSchedule, isProgramStaff };
       if (name === "@/lib/data/schedule-server")
         return {
           getEventDetail: async () => ({
