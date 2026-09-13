@@ -235,7 +235,6 @@ const SAMPLE = {
   backhand: "Two-handed",
   venue: "Home Tennis Center",
   conference: "Conference",
-  season: "2026–27",
   hours: "10h 00m",
   clock: "0:00 / 5:00",
   month: "Sep 2026",
@@ -839,11 +838,15 @@ export function SettingsTeamDetailPending() {
               height={conferenceIsSelect ? 34 : 32}
               hint={isOwner ? undefined : lockedHint}
             />
-            <Field label="Season" value={SAMPLE.season} height={32} />
+            <Field
+              label="Season"
+              value="2026–27"
+              height={32}
+              hint="Follows the academic year — turns over Aug 1."
+            />
           </div>
           <Text className="text-[11px] leading-[1.5]">
-            Venue, surface and season prefill the upload wizard — players
-            won&apos;t have to type them per match.
+            Default surface prefills new duals and tournaments on the schedule.
             {isOwner &&
               " Name, squad and conference are the program's directory record — changing them changes what other schools see."}
           </Text>
@@ -859,7 +862,7 @@ export function SettingsTeamDetailPending() {
               ["Home venue", SAMPLE.venue],
               ["Default surface", "Hard"],
               ["Conference", SAMPLE.conference],
-              ["Season", SAMPLE.season],
+              ["Season", "2026–27"],
             ].map(([label, value]) => (
               <div key={label} className="flex flex-col gap-1">
                 <Text className="text-[11px]">{label}</Text>

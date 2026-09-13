@@ -126,7 +126,6 @@ export interface TeamSettingsInput {
   conference: string;
   homeVenue: string;
   defaultSurface: string | null;
-  season: string;
   /** The whole ladder; `players_can_upload` is derived from it in SQL. */
   uploadPolicy: UploadPolicy;
   /** Owner-only to change; the RPC refuses anyone else in words. */
@@ -136,8 +135,8 @@ export interface TeamSettingsInput {
 /**
  * One save for identity and policy — they are one row in `programs`.
  *
- * The RPC is where the rules live: any staff may change venue, surface and
- * season; only the owner may change name, squad or conference, and it says so
+ * The RPC is where the rules live: any staff may change venue and surface;
+ * only the owner may change name, squad or conference, and it says so
  * in words the form can show. `/dashboard` is revalidated as a layout because
  * a rename changes the switcher's label, which lives nowhere under settings.
  */
@@ -155,7 +154,8 @@ export async function saveTeamSettings(
     p_conference: input.conference,
     p_home_venue: input.homeVenue,
     p_default_surface: input.defaultSurface,
-    p_season: input.season,
+    // Season is no longer edited; the RPC coalesces '' to the stored value.
+    p_season: "",
     p_players_can_upload: input.uploadPolicy === "everyone",
     p_upload_policy: input.uploadPolicy,
     p_events_policy: input.eventsPolicy,

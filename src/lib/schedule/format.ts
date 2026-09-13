@@ -120,6 +120,23 @@ export function todayISO(): string {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
+/** The month a college season turns over — fall play starts in August. */
+const SEASON_START_MONTH = 8;
+
+/**
+ * The academic-year season a date falls in: `"2026–27"` from Aug 1, 2026
+ * through Jul 31, 2027. En dash, two-digit second year.
+ *
+ * Derived, never stored. A season a coach typed went stale every August and
+ * nothing read it; the calendar can't disagree with itself.
+ */
+export function academicSeason(isoDate: string): string {
+  const year = Number(isoDate.slice(0, 4));
+  const month = Number(isoDate.slice(5, 7));
+  const start = month >= SEASON_START_MONTH ? year : year - 1;
+  return `${start}–${String(start + 1).slice(2)}`;
+}
+
 /**
  * The four match formats, as the pair of values that actually reaches the
  * database — and nothing else.

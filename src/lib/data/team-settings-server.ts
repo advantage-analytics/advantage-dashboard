@@ -45,7 +45,6 @@ export interface TeamIdentity {
   division: string | null;
   homeVenue: string | null;
   defaultSurface: string | null;
-  season: string | null;
   playersCanUpload: boolean;
   /** The ladder `playersCanUpload` is the bottom rung of — what the form edits. */
   uploadPolicy: UploadPolicy;
@@ -90,7 +89,7 @@ export async function getTeamSettings(
       supabase
         .from("programs")
         .select(
-          "id, school_name, team, conference, division, home_venue, default_surface, season, players_can_upload, upload_policy, events_policy, time_zone, crest_path",
+          "id, school_name, team, conference, division, home_venue, default_surface, players_can_upload, upload_policy, events_policy, time_zone, crest_path",
         )
         .eq("id", programId)
         .maybeSingle(),
@@ -158,7 +157,6 @@ export async function getTeamSettings(
       division: row.division ?? null,
       homeVenue: row.home_venue,
       defaultSurface: row.default_surface,
-      season: row.season,
       playersCanUpload: row.players_can_upload,
       uploadPolicy: (row.upload_policy as UploadPolicy | null) ?? "everyone",
       eventsPolicy: (row.events_policy as EventsPolicy | null) ?? "staff",

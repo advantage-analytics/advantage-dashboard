@@ -98,7 +98,6 @@ export function TeamDetail({
         homeVenue: draft.homeVenue,
         defaultSurface:
           draft.defaultSurface === "" ? null : draft.defaultSurface,
-        season: draft.season,
         uploadPolicy: draft.uploadPolicy,
         eventsPolicy: draft.eventsPolicy,
       });

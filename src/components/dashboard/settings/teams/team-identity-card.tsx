@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { Lock } from "lucide-react";
 import {
   SettingsCard,
@@ -11,6 +12,7 @@ import { CrestControl } from "@/components/dashboard/settings/teams/crest-contro
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import { ConferenceSelect } from "@/components/dashboard/settings/teams/conference-select";
 import type { IdentityDraft } from "@/components/dashboard/settings/teams/types";
+import { academicSeason, todayISO } from "@/lib/schedule/format";
 
 export const SQUAD_OPTIONS = [
   { value: "mens" as const, label: "Men's tennis" },
@@ -27,9 +29,9 @@ export const SURFACE_OPTIONS = [
 /**
  * The identity card: crest, name and home courts.
  *
- * Two kinds of field on one grid. Venue, surface and season are logistics —
- * any staff may change them, and a coach setting up a season should not have
- * to find the owner. Name, squad and conference are the program's directory
+ * Two kinds of field on one grid. Venue and surface are logistics — any staff
+ * may change them, and a coach setting up a season should not have to find
+ * the owner. Name, squad and conference are the program's directory
  * record: other schools match against them, and the two squads of one school
  * are two programs with two budgets. Those three are the owner's, and to
  * everyone else they render as a fact with a reason, not as a disabled input
@@ -39,6 +41,10 @@ export const SURFACE_OPTIONS = [
  *
  * A player never edits here at all — they get the four facts that matter to
  * them, read-only, and none of the identity fields.
+ *
+ * Season is shown, never edited: it is the academic year today falls in
+ * (`academicSeason`). A typed "2026–27" went stale every August, and nothing
+ * in the product read it.
  */
 export function TeamIdentityCard({
   programId,
@@ -73,6 +79,9 @@ export function TeamIdentityCard({
   conferenceOptions: readonly string[];
   onCrestError: (message: string | null) => void;
 }) {
+  // Once per mount — the season has no reason to turn over while the page is open.
+  const season = useMemo(() => academicSeason(todayISO()), []);
+
   if (!canEdit) {
     return (
       <SettingsCard className="gap-3.5">
@@ -89,7 +98,7 @@ export function TeamIdentityCard({
             value={surfaceLabel(draft.defaultSurface)}
           />
           <Fact label="Conference" value={draft.conference || "—"} />
-          <Fact label="Season" value={draft.season || "—"} mono />
+          <Fact label="Season" value={season} />
         </div>
       </SettingsCard>
     );
@@ -183,20 +192,17 @@ export function TeamIdentityCard({
           />
         )}
 
-        <TextField
+        <LockedField
           label="Season"
-          value={draft.season}
-          placeholder="2026–27"
-          mono
-          onChange={(value) => onChange("season", value)}
+          value={season}
+          hint="Follows the academic year — turns over Aug 1."
         />
       </div>
 
       {/* No rule above this note: the grid's last row already ends the block,
           and a second line two pixels under it read as a double border. */}
       <span className="text-[11px] leading-[1.5] text-[var(--ink-500)]">
-        Venue, surface and season prefill the upload wizard — players won&apos;t
-        have to type them per match.
+        Default surface prefills new duals and tournaments on the schedule.
         {isOwner &&
           " Name, squad and conference are the program's directory record — changing them changes what other schools see."}
       </span>
@@ -209,13 +215,11 @@ function TextField({
   label,
   value,
   placeholder,
-  mono,
   onChange,
 }: {
   label: string;
   value: string;
   placeholder?: string;
-  mono?: boolean;
   onChange: (next: string) => void;
 }) {
   return (
@@ -224,7 +228,6 @@ function TextField({
         type="text"
         value={value}
         placeholder={placeholder}
-        mono={mono}
         className="h-8"
         onChange={(event) => onChange(event.target.value)}
       />
@@ -260,27 +263,11 @@ function LockedField({
   );
 }
 
-function Fact({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
+function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-[11px] text-[var(--ink-600)]">{label}</span>
-      <span
-        className={
-          mono
-            ? "mono text-[13px] text-[var(--ink-900)]"
-            : "text-[13px] text-[var(--ink-900)]"
-        }
-      >
-        {value}
-      </span>
+      <span className="text-[13px] text-[var(--ink-900)]">{value}</span>
     </div>
   );
 }
