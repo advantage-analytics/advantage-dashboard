@@ -169,6 +169,9 @@ export async function getTeamSettings(
   };
 }
 
+/** The API's per-response row cap (`max_rows`). */
+const CONFERENCE_PAGE = 1000;
+
 /**
  * The conferences of one division, read off the program directory itself.
  *
@@ -177,9 +180,9 @@ export async function getTeamSettings(
  * beside the directory's "Pac-12" empties Opponents without an error. Offering
  * only names the directory already uses is what keeps that match honest.
  *
- * `programs` is publicly readable, and the largest division is ~640 rows of
- * one column — well under the API's row cap — so distinct-ing here is cheaper
- * than a view nobody else needs. Its own loader, not part of `getTeamSettings`,
+ * `programs` is publicly readable, so distinct-ing here is cheaper than a view
+ * nobody else needs. It pages: the API caps a response at 1,000 rows, and the
+ * whole directory (a college with no division) is ~1,940. Its own loader, not part of `getTeamSettings`,
  * because only the owner's form reads it and the schedule pages share that one.
  */
 export async function getConferenceOptions(
@@ -191,27 +194,31 @@ export async function getConferenceOptions(
   if (orgType !== "college") return [];
 
   const supabase = await createClient();
-  let query = supabase
-    .from("programs")
-    .select("conference")
-    .not("conference", "is", null);
-  // A college with no division is a gap in its row, not a different kind of
-  // program — it still picks from the directory, just from every division.
-  // The whole directory is ~1,940 rows, still under the API's row cap.
-  if (division) query = query.eq("division", division);
-  const { data, error } = await query;
-
-  if (error) {
-    console.error("[team settings] could not read conferences", {
-      error: error.message,
-    });
-    return [];
-  }
-
   const names = new Set<string>();
-  for (const { conference } of data as { conference: string }[]) {
-    const name = conference.trim();
-    if (name) names.add(name);
+  for (let from = 0; ; from += CONFERENCE_PAGE) {
+    let query = supabase
+      .from("programs")
+      .select("conference")
+      .not("conference", "is", null)
+      .order("id")
+      .range(from, from + CONFERENCE_PAGE - 1);
+    // A college with no division is a gap in its row, not a different kind of
+    // program — it still picks from the directory, just from every division.
+    if (division) query = query.eq("division", division);
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("[team settings] could not read conferences", {
+        error: error.message,
+      });
+      return [];
+    }
+
+    for (const { conference } of data as { conference: string }[]) {
+      const name = conference.trim();
+      if (name) names.add(name);
+    }
+    if (data.length < CONFERENCE_PAGE) break;
   }
   return [...names].sort((a, b) => a.localeCompare(b));
 }

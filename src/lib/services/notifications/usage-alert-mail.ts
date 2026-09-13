@@ -42,12 +42,19 @@ export async function notifyUsageThreshold(params: {
       return;
     }
 
+    // Straight off the tables, not `program_roster`: that RPC answers only a
+    // member (`user_program_ids()` keys on `auth.uid()`), and the admin client
+    // has no uid — it returned nobody, after the month's key was spent.
     const db = createAdminClient();
-    const { data: roster, error } = await db.rpc("program_roster", {
-      p_program_id: workspace.id,
-    });
+    const { data: members, error } = await db
+      .from("program_members")
+      .select(
+        "user_id, users!program_members_user_id_fkey(first_name, last_name, email)",
+      )
+      .eq("program_id", workspace.id)
+      .in("role", ["owner", "coach"]);
     if (error) {
-      console.error(`${LOG} could not read the roster`, {
+      console.error(`${LOG} could not read the staff`, {
         programId: workspace.id,
         error: error.message,
       });
@@ -55,13 +62,23 @@ export async function notifyUsageThreshold(params: {
     }
 
     const staff = (
-      (roster ?? []) as {
+      (members ?? []) as unknown as {
         user_id: string;
-        display_name: string | null;
-        email: string | null;
-        role: string;
+        users: {
+          first_name: string | null;
+          last_name: string | null;
+          email: string | null;
+        } | null;
       }[]
-    ).filter((row) => row.role === "owner" || row.role === "coach");
+    ).map((row) => ({
+      user_id: row.user_id,
+      display_name:
+        [row.users?.first_name, row.users?.last_name]
+          .map((part) => part?.trim())
+          .filter(Boolean)
+          .join(" ") || null,
+      email: row.users?.email ?? null,
+    }));
 
     const prefs = await getNotificationPrefs(staff.map((row) => row.user_id));
     const programName = programDisplayName(workspace.name, workspace.team);
