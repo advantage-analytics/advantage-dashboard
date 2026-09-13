@@ -84,7 +84,7 @@ ready).
 
 ## T6 · Migration: `restore_program_player` + `program_former_players`
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** new `supabase/migrations/2026MMDDhhmmss_restore_program_player.sql` (guess — model it on `supabase/migrations/20260822090700_program_player_writes.sql` for the write shape, `20260822120100_accept_invite_claims_profile.sql:85-94` for the seat check, `20260907034749_set_program_member_role.sql:96-121` for the drop-and-re-add of the audit constraint, and `20260822150700_pooled_reads_as_functions.sql` for the `user_program_ids()`-gated read)
 - **done when:**
