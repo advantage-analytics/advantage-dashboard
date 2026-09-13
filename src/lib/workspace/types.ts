@@ -49,7 +49,15 @@ export const EVENTS_POLICIES: readonly EventsPolicy[] = [
   "staff",
 ];
 
-/** The policy as a settings row reads it. */
+/**
+ * The policy as a settings row reads it.
+ *
+ * Named for the upload ladder, but `EventsPolicy` is a subset of the same
+ * type (`owner` | `owner_coaches` | `staff`) sharing the same three rungs and
+ * wording, so `team-policies-card.tsx` and the schedule-manager refusal in
+ * `schedule/actions.ts` call this for events-policy labels too. `"everyone"`
+ * is unreachable from an `EventsPolicy` value.
+ */
 export function uploadPolicyLabel(policy: UploadPolicy): string {
   switch (policy) {
     case "owner":

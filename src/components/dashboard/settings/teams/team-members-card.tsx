@@ -118,15 +118,15 @@ export function TeamMembersCard({
             isStaff && options.length === 0 && member.userId !== viewerId;
           return (
             <PersonRow key={member.userId}>
-              {member.userId === viewerId ? (
-                <PersonAvatar
-                  initials={viewer.initials}
-                  photoUrl={viewer.avatarUrl}
-                  className="size-[22px] text-[9px]"
-                />
-              ) : (
-                <Avatar22>{getInitials(member.name)}</Avatar22>
-              )}
+              <PersonAvatar
+                initials={
+                  member.userId === viewerId
+                    ? viewer.initials
+                    : getInitials(member.name)
+                }
+                photoUrl={member.userId === viewerId ? viewer.avatarUrl : null}
+                className="size-[22px] text-[9px]"
+              />
               <span className="truncate text-[12px] font-medium text-[var(--ink-900)]">
                 {member.name}
               </span>
@@ -248,18 +248,6 @@ function PersonRow({ children }: { children: React.ReactNode }) {
     <div className="flex items-center gap-2.5 border-t border-[var(--border-hairline)] py-[9px]">
       {children}
     </div>
-  );
-}
-
-/** The 22px mark the v3 person row leads with — smaller than a table's 26. */
-function Avatar22({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[9px] font-medium text-[var(--ink-700)]"
-    >
-      {children}
-    </span>
   );
 }
 

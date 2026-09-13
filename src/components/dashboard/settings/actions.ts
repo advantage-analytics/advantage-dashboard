@@ -94,6 +94,19 @@ export async function saveProfile(input: ProfileInput): Promise<ActionResult> {
   return { ok: true };
 }
 
+/** The stored key of a user's current avatar, if any. */
+async function getCurrentAvatarPath(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("users")
+    .select("avatar_path")
+    .eq("id", userId)
+    .maybeSingle();
+  return (data?.avatar_path as string | null | undefined) ?? null;
+}
+
 /**
  * Replace the profile photo.
  *
@@ -118,17 +131,15 @@ export async function uploadAvatar(formData: FormData): Promise<ActionResult> {
     return { ok: false, error: "Keep the photo under 2 MB." };
   }
 
-  const { data: current } = await supabase
-    .from("users")
-    .select("avatar_path")
-    .eq("id", user.id)
-    .maybeSingle();
-  const previous = (current?.avatar_path as string | null | undefined) ?? null;
-
   const path = `${user.id}/avatar-${Date.now()}.${ext}`;
-  const { error: uploadError } = await supabase.storage
-    .from(USER_AVATARS_BUCKET)
-    .upload(path, file, { contentType: file.type, upsert: false });
+  // The lookup only matters after a successful upload (to know what to
+  // remove), so it runs alongside the upload rather than before it.
+  const [previous, { error: uploadError }] = await Promise.all([
+    getCurrentAvatarPath(supabase, user.id),
+    supabase.storage
+      .from(USER_AVATARS_BUCKET)
+      .upload(path, file, { contentType: file.type, upsert: false }),
+  ]);
   if (uploadError) {
     return {
       ok: false,
@@ -161,17 +172,12 @@ export async function removeAvatar(): Promise<ActionResult> {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in. Please log back in." };
 
-  const { data: current } = await supabase
-    .from("users")
-    .select("avatar_path")
-    .eq("id", user.id)
-    .maybeSingle();
-  const previous = (current?.avatar_path as string | null | undefined) ?? null;
-
-  const { error } = await supabase
-    .from("users")
-    .update({ avatar_path: null })
-    .eq("id", user.id);
+  // The update doesn't depend on the lookup's result — only the storage
+  // cleanup below does — so the two run together.
+  const [previous, { error }] = await Promise.all([
+    getCurrentAvatarPath(supabase, user.id),
+    supabase.from("users").update({ avatar_path: null }).eq("id", user.id),
+  ]);
   if (error) return { ok: false, error: "Couldn't remove the photo." };
 
   if (previous) {
