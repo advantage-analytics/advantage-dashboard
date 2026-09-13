@@ -81,6 +81,7 @@ function route(
                       kind: options.kind ?? "team",
                       role: options.role ?? "owner",
                       canSubmitVideo: true,
+                      eventsPolicy: "staff",
                     },
                   },
           };
@@ -88,6 +89,7 @@ function route(
           return {
             isProgramStaff: (w: { role: string }) => w.role !== "player",
             canUploadForProgram: (w: { role: string }) => w.role !== "player",
+            canManageTeamSchedule: (w: { role: string }) => w.role !== "player",
             teamLabel: () => "Men's tennis",
           };
         if (id.includes("team-home-server"))
@@ -118,6 +120,7 @@ function route(
               if (options.fail) throw new Error("database failed");
               return options.roster ?? emptyRoster;
             },
+            getFormerPlayers: async () => [],
           };
         if (id.includes("join-requests-server"))
           return {

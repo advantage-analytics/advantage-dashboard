@@ -9,7 +9,11 @@ import {
 import { RosterHeaderButtons } from "./roster-header-buttons";
 import { COL, ROSTER_COLUMNS, ROW } from "./roster-table";
 import type { ManagedPlayer } from "./invite-target-picker";
-import type { RosterMember, SeatUsage } from "@/lib/data/team-roster-server";
+import type {
+  FormerPlayer,
+  RosterMember,
+  SeatUsage,
+} from "@/lib/data/team-roster-server";
 
 /**
  * Roster before the program has a player on it.
@@ -79,12 +83,15 @@ export function RosterDayZero({
   seats,
   roster,
   playersCanUpload,
+  former,
 }: {
   canManage: boolean;
   managedPlayers: ManagedPlayer[];
   seats: SeatUsage;
   roster: RosterMember[];
   playersCanUpload: boolean;
+  /** Forwarded to `RosterHeaderButtons` — see its own doc comment. */
+  former: FormerPlayer[];
 }) {
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -98,6 +105,7 @@ export function RosterDayZero({
               seats={seats}
               roster={roster}
               playersCanUpload={playersCanUpload}
+              former={former}
             />
           ) : null
         }

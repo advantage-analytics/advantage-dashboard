@@ -36,6 +36,7 @@ export function PendingRegion({
 
 export function TeamHomeFrame({
   title,
+  setupLine,
   kpis,
   dual,
   movers,
@@ -53,11 +54,15 @@ export function TeamHomeFrame({
   | "history"
   | "footer",
   ReactNode
->) {
+> & {
+  /** Staff-only, and only while setup remains — see `TeamSetupLine`. */
+  setupLine?: ReactNode;
+}) {
   return (
-    <div className="w-full flex-1 bg-[var(--surface-card)]">
-      <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4 px-14 pt-5 pb-8">
+    <div className="flex w-full flex-1 flex-col bg-[var(--surface-card)]">
+      <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col gap-4 px-14 pt-5 pb-8">
         {title}
+        {setupLine}
         <TeamHomeRegions
           kpis={kpis}
           dual={dual}
@@ -66,7 +71,10 @@ export function TeamHomeFrame({
           court={court}
           history={history}
         />
-        <div className="flex flex-col gap-4">{footer}</div>
+        {/* `mt-auto` eats the leftover column height, so on a short page the
+            footer lands on the bottom edge instead of leaving a dead strip of
+            surface below it — the same trick the personal Home's footer uses. */}
+        <div className="mt-auto flex flex-col gap-4">{footer}</div>
       </div>
     </div>
   );

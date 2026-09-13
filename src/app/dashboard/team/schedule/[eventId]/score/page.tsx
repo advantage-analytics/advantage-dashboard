@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { isProgramStaff } from "@/lib/workspace/types";
+import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { getEventDetail, programNamesFor } from "@/lib/data/schedule-server";
 import { entryState, outcomeForRound } from "@/lib/schedule/entry-state";
 import { lineupChoices, presetFor } from "@/lib/schedule/line-choices";
@@ -40,7 +40,8 @@ export default async function ScoreEventPage({
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");
-  if (!isProgramStaff(active)) redirect(`/dashboard/team/schedule/${eventId}`);
+  if (!canManageTeamSchedule(active))
+    redirect(`/dashboard/team/schedule/${eventId}`);
 
   // This route only needs one event. React's request cache does not carry the
   // season loaded by a previous page into this navigation.

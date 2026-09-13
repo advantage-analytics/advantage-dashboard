@@ -32,6 +32,7 @@ function deletion(role: string, error: string | null = null) {
                       kind: role === "personal" ? "personal" : "team",
                       role,
                       id: "program",
+                      eventsPolicy: "staff",
                     },
                   },
           };

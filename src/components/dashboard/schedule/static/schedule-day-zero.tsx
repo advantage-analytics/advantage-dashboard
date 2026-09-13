@@ -81,7 +81,7 @@ export function ScheduleDayZero({
   canCreate,
   canAddOwnMatch,
 }: {
-  /** `isProgramStaff` — may schedule the program's events. */
+  /** `canManageTeamSchedule` — may schedule the program's events. */
   canCreate: boolean;
   /** `canUploadForProgram` — may add a match that belongs to no event. */
   canAddOwnMatch: boolean;

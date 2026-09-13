@@ -9,6 +9,9 @@ import {
   ChevronRight,
   ChevronUp,
   MoreHorizontal,
+  Pencil,
+  Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import {
@@ -82,6 +85,14 @@ import type {
 
 const ICON_BUTTON =
   "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40";
+
+/**
+ * The leading glyph on each Options-menu row: neutral at rest and on hover —
+ * never `--blue` (`FloatMenuItem`'s default) or `--danger` (the Remove row's
+ * label still turns danger on hover; its icon does not). Shared by all three
+ * rows so a later tweak to size, colour or stroke weight is one edit.
+ */
+const MENU_ROW_ICON = "size-[13px] shrink-0 text-[var(--ink-400)]";
 
 /** The drawer's `role="dialog"` carries this so the window key handler can tell it from a modal. */
 export const DRAWER_ATTR = "data-roster-drawer";
@@ -365,12 +376,19 @@ function MemberMenu({
       >
         {canToggleSend ? (
           <div className="flex items-start gap-3 rounded-[var(--radius-element)] px-2 py-2">
-            <span className="min-w-0 flex-1">
-              <span className="block text-[12px] font-medium text-[var(--ink-900)]">
-                Can send video
-              </span>
-              <span className="block text-[11px] leading-[1.5] text-[var(--ink-500)]">
-                Spends the program&apos;s analysis time
+            <span className="flex min-w-0 flex-1 items-start gap-2.5">
+              <Upload
+                className={`mt-0.5 ${MENU_ROW_ICON}`}
+                strokeWidth={1.5}
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[12px] font-medium text-[var(--ink-900)]">
+                  Can send video
+                </span>
+                <span className="block text-[11px] leading-[1.5] text-[var(--ink-500)]">
+                  Spends the program&apos;s analysis time
+                </span>
               </span>
             </span>
             <AdvSwitch
@@ -416,8 +434,9 @@ function MemberMenu({
               onError(null);
               onEdit();
             }}
-            className="block w-full rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
+            className="flex w-full items-center gap-2.5 rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
           >
+            <Pencil className={MENU_ROW_ICON} strokeWidth={1.5} aria-hidden />
             Edit player
           </button>
         )}
@@ -436,9 +455,24 @@ function MemberMenu({
                   : removeMember(member.userId as string),
               )
             }
-            className="block w-full rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)] disabled:opacity-50"
+            className="group flex w-full items-start gap-2.5 rounded-[var(--radius-element)] px-2 py-2 text-left transition-colors hover:bg-[var(--surface-subtle)] disabled:opacity-50"
           >
-            Remove from roster
+            <Trash2
+              className={`mt-0.5 ${MENU_ROW_ICON}`}
+              strokeWidth={1.5}
+              aria-hidden
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[12px] text-[var(--ink-700)] group-hover:text-[var(--danger)]">
+                Remove from roster
+              </span>
+              {member.profileId && (
+                <span className="block text-[11px] leading-[1.5] text-[var(--ink-500)]">
+                  Their matches stay. Adding them again offers to restore this
+                  profile.
+                </span>
+              )}
+            </span>
           </button>
         )}
       </PopoverContent>
@@ -757,13 +791,12 @@ export function PlayerDrawer({
                   )}
                   <span className="truncate text-[12px] text-[var(--ink-900)]">
                     {match.opponent}
-                    {match.event ? ` · ${match.event}` : ""}
                   </span>
                   {/* `playedSets` is display-only and belongs here, not in the
                       loader: `matches.score` genuinely stores trailing `0-0`
                       sets and nothing may rewrite them. The track is
                       `minmax(72px,max-content)` so a real three-setter pushes
-                      the truncating opponent/event cell instead of being
+                      the truncating opponent cell instead of being
                       clipped — the score is the column that must stay whole. */}
                   <ScoreLine
                     sets={playedSets(match.sets)}

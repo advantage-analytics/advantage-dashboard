@@ -42,8 +42,11 @@ const SOURCE = readFileSync(
 
 test("the gate the replica models is the one the dialog ships", () => {
   // `ready` gains exactly one term, and the button is untouched behind it.
+  // `busy` is the dialog's in-flight flag — `pending || restoring`, since the
+  // restore offer added a second transition. What matters here is that the spot
+  // gate is the only *readiness* term in front of the primary action.
   expect(SOURCE).toContain("(spotTakenBy.length === 0 || spotAcknowledged)");
-  expect(SOURCE).toContain("disabled={!ready || pending}");
+  expect(SOURCE).toContain("disabled={!ready || busy}");
 
   // The acknowledgement resets both on close and on every spot change.
   expect(SOURCE).toMatch(

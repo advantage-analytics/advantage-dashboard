@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { GitMerge, Loader2, Upload, Users } from "lucide-react";
-import type { RosterMember } from "@/lib/data/team-roster-server";
+import { GitMerge, Loader2, RotateCcw, Upload, Users } from "lucide-react";
+import type { FormerPlayer, RosterMember } from "@/lib/data/team-roster-server";
 import {
   SettingsField,
   SettingsUnderlineInput,
 } from "@/components/dashboard/settings/settings-card";
 import { advButton } from "@/lib/ui/adv-button";
 import { normalizedPersonName } from "@/lib/data/person-name";
-import { addProgramPlayer } from "@/components/dashboard/team/roster-actions";
+import {
+  addProgramPlayer,
+  restoreProgramPlayer,
+} from "@/components/dashboard/team/roster-actions";
 import { inviteMember } from "@/components/dashboard/settings/team-actions";
 import {
   DialogInfoRow,
@@ -80,6 +83,25 @@ import {
  * two checks inside `add_program_player` — and re-stating those here is the
  * drift the Validation note above is about. They still arrive as sentences in
  * `DialogProblem`.
+ *
+ * ── The player who was removed ──────────────────────────────────────────────
+ * A third note, and a second button, for the case the two above cannot see: the
+ * athlete is not on the roster because somebody took them off it. Their profile
+ * is still there, archived, holding every match anybody uploaded for them.
+ * Adding a fresh row leaves that history stranded on a profile nobody will open
+ * again, and the coach has no way to tell from in here that it happened.
+ *
+ * It is a note plus a secondary button, never a refusal, for the same reason
+ * the name note is a note: two athletes can share a name, and the recognition
+ * here is a guess made from the fields on screen. `add_program_player` keeps
+ * its duplicate check on live rows only, deliberately — so "Add to roster"
+ * still writes a second, distinct row for a same-named different athlete, and
+ * stays enabled and unlabelled while the offer is on screen. Restoring is the
+ * cheaper path when it is the same person; it is never the only one.
+ *
+ * The match is `formerPlayerMatch` below, and unlike the name note it does read
+ * the typed address — an email equal to an archived one is the strong signal,
+ * and it wins over a shared name.
  */
 
 /** The field that tells two same-named rows apart, or the absence of it. */
@@ -106,6 +128,58 @@ function duplicateNameNote(matches: RosterMember[]): string {
 }
 
 /**
+ * The archived profile the typed fields look like, or `null`.
+ *
+ * Exported and pure so it can be pinned by `tests/former-player-match.spec.ts`
+ * without a browser: the dialog itself cannot be rendered from a spec (see
+ * `tests/add-player-prefill.spec.ts` for why), and the recognition rule is the
+ * part worth testing — getting it wrong either strands a player's whole match
+ * history on a profile nobody reopens, or offers to restore a stranger.
+ *
+ * Email first, because it is the field that tells two same-named athletes
+ * apart; the name rule is `normalizedPersonName`, the roster's own definition of
+ * "the same name" and the one the `sameName` check above already applies, so a
+ * looser match here could not be acted on by the merge path either. An empty
+ * typed address matches nothing — half the archived rows have no email, and
+ * "blank equals blank" would offer the first of them to anybody who starts
+ * typing. Same for half a name: both halves are needed before this answers.
+ */
+export function formerPlayerMatch(
+  former: FormerPlayer[],
+  typed: { firstName: string; lastName: string; email: string },
+): FormerPlayer | null {
+  const address = typed.email.trim().toLowerCase();
+  if (address !== "") {
+    const byEmail = former.find(
+      (person) => (person.email?.trim().toLowerCase() ?? "") === address,
+    );
+    if (byEmail) return byEmail;
+  }
+
+  if (typed.firstName.trim() === "" || typed.lastName.trim() === "")
+    return null;
+  const name = normalizedPersonName(typed.firstName, typed.lastName);
+
+  return (
+    former.find((person) => normalizedPersonName(person.name) === name) ?? null
+  );
+}
+
+/**
+ * The restore offer's sentence, built beside the file's other prose helpers and
+ * returned as a string for the reason `duplicateNameNote` is: `RosterNote` says
+ * it twice, once on screen and once in the live region.
+ *
+ * No pronoun but "their" — the roster knows nothing about anybody's gender, and
+ * a guess is worse than a plural.
+ */
+function formerPlayerNote(person: FormerPlayer): string {
+  const matches =
+    person.matchCount === 1 ? "1 match" : `${person.matchCount} matches`;
+  return `${person.name} was removed on ${person.archivedOn} with ${matches}. Restore their profile instead? If this is somebody else, you can still add them.`;
+}
+
+/**
  * What a caller already knows about the person being added.
  *
  * The receiving end of a hand-off: a coach who has typed an address into
@@ -124,6 +198,7 @@ export function AddPlayerDialog({
   onOpenChange,
   seatNote,
   roster,
+  former,
   initial,
 }: {
   open: boolean;
@@ -132,6 +207,12 @@ export function AddPlayerDialog({
   seatNote: string;
   /** Who is on the roster already, so a repeat can say who it would repeat. */
   roster: RosterMember[];
+  /**
+   * Everyone archived off this roster, so the form can recognize a name that
+   * has already been here and offer to restore it instead of quietly
+   * creating a second, historyless profile beside their old one.
+   */
+  former: FormerPlayer[];
   /**
    * A prefill for the next opening, applied on the closed→open transition.
    *
@@ -163,6 +244,15 @@ export function AddPlayerDialog({
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   /**
+   * Restore's own transition, not a shared flag.
+   *
+   * Two buttons, two requests, and the spinner belongs on the one that was
+   * clicked — but every disable below reads `busy`, so neither can be fired
+   * while the other is in flight and `close()` refuses either way.
+   */
+  const [restoring, startRestore] = useTransition();
+  const busy = pending || restoring;
+  /**
    * The profile this dialog just created, and the form that produced it.
    *
    * `add_program_player` revalidates the roster before returning, so on the
@@ -192,6 +282,30 @@ export function AddPlayerDialog({
   const [created, setCreated] = useState<{
     profileId: string | null;
     form: string;
+  } | null>(null);
+  /**
+   * The archived profile `restore()` was last asked to bring back, frozen at
+   * the moment of the click — the fix for a gap the `former` prop alone
+   * cannot close.
+   *
+   * `restoreProgramPlayer` revalidates the roster the same way
+   * `addProgramPlayer` does, so on the invite-failure path the refreshed
+   * `former` array no longer contains this profile: it is live again, no
+   * longer "former." Deriving `restorable` from `former` alone would then
+   * make the note and the Restore button vanish mid-error, leaving only "Add
+   * to roster" on screen — which a coach clicking it, with an email that
+   * does not match what is now on file, turns into the exact silent second
+   * profile this whole feature exists to prevent (`add_program_player`'s
+   * duplicate check only fires against a live row's own email).
+   *
+   * Keyed on the form for the same reason `created` is: an edit that changes
+   * what would be restored must drop this, or a coach who clears the field
+   * and means someone else would have their new person's row read as a
+   * dangling retry target instead.
+   */
+  const [restoreTarget, setRestoreTarget] = useState<{
+    form: string;
+    person: FormerPlayer;
   } | null>(null);
 
   /**
@@ -237,6 +351,7 @@ export function AddPlayerDialog({
     setSpotAcknowledged(false);
     setError(null);
     setCreated(null);
+    setRestoreTarget(null);
   }
 
   /**
@@ -250,15 +365,15 @@ export function AddPlayerDialog({
    * what Cancel skipped was not cleaned up later: it left the form, and the
    * exclusion above, standing into the next time the dialog opened.
    *
-   * Refused while the write is in flight, which is why Cancel is disabled with
-   * it. The component outlives the close, so a reset that lands mid-request is
+   * Refused while either write — the add or the restore — is in flight, which
+   * is why Cancel is disabled with them. The component outlives the close, so a reset that lands mid-request is
    * undone by the `setCreated`/`setError` still to come — the dialog would
    * reopen holding a red error from an attempt the coach cancelled, and
    * retyping the same athlete would revive the exclusion for a row no longer
    * on screen.
    */
   function close() {
-    if (pending) return;
+    if (busy) return;
     reset();
     onOpenChange(false);
   }
@@ -312,9 +427,62 @@ export function AddPlayerDialog({
             normalizedPersonName(person.name) === typedName,
         );
 
+  /**
+   * The archived profile on offer, if the typed fields look like one — or,
+   * failing that, the one `restore()` was last asked to bring back for this
+   * exact form, per `restoreTarget` above.
+   *
+   * The fallback matters on the one path that succeeds and stays open: once
+   * `restoreProgramPlayer` clears `archived_at`, the freshly-revalidated
+   * `former` prop no longer carries this profile, so `formerPlayerMatch`
+   * alone would return `null` here — dropping the note and the Restore
+   * button out from under a coach mid-retry, with only "Add to roster" left
+   * to click.
+   */
+  const restorable =
+    formerPlayerMatch(former, { firstName, lastName, email }) ??
+    (restoreTarget !== null && restoreTarget.form === formKey
+      ? restoreTarget.person
+      : null);
+
   const nameNote = sameName.length === 0 ? null : duplicateNameNote(sameName);
+  const restoreNote = restorable === null ? null : formerPlayerNote(restorable);
   const spotNote =
     spotTakenBy.length === 0 ? null : spotHeldNote(spotTakenBy, lineupSpot);
+
+  /**
+   * The optional invite that can follow either write, and the half-done
+   * handling both `submit()` and `restore()` need if it fails: the row is
+   * already live, so a failure here is reported, not thrown, and the caller
+   * leaves the dialog open with `alsoInvite` unchecked rather than close on a
+   * half-done action the coach would then wait on a reply that can't come.
+   *
+   * Returns the sentence to show on failure, or `null` on success — the
+   * caller still owns `setError`/`setAlsoInvite`/staying open, since exactly
+   * which name feeds which message differs by caller (`submit()` keeps its
+   * own pre-existing last-name/first-name split across the two branches;
+   * `restore()` uses the one name it has for both).
+   */
+  async function sendOptionalInvite(input: {
+    profileId: string;
+    email: string;
+    onRoster: string;
+    failureName: string;
+    warningName: string;
+  }): Promise<string | null> {
+    const invited = await inviteMember({
+      email: input.email,
+      role: "player",
+      playerId: input.profileId,
+    });
+    if (!invited.ok) {
+      return `${input.failureName} ${input.onRoster}, but the invitation did not send: ${invited.error}`;
+    }
+    if (invited.warning) {
+      return `${input.warningName} ${input.onRoster}. ${invited.warning}`;
+    }
+    return null;
+  }
 
   function submit() {
     setError(null);
@@ -334,25 +502,75 @@ export function AddPlayerDialog({
 
       setCreated({ profileId: result.profileId, form: formKey });
 
-      // The row exists now whatever happens next. If the invitation fails, say
-      // so and leave the dialog open — closing on a half-done action would
-      // report the whole thing as done, and the coach would wait for a reply
-      // that could not come.
       if (alsoInvite && result.profileId) {
-        const invited = await inviteMember({
+        const inviteError = await sendOptionalInvite({
+          profileId: result.profileId,
           email: email.trim(),
-          role: "player",
-          playerId: result.profileId,
+          onRoster: "is on the roster",
+          failureName: lastName.trim(),
+          warningName: firstName.trim(),
         });
-        if (!invited.ok) {
-          setError(
-            `${lastName.trim()} is on the roster, but the invitation did not send: ${invited.error}`,
-          );
+        if (inviteError) {
+          setError(inviteError);
           setAlsoInvite(false);
           return;
         }
-        if (invited.warning) {
-          setError(`${firstName.trim()} is on the roster. ${invited.warning}`);
+      }
+
+      reset();
+      onOpenChange(false);
+    });
+  }
+
+  /**
+   * The other way this dialog can end: the athlete was already here.
+   *
+   * Deliberately a mirror of `submit()` rather than a branch inside it — one
+   * RPC instead of the other, then the same optional invite with the same
+   * half-done handling, and the same "revalidate happened, so record what we
+   * wrote" bookkeeping. `created` is what makes a retry *safe*: the invite is
+   * the half that can fail after the row is already live, and a second click
+   * must not call `restore_program_player` again on a row it already
+   * un-archived. `restoreTarget` is what makes a retry *reachable* — without
+   * it, that same revalidation would remove the row from `former` and take
+   * the Restore button down with it.
+   *
+   * The invite is skipped without an address rather than refused: the checkbox
+   * is already disabled while the field is empty, and an archived player who
+   * never had an email is exactly the case where the coach wants the profile
+   * back and nothing else. Whether the invite is *allowed* is `inviteMember`'s
+   * call — a profile somebody already claimed has its own account, and it
+   * refuses that today, which is a better answer than a loader field added here
+   * to guess at it.
+   */
+  function restore(person: FormerPlayer) {
+    setError(null);
+    // Frozen now, before the RPC that will make `former` stop matching this
+    // person — see `restoreTarget` above for why. Set unconditionally, not
+    // only on the branch that actually calls the RPC: a retry after a failed
+    // invite must keep the same frozen target, not drop it a render early.
+    setRestoreTarget({ form: formKey, person });
+    startRestore(async () => {
+      if (createdProfileId !== person.profileId) {
+        const result = await restoreProgramPlayer(person.profileId);
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        setCreated({ profileId: person.profileId, form: formKey });
+      }
+
+      const address = email.trim();
+      if (alsoInvite && address !== "") {
+        const inviteError = await sendOptionalInvite({
+          profileId: person.profileId,
+          email: address,
+          onRoster: "is back on the roster",
+          failureName: person.name,
+          warningName: person.name,
+        });
+        if (inviteError) {
+          setError(inviteError);
           setAlsoInvite(false);
           return;
         }
@@ -382,15 +600,33 @@ export function AddPlayerDialog({
           <button
             type="button"
             className={advButton("outline")}
-            disabled={pending}
+            disabled={busy}
             onClick={close}
           >
             Cancel
           </button>
+          {/* The offer, at the weight of an alternative: an outline button
+              beside the blue one, not instead of it. Adding is still the
+              action this dialog is for — a coach who knows this is a different
+              athlete with the same name should not have to defeat anything to
+              say so. Present only while the note above it is. */}
+          {restorable !== null && (
+            <button
+              type="button"
+              className={advButton("outline")}
+              disabled={busy}
+              onClick={() => restore(restorable)}
+            >
+              {restoring && (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              )}
+              Restore {restorable.name}
+            </button>
+          )}
           <button
             type="button"
             className={advButton("primary")}
-            disabled={!ready || pending}
+            disabled={!ready || busy}
             onClick={submit}
           >
             {pending && (
@@ -433,6 +669,15 @@ export function AddPlayerDialog({
           types. GitMerge rather than a person glyph — it is the mark the
           roster row already carries for this exact question. */}
       <RosterNote icon={GitMerge} note={nameNote} />
+
+      {/* Beside the duplicate note rather than down by the email field it also
+          reads: both answer "wait, do we already have this person?", and a
+          coach reading one should find the other without hunting. `RotateCcw`
+          is the app's put-it-back glyph — the same one `season-kpi-strip.tsx`
+          resets with — because that is what the sentence offers: not a new
+          profile, the one that was already here.
+          Same neutral register: no alert role, nothing gated. */}
+      <RosterNote icon={RotateCcw} note={restoreNote} />
 
       <div className="grid grid-cols-2 gap-4">
         <SettingsField label="Class year">

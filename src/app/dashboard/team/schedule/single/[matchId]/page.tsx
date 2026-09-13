@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { isProgramStaff } from "@/lib/workspace/types";
+import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { getTeamSingleMatch } from "@/lib/data/single-match-server";
 import { SingleDetail } from "@/components/dashboard/schedule/single-detail";
 
@@ -32,5 +32,5 @@ export default async function TeamSingleMatchPage({
   const match = await getTeamSingleMatch(active.id, matchId);
   if (!match) notFound();
 
-  return <SingleDetail match={match} canEdit={isProgramStaff(active)} />;
+  return <SingleDetail match={match} canEdit={canManageTeamSchedule(active)} />;
 }

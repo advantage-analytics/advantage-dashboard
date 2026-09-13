@@ -213,7 +213,7 @@ function SwapRow({
       {you && <YouPill />}
       <span className="flex-1" />
       <span className="text-[11px] text-[var(--ink-500)]">was {was}</span>
-      <StatePill className="w-[62px] justify-center">{now}</StatePill>
+      <StatePill>{now}</StatePill>
     </div>
   );
 }
