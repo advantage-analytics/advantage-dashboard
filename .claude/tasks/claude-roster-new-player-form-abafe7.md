@@ -136,7 +136,7 @@ ready).
 
 ## T10 · `program_former_players`: fold a claimed profile's pre-claim matches and drop the per-row subquery
 
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **files:** new `supabase/migrations/20260913060000_program_former_players_fold_claimed_ids.sql` (guess — any timestamp later than `20260913031528`; model the header on `20260913031528_restore_program_player.sql:133-138` and the join shape on the `program_roster_full` arm 1 in `20260822090500_program_roster_full.sql:25-40`, which is where `user_id = pp.claimed_by_user_id` is bound to `player_id = pp.id`). Reads only: `src/lib/data/roster-ids.ts` (`canonicalRosterIds`), `src/lib/data/team-roster-server.ts:436-463` (the fold in use)
 - **done when:**
