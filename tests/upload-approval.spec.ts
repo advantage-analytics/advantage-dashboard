@@ -51,7 +51,7 @@ function preset(overrides: Partial<EventPreset> = {}): EventPreset {
 }
 
 /**
- * The footer's own composition (`UploadMatchFlow.tsx`'s
+ * The footer's own composition (`useWizardGates.ts`'s
  * `eligibilityNoticeVisible`/`continueDisabled`), rebuilt here from the
  * hook's `eligibility` so a hook-level test can assert the SAME thing the
  * component renders, without mounting it.

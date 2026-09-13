@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
  *      criterion 1: an unset `value` renders the placeholder in the
  *      empty-field ink with NO row marked chosen — never a guessed default,
  *      never the raw value printed, never an "Unknown" row.
- *   2. Source assertions on `DetailsStepContent.tsx`, `UploadMatchFlow.tsx`
+ *   2. Source assertions on `DetailsStepContent.tsx`, `useWizardGates.ts`
  *      and `lib/wizard/actions.ts` for the wiring claims that a static render
  *      of one component can't observe on its own: which function gates Save,
  *      who sees the profile-save button, and that the profile write is
@@ -339,9 +339,10 @@ test("missing hand or backhand answers are collected by the one shared requireme
   expect(beforeProcessingGate).toContain('labels.push("opponent backhand")');
 });
 
-// ─── UploadMatchFlow.tsx: the visible gate consumes the same function ──────
+// ─── useWizardGates.ts: the visible gate consumes the same function ────────
 
-const flowSrc = readFileSync(`${WIZARD}/UploadMatchFlow.tsx`, "utf8");
+// The page's gate hook — `UploadMatchFlow` composes it through the provider.
+const flowSrc = readFileSync(`${WIZARD}/useWizardGates.ts`, "utf8");
 
 test("the footer's missing-answers counter and the write-time gate share one function, so a missing style blocks both", () => {
   expect(flowSrc).toContain(
@@ -349,7 +350,7 @@ test("the footer's missing-answers counter and the write-time gate share one fun
   );
   const missingBlock = flowSrc.slice(
     flowSrc.indexOf("const missing = useMemo("),
-    flowSrc.indexOf("// Work in progress, per step."),
+    flowSrc.indexOf("const stepBusy = stepBusyLabel("),
   );
   expect(missingBlock).toContain("collectMatchCompletionRequirements({");
   expect(missingBlock).toContain("playerHand: formData.playerHand,");

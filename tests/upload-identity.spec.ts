@@ -429,23 +429,37 @@ test("the footer button and the Enter key are handed the same value", () => {
   // `useWizardKeys` refuses plain Enter on `continueDisabled`; `WizardShell`
   // disables the button with it. One variable, read twice — asserted here
   // because the alternative is two inline expressions that drift apart.
+  // The value is computed once in `useWizardGates`, handed to the keyboard
+  // hook by `UploadWizardProvider`, and read by the footer button through the
+  // context in `UploadMatchFlow` — one variable, three readers.
+  const gates = readFileSync(resolve(`${WIZARD}/useWizardGates.ts`), "utf8");
+  const provider = readFileSync(
+    resolve(`${WIZARD}/UploadWizardProvider.tsx`),
+    "utf8",
+  );
   const flow = readFileSync(resolve(`${WIZARD}/UploadMatchFlow.tsx`), "utf8");
-  expect(flow).toContain("const continueDisabled = wizardContinueBlocked({");
-  const keys = flow.slice(flow.indexOf("useWizardKeys({"));
-  expect(keys.slice(0, keys.indexOf("});"))).toContain("continueDisabled,");
+  expect(gates).toContain("const continueDisabled = wizardContinueBlocked({");
+  const keys = provider.slice(provider.indexOf("useWizardKeys({"));
+  expect(keys.slice(0, keys.indexOf("});"))).toContain(
+    "continueDisabled: gates.continueDisabled,",
+  );
   expect(flow).toContain("continueDisabled={continueDisabled}");
   // The disable is scoped to the notice being on screen, so a disabled
   // Continue always has the explanation — and the two answers — beside it.
   // Every other reason the import can be blocked keeps the handler's sentence.
-  expect(flow).toContain(
+  expect(gates).toContain(
     "importIdentityBlocked: identityNoticeVisible && importIdentity.blocked,",
   );
-  expect(flow).toMatch(
+  expect(gates).toMatch(
     /identityNoticeVisible =\s*step === "file" &&\s*!isProcessingProvider &&/,
   );
   // The notice is a sibling of the file step's content, never wrapped around
   // it: T17's video requirements and the drop zone's error strip stay visible.
-  expect(flow).toMatch(/<\/FileStepContent>|\/>\s*\{identityNoticeVisible/);
+  const steps = readFileSync(
+    resolve(`${WIZARD}/UploadWizardSteps.tsx`),
+    "utf8",
+  );
+  expect(steps).toMatch(/<\/FileStepContent>|\/>\s*<IdentityQuestion \/>/);
   // And the handler re-checks the same fact at the write, so a stale render
   // cannot let Enter through.
   const hook = readFileSync(
