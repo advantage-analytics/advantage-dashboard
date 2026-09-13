@@ -20,10 +20,10 @@ import {
   RosterDialog,
 } from "@/components/dashboard/team/dialog-shell";
 import {
-  CLASS_YEARS,
-  LINEUP_SPOTS,
+  PlayerMenuField,
   RosterNote,
-  UnderlineSelect,
+  classYearOptions,
+  lineupSpotOptions,
   nameList,
   spotHeldNote,
   spotHolders,
@@ -680,34 +680,18 @@ export function AddPlayerDialog({
       <RosterNote icon={RotateCcw} note={restoreNote} />
 
       <div className="grid grid-cols-2 gap-4">
-        <SettingsField label="Class year">
-          <UnderlineSelect
-            ariaLabel="Class year"
-            value={classYear}
-            onChange={setClassYear}
-          >
-            <option value="">Not set</option>
-            {CLASS_YEARS.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </UnderlineSelect>
-        </SettingsField>
-        <SettingsField label="Lineup spot">
-          <UnderlineSelect
-            ariaLabel="Lineup spot"
-            value={lineupSpot}
-            onChange={changeLineupSpot}
-          >
-            <option value="">Not set</option>
-            {LINEUP_SPOTS.map((spot) => (
-              <option key={spot} value={String(spot)}>
-                #{spot}
-              </option>
-            ))}
-          </UnderlineSelect>
-        </SettingsField>
+        <PlayerMenuField
+          label="Class year"
+          value={classYear}
+          options={classYearOptions(classYear)}
+          onChange={setClassYear}
+        />
+        <PlayerMenuField
+          label="Lineup spot"
+          value={lineupSpot}
+          options={lineupSpotOptions(lineupSpot)}
+          onChange={changeLineupSpot}
+        />
       </div>
 
       {/* Full width rather than in the field's hint slot: the cell is half of a

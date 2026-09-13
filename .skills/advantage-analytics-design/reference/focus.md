@@ -135,7 +135,6 @@ selector on:
 | --------------------------------------------------------------------------- | ------------------------------------------------- |
 | `FormField`'s input                                                         | `auth/form-field.tsx`                             |
 | `SettingsUnderlineInput`                                                    | `settings/settings-card.tsx`                      |
-| `UnderlineSelect`                                                           | `team/player-fields.tsx`                          |
 | `ProfileSelect`'s inline `<select>`                                         | `settings/profile-form.tsx`                       |
 | `UnderlineField`'s children, `PlayerRow`'s name input                       | `matches/match-actions/edit-match-dialog.tsx`     |
 | `EventCell`'s input — the wrapper goes blue 2px on `focus-within`           | `matches/new-match-wizard/DetailsStepContent.tsx` |

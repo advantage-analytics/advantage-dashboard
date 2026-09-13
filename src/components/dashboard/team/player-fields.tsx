@@ -1,7 +1,8 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { AdvSelect } from "@/components/ui/adv-select";
+import { SettingsField } from "@/components/dashboard/settings/settings-card";
+import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import type { RosterMember } from "@/lib/data/team-roster-server";
 
 /**
@@ -20,7 +21,7 @@ import type { RosterMember } from "@/lib/data/team-roster-server";
  */
 
 /** Four years and the fifth that redshirts and grad transfers actually use. */
-export const CLASS_YEARS = [
+const CLASS_YEARS = [
   "Freshman",
   "Sophomore",
   "Junior",
@@ -35,43 +36,86 @@ export const CLASS_YEARS = [
  * a constraint, and there is no swap control. `program_players` carries no
  * unique index on the column, so the note below is the whole of the check.
  */
-export const LINEUP_SPOTS = Array.from({ length: 9 }, (_, i) => i + 1);
+const LINEUP_SPOTS = Array.from({ length: 9 }, (_, i) => i + 1);
 
 /**
- * The underline `<select>`, matching `SettingsUnderlineInput`'s rule.
- *
- * A thin adapter over `AdvSelect` now, kept only for its callback shape: the
- * two roster dialogs pass `onChange={setClassYear}` — a plain setter, not an
- * event handler — and rewriting both call sites to unwrap the event would be
- * churn for no gain. Everything visual belongs to the primitive.
- *
- * What that fixed here: this component set `appearance-none` and put nothing
- * back where the browser's arrow had been, so the control read as static
- * text; and its rule recoloured on focus without thickening to the 2px the
- * design system asks for.
+ * "Not set" as a `MenuSelect` row. The form state keeps `""` for it — that is
+ * what the save path turns into `null` — but a menu row needs a value of its
+ * own, so `PlayerMenuField` maps it back before the caller sees it.
  */
-export function UnderlineSelect({
+const NOT_SET = "__not-set";
+
+/**
+ * The options with a stored value that is in none of them kept as its own
+ * first row, and "Not set" last — the same order Edit match uses.
+ *
+ * A class year typed straight into the database, or carried over from the
+ * player's own profile before this row had one, need not be one of the five;
+ * a spot outside 1–9 is legal in the column. Either must survive the dialog
+ * being opened, rather than silently becoming "Not set".
+ */
+function withStored(
+  value: string,
+  options: MenuOption<string>[],
+  label: (stored: string) => string,
+): MenuOption<string>[] {
+  const stored =
+    value !== "" && !options.some((option) => option.value === value)
+      ? [{ value, label: label(value) }]
+      : [];
+  return [...stored, ...options, { value: NOT_SET, label: "Not set" }];
+}
+
+export function classYearOptions(value: string): MenuOption<string>[] {
+  return withStored(
+    value,
+    CLASS_YEARS.map((year) => ({ value: year, label: year })),
+    (stored) => stored,
+  );
+}
+
+export function lineupSpotOptions(value: string): MenuOption<string>[] {
+  return withStored(
+    value,
+    LINEUP_SPOTS.map((spot) => ({ value: String(spot), label: `#${spot}` })),
+    (stored) => `#${stored}`,
+  );
+}
+
+/**
+ * Class year or Lineup spot: a caption over an underline `MenuSelect`, in the
+ * form's `""`-means-unset vocabulary.
+ *
+ * `labelless`, because `SettingsField`'s `<label>` forwards every click inside
+ * it to the trigger button, so picking a row would reopen the menu it just
+ * closed. The select carries its own accessible name.
+ */
+export function PlayerMenuField({
+  label,
   value,
+  options,
   onChange,
-  children,
-  ariaLabel,
   disabled,
 }: {
+  label: string;
   value: string;
+  /** From `classYearOptions` / `lineupSpotOptions`, called with `value`. */
+  options: MenuOption<string>[];
   onChange: (value: string) => void;
-  children: React.ReactNode;
-  ariaLabel: string;
   disabled?: boolean;
 }) {
   return (
-    <AdvSelect
-      aria-label={ariaLabel}
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value)}
-    >
-      {children}
-    </AdvSelect>
+    <SettingsField label={label} labelless>
+      <MenuSelect
+        label={label}
+        variant="underline"
+        placeholder="Not set"
+        value={value || undefined}
+        options={options}
+        disabled={disabled}
+        onChange={(next) => onChange(next === NOT_SET ? "" : next)}
+      />
+    </SettingsField>
   );
 }
 
