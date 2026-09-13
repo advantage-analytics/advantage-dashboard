@@ -29,6 +29,7 @@
  * | Invite request declined  | `resolveRequest(id, "dismissed")`, to the requester — WIRED |
  * | Expired-invite nudge     | `requestFreshInvite()` — WIRED                  |
  * | Ownership transferred    | `transferProgramOwnership()`, to the new owner — WIRED |
+ * | Member left              | `leaveProgram()`, to the owner — WIRED          |
  *
  * The claim and invite-request rows fire from
  * `services/programs/{admin-actions,claim-actions}.ts`. None of them can fail
@@ -117,6 +118,11 @@ export {
   ownershipTransferredEmail,
   type OwnershipTransferredInput,
 } from "./templates/ownership-transferred";
+
+export {
+  memberLeftOwnerEmail,
+  type MemberLeftOwnerInput,
+} from "./templates/member-left";
 
 export {
   inviteRequestReceivedEmail,

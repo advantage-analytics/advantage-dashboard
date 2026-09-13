@@ -10,6 +10,7 @@ import { TeamIdentityCard } from "@/components/dashboard/settings/teams/team-ide
 import { TeamMembersCard } from "@/components/dashboard/settings/teams/team-members-card";
 import { TeamPoliciesCard } from "@/components/dashboard/settings/teams/team-policies-card";
 import { TransferOwnershipDialog } from "@/components/dashboard/settings/teams/transfer-ownership-dialog";
+import { LeaveTeamCard } from "@/components/dashboard/settings/teams/leave-team";
 import {
   toDraft,
   type IdentityDraft,
@@ -35,8 +36,8 @@ import { SUPPORT_EMAIL } from "@/lib/constants";
  *
  * What renders depends on the viewer's standing on THIS program, which is not
  * necessarily their active workspace: a player gets hours, a read-only
- * identity and the member list; staff get the form; the owner also gets
- * "Make owner" and the delete row.
+ * identity, the member list and the leave row; staff get the form; the owner
+ * also gets "Make owner" and the delete row.
  */
 export function TeamDetail({
   programId,
@@ -181,6 +182,17 @@ export function TeamDetail({
             </a>
           </div>
         </SettingsCard>
+      )}
+
+      {viewerRole === "player" && (
+        <LeaveTeamCard
+          programId={programId}
+          programName={data.program.schoolName}
+          team={data.program.team}
+          conference={data.program.conference}
+          crestUrl={crestUrl}
+          ownerName={data.ownerName}
+        />
       )}
 
       {!isStaff && (
