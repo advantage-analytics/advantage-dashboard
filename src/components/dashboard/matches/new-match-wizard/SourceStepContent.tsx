@@ -66,6 +66,7 @@ import {
 import type { MatchSubject, RosterOption } from "./useUploadMatchWizard";
 import { noteStripCls } from "./styles";
 import { PendingTeamNote } from "./PendingTeamNote";
+import { RosterMenuList, rosterMeta, workspaceLabel } from "./RosterMenu";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
 
@@ -124,29 +125,11 @@ function sourceCopy(provider: Provider) {
   );
 }
 
-/** "Cardinal · M" — the squad initial the frames put beside a team's name. */
-function workspaceLabel(workspace: Workspace): string {
-  if (workspace.kind !== "team") return "You";
-  const squad =
-    workspace.team === "mens" ? "M" : workspace.team === "womens" ? "W" : null;
-  return squad ? `${workspace.name} · ${squad}` : workspace.name;
-}
-
 /** The subline under a workspace, for the field and for its menu rows. */
 function workspaceSubline(workspace: Workspace): string {
   return workspace.kind === "team"
     ? "Team workspace · upload for any player on the roster"
     : "Personal workspace · your matches, your hours";
-}
-
-/** "#2 Singles · Junior" — a roster row's middot-joined meta. */
-function rosterMeta(player: RosterOption): string {
-  return [
-    player.ladderPosition !== null ? `#${player.ladderPosition} Singles` : null,
-    player.classYear,
-  ]
-    .filter(Boolean)
-    .join(" · ");
 }
 
 /** The engine mark — the logo's swoosh, white on the ink-900 square. */
@@ -207,29 +190,6 @@ function SourceMark({ provider, size }: { provider: Provider; size: 40 | 26 }) {
         height={size}
         className="size-full object-contain"
       />
-    </span>
-  );
-}
-
-/** A 22px avatar for a menu row — initials, or the dashed ring of a profile nobody has claimed. */
-function RowAvatar({
-  initials,
-  dashed = false,
-}: {
-  initials: string;
-  dashed?: boolean;
-}) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "inline-flex size-[22px] shrink-0 items-center justify-center rounded-full text-[10px] font-medium",
-        dashed
-          ? "border border-dashed border-[var(--ink-300)] text-[var(--ink-400)]"
-          : "bg-[var(--surface-muted)] text-[var(--ink-700)]",
-      )}
-    >
-      {initials}
     </span>
   );
 }
@@ -671,9 +631,6 @@ function SourceStepContentImpl({
                 </span>
               </Link>
               <span className="my-[5px] h-px bg-[var(--border-hairline)]" />
-              <span className="px-2.5 pt-1.5 pb-1 text-[11px] text-[var(--ink-400)]">
-                Roster · {workspaceLabel(active)}
-              </span>
 
               {/* No "Myself" row. A team match is recorded against a roster
                   player, and a staff login is not one — the hook's eligibility
@@ -681,70 +638,24 @@ function SourceStepContentImpl({
                   refusal. A viewer who genuinely holds a player profile finds
                   it in the list below, marked You: the hook folds their own
                   `program_players` row in when the roster RPC leaves it out. */}
-              {whoPlayed.roster === null ? (
-                <span className="px-2.5 py-2 text-[11px] text-[var(--ink-500)]">
-                  {whoPlayed.loadFailed
-                    ? "The roster couldn't be loaded."
-                    : "Loading the roster…"}
-                </span>
-              ) : whoPlayed.roster.length === 0 ? (
-                <span className="px-2.5 py-2 text-[11px] text-[var(--ink-500)]">
-                  Nobody is on this program&rsquo;s roster yet.
-                </span>
-              ) : (
-                whoPlayed.roster.map((player) => {
-                  const chosen =
-                    subject?.kind === "roster" &&
-                    subject.playerId === player.playerId;
-                  const invited =
-                    player.invitedEmail !== null && player.userId === null;
-                  // The viewer's own profile — by the login bound to it, or
-                  // by the id the workspace already resolved as theirs.
-                  const isYou =
-                    player.userId === viewer.id ||
-                    (active.myPlayerId !== null &&
-                      player.playerId === active.myPlayerId);
-                  return (
-                    <RosterRow
-                      key={player.playerId}
-                      chosen={chosen}
-                      onChoose={() => {
-                        whoPlayed.choose({
-                          kind: "roster",
-                          playerId: player.playerId,
-                          name: player.name,
-                        });
-                        setOpenMenu(null);
-                      }}
-                      avatar={
-                        <RowAvatar
-                          initials={getInitials(player.name)}
-                          dashed={invited}
-                        />
-                      }
-                      name={player.name}
-                      meta={
-                        isYou
-                          ? "Your own match"
-                          : invited
-                            ? `Invited · ${player.invitedEmail}`
-                            : rosterMeta(player)
-                      }
-                      trailing={
-                        // Roster state travels with the person: a profile a
-                        // coach still runs carries the grey pill.
-                        isYou ? (
-                          <Pill>You</Pill>
-                        ) : !invited &&
-                          player.managedBy === "coach" &&
-                          player.userId === null ? (
-                          <Pill>Coach-managed</Pill>
-                        ) : null
-                      }
-                    />
-                  );
-                })
-              )}
+              <RosterMenuList
+                label={`Roster · ${workspaceLabel(active)}`}
+                roster={whoPlayed.roster}
+                loadFailed={whoPlayed.loadFailed}
+                chosenPlayerId={
+                  subject?.kind === "roster" ? subject.playerId : null
+                }
+                viewerId={viewer.id}
+                myPlayerId={active.myPlayerId}
+                onChoose={(player) => {
+                  whoPlayed.choose({
+                    kind: "roster",
+                    playerId: player.playerId,
+                    name: player.name,
+                  });
+                  setOpenMenu(null);
+                }}
+              />
             </PopoverContent>
           </Popover>
         )}
@@ -860,62 +771,6 @@ function SourceStepContentImpl({
         </Popover>
       </Field>
     </div>
-  );
-}
-
-/** One 38px row of the roster picker. */
-function RosterRow({
-  chosen,
-  onChoose,
-  avatar,
-  name,
-  meta,
-  trailing,
-}: {
-  chosen: boolean;
-  onChoose: () => void;
-  avatar: React.ReactNode;
-  name: string;
-  meta: string;
-  trailing?: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      role="option"
-      aria-selected={chosen}
-      onClick={onChoose}
-      className={cn(
-        "flex h-[38px] w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-2.5 text-left transition-colors duration-150 focus-visible:outline-none",
-        "focus-visible:bg-[var(--surface-subtle)]",
-        !chosen && "hover:bg-[var(--surface-subtle)]",
-      )}
-    >
-      {avatar}
-      <span className="text-[12px] font-medium whitespace-nowrap text-[var(--ink-900)]">
-        {name}
-      </span>
-      {meta && (
-        <span className="min-w-0 truncate text-[11px] text-[var(--ink-500)]">
-          {meta}
-        </span>
-      )}
-      <span className="flex-1" />
-      {trailing}
-      {/* The chosen row is marked the way every other select in the app marks
-          one — a 13px Signal Blue check in its own slot, no persistent fill
-          (`ui/float-menu.tsx`). It sits after the You / Coach-managed pill so
-          the two read as different facts: who this is, then what is picked. */}
-      {chosen ? (
-        <Check
-          className="size-[13px] shrink-0 text-[var(--blue)]"
-          strokeWidth={1.5}
-          aria-hidden="true"
-        />
-      ) : (
-        <span className="w-[13px] shrink-0" aria-hidden="true" />
-      )}
-    </button>
   );
 }
 

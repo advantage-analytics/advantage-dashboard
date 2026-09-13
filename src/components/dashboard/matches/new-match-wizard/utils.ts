@@ -3,6 +3,7 @@
  */
 
 import { FormData, WinnerLoserResult, MatchData, UploadedFile } from "./types";
+import { retiredWinner } from "./score-state";
 
 /**
  * Get the number of sets to display/edit.
@@ -179,6 +180,11 @@ export function buildMatchData(
       player2: opponentScoresNum,
       player1_tiebreaks: adjustedPlayerTiebreaks,
       player2_tiebreaks: adjustedOpponentTiebreaks,
+      // Reads the result the caller settled on, so an early-end answer left
+      // over from before the score was finished never names a winner.
+      ...(formData.result === "Retired" && formData.retiredSide
+        ? { winner: retiredWinner(formData.retiredSide) }
+        : {}),
     },
     // New metadata fields
     created_by: metadata.userId,

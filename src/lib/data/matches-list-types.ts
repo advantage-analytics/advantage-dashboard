@@ -39,7 +39,11 @@ export interface DisplayMatch {
   matchContext?: string;
   duration?: string;
   sourceProvider?: string;
-  player1: { name: string };
+  /**
+   * `id` is `matches.player1_id` — an auth uid or a `program_players.id`
+   * (both spaces live in that column), so compare it against both.
+   */
+  player1: { name: string; id?: string | null };
   player2: { name: string };
   player2Hand?: string;
   player2Backhand?: string;
@@ -109,7 +113,7 @@ export function transformDbMatch(
     matchContext: row.result ?? "Final Score",
     duration: formatDuration(row.duration ?? undefined),
     sourceProvider: row.source_provider ?? undefined,
-    player1: { name: row.player1_name },
+    player1: { name: row.player1_name, id: row.player1_id },
     player2: { name: row.player2_name },
     score: {
       sets,

@@ -5,51 +5,57 @@ import { useMemo } from "react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { DraftRow, type DraftRowData } from "./draft-row";
 import { MatchCardGallery } from "./match-card-gallery";
+import { MatchCardList } from "./match-card-list";
 import {
-  MatchCardList,
   DATE_COL,
   DATE_COL_WITH_YEAR,
-  LIST_GRID_COLS,
-  TEAM_LIST_GRID_COLS,
   LIST_ROW_FRAME,
-} from "./match-card-list";
+  listGridCols,
+  LIST_MIN_WIDTH,
+  LIST_TRACK_TRANSITION,
+  TEAM_LIST_MIN_WIDTH,
+  TEAM_LIST_MIN_WIDTH_COMPACT,
+  eventCellFade,
+} from "./match-list-layout";
+import { cn } from "@/lib/utils";
 
 export type SortField = "date" | "opponent" | "event" | "result";
 export type SortDir = "asc" | "desc";
 
 interface MatchesGridProps {
   matches: DisplayMatch[];
-  /** Half-finished uploads, listed at the top with Resume (design 11c). */
+  /** Half-finished uploads, listed at the top (design 11c). */
   drafts?: DraftRowData[];
   newMatchId?: string | null;
   /** Match ids never opened on this device — draws the blue "New" pill. */
   unseenIds?: Set<string>;
   /** Which wizard a draft resumes in. */
   scope?: "personal" | "team";
+  /** The match or draft open in the drawer, or null. */
+  selectedId?: string | null;
+  /** Row click and Enter/Space: open, switch or close the drawer. */
+  onToggle?: (id: string, viaKeyboard: boolean) => void;
+  /** The drawer is open (or closing) beside the table. */
+  drawerOpen?: boolean;
 }
 
 /**
- * One header per row column, in the same order as `LIST_GRID_COLS`. Flush left
- * but for Result, which centres over its glyph: the score is the only numeric
- * measure left and it sits in a fixed track, so left-aligning it starts every
- * row's numbers at one x — right-aligning would ragged them against a three-set
- * score.
+ * One header per row column, in `match-list-layout.ts`'s order, every one flush
+ * left over its value — the Result glyph included, never centred.
  *
  * Plain eyebrows, no sort buttons: sorting lives in the toolbar's one sort
- * control. The last three tracks — lifecycle, the actions lane and the chevron
- * — head nothing and carry an empty label to keep the header's column count in
- * step with the row's.
+ * control. The last track — lifecycle — heads nothing and
+ * carries an empty label to keep the header's column count in step with the
+ * row's.
  */
-const COLUMNS: string[] = [
-  "Date",
-  "Opponent",
-  "Event",
-  "Score",
-  "Result",
-  "",
-  "",
-  "",
-];
+function columnsFor(scope: "personal" | "team"): string[] {
+  if (scope === "personal") {
+    return ["Date", "Opponent", "Result", "Score", "Event", ""];
+  }
+  // Event stays in the team header beside the drawer: its track collapses and
+  // the label fades with the cells under it (`TEAM_LIST_GRID_COLS_COMPACT`).
+  return ["Date", "Player", "Opponent", "Result", "Score", "Event", ""];
+}
 
 export function MatchesGrid({
   matches,
@@ -57,7 +63,13 @@ export function MatchesGrid({
   newMatchId,
   unseenIds,
   scope = "personal",
+  selectedId = null,
+  onToggle,
+  drawerOpen = false,
 }: MatchesGridProps): React.JSX.Element {
+  // Only the team table gives a track up beside the drawer; the personal one
+  // fits at 1440 with every column.
+  const compact = scope === "team" && drawerOpen;
   /* Which layout shows is a width question, so Tailwind answers it rather than
      React. Held in state it could only be read after mount, so the server — which
      has no viewport — always emitted the wide table and a phone painted
@@ -107,21 +119,38 @@ export function MatchesGrid({
             of dividers (SKILL 8a). */}
         <div className="surface-card overflow-x-auto" style={cardStyle}>
           <div
-            className={scope === "team" ? "min-w-[1048px]" : "min-w-[1000px]"}
+            className={cn(
+              LIST_TRACK_TRANSITION,
+              scope === "personal"
+                ? LIST_MIN_WIDTH
+                : compact
+                  ? TEAM_LIST_MIN_WIDTH_COMPACT
+                  : TEAM_LIST_MIN_WIDTH,
+            )}
           >
             {/* Column headers — flush at the card inset, hairline underneath. */}
             <div
-              className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pt-3.5 pb-2.5`}
-              style={scope === "team" ? TEAM_LIST_GRID_COLS : LIST_GRID_COLS}
+              className={cn(
+                LIST_ROW_FRAME,
+                LIST_TRACK_TRANSITION,
+                "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
+              )}
+              style={listGridCols(scope, compact)}
               role="row"
             >
-              {(scope === "team"
-                ? [COLUMNS[0], "Roster", ...COLUMNS.slice(1)]
-                : COLUMNS
-              ).map((label, i) => (
+              {columnsFor(scope).map((label, i) => (
                 <span
                   key={label || `col-${i}`}
-                  className="eyebrow-sm min-w-0 truncate"
+                  aria-hidden={
+                    (label === "Event" && scope === "team" && compact) ||
+                    undefined
+                  }
+                  className={cn(
+                    "eyebrow-sm min-w-0 truncate",
+                    label === "Event" &&
+                      scope === "team" &&
+                      eventCellFade(compact),
+                  )}
                   role="columnheader"
                 >
                   {label}
@@ -133,7 +162,14 @@ export function MatchesGrid({
               the route-level entrance. */}
             <div>
               {drafts.map((draft) => (
-                <DraftRow key={draft.id} draft={draft} scope={scope} />
+                <DraftRow
+                  key={draft.id}
+                  draft={draft}
+                  scope={scope}
+                  compact={compact}
+                  selected={draft.id === selectedId}
+                  onToggle={onToggle}
+                />
               ))}
               {matches.map((match) => (
                 <MatchCardList
@@ -142,6 +178,9 @@ export function MatchesGrid({
                   scope={scope}
                   isNew={match.id === newMatchId}
                   unseen={unseenIds?.has(match.id)}
+                  compact={compact}
+                  selected={match.id === selectedId}
+                  onToggle={onToggle}
                 />
               ))}
             </div>

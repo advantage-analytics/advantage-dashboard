@@ -75,6 +75,33 @@ test.describe("upload score regression reproduction", () => {
     });
   });
 
+  test("a SwingVision import saves without asking whether it ended early", async ({
+    page,
+  }) => {
+    const submissions: unknown[] = [];
+    await captureMatchSubmission(page, submissions);
+    await page.goto(`${baseURL}/wizard-reproduction?mode=new`);
+
+    await chooseSource(page, "SwingVision export");
+    await page
+      .locator('input[type="file"]')
+      .setInputFiles(await oneSetExport());
+    await expect(page.getByText(/XLSX.*read/)).toBeVisible();
+    await page.locator("[data-wizard-continue]").click();
+    // 6-4 in a best of 3 decides nothing — the score a typed entry is asked about.
+    await setFormat(page, "Best of 3");
+    await answerPlayerStyles(page);
+
+    await page.locator("[data-wizard-continue]").click();
+    await expect.poll(() => submissions.length).toBe(1);
+    await expect(
+      page.getByText("This score doesn’t finish the match."),
+    ).toHaveCount(0);
+    expect(submissions[0]).toMatchObject({
+      score: { player1: [6], player2: [4] },
+    });
+  });
+
   test("score cells keep corrections, ghost sets, tiebreaks, and the final cell focused", async ({
     page,
   }) => {
@@ -341,14 +368,22 @@ test.describe("upload score regression reproduction", () => {
 
     await save.click();
     await page.getByRole("button", { name: "Yes, a player retired" }).click();
-    await expect(page.getByText("Marked as retired.")).toBeVisible();
+    // Retired has a winner, so it is not an answer until it names who stopped.
+    await expect(page.getByText("Who retired?")).toBeVisible();
+    await expect(save).toBeDisabled();
+    await page
+      .getByRole("button", { name: "Casey Opponent retired", exact: true })
+      .click();
+    await expect(
+      page.getByText("Marked as retired by Casey Opponent."),
+    ).toBeVisible();
     await expect(save).toBeEnabled();
 
     await save.click();
     await expect.poll(() => submissions.length).toBe(1);
     expect(submissions[0]).toMatchObject({
       result: "Retired",
-      score: { player1: [6], player2: [4] },
+      score: { player1: [6], player2: [4], winner: "player1" },
     });
   });
 

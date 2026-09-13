@@ -82,7 +82,9 @@ import {
   MatchMetadata,
 } from "./utils";
 import {
+  asksIfEndedEarly,
   isStoppedResult,
+  scoreCheckAnswered,
   scoreGames,
   scoreUndecided,
   updateScoreState,
@@ -2303,8 +2305,16 @@ export function useUploadMatchWizard({
       // score nobody won is saved only as Retired or Unfinished, never as a
       // plain final score that just happens to be missing a set.
       const undecided = scoreUndecided(scoreGames(formData));
-      if (undecided && !isStoppedResult(formData.result)) {
-        setError("Finish the score, or say whether the match ended early.");
+      if (
+        undecided &&
+        asksIfEndedEarly(selectedProvider) &&
+        !scoreCheckAnswered(formData)
+      ) {
+        setError(
+          formData.result === "Retired"
+            ? "Say who retired, or finish the score."
+            : "Finish the score, or say whether the match ended early.",
+        );
         return;
       }
 
@@ -2439,6 +2449,10 @@ export function useUploadMatchWizard({
         };
 
         const stopped = undecided && isStoppedResult(formData.result);
+        // An undecided SwingVision import saves without being asked, and it
+        // stopped where its sets stop just the same.
+        const keepsPlayedSets =
+          stopped || (undecided && !asksIfEndedEarly(selectedProvider));
         const decidedResult = isStoppedResult(formData.result)
           ? ""
           : formData.result;
@@ -2462,7 +2476,7 @@ export function useUploadMatchWizard({
             // A match that stopped keeps the sets it played. Padding it out
             // to the format writes 0-0 sets that never happened, and the match
             // pages would print "6-4, 0-0, 0-0".
-            ...(stopped ? { numberOfSets: setsPlayed } : {}),
+            ...(keepsPlayedSets ? { numberOfSets: setsPlayed } : {}),
           },
           winner,
           loser,
@@ -2487,16 +2501,10 @@ export function useUploadMatchWizard({
           ? await supabase
               .from("matches")
               .update({
-                // A retired line's winner rides on the score, and the typed
-                // form does not carry it — so it is kept while the refilled
-                // match still stopped as a retirement, and dropped otherwise:
-                // a score corrected to a finished match is decided by its sets.
-                score:
-                  stopped &&
-                  formData.result === "Retired" &&
-                  preset?.score?.winner
-                    ? { ...matchRow.score, winner: preset.score.winner }
-                    : matchRow.score,
+                // `score.winner` comes from this pass's own "Who retired?"
+                // answer (`buildMatchData`), never carried from the line: a
+                // score corrected to a finished match is decided by its sets.
+                score: matchRow.score,
                 player1_name: matchRow.player1_name,
                 player2_name: matchRow.player2_name,
                 // The score page can have written "Retired"/"Defaulted"; a

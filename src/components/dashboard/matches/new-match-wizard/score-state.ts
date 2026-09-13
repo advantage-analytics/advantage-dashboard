@@ -1,3 +1,4 @@
+import type { ProviderId } from "@/lib/services/upload";
 import type { FormData } from "./types";
 
 export type ScoreArrayField =
@@ -175,6 +176,48 @@ export type StoppedResult = (typeof STOPPED_RESULTS)[number];
 
 export function isStoppedResult(result: string): result is StoppedResult {
   return (STOPPED_RESULTS as readonly string[]).includes(result);
+}
+
+/**
+ * Does Save ask "did it end early?" for this source?
+ *
+ * Not for a SwingVision import. Its score is the app's record of what was
+ * played, not something the person is still typing, so a score nobody won is
+ * how the match really ended — and asking would stop a player saving their own
+ * export. A stopped export already arrives as "Unfinished" when the file says so.
+ */
+export function asksIfEndedEarly(provider: ProviderId | null): boolean {
+  return provider !== "swing-vision";
+}
+
+/** Which side stopped a Retired match: the uploader's player, or the opponent. */
+export type RetiredSide = "player" | "opponent";
+
+/**
+ * Has "did it end early?" been answered completely?
+ *
+ * Unfinished is whole on its own. Retired is not: a retirement has a winner,
+ * and the score cannot say who it is — a match stopped mid-set usually has no
+ * set lead, and when it does, the leader is not necessarily the one who stayed
+ * on court. So Retired counts only once it names who retired.
+ */
+export function scoreCheckAnswered({
+  result,
+  retiredSide,
+}: {
+  result: string;
+  retiredSide?: RetiredSide;
+}): boolean {
+  if (result === "Unfinished") return true;
+  return result === "Retired" && retiredSide !== undefined;
+}
+
+/**
+ * The winner a retirement decides, spelled as `matches.score.winner` — the key
+ * SwingVision imports already write. player1 is always the uploader's player.
+ */
+export function retiredWinner(side: RetiredSide): "player1" | "player2" {
+  return side === "opponent" ? "player1" : "player2";
 }
 
 /**

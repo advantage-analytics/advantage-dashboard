@@ -306,7 +306,7 @@ const CHECKS = [
   },
   {
     key: "size",
-    seed: 6,
+    seed: 5,
     label: "off-scale text-[Npx]",
     fix: "snap to the SKILL.md type scale, or add the missing step to it",
   },
