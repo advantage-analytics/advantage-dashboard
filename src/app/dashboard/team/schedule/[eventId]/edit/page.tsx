@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { isProgramStaff } from "@/lib/workspace/types";
+import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { createClient } from "@/lib/supabase/server";
 import { getLadder } from "@/lib/data/roster-server";
 import { getTeamSettings } from "@/lib/data/team-settings-server";
@@ -72,7 +72,8 @@ export default async function EditEventPage({
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");
-  if (!isProgramStaff(active)) redirect(`/dashboard/team/schedule/${eventId}`);
+  if (!canManageTeamSchedule(active))
+    redirect(`/dashboard/team/schedule/${eventId}`);
 
   const detail = await getEventDetail(active.id, eventId);
   if (!detail) notFound();

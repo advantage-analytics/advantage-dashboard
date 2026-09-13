@@ -17,6 +17,8 @@ import {
   usageFraction,
 } from "@/lib/data/usage-format";
 import { cn } from "@/lib/utils";
+import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
+import { teamLabel, type Workspace } from "@/lib/workspace/types";
 
 /**
  * The program's shared hours, one month at a time.
@@ -26,11 +28,15 @@ import { cn } from "@/lib/utils";
  * transition only ever covers a month the person asked for.
  */
 export function ProgramUsageCard({
-  programName,
+  program,
   initial,
   currentMonth,
 }: {
-  programName: string;
+  /** The team workspace this ledger belongs to — name, squad and crest. */
+  program: Pick<
+    Workspace,
+    "id" | "name" | "kind" | "mark" | "crestUrl" | "team"
+  >;
   initial: ProgramUsage;
   /** The live month — the stepper will not walk past it. */
   currentMonth: string;
@@ -42,12 +48,13 @@ export function ProgramUsageCard({
     const next = shiftBillingMonth(usage.billingMonth, months);
     if (next > currentMonth) return;
     startTransition(async () => {
-      setUsage(await loadProgramUsage(next));
+      setUsage(await loadProgramUsage(program.id, next));
     });
   };
 
   const atCurrentMonth = usage.billingMonth >= currentMonth;
   const fraction = usageFraction(usage.usedSeconds, usage.capSeconds);
+  const squad = teamLabel(program.team);
 
   return (
     <SettingsCard className="gap-3">
@@ -79,7 +86,23 @@ export function ProgramUsageCard({
           </div>
         }
       >
-        Program hours — {programName}
+        {/* The page is already "Usage", so the program itself is the title:
+            crest, name, and the squad as a quiet qualifier. A square, never a
+            circle — circles are for people. */}
+        <span className="flex min-w-0 items-center gap-3">
+          <WorkspaceMark
+            workspace={program}
+            className="size-8 rounded-[8px] text-[13px]"
+          />
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
+              {program.name}
+            </span>
+            <span className="truncate text-[11px] font-normal text-[var(--ink-500)]">
+              {squad ? `${squad} · shared hours` : "Shared hours"}
+            </span>
+          </span>
+        </span>
       </SettingsCardTitle>
 
       <div className="flex items-center gap-3">

@@ -108,6 +108,7 @@ export function uploadWizardHarness(
     playersCanUpload: true,
     memberUploadEnabled: true,
     uploadPolicy: "everyone",
+    eventsPolicy: "staff",
     myPlayerId: null,
     ...options.workspace,
   };

@@ -2,7 +2,11 @@
 import { ScheduleToolbarPending } from "./list-toolbar-pending";
 
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
-import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
+import {
+  canManageTeamSchedule,
+  canUploadForProgram,
+  isProgramStaff,
+} from "@/lib/workspace/types";
 import { NewMatchAction } from "@/components/dashboard/team/team-season-title";
 import {
   TeamListHeading,
@@ -118,7 +122,7 @@ export function SchedulePageSkeleton() {
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
       <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pt-5 pb-6">
-        <ScheduleTitleRow canCreate={isProgramStaff(active)}>
+        <ScheduleTitleRow canCreate={canManageTeamSchedule(active)}>
           <PendingRegion label="schedule summary">
             <div className="flex h-[18px] items-center">
               <PendingBar className="w-72" />

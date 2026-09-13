@@ -20,6 +20,7 @@ import {
   TEAM_NAV,
   TEAM_BOTTOM,
 } from "@/lib/dashboard/nav";
+import { PersonAvatar } from "@/components/ui/person-avatar";
 
 /**
  * Two committed widths: a 64px icon rail and a 232px panel.
@@ -163,12 +164,11 @@ function ViewerFooter({
         className="flex min-w-0 flex-1 items-center rounded-[8px] transition-opacity duration-150 hover:opacity-80 focus-visible:outline-none"
       >
         <span className="flex size-10 shrink-0 items-center justify-center">
-          <span
-            aria-hidden="true"
-            className="flex size-6 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[9px] font-medium text-[var(--ink-700)]"
-          >
-            {viewer.initials}
-          </span>
+          <PersonAvatar
+            initials={viewer.initials}
+            photoUrl={viewer.avatarUrl}
+            className="size-6 text-[9px]"
+          />
         </span>
         <span
           className={cn(

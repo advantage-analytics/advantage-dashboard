@@ -37,6 +37,18 @@ export const UPLOAD_POLICIES: readonly UploadPolicy[] = [
   "everyone",
 ];
 
+/**
+ * `programs.events_policy` — who may change the program's schedule. The upload
+ * ladder's staff rungs only: players are read-only on the schedule.
+ */
+export type EventsPolicy = Exclude<UploadPolicy, "everyone">;
+
+export const EVENTS_POLICIES: readonly EventsPolicy[] = [
+  "owner",
+  "owner_coaches",
+  "staff",
+];
+
 /** The policy as a settings row reads it. */
 export function uploadPolicyLabel(policy: UploadPolicy): string {
   switch (policy) {
@@ -106,6 +118,12 @@ export interface Workspace {
   role: ProgramRole;
   /** One or two characters for the switcher's mark. */
   mark: string;
+  /**
+   * Public URL of the program's crest in `program-crests`, drawn in place of
+   * `mark` wherever the workspace is shown. Absent or null for a personal
+   * workspace and for a program that has not uploaded one.
+   */
+  crestUrl?: string | null;
   /**
    * May video be submitted against this workspace's allowance yet?
    *
@@ -210,6 +228,13 @@ export interface Workspace {
    */
   uploadPolicy: UploadPolicy;
   /**
+   * `programs.events_policy` — who may create, edit, score and delete schedule
+   * events. Read by `canManageTeamSchedule()`, the twin of the SQL
+   * `can_manage_program_schedule`. `'staff'` for a personal workspace, where
+   * there is no team schedule.
+   */
+  eventsPolicy: EventsPolicy;
+  /**
    * The id this viewer's matches carry inside this program, when they are a
    * player here — the `program_players.id` they have claimed, else their own
    * user id for a player-role membership with no live profile (arm 3 of
@@ -246,6 +271,12 @@ export interface Viewer {
    */
   firstName: string | null;
   initials: string;
+  /**
+   * Public URL of the profile photo in `user-avatars`, or null for none — in
+   * which case every avatar falls back to `initials`. Built from
+   * `users.avatar_path` at read time; the row never stores a URL.
+   */
+  avatarUrl: string | null;
   /** `users.plan` — 'free' | 'pro'. The paid entitlement, and only that. */
   plan: string;
   /**
@@ -292,7 +323,7 @@ export interface ScheduleCapabilities {
   canDelete: boolean;
 }
 
-type ScheduleWorkspace = Pick<Workspace, "kind" | "role">;
+type ScheduleWorkspace = Pick<Workspace, "kind" | "role" | "eventsPolicy">;
 
 /** May this viewer open and browse the team Schedule? */
 export function canViewTeamSchedule(workspace: ScheduleWorkspace): boolean {
@@ -307,17 +338,28 @@ export function canViewTeamSchedule(workspace: ScheduleWorkspace): boolean {
  * line is a staff-only write enforced independently by the database.
  */
 export function canManageTeamSchedule(workspace: ScheduleWorkspace): boolean {
-  // One spelling of the staff rule, so the Schedule's presentation gate and
-  // `requireStaff()`'s server-action gate cannot drift apart.
-  return isProgramStaff(workspace);
+  // One spelling of the rule, so the Schedule's presentation gate and
+  // `requireScheduleManager()`'s server-action gate cannot drift apart. The
+  // ladder is `can_manage_program_schedule` in SQL, rung for rung.
+  if (!isProgramStaff(workspace)) return false;
+  switch (workspace.eventsPolicy) {
+    case "owner":
+      return workspace.role === "owner";
+    case "owner_coaches":
+      return workspace.role === "owner" || workspace.role === "coach";
+    case "staff":
+      return true;
+  }
 }
 
 /** May this viewer delete an otherwise-safe, empty team Schedule event? */
 export function canDeleteTeamScheduleEvent(
   workspace: ScheduleWorkspace,
 ): boolean {
+  // The events policy first, then deleting's own extra rung — as
+  // `delete_schedule_event` checks it.
   return (
-    workspace.kind === "team" &&
+    canManageTeamSchedule(workspace) &&
     (workspace.role === "owner" || workspace.role === "coach")
   );
 }

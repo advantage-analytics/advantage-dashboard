@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { UploadPolicy } from "@/lib/workspace/types";
+import type { EventsPolicy, UploadPolicy } from "@/lib/workspace/types";
 
 /**
  * What Settings › Team reads.
@@ -40,6 +40,8 @@ export interface TeamIdentity {
   playersCanUpload: boolean;
   /** The ladder `playersCanUpload` is the bottom rung of — what the form edits. */
   uploadPolicy: UploadPolicy;
+  /** Who may change the schedule — the second policy row. */
+  eventsPolicy: EventsPolicy;
   /**
    * Object key in the `program-crests` bucket, or null for the initials mark.
    * A key, never a URL — see `crestUrl()` in `teams-server.ts`.
@@ -78,7 +80,7 @@ export async function getTeamSettings(
     supabase
       .from("programs")
       .select(
-        "id, school_name, team, conference, home_venue, default_surface, season, players_can_upload, upload_policy, time_zone, crest_path",
+        "id, school_name, team, conference, home_venue, default_surface, season, players_can_upload, upload_policy, events_policy, time_zone, crest_path",
       )
       .eq("id", programId)
       .maybeSingle(),
@@ -146,6 +148,7 @@ export async function getTeamSettings(
       season: row.season,
       playersCanUpload: row.players_can_upload,
       uploadPolicy: (row.upload_policy as UploadPolicy | null) ?? "everyone",
+      eventsPolicy: (row.events_policy as EventsPolicy | null) ?? "staff",
       crestPath: row.crest_path ?? null,
       timeZone: row.time_zone,
     },

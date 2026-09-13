@@ -910,6 +910,7 @@ async function resolveAutoRetryWorkspace(params: {
       programStatus: null,
       playersCanUpload: false,
       uploadPolicy: "everyone",
+      eventsPolicy: "staff",
       memberUploadEnabled: true,
       myPlayerId: null,
     };
@@ -970,6 +971,8 @@ async function resolveAutoRetryWorkspace(params: {
     programStatus: program.status as Workspace["programStatus"],
     playersCanUpload: program.players_can_upload,
     uploadPolicy: program.upload_policy as Workspace["uploadPolicy"],
+    // Not read here — a retry never touches the schedule — and not selected.
+    eventsPolicy: "staff",
     memberUploadEnabled: Boolean(row.upload_enabled),
     // Not read here: this workspace only prices a retry. The rail's footer
     // link is the sole reader, and it never sees this object.

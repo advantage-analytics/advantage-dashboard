@@ -19,6 +19,8 @@ import type {
 import type { SeatUsage } from "@/lib/data/teams-server";
 import { setActiveWorkspaceThen } from "@/lib/workspace/actions";
 import { capitalize, cn } from "@/lib/utils";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 
 const ROSTER_PATH = "/dashboard/team/roster";
 
@@ -59,6 +61,7 @@ export function TeamMembersCard({
   onMakeOwner: (member: TeamMember) => void;
   onError: (message: string | null) => void;
 }) {
+  const { viewer } = useWorkspace();
   const isOwner = viewerRole === "owner";
   const isStaff = viewerRole !== "player";
   const goToRoster = setActiveWorkspaceThen.bind(null, programId, ROSTER_PATH);
@@ -115,7 +118,15 @@ export function TeamMembersCard({
             isStaff && options.length === 0 && member.userId !== viewerId;
           return (
             <PersonRow key={member.userId}>
-              <Avatar22>{getInitials(member.name)}</Avatar22>
+              {member.userId === viewerId ? (
+                <PersonAvatar
+                  initials={viewer.initials}
+                  photoUrl={viewer.avatarUrl}
+                  className="size-[22px] text-[9px]"
+                />
+              ) : (
+                <Avatar22>{getInitials(member.name)}</Avatar22>
+              )}
               <span className="truncate text-[12px] font-medium text-[var(--ink-900)]">
                 {member.name}
               </span>

@@ -45,7 +45,7 @@
  * 3. ROLE — `canUploadForProgram()`, verbatim. The policy ladder and the two
  *    player switches keep exactly the meaning `types.ts` documents; this adds
  *    no rung and removes none.
- * 4. LINE — attaching to a scheduled line is staff-only, as the
+ * 4. LINE — attaching to a scheduled line follows the events policy, as the
  *    `matches_block_client_regraft` trigger enforces. Mirrored here so that,
  *    once a seam asks, the refusal can arrive before the bytes rather than
  *    after them.
@@ -70,6 +70,7 @@
 import type { ProgramStatus } from "@/lib/services/programs/claim-state";
 import {
   canUploadForProgram,
+  canManageTeamSchedule,
   isProgramStaff,
   NO_BILLING_WORKSPACE_REFUSAL,
   uploadPolicyLabel,
@@ -207,7 +208,7 @@ export const PENDING_APPROVAL_NOTICE =
  * the one the database would have raised after it.
  */
 export const LINE_REQUIRES_STAFF_REFUSAL =
-  "Only a program's staff can attach a match to a scheduled line.";
+  "Your program limits who can change its schedule, so this match can't be attached to a scheduled line.";
 
 function refusal(
   reason: UploadIneligibilityReason,
@@ -349,7 +350,7 @@ export function uploadEligibility(
   }
 
   // 4. Line.
-  if (input.attachesToLine && !isProgramStaff(workspace)) {
+  if (input.attachesToLine && !canManageTeamSchedule(workspace)) {
     return refusal("line-requires-staff", LINE_REQUIRES_STAFF_REFUSAL);
   }
 

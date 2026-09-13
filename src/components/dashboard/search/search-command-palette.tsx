@@ -40,6 +40,7 @@ import {
 import { scopeToWorkspace } from "@/lib/workspace/scope";
 import {
   canUploadForProgram,
+  canManageTeamSchedule,
   isProgramStaff,
   type Workspace,
 } from "@/lib/workspace/types";
@@ -264,20 +265,20 @@ function actionsFor(active: Workspace): Action[] {
     });
   }
   if (active.kind === "team" && isProgramStaff(active)) {
-    actions.push(
-      {
-        id: "invite",
-        label: "Invite a player",
-        href: "/dashboard/team/roster",
-        icon: UserPlus,
-      },
-      {
-        id: "fixture",
-        label: "Add a fixture",
-        href: "/dashboard/team/schedule/new",
-        icon: CalendarPlus,
-      },
-    );
+    actions.push({
+      id: "invite",
+      label: "Invite a player",
+      href: "/dashboard/team/roster",
+      icon: UserPlus,
+    });
+  }
+  if (canManageTeamSchedule(active)) {
+    actions.push({
+      id: "fixture",
+      label: "Add a fixture",
+      href: "/dashboard/team/schedule/new",
+      icon: CalendarPlus,
+    });
   }
   actions.push(
     {

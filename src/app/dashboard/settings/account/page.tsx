@@ -6,7 +6,10 @@ import { Monitor, MonitorSmartphone, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
-import { SettingsSectionHeading } from "@/components/dashboard/settings/settings-card";
+import {
+  SettingsCard,
+  SettingsCardTitle,
+} from "@/components/dashboard/settings/settings-card";
 import {
   deleteAccount,
   requestPasswordReset,
@@ -95,7 +98,7 @@ export default function AccountPage() {
     .join(", ");
 
   return (
-    <div className="flex max-w-[660px] flex-col gap-10">
+    <div className="flex max-w-[660px] flex-col gap-5">
       {message && (
         <SettingsAlert
           type={message.type}
@@ -104,139 +107,136 @@ export default function AccountPage() {
         />
       )}
 
-      {/* 01 · Sign-in */}
-      <section className="flex flex-col gap-[18px]">
-        <SettingsSectionHeading number="01" title="Sign-in" />
-        <div className="flex flex-col">
-          <FactRow label="Account email">
-            <span className="truncate text-[13px] text-[var(--ink-900)]">
-              {viewer.email}
-            </span>
-            <a
-              href={`mailto:${SUPPORT_EMAIL}?subject=Change%20account%20email`}
-              className="ml-auto shrink-0 text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
-            >
-              Contact support
-            </a>
-          </FactRow>
+      {/* Sign-in */}
+      <SettingsCard>
+        <SettingsCardTitle className="pb-2">Sign-in</SettingsCardTitle>
+        <FactRow label="Account email">
+          <span className="truncate text-[13px] text-[var(--ink-900)]">
+            {viewer.email}
+          </span>
+          <a
+            href={`mailto:${SUPPORT_EMAIL}?subject=Change%20account%20email`}
+            className="ml-auto shrink-0 text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+          >
+            Contact support
+          </a>
+        </FactRow>
 
-          <FactRow label="Method">
+        <FactRow label="Method">
+          <span className="text-[13px] text-[var(--ink-900)]">
+            Email &amp; password
+          </span>
+          <span className="ml-auto shrink-0 text-[11px] text-[var(--ink-500)]">
+            Magic link also enabled
+          </span>
+        </FactRow>
+
+        <FactRow label="Password">
+          <div className="flex flex-col gap-0.5">
             <span className="text-[13px] text-[var(--ink-900)]">
-              Email &amp; password
+              Reset by email
             </span>
-            <span className="ml-auto shrink-0 text-[11px] text-[var(--ink-500)]">
-              Magic link also enabled
+            <span className="text-[11px] text-[var(--ink-500)]">
+              We email a one-time link; it expires in an hour.
             </span>
-          </FactRow>
+          </div>
+          <SettingsButton
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            onClick={handlePasswordReset}
+            loading={isResetting}
+          >
+            Reset password
+          </SettingsButton>
+        </FactRow>
+      </SettingsCard>
 
-          <FactRow label="Password" className="border-b">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[13px] text-[var(--ink-900)]">
-                Reset by email
-              </span>
-              <span className="text-[11px] text-[var(--ink-500)]">
-                We email a one-time link; it expires in an hour.
-              </span>
-            </div>
-            <SettingsButton
-              variant="outline"
-              size="sm"
-              className="ml-auto"
-              onClick={handlePasswordReset}
-              loading={isResetting}
-            >
-              Reset password
-            </SettingsButton>
-          </FactRow>
-        </div>
-      </section>
-
-      {/* 02 · Sessions.
+      {/* Sessions.
 
           Two rows — this device and everywhere — not a device list: nothing in
           the app records where an account has been signed in, and a list
           assembled from the current session would show one device while
           implying it was all of them. The second action is genuinely global. */}
-      <section className="flex flex-col gap-[18px]">
-        <SettingsSectionHeading number="02" title="Where you're signed in" />
-        <div className="flex flex-col border-y border-[var(--border-hairline)]">
-          <SessionRow
-            icon={Monitor}
-            title="This device"
-            detail="Ends this session only. Other devices stay signed in."
+      <SettingsCard>
+        <SettingsCardTitle className="pb-2">
+          Where you&apos;re signed in
+        </SettingsCardTitle>
+
+        <SessionRow
+          icon={Monitor}
+          title="This device"
+          detail="Ends this session only. Other devices stay signed in."
+        >
+          <SettingsButton variant="outline" size="sm" onClick={requestLogout}>
+            Sign out
+          </SettingsButton>
+        </SessionRow>
+
+        <SessionRow
+          icon={MonitorSmartphone}
+          title="Every device"
+          detail="Signing out everywhere ends every other session too — phones included."
+        >
+          <SettingsButton
+            variant="outline"
+            size="sm"
+            onClick={handleSignOutEverywhere}
+            loading={isSigningOut}
           >
-            <SettingsButton variant="outline" size="sm" onClick={requestLogout}>
-              Sign out
-            </SettingsButton>
-          </SessionRow>
+            Sign out everywhere
+          </SettingsButton>
+        </SessionRow>
+      </SettingsCard>
 
-          <SessionRow
-            icon={MonitorSmartphone}
-            title="Every device"
-            detail="Signing out everywhere ends every other session too — phones included."
-          >
-            <SettingsButton
-              variant="outline"
-              size="sm"
-              onClick={handleSignOutEverywhere}
-              loading={isSigningOut}
-            >
-              Sign out everywhere
-            </SettingsButton>
-          </SessionRow>
-        </div>
-      </section>
+      {/* Delete account — the one card with a bled, tinted footer, so the
+          confirm step reads as bounded even inside the card vocabulary. */}
+      <SettingsCard className="gap-3 overflow-hidden">
+        <span className="text-[13px] font-medium text-[var(--danger)]">
+          Delete account
+        </span>
+        <span className="text-[12px] leading-[1.55] text-[var(--ink-600)]">
+          Removes your personal matches, statistics, reports, and your account
+          record. Matches you filed under a team stay with that team, as a
+          profile its coaches manage. This cannot be undone.
+        </span>
 
-      {/* 03 · Delete account — bounded, and the only thing in its own frame. */}
-      <section className="mt-2 flex flex-col overflow-hidden rounded-[14px] border border-[var(--border-card)]">
-        <div className="px-5 pt-4 pb-3">
-          <SettingsSectionHeading number="03" title="Delete account" />
-        </div>
-
-        <div className="flex flex-col gap-3 px-5 pb-4">
-          <span className="text-[12px] leading-[1.55] text-[var(--ink-600)]">
-            Removes your personal matches, statistics, reports, and your account
-            record. Matches you filed under a team stay with that team, as a
-            profile its coaches manage. This cannot be undone.
-          </span>
-
-          {ownsProgram && (
-            <div className="flex items-start gap-3 rounded-[8px] bg-[var(--surface-muted)] px-3.5 py-3">
-              <Users
-                className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-600)]"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-              <div>
-                <div className="text-[12px] text-[var(--ink-900)]">
-                  You own {ownedNames}
-                </div>
-                <div className="mt-0.5 text-[11px] leading-[1.5] text-[var(--ink-600)]">
-                  Deletion is blocked until you transfer ownership.{" "}
-                  <Link
-                    href="/dashboard/settings/teams"
-                    className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
-                  >
-                    Team settings
-                  </Link>
-                </div>
+        {ownsProgram && (
+          <div className="flex items-start gap-3 rounded-[8px] bg-[var(--surface-muted)] px-3.5 py-3">
+            <Users
+              className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-600)]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+            <div>
+              <div className="text-[12px] text-[var(--ink-900)]">
+                You own {ownedNames}
+              </div>
+              <div className="mt-0.5 text-[11px] leading-[1.5] text-[var(--ink-600)]">
+                Deletion is blocked until you transfer ownership.{" "}
+                <Link
+                  href="/dashboard/settings/teams"
+                  className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                >
+                  Team settings
+                </Link>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {deleteError && (
-            <p role="alert" className="text-[12px] text-[var(--danger)]">
-              {deleteError}
-            </p>
-          )}
-        </div>
+        {deleteError && (
+          <p role="alert" className="text-[12px] text-[var(--danger)]">
+            {deleteError}
+          </p>
+        )}
 
         <form
           onSubmit={(event) => {
             event.preventDefault();
             if (canDelete && !isDeleting) handleDelete();
           }}
-          className="flex flex-wrap items-center gap-3 border-t border-[var(--border-hairline)] bg-[var(--surface-muted)] px-5 py-3.5"
+          className="-mx-6 mt-1 -mb-[18px] flex flex-wrap items-center gap-3 rounded-b-[14px] border-t border-[var(--border-hairline)] bg-[var(--surface-muted)] px-6 py-3.5"
         >
           <label
             htmlFor="confirm-delete"
@@ -264,7 +264,7 @@ export default function AccountPage() {
             Delete account
           </SettingsButton>
         </form>
-      </section>
+      </SettingsCard>
     </div>
   );
 }
@@ -286,7 +286,7 @@ function SessionRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3.5 border-t border-[var(--border-hairline)] py-3 first:border-t-0">
+    <div className="flex items-center gap-3.5 border-t border-[var(--border-hairline)] py-3">
       <Icon
         className="size-3.5 shrink-0 text-[var(--ink-600)]"
         strokeWidth={1.5}

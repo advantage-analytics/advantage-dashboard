@@ -7,6 +7,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { recoveryRedirectTo } from "@/lib/auth/recovery-handoff";
+import {
+  AVATAR_MAX_BYTES,
+  AVATAR_TYPES,
+  USER_AVATARS_BUCKET,
+} from "@/lib/user/avatar";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -86,6 +91,94 @@ export async function saveProfile(input: ProfileInput): Promise<ActionResult> {
   }
 
   revalidatePath("/dashboard/settings/profile");
+  return { ok: true };
+}
+
+/**
+ * Replace the profile photo.
+ *
+ * Same order as `uploadProgramCrest`: upload under a stamped key, point the
+ * row at it, then remove what it replaced. A fixed key would sit behind the
+ * CDN showing the old face for the cache's lifetime.
+ */
+export async function uploadAvatar(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in. Please log back in." };
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "Choose a photo first." };
+  }
+  const ext = AVATAR_TYPES[file.type];
+  if (!ext) return { ok: false, error: "Use a PNG, JPG or WebP." };
+  if (file.size > AVATAR_MAX_BYTES) {
+    return { ok: false, error: "Keep the photo under 2 MB." };
+  }
+
+  const { data: current } = await supabase
+    .from("users")
+    .select("avatar_path")
+    .eq("id", user.id)
+    .maybeSingle();
+  const previous = (current?.avatar_path as string | null | undefined) ?? null;
+
+  const path = `${user.id}/avatar-${Date.now()}.${ext}`;
+  const { error: uploadError } = await supabase.storage
+    .from(USER_AVATARS_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: false });
+  if (uploadError) {
+    return {
+      ok: false,
+      error: `Couldn't upload the photo: ${uploadError.message}`,
+    };
+  }
+
+  const { error } = await supabase
+    .from("users")
+    .update({ avatar_path: path })
+    .eq("id", user.id);
+  if (error) {
+    await supabase.storage.from(USER_AVATARS_BUCKET).remove([path]);
+    return { ok: false, error: "Couldn't save the photo." };
+  }
+
+  if (previous && previous !== path) {
+    await supabase.storage.from(USER_AVATARS_BUCKET).remove([previous]);
+  }
+
+  revalidatePath("/dashboard", "layout");
+  return { ok: true };
+}
+
+/** Back to initials. Row first, then the object it pointed at. */
+export async function removeAvatar(): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in. Please log back in." };
+
+  const { data: current } = await supabase
+    .from("users")
+    .select("avatar_path")
+    .eq("id", user.id)
+    .maybeSingle();
+  const previous = (current?.avatar_path as string | null | undefined) ?? null;
+
+  const { error } = await supabase
+    .from("users")
+    .update({ avatar_path: null })
+    .eq("id", user.id);
+  if (error) return { ok: false, error: "Couldn't remove the photo." };
+
+  if (previous) {
+    await supabase.storage.from(USER_AVATARS_BUCKET).remove([previous]);
+  }
+
+  revalidatePath("/dashboard", "layout");
   return { ok: true };
 }
 
