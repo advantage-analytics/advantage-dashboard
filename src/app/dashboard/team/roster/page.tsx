@@ -10,7 +10,7 @@ import {
   teamLabel,
   type UploadPolicy,
 } from "@/lib/workspace/types";
-import { getRosterData } from "@/lib/data/team-roster-server";
+import { getFormerPlayers, getRosterData } from "@/lib/data/team-roster-server";
 import { getPendingJoinRequests } from "@/lib/data/join-requests-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { formatResetDate } from "@/lib/data/usage-format";
@@ -116,16 +116,23 @@ async function RosterContent({
   const { player } = await searchParams;
   const initialSelectedId = typeof player === "string" ? player : null;
 
-  // Two independent reads start together. The join-request queue is
-  // staff-only: `program_join_requests` is SECURITY DEFINER and hands a player
-  // the same empty array it hands a stranger, so this only declines to ask for
-  // a queue the database would refuse to fill.
-  const [rosterResult, joinRequestsResult] = await Promise.allSettled([
-    getRosterData(active.id),
-    canManage ? getPendingJoinRequests(active.id, true) : Promise.resolve([]),
-  ]);
+  // Three independent reads start together. The join-request queue and the
+  // former-players list are both staff-only: `program_join_requests` and
+  // `program_former_players` are SECURITY DEFINER and hand a player the same
+  // empty array they hand a stranger, so this only declines to ask for
+  // something the database would refuse to fill.
+  const [rosterResult, joinRequestsResult, formerResult] =
+    await Promise.allSettled([
+      getRosterData(active.id),
+      canManage ? getPendingJoinRequests(active.id, true) : Promise.resolve([]),
+      canManage ? getFormerPlayers(active.id) : Promise.resolve([]),
+    ]);
   if (rosterResult.status === "rejected") throw rosterResult.reason;
   const roster = rosterResult.value;
+  // A courtesy note in the Add player dialog, not load-bearing content — an
+  // empty list on failure degrades to the dialog behaving as if nobody has
+  // ever been archived, which is a worse hint, not a broken page.
+  const former = formerResult.status === "fulfilled" ? formerResult.value : [];
 
   // Join requests decide whether an otherwise empty program is truly at day
   // zero, so failure is fatal only in that state. Once a roster row or invite
@@ -205,6 +212,7 @@ async function RosterContent({
             seats={roster.seats}
             roster={players}
             playersCanUpload={roster.playersCanUpload}
+            former={former}
           />
         </div>
       </div>
@@ -274,6 +282,7 @@ async function RosterContent({
       seats={roster.seats}
       roster={players}
       playersCanUpload={roster.playersCanUpload}
+      former={former}
     />
   ) : null;
 

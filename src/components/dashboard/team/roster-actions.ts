@@ -513,8 +513,18 @@ async function describeUpdateFailure(
  * Separate from `removeMember`, which takes a user id and can only act on
  * somebody who has an account. A coach-managed player has none.
  */
-export async function archiveProgramPlayer(
+/**
+ * The write `archiveProgramPlayer` and `restoreProgramPlayer` share: guard
+ * the team workspace, call the one-argument RPC, normalize a Postgres error
+ * into a sentence, and revalidate the three pages every player-roster write
+ * touches. Callers build their own success value — restore's carries the id
+ * back, archive's doesn't — so this returns the plain split rather than a
+ * shared result type.
+ */
+async function callProfileRpc(
+  rpcName: "archive_program_player" | "restore_program_player",
   profileId: string,
+  fallbackError: string,
 ): Promise<ActionResult> {
   const workspace = await getWorkspaceContext();
   if (!workspace || workspace.active.kind !== "team") {
@@ -522,15 +532,13 @@ export async function archiveProgramPlayer(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.rpc("archive_program_player", {
-    p_player_id: profileId,
-  });
+  const { error } = await supabase.rpc(rpcName, { p_player_id: profileId });
 
   if (error) {
     const raw = error.message?.trim();
     return {
       ok: false,
-      error: raw && raw.length > 0 ? raw : "Couldn't remove that player.",
+      error: raw && raw.length > 0 ? raw : fallbackError,
     };
   }
 
@@ -538,6 +546,41 @@ export async function archiveProgramPlayer(
   revalidatePath(SETTINGS_PATH);
   revalidatePath(TEAM_HOME_PATH);
   return { ok: true };
+}
+
+export async function archiveProgramPlayer(
+  profileId: string,
+): Promise<ActionResult> {
+  return callProfileRpc(
+    "archive_program_player",
+    profileId,
+    "Couldn't remove that player.",
+  );
+}
+
+/**
+ * Put an archived player back on the roster, matches and all.
+ *
+ * The way back from `archiveProgramPlayer`. `restore_program_player` clears
+ * `archived_at` on the same row rather than minting a new one, which is the
+ * whole point: `matches.player1_id` has no foreign key, so the profile id is
+ * what every one of that player's matches already carries, and reusing it is
+ * what makes the history reappear instead of staying orphaned under a row
+ * nothing points at anymore.
+ *
+ * Revalidates `SETTINGS_PATH` for the same reason `archiveProgramPlayer`
+ * does: a claimed profile gets re-seated into `program_members` on restore,
+ * and that seat count is what Settings › Teams shows.
+ */
+export async function restoreProgramPlayer(
+  profileId: string,
+): Promise<AddPlayerResult> {
+  const result = await callProfileRpc(
+    "restore_program_player",
+    profileId,
+    "Couldn't restore that player.",
+  );
+  return result.ok ? { ok: true, profileId } : result;
 }
 
 /**

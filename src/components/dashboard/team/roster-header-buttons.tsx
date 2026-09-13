@@ -5,7 +5,11 @@ import { advButton } from "@/lib/ui/adv-button";
 import { AddPlayerDialog, type AddPlayerInitial } from "./add-player-dialog";
 import { RosterInviteDialog } from "./roster-invite-dialog";
 import type { ManagedPlayer } from "./invite-target-picker";
-import type { RosterMember, SeatUsage } from "@/lib/data/team-roster-server";
+import type {
+  FormerPlayer,
+  RosterMember,
+  SeatUsage,
+} from "@/lib/data/team-roster-server";
 
 /**
  * The Roster page's two ways of growing a squad.
@@ -23,6 +27,7 @@ export function RosterHeaderButtons({
   seats,
   roster,
   playersCanUpload,
+  former,
 }: {
   /** Coach-managed rows, so an invitation can target one instead of duplicating it. */
   managedPlayers: ManagedPlayer[];
@@ -37,6 +42,12 @@ export function RosterHeaderButtons({
    * that was picked and who already answers to the name that was typed.
    */
   roster: RosterMember[];
+  /**
+   * Everyone archived off the roster, so Add player can offer to restore a
+   * name it recognizes instead of quietly minting a second, historyless
+   * profile beside their old one.
+   */
+  former: FormerPlayer[];
 }) {
   const [inviting, setInviting] = useState(false);
   const [addingPlayer, setAddingPlayer] = useState(false);
@@ -132,6 +143,7 @@ export function RosterHeaderButtons({
         }}
         seatNote={seatNote}
         roster={roster}
+        former={former}
         initial={addInitial}
       />
     </>

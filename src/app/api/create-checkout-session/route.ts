@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe/client";
 import { STRIPE_CONFIG } from "@/lib/stripe/config";
 import { isProPlan } from "@/lib/user/roles";
+import { siteUrl } from "@/lib/site-url";
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,10 +39,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const baseUrl =
-      request.headers.get("origin") ||
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      "http://localhost:3000";
+    const baseUrl = request.headers.get("origin") || siteUrl();
 
     // Create the Stripe Checkout Session (one-time payment)
     const session = await stripe.checkout.sessions.create({

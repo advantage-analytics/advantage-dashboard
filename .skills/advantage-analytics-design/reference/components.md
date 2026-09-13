@@ -185,7 +185,10 @@ no longer says.
 **(v3)** The last five results as bars, not lettered squares: 2.5×12px, 3px
 gap, 1px radius, oldest left, `--viz-good` / `--viz-bad`. Shipped as
 `FormTicks` in `shared/form-ticks.tsx` (the roster table and the player profile's line history both draw it); pair with a muted summary ("5–2 last
-7") where there is room. The pre-v3 treatment — a 20px `rounded-[3px]` square
+7") where there is room. A played-but-unscored match is `"pending"` and draws
+`--ink-300`. The roster table passes `slots={5}`, which pads the strip with
+`--ink-100` ghost bars for matches not yet played (and replaces the em dash for
+a player with none); other call sites leave `slots` off. The pre-v3 treatment — a 20px `rounded-[3px]` square
 with a 9px semibold letter on the 15% tint — is retired.
 
 ### Activity Indicator Line

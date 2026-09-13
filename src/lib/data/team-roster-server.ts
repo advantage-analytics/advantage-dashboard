@@ -89,8 +89,6 @@ export interface RosterRecentMatch {
   id: string;
   /** Already shortened: "Ana Castillo" → "A. Castillo". */
   opponent: string;
-  /** The tournament or dual it belonged to, when the row recorded one. */
-  event: string | null;
   /** Oriented so `player1` is this member — see `RosterMatch.sets`. */
   sets: ScoreLineSet[];
   won: boolean | null;
@@ -173,8 +171,12 @@ export interface RosterMember {
    */
   wins: number;
   losses: number;
-  /** The last five results, oldest first. Unscored matches are left out. */
-  form: ("win" | "loss")[];
+  /**
+   * The last five matches, oldest first. An unscored one — no winner yet —
+   * is `"pending"` rather than left out, so its slot in the strip lines up
+   * with the same match's "Analyzing"/"Review score" token in `lastMatch`.
+   */
+  form: ("win" | "loss" | "pending")[];
   lastMatch: RosterMatch | null;
   /** Newest first, at most `DRAWER_WINDOW`. What the drawer reads. */
   recent: RosterRecentMatch[];
@@ -244,7 +246,6 @@ interface DbMatchRow {
   player2_name: string | null;
   score: MatchScore | null;
   date: string | null;
-  tournament_name: string | null;
 }
 
 /**
@@ -360,7 +361,7 @@ export const getRosterData = cache(async function getRosterData(
       const { data, error } = await supabase
         .from("matches")
         .select(
-          "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name",
+          "id, player1_id, player2_id, player1_name, player2_name, score, date",
         )
         .eq("program_id", programId)
         // `nullsFirst` is not a detail here: Postgres puts NULLs first on a
@@ -530,11 +531,20 @@ export const getRosterData = cache(async function getRosterData(
       wins,
       losses,
       // Reversed so the strip reads left to right in the order the season was
-      // played, which is how a coach reads a run of results out loud.
-      form: decided
+      // played, which is how a coach reads a run of results out loud. Windowed
+      // over `results`, not `decided` — an unscored match still takes its slot
+      // in the strip (as `"pending"`), rather than vanishing and letting an
+      // older, already-settled match slide in to replace it.
+      form: results
         .slice(0, FORM_WINDOW)
         .reverse()
-        .map((r) => (r.won ? ("win" as const) : ("loss" as const))),
+        .map((r) =>
+          r.won === null
+            ? ("pending" as const)
+            : r.won
+              ? ("win" as const)
+              : ("loss" as const),
+        ),
       lastMatch: latest
         ? {
             opponent: shortName(
@@ -559,7 +569,6 @@ export const getRosterData = cache(async function getRosterData(
           (r.isPlayer1 ? r.match.player2_name : r.match.player1_name) ??
             "Unknown",
         ),
-        event: r.match.tournament_name,
         sets: scoreSetsFrom(r.match.score, { swap: !r.isPlayer1 }),
         won: r.won,
         date: r.match.date ? shortDate(r.match.date) : "",
@@ -632,3 +641,65 @@ export const getRosterData = cache(async function getRosterData(
     },
   };
 });
+
+/**
+ * A player who used to be on the roster.
+ *
+ * What `program_former_players` returns, shaped for the Add player dialog's
+ * "already been here" check. `matchCount` is what makes restoring worth
+ * offering over adding fresh: a coach retyping a name that already has
+ * matches attached would otherwise get a second, historyless profile.
+ */
+export interface FormerPlayer {
+  profileId: string;
+  name: string;
+  email: string | null;
+  /** "Aug 20" — formatted with the same `shortDate` helper `addedOn` uses. */
+  archivedOn: string;
+  matchCount: number;
+}
+
+interface DbFormerPlayerRow {
+  profile_id: string;
+  display_name: string;
+  email: string | null;
+  archived_at: string;
+  match_count: number | string;
+}
+
+/**
+ * The players archived off a program's roster, most recently removed first.
+ *
+ * Read through the RPC rather than a server-client `select` on
+ * `program_players`, for the reason `program_former_players`'s own comment
+ * gives: the roster page reads pooled data through SECURITY DEFINER
+ * functions, and a staff member's visibility of an archived player's matches
+ * under `visible_match_ids()` is not something the Add player dialog should
+ * depend on.
+ *
+ * `archivedOn` is formatted here rather than in the browser — the same reason
+ * `addedOn` above is: a client-rendered date next to a server-rendered page
+ * is a hydration mismatch waiting for a viewer in a different time zone.
+ *
+ * A null or errored RPC result yields an empty list rather than throwing —
+ * this is a secondary lookup the Add player dialog uses for a courtesy note,
+ * not something the roster page's own load should fail over.
+ */
+export async function getFormerPlayers(
+  programId: string,
+): Promise<FormerPlayer[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("program_former_players", {
+    p_program_id: programId,
+  });
+
+  if (error || !data) return [];
+
+  return (data as DbFormerPlayerRow[]).map((row) => ({
+    profileId: row.profile_id,
+    name: row.display_name,
+    email: row.email,
+    archivedOn: shortDate(row.archived_at),
+    matchCount: Number(row.match_count),
+  }));
+}
