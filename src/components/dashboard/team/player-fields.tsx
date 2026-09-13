@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { AdvSelect } from "@/components/ui/adv-select";
+import type { MenuOption } from "@/components/ui/menu-select";
 import type { RosterMember } from "@/lib/data/team-roster-server";
 
 /**
@@ -38,40 +38,51 @@ export const CLASS_YEARS = [
 export const LINEUP_SPOTS = Array.from({ length: 9 }, (_, i) => i + 1);
 
 /**
- * The underline `<select>`, matching `SettingsUnderlineInput`'s rule.
- *
- * A thin adapter over `AdvSelect` now, kept only for its callback shape: the
- * two roster dialogs pass `onChange={setClassYear}` — a plain setter, not an
- * event handler — and rewriting both call sites to unwrap the event would be
- * churn for no gain. Everything visual belongs to the primitive.
- *
- * What that fixed here: this component set `appearance-none` and put nothing
- * back where the browser's arrow had been, so the control read as static
- * text; and its rule recoloured on focus without thickening to the 2px the
- * design system asks for.
+ * "Not set" as a `MenuSelect` row. The form state keeps `""` for it — that is
+ * what the save path turns into `null` — but a menu row needs a value of its
+ * own, so the dialogs map this back with `fromMenu`.
  */
-export function UnderlineSelect({
-  value,
-  onChange,
-  children,
-  ariaLabel,
-  disabled,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  children: React.ReactNode;
-  ariaLabel: string;
-  disabled?: boolean;
-}) {
-  return (
-    <AdvSelect
-      aria-label={ariaLabel}
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value)}
-    >
-      {children}
-    </AdvSelect>
+const NOT_SET = "__not-set";
+
+/** A picked row back into form state: the sentinel is `""`. */
+export function fromMenu(value: string): string {
+  return value === NOT_SET ? "" : value;
+}
+
+/**
+ * The options with a stored value that is in none of them kept as its own
+ * first row, and "Not set" last — the same order Edit match uses.
+ *
+ * A class year typed straight into the database, or carried over from the
+ * player's own profile before this row had one, need not be one of the five;
+ * a spot outside 1–9 is legal in the column. Either must survive the dialog
+ * being opened, rather than silently becoming "Not set".
+ */
+function withStored(
+  value: string,
+  options: MenuOption<string>[],
+  label: (stored: string) => string,
+): MenuOption<string>[] {
+  const stored =
+    value !== "" && !options.some((option) => option.value === value)
+      ? [{ value, label: label(value) }]
+      : [];
+  return [...stored, ...options, { value: NOT_SET, label: "Not set" }];
+}
+
+export function classYearOptions(value: string): MenuOption<string>[] {
+  return withStored(
+    value,
+    CLASS_YEARS.map((year) => ({ value: year, label: year })),
+    (stored) => stored,
+  );
+}
+
+export function lineupSpotOptions(value: string): MenuOption<string>[] {
+  return withStored(
+    value,
+    LINEUP_SPOTS.map((spot) => ({ value: String(spot), label: `#${spot}` })),
+    (stored) => `#${stored}`,
   );
 }
 

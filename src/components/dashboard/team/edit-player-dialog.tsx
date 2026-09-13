@@ -17,11 +17,12 @@ import {
   DialogProblem,
   RosterDialog,
 } from "@/components/dashboard/team/dialog-shell";
+import { MenuSelect } from "@/components/ui/menu-select";
 import {
-  CLASS_YEARS,
-  LINEUP_SPOTS,
   RosterNote,
-  UnderlineSelect,
+  classYearOptions,
+  fromMenu,
+  lineupSpotOptions,
   spotHeldNote,
   spotHolders,
 } from "@/components/dashboard/team/player-fields";
@@ -275,54 +276,39 @@ export function EditPlayerDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <SettingsField label="Class year">
-              <UnderlineSelect
-                ariaLabel="Class year"
-                value={fields.classYear}
+            {/* Caption spans, not `SettingsField`: its `<label>` forwards
+                every click inside it to the trigger button, so picking a row
+                would reopen the menu it just closed. The option builders keep
+                a stored value outside the list as its own row, so opening the
+                dialog cannot silently change it to "Not set". */}
+            <div className="flex min-w-0 flex-col gap-2">
+              <span className="text-[11px] text-[var(--ink-600)]">
+                Class year
+              </span>
+              <MenuSelect
+                label="Class year"
+                variant="underline"
+                placeholder="Not set"
+                value={fields.classYear || undefined}
+                options={classYearOptions(fields.classYear)}
                 disabled={pending}
-                onChange={(value) => edit("classYear", value)}
-              >
-                <option value="">Not set</option>
-                {/* A class year typed straight into the database — or carried
-                    over from the player's own profile before this row had one —
-                    need not be one of the five. Kept as an option so opening
-                    the dialog cannot silently change it to "Not set". */}
-                {!CLASS_YEARS.some((year) => year === fields.classYear) &&
-                  fields.classYear !== "" && (
-                    <option value={fields.classYear}>{fields.classYear}</option>
-                  )}
-                {CLASS_YEARS.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </UnderlineSelect>
-            </SettingsField>
-            <SettingsField label="Lineup spot">
-              <UnderlineSelect
-                ariaLabel="Lineup spot"
-                value={fields.lineupSpot}
+                onChange={(value) => edit("classYear", fromMenu(value))}
+              />
+            </div>
+            <div className="flex min-w-0 flex-col gap-2">
+              <span className="text-[11px] text-[var(--ink-600)]">
+                Lineup spot
+              </span>
+              <MenuSelect
+                label="Lineup spot"
+                variant="underline"
+                placeholder="Not set"
+                value={fields.lineupSpot || undefined}
+                options={lineupSpotOptions(fields.lineupSpot)}
                 disabled={pending}
-                onChange={(value) => edit("lineupSpot", value)}
-              >
-                <option value="">Not set</option>
-                {/* Same reason as the class year above: a spot outside 1–9 is
-                    legal in the column and must survive being looked at. */}
-                {fields.lineupSpot !== "" &&
-                  !LINEUP_SPOTS.some(
-                    (option) => String(option) === fields.lineupSpot,
-                  ) && (
-                    <option value={fields.lineupSpot}>
-                      #{fields.lineupSpot}
-                    </option>
-                  )}
-                {LINEUP_SPOTS.map((option) => (
-                  <option key={option} value={String(option)}>
-                    #{option}
-                  </option>
-                ))}
-              </UnderlineSelect>
-            </SettingsField>
+                onChange={(value) => edit("lineupSpot", fromMenu(value))}
+              />
+            </div>
           </div>
 
           <RosterNote icon={Users} note={spotNote} />
