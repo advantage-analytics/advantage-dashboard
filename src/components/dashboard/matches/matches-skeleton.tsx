@@ -18,7 +18,7 @@ function Bar({ className }: { className: string }): React.JSX.Element {
 export function MatchesSkeleton(): React.JSX.Element {
   return (
     <div
-      className="flex flex-col gap-6"
+      className="flex flex-col gap-[18px]"
       role="status"
       aria-busy="true"
       aria-label="Loading matches"
@@ -43,7 +43,6 @@ export function MatchesSkeleton(): React.JSX.Element {
             </span>
           ))}
           <span />
-          <span />
         </div>
         <div>
           {Array.from({ length: SKELETON_ROWS }).map((_, row) => (
@@ -57,7 +56,6 @@ export function MatchesSkeleton(): React.JSX.Element {
               <Bar className="size-3.5 rounded-full" />
               <Bar className="h-3 w-20" />
               <Bar className="h-3 w-36" />
-              <span />
               <span />
             </div>
           ))}

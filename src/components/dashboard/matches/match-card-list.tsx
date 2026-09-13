@@ -14,7 +14,6 @@ export {
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
-import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
 import { formatShortDate } from "@/lib/ui/date-format";
 import { NewPill } from "@/components/ui/new-pill";
 import { RowLifecycle } from "./row-state";
@@ -78,21 +77,6 @@ import { cn } from "@/lib/utils";
  * the same x because the row's `-mx-4 px-4` cancels to the header's edge.
  */
 
-/**
- * The row's actions lane: 28px at the row's end, empty at rest and holding the
- * ⋯ on hover. Clicks inside it never reach the row, so the menu does not also
- * open the drawer.
- *
- * v3's law says hover swaps the *lifecycle cell* for the trigger, which was
- * sound when Analysis sat second-to-last — it put the ⋯ where the cursor was
- * already heading. Once the columns were reordered that same rule dropped the
- * menu into the middle of the row, over content it also had to hide. A lane of
- * its own costs 28px of permanent gutter and buys a trigger that is always in
- * the same place, over nothing.
- */
-export const ACTIONS_LANE =
-  "relative z-[1] flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 has-[:focus-visible]:opacity-100 has-[[data-state=open]]:opacity-100";
-
 interface MatchCardListProps {
   match: DisplayMatch;
   /** Highlights briefly right after this match was created, this session. */
@@ -105,7 +89,7 @@ interface MatchCardListProps {
   /** This row's match is the one in the drawer. */
   selected?: boolean;
   /** Open or close the drawer on this row; `viaKeyboard` moves focus into it. */
-  onToggle?: (match: DisplayMatch, viaKeyboard: boolean) => void;
+  onToggle?: (id: string, viaKeyboard: boolean) => void;
 }
 
 /** The row's DOM id, so stepping in the drawer can scroll and focus it. */
@@ -138,14 +122,14 @@ export function MatchCardList({
           router.push(href);
           return;
         }
-        if (onToggle) onToggle(match, false);
+        if (onToggle) onToggle(match.id, false);
         else router.push(href);
       }}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          if (onToggle) onToggle(match, true);
+          if (onToggle) onToggle(match.id, true);
           else router.push(href);
         }
       }}
@@ -228,20 +212,6 @@ export function MatchCardList({
           label={`${match.player2.name}, ${match.tournamentName}`}
         />
       </div>
-
-      <span
-        className={ACTIONS_LANE}
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => event.stopPropagation()}
-      >
-        {match.canManage !== false && (
-          <MatchActionsMenu
-            matchId={match.id}
-            matchLabel={match.tournamentName}
-            className="bg-[var(--surface-subtle)]"
-          />
-        )}
-      </span>
     </div>
   );
 }

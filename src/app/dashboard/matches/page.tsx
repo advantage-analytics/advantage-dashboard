@@ -87,8 +87,8 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   // a door the next page closes.
   if (matches.length === 0 && drafts.length === 0) {
     return (
-      <div className="flex w-full flex-1 flex-col bg-white">
-        <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-14 pt-5 pb-8">
+      <div className="flex w-full flex-1 bg-[var(--surface-card)]">
+        <div className="flex min-w-0 flex-1 flex-col px-14 pt-5 pb-6">
           <MatchesDayZero
             scope={isTeam ? "team" : "personal"}
             canUpload={isTeam ? canUploadForProgram(workspace.active) : true}
@@ -107,8 +107,8 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   // A row: the page column, then the slot the match drawer portals into — so
   // the rail sits beside the column and the table reflows, as on the Roster.
   return (
-    <div className="flex w-full flex-1 bg-white">
-      <div className="mx-auto flex max-w-screen-2xl min-w-0 flex-1 flex-col gap-6 px-6 pt-5 pb-6 lg:px-14">
+    <div className="flex w-full flex-1 bg-[var(--surface-card)]">
+      <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pt-5 pb-6">
         <WidgetBoundary key={`title:${scopeKey}`} label="Match summary">
           <Suspense
             fallback={<MatchesTitleRow scope={scope} canUpload={canUpload} />}

@@ -23,17 +23,17 @@ export type SortDir = "asc" | "desc";
 
 interface MatchesGridProps {
   matches: DisplayMatch[];
-  /** Half-finished uploads, listed at the top with Resume (design 11c). */
+  /** Half-finished uploads, listed at the top (design 11c). */
   drafts?: DraftRowData[];
   newMatchId?: string | null;
   /** Match ids never opened on this device — draws the blue "New" pill. */
   unseenIds?: Set<string>;
   /** Which wizard a draft resumes in. */
   scope?: "personal" | "team";
-  /** The match open in the drawer, or null. */
+  /** The match or draft open in the drawer, or null. */
   selectedId?: string | null;
   /** Row click and Enter/Space: open, switch or close the drawer. */
-  onToggle?: (match: DisplayMatch, viaKeyboard: boolean) => void;
+  onToggle?: (id: string, viaKeyboard: boolean) => void;
   /** The drawer is open (or closing) beside the table. */
   drawerOpen?: boolean;
 }
@@ -43,17 +43,17 @@ interface MatchesGridProps {
  * left over its value — the Result glyph included, never centred.
  *
  * Plain eyebrows, no sort buttons: sorting lives in the toolbar's one sort
- * control. The last two tracks — lifecycle and the actions lane — head nothing
- * and carry an empty label to keep the header's column count in step with the
+ * control. The last track — lifecycle — heads nothing and
+ * carries an empty label to keep the header's column count in step with the
  * row's.
  */
 function columnsFor(scope: "personal" | "team", compact: boolean): string[] {
   if (scope === "personal") {
-    return ["Date", "Opponent", "Result", "Score", "Event", "", ""];
+    return ["Date", "Opponent", "Result", "Score", "Event", ""];
   }
   return compact
-    ? ["Date", "Player", "Opponent", "Result", "Score", "", ""]
-    : ["Date", "Player", "Opponent", "Result", "Score", "Event", "", ""];
+    ? ["Date", "Player", "Opponent", "Result", "Score", ""]
+    : ["Date", "Player", "Opponent", "Result", "Score", "Event", ""];
 }
 
 export function MatchesGrid({
@@ -152,6 +152,8 @@ export function MatchesGrid({
                   draft={draft}
                   scope={scope}
                   compact={compact}
+                  selected={draft.id === selectedId}
+                  onToggle={onToggle}
                 />
               ))}
               {matches.map((match) => (

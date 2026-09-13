@@ -68,21 +68,13 @@ import { LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-card-list";
  * not.
  */
 
-const COLUMNS = [
-  "Date",
-  "Opponent",
-  "Result",
-  "Score",
-  "Event",
-  "",
-  "",
-] as const;
+const COLUMNS = ["Date", "Opponent", "Result", "Score", "Event", ""] as const;
 
 /**
  * Proportional rules for the five columns that carry a value, in
  * `LIST_GRID_COLS` order. Result is a 14px dot — `ResultMark`'s own footprint,
- * flush left where the glyph sits; the two columns after Event — lifecycle and
- * the actions lane — draw nothing, the same as a settled real row.
+ * flush left where the glyph sits; the column after Event — lifecycle — draws
+ * nothing, the same as a settled real row.
  */
 type Rule = React.ComponentProps<typeof GhostRule>;
 
@@ -104,8 +96,7 @@ function GhostRow({ opacity }: { opacity: number }) {
       {ROW_RULES.map((rule, i) => (
         <GhostRule key={i} {...rule} />
       ))}
-      {/* Lifecycle and the actions lane — blank, the same as a settled row. */}
-      <span />
+      {/* Lifecycle — blank, the same as a settled row. */}
       <span />
     </div>
   );

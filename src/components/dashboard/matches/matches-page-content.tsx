@@ -32,6 +32,7 @@ import { providers } from "@/lib/providers";
 import { useUnseenReportIds } from "@/lib/ui/seen-reports";
 import { MatchesGrid, type SortField, type SortDir } from "./matches-grid";
 import { DRAWER_ATTR, MatchDrawer } from "./match-drawer";
+import { DraftDrawer } from "./draft-drawer";
 import { matchRowId } from "./match-card-list";
 import { MATCH_DRAWER_SLOT_ID } from "./match-drawer-slot";
 import type { MatchAnalysis } from "@/lib/data/match-analysis";
@@ -675,28 +676,42 @@ export function MatchesPageContent({
   const rangeStart = sorted.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(safePage * PAGE_SIZE, sorted.length);
 
-  /* ── The match drawer ────────────────────────────────────────────────────
+  /* ── The drawer ──────────────────────────────────────────────────────────
      The Roster's selection model, verbatim: click opens and selects, clicking
-     the selected row closes, ↑ ↓ step, Esc closes, and `?match=` is the one
-     deep link that lands open. `selectedId` is the washed row; `drawerId`
-     outlives it by the slide-out, so the rail can animate closed. Stepping
-     walks the whole filtered list and turns the page when it has to. */
+     the selected row closes, ↑ ↓ step, Esc closes, and `?match=` / `?draft=`
+     are the deep links that land open. `selectedId` is the washed row;
+     `drawerId` outlives it by the slide-out, so the rail can animate closed.
+     Drafts sit above the matches on every page, so stepping walks the drafts
+     first, then the whole filtered list, turning the page when it has to. */
   const [selectedId, setSelectedId] = useState<string | null>(() => {
-    const id = searchParams.get("match");
-    return id && serverMatches.some((m) => m.id === id) ? id : null;
+    const matchId = searchParams.get("match");
+    if (matchId && serverMatches.some((m) => m.id === matchId)) return matchId;
+    const draftId = searchParams.get("draft");
+    return draftId && drafts.some((d) => d.id === draftId) ? draftId : null;
   });
   const [drawerId, setDrawerId] = useState<string | null>(selectedId);
   const [closing, setClosing] = useState(false);
   const [openedByKeyboard, setOpenedByKeyboard] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const drawerIndex = drawerId
-    ? sorted.findIndex((m) => m.id === drawerId)
+  const drawerDraftIndex = drawerId
+    ? drafts.findIndex((d) => d.id === drawerId)
     : -1;
+  const drawerDraft = drawerDraftIndex >= 0 ? drafts[drawerDraftIndex] : null;
+  const drawerIndex =
+    drawerId && !drawerDraft ? sorted.findIndex((m) => m.id === drawerId) : -1;
   const drawerMatch = drawerIndex >= 0 ? sorted[drawerIndex] : null;
+  // Stepping order: drafts, then matches. A row's place in it decides whether
+  // ↑ and ↓ have anywhere to go.
+  const drawerPosition = drawerDraft
+    ? drawerDraftIndex
+    : drawerMatch
+      ? drafts.length + drawerIndex
+      : -1;
+  const rowCount = drafts.length + sorted.length;
 
-  // A match that left the list — deleted, or cut by a filter — takes the
-  // drawer with it rather than leaving it open on a row nobody can see.
-  if (drawerId && !drawerMatch) {
+  // A record that left the list — deleted, discarded, or cut by a filter —
+  // takes the drawer with it rather than leaving it open on a row nobody sees.
+  if (drawerId && !drawerMatch && !drawerDraft) {
     setSelectedId(null);
     setDrawerId(null);
     setClosing(false);
@@ -709,17 +724,14 @@ export function MatchesPageContent({
     setClosing(false);
   }, []);
 
-  const selectMatch = useCallback(
-    (match: DisplayMatch, viaKeyboard: boolean) => {
-      if (closeTimer.current) clearTimeout(closeTimer.current);
-      closeTimer.current = null;
-      setClosing(false);
-      setSelectedId(match.id);
-      setDrawerId(match.id);
-      setOpenedByKeyboard(viaKeyboard);
-    },
-    [],
-  );
+  const selectRow = useCallback((id: string, viaKeyboard: boolean) => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+    setClosing(false);
+    setSelectedId(id);
+    setDrawerId(id);
+    setOpenedByKeyboard(viaKeyboard);
+  }, []);
 
   const closeDrawer = useCallback(
     (returnFocusTo: string | null) => {
@@ -735,29 +747,40 @@ export function MatchesPageContent({
     [finishClose],
   );
 
-  const toggleMatch = useCallback(
-    (match: DisplayMatch, viaKeyboard: boolean) => {
-      if (selectedId === match.id) closeDrawer(viaKeyboard ? match.id : null);
-      else selectMatch(match, viaKeyboard);
+  const toggleRow = useCallback(
+    (id: string, viaKeyboard: boolean) => {
+      if (selectedId === id) closeDrawer(viaKeyboard ? id : null);
+      else selectRow(id, viaKeyboard);
     },
-    [selectedId, selectMatch, closeDrawer],
+    [selectedId, selectRow, closeDrawer],
   );
 
-  const stepMatch = useCallback(
+  const stepRow = useCallback(
     (direction: 1 | -1) => {
       if (!selectedId) return;
-      const index = sorted.findIndex((m) => m.id === selectedId);
-      const next = sorted[index + direction];
-      if (!next) return;
-      setPage(Math.floor((index + direction) / PAGE_SIZE) + 1);
-      selectMatch(next, true);
+      const draftAt = drafts.findIndex((d) => d.id === selectedId);
+      const position =
+        draftAt >= 0
+          ? draftAt
+          : drafts.length + sorted.findIndex((m) => m.id === selectedId);
+      const target = position + direction;
+      if (target < 0 || target >= drafts.length + sorted.length) return;
+      let nextId: string;
+      if (target < drafts.length) {
+        nextId = drafts[target].id;
+      } else {
+        const matchAt = target - drafts.length;
+        nextId = sorted[matchAt].id;
+        setPage(Math.floor(matchAt / PAGE_SIZE) + 1);
+      }
+      selectRow(nextId, true);
       requestAnimationFrame(() => {
         document
-          .getElementById(matchRowId(next.id))
+          .getElementById(matchRowId(nextId))
           ?.scrollIntoView({ block: "nearest" });
       });
     },
-    [sorted, selectedId, selectMatch],
+    [drafts, sorted, selectedId, selectRow],
   );
 
   useEffect(() => {
@@ -797,16 +820,16 @@ export function MatchesPageContent({
         closeDrawer(selectedId);
       } else if (event.key === "ArrowDown") {
         event.preventDefault();
-        stepMatch(1);
+        stepRow(1);
       } else if (event.key === "ArrowUp") {
         event.preventDefault();
-        stepMatch(-1);
+        stepRow(-1);
       }
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedId, closeDrawer, stepMatch]);
+  }, [selectedId, closeDrawer, stepRow]);
 
   // The rail renders beside the page column, not inside it, so the table
   // reflows the way the Roster's does. The page draws the slot; this reads it
@@ -836,7 +859,10 @@ export function MatchesPageContent({
     if (page > 1) params.set("page", String(page));
     if (lifecycle !== "all") params.set("lifecycle", lifecycle);
     for (const f of filters) params.append(f.key, f.value);
-    if (selectedId) params.set("match", selectedId);
+    if (selectedId) {
+      const isDraft = drafts.some((d) => d.id === selectedId);
+      params.set(isDraft ? "draft" : "match", selectedId);
+    }
     const query = params.toString();
     window.history.replaceState(
       null,
@@ -851,6 +877,7 @@ export function MatchesPageContent({
     filters,
     lifecycle,
     selectedId,
+    drafts,
     pathname,
   ]);
 
@@ -981,7 +1008,7 @@ export function MatchesPageContent({
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-[18px]">
       {/* Toolbar — the view pills left; Filters and the sort right. Nothing
           else lives in this row (19g). Wraps on medium screens. */}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
@@ -1082,10 +1109,30 @@ export function MatchesPageContent({
           newMatchId={newMatchId}
           unseenIds={unseenIds}
           selectedId={selectedId}
-          onToggle={toggleMatch}
-          drawerOpen={drawerMatch !== null}
+          onToggle={toggleRow}
+          drawerOpen={drawerMatch !== null || drawerDraft !== null}
         />
       )}
+
+      {drawerSlot &&
+        drawerDraft &&
+        createPortal(
+          <DraftDrawer
+            draft={drawerDraft}
+            scope={scope}
+            index={drawerDraftIndex}
+            total={drafts.length}
+            canPrev={drawerPosition > 0}
+            canNext={drawerPosition < rowCount - 1}
+            closing={closing}
+            autoFocus={openedByKeyboard}
+            onPrev={() => stepRow(-1)}
+            onNext={() => stepRow(1)}
+            onClose={() => closeDrawer(drawerDraft.id)}
+            onClosed={finishClose}
+          />,
+          drawerSlot,
+        )}
 
       {drawerSlot &&
         drawerMatch &&
@@ -1095,10 +1142,12 @@ export function MatchesPageContent({
             scope={scope}
             index={drawerIndex}
             total={sorted.length}
+            canPrev={drawerPosition > 0}
+            canNext={drawerPosition < rowCount - 1}
             closing={closing}
             autoFocus={openedByKeyboard}
-            onPrev={() => stepMatch(-1)}
-            onNext={() => stepMatch(1)}
+            onPrev={() => stepRow(-1)}
+            onNext={() => stepRow(1)}
             onClose={() => closeDrawer(drawerMatch.id)}
             onClosed={finishClose}
           />,
