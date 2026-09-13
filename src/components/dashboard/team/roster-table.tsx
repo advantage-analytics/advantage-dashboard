@@ -560,7 +560,7 @@ function MemberRow({
 
       <Record wins={member.wins} losses={member.losses} />
       <span className={cn(COL.form, "flex items-center gap-[3px]")}>
-        <FormTicks form={member.form} />
+        <FormTicks form={member.form} slots={5} />
       </span>
       <LastMatchCell member={member} />
     </Reorder.Item>

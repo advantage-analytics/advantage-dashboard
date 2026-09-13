@@ -173,8 +173,12 @@ export interface RosterMember {
    */
   wins: number;
   losses: number;
-  /** The last five results, oldest first. Unscored matches are left out. */
-  form: ("win" | "loss")[];
+  /**
+   * The last five matches, oldest first. An unscored one — no winner yet —
+   * is `"pending"` rather than left out, so its slot in the strip lines up
+   * with the same match's "Analyzing"/"Review score" token in `lastMatch`.
+   */
+  form: ("win" | "loss" | "pending")[];
   lastMatch: RosterMatch | null;
   /** Newest first, at most `DRAWER_WINDOW`. What the drawer reads. */
   recent: RosterRecentMatch[];
@@ -530,11 +534,20 @@ export const getRosterData = cache(async function getRosterData(
       wins,
       losses,
       // Reversed so the strip reads left to right in the order the season was
-      // played, which is how a coach reads a run of results out loud.
-      form: decided
+      // played, which is how a coach reads a run of results out loud. Windowed
+      // over `results`, not `decided` — an unscored match still takes its slot
+      // in the strip (as `"pending"`), rather than vanishing and letting an
+      // older, already-settled match slide in to replace it.
+      form: results
         .slice(0, FORM_WINDOW)
         .reverse()
-        .map((r) => (r.won ? ("win" as const) : ("loss" as const))),
+        .map((r) =>
+          r.won === null
+            ? ("pending" as const)
+            : r.won
+              ? ("win" as const)
+              : ("loss" as const),
+        ),
       lastMatch: latest
         ? {
             opponent: shortName(
