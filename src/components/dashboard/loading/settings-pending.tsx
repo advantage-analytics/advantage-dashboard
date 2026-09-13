@@ -733,6 +733,9 @@ export function SettingsTeamDetailPending() {
   const name = program?.name ?? "Program name";
   const squad = program?.team === "womens" ? "Women's tennis" : "Men's tennis";
   const lockedHint = `Ask ${SAMPLE.personName}, the owner, to change it.`;
+  // A college owner picks Conference from the directory (a 34px select); a
+  // club or high school, with no directory, types it (a 32px input).
+  const conferenceIsSelect = isOwner && program?.orgType === "college";
 
   return (
     <Column label="Loading team">
@@ -804,7 +807,7 @@ export function SettingsTeamDetailPending() {
             <Field
               label="Conference"
               value={SAMPLE.conference}
-              height={32}
+              height={conferenceIsSelect ? 34 : 32}
               hint={isOwner ? undefined : lockedHint}
             />
             <Field label="Season" value={SAMPLE.season} height={32} />

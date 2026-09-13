@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { getTeamSettings } from "@/lib/data/team-settings-server";
+import {
+  getConferenceOptions,
+  getTeamSettings,
+} from "@/lib/data/team-settings-server";
 import { getProgramUsage } from "@/lib/data/usage-server";
 import {
   crestUrl,
@@ -45,11 +48,19 @@ export default async function TeamPage({
   ]);
   if (!data) redirect("/dashboard/settings/teams");
 
+  // Only the owner edits Conference, and the list depends on the division the
+  // read above just returned — so it follows that read rather than joining it.
+  const conferenceOptions =
+    program.role === "owner"
+      ? await getConferenceOptions(program.orgType, data.program.division)
+      : [];
+
   return (
     <TeamDetail
       programId={programId}
       data={data}
       crestUrl={await crestUrl(data.program.crestPath)}
+      conferenceOptions={conferenceOptions}
       usage={usage}
       pendingSeconds={pendingSeconds}
       seats={seats}

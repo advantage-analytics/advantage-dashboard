@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
-import type { EventsPolicy, UploadPolicy } from "@/lib/workspace/types";
+import type {
+  EventsPolicy,
+  ProgramOrgType,
+  UploadPolicy,
+} from "@/lib/workspace/types";
 
 /**
  * What Settings › Team reads.
@@ -37,6 +41,8 @@ export interface TeamIdentity {
   schoolName: string;
   team: "mens" | "womens";
   conference: string | null;
+  /** `programs.division` — D1, D2, D3, JUCO, NAIA; null for a custom org. */
+  division: string | null;
   homeVenue: string | null;
   defaultSurface: string | null;
   season: string | null;
@@ -84,7 +90,7 @@ export async function getTeamSettings(
       supabase
         .from("programs")
         .select(
-          "id, school_name, team, conference, home_venue, default_surface, season, players_can_upload, upload_policy, events_policy, time_zone, crest_path",
+          "id, school_name, team, conference, division, home_venue, default_surface, season, players_can_upload, upload_policy, events_policy, time_zone, crest_path",
         )
         .eq("id", programId)
         .maybeSingle(),
@@ -149,6 +155,7 @@ export async function getTeamSettings(
       schoolName: row.school_name,
       team: row.team === "womens" ? "womens" : "mens",
       conference: row.conference,
+      division: row.division ?? null,
       homeVenue: row.home_venue,
       defaultSurface: row.default_surface,
       season: row.season,
@@ -162,4 +169,51 @@ export async function getTeamSettings(
     invites,
     ownerName: members.find((member) => member.role === "owner")?.name ?? null,
   };
+}
+
+/**
+ * The conferences of one division, read off the program directory itself.
+ *
+ * Conference is a join key, not a label: `getConferenceTable` and the dual-meet
+ * wizard match other programs on the exact string, so a hand-typed "Pac 12"
+ * beside the directory's "Pac-12" empties Opponents without an error. Offering
+ * only names the directory already uses is what keeps that match honest.
+ *
+ * `programs` is publicly readable, and the largest division is ~640 rows of
+ * one column — well under the API's row cap — so distinct-ing here is cheaper
+ * than a view nobody else needs. Its own loader, not part of `getTeamSettings`,
+ * because only the owner's form reads it and the schedule pages share that one.
+ */
+export async function getConferenceOptions(
+  orgType: ProgramOrgType | null,
+  division: string | null,
+): Promise<string[]> {
+  // A club or high school has no directory to pick from, and the form keeps
+  // its free-text field.
+  if (orgType !== "college") return [];
+
+  const supabase = await createClient();
+  let query = supabase
+    .from("programs")
+    .select("conference")
+    .not("conference", "is", null);
+  // A college with no division is a gap in its row, not a different kind of
+  // program — it still picks from the directory, just from every division.
+  // The whole directory is ~1,940 rows, still under the API's row cap.
+  if (division) query = query.eq("division", division);
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("[team settings] could not read conferences", {
+      error: error.message,
+    });
+    return [];
+  }
+
+  const names = new Set<string>();
+  for (const { conference } of data as { conference: string }[]) {
+    const name = conference.trim();
+    if (name) names.add(name);
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
 }

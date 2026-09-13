@@ -43,6 +43,7 @@ export function TeamDetail({
   programId,
   data,
   crestUrl,
+  conferenceOptions,
   usage,
   pendingSeconds,
   seats,
@@ -53,6 +54,8 @@ export function TeamDetail({
 }: {
   programId: string;
   data: TeamSettingsData;
+  /** The division's conferences, for the owner's picker; empty otherwise. */
+  conferenceOptions: string[];
   crestUrl: string | null;
   usage: ProgramUsage;
   pendingSeconds: number;
@@ -133,6 +136,8 @@ export function TeamDetail({
         canEdit={isStaff}
         isOwner={isOwner}
         ownerName={data.ownerName}
+        division={data.program.division}
+        conferenceOptions={conferenceOptions}
         onCrestError={setError}
       />
 

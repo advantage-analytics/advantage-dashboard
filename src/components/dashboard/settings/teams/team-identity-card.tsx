@@ -9,6 +9,7 @@ import {
 import { MenuSelect } from "@/components/ui/menu-select";
 import { CrestControl } from "@/components/dashboard/settings/teams/crest-control";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
+import { ConferenceSelect } from "@/components/dashboard/settings/teams/conference-select";
 import type { IdentityDraft } from "@/components/dashboard/settings/teams/types";
 
 export const SQUAD_OPTIONS = [
@@ -47,6 +48,8 @@ export function TeamIdentityCard({
   canEdit,
   isOwner,
   ownerName,
+  division,
+  conferenceOptions,
   onCrestError,
 }: {
   programId: string;
@@ -60,6 +63,14 @@ export function TeamIdentityCard({
   canEdit: boolean;
   isOwner: boolean;
   ownerName: string | null;
+  /** The program's division — names the picker's list. */
+  division: string | null;
+  /**
+   * The directory's conferences — the division's, or every division's for a
+   * college with none on file. Non-empty turns Conference into a picker;
+   * empty (a club or high school, with no directory) keeps the text field.
+   */
+  conferenceOptions: readonly string[];
   onCrestError: (message: string | null) => void;
 }) {
   if (!canEdit) {
@@ -148,7 +159,16 @@ export function TeamIdentityCard({
           />
         </SettingsField>
 
-        {isOwner ? (
+        {isOwner && conferenceOptions.length > 0 ? (
+          <SettingsField label="Conference">
+            <ConferenceSelect
+              value={draft.conference}
+              options={conferenceOptions}
+              division={division}
+              onChange={(value) => onChange("conference", value)}
+            />
+          </SettingsField>
+        ) : isOwner ? (
           <TextField
             label="Conference"
             value={draft.conference}
