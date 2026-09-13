@@ -14,6 +14,7 @@ import { MatchesPageContent } from "@/components/dashboard/matches/matches-page-
 import { MatchesTitleRow } from "@/components/dashboard/matches/matches-title-row";
 import { MatchesDayZero } from "@/components/dashboard/matches/matches-day-zero";
 import { MatchesSkeleton } from "@/components/dashboard/matches/matches-skeleton";
+import { matchesListShape } from "@/components/dashboard/matches/match-list-layout";
 import { MatchDrawerSlot } from "@/components/dashboard/matches/match-drawer-slot";
 import { listMatchDrafts } from "@/lib/wizard/actions";
 
@@ -104,6 +105,11 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   const scope = isTeam ? "team" : "personal";
   const canUpload = !isTeam || canUploadForProgram(workspace.active);
   const scopeKey = `${user.id}:${workspace.active.id}`;
+  // Counted already, so the fallback draws the first page at its real size.
+  const shape = matchesListShape(
+    matches.map((m) => m.date),
+    drafts.map((d) => d.updatedAt),
+  );
   // A row: the page column, then the slot the match drawer portals into — so
   // the rail sits beside the column and the table reflows, as on the Roster.
   return (
@@ -121,7 +127,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
           </Suspense>
         </WidgetBoundary>
         <WidgetBoundary key={scopeKey} label="Matches">
-          <Suspense fallback={<MatchesSkeleton />}>
+          <Suspense fallback={<MatchesSkeleton scope={scope} shape={shape} />}>
             <MatchesResolvedContent
               enriched={enriched}
               drafts={drafts}

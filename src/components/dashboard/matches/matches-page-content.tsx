@@ -42,6 +42,9 @@ import {
   type FilterPanelSection,
 } from "./matches-filter-panel";
 import { LifecycleChips, type LifecycleValue } from "./lifecycle-chips";
+import { MATCHES_PAGE_SIZE, matchesListShape } from "./match-list-layout";
+import { rememberMatchesShape } from "./matches-shape-memory";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 
 function providerName(id: string): string {
   return providers.find((p) => p.id === id)?.name ?? id;
@@ -272,12 +275,7 @@ const FILTER_GROUPS: {
   },
 ];
 
-/**
- * Ten rows a page. The frame's footer is a range and one quiet "Older matches"
- * link (Platform Audit Pb2) — no page-size control, so the size is a constant
- * rather than a preference.
- */
-const PAGE_SIZE = 10;
+const PAGE_SIZE = MATCHES_PAGE_SIZE;
 
 /* ─── Sort dropdown ─── */
 const SORT_OPTIONS: { field: SortField; label: string }[] = [
@@ -468,6 +466,19 @@ export function MatchesPageContent({
 }: MatchesPageContentProps): React.JSX.Element {
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  const workspaceId = useWorkspace().active.id;
+
+  // Teach the route's loading boundary this workspace's first page, so the next
+  // client-side visit draws its skeleton at the size the rows will arrive at.
+  useEffect(() => {
+    rememberMatchesShape(
+      workspaceId,
+      matchesListShape(
+        serverMatches.map((m) => m.date),
+        drafts.map((d) => d.updatedAt),
+      ),
+    );
+  }, [workspaceId, serverMatches, drafts]);
 
   // Live job state, merged over what the server rendered. Without this the bar
   // is a snapshot from page load — a long upload appears frozen, and a job that

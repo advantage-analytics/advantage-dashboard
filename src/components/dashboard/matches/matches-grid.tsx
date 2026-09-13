@@ -10,6 +10,7 @@ import {
   DATE_COL,
   DATE_COL_WITH_YEAR,
   LIST_ROW_FRAME,
+  listColumnLabels,
   listGridCols,
   LIST_MIN_WIDTH,
   LIST_TRACK_TRANSITION,
@@ -37,24 +38,6 @@ interface MatchesGridProps {
   onToggle?: (id: string, viaKeyboard: boolean) => void;
   /** The drawer is open (or closing) beside the table. */
   drawerOpen?: boolean;
-}
-
-/**
- * One header per row column, in `match-list-layout.ts`'s order, every one flush
- * left over its value — the Result glyph included, never centred.
- *
- * Plain eyebrows, no sort buttons: sorting lives in the toolbar's one sort
- * control. The last track — lifecycle — heads nothing and
- * carries an empty label to keep the header's column count in step with the
- * row's.
- */
-function columnsFor(scope: "personal" | "team"): string[] {
-  if (scope === "personal") {
-    return ["Date", "Opponent", "Result", "Score", "Event", ""];
-  }
-  // Event stays in the team header beside the drawer: its track collapses and
-  // the label fades with the cells under it (`TEAM_LIST_GRID_COLS_COMPACT`).
-  return ["Date", "Player", "Opponent", "Result", "Score", "Event", ""];
 }
 
 export function MatchesGrid({
@@ -138,7 +121,7 @@ export function MatchesGrid({
               style={listGridCols(scope, compact)}
               role="row"
             >
-              {columnsFor(scope).map((label, i) => (
+              {listColumnLabels(scope).map((label, i) => (
                 <span
                   key={label || `col-${i}`}
                   aria-hidden={
