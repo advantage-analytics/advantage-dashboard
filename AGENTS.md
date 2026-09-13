@@ -174,6 +174,10 @@ this branch's queue, then stop.`
 
 ## Conventions
 
+- **Every branch and PR targets `splitstep-integration`**, never `main`. `main` is
+  production and only ever takes `splitstep-integration` whole; the `base-guard` check
+  fails any other PR into it. If a tool reports `main` as the default branch, the clone's
+  `origin/HEAD` is stale: `git remote set-head origin splitstep-integration`.
 - `MAP.md` is generated — run `npm run map` after adding a route, or `npm test` fails.
 - Never hand-format `supabase/migrations/` or `src/styles/design-system/colors.css`.
   `.prettierignore` documents every exclusion and why.
