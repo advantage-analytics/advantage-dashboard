@@ -218,16 +218,18 @@ export function SettingsField({
  * The underline input itself. Separate from `SettingsField` because the Team
  * page pairs the same rule with a `<select>`, and a wrapper that owned the
  * input could not do that.
+ *
+ * The rule is blue only while the field has focus. There is deliberately no
+ * way to hold it blue at rest: an empty required field wearing the focus rule
+ * reads as already selected, and the asterisk on the caption is what says
+ * the field is needed.
  */
 export function SettingsUnderlineInput({
   mono,
-  emphasis,
   className,
   ...props
 }: React.InputHTMLAttributes<HTMLInputElement> & {
   mono?: boolean;
-  /** Swap the hairline for a 2px blue rule — a field the page is asking for. */
-  emphasis?: boolean;
 }) {
   return (
     <input
@@ -235,9 +237,7 @@ export function SettingsUnderlineInput({
       className={cn(
         "h-[34px] bg-transparent text-[13px] text-[var(--ink-900)] transition-colors outline-none",
         "placeholder:text-[var(--ink-400)] focus:border-b-2 focus:border-[var(--blue)]",
-        emphasis
-          ? "border-b-2 border-[var(--blue)]"
-          : "border-b border-[var(--border-field)]",
+        "border-b border-[var(--border-field)]",
         mono && "mono",
         className,
       )}

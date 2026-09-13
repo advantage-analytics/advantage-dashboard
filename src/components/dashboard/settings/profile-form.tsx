@@ -364,17 +364,14 @@ function ProfileField({
       required={missing}
     >
       {isDate ? (
-        // `emphasis` is the same prop name `SettingsUnderlineInput` takes
-        // below, and means the same thing: draw the rule 2px blue at rest
-        // because the page is asking for this field. The two branches stay
-        // visually identical, and neither restyles the other's internals.
+        // A missing field is marked by the caption's asterisk, not by the
+        // rule: blue belongs to the field that has focus.
         <DateField
           label={label}
           variant="underline"
           value={value}
           onChange={onChange}
           max={maxDate}
-          emphasis={missing}
         />
       ) : (
         <SettingsUnderlineInput
@@ -382,7 +379,6 @@ function ProfileField({
           value={value}
           placeholder={placeholder}
           mono={mono}
-          emphasis={missing}
           onChange={(event) => onChange(event.target.value)}
         />
       )}

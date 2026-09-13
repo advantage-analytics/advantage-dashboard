@@ -549,7 +549,6 @@ export function RosterInviteDialog({
               aria-required
               inputMode="email"
               value={email}
-              emphasis={!linked}
               placeholder={listed ? "Add another" : "name@school.edu"}
               onChange={(event) => {
                 // A linked invitation is one address by definition, so the
