@@ -119,11 +119,14 @@ export default async function TeamHomePage() {
       isPreview={isDayZero}
     />,
   );
+  const setupLine = isStaff
+    ? region("Getting set up", null, <Setup resources={resources} />)
+    : null;
 
   if (isDayZero) {
     return (
-      <div className="w-full flex-1 bg-[var(--surface-card)]">
-        <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4 px-14 pt-5 pb-8">
+      <div className="flex w-full flex-1 flex-col bg-[var(--surface-card)]">
+        <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col gap-4 px-14 pt-5 pb-8">
           <TeamDayZeroHome canManage={isStaff}>
             <TeamHomeRegions
               kpis={kpis}
@@ -147,6 +150,7 @@ export default async function TeamHomePage() {
         <TeamTitlePending action={action} />,
         <Title resources={resources} action={action} />,
       )}
+      setupLine={setupLine}
       kpis={kpis}
       dual={dual}
       movers={movers}
@@ -156,7 +160,7 @@ export default async function TeamHomePage() {
       footer={region(
         "Team usage",
         <HomeFooterPending />,
-        <Footer resources={resources} isStaff={isStaff} />,
+        <Footer resources={resources} />,
       )}
     />
   );
@@ -307,27 +311,16 @@ async function Insight({
     </FocusCard>
   ) : null;
 }
-async function Footer({
-  resources,
-  isStaff,
-}: {
-  resources: Resources;
-  isStaff: boolean;
-}) {
+async function Footer({ resources }: { resources: Resources }) {
   const usage = await resources.usage;
   return (
-    <>
-      <Suspense fallback={null}>
-        {isStaff && <Setup resources={resources} />}
-      </Suspense>
-      <UsageFooter
-        usedSeconds={usage.usedSeconds}
-        capSeconds={usage.capSeconds}
-        billingMonth={usage.billingMonth}
-        dualWeekends
-        note="free through Dec 31, 2026"
-      />
-    </>
+    <UsageFooter
+      usedSeconds={usage.usedSeconds}
+      capSeconds={usage.capSeconds}
+      billingMonth={usage.billingMonth}
+      dualWeekends
+      note="free through Dec 31, 2026"
+    />
   );
 }
 async function Setup({ resources }: { resources: Resources }) {
