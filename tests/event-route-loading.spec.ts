@@ -50,12 +50,15 @@ for (const leaf of ["edit", "score"]) {
                         id: "program-a",
                         kind: scenario === "personal" ? "personal" : "team",
                         role: scenario === "staff" ? "coach" : "player",
+                        eventsPolicy: "staff",
                       },
                     },
             };
           if (id === "@/lib/workspace/types")
             return {
               isProgramStaff: (workspace: { role: string }) =>
+                workspace.role === "coach",
+              canManageTeamSchedule: (workspace: { role: string }) =>
                 workspace.role === "coach",
             };
           if (id === "@/lib/data/schedule-server")

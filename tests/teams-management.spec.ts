@@ -146,16 +146,25 @@ test.describe("Settings › Teams — owner gate, transfer, one owner (live)", (
 
   // ── update_program_settings ───────────────────────────────────────────────
 
-  test("a coach may change the venue, and an unchanged re-send is not a rename", async () => {
-    // The roster's upload switch sends the current row back with the flag
-    // flipped, and the fixture's conference is NULL — the case where a naive
-    // `<>` comparison against '' would have refused a coach.
+  test("a coach may resend unchanged settings and change the venue, but not the upload policy", async () => {
+    // The roster used to send the current row back with the upload flag
+    // flipped; that path is now owner-only (`upload_policy_owner_only`), so
+    // the regression this test originally guarded — the fixture's conference
+    // is NULL, the case where a naive `<>` comparison against '' would have
+    // refused a coach on an unrelated field — is exercised here by resending
+    // the settings completely unchanged instead.
     const unchanged = await currentSettings();
+    const resend = await coach.client.rpc("update_program_settings", unchanged);
+    expect(resend.error).toBeNull();
+
+    // A coach flipping the upload policy is exactly what `upload_policy_owner_only`
+    // exists to refuse — a coach who could change it could lift an owner-only
+    // upload rule off themselves.
     const flip = await coach.client.rpc("update_program_settings", {
       ...unchanged,
       p_players_can_upload: !unchanged.p_players_can_upload,
     });
-    expect(flip.error).toBeNull();
+    expect(flip.error?.code).toBe(INSUFFICIENT_PRIVILEGE);
 
     const venue = await coach.client.rpc("update_program_settings", {
       ...(await currentSettings()),
@@ -249,8 +258,10 @@ test.describe("Settings › Teams — owner gate, transfer, one owner (live)", (
     });
 
     // Eight arguments: the roster's switch sends only the boolean. Off leaves
-    // a tighter policy alone; on opens it all the way.
-    const switchOff = await coach.client.rpc("update_program_settings", {
+    // a tighter policy alone; on opens it all the way. Owner-only per
+    // `upload_policy_owner_only` — the ladder derivation under test here is
+    // orthogonal to who may trigger it, so the actor is the owner throughout.
+    const switchOff = await owner.client.rpc("update_program_settings", {
       ...(await currentSettings()),
       p_players_can_upload: false,
     });
@@ -262,7 +273,7 @@ test.describe("Settings › Teams — owner gate, transfer, one owner (live)", (
       .single();
     expect(row.data?.upload_policy).toBe("owner_coaches");
 
-    const switchOn = await coach.client.rpc("update_program_settings", {
+    const switchOn = await owner.client.rpc("update_program_settings", {
       ...(await currentSettings()),
       p_players_can_upload: true,
     });
@@ -278,7 +289,7 @@ test.describe("Settings › Teams — owner gate, transfer, one owner (live)", (
     });
 
     // And off again from `everyone` narrows to staff, not to nothing.
-    const narrow = await coach.client.rpc("update_program_settings", {
+    const narrow = await owner.client.rpc("update_program_settings", {
       ...(await currentSettings()),
       p_players_can_upload: false,
     });
