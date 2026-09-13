@@ -70,7 +70,7 @@ ready).
 
 ## T6 · Stop a malformed auth cookie from crashing the session-refresh proxy
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** src/lib/supabase/middleware.ts (the bare `await supabase.auth.getClaims();` at line 58 inside `updateSession`), tests/ (new node-only spec, e.g. `tests/session-refresh-bad-cookie.spec.ts`), src/proxy.ts (reference only — should not need to change)
 - **done when:**
