@@ -1,0 +1,31 @@
+# Only splitstep-integration may be merged into main.
+#
+# Every feature PR targets splitstep-integration. `main` is what Vercel serves
+# in production and takes the integration branch whole, once, when it lands.
+# PR #201 went to main by mistake (a clone's stale origin/HEAD told the agent
+# `main` was the PR base), dragged ~1200 integration commits in with it, and
+# needed a revert plus a force-push to undo.
+#
+# The `main` ruleset requires this check, so a PR into main from any other
+# branch cannot merge. On a PR into any other base it passes immediately.
+name: Base guard
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+
+jobs:
+  base-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: PRs into main must come from splitstep-integration
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          if [ "$BASE" = "main" ] && [ "$HEAD" != "splitstep-integration" ]; then
+            echo "::error::PRs into main must come from splitstep-integration, not '$HEAD'. Retarget this PR to splitstep-integration."
+            exit 1
+          fi
+          echo "ok: $HEAD -> $BASE"
