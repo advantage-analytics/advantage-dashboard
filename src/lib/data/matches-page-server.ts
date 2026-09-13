@@ -9,6 +9,7 @@ import {
   type DisplayMatch,
   transformDbMatch,
 } from "@/lib/data/matches-list-types";
+import { canonicalRosterIds, type RosterIdRow } from "@/lib/data/roster-ids";
 
 export async function enrichMatches(
   supabase: SupabaseClient,
@@ -82,4 +83,32 @@ export async function enrichMatches(
       return display;
     })
     .filter((m): m is DisplayMatch => m !== null);
+}
+
+/**
+ * Each match's player resolved to their profile on this team's roster, so the
+ * team table can link the name. Both of a claimed player's ids fold onto the
+ * one profile (`canonicalRosterIds`); an id the roster no longer holds — an
+ * archived player, whose matches keep their old id — resolves to null rather
+ * than to a link that 404s. A failed roster read links nobody.
+ */
+export async function withRosterProfiles(
+  supabase: SupabaseClient,
+  programId: string,
+  matches: Promise<DisplayMatch[]>,
+): Promise<DisplayMatch[]> {
+  const [list, roster] = await Promise.all([
+    matches,
+    supabase.rpc("program_roster_full", { p_program_id: programId }),
+  ]);
+  const canonical = canonicalRosterIds((roster.data ?? []) as RosterIdRow[]);
+  return list.map((match) => ({
+    ...match,
+    player1: {
+      ...match.player1,
+      profileId: match.player1.id
+        ? (canonical.get(match.player1.id) ?? null)
+        : null,
+    },
+  }));
 }

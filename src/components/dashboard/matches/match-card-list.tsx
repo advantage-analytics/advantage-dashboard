@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   LIST_ROW_FRAME,
@@ -15,6 +16,7 @@ import { NewPill } from "@/components/ui/new-pill";
 import { PlayerMark } from "@/components/ui/player-mark";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { RowLifecycle } from "./row-state";
+import { profileHref } from "@/components/dashboard/team/roster-table";
 import { cn } from "@/lib/utils";
 
 /**
@@ -163,9 +165,20 @@ export function MatchCardList({
             name={match.player1.name}
             viewer={isViewerRow ? viewer : null}
           />
-          <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
-            {match.player1.name}
-          </span>
+          {match.player1.profileId ? (
+            <Link
+              href={profileHref(match.player1.profileId)}
+              // The row opens the drawer; the name goes to the player.
+              onClick={(event) => event.stopPropagation()}
+              className="min-w-0 truncate rounded-[var(--radius-cell)] text-[13px] font-medium text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+            >
+              {match.player1.name}
+            </Link>
+          ) : (
+            <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
+              {match.player1.name}
+            </span>
+          )}
         </span>
       )}
 

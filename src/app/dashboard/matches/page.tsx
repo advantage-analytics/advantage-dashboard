@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
-import { enrichMatches } from "@/lib/data/matches-page-server";
+import {
+  enrichMatches,
+  withRosterProfiles,
+} from "@/lib/data/matches-page-server";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
@@ -101,7 +104,13 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
 
   // Start the slower reads once. Title counts and the list share their result;
   // the frame no longer waits for opponent profiles and analysis reconciliation.
-  const enriched = enrichMatches(supabase, rows, user);
+  const enriched = isTeam
+    ? withRosterProfiles(
+        supabase,
+        workspace.active.id,
+        enrichMatches(supabase, rows, user),
+      )
+    : enrichMatches(supabase, rows, user);
   const scope = isTeam ? "team" : "personal";
   const canUpload = !isTeam || canUploadForProgram(workspace.active);
   const scopeKey = `${user.id}:${workspace.active.id}`;
