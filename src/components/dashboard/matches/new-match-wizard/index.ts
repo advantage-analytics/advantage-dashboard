@@ -9,6 +9,28 @@
 // Main component
 export { UploadMatchFlow } from "./UploadMatchFlow";
 
+// The wizard page's context, and the pieces composed into the shell from it.
+// `UploadMatchFlow` is the one consumer today; a second flow that wants the
+// same state with a different page would compose these itself.
+export { UploadWizardProvider, useUploadWizard } from "./UploadWizardProvider";
+export type {
+  UploadWizardContextValue,
+  UploadWizardProviderProps,
+} from "./UploadWizardProvider";
+export {
+  DraftNotices,
+  ProviderStep,
+  FileStep,
+  TrimStep,
+  MatchStep,
+} from "./UploadWizardSteps";
+export {
+  WizardQuotaMeter,
+  WizardFooterStatus,
+  SaveDraftButton,
+} from "./UploadWizardFooter";
+export { UploadMatchSuccess } from "./UploadMatchSuccess";
+
 // Shell components
 export { StepIndicator } from "./StepIndicator";
 export { WizardShell, CONTENT_CLS } from "./WizardShell";

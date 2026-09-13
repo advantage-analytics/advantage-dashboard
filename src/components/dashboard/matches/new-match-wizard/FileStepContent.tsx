@@ -255,8 +255,8 @@ function FoundInExport({ formData }: { formData: FormData }) {
     formData.adScoring === undefined
       ? null
       : formData.adScoring
-        ? "Ad scoring"
-        : "No-ad scoring",
+        ? "Ad Scoring"
+        : "No-Ad Scoring",
   ].filter(Boolean);
   const durationSeconds = (formData.duration ?? 0) / 1000;
 

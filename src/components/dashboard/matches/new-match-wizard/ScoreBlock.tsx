@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { scoreColumns } from "./score-state";
 import type { FormData } from "./types";
 import { setHasData } from "./utils";
 
@@ -44,6 +45,8 @@ export const ScoreInput = ({
   label,
   tiebreak = false,
   invalid = false,
+  onEnter,
+  set,
 }: {
   value: number | null;
   onValue: (v: string) => void;
@@ -51,17 +54,30 @@ export const ScoreInput = ({
   label: string;
   tiebreak?: boolean;
   invalid?: boolean;
+  /** Called on Enter; the keypress is always prevented so no form submits. */
+  onEnter?: () => void;
+  /** Zero-based set index, so a caller can find one set's cells in the DOM. */
+  set?: number;
 }) => (
   <input
     ref={inputRef}
     type="text"
     inputMode="numeric"
+    data-set={set}
     maxLength={tiebreak ? 3 : 2}
     aria-label={label}
     aria-invalid={invalid || undefined}
     value={value === null ? "" : String(value)}
     onChange={(e) => onValue(e.target.value.replace(/[^0-9]/g, ""))}
     onFocus={(e) => e.currentTarget.select()}
+    onKeyDown={
+      onEnter &&
+      ((e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        onEnter();
+      })
+    }
     data-focus-ring="none"
     className={cn(
       CELL_CLS,
@@ -92,7 +108,7 @@ export function ScoreBlock({
   >;
   playerName: string;
   opponentName: string;
-  /** "Best of 3 · no-ad" when a line declared the format. */
+  /** "Best of 3 · No-Ad" when a line declared the format. */
   fromLine: boolean;
   onScoreChange: (
     player: "player" | "opponent",
@@ -112,10 +128,16 @@ export function ScoreBlock({
   for (let i = 0; i < bestOf; i++) {
     if (setHasData(formData, i)) filled = i + 1;
   }
-  // Two columns to start, one more than is filled after that, never past the
-  // format. The dashed column after the last is how a set gets added.
-  const displayed = Math.min(bestOf, Math.max(2, filled + 1));
-  const ghost = displayed < bestOf;
+  // Columns follow the match: two to start, one more once every set so far
+  // is finished, and none once someone has won it (`scoreColumns`). The dashed
+  // column after the last is how a set gets added while the match is open.
+  const { displayed, decided } = scoreColumns({
+    bestOf,
+    playerScores: formData.playerScores,
+    opponentScores: formData.opponentScores,
+    filled,
+  });
+  const ghost = !decided && displayed < bestOf;
 
   const refs = useRef<Record<string, HTMLInputElement | null>>({});
   const key = (row: "p" | "o", i: number, tb = false) =>
@@ -154,11 +176,45 @@ export function ScoreBlock({
         onSetsChange(i);
       return;
     }
-    // A complete game digit advances focus; tiebreak cells wait for Tab.
+    // A complete game digit advances focus; tiebreak cells wait for Enter.
     // Out-of-range values stay put so they can be corrected, and the last
     // available game cell deliberately has nowhere to send focus.
     if (!isGameEntry(v)) return;
-    if (row === "player") focusKey(key("o", i));
+    // If this digit completes a tiebreak pair with the other row's existing
+    // value (7-6, 6-7, 1-0 in either row), the tiebreak cell that just
+    // appeared gets focus instead of wherever a plain game digit would send
+    // it — the player's tiebreak cell for this same set.
+    const typed = Number(v);
+    const playerVal =
+      row === "player" ? typed : (formData.playerScores[i] ?? null);
+    const opponentVal =
+      row === "opponent" ? typed : (formData.opponentScores[i] ?? null);
+    if (isTiebreakSet(playerVal, opponentVal)) {
+      focusKey(key("p", i, true));
+      return;
+    }
+    if (row === "player") {
+      focusKey(key("o", i));
+      return;
+    }
+    // Where the opponent's digit sends focus depends on what it just did to
+    // the match, so measure the columns with it in place: a split opens the
+    // next set, a clinched match has nowhere left to go.
+    const opponentScores = [...formData.opponentScores];
+    opponentScores[i] = typed;
+    const next = scoreColumns({
+      bestOf,
+      playerScores: formData.playerScores,
+      opponentScores,
+      filled: Math.max(filled, i + 1),
+    });
+    if (i + 1 < next.displayed) focusKey(key("p", i + 1));
+  };
+
+  // Enter in a tiebreak cell: player -> opponent tiebreak (same set);
+  // opponent -> next set's player cell, or nowhere past the last set.
+  const enterTiebreak = (row: "player" | "opponent", i: number) => {
+    if (row === "player") focusKey(key("o", i, true));
     else if (i + 1 < displayed || ghost) focusKey(key("p", i + 1));
   };
 
@@ -181,8 +237,8 @@ export function ScoreBlock({
     formData.adScoring === undefined
       ? ""
       : formData.adScoring
-        ? " · ad"
-        : " · no-ad"
+        ? " · Ad"
+        : " · No-Ad"
   }`;
 
   // A render function, not a component: declared inside render, a component
@@ -211,6 +267,7 @@ export function ScoreBlock({
           {Array.from({ length: displayed }, (_, i) => (
             <span key={i} className="flex gap-3">
               <ScoreInput
+                set={i}
                 value={scores[i] ?? null}
                 onValue={(v) => setDigit(row, i, v)}
                 inputRef={(el) => {
@@ -221,12 +278,14 @@ export function ScoreBlock({
               {tie(i) && (
                 <ScoreInput
                   tiebreak
+                  set={i}
                   value={tbs[i] ?? null}
                   onValue={(v) => onTiebreakChange(row, i, v)}
                   inputRef={(el) => {
                     refs.current[key(r, i, true)] = el;
                   }}
                   label={`${name}, set ${i + 1} tiebreak`}
+                  onEnter={() => enterTiebreak(row, i)}
                 />
               )}
             </span>
@@ -298,8 +357,8 @@ export function ScoreBlock({
       {renderRow("player", playerName || "You", false)}
       {renderRow("opponent", opponentName || "Opponent", true)}
       <span className="text-micro pt-0.5">
-        Digits move on <span className="text-[var(--ink-300)]">·</span> tiebreak
-        cells appear on their own
+        Digits move on <span className="text-[var(--ink-300)]">·</span> Enter
+        leaves a tiebreak cell
         {ghost && (
           <>
             {" "}

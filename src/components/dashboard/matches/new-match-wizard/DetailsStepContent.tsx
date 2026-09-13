@@ -79,6 +79,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { advField } from "@/lib/ui/adv-field";
 import { getInitials } from "@/lib/data/match-utils";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { siteLabel, todayISO } from "@/lib/schedule/format";
@@ -105,6 +106,9 @@ import {
 } from "./styles";
 import { formatHoursMinutes, setHasData } from "./utils";
 import { FORMAT_OPTIONS, Required, ScoreBlock } from "./ScoreBlock";
+import { AnimatedHeight } from "./AnimatedHeight";
+import { ScoreCheckNotice } from "./ScoreCheckNotice";
+import { firstOpenSet, isStoppedResult, scoreGames } from "./score-state";
 
 export interface DetailsStepContentProps {
   formData: FormData;
@@ -143,6 +147,13 @@ export interface DetailsStepContentProps {
   exportRead: boolean;
   /** Why the last Save match failed, if it did. */
   error: string | null;
+  /**
+   * Save met a score nobody has won, so "did it end early?" is on screen under
+   * the score. The answer is `formData.result`; the flow owns when it shows.
+   */
+  scoreCheckVisible: boolean;
+  /** "No, I'll finish the score" — the flow hides the question again. */
+  onScoreCheckDismiss: () => void;
 }
 
 type Hand = "right" | "left";
@@ -283,16 +294,19 @@ function Cell({
   tag,
   children,
   className,
+  labelClassName,
 }: {
   label: string;
   required?: boolean;
   tag?: string;
   children: React.ReactNode;
   className?: string;
+  /** For cells under a shared column heading, which hide their own label. */
+  labelClassName?: string;
 }) {
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      <span className="flex items-center gap-1">
+      <span className={cn("flex items-center gap-1", labelClassName)}>
         <span className="eyebrow">{label}</span>
         {required && <Required />}
         {tag && (
@@ -306,6 +320,13 @@ function Cell({
   );
 }
 
+/**
+ * The wizard's hand-rolled underline cells. Their rule is `--border-field` —
+ * the same grey as `advField("underline")`, `MenuSelect` and `DateField` — so
+ * every underline on the step reads as one field family. (They drew the
+ * lighter `--border-hairline` once, and sat visibly paler than the date and
+ * the hand/backhand selects beside them.)
+ */
 const UNDERLINE_CLS =
   "flex min-h-[34px] w-full items-center gap-2 border-b pb-2 pt-1.5 text-left text-[13px] transition-[border-color] duration-[var(--duration-hover)]";
 
@@ -338,12 +359,15 @@ function SelectCell<T extends string | boolean>({
         <PopoverTrigger asChild>
           <button
             type="button"
+            // The footer's missing-fields pill finds the field by this; not an
+            // aria-label, which would replace the chosen value as its name.
+            data-field={label}
             className={cn(
               UNDERLINE_CLS,
               "cursor-pointer",
               open
                 ? "border-b-2 border-[var(--blue)] pb-[7px]"
-                : "border-[var(--border-hairline)]",
+                : "border-[var(--border-field)]",
               focusRingCls,
             )}
           >
@@ -429,7 +453,7 @@ function ReadCell({
 }) {
   return (
     <Cell label={label} required={required}>
-      <div className={cn(UNDERLINE_CLS, "border-[var(--border-hairline)]")}>
+      <div className={cn(UNDERLINE_CLS, "border-[var(--border-field)]")}>
         <span
           className={cn(
             "min-w-0 flex-1 truncate",
@@ -577,7 +601,7 @@ function EventCell({
               "focus-within:border-b-2 focus-within:border-[var(--blue)] focus-within:pb-[7px]",
               open
                 ? "border-b-2 border-[var(--blue)] pb-[7px]"
-                : "border-[var(--border-hairline)]",
+                : "border-[var(--border-field)]",
             )}
           >
             <input
@@ -833,9 +857,6 @@ const BACKHAND_OPTIONS: readonly { value: Backhand; label: string }[] = [
   { value: "one-handed", label: "One-handed backhand" },
 ];
 
-const ACTION_CLS =
-  "cursor-pointer text-[11px] font-medium transition-colors duration-[var(--duration-hover)]";
-
 function provenanceFor(
   source: ValueSource | undefined,
   ctx: {
@@ -885,7 +906,10 @@ function DetailsStepContentImpl({
   onDetach,
   exportRead,
   error,
+  scoreCheckVisible,
+  onScoreCheckDismiss,
 }: DetailsStepContentProps) {
+  const scoreRef = useRef<HTMLDivElement>(null);
   // A preset IS the line it came from; the name is what reads at the use
   // sites, several of which pair it with `attachedLine`.
   const line = preset;
@@ -1230,15 +1254,49 @@ function DetailsStepContentImpl({
         />
       )}
 
-      <ScoreBlock
-        formData={formData}
-        playerName={subject.name}
-        opponentName={formData.opponentName}
-        fromLine={fromLine}
-        onScoreChange={onScoreChange}
-        onTiebreakChange={onTiebreakChange}
-        onSetsChange={(count) => onInputChange("numberOfSets", count)}
-      />
+      <div ref={scoreRef} className="flex flex-col">
+        <ScoreBlock
+          formData={formData}
+          playerName={subject.name}
+          opponentName={formData.opponentName}
+          fromLine={fromLine}
+          onScoreChange={onScoreChange}
+          onTiebreakChange={onTiebreakChange}
+          onSetsChange={(count) => onInputChange("numberOfSets", count)}
+        />
+        {/* Always mounted, so the question arriving, collapsing to its settled
+            line, and going away on "No" all move the page below smoothly. The
+            gap lives inside (`pt-4`) so an empty wrapper takes no space. */}
+        <AnimatedHeight>
+          {scoreCheckVisible && (
+            <div className="pt-4">
+              <ScoreCheckNotice
+                answer={
+                  isStoppedResult(formData.result) ? formData.result : null
+                }
+                onAnswer={(result) => onInputChange("result", result)}
+                onChange={() => onInputChange("result", "")}
+                onFinishScore={() => {
+                  onScoreCheckDismiss();
+                  // Into the set nobody has won — its first empty cell, else
+                  // its first. Not simply the first empty cell on the card: an
+                  // earlier 7-6's optional tiebreak box and the dashed "add a
+                  // set" cell are both empty and neither is what's unfinished.
+                  const open = firstOpenSet(scoreGames(formData));
+                  const cells = Array.from(
+                    scoreRef.current?.querySelectorAll<HTMLInputElement>(
+                      `input[data-set="${open}"]`,
+                    ) ?? [],
+                  );
+                  (
+                    cells.find((cell) => cell.value === "") ?? cells[0]
+                  )?.focus();
+                }}
+              />
+            </div>
+          )}
+        </AnimatedHeight>
+      </div>
 
       {/* Players */}
       <div className="flex flex-col gap-3.5 border-t border-[var(--border-hairline)] pt-6">
@@ -1253,307 +1311,357 @@ function DetailsStepContentImpl({
             are, as two required fields — never behind an Add/Change toggle,
             since a missing answer has to read as missing, not as one tap
             away from looking answered. */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-6">
-          <span className="flex w-full shrink-0 flex-col gap-0.5 sm:w-[200px] sm:pt-[9px]">
-            <span className="inline-flex items-center gap-2 text-[13px] text-[var(--ink-900)]">
-              <span className="truncate">{subject.name}</span>
-              {subject.isSelf && <StatePill>You</StatePill>}
+        {/* One grid for both rows — name, hand, backhand — so the opponent's
+            selects sit exactly under the player's. The headings are printed
+            once; a narrow column stacks each row and brings its labels back.
+            Anything a row says beyond its three answers lives under the name,
+            never in a fourth column that would knock the grid out of line. */}
+        <div className="flex flex-col gap-6 sm:grid sm:grid-cols-[200px_minmax(0,1fr)_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-4">
+          <div aria-hidden="true" className="hidden sm:contents">
+            <span />
+            <span className="flex items-center gap-1">
+              <span className="eyebrow">Hand</span>
+              <Required />
             </span>
-            {playerProvenance && (
-              <span className="text-micro whitespace-nowrap">
-                {playerProvenance}
-              </span>
-            )}
-          </span>
-          <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:gap-4">
-            <Cell label="Hand" required className="min-w-0 sm:flex-1">
-              <MenuSelect
-                label="Player hand"
-                variant="underline"
-                value={playerHand}
-                placeholder="Hand"
-                options={HAND_OPTIONS}
-                onChange={(v) => {
-                  onInputChange("playerHand", v);
-                  onInputChange("playerStyleSource", undefined);
-                  setSavingProfile("idle");
-                }}
-              />
-            </Cell>
-            <Cell label="Backhand" required className="min-w-0 sm:flex-1">
-              <MenuSelect
-                label="Player backhand"
-                variant="underline"
-                value={playerBackhand}
-                placeholder="Backhand"
-                width={220}
-                options={BACKHAND_OPTIONS}
-                onChange={(v) => {
-                  onInputChange("playerBackhand", v);
-                  onInputChange("playerStyleSource", undefined);
-                  setSavingProfile("idle");
-                }}
-              />
-            </Cell>
+            <span className="flex items-center gap-1">
+              <span className="eyebrow">Backhand</span>
+              <Required />
+            </span>
           </div>
-          {subject.isSelf &&
-            (playerHand || playerBackhand) &&
-            formData.playerStyleSource !== "profile" && (
-              <button
-                type="button"
-                onClick={saveProfile}
-                disabled={savingProfile !== "idle"}
-                className={cn(
-                  ACTION_CLS,
-                  "shrink-0 self-start whitespace-nowrap text-[var(--ink-500)] hover:text-[var(--ink-900)] disabled:cursor-default sm:pt-[11px]",
-                )}
-              >
-                {savingProfile === "saving"
-                  ? "Saving…"
-                  : savingProfile === "saved"
-                    ? "Saved to your profile"
-                    : "Save to your profile"}
-              </button>
-            )}
-        </div>
 
-        {/* The opponent — named here, then read back like the row above. */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-6">
-          {namingOpponent ? (
-            <Popover open={nameOpen} onOpenChange={setNameOpen}>
-              <PopoverAnchor asChild>
-                <span className="flex w-full shrink-0 items-center border-b-2 border-[var(--border-medium)] pt-1 pb-1.5 transition-colors focus-within:border-[var(--blue)] sm:w-[200px]">
-                  <input
-                    autoFocus
-                    value={nameTerm}
-                    placeholder="Opponent"
-                    aria-label="Opponent"
-                    // The span above turns its 2px rule blue on focus, which
-                    // is this field's focus mark — so the ring would sit inset
-                    // inside a field that has already answered. A STANDING blue
-                    // rule would not answer anything; see `focus.css`.
-                    data-focus-ring="none"
-                    autoComplete="off"
-                    onFocus={() => setNameOpen(true)}
-                    onChange={(e) => {
-                      setNameTerm(e.target.value);
-                      if (!nameOpen) setNameOpen(true);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter") return;
-                      e.preventDefault();
-                      const term = nameTerm.trim();
-                      if (!term) return;
-                      const hitRoster = rosterShown.find(
-                        (p) => normalizedPersonName(p.name) === needle,
-                      );
-                      const hitPlayed = playedShown.find(
-                        (p) => normalizedPersonName(p.name) === needle,
-                      );
-                      if (hitRoster) pickRoster(hitRoster);
-                      else if (hitPlayed) pickPlayed(hitPlayed);
-                      else void createOpponent(term);
-                    }}
-                    className="w-full bg-transparent text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]"
-                  />
-                </span>
-              </PopoverAnchor>
-              <PopoverContent
-                align="start"
-                sideOffset={6}
-                onOpenAutoFocus={(e) => e.preventDefault()}
-                className={cn(floatMenuCls, inDual ? "w-[360px]" : "w-[320px]")}
-              >
-                {inDual ? (
-                  <>
-                    {rosterShown.some((p) => p.heldThisLine) && (
-                      <span className={floatMenuLabelCls}>
-                        {lineSchool}
-                        {lineSlot ? ` · ${lineSlot} last season` : ""}
-                      </span>
-                    )}
-                    {rosterShown
-                      .filter((p) => p.heldThisLine)
-                      .map((p) => (
-                        <button
-                          key={p.playerId}
-                          type="button"
-                          onClick={() => pickRoster(p)}
-                          className={floatMenuRowCls}
-                        >
-                          <Avatar name={p.name} />
-                          <span className="text-[12px] font-medium text-[var(--ink-900)]">
-                            {p.name}
-                          </span>
-                          <span className="text-[11px] text-[var(--ink-500)]">
-                            {p.classYear ? `${p.classYear} · ` : ""}
-                            {p.meetings === 0
-                              ? "no matches vs us"
-                              : `${p.meetings} ${p.meetings === 1 ? "match" : "matches"} vs us`}
-                          </span>
-                        </button>
-                      ))}
-                    {rosterShown.some((p) => !p.heldThisLine) && (
-                      <span className={floatMenuLabelCls}>
-                        {rosterShown.some((p) => p.heldThisLine)
-                          ? "Rest of their roster"
-                          : `${lineSchool}'s roster`}
-                      </span>
-                    )}
-                    {rosterShown
-                      .filter((p) => !p.heldThisLine)
-                      .slice(0, 8)
-                      .map((p) => (
-                        <button
-                          key={p.playerId}
-                          type="button"
-                          onClick={() => pickRoster(p)}
-                          className={floatMenuRowCls}
-                        >
-                          <Avatar name={p.name} />
-                          <span className="text-[12px] font-medium text-[var(--ink-900)]">
-                            {p.name}
-                          </span>
-                          <span className="text-[11px] text-[var(--ink-500)]">
-                            {p.classYear ? `${p.classYear} · ` : ""}
-                            {p.meetings === 0
-                              ? "no matches vs us"
-                              : `${p.meetings} ${p.meetings === 1 ? "match" : "matches"} vs us`}
-                          </span>
-                        </button>
-                      ))}
-                  </>
-                ) : (
-                  <>
-                    {playedShown.length > 0 && (
-                      <span className={floatMenuLabelCls}>
-                        People you&apos;ve played
-                      </span>
-                    )}
-                    {playedShown.map((p) => (
-                      <button
-                        key={p.name}
-                        type="button"
-                        onClick={() => pickPlayed(p)}
-                        className={floatMenuRowCls}
-                      >
-                        <Avatar name={p.name} />
-                        <span className="text-[12px] font-medium text-[var(--ink-900)]">
-                          {p.name}
-                        </span>
-                        <span className="text-[11px] text-[var(--ink-500)]">
-                          {p.matches} {p.matches === 1 ? "match" : "matches"} ·
-                          last {formatMonthDay(p.lastDate)}
-                        </span>
-                      </button>
-                    ))}
-                  </>
-                )}
-                {nameTerm.trim() && !exactKnown && (
-                  <>
-                    {(playedShown.length > 0 || rosterShown.length > 0) && (
-                      <span className={floatMenuDividerCls} />
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => void createOpponent(nameTerm.trim())}
-                      className={floatMenuRowCls}
-                    >
-                      <NewRing />
-                      <span className="min-w-0 truncate text-[12px] text-[var(--ink-700)]">
-                        {inDual ? (
-                          <>
-                            New player for{" "}
-                            <span className="font-medium text-[var(--ink-900)]">
-                              {lineSchool}
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            New opponent{" "}
-                            <span className="font-medium text-[var(--ink-900)]">
-                              &ldquo;{nameTerm.trim()}&rdquo;
-                            </span>
-                          </>
-                        )}
-                      </span>
-                      <span className="flex-1" />
-                      <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
-                        {inDual ? "name only" : "only you see this name"}
-                      </span>
-                    </button>
-                  </>
-                )}
-                {!nameTerm.trim() &&
-                  playedShown.length === 0 &&
-                  rosterShown.length === 0 && (
-                    <span className={cn(floatMenuLabelCls, "pb-2")}>
-                      Type their name.
-                    </span>
-                  )}
-              </PopoverContent>
-            </Popover>
-          ) : (
-            <span className="flex w-full shrink-0 flex-col gap-0.5 sm:w-[200px]">
-              <button
-                type="button"
-                onClick={() => {
-                  setNameTerm(formData.opponentName);
-                  setNamingOpponent(true);
-                }}
-                title="Change the opponent"
-                className="group inline-flex cursor-pointer items-center gap-1.5 text-left text-[13px] text-[var(--ink-900)]"
-              >
-                <span className="truncate">{formData.opponentName}</span>
-                <Pencil
-                  className="size-3 shrink-0 text-[var(--ink-400)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--ink-700)]"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-              </button>
-              {opponentProvenance && (
+          <div className="flex flex-col gap-3 sm:col-span-3 sm:grid sm:grid-cols-subgrid sm:items-start sm:gap-y-2">
+            <span className="flex min-w-0 flex-col gap-0.5 sm:pt-1.5">
+              <span className="inline-flex items-center gap-2 text-[13px] text-[var(--ink-900)]">
+                <span className="truncate">{subject.name}</span>
+                {subject.isSelf && <StatePill>You</StatePill>}
+              </span>
+              {playerProvenance && (
                 <span className="text-micro whitespace-nowrap">
-                  {opponentProvenance}
+                  {playerProvenance}
                 </span>
               )}
             </span>
-          )}
-          <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:gap-4">
-            <Cell label="Hand" required className="min-w-0 sm:flex-1">
-              <MenuSelect
-                label="Opponent hand"
-                variant="underline"
-                value={opponentHand}
-                placeholder="Hand"
-                disabled={namingOpponent}
-                options={HAND_OPTIONS}
-                onChange={(v) => {
-                  onInputChange("opponentHand", v);
-                  onInputChange("opponentStyleSource", undefined);
-                }}
-              />
-            </Cell>
-            <Cell label="Backhand" required className="min-w-0 sm:flex-1">
-              <MenuSelect
-                label="Opponent backhand"
-                variant="underline"
-                value={opponentBackhand}
-                placeholder="Backhand"
-                width={220}
-                disabled={namingOpponent}
-                options={BACKHAND_OPTIONS}
-                onChange={(v) => {
-                  onInputChange("opponentBackhand", v);
-                  onInputChange("opponentStyleSource", undefined);
-                }}
-              />
-            </Cell>
+            <div className="flex flex-col gap-3 sm:contents">
+              <Cell
+                label="Hand"
+                required
+                className="min-w-0"
+                labelClassName="sm:hidden"
+              >
+                <MenuSelect
+                  label="Player hand"
+                  variant="underline"
+                  value={playerHand}
+                  placeholder="Hand"
+                  options={HAND_OPTIONS}
+                  onChange={(v) => {
+                    onInputChange("playerHand", v);
+                    onInputChange("playerStyleSource", undefined);
+                    setSavingProfile("idle");
+                  }}
+                />
+              </Cell>
+              <Cell
+                label="Backhand"
+                required
+                className="min-w-0"
+                labelClassName="sm:hidden"
+              >
+                <MenuSelect
+                  label="Player backhand"
+                  variant="underline"
+                  value={playerBackhand}
+                  placeholder="Backhand"
+                  width={220}
+                  options={BACKHAND_OPTIONS}
+                  onChange={(v) => {
+                    onInputChange("playerBackhand", v);
+                    onInputChange("playerStyleSource", undefined);
+                    setSavingProfile("idle");
+                  }}
+                />
+              </Cell>
+            </div>
+            {/* Directly under the two answers it saves, in the one quiet blue a
+                text action carries — it read as a caption under the name. */}
+            {subject.isSelf &&
+              (playerHand || playerBackhand) &&
+              formData.playerStyleSource !== "profile" && (
+                <button
+                  type="button"
+                  onClick={saveProfile}
+                  disabled={savingProfile !== "idle"}
+                  className={cn(
+                    "cursor-pointer self-start text-[12px] whitespace-nowrap transition-colors duration-[var(--duration-hover)] disabled:cursor-default sm:col-span-2 sm:col-start-2 sm:justify-self-start",
+                    savingProfile === "idle"
+                      ? "text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                      : "text-[var(--ink-500)]",
+                  )}
+                >
+                  {savingProfile === "saving"
+                    ? "Saving…"
+                    : savingProfile === "saved"
+                      ? "Saved to your profile"
+                      : "Save to your profile"}
+                </button>
+              )}
           </div>
-          {namingOpponent && (
-            <span className="text-micro shrink-0 whitespace-nowrap sm:pt-[11px]">
-              after the name
-            </span>
-          )}
+
+          {/* The opponent — named here, then read back like the row above. */}
+          <div className="flex flex-col gap-3 sm:col-span-3 sm:grid sm:grid-cols-subgrid sm:items-start">
+            {namingOpponent ? (
+              <span className="flex min-w-0 flex-col gap-1.5">
+                <Popover open={nameOpen} onOpenChange={setNameOpen}>
+                  <PopoverAnchor asChild>
+                    <input
+                      autoFocus
+                      value={nameTerm}
+                      placeholder="Opponent"
+                      aria-label="Opponent"
+                      // The DS underline field — the same 34px hairline as the
+                      // Hand and Backhand selects beside it. Its rule going 2px
+                      // blue on focus is the focus mark, so the ring would be a
+                      // second one; see `advField()` and `focus.css`.
+                      data-focus-ring="none"
+                      autoComplete="off"
+                      onFocus={() => setNameOpen(true)}
+                      onChange={(e) => {
+                        setNameTerm(e.target.value);
+                        if (!nameOpen) setNameOpen(true);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        e.preventDefault();
+                        const term = nameTerm.trim();
+                        if (!term) return;
+                        const hitRoster = rosterShown.find(
+                          (p) => normalizedPersonName(p.name) === needle,
+                        );
+                        const hitPlayed = playedShown.find(
+                          (p) => normalizedPersonName(p.name) === needle,
+                        );
+                        if (hitRoster) pickRoster(hitRoster);
+                        else if (hitPlayed) pickPlayed(hitPlayed);
+                        else void createOpponent(term);
+                      }}
+                      className={cn(
+                        advField("underline"),
+                        "w-full outline-none",
+                      )}
+                    />
+                  </PopoverAnchor>
+                  <PopoverContent
+                    align="start"
+                    sideOffset={6}
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    className={cn(
+                      floatMenuCls,
+                      inDual ? "w-[360px]" : "w-[320px]",
+                    )}
+                  >
+                    {inDual ? (
+                      <>
+                        {rosterShown.some((p) => p.heldThisLine) && (
+                          <span className={floatMenuLabelCls}>
+                            {lineSchool}
+                            {lineSlot ? ` · ${lineSlot} last season` : ""}
+                          </span>
+                        )}
+                        {rosterShown
+                          .filter((p) => p.heldThisLine)
+                          .map((p) => (
+                            <button
+                              key={p.playerId}
+                              type="button"
+                              onClick={() => pickRoster(p)}
+                              className={floatMenuRowCls}
+                            >
+                              <Avatar name={p.name} />
+                              <span className="text-[12px] font-medium text-[var(--ink-900)]">
+                                {p.name}
+                              </span>
+                              <span className="text-[11px] text-[var(--ink-500)]">
+                                {p.classYear ? `${p.classYear} · ` : ""}
+                                {p.meetings === 0
+                                  ? "no matches vs us"
+                                  : `${p.meetings} ${p.meetings === 1 ? "match" : "matches"} vs us`}
+                              </span>
+                            </button>
+                          ))}
+                        {rosterShown.some((p) => !p.heldThisLine) && (
+                          <span className={floatMenuLabelCls}>
+                            {rosterShown.some((p) => p.heldThisLine)
+                              ? "Rest of their roster"
+                              : `${lineSchool}'s roster`}
+                          </span>
+                        )}
+                        {rosterShown
+                          .filter((p) => !p.heldThisLine)
+                          .slice(0, 8)
+                          .map((p) => (
+                            <button
+                              key={p.playerId}
+                              type="button"
+                              onClick={() => pickRoster(p)}
+                              className={floatMenuRowCls}
+                            >
+                              <Avatar name={p.name} />
+                              <span className="text-[12px] font-medium text-[var(--ink-900)]">
+                                {p.name}
+                              </span>
+                              <span className="text-[11px] text-[var(--ink-500)]">
+                                {p.classYear ? `${p.classYear} · ` : ""}
+                                {p.meetings === 0
+                                  ? "no matches vs us"
+                                  : `${p.meetings} ${p.meetings === 1 ? "match" : "matches"} vs us`}
+                              </span>
+                            </button>
+                          ))}
+                      </>
+                    ) : (
+                      <>
+                        {playedShown.length > 0 && (
+                          <span className={floatMenuLabelCls}>
+                            People you&apos;ve played
+                          </span>
+                        )}
+                        {playedShown.map((p) => (
+                          <button
+                            key={p.name}
+                            type="button"
+                            onClick={() => pickPlayed(p)}
+                            className={floatMenuRowCls}
+                          >
+                            <Avatar name={p.name} />
+                            <span className="text-[12px] font-medium text-[var(--ink-900)]">
+                              {p.name}
+                            </span>
+                            <span className="text-[11px] text-[var(--ink-500)]">
+                              {p.matches}{" "}
+                              {p.matches === 1 ? "match" : "matches"} · last{" "}
+                              {formatMonthDay(p.lastDate)}
+                            </span>
+                          </button>
+                        ))}
+                      </>
+                    )}
+                    {nameTerm.trim() && !exactKnown && (
+                      <>
+                        {(playedShown.length > 0 || rosterShown.length > 0) && (
+                          <span className={floatMenuDividerCls} />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void createOpponent(nameTerm.trim())}
+                          className={floatMenuRowCls}
+                        >
+                          <NewRing />
+                          <span className="min-w-0 truncate text-[12px] text-[var(--ink-700)]">
+                            {inDual ? (
+                              <>
+                                New player for{" "}
+                                <span className="font-medium text-[var(--ink-900)]">
+                                  {lineSchool}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                New opponent{" "}
+                                <span className="font-medium text-[var(--ink-900)]">
+                                  &ldquo;{nameTerm.trim()}&rdquo;
+                                </span>
+                              </>
+                            )}
+                          </span>
+                          <span className="flex-1" />
+                          <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
+                            {inDual ? "name only" : "only you see this name"}
+                          </span>
+                        </button>
+                      </>
+                    )}
+                    {!nameTerm.trim() &&
+                      playedShown.length === 0 &&
+                      rosterShown.length === 0 && (
+                        <span className={cn(floatMenuLabelCls, "pb-2")}>
+                          Type their name.
+                        </span>
+                      )}
+                  </PopoverContent>
+                </Popover>
+                {/* The selects beside it wait on the name; say so where the
+                  eye already is, not in a column of its own. */}
+                <span className="text-micro">
+                  Hand and backhand after the name
+                </span>
+              </span>
+            ) : (
+              <span className="flex min-w-0 flex-col gap-0.5 sm:pt-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNameTerm(formData.opponentName);
+                    setNamingOpponent(true);
+                  }}
+                  title="Change the opponent"
+                  className="group inline-flex cursor-pointer items-center gap-1.5 text-left text-[13px] text-[var(--ink-900)]"
+                >
+                  <span className="truncate">{formData.opponentName}</span>
+                  <Pencil
+                    className="size-3 shrink-0 text-[var(--ink-400)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--ink-700)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                </button>
+                {opponentProvenance && (
+                  <span className="text-micro whitespace-nowrap">
+                    {opponentProvenance}
+                  </span>
+                )}
+              </span>
+            )}
+            <div className="flex flex-col gap-3 sm:contents">
+              <Cell
+                label="Hand"
+                required
+                className="min-w-0"
+                labelClassName="sm:hidden"
+              >
+                <MenuSelect
+                  label="Opponent hand"
+                  variant="underline"
+                  value={opponentHand}
+                  placeholder="Hand"
+                  disabled={namingOpponent}
+                  options={HAND_OPTIONS}
+                  onChange={(v) => {
+                    onInputChange("opponentHand", v);
+                    onInputChange("opponentStyleSource", undefined);
+                  }}
+                />
+              </Cell>
+              <Cell
+                label="Backhand"
+                required
+                className="min-w-0"
+                labelClassName="sm:hidden"
+              >
+                <MenuSelect
+                  label="Opponent backhand"
+                  variant="underline"
+                  value={opponentBackhand}
+                  placeholder="Backhand"
+                  width={220}
+                  disabled={namingOpponent}
+                  options={BACKHAND_OPTIONS}
+                  onChange={(v) => {
+                    onInputChange("opponentBackhand", v);
+                    onInputChange("opponentStyleSource", undefined);
+                  }}
+                />
+              </Cell>
+            </div>
+          </div>
         </div>
 
         {inDual && namingOpponent && (
@@ -1656,7 +1764,7 @@ function DetailsStepContentImpl({
                   ? "Not set"
                   : formData.adScoring
                     ? "Ad"
-                    : "No-ad"
+                    : "No-Ad"
               }
               tag="from the event"
             />
@@ -1668,7 +1776,7 @@ function DetailsStepContentImpl({
               value={formData.adScoring}
               options={[
                 { value: true, label: "Ad" },
-                { value: false, label: "No-ad" },
+                { value: false, label: "No-Ad" },
               ]}
               onChange={(v) => onInputChange("adScoring", v)}
             />

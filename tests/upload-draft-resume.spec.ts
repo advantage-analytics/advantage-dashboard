@@ -70,10 +70,12 @@ test.describe("save draft failure", () => {
   });
 
   test("the footer leaves only on a save that worked", () => {
-    const flow = source(`${WIZARD}/UploadMatchFlow.tsx`);
+    // `handleSaveDraft` lives in `useDraftSaving`, the page's draft hook; the
+    // footer button (`UploadWizardFooter.tsx`) only calls what it returns.
+    const flow = source(`${WIZARD}/useDraftSaving.ts`);
     const body = flow.slice(
       flow.indexOf("const handleSaveDraft"),
-      flow.indexOf("const onDragOver"),
+      flow.indexOf("return handleSaveDraft;"),
     );
     expect(body).toContain("const saved = await saveDraft();");
     // The guard, and the guard BEFORE the navigation — the whole defect was
@@ -86,7 +88,7 @@ test.describe("save draft failure", () => {
   });
 
   test("the header never claims a draft that was refused", () => {
-    const flow = source(`${WIZARD}/UploadMatchFlow.tsx`);
+    const flow = source(`${WIZARD}/useDraftSaving.ts`);
     const status = flow.slice(
       flow.indexOf("usePublishHeaderStatus("),
       flow.indexOf("const handleSaveDraft"),
@@ -169,11 +171,14 @@ test.describe("draft workspace binding", () => {
 
   test("a refused draft reaches the wizard as nothing at all", () => {
     const flow = source(`${WIZARD}/UploadMatchFlow.tsx`);
+    const provider = source(`${WIZARD}/UploadWizardProvider.tsx`);
+    const steps = source(`${WIZARD}/UploadWizardSteps.tsx`);
     // The preset is seeded from `draft?.preset` before the hook ever runs, so
     // a half-refused draft would still pin a line bar from the wrong program.
-    // `draftRefusal` is a sentence only — it can carry no draft state.
+    // `draftRefusal` is a sentence only — it can carry no draft state, at the
+    // page's prop, through the provider, to the notice that renders it.
     expect(flow).toContain("draftRefusal?: string | null;");
-    expect(flow).toContain("draftRefusal: string | null;");
-    expect(flow).toContain("<FlowNotice>{draftRefusal}</FlowNotice>");
+    expect(provider).toContain("draftRefusal: string | null;");
+    expect(steps).toContain("<FlowNotice>{draftRefusal}</FlowNotice>");
   });
 });

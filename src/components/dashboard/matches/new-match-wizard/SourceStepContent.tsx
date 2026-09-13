@@ -65,6 +65,7 @@ import {
 } from "@/lib/workspace/types";
 import type { MatchSubject, RosterOption } from "./useUploadMatchWizard";
 import { noteStripCls } from "./styles";
+import { PendingTeamNote } from "./PendingTeamNote";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
 
@@ -502,6 +503,10 @@ function SourceStepContentImpl({
           </Link>
         </span>
       </div>
+    ) : videoRefusal && !active.canSubmitVideo ? (
+      // A team still being confirmed: the wizard's eligibility gate keeps
+      // Continue off for video, and this is the reason, with a way to ask.
+      <PendingTeamNote message={videoRefusal} />
     ) : videoRefusal ? (
       // Advisory, never a gate: `reserveQuota()` is the choke point every
       // submission passes and the only thing that refuses. This says WHY, in

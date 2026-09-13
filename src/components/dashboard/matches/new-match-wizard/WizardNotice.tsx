@@ -1,4 +1,5 @@
 import { TriangleAlert } from "lucide-react";
+import { noteIconCls, warningStripCls } from "./styles";
 
 /**
  * The wizard's warning register, announced.
@@ -16,22 +17,18 @@ import { TriangleAlert } from "lucide-react";
  * chrome produces — not a visual difference anyone would catch in review, just
  * two spellings that make a future restyle miss a file.
  *
- * Children lay out in a column with a 3-unit gap, so a notice carrying an
+ * Children lay out in a column with a 2-unit gap, so a notice carrying an
  * action row under its sentence needs no wrapper of its own.
  */
 export function WizardNotice({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex items-start gap-3 rounded-[var(--radius-element)] border border-[var(--warning-border)] bg-[var(--warning-bg)] px-3.5 py-3 text-[12px] leading-[1.5] text-[var(--warning-text)]"
-    >
+    <div role="status" aria-live="polite" className={warningStripCls}>
       <TriangleAlert
-        className="mt-0.5 size-4 shrink-0"
+        className={noteIconCls}
         strokeWidth={1.5}
         aria-hidden="true"
       />
-      <div className="flex min-w-0 flex-1 flex-col gap-3">{children}</div>
+      <div className="flex min-w-0 flex-1 flex-col gap-2">{children}</div>
     </div>
   );
 }

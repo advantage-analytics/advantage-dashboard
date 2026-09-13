@@ -392,6 +392,62 @@ test.describe("claim state, reused rather than recomputed", () => {
   });
 });
 
+test.describe("a program still being confirmed", () => {
+  test("refuses video, and says so whether or not the caller named the source", () => {
+    for (const recordsVideo of [undefined, true]) {
+      const result = refused(
+        uploadEligibility({
+          workspace: team({ programStatus: "claim_pending" }),
+          viewerId: VIEWER,
+          athlete: pick("pp-ava"),
+          roster: ROSTER,
+          recordsVideo,
+        }),
+      );
+      expect(result.reason).toBe("pending-approval");
+      expect(result.message).toBe(PENDING_APPROVAL_NOTICE);
+    }
+  });
+
+  test("lets a SwingVision import through, with every other rule still asked", () => {
+    expect(
+      uploadEligibility({
+        workspace: team({ programStatus: "claim_pending" }),
+        viewerId: VIEWER,
+        athlete: pick("pp-ava"),
+        roster: ROSTER,
+        recordsVideo: false,
+      }).ok,
+    ).toBe(true);
+    // The athlete rule still stands behind it.
+    expect(
+      refused(
+        uploadEligibility({
+          workspace: team({ programStatus: "claim_pending" }),
+          viewerId: VIEWER,
+          athlete: null,
+          roster: ROSTER,
+          recordsVideo: false,
+        }),
+      ).reason,
+    ).toBe("athlete-required");
+  });
+
+  test("a suspended program is still refused for an import", () => {
+    expect(
+      refused(
+        uploadEligibility({
+          workspace: team({ programStatus: "suspended" }),
+          viewerId: VIEWER,
+          athlete: pick("pp-ava"),
+          roster: ROSTER,
+          recordsVideo: false,
+        }),
+      ).reason,
+    ).toBe("workspace-unavailable");
+  });
+});
+
 // ─── 3. Ownership supplies no athlete; a real profile does ───────────────────
 
 test.describe("an owner and the athlete", () => {
@@ -1337,11 +1393,12 @@ function completeDetails(h: ReturnType<typeof uploadWizardHarness>) {
   h.render();
 }
 
-test.describe("wizard handlers: a pending team cannot progress or create", () => {
-  test("Continue and Save match both stop, with the approval notice", async () => {
+test.describe("wizard handlers: a pending team cannot send video", () => {
+  test("Continue and Save match both stop for video, with the approval notice", async () => {
     const h = uploadWizardHarness({
       team: true,
       workspace: { programStatus: "claim_pending" },
+      props: { initialProvider: "splitstep" },
     });
     await h.flush();
     h.current.whoPlayed.choose({
@@ -1496,6 +1553,46 @@ test.describe("wizard handlers: only eligible roster subjects are offered or ins
     h.render();
     expect(h.current.step).toBe("provider");
     expect(h.current.error).toBeNull();
+  });
+
+  // T4 · the ZZ Test Program "Loading the roster…" hang. Its cause was a
+  // guard of `!askWhoPlayed` on the roster effect: a preset (a resumed team
+  // draft carries one) made `askWhoPlayed` false, the fetch never ran, and the
+  // picker — which renders on the workspace kind alone — showed the loading
+  // copy forever with no request in flight. The fetch must key on the
+  // workspace, never on whether the answer is already known.
+  test("a team workspace with a preset still loads the roster (T4)", async () => {
+    const h = uploadWizardHarness({
+      team: true,
+      props: { preset: preset({ matchId: "m-existing" }) },
+    });
+    expect(h.current.whoPlayed.required).toBe(false);
+    await h.flush();
+    expect(h.rosterRpcCallCount).toBeGreaterThan(0);
+    expect(h.current.whoPlayed.roster).not.toBeNull();
+    expect(h.current.whoPlayed.loadFailed).toBe(false);
+  });
+
+  test("a program with nobody on the roster resolves to an empty list, not a pending one (T4)", async () => {
+    // Only the owner's own staff seat comes back — arm 2 of the RPC — which
+    // the picker filters out. That is the empty state, and it must read as
+    // `[]`, never as `null` (which the picker draws as still loading).
+    const h = uploadWizardHarness({
+      team: true,
+      workspace: { role: "owner" },
+      roster: [
+        rosterRow("user", {
+          user_id: "user",
+          display_name: "Riley Player",
+          role: "owner",
+          managed_by: "self",
+        }),
+      ],
+    });
+    await h.flush();
+    expect(h.rosterRpcCallCount).toBeGreaterThan(0);
+    expect(h.current.whoPlayed.roster).toEqual([]);
+    expect(h.current.whoPlayed.loadFailed).toBe(false);
   });
 });
 

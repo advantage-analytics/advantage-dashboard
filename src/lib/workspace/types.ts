@@ -484,8 +484,9 @@ export function pendingReviewRefusal(
   workspace: Pick<Workspace, "name">,
 ): string {
   return (
-    `${workspace.name} is still being confirmed. You can invite staff and ` +
-    `build your roster now; sending video opens as soon as that's done.`
+    `${workspace.name} is still being confirmed. Video analysis opens as ` +
+    `soon as it is. SwingVision imports, your roster and staff invites work ` +
+    `now.`
   );
 }
 
@@ -523,9 +524,9 @@ export function pendingReviewRefusal(
  * recorded here at all, and for whom" is a different one that an import asks
  * too, and it lives in `upload-eligibility.ts` (`uploadEligibility()`), which
  * reuses `canUploadForProgram()` for the role half and never reads
- * `canSubmitVideo`. The two seams stay separate on purpose: a pending program
- * must block every upload, not only the ones that cost minutes — which is
- * what T12-T16 wire that function in to do.
+ * `canSubmitVideo`. The two seams stay separate on purpose. A pending program
+ * blocks video only — an import spends no minutes and asks nobody — which is
+ * why `uploadEligibility()` takes `recordsVideo`.
  */
 export function explainVideoRefusal(workspace: Workspace): string | null {
   if (workspace.kind !== "team") return null;

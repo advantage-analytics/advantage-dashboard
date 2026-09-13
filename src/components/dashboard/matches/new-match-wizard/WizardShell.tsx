@@ -81,7 +81,7 @@ export function WizardShell({
 
       {pinned}
 
-      <div className={`${CONTENT_CLS} pt-16 pb-10`}>
+      <div className={`${CONTENT_CLS} pt-16 pb-24`}>
         <div className="flex flex-col gap-3">
           <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
             Step {stepIndex + 1} of {stepCount}
@@ -115,7 +115,7 @@ export function WizardShell({
           the secondary and Continue. It is the same on every step — only the
           meter comes and goes, and it sits left of the spacer so nothing else
           shifts when it does. */}
-      <div className="sticky bottom-0 mt-auto border-t border-[var(--border-hairline)] bg-white">
+      <div className="sticky bottom-0 z-10 mt-auto border-t border-[var(--border-hairline)] bg-white">
         <div className={`${CONTENT_CLS} flex h-16 items-center gap-4`}>
           {back ? (
             <button

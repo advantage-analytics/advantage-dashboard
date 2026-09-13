@@ -1,5 +1,6 @@
 import { advButton } from "@/lib/ui/adv-button";
 import type { WizardEligibility } from "./subject-eligibility";
+import { PendingTeamNote } from "./PendingTeamNote";
 import { WizardNotice } from "./WizardNotice";
 
 export interface EligibilityNoticeProps {
@@ -36,6 +37,12 @@ export function EligibilityNotice({
   eligibility,
   onRetry,
 }: EligibilityNoticeProps) {
+  // A wait, not a refusal to explain: the grey note, with a way to ask. Only
+  // reached off step 1 (a preset or resumed draft opening on the file step);
+  // step 1 says it under the source row instead.
+  if (eligibility.reason === "pending-approval") {
+    return <PendingTeamNote message={eligibility.message} />;
+  }
   return (
     <WizardNotice>
       <>
