@@ -86,6 +86,7 @@ import { siteLabel, todayISO } from "@/lib/schedule/format";
 import { saveOpponentPlayer } from "@/lib/schedule/actions";
 import {
   findLineOffers,
+  findUploadLines,
   opponentRosterForLine,
   opponentsPlayed,
   playerStyleFromMatches,
@@ -93,8 +94,12 @@ import {
   yourEvents,
   type OpponentPlayed,
   type OpponentRosterRow,
+  type UploadLine,
   type YourEvent,
 } from "@/lib/wizard/actions";
+import { AttachLinePicker } from "@/components/dashboard/matches/match-actions/attach-line-picker";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { canManageTeamSchedule } from "@/lib/workspace/types";
 import type { EventPreset, FormData, LineOffer, ValueSource } from "./types";
 import {
   floatMenuCls,
@@ -546,11 +551,14 @@ function EventCell({
   kind,
   events,
   onPick,
+  footer,
 }: {
   value: string;
   kind: FormData["eventKind"];
   events: YourEvent[];
   onPick: (name: string, kind: FormData["eventKind"]) => void;
+  /** The schedule's way in, under the field — the Edit Match dialog's line. */
+  footer?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [askKind, setAskKind] = useState(false);
@@ -742,7 +750,44 @@ function EventCell({
           )}
         </PopoverContent>
       </Popover>
+      {!open && footer}
     </Cell>
+  );
+}
+
+/**
+ * Under a one-off's Event field in a team workspace: where it stands and the
+ * way onto the schedule, worded as the Edit Match dialog words it.
+ */
+function ScheduleFooter({
+  canAttach,
+  onAdd,
+}: {
+  canAttach: boolean;
+  onAdd: () => void;
+}) {
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 text-[11px] text-[var(--ink-500)]">
+      {canAttach ? (
+        <>
+          <span>One-off · not on the schedule</span>
+          <span className="text-[var(--ink-300)]">·</span>
+          <button
+            type="button"
+            onClick={onAdd}
+            className="inline-flex cursor-pointer items-center gap-[3px] text-[11px] font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
+          >
+            <Plus className="size-[11px]" strokeWidth={2} aria-hidden />
+            Add to an event
+          </button>
+        </>
+      ) : (
+        <span>
+          One-off · not on the schedule. A coach who runs the schedule can add
+          it to an event.
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -929,6 +974,35 @@ function DetailsStepContentImpl({
     Boolean(lineProgramKey);
   const fromLine = Boolean(attachedLine || line);
   const [pendingFormat, setPendingFormat] = useState<string | null>(null);
+  const { active: activeWorkspace } = useWorkspace();
+  const canAttach =
+    workspaceKind === "team" &&
+    activeWorkspace.kind === "team" &&
+    canManageTeamSchedule(activeWorkspace);
+  const [pickingLine, setPickingLine] = useState(false);
+  const adScoringFact = formData.adScoring ?? null;
+  const bestOfFact = Number.parseInt(formData.bestOf, 10) || 3;
+  const roundFact = formData.round || null;
+  const loadUploadLines = useCallback(
+    (query: string) =>
+      findUploadLines({
+        date: formData.date,
+        round: roundFact,
+        player: { id: subject.playerId ?? subject.userId, name: subject.name },
+        bestOf: bestOfFact,
+        adScoring: adScoringFact,
+        query,
+      }),
+    [
+      formData.date,
+      roundFact,
+      subject.playerId,
+      subject.userId,
+      subject.name,
+      bestOfFact,
+      adScoringFact,
+    ],
+  );
 
   const changeFormat = useCallback(
     (nextBestOf: string) => {
@@ -1696,11 +1770,38 @@ function DetailsStepContentImpl({
               value={eventRead}
               tag={lineSlot ? `· ${lineSlot}` : undefined}
             />
+          ) : pickingLine ? (
+            <Cell label="Event" className="col-span-2">
+              <AttachLinePicker<UploadLine>
+                load={loadUploadLines}
+                loadKey={JSON.stringify([
+                  formData.date,
+                  roundFact,
+                  subject.playerId ?? subject.userId,
+                  subject.name,
+                  bestOfFact,
+                  adScoringFact,
+                ])}
+                onPick={(picked) => {
+                  setPickingLine(false);
+                  onAttach(picked.offer);
+                }}
+                onClose={() => setPickingLine(false)}
+              />
+            </Cell>
           ) : (
             <EventCell
               value={formData.eventName}
               kind={formData.eventKind}
               events={events}
+              footer={
+                workspaceKind === "team" ? (
+                  <ScheduleFooter
+                    canAttach={canAttach}
+                    onAdd={() => setPickingLine(true)}
+                  />
+                ) : undefined
+              }
               onPick={(name, kind) => {
                 onInputChange("eventName", name);
                 onInputChange("eventKind", kind);

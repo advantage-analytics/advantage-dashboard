@@ -327,6 +327,80 @@ test.describe("attachLineGroups", () => {
     });
   });
 
+  test("upload mode: fills an unfilmed match, closes outcomes, video and other players", () => {
+    const scored = (id: string, slot: string, hasVideo: boolean) => ({
+      id,
+      round: slot,
+      status: "manual" as const,
+      score: null,
+      opponentLabels: [],
+      hasVideo,
+    });
+    const lines = [
+      // The S1 that reached the wizard: defaulted, no match beside it.
+      entry({
+        id: "defaulted",
+        slot: "S1",
+        outcomes: [
+          {
+            id: "o",
+            round: null,
+            kind: "default",
+            side: "ours",
+            actorUserId: "coach",
+            recordedAt: "2025-01-31T12:00:00Z",
+          },
+        ],
+      }),
+      entry({
+        id: "unfilmed",
+        slot: "S2",
+        matches: [scored("m2", "S2", false)],
+      }),
+      entry({ id: "filmed", slot: "S3", matches: [scored("m3", "S3", true)] }),
+      entry({
+        id: "someone",
+        slot: "S4",
+        playerUserIds: ["u-brandt"],
+        playerLabels: ["Luca Brandt"],
+      }),
+      entry({ id: "empty", slot: "S5", playerUserIds: [], playerLabels: [] }),
+    ];
+    const groups = attachLineGroups({
+      events: [event()],
+      entriesByEvent: new Map([["ev1", lines]]),
+      match: facts,
+      canonical: new Map([["u-revelli", "pp-revelli"]]),
+      mode: "upload",
+    });
+    const all = [...groups.suggested, ...groups.sameDay];
+    const by = (id: string) => all.find((l) => l.entryId === id)!;
+    expect(by("defaulted")).toMatchObject({ state: "hasResult" });
+    expect(by("unfilmed")).toMatchObject({
+      state: "available",
+      existingMatchId: "m2",
+    });
+    expect(groups.suggested.map((l) => l.entryId)).toEqual(["unfilmed"]);
+    expect(by("filmed")).toMatchObject({ state: "hasVideo" });
+    expect(by("someone")).toMatchObject({ state: "otherPlayer" });
+    expect(by("empty")).toMatchObject({ state: "available" });
+
+    // Edit Match's own mode is unchanged: any match closes the line.
+    const attach = attachLineGroups({
+      events: [event()],
+      entriesByEvent: new Map([["ev1", lines]]),
+      match: facts,
+      canonical: new Map([["u-revelli", "pp-revelli"]]),
+    });
+    const inAttach = [...attach.suggested, ...attach.sameDay];
+    expect(inAttach.find((l) => l.entryId === "unfilmed")!.state).toBe(
+      "hasResult",
+    );
+    expect(inAttach.find((l) => l.entryId === "someone")!.state).toBe(
+      "available",
+    );
+  });
+
   test("lineName", () => {
     expect(lineName({ eventKind: "dual", slot: "S2", round: "S2" })).toBe(
       "Singles 2",

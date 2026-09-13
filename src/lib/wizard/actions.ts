@@ -20,7 +20,13 @@ import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { getProgramSchedule } from "@/lib/data/schedule-server";
 import { headToHeadRows } from "@/lib/data/opponents-server";
 import { normalizedPersonName } from "@/lib/data/person-name";
-import type { EventSite } from "@/lib/schedule/types";
+import type { EventEntry, EventSite, ProgramEvent } from "@/lib/schedule/types";
+import { resolveEntryResult } from "@/lib/schedule/entry-state";
+import {
+  attachLineGroups,
+  type AttachLine,
+} from "@/lib/schedule/attach-line-state";
+import { canonicalRosterIds, type RosterIdRow } from "@/lib/data/roster-ids";
 import type {
   LineOffer,
   MatchDraft,
@@ -57,6 +63,61 @@ async function programKeysFor(
   return map;
 }
 
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+/** One line as the wizard attaches it: what `attachLine` fills the form from. */
+function offerFor(
+  event: ProgramEvent,
+  entry: EventEntry,
+  match: EventEntry["matches"][number] | null,
+  fallbackPlayerName: string,
+): LineOffer {
+  return {
+    entryId: entry.id,
+    matchId: match?.id ?? null,
+    eventId: event.id,
+    eventName: event.name,
+    eventKind: event.kind,
+    slot: entry.slot ?? match?.round ?? null,
+    playerName: entry.playerLabels[0] ?? fallbackPlayerName,
+    opponentName: (match?.opponentLabels ?? entry.opponentLabels)[0] ?? "",
+    // A program id until `withProgramKeys` swaps in the key.
+    opponentProgramKey: entry.opponentProgramId ?? null,
+    opponentSchool: entry.opponentSchool,
+    date: event.startsOn,
+    site: event.site,
+    surface: event.surface,
+    bestOf: event.format.bestOf,
+    adScoring: event.format.adScoring,
+  };
+}
+
+/** Swap each offer's opponent program id for its key, filling the school. */
+async function withProgramKeys<T extends LineOffer>(
+  supabase: Supabase,
+  offers: T[],
+): Promise<T[]> {
+  const ids = [
+    ...new Set(
+      offers
+        .map((offer) => offer.opponentProgramKey)
+        .filter((id): id is string => id !== null),
+    ),
+  ];
+  const keys = await programKeysFor(supabase, ids);
+  return offers.map((offer) => ({
+    ...offer,
+    opponentProgramKey: offer.opponentProgramKey
+      ? (keys.get(offer.opponentProgramKey)?.key ?? null)
+      : null,
+    opponentSchool:
+      offer.opponentSchool ??
+      (offer.opponentProgramKey
+        ? (keys.get(offer.opponentProgramKey)?.school ?? null)
+        : null),
+  }));
+}
+
 /**
  * Lines the schedule can offer for this file (design 3d): open singles lines
  * for the named player within two days of the file's date, in the active
@@ -76,7 +137,6 @@ export async function findLineOffers(input: {
   const schedule = await getProgramSchedule(workspace.active.id);
   const wanted = normalizedPersonName(input.playerName);
   const offers: (LineOffer & { distance: number })[] = [];
-  const programIds = new Set<string>();
 
   for (const event of schedule.events) {
     const distance = Math.min(
@@ -102,44 +162,137 @@ export async function findLineOffers(input: {
       // A line whose match already has video is somebody else's upload.
       const match = entry.matches[0] ?? null;
       if (match?.hasVideo) continue;
+      // A saved outcome (a default, a withdrawal) answers the line with no
+      // match to fill, and `guard_schedule_result` refuses a match beside it.
+      const round = event.kind === "dual" ? null : (match?.round ?? null);
+      if (resolveEntryResult(entry, round).kind === "non-played") continue;
 
-      if (entry.opponentProgramId) programIds.add(entry.opponentProgramId);
       offers.push({
-        entryId: entry.id,
-        matchId: match?.id ?? null,
-        eventId: event.id,
-        eventName: event.name,
-        eventKind: event.kind,
-        slot: entry.slot ?? match?.round ?? null,
-        playerName: entry.playerLabels[0] ?? input.playerName,
-        opponentName: (match?.opponentLabels ?? entry.opponentLabels)[0] ?? "",
-        opponentProgramKey: entry.opponentProgramId ?? null,
-        opponentSchool: entry.opponentSchool,
-        date: event.startsOn,
-        site: event.site,
-        surface: event.surface,
-        bestOf: event.format.bestOf,
-        adScoring: event.format.adScoring,
+        ...offerFor(event, entry, match, input.playerName),
         distance: inside ? 0 : distance,
       });
     }
   }
 
   const supabase = await createClient();
-  const keys = await programKeysFor(supabase, [...programIds]);
-  return offers
+  const sorted = offers
     .sort((a, b) => a.distance - b.distance)
-    .map(({ distance: _distance, ...offer }) => ({
-      ...offer,
-      opponentProgramKey: offer.opponentProgramKey
-        ? (keys.get(offer.opponentProgramKey)?.key ?? null)
-        : null,
-      opponentSchool:
-        offer.opponentSchool ??
-        (offer.opponentProgramKey
-          ? (keys.get(offer.opponentProgramKey)?.school ?? null)
-          : null),
-    }));
+    .map(({ distance: _distance, ...offer }) => offer);
+  return withProgramKeys(supabase, sorted);
+}
+
+/** A picker row, carrying the offer `attachLine` fills the form from. */
+export type UploadLine = AttachLine & { offer: LineOffer };
+
+export type FindUploadLinesResult =
+  | {
+      ok: true;
+      matchDate: string;
+      suggested: UploadLine[];
+      sameDay: UploadLine[];
+      search: UploadLine[];
+    }
+  | { ok: false; error: string };
+
+/**
+ * The wizard's "Add to an event" — the Edit Match picker's groups, judged for a
+ * match that does not exist yet: the file's date, round, format and player.
+ * `mode: "upload"` keeps a scored-but-unfilmed line open, since the upload
+ * fills that match (`handleCreateMatch` reuses `offer.matchId`).
+ */
+export async function findUploadLines(input: {
+  /** YYYY-MM-DD. */
+  date: string;
+  round: string | null;
+  player: { id: string | null; name: string };
+  bestOf: number;
+  adScoring: boolean | null;
+  query?: string;
+}): Promise<FindUploadLinesResult> {
+  const workspace = await getWorkspaceContext();
+  if (
+    !workspace ||
+    workspace.active.kind !== "team" ||
+    !canManageTeamSchedule(workspace.active)
+  ) {
+    return {
+      ok: false,
+      error: "Only schedule staff can add a match to an event.",
+    };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) {
+    return { ok: false, error: "Set the match date first." };
+  }
+
+  const supabase = await createClient();
+  const programId = workspace.active.id;
+  const [schedule, roster] = await Promise.all([
+    getProgramSchedule(programId),
+    supabase.rpc("program_roster_full", { p_program_id: programId }),
+  ]);
+  const groups = attachLineGroups({
+    events: schedule.events,
+    entriesByEvent: schedule.entriesByEvent,
+    canonical: canonicalRosterIds((roster.data ?? []) as RosterIdRow[]),
+    query: input.query,
+    mode: "upload",
+    match: {
+      date: input.date,
+      round: input.round,
+      player1Id: input.player.id,
+      player1Name: input.player.name,
+      bestOf: input.bestOf,
+      adScoring: input.adScoring,
+    },
+  });
+
+  const eventsById = new Map(schedule.events.map((e) => [e.id, e]));
+  const entriesById = new Map(
+    [...schedule.entriesByEvent.values()].flat().map((e) => [e.id, e]),
+  );
+  const attach = (lines: AttachLine[]) =>
+    lines.map((line) => {
+      const event = eventsById.get(line.eventId)!;
+      const entry = entriesById.get(line.entryId)!;
+      const match = line.existingMatchId
+        ? (entry.matches.find((m) => m.id === line.existingMatchId) ?? null)
+        : null;
+      const offer = offerFor(event, entry, match, input.player.name);
+      // A tournament entry takes the file's own round, not the slot, and keeps
+      // the file's day when that day is inside the event. A dual is one day.
+      return {
+        ...line,
+        offer:
+          event.kind === "tournament"
+            ? {
+                ...offer,
+                slot: line.round,
+                date: line.sameDay ? input.date : offer.date,
+              }
+            : offer,
+      };
+    });
+  const all = [
+    ...attach(groups.suggested),
+    ...attach(groups.sameDay),
+    ...attach(groups.search),
+  ];
+  const keyed = await withProgramKeys(
+    supabase,
+    all.map((line) => line.offer),
+  );
+  const byEntry = new Map(keyed.map((offer) => [offer.entryId, offer]));
+  const finish = (lines: UploadLine[]) =>
+    lines.map((line) => ({ ...line, offer: byEntry.get(line.entryId)! }));
+  const nSuggested = groups.suggested.length;
+  const nSameDay = groups.sameDay.length;
+  return {
+    ok: true,
+    matchDate: input.date,
+    suggested: finish(all.slice(0, nSuggested)),
+    sameDay: finish(all.slice(nSuggested, nSuggested + nSameDay)),
+    search: finish(all.slice(nSuggested + nSameDay)),
+  };
 }
 
 export interface OpponentPlayed {

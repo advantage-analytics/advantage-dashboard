@@ -12,7 +12,7 @@
 
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { normalizeRound } from "@/lib/matches/round-options";
-import { resolveEntryResult } from "@/lib/schedule/entry-state";
+import { matchForRound, resolveEntryResult } from "@/lib/schedule/entry-state";
 import type { EventEntry, EventKind, ProgramEvent } from "@/lib/schedule/types";
 
 export type AttachLineState =
@@ -21,7 +21,19 @@ export type AttachLineState =
   | "doubles"
   | "forfeit"
   | "needsRound"
-  | "roundTaken";
+  | "roundTaken"
+  /** Upload only: the line's match already carries video. */
+  | "hasVideo"
+  /** Upload only: the lineup names somebody other than the match's player. */
+  | "otherPlayer";
+
+/**
+ * `attach` moves an existing match onto an empty line (Edit Match). `upload`
+ * is the wizard's: a line scored without video still takes the file — it
+ * fills that match rather than minting a second — so only video, a saved
+ * outcome or another player's lineup closes it.
+ */
+export type AttachLineMode = "attach" | "upload";
 
 export interface AttachLine {
   entryId: string;
@@ -46,6 +58,8 @@ export interface AttachLine {
   playerOnLineup: boolean;
   /** The lineup names someone else. Null when it names the match's player, or nobody. */
   lineupMismatch: string | null;
+  /** The match this line already produced for its round, when it was scored. */
+  existingMatchId: string | null;
   /** The event's format disagrees with the match's own. */
   formatDiffers: boolean;
   /** The event's own format, for the note that says how they differ. */
@@ -81,6 +95,7 @@ function lineFor(
   entry: EventEntry,
   match: AttachMatchFacts,
   canonical: ReadonlyMap<string, string>,
+  mode: AttachLineMode,
 ): AttachLine {
   const canon = (id: string) => canonical.get(id) ?? id;
   const wanted = normalizedPersonName(match.player1Name);
@@ -92,14 +107,26 @@ function lineFor(
     entry.playerLabels.some((label) => normalizedPersonName(label) === wanted);
   const playerOnLineup = byId || byName;
   const lineupLabel = entry.playerLabels.join(" · ");
-  const hasLineup =
-    entry.playerLabels.length > 0 || entry.playerUserIds.length > 0;
 
   // A tournament round in its short code ("QF"), whatever spelling the match
   // was saved with — attaching writes the code (`attachMatchToLine`), so the
   // taken-round check must compare codes too.
   const round =
     event.kind === "dual" ? entry.slot : normalizeRound(match.round);
+
+  const resultRound = event.kind === "dual" ? null : round;
+  const result =
+    event.kind === "dual" || round !== null
+      ? resolveEntryResult(entry, resultRound)
+      : null;
+  // The upload wizard fills a scored-but-unfilmed match; anything else that
+  // answers the line (an outcome, or a match with video) still closes it.
+  const taken =
+    result !== null &&
+    result.kind !== "unanswered" &&
+    !(mode === "upload" && result.kind === "played" && !result.match.hasVideo);
+  const hasLineup =
+    entry.playerLabels.length > 0 || entry.playerUserIds.length > 0;
 
   let state: AttachLineState = "available";
   let reason: string | null = null;
@@ -109,17 +136,20 @@ function lineFor(
   } else if (entry.forfeit !== null) {
     state = "forfeit";
     reason = "Forfeited";
-  } else if (event.kind === "dual") {
-    if (resolveEntryResult(entry, null).kind !== "unanswered") {
-      state = "hasResult";
-      reason = "Has a result";
-    }
-  } else if (round === null) {
+  } else if (event.kind === "tournament" && round === null) {
     state = "needsRound";
     reason = "Set the round first";
-  } else if (resolveEntryResult(entry, round).kind !== "unanswered") {
-    state = "roundTaken";
-    reason = `${round} has a result`;
+  } else if (taken && mode === "upload" && result?.kind === "played") {
+    state = "hasVideo";
+    reason = "Has video";
+  } else if (taken) {
+    state = event.kind === "dual" ? "hasResult" : "roundTaken";
+    reason = event.kind === "dual" ? "Has a result" : `${round} has a result`;
+  } else if (mode === "upload" && hasLineup && !playerOnLineup) {
+    // A file already names its player; putting it on someone else's line
+    // would score their line with this match.
+    state = "otherPlayer";
+    reason = "Other player";
   }
 
   const formatDiffers =
@@ -144,6 +174,7 @@ function lineFor(
     state,
     reason,
     playerOnLineup,
+    existingMatchId: matchForRound(entry, resultRound)?.id ?? null,
     lineupMismatch:
       !playerOnLineup && hasLineup && lineupLabel !== "" ? lineupLabel : null,
     formatDiffers,
@@ -165,6 +196,7 @@ export function attachLineGroups(input: {
   match: AttachMatchFacts;
   canonical?: ReadonlyMap<string, string>;
   query?: string;
+  mode?: AttachLineMode;
 }): AttachLineGroups {
   const canonical = input.canonical ?? new Map<string, string>();
   const needle = input.query?.trim().toLowerCase() ?? "";
@@ -176,7 +208,13 @@ export function attachLineGroups(input: {
     const nameHit = needle === "" || event.name.toLowerCase().includes(needle);
     const entries = input.entriesByEvent.get(event.id) ?? [];
     for (const entry of entries) {
-      const line = lineFor(event, entry, input.match, canonical);
+      const line = lineFor(
+        event,
+        entry,
+        input.match,
+        canonical,
+        input.mode ?? "attach",
+      );
       if (event.kind === "tournament" && !line.playerOnLineup) continue;
 
       if (line.sameDay) {
