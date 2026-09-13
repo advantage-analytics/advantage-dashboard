@@ -40,12 +40,8 @@ export function FilterPills({
   }
 
   return (
-    <div className={cn("flex min-w-0 flex-col gap-2", className)}>
-      {label && (
-        <span className="text-[12px] font-medium text-[var(--ink-500)]">
-          {label}
-        </span>
-      )}
+    <div className={cn("flex flex-col gap-2 min-w-0", className)}>
+      {label && <span className="text-[12px] font-medium text-[#999999]">{label}</span>}
       <div className="flex flex-wrap gap-2">
         {options.map((option) => {
           const isSelected = selected.includes(option.value);
@@ -54,12 +50,12 @@ export function FilterPills({
               key={option.value}
               onClick={() => handleClick(option.value)}
               className={cn(
-                "cursor-pointer rounded-[16px] border px-4 py-1.5 text-[12px] font-medium whitespace-nowrap",
+                "rounded-[16px] px-4 py-1.5 text-[12px] font-medium whitespace-nowrap cursor-pointer border",
                 "transition-colors duration-200",
-                "focus-visible:outline-none",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1",
                 isSelected
-                  ? "border-[#60A5FA] bg-[#60A5FA] text-white"
-                  : "border-[var(--ink-300)] bg-white text-[#525252] hover:bg-[#F5F5F5]",
+                  ? "bg-[#60A5FA] border-[#60A5FA] text-white"
+                  : "border-[#D9D9D9] text-[#525252] bg-white hover:bg-[#F5F5F5]",
                 pillClassName,
               )}
             >

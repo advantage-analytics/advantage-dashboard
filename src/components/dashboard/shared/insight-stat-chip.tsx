@@ -17,14 +17,10 @@ export interface InsightStatChipProps {
 }
 
 /**
- * A bare evidence stat beside AI prose — v3's `InsightStatChip`: pure type,
- * no container. The numbers always come from real computed data (match
- * statistics, KPI movers), never from the LLM, so the figures are
- * trustworthy. The trend arrow mirrors `KpiTile` for consistency.
- *
- * It used to draw a grey box around itself; the design system's own chip is
- * a 9px letter-spaced label on a 12px tabular value, which is what a row of
- * five reads as evidence rather than as five buttons.
+ * Small, non-interactive "evidence" pill shown next to AI-insight prose. The numbers
+ * always come from real computed data (KPI movers, match statistics) — never from the
+ * LLM — so the figures are trustworthy. The trend arrow/color mirrors `KpiTile`
+ * (`src/components/dashboard/shared/kpi-tile.tsx`) for consistency.
  */
 export function InsightStatChip({
   label,
@@ -36,31 +32,26 @@ export function InsightStatChip({
   // A zero delta is treated as "no trend" — we render value-only rather than a neutral
   // "→0", which next to the value reads as a drop to zero.
   const hasTrend = typeof change === "number" && change !== 0;
-  const isGood = lowerIsBetter
-    ? (change as number) < 0
-    : (change as number) > 0;
-  const trendColor = isGood ? "var(--viz-good)" : "var(--viz-bad)";
+  const isGood = lowerIsBetter ? (change as number) < 0 : (change as number) > 0;
+  const trendColor = isGood ? "text-[#5DB955]" : "text-[#E51837]";
   const arrow = (change as number) > 0 ? "↑" : "↓";
   const sign = (change as number) > 0 ? "+" : "";
 
   return (
     <span
       className={cn(
-        "inline-flex items-baseline gap-[7px] leading-none",
+        "inline-flex items-center gap-1.5 rounded-[6px] bg-[#F5F5F5] px-2 py-1",
         className,
       )}
     >
-      <span className="text-[9px] font-normal tracking-[2.5px] whitespace-nowrap text-[var(--ink-400)] uppercase">
+      <span className="text-[9px] font-normal uppercase tracking-[2.5px] text-[var(--color-text-dim)] whitespace-nowrap">
         {label}
       </span>
-      <span className="tabular text-[12px] font-normal text-[var(--ink-900)]">
+      <span className="text-[11px] font-semibold tabular-nums text-[var(--color-text-primary)]">
         {value}
       </span>
       {hasTrend && (
-        <span
-          className="tabular text-[10px] font-medium"
-          style={{ color: trendColor }}
-        >
+        <span className={cn("text-[10px] font-semibold tabular-nums", trendColor)}>
           {arrow}
           {sign}
           {change}

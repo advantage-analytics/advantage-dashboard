@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-04-30T00:00:00.000Z",
+  "title": "Design System: Advantage Analytics",
+  "extensions": {
+    "colorMeta": {
+      "signal-blue": {
+        "role": "primary",
+        "displayName": "Signal Blue",
+        "canonical": "#3B82F6",
+        "tonalRamp": ["#0F2C5C", "#1B3F86", "#2454A8", "#2563EB", "#3B82F6", "#7AAEFA", "#BFD5FB", "#EBF2FD"]
+      },
+      "signal-blue-deep": {
+        "role": "primary",
+        "displayName": "Signal Blue Deep",
+        "canonical": "#2563EB"
+      },
+      "signal-blue-soft": {
+        "role": "primary",
+        "displayName": "Signal Blue Soft",
+        "canonical": "#EBF2FD"
+      },
+      "win-green": {
+        "role": "secondary",
+        "displayName": "Win Green",
+        "canonical": "#5DB955",
+        "tonalRamp": ["#1F3F1C", "#2F5C2A", "#3F7A37", "#4EA84A", "#5DB955", "#8FD389", "#BFE5BB", "#EAF6E7"]
+      },
+      "loss-red": {
+        "role": "secondary",
+        "displayName": "Loss Red",
+        "canonical": "#E51837",
+        "tonalRamp": ["#3F0810", "#5C0E18", "#8C1424", "#C41530", "#E51837", "#F25671", "#F89BAB", "#FCE3E8"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#0D0D0D",
+        "tonalRamp": ["#0D0D0D", "#1D1D1F", "#3C3C43", "#525252", "#71717A", "#888888", "#AAAAAA", "#CCCCCC"]
+      },
+      "ink-secondary": {
+        "role": "neutral",
+        "displayName": "Ink Secondary",
+        "canonical": "#525252"
+      },
+      "ink-label": {
+        "role": "neutral",
+        "displayName": "Ink Label",
+        "canonical": "#AAAAAA"
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "#FFFFFF"
+      },
+      "surface-page": {
+        "role": "neutral",
+        "displayName": "Surface Page",
+        "canonical": "#FAFAFA"
+      },
+      "surface-subtle": {
+        "role": "neutral",
+        "displayName": "Surface Subtle",
+        "canonical": "#F5F5F5"
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#F3F3F3"
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Page heading. Home greeting, settings page title." },
+      "headline": { "displayName": "Headline", "purpose": "KPI hero values, brand panel hero on auth." },
+      "title": { "displayName": "Title", "purpose": "Event names, dialog titles." },
+      "body": { "displayName": "Body", "purpose": "Standard interface body, nav items." },
+      "body-sm": { "displayName": "Body Small", "purpose": "Descriptions, helper text, activity messages." },
+      "label": { "displayName": "Label", "purpose": "Section eyebrows, card headers, field labels. The most-used token in the system." },
+      "score": { "displayName": "Score", "purpose": "Match scores in match detail view only. The only place 700 weight appears." }
+    },
+    "shadows": [
+      { "name": "shadow-card", "value": "0px 2px 8px 0px rgba(0,0,0,0.06)", "purpose": "Default card. Reads as a slight lift, not a drop shadow." },
+      { "name": "shadow-card-emphasis", "value": "0px 4px 16px 0px rgba(0,0,0,0.10)", "purpose": "Earned emphasis: active plan card, hovered KPI tiles." },
+      { "name": "shadow-card-raised", "value": "0px 6px 20px 0px rgba(0,0,0,0.12)", "purpose": "Activity feed, content-heavy cards that need to feel like a discrete object." },
+      { "name": "shadow-dropdown", "value": "0 8px 30px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)", "purpose": "Menus, popovers, profile dropdown." },
+      { "name": "shadow-floating", "value": "0px 8px 32px rgba(0,0,0,0.25), 0px 0px 0px 1px rgba(255,255,255,0.06) inset", "purpose": "Dark floating UI on the processing toast." },
+      { "name": "shadow-cta", "value": "0 1px 3px rgba(57,134,243,0.25)", "purpose": "Subtle blue glow under primary CTAs." }
+    ],
+    "motion": [
+      { "name": "ease-primary", "value": "cubic-bezier(0.25, 0.46, 0.45, 0.94)", "purpose": "Default custom easing for cards, fades, slides." },
+      { "name": "ease-spring", "value": "cubic-bezier(0.23, 1, 0.32, 1)", "purpose": "Header transitions, layout shifts. Reads as spring without bounce." },
+      { "name": "ease-chart", "value": "cubic-bezier(0.2, 0, 0.4, 1)", "purpose": "Chart and data transitions." },
+      { "name": "duration-quick", "value": "150ms", "purpose": "Fast UI responses." },
+      { "name": "duration-default", "value": "200ms", "purpose": "Default CSS hover transitions." },
+      { "name": "duration-page", "value": "300ms", "purpose": "Page transitions, fade-ins." },
+      { "name": "duration-reveal", "value": "600ms", "purpose": "Larger reveals, chart animations, completion ring sweeps." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary CTA Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Action button used as the main affordance on every form and modal footer.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Save changes</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; background: #3B82F6; color: #FFFFFF; border: none; border-radius: 6px; font-family: Inter, system-ui, sans-serif; font-size: 13px; font-weight: 500; line-height: 1; box-shadow: 0 1px 3px rgba(57,134,243,0.25); transition: background-color 200ms cubic-bezier(0.25,0.46,0.45,0.94), transform 200ms cubic-bezier(0.25,0.46,0.45,0.94); cursor: pointer; } .ds-btn-primary:hover { background: #2563EB; } .ds-btn-primary:active { transform: scale(0.97); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(59,130,246,0.40); } .ds-btn-primary:disabled { background: #F7F7F7; color: #888888; box-shadow: none; cursor: not-allowed; }"
+    },
+    {
+      "name": "Ghost Pill Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Quiet secondary action. Used for filter chips, segmented toggles, and ghost CTAs in settings and the upload modal.",
+      "html": "<button class=\"ds-btn-ghost\" type=\"button\">Upload photo</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; justify-content: center; height: 32px; padding: 0 14px; background: #FFFFFF; color: #525252; border: 1px solid #EAECF0; border-radius: 9999px; font-family: Inter, system-ui, sans-serif; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px; line-height: 1; transition: color 200ms, border-color 200ms, background-color 200ms; cursor: pointer; } .ds-btn-ghost:hover { color: #3B82F6; border-color: #3B82F6; } .ds-btn-ghost:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(59,130,246,0.40); }"
+    },
+    {
+      "name": "Underline Input",
+      "kind": "input",
+      "refersTo": "input-underline",
+      "description": "Canonical input pattern. Eyebrow label above, transparent input, hairline rule below. Rule grows to 2px Signal Blue on focus.",
+      "html": "<div class=\"ds-input\"><label class=\"ds-input-label\" for=\"ds-input-1\">First Name</label><input class=\"ds-input-control\" id=\"ds-input-1\" type=\"text\" placeholder=\"First name\" /><span class=\"ds-input-rule\" aria-hidden=\"true\"></span></div>",
+      "css": ".ds-input { display: flex; flex-direction: column; gap: 6px; font-family: Inter, system-ui, sans-serif; } .ds-input-label { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 2.5px; color: #AAAAAA; } .ds-input-control { width: 100%; background: transparent; border: none; outline: none; padding: 0 0 10px 0; font-size: 14px; color: #0D0D0D; } .ds-input-control::placeholder { color: #AAAAAA; } .ds-input-rule { display: block; height: 1px; width: 100%; background: #F3F3F3; transition: height 300ms cubic-bezier(0.25,0.46,0.45,0.94), background-color 300ms cubic-bezier(0.25,0.46,0.45,0.94); } .ds-input:hover .ds-input-rule { background: #E5E5EA; } .ds-input:focus-within .ds-input-rule { height: 2px; background: #3B82F6; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Default card surface. Flat at rest, promotes to shadow-card-emphasis on hover or selection.",
+      "html": "<article class=\"ds-card\"><p class=\"ds-card-eyebrow\">Recent Match</p><h3 class=\"ds-card-title\">Cardinal Invitational</h3><p class=\"ds-card-body\">Defeated Stanford 6-3, 6-4 in straight sets.</p></article>",
+      "css": ".ds-card { background: #FFFFFF; border: 1px solid #F3F3F3; border-radius: 14px; padding: 20px; font-family: Inter, system-ui, sans-serif; box-shadow: 0 2px 8px 0 rgba(0,0,0,0.06); transition: box-shadow 200ms cubic-bezier(0.25,0.46,0.45,0.94); } .ds-card:hover { box-shadow: 0 4px 16px 0 rgba(0,0,0,0.10); } .ds-card-eyebrow { margin: 0 0 8px 0; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 2.5px; color: #AAAAAA; } .ds-card-title { margin: 0 0 6px 0; font-size: 16px; font-weight: 400; letter-spacing: -0.4px; color: #0D0D0D; } .ds-card-body { margin: 0; font-size: 12px; line-height: 1.5; color: #525252; }"
+    },
+    {
+      "name": "Section Eyebrow",
+      "kind": "custom",
+      "refersTo": "section-eyebrow",
+      "description": "Signature pattern: 10px uppercase eyebrow + 12px gap + 1px hairline rule, optionally with right-aligned action.",
+      "html": "<header class=\"ds-eyebrow\"><span class=\"ds-eyebrow-label\">General Information</span><span class=\"ds-eyebrow-rule\" aria-hidden=\"true\"></span></header>",
+      "css": ".ds-eyebrow { display: flex; align-items: center; gap: 12px; font-family: Inter, system-ui, sans-serif; } .ds-eyebrow-label { white-space: nowrap; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 2.5px; color: #AAAAAA; } .ds-eyebrow-rule { flex: 1; height: 1px; background: #F3F3F3; }"
+    },
+    {
+      "name": "Sidebar Nav Item (Active)",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Active state of the dashboard sidebar nav item. Soft blue tint, blue label and icon.",
+      "html": "<a class=\"ds-nav-item ds-nav-item--active\" href=\"#\" aria-current=\"page\"><svg class=\"ds-nav-icon\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"8\" r=\"4\"/><path d=\"M4 21a8 8 0 0 1 16 0\"/></svg><span class=\"ds-nav-label\">Profile</span></a>",
+      "css": ".ds-nav-item { display: inline-flex; align-items: center; gap: 12px; height: 36px; padding: 0 14px 0 13px; background: #EBF2FD; color: #3B82F6; border-radius: 8px; font-family: Inter, system-ui, sans-serif; font-size: 13px; font-weight: 500; text-decoration: none; transition: background-color 200ms; } .ds-nav-item:hover { background: #E1ECFB; } .ds-nav-icon { color: #3B82F6; flex-shrink: 0; } .ds-nav-label { line-height: 1; }",
+      "states": ["default", "hover", "active"]
+    },
+    {
+      "name": "Status Badge (Win)",
+      "kind": "chip",
+      "refersTo": "badge-win",
+      "description": "Match outcome pill. Win Green tint with Win Green text.",
+      "html": "<span class=\"ds-badge ds-badge--win\">Won</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; padding: 4px 6px; border-radius: 6px; font-family: Inter, system-ui, sans-serif; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; line-height: 1; } .ds-badge--win { background: rgba(115,230,104,0.15); color: #5DB955; }"
+    },
+    {
+      "name": "Status Badge (Loss)",
+      "kind": "chip",
+      "refersTo": "badge-loss",
+      "description": "Match outcome pill. Loss Red tint with Loss Red text.",
+      "html": "<span class=\"ds-badge ds-badge--loss\">Lost</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; padding: 4px 6px; border-radius: 6px; font-family: Inter, system-ui, sans-serif; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; line-height: 1; } .ds-badge--loss { background: rgba(229,24,55,0.15); color: #E51837; }"
+    },
+    {
+      "name": "Keyboard Shortcut Chip",
+      "kind": "custom",
+      "refersTo": "kbd",
+      "description": "Inline keyboard hint. Auto-sizes to text + padding so glyphs sit at their natural cap height.",
+      "html": "<kbd class=\"ds-kbd\">⌘S</kbd>",
+      "css": ".ds-kbd { display: inline-block; padding: 2px 4px; background: #F0F0F0; color: #AAAAAA; border-radius: 3px; font-family: Inter, system-ui, sans-serif; font-size: 10px; font-weight: 500; line-height: 1; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Pro Training Room",
+    "overview": "Advantage Analytics is a competitor's tool, not a consumer app. The interface is the equivalent of a high-performance training room: clean walls, exact equipment, no decoration. Numbers breathe. Type is light. Lines are hairline. The accent is one shade of blue, used only when the screen needs to issue a command or claim a win. Nothing else fights for attention because there's nothing else to say. The system is monochrome with a single chromatic voice. Cool neutrals carry every surface, every divider, every body word. Signal Blue carries action and emphasis only. Win Green and Loss Red carry match outcome and nothing else. Color is functional, never decorative.",
+    "keyCharacteristics": [
+      "Light mode only, cool-neutral palette, single accent.",
+      "Light (300) for hero numbers; medium (500) for eyebrows; semibold (600) for stat values; bold (700) reserved for match scores.",
+      "Hairline #F3F3F3 rules carry hierarchy more than borders or shadows do.",
+      "Tabular numerics throughout.",
+      "Two motion curves only, both ease-out exponential. No bounce, no elastic.",
+      "Inter only. Lucide only."
+    ],
+    "rules": [
+      { "name": "The One Voice Rule", "body": "Signal Blue carries no more than 10% of any screen. The page may have one CTA, one active nav highlight, one focus ring at a time. If two blue elements compete on the same surface, one of them is wrong.", "section": "colors" },
+      { "name": "The Outcome-Only Rule", "body": "Green means winning; red means losing. They never appear as mood, status, or affirmation.", "section": "colors" },
+      { "name": "The Hairline Rule", "body": "Hierarchy comes from #F3F3F3 rules and whitespace, not from borders or shadows. If a section needs a card to feel real, the structure is wrong: simplify the page, not the chrome.", "section": "colors" },
+      { "name": "The Eyebrow Rule", "body": "Every section opens with a 10px font-medium uppercase tracking-2.5px text-#AAAAAA eyebrow followed by a hairline rule. Non-negotiable; this is the typographic spine of the product.", "section": "typography" },
+      { "name": "The Tabular Rule", "body": "Any number a player will compare against another number gets tabular-nums. If columns of numbers are not aligned, the system has lost.", "section": "typography" },
+      { "name": "The 65-75ch Rule", "body": "Body copy never extends past 75 characters per line.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Cards begin flat. Shadow is added only when the surface needs to claim attention. Never as default decoration.", "section": "elevation" },
+      { "name": "The No-Layered-Cards Rule", "body": "Cards inside cards are forbidden. Use a hairline rule and whitespace, not a second card.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do lead every section with a 10px uppercase eyebrow + hairline rule.",
+      "Do use tabular-nums on every number a player will read alongside another number.",
+      "Do respect prefers-reduced-motion: skip transforms, keep opacity.",
+      "Do use Signal Blue exclusively for action and emphasis, on no more than 10% of the screen.",
+      "Do use Win Green for winning and Loss Red for losing only.",
+      "Do prefer underline inputs over boxed inputs.",
+      "Do keep cards flat at rest. Promote to shadow-card-emphasis only on hover, selection, or active state.",
+      "Do size icons at size-3.5 with strokeWidth=1.5. Lucide only."
+    ],
+    "donts": [
+      "Don't use bounce or elastic animations.",
+      "Don't apply glassmorphism or backdrop blur as decoration.",
+      "Don't use neon accents, gradient text, or gradient-heavy surfaces.",
+      "Don't use warm tones, browns, or earthy colors anywhere.",
+      "Don't ship gamification: no streak meters, no achievement badges, no celebratory confetti.",
+      "Don't use border-left or border-right greater than 1px as a colored stripe.",
+      "Don't nest cards.",
+      "Don't invent decoration colors. The palette is closed.",
+      "Don't use emoji as icons. Lucide only.",
+      "Don't apply font weights other than 300, 400, 500, 600, 700.",
+      "Don't use SwingVision as a visual reference.",
+      "Don't ship a hero-metric template."
+    ]
+  }
+}

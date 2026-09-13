@@ -2,8 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 // Types
-type TargetSheetName =
-  "Shots" | "Points" | "Games" | "Sets" | "Stats" | "Settings";
+type TargetSheetName = "Shots" | "Points" | "Games" | "Sets" | "Stats" | "Settings";
 
 type CombinedRow = Record<string, unknown> & {
   __source_file__: string;
@@ -37,38 +36,21 @@ Deno.serve(async (req: Request) => {
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Methods": "POST, OPTIONS",
-          "Access-Control-Allow-Headers":
-            "authorization, x-client-info, apikey, content-type",
+          "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
         },
       });
     }
 
-    const {
-      matchId,
-      userId,
-      fileNames,
-      bucketId = "match-data",
-      sourceProvider,
-    }: ProcessMatchRequest = await req.json();
+    const { matchId, userId, fileNames, bucketId = "match-data", sourceProvider }: ProcessMatchRequest =
+      await req.json();
+    
+    console.log("📥 Request received:", { matchId, userId, fileCount: fileNames.length, sourceProvider });
 
-    console.log("📥 Request received:", {
-      matchId,
-      userId,
-      fileCount: fileNames.length,
-      sourceProvider,
-    });
-
-    if (
-      !matchId ||
-      !userId ||
-      !Array.isArray(fileNames) ||
-      fileNames.length === 0
-    ) {
+    if (!matchId || !userId || !Array.isArray(fileNames) || fileNames.length === 0) {
       return new Response(
         JSON.stringify({
           success: false,
-          error:
-            "matchId, userId, and a non-empty fileNames array are required",
+          error: "matchId, userId, and a non-empty fileNames array are required",
         }),
         {
           status: 400,
@@ -117,8 +99,7 @@ Deno.serve(async (req: Request) => {
 
     const provider = sourceProvider || match?.source_provider || null;
     // Extract best_of from format JSONB field, default to best-of-3
-    const matchFormat =
-      (match?.format as { best_of?: number } | null)?.best_of ?? 3;
+    const matchFormat = (match?.format as { best_of?: number } | null)?.best_of ?? 3;
 
     // Only process if source_provider is "swing-vision"
     if (provider !== "swing-vision") {
@@ -149,13 +130,16 @@ Deno.serve(async (req: Request) => {
     });
 
     console.log("✅ Match data processing completed successfully");
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
+    return new Response(
+      JSON.stringify({ success: true }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
       },
-    });
+    );
   } catch (error: any) {
     console.error("Error in process-match Edge Function:", error);
     return new Response(
@@ -222,18 +206,15 @@ async function processMatchToDb({
     const availableSheets = Object.keys(combined).join(", ") || "none";
     throw new Error(
       `No Points sheet data found in uploaded files. ` +
-        `Available sheets: ${availableSheets}. ` +
-        `Files processed: ${fileNames.join(", ")}`,
+      `Available sheets: ${availableSheets}. ` +
+      `Files processed: ${fileNames.join(", ")}`
     );
   }
 
   // Extract host team name from Settings for player identification
-  const hostTeam =
-    settingsRows.length > 0
-      ? String(settingsRows[0]["Host Team"] ?? "")
-          .toLowerCase()
-          .trim()
-      : "";
+  const hostTeam = settingsRows.length > 0
+    ? String(settingsRows[0]["Host Team"] ?? "").toLowerCase().trim()
+    : "";
   console.log(`👤 Host team identified: "${hostTeam}"`);
 
   // Build a map of set scores from Sets sheet: setNumber -> "hostWins-guestWins" (cumulative before that set)
@@ -249,16 +230,12 @@ async function processMatchToDb({
   console.log(`🎾 Rally length map built with ${rallyLengthMap.size} entries`);
 
   // 2. Insert points
-  const pointInserts = buildPointInserts(
-    pointsRows,
-    matchId,
-    setScoreMap,
-    gameScoreMap,
-    rallyLengthMap,
-    matchFormat,
-  );
+  const pointInserts = buildPointInserts(pointsRows, matchId, setScoreMap, gameScoreMap, rallyLengthMap, matchFormat);
 
-  const { data: insertedPoints, error: pointsError } = await supabase
+  const {
+    data: insertedPoints,
+    error: pointsError,
+  } = await supabase
     .from("points")
     .insert(pointInserts)
     .select("id, set_number, game_number, point_number");
@@ -308,7 +285,7 @@ async function processMatchToDb({
 
   console.log("🎬 Generating key moments...");
   const { data: keyMomentsData, error: keyMomentsError } =
-    await supabase.functions.invoke("generate-key-moments", {
+    await supabase.functions.invoke('generate-key-moments', {
       body: { match_id: matchId },
     });
 
@@ -320,18 +297,13 @@ async function processMatchToDb({
   console.log("✅ Key moments generated successfully:", keyMomentsData);
 
   console.log("Generating insights:");
-  const { error: insightsError } = await supabase.functions.invoke(
-    "generate-insights",
-    {
+  const { error: insightsError } =
+    await supabase.functions.invoke('generate-insights', {
       body: { matchId: matchId },
-    },
-  );
+    });
 
   if (insightsError) {
-    console.error(
-      "Failed to generate and store match insights:",
-      insightsError,
-    );
+    console.error("Failed to generate and store match insights:", insightsError);
   }
 
   console.log("Insights generated successfully.");
@@ -356,7 +328,7 @@ async function createCombinedSheets({
   const ExcelJSModule = await import("npm:exceljs@4.4.0");
   // Handle both default and named exports
   const ExcelJS = (ExcelJSModule.default || ExcelJSModule) as any;
-
+  
   const combined: Record<TargetSheetName, CombinedRow[]> = {
     Shots: [],
     Points: [],
@@ -373,9 +345,7 @@ async function createCombinedSheets({
 
     // If fileName is already a full storage path (contains '/'), use it directly.
     // Otherwise, construct it as {userId}/{fileName} for backward compatibility.
-    const filePath = fileName.includes("/")
-      ? fileName
-      : `${userId}/${fileName}`;
+    const filePath = fileName.includes("/") ? fileName : `${userId}/${fileName}`;
 
     // Extract just the filename for __source_file__ field (last part after '/')
     const sourceFileName = fileName.includes("/")
@@ -400,28 +370,20 @@ async function createCombinedSheets({
       // ExcelJS in Deno: Workbook is available directly on the module
       const Workbook = ExcelJS.Workbook;
       if (!Workbook) {
-        console.error(
-          `❌ ExcelJS.Workbook not found. Module keys:`,
-          Object.keys(ExcelJS),
-        );
+        console.error(`❌ ExcelJS.Workbook not found. Module keys:`, Object.keys(ExcelJS));
         throw new Error("ExcelJS.Workbook is not available");
       }
       const workbook = new Workbook();
       await workbook.xlsx.load(arrayBuffer);
 
       // Log all available sheets in the workbook
-      const availableSheetNames = workbook.worksheets.map((ws) => ws.name);
-      console.log(
-        `  📑 Available sheets in ${sourceFileName}:`,
-        availableSheetNames,
-      );
+      const availableSheetNames = workbook.worksheets.map(ws => ws.name);
+      console.log(`  📑 Available sheets in ${sourceFileName}:`, availableSheetNames);
 
       for (const sheetName of TARGET_SHEETS) {
         const sheet = workbook.getWorksheet(sheetName);
         if (!sheet) {
-          console.log(
-            `  ⚠️ Sheet "${sheetName}" not found in ${sourceFileName}`,
-          );
+          console.log(`  ⚠️ Sheet "${sheetName}" not found in ${sourceFileName}`);
           continue;
         }
 
@@ -453,9 +415,7 @@ async function createCombinedSheets({
 
   console.log(`✅ Combined sheets result:`, {
     sheets: Object.keys(result),
-    totalFilesProcessed: fileNames.filter(
-      (f) => f.endsWith(".xlsx") && f !== "combined.xlsx",
-    ).length,
+    totalFilesProcessed: fileNames.filter(f => f.endsWith(".xlsx") && f !== "combined.xlsx").length,
   });
 
   return result;
@@ -468,9 +428,7 @@ function extractRowsFromSheet(
   const rows: CombinedRow[] = [];
 
   const headerRow = sheet.getRow(1);
-  const headerValues = headerRow.values as (
-    string | number | null | undefined
-  )[];
+  const headerValues = headerRow.values as (string | number | null | undefined)[];
 
   // Build a list of header names keyed by column index (1-based in ExcelJS)
   const headers: Record<number, string> = {};
@@ -517,7 +475,7 @@ function extractRowsFromSheet(
 function buildSetScoreMap(setsRows: CombinedRow[]): Map<number, string> {
   // Sort by set number to ensure correct cumulative calculation
   const sortedSets = [...setsRows].sort(
-    (a, b) => toInt(a["Set"]) - toInt(b["Set"]),
+    (a, b) => toInt(a["Set"]) - toInt(b["Set"])
   );
 
   const map = new Map<number, string>();
@@ -543,9 +501,7 @@ function buildSetScoreMap(setsRows: CombinedRow[]): Map<number, string> {
  * Key: "set-game" -> Value: { host: number, guest: number } (games won by each in that set)
  * Used to show score like "3-2" meaning host leads 3 games to 2 in the current set.
  */
-function buildGameScoreMap(
-  gamesRows: CombinedRow[],
-): Map<string, { host: number; guest: number }> {
+function buildGameScoreMap(gamesRows: CombinedRow[]): Map<string, { host: number; guest: number }> {
   const map = new Map<string, { host: number; guest: number }>();
   for (const row of gamesRows) {
     const setNumber = toInt(row["Set"]);
@@ -628,15 +584,11 @@ function buildPointInserts(
     // (SwingVision's "Set Point" column is unreliable for sets 2+)
     const { serverHasSetPoint, receiverHasSetPoint } = calculateSetPoint(
       gameScore,
-      pointScore,
+      pointScore
     );
 
-    const hostHasSetPoint = serverIsPlayer1
-      ? serverHasSetPoint
-      : receiverHasSetPoint;
-    const guestHasSetPoint = serverIsPlayer1
-      ? receiverHasSetPoint
-      : serverHasSetPoint;
+    const hostHasSetPoint = serverIsPlayer1 ? serverHasSetPoint : receiverHasSetPoint;
+    const guestHasSetPoint = serverIsPlayer1 ? receiverHasSetPoint : serverHasSetPoint;
     const isSetPoint = hostHasSetPoint || guestHasSetPoint;
 
     // Match point: set point for a player who needs 1 more set to win
@@ -716,9 +668,7 @@ function buildShotInserts(
 
     // SwingVision uses actual player names in the "Player" column (e.g., "Rudy Quan")
     // Compare to hostTeam name from Settings sheet to determine is_player1
-    const playerName = String(row["Player"] ?? "")
-      .toLowerCase()
-      .trim();
+    const playerName = String(row["Player"] ?? "").toLowerCase().trim();
     const isPlayer1 = hostTeam !== "" && playerName === hostTeam;
 
     // Determine shot_type from "Stroke" column
@@ -860,24 +810,22 @@ function safeString(value: unknown): string | null {
   if (value === null || value === undefined) return null;
 
   // Handle ExcelJS objects (empty cells with formatting, rich text, formulas)
-  if (typeof value === "object" && value !== null) {
+  if (typeof value === 'object' && value !== null) {
     // Rich text cells have a richText array
-    if ("richText" in value && Array.isArray((value as any).richText)) {
-      const text = (value as any).richText
-        .map((rt: any) => rt.text || "")
-        .join("");
+    if ('richText' in value && Array.isArray((value as any).richText)) {
+      const text = (value as any).richText.map((rt: any) => rt.text || '').join('');
       return text.length ? text : null;
     }
     // Some cells have a text property
-    if ("text" in value && typeof (value as any).text === "string") {
+    if ('text' in value && typeof (value as any).text === 'string') {
       const text = (value as any).text;
       return text.length ? text : null;
     }
     // Formula cells might have a result property
-    if ("result" in value) {
+    if ('result' in value) {
       const result = (value as any).result;
-      if (typeof result === "string" && result.length) return result;
-      if (typeof result === "number") return String(result);
+      if (typeof result === 'string' && result.length) return result;
+      if (typeof result === 'number') return String(result);
     }
     // Empty object or unrecognized - treat as null
     return null;
@@ -897,7 +845,7 @@ function safeString(value: unknown): string | null {
  */
 function calculateSetPoint(
   gameScore: string,
-  pointScore: string,
+  pointScore: string
 ): { serverHasSetPoint: boolean; receiverHasSetPoint: boolean } {
   const [serverGames, receiverGames] = gameScore.split("-").map(Number);
   const [serverPts, receiverPts] = pointScore.split("-");
