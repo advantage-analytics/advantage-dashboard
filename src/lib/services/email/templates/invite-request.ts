@@ -19,6 +19,11 @@ import type { EmailMessage } from "../send";
  * let the link lapse is not asking the review queue to consider them — they are
  * asking one named coach to press resend — so `expiredInviteNudgeEmail` goes to
  * that coach rather than into the queue.
+ *
+ * The fourth faces the other direction. The receipt tells the requester their
+ * ask was recorded; `joinRequestOwnerNoticeEmail` tells the program's owner
+ * that it exists, because a request nobody is told about waits exactly as long
+ * as one that was never filed.
  */
 
 export interface InviteRequestReceivedInput {
@@ -59,6 +64,81 @@ export function inviteRequestReceivedEmail(
     html: renderEmail(content),
     text: renderText(content),
     tags: { type: "invite_request_received" },
+  };
+}
+
+export interface JoinRequestOwnerNoticeInput {
+  /**
+   * The program owner's account address, resolved server-side from the
+   * `program_members` row with `role = 'owner'` — never anything the request
+   * form carried.
+   */
+  to: string;
+  /** "Elena Vasquez", "Elena", or null — the greeting reads without it. */
+  ownerName: string | null;
+  programName: string;
+  /** The address the requester typed. Unverified: it is what they will be invited at. */
+  requesterEmail: string;
+  /** Optional on the form, so the copy has to survive its absence. */
+  requesterName: string | null;
+}
+
+/**
+ * The notice to the program's owner that someone asked to join.
+ *
+ * Recipient is the OWNER only, by the author's wording — even though coaches
+ * and staff can also approve from the roster page. That is the narrowest
+ * reading, chosen on purpose: mailing every approver on every request turns
+ * one ask into three emails, and a coach who wants the notice can be added
+ * once the owner has said so. If that turns out wrong, widen the recipient
+ * list in `requestInvite()`, not here — this template is per-recipient.
+ *
+ * It fires only when a NEW open request was created. The unique index
+ * collapses a resubmitted form into the row already on file, and the send is
+ * gated on that distinction, so a second click cannot mail the owner twice.
+ *
+ * Nothing internal goes in it: no request id, no program id. The CTA is the
+ * roster page, which is where the request is approved and where the row
+ * already shows — a link straight to an approve action would be a one-click
+ * grant sitting in an inbox.
+ */
+export function joinRequestOwnerNoticeEmail(
+  input: JoinRequestOwnerNoticeInput,
+): EmailMessage {
+  const { to, ownerName, programName, requesterEmail, requesterName } = input;
+
+  const owner = ownerName?.trim();
+  const requester = requesterName?.trim();
+  // "Elena Vasquez (elena@…)" when they gave a name, the bare address when
+  // they did not — the address is the one thing the row always has.
+  const who = requester ? `${requester} (${requesterEmail})` : requesterEmail;
+
+  const content: EmailContent = {
+    preheader: `${who} asked to join ${programName}.`,
+    eyebrow: "Join request",
+    heading: `${requester ?? requesterEmail} asked to join ${programName}`,
+    body: [
+      `Hi${owner ? ` ${owner}` : ""} — ${who} has asked to join ${programName} on Advantage.`,
+      "Nothing has changed on your roster. Approving sends them an invitation and reserves a seat; declining closes the request and lets them know.",
+    ],
+    facts: [
+      { label: "Program", value: programName },
+      ...(requester ? [{ label: "Name", value: requester }] : []),
+      { label: "Email", value: requesterEmail },
+    ],
+    cta: {
+      label: "Review the request",
+      url: `${siteUrl()}/dashboard/team/roster`,
+    },
+    note: "You decide who joins, not us. If you don't recognise this person, declining is the whole of what you need to do.",
+  };
+
+  return {
+    to,
+    subject: `${requester ?? requesterEmail} asked to join ${programName}`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "join_request_owner_notice" },
   };
 }
 

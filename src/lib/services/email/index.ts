@@ -24,6 +24,7 @@
  * | Claim declined           | `rejectClaim()` / `handBackClaim()`, to the claimant — WIRED |
  * | Claim objection notice   | nothing — the announced claim was cut           |
  * | Invite request received  | `requestInvite()`, to a signed-in requester's own address — WIRED |
+ * | Join request owner notice | `requestInvite()` on a NEW open row, to the program owner — WIRED |
  * | Invite request declined  | `resolveRequest(id, "dismissed")`, to the requester — WIRED |
  * | Expired-invite nudge     | `requestFreshInvite()` — WIRED                  |
  * | Ownership transferred    | `transferProgramOwnership()`, to the new owner — WIRED |
@@ -46,14 +47,19 @@
  *    a recorded staff contact skips review entirely and lands live inside
  *    `complete_program_claim`, with the claimant already looking at their
  *    program — no waiting screen was opened, so there is no silence to close.
- *  - **"Invite request received" is a receipt to the requester, not a notice to
- *    the owner** (the queue table's earlier "to the program owner" was a
- *    drafting error). It sends ONLY when the requester is signed in and typed
- *    their OWN account address — never to an arbitrary, unverified inbox — so
- *    the anonymous request form cannot be turned into a mail relay or a
- *    pending-request timing oracle. There is no "invite request approved":
- *    approving one sends a real invitation, and two messages about one decision
- *    is one too many.
+ *  - **"Invite request received" is a receipt to the requester; "Join request
+ *    owner notice" is the notice to the owner.** They are gated differently
+ *    because they carry different risks. The receipt sends ONLY when the
+ *    requester is signed in and typed their OWN account address — never to an
+ *    arbitrary, unverified inbox — so the anonymous form cannot be turned into
+ *    a mail relay. The owner notice goes to an address resolved server-side
+ *    from `program_members` (`services/programs/program-owner.ts`), never one
+ *    the form carried, and fires only when a NEW open row was created — a
+ *    resubmitted form collapses into the existing row and mails nobody twice.
+ *    It runs in `after()` so the caller's response is identical whether or not
+ *    it fired: the form still cannot be used as a pending-request timing
+ *    oracle. There is no "invite request approved": approving one sends a
+ *    real invitation, and two messages about one decision is one too many.
  *
  * The analysis and digest rows are still unwired, and still waiting on the
  * trigger points named in `docs/email-system.md` §8.
@@ -108,9 +114,11 @@ export {
 
 export {
   inviteRequestReceivedEmail,
+  joinRequestOwnerNoticeEmail,
   inviteRequestDeclinedEmail,
   expiredInviteNudgeEmail,
   type InviteRequestReceivedInput,
+  type JoinRequestOwnerNoticeInput,
   type InviteRequestDeclinedInput,
   type ExpiredInviteNudgeInput,
 } from "./templates/invite-request";

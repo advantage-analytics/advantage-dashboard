@@ -57,7 +57,7 @@ ready).
 
 ## T4 · Email the program owner when someone requests to join
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** `src/lib/services/email/templates/invite-request.ts`, `src/lib/services/email/index.ts`, `src/lib/services/programs/claim-actions.ts` (`requestInvite`), new helper e.g. `src/lib/services/programs/program-owner.ts` (guess — `requestInvite()` is the anonymous filing action and already holds an admin client; the invite-request template family lives in `invite-request.ts`; `index.ts` is both the export barrel and the "what fires what" table and currently states there is no owner notice)
 - **done when:**
