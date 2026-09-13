@@ -36,6 +36,18 @@ database exactly as it covers the repo: you verify state, you do not change
 it. If the tool is unavailable or a query errors, that criterion is
 `unverifiable` — same as before this tool existed — not a reason to guess.
 
+**Known gap (as of the roster-new-player-form-abafe7 branch, T10):** this tool
+is listed above, but a restricted-tool custom agent — no `ToolSearch`, no
+`tools: *` — has not actually been able to reach it at runtime; a deferred MCP
+tool named in `tools:` here errored with "No such tool available" while the
+same tool worked for a `general-purpose` agent (which does hold `ToolSearch`)
+in the same session. If you hit that error, it is this known harness
+limitation, not a misconfiguration to chase — report the criterion
+`unverifiable` exactly as this file already says to, and tell the orchestrator
+so it can perform the live-DB check itself and record the result in the
+task's log entry as an explicit, visible exception. Do not guess the outcome
+in its place.
+
 ## What you are given
 
 The task block, verbatim, including its `done when:` list. That list is the
