@@ -4,7 +4,8 @@ import { programDisplayName } from "@/lib/data/programs-server";
 import { hoursSeverity, usageFraction } from "@/lib/data/usage-format";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import type { Workspace } from "@/lib/workspace/types";
-import { claimSend, getNotificationPrefs } from "./should-notify";
+import { displayName } from "@/lib/services/programs/invite-acceptance";
+import { alreadySent, claimSend, getNotificationPrefs } from "./should-notify";
 
 const LOG = "[notifications:usage]";
 
@@ -36,6 +37,10 @@ export async function notifyUsageThreshold(params: {
 
   try {
     const billingMonth = currentBillingMonth(now);
+    const dedupeKey = `usage_${severity}:${workspace.id}:${billingMonth}`;
+    // Every upload past the line lands here; once the month is told, stop
+    // before the staff and preference reads.
+    if (await alreadySent(dedupeKey)) return;
 
     // Straight off the tables, not `program_roster`: that RPC answers only a
     // member (`user_program_ids()` keys on `auth.uid()`), and the admin client
@@ -56,30 +61,20 @@ export async function notifyUsageThreshold(params: {
       return;
     }
 
-    const staff = (
-      (members ?? []) as unknown as {
-        user_id: string;
-        users: {
-          first_name: string | null;
-          last_name: string | null;
-          email: string | null;
-        } | null;
-      }[]
-    ).map((row) => ({
-      user_id: row.user_id,
-      display_name:
-        [row.users?.first_name, row.users?.last_name]
-          .map((part) => part?.trim())
-          .filter(Boolean)
-          .join(" ") || null,
-      email: row.users?.email ?? null,
-    }));
+    const staff = (members ?? []) as unknown as {
+      user_id: string;
+      users: {
+        first_name: string | null;
+        last_name: string | null;
+        email: string | null;
+      } | null;
+    }[];
 
     const prefs = await getNotificationPrefs(staff.map((row) => row.user_id));
-    const recipients = staff.flatMap((person) => {
-      const to = person.email?.trim();
-      return to && prefs.get(person.user_id)?.notifyUsageAlerts
-        ? [{ ...person, to }]
+    const recipients = staff.flatMap(({ user_id, users }) => {
+      const to = users?.email?.trim();
+      return users && to && prefs.get(user_id)?.notifyUsageAlerts
+        ? [{ to, name: displayName(users.first_name, users.last_name) }]
         : [];
     });
     if (recipients.length === 0) return;
@@ -88,20 +83,16 @@ export async function notifyUsageThreshold(params: {
     // lookup — or a program whose staff all had the switch off — spent the
     // month's key with nothing sent, and every later upload stayed silent.
     // A redelivery or concurrent submission still races on the primary key.
-    if (
-      !(await claimSend(`usage_${severity}:${workspace.id}:${billingMonth}`))
-    ) {
-      return;
-    }
+    if (!(await claimSend(dedupeKey))) return;
 
     const programName = programDisplayName(workspace.name, workspace.team);
 
     let sent = 0;
-    for (const { to, ...person } of recipients) {
+    for (const { to, name } of recipients) {
       const result = await sendEmail(
         usageAlertEmail({
           to,
-          recipientName: person.display_name,
+          recipientName: name,
           programName,
           severity,
           usedSeconds,

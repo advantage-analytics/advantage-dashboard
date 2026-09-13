@@ -93,6 +93,23 @@ export async function wantsNotification(
 }
 
 /**
+ * Has this one-shot notification already gone out? A read, not a claim — for a
+ * caller with work to do before it can claim (finding recipients), so a key
+ * that is already spent short-circuits before that work. `claimSend` stays the
+ * authority: a false here can still lose the race there. A read error answers
+ * false, and the claim decides.
+ */
+export async function alreadySent(dedupeKey: string): Promise<boolean> {
+  const { data, error } = await createAdminClient()
+    .from("notification_sends")
+    .select("dedupe_key")
+    .eq("dedupe_key", dedupeKey)
+    .maybeSingle();
+  if (error) return false;
+  return data !== null;
+}
+
+/**
  * Claim the right to send a one-shot notification.
  *
  * Inserts `dedupeKey` into `notification_sends` and returns true only when
