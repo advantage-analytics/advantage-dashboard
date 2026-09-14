@@ -35,7 +35,7 @@ export function ProgramUsageCard({
   /** The team workspace this ledger belongs to — name, squad and crest. */
   program: Pick<
     Workspace,
-    "id" | "name" | "kind" | "mark" | "crestUrl" | "team"
+    "id" | "name" | "kind" | "mark" | "iconUrl" | "team"
   >;
   initial: ProgramUsage;
   /** The live month — the stepper will not walk past it. */

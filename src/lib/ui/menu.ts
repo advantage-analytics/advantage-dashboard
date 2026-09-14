@@ -13,5 +13,14 @@ export const MENU_ROW_CLASS =
 /** The width of a menu row's leading slot — an icon, a tick, a spinner. */
 export const MENU_LEAD_CLASS = "flex w-[14px] shrink-0 justify-center";
 
+/**
+ * A workspace mark at menu-row scale: 18px, the text's own line height, so a
+ * row holding one stays the height the menu's scroll cap was measured against.
+ * Settings › Profile previews the personal mark with the same string, so the
+ * preview is the icon the list really draws.
+ */
+export const MENU_MARK_CLASS =
+  "size-[18px] rounded-[var(--radius-cell)] text-[9px]";
+
 /** A hairline that runs edge to edge inside the menu's 8px padding. */
 export const MENU_RULE_CLASS = "-mx-2 h-px bg-[var(--border-hairline)]";

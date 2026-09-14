@@ -3,7 +3,11 @@
 import { useState, useTransition } from "react";
 import { Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MENU_LEAD_CLASS, MENU_ROW_CLASS } from "@/lib/ui/menu";
+import {
+  MENU_LEAD_CLASS,
+  MENU_MARK_CLASS,
+  MENU_ROW_CLASS,
+} from "@/lib/ui/menu";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { setActiveWorkspace } from "@/lib/workspace/actions";
 import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
@@ -71,12 +75,7 @@ export function WorkspaceOptionList({
               "text-left disabled:cursor-not-allowed disabled:opacity-60",
             )}
           >
-            {/* 18px, the text's own line height, so the row stays the height
-                the menu's four-row scroll cap was measured against. */}
-            <WorkspaceMark
-              workspace={workspace}
-              className="size-[18px] rounded-[var(--radius-cell)] text-[9px]"
-            />
+            <WorkspaceMark workspace={workspace} className={MENU_MARK_CLASS} />
 
             <span
               className={cn(

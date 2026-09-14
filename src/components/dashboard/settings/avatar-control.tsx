@@ -9,6 +9,8 @@ import {
   uploadAvatar,
 } from "@/components/dashboard/settings/actions";
 import { AVATAR_EDGE_PX, AVATAR_MAX_BYTES } from "@/lib/user/avatar";
+import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
+import { MENU_MARK_CLASS } from "@/lib/ui/menu";
 
 const ACCEPT = "image/png,image/jpeg,image/webp";
 
@@ -148,6 +150,24 @@ export function AvatarControl({
           )}
           <span className="text-[11px] text-[var(--ink-400)]">
             PNG, JPG or WebP · cropped to a circle
+          </span>
+        </div>
+
+        {/* The personal workspace has no icon of its own — it wears this
+            photo, squared. Said here, where the photo is changed, so nobody
+            goes looking for a second upload. The mark previews the result,
+            initials included while there is no photo. */}
+        <div className="mt-2.5 flex items-center gap-2">
+          <WorkspaceMark
+            workspace={{
+              kind: "personal",
+              mark: initials,
+              iconUrl: avatarUrl,
+            }}
+            className={MENU_MARK_CLASS}
+          />
+          <span className="text-[11px] text-[var(--ink-600)]">
+            Also your Personal workspace icon.
           </span>
         </div>
       </div>
