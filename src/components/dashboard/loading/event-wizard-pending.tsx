@@ -287,9 +287,10 @@ export function NewTournamentPending() {
 /**
  * An edit, before the event says whether it is a dual or a tournament — so no
  * title, no lede and no step can be printed as fact. What both kinds share is
- * the shell and a four-up row of facts (a dual opens on Date · Site · Surface ·
- * Format, a tournament's details are Starts · Ends · Site · Format), so that
- * row is what waits.
+ * the shell and a row of facts (a dual opens on Date · Site · Surface over
+ * Time · Singles format · Doubles format, a tournament's details are Starts ·
+ * Ends · Site · Format), so one neutral four-up is what waits — drawing the
+ * dual's two rows would be a guess the tournament then contradicts.
  */
 export function EditEventPending() {
   return (

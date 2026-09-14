@@ -21,7 +21,13 @@
 
 import { Calendar, MapPin, Swords } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatEventDay, siteTitle, formatLabel } from "@/lib/schedule/format";
+import {
+  doublesFormatLabel,
+  formatEventDay,
+  formatEventTime,
+  siteTitle,
+  singlesFormatLabel,
+} from "@/lib/schedule/format";
 import type { EventFormat, EventSite } from "@/lib/schedule/types";
 
 /**
@@ -68,6 +74,7 @@ export function PinnedEventBar({
   subline,
   date,
   endDate,
+  time,
   site,
   format,
   onChange,
@@ -79,6 +86,8 @@ export function PinnedEventBar({
   date?: string | null;
   /** YYYY-MM-DD. When given alongside `date`, prints as a span. */
   endDate?: string | null;
+  /** "HH:MM" start time; printed after a one-day date. */
+  time?: string | null;
   site?: EventSite | null;
   format?: EventFormat | null;
   /** Omit to pin the event with no way to change it (the edit flow). */
@@ -91,7 +100,9 @@ export function PinnedEventBar({
   const dateLabel = date
     ? endDate && endDate !== date
       ? `${formatEventDay(date)} – ${formatEventDay(endDate)}`
-      : formatEventDay(date)
+      : time
+        ? `${formatEventDay(date)} · ${formatEventTime(time)}`
+        : formatEventDay(date)
     : null;
 
   const facts: React.ReactNode[] = [];
@@ -131,9 +142,20 @@ export function PinnedEventBar({
         key="format"
         className="inline-flex shrink-0 items-center text-[11px] text-[var(--ink-600)]"
       >
-        {formatLabel(format)}
+        {singlesFormatLabel(format)}
       </span>,
     );
+    const doubles = doublesFormatLabel(format);
+    if (doubles) {
+      facts.push(
+        <span
+          key="doubles-format"
+          className="inline-flex shrink-0 items-center text-[11px] text-[var(--ink-600)]"
+        >
+          {doubles}
+        </span>,
+      );
+    }
   }
 
   return (

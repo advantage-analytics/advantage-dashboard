@@ -15,8 +15,12 @@
 import type { EventSite } from "@/lib/schedule/types";
 import type { MenuOption } from "@/components/ui/menu-select";
 import {
+  EVENT_DOUBLES_FORMATS,
   EVENT_FORMATS,
+  doublesSetLabel,
   siteTitle,
+  type DoublesFormatValue,
+  type DoublesGamesTo,
   type EventFormatValue,
 } from "@/lib/schedule/format";
 
@@ -131,6 +135,44 @@ export function formatOptions(
 }
 
 /**
+ * One row of the Doubles format control — the dual's second format.
+ *
+ * Same shape of rule as `DualFormat`: `value` is a name looked up, `gamesTo`
+ * and `adScoring` literals off `EVENT_DOUBLES_FORMATS`, never parsed. The
+ * menu row and the note under the cell read "Tiebreak at 6-6 · No-Ad Scoring"
+ * — the tiebreak rule with the scoring half the singles cell prints alone.
+ */
+export interface DoublesFormat {
+  value: DoublesFormatValue;
+  /** "One Set to 6" — the closed cell and the menu row's first line. */
+  label: string;
+  /** "Tiebreak at 6-6 · No-Ad Scoring" — the menu row's second line. */
+  detail: string;
+  gamesTo: DoublesGamesTo;
+  adScoring: boolean;
+}
+
+export const DOUBLES_FORMATS: readonly DoublesFormat[] =
+  EVENT_DOUBLES_FORMATS.map((format) => ({
+    ...format,
+    label: doublesSetLabel(format.gamesTo),
+    detail: `Tiebreak at ${format.gamesTo}-${format.gamesTo} · ${
+      format.adScoring ? "Ad Scoring" : "No-Ad Scoring"
+    }`,
+  }));
+
+/** The Doubles format control's options — see `formatOptions`. */
+export function doublesFormatOptions(
+  formats: readonly DoublesFormat[],
+): MenuOption<DoublesFormatValue>[] {
+  return formats.map((format) => ({
+    value: format.value,
+    label: format.label,
+    description: format.detail,
+  }));
+}
+
+/**
  * The three sites a dual can be at, titled through the shared schedule
  * formatter and in the dormant form's order. `EventSite` on `value`, so the
  * union is checked here rather than cast at the change handler.
@@ -172,7 +214,7 @@ export function FieldCell({
   label: string;
   /** `rule` draws the hairline row; `none` lets the child draw its own. */
   chrome?: "rule" | "none";
-  /** Drawn under the cell, on Format alone. */
+  /** Drawn under the cell — the two format cells' second line. */
   note?: string;
   children: React.ReactNode;
 }) {

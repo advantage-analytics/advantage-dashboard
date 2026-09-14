@@ -103,7 +103,7 @@ import {
   type DualLineLock,
 } from "@/components/dashboard/schedule/static/dual-build-step";
 import { divisionLabel } from "@/lib/data/programs-server";
-import { formatValueOf } from "@/lib/schedule/format";
+import { doublesFormatValueOf, formatValueOf } from "@/lib/schedule/format";
 import {
   isNoPlayerLine,
   isOpponentNoPlayerLine,
@@ -129,7 +129,7 @@ export const COPY: Record<Step, { title: string; lede: string }> = {
   },
   2: {
     title: "When it's played, and how.",
-    lede: "Four facts the whole dual inherits. Every one of the nine lines is created under them.",
+    lede: "Six facts the whole dual inherits. Singles lines play the singles format, doubles lines the doubles format.",
   },
   3: {
     title: "The lineup.",
@@ -222,11 +222,16 @@ export function dualSeed({ event, entries }: EventDetail): DualDraftSeed {
   return {
     eventId: event.id,
     date: event.startsOn,
+    startsAtTime: event.startsAtTime ?? "",
     site: event.site,
     // `""` is "no surface", and is honoured as one — the column is nullable
     // and an absent surface is not "hard".
     surface: event.surface ?? "",
     format: formatValueOf(event.format),
+    // Undefined for a dual saved before the field existed — the draft then
+    // opens on one set to 6, no-ad. Also undefined for a null ad answer,
+    // which the draft must not guess.
+    doublesFormat: doublesFormatValueOf(event.format.doubles),
     lines: entries.flatMap((entry) =>
       entry.slot
         ? [
@@ -500,12 +505,17 @@ function DualDraftFlow({
           name={edit ? edit.detail.event.name : opponentName}
           subline={subline}
           date={draft.date || null}
+          time={draft.time || null}
           site={draft.site}
           /* The chosen `FORMATS` row's two literals — never a parse, and never
              a `null` standing in as `false`. */
           format={{
             bestOf: draft.format.bestOf,
             adScoring: draft.format.adScoring,
+            doubles: {
+              gamesTo: draft.doublesFormat.gamesTo,
+              adScoring: draft.doublesFormat.adScoring,
+            },
           }}
           // No handler at all on an edit: a dual's school is fixed once its
           // lines point at it, and a control that can never do anything is not

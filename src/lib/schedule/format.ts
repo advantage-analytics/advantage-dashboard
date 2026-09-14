@@ -6,7 +6,7 @@
  * is three chances to drift.
  */
 
-import type { EventFormat, EventSite } from "./types";
+import type { Discipline, EventFormat, EventSite } from "./types";
 
 const MONTHS = [
   "Jan",
@@ -176,6 +176,86 @@ export function formatValueOf(format: {
 }
 
 /**
+ * How long a doubles set runs: one set to 6 (tiebreak at 6-6) or an 8-game
+ * pro-set (tiebreak at 8-8). College doubles is one set either way, so the
+ * set length is the only thing a program actually chooses.
+ */
+export type DoublesGamesTo = 6 | 8;
+
+export type DoublesFormatValue =
+  "set-to-6-no-ad" | "set-to-6-ad" | "pro-set-8-no-ad" | "pro-set-8-ad";
+
+/**
+ * The four doubles formats, as `program_events.format.doubles` stores them
+ * (`{ games_to, ad_scoring }`). Same rule as `EVENT_FORMATS`: an option name
+ * looked up, never parsed, with both values stated as literals.
+ *
+ * Doubles carries its own ad/no-ad because it is not always the singles
+ * answer — high-school doubles is often played with ad scoring.
+ */
+export const EVENT_DOUBLES_FORMATS: readonly {
+  value: DoublesFormatValue;
+  gamesTo: DoublesGamesTo;
+  adScoring: boolean;
+}[] = [
+  { value: "set-to-6-no-ad", gamesTo: 6, adScoring: false },
+  { value: "set-to-6-ad", gamesTo: 6, adScoring: true },
+  { value: "pro-set-8-no-ad", gamesTo: 8, adScoring: false },
+  { value: "pro-set-8-ad", gamesTo: 8, adScoring: true },
+];
+
+/**
+ * What a doubles line plays when its event never recorded a doubles format —
+ * every dual saved before the field existed. One set to 6 is the NCAA default.
+ */
+export const DEFAULT_DOUBLES_GAMES_TO: DoublesGamesTo = 6;
+
+/**
+ * A saved event's doubles format as an option name, or `undefined` — for an
+ * event with no doubles format, or one whose `adScoring` is null. Nothing is
+ * the honest answer there, as in `formatValueOf`: the draft opens on its own
+ * default rather than a `false` invented to make the lookup succeed.
+ */
+export function doublesFormatValueOf(
+  doubles: EventFormat["doubles"],
+): DoublesFormatValue | undefined {
+  if (!doubles) return undefined;
+  return EVENT_DOUBLES_FORMATS.find(
+    (option) =>
+      option.gamesTo === doubles.gamesTo &&
+      option.adScoring === doubles.adScoring,
+  )?.value;
+}
+
+/**
+ * The format ONE line plays, from its event's format and its discipline.
+ *
+ * Singles lines play the event's `bestOf` in 6-game sets. A doubles line plays
+ * one set of `doubles.gamesTo` with `doubles.adScoring` — or, for an event
+ * that predates the field, the default length and the singles `adScoring`,
+ * null included. The one place the split is decided, so the score page, the
+ * preset and the saved match agree.
+ */
+export function lineFormat(
+  format: EventFormat,
+  discipline: Discipline | undefined,
+): { bestOf: number; adScoring: boolean | null; gamesTo: number } {
+  if (discipline !== "doubles") {
+    return { bestOf: format.bestOf, adScoring: format.adScoring, gamesTo: 6 };
+  }
+  return {
+    bestOf: 1,
+    adScoring: format.doubles ? format.doubles.adScoring : format.adScoring,
+    gamesTo: format.doubles?.gamesTo ?? DEFAULT_DOUBLES_GAMES_TO,
+  };
+}
+
+/** The label both the wizard and the event page print for a set length. */
+export function doublesSetLabel(gamesTo: DoublesGamesTo): string {
+  return gamesTo === 8 ? "8-Game Pro-Set" : "One Set to 6";
+}
+
+/**
  * "Brooks / Reid" → ["Brooks", "Reid"].
  *
  * Applied at the BOUNDARIES — on submit, and when comparing against the roster
@@ -292,6 +372,31 @@ export function formatEventDatesLong(startsOn: string, endsOn: string): string {
 }
 
 /**
+ * The start times the dual builder offers: every half hour from 6:00 AM to
+ * 9:00 PM, as the "HH:MM" `program_events.starts_at_time` stores.
+ */
+export const EVENT_START_TIMES: readonly string[] = Array.from(
+  { length: 31 },
+  (_, index) => {
+    const minutes = 6 * 60 + index * 30;
+    const hh = String(Math.floor(minutes / 60)).padStart(2, "0");
+    const mm = String(minutes % 60).padStart(2, "0");
+    return `${hh}:${mm}`;
+  },
+);
+
+/**
+ * "1:30 PM" from "13:30" (or Postgres's "13:30:00"). A wall-clock time, never
+ * an instant — it is the time on the schedule, not shifted by the reader's zone.
+ */
+export function formatEventTime(time: string): string {
+  const [h, m] = time.split(":").map(Number);
+  const suffix = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 === 0 ? 12 : h % 12;
+  return `${hour}:${String(m ?? 0).padStart(2, "0")} ${suffix}`;
+}
+
+/**
  * "Hard" — a surface as the drawer prints it. The column holds whatever a
  * builder wrote ("hard", "Hard", "Indoor Hard"), so only the first letter is
  * touched: enough to read as a label, without re-casing a value someone typed.
@@ -320,4 +425,28 @@ export function formatLabel(format: EventFormat): string {
     format.bestOf === 1 ? "One Set" : `Best of ${format.bestOf} Sets`;
   if (format.adScoring === null) return sets;
   return `${sets} · ${format.adScoring ? "Ad Scoring" : "No-Ad Scoring"}`;
+}
+
+/**
+ * "Doubles · 8-Game Pro-Set · Ad Scoring" — the second capsule on a dual, or null when the
+ * event never recorded a doubles format (a tournament, or a dual saved before
+ * the field existed). Null prints nothing rather than a guessed default.
+ */
+export function doublesFormatLabel(format: EventFormat): string | null {
+  if (!format.doubles) return null;
+  const sets = `Doubles · ${doublesSetLabel(format.doubles.gamesTo)}`;
+  // Null drops the scoring half, exactly as `formatLabel` does.
+  if (format.doubles.adScoring === null) return sets;
+  return `${sets} · ${format.doubles.adScoring ? "Ad Scoring" : "No-Ad Scoring"}`;
+}
+
+/**
+ * `formatLabel`, prefixed "Singles · " when a doubles label will print beside
+ * it — so neither capsule leaves the reader guessing which lines it covers.
+ * An event with no doubles format keeps the bare label it always had.
+ */
+export function singlesFormatLabel(format: EventFormat): string {
+  return format.doubles
+    ? `Singles · ${formatLabel(format)}`
+    : formatLabel(format);
 }

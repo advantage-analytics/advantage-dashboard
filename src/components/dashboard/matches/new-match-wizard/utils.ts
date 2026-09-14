@@ -392,30 +392,25 @@ export function formatHoursMinutes(seconds: number): string {
 export function validateSetScore(
   p: number | null,
   o: number | null,
+  /** The set's length — 6, or 8 for a doubles pro-set. */
+  gamesTo = 6,
 ): { kind: "ok" | "incomplete" | "invalid"; message?: string } {
+  const n = gamesTo;
   if (p === null && o === null) return { kind: "incomplete" };
   if (p === null || o === null) return { kind: "incomplete" };
-  if (p < 0 || o < 0 || p > 7 || o > 7) {
-    return { kind: "invalid", message: "Games must be 0–7." };
+  if (p < 0 || o < 0 || p > n + 1 || o > n + 1) {
+    return { kind: "invalid", message: `Games must be 0–${n + 1}.` };
   }
   const [hi, lo] = p >= o ? [p, o] : [o, p];
   // Valid completed combinations
-  if (hi === 6 && lo <= 4) return { kind: "ok" };
-  if (hi === 7 && (lo === 5 || lo === 6)) return { kind: "ok" };
-  // In-progress (e.g. 4-3, 5-5) — accept as incomplete, not invalid
-  if (
-    hi <= 6 &&
-    lo <= 6 &&
-    !(hi === 6 && lo === 5) &&
-    !(hi === 6 && lo === 6)
-  ) {
-    if (hi < 6) return { kind: "incomplete" };
-  }
-  // 6-5, 6-6 are transitional but not final scores
-  if ((hi === 6 && lo === 5) || (hi === 6 && lo === 6)) {
-    return { kind: "incomplete" };
-  }
-  return { kind: "invalid", message: "Set must end 6-0..6-4, 7-5, or 7-6." };
+  if (hi === n && lo <= n - 2) return { kind: "ok" };
+  if (hi === n + 1 && (lo === n - 1 || lo === n)) return { kind: "ok" };
+  // In-progress (e.g. 4-3, 5-5), and the transitional n-(n-1) and n-n
+  if (hi < n || (hi === n && lo >= n - 1)) return { kind: "incomplete" };
+  return {
+    kind: "invalid",
+    message: `Set must end ${n}-0..${n}-${n - 2}, ${n + 1}-${n - 1}, or ${n + 1}-${n}.`,
+  };
 }
 
 /**

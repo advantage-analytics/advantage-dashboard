@@ -449,6 +449,11 @@ export interface EventPreset {
   surface: string | null;
   bestOf: number;
   /**
+   * Games in a set: 6, or 8 on a doubles line whose dual plays an 8-game
+   * pro-set. Optional — only the schedule's score page reads it.
+   */
+  gamesTo?: number;
+  /**
    * Ad or no-ad, from the event's format. Nullable because the pipeline
    * refuses a job without a real answer and a `false` default would be a wrong
    * answer that looks like a real one.

@@ -35,6 +35,7 @@ import type {
   OutcomeSide,
 } from "./types";
 import { validateDualLineup, validateLineup } from "./lineup-validation";
+import { DEFAULT_DOUBLES_GAMES_TO, type DoublesGamesTo } from "./format";
 import { matchResultFor } from "./entry-state";
 
 export type ActionError = { error: string };
@@ -107,11 +108,44 @@ export interface CreateDualInput {
    */
   opponentProgramKey: string | null;
   date: string;
+  /** "HH:MM" local start time, or null when the coach left it unset. */
+  startsAtTime: string | null;
   site: EventSite;
   surface: string;
   bestOf: number;
   adScoring: boolean | null;
+  /**
+   * The doubles lines' format. `bestOf`/`adScoring` are the singles format;
+   * doubles is always one set, of this length, with its own ad scoring.
+   */
+  doublesGamesTo: DoublesGamesTo;
+  doublesAdScoring: boolean;
   lines: LineupLineInput[];
+}
+
+/** "HH:MM" as the `time` column takes it; anything else is no time. */
+function startTimeColumn(value: string | null): string | null {
+  return value && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : null;
+}
+
+/**
+ * A dual's `program_events.format` jsonb. The singles keys stay top-level so
+ * every reader that predates `doubles` keeps working unchanged.
+ */
+function dualFormatColumn(input: {
+  bestOf: number;
+  adScoring: boolean | null;
+  doublesGamesTo: DoublesGamesTo;
+  doublesAdScoring: boolean;
+}) {
+  return {
+    best_of: input.bestOf,
+    ad_scoring: input.adScoring,
+    doubles: {
+      games_to: input.doublesGamesTo,
+      ad_scoring: input.doublesAdScoring,
+    },
+  };
 }
 
 export interface TournamentEntryInput {
@@ -260,9 +294,10 @@ export async function createDual(
       // it without inventing a second date nobody entered.
       starts_on: input.date,
       ends_on: input.date,
+      starts_at_time: startTimeColumn(input.startsAtTime),
       site: input.site,
       surface: input.surface || null,
-      format: { best_of: input.bestOf, ad_scoring: input.adScoring },
+      format: dualFormatColumn(input),
       created_by: auth.userId,
     })
     .select("id")
@@ -644,9 +679,10 @@ export async function updateDual(
       // here so an edited date cannot leave `ends_on` on the old day.
       starts_on: input.date,
       ends_on: input.date,
+      starts_at_time: startTimeColumn(input.startsAtTime),
       site: input.site,
       surface: input.surface || null,
-      format: { best_of: input.bestOf, ad_scoring: input.adScoring },
+      format: dualFormatColumn(input),
       updated_at: new Date().toISOString(),
     })
     .eq("id", detail.event.id)
@@ -819,7 +855,14 @@ export async function recordResult(
   const format = (event.format ?? {}) as {
     best_of?: number;
     ad_scoring?: boolean | null;
+    doubles?: { games_to?: number; ad_scoring?: boolean | null } | null;
   };
+  // A doubles line plays one set of the dual's doubles length — never the
+  // singles best-of it used to inherit. An event saved before the field
+  // existed plays the default.
+  const doublesLine = entry.discipline === "doubles";
+  const doublesGamesTo =
+    format.doubles?.games_to === 8 ? 8 : DEFAULT_DOUBLES_GAMES_TO;
 
   // A forged round must not bypass the dual's single-result grain.
   const round =
@@ -1009,11 +1052,22 @@ export async function recordResult(
     // west of Greenwich — which is all of them. Noon puts the whole Americas
     // safely inside the right day.
     date: `${event.starts_on}T12:00:00`,
-    format: {
-      best_of: format.best_of ?? 3,
-      ad_scoring: format.ad_scoring ?? null,
-      play_on_lets: false,
-    },
+    format: doublesLine
+      ? {
+          best_of: 1,
+          // The dual's doubles answer; an event that predates it keeps the
+          // singles one it always used. Null stays null either way.
+          ad_scoring: format.doubles
+            ? (format.doubles.ad_scoring ?? null)
+            : (format.ad_scoring ?? null),
+          play_on_lets: false,
+          games_to: doublesGamesTo,
+        }
+      : {
+          best_of: format.best_of ?? 3,
+          ad_scoring: format.ad_scoring ?? null,
+          play_on_lets: false,
+        },
     score: scorePayload,
     // The context string: "Final Score", or how a stopped match ended. Who won
     // is the games, or `score.winner` when it stopped.

@@ -698,7 +698,11 @@ test.describe("/dashboard/team/schedule/new/dual · 2c 2b 2d 2e", () => {
     drawn(
       flow,
       "new-dual-flow.tsx",
-      "Four facts the whole dual inherits. Every one of the nine lines is created under them.",
+      // RETIRED 'Four facts the whole dual inherits. Every one of the nine
+      //   lines is created under them.' — the format split into singles and
+      //   doubles, so it is five facts and the lede says which lines get which. Six once Time
+      //   joined them.
+      "Six facts the whole dual inherits. Singles lines play the singles format, doubles lines the doubles format.",
     );
     drawn(flow, "new-dual-flow.tsx", "The lineup.");
     // "Grey well" (Dual Lineup Step canvas, Final): two ledes — the ladder's,
@@ -805,7 +809,13 @@ test.describe("/dashboard/team/schedule/new/dual · 2c 2b 2d 2e", () => {
     drawn(step2, "dual-build-step.tsx", "Date");
     drawn(step2, "dual-build-step.tsx", "Site");
     drawn(step2, "dual-build-step.tsx", "Surface");
-    drawn(step2, "dual-build-step.tsx", "Format");
+    // RETIRED 'Format' — one cell never said it was the singles format, and
+    //   college doubles plays its own. Two labelled cells now.
+    drawn(step2, "dual-build-step.tsx", '"Singles format"');
+    drawn(step2, "dual-build-step.tsx", '"Doubles format"');
+    // The doubles words ("One Set to 6", "8-Game Pro-Set") are
+    // `doublesSetLabel()`'s, pinned in `tests/doubles-format.spec.ts`.
+    drawn(facts, "event-fact-fields.tsx", "Tiebreak at ");
     // "Best of 3 Sets" over "No-Ad Scoring" — the sets half in the cell, the
     // scoring half under the underline. Title case since the tournament
     // builder adopted the same control: the words are `formatLabel()`'s, which

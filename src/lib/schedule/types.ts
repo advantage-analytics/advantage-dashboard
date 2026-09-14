@@ -54,6 +54,14 @@ export interface EventFormat {
    * answer that looks like a real one.
    */
   adScoring: boolean | null;
+  /**
+   * The doubles lines' format. `bestOf`/`adScoring` above describe SINGLES;
+   * a doubles line is always one set, of `gamesTo` games, with its own
+   * `adScoring` (nullable for the same reason as the singles one). Null
+   * (or absent) when the event never recorded one — readers that need a
+   * number fall back to `DEFAULT_DOUBLES_GAMES_TO`, displays print nothing.
+   */
+  doubles?: { gamesTo: 6 | 8; adScoring: boolean | null } | null;
 }
 
 export interface ProgramEvent {
@@ -64,6 +72,11 @@ export interface ProgramEvent {
   name: string;
   /** YYYY-MM-DD. */
   startsOn: string;
+  /**
+   * "HH:MM", the local start time — null when nobody set one. Optional only so
+   * fixtures written before the column need not state it; the loader sets it.
+   */
+  startsAtTime?: string | null;
   /** Equal to `startsOn` for a dual. */
   endsOn: string;
   site: EventSite;

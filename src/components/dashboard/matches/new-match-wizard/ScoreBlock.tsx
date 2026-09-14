@@ -96,6 +96,8 @@ export function ScoreBlock({
   onScoreChange,
   onTiebreakChange,
   onSetsChange,
+  gamesTo = 6,
+  setsLabel,
 }: {
   formData: Pick<
     FormData,
@@ -127,6 +129,17 @@ export function ScoreBlock({
     value: string,
   ) => void;
   onSetsChange: (count: number) => void;
+  /**
+   * Games in a set — 6, or 8 for a doubles line whose dual plays an 8-game
+   * pro-set. Only the schedule's score page passes it; the upload wizard never
+   * scores doubles, so it stays on 6.
+   */
+  gamesTo?: number;
+  /**
+   * Replaces the "Best of N" half of the format line. A doubles line is one
+   * set, and "Best of 1" would not say whether it runs to 6 or is a pro-set.
+   */
+  setsLabel?: string;
 }) {
   const bestOf = parseInt(formData.bestOf, 10) || 3;
   // Sets with anything in them, counted from the front.
@@ -139,6 +152,7 @@ export function ScoreBlock({
   // column after the last is how a set gets added while the match is open.
   const { displayed, decided } = scoreColumns({
     bestOf,
+    gamesTo,
     playerScores: formData.playerScores,
     opponentScores: formData.opponentScores,
     filled,
@@ -152,7 +166,7 @@ export function ScoreBlock({
     window.setTimeout(() => refs.current[k]?.focus(), 0);
 
   const isGameEntry = (value: string) =>
-    /^\d$/.test(value) && Number(value) <= 7;
+    /^\d$/.test(value) && Number(value) <= gamesTo + 1;
 
   // A digit, whatever its value. `isGameEntry` answers "should focus move on",
   // which is a narrower question than "is this worth recording": a set can open
@@ -210,6 +224,7 @@ export function ScoreBlock({
     opponentScores[i] = typed;
     const next = scoreColumns({
       bestOf,
+      gamesTo,
       playerScores: formData.playerScores,
       opponentScores,
       filled: Math.max(filled, i + 1),
@@ -239,7 +254,7 @@ export function ScoreBlock({
     focusKey(row === "player" ? key("o", displayed) : key("p", displayed + 1));
   };
 
-  const format = `${FORMAT_OPTIONS.find((o) => o.value === formData.bestOf)?.label ?? "Best of 3"}${
+  const format = `${setsLabel ?? FORMAT_OPTIONS.find((o) => o.value === formData.bestOf)?.label ?? "Best of 3"}${
     formData.adScoring === undefined
       ? ""
       : formData.adScoring

@@ -1,6 +1,7 @@
 import { Calendar, MapPin } from "lucide-react";
 import {
   formatEventDatesLong,
+  formatEventTime,
   siteTitle,
   surfaceTitle,
 } from "@/lib/schedule/format";
@@ -46,6 +47,9 @@ export function EventGlyphRow({
         />
         <span className="tabular">
           {formatEventDatesLong(event.startsOn, event.endsOn)}
+          {event.startsAtTime
+            ? ` · ${formatEventTime(event.startsAtTime)}`
+            : null}
         </span>
       </span>
       <span className="text-micro inline-flex items-center gap-[5px] whitespace-nowrap">

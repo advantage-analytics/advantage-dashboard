@@ -6,10 +6,13 @@ import { DOUBLES_SLOTS, SINGLES_SLOTS } from "@/lib/schedule/courts";
 import { DateField } from "@/components/ui/date-field";
 import { MenuSelect } from "@/components/ui/menu-select";
 import {
+  DOUBLES_FORMATS,
   FORMATS,
   FieldCell,
   SITES,
+  doublesFormatOptions,
   formatOptions,
+  type DoublesFormat,
   type DualFormat,
 } from "@/components/dashboard/schedule/static/event-fact-fields";
 import { resultLabelFromOutcome } from "@/components/dashboard/schedule/result-choice";
@@ -30,8 +33,11 @@ import {
   type LineupLineInput,
 } from "@/lib/schedule/actions";
 import {
+  EVENT_START_TIMES,
+  formatEventTime,
   splitNames,
   todayISO,
+  type DoublesFormatValue,
   type EventFormatValue,
 } from "@/lib/schedule/format";
 import { rosterIdsForLabels } from "@/lib/schedule/roster-match";
@@ -76,6 +82,26 @@ const FORMAT_OPTIONS = formatOptions(FORMATS);
 const DEFAULT_FORMAT =
   FORMATS.find((format) => format.value === "bo3-no-ad") ?? FORMATS[0];
 
+const DOUBLES_FORMAT_OPTIONS = doublesFormatOptions(DOUBLES_FORMATS);
+
+/**
+ * The start times, half-hourly, under the same `—` for none that Surface
+ * uses. `""` is "no time" and saves as a null column — a time nobody stated
+ * is not one to invent.
+ */
+const TIME_OPTIONS: readonly { value: string; label: string }[] = [
+  { value: "", label: "—" },
+  ...EVENT_START_TIMES.map((time) => ({
+    value: time,
+    label: formatEventTime(time),
+  })),
+];
+
+/** One set to 6, no-ad — the NCAA default, and what a new dual opens on. */
+const DEFAULT_DOUBLES_FORMAT =
+  DOUBLES_FORMATS.find((format) => format.value === "set-to-6-no-ad") ??
+  DOUBLES_FORMATS[0];
+
 /**
  * The surfaces a dual can be on — `programs.default_surface`'s own vocabulary,
  * which is the settings form's `SURFACE_OPTIONS` (`team-settings-form.tsx`).
@@ -96,14 +122,19 @@ const SURFACES: readonly { value: string; label: string }[] = [
   { value: "carpet", label: "Carpet" },
 ];
 
-/** The four facts `2b`'s top row asks for, held as what the coach entered. */
+/** The facts step two asks for, held as what the coach entered. */
 interface DualDraft {
   /** YYYY-MM-DD, as `program_events.starts_on` stores it. */
   date: string;
+  /** "HH:MM" start time; `""` is none. */
+  time: string;
   site: EventSite;
   /** One of `SURFACES`' values; `""` is none. */
   surface: string;
+  /** The singles format. */
   format: DualFormat;
+  /** The doubles lines' set length and their own ad scoring. */
+  doublesFormat: DoublesFormat;
 }
 
 /**
@@ -247,10 +278,13 @@ export interface DualDraftSeed {
   eventId?: string;
   /** YYYY-MM-DD. */
   date?: string;
+  /** "HH:MM", or `""` for none. */
+  startsAtTime?: string;
   site?: EventSite;
   /** One of `SURFACES`' values; `""` is none, and is honoured as none. */
   surface?: string;
   format?: EventFormatValue;
+  doublesFormat?: DoublesFormatValue;
   lines?: DualLineSeed[];
 }
 
@@ -258,6 +292,17 @@ export interface DualDraftSeed {
 function formatFor(value: EventFormatValue | undefined): DualFormat {
   if (!value) return DEFAULT_FORMAT;
   return FORMATS.find((option) => option.value === value) ?? DEFAULT_FORMAT;
+}
+
+/** The `DOUBLES_FORMATS` row an option name names, or the default. */
+function doublesFormatFor(
+  value: DoublesFormatValue | undefined,
+): DoublesFormat {
+  if (!value) return DEFAULT_DOUBLES_FORMAT;
+  return (
+    DOUBLES_FORMATS.find((option) => option.value === value) ??
+    DEFAULT_DOUBLES_FORMAT
+  );
 }
 
 /**
@@ -447,6 +492,7 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
 
   const [draft, setDraft] = useState<DualDraft>(() => ({
     date: initial?.date ?? todayISO(),
+    time: initial?.startsAtTime ?? "",
     site: initial?.site ?? "home",
     // The seed first — including `""`, which is a coach saying "no surface"
     // and not an absent answer — then the program's own default, then none.
@@ -455,6 +501,7 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
     surface:
       initial?.surface !== undefined ? initial.surface : (defaultSurface ?? ""),
     format: formatFor(initial?.format),
+    doublesFormat: doublesFormatFor(initial?.doublesFormat),
   }));
 
   /**
@@ -704,10 +751,13 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
         ? await updateDual({
             eventId,
             date: draft.date,
+            startsAtTime: draft.time || null,
             site: draft.site,
             surface: draft.surface,
             bestOf: draft.format.bestOf,
             adScoring: draft.format.adScoring,
+            doublesGamesTo: draft.doublesFormat.gamesTo,
+            doublesAdScoring: draft.doublesFormat.adScoring,
             lines: payloadLines(),
           })
         : await createDual({
@@ -718,12 +768,15 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
             opponentProgramKey:
               school.kind === "program" ? school.program.programKey : null,
             date: draft.date,
+            startsAtTime: draft.time || null,
             site: draft.site,
             surface: draft.surface,
             // Read off the chosen `FORMATS` row, which states both as literals.
             // Nothing here parses a string, so no null can arrive as "null".
             bestOf: draft.format.bestOf,
             adScoring: draft.format.adScoring,
+            doublesGamesTo: draft.doublesFormat.gamesTo,
+            doublesAdScoring: draft.doublesFormat.adScoring,
             lines: payloadLines(),
           });
 
@@ -763,10 +816,15 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
 }
 
 /**
- * The four facts `2b` draws across the top: Date, Site, Surface, Format.
+ * The facts step two asks for: Date, Site and Surface across the top, then
+ * Singles format and Doubles format on a row of their own.
  *
  * A body, not a screen — no shell, no header and no footer, so whichever frame
- * shows it decides those. `2b` draws the four in one four-up at `gap:24px`.
+ * shows it decides those. `2b` drew four in one four-up at `gap:24px`; the
+ * format split into two labelled cells because one "Format" never said it was
+ * the singles format, and college doubles is played as one set to 6 or an
+ * 8-game pro-set rather than the singles best-of. Both rows are the same
+ * three columns at the same gap, the format pair in the right two.
  *
  * ── What draws what ────────────────────────────────────────────────────────
  *   Date                `DateField variant="bare"` inside `FieldCell`'s ruled
@@ -797,56 +855,99 @@ export function DualFactsStep({
   onEdit: (patch: Partial<DualDraft>) => void;
 }) {
   return (
-    <div className="grid grid-cols-4 gap-6">
-      <FieldCell label="Date">
-        <DateField
-          label="Date"
-          variant="bare"
-          value={draft.date}
-          onChange={(date) => onEdit({ date })}
-          className="w-full"
-        />
-      </FieldCell>
+    <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-3 gap-6">
+        <FieldCell label="Date">
+          <DateField
+            label="Date"
+            variant="bare"
+            value={draft.date}
+            onChange={(date) => onEdit({ date })}
+            className="w-full"
+          />
+        </FieldCell>
 
-      <FieldCell label="Site" chrome="none">
-        <MenuSelect
-          label="Site"
-          variant="underline"
-          value={draft.site}
-          options={SITES}
-          onChange={(site) => onEdit({ site })}
-        />
-      </FieldCell>
+        <FieldCell label="Site" chrome="none">
+          <MenuSelect
+            label="Site"
+            variant="underline"
+            value={draft.site}
+            options={SITES}
+            onChange={(site) => onEdit({ site })}
+          />
+        </FieldCell>
 
-      <FieldCell label="Surface" chrome="none">
-        <MenuSelect
-          label="Surface"
-          variant="underline"
-          value={draft.surface}
-          options={SURFACES}
-          onChange={(surface) => onEdit({ surface })}
-        />
-      </FieldCell>
+        <FieldCell label="Surface" chrome="none">
+          <MenuSelect
+            label="Surface"
+            variant="underline"
+            value={draft.surface}
+            options={SURFACES}
+            onChange={(surface) => onEdit({ surface })}
+          />
+        </FieldCell>
+      </div>
 
-      {/* `2b` draws the ad half BELOW the underline rather than inside the
+      {/* The same three columns as the row above: Time under Date, and the
+          two format cells matching Site and Surface in width under them. */}
+      <div className="grid grid-cols-3 gap-6">
+        <FieldCell label="Time" chrome="none">
+          <MenuSelect
+            label="Time"
+            variant="underline"
+            value={draft.time}
+            options={TIME_OPTIONS}
+            scroll
+            onChange={(time) => onEdit({ time })}
+          />
+        </FieldCell>
+        {/* `2b` draws the ad half BELOW the underline rather than inside the
           value, so the cell prints `scoring` under a trigger printing `sets`
           — the two halves of the one chosen row. */}
-      <FieldCell label="Format" chrome="none" note={draft.format.scoring}>
-        <MenuSelect
-          label="Format"
-          variant="underline"
-          value={draft.format.value}
-          options={FORMAT_OPTIONS}
-          onChange={(value) => {
-            // The chosen ROW, looked up by option name — never a parse of the
-            // option's text. This is `format`'s only assignment, and every row
-            // of that table states `adScoring` as a literal boolean. See
-            // `DualFormat`'s header and `docs/ui-revamp-guardrails.md` §3.1.
-            const chosen = FORMATS.find((option) => option.value === value);
-            if (chosen) onEdit({ format: chosen });
-          }}
-        />
-      </FieldCell>
+        <FieldCell
+          label="Singles format"
+          chrome="none"
+          note={draft.format.scoring}
+        >
+          <MenuSelect
+            label="Singles format"
+            variant="underline"
+            value={draft.format.value}
+            options={FORMAT_OPTIONS}
+            onChange={(value) => {
+              // The chosen ROW, looked up by option name — never a parse of the
+              // option's text. This is `format`'s only assignment, and every row
+              // of that table states `adScoring` as a literal boolean. See
+              // `DualFormat`'s header and `docs/ui-revamp-guardrails.md` §3.1.
+              const chosen = FORMATS.find((option) => option.value === value);
+              if (chosen) onEdit({ format: chosen });
+            }}
+          />
+        </FieldCell>
+
+        {/* Doubles picks its own scoring — high-school doubles is often ad
+          even when singles is not — so the note prints the tiebreak rule
+          and the chosen row's scoring together. */}
+        <FieldCell
+          label="Doubles format"
+          chrome="none"
+          note={draft.doublesFormat.detail}
+        >
+          <MenuSelect
+            label="Doubles format"
+            variant="underline"
+            value={draft.doublesFormat.value}
+            options={DOUBLES_FORMAT_OPTIONS}
+            onChange={(value) => {
+              // The chosen row by name, as the singles cell does.
+              const chosen = DOUBLES_FORMATS.find(
+                (option) => option.value === value,
+              );
+              if (chosen) onEdit({ doublesFormat: chosen });
+            }}
+          />
+        </FieldCell>
+      </div>
     </div>
   );
 }

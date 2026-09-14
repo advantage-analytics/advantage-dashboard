@@ -454,7 +454,9 @@ export function EditMatchDialog({
     }));
     setPlayerPrefill({ ...known, ...filled });
   }
-  const invalidSet = firstInvalidSet(score);
+  // A doubles pro-set's games run to 9; the event wrote the length.
+  const gamesTo = loaded?.match.format?.games_to ?? 6;
+  const invalidSet = firstInvalidSet(score, gamesTo);
   const lineupBlocks = !!pendingLine?.lineupMismatch;
 
   const close = () => {
@@ -776,6 +778,7 @@ export function EditMatchDialog({
             playerName={player.name}
             opponentName={opponent.name}
             bestOf={format.bestOf}
+            gamesTo={gamesTo}
             disabled={saving}
           />
 

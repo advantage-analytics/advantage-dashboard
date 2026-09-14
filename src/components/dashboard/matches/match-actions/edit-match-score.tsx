@@ -23,9 +23,11 @@ export interface ScoreValue {
 /** The first set whose games break tennis rules, with why, or null. */
 export function firstInvalidSet(
   score: ScoreValue,
+  /** Games in a set — 6 unless a doubles pro-set says 8. */
+  gamesTo = 6,
 ): { index: number; message: string } | null {
   for (let i = 0; i < score.player.length; i++) {
-    const v = validateSetScore(score.player[i], score.opponent[i]);
+    const v = validateSetScore(score.player[i], score.opponent[i], gamesTo);
     if (v.kind === "invalid") {
       return { index: i, message: v.message ?? "Check this set." };
     }
@@ -49,6 +51,7 @@ export function EditMatchScore({
   playerName,
   opponentName,
   bestOf,
+  gamesTo = 6,
   disabled,
 }: {
   value: ScoreValue;
@@ -56,6 +59,8 @@ export function EditMatchScore({
   playerName: string;
   opponentName: string;
   bestOf: number;
+  /** Games in a set — 6 unless a doubles pro-set says 8. */
+  gamesTo?: number;
   disabled?: boolean;
 }) {
   const refs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -71,12 +76,13 @@ export function EditMatchScore({
   }
   const { decided } = scoreColumns({
     bestOf,
+    gamesTo,
     playerScores: value.player,
     opponentScores: value.opponent,
     filled,
   });
   const ghost = !decided && sets < Math.max(bestOf, 1) && !disabled;
-  const invalid = firstInvalidSet(value);
+  const invalid = firstInvalidSet(value, gamesTo);
   const tie = (i: number) =>
     isTiebreakSet(value.player[i] ?? null, value.opponent[i] ?? null);
 
@@ -114,7 +120,7 @@ export function EditMatchScore({
     }
     onChange(next);
 
-    if (n === null || raw.length !== 1 || n > 7) return;
+    if (n === null || raw.length !== 1 || n > gamesTo + 1) return;
     if (isTiebreakSet(next.player[i], next.opponent[i])) {
       focus(key("p", i, true));
     } else if (row === "player") {
@@ -137,6 +143,7 @@ export function EditMatchScore({
     player: value.player,
     opponent: value.opponent,
     bestOf,
+    gamesTo,
   });
 
   // A render function, not a component: declared as a component it would

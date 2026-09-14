@@ -21,6 +21,7 @@ import {
 } from "@/lib/schedule/entry-state";
 import { compareEntryOrder } from "@/lib/schedule/courts";
 import { nextRound } from "@/lib/schedule/tournament-run";
+import { lineFormat } from "@/lib/schedule/format";
 
 /**
  * The preset for one entry (and, optionally, one of its matches) within an
@@ -42,6 +43,9 @@ export function presetFor(
   programs: Map<string, { key: string; school: string }>,
   round: string | null = null,
 ): EventPreset {
+  // A doubles line is one set of the dual's doubles length, not the singles
+  // best-of — see `lineFormat`.
+  const played = lineFormat(event.format, entry.discipline);
   return {
     entryId: entry.id,
     eventId: event.id,
@@ -58,8 +62,9 @@ export function presetFor(
       (match?.opponentLabels ?? entry.opponentLabels).join(" / ") || "",
     date: event.startsOn,
     surface: event.surface,
-    bestOf: event.format.bestOf,
-    adScoring: event.format.adScoring,
+    bestOf: played.bestOf,
+    adScoring: played.adScoring,
+    gamesTo: played.gamesTo,
     score: match?.score ?? null,
     ending: match?.ending ?? null,
     discipline: entry.discipline,
