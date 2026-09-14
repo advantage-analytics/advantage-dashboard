@@ -66,14 +66,13 @@ const SCHEDULE_HREF = "/dashboard/team/schedule";
  *     content column, so the chord steps card → card → Continue as it does on
  *     `/dashboard/matches/new`. Rooted on the column it detoured through the
  *     aside's link first.
- *   • The hook takes any plain Enter outside a form control as Continue, and
- *     prevents the key's own click. Enter on a card therefore opens THAT
- *     card's flow (the click it swallowed would have selected it), and Enter
- *     on any other link or button — the aside's link, Back, Cancel — is
- *     handed back to that control rather than opening the selected flow.
- *     Continue's own click is a plain push: a mouse click in Safari does not
- *     move focus, so reading the focused element there would follow whatever
- *     link was focused last.
+ *   • The hook takes a plain Enter on a card as Continue and prevents the
+ *     card's own click, so Enter on a card opens THAT card's flow (the click
+ *     it swallowed would have selected it). Links — the aside's, Cancel — and
+ *     the footer's Back keep their own Enter in the hook itself
+ *     (`isWizardExit`). Continue's own click is a plain push: a mouse click in
+ *     Safari does not move focus, so reading the focused element there would
+ *     follow whatever card was focused last.
  *
  * The 820px grid now sits in the shell's 720px column and shrinks with it;
  * the shell is not widened for one screen.
@@ -192,14 +191,6 @@ export function StaticEventChooser() {
     if (card) {
       setChoice(card.id);
       router.push(card.href);
-      return;
-    }
-    if (
-      focused &&
-      (focused.tagName === "A" || focused.tagName === "BUTTON") &&
-      !focused.hasAttribute("data-wizard-continue")
-    ) {
-      focused.click();
       return;
     }
     router.push(selected.href);

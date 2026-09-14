@@ -123,7 +123,13 @@ export function WizardShell({
       <div className="sticky bottom-0 z-10 mt-auto border-t border-[var(--border-hairline)] bg-white">
         <div className={`${CONTENT_CLS} flex h-16 items-center gap-4`}>
           {back && (
-            <button type="button" onClick={back} className={FOOTER_LINK_CLS}>
+            <button
+              type="button"
+              onClick={back}
+              // Enter here goes back, never Continue — see `isWizardExit`.
+              data-wizard-exit
+              className={FOOTER_LINK_CLS}
+            >
               Back
             </button>
           )}
