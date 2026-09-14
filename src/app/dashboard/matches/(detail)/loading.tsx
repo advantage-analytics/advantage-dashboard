@@ -1,3 +1,14 @@
+/**
+ * The match page's skeleton, at the route GROUP rather than inside `[matchId]`.
+ *
+ * A `loading.tsx` wraps its segment's page and every NESTED layout, but never
+ * the layout beside it. `[matchId]/layout.tsx` awaits the whole match before it
+ * renders, so a skeleton inside `[matchId]` could not cover that wait — the
+ * nearest boundary above it did, and that was `matches/loading.tsx`: the
+ * matches LIST skeleton. Every jump to a match (the upload wizard's View match
+ * most visibly) flashed the list first. `(list)` and `(detail)` give each route
+ * its own boundary without changing a URL.
+ */
 export default function Loading() {
   return (
     <div className="w-full flex-1 bg-white" aria-busy="true">

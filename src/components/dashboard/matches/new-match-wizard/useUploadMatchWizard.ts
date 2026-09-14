@@ -69,6 +69,8 @@ import {
   type IdentityMatchStatus,
 } from "./types";
 import { deleteMatchDraft, saveMatchDraft } from "@/lib/wizard/actions";
+import { playedSets, scoreSetsFrom } from "@/lib/ui/score-format";
+import type { CreatedMatch } from "./upload-progress";
 import {
   determineWinner,
   buildMatchData,
@@ -182,7 +184,9 @@ async function rollbackCreatedMatch(
 /**
  * The rollback-then-announce ritual both failure sites share: undo the match
  * row (unless it predates this upload), then dispatch `match-upload-failed`
- * with `matchId` attached ONLY if a viewable row survived. One function so
+ * with `matchId` attached ONLY if a viewable row survived — and, when the row
+ * is gone, `removedMatchId`, so a screen still showing that match can tell the
+ * rollback was its own rather than a late one from an earlier run. One function so
  * the invariant the comments above describe — a dead link is worse than no
  * link — cannot drift between the two catch blocks.
  */
@@ -200,7 +204,7 @@ async function rollbackAndAnnounceFailure(params: {
   window.dispatchEvent(
     new CustomEvent("match-upload-failed", {
       detail: {
-        ...(matchIsViewable ? { matchId } : {}),
+        ...(matchIsViewable ? { matchId } : { removedMatchId: matchId }),
         error,
       },
     }),
@@ -259,7 +263,7 @@ export interface UseUploadMatchWizardProps {
    * match was created" — the modal doesn't care, but the full-page flow has to
    * show a success state for one and navigate away for the other.
    */
-  onCreated?: (matchId: string) => void;
+  onCreated?: (match: CreatedMatch) => void;
   /**
    * Video transfer lifecycle, for whoever is still on screen to render.
    *
@@ -2583,7 +2587,19 @@ export function useUploadMatchWizard({
         window.dispatchEvent(
           new CustomEvent("match-created", { detail: { matchId } }),
         );
-        onCreated?.(matchId);
+        onCreated?.({
+          matchId,
+          playerName: matchRow.player1_name,
+          opponentName: matchRow.player2_name,
+          sets: playedSets(scoreSetsFrom(matchRow.score)),
+          // A score nobody won — stopped, unfinished — gets no result word.
+          won: undecided ? null : winner.name === formData.playerName,
+          follows: processingStrategy
+            ? uploadedFile?.file
+              ? "video"
+              : "none"
+            : "import",
+        });
 
         // Close the modal FIRST, then refresh after it has finished closing. The modal is
         // a Radix dialog that locks <body> (pointer-events + scroll) while open. A

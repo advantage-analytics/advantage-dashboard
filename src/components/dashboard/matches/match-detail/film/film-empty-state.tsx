@@ -6,6 +6,7 @@ import { Film } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { MAX_VIDEO_SIZE_BYTES } from "@/lib/services/splitstep/config";
 import { advButton } from "@/lib/ui/adv-button";
+import { addVideoHref } from "@/lib/matches/add-video-href";
 
 /**
  * The Film room with no film (artboard 46d, lines 1199–1211).
@@ -28,10 +29,13 @@ import { advButton } from "@/lib/ui/adv-button";
  * they get copy that is true for them. Same allowlist as the rail's no-video
  * strip (`match-rail.tsx`).
  *
- * ── Both CTAs go to the wizard ──────────────────────────────────────────────
- * There is no add-video-to-an-existing-match flow in the codebase and no
- * import-only route, so "Add video" and "Import from SwingVision" both land on
- * `/dashboard/matches/new`. Recorded as a semantic gap for the flags doc.
+ * ── Where the CTAs go ───────────────────────────────────────────────────────
+ * "Add video" attaches the film to THIS match (`/dashboard/matches/new?match=`)
+ * when it was typed in by hand. A match with a source still starts a new
+ * upload: a SwingVision match already has points from the export, and a video
+ * analysis would write a second set; a video match whose film was reclaimed
+ * already has its analysis. There is no
+ * import-only route, so "Import from SwingVision" lands on the plain wizard.
  */
 
 const MAX_VIDEO_GB = Math.round(MAX_VIDEO_SIZE_BYTES / 1_000_000_000);
@@ -65,7 +69,7 @@ export function FilmEmptyState() {
 
       <div className="flex items-center gap-3.5 pt-1">
         <Link
-          href="/dashboard/matches/new"
+          href={addVideoHref(match.sourceProvider ? null : match.id)}
           className={advButton("primary", "md")}
         >
           Add video

@@ -11,6 +11,8 @@
  */
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { addVideoHref } from "@/lib/matches/add-video-href";
 import { TriangleAlert, Info } from "lucide-react";
 import {
   ANALYSIS_LABEL,
@@ -229,6 +231,17 @@ export function MatchAnalysisProgress({
                   this button there would be a button that always 409s. */}
               {analysis.jobId && analysis.status === "failed" && (
                 <RetryAnalysis jobId={analysis.jobId} />
+              )}
+              {/* The "upload a new recording" the copy above offers. The
+                  route re-checks the match and sends anything it can't take
+                  somewhere that can. */}
+              {analysis.status === "failed" && (
+                <Link
+                  href={addVideoHref(matchId)}
+                  className="mt-3 inline-block text-[12px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
+                >
+                  Upload a new recording
+                </Link>
               )}
             </div>
           </div>

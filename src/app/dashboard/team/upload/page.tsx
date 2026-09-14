@@ -13,7 +13,11 @@ import {
   draftBelongsToWorkspace,
   draftWorkspaceRefusal,
 } from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
-import { presetFor, lineupChoices } from "@/lib/schedule/line-choices";
+import {
+  lineupChoices,
+  presetFor,
+  singleMatchPreset,
+} from "@/lib/schedule/line-choices";
 import { getTeamSingleMatch } from "@/lib/data/single-match-server";
 import { supportsVideo } from "@/lib/schedule/entry-state";
 import { formatEventSpan, siteLabel } from "@/lib/schedule/format";
@@ -138,30 +142,18 @@ export default async function TeamUploadPage({
     const single = await getTeamSingleMatch(active.id, matchId);
     if (!single) redirect("/dashboard/team/upload");
 
-    const preset: EventPreset = {
-      entryId: null,
-      eventId: null,
+    const preset = singleMatchPreset({
+      id: single.id,
       eventName: single.context,
-      matchId: single.id,
       round: single.round,
       playerName: single.playerName,
       playerUserId: single.playerUserId,
       opponentName: single.opponentName,
-      date: single.date.slice(0, 10),
+      date: single.date,
       surface: single.surface,
-      bestOf: single.score?.player1.length === 1 ? 1 : 3,
-      // Nothing declared a format for a challenge match, so the details step
-      // asks. Never `false` by default — the pipeline refuses a job without a
-      // real answer, and a wrong one that looks real is worse than none.
-      adScoring: null,
       score: single.score,
-      supportsVideo: true,
       eventHref: `/dashboard/team/schedule/single/${single.id}`,
-      site: null,
-      eventKind: null,
-      opponentProgramKey: null,
-      opponentSchool: null,
-    };
+    });
 
     return <UploadMatchFlow preset={preset} />;
   }
