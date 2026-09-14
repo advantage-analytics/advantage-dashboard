@@ -57,20 +57,17 @@ export default async function TeamHomePage() {
   if (!workspace) redirect("/login");
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");
+  // Both start together: on a client navigation the layout does not re-run,
+  // so presence is not cached and awaiting it first would add a round trip to
+  // every populated visit.
   const presence = getTeamHomePresence(active.id);
   const resources = getTeamHomeResources(
     active.id,
     currentBillingMonth(),
     active.orgType,
   );
-  const isStaff = isProgramStaff(active);
-  const action = (
-    <NewMatchAction
-      canUpload={canUploadForProgram(active)}
-      canSubmitVideo={active.canSubmitVideo}
-    />
-  );
   const state = await presence;
+  const isStaff = isProgramStaff(active);
   const isDayZero = !state.hasMatches && !state.hasRoster && !state.hasSchedule;
   // Keeps the loading fallback's day-zero hint honest across navigation.
   const report = (
@@ -85,20 +82,23 @@ export default async function TeamHomePage() {
   // Day zero reads nothing: every card's empty anatomy is the whole truth for
   // a program with no match, player or dual (see `TeamHomeDayZeroPage`), and
   // the route's loading fallback draws the same page. The resources already
-  // started for the populated case are left to settle unobserved.
+  // started are left to settle unobserved.
   if (isDayZero) {
     for (const pending of Object.values(resources)) pending.catch(() => {});
     return (
       <>
         {report}
-        <TeamHomeDayZeroPage
-          canManage={isStaff}
-          canSchedule={canManageTeamSchedule(active)}
-          teamName={active.name}
-        />
+        <TeamHomeDayZeroPage canManage={isStaff} teamName={active.name} />
       </>
     );
   }
+
+  const action = (
+    <NewMatchAction
+      canUpload={canUploadForProgram(active)}
+      canSubmitVideo={active.canSubmitVideo}
+    />
+  );
 
   const kpis = region(
     "Program summary",

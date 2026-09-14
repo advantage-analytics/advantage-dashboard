@@ -12,6 +12,24 @@ import type {
 } from "@/lib/data/team-roster-server";
 
 /**
+ * `RosterHeaderButtons` before the page has the seat count its dialogs open
+ * with: the same pair, disabled in place. Drawn by the roster skeleton and by
+ * the day-zero screen while the route fallback renders it.
+ */
+export function RosterHeaderButtonsPending() {
+  return (
+    <div className="flex shrink-0 items-center gap-2.5">
+      <button type="button" disabled className={advButton("ghost")}>
+        Invite
+      </button>
+      <button type="button" disabled className={advButton("primary")}>
+        Add player
+      </button>
+    </div>
+  );
+}
+
+/**
  * The Roster page's two ways of growing a squad.
  *
  * Design 9a. They are not two flavours of one action, and the button weights

@@ -4,6 +4,7 @@ import { ScheduleToolbarPending } from "./list-toolbar-pending";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { useIsDayZero } from "@/components/dashboard/presence-provider";
 import { RosterDayZeroPage } from "@/components/dashboard/team/roster-day-zero";
+import { RosterHeaderButtonsPending } from "@/components/dashboard/team/roster-header-buttons";
 import { ScheduleDayZeroPage } from "@/components/dashboard/schedule/static/schedule-day-zero";
 import { TeamHomeDayZeroPage } from "@/components/dashboard/team/team-home-day-zero-page";
 import {
@@ -25,7 +26,6 @@ import {
   SCHEDULE_COLUMNS,
   SCHEDULE_GRID,
 } from "@/components/dashboard/schedule/static/schedule-table-layout";
-import { advButton } from "@/lib/ui/adv-button";
 import {
   PendingBar,
   PendingRegion,
@@ -40,7 +40,6 @@ export function TeamHomePageSkeleton() {
     return (
       <TeamHomeDayZeroPage
         canManage={isProgramStaff(active)}
-        canSchedule={canManageTeamSchedule(active)}
         teamName={active.name}
       />
     );
@@ -77,16 +76,7 @@ export function RosterPageSkeleton() {
               </div>
             </PendingRegion>
           </TeamListHeading>
-          {isProgramStaff(active) && (
-            <div className="flex shrink-0 items-center gap-2.5">
-              <button disabled className={advButton("ghost")}>
-                Invite
-              </button>
-              <button disabled className={advButton("primary")}>
-                Add player
-              </button>
-            </div>
-          )}
+          {isProgramStaff(active) && <RosterHeaderButtonsPending />}
         </div>
         <div className="surface-card overflow-x-auto">
           <div className="min-w-[768px] px-6 pt-0.5 pb-1.5">

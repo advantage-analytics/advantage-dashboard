@@ -6,8 +6,10 @@ import {
   GHOST_OPACITY,
   GhostRule,
 } from "@/components/dashboard/home/day-zero-shape";
-import { advButton } from "@/lib/ui/adv-button";
-import { RosterHeaderButtons } from "./roster-header-buttons";
+import {
+  RosterHeaderButtons,
+  RosterHeaderButtonsPending,
+} from "./roster-header-buttons";
 import { COL, ROSTER_COLUMNS, ROW } from "./roster-table";
 import type { ManagedPlayer } from "./invite-target-picker";
 import type {
@@ -109,14 +111,7 @@ export function RosterDayZero({
           !canManage ? null : buttons ? (
             <RosterHeaderButtons {...buttons} />
           ) : (
-            <div className="flex shrink-0 items-center gap-2.5">
-              <button type="button" disabled className={advButton("ghost")}>
-                Invite
-              </button>
-              <button type="button" disabled className={advButton("primary")}>
-                Add player
-              </button>
-            </div>
+            <RosterHeaderButtonsPending />
           )
         }
         conditions={

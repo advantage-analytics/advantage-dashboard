@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import HomeContent from "./home-content";
 import RecentActivity from "./recent-activity";
 import { SeasonKpiStrip } from "@/components/dashboard/shared/season-kpi-strip";
@@ -9,7 +9,19 @@ import { FocusCard } from "@/components/dashboard/home/focus-card";
 import { FocusEmpty } from "@/components/dashboard/home/focus-empty";
 import { HomeWidgetFrame } from "@/components/dashboard/home/home-widget-frame";
 import ServePlacementHome from "@/components/dashboard/home/serve-placement-home";
-import { personalActivityFrom } from "@/lib/data/personal-activity";
+import {
+  personalActivityFrom,
+  type PersonalActivity,
+} from "@/lib/data/personal-activity";
+
+const noSubscription = () => () => {};
+let cachedActivity: PersonalActivity | null = null;
+const clientActivity = () => (cachedActivity ??= personalActivityFrom([]));
+const SERVER_ACTIVITY: PersonalActivity = {
+  ...personalActivityFrom([]),
+  monthLabels: Array.from({ length: 12 }, () => ""),
+};
+const serverActivity = () => SERVER_ACTIVITY;
 
 const NO_EVENTS: never[] = [];
 const NO_SERVES = { dots: [], matchCount: 0 };
@@ -29,7 +41,14 @@ const NO_SERVES = { dots: [], matchCount: 0 };
  */
 export function HomeDayZeroPage({ userId }: { userId: string }) {
   const playerIds = useMemo(() => [userId], [userId]);
-  const activity = useMemo(() => personalActivityFrom([]), []);
+  // The month labels depend on the clock and time zone, which differ between
+  // the server and the browser; a blank grid on both renders, then the
+  // browser's own labels, keeps hydration from mismatching near a boundary.
+  const activity = useSyncExternalStore(
+    noSubscription,
+    clientActivity,
+    serverActivity,
+  );
   return (
     <div className="flex w-full flex-1 flex-col bg-white">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-14 pt-5 pb-8">

@@ -31,11 +31,10 @@ const EMPTY_FORM = { form: [], wins: 0, losses: 0 };
  */
 export function TeamHomeDayZeroPage({
   canManage,
-  canSchedule,
   teamName,
 }: {
+  /** The offer's actions. The preview cards below draw none, whoever views. */
   canManage: boolean;
-  canSchedule: boolean;
   teamName: string;
 }) {
   return (
@@ -52,12 +51,12 @@ export function TeamHomeDayZeroPage({
                 ariaLabel="Program summary"
               />
             }
-            dual={<DualSheetEmpty canSchedule={canSchedule} isPreview />}
+            dual={<DualSheetEmpty canSchedule={false} isPreview />}
             movers={
               <TopMovers
                 movers={[]}
                 rosterSize={0}
-                canManage={canManage}
+                canManage={false}
                 isPreview
               />
             }

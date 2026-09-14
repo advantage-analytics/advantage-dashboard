@@ -183,14 +183,20 @@ test("Team Home streams the schedule's confirmed empty cards while analytics, ro
   expect(home.reads).toEqual(["presence", "resources"]);
 });
 
-test("Team Home preserves the dedicated day-zero offer around streamed preview regions", async () => {
+test("Team Home day zero draws the static day-zero page instead of streamed regions", async () => {
   const home = route("", { dayZero: true });
   const page = await home.render();
-  expect(find(page, "TeamDayZeroHome")).toBeDefined();
+  const dayZero = find(page, "TeamHomeDayZeroPage");
+  expect(dayZero).toBeDefined();
+  expect(dayZero?.props).toMatchObject({ canManage: true });
   expect(find(page, "TeamHomeFrame")).toBeUndefined();
-  expect(find(page, "TeamHomeRegions")).toBeDefined();
-  expect(find(page, "Dual")?.props.isPreview).toBe(true);
-  expect(find(page, "TopMoversFrame")?.props.isPreview).toBe(true);
+  expect(find(page, "Dual")).toBeUndefined();
+  expect(find(page, "PresenceReport")?.props).toMatchObject({
+    matches: false,
+    roster: false,
+    duals: false,
+  });
+  // Resources start beside presence so a populated visit pays no extra trip.
   expect(home.reads).toEqual(["presence", "resources"]);
 });
 
@@ -242,7 +248,7 @@ test("Confirmed empty roster shows day zero; an invitation keeps the roster view
     const frame = await target.render();
     const content = await renderChild(find(frame, "RosterContent")!);
     expect(
-      find(content, invited ? "RosterView" : "RosterDayZero"),
+      find(content, invited ? "RosterView" : "RosterDayZeroPage"),
     ).toBeDefined();
     expect(find(content, "RosterPageSkeleton")).toBeUndefined();
   }
@@ -280,7 +286,7 @@ test("Player view skips the staff join-request read and does not offer adding a 
   const content = await renderChild(
     find(await roster.render(), "RosterContent")!,
   );
-  expect(find(content, "RosterDayZero")?.props.canManage).toBe(false);
+  expect(find(content, "RosterDayZeroPage")?.props.canManage).toBe(false);
   expect(roster.reads).toEqual(["roster"]);
   const home = route("", { role: "player" });
   const dual = await renderChild(find(await home.render(), "Dual")!);

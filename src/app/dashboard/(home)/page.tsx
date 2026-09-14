@@ -68,15 +68,15 @@ export default async function Home() {
       </>
     );
   }
+  // Past this point the viewer has at least one match.
   const resources = startHomeResources(supabase, userId, matches, billingMonth);
-  const { hasMatches } = resources;
   return (
     <div className="flex w-full flex-1 flex-col bg-white">
       {report}
       <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-14 pt-5 pb-8">
         <HomeContent
           key={userId}
-          hasMatches={hasMatches}
+          hasMatches
           title={region(
             "Season summary",
             <HomeTitlePending />,
@@ -90,7 +90,7 @@ export default async function Home() {
           recent={
             <HomeWidgetFrame
               title="Recent matches"
-              href={hasMatches ? "/dashboard/matches" : undefined}
+              href="/dashboard/matches"
               action="All matches"
               className="@container/matches"
             >
@@ -104,7 +104,7 @@ export default async function Home() {
           activity={
             <HomeWidgetFrame
               title="Activity"
-              href={hasMatches ? "/dashboard/matches" : undefined}
+              href="/dashboard/matches"
               action="Session log"
               className="@container/activity flex flex-col gap-1.5"
             >
@@ -123,7 +123,7 @@ export default async function Home() {
           serves={
             <HomeWidgetFrame
               title="Serve placement"
-              href={hasMatches ? "/dashboard/statistics" : undefined}
+              href="/dashboard/statistics"
               action="Placement view"
               className="flex flex-col gap-3"
             >
@@ -151,50 +151,32 @@ function startHomeResources(
   matches: Awaited<ReturnType<typeof getPersonalMatches>>,
   billingMonth: string,
 ) {
-  const hasMatches = matches.length > 0;
-  const performance = hasMatches
-    ? getOverallPerformance()
-    : Promise.resolve(null);
-  const usage = hasMatches
-    ? getPersonalUsage(userId, billingMonth)
-    : Promise.resolve(null);
-  const season = hasMatches
-    ? getPersonalSeasonKpis(userId)
-    : Promise.resolve({ kpis: [], hasStats: false, matchesPlayed: 0 });
+  const performance = getOverallPerformance();
+  const usage = getPersonalUsage(userId, billingMonth);
+  const season = getPersonalSeasonKpis(userId);
   const activity = getPersonalActivity(userId, matches);
-  const players = hasMatches ? getMyPlayerIds() : Promise.resolve([userId]);
+  const players = getMyPlayerIds();
   const recent = players.then((ids) =>
-    hasMatches
-      ? loadRecentMatches(
-          supabase,
-          userId,
-          ids,
-          matches.slice(0, 50) as DbRecentMatch[],
-        )
-      : [],
+    loadRecentMatches(
+      supabase,
+      userId,
+      ids,
+      matches.slice(0, 50) as DbRecentMatch[],
+    ),
   );
   const wonCount = players.then((ids) =>
     countViewerWins(matches as DbRecentMatch[], ids, userId),
   );
-  const serves = hasMatches
-    ? loadHomeServes(supabase, userId, matches.slice(0, 4))
-    : Promise.resolve({ dots: [], matchCount: 0 });
-  const setup = hasMatches
-    ? Promise.all([
-        supabase
-          .from("users")
-          .select("hand, backhand")
-          .eq("id", userId)
-          .single(),
-        supabase
-          .from("user_preferences")
-          .select("user_id")
-          .eq("user_id", userId)
-          .maybeSingle(),
-      ])
-    : Promise.resolve(null);
+  const serves = loadHomeServes(supabase, userId, matches.slice(0, 4));
+  const setup = Promise.all([
+    supabase.from("users").select("hand, backhand").eq("id", userId).single(),
+    supabase
+      .from("user_preferences")
+      .select("user_id")
+      .eq("user_id", userId)
+      .maybeSingle(),
+  ]);
   return {
-    hasMatches,
     matches,
     userId,
     performance,
@@ -210,12 +192,12 @@ function startHomeResources(
 }
 type HomeResources = ReturnType<typeof startHomeResources>;
 async function Title({ resources }: { resources: HomeResources }) {
-  const { hasMatches, matches, userId, performance, usage } = resources;
+  const { matches, userId, performance, usage } = resources;
   const [p, u] = await Promise.all([performance, usage]);
   if (!u) return null;
   return (
     <SeasonTitle
-      hasMatches={hasMatches}
+      hasMatches
       matchCount={matches.length}
       analyzedMatchCount={p?.analyzedMatchCount ?? 0}
       usage={u}
@@ -235,14 +217,14 @@ async function Kpis({ resources }: { resources: HomeResources }) {
   );
 }
 async function Recent({ resources }: { resources: HomeResources }) {
-  const { recent, players, wonCount, userId, hasMatches, matches } = resources;
+  const { recent, players, wonCount, userId, matches } = resources;
   const [events, ids, wins] = await Promise.all([recent, players, wonCount]);
   return (
     <RecentActivity
       userId={userId}
       playerIds={ids}
-      hasMatches={hasMatches}
-      showEmptyAction={hasMatches}
+      hasMatches
+      showEmptyAction
       matchCount={matches.length}
       wonCount={wins}
       initialEvents={events}
@@ -257,16 +239,7 @@ async function Serves({ resources }: { resources: HomeResources }) {
   return <ServePlacementHome initialData={await resources.serves} />;
 }
 async function Insight({ resources }: { resources: HomeResources }) {
-  const { hasMatches, performance, userId } = resources;
-  if (!hasMatches)
-    return (
-      <FocusCard
-        showStatisticsLink={false}
-        footer={{ left: "One thing to work on, after your first match." }}
-      >
-        <FocusEmpty />
-      </FocusCard>
-    );
+  const { performance, userId } = resources;
   const p = await performance;
   const evidence = p
     ? buildInsightEvidenceWithCaption(p.kpiCards, p.matchCount)
