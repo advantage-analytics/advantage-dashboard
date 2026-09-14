@@ -21,12 +21,7 @@
 
 import { Calendar, MapPin, Swords } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  formatEventDay,
-  formatEventSpanWithYear,
-  siteTitle,
-  formatLabel,
-} from "@/lib/schedule/format";
+import { formatEventDay, siteTitle, formatLabel } from "@/lib/schedule/format";
 import type { EventFormat, EventSite } from "@/lib/schedule/types";
 
 /**
@@ -89,9 +84,13 @@ export function PinnedEventBar({
   /** Omit to pin the event with no way to change it (the edit flow). */
   onChange?: () => void;
 }) {
+  // A span is two of the dual's own day labels ("Fri 13 Sep – Sun 15 Sep"),
+  // not the tournament eyebrow's "13–15 Sep 2026": the same bar pins both
+  // kinds of event, and a date fact that changed grammar with the event kind
+  // read as two different bars.
   const dateLabel = date
     ? endDate && endDate !== date
-      ? formatEventSpanWithYear(date, endDate)
+      ? `${formatEventDay(date)} – ${formatEventDay(endDate)}`
       : formatEventDay(date)
     : null;
 
