@@ -183,6 +183,36 @@ Cancel + **one** primary right — never two primaries. Fields inside use the
 underline vocabulary; the active field's rule thickens to 2px blue (see
 Focus → "The underline opt-out").
 
+**Every confirmation is `ConfirmDialog`** (`ui/confirm-dialog.tsx`, 2026-09-13,
+in-repo — design owner's pick, direction B of the sign-out mock). This geometry
+at 440px on Radix `AlertDialog`: a question for a title ("Delete this match?"),
+the contract sentence under it, an optional body (`ConfirmList` for what it
+costs, `ConfirmNote` for one icon-led line, or a row showing the subject), the
+shared `DialogProblem` line for a failure, and the footer grammar above. The
+action is a verb that names its object ("Delete match", never "OK"). While it
+is pending, the spinner rides inside the action and Cancel, the X and Esc are
+all held.
+
+- **Red only when something is lost.** `tone="danger"` (`danger-solid`) for a
+  match, an event, entered scores, unsaved edits. Anything else — signing out,
+  signing out everywhere — is the blue primary.
+- **Multi-step confirms stay on `RosterDialog`** at the same 440px (Leave team,
+  Make owner), because their done step re-renders the same dialog; swapping
+  components between steps would close and reopen it.
+- **No `window.confirm`, no hand-styled `AlertDialogContent`.** Settings'
+  leave-without-saving prompt was the browser's own box; the tab-close
+  `beforeunload` is the one native prompt left, because it cannot wait on React.
+- **Sign-out names the account.** One dialog for both scopes: an account row
+  (avatar, name, email, "This device") and "Sign out everywhere" as the quiet
+  footer link, which swaps the same dialog to "Sign out of every device?". The
+  word is "Sign out" everywhere.
+
+> Retired (2026-09-13): the 320px "Log out" card with a red icon disc, red
+> 10px uppercase tracked buttons and no close; the 448px delete dialogs at
+> 16px and 14px radii with 36px buttons; the stock `AlertDialog` (8px radius,
+> 18px semibold title, blue action for removing set scores); and a
+> one-click, unconfirmed "Sign out everywhere".
+
 ---
 
 ## Dropdown / Menu
@@ -222,7 +252,7 @@ turn `--danger` together, over the usual `--surface-subtle` wash; the 11px
 `--ink-500` consequence line stays grey. No standing red label, no red icon at
 rest — red marks the moment of intent, not the row's existence. Menu-row glyphs
 are never `--blue` either (that colour is reserved for "chosen"). The confirm
-step — `danger-solid` in an `AlertDialog` — is where red stands.
+step — `ConfirmDialog` with `tone="danger"` — is where red stands.
 
 The header's account menu predates the primitives and still carries its own
 classes; migrate it to `FloatMenu` rather than copying them.

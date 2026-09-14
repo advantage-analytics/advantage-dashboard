@@ -81,7 +81,7 @@ export function TransferOwnershipDialog({
       <RosterDialog
         open={open}
         onOpenChange={onOpenChange}
-        width={480}
+        width={440}
         title="Ownership transferred"
         description={
           warning ?? `We emailed ${target.name} so they know it happened.`
@@ -107,7 +107,7 @@ export function TransferOwnershipDialog({
     <RosterDialog
       open={open}
       onOpenChange={onOpenChange}
-      width={480}
+      width={440}
       title={`Make ${target.name} the owner?`}
       description="This takes effect immediately, and only the new owner can hand it back."
       footer={

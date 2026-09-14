@@ -134,7 +134,7 @@
   /* Player attribution — you own Signal Blue; the opponent recedes to cool
      slate (review decision C: violet retired from attribution). */
   --player-1:#3B82F6;
-  --player-1-text:#1D4ED8;
+  --player-1-text:#3B82F6; /* was #1D4ED8, a darker ink blue — a blue word rests on --blue (2026-09-13) */
   --player-1-soft:#EFF4FF;
   --player-1-bar-tint:#BFD5FB;
   --player-2:#64748B;
@@ -235,8 +235,6 @@
      not the light accent, so dark mode keeps its own already-tuned blue. */
   --field-ring:var(--blue);
   --field-ring-30:var(--blue-ring-30);
-  --blue-ink-deep:var(--ink-900);
-  --blue-ink-mid:var(--ink-700);
   --danger:#FF6478;
   --danger-hover:#FF8294;
   --danger-tint-15:rgba(255,100,120,0.18);
@@ -244,7 +242,7 @@
   /* Success #5DB955 holds — already clears 8:1 on dark */
   /* Player attribution — lifted like the blues */
   --player-1:#60A5FA;
-  --player-1-text:#93C5FD;
+  --player-1-text:#60A5FA;
   --player-1-soft:rgba(96,165,250,0.12);
   --player-1-bar-tint:rgba(96,165,250,0.35);
   --player-2:#94A3B8;

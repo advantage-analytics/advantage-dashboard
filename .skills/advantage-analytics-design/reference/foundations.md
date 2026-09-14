@@ -158,21 +158,21 @@ the auth mesh and the sparkline's area fill (stroke colour 18%→0, chart-only).
 
 Match detail and video sections use additional colors for multi-player differentiation and status:
 
-| Token             | Value     | Use                                                    |
-| ----------------- | --------- | ------------------------------------------------------ |
-| player-2          | `#64748B` | Secondary player/opponent color in charts (cool slate) |
-| player-2-text     | `#475569` | Player 2 text on white or soft-slate bg (WCAG AA)      |
-| player-2-soft     | `#F1F5F9` | Player 2 soft pill/highlight background                |
-| player-1-text     | `#1D4ED8` | Player 1 text on white or soft-blue bg (WCAG AA)       |
-| player-1-soft     | `#EFF4FF` | Player 1 soft pill/highlight background                |
-| player-1-bar-tint | `#BFD5FB` | Player 1 non-leader bar fill (on `#F3F3F3` track)      |
-| player-2-bar-tint | `#CBD5E1` | Player 2 non-leader bar fill (on `#F3F3F3` track)      |
-| alt-success       | `#22C55E` | Progress bar success (Tailwind green-500)              |
-| alt-error         | `#EF4444` | Video/inline error states (Tailwind red-500)           |
-| alt-error-dark    | `#DC2626` | Darker error emphasis (Tailwind red-600)               |
-| warning-bg        | `#FFFBEB` | Warning banner background                              |
-| warning-border    | `#FDE68A` | Warning banner border                                  |
-| warning-text      | `#92400E` | Warning banner text                                    |
+| Token             | Value     | Use                                                                  |
+| ----------------- | --------- | -------------------------------------------------------------------- |
+| player-2          | `#64748B` | Secondary player/opponent color in charts (cool slate)               |
+| player-2-text     | `#475569` | Player 2 text on white or soft-slate bg (WCAG AA)                    |
+| player-2-soft     | `#F1F5F9` | Player 2 soft pill/highlight background                              |
+| player-1-text     | `#3B82F6` | Player 1 text — Signal Blue; the darker `#1D4ED8` retired 2026-09-13 |
+| player-1-soft     | `#EFF4FF` | Player 1 soft pill/highlight background                              |
+| player-1-bar-tint | `#BFD5FB` | Player 1 non-leader bar fill (on `#F3F3F3` track)                    |
+| player-2-bar-tint | `#CBD5E1` | Player 2 non-leader bar fill (on `#F3F3F3` track)                    |
+| alt-success       | `#22C55E` | Progress bar success (Tailwind green-500)                            |
+| alt-error         | `#EF4444` | Video/inline error states (Tailwind red-500)                         |
+| alt-error-dark    | `#DC2626` | Darker error emphasis (Tailwind red-600)                             |
+| warning-bg        | `#FFFBEB` | Warning banner background                                            |
+| warning-border    | `#FDE68A` | Warning banner border                                                |
+| warning-text      | `#92400E` | Warning banner text                                                  |
 
 > Violet was retired from player attribution in v2 review decision C, and the
 > values above are the slate that replaced it — you own Signal Blue, the

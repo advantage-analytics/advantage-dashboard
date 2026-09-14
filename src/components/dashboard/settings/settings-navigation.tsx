@@ -39,7 +39,9 @@ export function SettingsNavigation(): React.ReactElement {
   ) => {
     if (isActive) return;
     event.preventDefault();
-    if (confirmNavigation()) router.push(href);
+    void confirmNavigation().then((proceed) => {
+      if (proceed) router.push(href);
+    });
   };
 
   return (

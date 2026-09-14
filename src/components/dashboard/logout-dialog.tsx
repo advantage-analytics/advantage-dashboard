@@ -2,135 +2,174 @@
 
 import { createContext, useCallback, useContext, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, Loader2 } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { Monitor, PenLine } from "lucide-react";
+import { ConfirmDialog, ConfirmNote } from "@/components/ui/confirm-dialog";
+import { PersonAvatar } from "@/components/ui/person-avatar";
 import { createClient } from "@/lib/supabase/client";
 import { useUnsavedChanges } from "@/components/dashboard/settings/unsaved-changes-context";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 
 /**
- * The single logout confirmation for the dashboard.
+ * The single sign-out confirmation for the dashboard.
  *
- * Sign out is reachable from two places in the v2 chrome — the sidebar footer
- * and the header profile menu — and both must land on the same confirmation.
- * Two dialogs would mean two places to keep the unsaved-changes warning
- * correct, and one of them would eventually drift.
+ * Sign out is reachable from the header profile menu and Settings › Account's
+ * two session rows, and all of them must land on the same confirmation. Two
+ * dialogs would mean two places to keep the unsaved-changes warning correct,
+ * and one of them would eventually drift.
+ *
+ * Two scopes, one dialog. "This device" is the default; "Sign out everywhere"
+ * is the quiet footer link, and swaps the same dialog to the global question
+ * rather than stacking a second one. Settings › Account's "Sign out
+ * everywhere" button opens it at that step directly — it used to end every
+ * session on one click, with no confirmation at all.
+ *
+ * The word is "Sign out", as on every entry point; this dialog alone said
+ * "Log out". The account row answers the question a sign-out confirm exists
+ * for — which account, on which device — and red appears only when unsaved
+ * edits would go with it.
  */
-const LogoutContext = createContext<(() => void) | null>(null);
+type Scope = "local" | "global";
 
-export function useRequestLogout(): () => void {
+const LogoutContext = createContext<((scope: Scope) => void) | null>(null);
+
+function useLogoutRequest() {
   const request = useContext(LogoutContext);
   if (!request) {
-    throw new Error("useRequestLogout must be used within a LogoutProvider.");
+    throw new Error("Sign-out requests must be made within a LogoutProvider.");
   }
   return request;
 }
 
+export function useRequestLogout(): () => void {
+  const request = useLogoutRequest();
+  return useCallback(() => request("local"), [request]);
+}
+
+export function useRequestSignOutEverywhere(): () => void {
+  const request = useLogoutRequest();
+  return useCallback(() => request("global"), [request]);
+}
+
 export function LogoutProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { hasUnsavedChanges } = useUnsavedChanges();
+  const { viewer } = useWorkspace();
+  const { hasUnsavedChanges, setHasUnsavedChanges } = useUnsavedChanges();
   const [isOpen, setIsOpen] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [scope, setScope] = useState<Scope>("local");
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const [hasError, setHasError] = useState(false);
 
-  const requestLogout = useCallback(() => setIsOpen(true), []);
+  const request = useCallback((next: Scope) => {
+    setScope(next);
+    setHasError(false);
+    setIsOpen(true);
+  }, []);
 
-  const handleLogout = async () => {
-    setIsLoggingOut(true);
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
     setHasError(false);
     try {
-      const supabase = createClient();
-      // Local scope, explicitly: auth-js defaults signOut() to "global", which
-      // revokes every device's refresh token. This shared dialog is the
-      // "sign out here" action behind the sidebar footer, the header profile
-      // menu and Settings > Account's "This device" row. Ending every other
-      // session is a separate, explicitly-labelled control ("Sign out
-      // everywhere" on Settings > Account), and only that one should do it.
-      await supabase.auth.signOut({ scope: "local" });
-      router.push("/login");
+      // Explicit, both ways: auth-js defaults signOut() to "global", which
+      // revokes every device's refresh token. "This device" must never do
+      // that; only the step that says "every device" in its title does.
+      const { error } = await createClient().auth.signOut({ scope });
+      if (error) throw error;
+      if (scope === "global") {
+        // A full load, as Settings › Account did: every cached route belongs
+        // to a session that no longer exists anywhere. The discard was
+        // confirmed here, so clear the flag first — otherwise `beforeunload`
+        // asks again, and "Stay" strands a signed-out user on the page.
+        setHasUnsavedChanges(false);
+        window.location.href = "/login";
+      } else {
+        router.push("/login");
+      }
     } catch {
-      setIsLoggingOut(false);
+      setIsSigningOut(false);
       setHasError(true);
     }
   };
 
+  const everywhere = scope === "global";
+  const action = everywhere ? "sign out everywhere" : "sign out";
+
   return (
-    <LogoutContext.Provider value={requestLogout}>
+    <LogoutContext.Provider value={request}>
       {children}
 
-      <AlertDialog
+      <ConfirmDialog
         open={isOpen}
-        onOpenChange={(open) => {
-          setIsOpen(open);
-          if (!open) {
-            setHasError(false);
-            setIsLoggingOut(false);
-          }
-        }}
+        onOpenChange={setIsOpen}
+        title={
+          everywhere ? "Sign out of every device?" : "Sign out of Advantage?"
+        }
+        description={
+          everywhere
+            ? "Ends every session, this one included — phones too. You'll sign in again on each."
+            : "You'll sign in again on this device to see your matches and reports."
+        }
+        tone={hasUnsavedChanges ? "danger" : "primary"}
+        confirmLabel={
+          hasError
+            ? "Try again"
+            : hasUnsavedChanges
+              ? `Discard and ${action}`
+              : everywhere
+                ? "Sign out everywhere"
+                : "Sign out"
+        }
+        pendingLabel="Signing out…"
+        pending={isSigningOut}
+        error={
+          hasError
+            ? "Couldn't sign out. Check your connection and try again."
+            : null
+        }
+        onConfirm={handleSignOut}
+        footerLeft={
+          everywhere ? null : (
+            <button
+              type="button"
+              disabled={isSigningOut}
+              onClick={() => request("global")}
+              className="cursor-pointer rounded-[var(--radius-cell)] text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+            >
+              Sign out everywhere
+            </button>
+          )
+        }
       >
-        <AlertDialogContent className="gap-0 border border-[#E5E5EA] p-5 shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)] sm:max-w-[320px] sm:rounded-2xl">
-          <AlertDialogHeader className="mb-5 space-y-0 text-left">
-            <div className="mb-2 flex items-center gap-2.5">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[rgba(229,24,55,0.15)]">
-                <LogOut
-                  className="h-3 w-3 text-[#E51837]"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-              </div>
-              <AlertDialogTitle className="text-[16px] font-medium tracking-[-0.4px] text-[var(--ink-900)]">
-                Log out
-              </AlertDialogTitle>
+        {everywhere ? null : (
+          <div className="flex items-center gap-3 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-2.5">
+            <PersonAvatar
+              initials={viewer.initials}
+              photoUrl={viewer.avatarUrl}
+              className="size-7 bg-[var(--surface-card)] text-[10px]"
+            />
+            <div className="flex min-w-0 flex-1 flex-col gap-px">
+              <span className="truncate text-[12px] font-medium text-[var(--ink-900)]">
+                {viewer.name}
+              </span>
+              <span className="truncate text-[11px] text-[var(--ink-500)]">
+                {viewer.email}
+              </span>
             </div>
-            <AlertDialogDescription className="text-[13px] leading-[1.5] text-[#888888]">
-              {hasUnsavedChanges
-                ? "You have unsaved changes that will be lost. "
-                : ""}
-              You&#39;ll need to sign in again to access your matches and
-              statistics.
-            </AlertDialogDescription>
-            {hasError && (
-              <div className="mt-3 flex items-center gap-2 rounded-[6px] bg-[rgba(229,24,55,0.15)] px-3 py-2">
-                <div className="h-1 w-1 shrink-0 rounded-full bg-[#E51837]" />
-                <p className="text-[12px] font-normal text-[#E51837]">
-                  Could not log out. Please try again.
-                </p>
-              </div>
-            )}
-          </AlertDialogHeader>
-          <div className="flex items-center justify-end gap-2.5">
-            <AlertDialogCancel
-              disabled={isLoggingOut}
-              className="m-0 h-8 cursor-pointer rounded-[6px] border border-[#EAECF0] bg-transparent px-4 text-[10px] font-medium tracking-[1.5px] text-[#525252] uppercase transition-colors duration-200 hover:bg-[#F5F5F5] focus-visible:outline-none active:scale-[0.97]"
-            >
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleLogout}
-              disabled={isLoggingOut}
-              className="h-8 cursor-pointer rounded-[6px] border-none bg-[#E51837] px-4 text-[10px] font-medium tracking-[1.5px] text-white uppercase shadow-none transition-colors duration-200 hover:bg-[var(--danger-hover)] focus-visible:outline-none active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isLoggingOut ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-                  Logging out
-                </span>
-              ) : hasError ? (
-                "Try again"
-              ) : (
-                "Log out"
-              )}
-            </AlertDialogAction>
+            <span className="flex shrink-0 items-center gap-1.5 text-[11px] whitespace-nowrap text-[var(--ink-500)]">
+              <Monitor
+                className="size-[13px] text-[var(--ink-400)]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              This device
+            </span>
           </div>
-        </AlertDialogContent>
-      </AlertDialog>
+        )}
+        {hasUnsavedChanges ? (
+          <ConfirmNote icon={<PenLine />}>
+            Your unsaved settings changes will be discarded.
+          </ConfirmNote>
+        ) : null}
+      </ConfirmDialog>
     </LogoutContext.Provider>
   );
 }

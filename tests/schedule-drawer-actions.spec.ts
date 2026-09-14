@@ -266,7 +266,7 @@ test("only owners and coaches are offered deletion, with named confirmation and 
       confirmation.getByRole("heading", { name: "Delete Long Open Dual?" }),
     ).toBeVisible();
     await expect(confirmation).toContainText(
-      "permanently removes the event and its empty schedule lines",
+      "Removes the event and its empty lines from the team schedule",
     );
     await expect(
       confirmation.getByRole("button", { name: "Cancel" }),
