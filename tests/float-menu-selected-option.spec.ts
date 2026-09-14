@@ -17,7 +17,12 @@ test.describe("FloatMenuItem selected-option treatment", () => {
 
   test("keeps pointer hover for unselected options and menu semantics for actions", () => {
     expect(source).toContain("{icon ? (");
-    expect(source).toContain("<Check");
+    // A select row's check is the shared right-edge `ChosenCheck`; an action
+    // row (one with an icon) has no chosen mark.
+    expect(source).toContain("export function ChosenCheck");
+    expect(source).toContain(
+      '{!icon && <ChosenCheck chosen={chosen} className="mt-[2px]" />}',
+    );
     expect(source).toContain("text-[var(--blue)]");
   });
 });

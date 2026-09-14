@@ -149,7 +149,7 @@ export function FloatMenuItem({
         ) : null}
       </span>
       {/* Pinned to the label's line, not centred on a two-line row. */}
-      {icon ? null : <ChosenCheck chosen={chosen} className="mt-[2px]" />}
+      {!icon && <ChosenCheck chosen={chosen} className="mt-[2px]" />}
     </button>
   );
 }

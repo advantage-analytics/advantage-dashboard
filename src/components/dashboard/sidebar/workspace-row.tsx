@@ -260,7 +260,7 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
 
                 {pendingId === workspace.id ? (
                   <Loader2
-                    className="size-3 shrink-0 animate-spin text-[var(--ink-400)]"
+                    className="size-[13px] shrink-0 animate-spin text-[var(--ink-400)]"
                     aria-hidden="true"
                   />
                 ) : (

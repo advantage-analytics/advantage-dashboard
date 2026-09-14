@@ -138,12 +138,39 @@ const stepModule = (() => {
       ),
   };
 
+  // The shared chosen-row mark is rendered for real: `ChosenCheck` IS the
+  // treatment item 3 above pins, so stubbing it would prove nothing.
+  const floatMenu: Record<string, unknown> = {};
+  runInNewContext(
+    ts.transpileModule(
+      readFileSync(resolve("src/components/ui/float-menu.tsx"), "utf8"),
+      {
+        compilerOptions: {
+          module: ts.ModuleKind.CommonJS,
+          jsx: ts.JsxEmit.ReactJSX,
+          target: ts.ScriptTarget.ES2022,
+        },
+      },
+    ).outputText,
+    {
+      exports: floatMenu,
+      require: (dep: string) => {
+        if (dep === "react/jsx-runtime") return jsx;
+        if (dep === "lucide-react") return icons;
+        if (dep === "@/lib/utils") return { cn };
+        if (dep === "@/components/ui/popover") return popover;
+        throw new Error(`unexpected import in the float menu: ${dep}`);
+      },
+    },
+  );
+
   runInNewContext(outputText, {
     exports,
     require: (id: string) => {
       if (id === "react/jsx-runtime") return jsx;
       if (id === "react") return React;
       if (id === "lucide-react") return icons;
+      if (id === "@/components/ui/float-menu") return floatMenu;
       if (id === "next/link")
         return {
           default: ({
@@ -246,6 +273,7 @@ const stepModule = (() => {
             require: (dep: string) => {
               if (dep === "react/jsx-runtime") return jsx;
               if (dep === "lucide-react") return icons;
+              if (dep === "@/components/ui/float-menu") return floatMenu;
               if (dep === "@/lib/utils") return { cn };
               if (dep === "@/lib/data/match-utils") return { getInitials };
               if (dep === "@/components/ui/state-pill")
@@ -620,7 +648,9 @@ test("an unchosen row keeps the check's slot, so labels stay on one grid", () =>
   for (const row of options) {
     expect(row.check).toBe(false);
     // The reserved 13px slot, so nothing shifts when a pick is made.
-    expect(row.html).toContain('class="w-[13px] shrink-0"');
+    expect(row.html).toMatch(
+      /<span aria-hidden="true" class="[^"]*\bw-\[13px\][^"]*"><\/span>/,
+    );
   }
 });
 
@@ -651,7 +681,8 @@ test("every option is named, and the check is decoration only", () => {
   }
   // The check is never the only thing saying a row is chosen.
   expect(html).toContain('data-icon="Check"');
-  expect(html).toMatch(/aria-hidden="true"[^>]*data-icon="Check"/);
+  // `ChosenCheck` hides its whole slot, so the check inside it is hidden too.
+  expect(html).toMatch(/aria-hidden="true"[^>]*><[^>]*data-icon="Check"/);
   expect(html).toContain('aria-selected="true"');
 
   // A long source label truncates rather than wrapping the row out of its
