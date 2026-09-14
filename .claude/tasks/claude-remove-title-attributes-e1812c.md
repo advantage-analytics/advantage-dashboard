@@ -65,3 +65,53 @@ ready).
   - [ ] Temporarily adding `<span title="x" />` to any `src/**/*.tsx` makes `npm run lint` fail naming `react/forbid-dom-props`; the probe is removed before commit.
   - [ ] The rule's comment in `eslint.config.mjs` states the two known gaps: it does not see `title` on capitalised components (`Link`, `SortTrigger`/`FilterTrigger` whose `...props` reach a `<button>`), nor `title` keys inside spread objects.
 - **notes:** Optional. Cheap (one rule block) and observable via the probe. Skip if the user would rather not add lint surface; the sweep in T1–T3 stands on its own.
+
+## T5 · Land T1's title sweep with the spec re-anchored
+
+- **status:** todo
+- **model:** sonnet
+- **files:** src/components/dashboard/matches/match-card-gallery.tsx, src/components/dashboard/matches/matches-page-content.tsx, src/components/dashboard/matches/matches-filter-panel.tsx, src/components/dashboard/matches/new-match-wizard/DetailsStepContent.tsx, src/components/dashboard/matches/new-match-wizard/MissingFieldsPill.tsx, src/components/dashboard/shared/season-kpi-strip.tsx, tests/upload-player-details.spec.ts (surveyed, not guessed)
+- **done when:**
+  - [ ] The seven `title` attributes listed in T1's first criterion are removed and nothing else on those elements changes; the `DetailsStepContent.tsx` opponent button gains `aria-label` reading "Change the opponent, " followed by `formData.opponentName`, and no other element gains an `aria-label`.
+  - [ ] `tests/upload-player-details.spec.ts:291` anchors its `indexOf` on the literal text "Change the opponent, " from the new aria-label (or an equivalent literal that appears exactly once in the file) instead of `title="Change the opponent"`; the `<Pencil` assertion 400 chars after it still holds; no other line of the spec changes.
+  - [ ] `grep -nE '\stitle=' ` on the six source files returns no hit whose enclosing tag is a lowercase DOM element, `SortTrigger` or `FilterTrigger`.
+  - [ ] `npm run typecheck`, `npm run lint` and `npm test` all pass — the KPI-strip footer at `season-kpi-strip.tsx:378-384` is untouched, since it already prints the disabled reason ("All slots full — uncheck to swap." / "Minimum N tiles.") that the removed `title` duplicated.
+- **notes:** Replaces T1 (blocked at the mechanical gate: the spec, not the code). Optional shortcut: T1's edits are intact in stash `49a4994a6dbe97d3809674bea00621ef50d935d2` — `git stash apply <sha>` (never pop; the stack is shared), then re-anchor the spec. Re-doing the seven removals by hand is equally fine. Keep T1's notes on which capitalised `title` props render text and must not be touched. Do not add tooltips here; the one "lost" affordance on this surface (KPI disabled reason) is already visible in the menu footer.
+
+## T6 · Join requests — unclip the email, expand the note
+
+- **status:** todo
+- **model:** opus
+- **files:** src/components/dashboard/team/join-requests-card.tsx (surveyed, not guessed)
+- **done when:**
+  - [ ] The email span at `join-requests-card.tsx:239-241` loses `truncate` and gains `break-all` (a 60-character address with no break points wraps onto a second line inside the 11px row rather than being cut with an ellipsis); no other class on it changes.
+  - [ ] Under the note span (`:270-274`, still `line-clamp-2 break-words`) a text button reading "Show more" renders only when the clamped span overflows (its `scrollHeight` exceeds its `clientHeight`, measured after mount and on resize); a two-line note shows no button.
+  - [ ] Clicking "Show more" removes `line-clamp-2` from that request's note only, the button reads "Show less", and clicking again restores the clamp; state is per request, so expanding one card leaves its neighbours clamped.
+  - [ ] The "Show more" / "Show less" control is a `<button type="button">` styled with the card's existing 11px text-link pattern (no `advButton`, no pill), reachable by Tab, with `aria-expanded` reflecting the state.
+  - [ ] `npm run typecheck` and `npm run lint` pass; `npm test` passes.
+- **notes:** Follow-up to T2, which removed the `title` that carried the full email and note. Design system (`reference/chrome.md` §Dark Tooltip) forbids a tooltip on text and says to remove the clipping instead — the email is the only copy on screen and nothing opens it, so it wraps; the note stays clamped by default (the source comment explains why: a 5,000-character "word" from a public form) and opens on demand. Update the two source comments that still say "the full text is on the title".
+
+## T7 · Help TOC — make the ? hint a keycap with an sr-only sentence
+
+- **status:** todo
+- **model:** sonnet
+- **files:** src/app/dashboard/help/help-toc.tsx (surveyed, not guessed)
+- **done when:**
+  - [ ] The bare `<span>?</span>` at `help-toc.tsx:205-207` is replaced by `<Kbd size="sm" aria-hidden="true">?</Kbd>` (import from `@/components/ui/kbd`, default `raised` variant — the help page's own keycap) followed by a `<span className="sr-only">Press ? from anywhere on this page to jump to these topics</span>`, both inside the existing `flex items-baseline justify-between` header row.
+  - [ ] The sr-only sentence is the only place that text appears; no `title`, no tooltip, no `aria-label` is added.
+  - [ ] The `?`-key handler at `help-toc.tsx:110-133` and the mobile pill bar are unchanged.
+  - [ ] `npm run typecheck` and `npm run lint` pass.
+- **notes:** Follow-up to T2. `Kbd` is the product's only keyboard chip (`reference/components.md` §Keyboard Shortcut Chip: "a keyboard path is stated once, where the mode is stated"; `aria-hidden` on the chip when text already says the shortcut). The `Kbd` component signature has no `aria-hidden` prop today — if `cn`-only props reject it, pass it via `className`-adjacent spread or wrap the chip in `<span aria-hidden="true">`; note whichever you did in the commit body. A dark tooltip is off-limits here: the `?` is not a control.
+
+## T8 · Schedule — wrap the event name, name the pair in the button
+
+- **status:** todo
+- **model:** sonnet
+- **needs:** T3
+- **files:** src/components/dashboard/schedule/static/event-drawer.tsx, src/components/dashboard/schedule/static/lineup-rows.tsx (surveyed, not guessed)
+- **done when:**
+  - [ ] `event-drawer.tsx:275` `<div className="text-title-lg truncate">` becomes `<div className="text-title-lg line-clamp-2 break-words">` — a 60-character event name shows on two lines in the 340px rail with no ellipsis, a 200-character one still clamps at two; nothing else in the header block changes and the drawer chrome is untouched.
+  - [ ] The source comment above that div (`:272-274`) no longer says `title` carries the full name; it states the two-line wrap instead.
+  - [ ] `lineup-rows.tsx:902` "their pair" button's `aria-label` becomes "Their pair at " + `line.slot` when `names` is empty, and "Their pair at " + `line.slot` + ": " + `names.join(" / ")` when set, so a screen reader hears the full names the visible text abbreviates to surnames; `aria-expanded` and every `data-*` attribute are unchanged.
+  - [ ] `grep -nE '\stitle=' ` on both files still returns no lowercase-DOM hit, and `npm run typecheck` and `npm run lint` pass.
+- **notes:** Follow-up to T3. `reference/chrome.md` §Dark Tooltip: "a name in a 340px drawer wraps to two lines, and the panel scrolls anyway"; the pair names are one click away in the popup (`lineup-rows.tsx:938-975` lists every chosen player in full), so the visible button truncates bare and only the accessible name carries them. Do not wrap either in a tooltip — neither the div nor a text button is icon-only chrome. Every 340px rail shares the roster's shell: touch only the one `div`.
