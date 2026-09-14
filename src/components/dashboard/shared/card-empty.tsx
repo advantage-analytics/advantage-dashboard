@@ -5,6 +5,18 @@ import {
   GHOST_OPACITY,
 } from "@/components/dashboard/home/day-zero-shape";
 
+interface CardEmptyBand {
+  title: string;
+  body: string;
+  action?: { label: string; href: string };
+}
+
+/** Whose card this is, for a sentence about them: "Your …" or "Maya's …". */
+export interface CardSubject {
+  isSelf: boolean;
+  firstName: string;
+}
+
 /**
  * What a card says before it holds anything, and the one step that fills it.
  *
@@ -18,47 +30,8 @@ import {
  * (components.md → one primary per surface), and a card that would repeat its
  * route gets the band with no button — the "one action, not two" rule
  * `recent-matches-empty.tsx` records.
- */
-export interface CardEmptyBand {
-  title: string;
-  body: string;
-  action?: { label: string; href: string };
-}
-
-/** Whose card this is, for a sentence about them: "Your …" or "Maya's …". */
-export interface CardSubject {
-  isSelf: boolean;
-  firstName: string;
-}
-
-function WidgetEmptyBand({ title, body, action }: CardEmptyBand) {
-  return (
-    <div className="mt-3.5 flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-[var(--border-hairline)] pt-[18px] pb-1">
-      <div className="min-w-0 flex-1 basis-[220px]">
-        <span className="block text-[13px] leading-[1.4] font-medium text-[var(--ink-900)]">
-          {title}
-        </span>
-        <span
-          className="text-body-sm mt-[3px] block"
-          style={{ textWrap: "pretty" }}
-        >
-          {body}
-        </span>
-      </div>
-      {action && (
-        <Link
-          href={action.href}
-          className={`${advButton("outline", "sm")} shrink-0`}
-        >
-          {action.label}
-        </Link>
-      )}
-    </div>
-  );
-}
-
-/**
- * The ghost and the band as one piece, so no card can draw the shape without
+ *
+ * The ghost and the band are one piece, so no card can draw the shape without
  * saying what fills it. `description` is `DayZeroShape`'s screen-reader
  * sentence for the dimmed block.
  */
@@ -78,7 +51,27 @@ export function CardEmpty({
       <DayZeroShape description={description} className={className}>
         {children}
       </DayZeroShape>
-      <WidgetEmptyBand {...band} />
+      <div className="mt-3.5 flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-[var(--border-hairline)] pt-[18px] pb-1">
+        <div className="min-w-0 flex-1 basis-[220px]">
+          <span className="block text-[13px] leading-[1.4] font-medium text-[var(--ink-900)]">
+            {band.title}
+          </span>
+          <span
+            className="text-body-sm mt-[3px] block"
+            style={{ textWrap: "pretty" }}
+          >
+            {band.body}
+          </span>
+        </div>
+        {band.action && (
+          <Link
+            href={band.action.href}
+            className={`${advButton("outline", "sm")} shrink-0`}
+          >
+            {band.action.label}
+          </Link>
+        )}
+      </div>
     </>
   );
 }

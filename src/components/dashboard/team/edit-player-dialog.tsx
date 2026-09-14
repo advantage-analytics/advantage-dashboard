@@ -170,6 +170,11 @@ export function EditPlayerDialog({
   const busy = pending || removed;
   const confirming = step === "confirm";
 
+  function goTo(next: "edit" | "confirm") {
+    setError(null);
+    setStep(next);
+  }
+
   function close() {
     if (busy) return;
     onOpenChange(false);
@@ -198,8 +203,6 @@ export function EditPlayerDialog({
       let result: Awaited<ReturnType<typeof updateProgramPlayer>>;
       try {
         result = await updateProgramPlayer({
-          // `profileId` rather than `member.profileId`: the same value, but a
-          // const the guard above has already narrowed to a real id.
           profileId,
           firstName: fields.firstName.trim(),
           lastName: fields.lastName.trim(),
@@ -273,10 +276,7 @@ export function EditPlayerDialog({
               type="button"
               className={advButton("outline")}
               disabled={busy}
-              onClick={() => {
-                setError(null);
-                setStep("edit");
-              }}
+              onClick={() => goTo("edit")}
             >
               Back
             </button>
@@ -309,10 +309,7 @@ export function EditPlayerDialog({
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => {
-                  setError(null);
-                  setStep("confirm");
-                }}
+                onClick={() => goTo("confirm")}
                 className="group -ml-2 inline-flex h-9 cursor-pointer items-center gap-[7px] rounded-[var(--radius-button)] px-2 text-[12px] text-[var(--ink-700)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)] focus-visible:bg-[var(--surface-subtle)] focus-visible:text-[var(--danger)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
               >
                 <Trash2
@@ -386,7 +383,7 @@ export function EditPlayerDialog({
               <SettingsUnderlineInput
                 aria-required
                 value={fields.firstName}
-                disabled={pending}
+                disabled={busy}
                 onChange={(event) => edit("firstName", event.target.value)}
               />
             </SettingsField>
@@ -394,7 +391,7 @@ export function EditPlayerDialog({
               <SettingsUnderlineInput
                 aria-required
                 value={fields.lastName}
-                disabled={pending}
+                disabled={busy}
                 onChange={(event) => edit("lastName", event.target.value)}
               />
             </SettingsField>
@@ -408,14 +405,14 @@ export function EditPlayerDialog({
               label="Class year"
               value={fields.classYear}
               options={classYearOptions(fields.classYear)}
-              disabled={pending}
+              disabled={busy}
               onChange={(value) => edit("classYear", value)}
             />
             <PlayerMenuField
               label="Lineup spot"
               value={fields.lineupSpot}
               options={lineupSpotOptions(fields.lineupSpot)}
-              disabled={pending}
+              disabled={busy}
               onChange={(value) => edit("lineupSpot", value)}
             />
           </div>
@@ -434,7 +431,7 @@ export function EditPlayerDialog({
               type="email"
               value={fields.email}
               placeholder="name@school.edu"
-              disabled={pending}
+              disabled={busy}
               onChange={(event) => edit("email", event.target.value)}
             />
           </SettingsField>

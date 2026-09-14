@@ -147,13 +147,7 @@ export default async function PlayerProfilePage({
           kpis={profile.kpis}
           hasStats={profile.hasStats}
           matchesPlayed={profile.matchesPlayed}
-          // Only the day-zero hint is reworded for a coach. Once a match exists
-          // the strip's own "When the report lands" is the true sentence.
-          emptyHint={
-            isSelf || profile.matchesPlayed > 0
-              ? undefined
-              : `After ${profile.firstName}'s first match`
-          }
+          subject={subject}
         />
 
         <div className="grid items-start gap-4 lg:grid-cols-[1.9fr_1fr]">

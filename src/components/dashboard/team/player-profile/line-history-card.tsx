@@ -38,8 +38,9 @@ function LineHistoryHeader() {
  * A match counts for the line its schedule entry names; an unscheduled
  * upload counts for none, so a player whose matches were all filed by hand
  * sees the card's own shape empty — the header over grey rows, then the
- * band saying what fills it, with the way to the schedule (`CardEmpty`). The frame's "Season"
- * link is not drawn: there is no per-line page for it to open.
+ * band saying what fills it, with the way to the schedule (`CardEmpty`).
+ * The frame's "Season" link is not drawn: there is no per-line page for it
+ * to open.
  */
 export function LineHistoryCard({ lines }: { lines: LineRow[] }) {
   return (

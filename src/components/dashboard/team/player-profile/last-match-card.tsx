@@ -13,21 +13,6 @@ import {
 import type { ProfileLastMatch } from "@/lib/data/player-profile-server";
 
 /**
- * The most recent match, and what the engine made of it.
- *
- * Three stacked bands, each behind a hairline: the match itself (who, where,
- * which line, the score and the outcome), then Advantage Intelligence's
- * paragraph for this player's side, then the evidence — five computed
- * numbers as `InsightStatChip`s. The two lower bands appear only when there
- * is something in them: a file-imported match has stats and no paragraph, a
- * hand-scored one has neither, and a band drawn around nothing would say the
- * engine had failed rather than that it was never asked.
- *
- * The paragraph is the stored `matches.insights` summary — a fact about the
- * match written once when it was analysed, never re-asked at render. Its
- * first sentence leads in 14px light; the rest follows in body grey.
- */
-/**
  * The frame gives the claim one line and the body a line and a half; the
  * engine writes for the report page and can run longer. Both caps are
  * characters at the card's width, cut on a word, and "Why this" beside them
@@ -102,6 +87,21 @@ export function LastMatchCard({
   return matchesPlayed === 0 ? <LastMatchEmpty subject={subject} /> : null;
 }
 
+/**
+ * The most recent match, and what the engine made of it.
+ *
+ * Three stacked bands, each behind a hairline: the match itself (who, where,
+ * which line, the score and the outcome), then Advantage Intelligence's
+ * paragraph for this player's side, then the evidence — five computed
+ * numbers as `InsightStatChip`s. The two lower bands appear only when there
+ * is something in them: a file-imported match has stats and no paragraph, a
+ * hand-scored one has neither, and a band drawn around nothing would say the
+ * engine had failed rather than that it was never asked.
+ *
+ * The paragraph is the stored `matches.insights` summary — a fact about the
+ * match written once when it was analysed, never re-asked at render. Its
+ * first sentence leads in 14px light; the rest follows in body grey.
+ */
 function PlayedMatch({ match }: { match: ProfileLastMatch }) {
   const reportHref = `/dashboard/matches/${match.id}`;
   const insight = match.insight ? splitClaim(match.insight.summary) : null;
