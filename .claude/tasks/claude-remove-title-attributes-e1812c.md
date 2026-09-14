@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Drop DOM title tooltips — matches list, wizard, KPI strip
 
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/match-card-gallery.tsx, src/components/dashboard/matches/matches-page-content.tsx, src/components/dashboard/matches/matches-filter-panel.tsx, src/components/dashboard/matches/new-match-wizard/DetailsStepContent.tsx, src/components/dashboard/matches/new-match-wizard/MissingFieldsPill.tsx, src/components/dashboard/shared/season-kpi-strip.tsx (surveyed, not guessed)
 - **done when:**
