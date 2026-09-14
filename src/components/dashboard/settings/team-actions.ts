@@ -295,14 +295,15 @@ export type LeaveResult =
   | { ok: false; error: string };
 
 /**
- * The caller leaves a program they play for.
+ * The caller leaves a program — any member but the owner.
  *
  * `leave_program` is the authority: it refuses the owner, un-claims the
  * caller's roster profile (so a fresh invitation can hand it back), clears the
  * uploader columns that would otherwise keep the team's matches readable, and
- * drops the membership. The players-only gate here is presentation's rule
- * restated — the RPC would let a coach leave too, and the page does not offer
- * it to them yet.
+ * drops the membership. The owner check here is the RPC's rule restated so the
+ * form can say it in words: a program without an owner has nobody who can
+ * invite anyone back, while a coach or staff member leaving takes nothing the
+ * owner still needs.
  *
  * No `revalidatePath` on purpose. Revalidating the program page re-renders it
  * for a viewer who is no longer a member, and its redirect would unmount the
@@ -320,12 +321,6 @@ export async function leaveProgram(programId: string): Promise<LeaveResult> {
     return {
       ok: false,
       error: "Transfer ownership of this program before leaving it.",
-    };
-  }
-  if (member.program.role !== "player") {
-    return {
-      ok: false,
-      error: "Ask the owner to change your role before you leave.",
     };
   }
 
@@ -366,6 +361,7 @@ export async function leaveProgram(programId: string): Promise<LeaveResult> {
         programName: programLabel(member.program),
         memberName: member.viewer.name,
         memberEmail: member.viewer.email,
+        memberRole: member.program.role,
         profileKept,
       }),
     );

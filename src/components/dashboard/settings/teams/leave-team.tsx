@@ -12,18 +12,31 @@ import { SettingsButton } from "@/components/dashboard/settings/settings-button"
 import { StatePill } from "@/components/ui/state-pill";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import { leaveProgram } from "@/components/dashboard/settings/team-actions";
-import { teamLabel } from "@/lib/workspace/types";
+import { teamLabel, type ProgramRole } from "@/lib/workspace/types";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 
 const TEAMS_PATH = "/dashboard/settings/teams";
 
+/** Who may leave: anyone on the program but its owner. */
+type LeavingRole = Exclude<ProgramRole, "owner">;
+
+const ROLE_NAME: Record<LeavingRole, string> = {
+  coach: "Coach",
+  staff: "Staff",
+  player: "Player",
+};
+
 /**
- * A player leaving the program they are looking at.
+ * A member leaving the program they are looking at — player, coach or staff.
+ * The owner gets `OwnerLeaveNote` instead: the one role that cannot leave,
+ * because a program without an owner has nobody who can invite anyone back.
  *
- * The entry is the player's counterpart to the owner's "Delete program" row:
+ * The entry is the member's counterpart to the owner's "Delete program" row:
  * the last card on the page, the destructive word in `--danger`, an outline
- * danger button that only opens the confirm. Staff never see it — a coach
- * steps down by transfer or is removed on the Roster.
+ * danger button that only opens the confirm. What leaving costs differs by
+ * role — staff also give up the roster, schedule and settings — and the
+ * profile line only appears for someone who holds a roster profile here, which
+ * most coaches do not.
  *
  * The dialog has two beats, like the transfer's. Confirm puts the one thing
  * that cannot be undone from this side in the contract line under the title,
@@ -45,6 +58,7 @@ export function LeaveTeamCard({
   conference,
   crestUrl,
   ownerName,
+  role,
 }: {
   programId: string;
   programName: string;
@@ -52,6 +66,7 @@ export function LeaveTeamCard({
   conference: string | null;
   crestUrl: string | null;
   ownerName: string | null;
+  role: LeavingRole;
 }) {
   const [open, setOpen] = useState(false);
   // Bumped on every open so the dialog remounts at Confirm with no stale error.
@@ -64,8 +79,10 @@ export function LeaveTeamCard({
           <div className="min-w-0 flex-1">
             <div className="text-[12px] text-[var(--danger)]">Leave team</div>
             <div className="mt-0.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
-              You&apos;ll lose access to {programName}&apos;s matches and
-              reports. Your own uploads stay in your personal workspace.
+              {role === "player"
+                ? `You'll lose access to ${programName}'s matches and reports.`
+                : `You'll lose access to ${programName}'s matches, roster and settings.`}{" "}
+              Your own uploads stay in your personal workspace.
             </div>
           </div>
           <SettingsButton
@@ -91,8 +108,27 @@ export function LeaveTeamCard({
         conference={conference}
         crestUrl={crestUrl}
         ownerName={ownerName}
+        role={role}
       />
     </>
+  );
+}
+
+/**
+ * The owner's row where everyone else's Leave team sits. Not hidden: an owner
+ * looking for the way out should find the rule and the route, not nothing.
+ * No button — there is nothing to press until ownership has moved, and a
+ * disabled danger button reads as broken rather than as not-yet.
+ */
+export function OwnerLeaveNote({ programName }: { programName: string }) {
+  return (
+    <SettingsCard className="gap-0 py-4">
+      <div className="text-[12px] text-[var(--ink-900)]">Leave team</div>
+      <div className="mt-0.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
+        You own {programName}, so you can&apos;t leave it yet. Use Make owner on
+        a coach or staff member under Members, then leave as a coach.
+      </div>
+    </SettingsCard>
   );
 }
 
@@ -105,6 +141,7 @@ function LeaveTeamDialog({
   conference,
   crestUrl,
   ownerName,
+  role,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -114,9 +151,17 @@ function LeaveTeamDialog({
   conference: string | null;
   crestUrl: string | null;
   ownerName: string | null;
+  role: LeavingRole;
 }) {
   const router = useRouter();
   const { available } = useWorkspace();
+  const isStaff = role !== "player";
+  // A roster profile claimed on this program — every player's, and the rare
+  // coach who also plays. Without one there is nothing to "stay with the
+  // program", and the confirm should not promise it.
+  const hasProfile =
+    available.find((workspace) => workspace.id === programId)?.myPlayerId !=
+    null;
   // Read before leaving: the Teams list redirects to Profile when no team is
   // left, and the done step should name where Done actually goes.
   const [otherTeams] = useState(
@@ -206,7 +251,7 @@ function LeaveTeamDialog({
               )}
             </div>
             <span className="text-[11px] whitespace-nowrap text-[var(--ink-500)]">
-              was Player
+              was {ROLE_NAME[role]}
             </span>
             <StatePill outline>Left</StatePill>
           </div>
@@ -270,14 +315,24 @@ function LeaveTeamDialog({
       <div className="flex flex-col gap-3.5">
         <ul className="flex flex-col gap-[7px] rounded-[8px] bg-[var(--surface-subtle)] px-3.5 py-3 text-[11px] leading-[1.5] text-[var(--ink-700)]">
           <Bullet>
-            You lose access to the team&apos;s matches, video and reports,
-            including the ones recorded of you.
+            {isStaff
+              ? "You lose access to the team's matches, video and reports."
+              : "You lose access to the team's matches, video and reports, including the ones recorded of you."}
           </Bullet>
-          <Bullet>
-            Your player profile and its matches stay with the program for{" "}
-            {ownerName ? `${ownerName} and the coaches` : "the coaches"} to
-            manage.
-          </Bullet>
+          {isStaff && (
+            <Bullet>
+              You give up your {ROLE_NAME[role].toLowerCase()} role — the
+              roster, schedule and team settings. Team matches you uploaded stay
+              with the program.
+            </Bullet>
+          )}
+          {hasProfile && (
+            <Bullet>
+              Your player profile and its matches stay with the program for{" "}
+              {ownerName ? `${ownerName} and the coaches` : "the coaches"} to
+              manage.
+            </Bullet>
+          )}
           <Bullet>
             Matches you uploaded to your personal workspace are unaffected.
           </Bullet>

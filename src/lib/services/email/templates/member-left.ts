@@ -8,7 +8,7 @@ import {
 import type { EmailMessage } from "../send";
 
 /**
- * "A player left your program."
+ * "A member left your program."
  *
  * Sent to the owner after `leave_program` has already dropped the membership
  * and un-claimed the profile. The mirror of `memberJoinedOwnerEmail`, and to
@@ -27,14 +27,23 @@ export interface MemberLeftOwnerInput {
   /** The leaver's display name — already falls back to their address. */
   memberName: string;
   memberEmail: string;
+  /** Their role when they left. Never `owner` — `leave_program` refuses one. */
+  memberRole: "coach" | "staff" | "player";
   /** False when the leaver held no roster profile, so there is nothing kept. */
   profileKept: boolean;
 }
 
+const ROLE_LABEL: Record<MemberLeftOwnerInput["memberRole"], string> = {
+  coach: "Coach",
+  staff: "Staff",
+  player: "Player",
+};
+
 export function memberLeftOwnerEmail(
   input: MemberLeftOwnerInput,
 ): EmailMessage {
-  const { to, programName, memberName, memberEmail, profileKept } = input;
+  const { to, programName, memberName, memberEmail, memberRole, profileKept } =
+    input;
   const owner = input.ownerName?.trim();
   const who =
     memberName.trim() && memberName.trim() !== memberEmail
@@ -54,6 +63,7 @@ export function memberLeftOwnerEmail(
     ],
     facts: [
       { label: "Program", value: programName },
+      { label: "Role", value: ROLE_LABEL[memberRole] },
       { label: "Email", value: memberEmail },
     ],
     cta: {
