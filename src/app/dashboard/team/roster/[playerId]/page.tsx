@@ -9,11 +9,13 @@ import { ProfileHeaderSlot } from "@/components/dashboard/team/player-profile/pr
 import { ProfileIdentity } from "@/components/dashboard/team/player-profile/profile-identity";
 import { ProfileActions } from "@/components/dashboard/team/player-profile/profile-actions";
 import { SeasonKpiStrip } from "@/components/dashboard/shared/season-kpi-strip";
-import { LastMatchCard } from "@/components/dashboard/team/player-profile/last-match-card";
+import {
+  LastMatchCard,
+  LastMatchEmpty,
+} from "@/components/dashboard/team/player-profile/last-match-card";
 import { MatchHistoryCard } from "@/components/dashboard/team/player-profile/match-history-card";
 import { LineHistoryCard } from "@/components/dashboard/team/player-profile/line-history-card";
 import { ServePlacementCard } from "@/components/dashboard/team/player-profile/serve-placement-card";
-import { ProfileDayZero } from "@/components/dashboard/team/player-profile/profile-day-zero";
 
 /**
  * One player's page — Platform Audit `Te` (their own) and `Te2` (a coach's
@@ -98,6 +100,10 @@ export default async function PlayerProfilePage({
       ? (roster.members.find((m) => m.playerId === playerId) ?? null)
       : null;
 
+  // `profile.playerId`, never the URL's — the wizard's For field wants the
+  // profile id. Match history's import step builds on it.
+  const newMatchHref = `/dashboard/matches/new?player=${profile.playerId}`;
+
   const actions = (
     <ProfileActions
       mode={mode}
@@ -138,43 +144,72 @@ export default async function PlayerProfilePage({
           actions={actions}
         />
 
-        {profile.matchesPlayed === 0 ? (
-          <ProfileDayZero
-            mode={mode}
-            firstName={profile.firstName}
-            canUpload={canUpload}
-            playerId={profile.playerId}
-            serve={profile.serve}
-          />
-        ) : (
-          <>
-            <SeasonKpiStrip
-              kpis={profile.kpis}
-              hasStats={profile.hasStats}
-              matchesPlayed={profile.matchesPlayed}
-            />
+        {/* The same five blocks whether or not a match exists: each card
+            holds its own ghost and the one step that fills it, so the first
+            match fills this page in rather than replacing it with another. */}
+        <SeasonKpiStrip
+          kpis={profile.kpis}
+          hasStats={profile.hasStats}
+          matchesPlayed={profile.matchesPlayed}
+          emptyHint={
+            isSelf ? undefined : `After ${profile.firstName}'s first match`
+          }
+        />
 
-            <div className="grid items-start gap-4 lg:grid-cols-[1.9fr_1fr]">
-              <div className="flex min-w-0 flex-col gap-4">
-                {profile.lastMatch && (
-                  <LastMatchCard match={profile.lastMatch} />
-                )}
-                <MatchHistoryCard
-                  rows={profile.history}
-                  playerName={profile.name}
+        <div className="grid items-start gap-4 lg:grid-cols-[1.9fr_1fr]">
+          <div className="flex min-w-0 flex-col gap-4">
+            {profile.lastMatch ? (
+              <LastMatchCard match={profile.lastMatch} />
+            ) : (
+              profile.matchesPlayed === 0 && (
+                <LastMatchEmpty
+                  empty={{
+                    title: isSelf
+                      ? "Your last match lands here"
+                      : `${profile.firstName}'s last match lands here`,
+                    // No button: the header's New match is the same step,
+                    // one row above.
+                    body: "The score, the line, and what the report found.",
+                  }}
                 />
-              </div>
-              <div className="flex min-w-0 flex-col gap-4">
-                <LineHistoryCard lines={profile.lines} />
-                <ServePlacementCard
-                  serve={profile.serve}
-                  matchesPlayed={profile.matchesPlayed}
-                  isSelf={isSelf}
-                />
-              </div>
-            </div>
-          </>
-        )}
+              )
+            )}
+            <MatchHistoryCard
+              rows={profile.history}
+              playerName={profile.name}
+              empty={{
+                title: isSelf
+                  ? "Every match you play, newest first"
+                  : `Every match ${profile.firstName} plays, newest first`,
+                body: "Each row opens its full report. Matches tracked in SwingVision import straight in.",
+                action: canUpload
+                  ? {
+                      label: "Import from SwingVision",
+                      href: `${newMatchHref}&source=swing-vision`,
+                    }
+                  : undefined,
+              }}
+            />
+          </div>
+          <div className="flex min-w-0 flex-col gap-4">
+            <LineHistoryCard
+              lines={profile.lines}
+              empty={{
+                title: "Lines fill in from the schedule",
+                body: "A dual's S1 to S6 and D1 to D3, or a tournament draw.",
+                action: {
+                  label: "Open schedule",
+                  href: "/dashboard/team/schedule",
+                },
+              }}
+            />
+            <ServePlacementCard
+              serve={profile.serve}
+              matchesPlayed={profile.matchesPlayed}
+              isSelf={isSelf}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -5,6 +5,11 @@ import { RowAction } from "@/components/dashboard/schedule/row-action";
 import { InsightStatChip } from "@/components/dashboard/shared/insight-stat-chip";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { clipText } from "@/lib/data/player-profile";
+import {
+  DayZeroShape,
+  GhostRule,
+} from "@/components/dashboard/home/day-zero-shape";
+import { WidgetEmptyBand, type WidgetEmptyCopy } from "./widget-empty";
 import type { ProfileLastMatch } from "@/lib/data/player-profile-server";
 
 /**
@@ -38,6 +43,41 @@ function splitClaim(summary: string): { claim: string; body: string | null } {
     claim: clipText(match[1], CLAIM_MAX),
     body: clipText(match[2], BODY_MAX),
   };
+}
+
+/**
+ * The card before there is a last match: its eyebrow, the match row in grey,
+ * and the page's band (`WidgetEmptyBand`).
+ *
+ * Drawn only on a profile with no matches at all. A player whose matches are
+ * all unscored has matches and no "last match" to lead with, and a sentence
+ * about their first one would be false — the page leaves the card out there.
+ */
+export function LastMatchEmpty({ empty }: { empty: WidgetEmptyCopy }) {
+  return (
+    <section
+      aria-label="Last match"
+      className="surface-card flex flex-col"
+      style={{ padding: "18px 20px" }}
+    >
+      <span className="eyebrow">Last match</span>
+      <DayZeroShape
+        description="No match yet: this card shows the most recent match, its score and what the report found."
+        className="mt-3.5"
+      >
+        <div className="grid grid-cols-[32px_minmax(0,1fr)_15px_auto] items-center gap-3">
+          <span className="size-8 rounded-[var(--radius-button)] bg-[var(--ink-100)]" />
+          <span className="flex flex-col gap-1.5">
+            <GhostRule width="40%" tone="200" shape="tall" />
+            <GhostRule width="60%" />
+          </span>
+          <GhostRule width="14px" shape="dot" />
+          <GhostRule width="88px" />
+        </div>
+      </DayZeroShape>
+      <WidgetEmptyBand {...empty} />
+    </section>
+  );
 }
 
 export function LastMatchCard({ match }: { match: ProfileLastMatch }) {

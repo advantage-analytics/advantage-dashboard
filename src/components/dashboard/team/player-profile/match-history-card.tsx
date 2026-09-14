@@ -3,18 +3,23 @@ import { ResultMark } from "@/components/dashboard/result-mark";
 import { RowAction } from "@/components/dashboard/schedule/row-action";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import type { ProfileMatchRow } from "@/lib/data/player-profile-server";
+import {
+  DayZeroShape,
+  GhostRule,
+} from "@/components/dashboard/home/day-zero-shape";
+import {
+  CARD_GHOST_ROWS,
+  WidgetEmptyBand,
+  type WidgetEmptyCopy,
+} from "./widget-empty";
 
 /**
  * Every match, one row each — Date · Name · School · Line · outcome · Score.
- *
- * The geometry is exported so the day-zero ghost draws the same columns
- * under the same header by import; a ghost that restates a grid is a ghost
- * that stops matching the table it stands in for.
  */
-export const HISTORY_GRID =
+const HISTORY_GRID =
   "grid-cols-[56px_minmax(0,1.2fr)_minmax(0,1.2fr)_40px_18px_88px]";
 
-export const HISTORY_COLUMNS = [
+const HISTORY_COLUMNS = [
   "Date",
   "Name",
   "School",
@@ -23,7 +28,7 @@ export const HISTORY_COLUMNS = [
   "Score",
 ] as const;
 
-export function MatchHistoryHeader() {
+function MatchHistoryHeader() {
   return (
     <div
       className={`grid ${HISTORY_GRID} gap-3 border-b border-[var(--border-hairline)] pb-2`}
@@ -46,10 +51,13 @@ export function MatchHistoryHeader() {
 export function MatchHistoryCard({
   rows,
   playerName,
+  empty,
 }: {
   rows: ProfileMatchRow[];
   /** For the Matches list's own player filter, which keys on the name. */
   playerName: string;
+  /** The band under the ghost rows when there are none — see `WidgetEmptyBand`. */
+  empty: WidgetEmptyCopy;
 }) {
   const allHref = `/dashboard/matches?player=${encodeURIComponent(playerName)}`;
 
@@ -62,12 +70,37 @@ export function MatchHistoryCard({
       <div className="flex items-center gap-2.5 pb-3">
         <span className="eyebrow">Match history</span>
         <div className="flex-1" />
-        <RowAction href={allHref}>
-          All {rows.length} {rows.length === 1 ? "match" : "matches"}
-        </RowAction>
+        {/* "All 0 matches" would be a link to an empty list. */}
+        {rows.length > 0 && (
+          <RowAction href={allHref}>
+            All {rows.length} {rows.length === 1 ? "match" : "matches"}
+          </RowAction>
+        )}
       </div>
 
       <MatchHistoryHeader />
+
+      {rows.length === 0 && (
+        <>
+          <DayZeroShape description="No matches yet: this card lists every match with its date, opponent, school, line, result and score.">
+            {CARD_GHOST_ROWS.map((opacity) => (
+              <div
+                key={opacity}
+                className={`grid ${HISTORY_GRID} h-11 items-center gap-3`}
+                style={{ opacity }}
+              >
+                <GhostRule width="70%" />
+                <GhostRule width="55%" tone="200" shape="tall" />
+                <GhostRule width="60%" />
+                <GhostRule width="20px" />
+                <GhostRule width="14px" shape="dot" />
+                <GhostRule width="65%" />
+              </div>
+            ))}
+          </DayZeroShape>
+          <WidgetEmptyBand {...empty} />
+        </>
+      )}
 
       {/* No rules between rows — the header's hairline is the card's only
           line, as on the roster (Data Table law 9). */}
