@@ -31,7 +31,7 @@ ready).
 
 ## T2 · Event chooser adopts WizardShell, keys and stepper
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/components/dashboard/schedule/static/static-event-chooser.tsx, src/app/dashboard/team/schedule/new/loading.tsx, src/components/dashboard/loading/event-wizard-pending.tsx, tests/schedule-static-copy.spec.ts (guess)

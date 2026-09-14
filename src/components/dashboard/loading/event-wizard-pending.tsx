@@ -24,8 +24,8 @@ import { cn } from "@/lib/utils";
  *
  * Every placeholder here mirrors a real component's geometry, lifted from it:
  * `WizardShell` (the 832px column, `pt-16`, the 30px light title, the sticky
- * 64px footer), `EventShell` + `StaticEventChooser` (the centred 820px column
- * and its two cards), `DualSchoolStep` (the 2px search rule, the two 30px
+ * 64px footer), `StaticEventChooser` (its two cards, which draw through
+ * `WizardShell` as step one of four), `DualSchoolStep` (the 2px search rule, the two 30px
  * menus, the 32px-mark school rows) and `TournamentNameStep` (the name field).
  *
  * Nothing in here is focusable — a disabled Continue that can be tabbed to is a
@@ -68,8 +68,8 @@ function Status({
 
 /**
  * `WizardShell` with its content still to come: the real step indicator,
- * eyebrow, title and lede, a body slot, and the footer's two controls as
- * shapes.
+ * eyebrow, title and lede, a body slot, and the footer's controls as shapes.
+ * `footerStart` is what sits left of the spacer — Cancel alone by default.
  */
 function WizardChrome({
   label,
@@ -77,6 +77,7 @@ function WizardChrome({
   stepCount,
   title,
   lede,
+  footerStart = <Bar className="h-3 w-12" />,
   children,
 }: {
   label: string;
@@ -85,6 +86,7 @@ function WizardChrome({
   /** Null when the screen's title is not known yet (an edit's kind). */
   title: string | null;
   lede: string | null;
+  footerStart?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -127,7 +129,7 @@ function WizardChrome({
 
         <div className="sticky bottom-0 z-10 mt-auto border-t border-[var(--border-hairline)] bg-white">
           <div className={`${CONTENT_CLS} flex h-16 items-center gap-4`}>
-            <Bar className="h-3 w-12" />
+            {footerStart}
             <div className="flex-1" />
             <Bar className="h-9 w-[92px] rounded-[6px]" />
           </div>
@@ -140,64 +142,53 @@ function WizardChrome({
 /* ── /dashboard/team/schedule/new ─────────────────────────────────────────── */
 
 /**
- * The chooser: its heading and lede as themselves, the two cards as outlines
- * with their icon, label, blurb and meta as shapes, and `EventShell`'s footer.
+ * The chooser, step one of four: its heading and lede as themselves, the two
+ * cards as outlines with their icon, label, blurb and meta as shapes, the
+ * aside under them, and a footer of Back · Cancel · the selection's label.
  */
 export function EventChooserPending() {
   return (
-    <Status label="Loading new event" className="flex min-h-0 flex-1 flex-col">
-      <div aria-hidden="true" className="flex min-h-0 flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-12 pt-[26px] pb-8">
-          <div className="mx-auto my-auto w-full max-w-[820px] pt-[10px]">
-            <h1 className="text-[30px] leading-[34px] font-light tracking-[-0.6px] text-[var(--ink-900)]">
-              {CHOOSER_COPY.heading}
-            </h1>
-            <p
-              className="mt-2 max-w-[560px] text-[13px]"
-              style={{ color: "var(--ink-600)" }}
-            >
-              {CHOOSER_COPY.lede}
-            </p>
-
-            <div className="mt-7 grid max-w-[820px] grid-cols-2 gap-5">
-              {[0, 1].map((card) => (
-                <div
-                  key={card}
-                  className="flex flex-col gap-3.5 rounded-[var(--radius-card)] border border-[var(--border-field)] px-[26px] pt-7 pb-[22px]"
-                >
-                  <span className="flex items-center justify-between">
-                    <Bar className="size-[22px] rounded-[5px]" />
-                    <span className="size-3.5 rounded-full border border-[var(--ink-200)]" />
-                  </span>
-                  <span className="flex flex-col gap-2.5">
-                    <Bar className="h-4 w-28" />
-                    <Bar className="h-3 w-[88%]" />
-                    <Bar className="h-3 w-[62%]" />
-                  </span>
-                  <span className="mt-auto block border-t border-[var(--border-hairline)] pt-3.5">
-                    <Bar className="h-2.5 w-44" />
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-5 flex items-center gap-2">
-              <Bar className="h-2.5 w-96" />
-              <Bar className="h-2.5 w-24" />
-            </div>
+    <WizardChrome
+      label="Loading new event"
+      stepIndex={0}
+      stepCount={4}
+      title={CHOOSER_COPY.heading}
+      lede={CHOOSER_COPY.lede}
+      footerStart={
+        <>
+          <Bar className="h-3 w-8" />
+          <Bar className="h-3 w-11" />
+          <Bar className="h-2.5 w-20" />
+        </>
+      }
+    >
+      <div className="grid max-w-[820px] grid-cols-2 gap-5">
+        {[0, 1].map((card) => (
+          <div
+            key={card}
+            className="flex flex-col gap-3.5 rounded-[var(--radius-card)] border border-[var(--border-field)] px-[26px] pt-7 pb-[22px]"
+          >
+            <span className="flex items-center justify-between">
+              <Bar className="size-[22px] rounded-[5px]" />
+              <span className="size-3.5 rounded-full border border-[var(--ink-200)]" />
+            </span>
+            <span className="flex flex-col gap-2.5">
+              <Bar className="h-4 w-28" />
+              <Bar className="h-3 w-[88%]" />
+              <Bar className="h-3 w-[62%]" />
+            </span>
+            <span className="mt-auto block border-t border-[var(--border-hairline)] pt-3.5">
+              <Bar className="h-2.5 w-44" />
+            </span>
           </div>
-        </div>
-
-        <div className="sticky bottom-0 z-10 flex h-16 shrink-0 items-center gap-3 border-t border-[var(--border-hairline)] bg-[var(--surface-card)] px-12">
-          <div className="mx-auto flex w-full max-w-[820px] items-center gap-3">
-            <Bar className="h-9 w-[76px] rounded-[6px]" />
-            <div className="flex-1" />
-            <Bar className="h-2.5 w-20" />
-            <Bar className="h-9 w-[92px] rounded-[6px]" />
-          </div>
-        </div>
+        ))}
       </div>
-    </Status>
+
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <Bar className="h-2.5 w-96" />
+        <Bar className="h-2.5 w-24" />
+      </div>
+    </WizardChrome>
   );
 }
 

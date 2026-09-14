@@ -526,7 +526,8 @@ test.describe("/dashboard/team/schedule/new · 3b", () => {
       "One player's own match — a challenge, practice set or outside entry — isn't an event.",
     );
     drawn(chooser, file, "Add a one-off match");
-    drawn(chooser, file, "Cancel");
+    // RETIRED 'Cancel' — the chooser draws through `WizardShell`, whose footer
+    //   prints Back and Cancel itself; the word left this file's `COPY`.
     drawn(chooser, file, "Continue");
     // The footer names the selection; `3b` opens on the dual.
     drawn(chooser, file, "Dual selected");
