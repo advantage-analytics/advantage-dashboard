@@ -55,7 +55,7 @@ ready).
 
 ## T4 · (optional) ESLint guard against DOM title attributes
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1, T2, T3
 - **files:** eslint.config.mjs

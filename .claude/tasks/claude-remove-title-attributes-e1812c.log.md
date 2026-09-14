@@ -56,3 +56,13 @@ is the runner's. Newest entries at the bottom.
 **gate:** mechanical — pass (lint, typecheck, full test suite); completion — pass
 
 **changed:** `event-drawer.tsx`: the event-name div swaps `truncate` for `line-clamp-2 break-words`, and its comment now describes the two-line wrap. `lineup-rows.tsx`: the "their pair" button's `aria-label` appends ": " + the full pair names when a pair is set (plain "Their pair at <slot>" otherwise); `aria-expanded` and `data-*` unchanged. The four specs that find this button by name use Playwright's default substring match, no `exact: true`, and still pass. Widget-states check: loaded-state markup only.
+
+## T4 · (optional) ESLint guard against DOM title attributes — done
+
+**gate:** mechanical — pass (lint, typecheck, full test suite); completion — pass
+
+**changed:** `eslint.config.mjs` gains a named block `forbid-dom-title-attribute`: `react/forbid-dom-props` at `error` on `src/**/*.tsx`, forbidding `title` with a message pointing at `aria-label`, wrapping, or `src/components/ui/tooltip.tsx` for icon-only controls. The comment records the two gaps (capitalised components such as `Link` and prop-spreading triggers; `title` keys inside spread objects). Probe `<span title="x" />` fails lint naming `react/forbid-dom-props`, and was reverted. T1 was set to `done` by the author before this run (its work landed in T5).
+
+**follow-ups:**
+
+1. The block's comment opens with "This branch removed…" — after merge that reads as history; consider rewording to a standing rule.

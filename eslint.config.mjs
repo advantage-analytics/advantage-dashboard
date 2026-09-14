@@ -103,6 +103,39 @@ const eslintConfig = [
     },
   },
 
+  // Ban the native `title` attribute on DOM elements. This branch removed
+  // every hover-tooltip `title` from the app: a name that isn't already on
+  // screen belongs in `aria-label`, clipped text should wrap instead of
+  // being explained on hover, and the only sanctioned tooltip is
+  // `src/components/ui/tooltip.tsx`, reserved for icon-only controls (see
+  // `.skills/advantage-analytics-design/reference/chrome.md` §Dark Tooltip).
+  //
+  // Known gaps, both out of reach for a DOM-props rule:
+  //   - Capitalised components. `react/forbid-dom-props` only sees `title`
+  //     on lowercase (host) JSX elements, so `<Link title="…">` or a
+  //     `SortTrigger`/`FilterTrigger` that spreads `...props` onto an inner
+  //     `<button>` is invisible to this rule.
+  //   - `title` keys inside a spread object (`<div {...{ title: "x" }} />`)
+  //     — the rule inspects JSX attributes, not object literals.
+  {
+    name: "forbid-dom-title-attribute",
+    files: ["src/**/*.tsx"],
+    rules: {
+      "react/forbid-dom-props": [
+        "error",
+        {
+          forbid: [
+            {
+              propName: "title",
+              message:
+                "native hover tooltip; use aria-label for an off-screen name, let text wrap instead of explaining a clip, or src/components/ui/tooltip.tsx for icon-only controls",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // MUST be last. Turns off the 358 ESLint rules that overlap with Prettier,
   // so the two can never disagree about formatting and fight each other
   // between the PostToolUse hook and the pre-commit hook.
