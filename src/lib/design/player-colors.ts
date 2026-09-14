@@ -20,7 +20,7 @@
 export const PLAYER_1 = "#3B82F6";
 export const PLAYER_2 = "#64748B";
 
-export const PLAYER_1_TEXT = "#1D4ED8";
+export const PLAYER_1_TEXT = "#3B82F6";
 export const PLAYER_2_TEXT = "#475569";
 
 export const PLAYER_1_SOFT = "#EFF4FF";

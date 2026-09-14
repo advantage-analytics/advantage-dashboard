@@ -8,18 +8,19 @@ import {
   useRef,
   useState,
 } from "react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 interface UnsavedChangesContextValue {
   hasUnsavedChanges: boolean;
   setHasUnsavedChanges: (v: boolean) => void;
-  /** Returns true if navigation should proceed. */
-  confirmNavigation: () => boolean;
+  /** Resolves true if navigation should proceed — at once when nothing is dirty. */
+  confirmNavigation: () => Promise<boolean>;
 }
 
 const UnsavedChangesContext = createContext<UnsavedChangesContextValue>({
   hasUnsavedChanges: false,
   setHasUnsavedChanges: () => {},
-  confirmNavigation: () => true,
+  confirmNavigation: () => Promise.resolve(true),
 });
 
 export function UnsavedChangesProvider({
@@ -48,11 +49,27 @@ export function UnsavedChangesProvider({
     return () => window.removeEventListener("beforeunload", handler);
   }, []);
 
+  // In-app navigation asks with the product's own confirm, not
+  // `window.confirm` — the browser's grey box was the one confirmation in the
+  // dashboard that did not look like ours. `beforeunload` above has to stay
+  // native: a tab close cannot wait on a React dialog.
+  const [isAsking, setIsAsking] = useState(false);
+  const resolveRef = useRef<((proceed: boolean) => void) | null>(null);
+
+  const settle = useCallback((proceed: boolean) => {
+    resolveRef.current?.(proceed);
+    resolveRef.current = null;
+    setIsAsking(false);
+  }, []);
+
   const confirmNavigation = useCallback(() => {
-    if (!dirtyRef.current) return true;
-    return window.confirm(
-      "You have unsaved changes. Are you sure you want to leave?",
-    );
+    if (!dirtyRef.current) return Promise.resolve(true);
+    // A second ask while one is open answers the first with "stay".
+    resolveRef.current?.(false);
+    return new Promise<boolean>((resolve) => {
+      resolveRef.current = resolve;
+      setIsAsking(true);
+    });
   }, []);
 
   return (
@@ -60,6 +77,22 @@ export function UnsavedChangesProvider({
       value={{ hasUnsavedChanges, setHasUnsavedChanges, confirmNavigation }}
     >
       {children}
+
+      <ConfirmDialog
+        open={isAsking}
+        onOpenChange={(open) => {
+          if (!open) settle(false);
+        }}
+        title="Leave without saving?"
+        description="Your changes on this page haven't been saved, and leaving discards them."
+        tone="danger"
+        cancelLabel="Keep editing"
+        confirmLabel="Discard changes"
+        onConfirm={() => {
+          setHasUnsavedChanges(false);
+          settle(true);
+        }}
+      />
     </UnsavedChangesContext.Provider>
   );
 }
