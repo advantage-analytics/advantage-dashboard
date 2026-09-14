@@ -2,7 +2,7 @@ import type { TeamSettingsData } from "@/lib/data/team-settings-server";
 import type { EventsPolicy, UploadPolicy } from "@/lib/workspace/types";
 
 /**
- * What the identity card edits — one draft, one save, because the six fields
+ * What the identity card edits — one draft, one save, because the five fields
  * and both policies are one row in `programs`.
  */
 export interface IdentityDraft {
@@ -11,7 +11,6 @@ export interface IdentityDraft {
   conference: string;
   homeVenue: string;
   defaultSurface: "hard" | "clay" | "grass" | "carpet" | "";
-  season: string;
   uploadPolicy: UploadPolicy;
   eventsPolicy: EventsPolicy;
 }
@@ -25,7 +24,6 @@ export function toDraft(data: TeamSettingsData): IdentityDraft {
     defaultSurface:
       (data.program.defaultSurface as IdentityDraft["defaultSurface"] | null) ??
       "",
-    season: data.program.season ?? "",
     uploadPolicy: data.program.uploadPolicy,
     eventsPolicy: data.program.eventsPolicy,
   };

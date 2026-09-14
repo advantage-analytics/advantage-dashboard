@@ -14,6 +14,7 @@ import { canonicalRosterIds } from "@/lib/data/roster-ids";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
+import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
 import { isWorking } from "@/lib/data/match-analysis";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 
@@ -134,6 +135,8 @@ export interface RosterMember {
   name: string;
   /** A coach-managed profile may genuinely have no address on file. */
   email: string | null;
+  /** The login's profile photo, or null to draw initials. */
+  avatarUrl: string | null;
   role: MemberRole;
   /** "coach" until they claim the profile, then "self". */
   managedBy: "coach" | "self";
@@ -336,6 +339,7 @@ export const getRosterData = cache(async function getRosterData(
     invitesResult,
     programResult,
     matchesResult,
+    avatars,
   ] = await Promise.all([
     // One call for both kinds of roster row. `program_roster` still exists and
     // is deliberately untouched — it is the SEAT list, which Settings › Team
@@ -397,6 +401,7 @@ export const getRosterData = cache(async function getRosterData(
         stats: (stats ?? []) as unknown as DbStatRow[],
       };
     })(),
+    getMemberAvatarUrls(supabase, programId),
   ]);
 
   const error =
@@ -517,6 +522,7 @@ export const getRosterData = cache(async function getRosterData(
       userId: row.user_id,
       name: row.display_name?.trim() || fallbackName(row.email),
       email: row.email,
+      avatarUrl: row.user_id ? (avatars.get(row.user_id) ?? null) : null,
       role: row.role as MemberRole,
       managedBy:
         row.managed_by === "coach" ? ("coach" as const) : ("self" as const),

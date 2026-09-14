@@ -7,13 +7,15 @@ import { cn } from "@/lib/utils";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
 import {
+  SETTINGS_FACT_FIGURE,
   SettingsCard,
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
-import { isProPlan } from "@/lib/user/roles";
+import { isProPlan } from "@/lib/user/plan";
 import { teamLabel } from "@/lib/workspace/types";
 import { SUPPORT_EMAIL } from "@/lib/constants";
+import { SettingsPlanPending } from "@/components/dashboard/loading/settings-pending";
 
 /**
  * Settings › Plan — what the account is entitled to.
@@ -27,7 +29,7 @@ import { SUPPORT_EMAIL } from "@/lib/constants";
  * Entitlement is read from `viewer.plan`, never from `users.role`. The old
  * subscription page read `role === 'founder'`, which the Profile page in this
  * same area overwrites with a persona — so saving your profile downgraded you
- * on screen. See `lib/user/roles.ts`.
+ * on screen. See `lib/user/plan.ts`.
  *
  * Still a client page because the Stripe round trip lands back on it with
  * `?success=true` and has to poll for the webhook.
@@ -182,7 +184,12 @@ function PlanContent() {
               className="flex min-w-0 flex-col gap-1.5 px-6 py-5"
             >
               <dt className="eyebrow whitespace-nowrap">{fact.label}</dt>
-              <dd className="tabular text-[22px] leading-[1.15] font-light tracking-[-0.4px] whitespace-nowrap text-[var(--ink-900)]">
+              <dd
+                className={cn(
+                  SETTINGS_FACT_FIGURE,
+                  "tabular whitespace-nowrap text-[var(--ink-900)]",
+                )}
+              >
                 {fact.value}
               </dd>
             </div>
@@ -326,7 +333,7 @@ function PlanContent() {
 
 export default function PlanPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<SettingsPlanPending />}>
       <PlanContent />
     </Suspense>
   );

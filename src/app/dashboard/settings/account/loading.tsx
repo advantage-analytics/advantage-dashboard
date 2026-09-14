@@ -1,1 +1,1 @@
-export { SettingsAccountSkeleton as default } from "@/components/dashboard/loading/page-skeletons";
+export { SettingsAccountPending as default } from "@/components/dashboard/loading/settings-pending";

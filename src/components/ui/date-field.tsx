@@ -84,7 +84,6 @@ export function DateField({
   required = false,
   className,
   handleRef,
-  emphasis = false,
   onIncompleteChange,
 }: {
   /** Accessible name — the visible eyebrow or row label sits outside. */
@@ -104,14 +103,6 @@ export function DateField({
   className?: string;
   /** Filled with `{ focus() }` so a dialog can send focus here as the first invalid field. */
   handleRef?: React.RefObject<DateFieldHandle | null>;
-  /**
-   * Draw the `underline` rule 2px blue at rest — a field the page is asking
-   * for, matching `SettingsUnderlineInput`'s prop of the same name. It exists
-   * so a call site can say what it wants rather than reach through this
-   * component with a descendant selector to restyle the rule itself; that
-   * bound the caller to which element happens to draw it.
-   */
-  emphasis?: boolean;
   /**
    * Fires when the field starts or stops showing a blank segment.
    *
@@ -241,10 +232,9 @@ export function DateField({
             // are not focused then, but the field is still the thing being
             // edited. Error owns the colour; focus owns the weight.
             cn(
-              "h-[34px] w-full border-b",
-              emphasis
-                ? "border-b-2 border-[var(--blue)]"
-                : "border-[var(--border-field)]",
+              // Blue only while focused or open — never at rest, even on an
+              // empty required field; the caption's asterisk says it's needed.
+              "h-[34px] w-full border-b border-[var(--border-field)]",
               "focus-within:border-b-2 focus-within:border-[var(--blue)]",
               "group-data-[open]/date:border-b-2 group-data-[open]/date:border-[var(--blue)]",
               "data-[invalid]:border-[var(--error)] data-[invalid]:focus-within:border-[var(--error)]",

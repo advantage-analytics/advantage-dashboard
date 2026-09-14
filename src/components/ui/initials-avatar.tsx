@@ -1,4 +1,5 @@
 import { getInitials } from "@/lib/data/match-utils";
+import { PersonAvatar } from "@/components/ui/person-avatar";
 
 /**
  * The 26px initials mark that leads a person's name in a table row.
@@ -10,16 +11,24 @@ import { getInitials } from "@/lib/data/match-utils";
  * roster table for a while, which is how Matches came to draw its opponent
  * bare and stopped looking like the other two lists.
  *
+ * `photoUrl` swaps the initials for the person's photo at the same size, for
+ * someone on the program who set one. An opponent never has one to pass.
+ *
  * `aria-hidden` on purpose: the initials are a glyph for the name beside
  * them, not a second reading of it.
  */
-export function InitialsAvatar({ name }: { name: string }) {
+export function InitialsAvatar({
+  name,
+  photoUrl,
+}: {
+  name: string;
+  photoUrl?: string | null;
+}) {
   return (
-    <span
-      aria-hidden
-      className="flex size-[26px] shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[9px] font-medium text-[var(--ink-700)]"
-    >
-      {getInitials(name)}
-    </span>
+    <PersonAvatar
+      initials={getInitials(name)}
+      photoUrl={photoUrl}
+      className="size-[26px] text-[9px]"
+    />
   );
 }

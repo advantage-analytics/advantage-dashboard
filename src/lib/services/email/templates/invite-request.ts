@@ -1,5 +1,10 @@
 import { siteUrl } from "@/lib/site-url";
-import { renderEmail, renderText, type EmailContent } from "../shell";
+import {
+  preferenceNote,
+  renderEmail,
+  renderText,
+  type EmailContent,
+} from "../shell";
 import type { EmailMessage } from "../send";
 
 /**
@@ -134,7 +139,7 @@ export function joinRequestOwnerNoticeEmail(
       label: "Review the request",
       url: `${siteUrl()}/dashboard/team/roster`,
     },
-    note: "You decide who joins, not us. If you don't recognise this person, declining is the whole of what you need to do.",
+    note: `You decide who joins, not us. If you don't recognise this person, declining is the whole of what you need to do. ${preferenceNote("Team activity")}`,
   };
 
   return {
@@ -238,7 +243,7 @@ export function memberJoinedOwnerEmail(
       label: "View the roster",
       url: `${siteUrl()}/dashboard/team/roster`,
     },
-    note: "If this wasn't somebody you invited, you can remove them from the roster page.",
+    note: `If this wasn't somebody you invited, you can remove them from the roster page. ${preferenceNote("Team activity")}`,
   };
 
   return {

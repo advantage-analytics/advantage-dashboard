@@ -124,7 +124,13 @@ export function TeamMembersCard({
                     ? viewer.initials
                     : getInitials(member.name)
                 }
-                photoUrl={member.userId === viewerId ? viewer.avatarUrl : null}
+                // The viewer's own from the workspace, so a photo changed a
+                // moment ago in Profile shows here without a refetch.
+                photoUrl={
+                  member.userId === viewerId
+                    ? viewer.avatarUrl
+                    : member.avatarUrl
+                }
                 className="size-[22px] text-[9px]"
               />
               <span className="truncate text-[12px] font-medium text-[var(--ink-900)]">

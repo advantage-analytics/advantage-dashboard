@@ -67,7 +67,7 @@ function Row({ mover }: { mover: TopMover }) {
   const delta = formatDelta(mover.delta);
   return (
     <Link href={`/dashboard/team/roster/${mover.playerId}`} className={ROW}>
-      <InitialsAvatar name={mover.name} />
+      <InitialsAvatar name={mover.name} photoUrl={mover.avatarUrl} />
       <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
         {mover.name}
       </span>

@@ -225,8 +225,11 @@ form red (`--error`) and Loss Red never share a surface.
 
 **Fields.** Field text is 13px across `Input`, `Select`, `EntitySelect` and
 `Textarea` — never 14px. The rule is the focus indicator (1px hairline → 2px
-`--blue`; see **Focus** (`reference/focus.md`) → the underline opt-out); `emphasis` keeps a standing 2px
-blue rule for the one field a page is asking for; disabled drops the label to
+`--blue`; see **Focus** (`reference/focus.md`) → the underline opt-out). The rule is never blue at
+rest — not even on an empty required field, where the caption's asterisk does
+that job (in-repo, 2026-09-13: a resting blue rule read as a field already
+selected). _Supersedes: "`emphasis` keeps a standing 2px blue rule for the one
+field a page is asking for"._ Disabled drops the label to
 ink-300 and the text to ink-500 with the rule at 1px. `Textarea` is the one
 boxed input — everything single-line stays underline.
 

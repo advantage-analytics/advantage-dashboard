@@ -1,1 +1,1 @@
-export { SettingsTeamsSkeleton as default } from "@/components/dashboard/loading/page-skeletons";
+export { SettingsTeamsPending as default } from "@/components/dashboard/loading/settings-pending";

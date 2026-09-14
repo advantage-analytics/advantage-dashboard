@@ -9,10 +9,13 @@ import {
   INVITE_TTL_HOURS,
 } from "@/lib/services/programs/tokens";
 import {
+  memberLeftOwnerEmail,
   ownershipTransferredEmail,
   programInviteEmail,
   sendEmail,
 } from "@/lib/services/email";
+import { getProgramOwner } from "@/lib/services/programs/program-owner";
+import { wantsNotification } from "@/lib/services/notifications/should-notify";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import { programDisplayName } from "@/lib/data/programs-server";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
@@ -123,7 +126,6 @@ export interface TeamSettingsInput {
   conference: string;
   homeVenue: string;
   defaultSurface: string | null;
-  season: string;
   /** The whole ladder; `players_can_upload` is derived from it in SQL. */
   uploadPolicy: UploadPolicy;
   /** Owner-only to change; the RPC refuses anyone else in words. */
@@ -133,8 +135,8 @@ export interface TeamSettingsInput {
 /**
  * One save for identity and policy — they are one row in `programs`.
  *
- * The RPC is where the rules live: any staff may change venue, surface and
- * season; only the owner may change name, squad or conference, and it says so
+ * The RPC is where the rules live: any staff may change venue and surface;
+ * only the owner may change name, squad or conference, and it says so
  * in words the form can show. `/dashboard` is revalidated as a layout because
  * a rename changes the switcher's label, which lives nowhere under settings.
  */
@@ -152,7 +154,8 @@ export async function saveTeamSettings(
     p_conference: input.conference,
     p_home_venue: input.homeVenue,
     p_default_surface: input.defaultSurface,
-    p_season: input.season,
+    // Season is no longer edited; the RPC coalesces '' to the stored value.
+    p_season: "",
     p_players_can_upload: input.uploadPolicy === "everyone",
     p_upload_policy: input.uploadPolicy,
     p_events_policy: input.eventsPolicy,
@@ -285,6 +288,97 @@ export async function transferProgramOwnership(input: {
   }
 
   return { ok: true };
+}
+
+export type LeaveResult =
+  | { ok: true; ownerNotified: string | null; profileKept: boolean }
+  | { ok: false; error: string };
+
+/**
+ * The caller leaves a program they play for.
+ *
+ * `leave_program` is the authority: it refuses the owner, un-claims the
+ * caller's roster profile (so a fresh invitation can hand it back), clears the
+ * uploader columns that would otherwise keep the team's matches readable, and
+ * drops the membership. The players-only gate here is presentation's rule
+ * restated — the RPC would let a coach leave too, and the page does not offer
+ * it to them yet.
+ *
+ * No `revalidatePath` on purpose. Revalidating the program page re-renders it
+ * for a viewer who is no longer a member, and its redirect would unmount the
+ * dialog before the "you've left" step could show. The dialog's Done replaces
+ * the route and refreshes instead, which re-resolves the workspace list and
+ * falls a stale active-workspace cookie back to the personal workspace.
+ *
+ * The owner email is a courtesy, like the transfer's: the row is the truth,
+ * and a failed send only changes what the done step says.
+ */
+export async function leaveProgram(programId: string): Promise<LeaveResult> {
+  const member = await memberWorkspace(programId);
+  if (!member) return { ok: false, error: NOT_A_MEMBER };
+  if (member.program.role === "owner") {
+    return {
+      ok: false,
+      error: "Transfer ownership of this program before leaving it.",
+    };
+  }
+  if (member.program.role !== "player") {
+    return {
+      ok: false,
+      error: "Ask the owner to change your role before you leave.",
+    };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("leave_program", {
+    p_program_id: programId,
+  });
+
+  if (error) {
+    return { ok: false, error: toMessage(error, "Couldn't leave this team.") };
+  }
+
+  const row = (
+    (data ?? []) as {
+      left_program: boolean;
+      profile_id: string | null;
+    }[]
+  )[0];
+  if (!row?.left_program) {
+    return { ok: false, error: NOT_A_MEMBER };
+  }
+
+  const profileKept = row.profile_id !== null;
+  const owner = await getProgramOwner(programId);
+  let ownerNotified: string | null = null;
+
+  // Skipped when the owner turned "Team activity" off: `ownerNotified` stays
+  // null and the dialog says nothing about mail, which is the truth.
+  if (
+    owner &&
+    owner.userId !== member.viewer.id &&
+    (await wantsNotification(owner.userId, "notifyTeamActivity"))
+  ) {
+    const sent = await sendEmail(
+      memberLeftOwnerEmail({
+        to: owner.email,
+        ownerName: owner.name,
+        programName: programLabel(member.program),
+        memberName: member.viewer.name,
+        memberEmail: member.viewer.email,
+        profileKept,
+      }),
+    );
+    if (sent.ok) ownerNotified = owner.name ?? "the owner";
+    else {
+      console.error("[teams] leave notice not sent", {
+        programId,
+        error: sent.error,
+      });
+    }
+  }
+
+  return { ok: true, ownerNotified, profileKept };
 }
 
 const CREST_TYPES: Record<string, string> = {

@@ -3,19 +3,23 @@ import { PersonAvatar } from "@/components/ui/person-avatar";
 
 /**
  * The 26px mark that leads a roster player's name in a table row — the
- * viewer's own photo on their own row, initials on everyone else's.
+ * viewer's own photo on their own row, a teammate's photo where the page has
+ * one, initials otherwise.
  *
- * Only the viewer's photo is drawn because it is the only one readable:
- * `users` RLS is own-row only, so a teammate's `avatar_path` never reaches the
- * client. Pass `viewer` only on the viewer's row. Shared by the Roster and the
- * team Matches table so the two name columns cannot drift apart.
+ * `users` RLS is own-row only, so a teammate's photo arrives as `photoUrl`
+ * from `program_member_avatars` (via `getMemberAvatarUrls`) rather than off
+ * the row. Pass `viewer` only on the viewer's row. Shared by the Roster and
+ * the team Matches table so the two name columns cannot drift apart.
  */
 export function PlayerMark({
   name,
   viewer,
+  photoUrl,
 }: {
   name: string;
   viewer: { initials: string; avatarUrl: string | null } | null;
+  /** A teammate's photo; ignored on the viewer's own row. */
+  photoUrl?: string | null;
 }) {
   return viewer ? (
     <PersonAvatar
@@ -24,6 +28,6 @@ export function PlayerMark({
       className="size-[26px] text-[9px]"
     />
   ) : (
-    <InitialsAvatar name={name} />
+    <InitialsAvatar name={name} photoUrl={photoUrl} />
   );
 }

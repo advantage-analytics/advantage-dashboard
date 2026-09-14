@@ -3,6 +3,14 @@
 import { cn } from "@/lib/utils";
 
 /**
+ * The Plan facts' 22px light figure. Not a step on the SKILL.md type scale, so
+ * it lives here once and the page and its skeleton share it instead of each
+ * carrying the literal. (Program hours' 24px figure is `.text-title-lg`.)
+ */
+export const SETTINGS_FACT_FIGURE =
+  "text-[22px] leading-[1.15] font-light tracking-[-0.4px]";
+
+/**
  * The card the round-4 settings pages are built from: hairline border, card
  * radius, resting shadow, 24px of horizontal padding.
  *
@@ -100,11 +108,22 @@ export function SettingsCardRow({
 /** The closing note some cards carry: 11px, muted, above a hairline. */
 export function SettingsCardFootnote({
   children,
+  className,
 }: {
   children: React.ReactNode;
+  /**
+   * Pass `border-t-0 pt-0` when the content above already ends in a hairline
+   * (a row list); the rule is only for closing a figure or a paragraph.
+   */
+  className?: string;
 }) {
   return (
-    <span className="mt-3.5 border-t border-[var(--border-hairline)] pt-3.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
+    <span
+      className={cn(
+        "mt-3.5 border-t border-[var(--border-hairline)] pt-3.5 text-[11px] leading-[1.5] text-[var(--ink-500)]",
+        className,
+      )}
+    >
       {children}
     </span>
   );
@@ -218,18 +237,20 @@ export function SettingsField({
  * The underline input itself. Separate from `SettingsField` because the Team
  * page pairs the same rule with a `<select>`, and a wrapper that owned the
  * input could not do that.
+ *
+ * The rule is blue only while the field has focus. There is deliberately no
+ * way to hold it blue at rest: an empty required field wearing the focus rule
+ * reads as already selected, and the asterisk on the caption is what says
+ * the field is needed.
  */
 export function SettingsUnderlineInput({
   mono,
-  emphasis,
   className,
   ...props
 }: React.InputHTMLAttributes<HTMLInputElement> & {
   /** React 19 passes `ref` as a prop; the spread below lands it on the input. */
   ref?: React.Ref<HTMLInputElement>;
   mono?: boolean;
-  /** Swap the hairline for a 2px blue rule — a field the page is asking for. */
-  emphasis?: boolean;
 }) {
   return (
     <input
@@ -237,9 +258,7 @@ export function SettingsUnderlineInput({
       className={cn(
         "h-[34px] bg-transparent text-[13px] text-[var(--ink-900)] transition-colors outline-none",
         "placeholder:text-[var(--ink-400)] focus:border-b-2 focus:border-[var(--blue)]",
-        emphasis
-          ? "border-b-2 border-[var(--blue)]"
-          : "border-b border-[var(--border-field)]",
+        "border-b border-[var(--border-field)]",
         mono && "mono",
         className,
       )}

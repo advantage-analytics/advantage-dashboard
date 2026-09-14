@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   SettingsCard,
+  SettingsCardFootnote,
   SettingsCardRow,
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
@@ -39,20 +40,28 @@ const REPORT_OPTIONS: readonly { value: ReportEntryPoint; label: string }[] = [
  * half of them are true and the person has to commit the other half — and a
  * page of toggles that silently forgets what you did because you navigated
  * away is the worse failure.
+ *
+ * Every switch on the Notifications card is read by a sender. That is the
+ * rule for adding one: a switch for mail nothing sends (the weekly digest, whose
+ * column exists but whose cron does not) stays off this page until it is wired,
+ * because a page that offers to stop mail that never came teaches people not to
+ * trust the switches that do work. The labels are the exact strings the
+ * templates print in their `preferenceNote()` footers.
  */
 export function PreferencesForm({
   initial,
-  role,
   plan,
-  showTeamDigest,
+  showTeamNotifications,
 }: {
   initial: Preferences;
-  /** From `users.role` — what shapes the app, never what you pay for. */
-  role: string | null;
   /** From `users.plan` — what you pay for, never what you see. */
   plan: string;
-  /** The digest is a program artefact; outside a team there is nothing to send. */
-  showTeamDigest: boolean;
+  /**
+   * Owner or coach of the active team. The team switches gate mail that only
+   * staff receive (join requests, the allowance), so a player would be turning
+   * off nothing.
+   */
+  showTeamNotifications: boolean;
 }) {
   const [preferences, setPreferences] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +94,7 @@ export function PreferencesForm({
       <SettingsCard>
         <SettingsCardTitle className="pb-2">Notifications</SettingsCardTitle>
 
+        <NotificationGroup label="Your matches" />
         <SettingsCardRow
           label="Email me when analysis is ready"
           description="Processing has no fixed turnaround — this is how you'll know."
@@ -98,6 +108,7 @@ export function PreferencesForm({
         />
         <SettingsCardRow
           label="Email me if analysis fails"
+          description="Including why, and whether your video is still held for a retry."
           control={
             <SettingsToggle
               label="Email me if analysis fails"
@@ -106,19 +117,41 @@ export function PreferencesForm({
             />
           }
         />
-        {showTeamDigest && (
-          <SettingsCardRow
-            label="Weekly team digest"
-            description="Coaches only — Monday summary of the weekend's results."
-            control={
-              <SettingsToggle
-                label="Weekly team digest"
-                checked={preferences.weeklyTeamDigest}
-                onChange={(value) => update({ weeklyTeamDigest: value })}
-              />
-            }
-          />
+
+        {showTeamNotifications && (
+          <>
+            <NotificationGroup label="Your team" />
+            <SettingsCardRow
+              label="Team activity"
+              description="Someone asks to join, accepts an invitation, or leaves the team."
+              control={
+                <SettingsToggle
+                  label="Team activity"
+                  checked={preferences.notifyTeamActivity}
+                  onChange={(value) => update({ notifyTeamActivity: value })}
+                />
+              }
+            />
+            <SettingsCardRow
+              label="Analysis allowance alerts"
+              description="Once at 80% of the month's video analysis time, and once when it's spent."
+              control={
+                <SettingsToggle
+                  label="Analysis allowance alerts"
+                  checked={preferences.notifyUsageAlerts}
+                  onChange={(value) => update({ notifyUsageAlerts: value })}
+                />
+              }
+            />
+          </>
         )}
+
+        {/* No top border: the last row already drew a hairline, and a second
+            rule two pixels below it reads as a mistake (DS › Settings). */}
+        <SettingsCardFootnote className="border-t-0 pt-0">
+          Invitations, claim decisions, ownership changes and account security
+          emails always send.
+        </SettingsCardFootnote>
       </SettingsCard>
 
       <SettingsCard>
@@ -159,18 +192,12 @@ export function PreferencesForm({
         />
       </SettingsCard>
 
-      {/* Role and plan, stated side by side and edited nowhere near each other.
-          They were one column once, which is how changing a role could change
-          what somebody paid for. */}
+      {/* Plan is stated here and changed on its own page. Team roles live
+          under Settings › Teams, per team. */}
       <SettingsCard className="flex-row items-center gap-4">
         <div className="min-w-0 flex-1">
           <div className="text-[12px] text-[var(--ink-900)]">
-            Role:{" "}
-            <b className="font-medium">{role ? capitalize(role) : "Not set"}</b>{" "}
-            · Plan: <b className="font-medium">{capitalize(plan)}</b>
-          </div>
-          <div className="mt-0.5 text-[11px] text-[var(--ink-500)]">
-            Separate columns — editing your profile can never touch your plan.
+            Plan: <b className="font-medium">{capitalize(plan)}</b>
           </div>
         </div>
         <Link
@@ -180,6 +207,23 @@ export function PreferencesForm({
           Manage plan
         </Link>
       </SettingsCard>
+    </div>
+  );
+}
+
+/**
+ * The label that splits one card of switches into who they are for.
+ * `SettingsSectionHeading` is a page-level `01 · Title` and too loud for a
+ * divider inside a card; this is the 11px muted register of a row
+ * description, one weight up, sitting above the row it introduces.
+ *
+ * Sentence case, not tracked caps: "YOUR MATCHES" shouted over rows whose
+ * own labels are quiet 12px sentences, and read as a second card title.
+ */
+function NotificationGroup({ label }: { label: string }) {
+  return (
+    <div className="pt-3 pb-1 text-[11px] font-medium text-[var(--ink-500)] first-of-type:pt-0">
+      {label}
     </div>
   );
 }

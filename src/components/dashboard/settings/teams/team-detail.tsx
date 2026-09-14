@@ -10,6 +10,7 @@ import { TeamIdentityCard } from "@/components/dashboard/settings/teams/team-ide
 import { TeamMembersCard } from "@/components/dashboard/settings/teams/team-members-card";
 import { TeamPoliciesCard } from "@/components/dashboard/settings/teams/team-policies-card";
 import { TransferOwnershipDialog } from "@/components/dashboard/settings/teams/transfer-ownership-dialog";
+import { LeaveTeamCard } from "@/components/dashboard/settings/teams/leave-team";
 import {
   toDraft,
   type IdentityDraft,
@@ -35,13 +36,14 @@ import { SUPPORT_EMAIL } from "@/lib/constants";
  *
  * What renders depends on the viewer's standing on THIS program, which is not
  * necessarily their active workspace: a player gets hours, a read-only
- * identity and the member list; staff get the form; the owner also gets
- * "Make owner" and the delete row.
+ * identity, the member list and the leave row; staff get the form; the owner
+ * also gets "Make owner" and the delete row.
  */
 export function TeamDetail({
   programId,
   data,
   crestUrl,
+  conferenceOptions,
   usage,
   pendingSeconds,
   seats,
@@ -52,6 +54,8 @@ export function TeamDetail({
 }: {
   programId: string;
   data: TeamSettingsData;
+  /** The division's conferences, for the owner's picker; empty otherwise. */
+  conferenceOptions: string[];
   crestUrl: string | null;
   usage: ProgramUsage;
   pendingSeconds: number;
@@ -94,7 +98,6 @@ export function TeamDetail({
         homeVenue: draft.homeVenue,
         defaultSurface:
           draft.defaultSurface === "" ? null : draft.defaultSurface,
-        season: draft.season,
         uploadPolicy: draft.uploadPolicy,
         eventsPolicy: draft.eventsPolicy,
       });
@@ -132,6 +135,8 @@ export function TeamDetail({
         canEdit={isStaff}
         isOwner={isOwner}
         ownerName={data.ownerName}
+        division={data.program.division}
+        conferenceOptions={conferenceOptions}
         onCrestError={setError}
       />
 
@@ -181,6 +186,17 @@ export function TeamDetail({
             </a>
           </div>
         </SettingsCard>
+      )}
+
+      {viewerRole === "player" && (
+        <LeaveTeamCard
+          programId={programId}
+          programName={data.program.schoolName}
+          team={data.program.team}
+          conference={data.program.conference}
+          crestUrl={crestUrl}
+          ownerName={data.ownerName}
+        />
       )}
 
       {!isStaff && (

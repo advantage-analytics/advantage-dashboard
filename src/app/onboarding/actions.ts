@@ -26,11 +26,10 @@ export type OnboardingChoice = "coach" | "college" | "solo";
 /**
  * What each resolution writes and where it lands.
  *
- * `role` uses the Settings profile vocabulary (`PERSONA_ROLES` in
- * `settings/actions.ts`): play → player, coach → coach, junior → parent. The
- * parent mapping is the closest of the four personas on day one; profile
- * settings can refine it to `academy` later. Persona only — entitlement lives
- * in `users.plan` and is never touched here.
+ * `role` is the persona vocabulary (player, coach, parent, academy): play →
+ * player, coach → coach, junior → parent. Onboarding is the only writer —
+ * Settings no longer edits it. Persona only — entitlement lives in
+ * `users.plan` and team roles in `program_members`; neither is touched here.
  *
  * A coach lands on the team-workspace fork (`/claim/team`, screen 5.1), where
  * college-vs-other is decided; the earlier interim `/claim/program` skipped
