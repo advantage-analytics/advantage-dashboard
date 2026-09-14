@@ -68,7 +68,7 @@ ready).
 
 ## T5 · Land T1's title sweep with the spec re-anchored
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/match-card-gallery.tsx, src/components/dashboard/matches/matches-page-content.tsx, src/components/dashboard/matches/matches-filter-panel.tsx, src/components/dashboard/matches/new-match-wizard/DetailsStepContent.tsx, src/components/dashboard/matches/new-match-wizard/MissingFieldsPill.tsx, src/components/dashboard/shared/season-kpi-strip.tsx, tests/upload-player-details.spec.ts (surveyed, not guessed)
 - **done when:**

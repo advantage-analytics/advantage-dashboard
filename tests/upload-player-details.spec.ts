@@ -288,7 +288,7 @@ test("both player rows share one grid, stacking only below sm", () => {
 test("the opponent's editable name carries a visible edit affordance; the subject's locked name carries none", () => {
   // The opponent's closed-state name button now shows a pencil.
   const opponentButton = detailsSrc.slice(
-    detailsSrc.indexOf('title="Change the opponent"'),
+    detailsSrc.indexOf("Change the opponent, "),
   );
   expect(opponentButton.slice(0, 400)).toContain("<Pencil");
 

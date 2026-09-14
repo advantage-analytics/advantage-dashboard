@@ -96,7 +96,7 @@ export function MatchCardGallery({
                 {match.matchContext ?? "Final Score"}
               </span>
               {match.verificationStatus && (
-                <span title="Verified result">
+                <span>
                   <BadgeCheck
                     className="size-3.5 shrink-0 text-[#3B82F6]"
                     strokeWidth={1.5}

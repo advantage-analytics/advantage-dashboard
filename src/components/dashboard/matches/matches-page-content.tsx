@@ -330,12 +330,7 @@ function SortDropdown({
       sideOffset={6}
       label="Sort options"
       trigger={
-        <SortTrigger
-          aria-expanded={open}
-          aria-haspopup="menu"
-          title={`Sorted by ${activeLabel}, ${dirLabel}`}
-          engaged={open}
-        >
+        <SortTrigger aria-expanded={open} aria-haspopup="menu" engaged={open}>
           {sortPhrase}
         </SortTrigger>
       }

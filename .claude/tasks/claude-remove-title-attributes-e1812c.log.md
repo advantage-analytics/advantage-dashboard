@@ -27,3 +27,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** mechanical — pass (lint, typecheck, full test suite); completion — pass
 
 **changed:** Removed the native `title` from the "their pair" button in `lineup-rows.tsx` (`aria-label` and `aria-expanded` kept) and from the truncated event-name div in `event-drawer.tsx`; the comment above that div no longer claims a hover reveal. No spec anchored on either. Widget-states check: attribute-only diff, no loading/empty/error code touched.
+
+## T5 · Land T1's title sweep with the spec re-anchored — done
+
+**gate:** mechanical — pass (lint, typecheck, full test suite); completion — pass
+
+**changed:** Applied T1's stash `49a4994a…` (clean, six source files only): removed the seven native `title` tooltips on the matches list, upload wizard and season KPI strip; the wizard's opponent-name button now carries `aria-label` "Change the opponent, <name>". `tests/upload-player-details.spec.ts:291` re-anchored from `title="Change the opponent"` to the literal "Change the opponent, " (unique in the file, `<Pencil` 288 chars after it). The KPI strip's disabled reason stays visible in its footer. Widget-states check: attribute-only diff. The stash entry was applied, not dropped. T1 remains `blocked` in the queue — superseded by this task.
