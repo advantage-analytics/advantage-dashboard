@@ -246,7 +246,8 @@ function UploadWizardPage() {
       contentKey={step}
       contentClassName={step === "match" ? "mt-9" : "mt-[52px]"}
       back={step !== firstStep ? handleBack : undefined}
-      cancelHref={exitHref}
+      // Step 1 only: past it the footer's way out is Back, as it always was.
+      cancelHref={step === firstStep ? exitHref : undefined}
       meter={<WizardQuotaMeter />}
       status={<WizardFooterStatus />}
       secondary={<SaveDraftButton />}

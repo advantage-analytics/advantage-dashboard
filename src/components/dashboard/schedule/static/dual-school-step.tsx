@@ -10,6 +10,7 @@ import {
 } from "react";
 import { Check, ChevronRight, Plus, Search } from "lucide-react";
 import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
+import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import { cn } from "@/lib/utils";
 import {
   divisionLabel,
@@ -47,7 +48,7 @@ export interface NewDualData {
   ladder: LadderPlayer[];
   /** `getTeamSettings` — step two's surface default. */
   defaultSurface: string | null;
-  /** From `getTeamSettings` — the label the own-conference chip carries. */
+  /** From `getTeamSettings` — the Conference menu opens on it. */
   ourConference: string | null;
   /**
    * The viewer's own squad, from `getTeamSettings` — step one lists only the
@@ -66,12 +67,23 @@ export interface NewDualData {
    * coach can still finish.
    */
   ourTeam: "mens" | "womens" | null;
-  /** Already label-formatted ("D-I"), so the chip and the sublines agree. */
+  /**
+   * The raw dataset key (`D1`, `NAIA`) — the Division menu's value, and what it
+   * opens on. Labelled at the menu, like every other division on the screen.
+   */
   ourDivision: string | null;
   /** So a program cannot schedule a dual against itself out of the directory. */
   ourProgramKey: string | null;
-  /** `getConferenceTable`'s rows, own program already dropped. */
-  conferencePrograms: ProgramSearchResult[];
+  /**
+   * `getOpponentDirectory` — every college program of this squad, whole.
+   *
+   * Whole because step one browses it by Division and Conference: the
+   * Conference menu can only list the conferences a division has if every row
+   * of that division is on hand, and a round trip per menu change would put a
+   * loading state between a coach and a list they are only flicking through.
+   * The own program is still in it; step one drops it by `ourProgramKey`.
+   */
+  directory: ProgramSearchResult[];
   /**
    * `opponentDualHistory()`'s map, flattened to entries.
    *
@@ -124,12 +136,12 @@ export function useNewDualData(): NewDualData {
  * for a club side the ITA scrape never had.
  *
  * ── Wired, as of the schedule re-wiring ────────────────────────────────────
- * The rows are real programs. The conference list is `getConferenceTable`'s,
+ * The rows are real programs. The browsed list is `getOpponentDirectory`'s,
  * already in memory and narrowed here rather than by a round trip; the
  * directory list is `/api/programs/search`, debounced and aborted per
  * keystroke; every subline's head-to-head half is this program's own duals,
- * from `opponentDualHistory()`. The field is an `<input>`, and the pills and
- * "Clear" are buttons that filter what is listed.
+ * from `opponentDualHistory()`. The field is an `<input>`, and Division and
+ * Conference are `MenuSelect`s over the directory in memory.
  *
  * The sidebar and the 44px "… › Schedule › New dual" topbar the artboard draws
  * are the app's own chrome and already on screen — the crumb trail comes from
@@ -188,16 +200,39 @@ export function DualSchoolStep({
     ourTeam,
     ourDivision,
     ourProgramKey,
-    conferencePrograms,
+    directory,
     historyEntries,
     directoryTotal,
   } = useNewDualData();
 
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<ProgramSearchResult[]>([]);
-  const [conferenceOnly, setConferenceOnly] = useState(false);
-  const [divisionOnly, setDivisionOnly] = useState(false);
   const [picked, setPicked] = useState<ProgramSearchResult | null>(null);
+
+  /**
+   * Division and Conference — the scope the list is browsed in.
+   *
+   * Two menus and not two pills. The pills they replace ("Big Ten", "D-I")
+   * could only narrow what was already the viewer's own conference, so on
+   * arrival pressing either changed nothing on screen; a menu can go the other
+   * way and open another conference's schools, which is what a coach
+   * scheduling outside the conference needs.
+   *
+   * Division comes first because a conference sits inside one division: the
+   * Conference menu lists only that division's, so no pairing of the two can
+   * name an empty list. Both open on the program's own, which draws the same
+   * list the screen always opened on.
+   */
+  const scope = useMemo(
+    () => directoryScope(directory, ourTeam, ourProgramKey),
+    [directory, ourTeam, ourProgramKey],
+  );
+  const home = useMemo(
+    () => homeScope(scope, ourDivision, ourConference),
+    [scope, ourDivision, ourConference],
+  );
+  const [division, setDivision] = useState<string | null>(home.division);
+  const [conference, setConference] = useState<string>(home.conference);
 
   const histories = useMemo(() => new Map(historyEntries), [historyEntries]);
 
@@ -253,45 +288,77 @@ export function DualSchoolStep({
     return program.team === ourTeam;
   }
 
-  function passesChips(program: ProgramSearchResult): boolean {
-    if (conferenceOnly && program.conference !== ourConference) return false;
-    if (divisionOnly && divisionLabel(program.division) !== ourDivision) {
-      return false;
-    }
-    return true;
-  }
+  const divisionRows = scope.rows.filter((row) => row.division === division);
+  const resultKeys = new Set(results.map((row) => row.programKey));
 
-  // The whole conference on arrival, narrowed as the term is typed. The table
-  // is already in memory — 1,941 rows are seeded with a conference, so this is
-  // a real list on day one — and a substring match over a few dozen rows is not
-  // worth a round trip. Listing it unfiltered is the one departure from the
-  // dormant `SchoolSearch`, which showed nothing until two characters were
-  // typed: behind a field that is now genuinely empty on arrival, that reads as
-  // a program with no opponents rather than as a directory waiting for a term.
-  //
-  // The term matches a school's name OR its conference, because "Big Ten" is
-  // a thing a coach types into a box that lists schools by conference — and
-  // a term that matched only names answered it with nothing, having just
-  // drawn the heading "Your conference" above the list it emptied.
-  const conferenceRows = conferencePrograms
-    .filter(isOurSquad)
+  // The browsed scope on arrival, narrowed as the term is typed. The term
+  // matches a school's name OR its conference, because "Big Ten" is a thing a
+  // coach types into a box that lists schools by conference — and a term that
+  // matched only names answered it with nothing. A search hit inside the scope
+  // stays in the scope's section too: the search RPC also matches
+  // abbreviations ("UCLA"), which a substring over the name never would.
+  const scopeRows = divisionRows
+    .filter(
+      (program) => conference === ANY || program.conference === conference,
+    )
     .filter(
       (program) =>
         query.length === 0 ||
         program.schoolName.toLowerCase().includes(query) ||
-        (program.conference?.toLowerCase().includes(query) ?? false),
-    )
-    .filter(passesChips);
+        (program.conference?.toLowerCase().includes(query) ?? false) ||
+        resultKeys.has(program.programKey),
+    );
 
-  const listedKeys = new Set(conferenceRows.map((row) => row.programKey));
+  // Everything the search found outside the scope. Search reaches past the
+  // two menus on purpose: they browse, they do not fence. A coach left on
+  // "Big Ten" who types a school from another conference is naming the
+  // opponent, and a list that answered "nothing" would make them go and widen
+  // two menus to be allowed to.
+  const scopedKeys = new Set(scopeRows.map((row) => row.programKey));
   const searchRows = results
     .filter(isOurSquad)
     .filter((program) => program.programKey !== ourProgramKey)
-    .filter((program) => !listedKeys.has(program.programKey))
-    .filter(passesChips);
+    .filter((program) => !scopedKeys.has(program.programKey));
 
-  const listed = conferenceRows.length + searchRows.length;
-  const chipsOn = conferenceOnly || divisionOnly;
+  const listed = scopeRows.length + searchRows.length;
+  const moved = division !== home.division || conference !== home.conference;
+
+  const divisionOptions: MenuOption<string>[] = scope.divisions.map((key) => ({
+    value: key,
+    label: DIVISION_NAME[key] ?? key,
+    description: key === ourDivision ? "Your division" : undefined,
+  }));
+  const conferenceOptions: MenuOption<string>[] = [
+    {
+      value: ANY,
+      label: "Any conference",
+      description: `Every ${divisionLabel(division) ?? ""} program`,
+    },
+    ...conferencesOf(divisionRows, ourConference).map((name) => ({
+      value: name,
+      label: name,
+      description: name === ourConference ? "Your conference" : undefined,
+    })),
+  ];
+  const scopeHeading =
+    conference === ANY
+      ? (DIVISION_NAME[division ?? ""] ?? division ?? "Programs")
+      : conference;
+
+  function chooseDivision(next: string) {
+    setDivision(next);
+    // A conference belongs to one division, so the old one names nothing
+    // here. Any, rather than guessing which of the new division's conferences
+    // was meant — unless this is the program's own division, whose conference
+    // is known.
+    setConference(next === home.division ? home.conference : ANY);
+    setPicked(null);
+  }
+
+  function chooseConference(next: string) {
+    setConference(next);
+    setPicked(null);
+  }
 
   /**
    * What Continue carries — a picked directory row, or whatever is in the box.
@@ -377,55 +444,57 @@ export function DualSchoolStep({
         </span>
       </div>
 
-      {ourConference || ourDivision ? (
-        <div className="mt-4 flex items-center gap-2">
-          {/* Two pills, not three. Both are real filters over the two
-                  columns `programs` actually carries; the artboard's third,
-                  "Region", has no column behind it and is not drawn. */}
-          {ourConference ? (
-            <FilterPill
-              label={ourConference}
-              active={conferenceOnly}
-              onClick={() => setConferenceOnly((on) => !on)}
-            />
-          ) : null}
-          {ourDivision ? (
-            <FilterPill
-              label={ourDivision}
-              active={divisionOnly}
-              onClick={() => setDivisionOnly((on) => !on)}
-            />
-          ) : null}
+      {divisionOptions.length > 0 ? (
+        <div className="mt-5 flex items-center gap-2">
+          <MenuSelect
+            label="Division"
+            value={division ?? undefined}
+            placeholder="Division"
+            options={divisionOptions}
+            onChange={chooseDivision}
+            align="start"
+            width={200}
+          />
+          <MenuSelect
+            label="Conference"
+            value={conference}
+            options={conferenceOptions}
+            onChange={chooseConference}
+            align="start"
+            width={248}
+            scroll
+          />
           <div className="flex-1" />
           {/* `--blue` at rest, `--blue-hover` on hover — the rule for every
-                  blue word since the darker resting `--blue-text` was
-                  retired. 11px blue on white measures 3.68:1 and fails WCAG
-                  1.4.3 AA; drawn as drawn, and recorded on the token. */}
-          {chipsOn ? (
+              blue word since the darker resting `--blue-text` was retired.
+              11px blue on white measures 3.68:1 and fails WCAG 1.4.3 AA; drawn
+              as drawn, and recorded on the token. */}
+          {moved ? (
             <button
               type="button"
               onClick={() => {
-                setConferenceOnly(false);
-                setDivisionOnly(false);
+                setDivision(home.division);
+                setConference(home.conference);
+                setPicked(null);
               }}
-              className="cursor-pointer text-[11px] font-medium text-[var(--blue)]"
+              className="cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
             >
-              Clear
+              Reset
             </button>
           ) : null}
         </div>
       ) : null}
 
-      {conferenceRows.length > 0 ? (
+      {scopeRows.length > 0 ? (
         <>
           <div
             className="eyebrow-sm pt-[22px] pb-1.5"
             style={{ color: "var(--ink-400)" }}
           >
-            Your conference
+            {scopeHeading}
           </div>
           <div className="flex flex-col">
-            {conferenceRows.map((program) => (
+            {scopeRows.map((program) => (
               <SchoolRow
                 key={program.programKey}
                 program={program}
@@ -444,7 +513,7 @@ export function DualSchoolStep({
             className="eyebrow-sm pt-5 pb-1.5"
             style={{ color: "var(--ink-400)" }}
           >
-            All programs
+            Other programs
           </div>
           <div className="flex flex-col">
             {searchRows.map((program) => (
@@ -610,37 +679,6 @@ function SchoolRow({
 }
 
 /**
- * A filter pill — `rounded-full`, which is what the design system reserves for
- * pills, tabs, avatars and indicators. Buttons stay on `--radius-button`.
- */
-function FilterPill({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        "inline-flex h-[26px] cursor-pointer items-center gap-[5px] rounded-full px-[11px] text-[12px]",
-        "transition-colors duration-[var(--duration-hover)]",
-        active
-          ? "bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
-          : "border border-[var(--border-hairline)] font-normal text-[var(--ink-600)] hover:bg-[var(--surface-subtle)]",
-      )}
-    >
-      {label}
-    </button>
-  );
-}
-
-/**
  * This program's record against one school row.
  *
  * One lookup, on the name a dual is actually recorded under:
@@ -676,4 +714,84 @@ function historyForProgram(
     histories,
     programDisplayName(program.schoolName, program.team),
   );
+}
+
+/** The Conference menu's "no conference chosen" value. Not a conference name. */
+const ANY = "__any__";
+
+/** The Division menu's words. `divisionLabel`'s "D-I" is for sublines. */
+const DIVISION_NAME: Record<string, string> = {
+  D1: "Division I",
+  D2: "Division II",
+  D3: "Division III",
+  NAIA: "NAIA",
+  JUCO: "JUCO",
+};
+
+/** The order a coach says them in, not the alphabet's. */
+const DIVISION_ORDER = ["D1", "D2", "D3", "NAIA", "JUCO"];
+
+/**
+ * The browsable directory: this squad's rows minus the viewer's own, and the
+ * divisions those rows actually carry. A division the directory has no row in
+ * is not offered — a menu entry that opens an empty list is a dead end.
+ */
+function directoryScope(
+  directory: ProgramSearchResult[],
+  ourTeam: "mens" | "womens" | null,
+  ourProgramKey: string | null,
+): { rows: ProgramSearchResult[]; divisions: string[] } {
+  const rows = directory.filter(
+    (program) =>
+      (ourTeam === null || program.team === ourTeam) &&
+      program.programKey !== ourProgramKey,
+  );
+  const present = new Set(rows.map((row) => row.division).filter(Boolean));
+  const divisions = [
+    ...DIVISION_ORDER.filter((key) => present.has(key)),
+    // Anything the scrape adds later still appears, after the five known.
+    ...[...present]
+      .filter((key): key is string => !!key && !DIVISION_ORDER.includes(key))
+      .sort(),
+  ];
+  return { rows, divisions };
+}
+
+/**
+ * Where the menus open, and where Reset returns: the program's own division
+ * and conference — each only if the directory can list it. A division the
+ * program has not recorded falls to the first one listed, and a conference
+ * outside that division (or none) to Any, so the screen never opens on an
+ * empty list.
+ */
+function homeScope(
+  scope: { rows: ProgramSearchResult[]; divisions: string[] },
+  ourDivision: string | null,
+  ourConference: string | null,
+): { division: string | null; conference: string } {
+  const division =
+    ourDivision && scope.divisions.includes(ourDivision)
+      ? ourDivision
+      : (scope.divisions[0] ?? null);
+  const hasConference =
+    ourConference !== null &&
+    scope.rows.some(
+      (row) => row.division === division && row.conference === ourConference,
+    );
+  return { division, conference: hasConference ? ourConference : ANY };
+}
+
+/** One division's conferences, the program's own first and the rest A–Z. */
+function conferencesOf(
+  rows: ProgramSearchResult[],
+  ourConference: string | null,
+): string[] {
+  const names = [
+    ...new Set(
+      rows.map((row) => row.conference).filter((c): c is string => !!c),
+    ),
+  ].sort((a, b) => a.localeCompare(b));
+  return ourConference && names.includes(ourConference)
+    ? [ourConference, ...names.filter((name) => name !== ourConference)]
+    : names;
 }

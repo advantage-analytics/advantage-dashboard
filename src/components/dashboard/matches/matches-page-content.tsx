@@ -1,5 +1,6 @@
 "use client";
 import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
+import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 
 import {
   useState,
@@ -12,8 +13,9 @@ import {
 import { createPortal } from "react-dom";
 import { useSearchParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Filter as FilterIcon } from "lucide-react";
+import { Filter as FilterIcon, GalleryHorizontalEnd } from "lucide-react";
 import { EmptyMatches } from "./empty-matches";
+import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import type { DraftRowData } from "./draft-row";
 import {
@@ -42,6 +44,9 @@ import {
   type FilterPanelSection,
 } from "./matches-filter-panel";
 import { LifecycleChips, type LifecycleValue } from "./lifecycle-chips";
+import { MATCHES_PAGE_SIZE, matchesListShape } from "./match-list-layout";
+import { rememberMatchesShape } from "./matches-shape-memory";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 
 function providerName(id: string): string {
   return providers.find((p) => p.id === id)?.name ?? id;
@@ -272,12 +277,7 @@ const FILTER_GROUPS: {
   },
 ];
 
-/**
- * Ten rows a page. The frame's footer is a range and one quiet "Older matches"
- * link (Platform Audit Pb2) — no page-size control, so the size is a constant
- * rather than a preference.
- */
-const PAGE_SIZE = 10;
+const PAGE_SIZE = MATCHES_PAGE_SIZE;
 
 /* ─── Sort dropdown ─── */
 const SORT_OPTIONS: { field: SortField; label: string }[] = [
@@ -297,71 +297,6 @@ function SortDropdown({
   onSort: (field: SortField) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [focusIdx, setFocusIdx] = useState(-1);
-  const ref = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const listboxId = "sort-listbox";
-
-  // Close on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node))
-        setOpen(false);
-    }
-    if (open) document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open]);
-
-  const closeAndReturn = useCallback(() => {
-    setOpen(false);
-    triggerRef.current?.focus();
-  }, []);
-
-  // Scoped keyboard handler
-  function handleContainerKeyDown(e: React.KeyboardEvent) {
-    if (!open) return;
-    if (e.key === "Escape") {
-      e.preventDefault();
-      closeAndReturn();
-      return;
-    }
-    if (e.key === "Tab") {
-      setOpen(false);
-      return;
-    }
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setFocusIdx((prev) => {
-        const next = prev < SORT_OPTIONS.length - 1 ? prev + 1 : 0;
-        optionRefs.current[next]?.focus();
-        return next;
-      });
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setFocusIdx((prev) => {
-        const next = prev > 0 ? prev - 1 : SORT_OPTIONS.length - 1;
-        optionRefs.current[next]?.focus();
-        return next;
-      });
-    }
-    if (e.key === "Home") {
-      e.preventDefault();
-      setFocusIdx(0);
-      optionRefs.current[0]?.focus();
-    }
-    if (e.key === "End") {
-      e.preventDefault();
-      const last = SORT_OPTIONS.length - 1;
-      setFocusIdx(last);
-      optionRefs.current[last]?.focus();
-    }
-  }
-
-  useEffect(() => {
-    if (!open) setFocusIdx(-1);
-  }, [open]);
 
   const activeLabel =
     SORT_OPTIONS.find((o) => o.field === sortField)?.label ?? "Date";
@@ -382,76 +317,96 @@ function SortDropdown({
         : "Newest first"
       : `${activeLabel} ${dirLabel}`;
 
-  return (
-    <div className="relative" ref={ref} onKeyDown={handleContainerKeyDown}>
-      <SortTrigger
-        ref={triggerRef}
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-controls={open ? listboxId : undefined}
-        title={`Sorted by ${activeLabel}, ${dirLabel}`}
-        engaged={open}
-      >
-        {sortPhrase}
-      </SortTrigger>
+  // The chosen row is marked by FloatMenu's blue check, as on Schedule. Its
+  // second line carries the direction the old ↑/↓ glyph did, and that
+  // choosing it again reverses it — `onSort` flips the active field.
+  const chosenNote = `${sortField === "date" ? sortPhrase : dirLabel} · again to reverse`;
 
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
-            id={listboxId}
-            role="listbox"
-            aria-label="Sort options"
-            className="absolute top-full right-0 z-20 mt-1.5 min-w-[160px] rounded-xl border px-1.5 py-1.5"
-            style={{
-              background: "var(--surface-card)",
-              borderColor: "var(--border-medium)",
-              boxShadow: "var(--shadow-dropdown)",
+  return (
+    <FloatMenu
+      open={open}
+      onOpenChange={setOpen}
+      width={172}
+      sideOffset={6}
+      label="Sort options"
+      trigger={
+        <SortTrigger
+          aria-expanded={open}
+          aria-haspopup="menu"
+          title={`Sorted by ${activeLabel}, ${dirLabel}`}
+          engaged={open}
+        >
+          {sortPhrase}
+        </SortTrigger>
+      }
+    >
+      {SORT_OPTIONS.map((opt) => {
+        const chosen = sortField === opt.field;
+        return (
+          <FloatMenuItem
+            key={opt.field}
+            label={opt.label}
+            description={chosen ? chosenNote : undefined}
+            chosen={chosen}
+            onSelect={() => {
+              onSort(opt.field);
+              setOpen(false);
             }}
-          >
-            {SORT_OPTIONS.map((opt, idx) => {
-              const isActive = sortField === opt.field;
-              return (
-                <button
-                  key={opt.field}
-                  ref={(el) => {
-                    optionRefs.current[idx] = el;
-                  }}
-                  role="option"
-                  aria-selected={isActive}
-                  tabIndex={idx === focusIdx ? 0 : -1}
-                  onClick={() => {
-                    onSort(opt.field);
-                    setOpen(false);
-                  }}
-                  className={`flex w-full items-center justify-between rounded-[var(--radius-element)] px-2.5 py-2 text-xs transition-colors duration-150 ${isActive ? "" : "hover:bg-[var(--surface-subtle)]"}`}
-                  style={{
-                    background: isActive ? "var(--surface-subtle)" : undefined,
-                    color: isActive ? "var(--ink-900)" : "var(--ink-700)",
-                    fontWeight: isActive ? 500 : 400,
-                  }}
-                >
-                  {opt.label}
-                  {isActive && (
-                    <span
-                      className="text-[10px]"
-                      style={{ color: "var(--ink-500)" }}
-                    >
-                      {sortDir === "asc" ? "↑" : "↓"}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+          />
+        );
+      })}
+    </FloatMenu>
   );
+}
+
+/** The chip's own name, as a heading reads it. */
+const LIFECYCLE_NOUN: Record<Exclude<LifecycleValue, "all">, string> = {
+  new: "new matches",
+  "in-progress": "matches in progress",
+  estimates: "estimates",
+};
+
+/**
+ * What the table's empty body says when the chip, the search and the filters
+ * leave no matches: the cut, named, and the one link that undoes the
+ * narrowest part of it.
+ *
+ * The heading names the chip and the search but not the filters: those can
+ * run to four facets, and the applied strip right above the table already
+ * spells them out in full. Only reachable with something applied — an empty
+ * workspace is day zero, which returns before the table renders.
+ */
+function emptyCutCopy({
+  lifecycle,
+  query,
+  hasFilters,
+  clearCut,
+  showAll,
+}: {
+  lifecycle: LifecycleValue;
+  query: string;
+  hasFilters: boolean;
+  clearCut: () => void;
+  showAll: () => void;
+}): Pick<React.ComponentProps<typeof TableEmptyBody>, "title" | "action"> {
+  const noun = lifecycle === "all" ? "matches" : LIFECYCLE_NOUN[lifecycle];
+
+  if (!hasFilters && !query) {
+    return {
+      title: `No ${noun}`,
+      action: { label: "Show all matches", onClick: showAll },
+    };
+  }
+  return {
+    title:
+      query && !hasFilters
+        ? `No ${noun} for “${query}”`
+        : `No ${noun} fit this filter`,
+    action: {
+      label: hasFilters ? "Clear filters" : "Clear search",
+      onClick: clearCut,
+    },
+  };
 }
 
 /** The slot never changes once mounted, so there is nothing to subscribe to. */
@@ -468,6 +423,19 @@ export function MatchesPageContent({
 }: MatchesPageContentProps): React.JSX.Element {
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  const workspaceId = useWorkspace().active.id;
+
+  // Teach the route's loading boundary this workspace's first page, so the next
+  // client-side visit draws its skeleton at the size the rows will arrive at.
+  useEffect(() => {
+    rememberMatchesShape(
+      workspaceId,
+      matchesListShape(
+        serverMatches.map((m) => m.date),
+        drafts.map((d) => d.updatedAt),
+      ),
+    );
+  }, [workspaceId, serverMatches, drafts]);
 
   // Live job state, merged over what the server rendered. Without this the bar
   // is a snapshot from page load — a long upload appears frozen, and a job that
@@ -1077,49 +1045,35 @@ export function MatchesPageContent({
       )}
 
       {/* Table / Grid */}
-      {sorted.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16">
-          <Search
-            className="mb-3 h-8 w-8"
-            strokeWidth={1.5}
-            style={{ color: "var(--ink-300)" }}
+      <MatchesGrid
+        matches={paginatedMatches}
+        drafts={drafts}
+        scope={scope}
+        newMatchId={newMatchId}
+        unseenIds={unseenIds}
+        selectedId={selectedId}
+        onToggle={toggleRow}
+        // Not while closing: the tracks widen as the rail shrinks, in the
+        // same 200ms, rather than waiting for it to finish and then jumping.
+        drawerOpen={(drawerMatch !== null || drawerDraft !== null) && !closing}
+        // A cut that leaves nothing keeps the table — headers and card — and
+        // says so in its body (see `TableEmptyBody`).
+        empty={
+          <TableEmptyBody
+            icon={GalleryHorizontalEnd}
+            {...emptyCutCopy({
+              lifecycle,
+              query: search.trim(),
+              hasFilters: filters.length > 0,
+              clearCut,
+              showAll: () => {
+                clearCut();
+                setLifecycle("all");
+              },
+            })}
           />
-          <p
-            className="mb-1 text-[14px] font-medium"
-            style={{ color: "var(--ink-900)" }}
-          >
-            No matches found
-          </p>
-          {(hasCut || lifecycle !== "all") && (
-            <div className="mt-1 flex flex-col items-center gap-2">
-              <button
-                onClick={() => {
-                  clearCut();
-                  setLifecycle("all");
-                }}
-                className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-              >
-                Clear all filters
-              </button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <MatchesGrid
-          matches={paginatedMatches}
-          drafts={drafts}
-          scope={scope}
-          newMatchId={newMatchId}
-          unseenIds={unseenIds}
-          selectedId={selectedId}
-          onToggle={toggleRow}
-          // Not while closing: the tracks widen as the rail shrinks, in the
-          // same 200ms, rather than waiting for it to finish and then jumping.
-          drawerOpen={
-            (drawerMatch !== null || drawerDraft !== null) && !closing
-          }
-        />
-      )}
+        }
+      />
 
       {drawerSlot &&
         drawerDraft &&

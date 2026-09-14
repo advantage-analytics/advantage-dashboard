@@ -43,7 +43,16 @@ export interface DisplayMatch {
    * `id` is `matches.player1_id` — an auth uid or a `program_players.id`
    * (both spaces live in that column), so compare it against both.
    */
-  player1: { name: string; id?: string | null };
+  player1: {
+    name: string;
+    id?: string | null;
+    /**
+     * The roster profile `id` resolves to on the active team, for linking the
+     * name. Null when they are no longer on the roster (archived, or never
+     * were) — that page would 404. Absent outside a team list.
+     */
+    profileId?: string | null;
+  };
   player2: { name: string };
   player2Hand?: string;
   player2Backhand?: string;

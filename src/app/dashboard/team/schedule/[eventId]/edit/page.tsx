@@ -23,8 +23,8 @@ import type { EventDetail } from "@/lib/schedule/types";
  *
  *   dual         `NewDualFlow mode="edit"` — nine courts, the school pinned
  *                and unchangeable, step one unreachable.
- *   tournament   `NewTournamentFlow mode="edit"` — the weekend and then the
- *                field, both steps reachable, the entered field seeded with
+ *   tournament   `NewTournamentFlow mode="edit"` — the name, the dates, site
+ *                and format, then the field, every step reachable, the entered field seeded with
  *                its saved ids, draws and seeds.
  *
  * Both open on the event's own facts, draw settled entries read-only, and
@@ -134,7 +134,7 @@ export default async function EditEventPage({
           ourTeam: settings?.program.team ?? null,
           ourDivision: null,
           ourProgramKey: null,
-          conferencePrograms: [],
+          directory: [],
           historyEntries: [],
           directoryTotal: null,
         }}

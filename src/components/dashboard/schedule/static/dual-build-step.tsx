@@ -4,7 +4,17 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { DOUBLES_SLOTS, SINGLES_SLOTS } from "@/lib/schedule/courts";
 import { DateField } from "@/components/ui/date-field";
-import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
+import { MenuSelect } from "@/components/ui/menu-select";
+import {
+  DOUBLES_FORMATS,
+  FORMATS,
+  FieldCell,
+  SITES,
+  doublesFormatOptions,
+  formatOptions,
+  type DoublesFormat,
+  type DualFormat,
+} from "@/components/dashboard/schedule/static/event-fact-fields";
 import { resultLabelFromOutcome } from "@/components/dashboard/schedule/result-choice";
 import {
   useOpponentPool,
@@ -23,10 +33,11 @@ import {
   type LineupLineInput,
 } from "@/lib/schedule/actions";
 import {
-  EVENT_FORMATS,
-  siteTitle,
+  EVENT_START_TIMES,
+  formatEventTime,
   splitNames,
   todayISO,
+  type DoublesFormatValue,
   type EventFormatValue,
 } from "@/lib/schedule/format";
 import { rosterIdsForLabels } from "@/lib/schedule/roster-match";
@@ -58,112 +69,10 @@ export type ChosenSchool =
   | { kind: "program"; program: ProgramSearchResult }
   | { kind: "text"; name: string };
 
-/**
- * One row of the Format control: the option it is, and what it means.
- *
- * ── Why this is a table and not an encoding ────────────────────────────────
- * The deleted `dual-form.tsx` carried the format through a `<select>` as one
- * pipe-joined string of the two fields, and decoded it by splitting on the
- * pipe, numbering the first half and string-comparing the second against the
- * word true. Until an earlier pass the cell here held the same string, with
- * both halves hard-coded — and because `adScoring` is `boolean | null` on
- * `EventFormat`, a null interpolates into such a string as the four characters
- * spelling null, which that comparison then reads as a confident
- * `false`: a wrong answer that looks like a real one. That is the recorded
- * cause of a real outage — format arrived as `{}`, `adScoring` arrived null,
- * and every tournament video failed vendor submission long after the coach had
- * left. See `docs/ui-revamp-guardrails.md` §3.1 and §4, and `TournamentFormat`
- * in `static-tournament-builder.tsx`, which made this same call first.
- *
- * So there is no encoding to get wrong. `value` is an opaque option name that
- * is only ever compared, never parsed; `bestOf` and `adScoring` are stated as
- * literals in `FORMATS` and travel as themselves. `adScoring` is typed
- * `boolean` rather than `boolean | null`, which makes "the control carries a
- * real boolean" a compile error to break rather than a convention to
- * remember: no null can be assigned into this shape, so none can reach
- * `createDual`'s `format` jsonb.
- *
- * `sets` and `scoring` are the two strings `2b` prints — the sets half inside
- * the underline, the scoring half under it. Both are read off the chosen row,
- * so the label and the value cannot drift into disagreeing about which format
- * this dual is.
- */
-export interface DualFormat {
-  /** The option's name — matched against, never split. */
-  value: EventFormatValue;
-  /** What the closed cell prints, and the menu row's first line. */
-  sets: string;
-  /** What prints under the cell, and the menu row's second line. */
-  scoring: string;
-  bestOf: number;
-  adScoring: boolean;
-}
-
-/**
- * The four formats the control offers.
- *
- * `2b` draws one — "Best of 3 sets" over "No-ad scoring" — and no dropdown
- * contents, so the other three are built from vocabulary that already exists
- * rather than invented: "One set", "ad" and "no-ad" are the dormant
- * `FORMATS`' words, in that table's order. The first row is what the artboard
- * draws, and what a new dual opens on.
- */
-/**
- * `2b`'s wording over the shared format table.
- *
- * Only the words live here. `bestOf` and `adScoring` come from
- * `EVENT_FORMATS` in `lib/schedule/format.ts`, so the two builders cannot word
- * the same option differently where it counts — see that table's header, and
- * `docs/ui-revamp-guardrails.md` §3.1 and §4.
- */
-const FORMAT_WORDS: Record<
-  EventFormatValue,
-  { sets: string; scoring: string }
-> = {
-  "bo3-no-ad": {
-    sets: "Best of 3 sets",
-    scoring: "No-ad scoring",
-  },
-  "bo3-ad": {
-    sets: "Best of 3 sets",
-    scoring: "Ad scoring",
-  },
-  "one-set-no-ad": {
-    sets: "One set",
-    scoring: "No-ad scoring",
-  },
-  "one-set-ad": {
-    sets: "One set",
-    scoring: "Ad scoring",
-  },
-};
-
-export const FORMATS: readonly DualFormat[] = EVENT_FORMATS.map((format) => ({
-  ...format,
-  ...FORMAT_WORDS[format.value],
-}));
-
-/**
- * The Format control's options: one per `FORMATS` row, carrying `2b`'s two
- * halves as the two lines `MenuSelect` draws — `sets` as the label the closed
- * trigger prints, `scoring` as the description beneath it in the open menu.
- *
- * Pure and exported so the mapping can be asserted without mounting the step
- * (`tests/dual-format-options.spec.ts`). What it deliberately does NOT carry
- * is `bestOf` or `adScoring`: an option is a NAME to look the row back up by,
- * so nothing downstream can read a scoring rule off the dropdown instead of
- * off the row. See `DualFormat`'s header and
- * `docs/ui-revamp-guardrails.md` §3.1.
- */
-export function formatOptions(
-  formats: readonly DualFormat[],
-): MenuOption<EventFormatValue>[] {
-  return formats.map((format) => ({
-    value: format.value,
-    label: format.sets,
-    description: format.scoring,
-  }));
-}
+/* Re-exported: the format table and the fact cell moved to
+   `event-fact-fields.tsx` so the tournament builder can draw them without
+   importing this file's lineup machinery. Existing importers keep their path. */
+export { FORMATS, FieldCell, SITES, formatOptions, type DualFormat };
 
 /** Built once: `FORMATS` is a module constant, so its options are too. */
 const FORMAT_OPTIONS = formatOptions(FORMATS);
@@ -173,14 +82,25 @@ const FORMAT_OPTIONS = formatOptions(FORMATS);
 const DEFAULT_FORMAT =
   FORMATS.find((format) => format.value === "bo3-no-ad") ?? FORMATS[0];
 
+const DOUBLES_FORMAT_OPTIONS = doublesFormatOptions(DOUBLES_FORMATS);
+
 /**
- * The three sites a dual can be at, titled through the shared schedule
- * formatter and in the dormant form's order. `EventSite` on `value`, so the
- * union is checked here rather than cast at the change handler.
+ * The start times, half-hourly, under the same `—` for none that Surface
+ * uses. `""` is "no time" and saves as a null column — a time nobody stated
+ * is not one to invent.
  */
-const SITES: readonly { value: EventSite; label: string }[] = (
-  ["home", "away", "neutral"] as const
-).map((value) => ({ value, label: siteTitle(value) }));
+const TIME_OPTIONS: readonly { value: string; label: string }[] = [
+  { value: "", label: "—" },
+  ...EVENT_START_TIMES.map((time) => ({
+    value: time,
+    label: formatEventTime(time),
+  })),
+];
+
+/** One set to 6, no-ad — the NCAA default, and what a new dual opens on. */
+const DEFAULT_DOUBLES_FORMAT =
+  DOUBLES_FORMATS.find((format) => format.value === "set-to-6-no-ad") ??
+  DOUBLES_FORMATS[0];
 
 /**
  * The surfaces a dual can be on — `programs.default_surface`'s own vocabulary,
@@ -202,14 +122,19 @@ const SURFACES: readonly { value: string; label: string }[] = [
   { value: "carpet", label: "Carpet" },
 ];
 
-/** The four facts `2b`'s top row asks for, held as what the coach entered. */
+/** The facts step two asks for, held as what the coach entered. */
 interface DualDraft {
   /** YYYY-MM-DD, as `program_events.starts_on` stores it. */
   date: string;
+  /** "HH:MM" start time; `""` is none. */
+  time: string;
   site: EventSite;
   /** One of `SURFACES`' values; `""` is none. */
   surface: string;
+  /** The singles format. */
   format: DualFormat;
+  /** The doubles lines' set length and their own ad scoring. */
+  doublesFormat: DoublesFormat;
 }
 
 /**
@@ -353,10 +278,13 @@ export interface DualDraftSeed {
   eventId?: string;
   /** YYYY-MM-DD. */
   date?: string;
+  /** "HH:MM", or `""` for none. */
+  startsAtTime?: string;
   site?: EventSite;
   /** One of `SURFACES`' values; `""` is none, and is honoured as none. */
   surface?: string;
   format?: EventFormatValue;
+  doublesFormat?: DoublesFormatValue;
   lines?: DualLineSeed[];
 }
 
@@ -364,6 +292,17 @@ export interface DualDraftSeed {
 function formatFor(value: EventFormatValue | undefined): DualFormat {
   if (!value) return DEFAULT_FORMAT;
   return FORMATS.find((option) => option.value === value) ?? DEFAULT_FORMAT;
+}
+
+/** The `DOUBLES_FORMATS` row an option name names, or the default. */
+function doublesFormatFor(
+  value: DoublesFormatValue | undefined,
+): DoublesFormat {
+  if (!value) return DEFAULT_DOUBLES_FORMAT;
+  return (
+    DOUBLES_FORMATS.find((option) => option.value === value) ??
+    DEFAULT_DOUBLES_FORMAT
+  );
 }
 
 /**
@@ -553,6 +492,7 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
 
   const [draft, setDraft] = useState<DualDraft>(() => ({
     date: initial?.date ?? todayISO(),
+    time: initial?.startsAtTime ?? "",
     site: initial?.site ?? "home",
     // The seed first — including `""`, which is a coach saying "no surface"
     // and not an absent answer — then the program's own default, then none.
@@ -561,6 +501,7 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
     surface:
       initial?.surface !== undefined ? initial.surface : (defaultSurface ?? ""),
     format: formatFor(initial?.format),
+    doublesFormat: doublesFormatFor(initial?.doublesFormat),
   }));
 
   /**
@@ -810,10 +751,13 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
         ? await updateDual({
             eventId,
             date: draft.date,
+            startsAtTime: draft.time || null,
             site: draft.site,
             surface: draft.surface,
             bestOf: draft.format.bestOf,
             adScoring: draft.format.adScoring,
+            doublesGamesTo: draft.doublesFormat.gamesTo,
+            doublesAdScoring: draft.doublesFormat.adScoring,
             lines: payloadLines(),
           })
         : await createDual({
@@ -824,12 +768,15 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
             opponentProgramKey:
               school.kind === "program" ? school.program.programKey : null,
             date: draft.date,
+            startsAtTime: draft.time || null,
             site: draft.site,
             surface: draft.surface,
             // Read off the chosen `FORMATS` row, which states both as literals.
             // Nothing here parses a string, so no null can arrive as "null".
             bestOf: draft.format.bestOf,
             adScoring: draft.format.adScoring,
+            doublesGamesTo: draft.doublesFormat.gamesTo,
+            doublesAdScoring: draft.doublesFormat.adScoring,
             lines: payloadLines(),
           });
 
@@ -869,10 +816,15 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
 }
 
 /**
- * The four facts `2b` draws across the top: Date, Site, Surface, Format.
+ * The facts step two asks for: Date, Site and Surface across the top, then
+ * Singles format and Doubles format on a row of their own.
  *
  * A body, not a screen — no shell, no header and no footer, so whichever frame
- * shows it decides those. `2b` draws the four in one four-up at `gap:24px`.
+ * shows it decides those. `2b` drew four in one four-up at `gap:24px`; the
+ * format split into two labelled cells because one "Format" never said it was
+ * the singles format, and college doubles is played as one set to 6 or an
+ * 8-game pro-set rather than the singles best-of. Both rows are the same
+ * three columns at the same gap, the format pair in the right two.
  *
  * ── What draws what ────────────────────────────────────────────────────────
  *   Date                `DateField variant="bare"` inside `FieldCell`'s ruled
@@ -903,56 +855,99 @@ export function DualFactsStep({
   onEdit: (patch: Partial<DualDraft>) => void;
 }) {
   return (
-    <div className="grid grid-cols-4 gap-6">
-      <FieldCell label="Date">
-        <DateField
-          label="Date"
-          variant="bare"
-          value={draft.date}
-          onChange={(date) => onEdit({ date })}
-          className="w-full"
-        />
-      </FieldCell>
+    <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-3 gap-6">
+        <FieldCell label="Date">
+          <DateField
+            label="Date"
+            variant="bare"
+            value={draft.date}
+            onChange={(date) => onEdit({ date })}
+            className="w-full"
+          />
+        </FieldCell>
 
-      <FieldCell label="Site" chrome="none">
-        <MenuSelect
-          label="Site"
-          variant="underline"
-          value={draft.site}
-          options={SITES}
-          onChange={(site) => onEdit({ site })}
-        />
-      </FieldCell>
+        <FieldCell label="Site" chrome="none">
+          <MenuSelect
+            label="Site"
+            variant="underline"
+            value={draft.site}
+            options={SITES}
+            onChange={(site) => onEdit({ site })}
+          />
+        </FieldCell>
 
-      <FieldCell label="Surface" chrome="none">
-        <MenuSelect
-          label="Surface"
-          variant="underline"
-          value={draft.surface}
-          options={SURFACES}
-          onChange={(surface) => onEdit({ surface })}
-        />
-      </FieldCell>
+        <FieldCell label="Surface" chrome="none">
+          <MenuSelect
+            label="Surface"
+            variant="underline"
+            value={draft.surface}
+            options={SURFACES}
+            onChange={(surface) => onEdit({ surface })}
+          />
+        </FieldCell>
+      </div>
 
-      {/* `2b` draws the ad half BELOW the underline rather than inside the
+      {/* The same three columns as the row above: Time under Date, and the
+          two format cells matching Site and Surface in width under them. */}
+      <div className="grid grid-cols-3 gap-6">
+        <FieldCell label="Time" chrome="none">
+          <MenuSelect
+            label="Time"
+            variant="underline"
+            value={draft.time}
+            options={TIME_OPTIONS}
+            scroll
+            onChange={(time) => onEdit({ time })}
+          />
+        </FieldCell>
+        {/* `2b` draws the ad half BELOW the underline rather than inside the
           value, so the cell prints `scoring` under a trigger printing `sets`
           — the two halves of the one chosen row. */}
-      <FieldCell label="Format" chrome="none" note={draft.format.scoring}>
-        <MenuSelect
-          label="Format"
-          variant="underline"
-          value={draft.format.value}
-          options={FORMAT_OPTIONS}
-          onChange={(value) => {
-            // The chosen ROW, looked up by option name — never a parse of the
-            // option's text. This is `format`'s only assignment, and every row
-            // of that table states `adScoring` as a literal boolean. See
-            // `DualFormat`'s header and `docs/ui-revamp-guardrails.md` §3.1.
-            const chosen = FORMATS.find((option) => option.value === value);
-            if (chosen) onEdit({ format: chosen });
-          }}
-        />
-      </FieldCell>
+        <FieldCell
+          label="Singles format"
+          chrome="none"
+          note={draft.format.scoring}
+        >
+          <MenuSelect
+            label="Singles format"
+            variant="underline"
+            value={draft.format.value}
+            options={FORMAT_OPTIONS}
+            onChange={(value) => {
+              // The chosen ROW, looked up by option name — never a parse of the
+              // option's text. This is `format`'s only assignment, and every row
+              // of that table states `adScoring` as a literal boolean. See
+              // `DualFormat`'s header and `docs/ui-revamp-guardrails.md` §3.1.
+              const chosen = FORMATS.find((option) => option.value === value);
+              if (chosen) onEdit({ format: chosen });
+            }}
+          />
+        </FieldCell>
+
+        {/* Doubles picks its own scoring — high-school doubles is often ad
+          even when singles is not — so the note prints the tiebreak rule
+          and the chosen row's scoring together. */}
+        <FieldCell
+          label="Doubles format"
+          chrome="none"
+          note={draft.doublesFormat.detail}
+        >
+          <MenuSelect
+            label="Doubles format"
+            variant="underline"
+            value={draft.doublesFormat.value}
+            options={DOUBLES_FORMAT_OPTIONS}
+            onChange={(value) => {
+              // The chosen row by name, as the singles cell does.
+              const chosen = DOUBLES_FORMATS.find(
+                (option) => option.value === value,
+              );
+              if (chosen) onEdit({ doublesFormat: chosen });
+            }}
+          />
+        </FieldCell>
+      </div>
     </div>
   );
 }
@@ -1092,93 +1087,4 @@ function setCount(
       locked?.[line.key] !== undefined ||
       (isDraftLineSet(line) && !clashes.has(line.slot)),
   ).length;
-}
-
-/**
- * One fact under its eyebrow — `2b` draws all four the same way.
- *
- * Two chromes, because the four cells no longer answer the same way. `rule`
- * is the artboard's row drawn here: a hairline and the control inside it.
- * `none` hands the whole treatment to the child, because `MenuSelect`'s
- * underline trigger already draws that hairline, its own chevron and its own
- * 2px blue rule on focus — a second hairline here would stack a rule on a
- * rule and a chevron beside a chevron.
- *
- * Both are a `<div>`, and `rule` is one on purpose. It was a `<label>` while
- * a native date input sat in it and the eyebrow named that input. `DateField`
- * is a group of segments plus a calendar `<button>`, and a button IS
- * labelable: the `<label>` forwarded every click on a segment to the calendar
- * button instead, so the month could never be clicked into. Measured, not
- * assumed. Each cell's `label` string goes to its child as an `aria-label`,
- * which is what names the control now.
- *
- * Not the deleted `field-row.tsx`'s `FieldCellText`/`FieldCellSelect`: those
- * were 25b's row and carried its `FieldRow` spacing (`mt-3.5`, `gap-8`) where
- * this artboard draws a plain four-up at `gap:24px`. The row's own spacing
- * matched those cells exactly, `pt-1.5 pb-[7px]` included;
- * `static-tournament-builder.tsx` still records the same numbers.
- */
-function FieldCell({
-  label,
-  chrome = "rule",
-  note,
-  children,
-}: {
-  label: string;
-  /** `rule` draws the hairline row; `none` lets the child draw its own. */
-  chrome?: "rule" | "none";
-  /** Drawn under the cell, on Format alone. */
-  note?: string;
-  children: React.ReactNode;
-}) {
-  const eyebrow = <span className="eyebrow">{label}</span>;
-  const footnote = note ? (
-    <span
-      className="text-micro mt-[5px] block"
-      style={{ color: "var(--ink-600)" }}
-    >
-      {note}
-    </span>
-  ) : null;
-
-  if (chrome === "none") {
-    return (
-      <div>
-        {eyebrow}
-        {children}
-        {footnote}
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      {eyebrow}
-      {/* `focus-within`, not `focus-visible`: the rule belongs to the row and
-          what it answers is focus landing on the control inside it. The
-          control inside opts out of the ring — the rule going blue IS the one
-          mark (`styles/design-system/focus.css`).
-
-          34px, not padding around the content: this row sits in a four-up
-          beside three `MenuSelect` underline triggers, which are 34px, and a
-          rule whose height is whatever its content happens to be does not
-          line up with them. It did while the content was bare text; the date
-          brought a 28px calendar button with it and the row grew, leaving the
-          Date rule sitting ~7px below the other three. Borders are inside the
-          box, so thickening to 2px on focus moves nothing.
-
-          `--border-field`, not `--border-hairline`: this rule IS a field's
-          underline, and the field family draws it in that token —
-          `MenuSelect`'s underline trigger in the three cells beside this one,
-          `SettingsUnderlineInput`, `DateField`'s own `underline` variant. The
-          two are not interchangeable greys (#E5E5EA against #F3F3F3), so the
-          hairline read visibly fainter than its neighbours in the same row.
-          `--border-hairline` is for a divider between things, which is what
-          the rest of this file uses it for. */}
-      <span className="relative flex h-[34px] items-center border-b border-[var(--border-field)] focus-within:border-b-2 focus-within:border-[var(--blue)]">
-        {children}
-      </span>
-      {footnote}
-    </div>
-  );
 }

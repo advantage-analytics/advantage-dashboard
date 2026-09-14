@@ -526,7 +526,8 @@ test.describe("/dashboard/team/schedule/new · 3b", () => {
       "One player's own match — a challenge, practice set or outside entry — isn't an event.",
     );
     drawn(chooser, file, "Add a one-off match");
-    drawn(chooser, file, "Cancel");
+    // RETIRED 'Cancel' — the chooser draws through `WizardShell`, whose footer
+    //   prints Back and Cancel itself; the word left this file's `COPY`.
     drawn(chooser, file, "Continue");
     // The footer names the selection; `3b` opens on the dual.
     drawn(chooser, file, "Dual selected");
@@ -542,6 +543,8 @@ test.describe("/dashboard/team/schedule/new · 3b", () => {
 test.describe("/dashboard/team/schedule/new/dual · 2c 2b 2d 2e", () => {
   const step1 = screen("dual-school-step.tsx");
   const step2 = screen("dual-build-step.tsx");
+  /** The format words and fact cell both builders draw. */
+  const facts = screen("event-fact-fields.tsx");
   const popup = screen("opponent-popup.tsx");
   /** Our side of a lineup court, split out of step two's row. */
   const picker = screen("lineup-name-picker.tsx");
@@ -640,10 +643,18 @@ test.describe("/dashboard/team/schedule/new/dual · 2c 2b 2d 2e", () => {
     // RETIRED 'Region' — the pill is gone from the screen, not renamed. Nothing
     //   in `programs` backs a region and no mapping invents one, so the wired
     //   step drops the control rather than drawing a filter that cannot filter.
-    //   The two pills beside it — conference and division — are now real.
-    drawn(step1, "dual-school-step.tsx", "Clear");
+    //   The two pills beside it — conference and division — became Division
+    //   and Conference menus over the whole directory.
+    // RETIRED 'Clear' — the pills' reset is "Reset" on the menus, back to the
+    //   program's own division and conference.
+    // RETIRED 'All programs' — search results outside the browsed scope are
+    //   "Other programs"; the scope's own section is headed by its conference.
+    drawn(step1, "dual-school-step.tsx", "Reset");
+    drawn(step1, "dual-school-step.tsx", '"Division"');
+    drawn(step1, "dual-school-step.tsx", '"Conference"');
+    drawn(step1, "dual-school-step.tsx", "Any conference");
     drawn(step1, "dual-school-step.tsx", "Your conference");
-    drawn(step1, "dual-school-step.tsx", "All programs");
+    drawn(step1, "dual-school-step.tsx", "Other programs");
     // STRAIGHT double quotes around the term, as the artboard writes them.
     drawn(step1, "dual-school-step.tsx", 'Add "');
     drawn(
@@ -688,7 +699,11 @@ test.describe("/dashboard/team/schedule/new/dual · 2c 2b 2d 2e", () => {
     drawn(
       flow,
       "new-dual-flow.tsx",
-      "Four facts the whole dual inherits. Every one of the nine lines is created under them.",
+      // RETIRED 'Four facts the whole dual inherits. Every one of the nine
+      //   lines is created under them.' — the format split into singles and
+      //   doubles, so it is five facts and the lede says which lines get which. Six once Time
+      //   joined them.
+      "Six facts the whole dual inherits. Singles lines play the singles format, doubles lines the doubles format.",
     );
     drawn(flow, "new-dual-flow.tsx", "The lineup.");
     // "Grey well" (Dual Lineup Step canvas, Final): two ledes — the ladder's,
@@ -795,13 +810,22 @@ test.describe("/dashboard/team/schedule/new/dual · 2c 2b 2d 2e", () => {
     drawn(step2, "dual-build-step.tsx", "Date");
     drawn(step2, "dual-build-step.tsx", "Site");
     drawn(step2, "dual-build-step.tsx", "Surface");
-    drawn(step2, "dual-build-step.tsx", "Format");
-    // "Best of 3 sets" over "No-ad scoring" — the sets half in the cell, the
-    // scoring half under the underline.
-    drawn(step2, "dual-build-step.tsx", "Best of ");
-    drawn(step2, "dual-build-step.tsx", " sets");
-    drawn(step2, "dual-build-step.tsx", '"No-ad scoring"');
-    drawn(step2, "dual-build-step.tsx", '"Ad scoring"');
+    // RETIRED 'Format' — one cell never said it was the singles format, and
+    //   college doubles plays its own. Two labelled cells now.
+    drawn(step2, "dual-build-step.tsx", '"Singles format"');
+    drawn(step2, "dual-build-step.tsx", '"Doubles format"');
+    // The doubles words ("One Set to 6", "8-Game Pro-Set") are
+    // `doublesSetLabel()`'s, pinned in `tests/doubles-format.spec.ts`.
+    drawn(facts, "event-fact-fields.tsx", "Tiebreak at ");
+    // "Best of 3 Sets" over "No-Ad Scoring" — the sets half in the cell, the
+    // scoring half under the underline. Title case since the tournament
+    // builder adopted the same control: the words are `formatLabel()`'s, which
+    // the pinned bar and the event page print.
+    // The words live in `event-fact-fields.tsx`, which both builders draw.
+    drawn(facts, "event-fact-fields.tsx", '"Best of 3 Sets"');
+    drawn(facts, "event-fact-fields.tsx", '"One Set"');
+    drawn(facts, "event-fact-fields.tsx", '"No-Ad Scoring"');
+    drawn(facts, "event-fact-fields.tsx", '"Ad Scoring"');
 
     // The lineup's rows moved to `lineup-rows.tsx` with "Grey well".
     // RETIRED 'Lineup · singles', 'six required · from your ladder',
@@ -1008,9 +1032,16 @@ test.describe("/dashboard/team/schedule/new/tournament · 3c", () => {
     // Not moved onto `TOURNAMENT_DETAIL`, which still carries the design's
     //   '2025-10-03'/'2025-10-05': nothing renders that fixture, so an
     //   assertion over it could not fail for anything this screen does.
-    drawn(builder, file, "Neutral");
-    // "Bo3 · ad" — best of 3, AD scoring, which is the opposite of the dual's.
-    drawn(builder, file, "Bo3 · ad");
+    // RETIRED 'Neutral' as a literal — Site is the dual's `MenuSelect` over
+    //   the shared `SITES`, titled by `siteTitle`. Still opens on neutral:
+    drawn(builder, file, 'DEFAULT_SITE: EventSite = "neutral"');
+    drawn(builder, file, "options={SITES}");
+    // RETIRED 'Bo3 · ad' — the Format cell is the dual's `MenuSelect` over the
+    //   dual's `FORMATS` now, so the words live in `dual-build-step.tsx` (see
+    //   the dual block above). The default is still best of 3, AD scoring —
+    //   the opposite of the dual's — looked up by option name:
+    drawn(builder, file, '"bo3-ad"');
+    drawn(builder, file, "note={draft.format.scoring}");
 
     // RETIRED '3 Big Ten programs are in this field — matches against them
     //   count toward conference seeding.' — a claim nothing in this app can
@@ -1025,32 +1056,46 @@ test.describe("/dashboard/team/schedule/new/tournament · 3c", () => {
 
     drawn(builder, file, '"Main draw"');
     drawn(builder, file, '"Qualifying"');
-    drawn(builder, file, '"Unseeded"');
-    drawn(builder, file, "Seed ${entry.seed}");
-    // A qualifier holds no seed, and `3c` draws an em dash rather than a word.
-    // The same glyph is the draw cell's first option — the one that takes a
-    // player back out of the field.
-    drawn(builder, file, '"—"');
-    drawn(
-      builder,
-      file,
-      "Include each athlete who is competing, then choose where they enter the singles draw. Seeds are optional.",
-    );
+    // The field step is two tables now — Entries, then Roster — in the app's
+    // own words ("Player" as the roster table and a dual's detail say it,
+    // "Entries" as the event drawer does). RETIRED 'Unseeded', 'Seed
+    //   ${entry.seed}', 'No seed', 'In the field', 'entered ·', 'Not entered',
+    //   'Remove' as a word (an × with the name in its label) and 'Nobody
+    //   entered yet — drag players up or add them below.'
+    drawn(builder, file, 'title="Entries"');
+    drawn(builder, file, 'title="Roster"');
+    drawn(builder, file, '"Player"');
+    drawn(builder, file, '"Draw"');
+    drawn(builder, file, '"Seed"');
+    drawn(builder, file, "seeded");
+    drawn(builder, file, '"Add seed"');
+    drawn(builder, file, "Add all");
+    drawn(builder, file, "No entries yet — add players from the roster below.");
+    drawn(builder, file, "Everyone on the roster is entered.");
     // RETIRED 'Cancel' — `WizardShell`'s, like the dual flow's. The shell is
     //   handed a `cancelHref` on step one and a `back` on step two, and decides
     //   which of the two it draws.
   });
 
-  test("the flow's own words — the two steps' titles and ledes", () => {
+  test("the flow's own words — the three steps' titles and ledes", () => {
     // Not the artboard's: `3c`'s single frame became two steps when the screen
     // adopted `WizardShell` (T16), so both pairs are new copy, transcribed here
     // the same way — one side typed out by hand, the other the component's
     // source.
-    drawn(flow, "new-tournament-flow.tsx", "The weekend.");
+    // RETIRED 'The weekend.' and its lede — the weekend step split into the
+    //   name, then the dates, site and format (three steps, the dual's shape).
+    //   STRAIGHT apostrophes, as everywhere else in this record.
+    drawn(flow, "new-tournament-flow.tsx", "What's the tournament called?");
     drawn(
       flow,
       "new-tournament-flow.tsx",
-      "Name it, say when and where. A tournament holds entries rather than lines — the field comes next.",
+      "Name it the way the draw sheet does — it's how the schedule and every entry refer to it.",
+    );
+    drawn(flow, "new-tournament-flow.tsx", "When it's played, and where.");
+    drawn(
+      flow,
+      "new-tournament-flow.tsx",
+      "Dates, site and format. Every entry in the field is created under them.",
     );
     drawn(flow, "new-tournament-flow.tsx", "The field.");
     // STRAIGHT apostrophe in "they'll", as everywhere else in this record.

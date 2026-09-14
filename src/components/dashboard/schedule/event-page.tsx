@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Calendar, Check, MapPin, Rows3, Upload } from "lucide-react";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { StatusChip } from "@/components/ui/status-chip";
-import { formatLabel } from "@/lib/schedule/format";
+import { doublesFormatLabel, singlesFormatLabel } from "@/lib/schedule/format";
 import { cn } from "@/lib/utils";
 import type { EventFormat } from "@/lib/schedule/types";
 
@@ -280,6 +280,9 @@ export function EventFacts({
       ) : null}
 
       {format ? <FormatCapsule format={format} /> : null}
+      {format && doublesFormatLabel(format) ? (
+        <FormatCapsule format={format} doubles />
+      ) : null}
     </div>
   );
 }
@@ -292,13 +295,20 @@ export function EventFacts({
  * property of it. Filled greys are `DetailLine`'s register, where the thing
  * being said IS a state.
  */
-export function FormatCapsule({ format }: { format: EventFormat }) {
+export function FormatCapsule({
+  format,
+  doubles = false,
+}: {
+  format: EventFormat;
+  /** Print the dual's doubles format ("Doubles · One Set to 6") instead. */
+  doubles?: boolean;
+}) {
   return (
     <span
       className="inline-flex h-[22px] items-center rounded-full border border-[var(--border-field)] px-2 text-[11px] whitespace-nowrap"
       style={{ color: "var(--ink-700)" }}
     >
-      {formatLabel(format)}
+      {doubles ? doublesFormatLabel(format) : singlesFormatLabel(format)}
     </span>
   );
 }

@@ -31,7 +31,11 @@ import { Check, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { advButton } from "@/lib/ui/adv-button";
 import { recordResult, setOutcome } from "@/lib/schedule/actions";
-import { ROUND_ORDER, splitNames } from "@/lib/schedule/format";
+import {
+  ROUND_ORDER,
+  doublesSetLabel,
+  splitNames,
+} from "@/lib/schedule/format";
 import {
   outcomeKey,
   planSave,
@@ -592,6 +596,12 @@ function ScoreForm({
                    digits in them, so there is no separate count to keep in
                    step. */
                 onSetsChange={() => {}}
+                gamesTo={preset.gamesTo}
+                setsLabel={
+                  doubles
+                    ? doublesSetLabel(preset.gamesTo === 8 ? 8 : 6)
+                    : undefined
+                }
               />
 
               <EndingLine

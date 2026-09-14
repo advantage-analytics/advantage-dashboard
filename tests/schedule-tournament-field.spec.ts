@@ -94,7 +94,12 @@ async function openField(
     .toBe("true");
 }
 
+/** Name → dates, site and format → the field: the flow's three steps. */
 async function advanceToField(page: import("@playwright/test").Page) {
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(
+    page.getByRole("heading", { name: "When it's played, and where." }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { name: "The field." })).toBeVisible();
 }
@@ -107,7 +112,7 @@ test("new tournament preserves real draft inclusion, draw, seed, and singles ide
   await advanceToField(page);
 
   await page
-    .getByRole("checkbox", { name: "Include Ana Vasquez from tournament" })
+    .getByRole("button", { name: "Add Ana Vasquez to tournament" })
     .click();
   await page.getByRole("button", { name: "Seed for Ana Vasquez" }).click();
   await page
@@ -119,22 +124,26 @@ test("new tournament preserves real draft inclusion, draw, seed, and singles ide
 
   // The production hook lives above both steps. Walking back and forward is
   // the persistence boundary that a field-only local-state harness skipped.
+  // Back twice: the field, then the dates, then the name.
+  await page.getByRole("button", { name: "Back" }).click();
   await page.getByRole("button", { name: "Back" }).click();
   await expect(page.getByPlaceholder("Buckeye Fall Classic")).toHaveValue(
     "Browser Open",
   );
   await advanceToField(page);
+  // Entered: in the field with its own Remove, and gone from the bench.
   await expect(
-    page.getByRole("checkbox", {
-      name: "Exclude Ana Vasquez from tournament",
-    }),
-  ).toBeChecked();
+    page.getByRole("button", { name: "Remove Ana Vasquez from tournament" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Add Ana Vasquez to tournament" }),
+  ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Draw for Ana Vasquez" }),
   ).toHaveText(/Main draw/);
   await expect(
     page.getByRole("button", { name: "Seed for Ana Vasquez" }),
-  ).toHaveText("Seed 3");
+  ).toHaveText("3");
 
   await page.getByRole("button", { name: "Draw for Ana Vasquez" }).click();
   await expect(
@@ -183,14 +192,15 @@ test("edit preserves saved identity values, carried entries, and settled locks",
   );
   await advanceToField(page);
 
-  const include = page.getByRole("checkbox", {
-    name: "Exclude Ana Vasquez from tournament",
-  });
   const draw = page.getByRole("button", { name: "Draw for Ana Vasquez" });
-  await expect(include).toBeDisabled();
   await expect(draw).toBeDisabled();
+  // A settled row has no way out of the field: the lock stands where Remove
+  // would be.
+  await expect(
+    page.getByRole("button", { name: "Remove Ana Vasquez from tournament" }),
+  ).toHaveCount(0);
 
-  const settledRow = include.locator("xpath=..");
+  const settledRow = draw.locator("xpath=..");
   const lock = settledRow.getByText("Played", { exact: true });
   await expect(lock).toBeVisible();
   await expect(
@@ -212,9 +222,7 @@ test("edit preserves saved identity values, carried entries, and settled locks",
   await expect(draw).toHaveText(/Main draw/);
   await expect(settledRow).toContainText("3");
   await expect(
-    page.getByRole("checkbox", {
-      name: "Exclude Ben Cole from tournament",
-    }),
+    page.getByRole("button", { name: "Remove Ben Cole from tournament" }),
   ).toBeEnabled();
   await expect(
     page.getByRole("button", { name: "Draw for Ben Cole" }),

@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, GraduationCap } from "lucide-react";
-import { advButton } from "@/lib/ui/adv-button";
-import { EventShell } from "@/components/dashboard/schedule/event-shell";
+import { WizardShell } from "@/components/dashboard/matches/new-match-wizard/WizardShell";
+import { useWizardKeys } from "@/components/dashboard/matches/new-match-wizard/useWizardKeys";
 import { cn } from "@/lib/utils";
+
+const SCHEDULE_HREF = "/dashboard/team/schedule";
 
 /**
  * 3b — "New event, choose type (cards)", rebuilt as static UI.
@@ -43,16 +45,37 @@ import { cn } from "@/lib/utils";
  *      without either glyph promising a fight. Size and stroke are the
  *      artboard's still: 22px at `strokeWidth={1.5}`.
  *
- *   2. The body is a centred column, not a left-flushed one — on both axes,
- *      not just the horizontal one. The artboard flushes it to the top left
- *      because it was drawn at the artboard's own width and height; in the
- *      live shell the 820px grid stranded a wide gutter on the right, and a
- *      short, unscrolled body left one below. The column centres in
- *      `EventShell`'s body with `mx-auto my-auto`; the text inside it stays
- *      left-aligned, so only the column's position moves. Done with a
- *      wrapper here rather than in `event-shell.tsx`, which four other
- *      screens draw through and which only grew `flex flex-col` (T22) so a
- *      caller like this one *could* centre — it does not centre itself.
+ *   2. The body is a centred column, not a left-flushed one. The artboard
+ *      flushes it to the top left because it was drawn at the artboard's own
+ *      width; in the live pane the 820px grid stranded a wide gutter on the
+ *      right. That column is now `WizardShell`'s (below), so the centring is
+ *      the shell's and this file no longer carries a wrapper of its own.
+ *
+ * ── Step one of the wizard, not a screen before it ─────────────────────────
+ * The chooser draws through `WizardShell` (`matches/new-match-wizard/`), the
+ * same chrome as the dual and tournament flows it opens, rather than
+ * `EventShell`. Picking a kind is the first decision of making an event, so
+ * it counts as step one of four — the chooser, then the three steps of either
+ * flow — and the step indicator does not jump from nothing to a third when
+ * Continue lands on the dual. The `Step 1 of 4` eyebrow is the shell's, and
+ * is not the `New event` eyebrow point 1 of the list above keeps out.
+ *
+ * Its keyboard is the shell's too (`useWizardKeys`). Two things it adapts:
+ *
+ *   • The ⌘/Ctrl+Enter walk is rooted on the radiogroup, not the whole
+ *     content column, so the chord steps card → card → Continue as it does on
+ *     `/dashboard/matches/new`. Rooted on the column it detoured through the
+ *     aside's link first.
+ *   • The hook takes a plain Enter on a card as Continue and prevents the
+ *     card's own click, so Enter on a card opens THAT card's flow (the click
+ *     it swallowed would have selected it). Links — the aside's, Cancel — and
+ *     the footer's Back keep their own Enter in the hook itself
+ *     (`isWizardExit`). Continue's own click is a plain push: a mouse click in
+ *     Safari does not move focus, so reading the focused element there would
+ *     follow whatever card was focused last.
+ *
+ * The 820px grid now sits in the shell's 720px column and shrinks with it;
+ * the shell is not widened for one screen.
  *
  * ── The selected card's inner rule ─────────────────────────────────────────
  * The artboard draws it `rgba(59,130,246,0.15)`, and `--blue-glow`
@@ -102,7 +125,8 @@ function BracketMark() {
   );
 }
 
-const COPY = {
+/** Exported for the route's skeleton, which prints the heading and lede. */
+export const COPY = {
   heading: "What are you adding?",
   lede: "Both are events the team shows up to — they hold a date, a site and the matches played under them.",
   dualLabel: "Dual match",
@@ -118,7 +142,7 @@ const COPY = {
   aside:
     "One player's own match — a challenge, practice set or outside entry — isn't an event.",
   asideLink: "Add a one-off match",
-  cancel: "Cancel",
+  // No `cancel`: `WizardShell` draws Back and Cancel itself.
   continue: "Continue",
   dualSelected: "Dual selected",
   tournamentSelected: "Tournament selected",
@@ -154,151 +178,152 @@ export function StaticEventChooser() {
   const [choice, setChoice] = useState<EventKind>("dual");
 
   const selected = OPTIONS.find((option) => option.id === choice) ?? OPTIONS[0];
+  /** The cards — the ⌘/Ctrl+Enter walk's root. The header says why not the column. */
+  const cardsRef = useRef<HTMLDivElement>(null);
+
+  // What plain Enter does, as distinct from Continue's click — the header's
+  // keyboard section says why the two differ.
+  const onEnter = () => {
+    const focused = document.activeElement as HTMLElement | null;
+    const card = OPTIONS.find(
+      (option) => option.id === focused?.dataset.eventKind,
+    );
+    if (card) {
+      setChoice(card.id);
+      router.push(card.href);
+      return;
+    }
+    router.push(selected.href);
+  };
+
+  // Step one: Esc has nowhere to go back to, and a kind is always selected,
+  // so Continue never sleeps.
+  useWizardKeys({
+    contentRef: cardsRef,
+    canGoBack: false,
+    onBack: () => {},
+    continueDisabled: false,
+    onContinue: onEnter,
+  });
 
   return (
-    <EventShell
-      footer={
-        <>
-          <button
-            type="button"
-            className={advButton("ghost", "md")}
-            onClick={() => router.push("/dashboard/team/schedule")}
-          >
-            {COPY.cancel}
-          </button>
-          <div className="flex-1" />
-          <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
-            {selected.selectedLabel}
-          </span>
-          <button
-            type="button"
-            className={advButton("primary", "md")}
-            onClick={() => router.push(selected.href)}
-          >
-            {COPY.continue}
-          </button>
-        </>
+    <WizardShell
+      stepIndex={0}
+      stepCount={4}
+      title={COPY.heading}
+      description={COPY.lede}
+      contentClassName="mt-9"
+      // Back and Cancel both land on the schedule: it is the screen before
+      // this one, so the two exits agree.
+      back={() => router.push(SCHEDULE_HREF)}
+      cancelHref={SCHEDULE_HREF}
+      status={
+        <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
+          {selected.selectedLabel}
+        </span>
       }
+      continueLabel={COPY.continue}
+      onContinue={() => router.push(selected.href)}
+      continueDisabled={false}
     >
-      {/* The artboard's body is `padding:36px 48px 0`. `EventShell` already
-          contributes 48px of side padding and 26px on top, so this makes up
-          the remaining 10px rather than reaching into the shared shell — three
-          other screens in this run sit in the same frame.
-
-          Centred on both axes — the header's point 2 says why. One fact
-          lives only here: below the height where the column plus its padding
-          no longer fits, `my-auto` collapses to 0 and the body's own
-          `overflow-y-auto` takes over, so short viewports scroll instead of
-          clipping. */}
-      <div className="mx-auto my-auto w-full max-w-[820px] pt-[10px]">
-        <h1 className="text-[30px] leading-[34px] font-light tracking-[-0.6px] text-[var(--ink-900)]">
-          {COPY.heading}
-        </h1>
-        <p
-          className="mt-2 max-w-[560px] text-[13px]"
-          style={{ color: "var(--ink-600)" }}
-        >
-          {COPY.lede}
-        </p>
-
-        <div
-          role="radiogroup"
-          aria-label={COPY.heading}
-          className="mt-7 grid max-w-[820px] grid-cols-2 gap-5"
-        >
-          {OPTIONS.map((option) => {
-            const active = choice === option.id;
-            return (
-              <button
-                key={option.id}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => setChoice(option.id)}
-                className={cn(
-                  "flex cursor-pointer flex-col gap-3.5 rounded-[var(--radius-card)] border px-[26px] pt-7 pb-[22px] text-left",
-                  "transition-colors duration-[var(--duration-fast)]",
-                  "focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                  active
-                    ? "border-[var(--blue)] bg-[var(--blue-tint-08)]"
-                    : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]",
-                )}
-              >
-                <span className="flex items-center justify-between">
-                  <span
-                    className={
-                      active ? "text-[var(--blue)]" : "text-[var(--ink-700)]"
-                    }
-                  >
-                    {option.id === "dual" ? (
-                      <GraduationCap
-                        strokeWidth={1.5}
-                        className="size-[22px]"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <BracketMark />
-                    )}
-                  </span>
-                  <span
-                    className={cn(
-                      "flex size-3.5 shrink-0 items-center justify-center rounded-full border",
-                      active
-                        ? "border-transparent bg-[var(--blue)]"
-                        : "border-[var(--ink-300)]",
-                    )}
-                    aria-hidden="true"
-                  >
-                    {active ? (
-                      <Check
-                        strokeWidth={2.5}
-                        className="size-[9px] text-white"
-                      />
-                    ) : null}
-                  </span>
+      <div
+        ref={cardsRef}
+        role="radiogroup"
+        aria-label={COPY.heading}
+        className="grid max-w-[820px] grid-cols-2 gap-5"
+      >
+        {OPTIONS.map((option) => {
+          const active = choice === option.id;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              data-event-kind={option.id}
+              onClick={() => setChoice(option.id)}
+              className={cn(
+                "flex cursor-pointer flex-col gap-3.5 rounded-[var(--radius-card)] border px-[26px] pt-7 pb-[22px] text-left",
+                "transition-colors duration-[var(--duration-fast)]",
+                "focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                active
+                  ? "border-[var(--blue)] bg-[var(--blue-tint-08)]"
+                  : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]",
+              )}
+            >
+              <span className="flex items-center justify-between">
+                <span
+                  className={
+                    active ? "text-[var(--blue)]" : "text-[var(--ink-700)]"
+                  }
+                >
+                  {option.id === "dual" ? (
+                    <GraduationCap
+                      strokeWidth={1.5}
+                      className="size-[22px]"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <BracketMark />
+                  )}
                 </span>
-
-                <span className="flex flex-col gap-1.5">
-                  <span className="text-[16px] text-[var(--ink-900)]">
-                    {option.label}
-                  </span>
-                  <span className="text-body-sm max-w-[42ch] text-pretty">
-                    {option.blurb}
-                  </span>
-                </span>
-
                 <span
                   className={cn(
-                    "mt-auto block border-t pt-3.5",
+                    "flex size-3.5 shrink-0 items-center justify-center rounded-full border",
                     active
-                      ? "border-[var(--blue-glow)]"
-                      : "border-[var(--border-hairline)]",
+                      ? "border-transparent bg-[var(--blue)]"
+                      : "border-[var(--ink-300)]",
                   )}
+                  aria-hidden="true"
                 >
-                  <span className="text-micro">
-                    {option.id === "dual" ? (
-                      <>
-                        {COPY.dualMetaBefore}
-                        <span className="mono tabular">
-                          {COPY.dualMetaCount}
-                        </span>
-                        {COPY.dualMetaAfter}
-                      </>
-                    ) : (
-                      COPY.tournamentMeta
-                    )}
-                  </span>
+                  {active ? (
+                    <Check
+                      strokeWidth={2.5}
+                      className="size-[9px] text-white"
+                    />
+                  ) : null}
                 </span>
-              </button>
-            );
-          })}
-        </div>
+              </span>
 
-        <div className="mt-5 flex max-w-[820px] flex-wrap items-center gap-2">
-          <span className="text-micro" style={{ color: "var(--ink-600)" }}>
-            {COPY.aside}
-          </span>
-          {/* The artboard's own anchor is the placeholder `href="#3b"`. This
+              <span className="flex flex-col gap-1.5">
+                <span className="text-[16px] text-[var(--ink-900)]">
+                  {option.label}
+                </span>
+                <span className="text-body-sm max-w-[42ch] text-pretty">
+                  {option.blurb}
+                </span>
+              </span>
+
+              <span
+                className={cn(
+                  "mt-auto block border-t pt-3.5",
+                  active
+                    ? "border-[var(--blue-glow)]"
+                    : "border-[var(--border-hairline)]",
+                )}
+              >
+                <span className="text-micro">
+                  {option.id === "dual" ? (
+                    <>
+                      {COPY.dualMetaBefore}
+                      <span className="mono tabular">{COPY.dualMetaCount}</span>
+                      {COPY.dualMetaAfter}
+                    </>
+                  ) : (
+                    COPY.tournamentMeta
+                  )}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-5 flex max-w-[820px] flex-wrap items-center gap-2">
+        <span className="text-micro" style={{ color: "var(--ink-600)" }}>
+          {COPY.aside}
+        </span>
+        {/* The artboard's own anchor is the placeholder `href="#3b"`. This
               run wires it to the wizard's single-match step under the
               schedule — `/new/single`, one of the four routes this run
               rebuilds — rather than the label the artboard used to carry,
@@ -306,14 +331,13 @@ export function StaticEventChooser() {
               has no Matches entry to arrive at, so that destination was
               never one a coach could reach from here. `schedule-day-zero.tsx`
               already uses the same label for the same destination. */}
-          <Link
-            href="/dashboard/team/schedule/new/single"
-            className="text-[11px] font-medium text-[var(--blue)]"
-          >
-            {COPY.asideLink}
-          </Link>
-        </div>
+        <Link
+          href="/dashboard/team/schedule/new/single"
+          className="text-[11px] font-medium text-[var(--blue)]"
+        >
+          {COPY.asideLink}
+        </Link>
       </div>
-    </EventShell>
+    </WizardShell>
   );
 }

@@ -157,8 +157,14 @@ export function MatchesFilterPanel<K extends string>({
       <PopoverContent
         sideOffset={6}
         align="start"
+        // Keep the whole panel on screen. Radix shifts it back inside the
+        // viewport (12px clear of every edge) and publishes the room left on
+        // its side of the trigger; the height and width cap to that room and
+        // the list scrolls, instead of a `100vh − 180px` guess that ran off the
+        // bottom whenever the toolbar sat lower than the guess assumed.
+        collisionPadding={12}
         aria-label={label}
-        className="flex max-h-[calc(100vh-180px)] w-[272px] flex-col overflow-y-auto rounded-xl border-[var(--border-medium)] p-1.5 shadow-[var(--shadow-dropdown)]"
+        className="flex max-h-[var(--radix-popover-content-available-height)] w-[min(272px,var(--radix-popover-content-available-width))] flex-col overflow-y-auto rounded-xl border-[var(--border-medium)] p-1.5 shadow-[var(--shadow-dropdown)]"
       >
         {sections.map((section, i) => (
           <div key={section.label}>

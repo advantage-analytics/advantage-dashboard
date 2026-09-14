@@ -78,7 +78,11 @@ export function DashboardShell({
             <HeaderSlotProvider>
               <div className="flex h-screen w-full overflow-hidden bg-white">
                 <AppSidebar />
-                <div className="flex min-w-0 flex-1 flex-col overflow-y-auto scroll-smooth motion-reduce:scroll-auto">
+                {/* The gutter is reserved even when nothing overflows: with
+                    always-visible scrollbars, a page whose height changes (a
+                    skeleton swapping for its rows) would otherwise gain and
+                    lose 15px of width and slide every fluid table column. */}
+                <div className="flex min-w-0 flex-1 flex-col overflow-y-auto scroll-smooth [scrollbar-gutter:stable] motion-reduce:scroll-auto">
                   <Header activitySlot={activitySlot} greeting={greeting} />
                   {/* Grows to fill whatever the header leaves, so a page shorter
                     than the viewport can still push its own footer to the

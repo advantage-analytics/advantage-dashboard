@@ -5,7 +5,7 @@
  *
  * The full-bleed step indicator under the app header, an optional pinned bar
  * beneath it, the 832px centred column with its "Step N of M" eyebrow, title
- * and lede, the keyed fade-in content, and the sticky 64px footer: Back or
+ * and lede, the keyed fade-in content, and the sticky 64px footer: Back ·
  * Cancel · meter · status · spacer · secondary · primary.
  *
  * It owns no state and makes no decision. Which step this is, what the title
@@ -23,6 +23,10 @@ import { StepIndicator } from "./StepIndicator";
 /** The design's column: 720px of content inside 56px gutters. */
 export const CONTENT_CLS = "mx-auto w-full max-w-[832px] px-14";
 
+/** Back and Cancel: two quiet ink words, drawn identically. */
+const FOOTER_LINK_CLS =
+  "cursor-pointer text-[12px] text-[var(--ink-600)] transition-colors duration-150 hover:text-[var(--ink-900)]";
+
 export interface WizardShellProps {
   /** Zero-based. */
   stepIndex: number;
@@ -39,7 +43,8 @@ export interface WizardShellProps {
   contentClassName?: string;
   /** Present when there is a previous step; the footer then shows Back. */
   back?: () => void;
-  /** Where Cancel goes when there is no `back`. */
+  /** Where Cancel goes. Independent of `back` — pass both and both draw,
+      Back first. */
   cancelHref?: string;
   /** Footer, left of the status: the allowance meter. */
   meter?: ReactNode;
@@ -111,31 +116,32 @@ export function WizardShell({
 
       {/* Footer sticks to the bottom of the viewport so the primary action is
           reachable without scrolling to the end of a long form. 64px, white on
-          a hairline, matching the app header: Cancel · divider · meter, then
+          a hairline, matching the app header: Back · Cancel · meter, then
           the secondary and Continue. It is the same on every step — only the
           meter comes and goes, and it sits left of the spacer so nothing else
           shifts when it does. */}
       <div className="sticky bottom-0 z-10 mt-auto border-t border-[var(--border-hairline)] bg-white">
         <div className={`${CONTENT_CLS} flex h-16 items-center gap-4`}>
-          {back ? (
+          {back && (
             <button
               type="button"
               onClick={back}
-              className="cursor-pointer text-[12px] text-[var(--ink-600)] transition-colors duration-150 hover:text-[var(--ink-900)]"
+              // Enter here goes back, never Continue — see `isWizardExit`.
+              data-wizard-exit
+              className={FOOTER_LINK_CLS}
             >
               Back
             </button>
-          ) : cancelHref ? (
+          )}
+
+          {cancelHref && (
             /* Esc is deliberately inert on step 1 and the breadcrumb is not
                obviously an exit — without this the flow has no way out that
                looks like one. */
-            <Link
-              href={cancelHref}
-              className="text-[12px] text-[var(--ink-600)] transition-colors duration-150 hover:text-[var(--ink-900)]"
-            >
+            <Link href={cancelHref} className={FOOTER_LINK_CLS}>
               Cancel
             </Link>
-          ) : null}
+          )}
 
           {meter}
 

@@ -53,7 +53,56 @@ export function listGridCols(scope: "personal" | "team", compact = false) {
   return compact ? TEAM_LIST_GRID_COLS_COMPACT : TEAM_LIST_GRID_COLS;
 }
 
+/**
+ * One header label per track, shared by `MatchesGrid` and the loading skeleton
+ * so the two cannot drift. Lifecycle heads nothing but keeps an empty label so
+ * the header's column count stays in step with the row's; Event stays in the
+ * team header beside the drawer, fading with the cells under it.
+ */
+export function listColumnLabels(scope: "personal" | "team"): string[] {
+  if (scope === "personal") {
+    return ["Date", "Opponent", "Result", "Score", "Event", ""];
+  }
+  return ["Date", "Player", "Opponent", "Result", "Score", "Event", ""];
+}
+
 export const LIST_ROW_FRAME = "grid items-center gap-x-4";
+
+/**
+ * Ten rows a page. The frame's footer is a range and one quiet "Older matches"
+ * link (Platform Audit Pb2) — no page-size control, so the size is a constant
+ * rather than a preference.
+ */
+export const MATCHES_PAGE_SIZE = 10;
+
+/** What the loading skeleton needs to draw the first page at its real size. */
+export interface MatchesListShape {
+  /** Draft rows plus the first page's match rows. */
+  rows: number;
+  /** The Date track widens for the whole card — see `DATE_COL_WITH_YEAR`. */
+  needsYear: boolean;
+  /** A second page exists, so the footer carries its "Older matches" link. */
+  paged: boolean;
+}
+
+/**
+ * The first, unfiltered page's shape, from the dates alone. `matchDates` must
+ * already be newest first — the list's default order.
+ */
+export function matchesListShape(
+  matchDates: string[],
+  draftDates: string[],
+): MatchesListShape {
+  const firstPage = matchDates.slice(0, MATCHES_PAGE_SIZE);
+  const thisYear = new Date().getFullYear();
+  return {
+    rows: draftDates.length + firstPage.length,
+    needsYear: [...draftDates, ...firstPage].some(
+      (date) => new Date(date).getFullYear() !== thisYear,
+    ),
+    paged: matchDates.length > MATCHES_PAGE_SIZE,
+  };
+}
 
 /**
  * The column shift beside the drawer: the rail's own 200ms and curve

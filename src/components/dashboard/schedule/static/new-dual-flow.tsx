@@ -86,6 +86,7 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 /* Straight from the two files, not the wizard's barrel: `index.ts` re-exports
    `UploadMatchFlow` and its whole subtree, and this flow needs the chrome and
    the keys — the same call `score-only-flow.tsx` made. */
@@ -103,7 +104,7 @@ import {
   type DualLineLock,
 } from "@/components/dashboard/schedule/static/dual-build-step";
 import { divisionLabel } from "@/lib/data/programs-server";
-import { formatValueOf } from "@/lib/schedule/format";
+import { doublesFormatValueOf, formatValueOf } from "@/lib/schedule/format";
 import {
   isNoPlayerLine,
   isOpponentNoPlayerLine,
@@ -115,20 +116,26 @@ import { resultLabelFromOutcome } from "@/components/dashboard/schedule/result-c
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
 import type { EventDetail, EventEntry } from "@/lib/schedule/types";
 
-/** Where Cancel goes on step one. Inside the rebuilt set. */
+/** Where Cancel goes on a create. Inside the rebuilt set. */
 const SCHEDULE_HREF = "/dashboard/team/schedule";
+
+/** Where step one's Back goes: the event chooser, which is step one of four
+ *  on a create — so the school is step two, the facts three, the lineup four.
+ *  An edit never passes the chooser and keeps counting three. */
+const CHOOSER_HREF = "/dashboard/team/schedule/new";
 
 type Step = 1 | 2 | 3;
 
-/** What each step asks, in the shell's own two lines. */
-const COPY: Record<Step, { title: string; lede: string }> = {
+/** What each step asks, in the shell's own two lines. Exported for the
+ *  route's skeleton, which prints step one's pair before the data lands. */
+export const COPY: Record<Step, { title: string; lede: string }> = {
   1: {
     title: "Who are you playing?",
     lede: "The school decides the lineup you fill in later. Pick a program, or type any opponent the directory never had.",
   },
   2: {
     title: "When it's played, and how.",
-    lede: "Four facts the whole dual inherits. Every one of the nine lines is created under them.",
+    lede: "Six facts the whole dual inherits. Singles lines play the singles format, doubles lines the doubles format.",
   },
   3: {
     title: "The lineup.",
@@ -221,11 +228,16 @@ export function dualSeed({ event, entries }: EventDetail): DualDraftSeed {
   return {
     eventId: event.id,
     date: event.startsOn,
+    startsAtTime: event.startsAtTime ?? "",
     site: event.site,
     // `""` is "no surface", and is honoured as one — the column is nullable
     // and an absent surface is not "hard".
     surface: event.surface ?? "",
     format: formatValueOf(event.format),
+    // Undefined for a dual saved before the field existed — the draft then
+    // opens on one set to 6, no-ad. Also undefined for a null ad answer,
+    // which the draft must not guess.
+    doublesFormat: doublesFormatValueOf(event.format.doubles),
     lines: entries.flatMap((entry) =>
       entry.slot
         ? [
@@ -311,12 +323,10 @@ export function NewDualFlow(props: NewDualFlowProps) {
  */
 function SchoolStep({
   onChoose,
-  back,
 }: {
   onChoose: (name: string, program: ProgramSearchResult | null) => void;
-  /** Present only on the way back from a later step. */
-  back?: () => void;
 }) {
+  const router = useRouter();
   const contentRef = useRef<HTMLDivElement>(null);
   /** What Continue would carry. Null until something is picked or typed. */
   const choice = useRef<{
@@ -345,24 +355,29 @@ function SchoolStep({
     onChoose(name, program);
   }, [onChoose]);
 
+  // A route, not a step: the chooser is its own page. Escape stays inert here
+  // all the same — the upload wizard's first screen is the precedent, and a
+  // key that leaves the page is a key that loses a half-typed search.
+  const toChooser = useCallback(() => router.push(CHOOSER_HREF), [router]);
+
   useWizardKeys({
     contentRef,
-    canGoBack: back !== undefined,
-    onBack: back ?? (() => {}),
+    canGoBack: false,
+    onBack: toChooser,
     continueDisabled: !hasChoice,
     onContinue: commit,
   });
 
   return (
     <WizardShell
-      stepIndex={0}
-      stepCount={3}
+      stepIndex={1}
+      stepCount={4}
       title={COPY[1].title}
       description={COPY[1].lede}
       contentRef={contentRef}
       contentKey="school"
       contentClassName="mt-9"
-      back={back}
+      back={toChooser}
       cancelHref={SCHEDULE_HREF}
       continueLabel="Continue"
       onContinue={commit}
@@ -464,8 +479,7 @@ function DualDraftFlow({
 
   if (step === 1) {
     // The draft is still mounted above this branch — this component is what
-    // holds it — so everything already typed is waiting on the way back. No
-    // `back`: step one is the first step, and its way out is Cancel.
+    // holds it — so everything already typed is waiting on the way back.
     return <SchoolStep onChoose={onChoose} />;
   }
 
@@ -481,8 +495,9 @@ function DualDraftFlow({
 
   return (
     <WizardShell
-      stepIndex={step - 1}
-      stepCount={3}
+      // A create counts the chooser before it; an edit starts here.
+      stepIndex={edit ? step - 1 : step}
+      stepCount={edit ? 3 : 4}
       title={COPY[step].title}
       description={
         step === 3 && !laddered ? UNLADDERED_LINEUP_LEDE : COPY[step].lede
@@ -499,12 +514,17 @@ function DualDraftFlow({
           name={edit ? edit.detail.event.name : opponentName}
           subline={subline}
           date={draft.date || null}
+          time={draft.time || null}
           site={draft.site}
           /* The chosen `FORMATS` row's two literals — never a parse, and never
              a `null` standing in as `false`. */
           format={{
             bestOf: draft.format.bestOf,
             adScoring: draft.format.adScoring,
+            doubles: {
+              gamesTo: draft.doublesFormat.gamesTo,
+              adScoring: draft.doublesFormat.adScoring,
+            },
           }}
           // No handler at all on an edit: a dual's school is fixed once its
           // lines point at it, and a control that can never do anything is not
@@ -516,8 +536,8 @@ function DualDraftFlow({
       contentKey={step}
       contentClassName={step === 2 ? "mt-9" : "mt-9 flex flex-col gap-7"}
       back={canGoBack ? back : undefined}
-      // Only ever reached when there is no Back — the shell draws one or the
-      // other. On an edit that is step two, and its way out is the event.
+      // Drawn beside Back when there is one. On an edit's step two it is the
+      // only way out, and it goes to the event.
       cancelHref={eventHref}
       status={
         error ? (

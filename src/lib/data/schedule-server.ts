@@ -34,7 +34,7 @@ import type {
 } from "@/lib/schedule/types";
 
 const EVENT_COLUMNS =
-  "id, program_id, kind, name, starts_on, ends_on, site, surface, host, format";
+  "id, program_id, kind, name, starts_on, ends_on, starts_at_time, site, surface, host, format";
 
 const ENTRY_COLUMNS =
   "id, event_id, discipline, slot, position, draw, seed, player_user_ids, player_labels, opponent_labels, opponent_school, opponent_program_id, forfeit";
@@ -52,10 +52,16 @@ interface DbEvent {
   name: string;
   starts_on: string;
   ends_on: string;
+  /** "HH:MM:SS" from Postgres, or null. */
+  starts_at_time: string | null;
   site: string;
   surface: string | null;
   host: string | null;
-  format: { best_of?: number; ad_scoring?: boolean | null } | null;
+  format: {
+    best_of?: number;
+    ad_scoring?: boolean | null;
+    doubles?: { games_to?: number; ad_scoring?: boolean | null } | null;
+  } | null;
 }
 
 interface DbEntry {
@@ -106,6 +112,7 @@ function toEvent(row: DbEvent): ProgramEvent {
     name: row.name,
     startsOn: row.starts_on,
     endsOn: row.ends_on,
+    startsAtTime: row.starts_at_time ? row.starts_at_time.slice(0, 5) : null,
     site: row.site as EventSite,
     surface: row.surface,
     host: row.host,
@@ -114,6 +121,16 @@ function toEvent(row: DbEvent): ProgramEvent {
       // `?? null`, never `?? false`. The vision pipeline refuses a job without
       // an answer here, and a false default is a wrong answer that looks real.
       adScoring: row.format?.ad_scoring ?? null,
+      // Only the two lengths a builder writes; anything else reads as unset.
+      doubles:
+        row.format?.doubles?.games_to === 6 ||
+        row.format?.doubles?.games_to === 8
+          ? {
+              gamesTo: row.format.doubles.games_to,
+              // `?? null`, never `?? false` — see `adScoring` above.
+              adScoring: row.format.doubles.ad_scoring ?? null,
+            }
+          : null,
     },
   };
 }

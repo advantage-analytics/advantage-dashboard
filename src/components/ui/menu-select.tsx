@@ -22,10 +22,12 @@ export interface MenuOption<T extends string> {
  * came to curl at both ends. Built on `FloatMenu`, so a select and an action
  * menu on the same page are visibly one family.
  *
- * Two triggers. `underline` is a form field — full width, the caption's
+ * Three triggers. `underline` is a form field — full width, the caption's
  * hairline beneath, no radius. `pill` is the control beside a
  * `SettingsCardRow` label — 30px, bordered. Both turn their edge Signal Blue
- * while open.
+ * while open. `text` is a value inside a table row — the words and a small
+ * chevron, no border, a wash on hover and while open — for dense rows where
+ * a boxed control would set the row's height.
  */
 export function MenuSelect<T extends string>({
   label,
@@ -38,6 +40,8 @@ export function MenuSelect<T extends string>({
   className,
   width,
   placeholder,
+  align,
+  scroll = false,
 }: {
   /** Accessible name — the visible caption or row label sits beside it. */
   label: string;
@@ -51,7 +55,7 @@ export function MenuSelect<T extends string>({
   value: T | undefined;
   options: readonly MenuOption<T>[];
   onChange: (next: T) => void;
-  variant?: "pill" | "underline";
+  variant?: "pill" | "underline" | "text";
   /** Sentence under a hairline at the menu's foot. */
   note?: string;
   disabled?: boolean;
@@ -61,6 +65,18 @@ export function MenuSelect<T extends string>({
   width?: number | "trigger";
   /** Shown, in the empty-field ink, when `value` is unset. */
   placeholder?: string;
+  /**
+   * Opens toward the trigger's start edge instead of the variant's default.
+   * A pill that leads a row of controls, rather than ending one, wants its
+   * menu to open under itself and not back across the page.
+   */
+  align?: "start" | "end";
+  /**
+   * Caps the menu at 360px (or the room left in the viewport, whichever is
+   * less) and scrolls the rest. For option lists a data set decides the
+   * length of — a division's conferences run to forty — rather than a design.
+   */
+  scroll?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const current = options.find((option) => option.value === value);
@@ -94,17 +110,23 @@ export function MenuSelect<T extends string>({
       className={cn(
         "flex cursor-pointer items-center justify-between gap-2 text-left transition-colors duration-150",
         "focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60",
-        variant === "underline"
-          ? // 34px, the underline family's one height (`advField("underline")`,
-            // `SettingsUnderlineInput`): this trigger sat at 32 and read as a
-            // 2px mistake beside any underline input in the same row.
-            "h-[34px] w-full rounded-none border-b bg-transparent text-[13px] text-[var(--ink-900)] focus-visible:border-b-2 focus-visible:border-[var(--blue)]"
-          : "h-[30px] shrink-0 rounded-[6px] border bg-[var(--surface-card)] px-3 text-[12px] text-[var(--ink-900)] hover:bg-[var(--surface-subtle)]",
-        open
-          ? variant === "underline"
-            ? "border-b-2 border-[var(--blue)]"
-            : "border-[var(--blue)]"
-          : "border-[var(--border-field)]",
+        variant === "text"
+          ? cn(
+              "-mx-1.5 h-7 w-fit max-w-full shrink-0 justify-start gap-1 rounded-[5px] px-1.5 text-[12px] text-[var(--ink-900)] hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)]",
+              open && "bg-[var(--surface-subtle)]",
+            )
+          : variant === "underline"
+            ? // 34px, the underline family's one height (`advField("underline")`,
+              // `SettingsUnderlineInput`): this trigger sat at 32 and read as a
+              // 2px mistake beside any underline input in the same row.
+              "h-[34px] w-full rounded-none border-b bg-transparent text-[13px] text-[var(--ink-900)] focus-visible:border-b-2 focus-visible:border-[var(--blue)]"
+            : "h-[30px] shrink-0 rounded-[6px] border bg-[var(--surface-card)] px-3 text-[12px] text-[var(--ink-900)] hover:bg-[var(--surface-subtle)]",
+        variant !== "text" &&
+          (open
+            ? variant === "underline"
+              ? "border-b-2 border-[var(--blue)]"
+              : "border-[var(--blue)]"
+            : "border-[var(--border-field)]"),
         className,
       )}
     >
@@ -125,8 +147,13 @@ export function MenuSelect<T extends string>({
       onOpenChange={setOpen}
       trigger={trigger}
       label={label}
-      align={variant === "underline" ? "start" : "end"}
+      align={align ?? (variant === "underline" ? "start" : "end")}
       width={width ?? (variant === "underline" ? "trigger" : 232)}
+      className={
+        scroll
+          ? "max-h-[min(360px,var(--radix-popover-content-available-height))] overflow-y-auto"
+          : undefined
+      }
     >
       {options.map((option) => (
         <MenuSelectRow

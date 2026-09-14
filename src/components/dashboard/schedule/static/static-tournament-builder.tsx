@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, LockKeyhole } from "lucide-react";
+import { GripVertical, LockKeyhole, Plus, X } from "lucide-react";
+import { Reorder, useDragControls, useReducedMotion } from "framer-motion";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
+import { BENCH, aboveBench, moveToken } from "@/lib/schedule/singles-order";
 import { cn } from "@/lib/utils";
 import { DateField } from "@/components/ui/date-field";
 import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
@@ -13,20 +16,24 @@ import {
 } from "@/lib/schedule/actions";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { EventSite } from "@/lib/schedule/types";
+import { todayISO, type EventFormatValue } from "@/lib/schedule/format";
 import {
-  EVENT_FORMATS,
-  todayISO,
-  type EventFormatValue,
-} from "@/lib/schedule/format";
+  FORMATS,
+  FieldCell,
+  SITES,
+  formatOptions,
+  type DualFormat,
+} from "@/components/dashboard/schedule/static/event-fact-fields";
 
 /**
  * `3c`, taken apart: the tournament draft, the weekend, and the field.
  *
  * ── What this file is now ──────────────────────────────────────────────────
- * Three exports and no screen. `useTournamentDraft` holds the draft and owns
- * the write; `TournamentWeekendStep` draws the five facts; `TournamentFieldStep`
- * draws the roster and who is in the field. `new-tournament-flow.tsx` frames
- * the two bodies as two steps of `WizardShell`, the same chrome
+ * Four exports and no screen. `useTournamentDraft` holds the draft and owns
+ * the write; `TournamentNameStep` asks for the name, `TournamentDetailsStep`
+ * the dates, site and format; `TournamentFieldStep` draws the roster and who
+ * is in the field. `new-tournament-flow.tsx` frames the three bodies as three
+ * steps of `WizardShell`, the same chrome
  * `/dashboard/matches/new` and the new dual use, and decides nothing about
  * either body's contents.
  *
@@ -272,11 +279,27 @@ export function seedEntries(
 export function fieldFor(
   roster: LadderPlayer[],
   entered: ReadonlyMap<string, FieldEntry>,
+  /**
+   * The field's order as the coach arranged it, by `userId`. Absent reads as
+   * roster order. Ids with no entry or no roster player are skipped, and an
+   * entered player the order does not name follows in roster order — so a
+   * stale order can drop nobody.
+   */
+  order?: readonly string[],
 ): { player: LadderPlayer; entry: FieldEntry }[] {
-  return roster.flatMap((player) => {
+  const inRoster = roster.flatMap((player) => {
     const entry = entered.get(player.userId);
     return entry ? [{ player, entry }] : [];
   });
+  if (!order) return inRoster;
+  const byId = new Map(inRoster.map((row) => [row.player.userId, row]));
+  const ordered = order.flatMap((id) => {
+    const row = byId.get(id);
+    if (!row) return [];
+    byId.delete(id);
+    return [row];
+  });
+  return [...ordered, ...byId.values()];
 }
 
 /**
@@ -290,8 +313,10 @@ export function buildTournamentEntries(
   roster: LadderPlayer[],
   entered: ReadonlyMap<string, FieldEntry>,
   carry: TournamentEntryInput[],
+  /** The field's arranged order — see `fieldFor`. Absent is roster order. */
+  order?: readonly string[],
 ): TournamentEntryInput[] {
-  const field = fieldFor(roster, entered);
+  const field = fieldFor(roster, entered, order);
 
   let nextPosition =
     Math.max(
@@ -349,6 +374,15 @@ export function useTournamentDraft(
   const [entered, setEntered] = useState<ReadonlyMap<string, FieldEntry>>(() =>
     seedEntries(roster, initial?.field),
   );
+  /**
+   * The field's order, by `userId` — what the coach drags. Opens on the saved
+   * field's own order (the seed's, which is the event's), and a player added
+   * later joins at the bottom. New entries are numbered in this order; a
+   * loaded entry keeps the position it was saved with (`buildTournamentEntries`).
+   */
+  const [order, setOrder] = useState<string[]>(() => [
+    ...seedEntries(roster, initial?.field).keys(),
+  ]);
   const [draft, setDraft] = useState<TournamentDraft>(() => ({
     name: initial?.name ?? "",
     // Both dates today, which is what the dormant form opened on: a tournament
@@ -376,7 +410,7 @@ export function useTournamentDraft(
   // entries are numbered in, which is why ladder order is the order; an entry
   // loaded from a saved event keeps the position it already had. See
   // `submit()`.
-  const field = fieldFor(roster, entered);
+  const field = fieldFor(roster, entered, order);
 
   function enter(player: LadderPlayer, draw: string = MAIN_DRAW) {
     setEntered((current) => {
@@ -385,6 +419,11 @@ export function useTournamentDraft(
       // refuse it, and refusal is total. The row draws no live control, so
       // this is the second lock on the same door.
       if (existing?.locked) return current;
+      if (!existing) {
+        setOrder((ids) =>
+          ids.includes(player.userId) ? ids : [...ids, player.userId],
+        );
+      }
       const next = new Map(current);
       next.set(player.userId, {
         ...existing,
@@ -404,8 +443,35 @@ export function useTournamentDraft(
       // to delete a row a match points at, and a refusal takes the whole save
       // with it.
       if (current.get(player.userId)?.locked) return current;
+      setOrder((ids) => ids.filter((id) => id !== player.userId));
       const next = new Map(current);
       next.delete(player.userId);
+      return next;
+    });
+  }
+
+  /**
+   * A drop: the field is exactly `ids`, in that order.
+   *
+   * Anyone newly in enters the main draw, anyone left out is removed — except
+   * a settled entry, which can neither be dropped (`remove`'s rule) nor
+   * dragged (its row draws no grip). One that `ids` omits anyway stays, at the
+   * bottom, rather than vanishing from the order while still in the field.
+   */
+  function arrange(ids: readonly string[]) {
+    setEntered((current) => {
+      const next = new Map<string, FieldEntry>();
+      for (const id of ids) {
+        next.set(id, current.get(id) ?? { draw: MAIN_DRAW, seed: "" });
+      }
+      const kept: string[] = [];
+      for (const [id, entry] of current) {
+        if (!next.has(id) && entry.locked) {
+          next.set(id, entry);
+          kept.push(id);
+        }
+      }
+      setOrder([...ids, ...kept]);
       return next;
     });
   }
@@ -458,6 +524,7 @@ export function useTournamentDraft(
       roster,
       entered,
       carried,
+      order,
     );
 
     const eventId = initial?.eventId;
@@ -500,6 +567,8 @@ export function useTournamentDraft(
     enter,
     remove,
     amend,
+    arrange,
+    order,
     field,
     submit,
     pending,
@@ -508,12 +577,59 @@ export function useTournamentDraft(
 }
 
 /**
- * The weekend: the name, both dates, the site and the format.
+ * Step one: the tournament's name, alone.
+ *
+ * On a step of its own, the way the dual asks for its school before anything
+ * else — a name is what the schedule and every entry refer to the weekend by,
+ * and `createTournament` refuses a tournament without one.
  *
  * A body, not a screen — `new-tournament-flow.tsx` puts it under the shell's
  * title and lede, and owns the footer that gates on it.
  */
-export function TournamentWeekendStep({
+export function TournamentNameStep({
+  draft,
+  onEdit,
+  onSubmit,
+}: {
+  draft: TournamentDraft;
+  onEdit: (patch: Partial<TournamentDraft>) => void;
+  /** Enter in the field — the flow's Continue, when it would wake. */
+  onSubmit: () => void;
+}) {
+  return (
+    <label className="block">
+      <span className="eyebrow">Tournament · name</span>
+      {/* The 2px rule turns blue on focus and is the focus mark, so the input
+          opts out of the ring inside it (`styles/design-system/focus.css`).
+          The placeholder is the name `3c` drew filled in: an unnamed
+          tournament is what the screen actually opens on. */}
+      <span className="mt-1 flex items-center border-b-2 border-[var(--border-medium)] pt-1.5 pb-2 transition-colors focus-within:border-[var(--blue)]">
+        <input
+          autoFocus
+          value={draft.name}
+          onChange={(event) => onEdit({ name: event.target.value })}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            onSubmit();
+          }}
+          placeholder="Buckeye Fall Classic"
+          data-focus-ring="none"
+          className="text-title-lg w-full bg-transparent outline-none placeholder:text-[var(--ink-300)]"
+        />
+      </span>
+    </label>
+  );
+}
+
+/**
+ * Step two: both dates, the site and the format — `DualFactsStep`'s four-up,
+ * with Ends where the dual has Surface.
+ *
+ * Site and Format are the dual's `MenuSelect` underline cells, format words
+ * and all, so the two builders' second steps are one row of controls.
+ */
+export function TournamentDetailsStep({
   draft,
   onEdit,
 }: {
@@ -521,333 +637,614 @@ export function TournamentWeekendStep({
   onEdit: (patch: Partial<TournamentDraft>) => void;
 }) {
   return (
-    <div>
-      <label className="block">
-        <span className="eyebrow">Tournament · name</span>
-        {/* The 2px blue rule is the artboard's. What `3c` draws filled in is
-            this field's placeholder: an unnamed tournament is what the screen
-            actually opens on, and `createTournament` refuses one. */}
-        <span className="mt-1 flex items-center border-b-2 border-[var(--border-medium)] pt-1.5 pb-2 transition-colors focus-within:border-[var(--blue)]">
-          <input
-            autoFocus
-            value={draft.name}
-            onChange={(event) => onEdit({ name: event.target.value })}
-            placeholder="Buckeye Fall Classic"
-            /* The span above turns its 2px rule blue on focus, and THAT is
-               the focus mark — so a ring inset inside it would be a second one.
-               The rule has to change, not merely be blue: drawn standing blue
-               (as it was) plus this opt-out left the field with no focus
-               indicator at all. `autoFocus` keeps the artboard's blue-on-arrival
-               look. */
-            data-focus-ring="none"
-            className="text-title-lg w-full bg-transparent outline-none placeholder:text-[var(--ink-300)]"
-          />
-        </span>
-      </label>
-
-      {/* `repeat(4, 1fr)`, `gap:24px`, `margin-top:16px` — the artboard's. */}
-      <div className="mt-4 grid grid-cols-4 gap-6">
-        <FieldCell label="Starts">
-          <DateField
-            label="Starts"
-            variant="bare"
-            value={draft.startsOn}
-            onChange={(startsOn) => onEdit({ startsOn })}
-            className="w-full"
-          />
-        </FieldCell>
-        <FieldCell label="Ends">
-          <DateField
-            label="Ends"
-            variant="bare"
-            value={draft.endsOn}
-            onChange={(endsOn) => onEdit({ endsOn })}
-            // A weekend cannot end before it starts. `undefined` while Starts
-            // is empty — `""` would be parsed as a bound and thrown away, and
-            // an empty Starts constrains nothing.
-            min={draft.startsOn || undefined}
-            className="w-full"
-          />
-        </FieldCell>
-        <FieldCell label="Site">
-          <FieldSelect
-            label="Site"
-            value={draft.site}
-            options={SITES}
-            onChange={(value) => {
-              const chosen = SITES.find((option) => option.value === value);
-              if (chosen) onEdit({ site: chosen.value });
-            }}
-          />
-        </FieldCell>
-        <FieldCell label="Format">
-          <FieldSelect
-            label="Format"
-            value={draft.format.value}
-            options={FORMATS}
-            onChange={(value) => {
-              // The chosen ROW, not a parse of the chosen string. See
-              // `FORMATS` — this is the only assignment `format` has, and
-              // every row of that table states `adScoring` as a literal
-              // boolean.
-              const chosen = FORMATS.find((option) => option.value === value);
-              if (chosen) onEdit({ format: chosen });
-            }}
-          />
-        </FieldCell>
-      </div>
+    <div className="grid grid-cols-4 gap-6">
+      <FieldCell label="Starts">
+        <DateField
+          label="Starts"
+          variant="bare"
+          value={draft.startsOn}
+          onChange={(startsOn) => onEdit({ startsOn })}
+          className="w-full"
+        />
+      </FieldCell>
+      <FieldCell label="Ends">
+        <DateField
+          label="Ends"
+          variant="bare"
+          value={draft.endsOn}
+          onChange={(endsOn) => onEdit({ endsOn })}
+          // A weekend cannot end before it starts. `undefined` while Starts
+          // is empty — `""` would be parsed as a bound and thrown away, and
+          // an empty Starts constrains nothing.
+          min={draft.startsOn || undefined}
+          className="w-full"
+        />
+      </FieldCell>
+      <FieldCell label="Site" chrome="none">
+        <MenuSelect
+          label="Site"
+          variant="underline"
+          value={draft.site}
+          options={SITES}
+          onChange={(site) => onEdit({ site })}
+        />
+      </FieldCell>
+      <FieldCell label="Format" chrome="none" note={draft.format.scoring}>
+        <MenuSelect
+          label="Format"
+          variant="underline"
+          value={draft.format.value}
+          options={FORMAT_OPTIONS}
+          onChange={(value) => {
+            // The chosen ROW, looked up by option name — never a parse of the
+            // option's text. This is `format`'s only assignment, and every row
+            // of that table states `adScoring` as a literal boolean. See
+            // `TournamentFormat` and `docs/ui-revamp-guardrails.md` §3.1.
+            const chosen = FORMATS.find((option) => option.value === value);
+            if (chosen) onEdit({ format: chosen });
+          }}
+        />
+      </FieldCell>
     </div>
   );
 }
 
 /**
- * The field: the roster, top to bottom, and where each player starts.
+ * The field: two tables on the page — Entries, then the Roster.
  *
- * ── One list ───────────────────────────────────────────────────────────────
- * Every row is a roster player and every row is answerable, so entering
- * somebody is picking their draw rather than clicking a `+` and then finding
- * their row again in a second table. `—` takes them back out. That is the whole
- * control surface: no rail, no add button, no entries list under it.
+ * ── Two tables ─────────────────────────────────────────────────────────────
+ * Entries is who is playing: each row a player with the draw and seed that
+ * belong to an entry. Roster is everyone on the team not entered yet, with an
+ * Add on each row and Add all in its heading. No cards — the wizard is flat,
+ * so each table is a heading over hairline rows — and no boxed controls: Draw
+ * is a `MenuSelect` in its `text` form and Seed is click-to-edit text, so a
+ * row is the lineup's 44px rather than a form field's height. The words are
+ * the app's own: "Player" (the roster table, a dual's detail), "Entries" (the
+ * event drawer, and the footer's "Creates N entries").
  *
- * The seed cell exists only once a player is in — an unentered row has no entry
- * to hold a seed, and a number typed against nobody would have to be thrown
- * away — and a qualifier's cell reads as a dash, because a qualifier holds no
- * seed.
+ * Both tables share their first two tracks — the grip and Player — so the
+ * columns line up across the gap.
+ *
+ * ── Dragging ───────────────────────────────────────────────────────────────
+ * The lineup's gesture, on the same `singles-order.ts` arithmetic: one
+ * `Reorder.Group` over the entries' ids, the `BENCH` marker (drawn as the
+ * Roster table's heading) and the roster's ids. A row moves by its grip —
+ * never by the row, so the draw menu and seed stay clickable — within Entries
+ * to order it, or between the tables to enter or remove; a drop is one
+ * `onArrange` with the ids above the marker. The keyboard lift is the
+ * lineup's: Space or Enter on a grip lifts, arrows move, Space drops, Escape
+ * puts it back. A settled row draws no grip; it cannot leave, and the save
+ * would refuse a moved position.
+ *
+ * Add enters the main draw at the bottom of Entries — the answer for almost
+ * every entry — and the roster stays in ladder order. The seed exists only on
+ * an entry: a number typed against nobody would have to be thrown away. A
+ * qualifier holds no seed.
  */
 export function TournamentFieldStep({
   roster,
   entered,
+  order,
   onEnter,
   onRemove,
   onAmend,
+  onArrange,
 }: {
   roster: LadderPlayer[];
   entered: ReadonlyMap<string, FieldEntry>;
+  /** The entries' order by `userId` — `useTournamentDraft().order`. */
+  order: readonly string[];
   onEnter: (player: LadderPlayer, draw: string) => void;
   onRemove: (player: LadderPlayer) => void;
   onAmend: (player: LadderPlayer, patch: Partial<FieldEntry>) => void;
+  /** A drop: the entries are exactly these ids, in this order. */
+  onArrange: (ids: readonly string[]) => void;
 }) {
+  const reduceMotion = useReducedMotion();
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const players = useMemo(
+    () => new Map(roster.map((player) => [player.userId, player])),
+    [roster],
+  );
+  const fieldIds = fieldFor(roster, entered, order).map(
+    ({ player }) => player.userId,
+  );
+  const benchIds = roster
+    .filter((player) => !entered.has(player.userId))
+    .map((player) => player.userId);
+  const resting = [...fieldIds, BENCH, ...benchIds];
+
+  /** The order being edited — a drag or a keyboard lift — or null at rest. */
+  const [draft, setDraft] = useState<string[] | null>(null);
+  const draftRef = useRef<string[] | null>(null);
+  const [lifted, setLifted] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+
+  const sequence = draft ?? resting;
+  const benchAt = sequence.indexOf(BENCH);
+
+  function setDraftSeq(next: string[] | null) {
+    draftRef.current = next;
+    setDraft(next);
+  }
+
+  function where(seq: readonly string[], id: string): string {
+    const at = seq.indexOf(id);
+    const bar = seq.indexOf(BENCH);
+    return at < bar ? `entry ${at + 1} of ${bar}` : "on the roster";
+  }
+
+  function nameOf(id: string): string {
+    return players.get(id)?.name ?? "Player";
+  }
+
+  function commit(seq: readonly string[]) {
+    setDraftSeq(null);
+    onArrange(aboveBench(seq));
+  }
+
+  function focusGrip(id: string) {
+    requestAnimationFrame(() =>
+      document.getElementById(fieldGripId(id))?.focus(),
+    );
+  }
+
+  function lift(id: string) {
+    setDraftSeq(resting);
+    setLifted(id);
+    setAnnouncement(
+      `${nameOf(id)} lifted, ${where(resting, id)}. Arrows move, Space drops, Escape cancels.`,
+    );
+  }
+
+  function drop(id: string) {
+    const seq = draftRef.current ?? resting;
+    setLifted(null);
+    commit(seq);
+    setAnnouncement(`${nameOf(id)} dropped, ${where(seq, id)}.`);
+    focusGrip(id);
+  }
+
+  function cancel(id: string) {
+    setLifted(null);
+    setDraftSeq(null);
+    setAnnouncement(`${nameOf(id)} put back.`);
+    focusGrip(id);
+  }
+
+  function step(id: string, direction: 1 | -1) {
+    const seq = moveToken(draftRef.current ?? resting, id, direction);
+    setDraftSeq(seq);
+    setAnnouncement(`${nameOf(id)}, ${where(seq, id)}.`);
+    focusGrip(id);
+  }
+
+  // A lift abandoned by tabbing away is put back rather than half-applied.
+  useEffect(() => {
+    if (!lifted) return;
+    function onFocusIn(event: FocusEvent) {
+      if ((event.target as HTMLElement | null)?.id !== fieldGripId(lifted!)) {
+        setLifted(null);
+        setDraftSeq(null);
+      }
+    }
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, [lifted]);
+
+  if (roster.length === 0) {
+    return (
+      <p className="text-micro" style={{ color: "var(--ink-500)" }}>
+        No players on the roster yet.
+      </p>
+    );
+  }
+
+  const held = lifted ?? dragging;
+  const seeded = fieldIds.filter((id) => {
+    const entry = entered.get(id);
+    return (
+      entry !== undefined && entry.draw !== QUALIFYING && entry.seed !== ""
+    );
+  }).length;
+  const benchPlayers = benchIds.flatMap((id) => {
+    const player = players.get(id);
+    return player ? [player] : [];
+  });
+  const rosterCount = sequence.length - 1 - benchAt;
+
   return (
     <div>
-      {roster.length > 0 ? (
-        <div className="grid grid-cols-[32px_1fr_96px_220px_88px] items-end gap-3 border-b border-[var(--border-hairline)] pb-2">
-          <span aria-hidden="true" />
-          <span className="eyebrow">Athlete</span>
-          <span className="eyebrow">Competing</span>
-          <span className="eyebrow">Draw</span>
-          <span className="eyebrow">Seed</span>
-        </div>
-      ) : null}
-      <div className="flex flex-col">
-        {roster.map((player, index) => (
-          <FieldRow
-            key={player.userId}
-            player={player}
-            entry={entered.get(player.userId)}
-            last={index === roster.length - 1}
-            onDraw={(draw) => {
-              if (draw === "") {
-                onRemove(player);
-                return;
-              }
-              onEnter(player, draw);
-            }}
-            onAmend={(patch) => onAmend(player, patch)}
-          />
-        ))}
-      </div>
-
-      {roster.length === 0 ? (
-        <p className="text-micro py-3" style={{ color: "var(--ink-500)" }}>
-          No players on the roster yet.
-        </p>
-      ) : null}
-
-      <p className="text-micro mt-2.5" style={{ color: "var(--ink-500)" }}>
-        Include each athlete who is competing, then choose where they enter the
-        singles draw. Seeds are optional.
+      <p className="sr-only" aria-live="polite">
+        {announcement}
       </p>
+
+      <TableHeading
+        title="Entries"
+        meta={`${fieldIds.length} ${fieldIds.length === 1 ? "entry" : "entries"} · ${seeded} seeded`}
+      />
+      <ColumnHeads
+        grid={ENTRY_GRID}
+        labels={["", "Player", "Draw", "Seed", ""]}
+      />
+
+      <Reorder.Group
+        ref={listRef}
+        as="div"
+        axis="y"
+        values={sequence}
+        onReorder={(next) => setDraftSeq(next)}
+        className="flex flex-col"
+      >
+        {sequence.map((id, index) => {
+          if (id === BENCH) {
+            return (
+              <Reorder.Item
+                key={BENCH}
+                as="div"
+                value={BENCH}
+                dragListener={false}
+                layout="position"
+                transition={reduceMotion ? { duration: 0 } : ROW_SLIDE}
+                className="select-none"
+              >
+                {index === 0 && !held ? (
+                  <p
+                    className="flex h-11 items-center border-b border-[var(--border-hairline)] text-[12px]"
+                    style={{ color: "var(--ink-500)" }}
+                  >
+                    No entries yet — add players from the roster below.
+                  </p>
+                ) : null}
+                <div className="pt-12">
+                  <TableHeading
+                    title="Roster"
+                    meta={`${rosterCount} ${rosterCount === 1 ? "player" : "players"}`}
+                    action={
+                      benchPlayers.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            for (const player of benchPlayers) {
+                              onEnter(player, MAIN_DRAW);
+                            }
+                          }}
+                          className="flex cursor-pointer items-center gap-1 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+                        >
+                          <Plus
+                            className="size-[11px]"
+                            strokeWidth={2}
+                            aria-hidden="true"
+                          />
+                          Add all
+                        </button>
+                      ) : null
+                    }
+                  />
+                  <ColumnHeads grid={ROSTER_GRID} labels={["", "Player", ""]} />
+                  {index === sequence.length - 1 ? (
+                    <p
+                      className="flex h-10 items-center text-[12px]"
+                      style={{ color: "var(--ink-500)" }}
+                    >
+                      Everyone on the roster is entered.
+                    </p>
+                  ) : null}
+                </div>
+              </Reorder.Item>
+            );
+          }
+
+          const player = players.get(id);
+          if (!player) return null;
+          const inField = index < benchAt;
+          // Mid-drag a roster player above the marker has no entry yet; it is
+          // drawn as an entry in the main draw until the drop makes it one.
+          const entry = entered.get(id) ?? { draw: MAIN_DRAW, seed: "" };
+          return (
+            <FieldItem
+              key={id}
+              id={id}
+              name={player.name}
+              inField={inField}
+              last={
+                inField ? index === benchAt - 1 : index === sequence.length - 1
+              }
+              locked={entered.get(id)?.locked !== undefined}
+              held={held === id}
+              reduceMotion={Boolean(reduceMotion)}
+              listRef={listRef}
+              onDragStart={() => {
+                setDragging(id);
+                setDraftSeq(resting);
+              }}
+              onDragEnd={() => {
+                setDragging(null);
+                commit(draftRef.current ?? resting);
+              }}
+              onKey={(event) => {
+                if (event.key === " " || event.key === "Enter") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (lifted === id) drop(id);
+                  else lift(id);
+                  return;
+                }
+                if (lifted !== id) return;
+                if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  step(id, event.key === "ArrowDown" ? 1 : -1);
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  cancel(id);
+                }
+              }}
+            >
+              {(grip) =>
+                inField ? (
+                  <FieldRow
+                    grip={grip}
+                    player={player}
+                    entry={entry}
+                    onDraw={(draw) => onEnter(player, draw)}
+                    onRemove={() => onRemove(player)}
+                    onAmend={(patch) => onAmend(player, patch)}
+                  />
+                ) : (
+                  <BenchRow
+                    grip={grip}
+                    player={player}
+                    onAdd={() => onEnter(player, MAIN_DRAW)}
+                  />
+                )
+              }
+            </FieldItem>
+          );
+        })}
+      </Reorder.Group>
     </div>
   );
 }
 
 /**
- * One roster line: their ladder spot, identity, inclusion, draw, and seed.
+ * The two tables' tracks. The first two — the grip's 16px and Player — are
+ * shared, which is what lines the Player column up across both tables.
+ */
+// Every track after Player is FIXED: an `auto` last track sized to the
+// rows' × button and to the header's empty cell differently, and pushed the
+// Draw and Seed labels 17px off their values. 64px holds "Forfeited".
+const ENTRY_GRID = "grid-cols-[16px_minmax(0,1fr)_140px_80px_64px]";
+const ROSTER_GRID = "grid-cols-[16px_minmax(0,1fr)_auto]";
+
+const fieldGripId = (userId: string) => `field-grip-${userId}`;
+
+/** The lineup's settle and slide — see `lineup-rows.tsx`. No bounce. */
+const ROW_SETTLE = { bounceStiffness: 600, bounceDamping: 50 };
+const ROW_SLIDE = { duration: 0.22, ease: [0.23, 1, 0.32, 1] as const };
+
+/**
+ * A table's heading: its name as an eyebrow, a count beside it, an optional
+ * action at the end.
  *
- * At least 58px, hairline-separated. The name is NOT editable, which is the
- * deleted entry list's rule and the reason it exists: retyping a name over an
- * entry that already carries a roster id is how a match gets attributed to the
- * wrong athlete. A correction is a different row's draw, never an edit that
- * silently keeps the old id.
+ * 16px of space below it, before the column labels: sat directly on them, the
+ * table's name and its columns' names read as one block of small capitals.
+ */
+function TableHeading({
+  title,
+  meta,
+  action,
+}: {
+  title: string;
+  meta: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="mb-4 flex h-5 items-center justify-between">
+      <span className="flex items-baseline gap-2.5">
+        <span className="eyebrow">{title}</span>
+        <span className="tabular text-[11px] text-[var(--ink-500)]">
+          {meta}
+        </span>
+      </span>
+      {action}
+    </div>
+  );
+}
+
+/** Eyebrow column labels over a hairline, on a table's own grid. */
+function ColumnHeads({ grid, labels }: { grid: string; labels: string[] }) {
+  return (
+    <div
+      className={cn(
+        "grid items-center gap-3.5 border-b border-[var(--border-hairline)] pb-2",
+        grid,
+      )}
+    >
+      {labels.map((label, index) => (
+        <span key={`${label}-${index}`} className="eyebrow-sm">
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * One draggable row: the grip, then the entry or roster row.
  *
- * A settled row — one whose entry has a match or a forfeit — is drawn in place
- * with nothing on it a save could move: its inclusion control and draw menu
- * are disabled beside a `Played`/`Forfeited` micro, and the seed is a label
- * rather than a field. See
+ * Only the grip starts a drag (`dragListener={false}`), so the draw menu, the
+ * seed and Add/Remove keep their clicks. The grip is the grid's first track —
+ * drawn on every row, entries and roster alike, so both tables' Player column
+ * starts at the same x; a settled entry draws the track empty.
+ */
+function FieldItem({
+  id,
+  name,
+  inField,
+  last,
+  locked,
+  held,
+  reduceMotion,
+  listRef,
+  onDragStart,
+  onDragEnd,
+  onKey,
+  children,
+}: {
+  id: string;
+  name: string;
+  inField: boolean;
+  last: boolean;
+  locked: boolean;
+  held: boolean;
+  reduceMotion: boolean;
+  listRef: React.RefObject<HTMLDivElement | null>;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onKey: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
+  children: (grip: React.ReactNode) => React.ReactNode;
+}) {
+  const controls = useDragControls();
+  const grip = locked ? (
+    <span aria-hidden="true" />
+  ) : (
+    <button
+      id={fieldGripId(id)}
+      type="button"
+      aria-label={`Move ${name}, ${inField ? "in entries" : "on the roster"}`}
+      aria-pressed={held}
+      onPointerDown={(event) => {
+        event.currentTarget.focus({ preventScroll: true });
+        controls.start(event);
+      }}
+      onKeyDown={onKey}
+      className={cn(
+        "-ml-0.5 inline-flex h-7 w-5 cursor-grab touch-none items-center justify-center rounded-[5px] transition-colors duration-[var(--duration-hover)] active:cursor-grabbing",
+        "focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        held
+          ? "text-[var(--ink-900)]"
+          : "text-[var(--ink-300)] group-hover:text-[var(--ink-600)]",
+      )}
+    >
+      <GripVertical className="size-3.5" strokeWidth={1.5} aria-hidden />
+    </button>
+  );
+  return (
+    <Reorder.Item
+      as="div"
+      value={id}
+      dragListener={false}
+      dragControls={controls}
+      dragConstraints={listRef}
+      dragElastic={0.08}
+      dragTransition={ROW_SETTLE}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      layout="position"
+      transition={{ layout: reduceMotion ? { duration: 0 } : ROW_SLIDE }}
+      className={cn(
+        // A hairline under each row but a table's last, and on hover the
+        // lineup's wash with an 8px radius — rounded ONLY while lit, with the
+        // hairline gone, because a radius on a resting row curls its hairline
+        // up at both ends (`lineup-rows.tsx`, LIT). `-mx-2 px-2` gives the
+        // rounded wash room past the text.
+        "group relative -mx-2 bg-[var(--surface-card)] px-2 transition-[background-color,box-shadow] duration-[var(--duration-hover)] hover:rounded-[8px] hover:border-transparent hover:bg-[var(--surface-subtle)]",
+        !last && "border-b border-[var(--border-hairline)]",
+        held &&
+          "z-[3]! rounded-[8px] border-transparent shadow-[0_0_0_2px_var(--blue),var(--shadow-card-emphasis)]!",
+      )}
+    >
+      {children(grip)}
+    </Reorder.Item>
+  );
+}
+
+/**
+ * One entry: grip, player, draw, seed, and the way back out.
+ *
+ * The name is NOT editable, which is the deleted entry list's rule and the
+ * reason it exists: retyping a name over an entry that already carries a
+ * roster id is how a match gets attributed to the wrong athlete.
+ *
+ * A settled entry — one with a match or a forfeit — is drawn in place with
+ * nothing on it a save could move: the draw menu is disabled, the seed is
+ * text, and the remove control is replaced by `Played`/`Forfeited`. See
  * `FieldEntry.locked`.
  */
 function FieldRow({
+  grip,
   player,
   entry,
-  last,
   onDraw,
+  onRemove,
   onAmend,
 }: {
+  grip: React.ReactNode;
   player: LadderPlayer;
-  entry: FieldEntry | undefined;
-  last: boolean;
+  entry: FieldEntry;
   onDraw: (draw: string) => void;
+  onRemove: () => void;
   onAmend: (patch: Partial<FieldEntry>) => void;
 }) {
   const [editingSeed, setEditingSeed] = useState(false);
 
   const name = player.name;
-  // Settled: a match points at this entry, or a side forfeited it. The row is
-  // then drawn in place and read-only — see `FieldEntry.locked`, and the seed
-  // cell below for why the seed is closed too.
-  const locked = entry?.locked;
-  // Null is "the program has never set one" — see `getLadder`, which sorts
-  // those last rather than proposing a ladder nobody set.
-  const spot =
-    player.ladderPosition !== null ? `S${player.ladderPosition}` : "—";
-  const qualifying = entry?.draw === QUALIFYING;
-  // A qualifier holds no seed, and `3c` draws an em dash rather than the word.
-  const seeded = !qualifying && entry !== undefined && entry.seed !== "";
-  const seedLabel = qualifying
-    ? "—"
-    : seeded
-      ? `Seed ${entry.seed}`
-      : "Unseeded";
+  const locked = entry.locked;
+  const qualifying = entry.draw === QUALIFYING;
+  const seeded = !qualifying && entry.seed !== "";
 
   return (
-    <div
-      className={cn(
-        "grid min-h-[58px] grid-cols-[32px_1fr_96px_220px_88px] items-center gap-3 py-1",
-        last ? "" : "border-b border-[var(--border-hairline)]",
-      )}
-    >
-      <span
-        className="mono tabular text-[11px]"
-        style={{ color: "var(--ink-500)" }}
-      >
-        {spot}
+    <div className={cn("grid h-11 items-center gap-3.5", ENTRY_GRID)}>
+      {grip}
+
+      <span className="flex min-w-0 items-center gap-2.5">
+        <InitialsAvatar name={name} />
+        <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
+          {name}
+        </span>
       </span>
 
-      <span
-        className={cn(
-          "truncate text-[13px] text-[var(--ink-900)]",
-          entry ? "font-medium" : "font-normal",
-        )}
-      >
-        {name}
-      </span>
-
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={entry !== undefined}
-        aria-label={`${entry ? "Exclude" : "Include"} ${name} from tournament`}
+      <MenuSelect
+        label={`Draw for ${name}`}
+        variant="text"
+        value={entry.draw}
+        options={DRAW_MENU_OPTIONS}
+        onChange={(draw) => onDraw(draw)}
         disabled={locked !== undefined}
-        onClick={() => (entry ? onDraw("") : onDraw(MAIN_DRAW))}
-        className="flex w-fit cursor-pointer items-center gap-2 text-[12px] text-[var(--ink-600)] disabled:cursor-default disabled:opacity-70"
-      >
-        <span
-          aria-hidden="true"
-          className={cn(
-            "flex size-4 items-center justify-center rounded-[4px] border",
-            entry
-              ? "border-[var(--blue)] bg-[var(--blue)] text-white"
-              : "border-[var(--ink-300)] bg-transparent",
-          )}
-        >
-          {entry ? <Check className="size-3" strokeWidth={2.5} /> : null}
-        </span>
-        <span>{entry ? "Included" : "Include"}</span>
-      </button>
+        align="start"
+        width={260}
+      />
 
-      {entry ? (
-        <span className="flex min-w-0 items-center gap-1.5">
-          <MenuSelect
-            label={`Draw for ${name}`}
-            value={entry.draw}
-            options={DRAW_MENU_OPTIONS}
-            onChange={(draw) => onDraw(draw)}
-            disabled={locked !== undefined}
-            className="w-full"
-            width={260}
-          />
-          {locked ? (
-            <span className="text-micro flex shrink-0 items-center gap-1 text-[var(--ink-500)]">
-              <LockKeyhole
-                className="size-3.5"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-              {locked === "forfeited" ? "Forfeited" : "Played"}
-            </span>
-          ) : null}
-        </span>
-      ) : (
-        <span className="text-[11px] text-[var(--ink-400)]">
-          Choose Include first
-        </span>
-      )}
-
-      {entry === undefined ? (
-        // Nobody to hold a seed. Drawn rather than dropped so the column does
-        // not collapse under an unentered row and shift every cell beside it.
+      {locked || qualifying ? (
+        // Read-only on a settled entry, and NOT because the seed is
+        // uninteresting: `changed()` in `entry-plan.ts` compares `seed` on a
+        // tournament row, so a settled entry whose seed moved is one the save
+        // refuses — and a refusal is total. A qualifier holds no seed.
         <span
-          className="mono tabular text-[11px]"
-          style={{ color: "var(--ink-300)" }}
-          aria-hidden="true"
-        >
-          —
-        </span>
-      ) : locked ? (
-        // Read-only, and NOT because the seed is uninteresting: `changed()` in
-        // `entry-plan.ts` compares `seed` on a tournament row, so a settled
-        // entry whose seed moved is an entry the save refuses — and a refusal
-        // is total, taking every other edit in the field with it. An editable
-        // cell here would be a control that silently costs the coach their
-        // whole save. Correcting a played entry's seed is a job for whoever
-        // can also delete the match.
-        <span
-          className="mono tabular text-[11px]"
+          className="mono tabular text-[12px]"
           style={{ color: seeded ? "var(--ink-600)" : "var(--ink-400)" }}
         >
-          {seedLabel}
+          {seeded ? entry.seed : "—"}
         </span>
-      ) : qualifying || !editingSeed ? (
-        <button
-          type="button"
-          aria-label={`Seed for ${name}`}
-          // A qualifier's dash is not a control: there is no seed to type, so
-          // the cell reports that rather than opening a field that would have
-          // to throw the number away.
-          disabled={qualifying}
-          onClick={() => setEditingSeed(true)}
-          className="mono tabular cursor-pointer text-left text-[11px] disabled:cursor-default"
-          style={{ color: seeded ? "var(--ink-600)" : "var(--ink-400)" }}
-        >
-          {seedLabel}
-        </button>
-      ) : (
+      ) : editingSeed ? (
         <input
           autoFocus
           value={entry.seed}
           inputMode="numeric"
-          placeholder="seed"
+          placeholder="Seed"
           aria-label={`Seed for ${name}`}
           // Digits only, filtered on the way in rather than validated on the
           // way out — `Number("3rd")` is `NaN`, and a NaN seed reaches the
           // column as a write that fails long after the coach typed it.
           //
-          // A leading zero goes the same way, and for the same reason: the
-          // column is `check (seed is null or seed > 0)`, so "0" is a value the
-          // database refuses. Stripping it here means the cell can never hold a
-          // seed the write will reject, rather than the coach discovering it as
-          // a raw constraint error under a tournament that failed to save. Four
-          // digits is past any real draw and keeps `Number()` inside `integer`.
+          // A leading zero goes the same way: the column is
+          // `check (seed is null or seed > 0)`, so "0" is a value the database
+          // refuses. Four digits is past any real draw and keeps `Number()`
+          // inside `integer`.
           onChange={(event) =>
             onAmend({
               seed: event.target.value
@@ -862,13 +1259,83 @@ function FieldRow({
               event.currentTarget.blur();
             }
           }}
-          className="mono tabular w-full bg-transparent text-[11px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)]"
+          // The blue rule under the text is the focus mark (`focus.css`).
+          data-focus-ring="none"
+          className="mono tabular h-7 w-12 border-b border-[var(--blue)] bg-transparent text-[12px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)]"
         />
+      ) : (
+        <button
+          type="button"
+          aria-label={`Seed for ${name}`}
+          onClick={() => setEditingSeed(true)}
+          className={cn(
+            "w-fit cursor-pointer border-b border-dotted border-[var(--ink-300)] text-left text-[12px] transition-colors duration-[var(--duration-hover)] hover:border-[var(--ink-600)]",
+            seeded
+              ? "mono tabular text-[var(--ink-900)]"
+              : "text-[var(--ink-400)]",
+          )}
+        >
+          {seeded ? entry.seed : "Add seed"}
+        </button>
+      )}
+
+      {locked ? (
+        <span className="text-micro flex items-center justify-end gap-1 text-[var(--ink-500)]">
+          <LockKeyhole
+            className="size-3.5"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+          {locked === "forfeited" ? "Forfeited" : "Played"}
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Remove ${name} from tournament`}
+          className="inline-flex size-[26px] cursor-pointer items-center justify-center justify-self-end rounded-[6px] text-[var(--ink-400)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-card)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+        >
+          <X className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+        </button>
       )}
     </div>
   );
 }
 
+/** One roster player not entered, and the Add that enters them. */
+function BenchRow({
+  grip,
+  player,
+  onAdd,
+}: {
+  grip: React.ReactNode;
+  player: LadderPlayer;
+  onAdd: () => void;
+}) {
+  return (
+    <div className={cn("grid h-10 items-center gap-3.5", ROSTER_GRID)}>
+      {grip}
+      <span className="flex min-w-0 items-center gap-2.5">
+        <InitialsAvatar name={player.name} />
+        <span className="truncate text-[13px] text-[var(--ink-700)]">
+          {player.name}
+        </span>
+      </span>
+      {/* Grey until pointed at: a blue Add on every roster row would be a
+          column of calls to action beside the footer's own. Add all, in the
+          heading, is the table's one blue word. */}
+      <button
+        type="button"
+        onClick={onAdd}
+        aria-label={`Add ${player.name} to tournament`}
+        className="flex cursor-pointer items-center gap-1 rounded-[5px] px-1 py-1 text-[11px] font-medium text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+      >
+        <Plus className="size-[11px]" strokeWidth={2} aria-hidden="true" />
+        Add
+      </button>
+    </div>
+  );
+}
 /**
  * One row of the Format control: the option it is, and what it means.
  *
@@ -894,49 +1361,19 @@ function FieldRow({
  * reach `createTournament`, whose own input types it `boolean` for the same
  * reason.
  */
-interface TournamentFormat {
-  /** The `<select>` option's value — matched against, never split. */
-  value: EventFormatValue;
-  label: string;
-  bestOf: number;
-  adScoring: boolean;
-}
+type TournamentFormat = DualFormat;
 
 /**
- * `3c`'s wording over the shared format table.
- *
- * Only the words live here — `3c` abbreviates where `2b` spells out. `bestOf`
- * and `adScoring` come from `EVENT_FORMATS` in `lib/schedule/format.ts`, so the
- * two builders cannot disagree about the pair that reaches the database. See
- * that table's header, and `docs/ui-revamp-guardrails.md` §3.1 and §4.
+ * The dual builder's format rows and words, drawn the same way: the trigger
+ * prints the sets half and the scoring half sits under the cell. One table for
+ * both builders, so the two cannot word a format differently — and the pair
+ * that reaches the database is `EVENT_FORMATS`' either way.
  */
-const FORMAT_LABELS: Record<EventFormatValue, string> = {
-  "bo3-no-ad": "Bo3 · no-ad",
-  "bo3-ad": "Bo3 · ad",
-  "one-set-no-ad": "One set · no-ad",
-  "one-set-ad": "One set · ad",
-};
-
-const FORMATS: readonly TournamentFormat[] = EVENT_FORMATS.map((format) => ({
-  ...format,
-  label: FORMAT_LABELS[format.value],
-}));
+const FORMAT_OPTIONS = formatOptions(FORMATS);
 
 /** What `3c` draws in the Format cell: best of 3, ad scoring. */
 const DEFAULT_FORMAT =
   FORMATS.find((format) => format.value === "bo3-ad") ?? FORMATS[0];
-
-/**
- * The three sites an event can hold, labelled as both dormant forms label them.
- *
- * `EventSite` on `value`, so the union is checked here rather than cast at the
- * change handler.
- */
-const SITES: readonly { value: EventSite; label: string }[] = [
-  { value: "away", label: "Away" },
-  { value: "home", label: "Home" },
-  { value: "neutral", label: "Neutral" },
-];
 
 /** What `3c` draws in the Site cell, and the usual answer for a tournament. */
 const DEFAULT_SITE: EventSite = "neutral";
@@ -979,99 +1416,3 @@ const DRAW_MENU_OPTIONS: readonly MenuOption<string>[] = [
     description: "The athlete must qualify before entering the main bracket.",
   },
 ];
-
-/**
- * One cell of the four-up row: `padding:6px 0 7px` under a hairline.
- *
- * A `<div>`, not a `<label>`, and the eyebrow is only the visible caption —
- * every control inside names itself with the same string. It was a `<label>`
- * while all four cells held a native control. Two of them now hold `DateField`,
- * whose segments are `[tabindex]` divs (not labelable) sitting beside a real
- * `<button>` for the calendar: a `<label>` wrapper forwards every click on a
- * segment to that button, and the month segment becomes impossible to click
- * into. So the wrapper stops labelling, and `FieldSelect` — which had no name
- * of its own — takes a `label` and sets it as its `aria-label`. Dropping the
- * wrapper without that would have left both selects unnamed with nothing
- * visibly wrong.
- *
- * The rule answers focus, exactly as the dual builder's `FieldCell` does: 2px
- * blue on `focus-within`, a pixel off the padding so the row does not grow.
- * That change is what earns every control in here the right to drop the focus
- * ring — see `styles/design-system/focus.css`. It is a pair, not a decoration:
- * `DateField`'s segments opt out unconditionally, so a cell that did not answer
- * focus would show no indicator at all.
- */
-function FieldCell({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <span className="eyebrow">{label}</span>
-      {/* 34px, the underline family's one height — the same reason the dual
-          builder's cell carries it: a row sized by its content stopped
-          matching its neighbours once the date brought a calendar button.
-          Borders are inside the box, so the 2px focus rule moves nothing.
-          `--border-field` is the field family's token — the same one
-          `MenuSelect` and `SettingsUnderlineInput` draw; `--border-hairline`
-          is a divider grey and read faintly against them. */}
-      <span className="flex h-[34px] items-center border-b border-[var(--border-field)] transition-colors focus-within:border-b-2 focus-within:border-[var(--blue)]">
-        {children}
-      </span>
-    </div>
-  );
-}
-
-/**
- * The two cells `3c` draws with a chevron.
- *
- * A native `<select>` under the artboard's own underline treatment, so the
- * value the app will store is in the document rather than implied by a label.
- * The chevron is the artboard's; `appearance-none` is what stops the platform
- * drawing a second one.
- *
- * `label` is the cell's eyebrow, repeated here as the `aria-label`. It is not
- * duplication for its own sake: `FieldCell` is no longer a `<label>` (see
- * there), so this is the only name the select has.
- */
-function FieldSelect({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  /** The cell's eyebrow. The select's only accessible name. */
-  label: string;
-  value: string;
-  options: readonly { value: string; label: string }[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <>
-      <select
-        aria-label={label}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        // The cell's rule now goes 2px blue on focus, so the neutral field
-        // ring inset inside it would be a second mark on a field that has
-        // already answered — the same opt-out the underline family takes
-        // (`styles/design-system/focus.css`).
-        data-focus-ring="none"
-        className="w-full cursor-pointer appearance-none bg-transparent text-[13px] text-[var(--ink-900)] outline-none"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        strokeWidth={1.5}
-        className="pointer-events-none size-3 shrink-0 text-[var(--ink-400)]"
-      />
-    </>
-  );
-}

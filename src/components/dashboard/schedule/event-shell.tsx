@@ -40,8 +40,13 @@ export function EventShell({
         {children}
       </div>
 
+      {/* `WizardShell`'s footer, so the chooser and the flow it hands off to
+          end on the same bar: 64px with the controls centred in it (it was
+          16px over and 22px under, which sat the buttons visibly high), and
+          sticky, so a body taller than a short viewport scrolls under it
+          rather than pushing Continue off the bottom. */}
       {footer ? (
-        <div className="flex shrink-0 items-center gap-3 border-t border-[var(--border-hairline)] px-12 pt-4 pb-[22px]">
+        <div className="sticky bottom-0 z-10 flex h-16 shrink-0 items-center gap-3 border-t border-[var(--border-hairline)] bg-[var(--surface-card)] px-12">
           {footer}
         </div>
       ) : null}

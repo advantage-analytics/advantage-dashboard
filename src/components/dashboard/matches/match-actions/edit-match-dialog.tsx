@@ -45,7 +45,10 @@ import {
   formatPhrase,
   surname,
 } from "@/lib/matches/edit-match-copy";
-import { attachMatchToLine } from "@/lib/schedule/attach-line";
+import {
+  attachMatchToLine,
+  findAttachableLines,
+} from "@/lib/schedule/attach-line";
 import { lineName, type AttachLine } from "@/lib/schedule/attach-line-state";
 import { AttachLinePicker } from "./attach-line-picker";
 import {
@@ -381,6 +384,9 @@ export function EditMatchDialog({
     !!match?.program_id && workspace.active.id === match.program_id;
   const playerChanged =
     !!match && roster !== null && playerId !== match.player1_id;
+  /** The roster pick Save will write, judged by the line picker before it lands. */
+  const unsavedPlayer =
+    playerChanged && playerId ? { id: playerId, name: player.name } : null;
 
   const styleNote = (
     fields: PlayerFields,
@@ -448,7 +454,9 @@ export function EditMatchDialog({
     }));
     setPlayerPrefill({ ...known, ...filled });
   }
-  const invalidSet = firstInvalidSet(score);
+  // A doubles pro-set's games run to 9; the event wrote the length.
+  const gamesTo = loaded?.match.format?.games_to ?? 6;
+  const invalidSet = firstInvalidSet(score, gamesTo);
   const lineupBlocks = !!pendingLine?.lineupMismatch;
 
   const close = () => {
@@ -770,6 +778,7 @@ export function EditMatchDialog({
             playerName={player.name}
             opponentName={opponent.name}
             bestOf={format.bestOf}
+            gamesTo={gamesTo}
             disabled={saving}
           />
 
@@ -908,14 +917,23 @@ export function EditMatchDialog({
                 <span className="text-[11px] text-[var(--ink-600)]">Event</span>
                 {picking ? (
                   <AttachLinePicker
-                    matchId={matchId}
-                    player={
-                      playerChanged && playerId
-                        ? { id: playerId, name: player.name }
-                        : null
+                    load={(query) =>
+                      findAttachableLines({
+                        matchId,
+                        query,
+                        unsaved: {
+                          player: unsavedPlayer,
+                          round: round || null,
+                          date: date || null,
+                        },
+                      })
                     }
-                    round={round || null}
-                    date={date || null}
+                    loadKey={JSON.stringify([
+                      matchId,
+                      unsavedPlayer,
+                      round || null,
+                      date || null,
+                    ])}
                     onPick={pickLine}
                     onClose={closePicker}
                   />

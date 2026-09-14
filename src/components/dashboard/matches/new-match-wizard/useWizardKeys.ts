@@ -44,6 +44,24 @@ export function isFormControl(el: EventTarget | null): boolean {
   );
 }
 
+/**
+ * Is this element a way somewhere else — a link, or one of the footer's exits?
+ *
+ * Plain Enter on these must do what a click does. A link navigates and Back
+ * steps back; before this, the Enter handler read both as "not a field" and
+ * ran Continue instead, cancelling the key's own activation — so Enter on the
+ * footer's Cancel, on the last step of a new dual, CREATED the dual.
+ *
+ * Deliberately narrower than "any button": a provider tile or an event card is
+ * a plain button whose Enter IS Continue, and `isFormControl` stays false for
+ * those. `WizardShell` marks its Back with `data-wizard-exit`; Cancel is a
+ * link, as is anything else in a step that leaves it.
+ */
+export function isWizardExit(el: EventTarget | null): boolean {
+  const node = el as HTMLElement | null;
+  return Boolean(node?.closest?.("a[href], [data-wizard-exit]"));
+}
+
 export interface UseWizardKeysOptions {
   /** The step content's root — the ⌘/Ctrl+Enter focus walk stays inside it. */
   contentRef: RefObject<HTMLDivElement | null>;
@@ -161,7 +179,7 @@ export function useWizardKeys({
         return;
       }
 
-      if (isFormControl(e.target)) return;
+      if (isFormControl(e.target) || isWizardExit(e.target)) return;
       if (continueDisabled) return;
       e.preventDefault();
       onContinue();

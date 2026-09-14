@@ -131,6 +131,8 @@ export function resultLine(input: {
   player: readonly (number | null)[];
   opponent: readonly (number | null)[];
   bestOf: number;
+  /** Games in a set — 6 unless a doubles pro-set says 8. */
+  gamesTo?: number;
 }): string | null {
   let p = 0;
   let o = 0;
@@ -139,7 +141,7 @@ export function resultLine(input: {
     const a = input.player[i];
     const b = input.opponent[i];
     if (a == null || b == null) break;
-    const w = setWinner(a, b);
+    const w = setWinner(a, b, input.gamesTo);
     if (!w) break;
     if (w === "player") p++;
     else o++;

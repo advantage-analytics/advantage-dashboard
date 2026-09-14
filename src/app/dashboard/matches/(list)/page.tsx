@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
-import { enrichMatches } from "@/lib/data/matches-page-server";
+import {
+  enrichMatches,
+  withRosterProfiles,
+} from "@/lib/data/matches-page-server";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
@@ -14,6 +17,7 @@ import { MatchesPageContent } from "@/components/dashboard/matches/matches-page-
 import { MatchesTitleRow } from "@/components/dashboard/matches/matches-title-row";
 import { MatchesDayZero } from "@/components/dashboard/matches/matches-day-zero";
 import { MatchesSkeleton } from "@/components/dashboard/matches/matches-skeleton";
+import { matchesListShape } from "@/components/dashboard/matches/match-list-layout";
 import { MatchDrawerSlot } from "@/components/dashboard/matches/match-drawer-slot";
 import { listMatchDrafts } from "@/lib/wizard/actions";
 
@@ -100,10 +104,21 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
 
   // Start the slower reads once. Title counts and the list share their result;
   // the frame no longer waits for opponent profiles and analysis reconciliation.
-  const enriched = enrichMatches(supabase, rows, user);
+  const enriched = isTeam
+    ? withRosterProfiles(
+        supabase,
+        workspace.active.id,
+        enrichMatches(supabase, rows, user),
+      )
+    : enrichMatches(supabase, rows, user);
   const scope = isTeam ? "team" : "personal";
   const canUpload = !isTeam || canUploadForProgram(workspace.active);
   const scopeKey = `${user.id}:${workspace.active.id}`;
+  // Counted already, so the fallback draws the first page at its real size.
+  const shape = matchesListShape(
+    matches.map((m) => m.date),
+    drafts.map((d) => d.updatedAt),
+  );
   // A row: the page column, then the slot the match drawer portals into — so
   // the rail sits beside the column and the table reflows, as on the Roster.
   return (
@@ -121,7 +136,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
           </Suspense>
         </WidgetBoundary>
         <WidgetBoundary key={scopeKey} label="Matches">
-          <Suspense fallback={<MatchesSkeleton />}>
+          <Suspense fallback={<MatchesSkeleton scope={scope} shape={shape} />}>
             <MatchesResolvedContent
               enriched={enriched}
               drafts={drafts}

@@ -14,16 +14,18 @@ import {
   floatMenuDividerCls,
   floatMenuLabelCls,
 } from "@/components/dashboard/matches/new-match-wizard/styles";
-import { findAttachableLines } from "@/lib/schedule/attach-line";
 import type { AttachLine } from "@/lib/schedule/attach-line-state";
 import { dayLabel } from "@/lib/matches/edit-match-copy";
 
-type Groups = {
+type Groups<L extends AttachLine> = {
   matchDate: string;
-  suggested: AttachLine[];
-  sameDay: AttachLine[];
-  search: AttachLine[];
+  suggested: L[];
+  sameDay: L[];
+  search: L[];
 };
+
+export type AttachLinesResult<L extends AttachLine> =
+  ({ ok: true } & Groups<L>) | { ok: false; error: string };
 
 /**
  * "Add to an event" — the Event field turned into a search, with the lines this
@@ -33,29 +35,30 @@ type Groups = {
  * 11px group labels, rows that wash on hover. A line that can't take the match
  * is still listed, dimmed, saying why — the coach looking for S1 learns it
  * already has a result instead of wondering where it went.
+ *
+ * Shared by Edit Match (an existing match) and the upload wizard (a match not
+ * yet saved) — each passes its own reader; the menu is the same.
  */
-export function AttachLinePicker({
-  matchId,
-  player = null,
-  round = null,
-  date = null,
+export function AttachLinePicker<L extends AttachLine>({
+  load,
+  loadKey,
   onPick,
   onClose,
 }: {
-  matchId: string;
-  /** The unsaved roster pick, when the player was changed in the dialog. */
-  player?: { id: string; name: string } | null;
-  /** The dialog's round and date, which Save writes before attaching. */
-  round?: string | null;
-  date?: string | null;
-  onPick: (line: AttachLine) => void;
+  /** Reads the groups for a search term. */
+  load: (query: string) => Promise<AttachLinesResult<L>>;
+  /** Changes when what `load` judges against changes, so the list re-reads. */
+  loadKey: string;
+  onPick: (line: L) => void;
   /** Closed without choosing. */
   onClose: () => void;
 }) {
-  const pickedId = player?.id ?? null;
-  const pickedName = player?.name ?? null;
+  const loadRef = useRef(load);
+  useEffect(() => {
+    loadRef.current = load;
+  }, [load]);
   const [query, setQuery] = useState("");
-  const [groups, setGroups] = useState<Groups | null>(null);
+  const [groups, setGroups] = useState<Groups<L> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -65,15 +68,8 @@ export function AttachLinePicker({
     const timer = window.setTimeout(
       () => {
         setLoading(true);
-        findAttachableLines({
-          matchId,
-          query,
-          unsaved: {
-            player: pickedId ? { id: pickedId, name: pickedName! } : null,
-            round,
-            date,
-          },
-        })
+        loadRef
+          .current(query)
           .then((result) => {
             if (!live) return;
             if (result.ok) {
@@ -96,7 +92,7 @@ export function AttachLinePicker({
       live = false;
       window.clearTimeout(timer);
     };
-  }, [matchId, query, pickedId, pickedName, round, date]);
+  }, [loadKey, query]);
 
   const nothingThatDay =
     groups !== null &&
@@ -263,13 +259,13 @@ export function AttachLinePicker({
   );
 }
 
-function LineRow({
+function LineRow<L extends AttachLine>({
   line,
   onPick,
   showDate = false,
 }: {
-  line: AttachLine;
-  onPick: (line: AttachLine) => void;
+  line: L;
+  onPick: (line: L) => void;
   showDate?: boolean;
 }) {
   const available = line.state === "available";
@@ -315,7 +311,8 @@ function LineRow({
           available ? "text-[var(--ink-700)]" : "text-[var(--ink-500)]",
         )}
       >
-        {line.reason ?? "Awaiting result"}
+        {line.reason ??
+          (line.existingMatchId ? "Result in · no video" : "Awaiting result")}
       </span>
     </button>
   );

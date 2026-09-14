@@ -61,6 +61,8 @@ type Cells = readonly (number | null | undefined)[];
 /** The games per set, and how many sets the format plays. */
 export interface ScoreGames {
   bestOf: number;
+  /** Games in a set — 6 unless a doubles pro-set says 8. */
+  gamesTo?: number;
   playerScores: Cells;
   opponentScores: Cells;
 }
@@ -89,17 +91,22 @@ export function scoreGames(
  * scorecard itself opens the TB column and moves focus there the moment 1-0 is
  * typed (`isTiebreakSet`), and stored matches keep only the losing side's
  * points, which for a 10-0 is a zero.
+ *
+ * `gamesTo` is the set's length: 6 for every singles set, 8 for a doubles
+ * pro-set (over at 8 with a two-game lead, 9-7 or 9-8). The default keeps
+ * every caller that predates it on the 6-game rule exactly.
  */
 export function setWinner(
   player: number | null | undefined,
   opponent: number | null | undefined,
+  gamesTo = 6,
 ): "player" | "opponent" | null {
   if (player == null || opponent == null || player === opponent) return null;
   const high = Math.max(player, opponent);
   const low = Math.min(player, opponent);
   const over =
-    (high >= 6 && high - low >= 2) ||
-    (high === 7 && (low === 5 || low === 6)) ||
+    (high >= gamesTo && high - low >= 2) ||
+    (high === gamesTo + 1 && (low === gamesTo - 1 || low === gamesTo)) ||
     (high === 1 && low === 0);
   if (!over) return null;
   return player > opponent ? "player" : "opponent";
@@ -111,7 +118,12 @@ export function setWinner(
  * `scoreColumns`, `firstOpenSet` and `scoreUndecided` all read, so they cannot
  * disagree about where the match stands.
  */
-function progress({ bestOf, playerScores, opponentScores }: ScoreGames): {
+function progress({
+  bestOf,
+  gamesTo,
+  playerScores,
+  opponentScores,
+}: ScoreGames): {
   finished: number;
   decided: boolean;
 } {
@@ -119,7 +131,7 @@ function progress({ bestOf, playerScores, opponentScores }: ScoreGames): {
   let player = 0;
   let opponent = 0;
   for (let i = 0; i < bestOf; i++) {
-    const winner = setWinner(playerScores[i], opponentScores[i]);
+    const winner = setWinner(playerScores[i], opponentScores[i], gamesTo);
     if (!winner) return { finished: i, decided: false };
     if (winner === "player") player++;
     else opponent++;

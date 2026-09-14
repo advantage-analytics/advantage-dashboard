@@ -108,6 +108,11 @@ export interface MatchFormat {
   best_of?: number;
   ad_scoring?: boolean | null;
   play_on_lets?: boolean | null;
+  /**
+   * Games in a set. Absent on every singles match (6); 6 or 8 on a doubles
+   * line scored from a dual — see `EventFormat.doubles`.
+   */
+  games_to?: number;
 }
 
 /** What the stored row contributes to the decision. */
@@ -174,12 +179,13 @@ export function decidedWinner(
   player1: readonly number[],
   player2: readonly number[],
   bestOf: number,
+  gamesTo = 6,
 ): "player1" | "player2" | null {
   const toWin = Math.ceil(bestOf / 2);
   let p1 = 0;
   let p2 = 0;
   for (let i = 0; i < player1.length; i++) {
-    const w = setWinner(player1[i], player2[i]);
+    const w = setWinner(player1[i], player2[i], gamesTo);
     if (w === "player") p1++;
     else if (w === "opponent") p2++;
   }
@@ -229,7 +235,8 @@ function parseScore(
   const player1 = v.player1 as number[];
   const player2 = v.player2 as number[];
   const bestOf = stored.format?.best_of ?? 3;
-  const decided = decidedWinner(player1, player2, Math.max(bestOf, 1));
+  const gamesTo = stored.format?.games_to ?? 6;
+  const decided = decidedWinner(player1, player2, Math.max(bestOf, 1), gamesTo);
   const unchanged =
     stored.score !== null &&
     sameSets(stored.score.player1, player1) &&
@@ -245,6 +252,7 @@ function parseScore(
         stored.score.player1 ?? [],
         stored.score.player2 ?? [],
         Math.max(bestOf, 1),
+        gamesTo,
       )
     : null;
   const retirementWinner = storedDecided === null ? storedWinner : null;

@@ -148,6 +148,15 @@ function explainWriteFailure(error: {
     return capitalize(message);
   }
 
+  // `guard_schedule_result`: the line was answered without a match (a default,
+  // a withdrawal, a forfeit) between the offer and the save.
+  if (message.includes("Clear the saved outcome")) {
+    return (
+      "That line already has a result saved in Schedule. Detach it to save " +
+      "this as a one-off, or clear the result in Schedule first."
+    );
+  }
+
   return `Database error: ${message || error.details || JSON.stringify(error)}`;
 }
 

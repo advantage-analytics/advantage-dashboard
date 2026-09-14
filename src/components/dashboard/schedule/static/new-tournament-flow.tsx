@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * `NewTournamentFlow` — the new tournament as two steps of the upload wizard's
- * chrome.
+ * `NewTournamentFlow` — the new tournament as three steps of the upload
+ * wizard's chrome.
  *
  * Same room as `/dashboard/matches/new`, `[eventId]/score` and the new dual,
  * deliberately: the full-bleed step indicator under the app header, an optional
@@ -12,30 +12,32 @@
  * nothing about how it looks — only which step is showing, what it is waiting
  * on, and what Continue does when it wakes.
  *
- * ── Two panes became two steps ─────────────────────────────────────────────
+ * ── Two panes became three steps ───────────────────────────────────────────
  * `3c` drew one frame: a roster rail on the left, and the weekend's five facts
- * over an entries table on the right. Under the shell that is the weekend and
- * then the field, because the shell's Continue is a single primary and a frame
- * with two unrelated requirements in it has nothing sensible for that button to
- * gate on. The rail and the entries table are gone with the split — the field
+ * over an entries table on the right. Under the shell that is the name, then
+ * the dates, site and format, then the field — the new dual's shape (school,
+ * facts, lineup), because the shell's Continue is a single primary and a frame
+ * with unrelated requirements in it has nothing sensible for that button to
+ * gate on. The name leads, alone, for the reason the dual's school does: it is
+ * what the pinned bar over every later step names the event by. The rail and the entries table are gone with the split — the field
  * step is one list over the roster, each row carrying its own draw and seed.
  * See `TournamentFieldStep`.
  *
  * ── The shape ──────────────────────────────────────────────────────────────
  * One component. `useTournamentDraft` needs no answer from step one to be
  * called — unlike the dual's `useDualDraft`, which needs a school — so the
- * draft is held here across both steps and nothing is keyed or remounted.
- * Walking back to the weekend leaves the field exactly as it was entered.
+ * draft is held here across all three steps and nothing is keyed or
+ * remounted. Walking back leaves the field exactly as it was entered.
  *
  * ── What Continue is waiting on ────────────────────────────────────────────
- *   step 1   a name and both dates. `createTournament` refuses an unnamed
- *            tournament and refuses an end before a start, and a date input is
- *            a control a coach can empty back to nothing.
- *   step 2   somebody in the field. The footer prints how many entries the
+ *   step 1   a name. `createTournament` refuses an unnamed tournament.
+ *   step 2   both dates. It refuses an end before a start, and a date input
+ *            is a control a coach can empty back to nothing.
+ *   step 3   somebody in the field. The footer prints how many entries the
  *            click will create beside the button.
  *
  * ── Editing the same tournament ────────────────────────────────────────────
- * `mode="edit"` is these same two steps over a tournament that already exists.
+ * `mode="edit"` is these same three steps over a tournament that already exists.
  * Every difference follows from one fact — parts of the field have already
  * been played:
  *
@@ -48,21 +50,22 @@
  *               AND seed, because `entry-plan.ts` compares both and a refusal
  *               takes the whole save with it.
  *   step one    stays reachable: a weekend's name, dates, site and format are
- *               all still the coach's to change. The pinned bar over step two
- *               therefore gets no `Change` — Back is the way, and there is one
+ *               all still the coach's to change. The pinned bar over the later
+ *               steps therefore gets no `Change` — Back is the way, and there is one
  *               event either way, since the same `eventId` is submitted
  *               whatever the name says.
  *   the write   `updateTournament`, chosen inside `useTournamentDraft` by the
  *               seed carrying an `eventId`. Same footer, same `ActionError`.
  *
  * `adScoring` never passes through this file. The format is the `FORMATS` row
- * `TournamentWeekendStep` chose, and `useTournamentDraft().submit()` reads
+ * `TournamentDetailsStep` chose, and `useTournamentDraft().submit()` reads
  * `bestOf` and `adScoring` off it as literals — see `TournamentFormat` in
  * `static-tournament-builder.tsx` and `docs/ui-revamp-guardrails.md` §3.1. The
  * pinned bar below hands the same pair to `formatLabel` and parses nothing.
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 /* Straight from the two files, not the wizard's barrel: `index.ts` re-exports
    `UploadMatchFlow` and its whole subtree, and this flow needs the chrome and
    the keys — the same call `new-dual-flow.tsx` made. */
@@ -70,8 +73,9 @@ import { WizardShell } from "@/components/dashboard/matches/new-match-wizard/Wiz
 import { useWizardKeys } from "@/components/dashboard/matches/new-match-wizard/useWizardKeys";
 import { PinnedEventBar } from "@/components/dashboard/schedule/static/pinned-event-bar";
 import {
+  TournamentDetailsStep,
   TournamentFieldStep,
-  TournamentWeekendStep,
+  TournamentNameStep,
   useTournamentDraft,
   type TournamentDraftSeed,
   type TournamentEntrySeed,
@@ -82,18 +86,27 @@ import { isSettled } from "@/lib/schedule/entry-plan";
 import { formatValueOf } from "@/lib/schedule/format";
 import type { EventDetail } from "@/lib/schedule/types";
 
-/** Where Cancel goes on step one. Inside the rebuilt set. */
+/** Where Cancel goes on a create. Inside the rebuilt set. */
 const SCHEDULE_HREF = "/dashboard/team/schedule";
 
-type Step = 1 | 2;
+/** Where step one's Back goes on a create: the event chooser, step one of
+ *  four — so the name is step two. An edit never passes it and counts three. */
+const CHOOSER_HREF = "/dashboard/team/schedule/new";
 
-/** What each step asks, in the shell's own two lines. */
-const COPY: Record<Step, { title: string; lede: string }> = {
+type Step = 1 | 2 | 3;
+
+/** What each step asks, in the shell's own two lines. Exported for the
+ *  route's skeleton, which prints step one's pair before the data lands. */
+export const COPY: Record<Step, { title: string; lede: string }> = {
   1: {
-    title: "The weekend.",
-    lede: "Name it, say when and where. A tournament holds entries rather than lines — the field comes next.",
+    title: "What's the tournament called?",
+    lede: "Name it the way the draw sheet does — it's how the schedule and every entry refer to it.",
   },
   2: {
+    title: "When it's played, and where.",
+    lede: "Dates, site and format. Every entry in the field is created under them.",
+  },
+  3: {
     title: "The field.",
     lede: "Add players from the roster. An entry says where they start, not what they'll play.",
   },
@@ -209,6 +222,7 @@ export function NewTournamentFlow({
   event,
 }: NewTournamentFlowProps) {
   const editing = mode === "edit";
+  const router = useRouter();
   // Memoised because `useTournamentDraft` seeds its entered map from this
   // object once. A fresh one per render would be a fresh `carry` array on
   // every keystroke — harmless, and still not what the hook describes.
@@ -226,13 +240,22 @@ export function NewTournamentFlow({
     enter,
     remove,
     amend,
+    arrange,
+    order,
     field,
     submit,
     pending,
     error,
   } = useTournamentDraft(roster, defaultSurface, initial);
 
-  const back = useCallback(() => setStep(1), []);
+  const back = useCallback(
+    () => setStep((current) => (current === 3 ? 2 : 1)),
+    [],
+  );
+  const toName = useCallback(() => setStep(1), []);
+  // A route, not a step — see `CHOOSER_HREF`. Only the footer's Back reaches
+  // it: Escape on step one stays inert, as on the upload wizard's first step.
+  const toChooser = useCallback(() => router.push(CHOOSER_HREF), [router]);
 
   const eventHref = event
     ? `/dashboard/team/schedule/${event.event.id}`
@@ -242,26 +265,34 @@ export function NewTournamentFlow({
   // would tell a coach their save drops entries it does not touch.
   const entryCount = field.length + (initial?.carry?.length ?? 0);
 
-  const lastStep = step === 2;
+  const lastStep = step === 3;
   // `createTournament` refuses an unnamed tournament and refuses a weekend with
-  // no dates, so the button is asleep until there is one to write — and asleep
-  // again while the write is in flight, so a second click cannot create a
-  // second tournament.
-  const continueDisabled = lastStep
-    ? pending || entryCount === 0
-    : draft.name.trim() === "" || draft.startsOn === "" || draft.endsOn === "";
+  // no dates, so each step's button is asleep until its answer exists — and the
+  // last one asleep again while the write is in flight, so a second click
+  // cannot create a second tournament.
+  const continueDisabled =
+    step === 1
+      ? draft.name.trim() === ""
+      : step === 2
+        ? draft.startsOn === "" || draft.endsOn === ""
+        : pending || entryCount === 0;
 
   const onContinue = useCallback(() => {
     if (lastStep) {
       submit();
       return;
     }
-    setStep(2);
-  }, [lastStep, submit]);
+    setStep(step === 1 ? 2 : 3);
+  }, [lastStep, step, submit]);
+
+  // The name field's Enter, which is Continue only when Continue would wake.
+  const submitName = useCallback(() => {
+    if (draft.name.trim() !== "") setStep(2);
+  }, [draft.name]);
 
   useWizardKeys({
     contentRef,
-    canGoBack: lastStep,
+    canGoBack: step !== 1,
     onBack: back,
     continueDisabled,
     onContinue,
@@ -269,15 +300,17 @@ export function NewTournamentFlow({
 
   return (
     <WizardShell
-      stepIndex={step - 1}
-      stepCount={2}
+      // A create counts the chooser before it; an edit starts here.
+      stepIndex={editing ? step - 1 : step}
+      stepCount={editing ? 3 : 4}
       title={COPY[step].title}
       description={COPY[step].lede}
       pinned={
-        /* The weekend step one described, pinned over the field that inherits
-           it — and the way back to change it. An unnamed weekend never gets
-           here: Continue is asleep until the name and both dates exist. */
-        lastStep ? (
+        /* The tournament step one named, pinned over the two steps that
+           inherit it — the dual's bar, on the dual's steps — and the way back
+           to rename it. An unnamed tournament never gets here:
+           Continue is asleep until the name exists. */
+        step !== 1 ? (
           <PinnedEventBar
             kind="tournament"
             name={draft.name}
@@ -294,14 +327,15 @@ export function NewTournamentFlow({
                and a second control saying the same thing is a second control
                to keep honest. `PinnedEventBar` draws no `Change` without
                one. */
-            onChange={editing ? undefined : back}
+            onChange={editing ? undefined : toName}
           />
         ) : undefined
       }
       contentRef={contentRef}
       contentKey={step}
       contentClassName="mt-9"
-      back={lastStep ? back : undefined}
+      // An edit's step one has no chooser behind it, so no Back — Cancel.
+      back={step !== 1 ? back : editing ? undefined : toChooser}
       // An edit's way out is the event it came from — the page the coach
       // opened this from, and the one they can read either way.
       cancelHref={editing && event ? eventHref : SCHEDULE_HREF}
@@ -337,7 +371,9 @@ export function NewTournamentFlow({
       continueDisabled={continueDisabled}
     >
       {step === 1 ? (
-        <TournamentWeekendStep draft={draft} onEdit={edit} />
+        <TournamentNameStep draft={draft} onEdit={edit} onSubmit={submitName} />
+      ) : step === 2 ? (
+        <TournamentDetailsStep draft={draft} onEdit={edit} />
       ) : (
         <TournamentFieldStep
           roster={roster}
@@ -345,6 +381,8 @@ export function NewTournamentFlow({
           onEnter={enter}
           onRemove={remove}
           onAmend={amend}
+          order={order}
+          onArrange={arrange}
         />
       )}
     </WizardShell>

@@ -46,10 +46,13 @@ const input: CreateDualInput = {
   opponent: "Opponent",
   opponentProgramKey: null,
   date: "2026-09-10",
+  startsAtTime: null,
   site: "home",
   surface: "hard",
   bestOf: 3,
   adScoring: false,
+  doublesGamesTo: 6,
+  doublesAdScoring: false,
   lines: [],
 };
 
