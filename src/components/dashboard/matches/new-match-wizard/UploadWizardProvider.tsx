@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import type { ProviderId } from "@/lib/services/upload";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import type { EventPreset, MatchDraft } from "./types";
+import type { CreatedMatch } from "./upload-progress";
 import {
   useUploadMatchWizard,
   type RosterSubject,
@@ -84,7 +85,7 @@ export function useUploadWizard(): UploadWizardContextValue {
 }
 
 export interface UploadWizardProviderProps {
-  onCreated: (matchId: string) => void;
+  onCreated: (match: CreatedMatch) => void;
   onVideoUpload: (event: VideoUploadEvent) => void;
   exitHref: string;
   preset: EventPreset | null;
@@ -117,9 +118,9 @@ export function UploadWizardProvider({
   // the two apart without the hook needing to know it is on a page.
   const createdRef = useRef(false);
   const handleCreated = useCallback(
-    (matchId: string) => {
+    (match: CreatedMatch) => {
       createdRef.current = true;
-      onCreated(matchId);
+      onCreated(match);
     },
     [onCreated],
   );

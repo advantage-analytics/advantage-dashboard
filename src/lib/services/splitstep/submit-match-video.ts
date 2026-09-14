@@ -37,7 +37,13 @@ export interface VideoUploadProgress {
 }
 
 export type VideoUploadEvent = { matchId: string } & (
-  | { kind: "started"; fileName: string; cancel: () => void }
+  | {
+      kind: "started";
+      fileName: string;
+      /** The `processing_jobs` row — what a "Try again" resubmits. */
+      jobId: string;
+      cancel: () => void;
+    }
   | { kind: "progress"; progress: VideoUploadProgress }
   | { kind: "done" }
   /** Handed to the vendor. The transfer AND the submission both succeeded. */
@@ -183,6 +189,7 @@ export async function uploadAndSubmitVideo({
       matchId,
       kind: "started",
       fileName: file.name,
+      jobId,
       cancel: () => controller.abort(),
     });
 

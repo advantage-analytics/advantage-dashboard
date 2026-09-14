@@ -40,9 +40,9 @@ markers is hand-written — edit it as things move.
 | `/dashboard` | [`src/app/dashboard/(home)/page.tsx`](src/app/dashboard/(home)/page.tsx) |
 | `/dashboard/ask` | [`src/app/dashboard/ask/page.tsx`](src/app/dashboard/ask/page.tsx) |
 | `/dashboard/help` | [`src/app/dashboard/help/page.tsx`](src/app/dashboard/help/page.tsx) |
-| `/dashboard/matches/[matchId]` | [`src/app/dashboard/matches/[matchId]/page.tsx`](src/app/dashboard/matches/[matchId]/page.tsx) |
+| `/dashboard/matches/[matchId]` | [`src/app/dashboard/matches/(detail)/[matchId]/page.tsx`](src/app/dashboard/matches/(detail)/[matchId]/page.tsx) |
+| `/dashboard/matches` | [`src/app/dashboard/matches/(list)/page.tsx`](src/app/dashboard/matches/(list)/page.tsx) |
 | `/dashboard/matches/new` | [`src/app/dashboard/matches/new/page.tsx`](src/app/dashboard/matches/new/page.tsx) |
-| `/dashboard/matches` | [`src/app/dashboard/matches/page.tsx`](src/app/dashboard/matches/page.tsx) |
 | `/dashboard/opponents` | [`src/app/dashboard/opponents/page.tsx`](src/app/dashboard/opponents/page.tsx) |
 | `/dashboard/settings/account` | [`src/app/dashboard/settings/account/page.tsx`](src/app/dashboard/settings/account/page.tsx) |
 | `/dashboard/settings` | [`src/app/dashboard/settings/page.tsx`](src/app/dashboard/settings/page.tsx) |

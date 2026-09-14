@@ -47,11 +47,20 @@ export function TeamsList({
             key={row.id}
             href={`/dashboard/settings/teams/${row.id}`}
             className={[
-              "-mx-2.5 flex items-center gap-3.5 rounded-[8px] px-2.5 py-[13px] transition-colors duration-150",
+              "relative -mx-2.5 flex items-center gap-3.5 rounded-[8px] px-2.5 py-[13px] transition-colors duration-150",
               "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none",
               // A hairline between rows that steps aside for the hover wash,
               // so the hovered row reads as one block rather than a stripe.
-              "[&+&]:shadow-[inset_0_1px_0_var(--border-hairline)] [&:hover+&]:shadow-none",
+              // Drawn as its own straight 1px box, inset to the card's content
+              // edge: an inset shadow on the row followed its 8px corners and
+              // curled up at both ends. Every row gets the positioned
+              // pseudo-element and only rows after the first colour it —
+              // Tailwind's `before:` variant emits `content`, so a hover rule
+              // on the first row would otherwise conjure an in-flow ::before
+              // and push its crest 14px right by the flex gap.
+              "before:pointer-events-none before:absolute before:inset-x-2.5 before:top-0 before:h-px before:content-['']",
+              "[&+&]:before:bg-[var(--border-hairline)]",
+              "hover:before:opacity-0 focus-visible:before:opacity-0 [&:focus-visible+&]:before:opacity-0 [&:hover+&]:before:opacity-0",
             ].join(" ")}
           >
             <ProgramCrest name={row.name} crestUrl={row.crestUrl} />

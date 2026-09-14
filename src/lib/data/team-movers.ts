@@ -27,6 +27,8 @@ import type { RosterMember } from "@/lib/data/team-roster-server";
 export interface TopMover {
   playerId: string;
   name: string;
+  /** `RosterMember.avatarUrl` — their photo, or null for initials. */
+  avatarUrl: string | null;
   /** Last five results, oldest first — `RosterMember.form`. */
   form: RosterMember["form"];
   /** The measure's short label, e.g. "1st serve in". */
@@ -58,6 +60,7 @@ export function topMovers(
         best = {
           playerId: member.playerId,
           name: member.name,
+          avatarUrl: member.avatarUrl,
           form: member.form,
           // `RosterMeasure.label` is already the drawer table's own label —
           // `team-roster-server.ts` copies it from `ROSTER_DRAWER_MEASURES`

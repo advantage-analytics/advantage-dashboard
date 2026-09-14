@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useHeaderStatus } from "@/components/dashboard/header-status";
@@ -177,11 +177,8 @@ export function Header({
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [matchCrumb, setMatchCrumb] = useState<MatchCrumb | null>(null);
   const [matchCrumbLoading, setMatchCrumbLoading] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
   const [isMac, setIsMac] = useState<boolean | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-
-  const headerRef = useRef<HTMLElement>(null);
 
   const matchesChildSegment =
     pathname.match(/^\/dashboard\/matches\/([^/]+)/)?.[1] ?? null;
@@ -356,22 +353,9 @@ export function Header({
     return () => document.removeEventListener("keydown", handleShortcuts);
   }, []);
 
-  const handleScroll = useCallback(() => {
-    const parent = headerRef.current?.parentElement;
-    if (parent) setScrolled(parent.scrollTop > 0);
-  }, []);
-
-  useEffect(() => {
-    const parent = headerRef.current?.parentElement;
-    if (!parent) return;
-    parent.addEventListener("scroll", handleScroll, { passive: true });
-    return () => parent.removeEventListener("scroll", handleScroll);
-  }, [handleScroll]);
-
   return (
     <>
       <header
-        ref={headerRef}
         /* `shrink-0` is load-bearing: the bar is a flex item in the shell's
            scrolling column, so without it the 44px height is only a starting
            size and the row squeezes down to whatever its tallest control needs
@@ -383,15 +367,10 @@ export function Header({
            round before them) draws the bar at `padding: 0 24px`; the 16px an
            older spec named was the drift the audit caught.
 
-           The bottom edge rests on the hairline the frames draw and firms up
-           to the scroll indicator once the column has moved — a canvas cannot
-           scroll, so the frame shows only the resting state. */
-        className={cn(
-          "sticky top-0 z-30 flex h-11 shrink-0 items-center justify-between border-b bg-white px-6 transition-colors duration-200",
-          scrolled
-            ? "border-[var(--border-medium)]"
-            : "border-[var(--border-hairline)]",
-        )}
+           The bottom edge is the hairline the frames draw, and it stays that
+           hairline on scroll — firming it up to a darker rule once the column
+           moved read as the bar changing colour under the reader. */
+        className="sticky top-0 z-30 flex h-11 shrink-0 items-center justify-between border-b border-[var(--border-hairline)] bg-white px-6"
       >
         {/* Left: the workspace title, or breadcrumbs — one or the other, never
             both. The collapse toggle moved into the sidebar's bottom group,

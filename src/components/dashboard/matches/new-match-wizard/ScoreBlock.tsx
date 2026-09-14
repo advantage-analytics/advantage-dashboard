@@ -6,17 +6,9 @@ import { cn } from "@/lib/utils";
 import { scoreColumns } from "./score-state";
 import type { FormData } from "./types";
 import { setHasData } from "./utils";
+import { FieldCaption } from "./FieldCaption";
 
-export function Required() {
-  return (
-    <span
-      aria-label="Required"
-      className="text-[12px] leading-none text-[var(--error)]"
-    >
-      *
-    </span>
-  );
-}
+export { Required } from "./FieldCaption";
 
 export const FORMAT_OPTIONS: readonly { value: string; label: string }[] = [
   { value: "1", label: "Best of 1" },
@@ -350,28 +342,19 @@ export function ScoreBlock({
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-baseline gap-3">
-        <span className="inline-flex items-center gap-1">
-          <span className="eyebrow">Score</span>
-          <Required />
-        </span>
+        <FieldCaption label="Score" required />
         <span className="flex-1" />
         <span className="text-[12px] text-[var(--ink-600)]">{format}</span>
       </div>
-      {/* Set numbers as eyebrows over the cells; a TB column where one is. */}
+      {/* Set numbers over the cells, in the caption's 11px; a TB column where one is. */}
       <div className="flex justify-end gap-3 pr-0.5">
         {Array.from({ length: displayed }, (_, i) => (
           <span key={i} className="flex gap-3">
-            <span
-              className="eyebrow-sm w-10 text-center"
-              style={{ color: "var(--ink-400)" }}
-            >
+            <span className="w-10 text-center text-[11px] text-[var(--ink-500)]">
               {i + 1}
             </span>
             {tie(i) && (
-              <span
-                className="eyebrow-sm w-10 text-center"
-                style={{ color: "var(--ink-400)" }}
-              >
+              <span className="w-10 text-center text-[11px] text-[var(--ink-500)]">
                 TB
               </span>
             )}

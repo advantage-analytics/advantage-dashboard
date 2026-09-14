@@ -111,6 +111,8 @@ import {
 } from "./styles";
 import { formatHoursMinutes, setHasData } from "./utils";
 import { FORMAT_OPTIONS, Required, ScoreBlock } from "./ScoreBlock";
+import { FieldCaption } from "./FieldCaption";
+import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { AnimatedHeight } from "./AnimatedHeight";
 import { ScoreCheckNotice } from "./ScoreCheckNotice";
 import { firstOpenSet, isStoppedResult, scoreGames } from "./score-state";
@@ -287,10 +289,10 @@ function NewRing() {
 // The underline cell vocabulary
 
 /**
- * Eyebrow over a 13px value on a hairline — the Context grid's cell.
+ * A field caption over a 13px value on a hairline — the Context grid's cell.
  *
  * `tag` is the value's provenance ("from the file"), set at the right of the
- * eyebrow row. Most cells carry it in the value row instead; the Date cell
+ * caption row. Most cells carry it in the value row instead; the Date cell
  * cannot, because its row is already two controls wide.
  */
 function Cell({
@@ -311,15 +313,12 @@ function Cell({
 }) {
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      <span className={cn("flex items-center gap-1", labelClassName)}>
-        <span className="eyebrow">{label}</span>
-        {required && <Required />}
-        {tag && (
-          <span className="text-micro ml-auto shrink-0 whitespace-nowrap">
-            {tag}
-          </span>
-        )}
-      </span>
+      <FieldCaption
+        label={label}
+        required={required}
+        tag={tag}
+        className={labelClassName}
+      />
       {children}
     </div>
   );
@@ -335,7 +334,16 @@ function Cell({
 const UNDERLINE_CLS =
   "flex min-h-[34px] w-full items-center gap-2 border-b pb-2 pt-1.5 text-left text-[13px] transition-[border-color] duration-[var(--duration-hover)]";
 
-/** A cell whose value is chosen from a short list. */
+/**
+ * A cell whose value is chosen from a short list.
+ *
+ * Drawn as `MenuSelect variant="underline"` — the Roster and Edit match
+ * dialogs' select: a 34px trigger on the field rule, a 12px chevron, and the
+ * shared `FloatMenu` with its check on the left. Not `MenuSelect` itself, for
+ * three things it cannot carry: boolean values (Scoring, Lets), a `read`
+ * override for the trigger, and the `data-field` hook the footer's
+ * missing-fields pill uses to find the field.
+ */
 function SelectCell<T extends string | boolean>({
   label,
   required,
@@ -360,20 +368,29 @@ function SelectCell<T extends string | boolean>({
   const current = options.find((o) => o.value === value);
   return (
     <Cell label={label} required={required}>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
+      <FloatMenu
+        open={open}
+        onOpenChange={setOpen}
+        label={label}
+        align="start"
+        width="trigger"
+        trigger={
           <button
             type="button"
             // The footer's missing-fields pill finds the field by this; not an
             // aria-label, which would replace the chosen value as its name.
             data-field={label}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            // The rule going 2px blue is this field's focus indicator, as it
+            // is for every underline control (`focus.css`).
+            data-focus-ring="none"
             className={cn(
-              UNDERLINE_CLS,
-              "cursor-pointer",
+              "flex h-[34px] w-full cursor-pointer items-center justify-between gap-2 border-b bg-transparent text-left text-[13px] transition-colors duration-150",
+              "focus-visible:border-b-2 focus-visible:border-[var(--blue)] focus-visible:outline-none",
               open
-                ? "border-b-2 border-[var(--blue)] pb-[7px]"
+                ? "border-b-2 border-[var(--blue)]"
                 : "border-[var(--border-field)]",
-              focusRingCls,
             )}
           >
             <span
@@ -386,56 +403,25 @@ function SelectCell<T extends string | boolean>({
               {read ?? current?.label ?? placeholder}
             </span>
             <ChevronDown
-              className="size-[13px] shrink-0 text-[var(--ink-400)]"
+              className="size-3 shrink-0 text-[var(--ink-500)]"
               strokeWidth={1.5}
+              aria-hidden="true"
             />
           </button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          sideOffset={6}
-          className={cn(
-            floatMenuCls,
-            "w-[var(--radix-popover-trigger-width)] min-w-[180px]",
-          )}
-        >
-          {options.map((option) => {
-            const isCurrent = option.value === value;
-            return (
-              <button
-                key={String(option.value)}
-                type="button"
-                onClick={() => {
-                  onChange(option.value);
-                  setOpen(false);
-                }}
-                className={cn(
-                  floatMenuRowCls,
-                  "h-[34px]",
-                  isCurrent && "hover:bg-transparent",
-                )}
-              >
-                <span
-                  className={cn(
-                    "flex-1 text-[12px] text-[var(--ink-900)]",
-                    isCurrent ? "font-medium" : "font-normal",
-                  )}
-                >
-                  {option.label}
-                </span>
-                {isCurrent ? (
-                  <Check
-                    className="size-[13px] text-[var(--blue)]"
-                    strokeWidth={1.5}
-                  />
-                ) : (
-                  <span className="w-[13px]" />
-                )}
-              </button>
-            );
-          })}
-        </PopoverContent>
-      </Popover>
+        }
+      >
+        {options.map((option) => (
+          <FloatMenuItem
+            key={String(option.value)}
+            label={option.label}
+            chosen={option.value === value}
+            onSelect={() => {
+              setOpen(false);
+              if (option.value !== value) onChange(option.value);
+            }}
+          />
+        ))}
+      </FloatMenu>
     </Cell>
   );
 }
@@ -642,7 +628,7 @@ function EventCell({
             />
             {!open && (
               <ChevronDown
-                className="size-[13px] shrink-0 text-[var(--ink-400)]"
+                className="size-3 shrink-0 text-[var(--ink-500)]"
                 strokeWidth={1.5}
               />
             )}
@@ -1403,14 +1389,8 @@ function DetailsStepContentImpl({
         <div className="flex flex-col gap-6 sm:grid sm:grid-cols-[200px_minmax(0,1fr)_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-4">
           <div aria-hidden="true" className="hidden sm:contents">
             <span />
-            <span className="flex items-center gap-1">
-              <span className="eyebrow">Hand</span>
-              <Required />
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="eyebrow">Backhand</span>
-              <Required />
-            </span>
+            <FieldCaption label="Hand" required />
+            <FieldCaption label="Backhand" required />
           </div>
 
           <div className="flex flex-col gap-3 sm:col-span-3 sm:grid sm:grid-cols-subgrid sm:items-start sm:gap-y-2">

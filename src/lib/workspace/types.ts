@@ -21,6 +21,14 @@ import type { ProgramStatus } from "@/lib/services/programs/claim-state";
 /** A member's standing inside a team workspace. Personal is always `owner`. */
 export type ProgramRole = "owner" | "coach" | "staff" | "player";
 
+/** A program role as a title — "Coach", "Staff" — for rows, facts and emails. */
+export const PROGRAM_ROLE_LABEL: Record<ProgramRole, string> = {
+  owner: "Owner",
+  coach: "Coach",
+  staff: "Staff",
+  player: "Player",
+};
+
 /**
  * `programs.upload_policy` — who may send team video. A ladder, top to bottom:
  * the owner alone; the owner and coaches; anyone on the coaching staff; or
@@ -127,11 +135,15 @@ export interface Workspace {
   /** One or two characters for the switcher's mark. */
   mark: string;
   /**
-   * Public URL of the program's crest in `program-crests`, drawn in place of
-   * `mark` wherever the workspace is shown. Absent or null for a personal
-   * workspace and for a program that has not uploaded one.
+   * Public URL of the workspace's icon, drawn in place of `mark` wherever the
+   * workspace is shown. Absent or null draws `mark`.
+   *
+   * On a team, the program's crest in `program-crests`, set by the owner. On
+   * personal, the viewer's profile photo (`Viewer.avatarUrl`): personal is one
+   * person's own matches and never gains members, so its icon is that person
+   * and there is no second upload — it changes on Settings › Profile.
    */
-  crestUrl?: string | null;
+  iconUrl?: string | null;
   /**
    * May video be submitted against this workspace's allowance yet?
    *
@@ -289,9 +301,9 @@ export interface Viewer {
   plan: string;
   /**
    * `users.role` — the self-described persona (player/coach/parent/academy).
-   * Shown on the profile and preferences pages; it gates nothing (team
+   * Written by onboarding only and shown nowhere in Settings; it gates nothing (team
    * surfaces key off `Workspace.role` above) and is never what the account
-   * is entitled to. See `lib/user/roles.ts` for why those two had to be split.
+   * is entitled to. See `lib/user/plan.ts` for why those two had to be split.
    */
   role: string | null;
   /** `users.created_at` as "Mon YYYY", or null for a row without one. */

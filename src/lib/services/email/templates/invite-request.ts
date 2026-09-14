@@ -1,5 +1,11 @@
+import { PROGRAM_ROLE_LABEL } from "@/lib/workspace/types";
 import { siteUrl } from "@/lib/site-url";
-import { renderEmail, renderText, type EmailContent } from "../shell";
+import {
+  preferenceNote,
+  renderEmail,
+  renderText,
+  type EmailContent,
+} from "../shell";
 import type { EmailMessage } from "../send";
 
 /**
@@ -134,7 +140,7 @@ export function joinRequestOwnerNoticeEmail(
       label: "Review the request",
       url: `${siteUrl()}/dashboard/team/roster`,
     },
-    note: "You decide who joins, not us. If you don't recognise this person, declining is the whole of what you need to do.",
+    note: `You decide who joins, not us. If you don't recognise this person, declining is the whole of what you need to do. ${preferenceNote("Team activity")}`,
   };
 
   return {
@@ -159,13 +165,6 @@ const JOINED_ROLE_NOUN: Record<JoinedRole, string> = {
   coach: "a coach",
   staff: "staff",
   player: "a player",
-};
-
-const JOINED_ROLE_LABEL: Record<JoinedRole, string> = {
-  owner: "Owner",
-  coach: "Coach",
-  staff: "Staff",
-  player: "Player",
 };
 
 export interface MemberJoinedOwnerInput {
@@ -232,13 +231,13 @@ export function memberJoinedOwnerEmail(
       { label: "Program", value: programName },
       ...(joiner ? [{ label: "Name", value: joiner }] : []),
       { label: "Email", value: joinerEmail },
-      ...(role ? [{ label: "Role", value: JOINED_ROLE_LABEL[role] }] : []),
+      ...(role ? [{ label: "Role", value: PROGRAM_ROLE_LABEL[role] }] : []),
     ],
     cta: {
       label: "View the roster",
       url: `${siteUrl()}/dashboard/team/roster`,
     },
-    note: "If this wasn't somebody you invited, you can remove them from the roster page.",
+    note: `If this wasn't somebody you invited, you can remove them from the roster page. ${preferenceNote("Team activity")}`,
   };
 
   return {

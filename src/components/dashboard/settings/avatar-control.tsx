@@ -1,12 +1,16 @@
 "use client";
 
-import { useRef, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Camera } from "lucide-react";
+import { ImageAdjustDialog } from "@/components/dashboard/settings/image-adjust-dialog";
+import { fetchImageFile } from "@/lib/ui/image-adjust";
 import {
   removeAvatar,
   uploadAvatar,
 } from "@/components/dashboard/settings/actions";
 import { AVATAR_EDGE_PX, AVATAR_MAX_BYTES } from "@/lib/user/avatar";
+import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
+import { MENU_MARK_CLASS } from "@/lib/ui/menu";
 
 const ACCEPT = "image/png,image/jpeg,image/webp";
 
@@ -16,8 +20,9 @@ const ACCEPT = "image/png,image/jpeg,image/webp";
  *
  * The same shape as the Teams crest control, except the mark is a circle —
  * the design system keeps circles for people and squares for programs.
- * Posts the moment a file is chosen; a photo is one file and a second Save
- * for it would be a step with nothing to decide.
+ * Choosing a file opens the adjust dialog, which bakes the placed circle to
+ * a `AVATAR_EDGE_PX` square before upload; a phone photo is several MB and
+ * 4000px wide, and the circle is 80px. "Adjust" reopens the current photo.
  */
 export function AvatarControl({
   initials,
@@ -33,23 +38,26 @@ export function AvatarControl({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
+  const [adjusting, setAdjusting] = useState<File | null>(null);
 
-  const submit = (file: File) => {
+  const submit = (baked: Blob) => {
+    if (baked.size > AVATAR_MAX_BYTES) {
+      onError("Keep the photo under 2 MB.");
+      return;
+    }
+    // A browser without a WebP encoder hands back PNG instead; name it for
+    // what it actually is.
+    const ext = baked.type === "image/webp" ? "webp" : "png";
+    const formData = new FormData();
+    formData.set(
+      "file",
+      new File([baked], `avatar.${ext}`, { type: baked.type }),
+    );
     onError(null);
     startTransition(async () => {
-      const prepared = await squareDownscale(file);
-      if (!prepared) {
-        onError("Couldn't read that image. Use a PNG, JPG or WebP.");
-        return;
-      }
-      if (prepared.size > AVATAR_MAX_BYTES) {
-        onError("Keep the photo under 2 MB.");
-        return;
-      }
-      const formData = new FormData();
-      formData.set("file", prepared);
       const result = await uploadAvatar(formData);
       if (!result.ok) onError(result.error);
+      else setAdjusting(null);
     });
   };
 
@@ -59,6 +67,17 @@ export function AvatarControl({
       const result = await removeAvatar();
       if (!result.ok) onError(result.error);
     });
+  };
+
+  /** Reopen the photo that is up now. The bucket is public and sends CORS. */
+  const adjustCurrent = async () => {
+    if (!avatarUrl) return;
+    onError(null);
+    try {
+      setAdjusting(await fetchImageFile(avatarUrl, "avatar"));
+    } catch {
+      onError("Couldn't load the current photo. Upload it again instead.");
+    }
   };
 
   return (
@@ -113,6 +132,16 @@ export function AvatarControl({
             <button
               type="button"
               disabled={isPending}
+              onClick={adjustCurrent}
+              className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)] focus-visible:outline-none disabled:opacity-50"
+            >
+              Adjust
+            </button>
+          )}
+          {avatarUrl && (
+            <button
+              type="button"
+              disabled={isPending}
               onClick={remove}
               className="cursor-pointer text-[11px] font-medium text-[var(--ink-600)] hover:text-[var(--ink-900)] focus-visible:outline-none disabled:opacity-50"
             >
@@ -120,7 +149,25 @@ export function AvatarControl({
             </button>
           )}
           <span className="text-[11px] text-[var(--ink-400)]">
-            PNG, JPG or WebP · cropped to a square
+            PNG, JPG or WebP · cropped to a circle
+          </span>
+        </div>
+
+        {/* The personal workspace has no icon of its own — it wears this
+            photo, squared. Said here, where the photo is changed, so nobody
+            goes looking for a second upload. The mark previews the result,
+            initials included while there is no photo. */}
+        <div className="mt-2.5 flex items-center gap-2">
+          <WorkspaceMark
+            workspace={{
+              kind: "personal",
+              mark: initials,
+              iconUrl: avatarUrl,
+            }}
+            className={MENU_MARK_CLASS}
+          />
+          <span className="text-[11px] text-[var(--ink-600)]">
+            Also your Personal workspace icon.
           </span>
         </div>
       </div>
@@ -135,52 +182,23 @@ export function AvatarControl({
           const file = event.target.files?.[0];
           // Reset so choosing the same file again still fires a change.
           event.target.value = "";
-          if (file) submit(file);
+          if (file) {
+            onError(null);
+            setAdjusting(file);
+          }
         }}
+      />
+
+      <ImageAdjustDialog
+        open={adjusting !== null}
+        file={adjusting}
+        shape="circle"
+        outputEdge={AVATAR_EDGE_PX}
+        saving={isPending}
+        onSave={submit}
+        onCancel={() => setAdjusting(null)}
+        onChooseAnother={() => inputRef.current?.click()}
       />
     </div>
   );
-}
-
-/**
- * Centre-crop to a square and scale down to `AVATAR_EDGE_PX` before upload.
- * A phone photo is several MB and 4000px wide; the circle is 80px. Null when
- * the browser cannot decode the file (HEIC outside Safari, a renamed PDF).
- */
-async function squareDownscale(file: File): Promise<File | null> {
-  let bitmap: ImageBitmap;
-  try {
-    bitmap = await createImageBitmap(file);
-  } catch {
-    return null;
-  }
-
-  const side = Math.min(bitmap.width, bitmap.height);
-  const edge = Math.min(side, AVATAR_EDGE_PX);
-  const canvas = document.createElement("canvas");
-  canvas.width = edge;
-  canvas.height = edge;
-  const context = canvas.getContext("2d");
-  if (!context) return null;
-  context.drawImage(
-    bitmap,
-    (bitmap.width - side) / 2,
-    (bitmap.height - side) / 2,
-    side,
-    side,
-    0,
-    0,
-    edge,
-    edge,
-  );
-  bitmap.close();
-
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/webp", 0.9),
-  );
-  if (!blob) return null;
-  // A browser without a WebP encoder hands back PNG instead; name it for
-  // what it actually is.
-  const ext = blob.type === "image/webp" ? "webp" : "png";
-  return new File([blob], `avatar.${ext}`, { type: blob.type });
 }

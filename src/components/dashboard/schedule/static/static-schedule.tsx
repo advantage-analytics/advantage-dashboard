@@ -21,6 +21,7 @@ import {
   scheduleRowId,
 } from "@/components/dashboard/schedule/static/schedule-table";
 import { advButton } from "@/lib/ui/adv-button";
+import { academicSeason } from "@/lib/schedule/format";
 import { cn } from "@/lib/utils";
 /**
  * `import type`, and only ever `import type`.
@@ -391,7 +392,7 @@ export function StaticSchedule({
       <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pt-5 pb-6">
         {/* Title slot with summary and primary New event. */}
         <ScheduleTitleRow canCreate={canCreate}>
-          {programName} · {seasonLabel(rows, today)} ·{" "}
+          {programName} · {academicSeason(today)} season ·{" "}
           <span className="tabular">
             {rows.length} {rows.length === 1 ? "event" : "events"}
           </span>{" "}
@@ -648,22 +649,6 @@ function describeCut(facets: Facets): string {
           ? "at neutral sites"
           : null;
   return where ? `${what} ${where}` : what;
-}
-
-/**
- * "2025 season", or "2025–26 season" when the events on file span two
- * calendar years. Derived from the dates rather than drawn: the artboard's
- * "2025 season" is its sample's, and this app holds no season record to
- * print instead. With nothing on file yet it names the current year.
- */
-function seasonLabel(rows: ScheduleRow[], today: string): string {
-  const years = rows.map((row) => Number(row.startsOn.slice(0, 4)));
-  if (years.length === 0) return `${today.slice(0, 4)} season`;
-  const first = Math.min(...years);
-  const last = Math.max(...years);
-  return first === last
-    ? `${first} season`
-    : `${first}–${String(last).slice(2)} season`;
 }
 
 /** Which program stands across the net — read off the first line that names one. */

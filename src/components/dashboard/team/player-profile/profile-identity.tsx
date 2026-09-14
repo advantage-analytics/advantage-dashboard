@@ -26,7 +26,7 @@ export function ProfileIdentity({
 }: {
   profile: PlayerProfile;
   isSelf: boolean;
-  /** The viewer's own photo, on their own page only; other players have none yet. */
+  /** This player's photo, or null to draw initials. */
   photoUrl: string | null;
   actions: React.ReactNode;
 }) {

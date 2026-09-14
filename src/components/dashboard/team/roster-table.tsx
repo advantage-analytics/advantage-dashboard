@@ -141,8 +141,10 @@ export function rosterRowId(playerId: string): string {
   return `roster-row-${playerId}`;
 }
 
+export const ROSTER_PATH = "/dashboard/team/roster";
+
 export function profileHref(playerId: string): string {
-  return `/dashboard/team/roster/${playerId}`;
+  return `${ROSTER_PATH}/${playerId}`;
 }
 
 /** What `RosterView` hands down while Set lineup is on. */
@@ -512,7 +514,11 @@ function MemberRow({
       <SpotCell spot={spot} draggable={inLineupMode} lifted={lifted} />
 
       <span className={cn(COL.player, "flex min-w-0 items-center gap-2.5")}>
-        <PlayerMark name={member.name} viewer={isViewer ? viewer : null} />
+        <PlayerMark
+          name={member.name}
+          viewer={isViewer ? viewer : null}
+          photoUrl={member.avatarUrl}
+        />
         <span className="flex min-w-0 items-baseline gap-1.5">
           {inLineupMode ? (
             <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">

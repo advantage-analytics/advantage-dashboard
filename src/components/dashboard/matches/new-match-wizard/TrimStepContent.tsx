@@ -47,6 +47,7 @@ import { useVideoFilmstrip } from "@/hooks/use-video-filmstrip";
 import type { VideoProbeSummary } from "./types";
 import { focusRingCls, noteStripCls } from "./styles";
 import { formatClipLength, formatClock, formatTimecode } from "./utils";
+import { FieldCaption } from "./FieldCaption";
 
 /** The two camera answers, by their FormData field. */
 export type CameraAnswer = "fixedCamera" | "initialTopPlayerIsPlayer1";
@@ -152,7 +153,7 @@ function OptionCard({
 }
 
 /**
- * One required question: eyebrow with the form's red asterisk, a pair of
+ * One required question: the field caption with the form's red asterisk, a pair of
  * cards, and the contract sentence under them as text-micro.
  */
 function Question({
@@ -173,15 +174,7 @@ function Question({
 }) {
   return (
     <div className="flex flex-col gap-2.5">
-      <span className="inline-flex items-center gap-1">
-        <span className="eyebrow">{label}</span>
-        <span
-          aria-label="Required"
-          className="text-[12px] leading-none text-[var(--error)]"
-        >
-          *
-        </span>
-      </span>
+      <FieldCaption label={label} required />
       <div
         role="radiogroup"
         aria-label={label}

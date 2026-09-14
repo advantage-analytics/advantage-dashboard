@@ -14,6 +14,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/format-clock";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { cn } from "@/lib/utils";
+import { addVideoHref } from "@/lib/matches/add-video-href";
 
 /**
  * The 300px match rail (frame 47f): an identity block (names + verified check +
@@ -211,8 +212,13 @@ export function MatchRail({
                   ? "No video on this match — the stats came from the SwingVision export."
                   : "No video available for this match."}
               </span>
+              {/* A match typed in by hand gets the video attached to itself.
+                  One with a source keeps starting a new upload: a SwingVision
+                  match already has points from the export (a video analysis
+                  would write a second set), and a video match whose film was
+                  reclaimed already has its analysis. */}
               <Link
-                href="/dashboard/matches/new"
+                href={addVideoHref(match.sourceProvider ? null : match.id)}
                 className="text-[11px] font-medium text-[var(--blue)]"
               >
                 Add video

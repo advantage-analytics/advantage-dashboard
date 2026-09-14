@@ -81,10 +81,7 @@ export function ProgramHoursSummary({
       <div className="flex flex-wrap items-baseline gap-2">
         {/* Proportional figures on purpose — `tabular-nums` loosens a
             standalone number at this size; it is for columns. */}
-        <span
-          className="text-[24px] leading-[1.2] font-light tracking-[-0.4px]"
-          style={{ color: figureColor }}
-        >
+        <span className="text-title-lg" style={{ color: figureColor }}>
           {formatHoursLong(left)}
         </span>
         <span className="text-[12px] text-[var(--ink-500)]">

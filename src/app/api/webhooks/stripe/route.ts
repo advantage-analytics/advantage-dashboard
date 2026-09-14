@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe/client";
-import { upgradeUserToPro, isProPlan } from "@/lib/user/roles";
+import { upgradeUserToPro } from "@/lib/user/roles";
+import { isProPlan } from "@/lib/user/plan";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type Stripe from "stripe";
 

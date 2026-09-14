@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { AlertCircle } from "lucide-react";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { AvatarControl } from "@/components/dashboard/settings/avatar-control";
@@ -27,9 +26,18 @@ import { todayISO } from "@/lib/schedule/format";
  * appeared every visit until the last field was filled.
  *
  * Editing is a draft with one commit, which is what the save bar exists for.
- * Role lives here and pays for nothing: a self-description, never what you
- * owe. It gates nothing either — roster and team surfaces key off the
- * workspace's `program_members.role`, not this column.
+ *
+ * There is no Role here. `users.role` is the persona onboarding records
+ * (player/coach/parent/academy) and gates nothing; the roles that do — owner,
+ * coach, staff, player — are per team, in `program_members`, and shown under
+ * Settings › Teams. A single self-described role beside them could only
+ * disagree with one of them, and editing it would let a parent account (with
+ * guardian consent on file) relabel itself.
+ *
+ * Nor is there a team. The identity card belongs to the account, so it reads
+ * the same in every workspace; a pill naming only the *active* team changed on
+ * every switch, vanished in Personal, and could not tell two squads at one
+ * school apart. Memberships, with their roles, are listed under Settings › Teams.
  *
  * The row arrives as a prop. Fetching it in an effect meant the page rendered
  * an empty form and a "7 fields left" badge for one paint on every visit, and
@@ -48,7 +56,6 @@ const FIELDS = [
   "state",
   "hand",
   "backhand",
-  "role",
 ] as const;
 
 type FieldName = (typeof FIELDS)[number];
@@ -62,7 +69,6 @@ const FIELD_LABELS: Record<FieldName, string> = {
   state: "State / region",
   hand: "Playing hand",
   backhand: "Backhand",
-  role: "Role",
 };
 
 const COUNTRY_OPTIONS = [
@@ -103,17 +109,10 @@ const BACKHAND_OPTIONS = [
   { value: "two-handed", label: "Two-handed" },
 ];
 
-const ROLE_OPTIONS = [
-  { value: "coach", label: "Coach" },
-  { value: "player", label: "Player" },
-  { value: "parent", label: "Parent" },
-  { value: "academy", label: "Academy" },
-];
-
 export type ProfileDraft = Record<FieldName, string>;
 
 export function ProfileForm({ initial }: { initial: ProfileDraft }) {
-  const { active, viewer } = useWorkspace();
+  const { viewer } = useWorkspace();
 
   const [saved, setSaved] = useState<ProfileDraft>(initial);
   const [draft, setDraft] = useState<ProfileDraft>(initial);
@@ -142,9 +141,6 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
 
   const displayName =
     `${draft.firstName} ${draft.lastName}`.trim() || viewer.name;
-  const roleLabel = ROLE_OPTIONS.find(
-    (option) => option.value === draft.role,
-  )?.label;
 
   return (
     <div className="flex max-w-[660px] flex-col gap-5">
@@ -164,17 +160,11 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
           onError={setError}
         >
           <div className="text-title-lg truncate">{displayName}</div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {roleLabel && <IdentityPill>{roleLabel}</IdentityPill>}
-            {active.kind === "team" && (
-              <IdentityPill>{active.name}</IdentityPill>
-            )}
-            {viewer.memberSince && (
-              <span className="mono text-[11px] text-[var(--ink-500)]">
-                since {viewer.memberSince}
-              </span>
-            )}
-          </div>
+          {viewer.memberSince && (
+            <div className="mono mt-1 text-[11px] text-[var(--ink-500)]">
+              since {viewer.memberSince}
+            </div>
+          )}
         </AvatarControl>
 
         {/* Completeness. One line, and only while something is actually
@@ -269,34 +259,6 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
             onChange={(value) => set("backhand", value)}
           />
         </div>
-
-        {/* No rule above this row: the grid's last row already ends the
-            block, and a second line two pixels under it read as a double
-            border. */}
-        <div className="flex items-start gap-6">
-          <div className="min-w-0 flex-1">
-            <div className="text-[12px] text-[var(--ink-900)]">Role</div>
-            <div className="mt-0.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
-              How you describe yourself; roster and team tools come from your
-              workspace membership, not this setting. It never changes what you
-              pay for; that&apos;s{" "}
-              <Link
-                href="/dashboard/settings/plan"
-                className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
-              >
-                Plan
-              </Link>
-              .
-            </div>
-          </div>
-          <MenuSelect
-            label="Role"
-            value={draft.role || undefined}
-            options={ROLE_OPTIONS}
-            placeholder="Select role"
-            onChange={(value) => set("role", value)}
-          />
-        </div>
       </SettingsCard>
 
       <SettingsSaveBar
@@ -311,14 +273,6 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
 
 function Note({ children }: { children: React.ReactNode }) {
   return <span className="text-[11px] text-[var(--ink-500)]">{children}</span>;
-}
-
-function IdentityPill({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded-full bg-[var(--surface-subtle)] px-2.5 py-[3px] text-[11px] text-[var(--ink-600)]">
-      {children}
-    </span>
-  );
 }
 
 function ProfileField({
@@ -364,17 +318,14 @@ function ProfileField({
       required={missing}
     >
       {isDate ? (
-        // `emphasis` is the same prop name `SettingsUnderlineInput` takes
-        // below, and means the same thing: draw the rule 2px blue at rest
-        // because the page is asking for this field. The two branches stay
-        // visually identical, and neither restyles the other's internals.
+        // A missing field is marked by the caption's asterisk, not by the
+        // rule: blue belongs to the field that has focus.
         <DateField
           label={label}
           variant="underline"
           value={value}
           onChange={onChange}
           max={maxDate}
-          emphasis={missing}
         />
       ) : (
         <SettingsUnderlineInput
@@ -382,7 +333,6 @@ function ProfileField({
           value={value}
           placeholder={placeholder}
           mono={mono}
-          emphasis={missing}
           onChange={(event) => onChange(event.target.value)}
         />
       )}

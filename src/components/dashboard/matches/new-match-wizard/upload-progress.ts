@@ -1,7 +1,30 @@
+import type { ScoreLineSet } from "@/lib/ui/score-format";
 import type {
   VideoUploadEvent,
   VideoUploadProgress,
 } from "./useUploadMatchWizard";
+
+/**
+ * What the success screen says about the match it just saved.
+ *
+ * Handed over by the wizard at the moment the row is written, from the same
+ * values it wrote — the screen never re-reads the match, so it cannot show a
+ * name or score the row does not have.
+ */
+export interface CreatedMatch {
+  matchId: string;
+  playerName: string;
+  opponentName: string;
+  /** Played sets only, oriented to `playerName`. */
+  sets: ScoreLineSet[];
+  /** Null when the score decides nobody — a stopped or unfinished match. */
+  won: boolean | null;
+  /**
+   * What still runs after the row is in: a video transfer from this tab, an
+   * import's file being read, or nothing (a video job saved without a file).
+   */
+  follows: "video" | "import" | "none";
+}
 
 /**
  * What one upload is doing, owned by `UploadMatchFlow` rather than the wizard
@@ -26,41 +49,18 @@ export interface UploadState {
     | "submit_failed"
     | "cancelled"
     | "failed";
-  fileName: string;
+  /** From `"started"`; what "Try again" resubmits. Absent before it lands. */
+  jobId?: string;
   progress?: VideoUploadProgress;
   error?: string;
   cancel?: () => void;
 }
 
-export type UploadPhase = UploadState["phase"];
-
-/** One source for phase colour, so the label ink cannot disagree with the track. */
-export const PHASE_INK: Record<UploadPhase, string> = {
-  uploading: "#3B82F6",
-  // Uploaded but not yet handed over is still in motion, so it reads as action
-  // rather than success — the green is reserved for the vendor accepting it.
-  done: "#3B82F6",
-  submitted: "#5DB955",
-  submit_failed: "#E51837",
-  cancelled: "#E51837",
-  failed: "#E51837",
-};
-
-export const PHASE_LABEL: Record<Exclude<UploadPhase, "uploading">, string> = {
-  done: "Submitting…",
-  submitted: "Submitted",
-  submit_failed: "Not submitted",
-  cancelled: "Cancelled",
-  failed: "Failed",
-};
-
 /**
  * Folds one event from the wizard's upload closure into the uploads map.
  *
- * Keyed by match, because uploads genuinely overlap: "Upload another" starts a
- * second transfer while the first is still moving bytes. A single slot meant
- * the second silently replaced the first on screen while both ran, and Cancel
- * only ever reached the newest one.
+ * Keyed by match so an event can only ever change the match it belongs to — a
+ * late event from an earlier run never lands on the match now on screen.
  *
  * Returns `prev` itself for an event it ignores, so a `setState` updater that
  * calls this does not re-render.
@@ -73,7 +73,7 @@ export function applyVideoUploadEvent(
     return new Map(prev).set(event.matchId, {
       matchId: event.matchId,
       phase: "uploading",
-      fileName: event.fileName,
+      jobId: event.jobId,
       cancel: event.cancel,
     });
   }
@@ -84,7 +84,6 @@ export function applyVideoUploadEvent(
     // was refused, the session expired, the file's container was rejected.
     // Dropped, it left the success card with nothing to show and falling
     // through to "Sent for analysis." for a video that never moved a byte.
-    // `"started"` is what carries the file name, so this entry has none.
     if (event.kind !== "failed") {
       // Every other kind follows a `"started"` and cannot arrive first.
       return prev;
@@ -92,7 +91,6 @@ export function applyVideoUploadEvent(
     return new Map(prev).set(event.matchId, {
       matchId: event.matchId,
       phase: "failed",
-      fileName: "Video",
       error: event.error,
     });
   }
@@ -105,30 +103,4 @@ export function applyVideoUploadEvent(
         : { phase: event.kind, cancel: undefined };
 
   return new Map(prev).set(event.matchId, { ...current, ...patch });
-}
-
-/**
- * The uploads that survive "Upload another": the ones still moving bytes.
- * Clearing everything would hide transfers that are still running, which is
- * exactly the bug keying by match fixes.
- */
-export function keepRunningUploads(
-  prev: Map<string, UploadState>,
-): Map<string, UploadState> {
-  const next = new Map(prev);
-  for (const [id, u] of next) if (u.phase !== "uploading") next.delete(id);
-  return next;
-}
-
-/** How the success screen reads a set of uploads, derived in one place. */
-export function summarizeUploads(uploads: readonly UploadState[]) {
-  const uploading = uploads.filter((u) => u.phase === "uploading");
-  const problems = uploads.filter(
-    (u) =>
-      u.phase === "failed" ||
-      u.phase === "cancelled" ||
-      u.phase === "submit_failed",
-  );
-  const busy = uploading.length > 0 || uploads.some((u) => u.phase === "done");
-  return { uploading, problems, busy };
 }

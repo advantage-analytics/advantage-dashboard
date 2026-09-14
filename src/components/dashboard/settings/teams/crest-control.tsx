@@ -1,7 +1,9 @@
 "use client";
 
-import { useRef, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Camera } from "lucide-react";
+import { ImageAdjustDialog } from "@/components/dashboard/settings/image-adjust-dialog";
+import { fetchImageFile } from "@/lib/ui/image-adjust";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import {
   removeProgramCrest,
@@ -10,13 +12,19 @@ import {
 
 const ACCEPT = "image/png,image/jpeg,image/webp,image/svg+xml";
 
+/** Edge of the square the dialog bakes. Drawn at 38–52px; 512 leaves room. */
+const CREST_EDGE_PX = 512;
+
 /**
  * The 52px crest at the head of the identity card, as a control.
  *
  * The mark itself is the button — hover paints a camera over it — and the
- * words beside it say what to upload. One hidden file input serves both; the
- * form posts the moment a file is chosen, because a crest is one file and a
- * second "Save" for it would be a step with nothing to decide.
+ * words beside it say what to upload. One hidden file input serves both.
+ * Choosing a file opens the adjust dialog rather than uploading: an SVG crest
+ * is usually off-centre inside its own canvas with nothing behind it, and
+ * uploaded as-is it came out small, lopsided and on the grey tile. Save bakes
+ * the placed, backed square and posts that. "Adjust" reopens the current
+ * crest so a nudge does not mean finding the file again.
  */
 export function CrestControl({
   programId,
@@ -31,15 +39,21 @@ export function CrestControl({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
+  const [adjusting, setAdjusting] = useState<File | null>(null);
 
-  const submit = (file: File) => {
+  const submit = (baked: Blob) => {
+    const ext = baked.type === "image/webp" ? "webp" : "png";
     const formData = new FormData();
     formData.set("programId", programId);
-    formData.set("file", file);
+    formData.set(
+      "file",
+      new File([baked], `crest.${ext}`, { type: baked.type }),
+    );
     onError(null);
     startTransition(async () => {
       const result = await uploadProgramCrest(formData);
       if (!result.ok) onError(result.error);
+      else setAdjusting(null);
     });
   };
 
@@ -49,6 +63,17 @@ export function CrestControl({
       const result = await removeProgramCrest(programId);
       if (!result.ok) onError(result.error);
     });
+  };
+
+  /** Reopen the crest that is up now. The bucket is public and sends CORS. */
+  const adjustCurrent = async () => {
+    if (!crestUrl) return;
+    onError(null);
+    try {
+      setAdjusting(await fetchImageFile(crestUrl, "crest"));
+    } catch {
+      onError("Couldn't load the current crest. Upload it again instead.");
+    }
   };
 
   return (
@@ -90,6 +115,16 @@ export function CrestControl({
             <button
               type="button"
               disabled={isPending}
+              onClick={adjustCurrent}
+              className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)] focus-visible:outline-none disabled:opacity-50"
+            >
+              Adjust
+            </button>
+          )}
+          {crestUrl && (
+            <button
+              type="button"
+              disabled={isPending}
               onClick={remove}
               className="cursor-pointer text-[11px] font-medium text-[var(--ink-600)] hover:text-[var(--ink-900)] focus-visible:outline-none disabled:opacity-50"
             >
@@ -97,7 +132,7 @@ export function CrestControl({
             </button>
           )}
           <span className="text-[11px] text-[var(--ink-400)]">
-            PNG, JPG, WebP or SVG · square · under 512 KB
+            PNG, JPG, WebP or SVG · under 512 KB
           </span>
         </div>
       </div>
@@ -112,8 +147,22 @@ export function CrestControl({
           const file = event.target.files?.[0];
           // Reset so choosing the same file again still fires a change.
           event.target.value = "";
-          if (file) submit(file);
+          if (file) {
+            onError(null);
+            setAdjusting(file);
+          }
         }}
+      />
+
+      <ImageAdjustDialog
+        open={adjusting !== null}
+        file={adjusting}
+        shape="square"
+        outputEdge={CREST_EDGE_PX}
+        saving={isPending}
+        onSave={submit}
+        onCancel={() => setAdjusting(null)}
+        onChooseAnother={() => inputRef.current?.click()}
       />
     </div>
   );

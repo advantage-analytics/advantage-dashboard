@@ -199,7 +199,7 @@ must show `processed` → **"Stats pending"**, not "Analyzed". Treating `complet
 as "show stats" renders a page of empty charts, which reads as "you hit no
 serves".
 
-### 3.3 The match detail short-circuit — `app/dashboard/matches/[matchId]/page.tsx`
+### 3.3 The match detail short-circuit — `app/dashboard/matches/(detail)/[matchId]/page.tsx`
 
 When `isInFlight(status) || isAnalysisFailed(status)`, the page renders hero +
 summary + `MatchAnalysisProgress` and **returns early**. Keep that gate. Every
