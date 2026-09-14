@@ -1,4 +1,4 @@
-import { YouPill } from "@/components/ui/new-pill";
+import { YouPill } from "@/components/ui/you-pill";
 import { getInitials } from "@/lib/data/match-utils";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { recordLabel } from "@/lib/data/player-profile";

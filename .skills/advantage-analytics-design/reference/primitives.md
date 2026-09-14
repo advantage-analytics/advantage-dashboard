@@ -159,7 +159,8 @@ ring + grey pill; invited = dashed ring (no person yet, only an email);
 "Claimed today" = a transition-receipt pill that decays after a session (a
 one-time acknowledgment, not a permanent state). State chips are 18px pill,
 10/500 ink-700 on surface-subtle — grey, never an outcome colour; "New" is the
-one blue-tinted exception (Data Table rule 4). 26px in rows, 22px in menus.
+one blue-tinted exception (Data Table rule 4). The viewer's own `You` wears the
+same grey through `YouPill` (see Settings Pages). 26px in rows, 22px in menus.
 The avatar is the system's one circle — entities are squares, people are
 circles.
 

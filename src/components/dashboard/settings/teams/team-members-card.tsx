@@ -5,7 +5,7 @@ import { ArrowUpRight, Lock } from "lucide-react";
 import { SettingsCard } from "@/components/dashboard/settings/settings-card";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
 import { StatePill } from "@/components/ui/state-pill";
-import { YouPill } from "@/components/ui/new-pill";
+import { YouPill } from "@/components/ui/you-pill";
 import { getInitials } from "@/lib/data/match-utils";
 import {
   RoleMenu,

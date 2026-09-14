@@ -107,7 +107,9 @@ master-detail split is retired; its detail is the peek drawer below.
    status; never filled blue (it would compete with the Result badge); gone
    once the report is opened. **Unread is not a dot and not a column** — the
    dot column retired from data tables (the 6px blue dot stays the activity
-   tray's mark alone). Max one state pill per row. A pill never truncates:
+   tray's mark alone). Max one state pill per row — the viewer's grey `You`
+   (`YouPill`) is identity, not state, and does not count; see Settings Pages
+   › Person row in a card. A pill never truncates:
    the name span takes `min-width:0; overflow:hidden; text-overflow:ellipsis`
    and the pill `flex-shrink:0` — a clipped pill reads like the banned W/L
    letter. _Shipped:_ `ui/state-pill.tsx` is the grey register (Draft, Shared,

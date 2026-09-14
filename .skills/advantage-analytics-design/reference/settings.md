@@ -79,11 +79,24 @@ One shape for every person a card lists — members, invitees, usage lines:
 - **Pending → outlined pill + dashed-ring avatar.** An `Invited` row is a state
   of the same list, not a different kind of row. The outlined pill deliberately
   matches the outlined seat box representing that same invite.
-- **The `You` pill is the one sanctioned blue-tinted pill besides "New"**
-  (design owner's call, 2026-09-06, overriding _people-state chips are grey_).
-  It marks identity, not standing, so it sits **beside the name** and the role
-  stays in the pill column. 18px, `--blue-tint-08` on `--blue`. A third blue
-  pill costs both of these their meaning — do not add one.
+- **`You` is a grey pill, and only `YouPill` draws it** (`ui/you-pill.tsx`;
+  design owner's call, 2026-09-13). `StatePill`'s geometry and colour — 18px,
+  10/500 `--ink-700` on `--surface-subtle`. It marks identity, not standing, so
+  it sits **beside the name** and the role stays in the pill column; a row
+  carrying `You` and a role pill is not two state pills. Every surface that
+  marks the viewer uses the primitive: this card, the hours breakdown, the
+  transfer receipt, the roster table, the upload wizard's roster menu and
+  player fields, and the player profile header. A lowercase `you`, `(you)` or
+  `<StatePill>You</StatePill>` is drift, and `scripts/check-design-drift.mjs`
+  (check 7) counts it. _The retired rule read "The `You` pill is the one
+  sanctioned blue-tinted pill besides "New" (design owner's call, 2026-09-06,
+  overriding people-state chips are grey). It marks identity, not standing, so
+  it sits beside the name and the role stays in the pill column. 18px,
+  `--blue-tint-08` on `--blue`. A third blue pill costs both of these their
+  meaning — do not add one." Blue on a card with nothing to click spent the
+  action colour on a label, and the wizard already drew `You` grey while the
+  roster wrote a lowercase `you`, so the product was marking the viewer three
+  ways at once._
 
 ### Selects on a settings page are `MenuSelect`
 

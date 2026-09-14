@@ -138,6 +138,19 @@ const DEFAULT_PALETTE_RE = new RegExp(
   "g",
 );
 
+// ── Check 7 — "You", drawn by hand instead of by `YouPill` ─────────────────
+// Before it was one primitive the product marked the viewer three ways at
+// once: a blue tint in Settings, a grey `StatePill` in the upload wizard, and
+// a lowercase grey word on the roster. A JSX text node that is only `You`,
+// `you` or `(you)` is how a fourth arrives. `.tsx` only, comments stripped.
+// The skeleton is exempt: it sizes an invisible placeholder with the word and
+// must not paint the live pill's colour.
+const YOU_MARKER_RE = />\s*\(?[Yy]ou\)?\s*</g;
+const YOU_MARKER_EXEMPT = new Set([
+  "src/components/ui/you-pill.tsx",
+  "src/components/dashboard/loading/settings-pending.tsx",
+]);
+
 // Blank out every region that can contain a shadcn-looking substring without
 // being a utility class:
 //   - comments, because a docstring may legitimately DISCUSS `bg-accent`
@@ -216,6 +229,7 @@ const findings = {
   shadcn: [],
   transcript: [],
   defaultPalette: [],
+  youMarker: [],
 };
 const SKIP = new Set([AUTHORITY, ...TRANSCRIPTIONS]);
 // Hex-literal checks (1 and 3) only — NOT the full per-file SKIP above, which
@@ -287,6 +301,10 @@ for (const file of (await walk(SRC)).sort()) {
 
   for (const m of stripped.matchAll(DEFAULT_PALETTE_RE))
     findings.defaultPalette.push(`${file}:${lineOf(m.index)}  ${m[0]}`);
+
+  if (extname(file) === ".tsx" && !YOU_MARKER_EXEMPT.has(file))
+    for (const m of hexText.matchAll(YOU_MARKER_RE))
+      findings.youMarker.push(`${file}:${lineOf(m.index)}  ${m[0].trim()}`);
 }
 
 // ── Seeds. Lower these as tasks clear drift; never raise one. ───────────────
@@ -333,6 +351,12 @@ const CHECKS = [
     seed: 0,
     label: "transcription drift from colors.css",
     fix: "align the module to colors.css, or add the role to colors.css if it is real",
+  },
+  {
+    key: "youMarker",
+    seed: 0,
+    label: "hand-drawn You marker",
+    fix: "render <YouPill /> from components/ui/you-pill.tsx",
   },
 ];
 

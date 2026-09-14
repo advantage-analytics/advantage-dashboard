@@ -66,7 +66,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { DateField } from "@/components/ui/date-field";
-import { StatePill } from "@/components/ui/state-pill";
+import { YouPill } from "@/components/ui/you-pill";
 import { MenuSelect } from "@/components/ui/menu-select";
 import {
   AlertDialog,
@@ -1397,7 +1397,7 @@ function DetailsStepContentImpl({
             <span className="flex min-w-0 flex-col gap-0.5 sm:pt-1.5">
               <span className="inline-flex items-center gap-2 text-[13px] text-[var(--ink-900)]">
                 <span className="truncate">{subject.name}</span>
-                {subject.isSelf && <StatePill>You</StatePill>}
+                {subject.isSelf && <YouPill />}
               </span>
               {playerProvenance && (
                 <span className="text-micro whitespace-nowrap">

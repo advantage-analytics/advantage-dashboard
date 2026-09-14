@@ -9,7 +9,7 @@ import {
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
 import { SettingsUnderlineInput } from "@/components/dashboard/settings/settings-card";
 import { StatePill } from "@/components/ui/state-pill";
-import { YouPill } from "@/components/ui/new-pill";
+import { YouPill } from "@/components/ui/you-pill";
 import { transferProgramOwnership } from "@/components/dashboard/settings/team-actions";
 import { getInitials } from "@/lib/data/match-utils";
 import type { TeamMember } from "@/lib/data/team-settings-server";
