@@ -6,6 +6,7 @@ import * as types from "@/components/dashboard/matches/new-match-wizard/types";
 import * as validation from "@/components/dashboard/matches/new-match-wizard/validation";
 import * as scoreState from "@/components/dashboard/matches/new-match-wizard/score-state";
 import * as subjectEligibility from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
+import * as scoreFormat from "@/lib/ui/score-format";
 import type {
   UseUploadMatchWizardProps,
   UseUploadMatchWizardReturn,
@@ -292,6 +293,8 @@ export function uploadWizardHarness(
       monthlyCapSecondsFor: () => 7200,
     },
     "@/lib/data/usage-format": { formatResetDate: () => "Oct 1" },
+    // Pure, and only read to describe the saved match to the success screen.
+    "@/lib/ui/score-format": scoreFormat,
     "@/lib/wizard/actions": {
       saveMatchDraft: async (draft: { id: string }) => {
         draftSaves.push(draft);

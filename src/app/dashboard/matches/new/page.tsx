@@ -6,6 +6,8 @@ import {
   draftWorkspaceRefusal,
 } from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
 import { loadMatchDraft } from "@/lib/wizard/actions";
+import { redirect } from "next/navigation";
+import { getAddVideoTarget } from "@/lib/data/add-video-server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { getRosterPlayerOptions } from "@/lib/data/roster-server";
 import { isProviderSupported, type ProviderId } from "@/lib/services/upload";
@@ -54,16 +56,37 @@ async function rosterSubjectFor(
  * person and attributes every statistic to them. A link may answer a question
  * on that step; it may not answer them all and move on.
  *
- * Both are validated rather than trusted: an unknown or retired provider id
+ * `?match=` adds a video to a match that already exists — see
+ * `getAddVideoTarget()` for which matches the wizard takes and where the rest
+ * are sent. That one DOES skip step one, because the match already answered it.
+ *
+ * All are validated rather than trusted: an unknown or retired provider id
  * falls through to the wizard's own default, and a player id that names nobody
  * on the ACTIVE program's roster opens an unseeded wizard.
  */
 export default async function NewMatchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ draft?: string; source?: string; player?: string }>;
+  searchParams: Promise<{
+    draft?: string;
+    source?: string;
+    player?: string;
+    match?: string;
+  }>;
 }): Promise<React.JSX.Element> {
-  const { draft: draftId, source, player } = await searchParams;
+  const { draft: draftId, source, player, match } = await searchParams;
+
+  if (match) {
+    const context = await getWorkspaceContext();
+    if (!context) redirect("/login");
+    const target = await getAddVideoTarget(
+      match,
+      context.viewer.id,
+      context.active.kind,
+    );
+    if (target.kind === "redirect") redirect(target.href);
+    return <UploadMatchFlow preset={target.preset} />;
+  }
 
   // Independent reads, so they overlap. The workspace is resolved for a
   // `?player=` visit (to name a roster player) and for a `?draft=` one (to

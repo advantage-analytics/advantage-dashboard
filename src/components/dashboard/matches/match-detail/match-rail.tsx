@@ -211,8 +211,17 @@ export function MatchRail({
                   ? "No video on this match — the stats came from the SwingVision export."
                   : "No video available for this match."}
               </span>
+              {/* A match typed in by hand gets the video attached to itself.
+                  One with a source keeps starting a new upload: a SwingVision
+                  match already has points from the export (a video analysis
+                  would write a second set), and a video match whose film was
+                  reclaimed already has its analysis. */}
               <Link
-                href="/dashboard/matches/new"
+                href={
+                  match.sourceProvider
+                    ? "/dashboard/matches/new"
+                    : `/dashboard/matches/new?match=${match.id}`
+                }
                 className="text-[11px] font-medium text-[var(--blue)]"
               >
                 Add video

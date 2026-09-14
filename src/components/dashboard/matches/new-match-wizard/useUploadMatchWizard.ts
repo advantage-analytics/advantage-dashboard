@@ -69,6 +69,8 @@ import {
   type IdentityMatchStatus,
 } from "./types";
 import { deleteMatchDraft, saveMatchDraft } from "@/lib/wizard/actions";
+import { playedSets, scoreSetsFrom } from "@/lib/ui/score-format";
+import type { CreatedMatch } from "./upload-progress";
 import {
   determineWinner,
   buildMatchData,
@@ -259,7 +261,7 @@ export interface UseUploadMatchWizardProps {
    * match was created" — the modal doesn't care, but the full-page flow has to
    * show a success state for one and navigate away for the other.
    */
-  onCreated?: (matchId: string) => void;
+  onCreated?: (match: CreatedMatch) => void;
   /**
    * Video transfer lifecycle, for whoever is still on screen to render.
    *
@@ -2583,7 +2585,19 @@ export function useUploadMatchWizard({
         window.dispatchEvent(
           new CustomEvent("match-created", { detail: { matchId } }),
         );
-        onCreated?.(matchId);
+        onCreated?.({
+          matchId,
+          playerName: matchRow.player1_name,
+          opponentName: matchRow.player2_name,
+          sets: playedSets(scoreSetsFrom(matchRow.score)),
+          // A score nobody won — stopped, unfinished — gets no result word.
+          won: undecided ? null : winner.name === formData.playerName,
+          follows: processingStrategy
+            ? uploadedFile?.file
+              ? "video"
+              : "none"
+            : "import",
+        });
 
         // Close the modal FIRST, then refresh after it has finished closing. The modal is
         // a Radix dialog that locks <body> (pointer-events + scroll) while open. A

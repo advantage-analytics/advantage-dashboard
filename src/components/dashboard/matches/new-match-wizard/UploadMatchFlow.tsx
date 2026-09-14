@@ -15,7 +15,7 @@
  * about how the state behind it is managed.
  */
 
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderId } from "@/lib/services/upload";
 import type { EventPreset, MatchDraft } from "./types";
 import type { RosterSubject, VideoUploadEvent } from "./useUploadMatchWizard";
@@ -41,6 +41,7 @@ import {
 import {
   applyVideoUploadEvent,
   keepRunningUploads,
+  type CreatedMatch,
   type UploadState,
 } from "./upload-progress";
 import { WizardShell } from "./WizardShell";
@@ -79,14 +80,30 @@ export function UploadMatchFlow({
   // A team upload came from a line and goes back to it. A personal one has the
   // matches list, which is where its match will appear.
   const EXIT_HREF = preset?.eventHref ?? PERSONAL_EXIT_HREF;
-  const [createdMatchId, setCreatedMatchId] = useState<string | null>(null);
+  const [created, setCreated] = useState<CreatedMatch | null>(null);
+  // Read by the failure listener below, which is registered once.
+  const createdRef = useRef<CreatedMatch | null>(null);
+  useEffect(() => {
+    createdRef.current = created;
+  }, [created]);
+  /**
+   * Set when the wizard rolled the new row back — the job insert or an
+   * import's file upload failed after the match was written. The match is
+   * gone, so the screen must stop offering to open it.
+   */
+  const [removed, setRemoved] = useState<{
+    matchId: string;
+    error: string;
+  } | null>(null);
   // Bumping this remounts the wizard, which is how "Upload another" gets a
   // clean hook rather than a hand-written reset that would drift from it.
   const [runId, setRunId] = useState(0);
   // The wizard unmounts the instant a match is created, but its upload closure
   // runs for up to a couple of hours afterwards. This component survives that,
-  // so it is the only place the progress can live — keyed by match, because
-  // "Upload another" starts a second transfer while the first is still moving.
+  // so it is the only place the progress can live. Keyed by match so a late
+  // event from an earlier run can never land on the match now on screen —
+  // "Upload another" opens a new tab while anything is still moving, so the
+  // screen itself only ever shows one.
   const [uploads, setUploads] = useState<Map<string, UploadState>>(
     () => new Map(),
   );
@@ -95,14 +112,59 @@ export function UploadMatchFlow({
     setUploads((prev) => applyVideoUploadEvent(prev, event));
   }, []);
 
-  if (createdMatchId) {
+  // `match-upload-failed` is the wizard's only word for the failures that
+  // happen OUTSIDE the video transfer: the processing-job insert, and an
+  // import's file upload. Neither reaches `onVideoUpload`, so without this the
+  // screen would wait on an upload that is never going to start. A transfer
+  // failure dispatches it too, but its own `"failed"` event is already here and
+  // wins — see the `has` guard.
+  useEffect(() => {
+    function onFailure(event: Event) {
+      const match = createdRef.current;
+      if (!match) return;
+      const detail = (event as CustomEvent).detail as
+        { matchId?: string; error?: string } | undefined;
+      const error = detail?.error || "The upload stopped before it completed.";
+      // No id is the wizard's contract for "the row was rolled back".
+      if (!detail?.matchId) {
+        setRemoved({ matchId: match.matchId, error });
+        return;
+      }
+      if (detail.matchId !== match.matchId) return;
+      setUploads((prev) =>
+        prev.has(match.matchId)
+          ? prev
+          : applyVideoUploadEvent(prev, {
+              matchId: match.matchId,
+              kind: "failed",
+              error,
+            }),
+      );
+    }
+    window.addEventListener("match-upload-failed", onFailure);
+    return () => window.removeEventListener("match-upload-failed", onFailure);
+  }, []);
+
+  const handleResubmitted = useCallback((matchId: string) => {
+    setUploads((prev) =>
+      applyVideoUploadEvent(prev, { matchId, kind: "submitted" }),
+    );
+  }, []);
+
+  if (created) {
     return (
       <UploadMatchSuccess
-        uploads={[...uploads.values()]}
+        match={created}
+        upload={uploads.get(created.matchId) ?? null}
+        removedError={
+          removed?.matchId === created.matchId ? removed.error : null
+        }
         exitHref={EXIT_HREF}
         preset={preset}
+        onResubmitted={() => handleResubmitted(created.matchId)}
         onUploadAnother={() => {
-          setCreatedMatchId(null);
+          setCreated(null);
+          setRemoved(null);
           setUploads(keepRunningUploads);
           setRunId((n) => n + 1);
         }}
@@ -120,7 +182,7 @@ export function UploadMatchFlow({
       // to prevent. No linked path does that today; the key is what keeps it
       // from mattering if one is ever added.
       key={`${runId}:${initialSubject?.playerId ?? ""}`}
-      onCreated={setCreatedMatchId}
+      onCreated={setCreated}
       onVideoUpload={handleVideoUpload}
       exitHref={EXIT_HREF}
       preset={preset}
