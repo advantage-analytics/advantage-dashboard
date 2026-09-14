@@ -1,4 +1,4 @@
-import type { PersonalActivity } from "@/lib/data/personal-activity-server";
+import type { PersonalActivity } from "@/lib/data/personal-activity";
 import { ActivityHeatmap } from "@/components/dashboard/home/activity-heatmap";
 
 /**

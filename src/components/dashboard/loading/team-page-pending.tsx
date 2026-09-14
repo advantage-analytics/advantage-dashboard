@@ -2,6 +2,10 @@
 import { ScheduleToolbarPending } from "./list-toolbar-pending";
 
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { useIsDayZero } from "@/components/dashboard/presence-provider";
+import { RosterDayZeroPage } from "@/components/dashboard/team/roster-day-zero";
+import { ScheduleDayZeroPage } from "@/components/dashboard/schedule/static/schedule-day-zero";
+import { TeamHomeDayZeroPage } from "@/components/dashboard/team/team-home-day-zero-page";
 import {
   canManageTeamSchedule,
   canUploadForProgram,
@@ -30,6 +34,16 @@ import {
 
 export function TeamHomePageSkeleton() {
   const { active } = useWorkspace();
+  const dayZero = useIsDayZero("teamHome");
+  // Nothing to load: draw the onboarding page this resolves to.
+  if (dayZero && active.kind === "team")
+    return (
+      <TeamHomeDayZeroPage
+        canManage={isProgramStaff(active)}
+        canSchedule={canManageTeamSchedule(active)}
+        teamName={active.name}
+      />
+    );
   return (
     <TeamHomeSkeleton
       action={
@@ -46,6 +60,12 @@ export function TeamHomePageSkeleton() {
 
 export function RosterPageSkeleton() {
   const { active } = useWorkspace();
+  const dayZero = useIsDayZero("roster");
+  // Nothing to load into rows: draw the page this resolves to, not a table.
+  if (dayZero)
+    return (
+      <RosterDayZeroPage canManage={isProgramStaff(active)} buttons={null} />
+    );
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
       <div className="flex min-w-0 flex-1 flex-col gap-5 px-14 pt-5 pb-8">
@@ -119,6 +139,15 @@ export function RosterPageSkeleton() {
 
 export function SchedulePageSkeleton() {
   const { active } = useWorkspace();
+  const dayZero = useIsDayZero("schedule");
+  // Nothing to load into rows: draw the page this resolves to, not a table.
+  if (dayZero)
+    return (
+      <ScheduleDayZeroPage
+        canCreate={canManageTeamSchedule(active)}
+        canAddOwnMatch={canUploadForProgram(active)}
+      />
+    );
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
       <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pt-5 pb-6">

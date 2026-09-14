@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import HomeContent from "./home-content";
+import { HomeDayZeroPage } from "./home-day-zero-page";
+import { PresenceReport } from "@/components/dashboard/presence-provider";
 import RecentActivity from "./recent-activity";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
@@ -49,10 +51,28 @@ export default async function Home() {
   // Shared base rows are the only layout prerequisite. The analytics loader
   // reuses this cached query, rather than issuing an extra existence check.
   const matches = await getPersonalMatches(userId);
+  // Keeps the loading fallback's day-zero hint honest across navigation.
+  const report = (
+    <PresenceReport
+      workspaceId={workspace.active.id}
+      matches={matches.length > 0}
+    />
+  );
+  // Day zero reads nothing further — see `HomeDayZeroPage`, which the route's
+  // loading fallback also draws.
+  if (matches.length === 0) {
+    return (
+      <>
+        {report}
+        <HomeDayZeroPage userId={userId} />
+      </>
+    );
+  }
   const resources = startHomeResources(supabase, userId, matches, billingMonth);
   const { hasMatches } = resources;
   return (
     <div className="flex w-full flex-1 flex-col bg-white">
+      {report}
       <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-14 pt-5 pb-8">
         <HomeContent
           key={userId}

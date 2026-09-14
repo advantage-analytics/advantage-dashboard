@@ -6,6 +6,7 @@ import {
   GHOST_OPACITY,
   GhostRule,
 } from "@/components/dashboard/home/day-zero-shape";
+import { advButton } from "@/lib/ui/adv-button";
 import { RosterHeaderButtons } from "./roster-header-buttons";
 import { COL, ROSTER_COLUMNS, ROW } from "./roster-table";
 import type { ManagedPlayer } from "./invite-target-picker";
@@ -77,21 +78,27 @@ function GhostRow({ opacity }: { opacity: number }) {
   );
 }
 
-export function RosterDayZero({
-  canManage,
-  managedPlayers,
-  seats,
-  roster,
-  playersCanUpload,
-  former,
-}: {
-  canManage: boolean;
+export interface RosterDayZeroButtons {
   managedPlayers: ManagedPlayer[];
   seats: SeatUsage;
   roster: RosterMember[];
   playersCanUpload: boolean;
   /** Forwarded to `RosterHeaderButtons` — see its own doc comment. */
   former: FormerPlayer[];
+}
+
+export function RosterDayZero({
+  canManage,
+  buttons,
+}: {
+  canManage: boolean;
+  /**
+   * What `RosterHeaderButtons` opens its dialogs with. Null while the page is
+   * still loading — the route fallback draws this screen before the seat count
+   * is known, so the pair renders disabled in place (the same pair the roster
+   * skeleton has always drawn) until the page replaces it with live buttons.
+   */
+  buttons: RosterDayZeroButtons | null;
 }) {
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -99,15 +106,18 @@ export function RosterDayZero({
         headline="Every player on the program starts here."
         headlineMeasure="30ch"
         actions={
-          canManage ? (
-            <RosterHeaderButtons
-              managedPlayers={managedPlayers}
-              seats={seats}
-              roster={roster}
-              playersCanUpload={playersCanUpload}
-              former={former}
-            />
-          ) : null
+          !canManage ? null : buttons ? (
+            <RosterHeaderButtons {...buttons} />
+          ) : (
+            <div className="flex shrink-0 items-center gap-2.5">
+              <button type="button" disabled className={advButton("ghost")}>
+                Invite
+              </button>
+              <button type="button" disabled className={advButton("primary")}>
+                Add player
+              </button>
+            </div>
+          )
         }
         conditions={
           canManage
@@ -151,6 +161,21 @@ export function RosterDayZero({
           </div>
         </div>
       </DayZeroShape>
+    </div>
+  );
+}
+
+/**
+ * `RosterDayZero` in `RosterView`'s own frame, minus the title row and the
+ * footer: the offer carries the page's one primary. Shared by the page and the
+ * loading fallbacks, so an empty program sees this from the first paint.
+ */
+export function RosterDayZeroPage(props: Parameters<typeof RosterDayZero>[0]) {
+  return (
+    <div className="flex w-full flex-1 bg-[var(--surface-card)]">
+      <div className="flex min-w-0 flex-1 flex-col px-14 pt-5 pb-8">
+        <RosterDayZero {...props} />
+      </div>
     </div>
   );
 }

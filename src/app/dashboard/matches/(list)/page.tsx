@@ -15,7 +15,8 @@ import {
 } from "@/lib/data/matches-list-types";
 import { MatchesPageContent } from "@/components/dashboard/matches/matches-page-content";
 import { MatchesTitleRow } from "@/components/dashboard/matches/matches-title-row";
-import { MatchesDayZero } from "@/components/dashboard/matches/matches-day-zero";
+import { MatchesDayZeroPage } from "@/components/dashboard/matches/matches-day-zero";
+import { PresenceReport } from "@/components/dashboard/presence-provider";
 import { MatchesSkeleton } from "@/components/dashboard/matches/matches-skeleton";
 import { matchesListShape } from "@/components/dashboard/matches/match-list-layout";
 import { MatchDrawerSlot } from "@/components/dashboard/matches/match-drawer-slot";
@@ -89,16 +90,26 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   // changes on the team side is who gets a pair at all — `canUploadForProgram`
   // is the same predicate the wizard itself enforces, so the offer never opens
   // a door the next page closes.
+  //
+  // The route's loading fallback draws this same page when the layout's
+  // presence read says the scope is empty; the report keeps that read honest
+  // across client navigation.
+  const report = (
+    <PresenceReport
+      workspaceId={workspace.active.id}
+      matches={matches.length > 0}
+      drafts={drafts.length > 0}
+    />
+  );
   if (matches.length === 0 && drafts.length === 0) {
     return (
-      <div className="flex w-full flex-1 bg-[var(--surface-card)]">
-        <div className="flex min-w-0 flex-1 flex-col px-14 pt-5 pb-6">
-          <MatchesDayZero
-            scope={isTeam ? "team" : "personal"}
-            canUpload={isTeam ? canUploadForProgram(workspace.active) : true}
-          />
-        </div>
-      </div>
+      <>
+        {report}
+        <MatchesDayZeroPage
+          scope={isTeam ? "team" : "personal"}
+          canUpload={isTeam ? canUploadForProgram(workspace.active) : true}
+        />
+      </>
     );
   }
 
@@ -123,6 +134,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   // the rail sits beside the column and the table reflows, as on the Roster.
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
+      {report}
       <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pt-5 pb-6">
         <WidgetBoundary key={`title:${scopeKey}`} label="Match summary">
           <Suspense
