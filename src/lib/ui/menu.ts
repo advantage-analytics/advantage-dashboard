@@ -10,9 +10,6 @@
 export const MENU_ROW_CLASS =
   "flex w-full items-center gap-3 rounded-[9px] px-3 py-[9px] text-[12px] text-[var(--ink-900)] transition-colors duration-100 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none cursor-pointer";
 
-/** The width of a menu row's leading slot — an icon, a tick, a spinner. */
-export const MENU_LEAD_CLASS = "flex w-[14px] shrink-0 justify-center";
-
 /**
  * A workspace mark at menu-row scale: 18px, the text's own line height, so a
  * row holding one stays the height the menu's scroll cap was measured against.

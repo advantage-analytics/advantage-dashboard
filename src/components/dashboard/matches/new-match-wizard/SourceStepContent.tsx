@@ -38,7 +38,6 @@
 import { memo, useCallback, useState, useTransition } from "react";
 import Link from "next/link";
 import {
-  Check,
   ChevronDown,
   ChevronsUpDown,
   Info,
@@ -51,6 +50,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ChosenCheck } from "@/components/ui/float-menu";
 import { StatePill } from "@/components/ui/state-pill";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/data/match-utils";
@@ -531,14 +531,8 @@ function SourceStepContentImpl({
                         className="size-[13px] shrink-0 animate-spin text-[var(--ink-400)]"
                         aria-hidden="true"
                       />
-                    ) : isActive ? (
-                      <Check
-                        className="size-[13px] shrink-0 text-[var(--blue)]"
-                        strokeWidth={1.5}
-                        aria-hidden="true"
-                      />
                     ) : (
-                      <span className="w-[13px] shrink-0" />
+                      <ChosenCheck chosen={isActive} />
                     )}
                   </button>
                 );
@@ -755,15 +749,7 @@ function SourceStepContentImpl({
                       {copy.types}
                     </span>
                   )}
-                  {isCurrent ? (
-                    <Check
-                      className="size-[13px] shrink-0 text-[var(--blue)]"
-                      strokeWidth={1.5}
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <span className="w-[13px] shrink-0" aria-hidden="true" />
-                  )}
+                  <ChosenCheck chosen={isCurrent} />
                 </button>
               );
             })}

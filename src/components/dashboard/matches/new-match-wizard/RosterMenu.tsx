@@ -15,7 +15,7 @@
  * fields; the list inside them is the same list.
  */
 
-import { Check } from "lucide-react";
+import { ChosenCheck } from "@/components/ui/float-menu";
 import { StatePill } from "@/components/ui/state-pill";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/data/match-utils";
@@ -193,19 +193,11 @@ function RosterRow({
       )}
       <span className="flex-1" />
       {trailing}
-      {/* The chosen row is marked the way every other select in the app marks
-          one — a 13px Signal Blue check in its own slot, no persistent fill.
-          It sits after the You / Coach-managed pill so the two read as
-          different facts: who this is, then what is picked. */}
-      {chosen ? (
-        <Check
-          className="size-[13px] shrink-0 text-[var(--blue)]"
-          strokeWidth={1.5}
-          aria-hidden="true"
-        />
-      ) : (
-        <span className="w-[13px] shrink-0" aria-hidden="true" />
-      )}
+      {/* The chosen row is marked the way every menu in the app marks one —
+          `ChosenCheck` at the right edge, no persistent fill. It sits after
+          the You / Coach-managed pill so the two read as different facts: who
+          this is, then what is picked. */}
+      <ChosenCheck chosen={chosen} />
     </button>
   );
 }

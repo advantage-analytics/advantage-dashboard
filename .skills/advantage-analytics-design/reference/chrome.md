@@ -223,8 +223,9 @@ trigger it wraps, 10px radius, 5px inset, `--shadow-dropdown`),
 `FloatMenuItem` (a 7px-radius row: 12px label, optional 11px `--ink-500`
 second line saying what the choice means, `--surface-subtle` on unselected
 pointer hover and on keyboard focus, no persistent or pointer-hover fill for
-the chosen row, a 12px Signal Blue check — the one colour that means
-"chosen"), `FloatMenuNote` (the closing sentence under a hairline for the
+the chosen row, and `ChosenCheck` at the row's right edge — the one colour
+that means "chosen"; a leading 12px glyph belongs to action menus, which have
+no chosen row), `FloatMenuNote` (the closing sentence under a hairline for the
 thing the menu will not do) and `FloatMenuDivider`. **Every select is
 `MenuSelect`** (`ui/menu-select.tsx`), composed from those with two triggers:
 `underline` for a form field (full width, the caption's hairline, no radius)
@@ -263,7 +264,9 @@ unselected row's pointer hover and any row's keyboard focus, never a standing
 fill on the selection, which is marked by a 13px `--blue` check alone — Signal
 Blue is the one colour that means "chosen", in menus and cards alike; the
 earlier ink-900 menu check is superseded). The check keeps its own 13px slot at
-the row's right edge, after any state pill, so an empty slot still aligns.
+the row's right edge, after any state pill, so an empty slot still aligns —
+drawn by `ChosenCheck`, the same as every other menu (see **Selected-row
+check**, `reference/primitives.md`).
 Person row = 22px avatar +
 12/500 name + 11px ink-500 middot-joined meta. "Someone new" is always first,
 above a hairline, dashed-ring avatar. Section labels are quiet sentence case

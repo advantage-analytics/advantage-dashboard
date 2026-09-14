@@ -8,12 +8,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { Check, ChevronDown, Search } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ChosenCheck } from "@/components/ui/float-menu";
 import { useListboxNav } from "@/hooks/use-listbox-nav";
 import { cn } from "@/lib/utils";
 
@@ -192,18 +193,10 @@ export function ConferenceSelect({
                     index === activeIndex && "bg-[var(--surface-subtle)]",
                   )}
                 >
-                  <span className="mt-[3px] w-3 shrink-0 text-[var(--blue)]">
-                    {chosen ? (
-                      <Check
-                        className="size-3"
-                        strokeWidth={2.5}
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                  </span>
-                  <span className="min-w-0 text-[12px] text-[var(--ink-900)]">
+                  <span className="min-w-0 flex-1 text-[12px] text-[var(--ink-900)]">
                     {name}
                   </span>
+                  <ChosenCheck chosen={chosen} className="mt-[2px]" />
                 </div>
               );
             })

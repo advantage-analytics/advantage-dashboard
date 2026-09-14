@@ -8,8 +8,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Check, ChevronRight, Plus, Search } from "lucide-react";
+import { ChevronRight, Plus, Search } from "lucide-react";
 import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
+import { ChosenCheck } from "@/components/ui/float-menu";
 import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import { cn } from "@/lib/utils";
 import {
@@ -656,17 +657,11 @@ function SchoolRow({
             off rather than formatted. */}
         {history.lastPlayedOn ? history.lastPlayedOn.slice(5) : "—"}
       </span>
-      {/* Selected-row check is Signal Blue, site-wide (design system SKILL.md)
-          — the same 13px Lucide `check` every menu and card uses for "chosen".
-          The chevron is what an unselected row draws instead; the two never
-          show together. */}
+      {/* `ChosenCheck` at the right edge — the one mark every menu and card
+          uses for "chosen". The chevron is what an unselected row draws
+          instead; the two never show together. */}
       {selected ? (
-        <Check
-          size={13}
-          strokeWidth={2}
-          aria-hidden="true"
-          className="text-[var(--blue)]"
-        />
+        <ChosenCheck chosen />
       ) : (
         <ChevronRight
           size={13}
