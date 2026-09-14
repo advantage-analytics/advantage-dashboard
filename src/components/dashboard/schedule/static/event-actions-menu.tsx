@@ -2,17 +2,8 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   FloatMenu,
   FloatMenuDivider,
@@ -20,7 +11,6 @@ import {
 } from "@/components/ui/float-menu";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { deleteEvent } from "@/lib/schedule/actions";
-import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -153,76 +143,29 @@ export function EventActionsMenu({
       </ChromeTooltip>
 
       {canDelete ? (
-        <AlertDialog
+        <ConfirmDialog
           open={deleteOpen}
           onOpenChange={(open) => {
-            if (deleting) return;
             setDeleteOpen(open);
             if (!open) setError(null);
           }}
-        >
-          <AlertDialogContent
-            className="max-w-md gap-3 rounded-[14px] border-[var(--border-hairline)] p-6 shadow-[var(--shadow-dropdown)]"
-            onCloseAutoFocus={(event) => {
-              event.preventDefault();
-              if (deletedRef.current) {
-                deletedRef.current = false;
-                return;
-              }
-              triggerRef.current?.focus();
-            }}
-          >
-            <AlertDialogHeader className="gap-2 text-left">
-              <AlertDialogTitle className="text-[16px] font-medium tracking-[-0.4px] text-[var(--ink-900)]">
-                Delete {eventName}?
-              </AlertDialogTitle>
-              <AlertDialogDescription className="text-[13px] leading-5 text-[var(--ink-600)]">
-                This permanently removes the event and its empty schedule lines
-                from the team schedule. Events with recorded matches or outcomes
-                cannot be deleted. This cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-
-            {error ? (
-              <p
-                role="alert"
-                className="rounded-[var(--radius-button)] bg-[var(--danger-tint-15)] px-3 py-2 text-[12px] text-[var(--danger)]"
-              >
-                {error}
-              </p>
-            ) : null}
-
-            <AlertDialogFooter className="mt-2 sm:gap-2">
-              <AlertDialogCancel
-                disabled={deleting}
-                className={cn(advButton("outline", "md"), "mt-0")}
-              >
-                Cancel
-              </AlertDialogCancel>
-              <AlertDialogAction
-                disabled={deleting}
-                onClick={(event) => {
-                  event.preventDefault();
-                  void confirmDelete();
-                }}
-                className={advButton("danger-solid", "md")}
-              >
-                {deleting ? (
-                  <>
-                    <Loader2
-                      className="size-3.5 animate-spin"
-                      strokeWidth={1.5}
-                      aria-hidden="true"
-                    />
-                    Deleting…
-                  </>
-                ) : (
-                  "Delete event"
-                )}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          title={`Delete ${eventName}?`}
+          description="Removes the event and its empty lines from the team schedule. Events with recorded matches or outcomes can't be deleted, and this can't be undone."
+          tone="danger"
+          confirmLabel="Delete event"
+          pendingLabel="Deleting…"
+          pending={deleting}
+          error={error}
+          onConfirm={() => void confirmDelete()}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            if (deletedRef.current) {
+              deletedRef.current = false;
+              return;
+            }
+            triggerRef.current?.focus();
+          }}
+        />
       ) : null}
     </>
   );

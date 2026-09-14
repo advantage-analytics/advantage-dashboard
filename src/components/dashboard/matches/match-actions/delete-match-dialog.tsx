@@ -2,19 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Loader2 } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { advButton } from "@/lib/ui/adv-button";
-import { cn } from "@/lib/utils";
+import { ConfirmDialog, ConfirmList } from "@/components/ui/confirm-dialog";
 
 interface DeleteMatchDialogProps {
   matchId: string;
@@ -60,63 +48,36 @@ export function DeleteMatchDialog({
   };
 
   return (
-    <AlertDialog
+    <ConfirmDialog
       open={open}
-      onOpenChange={(next) => !loading && onOpenChange(next)}
+      onOpenChange={onOpenChange}
+      title="Delete this match?"
+      description={
+        <>
+          Removes{" "}
+          <span className="font-medium text-[var(--ink-900)]">
+            {matchLabel}
+          </span>{" "}
+          for good. This can&apos;t be undone.
+        </>
+      }
+      tone="danger"
+      confirmLabel="Delete match"
+      pendingLabel="Deleting…"
+      pending={loading}
+      error={error}
+      onConfirm={() => void handleDelete()}
+      // Opened from inside clickable match rows and cards, which must not
+      // treat a click in the dialog as a click on the row.
+      onContentClick={(event) => event.stopPropagation()}
     >
-      <AlertDialogContent
-        className="max-w-md gap-3 rounded-2xl border-[var(--border-hairline)] p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <AlertDialogHeader className="gap-2 text-left">
-          <AlertDialogTitle className="text-[16px] font-medium tracking-[-0.4px] text-[var(--ink-900)]">
-            Delete this match?
-          </AlertDialogTitle>
-          <AlertDialogDescription className="text-[13px] leading-[20px] text-[#525252]">
-            This permanently removes{" "}
-            <span className="font-medium text-[#0D0D0D]">{matchLabel}</span>,
-            its statistics, every recorded point and shot, and the uploaded
-            file. This cannot be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-
-        {error && (
-          <p className="rounded-md bg-[rgba(229,24,55,0.06)] px-3 py-2 text-[12px] text-[#E51837]">
-            {error}
-          </p>
-        )}
-
-        <AlertDialogFooter className="mt-2 sm:gap-2">
-          <AlertDialogCancel
-            disabled={loading}
-            className={cn(
-              "h-9 rounded-[6px] border-[#EAECF0] bg-white px-4 text-[13px] font-medium text-[#525252] shadow-none hover:bg-[#F5F5F5]",
-            )}
-          >
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={(e) => {
-              e.preventDefault();
-              handleDelete();
-            }}
-            disabled={loading}
-            className={cn(
-              advButton("danger-solid"),
-              "shadow-[0_1px_3px_rgba(229,24,55,0.25)]",
-            )}
-          >
-            {loading ? (
-              <>
-                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                Deleting…
-              </>
-            ) : (
-              "Delete match"
-            )}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      <ConfirmList
+        items={[
+          "Its statistics",
+          "Every recorded point and shot",
+          "The uploaded file",
+        ]}
+      />
+    </ConfirmDialog>
   );
 }

@@ -210,7 +210,7 @@ function LeaveTeamDialog({
         onOpenChange={(next) => {
           if (!next) finish();
         }}
-        width={480}
+        width={440}
         title={`You've left ${programName}`}
         description={
           result.ownerNotified
@@ -285,9 +285,9 @@ function LeaveTeamDialog({
       onOpenChange={(next) => {
         if (!isPending) onOpenChange(next);
       }}
-      width={480}
+      width={440}
       title={`Leave ${programName}?`}
-      description={`Are you sure? You'll have to be invited back into ${programName}.`}
+      description="You'll need an invite from the coaching staff to come back."
       footer={
         <>
           <span className="flex-1" />

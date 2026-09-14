@@ -68,16 +68,7 @@ import {
 import { DateField } from "@/components/ui/date-field";
 import { StatePill } from "@/components/ui/state-pill";
 import { MenuSelect } from "@/components/ui/menu-select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 import { advField } from "@/lib/ui/adv-field";
 import { getInitials } from "@/lib/data/match-utils";
@@ -1896,33 +1887,23 @@ function DetailsStepContentImpl({
           />
         </div>
       </div>
-      <AlertDialog
+      {/* Red: the scores entered for the dropped sets are gone once this runs,
+          and the stock dialog's blue button said otherwise. */}
+      <ConfirmDialog
         open={pendingFormat !== null}
         onOpenChange={(open) => {
           if (!open) setPendingFormat(null);
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove entered set scores?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This format has fewer sets. Continuing removes the scores for the
-              excluded sets.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep current format</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (pendingFormat) onFormatChange(pendingFormat);
-                setPendingFormat(null);
-              }}
-            >
-              Remove set scores
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title="Remove entered set scores?"
+        description="This format has fewer sets, so the scores entered for the extra sets are removed."
+        tone="danger"
+        cancelLabel="Keep current format"
+        confirmLabel="Remove set scores"
+        onConfirm={() => {
+          if (pendingFormat) onFormatChange(pendingFormat);
+          setPendingFormat(null);
+        }}
+      />
     </div>
   );
 }

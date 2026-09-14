@@ -27,7 +27,8 @@ import { FocusEmpty } from "@/components/dashboard/home/focus-empty";
 import { FocusCardPending } from "@/components/dashboard/loading/home-skeleton";
 import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
 import { TeamSetupLine } from "@/components/dashboard/team/team-setup-line";
-import { TeamDayZeroHome } from "@/components/dashboard/team/team-day-zero-home";
+import { TeamHomeDayZeroPage } from "@/components/dashboard/team/team-home-day-zero-page";
+import { PresenceReport } from "@/components/dashboard/presence-provider";
 
 import { topMovers } from "@/lib/data/team-movers";
 import { TopMoversFrame } from "@/components/dashboard/team/top-movers";
@@ -40,7 +41,6 @@ import {
 } from "@/components/dashboard/loading/home-skeleton";
 import {
   TeamHomeFrame,
-  TeamHomeRegions,
   TeamTitlePending,
   DualPending,
   MoversBodyPending,
@@ -57,21 +57,49 @@ export default async function TeamHomePage() {
   if (!workspace) redirect("/login");
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");
+  // Both start together: on a client navigation the layout does not re-run,
+  // so presence is not cached and awaiting it first would add a round trip to
+  // every populated visit.
   const presence = getTeamHomePresence(active.id);
   const resources = getTeamHomeResources(
     active.id,
     currentBillingMonth(),
     active.orgType,
   );
+  const state = await presence;
   const isStaff = isProgramStaff(active);
+  const isDayZero = !state.hasMatches && !state.hasRoster && !state.hasSchedule;
+  // Keeps the loading fallback's day-zero hint honest across navigation.
+  const report = (
+    <PresenceReport
+      workspaceId={active.id}
+      matches={state.hasMatches}
+      roster={state.hasRoster}
+      duals={state.hasSchedule}
+    />
+  );
+
+  // Day zero reads nothing: every card's empty anatomy is the whole truth for
+  // a program with no match, player or dual (see `TeamHomeDayZeroPage`), and
+  // the route's loading fallback draws the same page. The resources already
+  // started are left to settle unobserved.
+  if (isDayZero) {
+    for (const pending of Object.values(resources)) pending.catch(() => {});
+    return (
+      <>
+        {report}
+        <TeamHomeDayZeroPage canManage={isStaff} teamName={active.name} />
+      </>
+    );
+  }
+
   const action = (
     <NewMatchAction
       canUpload={canUploadForProgram(active)}
       canSubmitVideo={active.canSubmitVideo}
     />
   );
-  const state = await presence;
-  const isDayZero = !state.hasMatches && !state.hasRoster && !state.hasSchedule;
+
   const kpis = region(
     "Program summary",
     <HomeKpisPending />,
@@ -80,27 +108,19 @@ export default async function TeamHomePage() {
   const dual = region(
     "Dual",
     <DualPending />,
-    <Dual
-      resources={resources}
-      canSchedule={canManageTeamSchedule(active)}
-      isPreview={isDayZero}
-    />,
+    <Dual resources={resources} canSchedule={canManageTeamSchedule(active)} />,
   );
   const movers = region(
     "Top movers",
-    <TopMoversFrame isPreview={isDayZero}>
+    <TopMoversFrame>
       <MoversBodyPending />
     </TopMoversFrame>,
-    <Movers resources={resources} canManage={isStaff} isPreview={isDayZero} />,
+    <Movers resources={resources} canManage={isStaff} />,
   );
   const insight = region(
     "Advantage Intelligence",
     <FocusCardPending />,
-    <Insight
-      resources={resources}
-      programId={active.id}
-      isPreview={isDayZero}
-    />,
+    <Insight resources={resources} programId={active.id} />,
   );
   const court = region(
     "Court record",
@@ -111,59 +131,39 @@ export default async function TeamHomePage() {
   );
   const history = region(
     "Dual match history",
-    <DualHistoryFrame isPreview={isDayZero}>
+    <DualHistoryFrame>
       <HistoryBodyPending />
     </DualHistoryFrame>,
-    <History
-      resources={resources}
-      teamName={active.name}
-      isPreview={isDayZero}
-    />,
+    <History resources={resources} teamName={active.name} />,
   );
   const setupLine = isStaff
     ? region("Getting set up", null, <Setup resources={resources} />)
     : null;
 
-  if (isDayZero) {
-    return (
-      <div className="flex w-full flex-1 flex-col bg-[var(--surface-card)]">
-        <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col gap-4 px-14 pt-5 pb-8">
-          <TeamDayZeroHome canManage={isStaff}>
-            <TeamHomeRegions
-              kpis={kpis}
-              dual={dual}
-              movers={movers}
-              insight={insight}
-              court={court}
-              history={history}
-            />
-          </TeamDayZeroHome>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <TeamHomeFrame
-      key={`${workspace.viewer.id}:${active.id}`}
-      title={region(
-        "Team summary",
-        <TeamTitlePending action={action} />,
-        <Title resources={resources} action={action} />,
-      )}
-      setupLine={setupLine}
-      kpis={kpis}
-      dual={dual}
-      movers={movers}
-      insight={insight}
-      court={court}
-      history={history}
-      footer={region(
-        "Team usage",
-        <HomeFooterPending />,
-        <Footer resources={resources} />,
-      )}
-    />
+    <>
+      {report}
+      <TeamHomeFrame
+        key={`${workspace.viewer.id}:${active.id}`}
+        title={region(
+          "Team summary",
+          <TeamTitlePending action={action} />,
+          <Title resources={resources} action={action} />,
+        )}
+        setupLine={setupLine}
+        kpis={kpis}
+        dual={dual}
+        movers={movers}
+        insight={insight}
+        court={court}
+        history={history}
+        footer={region(
+          "Team usage",
+          <HomeFooterPending />,
+          <Footer resources={resources} />,
+        )}
+      />
+    </>
   );
 }
 function awaiting(data: Awaited<Resources["analytics"]>) {
@@ -215,27 +215,23 @@ async function Kpis({ resources }: { resources: Resources }) {
 async function Dual({
   resources,
   canSchedule,
-  isPreview,
 }: {
   resources: Resources;
   canSchedule: boolean;
-  isPreview: boolean;
 }) {
   const { weekendDual } = await resources.schedule;
   return weekendDual ? (
     <DualSheet dual={weekendDual} />
   ) : (
-    <DualSheetEmpty canSchedule={canSchedule} isPreview={isPreview} />
+    <DualSheetEmpty canSchedule={canSchedule} />
   );
 }
 async function Movers({
   resources,
   canManage,
-  isPreview,
 }: {
   resources: Resources;
   canManage: boolean;
-  isPreview: boolean;
 }) {
   const roster = await resources.roster;
   return (
@@ -245,7 +241,6 @@ async function Movers({
         roster.members.filter((member) => member.role === "player").length
       }
       canManage={canManage}
-      isPreview={isPreview}
     />
   );
 }
@@ -255,11 +250,9 @@ async function Court({ resources }: { resources: Resources }) {
 async function History({
   resources,
   teamName,
-  isPreview,
 }: {
   resources: Resources;
   teamName: string;
-  isPreview: boolean;
 }) {
   const { dualHistory, dualForm, dualWins, decidedDuals } =
     await resources.schedule;
@@ -272,25 +265,22 @@ async function History({
         losses: decidedDuals.length - dualWins,
       }}
       teamName={teamName}
-      isPreview={isPreview}
     />
   );
 }
 async function Insight({
   resources,
   programId,
-  isPreview,
 }: {
   resources: Resources;
   programId: string;
-  isPreview: boolean;
 }) {
   const { insight, kpiMatchCount, kpiCards, matchCount } =
     await resources.analytics;
   if (insight)
     return (
       <FocusCard
-        showStatisticsLink={!isPreview}
+        showStatisticsLink
         footer={{
           left: insight.caption,
           right: `${kpiMatchCount} ${kpiMatchCount === 1 ? "match" : "matches"}`,
@@ -305,7 +295,7 @@ async function Insight({
     );
   return (
     <FocusCard
-      showStatisticsLink={!isPreview && matchCount > 0}
+      showStatisticsLink={matchCount > 0}
       footer={{
         left:
           matchCount === 0

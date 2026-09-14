@@ -199,3 +199,20 @@ export function MatchesDayZero(
     </div>
   );
 }
+
+/**
+ * `MatchesDayZero` in the page's own frame. Shared by `page.tsx` and the
+ * route's loading fallback, so an empty workspace sees this from the first
+ * paint rather than a table skeleton that then gives way to it.
+ */
+export function MatchesDayZeroPage(
+  props: Parameters<typeof MatchesDayZero>[0],
+) {
+  return (
+    <div className="flex w-full flex-1 bg-[var(--surface-card)]">
+      <div className="flex min-w-0 flex-1 flex-col px-14 pt-5 pb-6">
+        <MatchesDayZero {...props} />
+      </div>
+    </div>
+  );
+}
