@@ -65,6 +65,7 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 /* Straight from the two files, not the wizard's barrel: `index.ts` re-exports
    `UploadMatchFlow` and its whole subtree, and this flow needs the chrome and
    the keys — the same call `new-dual-flow.tsx` made. */
@@ -85,8 +86,12 @@ import { isSettled } from "@/lib/schedule/entry-plan";
 import { formatValueOf } from "@/lib/schedule/format";
 import type { EventDetail } from "@/lib/schedule/types";
 
-/** Where Cancel goes on step one. Inside the rebuilt set. */
+/** Where Cancel goes on a create. Inside the rebuilt set. */
 const SCHEDULE_HREF = "/dashboard/team/schedule";
+
+/** Where step one's Back goes on a create: the event chooser, step one of
+ *  four — so the name is step two. An edit never passes it and counts three. */
+const CHOOSER_HREF = "/dashboard/team/schedule/new";
 
 type Step = 1 | 2 | 3;
 
@@ -217,6 +222,7 @@ export function NewTournamentFlow({
   event,
 }: NewTournamentFlowProps) {
   const editing = mode === "edit";
+  const router = useRouter();
   // Memoised because `useTournamentDraft` seeds its entered map from this
   // object once. A fresh one per render would be a fresh `carry` array on
   // every keystroke — harmless, and still not what the hook describes.
@@ -247,6 +253,9 @@ export function NewTournamentFlow({
     [],
   );
   const toName = useCallback(() => setStep(1), []);
+  // A route, not a step — see `CHOOSER_HREF`. Only the footer's Back reaches
+  // it: Escape on step one stays inert, as on the upload wizard's first step.
+  const toChooser = useCallback(() => router.push(CHOOSER_HREF), [router]);
 
   const eventHref = event
     ? `/dashboard/team/schedule/${event.event.id}`
@@ -291,8 +300,9 @@ export function NewTournamentFlow({
 
   return (
     <WizardShell
-      stepIndex={step - 1}
-      stepCount={3}
+      // A create counts the chooser before it; an edit starts here.
+      stepIndex={editing ? step - 1 : step}
+      stepCount={editing ? 3 : 4}
       title={COPY[step].title}
       description={COPY[step].lede}
       pinned={
@@ -324,7 +334,8 @@ export function NewTournamentFlow({
       contentRef={contentRef}
       contentKey={step}
       contentClassName="mt-9"
-      back={step !== 1 ? back : undefined}
+      // An edit's step one has no chooser behind it, so no Back — Cancel.
+      back={step !== 1 ? back : editing ? undefined : toChooser}
       // An edit's way out is the event it came from — the page the coach
       // opened this from, and the one they can read either way.
       cancelHref={editing && event ? eventHref : SCHEDULE_HREF}

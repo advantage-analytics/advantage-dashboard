@@ -86,6 +86,7 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 /* Straight from the two files, not the wizard's barrel: `index.ts` re-exports
    `UploadMatchFlow` and its whole subtree, and this flow needs the chrome and
    the keys — the same call `score-only-flow.tsx` made. */
@@ -115,8 +116,13 @@ import { resultLabelFromOutcome } from "@/components/dashboard/schedule/result-c
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
 import type { EventDetail, EventEntry } from "@/lib/schedule/types";
 
-/** Where Cancel goes on step one. Inside the rebuilt set. */
+/** Where Cancel goes on a create. Inside the rebuilt set. */
 const SCHEDULE_HREF = "/dashboard/team/schedule";
+
+/** Where step one's Back goes: the event chooser, which is step one of four
+ *  on a create — so the school is step two, the facts three, the lineup four.
+ *  An edit never passes the chooser and keeps counting three. */
+const CHOOSER_HREF = "/dashboard/team/schedule/new";
 
 type Step = 1 | 2 | 3;
 
@@ -317,12 +323,10 @@ export function NewDualFlow(props: NewDualFlowProps) {
  */
 function SchoolStep({
   onChoose,
-  back,
 }: {
   onChoose: (name: string, program: ProgramSearchResult | null) => void;
-  /** Present only on the way back from a later step. */
-  back?: () => void;
 }) {
+  const router = useRouter();
   const contentRef = useRef<HTMLDivElement>(null);
   /** What Continue would carry. Null until something is picked or typed. */
   const choice = useRef<{
@@ -351,24 +355,29 @@ function SchoolStep({
     onChoose(name, program);
   }, [onChoose]);
 
+  // A route, not a step: the chooser is its own page. Escape stays inert here
+  // all the same — the upload wizard's first screen is the precedent, and a
+  // key that leaves the page is a key that loses a half-typed search.
+  const toChooser = useCallback(() => router.push(CHOOSER_HREF), [router]);
+
   useWizardKeys({
     contentRef,
-    canGoBack: back !== undefined,
-    onBack: back ?? (() => {}),
+    canGoBack: false,
+    onBack: toChooser,
     continueDisabled: !hasChoice,
     onContinue: commit,
   });
 
   return (
     <WizardShell
-      stepIndex={0}
-      stepCount={3}
+      stepIndex={1}
+      stepCount={4}
       title={COPY[1].title}
       description={COPY[1].lede}
       contentRef={contentRef}
       contentKey="school"
       contentClassName="mt-9"
-      back={back}
+      back={toChooser}
       cancelHref={SCHEDULE_HREF}
       continueLabel="Continue"
       onContinue={commit}
@@ -470,8 +479,7 @@ function DualDraftFlow({
 
   if (step === 1) {
     // The draft is still mounted above this branch — this component is what
-    // holds it — so everything already typed is waiting on the way back. No
-    // `back`: step one is the first step, and its way out is Cancel.
+    // holds it — so everything already typed is waiting on the way back.
     return <SchoolStep onChoose={onChoose} />;
   }
 
@@ -487,8 +495,9 @@ function DualDraftFlow({
 
   return (
     <WizardShell
-      stepIndex={step - 1}
-      stepCount={3}
+      // A create counts the chooser before it; an edit starts here.
+      stepIndex={edit ? step - 1 : step}
+      stepCount={edit ? 3 : 4}
       title={COPY[step].title}
       description={
         step === 3 && !laddered ? UNLADDERED_LINEUP_LEDE : COPY[step].lede
@@ -527,8 +536,8 @@ function DualDraftFlow({
       contentKey={step}
       contentClassName={step === 2 ? "mt-9" : "mt-9 flex flex-col gap-7"}
       back={canGoBack ? back : undefined}
-      // Only ever reached when there is no Back — the shell draws one or the
-      // other. On an edit that is step two, and its way out is the event.
+      // Drawn beside Back when there is one. On an edit's step two it is the
+      // only way out, and it goes to the event.
       cancelHref={eventHref}
       status={
         error ? (

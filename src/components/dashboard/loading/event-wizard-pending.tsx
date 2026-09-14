@@ -192,11 +192,21 @@ export function EventChooserPending() {
   );
 }
 
+/** Back · Cancel, the footer of every create step after the chooser. The
+ *  chooser's own two widths, so the words do not jump when the page lands. */
+const BACK_AND_CANCEL = (
+  <>
+    <Bar className="h-3 w-8" />
+    <Bar className="h-3 w-11" />
+  </>
+);
+
 /* ── /dashboard/team/schedule/new/dual ────────────────────────────────────── */
 
 /**
- * Step one of a new dual while the route reads the directory, the ladder and
- * the season: the search field (its icon is known, the directory count is
+ * Step two of four of a new dual — the chooser is step one — while the route
+ * reads the directory, the ladder and the season. Footer: Back · Cancel. The
+ * search field (its icon is known, the directory count is
  * not), the Division and Conference menus, the scope's eyebrow, and school
  * rows in `SchoolRow`'s grid.
  */
@@ -204,10 +214,11 @@ export function NewDualPending() {
   return (
     <WizardChrome
       label="Loading new dual"
-      stepIndex={0}
-      stepCount={3}
+      stepIndex={1}
+      stepCount={4}
       title={DUAL_COPY[1].title}
       lede={DUAL_COPY[1].lede}
+      footerStart={BACK_AND_CANCEL}
     >
       <div className="flex items-center gap-3 border-b-2 border-[var(--border-medium)] pt-3 pb-[13px]">
         <Search
@@ -252,18 +263,20 @@ export function NewDualPending() {
 /* ── /dashboard/team/schedule/new/tournament ──────────────────────────────── */
 
 /**
- * Step one of a new tournament while the route reads the ladder and the team
- * settings: the name field is fixed chrome — its label and its rule — and
+ * Step two of four of a new tournament — the chooser is step one — while the
+ * route reads the ladder and the team settings. Footer: Back · Cancel. The
+ * name field is fixed chrome — its label and its rule — and
  * waits only as a shape where the caret will land.
  */
 export function NewTournamentPending() {
   return (
     <WizardChrome
       label="Loading new tournament"
-      stepIndex={0}
-      stepCount={3}
+      stepIndex={1}
+      stepCount={4}
       title={TOURNAMENT_COPY[1].title}
       lede={TOURNAMENT_COPY[1].lede}
+      footerStart={BACK_AND_CANCEL}
     >
       <span className="eyebrow">Tournament · name</span>
       <span className="mt-1 flex h-[46px] items-center border-b-2 border-[var(--border-medium)] pt-1.5 pb-2">

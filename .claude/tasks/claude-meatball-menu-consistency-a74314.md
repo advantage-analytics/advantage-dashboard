@@ -45,7 +45,7 @@ ready).
 
 ## T3 · Dual/tournament flows: 4-step count, Back to chooser on step 1
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/components/dashboard/schedule/static/new-dual-flow.tsx, src/components/dashboard/schedule/static/new-tournament-flow.tsx, src/components/dashboard/loading/event-wizard-pending.tsx (guess)
