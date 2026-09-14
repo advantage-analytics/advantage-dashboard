@@ -12,23 +12,21 @@ import { cn } from "@/lib/utils";
  * The tint is mixed from `--blue` rather than baked as an rgba so it follows
  * the token into the dark scope; `--blue-tint-08` and `-12` bracket it but the
  * frame draws 10%.
- */
-const BLUE_PILL_CLASS =
-  "inline-flex h-[18px] items-center whitespace-nowrap rounded-full px-[7px] text-[10px] font-medium";
-
-const BLUE_PILL_STYLE = {
-  background: "color-mix(in oklch, var(--blue) 10%, transparent)",
-  color: "var(--blue)",
-} as const;
-
-/**
- * The only blue-tinted pill. "You" shared this style until 2026-09-13, when it
- * went grey (`YouPill`); a second blue pill costs this one its meaning, so do
- * not add one.
+ *
+ * The only blue-tinted pill — a second would cost this one its meaning.
  */
 export function NewPill({ className }: { className?: string }) {
   return (
-    <span className={cn(BLUE_PILL_CLASS, className)} style={BLUE_PILL_STYLE}>
+    <span
+      className={cn(
+        "inline-flex h-[18px] items-center rounded-full px-[7px] text-[10px] font-medium whitespace-nowrap",
+        className,
+      )}
+      style={{
+        background: "color-mix(in oklch, var(--blue) 10%, transparent)",
+        color: "var(--blue)",
+      }}
+    >
       New
     </span>
   );

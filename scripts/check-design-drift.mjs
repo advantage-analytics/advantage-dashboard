@@ -143,6 +143,7 @@ const DEFAULT_PALETTE_RE = new RegExp(
 // once: a blue tint in Settings, a grey `StatePill` in the upload wizard, and
 // a lowercase grey word on the roster. A JSX text node that is only `You`,
 // `you` or `(you)` is how a fourth arrives. `.tsx` only, comments stripped.
+// Text nodes only: a `{"You"}` expression or a `label="You"` prop passes.
 // The skeleton is exempt: it sizes an invisible placeholder with the word and
 // must not paint the live pill's colour.
 const YOU_MARKER_RE = />\s*\(?[Yy]ou\)?\s*</g;
@@ -253,7 +254,7 @@ for (const file of TRANSCRIPTIONS) {
 for (const file of (await walk(SRC)).sort()) {
   if (SKIP.has(file) || isUnreachable(file)) continue;
   const text = await readFile(file, "utf8");
-  // Comment-stripped once, reused by checks 1 and 3 below — a hex quoted in
+  // Comment-stripped once, reused by checks 1, 3 and 7 below — a hex quoted in
   // prose (explaining why a colour was retired, or naming the DS spec) is
   // documentation, not drift. blankComments preserves length and newlines,
   // so lineOf still maps to the right line either way.
