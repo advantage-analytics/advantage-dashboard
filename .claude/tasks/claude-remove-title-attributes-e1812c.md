@@ -80,7 +80,7 @@ ready).
 
 ## T6 · Join requests — unclip the email, expand the note
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/team/join-requests-card.tsx (surveyed, not guessed)
 - **done when:**

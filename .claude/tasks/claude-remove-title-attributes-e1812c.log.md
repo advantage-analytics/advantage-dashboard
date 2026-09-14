@@ -33,3 +33,14 @@ is the runner's. Newest entries at the bottom.
 **gate:** mechanical — pass (lint, typecheck, full test suite); completion — pass
 
 **changed:** Applied T1's stash `49a4994a…` (clean, six source files only): removed the seven native `title` tooltips on the matches list, upload wizard and season KPI strip; the wizard's opponent-name button now carries `aria-label` "Change the opponent, <name>". `tests/upload-player-details.spec.ts:291` re-anchored from `title="Change the opponent"` to the literal "Change the opponent, " (unique in the file, `<Pencil` 288 chars after it). The KPI strip's disabled reason stays visible in its footer. Widget-states check: attribute-only diff. The stash entry was applied, not dropped. T1 remains `blocked` in the queue — superseded by this task.
+
+## T6 · Join requests — unclip the email, expand the note — done
+
+**gate:** mechanical — pass (lint, typecheck, full test suite); completion — pass
+
+**changed:** `join-requests-card.tsx`: the requester email swaps `truncate` for `break-all` and wraps. The note moved into a local `RequestNote` component — still `line-clamp-2` by default; a ResizeObserver (measured only while clamped, disconnected on cleanup) shows a "Show more"/"Show less" `<button type="button" aria-expanded>` only when the clamp hides text; state is per request. Button class copied from the 11px "All N" link in `player-drawer.tsx`. The stale "full text is on the title" comment was rewritten. Widget-states check: loading/empty/error paths untouched; the change affects a loaded row only. Not browser-verified (needs a signed-in team staff session).
+
+**follow-ups:**
+
+1. The requester name span in the same row still `truncate`s, and `requesterName` can fall back to the email's local part — the same no-other-copy case as the email.
+2. A component test stubbing `ResizeObserver` would lock in the overflow-only button and its toggle; the repo's Playwright specs don't mount components today.
