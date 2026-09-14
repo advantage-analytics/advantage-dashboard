@@ -270,11 +270,9 @@ export function EventDrawer({
             <EventMark kind={event.kind} name={event.name} size={48} />
             <div className="flex min-w-0 flex-col gap-1">
               {/* One line, truncated: the drawer is 340px and a wrapped name
-                  pushes the facts and score down a row. `title` carries the
-                  full name on hover; the event page shows it whole. */}
-              <div className="text-title-lg truncate" title={event.name}>
-                {event.name}
-              </div>
+                  pushes the facts and score down a row. The full name has no
+                  on-hover reveal here; the event page shows it whole. */}
+              <div className="text-title-lg truncate">{event.name}</div>
               {subline ? (
                 <span
                   className="truncate text-[12px]"

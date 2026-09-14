@@ -43,7 +43,7 @@ ready).
 
 ## T3 · Drop DOM title tooltips — schedule
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/schedule/static/lineup-rows.tsx, src/components/dashboard/schedule/static/event-drawer.tsx (surveyed, not guessed)
 - **done when:**

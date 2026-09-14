@@ -21,3 +21,9 @@ is the runner's. Newest entries at the bottom.
 
 1. Full email and note text in the join-requests card are no longer reachable on hover — candidate for the `src/components/ui/tooltip.tsx` primitive.
 2. The "Press ? from anywhere on this page" hint in the help TOC is no longer shown anywhere — same candidate.
+
+## T3 · Drop DOM title tooltips — schedule — done
+
+**gate:** mechanical — pass (lint, typecheck, full test suite); completion — pass
+
+**changed:** Removed the native `title` from the "their pair" button in `lineup-rows.tsx` (`aria-label` and `aria-expanded` kept) and from the truncated event-name div in `event-drawer.tsx`; the comment above that div no longer claims a hover reveal. No spec anchored on either. Widget-states check: attribute-only diff, no loading/empty/error code touched.

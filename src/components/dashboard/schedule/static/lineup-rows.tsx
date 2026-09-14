@@ -901,7 +901,6 @@ export function OpponentPairPicker({
           type="button"
           aria-label={`Their pair at ${line.slot}`}
           aria-expanded={open}
-          title={names.length > 0 ? names.join(" / ") : undefined}
           data-line-unset={unset ? line.slot : undefined}
           data-opponent-well={
             names.length === 0 && !line.theirNoPlayer ? "empty" : "named"
