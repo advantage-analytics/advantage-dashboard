@@ -3,15 +3,12 @@ import { ResultMark } from "@/components/dashboard/result-mark";
 import { RowAction } from "@/components/dashboard/schedule/row-action";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import type { ProfileMatchRow } from "@/lib/data/player-profile-server";
+import { GhostRule } from "@/components/dashboard/home/day-zero-shape";
 import {
-  DayZeroShape,
-  GhostRule,
-} from "@/components/dashboard/home/day-zero-shape";
-import {
-  CARD_GHOST_ROWS,
-  WidgetEmptyBand,
-  type WidgetEmptyCopy,
-} from "./widget-empty";
+  CardEmpty,
+  GhostRows,
+  type CardSubject,
+} from "@/components/dashboard/shared/card-empty";
 
 /**
  * Every match, one row each — Date · Name · School · Line · outcome · Score.
@@ -51,13 +48,19 @@ function MatchHistoryHeader() {
 export function MatchHistoryCard({
   rows,
   playerName,
-  empty,
+  subject,
+  importHref,
 }: {
   rows: ProfileMatchRow[];
   /** For the Matches list's own player filter, which keys on the name. */
   playerName: string;
-  /** The band under the ghost rows when there are none — see `WidgetEmptyBand`. */
-  empty: WidgetEmptyCopy;
+  subject: CardSubject;
+  /**
+   * The wizard with SwingVision preselected, for the empty card's one step —
+   * the only place on the page that opens it that way. Null for a viewer who
+   * cannot upload.
+   */
+  importHref: string | null;
 }) {
   const allHref = `/dashboard/matches?player=${encodeURIComponent(playerName)}`;
 
@@ -81,25 +84,27 @@ export function MatchHistoryCard({
       <MatchHistoryHeader />
 
       {rows.length === 0 && (
-        <>
-          <DayZeroShape description="No matches yet: this card lists every match with its date, opponent, school, line, result and score.">
-            {CARD_GHOST_ROWS.map((opacity) => (
-              <div
-                key={opacity}
-                className={`grid ${HISTORY_GRID} h-11 items-center gap-3`}
-                style={{ opacity }}
-              >
-                <GhostRule width="70%" />
-                <GhostRule width="55%" tone="200" shape="tall" />
-                <GhostRule width="60%" />
-                <GhostRule width="20px" />
-                <GhostRule width="14px" shape="dot" />
-                <GhostRule width="65%" />
-              </div>
-            ))}
-          </DayZeroShape>
-          <WidgetEmptyBand {...empty} />
-        </>
+        <CardEmpty
+          description="No matches yet: this card lists every match with its date, opponent, school, line, result and score."
+          band={{
+            title: subject.isSelf
+              ? "Every match you play, newest first"
+              : `Every match ${subject.firstName} plays, newest first`,
+            body: "Each row opens its full report. Matches tracked in SwingVision import straight in.",
+            action: importHref
+              ? { label: "Import from SwingVision", href: importHref }
+              : undefined,
+          }}
+        >
+          <GhostRows className={`grid ${HISTORY_GRID} h-11 items-center gap-3`}>
+            <GhostRule width="70%" />
+            <GhostRule width="55%" tone="200" shape="tall" />
+            <GhostRule width="60%" />
+            <GhostRule width="20px" />
+            <GhostRule width="14px" shape="dot" />
+            <GhostRule width="65%" />
+          </GhostRows>
+        </CardEmpty>
       )}
 
       {/* No rules between rows — the header's hairline is the card's only

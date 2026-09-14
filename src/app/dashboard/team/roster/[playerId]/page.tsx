@@ -9,10 +9,7 @@ import { ProfileHeaderSlot } from "@/components/dashboard/team/player-profile/pr
 import { ProfileIdentity } from "@/components/dashboard/team/player-profile/profile-identity";
 import { ProfileActions } from "@/components/dashboard/team/player-profile/profile-actions";
 import { SeasonKpiStrip } from "@/components/dashboard/shared/season-kpi-strip";
-import {
-  LastMatchCard,
-  LastMatchEmpty,
-} from "@/components/dashboard/team/player-profile/last-match-card";
+import { LastMatchCard } from "@/components/dashboard/team/player-profile/last-match-card";
 import { MatchHistoryCard } from "@/components/dashboard/team/player-profile/match-history-card";
 import { LineHistoryCard } from "@/components/dashboard/team/player-profile/line-history-card";
 import { ServePlacementCard } from "@/components/dashboard/team/player-profile/serve-placement-card";
@@ -100,9 +97,10 @@ export default async function PlayerProfilePage({
       ? (roster.members.find((m) => m.playerId === playerId) ?? null)
       : null;
 
-  // `profile.playerId`, never the URL's — the wizard's For field wants the
-  // profile id. Match history's import step builds on it.
+  // `profile.playerId`, never the URL's: a claimed player's old links carry
+  // their user id, and the wizard's For field wants the profile id.
   const newMatchHref = `/dashboard/matches/new?player=${profile.playerId}`;
+  const subject = { isSelf, firstName: profile.firstName };
 
   const actions = (
     <ProfileActions
@@ -110,9 +108,7 @@ export default async function PlayerProfilePage({
       member={member}
       roster={mode === "staff" ? roster.members : []}
       canUpload={canUpload}
-      // `profile.playerId`, never the URL's: a claimed player's old links
-      // carry their user id, and the wizard's For field wants the profile id.
-      playerId={profile.playerId}
+      newMatchHref={newMatchHref}
     />
   );
 
@@ -145,64 +141,39 @@ export default async function PlayerProfilePage({
         />
 
         {/* The same five blocks whether or not a match exists: each card
-            holds its own ghost and the one step that fills it, so the first
-            match fills this page in rather than replacing it with another. */}
+            holds its own empty state, so the first match fills this page in
+            rather than replacing it with another. */}
         <SeasonKpiStrip
           kpis={profile.kpis}
           hasStats={profile.hasStats}
           matchesPlayed={profile.matchesPlayed}
+          // Only the day-zero hint is reworded for a coach. Once a match exists
+          // the strip's own "When the report lands" is the true sentence.
           emptyHint={
-            isSelf ? undefined : `After ${profile.firstName}'s first match`
+            isSelf || profile.matchesPlayed > 0
+              ? undefined
+              : `After ${profile.firstName}'s first match`
           }
         />
 
         <div className="grid items-start gap-4 lg:grid-cols-[1.9fr_1fr]">
           <div className="flex min-w-0 flex-col gap-4">
-            {profile.lastMatch ? (
-              <LastMatchCard match={profile.lastMatch} />
-            ) : (
-              profile.matchesPlayed === 0 && (
-                <LastMatchEmpty
-                  empty={{
-                    title: isSelf
-                      ? "Your last match lands here"
-                      : `${profile.firstName}'s last match lands here`,
-                    // No button: the header's New match is the same step,
-                    // one row above.
-                    body: "The score, the line, and what the report found.",
-                  }}
-                />
-              )
-            )}
+            <LastMatchCard
+              match={profile.lastMatch}
+              matchesPlayed={profile.matchesPlayed}
+              subject={subject}
+            />
             <MatchHistoryCard
               rows={profile.history}
               playerName={profile.name}
-              empty={{
-                title: isSelf
-                  ? "Every match you play, newest first"
-                  : `Every match ${profile.firstName} plays, newest first`,
-                body: "Each row opens its full report. Matches tracked in SwingVision import straight in.",
-                action: canUpload
-                  ? {
-                      label: "Import from SwingVision",
-                      href: `${newMatchHref}&source=swing-vision`,
-                    }
-                  : undefined,
-              }}
+              subject={subject}
+              importHref={
+                canUpload ? `${newMatchHref}&source=swing-vision` : null
+              }
             />
           </div>
           <div className="flex min-w-0 flex-col gap-4">
-            <LineHistoryCard
-              lines={profile.lines}
-              empty={{
-                title: "Lines fill in from the schedule",
-                body: "A dual's S1 to S6 and D1 to D3, or a tournament draw.",
-                action: {
-                  label: "Open schedule",
-                  href: "/dashboard/team/schedule",
-                },
-              }}
-            />
+            <LineHistoryCard lines={profile.lines} />
             <ServePlacementCard
               serve={profile.serve}
               matchesPlayed={profile.matchesPlayed}

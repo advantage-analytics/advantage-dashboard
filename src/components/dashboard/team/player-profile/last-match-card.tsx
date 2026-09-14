@@ -5,11 +5,11 @@ import { RowAction } from "@/components/dashboard/schedule/row-action";
 import { InsightStatChip } from "@/components/dashboard/shared/insight-stat-chip";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { clipText } from "@/lib/data/player-profile";
+import { GhostRule } from "@/components/dashboard/home/day-zero-shape";
 import {
-  DayZeroShape,
-  GhostRule,
-} from "@/components/dashboard/home/day-zero-shape";
-import { WidgetEmptyBand, type WidgetEmptyCopy } from "./widget-empty";
+  CardEmpty,
+  type CardSubject,
+} from "@/components/dashboard/shared/card-empty";
 import type { ProfileLastMatch } from "@/lib/data/player-profile-server";
 
 /**
@@ -47,13 +47,10 @@ function splitClaim(summary: string): { claim: string; body: string | null } {
 
 /**
  * The card before there is a last match: its eyebrow, the match row in grey,
- * and the page's band (`WidgetEmptyBand`).
- *
- * Drawn only on a profile with no matches at all. A player whose matches are
- * all unscored has matches and no "last match" to lead with, and a sentence
- * about their first one would be false — the page leaves the card out there.
+ * and the band. No button — the header's New match is the same step, one row
+ * above.
  */
-export function LastMatchEmpty({ empty }: { empty: WidgetEmptyCopy }) {
+function LastMatchEmpty({ subject }: { subject: CardSubject }) {
   return (
     <section
       aria-label="Last match"
@@ -61,9 +58,15 @@ export function LastMatchEmpty({ empty }: { empty: WidgetEmptyCopy }) {
       style={{ padding: "18px 20px" }}
     >
       <span className="eyebrow">Last match</span>
-      <DayZeroShape
+      <CardEmpty
         description="No match yet: this card shows the most recent match, its score and what the report found."
         className="mt-3.5"
+        band={{
+          title: subject.isSelf
+            ? "Your last match lands here"
+            : `${subject.firstName}'s last match lands here`,
+          body: "The score, the line, and what the report found.",
+        }}
       >
         <div className="grid grid-cols-[32px_minmax(0,1fr)_15px_auto] items-center gap-3">
           <span className="size-8 rounded-[var(--radius-button)] bg-[var(--ink-100)]" />
@@ -74,13 +77,32 @@ export function LastMatchEmpty({ empty }: { empty: WidgetEmptyCopy }) {
           <GhostRule width="14px" shape="dot" />
           <GhostRule width="88px" />
         </div>
-      </DayZeroShape>
-      <WidgetEmptyBand {...empty} />
+      </CardEmpty>
     </section>
   );
 }
 
-export function LastMatchCard({ match }: { match: ProfileLastMatch }) {
+/**
+ * The last match, its empty state, or nothing.
+ *
+ * Empty only on a profile with no matches at all. A player whose matches are
+ * all unscored has matches and no last match to lead with, and a sentence
+ * about their first one would be false — so the card is left out there.
+ */
+export function LastMatchCard({
+  match,
+  matchesPlayed,
+  subject,
+}: {
+  match: ProfileLastMatch | null;
+  matchesPlayed: number;
+  subject: CardSubject;
+}) {
+  if (match) return <PlayedMatch match={match} />;
+  return matchesPlayed === 0 ? <LastMatchEmpty subject={subject} /> : null;
+}
+
+function PlayedMatch({ match }: { match: ProfileLastMatch }) {
   const reportHref = `/dashboard/matches/${match.id}`;
   const insight = match.insight ? splitClaim(match.insight.summary) : null;
 

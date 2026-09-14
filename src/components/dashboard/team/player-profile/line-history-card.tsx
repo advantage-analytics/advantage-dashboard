@@ -1,14 +1,7 @@
 import { FormTicks } from "@/components/dashboard/shared/form-ticks";
-import {
-  DayZeroShape,
-  GhostRule,
-} from "@/components/dashboard/home/day-zero-shape";
+import { GhostRule } from "@/components/dashboard/home/day-zero-shape";
 import { recordLabel, type LineRow } from "@/lib/data/player-profile";
-import {
-  CARD_GHOST_ROWS,
-  WidgetEmptyBand,
-  type WidgetEmptyCopy,
-} from "./widget-empty";
+import { CardEmpty, GhostRows } from "@/components/dashboard/shared/card-empty";
 
 const LINE_GRID = "grid-cols-[32px_1fr_76px_56px]";
 
@@ -45,16 +38,10 @@ function LineHistoryHeader() {
  * A match counts for the line its schedule entry names; an unscheduled
  * upload counts for none, so a player whose matches were all filed by hand
  * sees the card's own shape empty — the header over grey rows, then the
- * page's band saying what fills it (`WidgetEmptyBand`). The frame's "Season"
+ * band saying what fills it, with the way to the schedule (`CardEmpty`). The frame's "Season"
  * link is not drawn: there is no per-line page for it to open.
  */
-export function LineHistoryCard({
-  lines,
-  empty,
-}: {
-  lines: LineRow[];
-  empty: WidgetEmptyCopy;
-}) {
+export function LineHistoryCard({ lines }: { lines: LineRow[] }) {
   return (
     <section
       aria-label="Line history"
@@ -68,27 +55,28 @@ export function LineHistoryCard({
       <LineHistoryHeader />
 
       {lines.length === 0 ? (
-        <>
-          <DayZeroShape description="No lines yet: this card lists each line this player has played, with recent form, record and win rate.">
-            {CARD_GHOST_ROWS.map((opacity) => (
-              <div
-                key={opacity}
-                className={`grid ${LINE_GRID} h-11 items-center gap-2.5`}
-                style={{ opacity }}
-              >
-                <GhostRule width="20px" />
-                <GhostRule width="34px" />
-                <span className="flex justify-end">
-                  <GhostRule width="70%" tone="200" shape="tall" />
-                </span>
-                <span className="flex justify-end">
-                  <GhostRule width="60%" />
-                </span>
-              </div>
-            ))}
-          </DayZeroShape>
-          <WidgetEmptyBand {...empty} />
-        </>
+        <CardEmpty
+          description="No lines yet: this card lists each line this player has played, with recent form, record and win rate."
+          band={{
+            title: "Lines fill in from the schedule",
+            body: "A dual's S1 to S6 and D1 to D3, or a tournament draw.",
+            action: {
+              label: "Open schedule",
+              href: "/dashboard/team/schedule",
+            },
+          }}
+        >
+          <GhostRows className={`grid ${LINE_GRID} h-11 items-center gap-2.5`}>
+            <GhostRule width="20px" />
+            <GhostRule width="34px" />
+            <span className="flex justify-end">
+              <GhostRule width="70%" tone="200" shape="tall" />
+            </span>
+            <span className="flex justify-end">
+              <GhostRule width="60%" />
+            </span>
+          </GhostRows>
+        </CardEmpty>
       ) : (
         <>
           {lines.map((line) => (

@@ -7,7 +7,6 @@ import {
   SettingsUnderlineInput,
 } from "@/components/dashboard/settings/settings-card";
 import { advButton } from "@/lib/ui/adv-button";
-import type { ActionResult } from "@/components/dashboard/settings/actions";
 import {
   archiveProgramPlayer,
   getProgramPlayerFields,
@@ -72,9 +71,10 @@ import type { RosterMember } from "@/lib/data/team-roster-server";
  * The drawer removes in one click; here the page the coach is standing on
  * goes with the player, so the step says so before it happens.
  *
- * Offered only once the fields have loaded, because the confirm step's copy
- * depends on `claimed` — `archive_program_player` also releases a claimed
- * profile's seat, which is the one consequence the drawer's line leaves out.
+ * Whether the player signs in for themselves comes from the roster row
+ * (`userId`), not the fields read, so Remove does not wait on a form it does
+ * not use — and `archive_program_player` also releases a claimed profile's
+ * seat, the one consequence the drawer's line leaves out.
  */
 export function EditPlayerDialog({
   member,
@@ -168,6 +168,7 @@ export function EditPlayerDialog({
   }
 
   const busy = pending || removed;
+  const confirming = step === "confirm";
 
   function close() {
     if (busy) return;
@@ -228,7 +229,7 @@ export function EditPlayerDialog({
   function remove() {
     setError(null);
     start(async () => {
-      let result: ActionResult;
+      let result: Awaited<ReturnType<typeof archiveProgramPlayer>>;
       try {
         result = await archiveProgramPlayer(profileId);
       } catch {
@@ -246,16 +247,26 @@ export function EditPlayerDialog({
     });
   }
 
-  if (step === "confirm") {
-    return (
-      <RosterDialog
-        open
-        onOpenChange={(next) => {
-          if (!next) close();
-        }}
-        title={`Remove ${member.name} from the roster?`}
-        description="They come off the lineup and out of the team's lists."
-        footer={
+  return (
+    <RosterDialog
+      open
+      onOpenChange={(next) => {
+        // `close()` is a no-op while the save is in flight, so Escape and the
+        // overlay leave the dialog open rather than half-closing it.
+        if (!next) close();
+      }}
+      title={
+        confirming ? `Remove ${member.name} from the roster?` : "Edit player"
+      }
+      description={
+        confirming
+          ? "They come off the lineup and out of the team's lists."
+          : gone
+            ? "Nothing was changed. Reload the page to see the current squad."
+            : "Their name, class year, lineup spot and the address on this profile. Matches already recorded stay with this player."
+      }
+      footer={
+        confirming ? (
           <>
             <div className="flex-1" />
             <button
@@ -281,47 +292,7 @@ export function EditPlayerDialog({
               Remove from roster
             </button>
           </>
-        }
-      >
-        <ul className="flex flex-col gap-[7px] rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-3 text-[11px] leading-[1.5] text-[var(--ink-700)]">
-          <ConfirmBullet>
-            Their matches stay on the program&apos;s record, still attributed to
-            this profile.
-          </ConfirmBullet>
-          {fields?.claimed && (
-            <ConfirmBullet>
-              They sign in for themselves, so they also lose access to the team.
-            </ConfirmBullet>
-          )}
-          <ConfirmBullet>
-            Adding them again offers to restore this profile.
-          </ConfirmBullet>
-          <ConfirmBullet>
-            You&apos;ll land back on the roster — this profile page closes with
-            them.
-          </ConfirmBullet>
-        </ul>
-        <DialogProblem message={error} />
-      </RosterDialog>
-    );
-  }
-
-  return (
-    <RosterDialog
-      open
-      onOpenChange={(next) => {
-        // `close()` is a no-op while the save is in flight, so Escape and the
-        // overlay leave the dialog open rather than half-closing it.
-        if (!next) close();
-      }}
-      title="Edit player"
-      description={
-        gone
-          ? "Nothing was changed. Reload the page to see the current squad."
-          : "Their name, class year, lineup spot and the address on this profile. Matches already recorded stay with this player."
-      }
-      footer={
-        gone ? (
+        ) : gone ? (
           <>
             <div className="flex-1" />
             <button
@@ -334,10 +305,10 @@ export function EditPlayerDialog({
           </>
         ) : (
           <>
-            {onRemoved && fields !== null && (
+            {onRemoved && (
               <button
                 type="button"
-                disabled={pending}
+                disabled={busy}
                 onClick={() => {
                   setError(null);
                   setStep("confirm");
@@ -356,7 +327,7 @@ export function EditPlayerDialog({
             <button
               type="button"
               className={advButton("outline")}
-              disabled={pending}
+              disabled={busy}
               onClick={close}
             >
               Cancel
@@ -364,10 +335,10 @@ export function EditPlayerDialog({
             <button
               type="button"
               className={advButton("primary")}
-              disabled={!ready || pending}
+              disabled={!ready || busy}
               onClick={submit}
             >
-              {pending && (
+              {busy && (
                 <Loader2 className="size-3.5 animate-spin" aria-hidden />
               )}
               Save changes
@@ -376,7 +347,30 @@ export function EditPlayerDialog({
         )
       }
     >
-      {gone ? (
+      {confirming ? (
+        <>
+          <ul className="flex flex-col gap-[7px] rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-3 text-[11px] leading-[1.5] text-[var(--ink-700)]">
+            <ConfirmBullet>
+              Their matches stay on the program&apos;s record, still attributed
+              to this profile.
+            </ConfirmBullet>
+            {member.userId !== null && (
+              <ConfirmBullet>
+                They sign in for themselves, so they also lose access to the
+                team.
+              </ConfirmBullet>
+            )}
+            <ConfirmBullet>
+              Adding them again offers to restore this profile.
+            </ConfirmBullet>
+            <ConfirmBullet>
+              You&apos;ll land back on the roster — this profile page closes
+              with them.
+            </ConfirmBullet>
+          </ul>
+          <DialogProblem message={error} />
+        </>
+      ) : gone ? (
         <DialogProblem message={error} />
       ) : fields === null ? (
         /* Nothing to fill in yet, and deliberately no placeholder values: the
