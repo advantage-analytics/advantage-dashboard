@@ -19,7 +19,7 @@ ready).
 
 ## T1 · WizardShell footer draws Back and Cancel together
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/new-match-wizard/WizardShell.tsx, src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx (guess)
 - **done when:**
