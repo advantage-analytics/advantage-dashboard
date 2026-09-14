@@ -10,6 +10,7 @@ import {
 } from "@/components/dashboard/settings/actions";
 import { AVATAR_EDGE_PX, AVATAR_MAX_BYTES } from "@/lib/user/avatar";
 import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
+import { MENU_MARK_CLASS } from "@/lib/ui/menu";
 
 const ACCEPT = "image/png,image/jpeg,image/webp";
 
@@ -161,9 +162,9 @@ export function AvatarControl({
             workspace={{
               kind: "personal",
               mark: initials,
-              photoUrl: avatarUrl,
+              iconUrl: avatarUrl,
             }}
-            className="size-4 rounded-[4px] text-[7px]"
+            className={MENU_MARK_CLASS}
           />
           <span className="text-[11px] text-[var(--ink-600)]">
             Also your Personal workspace icon.

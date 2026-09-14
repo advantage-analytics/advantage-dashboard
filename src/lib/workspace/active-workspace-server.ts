@@ -60,8 +60,8 @@ function personalWorkspace(viewer: Viewer): Workspace {
     timeZone: "UTC",
     role: "owner",
     mark: viewer.initials,
-    // The workspace is you, so its icon is your photo — see `Workspace.photoUrl`.
-    photoUrl: viewer.avatarUrl,
+    // The workspace is you, so its icon is your photo — see `Workspace.iconUrl`.
+    iconUrl: viewer.avatarUrl,
     canSubmitVideo: true,
     // No program row, so no status to carry — see `Workspace.programStatus`.
     programStatus: null,
@@ -205,7 +205,7 @@ async function listProgramWorkspaces(
         timeZone: program.time_zone,
         role: row.role as ProgramRole,
         mark: program.school_name.trim().charAt(0).toUpperCase(),
-        crestUrl: publicUrlOrNull(
+        iconUrl: publicUrlOrNull(
           supabase,
           PROGRAM_CRESTS_BUCKET,
           program.crest_path,

@@ -135,19 +135,15 @@ export interface Workspace {
   /** One or two characters for the switcher's mark. */
   mark: string;
   /**
-   * Public URL of the program's crest in `program-crests`, drawn in place of
-   * `mark` wherever the workspace is shown. Absent or null for a personal
-   * workspace and for a program that has not uploaded one.
+   * Public URL of the workspace's icon, drawn in place of `mark` wherever the
+   * workspace is shown. Absent or null draws `mark`.
+   *
+   * On a team, the program's crest in `program-crests`, set by the owner. On
+   * personal, the viewer's profile photo (`Viewer.avatarUrl`): personal is one
+   * person's own matches and never gains members, so its icon is that person
+   * and there is no second upload — it changes on Settings › Profile.
    */
-  crestUrl?: string | null;
-  /**
-   * The viewer's profile photo (`Viewer.avatarUrl`), drawn in place of `mark`
-   * on a personal workspace. Personal is one person's own matches and never
-   * gains members, so its icon is that person — there is no second upload.
-   * Changed on Settings › Profile. Absent or null for a team workspace, which
-   * wears `crestUrl` instead.
-   */
-  photoUrl?: string | null;
+  iconUrl?: string | null;
   /**
    * May video be submitted against this workspace's allowance yet?
    *

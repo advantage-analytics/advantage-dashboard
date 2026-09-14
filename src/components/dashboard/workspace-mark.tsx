@@ -16,18 +16,15 @@ export function WorkspaceMark({
   workspace,
   className,
 }: {
-  workspace: Pick<Workspace, "kind" | "mark" | "crestUrl" | "photoUrl">;
+  workspace: Pick<Workspace, "kind" | "mark" | "iconUrl">;
   /** Size, radius and letter type, e.g. `size-[26px] rounded-[6px] text-[11px]`. */
   className?: string;
 }) {
-  const imageUrl =
-    workspace.kind === "team" ? workspace.crestUrl : workspace.photoUrl;
-
-  if (imageUrl) {
+  if (workspace.iconUrl) {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- a small crest or avatar from a public bucket; next/image has no host allow-listed
       <img
-        src={imageUrl}
+        src={workspace.iconUrl}
         alt=""
         aria-hidden="true"
         className={cn(
