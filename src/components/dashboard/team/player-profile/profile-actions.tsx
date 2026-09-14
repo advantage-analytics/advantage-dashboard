@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { advButton } from "@/lib/ui/adv-button";
 import { EditPlayerDialog } from "@/components/dashboard/team/edit-player-dialog";
 import type { RosterMember } from "@/lib/data/team-roster-server";
@@ -24,7 +25,14 @@ import type { RosterMember } from "@/lib/data/team-roster-server";
  * that refuses on click is worse than no button. It carries `?player=` so
  * the wizard opens with this page's athlete already in its For field; the
  * wizard re-checks that id against the roster and still asks for the source.
+ *
+ * Edit player also carries **Remove from roster** here, which the roster
+ * reaches through its drawer's Options menu. Removing archives the profile,
+ * so this page would 404 on its next render; the dialog's confirm step says
+ * so, and success replaces the history entry with the roster.
  */
+
+const ROSTER_PATH = "/dashboard/team/roster";
 export function ProfileActions({
   mode,
   member,
@@ -48,6 +56,7 @@ export function ProfileActions({
   /** This page's athlete, as a `program_players.id` — what `player1_id` wants. */
   playerId: string;
 }) {
+  const router = useRouter();
   const [editing, setEditing] = useState<RosterMember | null>(null);
 
   const canEditPlayer =
@@ -85,6 +94,7 @@ export function ProfileActions({
           onOpenChange={(open) => {
             if (!open) setEditing(null);
           }}
+          onRemoved={() => router.replace(ROSTER_PATH)}
         />
       )}
     </div>

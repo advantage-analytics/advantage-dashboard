@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Info, Loader2, Users } from "lucide-react";
+import { Info, Loader2, Trash2, Users } from "lucide-react";
 import {
   SettingsField,
   SettingsUnderlineInput,
 } from "@/components/dashboard/settings/settings-card";
 import { advButton } from "@/lib/ui/adv-button";
+import type { ActionResult } from "@/components/dashboard/settings/actions";
 import {
+  archiveProgramPlayer,
   getProgramPlayerFields,
   updateProgramPlayer,
   type PlayerFields,
@@ -60,23 +62,50 @@ import type { RosterMember } from "@/lib/data/team-roster-server";
  * into a sentence by the action — and a row that has left the roster since this
  * opened, which ends the dialog rather than offering a retry there is nothing
  * left to retry against.
+ *
+ * ── Remove, where the page asks for it ──────────────────────────────────────
+ * With `onRemoved`, the footer's left slot carries **Remove from roster** — the
+ * roster drawer's Options row, moved to the one surface the player profile
+ * has for this player. It rests grey and turns `--danger` on hover and focus
+ * (DS › Dropdown / Menu, destructive rows), and it does not remove: it swaps
+ * the dialog to a confirm step, and red stands only on that step's button.
+ * The drawer removes in one click; here the page the coach is standing on
+ * goes with the player, so the step says so before it happens.
+ *
+ * Offered only once the fields have loaded, because the confirm step's copy
+ * depends on `claimed` — `archive_program_player` also releases a claimed
+ * profile's seat, which is the one consequence the drawer's line leaves out.
  */
 export function EditPlayerDialog({
   member,
   roster,
   onOpenChange,
+  onRemoved,
 }: {
   /** The row being edited, or null when closed. */
   member: RosterMember | null;
   /** Everyone on the roster, so the lineup-spot note can name who else holds one. */
   roster: RosterMember[];
   onOpenChange: (open: boolean) => void;
+  /**
+   * Offers Remove from roster, and runs once the player is archived — the
+   * profile page navigates away, since the page it is on now names nobody.
+   * Absent where another surface already carries Remove (the roster drawer).
+   */
+  onRemoved?: () => void;
 }) {
   const [fields, setFields] = useState<PlayerFields | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** Terminal: the row is not on this roster, so there is nothing to save to. */
   const [gone, setGone] = useState(false);
   const [pending, start] = useTransition();
+  const [step, setStep] = useState<"edit" | "confirm">("edit");
+  /**
+   * Terminal like `gone`, but a success: the archive landed and `onRemoved` is
+   * navigating. Held so the buttons stay disabled between the transition
+   * ending and the page going, rather than re-enabling for a frame.
+   */
+  const [removed, setRemoved] = useState(false);
 
   /**
    * Cleared when the dialog changes rows, and when it closes.
@@ -94,6 +123,8 @@ export function EditPlayerDialog({
     setFields(null);
     setError(null);
     setGone(false);
+    setStep("edit");
+    setRemoved(false);
   }
 
   useEffect(() => {
@@ -136,8 +167,10 @@ export function EditPlayerDialog({
     );
   }
 
+  const busy = pending || removed;
+
   function close() {
-    if (pending) return;
+    if (busy) return;
     onOpenChange(false);
   }
 
@@ -192,6 +225,87 @@ export function EditPlayerDialog({
     });
   }
 
+  function remove() {
+    setError(null);
+    start(async () => {
+      let result: ActionResult;
+      try {
+        result = await archiveProgramPlayer(profileId);
+      } catch {
+        setError(
+          "Couldn't reach the server, so they may or may not have been removed. Reload the page to check.",
+        );
+        return;
+      }
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setRemoved(true);
+      onRemoved?.();
+    });
+  }
+
+  if (step === "confirm") {
+    return (
+      <RosterDialog
+        open
+        onOpenChange={(next) => {
+          if (!next) close();
+        }}
+        title={`Remove ${member.name} from the roster?`}
+        description="They come off the lineup and out of the team's lists."
+        footer={
+          <>
+            <div className="flex-1" />
+            <button
+              type="button"
+              className={advButton("outline")}
+              disabled={busy}
+              onClick={() => {
+                setError(null);
+                setStep("edit");
+              }}
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              className={advButton("danger-solid")}
+              disabled={busy}
+              onClick={remove}
+            >
+              {busy && (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              )}
+              Remove from roster
+            </button>
+          </>
+        }
+      >
+        <ul className="flex flex-col gap-[7px] rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-3 text-[11px] leading-[1.5] text-[var(--ink-700)]">
+          <ConfirmBullet>
+            Their matches stay on the program&apos;s record, still attributed to
+            this profile.
+          </ConfirmBullet>
+          {fields?.claimed && (
+            <ConfirmBullet>
+              They sign in for themselves, so they also lose access to the team.
+            </ConfirmBullet>
+          )}
+          <ConfirmBullet>
+            Adding them again offers to restore this profile.
+          </ConfirmBullet>
+          <ConfirmBullet>
+            You&apos;ll land back on the roster — this profile page closes with
+            them.
+          </ConfirmBullet>
+        </ul>
+        <DialogProblem message={error} />
+      </RosterDialog>
+    );
+  }
+
   return (
     <RosterDialog
       open
@@ -220,6 +334,24 @@ export function EditPlayerDialog({
           </>
         ) : (
           <>
+            {onRemoved && fields !== null && (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  setError(null);
+                  setStep("confirm");
+                }}
+                className="group -ml-2 inline-flex h-9 cursor-pointer items-center gap-[7px] rounded-[var(--radius-button)] px-2 text-[12px] text-[var(--ink-700)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)] focus-visible:bg-[var(--surface-subtle)] focus-visible:text-[var(--danger)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+              >
+                <Trash2
+                  className="size-[13px] shrink-0 text-[var(--ink-400)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--danger)] group-focus-visible:text-[var(--danger)]"
+                  strokeWidth={1.5}
+                  aria-hidden
+                />
+                Remove from roster
+              </button>
+            )}
             <div className="flex-1" />
             <button
               type="button"
@@ -328,5 +460,16 @@ export function EditPlayerDialog({
         </>
       )}
     </RosterDialog>
+  );
+}
+
+function ConfirmBullet({ children }: { children: React.ReactNode }) {
+  return (
+    <li className="flex gap-2">
+      <span aria-hidden="true" className="text-[var(--ink-400)]">
+        ·
+      </span>
+      <span>{children}</span>
+    </li>
   );
 }
