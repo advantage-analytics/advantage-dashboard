@@ -37,7 +37,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T2 · Test: a signed-in user cannot self-promote to admin
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1
 - **files:** tests/admin-self-promotion.spec.ts
