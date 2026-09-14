@@ -423,8 +423,21 @@ export function surfaceTitle(surface: string): string {
 export function formatLabel(format: EventFormat): string {
   const sets =
     format.bestOf === 1 ? "One Set" : `Best of ${format.bestOf} Sets`;
-  if (format.adScoring === null) return sets;
-  return `${sets} · ${format.adScoring ? "Ad Scoring" : "No-Ad Scoring"}`;
+  return withScoring(sets, format.adScoring);
+}
+
+/** "Ad Scoring" or "No-Ad Scoring" — the one spelling every label uses. */
+export function scoringWords(adScoring: boolean): string {
+  return adScoring ? "Ad Scoring" : "No-Ad Scoring";
+}
+
+/**
+ * `sets · scoring`, or `sets` alone when the scoring is null — the rule
+ * `formatLabel` documents, kept in one place so the singles and doubles
+ * capsules cannot drift into guessing a null differently.
+ */
+function withScoring(sets: string, adScoring: boolean | null): string {
+  return adScoring === null ? sets : `${sets} · ${scoringWords(adScoring)}`;
 }
 
 /**
@@ -434,10 +447,10 @@ export function formatLabel(format: EventFormat): string {
  */
 export function doublesFormatLabel(format: EventFormat): string | null {
   if (!format.doubles) return null;
-  const sets = `Doubles · ${doublesSetLabel(format.doubles.gamesTo)}`;
-  // Null drops the scoring half, exactly as `formatLabel` does.
-  if (format.doubles.adScoring === null) return sets;
-  return `${sets} · ${format.doubles.adScoring ? "Ad Scoring" : "No-Ad Scoring"}`;
+  return withScoring(
+    `Doubles · ${doublesSetLabel(format.doubles.gamesTo)}`,
+    format.doubles.adScoring,
+  );
 }
 
 /**

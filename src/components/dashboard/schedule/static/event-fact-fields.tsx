@@ -18,6 +18,7 @@ import {
   EVENT_DOUBLES_FORMATS,
   EVENT_FORMATS,
   doublesSetLabel,
+  scoringWords,
   siteTitle,
   type DoublesFormatValue,
   type DoublesGamesTo,
@@ -66,15 +67,6 @@ export interface DualFormat {
 }
 
 /**
- * The four formats the control offers.
- *
- * `2b` draws one — "Best of 3 sets" over "No-ad scoring" — and no dropdown
- * contents, so the other three are built from vocabulary that already exists
- * rather than invented: "One set", "ad" and "no-ad" are the dormant
- * `FORMATS`' words, in that table's order. The first row is what the artboard
- * draws, and what a new dual opens on.
- */
-/**
  * `2b`'s wording over the shared format table.
  *
  * Only the words live here, in title case — the same words `formatLabel()`
@@ -107,6 +99,15 @@ const FORMAT_WORDS: Record<
   },
 };
 
+/**
+ * The four formats the control offers.
+ *
+ * `2b` draws one — "Best of 3 sets" over "No-ad scoring" — and no dropdown
+ * contents, so the other three are built from vocabulary that already exists
+ * rather than invented: "One set", "ad" and "no-ad" are the dormant
+ * `FORMATS`' words, in that table's order. The first row is what the artboard
+ * draws, and what a new dual opens on.
+ */
 export const FORMATS: readonly DualFormat[] = EVENT_FORMATS.map((format) => ({
   ...format,
   ...FORMAT_WORDS[format.value],
@@ -156,9 +157,7 @@ export const DOUBLES_FORMATS: readonly DoublesFormat[] =
   EVENT_DOUBLES_FORMATS.map((format) => ({
     ...format,
     label: doublesSetLabel(format.gamesTo),
-    detail: `Tiebreak at ${format.gamesTo}-${format.gamesTo} · ${
-      format.adScoring ? "Ad Scoring" : "No-Ad Scoring"
-    }`,
+    detail: `Tiebreak at ${format.gamesTo}-${format.gamesTo} · ${scoringWords(format.adScoring)}`,
   }));
 
 /** The Doubles format control's options — see `formatOptions`. */
