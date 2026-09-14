@@ -15,6 +15,7 @@ import {
   seasonSummaryFrom,
 } from "@/lib/data/schedule-server";
 import { StaticSchedule } from "@/components/dashboard/schedule/static/static-schedule";
+import { PresenceReport } from "@/components/dashboard/presence-provider";
 import type { EventDetail } from "@/lib/schedule/types";
 
 export const metadata = { title: "Schedule" };
@@ -104,25 +105,29 @@ async function ScheduleContent({
   );
 
   return (
-    <StaticSchedule
-      schedule={{ rows, details }}
-      season={seasonSummaryFrom(schedule)}
-      // Today in the PROGRAM's zone, not the server's. `starts_on` is a plain
-      // calendar date authored where the coach is, and the server is UTC on
-      // Vercel — comparing the two against a UTC "today" makes Upcoming a day
-      // wrong for every western coach from late afternoon onward.
-      // `zonedDayString` is the app's one answer to "what day is it there",
-      // shared with Team Home's dual sheet and the roster's claimed-today pill.
-      //
-      // Passed as a prop rather than read from a clock in the component: it
-      // also renders on the server, and a `new Date()` there would give the
-      // two renders different answers.
-      today={zonedDayString(new Date(), active.timeZone)}
-      capabilities={scheduleCapabilitiesFor(active)}
-      canAddOwnMatch={canUploadForProgram(active)}
-      programName={active.name}
-      opponents={opponents}
-      initialSelectedId={initialSelectedId}
-    />
+    <>
+      {/* Keeps the loading fallback's day-zero hint honest across navigation. */}
+      <PresenceReport workspaceId={active.id} events={rows.length > 0} />
+      <StaticSchedule
+        schedule={{ rows, details }}
+        season={seasonSummaryFrom(schedule)}
+        // Today in the PROGRAM's zone, not the server's. `starts_on` is a plain
+        // calendar date authored where the coach is, and the server is UTC on
+        // Vercel — comparing the two against a UTC "today" makes Upcoming a day
+        // wrong for every western coach from late afternoon onward.
+        // `zonedDayString` is the app's one answer to "what day is it there",
+        // shared with Team Home's dual sheet and the roster's claimed-today pill.
+        //
+        // Passed as a prop rather than read from a clock in the component: it
+        // also renders on the server, and a `new Date()` there would give the
+        // two renders different answers.
+        today={zonedDayString(new Date(), active.timeZone)}
+        capabilities={scheduleCapabilitiesFor(active)}
+        canAddOwnMatch={canUploadForProgram(active)}
+        programName={active.name}
+        opponents={opponents}
+        initialSelectedId={initialSelectedId}
+      />
+    </>
   );
 }

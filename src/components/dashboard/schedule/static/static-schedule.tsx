@@ -13,7 +13,7 @@ import {
   DRAWER_ATTR,
   EventDrawer,
 } from "@/components/dashboard/schedule/static/event-drawer";
-import { ScheduleDayZero } from "./schedule-day-zero";
+import { ScheduleDayZeroPage } from "./schedule-day-zero";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import { Chip } from "./chip";
 import {
@@ -376,14 +376,10 @@ export function StaticSchedule({
    */
   if (rows.length === 0) {
     return (
-      <div className="flex w-full flex-1 bg-[var(--surface-card)]">
-        <div className="flex min-w-0 flex-1 flex-col px-14 pt-5 pb-6">
-          <ScheduleDayZero
-            canCreate={canCreate}
-            canAddOwnMatch={canAddOwnMatch}
-          />
-        </div>
-      </div>
+      <ScheduleDayZeroPage
+        canCreate={canCreate}
+        canAddOwnMatch={canAddOwnMatch}
+      />
     );
   }
 

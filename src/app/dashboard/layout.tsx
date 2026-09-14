@@ -6,6 +6,8 @@ import {
   ActivityTrayFallback,
 } from "@/components/dashboard/activity/activity-tray-loader";
 import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
+import { PresenceProvider } from "@/components/dashboard/presence-provider";
+import { getWorkspacePresence } from "@/lib/workspace/presence-server";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { ToastProvider } from "@/components/dashboard/toast/toast-provider";
 import { UploadFailureListener } from "@/components/dashboard/toast/upload-failure-listener";
@@ -19,7 +21,8 @@ import { timeOfDayGreeting } from "@/lib/ui/greeting";
  * workspace is active, so resolving it client-side would flash the wrong nav.
  * The interactive shell lives in `DashboardShell`.
  *
- * The workspace is the ONLY thing awaited here. The activity feed streams in
+ * The workspace, and the presence read that depends on it, are the only things
+ * awaited here. The activity feed streams in
  * behind a Suspense boundary: it is chrome for a closed popover, and awaiting
  * it held up the sidebar, the header and the page content alike.
  */
@@ -52,25 +55,34 @@ export default async function Layout({
   // page made before the greeting moved up.
   const greeting = timeOfDayGreeting(new Date().getHours());
 
+  // Whether the workspace holds anything yet, so a route's loading fallback
+  // can draw that page's day zero instead of skeleton rows nobody has. A
+  // handful of `limit(1)` reads in parallel, and never fatal — see
+  // `getWorkspacePresence`. The one other thing awaited here, because the
+  // fallbacks render before any page has fetched.
+  const presence = await getWorkspacePresence(workspace);
+
   return (
     <WorkspaceProvider value={workspace}>
-      {/* Wraps the shell rather than sitting inside a page, because the thing
+      <PresenceProvider value={presence}>
+        {/* Wraps the shell rather than sitting inside a page, because the thing
           it most needs to report — a background upload dying — happens after
           the wizard has unmounted and the person has navigated away. A toast
           host scoped to any one page would miss every one of those. */}
-      <ToastProvider>
-        <UploadFailureListener />
-        <DashboardShell
-          greeting={greeting}
-          activitySlot={
-            <Suspense fallback={<ActivityTrayFallback />}>
-              <ActivityTrayLoader />
-            </Suspense>
-          }
-        >
-          {children}
-        </DashboardShell>
-      </ToastProvider>
+        <ToastProvider>
+          <UploadFailureListener />
+          <DashboardShell
+            greeting={greeting}
+            activitySlot={
+              <Suspense fallback={<ActivityTrayFallback />}>
+                <ActivityTrayLoader />
+              </Suspense>
+            }
+          >
+            {children}
+          </DashboardShell>
+        </ToastProvider>
+      </PresenceProvider>
     </WorkspaceProvider>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
-import type { ActivityDay } from "@/lib/data/personal-activity-server";
+import type { ActivityDay } from "@/lib/data/personal-activity";
 
 /**
  * The interactive body of the Activity widget — the 52×7 cell grid plus the one

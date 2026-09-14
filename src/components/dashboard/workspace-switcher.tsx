@@ -1,13 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { ChosenCheck } from "@/components/ui/float-menu";
 import { cn } from "@/lib/utils";
-import {
-  MENU_LEAD_CLASS,
-  MENU_MARK_CLASS,
-  MENU_ROW_CLASS,
-} from "@/lib/ui/menu";
+import { MENU_MARK_CLASS, MENU_ROW_CLASS } from "@/lib/ui/menu";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { setActiveWorkspace } from "@/lib/workspace/actions";
 import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
@@ -89,22 +86,14 @@ export function WorkspaceOptionList({
               )}
             </span>
 
-            {/* Trailing, in a fixed slot, so every name starts at the mark
-                and a tick appearing never shifts the text. */}
-            <span className={MENU_LEAD_CLASS}>
-              {pendingId === workspace.id ? (
-                <Loader2
-                  className="size-3 animate-spin text-[var(--ink-400)]"
-                  aria-hidden="true"
-                />
-              ) : isActive ? (
-                <Check
-                  className="size-[14px] text-[var(--blue)]"
-                  strokeWidth={2}
-                  aria-hidden="true"
-                />
-              ) : null}
-            </span>
+            {pendingId === workspace.id ? (
+              <Loader2
+                className="size-[13px] shrink-0 animate-spin text-[var(--ink-400)]"
+                aria-hidden="true"
+              />
+            ) : (
+              <ChosenCheck chosen={isActive} />
+            )}
           </button>
         );
       })}

@@ -195,3 +195,20 @@ export function ScheduleDayZero({
     </div>
   );
 }
+
+/**
+ * `ScheduleDayZero` in the page's own frame. Shared by `StaticSchedule` and
+ * the route's loading fallback, so an empty season sees this from the first
+ * paint rather than a table skeleton that then gives way to it.
+ */
+export function ScheduleDayZeroPage(
+  props: Parameters<typeof ScheduleDayZero>[0],
+) {
+  return (
+    <div className="flex w-full flex-1 bg-[var(--surface-card)]">
+      <div className="flex min-w-0 flex-1 flex-col px-14 pt-5 pb-6">
+        <ScheduleDayZero {...props} />
+      </div>
+    </div>
+  );
+}

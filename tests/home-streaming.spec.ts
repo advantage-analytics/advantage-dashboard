@@ -145,7 +145,15 @@ test("Home returns its frame while independent analytics and serve reads remain 
 test("Empty account selects day zero before analytics and skips recent/serve/usage reads", async () => {
   const home = route([]);
   const result = await home.render();
-  expect(contentProps(result).hasMatches).toBe(false);
+  const children = React.Children.toArray(
+    (result.props as { children?: React.ReactNode }).children,
+  ).filter(React.isValidElement);
+  const named = (name: string) =>
+    children.find(
+      (child) => (child.type as { displayName?: string }).displayName === name,
+    );
+  expect(named("HomeDayZeroPage")?.props).toEqual({ userId: "viewer" });
+  expect(named("PresenceReport")?.props).toMatchObject({ matches: false });
   expect(home.reads).not.toContain("recent");
   expect(home.reads).not.toContain("serves");
   expect(home.reads).not.toContain("usage");

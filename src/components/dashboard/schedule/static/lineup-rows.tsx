@@ -37,11 +37,12 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Reorder, useDragControls, useReducedMotion } from "framer-motion";
-import { Check, ChevronDown, GripVertical, Plus } from "lucide-react";
+import { ChevronDown, GripVertical, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import {
+  ChosenCheck,
   FloatMenu,
   FloatMenuDivider,
   FloatMenuNote,
@@ -514,11 +515,7 @@ function PairPicker({
                 ) : null}
               </span>
               {checked ? (
-                <Check
-                  className="size-3 shrink-0 text-[var(--blue)]"
-                  strokeWidth={2.5}
-                  aria-hidden
-                />
+                <ChosenCheck chosen />
               ) : elsewhere ? (
                 <span className="mono shrink-0 text-[10px] text-[var(--ink-400)]">
                   on {elsewhere.join(", ")}
@@ -548,11 +545,7 @@ function PairPicker({
           No pair
         </span>
         {line.noPlayer ? (
-          <Check
-            className="size-3 shrink-0 text-[var(--blue)]"
-            strokeWidth={2.5}
-            aria-hidden
-          />
+          <ChosenCheck chosen />
         ) : (
           <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
             Counts as a forfeit
@@ -970,11 +963,7 @@ export function OpponentPairPicker({
                 {name}
               </span>
               {checked ? (
-                <Check
-                  className="size-3 shrink-0 text-[var(--blue)]"
-                  strokeWidth={2.5}
-                  aria-hidden
-                />
+                <ChosenCheck chosen />
               ) : elsewhere ? (
                 <span className="mono shrink-0 text-[10px] text-[var(--ink-400)]">
                   on {elsewhere.join(", ")}
@@ -1052,11 +1041,7 @@ export function OpponentPairPicker({
             No pair
           </span>
           {line.theirNoPlayer ? (
-            <Check
-              className="size-3 shrink-0 text-[var(--blue)]"
-              strokeWidth={2.5}
-              aria-hidden
-            />
+            <ChosenCheck chosen />
           ) : (
             <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
               Counts as their forfeit

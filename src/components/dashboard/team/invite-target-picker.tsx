@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { ChosenCheck } from "@/components/ui/float-menu";
 import { getInitials } from "@/lib/data/match-utils";
 import { useListboxNav } from "@/hooks/use-listbox-nav";
 
@@ -209,13 +210,9 @@ export function InviteTargetPicker({
                     : `${player.matchesPlayed} ${player.matchesPlayed === 1 ? "match" : "matches"}`}
                 </span>
                 <span className="flex-1" />
-                {selected?.profileId === player.profileId && (
-                  <Check
-                    className="size-3 shrink-0 text-[var(--ink-900)]"
-                    strokeWidth={2}
-                    aria-hidden
-                  />
-                )}
+                <ChosenCheck
+                  chosen={selected?.profileId === player.profileId}
+                />
               </li>
             );
           })}

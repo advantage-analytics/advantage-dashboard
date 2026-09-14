@@ -68,16 +68,7 @@ import {
 import { DateField } from "@/components/ui/date-field";
 import { YouPill } from "@/components/ui/you-pill";
 import { MenuSelect } from "@/components/ui/menu-select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 import { advField } from "@/lib/ui/adv-field";
 import { getInitials } from "@/lib/data/match-utils";
@@ -112,7 +103,11 @@ import {
 import { formatHoursMinutes, setHasData } from "./utils";
 import { FORMAT_OPTIONS, Required, ScoreBlock } from "./ScoreBlock";
 import { FieldCaption } from "./FieldCaption";
-import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
+import {
+  ChosenCheck,
+  FloatMenu,
+  FloatMenuItem,
+} from "@/components/ui/float-menu";
 import { AnimatedHeight } from "./AnimatedHeight";
 import { ScoreCheckNotice } from "./ScoreCheckNotice";
 import { firstOpenSet, isStoppedResult, scoreGames } from "./score-state";
@@ -339,7 +334,7 @@ const UNDERLINE_CLS =
  *
  * Drawn as `MenuSelect variant="underline"` — the Roster and Edit match
  * dialogs' select: a 34px trigger on the field rule, a 12px chevron, and the
- * shared `FloatMenu` with its check on the left. Not `MenuSelect` itself, for
+ * shared `FloatMenu` with its check at the right edge. Not `MenuSelect` itself, for
  * three things it cannot carry: boolean values (Scoring, Lets), a `read`
  * override for the trigger, and the `data-field` hook the footer's
  * missing-fields pill uses to find the field.
@@ -695,15 +690,7 @@ function EventCell({
                     {event.years}
                     {event.matches > 1 ? ` · ${event.matches} matches` : ""}
                   </span>
-                  {event.name === value ? (
-                    <Check
-                      className="size-[13px] shrink-0 text-[var(--blue)]"
-                      strokeWidth={1.5}
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <span className="w-[13px] shrink-0" />
-                  )}
+                  <ChosenCheck chosen={event.name === value} />
                 </button>
               ))}
               {term.trim() && !exact && (
@@ -1900,33 +1887,23 @@ function DetailsStepContentImpl({
           />
         </div>
       </div>
-      <AlertDialog
+      {/* Red: the scores entered for the dropped sets are gone once this runs,
+          and the stock dialog's blue button said otherwise. */}
+      <ConfirmDialog
         open={pendingFormat !== null}
         onOpenChange={(open) => {
           if (!open) setPendingFormat(null);
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove entered set scores?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This format has fewer sets. Continuing removes the scores for the
-              excluded sets.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep current format</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (pendingFormat) onFormatChange(pendingFormat);
-                setPendingFormat(null);
-              }}
-            >
-              Remove set scores
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title="Remove entered set scores?"
+        description="This format has fewer sets, so the scores entered for the extra sets are removed."
+        tone="danger"
+        cancelLabel="Keep current format"
+        confirmLabel="Remove set scores"
+        onConfirm={() => {
+          if (pendingFormat) onFormatChange(pendingFormat);
+          setPendingFormat(null);
+        }}
+      />
     </div>
   );
 }

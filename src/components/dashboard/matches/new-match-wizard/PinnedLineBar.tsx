@@ -19,12 +19,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Calendar, Check, ChevronRight, MapPin, Swords } from "lucide-react";
+import { Calendar, ChevronRight, MapPin, Swords } from "lucide-react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ChosenCheck } from "@/components/ui/float-menu";
 import { cn } from "@/lib/utils";
 import { siteTitle } from "@/lib/schedule/format";
 import type { EventPreset, LineChoice } from "./types";
@@ -196,15 +197,7 @@ export function PinnedLineBar({
                       ? "No player"
                       : STATE_LABEL[line.state]}
                 </span>
-                {isCurrent ? (
-                  <Check
-                    className="size-[13px] shrink-0 text-[var(--blue)]"
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <span className="w-[13px] shrink-0" />
-                )}
+                <ChosenCheck chosen={isCurrent} />
               </button>
             );
           })}

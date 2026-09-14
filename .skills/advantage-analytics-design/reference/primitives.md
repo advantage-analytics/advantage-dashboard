@@ -280,11 +280,24 @@ dashes in Result/Score, "Resume · step 3 of 4" in the lifecycle cell; the
 header's status slot alone says "Draft saved" (`matches/draft-row.tsx` ships
 this). _Opponents are scoped to what names them_ (Events & Matches above).
 
-**Selected-row check is Signal Blue, site-wide.** The 13px Lucide `check`
-that marks "chosen" in a menu or card is `--blue` everywhere — the same glyph
-the check-dot `Radio` carries in white. One colour means "chosen", in menus
-and cards alike; the earlier ink-900 menu check is superseded. Single choice
-= the check-dot `Radio`, multi-select = the square `Checkbox`; a dialog
-carries one primary, never two.
+**Selected-row check is Signal Blue, site-wide, and always on the right.**
+The 13px Lucide `check` (stroke 2) that marks "chosen" in a menu, picker or
+selectable list is `--blue` everywhere — the same glyph the check-dot `Radio`
+carries in white. One colour means "chosen", in menus and cards alike; the
+earlier ink-900 menu check is superseded. It sits at the **row's right edge**,
+in its own 13px slot drawn on every row so a check appearing never moves the
+text, after any pill or meta: who or what the row is comes first, then whether
+it is picked. The leading slot belongs to what the row is — an action icon,
+an avatar, a workspace crest — and a check cannot share it. **Only
+`ChosenCheck`** (`ui/float-menu.tsx`, 2026-09-13) draws it; `FloatMenuItem`
+renders it, and a hand-built menu renders it rather than its own `<Check>`. A
+row may swap the empty slot for trailing text ("on D2", "Counts as a forfeit")
+or a grey chevron, never for a second mark beside the check. _The retired
+layout: `FloatMenuItem` drew "a 12px Signal Blue check" in its leading slot,
+so every `MenuSelect` marked the pick on the left while the hand-built menus —
+workspace switchers, the wizard's roster, source and line menus, the lineup
+pickers — marked it on the right, at three sizes and three stroke weights._
+Single choice = the check-dot `Radio`, multi-select = the square `Checkbox`; a
+dialog carries one primary, never two.
 
 ---

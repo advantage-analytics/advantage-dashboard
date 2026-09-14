@@ -213,9 +213,9 @@ test("a short backhand label stays on one line, with room reserved for the check
   // than shrinking to a cramped trigger — this is what keeps the label from
   // wrapping onto a second line.
   expect(html).toContain("width:220px");
-  // The check keeps its own reserved slot ahead of the label (FloatMenuItem's
-  // `w-3` span) — nothing here reflows the row to make room for it.
-  expect(html).toContain('class="mt-[3px] w-3 shrink-0 text-[var(--blue)]"');
+  // The check keeps its own reserved slot after the label (`ChosenCheck`'s
+  // 13px span, on every row) — nothing here reflows the row to make room for it.
+  expect(html).toMatch(/<span aria-hidden="true" class="[^"]*\bw-\[13px\]/);
 });
 
 // ─── DetailsStepContent.tsx wiring ──────────────────────────────────────────

@@ -15,7 +15,8 @@ import { getPendingJoinRequests } from "@/lib/data/join-requests-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { formatResetDate } from "@/lib/data/usage-format";
 import { RosterView } from "@/components/dashboard/team/roster-view";
-import { RosterDayZero } from "@/components/dashboard/team/roster-day-zero";
+import { RosterDayZeroPage } from "@/components/dashboard/team/roster-day-zero";
+import { PresenceReport } from "@/components/dashboard/presence-provider";
 import { RosterHeaderButtons } from "@/components/dashboard/team/roster-header-buttons";
 import { JoinRequestsCard } from "@/components/dashboard/team/join-requests-card";
 import { RowAction } from "@/components/dashboard/schedule/row-action";
@@ -200,22 +201,30 @@ async function RosterContent({
     roster.invites.length === 0 &&
     joinRequests.length === 0;
 
+  // Keeps the loading fallbacks' day-zero hint honest across navigation.
+  const report = (
+    <PresenceReport
+      workspaceId={active.id}
+      roster={players.length > 0}
+      rosterInFlight={roster.invites.length > 0 || joinRequests.length > 0}
+    />
+  );
+
   if (dayZero) {
     return (
-      /* RosterView's own frame, minus the title row and the footer: the offer
-         carries the page's one primary. See `RosterDayZero`. */
-      <div className="flex w-full flex-1 bg-[var(--surface-card)]">
-        <div className="flex min-w-0 flex-1 flex-col px-14 pt-5 pb-8">
-          <RosterDayZero
-            canManage={canManage}
-            managedPlayers={managedPlayers}
-            seats={roster.seats}
-            roster={players}
-            playersCanUpload={roster.playersCanUpload}
-            former={former}
-          />
-        </div>
-      </div>
+      <>
+        {report}
+        <RosterDayZeroPage
+          canManage={canManage}
+          buttons={{
+            managedPlayers,
+            seats: roster.seats,
+            roster: players,
+            playersCanUpload: roster.playersCanUpload,
+            former,
+          }}
+        />
+      </>
     );
   }
 
@@ -384,16 +393,19 @@ async function RosterContent({
   );
 
   return (
-    <RosterView
-      members={players}
-      invites={roster.invites}
-      canManage={canManage}
-      viewerId={viewer.id}
-      initialSelectedId={initialSelectedId}
-      title={title}
-      actions={actions}
-      notices={notices}
-      footer={footer}
-    />
+    <>
+      {report}
+      <RosterView
+        members={players}
+        invites={roster.invites}
+        canManage={canManage}
+        viewerId={viewer.id}
+        initialSelectedId={initialSelectedId}
+        title={title}
+        actions={actions}
+        notices={notices}
+        footer={footer}
+      />
+    </>
   );
 }

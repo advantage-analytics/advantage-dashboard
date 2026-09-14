@@ -183,6 +183,36 @@ Cancel + **one** primary right — never two primaries. Fields inside use the
 underline vocabulary; the active field's rule thickens to 2px blue (see
 Focus → "The underline opt-out").
 
+**Every confirmation is `ConfirmDialog`** (`ui/confirm-dialog.tsx`, 2026-09-13,
+in-repo — design owner's pick, direction B of the sign-out mock). This geometry
+at 440px on Radix `AlertDialog`: a question for a title ("Delete this match?"),
+the contract sentence under it, an optional body (`ConfirmList` for what it
+costs, `ConfirmNote` for one icon-led line, or a row showing the subject), the
+shared `DialogProblem` line for a failure, and the footer grammar above. The
+action is a verb that names its object ("Delete match", never "OK"). While it
+is pending, the spinner rides inside the action and Cancel, the X and Esc are
+all held.
+
+- **Red only when something is lost.** `tone="danger"` (`danger-solid`) for a
+  match, an event, entered scores, unsaved edits. Anything else — signing out,
+  signing out everywhere — is the blue primary.
+- **Multi-step confirms stay on `RosterDialog`** at the same 440px (Leave team,
+  Make owner), because their done step re-renders the same dialog; swapping
+  components between steps would close and reopen it.
+- **No `window.confirm`, no hand-styled `AlertDialogContent`.** Settings'
+  leave-without-saving prompt was the browser's own box; the tab-close
+  `beforeunload` is the one native prompt left, because it cannot wait on React.
+- **Sign-out names the account.** One dialog for both scopes: an account row
+  (avatar, name, email, "This device") and "Sign out everywhere" as the quiet
+  footer link, which swaps the same dialog to "Sign out of every device?". The
+  word is "Sign out" everywhere.
+
+> Retired (2026-09-13): the 320px "Log out" card with a red icon disc, red
+> 10px uppercase tracked buttons and no close; the 448px delete dialogs at
+> 16px and 14px radii with 36px buttons; the stock `AlertDialog` (8px radius,
+> 18px semibold title, blue action for removing set scores); and a
+> one-click, unconfirmed "Sign out everywhere".
+
 ---
 
 ## Dropdown / Menu
@@ -193,8 +223,9 @@ trigger it wraps, 10px radius, 5px inset, `--shadow-dropdown`),
 `FloatMenuItem` (a 7px-radius row: 12px label, optional 11px `--ink-500`
 second line saying what the choice means, `--surface-subtle` on unselected
 pointer hover and on keyboard focus, no persistent or pointer-hover fill for
-the chosen row, a 12px Signal Blue check — the one colour that means
-"chosen"), `FloatMenuNote` (the closing sentence under a hairline for the
+the chosen row, and `ChosenCheck` at the row's right edge — the one colour
+that means "chosen"; a leading 12px glyph belongs to action menus, which have
+no chosen row), `FloatMenuNote` (the closing sentence under a hairline for the
 thing the menu will not do) and `FloatMenuDivider`. **Every select is
 `MenuSelect`** (`ui/menu-select.tsx`), composed from those with two triggers:
 `underline` for a form field (full width, the caption's hairline, no radius)
@@ -222,7 +253,7 @@ turn `--danger` together, over the usual `--surface-subtle` wash; the 11px
 `--ink-500` consequence line stays grey. No standing red label, no red icon at
 rest — red marks the moment of intent, not the row's existence. Menu-row glyphs
 are never `--blue` either (that colour is reserved for "chosen"). The confirm
-step — `danger-solid` in an `AlertDialog` — is where red stands.
+step — `ConfirmDialog` with `tone="danger"` — is where red stands.
 
 The header's account menu predates the primitives and still carries its own
 classes; migrate it to `FloatMenu` rather than copying them.
@@ -233,7 +264,9 @@ unselected row's pointer hover and any row's keyboard focus, never a standing
 fill on the selection, which is marked by a 13px `--blue` check alone — Signal
 Blue is the one colour that means "chosen", in menus and cards alike; the
 earlier ink-900 menu check is superseded). The check keeps its own 13px slot at
-the row's right edge, after any state pill, so an empty slot still aligns.
+the row's right edge, after any state pill, so an empty slot still aligns —
+drawn by `ChosenCheck`, the same as every other menu (see **Selected-row
+check**, `reference/primitives.md`).
 Person row = 22px avatar +
 12/500 name + 11px ink-500 middot-joined meta. "Someone new" is always first,
 above a hairline, dashed-ring avatar. Section labels are quiet sentence case

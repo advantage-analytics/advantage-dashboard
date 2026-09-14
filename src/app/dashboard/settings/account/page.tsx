@@ -14,9 +14,11 @@ import {
   deleteAccount,
   requestPasswordReset,
 } from "@/components/dashboard/settings/actions";
-import { useRequestLogout } from "@/components/dashboard/logout-dialog";
+import {
+  useRequestLogout,
+  useRequestSignOutEverywhere,
+} from "@/components/dashboard/logout-dialog";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
-import { createClient } from "@/lib/supabase/client";
 import { SUPPORT_EMAIL } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -35,8 +37,12 @@ import { cn } from "@/lib/utils";
 export default function AccountPage() {
   const { available, viewer } = useWorkspace();
   // Same confirmation the header profile menu opens — one dialog, one place
-  // the unsaved-changes warning has to stay correct.
+  // the unsaved-changes warning has to stay correct. Global sign-out opens it
+  // at its "every device" step: Supabase revokes every refresh token on the
+  // account, so the phone that uploaded courtside goes with it, and that is
+  // worth one question before it happens.
   const requestLogout = useRequestLogout();
+  const requestSignOutEverywhere = useRequestSignOutEverywhere();
 
   const [confirmText, setConfirmText] = useState("");
   const [message, setMessage] = useState<{
@@ -45,7 +51,6 @@ export default function AccountPage() {
   } | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isResetting, startReset] = useTransition();
-  const [isSigningOut, startSignOut] = useTransition();
   const [isDeleting, startDelete] = useTransition();
 
   const handlePasswordReset = useCallback(() => {
@@ -56,22 +61,6 @@ export default function AccountPage() {
           ? { type: "success", text: "Reset link sent. Check your inbox." }
           : { type: "error", text: result.error },
       );
-    });
-  }, []);
-
-  /**
-   * Global sign-out. Supabase revokes every refresh token on the account, so
-   * the phone that uploaded courtside goes with it — which is the whole reason
-   * somebody presses this.
-   */
-  const handleSignOutEverywhere = useCallback(() => {
-    startSignOut(async () => {
-      const { error } = await createClient().auth.signOut({ scope: "global" });
-      if (error) {
-        setMessage({ type: "error", text: error.message });
-        return;
-      }
-      window.location.href = "/login";
     });
   }, []);
 
@@ -181,8 +170,7 @@ export default function AccountPage() {
           <SettingsButton
             variant="outline"
             size="sm"
-            onClick={handleSignOutEverywhere}
-            loading={isSigningOut}
+            onClick={requestSignOutEverywhere}
           >
             Sign out everywhere
           </SettingsButton>
