@@ -90,8 +90,9 @@ const SCHEDULE_HREF = "/dashboard/team/schedule";
 
 type Step = 1 | 2 | 3;
 
-/** What each step asks, in the shell's own two lines. */
-const COPY: Record<Step, { title: string; lede: string }> = {
+/** What each step asks, in the shell's own two lines. Exported for the
+ *  route's skeleton, which prints step one's pair before the data lands. */
+export const COPY: Record<Step, { title: string; lede: string }> = {
   1: {
     title: "What's the tournament called?",
     lede: "Name it the way the draw sheet does — it's how the schedule and every entry refer to it.",

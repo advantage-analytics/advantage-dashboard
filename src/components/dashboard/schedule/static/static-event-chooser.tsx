@@ -102,7 +102,8 @@ function BracketMark() {
   );
 }
 
-const COPY = {
+/** Exported for the route's skeleton, which prints the heading and lede. */
+export const COPY = {
   heading: "What are you adding?",
   lede: "Both are events the team shows up to — they hold a date, a site and the matches played under them.",
   dualLabel: "Dual match",

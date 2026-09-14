@@ -1,1 +1,1 @@
-export { WizardPageSkeleton as default } from "@/components/dashboard/loading/page-skeletons";
+export { EditEventPending as default } from "@/components/dashboard/loading/event-wizard-pending";
