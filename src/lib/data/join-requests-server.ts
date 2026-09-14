@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { shortDate } from "@/lib/data/match-utils";
 
@@ -53,31 +54,37 @@ export interface JoinRequest {
   requestedOn: string;
 }
 
-export async function getPendingJoinRequests(
-  programId: string,
-  strict = false,
-): Promise<JoinRequest[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("program_join_requests", {
-    p_program_id: programId,
-  });
-
-  if (error) {
-    if (strict)
-      throw new Error("Could not load join requests", { cause: error });
-    // Never fatal: a roster page that cannot load this list should render
-    // without it rather than break — same posture as the workspace lookup.
-    console.error("[join-requests] could not load pending join requests", {
-      error: error.message,
+/**
+ * Cached per request: the dashboard layout's presence read and the roster page
+ * both ask for the same program's list on a full roster load.
+ */
+export const getPendingJoinRequests = cache(
+  async function getPendingJoinRequests(
+    programId: string,
+    strict = false,
+  ): Promise<JoinRequest[]> {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("program_join_requests", {
+      p_program_id: programId,
     });
-    return [];
-  }
 
-  return ((data ?? []) as DbJoinRequestRow[]).map((row) => ({
-    id: row.id,
-    email: row.email,
-    name: row.name,
-    note: row.note,
-    requestedOn: shortDate(row.created_at),
-  }));
-}
+    if (error) {
+      if (strict)
+        throw new Error("Could not load join requests", { cause: error });
+      // Never fatal: a roster page that cannot load this list should render
+      // without it rather than break — same posture as the workspace lookup.
+      console.error("[join-requests] could not load pending join requests", {
+        error: error.message,
+      });
+      return [];
+    }
+
+    return ((data ?? []) as DbJoinRequestRow[]).map((row) => ({
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      note: row.note,
+      requestedOn: shortDate(row.created_at),
+    }));
+  },
+);
