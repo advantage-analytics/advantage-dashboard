@@ -545,7 +545,6 @@ function StepButton({
     <button
       type="button"
       aria-label={label}
-      title={label}
       onClick={onClick}
       className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
     >
@@ -573,7 +572,6 @@ function Swatch({
       role="radio"
       aria-checked={checked}
       aria-label={label}
-      title={label}
       onClick={onPick}
       className="flex size-6 cursor-pointer items-center justify-center rounded-full border transition-shadow duration-200 focus-visible:outline-none"
       style={{

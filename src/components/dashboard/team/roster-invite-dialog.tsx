@@ -882,7 +882,6 @@ function CopyInviteLink() {
     <button
       type="button"
       disabled
-      title={reason}
       className="inline-flex cursor-not-allowed items-center gap-1.5 text-[11px] font-medium text-[var(--ink-400)]"
     >
       <LinkIcon className="size-3.5" strokeWidth={1.5} aria-hidden />

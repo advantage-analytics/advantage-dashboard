@@ -31,7 +31,7 @@ ready).
 
 ## T2 · Drop DOM title tooltips — team, settings, claim, help
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/team/roster-invite-dialog.tsx, src/components/dashboard/team/join-requests-card.tsx, src/components/dashboard/settings/image-adjust-dialog.tsx, src/components/claim/claim-shell.tsx, src/app/dashboard/help/help-toc.tsx (surveyed, not guessed)
 - **done when:**

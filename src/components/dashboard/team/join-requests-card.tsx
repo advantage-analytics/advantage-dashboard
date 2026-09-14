@@ -236,10 +236,7 @@ export function JoinRequestsCard({
                   <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
                     {name}
                   </span>
-                  <span
-                    title={request.email}
-                    className="truncate text-[11px] text-[var(--ink-500)]"
-                  >
+                  <span className="truncate text-[11px] text-[var(--ink-500)]">
                     {request.email}
                   </span>
 
@@ -271,10 +268,7 @@ export function JoinRequestsCard({
                       length bound, so one unbroken 5,000-character "word" cannot
                       reshape the dialog. The full text is on the title. */}
                   {request.note && (
-                    <span
-                      title={request.note}
-                      className="mt-1.5 line-clamp-2 text-[11px] leading-[1.6] break-words text-[var(--ink-600)]"
-                    >
+                    <span className="mt-1.5 line-clamp-2 text-[11px] leading-[1.6] break-words text-[var(--ink-600)]">
                       {request.note}
                     </span>
                   )}

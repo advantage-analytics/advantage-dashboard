@@ -202,10 +202,7 @@ export function HelpToc() {
           <p className="text-[10px] font-medium tracking-[1.8px] text-[var(--ink-500)] uppercase">
             On this page
           </p>
-          <span
-            className="text-[10px] tracking-[0.2px] text-[var(--ink-400)]"
-            title="Press ? from anywhere on this page"
-          >
+          <span className="text-[10px] tracking-[0.2px] text-[var(--ink-400)]">
             ?
           </span>
         </div>

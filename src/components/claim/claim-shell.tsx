@@ -111,12 +111,7 @@ export function ClaimShell({
           rather than as a dialog that lost its window. */}
       <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between p-5">
         {back ? (
-          <Link
-            href={back}
-            title="Back"
-            aria-label="Back"
-            className={ICON_BUTTON}
-          >
+          <Link href={back} aria-label="Back" className={ICON_BUTTON}>
             <ArrowLeft
               className="size-[15px]"
               strokeWidth={1.5}
@@ -126,12 +121,7 @@ export function ClaimShell({
         ) : (
           <span className="w-8" />
         )}
-        <Link
-          href={exitHref}
-          title={exitLabel}
-          aria-label={exitLabel}
-          className={ICON_BUTTON}
-        >
+        <Link href={exitHref} aria-label={exitLabel} className={ICON_BUTTON}>
           <X className="size-[15px]" strokeWidth={1.5} aria-hidden="true" />
         </Link>
       </div>
