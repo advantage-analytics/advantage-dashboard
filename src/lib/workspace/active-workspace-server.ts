@@ -60,6 +60,8 @@ function personalWorkspace(viewer: Viewer): Workspace {
     timeZone: "UTC",
     role: "owner",
     mark: viewer.initials,
+    // The workspace is you, so its icon is your photo — see `Workspace.photoUrl`.
+    photoUrl: viewer.avatarUrl,
     canSubmitVideo: true,
     // No program row, so no status to carry — see `Workspace.programStatus`.
     programStatus: null,

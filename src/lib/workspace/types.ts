@@ -141,6 +141,14 @@ export interface Workspace {
    */
   crestUrl?: string | null;
   /**
+   * The viewer's profile photo (`Viewer.avatarUrl`), drawn in place of `mark`
+   * on a personal workspace. Personal is one person's own matches and never
+   * gains members, so its icon is that person — there is no second upload.
+   * Changed on Settings › Profile. Absent or null for a team workspace, which
+   * wears `crestUrl` instead.
+   */
+  photoUrl?: string | null;
+  /**
    * May video be submitted against this workspace's allowance yet?
    *
    * Always true for a personal workspace. For a program it follows the claim:
