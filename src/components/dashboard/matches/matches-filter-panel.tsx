@@ -151,7 +151,7 @@ export function MatchesFilterPanel<K extends string>({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <FilterTrigger title={label} aria-expanded={open} engaged={engaged} />
+        <FilterTrigger aria-expanded={open} engaged={engaged} />
       </PopoverTrigger>
 
       <PopoverContent

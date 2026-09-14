@@ -839,7 +839,6 @@ function OfferStrip({
           <button
             type="button"
             onClick={onAttach}
-            title="Fills opponent, date, court, format and scoring from the lineup, and closes this slot"
             className="cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors duration-150 hover:text-[var(--blue-hover)]"
           >
             Attach
@@ -1654,7 +1653,7 @@ function DetailsStepContentImpl({
                     setNameTerm(formData.opponentName);
                     setNamingOpponent(true);
                   }}
-                  title="Change the opponent"
+                  aria-label={`Change the opponent, ${formData.opponentName}`}
                   className="group inline-flex cursor-pointer items-center gap-1.5 text-left text-[13px] text-[var(--ink-900)]"
                 >
                   <span className="truncate">{formData.opponentName}</span>

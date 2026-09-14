@@ -22,7 +22,6 @@ export function MissingFieldsPill({
     <button
       type="button"
       onClick={onJump}
-      title={`Still to fill: ${labels.join(", ")}`}
       aria-label={`${count} required ${count === 1 ? "field" : "fields"} left: ${labels.join(", ")}. Go to the next one.`}
       className="inline-flex h-[22px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-[var(--danger)]/20 bg-[var(--danger)]/[0.08] pr-2.5 pl-2 text-[11px] leading-none font-medium whitespace-nowrap text-[var(--danger)] tabular-nums transition-colors duration-150 hover:bg-[var(--danger)]/[0.12]"
     >

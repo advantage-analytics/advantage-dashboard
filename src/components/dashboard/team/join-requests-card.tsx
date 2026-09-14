@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { ArrowRight, GraduationCap, UserPlus, Users } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
 import { getInitials } from "@/lib/data/match-utils";
@@ -86,6 +86,61 @@ function Pill({
       {icon}
       {children}
     </span>
+  );
+}
+
+/**
+ * A requester's note, clamped by default and opened on demand.
+ *
+ * Clamped, not trusted: free text from a public form with no length bound, so
+ * one unbroken 5,000-character "word" cannot reshape the dialog by default.
+ * The clamp is not the only way to read it, though — "Show more" removes it for
+ * this note alone. The button exists only when the clamp actually hides
+ * something: a note of two lines or fewer draws no control.
+ *
+ * Overflow is measured only while clamped. Once expanded the span has no clamp
+ * and never overflows, so re-measuring then would take "Show less" away with
+ * it; the last clamped reading stands until the note is collapsed again.
+ */
+function RequestNote({ note }: { note: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || expanded) return;
+    // Fires once on observe (after mount) and on every size change after. The
+    // 1px slack absorbs rounding of a fractional line height; a hidden third
+    // line is a whole line (~18px) taller.
+    const observer = new ResizeObserver(() => {
+      setOverflows(el.scrollHeight - el.clientHeight > 1);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [expanded, note]);
+
+  return (
+    <>
+      <span
+        ref={ref}
+        className={`mt-1.5 text-[11px] leading-[1.6] break-words text-[var(--ink-600)] ${
+          expanded ? "" : "line-clamp-2"
+        }`}
+      >
+        {note}
+      </span>
+      {overflows && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((current) => !current)}
+          className="self-start text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </>
   );
 }
 
@@ -236,10 +291,11 @@ export function JoinRequestsCard({
                   <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
                     {name}
                   </span>
-                  <span
-                    title={request.email}
-                    className="truncate text-[11px] text-[var(--ink-500)]"
-                  >
+                  {/* Wraps, never clips: this is the only copy of the address
+                      on screen and nothing here opens it, so an ellipsis would
+                      hide the one thing a coach approves on. `break-all`
+                      because an address has no spaces to break at. */}
+                  <span className="text-[11px] break-all text-[var(--ink-500)]">
                     {request.email}
                   </span>
 
@@ -267,17 +323,7 @@ export function JoinRequestsCard({
                     </Pill>
                   </span>
 
-                  {/* Clamped, not trusted: free text from a public form with no
-                      length bound, so one unbroken 5,000-character "word" cannot
-                      reshape the dialog. The full text is on the title. */}
-                  {request.note && (
-                    <span
-                      title={request.note}
-                      className="mt-1.5 line-clamp-2 text-[11px] leading-[1.6] break-words text-[var(--ink-600)]"
-                    >
-                      {request.note}
-                    </span>
-                  )}
+                  {request.note && <RequestNote note={request.note} />}
                 </span>
 
                 <span className="flex shrink-0 items-center gap-2">

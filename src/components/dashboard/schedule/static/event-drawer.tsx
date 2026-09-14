@@ -269,10 +269,9 @@ export function EventDrawer({
           <div className="flex shrink-0 items-center gap-3.5">
             <EventMark kind={event.kind} name={event.name} size={48} />
             <div className="flex min-w-0 flex-col gap-1">
-              {/* One line, truncated: the drawer is 340px and a wrapped name
-                  pushes the facts and score down a row. `title` carries the
-                  full name on hover; the event page shows it whole. */}
-              <div className="text-title-lg truncate" title={event.name}>
+              {/* Two-line wrap: the drawer is 340px, so a long name wraps
+                  instead of truncating, and the panel scrolls to fit. */}
+              <div className="text-title-lg line-clamp-2 break-words">
                 {event.name}
               </div>
               {subline ? (

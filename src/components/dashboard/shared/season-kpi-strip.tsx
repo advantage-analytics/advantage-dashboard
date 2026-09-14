@@ -339,13 +339,6 @@ export function SeasonKpiStrip({
                       aria-disabled={disabled}
                       disabled={disabled}
                       onClick={() => toggle(spec.key)}
-                      title={
-                        disabled
-                          ? checked
-                            ? `Keep at least ${SEASON_KPI_MIN} tiles visible`
-                            : `Uncheck a tile to add ${spec.label}`
-                          : undefined
-                      }
                       className={`group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors duration-100 focus-visible:bg-[#F5F5F5] focus-visible:outline-none ${
                         disabled
                           ? "cursor-not-allowed opacity-40"
