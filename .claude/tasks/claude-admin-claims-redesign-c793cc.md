@@ -21,7 +21,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T1 · Security migration: block `users.is_admin` self-promotion
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** supabase/migrations/20260914100000_users_block_admin_self_update.sql
 - **done when:**
