@@ -49,7 +49,6 @@ export interface UploadState {
     | "submit_failed"
     | "cancelled"
     | "failed";
-  fileName: string;
   /** From `"started"`; what "Try again" resubmits. Absent before it lands. */
   jobId?: string;
   progress?: VideoUploadProgress;
@@ -57,15 +56,11 @@ export interface UploadState {
   cancel?: () => void;
 }
 
-export type UploadPhase = UploadState["phase"];
-
 /**
  * Folds one event from the wizard's upload closure into the uploads map.
  *
- * Keyed by match, because uploads genuinely overlap: "Upload another" starts a
- * second transfer while the first is still moving bytes. A single slot meant
- * the second silently replaced the first on screen while both ran, and Cancel
- * only ever reached the newest one.
+ * Keyed by match so an event can only ever change the match it belongs to — a
+ * late event from an earlier run never lands on the match now on screen.
  *
  * Returns `prev` itself for an event it ignores, so a `setState` updater that
  * calls this does not re-render.
@@ -78,7 +73,6 @@ export function applyVideoUploadEvent(
     return new Map(prev).set(event.matchId, {
       matchId: event.matchId,
       phase: "uploading",
-      fileName: event.fileName,
       jobId: event.jobId,
       cancel: event.cancel,
     });
@@ -90,7 +84,6 @@ export function applyVideoUploadEvent(
     // was refused, the session expired, the file's container was rejected.
     // Dropped, it left the success card with nothing to show and falling
     // through to "Sent for analysis." for a video that never moved a byte.
-    // `"started"` is what carries the file name, so this entry has none.
     if (event.kind !== "failed") {
       // Every other kind follows a `"started"` and cannot arrive first.
       return prev;
@@ -98,7 +91,6 @@ export function applyVideoUploadEvent(
     return new Map(prev).set(event.matchId, {
       matchId: event.matchId,
       phase: "failed",
-      fileName: "Video",
       error: event.error,
     });
   }
@@ -111,17 +103,4 @@ export function applyVideoUploadEvent(
         : { phase: event.kind, cancel: undefined };
 
   return new Map(prev).set(event.matchId, { ...current, ...patch });
-}
-
-/**
- * The uploads that survive "Upload another": the ones still moving bytes.
- * Clearing everything would hide transfers that are still running, which is
- * exactly the bug keying by match fixes.
- */
-export function keepRunningUploads(
-  prev: Map<string, UploadState>,
-): Map<string, UploadState> {
-  const next = new Map(prev);
-  for (const [id, u] of next) if (u.phase !== "uploading") next.delete(id);
-  return next;
 }

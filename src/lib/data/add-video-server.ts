@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { providerKindOrNull } from "@/lib/services/upload";
 import type { EventPreset } from "@/components/dashboard/matches/new-match-wizard/types";
+import { singleMatchPreset } from "@/lib/schedule/line-choices";
 
 /**
  * Where "add a video to this match" should go, for `/dashboard/matches/new?match=`.
@@ -27,6 +28,10 @@ import type { EventPreset } from "@/components/dashboard/matches/new-match-wizar
  * - **Not `derivation_failed`.** That job already has its video and results;
  *   what it needs is a derivation re-run, not a new recording.
  *
+ * Every other match that exists goes back to its own page, never to a blank
+ * wizard: the links that land here say "add a video to this match", and a
+ * blank wizard would quietly create a second, unrelated one.
+ *
  * `playerUserId` is null on purpose: in a personal workspace a non-null one
  * resolves to a roster athlete, which `uploadEligibility` refuses there. Null
  * resolves to "Myself", which is who a personal match belongs to.
@@ -40,10 +45,6 @@ export async function getAddVideoTarget(
   activeKind: "personal" | "team",
 ): Promise<AddVideoTarget> {
   const supabase = await createClient();
-  const fallback: AddVideoTarget = {
-    kind: "redirect",
-    href: "/dashboard/matches/new",
-  };
 
   // RLS-scoped: a match the viewer cannot read resolves to nothing.
   const { data } = await supabase
@@ -53,63 +54,58 @@ export async function getAddVideoTarget(
     )
     .eq("id", matchId)
     .maybeSingle();
-  if (!data) return fallback;
+  // Nothing the viewer can read: there is no match to add a video to.
+  if (!data) return { kind: "redirect", href: "/dashboard/matches/new" };
 
   const matchHref = `/dashboard/matches/${data.id}`;
+  const backToMatch: AddVideoTarget = { kind: "redirect", href: matchHref };
 
-  // A team match with no event already has a flow that keeps its program and
-  // athlete; an event line's match is filled from its line, never from here.
+  // A team match is filled by the team upload page, which keeps its program
+  // and athlete: a single match by its id, an event line's match from its
+  // line (`?entry=`, which also carries the round). That page applies its own
+  // staff gate. Viewed from a personal workspace, it is not this page's to take.
   if (data.program_id) {
-    return activeKind === "team" && !data.event_entry_id
-      ? { kind: "redirect", href: `/dashboard/team/upload?match=${data.id}` }
-      : fallback;
+    if (activeKind !== "team") return backToMatch;
+    return {
+      kind: "redirect",
+      href: data.event_entry_id
+        ? `/dashboard/team/upload?entry=${data.event_entry_id}&match=${data.id}`
+        : `/dashboard/team/upload?match=${data.id}`,
+    };
   }
   if (activeKind !== "personal" || data.created_by !== viewerId) {
-    return fallback;
+    return backToMatch;
   }
 
   if (
     data.source_provider &&
     providerKindOrNull(data.source_provider) === "import"
   ) {
-    return { kind: "redirect", href: matchHref };
+    return backToMatch;
   }
 
   const analysis = (
     await loadMatchAnalysis(supabase, [data.id], { reap: true })
   ).get(data.id);
   if (analysis && analysis.status !== "failed") {
-    return { kind: "redirect", href: matchHref };
+    return backToMatch;
   }
-
-  // Carries `winner` when the match stopped: the games alone would name the
-  // wrong side, and the fill path writes this score back.
-  const score = data.score as EventPreset["score"];
 
   return {
     kind: "wizard",
-    preset: {
-      entryId: null,
-      eventId: null,
+    preset: singleMatchPreset({
+      id: data.id,
       eventName: data.tournament_name,
-      matchId: data.id,
       round: data.round,
       playerName: data.player1_name,
       playerUserId: null,
       opponentName: data.player2_name,
-      date: String(data.date).slice(0, 10),
+      date: String(data.date),
       surface: data.court_type,
-      bestOf: score?.player1.length === 1 ? 1 : 3,
-      // Asked, never defaulted — the pipeline refuses a job without a real
-      // answer, and a wrong one that looks real is worse than none.
-      adScoring: null,
-      score,
-      supportsVideo: true,
+      // Carries `winner` when the match stopped: the games alone would name
+      // the wrong side, and the fill path writes this score back.
+      score: data.score as EventPreset["score"],
       eventHref: matchHref,
-      site: null,
-      eventKind: null,
-      opponentProgramKey: null,
-      opponentSchool: null,
-    },
+    }),
   };
 }

@@ -23,6 +23,55 @@ import { compareEntryOrder } from "@/lib/schedule/courts";
 import { nextRound } from "@/lib/schedule/tournament-run";
 
 /**
+ * The preset for a match that exists on its own — no event, no line.
+ *
+ * What both "add a video to this match" routes open the wizard with: the team
+ * one (`/dashboard/team/upload?match=`) and the personal one
+ * (`getAddVideoTarget()`). `matchId` set is what makes the wizard fill that row
+ * instead of inserting one. `adScoring` is null on purpose — nothing declared a
+ * format, so the details step asks; a `false` default would be a wrong answer
+ * that looks like a real one, and the pipeline refuses a job without a real
+ * one.
+ */
+export function singleMatchPreset(match: {
+  id: string;
+  eventName: string | null;
+  round: string | null;
+  playerName: string;
+  /** The account behind the player; null resolves to the uploader. */
+  playerUserId: string | null;
+  opponentName: string;
+  /** As stored; only the day is kept. */
+  date: string;
+  surface: string | null;
+  score: EventPreset["score"];
+  /** Where Cancel and success return to. */
+  eventHref: string;
+}): EventPreset {
+  return {
+    entryId: null,
+    eventId: null,
+    eventName: match.eventName,
+    matchId: match.id,
+    round: match.round,
+    playerName: match.playerName,
+    playerUserId: match.playerUserId,
+    opponentName: match.opponentName,
+    date: match.date.slice(0, 10),
+    surface: match.surface,
+    bestOf: match.score?.player1.length === 1 ? 1 : 3,
+    adScoring: null,
+    score: match.score,
+    supportsVideo: true,
+    eventHref: match.eventHref,
+    site: null,
+    eventKind: null,
+    opponentProgramKey: null,
+    opponentSchool: null,
+  };
+}
+
+/**
  * The preset for one entry (and, optionally, one of its matches) within an
  * event — the `?entry=` branch of the upload page, and `lineupChoices`
  * below, which needs one per sibling line.

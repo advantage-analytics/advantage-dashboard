@@ -35,10 +35,22 @@ export function useMatchStatsReady(matchId: string | null): MatchStatsState {
     const supabase = createClient();
     let settled = false;
     let channel: ReturnType<typeof supabase.channel> | null = null;
+    let interval: ReturnType<typeof setInterval> | undefined;
+    let slow: ReturnType<typeof setTimeout> | undefined;
+
+    // Stops the socket and both timers: once ready there is nothing left to
+    // learn, and the success screen can sit open for a long time.
+    const stop = () => {
+      settled = true;
+      clearInterval(interval);
+      clearTimeout(slow);
+      if (channel) void supabase.removeChannel(channel);
+      channel = null;
+    };
 
     const finish = () => {
       if (settled) return;
-      settled = true;
+      stop();
       setState({ matchId, value: "ready" });
     };
 
@@ -84,17 +96,12 @@ export function useMatchStatsReady(matchId: string | null): MatchStatsState {
         });
     })();
 
-    const interval = setInterval(check, RECHECK_EVERY_MS);
-    const slow = setTimeout(() => {
+    interval = setInterval(check, RECHECK_EVERY_MS);
+    slow = setTimeout(() => {
       if (!settled) setState({ matchId, value: "slow" });
     }, SLOW_AFTER_MS);
 
-    return () => {
-      settled = true;
-      clearInterval(interval);
-      clearTimeout(slow);
-      if (channel) void supabase.removeChannel(channel);
-    };
+    return stop;
   }, [matchId]);
 
   // A different match starts over at "waiting" without an effect-time reset.

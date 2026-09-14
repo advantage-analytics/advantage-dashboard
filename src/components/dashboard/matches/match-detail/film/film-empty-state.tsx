@@ -6,6 +6,7 @@ import { Film } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { MAX_VIDEO_SIZE_BYTES } from "@/lib/services/splitstep/config";
 import { advButton } from "@/lib/ui/adv-button";
+import { addVideoHref } from "@/lib/matches/add-video-href";
 
 /**
  * The Film room with no film (artboard 46d, lines 1199–1211).
@@ -68,11 +69,7 @@ export function FilmEmptyState() {
 
       <div className="flex items-center gap-3.5 pt-1">
         <Link
-          href={
-            match.sourceProvider
-              ? "/dashboard/matches/new"
-              : `/dashboard/matches/new?match=${match.id}`
-          }
+          href={addVideoHref(match.sourceProvider ? null : match.id)}
           className={advButton("primary", "md")}
         >
           Add video

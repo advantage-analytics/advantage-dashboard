@@ -184,7 +184,9 @@ async function rollbackCreatedMatch(
 /**
  * The rollback-then-announce ritual both failure sites share: undo the match
  * row (unless it predates this upload), then dispatch `match-upload-failed`
- * with `matchId` attached ONLY if a viewable row survived. One function so
+ * with `matchId` attached ONLY if a viewable row survived — and, when the row
+ * is gone, `removedMatchId`, so a screen still showing that match can tell the
+ * rollback was its own rather than a late one from an earlier run. One function so
  * the invariant the comments above describe — a dead link is worse than no
  * link — cannot drift between the two catch blocks.
  */
@@ -202,7 +204,7 @@ async function rollbackAndAnnounceFailure(params: {
   window.dispatchEvent(
     new CustomEvent("match-upload-failed", {
       detail: {
-        ...(matchIsViewable ? { matchId } : {}),
+        ...(matchIsViewable ? { matchId } : { removedMatchId: matchId }),
         error,
       },
     }),

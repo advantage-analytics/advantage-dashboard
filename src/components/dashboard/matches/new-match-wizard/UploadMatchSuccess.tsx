@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useMemo,
   useState,
   useSyncExternalStore,
   useTransition,
@@ -20,6 +21,8 @@ import { AnalysisProgressTrack } from "../analysis-progress-track";
 import type { EventPreset } from "./types";
 import type { CreatedMatch, UploadState } from "./upload-progress";
 import { formatFileSize } from "./utils";
+import { addVideoHref } from "@/lib/matches/add-video-href";
+import { createClient } from "@/lib/supabase/client";
 
 /**
  * Where finishing lands: what is happening now, the match it is happening to,
@@ -238,9 +241,15 @@ function successView(
     state: "later",
     label: "Analysis",
   };
-  const size = upload?.progress
-    ? formatFileSize(upload.progress.bytesTotal)
-    : undefined;
+  const pct = upload?.progress ? Math.floor(upload.progress.pct) : null;
+  const uploaded: StepView = {
+    key: "video",
+    state: "done",
+    label: "Video uploaded",
+    value: upload?.progress
+      ? formatFileSize(upload.progress.bytesTotal)
+      : undefined,
+  };
 
   switch (upload?.phase ?? "starting") {
     case "starting":
@@ -253,9 +262,7 @@ function successView(
             key: "video",
             state: "now",
             label: "Uploading video",
-            value: upload?.progress
-              ? `${Math.floor(upload.progress.pct)}%`
-              : undefined,
+            value: pct === null ? undefined : `${pct}%`,
           },
           later,
         ],
@@ -267,7 +274,7 @@ function successView(
         title: "Sending for analysis",
         steps: [
           saved,
-          { key: "video", state: "done", label: "Video uploaded", value: size },
+          uploaded,
           {
             key: "analysis",
             state: "now",
@@ -282,7 +289,7 @@ function successView(
         title: "Sent for analysis",
         steps: [
           saved,
-          { key: "video", state: "done", label: "Video uploaded", value: size },
+          uploaded,
           { key: "analysis", state: "now", label: "Analysis in line" },
         ],
         busy: false,
@@ -293,7 +300,7 @@ function successView(
         title: "Couldn't send for analysis",
         steps: [
           saved,
-          { key: "video", state: "done", label: "Video uploaded", value: size },
+          uploaded,
           { key: "analysis", state: "fail", label: "Analysis" },
         ],
         busy: false,
@@ -322,9 +329,8 @@ function successView(
           {
             key: "video",
             state: "fail",
-            label: upload?.progress
-              ? `Upload stopped at ${Math.floor(upload.progress.pct)}%`
-              : "Upload stopped",
+            label:
+              pct === null ? "Upload stopped" : `Upload stopped at ${pct}%`,
           },
           later,
         ],
@@ -402,7 +408,7 @@ function stepBody(
         return (
           <>
             <p className={NOTE}>The match is saved without video.</p>
-            <ReuploadLink matchId={match.matchId} />
+            <ReuploadLink matchId={match.matchId} jobId={upload?.jobId} />
           </>
         );
       case "transfer":
@@ -414,7 +420,7 @@ function stepBody(
                 ? `${upload.error} The match is saved; it just has no video yet.`
                 : "The match is saved; it just has no video yet."}
             </p>
-            <ReuploadLink matchId={match.matchId} />
+            <ReuploadLink matchId={match.matchId} jobId={upload?.jobId} />
           </>
         );
     }
@@ -661,17 +667,13 @@ function ResubmitButton({
  * boundary on an otherwise static route. The URL cannot change while this
  * screen is mounted, so there is nothing to subscribe to.
  */
-function useCurrentUrl(): { pathname: string; search: string } | null {
+function useCurrentUrl(): URL | null {
   const href = useSyncExternalStore(
     noSubscription,
-    () => window.location.pathname + window.location.search,
+    () => window.location.href,
     () => null,
   );
-  if (href === null) return null;
-  const at = href.indexOf("?");
-  return at === -1
-    ? { pathname: href, search: "" }
-    : { pathname: href.slice(0, at), search: href.slice(at) };
+  return useMemo(() => (href === null ? null : new URL(href)), [href]);
 }
 
 function noSubscription(): () => void {
@@ -679,53 +681,96 @@ function noSubscription(): () => void {
 }
 
 /**
+ * Where the next wizard opens, from this page's URL.
+ *
+ * A line's `?entry=` URL is kept whole: it already names the line (and round)
+ * the next upload belongs to. Anything else is this route with `?match=` set
+ * to `match` — fill that saved match — or dropped when `match` is null, for a
+ * fresh wizard that will not try to give the match just saved a second video.
+ */
+function wizardHref(url: URL | null, match: string | null): string {
+  if (!url) return addVideoHref(match);
+  if (url.searchParams.has("entry")) return url.pathname + url.search;
+  const params = new URLSearchParams(url.search);
+  if (match) params.set("match", match);
+  else params.delete("match");
+  const query = params.toString();
+  return query ? `${url.pathname}?${query}` : url.pathname;
+}
+
+/**
  * "Upload the video again" — the same wizard, opened on this match.
  *
  * `?match=` makes it fill the saved row rather than insert a second one: the
- * score and players are already answered, so it opens on the video. A preset
- * flow's own URL already names its match or line, so it is reused as-is.
+ * score and players are already answered, so it opens on the video.
  *
  * A plain `<a>`, a full load: this is the wizard's own route with new search
  * params, and the flow's state (the match just saved, this screen) must not
  * survive into the next run.
+ *
+ * ── It re-sends the lost "failed" first ─────────────────────────────────────
+ * When a transfer dies because the connection dropped, the write marking its
+ * job `failed` usually dies with it, and the job sits at `uploading` until the
+ * reaper retires it a quarter of an hour later. The `?match=` page counts that
+ * as live and sends the person to the match instead of the wizard. So the
+ * click writes it again — the same write the transfer's own catch makes, and
+ * only onto a job still claiming to upload — and follows the link however
+ * that write goes: if it fails too, the page's own check decides.
  */
-function ReuploadLink({ matchId }: { matchId: string }) {
+function ReuploadLink({
+  matchId,
+  jobId,
+}: {
+  matchId: string;
+  jobId: string | undefined;
+}) {
   const url = useCurrentUrl();
-  const href = url
-    ? reuploadHref(matchId, url)
-    : `/dashboard/matches/new?match=${matchId}`;
+  const href = wizardHref(url, matchId);
+  const [pending, setPending] = useState(false);
   return (
     <div className="mt-1 flex">
-      <a href={href} className={advButton("primary", "sm")}>
-        Upload the video again
+      <a
+        href={href}
+        aria-disabled={pending}
+        onClick={async (event) => {
+          if (!jobId || event.metaKey || event.ctrlKey || event.shiftKey)
+            return;
+          event.preventDefault();
+          if (pending) return;
+          setPending(true);
+          try {
+            await createClient()
+              .from("processing_jobs")
+              .update({
+                status: "failed",
+                error_message: "Video upload failed",
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", jobId)
+              .eq("status", "uploading");
+          } catch {
+            // Still offline: the page decides from what the job says.
+          }
+          window.location.assign(href);
+        }}
+        className={advButton("primary", "sm")}
+      >
+        {pending ? "Opening…" : "Upload the video again"}
       </a>
     </div>
   );
 }
 
-function reuploadHref(
-  matchId: string,
-  location: { pathname: string; search: string },
-): string {
-  const params = new URLSearchParams(location.search);
-  if (params.has("entry") || params.get("match") === matchId) {
-    return location.pathname + location.search;
-  }
-  return `${location.pathname}?match=${matchId}`;
-}
-
 /**
- * "Upload another" — a same-tab restart when nothing is moving, a new tab
- * while something is.
+ * "Upload another" — a same-tab restart when nothing is moving, a full load
+ * otherwise.
  *
  * The same-tab remount cannot be used while a transfer is live: this screen is
  * the only thing holding the upload's progress and its cancel handle, so
  * replacing it with the wizard would leave bytes moving with nothing to watch
- * or stop them. A new tab keeps this one intact and starts a genuinely fresh
- * wizard beside it.
- *
- * The current URL rather than a hardcoded `/dashboard/matches/new`, because a
- * team upload's preset lives entirely in its own route and query string.
+ * or stop them — that opens a new tab and keeps this one intact. Nor can a bare
+ * `?match=` flow restart in place: the remount keeps its preset, which names
+ * the match just saved, so that one loads a clean wizard in this tab.
  */
 function UploadAnotherAction({
   busy,
@@ -734,22 +779,13 @@ function UploadAnotherAction({
   busy: boolean;
   onUploadAnother: () => void;
 }) {
-  // A bare `?match=` flow cannot restart in place: the remount keeps its
-  // preset, which names the match just saved. Load a clean wizard instead.
   const url = useCurrentUrl();
-  const freshHref = url ? anotherHref(url) : "/dashboard/matches/new";
   const namesSavedMatch =
-    url !== null && freshHref !== url.pathname + url.search;
+    url !== null &&
+    url.searchParams.has("match") &&
+    !url.searchParams.has("entry");
 
-  if (!busy && namesSavedMatch) {
-    return (
-      <a href={freshHref} className={QUIET_LINK}>
-        Upload another
-      </a>
-    );
-  }
-
-  if (!busy) {
+  if (!busy && !namesSavedMatch) {
     return (
       <button
         type="button"
@@ -761,38 +797,29 @@ function UploadAnotherAction({
     );
   }
 
-  const newTabHref = freshHref;
-
   // A real anchor, not `window.open`: it survives a popup blocker, honours
   // ⌘-click and middle-click, and announces the new tab to a screen reader.
-  // Plain `<a>` rather than `<Link>` — the new tab must be a full page load.
+  // Plain `<a>` rather than `<Link>` — either way it must be a full page load.
   return (
     <a
-      href={newTabHref}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label="Upload another match — opens in a new tab"
+      href={wizardHref(url, null)}
       className={QUIET_LINK}
+      {...(busy
+        ? {
+            target: "_blank",
+            rel: "noopener noreferrer",
+            "aria-label": "Upload another match — opens in a new tab",
+          }
+        : {})}
     >
       Upload another
-      <ExternalLink
-        className="size-3.5 shrink-0 text-[var(--ink-400)]"
-        strokeWidth={1.5}
-        aria-hidden="true"
-      />
+      {busy && (
+        <ExternalLink
+          className="size-3.5 shrink-0 text-[var(--ink-400)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+      )}
     </a>
   );
-}
-
-/**
- * The URL a fresh wizard opens on. A line's `?entry=` is kept — the next upload
- * from that page is for the same event — but a bare `?match=` is dropped: it
- * names the match just saved, and opening the wizard on it again would try to
- * give it a second video.
- */
-function anotherHref(location: { pathname: string; search: string }): string {
-  const params = new URLSearchParams(location.search);
-  if (!params.has("entry")) params.delete("match");
-  const query = params.toString();
-  return query ? `${location.pathname}?${query}` : location.pathname;
 }

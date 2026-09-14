@@ -12,6 +12,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { addVideoHref } from "@/lib/matches/add-video-href";
 import { TriangleAlert, Info } from "lucide-react";
 import {
   ANALYSIS_LABEL,
@@ -236,7 +237,7 @@ export function MatchAnalysisProgress({
                   somewhere that can. */}
               {analysis.status === "failed" && (
                 <Link
-                  href={`/dashboard/matches/new?match=${matchId}`}
+                  href={addVideoHref(matchId)}
                   className="mt-3 inline-block text-[12px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
                 >
                   Upload a new recording
