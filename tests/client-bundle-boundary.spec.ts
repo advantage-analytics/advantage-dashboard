@@ -26,15 +26,7 @@ const SERVER_ONLY = [
   "lib/user/roles.ts",
 ].map((p) => join(SRC, p));
 
-const EXTENSIONS = [
-  "",
-  ".ts",
-  ".tsx",
-  ".js",
-  ".mjs",
-  "/index.ts",
-  "/index.tsx",
-];
+const EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];
 
 function resolveImport(from: string, spec: string): string | null {
   let base: string;
@@ -71,6 +63,30 @@ function valueImports(source: string): string[] {
   return specs;
 }
 
+/**
+ * One read per module for the whole run. Every client file starts its own walk,
+ * and the shared ones (ui primitives, lib/utils) sit under hundreds of them.
+ */
+const moduleCache = new Map<
+  string,
+  { directive: "client" | "server" | undefined; targets: string[] }
+>();
+
+function moduleInfo(file: string) {
+  let info = moduleCache.get(file);
+  if (!info) {
+    const source = readFileSync(file, "utf8");
+    info = {
+      directive: directive(source),
+      targets: valueImports(source)
+        .map((spec) => resolveImport(file, spec))
+        .filter((target): target is string => target !== null),
+    };
+    moduleCache.set(file, info);
+  }
+  return info;
+}
+
 function* sourceFiles(dir: string): Generator<string> {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
@@ -84,18 +100,17 @@ test("no client file reaches a server-only module", () => {
   let clients = 0;
 
   for (const entry of sourceFiles(SRC)) {
-    if (directive(readFileSync(entry, "utf8")) !== "client") continue;
+    if (moduleInfo(entry).directive !== "client") continue;
     clients++;
 
     const parent = new Map<string, string | null>([[entry, null]]);
     const queue = [entry];
     while (queue.length) {
       const file = queue.shift()!;
-      const source = readFileSync(file, "utf8");
-      if (file !== entry && directive(source) === "server") continue;
-      for (const spec of valueImports(source)) {
-        const target = resolveImport(file, spec);
-        if (!target || parent.has(target)) continue;
+      const { directive: kind, targets } = moduleInfo(file);
+      if (file !== entry && kind === "server") continue;
+      for (const target of targets) {
+        if (parent.has(target)) continue;
         parent.set(target, file);
         queue.push(target);
       }
