@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { Kbd } from "@/components/ui/kbd";
 
 type TocItem = { id: string; label: string };
 
@@ -202,8 +203,11 @@ export function HelpToc() {
           <p className="text-[10px] font-medium tracking-[1.8px] text-[var(--ink-500)] uppercase">
             On this page
           </p>
-          <span className="text-[10px] tracking-[0.2px] text-[var(--ink-400)]">
-            ?
+          <span aria-hidden="true">
+            <Kbd size="sm">?</Kbd>
+          </span>
+          <span className="sr-only">
+            Press ? from anywhere on this page to jump to these topics
           </span>
         </div>
         <ul className="flex flex-col gap-0.5">

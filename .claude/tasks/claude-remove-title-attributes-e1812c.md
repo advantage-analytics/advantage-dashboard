@@ -93,7 +93,7 @@ ready).
 
 ## T7 · Help TOC — make the ? hint a keycap with an sr-only sentence
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/app/dashboard/help/help-toc.tsx (surveyed, not guessed)
 - **done when:**

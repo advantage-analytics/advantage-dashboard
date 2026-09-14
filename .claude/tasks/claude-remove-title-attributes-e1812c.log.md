@@ -44,3 +44,9 @@ is the runner's. Newest entries at the bottom.
 
 1. The requester name span in the same row still `truncate`s, and `requesterName` can fall back to the email's local part — the same no-other-copy case as the email.
 2. A component test stubbing `ResizeObserver` would lock in the overflow-only button and its toggle; the repo's Playwright specs don't mount components today.
+
+## T7 · Help TOC — make the ? hint a keycap with an sr-only sentence — done
+
+**gate:** mechanical — pass (lint, typecheck, full test suite); completion — pass
+
+**changed:** `help-toc.tsx`: the bare `?` span in the desktop rail header is now `<Kbd size="sm">?</Kbd>` inside a `<span aria-hidden="true">` wrapper (`Kbd` only forwards `children/size/variant/mono/className`, so `aria-hidden` cannot reach the DOM as a prop), followed by an sr-only "Press ? from anywhere on this page to jump to these topics". The `?`-key handler and mobile pill bar are untouched. Widget-states check: static header markup, no loading/empty/error code.
