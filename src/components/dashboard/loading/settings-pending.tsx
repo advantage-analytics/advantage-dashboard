@@ -980,25 +980,36 @@ export function SettingsTeamDetailPending() {
         </SettingsCard>
       )}
 
-      {role === "player" && (
-        <>
-          <SettingsCard className="gap-0 py-4">
-            <div className="flex items-center gap-6">
-              <div className="min-w-0 flex-1">
-                <Text className="text-[12px]">Leave team</Text>
-                <Text className="mt-0.5 text-[11px] leading-[1.5]">
-                  You&apos;ll lose access to {name}&apos;s matches and reports.
-                  Your own uploads stay in your personal workspace.
-                </Text>
-              </div>
-              <Button>Leave team</Button>
-            </div>
-          </SettingsCard>
-          <Text className="text-[11px] leading-[1.5]">
-            You play for this team. Identity, policies and ownership are the
-            coaching staff&apos;s — ask {SAMPLE.personName}, the owner.
+      {isOwner ? (
+        <SettingsCard className="gap-0 py-4">
+          <Text className="text-[12px]">Leave team</Text>
+          <Text className="mt-0.5 text-[11px] leading-[1.5]">
+            You own {name}, so you can&apos;t leave it yet. Use Make owner on a
+            coach or staff member under Members, then leave as a coach.
           </Text>
-        </>
+        </SettingsCard>
+      ) : (
+        <SettingsCard className="gap-0 py-4">
+          <div className="flex items-center gap-6">
+            <div className="min-w-0 flex-1">
+              <Text className="text-[12px]">Leave team</Text>
+              <Text className="mt-0.5 text-[11px] leading-[1.5]">
+                {isStaff
+                  ? `You'll lose access to ${name}'s matches, roster and settings.`
+                  : `You'll lose access to ${name}'s matches and reports.`}{" "}
+                Your own uploads stay in your personal workspace.
+              </Text>
+            </div>
+            <Button>Leave team</Button>
+          </div>
+        </SettingsCard>
+      )}
+
+      {role === "player" && (
+        <Text className="text-[11px] leading-[1.5]">
+          You play for this team. Identity, policies and ownership are the
+          coaching staff&apos;s — ask {SAMPLE.personName}, the owner.
+        </Text>
       )}
     </Column>
   );

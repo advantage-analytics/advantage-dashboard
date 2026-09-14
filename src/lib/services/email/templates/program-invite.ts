@@ -1,3 +1,4 @@
+import { PROGRAM_ROLE_LABEL } from "@/lib/workspace/types";
 import { siteUrl } from "@/lib/site-url";
 import { renderEmail, renderText, type EmailContent } from "../shell";
 import type { EmailMessage } from "../send";
@@ -20,12 +21,6 @@ import type { EmailMessage } from "../send";
  * moves by transfer, never by invitation.
  */
 export type InviteRole = "coach" | "staff" | "player";
-
-const ROLE_LABEL: Record<InviteRole, string> = {
-  coach: "Coach",
-  staff: "Staff",
-  player: "Player",
-};
 
 /**
  * What each standing actually lets you do, in the recipient's terms.
@@ -99,7 +94,7 @@ export function programInviteEmail(input: ProgramInviteInput): EmailMessage {
     ],
     facts: [
       { label: "Program", value: programName },
-      { label: "Your role", value: ROLE_LABEL[role] },
+      { label: "Your role", value: PROGRAM_ROLE_LABEL[role] },
     ],
     cta: { label: "Accept invitation", url: acceptUrl },
     // Both halves matter. The expiry is the deadline; the address is the thing

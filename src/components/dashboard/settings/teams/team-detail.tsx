@@ -10,7 +10,10 @@ import { TeamIdentityCard } from "@/components/dashboard/settings/teams/team-ide
 import { TeamMembersCard } from "@/components/dashboard/settings/teams/team-members-card";
 import { TeamPoliciesCard } from "@/components/dashboard/settings/teams/team-policies-card";
 import { TransferOwnershipDialog } from "@/components/dashboard/settings/teams/transfer-ownership-dialog";
-import { LeaveTeamCard } from "@/components/dashboard/settings/teams/leave-team";
+import {
+  LeaveTeamCard,
+  OwnerLeaveNote,
+} from "@/components/dashboard/settings/teams/leave-team";
 import {
   toDraft,
   type IdentityDraft,
@@ -36,8 +39,9 @@ import { SUPPORT_EMAIL } from "@/lib/constants";
  *
  * What renders depends on the viewer's standing on THIS program, which is not
  * necessarily their active workspace: a player gets hours, a read-only
- * identity, the member list and the leave row; staff get the form; the owner
- * also gets "Make owner" and the delete row.
+ * identity, the member list and the leave row; staff get the form and the
+ * leave row; the owner also gets "Make owner", the delete row, and a note in
+ * the leave row's place saying ownership has to move first.
  */
 export function TeamDetail({
   programId,
@@ -188,7 +192,9 @@ export function TeamDetail({
         </SettingsCard>
       )}
 
-      {viewerRole === "player" && (
+      {viewerRole === "owner" ? (
+        <OwnerLeaveNote programName={data.program.schoolName} />
+      ) : (
         <LeaveTeamCard
           programId={programId}
           programName={data.program.schoolName}
@@ -196,6 +202,7 @@ export function TeamDetail({
           conference={data.program.conference}
           crestUrl={crestUrl}
           ownerName={data.ownerName}
+          role={viewerRole}
         />
       )}
 

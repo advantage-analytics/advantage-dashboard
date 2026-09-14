@@ -40,6 +40,7 @@ test.describe("leave_program (live DB)", () => {
   let admin: SupabaseClient;
   let owner: Session;
   let player: Session;
+  let coach: Session;
 
   const authUserIds: string[] = [];
   const matchIds: string[] = [];
@@ -55,11 +56,15 @@ test.describe("leave_program (live DB)", () => {
     test.setTimeout(180_000);
     admin = createAdminClient();
 
-    [owner, player] = await createLogins(admin, ["owner", "player"], {
-      mark: MARK,
-      password: PASSWORD,
-      authUserIds,
-    });
+    [owner, player, coach] = await createLogins(
+      admin,
+      ["owner", "player", "coach"],
+      {
+        mark: MARK,
+        password: PASSWORD,
+        authUserIds,
+      },
+    );
 
     const programs = await admin
       .from("programs")
@@ -88,6 +93,7 @@ test.describe("leave_program (live DB)", () => {
     const members = await admin.from("program_members").insert([
       { program_id: leftProgram, user_id: owner.userId, role: "owner" },
       { program_id: leftProgram, user_id: player.userId, role: "player" },
+      { program_id: leftProgram, user_id: coach.userId, role: "coach" },
       { program_id: stayedProgram, user_id: owner.userId, role: "owner" },
       { program_id: stayedProgram, user_id: player.userId, role: "player" },
     ]);
@@ -286,5 +292,43 @@ test.describe("leave_program (live DB)", () => {
       .eq("program_id", leftProgram)
       .eq("action", "member.left");
     expect(audit.data).toHaveLength(1);
+  });
+
+  // Anyone but the owner may leave. A coach usually holds no roster profile, so
+  // there is nothing to re-point and nothing to un-claim — only the seat.
+  test("a coach with no roster profile leaves too", async () => {
+    const { data, error } = await coach.client.rpc(RPC, {
+      p_program_id: leftProgram,
+    });
+    expect(error).toBeNull();
+    expect(data).toEqual([
+      { left_program: true, profile_id: null, matches_repointed: 0 },
+    ]);
+
+    const membership = await admin
+      .from("program_members")
+      .select("user_id")
+      .eq("program_id", leftProgram)
+      .eq("user_id", coach.userId);
+    expect(membership.data).toEqual([]);
+
+    const audit = await admin
+      .from("program_audit_log")
+      .select("details")
+      .eq("program_id", leftProgram)
+      .eq("action", "member.left")
+      .eq("actor_user_id", coach.userId);
+    expect(audit.data).toEqual([
+      { details: { role: "coach", matches_repointed: 0 } },
+    ]);
+
+    // The owner is still the owner, with the program intact behind them.
+    const ownerRow = await admin
+      .from("program_members")
+      .select("role")
+      .eq("program_id", leftProgram)
+      .eq("user_id", owner.userId)
+      .single();
+    expect(ownerRow.data!.role).toBe("owner");
   });
 });
