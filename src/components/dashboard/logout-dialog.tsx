@@ -30,7 +30,7 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
  */
 type Scope = "local" | "global";
 
-const LogoutContext = createContext<((scope?: Scope) => void) | null>(null);
+const LogoutContext = createContext<((scope: Scope) => void) | null>(null);
 
 function useLogoutRequest() {
   const request = useContext(LogoutContext);
@@ -53,13 +53,13 @@ export function useRequestSignOutEverywhere(): () => void {
 export function LogoutProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { viewer } = useWorkspace();
-  const { hasUnsavedChanges } = useUnsavedChanges();
+  const { hasUnsavedChanges, setHasUnsavedChanges } = useUnsavedChanges();
   const [isOpen, setIsOpen] = useState(false);
   const [scope, setScope] = useState<Scope>("local");
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [hasError, setHasError] = useState(false);
 
-  const request = useCallback((next: Scope = "local") => {
+  const request = useCallback((next: Scope) => {
     setScope(next);
     setHasError(false);
     setIsOpen(true);
@@ -76,7 +76,10 @@ export function LogoutProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
       if (scope === "global") {
         // A full load, as Settings › Account did: every cached route belongs
-        // to a session that no longer exists anywhere.
+        // to a session that no longer exists anywhere. The discard was
+        // confirmed here, so clear the flag first — otherwise `beforeunload`
+        // asks again, and "Stay" strands a signed-out user on the page.
+        setHasUnsavedChanges(false);
         window.location.href = "/login";
       } else {
         router.push("/login");
@@ -88,7 +91,7 @@ export function LogoutProvider({ children }: { children: React.ReactNode }) {
   };
 
   const everywhere = scope === "global";
-  const destructive = hasUnsavedChanges;
+  const action = everywhere ? "sign out everywhere" : "sign out";
 
   return (
     <LogoutContext.Provider value={request}>
@@ -105,16 +108,14 @@ export function LogoutProvider({ children }: { children: React.ReactNode }) {
             ? "Ends every session, this one included — phones too. You'll sign in again on each."
             : "You'll sign in again on this device to see your matches and reports."
         }
-        tone={destructive ? "danger" : "primary"}
+        tone={hasUnsavedChanges ? "danger" : "primary"}
         confirmLabel={
           hasError
             ? "Try again"
-            : everywhere
-              ? destructive
-                ? "Discard and sign out everywhere"
-                : "Sign out everywhere"
-              : destructive
-                ? "Discard and sign out"
+            : hasUnsavedChanges
+              ? `Discard and ${action}`
+              : everywhere
+                ? "Sign out everywhere"
                 : "Sign out"
         }
         pendingLabel="Signing out…"
@@ -130,10 +131,7 @@ export function LogoutProvider({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               disabled={isSigningOut}
-              onClick={() => {
-                setScope("global");
-                setHasError(false);
-              }}
+              onClick={() => request("global")}
               className="cursor-pointer rounded-[var(--radius-cell)] text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
             >
               Sign out everywhere
@@ -166,7 +164,7 @@ export function LogoutProvider({ children }: { children: React.ReactNode }) {
             </span>
           </div>
         )}
-        {destructive ? (
+        {hasUnsavedChanges ? (
           <ConfirmNote icon={<PenLine />}>
             Your unsaved settings changes will be discarded.
           </ConfirmNote>
