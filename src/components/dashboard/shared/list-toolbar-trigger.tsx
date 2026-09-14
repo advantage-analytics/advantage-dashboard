@@ -2,7 +2,11 @@ import type { ComponentPropsWithRef } from "react";
 import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Props = ComponentPropsWithRef<"button"> & { engaged?: boolean };
+// `title` is omitted: these spread `...props` onto a DOM <button>, where the
+// `react/forbid-dom-props` lint rule can't see it — the type is the guard.
+type Props = Omit<ComponentPropsWithRef<"button">, "title"> & {
+  engaged?: boolean;
+};
 
 /** Shared by interactive toolbars and their inert loading counterparts. */
 function Trigger({ engaged = false, className, style, ...props }: Props) {

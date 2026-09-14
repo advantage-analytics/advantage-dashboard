@@ -103,18 +103,18 @@ const eslintConfig = [
     },
   },
 
-  // Ban the native `title` attribute on DOM elements. This branch removed
-  // every hover-tooltip `title` from the app: a name that isn't already on
-  // screen belongs in `aria-label`, clipped text should wrap instead of
-  // being explained on hover, and the only sanctioned tooltip is
+  // No native `title` hover tooltips on DOM elements. A name that isn't
+  // already on screen belongs in `aria-label`, clipped text should wrap
+  // instead of being explained on hover, and the only sanctioned tooltip is
   // `src/components/ui/tooltip.tsx`, reserved for icon-only controls (see
   // `.skills/advantage-analytics-design/reference/chrome.md` §Dark Tooltip).
   //
   // Known gaps, both out of reach for a DOM-props rule:
   //   - Capitalised components. `react/forbid-dom-props` only sees `title`
-  //     on lowercase (host) JSX elements, so `<Link title="…">` or a
-  //     `SortTrigger`/`FilterTrigger` that spreads `...props` onto an inner
-  //     `<button>` is invisible to this rule.
+  //     on lowercase (host) JSX elements, so `<Link title="…">` or any
+  //     component that spreads `...props` onto an inner element is invisible
+  //     to this rule. `SortTrigger`/`FilterTrigger` close that gap in their
+  //     own props type (`list-toolbar-trigger.tsx` omits `title`).
   //   - `title` keys inside a spread object (`<div {...{ title: "x" }} />`)
   //     — the rule inspects JSX attributes, not object literals.
   {
