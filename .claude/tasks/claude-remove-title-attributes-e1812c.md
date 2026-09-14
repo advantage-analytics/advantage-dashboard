@@ -105,7 +105,7 @@ ready).
 
 ## T8 · Schedule — wrap the event name, name the pair in the button
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T3
 - **files:** src/components/dashboard/schedule/static/event-drawer.tsx, src/components/dashboard/schedule/static/lineup-rows.tsx (surveyed, not guessed)

@@ -50,3 +50,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** mechanical — pass (lint, typecheck, full test suite); completion — pass
 
 **changed:** `help-toc.tsx`: the bare `?` span in the desktop rail header is now `<Kbd size="sm">?</Kbd>` inside a `<span aria-hidden="true">` wrapper (`Kbd` only forwards `children/size/variant/mono/className`, so `aria-hidden` cannot reach the DOM as a prop), followed by an sr-only "Press ? from anywhere on this page to jump to these topics". The `?`-key handler and mobile pill bar are untouched. Widget-states check: static header markup, no loading/empty/error code.
+
+## T8 · Schedule — wrap the event name, name the pair in the button — done
+
+**gate:** mechanical — pass (lint, typecheck, full test suite); completion — pass
+
+**changed:** `event-drawer.tsx`: the event-name div swaps `truncate` for `line-clamp-2 break-words`, and its comment now describes the two-line wrap. `lineup-rows.tsx`: the "their pair" button's `aria-label` appends ": " + the full pair names when a pair is set (plain "Their pair at <slot>" otherwise); `aria-expanded` and `data-*` unchanged. The four specs that find this button by name use Playwright's default substring match, no `exact: true`, and still pass. Widget-states check: loaded-state markup only.
