@@ -1,3 +1,4 @@
+import { PROGRAM_ROLE_LABEL } from "@/lib/workspace/types";
 import { siteUrl } from "@/lib/site-url";
 import {
   preferenceNote,
@@ -33,12 +34,6 @@ export interface MemberLeftOwnerInput {
   profileKept: boolean;
 }
 
-const ROLE_LABEL: Record<MemberLeftOwnerInput["memberRole"], string> = {
-  coach: "Coach",
-  staff: "Staff",
-  player: "Player",
-};
-
 export function memberLeftOwnerEmail(
   input: MemberLeftOwnerInput,
 ): EmailMessage {
@@ -63,7 +58,7 @@ export function memberLeftOwnerEmail(
     ],
     facts: [
       { label: "Program", value: programName },
-      { label: "Role", value: ROLE_LABEL[memberRole] },
+      { label: "Role", value: PROGRAM_ROLE_LABEL[memberRole] },
       { label: "Email", value: memberEmail },
     ],
     cta: {

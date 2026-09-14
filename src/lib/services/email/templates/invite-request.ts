@@ -1,3 +1,4 @@
+import { PROGRAM_ROLE_LABEL } from "@/lib/workspace/types";
 import { siteUrl } from "@/lib/site-url";
 import {
   preferenceNote,
@@ -166,13 +167,6 @@ const JOINED_ROLE_NOUN: Record<JoinedRole, string> = {
   player: "a player",
 };
 
-const JOINED_ROLE_LABEL: Record<JoinedRole, string> = {
-  owner: "Owner",
-  coach: "Coach",
-  staff: "Staff",
-  player: "Player",
-};
-
 export interface MemberJoinedOwnerInput {
   /**
    * The program owner's account address, resolved server-side with
@@ -237,7 +231,7 @@ export function memberJoinedOwnerEmail(
       { label: "Program", value: programName },
       ...(joiner ? [{ label: "Name", value: joiner }] : []),
       { label: "Email", value: joinerEmail },
-      ...(role ? [{ label: "Role", value: JOINED_ROLE_LABEL[role] }] : []),
+      ...(role ? [{ label: "Role", value: PROGRAM_ROLE_LABEL[role] }] : []),
     ],
     cta: {
       label: "View the roster",

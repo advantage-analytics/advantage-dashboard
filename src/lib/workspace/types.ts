@@ -21,6 +21,14 @@ import type { ProgramStatus } from "@/lib/services/programs/claim-state";
 /** A member's standing inside a team workspace. Personal is always `owner`. */
 export type ProgramRole = "owner" | "coach" | "staff" | "player";
 
+/** A program role as a title — "Coach", "Staff" — for rows, facts and emails. */
+export const PROGRAM_ROLE_LABEL: Record<ProgramRole, string> = {
+  owner: "Owner",
+  coach: "Coach",
+  staff: "Staff",
+  player: "Player",
+};
+
 /**
  * `programs.upload_policy` — who may send team video. A ladder, top to bottom:
  * the owner alone; the owner and coaches; anyone on the coaching staff; or

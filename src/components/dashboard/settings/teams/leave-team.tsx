@@ -12,19 +12,17 @@ import { SettingsButton } from "@/components/dashboard/settings/settings-button"
 import { StatePill } from "@/components/ui/state-pill";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import { leaveProgram } from "@/components/dashboard/settings/team-actions";
-import { teamLabel, type ProgramRole } from "@/lib/workspace/types";
+import {
+  PROGRAM_ROLE_LABEL,
+  teamLabel,
+  type ProgramRole,
+} from "@/lib/workspace/types";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 
 const TEAMS_PATH = "/dashboard/settings/teams";
 
 /** Who may leave: anyone on the program but its owner. */
 type LeavingRole = Exclude<ProgramRole, "owner">;
-
-const ROLE_NAME: Record<LeavingRole, string> = {
-  coach: "Coach",
-  staff: "Staff",
-  player: "Player",
-};
 
 /**
  * A member leaving the program they are looking at — player, coach or staff.
@@ -251,7 +249,7 @@ function LeaveTeamDialog({
               )}
             </div>
             <span className="text-[11px] whitespace-nowrap text-[var(--ink-500)]">
-              was {ROLE_NAME[role]}
+              was {PROGRAM_ROLE_LABEL[role]}
             </span>
             <StatePill outline>Left</StatePill>
           </div>
@@ -321,9 +319,9 @@ function LeaveTeamDialog({
           </Bullet>
           {isStaff && (
             <Bullet>
-              You give up your {ROLE_NAME[role].toLowerCase()} role — the
-              roster, schedule and team settings. Team matches you uploaded stay
-              with the program.
+              You give up your {PROGRAM_ROLE_LABEL[role].toLowerCase()} role —
+              the roster, schedule and team settings. Team matches you uploaded
+              stay with the program.
             </Bullet>
           )}
           {hasProfile && (
