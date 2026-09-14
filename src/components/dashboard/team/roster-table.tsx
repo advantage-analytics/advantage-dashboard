@@ -12,6 +12,7 @@ import { EmptyMark } from "@/components/ui/empty-mark";
 import { FormTicks } from "@/components/dashboard/shared/form-ticks";
 import { recordLabel } from "@/lib/data/player-profile";
 import { PlayerMark } from "@/components/ui/player-mark";
+import { YouPill } from "@/components/ui/you-pill";
 import { cn } from "@/lib/utils";
 import {
   inviteMember,
@@ -519,7 +520,7 @@ function MemberRow({
           viewer={isViewer ? viewer : null}
           photoUrl={member.avatarUrl}
         />
-        <span className="flex min-w-0 items-baseline gap-1.5">
+        <span className="flex min-w-0 items-center gap-2">
           {inLineupMode ? (
             <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
               {member.name}
@@ -539,11 +540,7 @@ function MemberRow({
               {member.name}
             </Link>
           )}
-          {isViewer && (
-            <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
-              you
-            </span>
-          )}
+          {isViewer && <YouPill className="shrink-0" />}
         </span>
       </span>
 

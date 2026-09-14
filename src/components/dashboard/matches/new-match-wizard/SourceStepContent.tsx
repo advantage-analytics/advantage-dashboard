@@ -50,8 +50,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { YouPill } from "@/components/ui/you-pill";
 import { ChosenCheck } from "@/components/ui/float-menu";
-import { StatePill } from "@/components/ui/state-pill";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/data/match-utils";
 import { providers, type Provider } from "@/lib/providers";
@@ -192,11 +192,6 @@ function SourceMark({ provider, size }: { provider: Provider; size: 40 | 26 }) {
       />
     </span>
   );
-}
-
-/** The 18px grey capsule — "You" beside a name, "Coach-managed" on a row. */
-function Pill({ children }: { children: React.ReactNode }) {
-  return <StatePill>{children}</StatePill>;
 }
 
 /**
@@ -400,7 +395,7 @@ function SourceStepContentImpl({
     <FieldText
       value={
         <>
-          {uploaderName} <Pill>You</Pill>
+          {uploaderName} <YouPill />
         </>
       }
       subline={`Personal workspace · ${viewer.email}`}
@@ -425,7 +420,7 @@ function SourceStepContentImpl({
     <FieldText
       value={
         <>
-          {uploaderName} <Pill>You</Pill>
+          {uploaderName} <YouPill />
         </>
       }
       subline={`Your own match · filed under ${workspaceLabel(active)}`}

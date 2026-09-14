@@ -59,9 +59,9 @@ tags, never a CTA.
 > adding one.
 >
 > The same principle governs elsewhere: nav active state is a neutral wash, not
-> blue; people-state chips are grey, never blue — with one sanctioned exception,
-> the **`You` pill**, see **Settings Pages › Person row in a card**
-> (`reference/settings.md`).
+> blue; people-state chips are grey, never blue — the **`You` pill** included
+> (`YouPill`; see **Settings Pages › Person row in a card**,
+> `reference/settings.md`).
 
 ### Button (Primary, CTA)
 

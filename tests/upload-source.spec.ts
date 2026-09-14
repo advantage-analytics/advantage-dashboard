@@ -111,6 +111,37 @@ const stepModule = (() => {
     },
   );
 
+  // The grey capsule — "You", "Coach-managed" — as a marked span the reader
+  // below finds by `data-pill`.
+  const statePill = {
+    StatePill: ({ children }: { children: React.ReactNode }) =>
+      React.createElement("span", { "data-pill": "" }, children),
+  };
+
+  // `YouPill` is the REAL module, drawn through that stub: the word it puts
+  // in the pill is product code, not this file's.
+  const youPill: Record<string, unknown> = {};
+  runInNewContext(
+    ts.transpileModule(
+      readFileSync(resolve("src/components/ui/you-pill.tsx"), "utf8"),
+      {
+        compilerOptions: {
+          module: ts.ModuleKind.CommonJS,
+          jsx: ts.JsxEmit.ReactJSX,
+          target: ts.ScriptTarget.ES2022,
+        },
+      },
+    ).outputText,
+    {
+      exports: youPill,
+      require: (dep: string) => {
+        if (dep === "react/jsx-runtime") return jsx;
+        if (dep === "@/components/ui/state-pill") return statePill;
+        throw new Error(`unexpected import in the You pill: ${dep}`);
+      },
+    },
+  );
+
   // The popover is a portal at runtime; here every menu renders inline and
   // tagged, so one static render carries all three selects.
   const popover = {
@@ -182,11 +213,7 @@ const stepModule = (() => {
             React.createElement("a", rest, children),
         };
       if (id === "@/components/ui/popover") return popover;
-      if (id === "@/components/ui/state-pill")
-        return {
-          StatePill: ({ children }: { children: React.ReactNode }) =>
-            React.createElement("span", { "data-pill": "" }, children),
-        };
+      if (id === "@/components/ui/you-pill") return youPill;
       // A server action. Nothing in this file awaits it.
       if (id === "@/lib/workspace/actions")
         return { setActiveWorkspaceInPlace: async () => true };
@@ -276,11 +303,8 @@ const stepModule = (() => {
               if (dep === "@/components/ui/float-menu") return floatMenu;
               if (dep === "@/lib/utils") return { cn };
               if (dep === "@/lib/data/match-utils") return { getInitials };
-              if (dep === "@/components/ui/state-pill")
-                return {
-                  StatePill: ({ children }: { children: React.ReactNode }) =>
-                    React.createElement("span", { "data-pill": "" }, children),
-                };
+              if (dep === "@/components/ui/state-pill") return statePill;
+              if (dep === "@/components/ui/you-pill") return youPill;
               throw new Error(`unexpected import in the roster menu: ${dep}`);
             },
           },

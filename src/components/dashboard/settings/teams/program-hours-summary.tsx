@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { AlertTriangle, ChevronRight } from "lucide-react";
 import { SettingsCard } from "@/components/dashboard/settings/settings-card";
-import { YouPill } from "@/components/ui/new-pill";
+import { YouPill } from "@/components/ui/you-pill";
 import type { ProgramUsage } from "@/lib/data/usage-server";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 import {

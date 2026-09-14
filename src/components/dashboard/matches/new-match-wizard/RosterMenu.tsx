@@ -17,6 +17,7 @@
 
 import { ChosenCheck } from "@/components/ui/float-menu";
 import { StatePill } from "@/components/ui/state-pill";
+import { YouPill } from "@/components/ui/you-pill";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/data/match-utils";
 import type { RosterPlayerOption } from "@/lib/data/roster-shared";
@@ -139,7 +140,7 @@ export function RosterMenuList({
                 // Roster state travels with the person: a profile a coach
                 // still runs carries the grey pill.
                 isYou ? (
-                  <StatePill>You</StatePill>
+                  <YouPill />
                 ) : !invited &&
                   player.managedBy === "coach" &&
                   player.userId === null ? (
