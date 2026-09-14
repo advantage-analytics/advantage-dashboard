@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { ChosenCheck } from "@/components/ui/float-menu";
 import { cn } from "@/lib/utils";
 import {
   MENU_LEAD_CLASS,
@@ -97,13 +98,9 @@ export function WorkspaceOptionList({
                   className="size-3 animate-spin text-[var(--ink-400)]"
                   aria-hidden="true"
                 />
-              ) : isActive ? (
-                <Check
-                  className="size-[14px] text-[var(--blue)]"
-                  strokeWidth={2}
-                  aria-hidden="true"
-                />
-              ) : null}
+              ) : (
+                <ChosenCheck chosen={isActive} />
+              )}
             </span>
           </button>
         );

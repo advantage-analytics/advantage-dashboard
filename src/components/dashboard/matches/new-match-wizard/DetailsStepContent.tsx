@@ -112,7 +112,11 @@ import {
 import { formatHoursMinutes, setHasData } from "./utils";
 import { FORMAT_OPTIONS, Required, ScoreBlock } from "./ScoreBlock";
 import { FieldCaption } from "./FieldCaption";
-import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
+import {
+  ChosenCheck,
+  FloatMenu,
+  FloatMenuItem,
+} from "@/components/ui/float-menu";
 import { AnimatedHeight } from "./AnimatedHeight";
 import { ScoreCheckNotice } from "./ScoreCheckNotice";
 import { firstOpenSet, isStoppedResult, scoreGames } from "./score-state";
@@ -339,7 +343,7 @@ const UNDERLINE_CLS =
  *
  * Drawn as `MenuSelect variant="underline"` — the Roster and Edit match
  * dialogs' select: a 34px trigger on the field rule, a 12px chevron, and the
- * shared `FloatMenu` with its check on the left. Not `MenuSelect` itself, for
+ * shared `FloatMenu` with its check at the right edge. Not `MenuSelect` itself, for
  * three things it cannot carry: boolean values (Scoring, Lets), a `read`
  * override for the trigger, and the `data-field` hook the footer's
  * missing-fields pill uses to find the field.
@@ -695,15 +699,7 @@ function EventCell({
                     {event.years}
                     {event.matches > 1 ? ` · ${event.matches} matches` : ""}
                   </span>
-                  {event.name === value ? (
-                    <Check
-                      className="size-[13px] shrink-0 text-[var(--blue)]"
-                      strokeWidth={1.5}
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <span className="w-[13px] shrink-0" />
-                  )}
+                  <ChosenCheck chosen={event.name === value} />
                 </button>
               ))}
               {term.trim() && !exact && (

@@ -2,12 +2,13 @@
 
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, ChevronsUpDown, Plus, Loader2 } from "lucide-react";
+import { ChevronsUpDown, Plus, Loader2 } from "lucide-react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ChosenCheck } from "@/components/ui/float-menu";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
@@ -262,13 +263,9 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
                     className="size-3 shrink-0 animate-spin text-[var(--ink-400)]"
                     aria-hidden="true"
                   />
-                ) : isActive ? (
-                  <Check
-                    className="size-[13px] shrink-0 text-[var(--blue)]"
-                    strokeWidth={2}
-                    aria-hidden="true"
-                  />
-                ) : null}
+                ) : (
+                  <ChosenCheck chosen={isActive} />
+                )}
               </button>
             </ChromeTooltip>
           );

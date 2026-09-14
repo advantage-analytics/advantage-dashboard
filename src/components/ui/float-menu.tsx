@@ -13,7 +13,8 @@ import { cn } from "@/lib/utils";
  *
  * Three parts and no more: `FloatMenu` (the surface, anchored to whatever
  * trigger it wraps), `FloatMenuItem` (one row: label, optional second line on
- * what it means, a blue check when it is the chosen one) and `FloatMenuNote`
+ * what it means, a blue `ChosenCheck` at the right edge when it is the chosen
+ * one) and `FloatMenuNote`
  * (the sentence under a hairline at the foot, for the one thing the menu
  * will not do). `MenuSelect` composes them into a select; a command menu or
  * a row's action menu composes them the same way.
@@ -73,7 +74,37 @@ export function FloatMenu({
 }
 
 /**
- * One row. `chosen` draws the check; `description` is the
+ * The mark on the chosen row of any menu, picker or selectable list — a 13px
+ * Signal Blue check in its own 13px slot at the row's RIGHT edge, after any
+ * pill or meta. The slot renders on every row, chosen or not, so a check
+ * appearing never moves the text.
+ *
+ * Right, never left (2026-09-13): the leading slot belongs to what the row is
+ * — an action icon, an avatar, a workspace crest — and a check can't share it.
+ * The one way to draw "chosen"; a hand-built menu renders this rather than its
+ * own `<Check>`.
+ */
+export function ChosenCheck({
+  chosen,
+  className,
+}: {
+  chosen: boolean;
+  className?: string;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("flex w-[13px] shrink-0 justify-center", className)}
+    >
+      {chosen ? (
+        <Check className="size-[13px] text-[var(--blue)]" strokeWidth={2} />
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * One row. `chosen` draws the check at the right edge; `description` is the
  * second line — use it when the label alone would not tell a coach what
  * they are choosing ("Staff"), and leave it off when it would ("Clay").
  */
@@ -89,7 +120,7 @@ export function FloatMenuItem({
   description?: string;
   chosen?: boolean;
   onSelect: () => void;
-  /** A 12px leading glyph for action menus; a select uses the check slot instead. */
+  /** A 12px leading glyph for action menus, which have no chosen row. */
   icon?: React.ReactNode;
   className?: string;
 }) {
@@ -106,14 +137,10 @@ export function FloatMenuItem({
         className,
       )}
     >
-      <span className="mt-[3px] w-3 shrink-0 text-[var(--blue)]">
-        {icon ? (
-          icon
-        ) : chosen ? (
-          <Check className="size-3" strokeWidth={2.5} aria-hidden="true" />
-        ) : null}
-      </span>
-      <span className="flex min-w-0 flex-col">
+      {icon ? (
+        <span className="mt-[3px] w-3 shrink-0 text-[var(--blue)]">{icon}</span>
+      ) : null}
+      <span className="flex min-w-0 flex-1 flex-col">
         <span className="text-[12px] text-[var(--ink-900)]">{label}</span>
         {description ? (
           <span className="mt-0.5 text-[11px] leading-[1.4] text-[var(--ink-500)]">
@@ -121,6 +148,8 @@ export function FloatMenuItem({
           </span>
         ) : null}
       </span>
+      {/* Pinned to the label's line, not centred on a two-line row. */}
+      {icon ? null : <ChosenCheck chosen={chosen} className="mt-[2px]" />}
     </button>
   );
 }
