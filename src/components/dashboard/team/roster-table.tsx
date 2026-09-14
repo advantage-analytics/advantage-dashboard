@@ -141,8 +141,10 @@ export function rosterRowId(playerId: string): string {
   return `roster-row-${playerId}`;
 }
 
+export const ROSTER_PATH = "/dashboard/team/roster";
+
 export function profileHref(playerId: string): string {
-  return `/dashboard/team/roster/${playerId}`;
+  return `${ROSTER_PATH}/${playerId}`;
 }
 
 /** What `RosterView` hands down while Set lineup is on. */

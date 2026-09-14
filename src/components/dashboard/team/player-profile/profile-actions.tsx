@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { advButton } from "@/lib/ui/adv-button";
 import { EditPlayerDialog } from "@/components/dashboard/team/edit-player-dialog";
+import { ROSTER_PATH } from "@/components/dashboard/team/roster-table";
 import type { RosterMember } from "@/lib/data/team-roster-server";
 
 /**
@@ -21,16 +23,21 @@ import type { RosterMember } from "@/lib/data/team-roster-server";
  * **New match** is the primary on both, gated by `canUploadForProgram` at
  * the page — the same predicate the upload wizard enforces, so this never
  * opens a door the next page closes. Absent rather than disabled: a button
- * that refuses on click is worse than no button. It carries `?player=` so
- * the wizard opens with this page's athlete already in its For field; the
+ * that refuses on click is worse than no button. Its href carries `?player=`
+ * so the wizard opens with this page's athlete already in its For field; the
  * wizard re-checks that id against the roster and still asks for the source.
+ *
+ * Edit player also carries **Remove from roster** here, which the roster
+ * reaches through its drawer's Options menu. Removing archives the profile,
+ * so this page would 404 on its next render; the dialog's confirm step says
+ * so, and success replaces the history entry with the roster.
  */
 export function ProfileActions({
   mode,
   member,
   roster,
   canUpload,
-  playerId,
+  newMatchHref,
 }: {
   /** `self`: the viewer's own page. `staff`: someone with roster rights. `viewer`: a teammate. */
   mode: "self" | "staff" | "viewer";
@@ -45,9 +52,10 @@ export function ProfileActions({
   member: RosterMember | null;
   roster: RosterMember[];
   canUpload: boolean;
-  /** This page's athlete, as a `program_players.id` — what `player1_id` wants. */
-  playerId: string;
+  /** The wizard for this page's athlete — built once by the page. */
+  newMatchHref: string;
 }) {
+  const router = useRouter();
   const [editing, setEditing] = useState<RosterMember | null>(null);
 
   const canEditPlayer =
@@ -70,10 +78,7 @@ export function ProfileActions({
         </button>
       )}
       {canUpload && (
-        <Link
-          href={`/dashboard/matches/new?player=${playerId}`}
-          className={advButton("primary")}
-        >
+        <Link href={newMatchHref} className={advButton("primary")}>
           New match
         </Link>
       )}
@@ -85,6 +90,7 @@ export function ProfileActions({
           onOpenChange={(open) => {
             if (!open) setEditing(null);
           }}
+          onRemoved={() => router.replace(ROSTER_PATH)}
         />
       )}
     </div>

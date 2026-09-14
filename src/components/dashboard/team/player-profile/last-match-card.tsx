@@ -5,23 +5,13 @@ import { RowAction } from "@/components/dashboard/schedule/row-action";
 import { InsightStatChip } from "@/components/dashboard/shared/insight-stat-chip";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { clipText } from "@/lib/data/player-profile";
+import { GhostRule } from "@/components/dashboard/home/day-zero-shape";
+import {
+  CardEmpty,
+  type CardSubject,
+} from "@/components/dashboard/shared/card-empty";
 import type { ProfileLastMatch } from "@/lib/data/player-profile-server";
 
-/**
- * The most recent match, and what the engine made of it.
- *
- * Three stacked bands, each behind a hairline: the match itself (who, where,
- * which line, the score and the outcome), then Advantage Intelligence's
- * paragraph for this player's side, then the evidence — five computed
- * numbers as `InsightStatChip`s. The two lower bands appear only when there
- * is something in them: a file-imported match has stats and no paragraph, a
- * hand-scored one has neither, and a band drawn around nothing would say the
- * engine had failed rather than that it was never asked.
- *
- * The paragraph is the stored `matches.insights` summary — a fact about the
- * match written once when it was analysed, never re-asked at render. Its
- * first sentence leads in 14px light; the rest follows in body grey.
- */
 /**
  * The frame gives the claim one line and the body a line and a half; the
  * engine writes for the report page and can run longer. Both caps are
@@ -40,7 +30,79 @@ function splitClaim(summary: string): { claim: string; body: string | null } {
   };
 }
 
-export function LastMatchCard({ match }: { match: ProfileLastMatch }) {
+/**
+ * The card before there is a last match: its eyebrow, the match row in grey,
+ * and the band. No button — the header's New match is the same step, one row
+ * above.
+ */
+function LastMatchEmpty({ subject }: { subject: CardSubject }) {
+  return (
+    <section
+      aria-label="Last match"
+      className="surface-card flex flex-col"
+      style={{ padding: "18px 20px" }}
+    >
+      <span className="eyebrow">Last match</span>
+      <CardEmpty
+        description="No match yet: this card shows the most recent match, its score and what the report found."
+        className="mt-3.5"
+        band={{
+          title: subject.isSelf
+            ? "Your last match lands here"
+            : `${subject.firstName}'s last match lands here`,
+          body: "The score, the line, and what the report found.",
+        }}
+      >
+        <div className="grid grid-cols-[32px_minmax(0,1fr)_15px_auto] items-center gap-3">
+          <span className="size-8 rounded-[var(--radius-button)] bg-[var(--ink-100)]" />
+          <span className="flex flex-col gap-1.5">
+            <GhostRule width="40%" tone="200" shape="tall" />
+            <GhostRule width="60%" />
+          </span>
+          <GhostRule width="14px" shape="dot" />
+          <GhostRule width="88px" />
+        </div>
+      </CardEmpty>
+    </section>
+  );
+}
+
+/**
+ * The last match, its empty state, or nothing.
+ *
+ * Empty only on a profile with no matches at all. A player whose matches are
+ * all unscored has matches and no last match to lead with, and a sentence
+ * about their first one would be false — so the card is left out there.
+ */
+export function LastMatchCard({
+  match,
+  matchesPlayed,
+  subject,
+}: {
+  match: ProfileLastMatch | null;
+  matchesPlayed: number;
+  subject: CardSubject;
+}) {
+  if (match) return <PlayedMatch match={match} />;
+  return matchesPlayed === 0 ? <LastMatchEmpty subject={subject} /> : null;
+}
+
+/**
+ * The most recent match, and what the engine made of it.
+ *
+ * Three stacked bands, each behind a hairline: the match itself (who, where,
+ * which line, the score and the outcome), then Advantage Intelligence's
+ * paragraph for this player's side, then the evidence — five computed
+ * numbers as `InsightStatChip`s. The two lower bands appear only when there
+ * is something in them: a file-imported match has stats and no paragraph, a
+ * hand-scored one has neither, and a band drawn around nothing would say the
+ * engine had failed rather than that it was never asked.
+ *
+ * The paragraph is the stored `matches.insights` summary — a fact about the
+ * match written once when it was analysed, never re-asked at render. Its
+ * first sentence leads in 14px light; the rest follows in body grey.
+ */
+function PlayedMatch({ match }: { match: ProfileLastMatch }) {
   const reportHref = `/dashboard/matches/${match.id}`;
   const insight = match.insight ? splitClaim(match.insight.summary) : null;
 

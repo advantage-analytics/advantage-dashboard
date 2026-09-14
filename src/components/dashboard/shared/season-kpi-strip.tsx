@@ -6,6 +6,7 @@ import { Check, RotateCcw, Settings2 } from "lucide-react";
 import { KpiTile, KpiTileStrip } from "./kpi-tile";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { KpiStripEmpty } from "@/components/dashboard/home/kpi-strip-empty";
+import type { CardSubject } from "@/components/dashboard/shared/card-empty";
 import {
   Popover,
   PopoverContent,
@@ -138,6 +139,7 @@ export function SeasonKpiStrip({
   matchesPlayed,
   awaitingReport,
   emptyHint,
+  subject,
   ariaLabel = "Season summary",
 }: {
   /** Every tile in catalogue order; this component shows the chosen ones. */
@@ -159,6 +161,8 @@ export function SeasonKpiStrip({
   awaitingReport?: boolean;
   /** Passed through to the empty strip — see `KpiStripEmpty`'s `hint`. */
   emptyHint?: string;
+  /** Passed through to the empty strip — see `KpiStripEmpty`'s `subject`. */
+  subject?: CardSubject;
   /** Names the region — see `KpiTileStrip`. Team Home says "Program summary". */
   ariaLabel?: string;
 }) {
@@ -209,6 +213,7 @@ export function SeasonKpiStrip({
       <KpiStripEmpty
         awaitingReport={awaitingReport ?? matchesPlayed > 0}
         hint={emptyHint}
+        subject={subject}
         ariaLabel={ariaLabel}
         labels={visibleKeys.map(
           (key) => SEASON_KPI_BY_KEY.get(key)?.label ?? key,

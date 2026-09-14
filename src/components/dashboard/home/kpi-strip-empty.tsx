@@ -1,6 +1,7 @@
 import { KpiTileStrip } from "@/components/dashboard/shared/kpi-tile";
 import { PlaceholderSparkline } from "@/components/dashboard/shared/placeholder-sparkline";
 import { SEASON_KPI_LABELS } from "@/lib/data/player-profile";
+import type { CardSubject } from "@/components/dashboard/shared/card-empty";
 
 /**
  * The KPI strip on day zero: present, shaped, and holding no numbers.
@@ -31,6 +32,7 @@ export function KpiStripEmpty({
   awaitingReport = false,
   labels = SEASON_KPI_LABELS,
   hint: hintOverride,
+  subject,
   ariaLabel,
 }: {
   /**
@@ -51,12 +53,23 @@ export function KpiStripEmpty({
    * say why it does not.
    */
   hint?: string;
+  /**
+   * Whose strip this is, on a page that may be someone else's (the team
+   * player profile). Names them in the day-zero line — "After Maya's first
+   * match" — and leaves "When the report lands", which names nobody, alone.
+   * Omitted, the strip speaks to the viewer, as on Home.
+   */
+  subject?: CardSubject;
   /** See `KpiTileStrip`. */
   ariaLabel?: string;
 }) {
   const hint =
     hintOverride ??
-    (awaitingReport ? "When the report lands" : "After your first match");
+    (awaitingReport
+      ? "When the report lands"
+      : subject && !subject.isSelf
+        ? `After ${subject.firstName}'s first match`
+        : "After your first match");
 
   return (
     <KpiTileStrip collapse ariaLabel={ariaLabel}>
