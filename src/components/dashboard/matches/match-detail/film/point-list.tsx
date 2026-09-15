@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
+import { filmProgressTransform } from "./film-clock";
 import {
   DEFAULT_FILM_FILTERS,
   FilmFiltersPanel,
@@ -55,7 +56,9 @@ interface PointListProps {
   onTabChange: (tab: "points" | "saved") => void;
   /** Point whose window contains the playhead, and how far through it is. */
   activePointId: string | null;
-  activeProgress: number;
+  /** Film-clock window of the playing point; its rule reads `--film-t`. */
+  activeStart: number;
+  activeEnd: number;
   /** Stable identity, please — `PointRow` is memoized on it. */
   onSelect: (point: MatchPoint) => void;
   onToggleSaved: (pointId: string) => void;
@@ -97,7 +100,8 @@ export function PointList({
   tab,
   onTabChange,
   activePointId,
-  activeProgress,
+  activeStart,
+  activeEnd,
   onSelect,
   onToggleSaved,
 }: PointListProps) {
@@ -303,7 +307,8 @@ export function PointList({
                     initials={isYou ? sides.you.initials : sides.opp.initials}
                     showPointScore={showPointScore}
                     isActive={point.id === activePointId}
-                    progress={point.id === activePointId ? activeProgress : 0}
+                    activeStart={point.id === activePointId ? activeStart : 0}
+                    activeEnd={point.id === activePointId ? activeEnd : 0}
                     onSelect={onSelect}
                     onToggleSaved={onToggleSaved}
                   />
@@ -345,7 +350,8 @@ const PointRow = memo(function PointRow({
   initials,
   showPointScore,
   isActive,
-  progress,
+  activeStart,
+  activeEnd,
   onSelect,
   onToggleSaved,
 }: {
@@ -354,7 +360,8 @@ const PointRow = memo(function PointRow({
   initials: string;
   showPointScore: boolean;
   isActive: boolean;
-  progress: number;
+  activeStart: number;
+  activeEnd: number;
   onSelect: (point: MatchPoint) => void;
   onToggleSaved: (pointId: string) => void;
 }) {
@@ -449,8 +456,8 @@ const PointRow = memo(function PointRow({
           className="absolute inset-x-3 bottom-0 h-0.5 overflow-hidden rounded-[1px] bg-[var(--ink-100)]"
         >
           <span
-            className="block h-0.5 rounded-[1px] bg-[var(--blue)]"
-            style={{ width: `${Math.round(progress * 100)}%` }}
+            className="block h-0.5 w-full origin-left rounded-[1px] bg-[var(--blue)] will-change-transform"
+            style={{ transform: filmProgressTransform(activeStart, activeEnd) }}
           />
         </span>
       )}

@@ -61,7 +61,6 @@ export function FilmTrack({
   }, [scrubbing, seekFromPointer]);
 
   const pct = (s: number) => (duration > 0 ? (s / duration) * 100 : 0);
-  const head = duration > 0 ? Math.min(100, pct(currentTime)) : 0;
   const last = segments.length - 1;
 
   return (
@@ -96,15 +95,11 @@ export function FilmTrack({
       {segments.map((seg, i) => {
         const leftPad = i === 0 ? 0 : 2.5;
         const rightPad = i === last ? 0 : 2.5;
-        let background: string;
-        if (currentTime >= seg.end) background = "var(--blue)";
-        else if (currentTime <= seg.start)
-          background = "rgba(255,255,255,0.22)";
-        else {
-          const split =
-            ((currentTime - seg.start) / (seg.end - seg.start)) * 100;
-          background = `linear-gradient(to right, var(--blue) 0 ${split}%, rgba(255,255,255,0.22) ${split}% 100%)`;
-        }
+        // The watched share of this run, from `--film-t` — repainted every
+        // frame by the room's clock rather than on `timeupdate`.
+        const span = Math.max(seg.end - seg.start, 0.001);
+        const split = `clamp(0%, calc((var(--film-t, 0) - ${seg.start}) / ${span} * 100%), 100%)`;
+        const background = `linear-gradient(to right, var(--blue) 0 ${split}, rgba(255,255,255,0.22) ${split} 100%)`;
         return (
           <span
             key={`${seg.start}-${seg.end}`}
@@ -118,11 +113,17 @@ export function FilmTrack({
           />
         );
       })}
+      {/* A full-width carrier translated by the watched fraction, so the
+          playhead moves on the compositor every frame. */}
       <span
         aria-hidden="true"
-        className="absolute h-[11px] w-[11px] -translate-x-1/2 rounded-[var(--radius-pill)] bg-white"
-        style={{ left: `${head}%` }}
-      />
+        className="pointer-events-none absolute inset-y-0 left-0 w-full will-change-transform"
+        style={{
+          transform: `translateX(calc(clamp(0, var(--film-t, 0) / var(--film-d, 1), 1) * 100%))`,
+        }}
+      >
+        <span className="absolute top-1/2 left-0 h-[11px] w-[11px] -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-pill)] bg-white" />
+      </span>
     </div>
   );
 }

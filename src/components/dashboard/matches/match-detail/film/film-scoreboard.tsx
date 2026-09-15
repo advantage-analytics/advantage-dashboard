@@ -128,6 +128,7 @@ export function FilmScoreboard({
       aria-describedby="film-board-hint"
       tabIndex={0}
       data-film-own-keys=""
+      data-film-chrome=""
       onPointerDown={(e) => {
         if (e.button !== 0) return;
         // Capture keeps the drag alive when the pointer outruns the board.

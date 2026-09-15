@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
+import { useFilmClockVars } from "./film-clock";
+import type { Rect } from "./film-motion";
 import { nextStop, prevStop, type FilmStop } from "./film-timeline";
 
 /**
@@ -61,6 +63,8 @@ export interface FilmPlayerHandle {
   pause: () => void;
   /** Where the player is right now — what the fullscreen room opens from. */
   snapshot: () => { time: number; playing: boolean };
+  /** The frame's box on screen, for the room's grow and shrink. */
+  frameRect: () => Rect | null;
 }
 
 interface FilmPlayerProps {
@@ -74,6 +78,11 @@ interface FilmPlayerProps {
   onTimeChange: (seconds: number) => void;
   /** The fullscreen glyph. Entered by user action only, never automatically. */
   onEnterFullscreen: () => void;
+  /**
+   * Where `--film-t` is written, so the point list beside the player can read
+   * it too. Defaults to the frame.
+   */
+  clockTargetRef?: React.RefObject<HTMLElement | null>;
 }
 
 const GLYPH =
@@ -111,10 +120,14 @@ function InertGlyph({
 }
 
 export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
-  function FilmPlayer({ video, stops, onTimeChange, onEnterFullscreen }, ref) {
+  function FilmPlayer(
+    { video, stops, onTimeChange, onEnterFullscreen, clockTargetRef },
+    ref,
+  ) {
     const { match } = useMatchData();
     const videoRef = useRef<HTMLVideoElement>(null);
     const barRef = useRef<HTMLDivElement>(null);
+    const frameRef = useRef<HTMLDivElement>(null);
 
     const [playing, setPlaying] = useState(false);
     const [muted, setMuted] = useState(false);
@@ -122,6 +135,12 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     const [duration, setDuration] = useState(0);
     const [failed, setFailed] = useState(false);
     const [scrubbing, setScrubbing] = useState(false);
+
+    const syncClock = useFilmClockVars(
+      videoRef,
+      clockTargetRef ?? frameRef,
+      playing,
+    );
 
     const seekTo = useCallback(
       (seconds: number) => {
@@ -135,8 +154,9 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
         el.currentTime = target;
         setCurrentTime(target);
         onTimeChange(target);
+        syncClock();
       },
-      [onTimeChange],
+      [onTimeChange, syncClock],
     );
 
     useImperativeHandle(
@@ -150,6 +170,12 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             time: el?.currentTime ?? 0,
             playing: el ? !el.paused : false,
           };
+        },
+        frameRect: () => {
+          const r = frameRef.current?.getBoundingClientRect();
+          return r
+            ? { left: r.left, top: r.top, width: r.width, height: r.height }
+            : null;
         },
       }),
       [seekTo],
@@ -216,7 +242,6 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       };
     }, [scrubbing, seekFromPointer]);
 
-    const progress = duration > 0 ? Math.min(1, currentTime / duration) : 0;
     const eventName = match.tournamentName?.trim() || null;
 
     if (failed) {
@@ -245,7 +270,10 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
 
     return (
       <TooltipProvider>
-        <div className="relative aspect-video w-full overflow-hidden rounded-[14px] bg-[#1A1A1C]">
+        <div
+          ref={frameRef}
+          className="relative aspect-video w-full overflow-hidden rounded-[14px] bg-[#1A1A1C]"
+        >
           <video
             ref={videoRef}
             src={video.url}
@@ -255,17 +283,25 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             onClick={togglePlay}
             onPlay={() => setPlaying(true)}
             onPause={() => setPlaying(false)}
-            onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
-            onDurationChange={(e) => setDuration(e.currentTarget.duration || 0)}
+            onLoadedMetadata={(e) => {
+              setDuration(e.currentTarget.duration || 0);
+              syncClock();
+            }}
+            onDurationChange={(e) => {
+              setDuration(e.currentTarget.duration || 0);
+              syncClock();
+            }}
             onTimeUpdate={(e) => {
               const t = e.currentTarget.currentTime;
               setCurrentTime(t);
               onTimeChange(t);
+              syncClock();
             }}
             onSeeked={(e) => {
               const t = e.currentTarget.currentTime;
               setCurrentTime(t);
               onTimeChange(t);
+              syncClock();
             }}
             onError={() => setFailed(true)}
           >
@@ -335,8 +371,11 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
               className="pointer-events-auto relative my-2 mb-2.5 h-0.5 cursor-pointer bg-white/[0.22] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
             >
               <span
-                className="absolute inset-y-0 left-0 bg-[var(--blue)]"
-                style={{ width: `${progress * 100}%` }}
+                className="absolute inset-0 origin-left bg-[var(--blue)] will-change-transform"
+                style={{
+                  transform:
+                    "scaleX(clamp(0, calc(var(--film-t, 0) / var(--film-d, 1)), 1))",
+                }}
               />
             </div>
 

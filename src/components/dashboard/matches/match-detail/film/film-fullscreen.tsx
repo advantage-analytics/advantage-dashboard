@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { PanelRight } from "lucide-react";
 
@@ -17,6 +24,16 @@ import type { FilmFilters } from "./film-filters";
 import { FilmPointPanel } from "./film-point-panel";
 import { boardAt, type BoardColumns } from "./film-score";
 import { FilmScoreboard } from "./film-scoreboard";
+import { useFilmClockVars } from "./film-clock";
+import {
+  OPEN_ROOM_FRAME,
+  ROOM_EASE_ENTER,
+  ROOM_EASE_EXIT,
+  ROOM_ENTER_MS,
+  ROOM_EXIT_MS,
+  collapsedRoomFrame,
+  type Rect,
+} from "./film-motion";
 import { activeShotAt, shotStops as buildShotStops } from "./film-shots";
 import {
   activeStopAt,
@@ -45,6 +62,16 @@ import { FilmTransport, PLAYBACK_RATES } from "./film-transport";
  * Re-parenting one element through a portal remounts it and drops the
  * buffer, which is a worse hand-off than a metadata fetch.
  *
+ * ── Motion ──────────────────────────────────────────────────────────────────
+ * The report player's frame grows into the room (`film-motion.ts`): a uniform
+ * scale plus a clip to the frame's shape, 460ms on the expo ease-out, and the
+ * chrome fades in once the film has landed. Exit runs the same path backwards
+ * in 320ms, chrome first, and only then hands the playhead back. The points
+ * drawer slides on the same curve and the transport's right edge travels with
+ * it. Progress rules and the playhead read `--film-t` (`film-clock.ts`), so
+ * they move every frame instead of every `timeupdate`. Reduced motion keeps
+ * every change as an opacity fade and drops the travel.
+ *
  * ── Chrome ──────────────────────────────────────────────────────────────────
  * 3s of stillness collapses everything operable; the board and the point
  * name stay. Any pointer, key or focus is activity, and a focused control
@@ -68,9 +95,22 @@ export interface FilmFullscreenProps {
   onTabChange: (tab: "points" | "saved") => void;
   onToggleSaved: (pointId: string) => void;
   onExit: (state: { time: number; playing: boolean }) => void;
+  /** The report player's frame on screen — where the room grows from and returns to. */
+  originRect: () => Rect | null;
+  /** Called as the exit starts, with the playhead to restore underneath. */
+  onHandoff: (time: number) => void;
 }
 
 const IDLE_MS = 3000;
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+type PanelState = "closed" | "open" | "closing";
 
 /**
  * True when a menu or dialog is up — the room's keys stand down.
@@ -111,7 +151,15 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   const [skipDead, setSkipDead] = useState(false);
   const [failed, setFailed] = useState(false);
   const [chrome, setChrome] = useState(true);
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [panel, setPanel] = useState<PanelState>("closed");
+  const panelOpen = panel === "open";
+  const [videoReady, setVideoReady] = useState(false);
+  // Set while the room is shrinking back into the report; everything that
+  // would start a second exit or a new interaction checks it.
+  const leavingRef = useRef(false);
+  const enterAnimation = useRef<Animation | null>(null);
+
+  const syncClock = useFilmClockVars(videoRef, rootRef, playing);
 
   /* ── Derived ─────────────────────────────────────────────────────────── */
 
@@ -187,6 +235,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     const target = Math.max(0, max ? Math.min(seconds, max) : seconds);
     el.currentTime = target;
     setCurrentTime(target);
+    rootRef.current?.style.setProperty("--film-t", String(target));
   }, []);
 
   const togglePlay = useCallback(() => {
@@ -241,15 +290,62 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   }, []);
 
   const exit = useCallback(() => {
+    if (leavingRef.current) return;
+    leavingRef.current = true;
     const el = videoRef.current;
     const wasPlaying = el ? !el.paused : false;
     el?.pause();
-    p.onExit({ time: el?.currentTime ?? currentTime, playing: wasPlaying });
+    const state = {
+      time: el?.currentTime ?? currentTime,
+      playing: wasPlaying,
+    };
+
+    // Hand the playhead back before the room shrinks, so the report player
+    // underneath is already on this frame when the room comes off it.
+    p.onHandoff(state.time);
+
+    const root = rootRef.current;
+    enterAnimation.current?.cancel();
+    if (!root) {
+      p.onExit(state);
+      return;
+    }
+
+    // Chrome leaves first and quickly, so the shrinking frame carries only film.
+    for (const node of root.querySelectorAll<HTMLElement>(
+      "[data-film-chrome]",
+    )) {
+      node.animate([{ opacity: 1 }, { opacity: 0 }], {
+        duration: 120,
+        easing: "linear",
+        fill: "forwards",
+      });
+    }
+
+    const frame = prefersReducedMotion() ? null : p.originRect();
+    const animation = frame
+      ? root.animate(
+          [
+            OPEN_ROOM_FRAME,
+            collapsedRoomFrame(frame, {
+              width: root.clientWidth,
+              height: root.clientHeight,
+            }),
+          ],
+          { duration: ROOM_EXIT_MS, easing: ROOM_EASE_EXIT, fill: "forwards" },
+        )
+      : root.animate([{ opacity: 1 }, { opacity: 0 }], {
+          duration: 180,
+          easing: "linear",
+          fill: "forwards",
+        });
+    void animation.finished.catch(() => {}).then(() => p.onExit(state));
   }, [p, currentTime]);
 
   const onTimeUpdate = useCallback(
     (t: number) => {
       setCurrentTime(t);
+      syncClock();
       const now = activeStopAt(p.stops, t);
       if (looping && now && t >= now.stop.end) {
         seek(now.stop.start);
@@ -260,7 +356,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
         if (jump !== null) seek(jump);
       }
     },
-    [p.stops, looping, skipDead, seek],
+    [p.stops, looping, skipDead, seek, syncClock],
   );
 
   /* ── Mount: seed the player, lock the page, take focus ───────────────── */
@@ -268,10 +364,53 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   useEffect(() => {
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    rootRef.current?.focus();
+    rootRef.current?.focus({ preventScroll: true });
     return () => {
       document.body.style.overflow = previous;
     };
+  }, []);
+
+  // The entrance. Layout effect, so the first painted frame is already the
+  // collapsed one — a normal effect would flash the full room for a frame
+  // before it snapped back to the report player's size.
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const reduced = prefersReducedMotion();
+    const frame = reduced ? null : p.originRect();
+
+    enterAnimation.current = frame
+      ? root.animate(
+          [
+            collapsedRoomFrame(frame, {
+              width: root.clientWidth,
+              height: root.clientHeight,
+            }),
+            OPEN_ROOM_FRAME,
+          ],
+          { duration: ROOM_ENTER_MS, easing: ROOM_EASE_ENTER },
+        )
+      : root.animate([{ opacity: 0 }, { opacity: 1 }], {
+          duration: 200,
+          easing: "linear",
+        });
+
+    // Chrome arrives as the film settles, not while it is still travelling.
+    for (const node of root.querySelectorAll<HTMLElement>(
+      "[data-film-chrome]",
+    )) {
+      node.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: 220,
+        delay: frame ? ROOM_ENTER_MS * 0.55 : 0,
+        easing: "linear",
+        fill: "backwards",
+      });
+    }
+    // A remount (React's development double-invoke, or a fast re-open) must
+    // not leave a second entrance composited over the first.
+    return () => enterAnimation.current?.cancel();
+    // Mount-only: the entrance plays once, from where the room was opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ── Chrome idle ─────────────────────────────────────────────────────── */
@@ -420,7 +559,11 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               src={p.video.url}
               preload="metadata"
               playsInline
-              className="absolute inset-0 h-full w-full object-contain"
+              className={cn(
+                "absolute inset-0 h-full w-full object-contain transition-opacity duration-200",
+                videoReady ? "opacity-100" : "opacity-0",
+              )}
+              onLoadedData={() => setVideoReady(true)}
               onClick={togglePlay}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
@@ -430,12 +573,17 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 el.currentTime = p.initial.time;
                 el.playbackRate = rate;
                 if (p.initial.playing) void el.play().catch(() => {});
+                syncClock();
               }}
-              onDurationChange={(e) =>
-                setDuration(e.currentTarget.duration || 0)
-              }
+              onDurationChange={(e) => {
+                setDuration(e.currentTarget.duration || 0);
+                syncClock();
+              }}
               onTimeUpdate={(e) => onTimeUpdate(e.currentTarget.currentTime)}
-              onSeeked={(e) => setCurrentTime(e.currentTarget.currentTime)}
+              onSeeked={(e) => {
+                setCurrentTime(e.currentTarget.currentTime);
+                syncClock();
+              }}
               onError={() => setFailed(true)}
             >
               Your browser cannot play this video.
@@ -453,24 +601,27 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               collapsed={!chrome}
             />
 
-            {!panelOpen && (
-              <button
-                type="button"
-                onClick={() => setPanelOpen(true)}
-                aria-expanded={false}
-                className={cn(
-                  "absolute top-[18px] right-6 inline-flex h-7 cursor-pointer items-center gap-[7px] rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium text-white hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                  fade,
-                )}
-              >
-                <PanelRight
-                  className="h-[13px] w-[13px]"
-                  strokeWidth={1.6}
-                  aria-hidden="true"
-                />
-                Points
-              </button>
-            )}
+            <button
+              data-film-chrome
+              type="button"
+              onClick={() => setPanel("open")}
+              aria-expanded={panelOpen}
+              aria-hidden={panel !== "closed" ? true : undefined}
+              tabIndex={panel !== "closed" ? -1 : undefined}
+              className={cn(
+                "absolute top-[18px] right-6 inline-flex h-7 cursor-pointer items-center gap-[7px] rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium text-white transition-[opacity,transform,background-color] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                chrome && panel === "closed"
+                  ? "opacity-100"
+                  : "pointer-events-none opacity-0 motion-safe:translate-x-2",
+              )}
+            >
+              <PanelRight
+                className="h-[13px] w-[13px]"
+                strokeWidth={1.6}
+                aria-hidden="true"
+              />
+              Points
+            </button>
 
             {/* A full-size positioning layer for the bottom block. It must never
                 take clicks itself: it sits above the video and the Points
@@ -478,10 +629,15 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 and did nothing. Only the transport block is interactive, and
                 only while the chrome is showing. */}
             <div
+              data-film-chrome
               className={cn(
-                "pointer-events-none absolute inset-0",
+                "pointer-events-none absolute inset-y-0 left-0",
                 fade,
-                panelOpen && "right-[320px]",
+                // The drawer's edge and the transport's edge travel together:
+                // same curve and length in, the drawer's quicker curve out.
+                panelOpen
+                  ? "right-[320px] transition-[right,opacity] duration-[420ms] ease-[var(--ease-out-expo)]"
+                  : "right-0 transition-[right,opacity] duration-[240ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
               )}
             >
               <FilmTransport
@@ -513,8 +669,10 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               />
             </div>
 
-            {panelOpen && (
+            {panel !== "closed" && (
               <FilmPointPanel
+                state={panel}
+                onExited={() => setPanel("closed")}
                 allPoints={p.allPoints}
                 visiblePoints={p.visiblePoints}
                 filters={p.filters}
@@ -522,15 +680,15 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 tab={p.tab}
                 onTabChange={p.onTabChange}
                 activePointId={activePoint?.id ?? null}
-                activeProgress={active?.progress ?? 0}
+                activeStart={active?.stop.start ?? 0}
+                activeEnd={active?.stop.end ?? 0}
                 position={position}
                 columns={p.columns}
                 onSelect={selectPoint}
                 onToggleSaved={p.onToggleSaved}
-                onClose={() => setPanelOpen(false)}
+                onClose={() => setPanel("closing")}
                 shotStops={shotStops}
                 activeShotId={activeShot?.stop.shot.id ?? null}
-                activeShotProgress={activeShot?.progress ?? 0}
                 onSelectShot={selectShot}
               />
             )}

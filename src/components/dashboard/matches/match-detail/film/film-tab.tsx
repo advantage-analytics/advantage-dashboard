@@ -45,6 +45,9 @@ function FilmRoom({ video }: { video: MatchVideo }) {
   const sides = useMatchSides();
   const supabase = useMemo(() => createClient(), []);
   const playerRef = useRef<FilmPlayerHandle>(null);
+  // `--film-t` is written here, so the player's bar and the list's playing
+  // rule both move every frame.
+  const clockRef = useRef<HTMLDivElement>(null);
 
   const [points, setPoints] = useState<MatchPoint[]>(serverPoints);
   // The authoritative copy for the write path. `setPoints`' updater runs
@@ -150,17 +153,22 @@ function FilmRoom({ video }: { video: MatchVideo }) {
     setRoom(snapshot);
   }, [currentTime]);
 
-  const exitRoom = useCallback((state: { time: number; playing: boolean }) => {
-    setRoom(null);
-    // The room is unmounted in the same commit; the report player is still
-    // there, so hand the playhead straight back to it.
-    playerRef.current?.seekTo(state.time);
+  // The room hands the playhead back as its exit starts (so the report frame
+  // is already on the right picture under the shrinking room), then unmounts.
+  const handoff = useCallback((time: number) => {
+    playerRef.current?.seekTo(time);
   }, []);
+  const exitRoom = useCallback(() => setRoom(null), []);
+  const originRect = useCallback(
+    () => playerRef.current?.frameRect() ?? null,
+    [],
+  );
 
   return (
-    <div className="flex flex-col gap-4">
+    <div ref={clockRef} className="flex flex-col gap-4">
       <FilmPlayer
         ref={playerRef}
+        clockTargetRef={clockRef}
         video={video}
         stops={walkStops}
         onTimeChange={setCurrentTime}
@@ -176,7 +184,8 @@ function FilmRoom({ video }: { video: MatchVideo }) {
         tab={tab}
         onTabChange={setTab}
         activePointId={active?.stop.point.id ?? null}
-        activeProgress={active?.progress ?? 0}
+        activeStart={active?.stop.start ?? 0}
+        activeEnd={active?.stop.end ?? 0}
         onSelect={handleSelect}
         onToggleSaved={handleToggleSaved}
       />
@@ -196,6 +205,8 @@ function FilmRoom({ video }: { video: MatchVideo }) {
           onTabChange={setTab}
           onToggleSaved={handleToggleSaved}
           onExit={exitRoom}
+          onHandoff={handoff}
+          originRect={originRect}
         />
       )}
     </div>

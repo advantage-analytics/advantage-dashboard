@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { FilmAdvancedFiltersDialog } from "./film-advanced-filters-dialog";
 import { describeFilmCut, lastNameOf, type FilmFilters } from "./film-filters";
 import { FilmQuickFilters } from "./film-quick-filters";
+import { filmProgressTransform } from "./film-clock";
 import { absolutize } from "./film-score";
 import { shotLabel, type ShotStop } from "./film-shots";
 
@@ -39,7 +40,12 @@ export interface FilmPointPanelProps {
   tab: "points" | "saved";
   onTabChange: (tab: "points" | "saved") => void;
   activePointId: string | null;
-  activeProgress: number;
+  /** Film-clock window of the playing point; the progress rule reads `--film-t`. */
+  activeStart: number;
+  activeEnd: number;
+  /** `open` slides in; `closing` slides out, then `onExited` unmounts it. */
+  state: "open" | "closing";
+  onExited: () => void;
   position: { index: number; total: number } | null;
   columns: { hasGameScore: boolean; hasPointScore: boolean };
   onSelect: (point: MatchPoint) => void;
@@ -48,7 +54,6 @@ export interface FilmPointPanelProps {
   /** Every timed shot on the film clock. */
   shotStops: ShotStop[];
   activeShotId: string | null;
-  activeShotProgress: number;
   onSelectShot: (stop: ShotStop) => void;
 }
 
@@ -82,7 +87,10 @@ export function FilmPointPanel({
   tab,
   onTabChange,
   activePointId,
-  activeProgress,
+  activeStart,
+  activeEnd,
+  state,
+  onExited,
   position,
   columns,
   onSelect,
@@ -90,7 +98,6 @@ export function FilmPointPanel({
   onClose,
   shotStops,
   activeShotId,
-  activeShotProgress,
   onSelectShot,
 }: FilmPointPanelProps) {
   const sides = useMatchSides();
@@ -163,7 +170,18 @@ export function FilmPointPanel({
   return (
     <aside
       aria-label="Point list"
-      className="absolute inset-y-0 right-0 flex w-[320px] max-w-full animate-in flex-col bg-[rgba(13,13,13,0.88)] shadow-[inset_1px_0_0_rgba(255,255,255,0.1)] duration-200 fade-in-0 motion-safe:slide-in-from-right"
+      data-film-chrome=""
+      data-state={state}
+      onAnimationEnd={(e) => {
+        if (e.target === e.currentTarget && state === "closing") onExited();
+      }}
+      className={cn(
+        "absolute inset-y-0 right-0 flex w-[320px] max-w-full flex-col bg-[rgba(13,13,13,0.88)] shadow-[inset_1px_0_0_rgba(255,255,255,0.1)]",
+        // In: the room's expo curve, long enough to read as the drawer arriving.
+        // Out: shorter and accelerating, so closing never feels like waiting.
+        "data-[state=open]:animate-in data-[state=open]:duration-[420ms] data-[state=open]:ease-[var(--ease-out-expo)] data-[state=open]:fade-in-0 motion-safe:data-[state=open]:slide-in-from-right",
+        "data-[state=closing]:animate-out data-[state=closing]:duration-[240ms] data-[state=closing]:ease-[cubic-bezier(0.4,0,1,1)] data-[state=closing]:fade-out-0 data-[state=closing]:fill-mode-forwards motion-safe:data-[state=closing]:slide-out-to-right",
+      )}
     >
       <div className="flex items-center gap-5 px-4 pt-[13px] shadow-[inset_0_-1px_0_rgba(255,255,255,0.08)]">
         <div
@@ -273,9 +291,6 @@ export function FilmPointPanel({
                           : oppName,
                       )}
                       isActive={stop.shot.id === activeShotId}
-                      progress={
-                        stop.shot.id === activeShotId ? activeShotProgress : 0
-                      }
                       onSelect={onSelectShot}
                     />
                   ))}
@@ -316,7 +331,8 @@ export function FilmPointPanel({
                       : null
                   }
                   isActive={point.id === activePointId}
-                  progress={point.id === activePointId ? activeProgress : 0}
+                  activeStart={point.id === activePointId ? activeStart : 0}
+                  activeEnd={point.id === activePointId ? activeEnd : 0}
                   onSelect={onSelect}
                   onToggleSaved={onToggleSaved}
                 />
@@ -351,19 +367,24 @@ export function FilmPointPanel({
   );
 }
 
-/** Memoized: `timeupdate` re-renders the panel ~4×/s. */
+/**
+ * Memoized: `timeupdate` re-renders the panel ~4×/s. The progress rule does
+ * not depend on those renders — it scales from `--film-t` every frame.
+ */
 const PanelRow = memo(function PanelRow({
   point,
   score,
   isActive,
-  progress,
+  activeStart,
+  activeEnd,
   onSelect,
   onToggleSaved,
 }: {
   point: MatchPoint;
   score: string | null;
   isActive: boolean;
-  progress: number;
+  activeStart: number;
+  activeEnd: number;
   onSelect: (point: MatchPoint) => void;
   onToggleSaved: (pointId: string) => void;
 }) {
@@ -446,8 +467,8 @@ const PanelRow = memo(function PanelRow({
       {isActive && (
         <span
           aria-hidden="true"
-          className="absolute bottom-0 left-0 h-0.5 bg-[var(--blue)]"
-          style={{ width: `${Math.round(progress * 100)}%` }}
+          className="absolute bottom-0 left-0 h-0.5 w-full origin-left bg-[var(--blue)] will-change-transform"
+          style={{ transform: filmProgressTransform(activeStart, activeEnd) }}
         />
       )}
     </div>
@@ -499,7 +520,6 @@ const ShotRow = memo(function ShotRow({
   order,
   playerName,
   isActive,
-  progress,
   onSelect,
 }: {
   stop: ShotStop;
@@ -510,7 +530,6 @@ const ShotRow = memo(function ShotRow({
   order: number;
   playerName: string;
   isActive: boolean;
-  progress: number;
   onSelect: (stop: ShotStop) => void;
 }) {
   const { shot } = stop;
@@ -563,8 +582,8 @@ const ShotRow = memo(function ShotRow({
       {isActive && (
         <span
           aria-hidden="true"
-          className="absolute bottom-0 left-0 h-0.5 bg-[var(--blue)]"
-          style={{ width: `${Math.round(progress * 100)}%` }}
+          className="absolute bottom-0 left-0 h-0.5 w-full origin-left bg-[var(--blue)] will-change-transform"
+          style={{ transform: filmProgressTransform(stop.start, stop.end) }}
         />
       )}
     </button>
