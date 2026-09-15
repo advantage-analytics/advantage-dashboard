@@ -314,7 +314,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T21 · Team Overview tab
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T18, T19, T20
 - **files:** src/app/admin/teams/[programId]/page.tsx, src/components/admin/admin-people-card.tsx, src/components/admin/admin-requests-card.tsx, src/components/admin/pilot-usage-card.tsx
