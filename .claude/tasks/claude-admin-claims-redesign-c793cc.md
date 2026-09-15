@@ -273,7 +273,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T18 · Team page loader
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6
 - **files:** src/lib/data/admin-team-server.ts
