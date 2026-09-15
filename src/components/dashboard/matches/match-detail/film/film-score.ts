@@ -144,3 +144,21 @@ export function boardAt(
     pointLine: youPts && oppPts ? `${youPts}\u2013${oppPts}` : null,
   };
 }
+
+/**
+ * Whether a score column is real on this match.
+ *
+ * `match-points-server.ts` coerces a null column to "0-0", and a derivation
+ * that never wrote the column leaves every row at exactly that. Printing
+ * "0-0" on every row would be a fabricated score in the one place a player
+ * reads as fact, so a column that is "0-0" from end to end is treated as
+ * absent. A real match escapes the test on its second game.
+ */
+export function scoreColumns(points: MatchPoint[]): BoardColumns {
+  const has = (read: (p: MatchPoint) => string) =>
+    points.length > 0 && points.some((p) => read(p) !== "0-0");
+  return {
+    hasGameScore: has((p) => p.gameScore),
+    hasPointScore: has((p) => p.pointScore),
+  };
+}
