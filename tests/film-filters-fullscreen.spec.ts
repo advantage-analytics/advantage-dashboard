@@ -73,9 +73,24 @@ test("ended-with is one OR group across serve and rally endings", () => {
   expect(cut({ ended: ["winner", "double-fault"] })).toEqual(["b", "d"]);
 });
 
-test("shot reads the last shot; serve +1 is a three-shot point", () => {
+test("shot reads the last shot; serve +1 is a +1 winner or a forced fourth-ball error", () => {
   expect(cut({ shot: ["forehand"] })).toEqual(["c"]);
-  expect(cut({ shot: ["serve-plus-one"] })).toEqual(["a"]);
+  const plusOne = [
+    pt({ id: "w3", rallyLength: 3, resultType: "Forehand Winner" }),
+    pt({ id: "e3", rallyLength: 3, resultType: "Forehand Unforced Error" }),
+    pt({ id: "e4", rallyLength: 4, resultType: "Backhand Forced Error" }),
+    pt({ id: "w4", rallyLength: 4, resultType: "Backhand Winner" }),
+    pt({ id: "ace", rallyLength: 1, resultType: "Ace" }),
+  ];
+  expect(
+    ids(
+      applyFilmFilters(
+        plusOne,
+        { ...DEFAULT_FILM_FILTERS, shot: ["serve-plus-one"] },
+        true,
+      ),
+    ),
+  ).toEqual(["w3", "e4"]);
 });
 
 test("court side from the score when there is one, else from position in the game", () => {

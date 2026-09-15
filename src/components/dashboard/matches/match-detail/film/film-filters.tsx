@@ -250,10 +250,15 @@ function matchesShot(point: MatchPoint, key: ShotKey): boolean {
       return last.includes("backhand") && !last.includes("volley");
     case "volley":
       return last.includes("volley") || last.includes("overhead");
-    // Serve, return, one more shot: the point ended on the server's first
-    // ball after the serve. `rallyLength` counts from the serve in play.
+    // The server's first ball after the return decided the point: either it
+    // was the winner (third shot of the rally) or it forced the returner's
+    // next ball into an error (fourth shot). `rallyLength` counts from the
+    // serve in play. Product owner's definition, 2026-09-14.
     case "serve-plus-one":
-      return point.rallyLength === 3;
+      return (
+        (point.rallyLength === 3 && isWinnerResult(point)) ||
+        (point.rallyLength === 4 && /error$/i.test(point.resultType.trim()))
+      );
   }
 }
 
