@@ -34,6 +34,17 @@ export interface MatchVideo {
   /** A short-lived, read-only URL straight to Azure. */
   url: string;
   expiresAt: string;
+  /**
+   * Where this file starts inside the ORIGINAL recording, in seconds.
+   *
+   * `points.video_time` / `shots.video_time` are original-video seconds by
+   * design (`derivation/parse.ts`), but the only playable file is the vendor's
+   * trimmed copy, whose t=0 is the job's `start_time_seconds`. Every seek has
+   * to subtract this or it lands late by exactly the trim — 15s on the first
+   * real match, which read as "the serve is already over". `film-timeline.ts`
+   * is the one place the conversion happens.
+   */
+  startTimeSeconds: number;
 }
 
 export const getMatchVideo = cache(async function getMatchVideo(
@@ -58,7 +69,7 @@ export const getMatchVideo = cache(async function getMatchVideo(
   const admin = createAdminClient();
   const { data: job } = await admin
     .from("processing_jobs")
-    .select("trimmed_object_key")
+    .select("trimmed_object_key, start_time_seconds")
     .eq("match_id", matchId)
     .not("trimmed_object_key", "is", null)
     // A resubmitted match has several jobs; the newest trimmed copy is the one
@@ -69,10 +80,16 @@ export const getMatchVideo = cache(async function getMatchVideo(
 
   const blobName = job?.trimmed_object_key as string | undefined;
   if (!blobName) return null;
+  const start = Number(job?.start_time_seconds ?? 0);
+  const startTimeSeconds = Number.isFinite(start) && start > 0 ? start : 0;
 
   try {
     const { playbackUrl, expiresAt } = mintPlaybackSas({ blobName });
-    return { url: playbackUrl, expiresAt: expiresAt.toISOString() };
+    return {
+      url: playbackUrl,
+      expiresAt: expiresAt.toISOString(),
+      startTimeSeconds,
+    };
   } catch (error) {
     // Signing throws only on a misconfigured account, which is an operator
     // problem rather than a viewer's. The page shows no video; the log says why.

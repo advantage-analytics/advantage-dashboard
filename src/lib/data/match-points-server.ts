@@ -6,6 +6,8 @@ export interface MatchPoint {
   pointNumber: number;
   setNumber: number;
   gameNumber: number;
+  /** Sets won before this point, SERVER-FIRST like the two below ("1-0"). */
+  setScore: string;
   gameScore: string;
   pointScore: string;
   resultType: string;
@@ -46,6 +48,7 @@ interface DbPoint {
   point_number: number;
   set_number: number;
   game_number: number;
+  set_score: string | null;
   game_score: string | null;
   point_score: string | null;
   result_type: string | null;
@@ -137,7 +140,7 @@ export async function getMatchPointsFromSupabase(
   const { data: pointsData, error: pointsError } = await supabase
     .from("points")
     .select(
-      "id, point_number, set_number, game_number, game_score, point_score, result_type, won_by_player1, server_is_player1, is_break_point, is_set_point, is_match_point, rally_length, duration, video_time, saved",
+      "id, point_number, set_number, game_number, set_score, game_score, point_score, result_type, won_by_player1, server_is_player1, is_break_point, is_set_point, is_match_point, rally_length, duration, video_time, saved",
     )
     .eq("match_id", matchId)
     .order("point_number", { ascending: true });
@@ -207,6 +210,7 @@ export async function getMatchPointsFromSupabase(
       pointNumber: point.point_number,
       setNumber: point.set_number,
       gameNumber: point.game_number,
+      setScore: point.set_score ?? "0-0",
       gameScore: point.game_score ?? "0-0",
       pointScore: point.point_score ?? "0-0",
       resultType,
