@@ -286,7 +286,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T19 · Team page frame: header, tabs, coming-soon stubs
 
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **needs:** T7, T8, T18
 - **files:** src/app/admin/teams/[programId]/layout.tsx, src/components/admin/team-page-header.tsx, src/components/admin/team-tabs.tsx, src/app/admin/teams/[programId]/people/page.tsx, src/app/admin/teams/[programId]/roster/page.tsx, src/app/admin/teams/[programId]/schedule/page.tsx, src/app/admin/teams/[programId]/activity/page.tsx
