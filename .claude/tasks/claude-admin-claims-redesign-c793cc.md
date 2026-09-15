@@ -215,7 +215,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T14 · Requests table + page shell
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T7, T13
 - **files:** src/components/admin/requests-table-layout.ts, src/components/admin/requests-table.tsx, src/app/admin/requests/page.tsx

@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { claimRoleLabel } from "@/lib/services/programs/claim-roles";
 import { reviewReason } from "@/lib/services/programs/claim-state";
 import { programDisplayName } from "@/lib/data/programs-server";
+import { crestUrl } from "@/lib/data/teams-server";
 
 /**
  * The Admin › Requests list — every `program_claims` row that has left
@@ -96,6 +97,15 @@ export interface AdminRequestRow {
   date: string;
   /** Display name of the program this request/claim concerns. */
   team: string;
+  /**
+   * The program's crest, resolved to a public URL — `null` when the program
+   * has none uploaded (or this row has no program at all, e.g. an unlisted
+   * program request). Added for T14's Team column; not part of T13's
+   * original shape. Resolved the same way `admin-teams-server.ts` resolves
+   * `AdminTeamRow.crestUrl` — batched `crestUrl(row.crest_path)` calls from
+   * `@/lib/data/teams-server`, zipped back onto each row by index.
+   */
+  crestUrl: string | null;
   /** "Head coach", "Invite request" — see `forLabel()`. */
   for: string;
   from: AdminRequestFrom;
@@ -202,6 +212,8 @@ interface RawProgramEmbed {
   staff_page_url: string | null;
   review_reasons: string | null;
   primary_domain: string | null;
+  /** Storage path, not a URL — resolved to `crestUrl` via `crestUrl()` below. */
+  crest_path: string | null;
 }
 
 function programOf(
@@ -252,7 +264,7 @@ const CLAIMS_SELECT = `
   verified_at,
   voucher_note,
   created_at,
-  programs(id, school_name, team, division, state, staff_page_url, review_reasons, primary_domain)
+  programs(id, school_name, team, division, state, staff_page_url, review_reasons, primary_domain, crest_path)
 `;
 
 /**
@@ -276,7 +288,10 @@ function claimEmailCheck(claim: RawClaimRow): AdminRequestEmailCheck {
   return "none";
 }
 
-function toClaimRow(claim: RawClaimRow): AdminRequestRow {
+function toClaimRow(
+  claim: RawClaimRow,
+  resolvedCrestUrl: string | null,
+): AdminRequestRow {
   const program = programOf(claim.programs);
   const schoolName = program?.school_name ?? claim.claimed_email;
   const team = teamOf(program?.team ?? null);
@@ -321,6 +336,7 @@ function toClaimRow(claim: RawClaimRow): AdminRequestRow {
     source: "claim",
     date: claim.created_at,
     team: programDisplayName(schoolName, team),
+    crestUrl: resolvedCrestUrl,
     for: claimRoleLabel(claim.claimant_role),
     from: { name: claim.claimant_name, email: claim.claimed_email },
     emailCheck: claimEmailCheck(claim),
@@ -354,7 +370,7 @@ const REQUESTS_SELECT = `
   team,
   status,
   created_at,
-  programs(id, school_name, team, division, state, staff_page_url, review_reasons, primary_domain)
+  programs(id, school_name, team, division, state, staff_page_url, review_reasons, primary_domain, crest_path)
 `;
 
 /** "invite_request" → "Invite request", for the `for` column. */
@@ -368,7 +384,10 @@ function requestKindLabel(kind: string): string {
   return REQUEST_KIND_LABEL[kind] ?? kind.replace(/_/g, " ");
 }
 
-function toRequestRow(request: RawRequestRow): AdminRequestRow {
+function toRequestRow(
+  request: RawRequestRow,
+  resolvedCrestUrl: string | null,
+): AdminRequestRow {
   const program = programOf(request.programs);
   const schoolName = program?.school_name ?? request.school_name;
   const team = teamOf(program?.team ?? request.team);
@@ -395,6 +414,7 @@ function toRequestRow(request: RawRequestRow): AdminRequestRow {
     team: schoolName
       ? programDisplayName(schoolName, team)
       : "Unlisted program",
+    crestUrl: resolvedCrestUrl,
     for: requestKindLabel(request.kind),
     from: { name: request.name ?? request.email, email: request.email },
     // `program_requests` carries none of the verification/matching columns
@@ -613,12 +633,32 @@ export async function listAdminRequests({
     });
   }
 
-  const claimRows = ((claimsResult.data ?? []) as unknown as RawClaimRow[]).map(
-    toClaimRow,
+  const rawClaims = (claimsResult.data ?? []) as unknown as RawClaimRow[];
+  const rawRequests = (requestsResult.data ?? []) as unknown as RawRequestRow[];
+
+  // Crest resolution is batched per source array, same pattern as
+  // `admin-teams-server.ts`'s `listAdminTeams`: one `crestUrl()` call per row
+  // (each is a cheap public-URL construction, not a network round trip), run
+  // together and zipped back on by index so row order is untouched.
+  const [claimCrests, requestCrests] = await Promise.all([
+    Promise.all(
+      rawClaims.map((claim) =>
+        crestUrl(programOf(claim.programs)?.crest_path ?? null),
+      ),
+    ),
+    Promise.all(
+      rawRequests.map((request) =>
+        crestUrl(programOf(request.programs)?.crest_path ?? null),
+      ),
+    ),
+  ]);
+
+  const claimRows = rawClaims.map((claim, index) =>
+    toClaimRow(claim, claimCrests[index]),
   );
-  const requestRows = (
-    (requestsResult.data ?? []) as unknown as RawRequestRow[]
-  ).map(toRequestRow);
+  const requestRows = rawRequests.map((request, index) =>
+    toRequestRow(request, requestCrests[index]),
+  );
 
   return mergeRequestRows(claimRows, requestRows, limit);
 }

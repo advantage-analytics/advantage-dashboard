@@ -27,6 +27,7 @@ function row(
 ): AdminRequestRow {
   return {
     team: "Stanford Women's Tennis",
+    crestUrl: null,
     for: "Head coach",
     from: { name: "Test Person", email: "test@example.com" },
     emailCheck: "none",
