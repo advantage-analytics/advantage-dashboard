@@ -260,7 +260,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T17 · Admin "needs a decision" notification email
 
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **needs:** T6
 - **files:** src/lib/services/email/templates/admin.ts, src/lib/services/email/index.ts, src/lib/services/notifications/admin-review-mail.ts, src/lib/services/programs/claim-actions.ts
