@@ -85,7 +85,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T5 · Test: admin RPC gates
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T4
 - **files:** tests/admin-program-rpcs.spec.ts
