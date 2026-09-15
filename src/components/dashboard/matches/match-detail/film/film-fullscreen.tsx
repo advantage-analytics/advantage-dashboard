@@ -71,12 +71,17 @@ export interface FilmFullscreenProps {
 
 const IDLE_MS = 3000;
 
-/** True when a Radix menu or dialog is up — the room's keys stand down. */
+/**
+ * True when a menu or dialog is up — the room's keys stand down.
+ *
+ * Radix gives both its Dialog content and its Popover content (the float
+ * menus) `role="dialog"` with `data-state`, and a tooltip `role="tooltip"`,
+ * so this one selector catches the two surfaces that take keys and ignores
+ * the one that must never eat the space bar. `data-state="open"` matters: a
+ * closing menu stays in the DOM through its exit animation.
+ */
 function overlayIsOpen(): boolean {
-  return (
-    document.querySelector('[role="dialog"][data-state="open"]') !== null ||
-    document.querySelector("[data-radix-popper-content-wrapper]") !== null
-  );
+  return document.querySelector('[role="dialog"][data-state="open"]') !== null;
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {

@@ -46,6 +46,8 @@ test.describe("film clock", () => {
   test("the active stop is the last one started, with clamped progress", () => {
     const stops = filmStops(points, OFFSET);
     expect(activeStopAt(stops, 1)).toBeNull();
+    // A seek that lands a few ms early still counts as reaching the point.
+    expect(activeStopAt(stops, stops[0].start - 0.03)?.stop.point.id).toBe("a");
     const mid = activeStopAt(stops, stops[0].start + 8.2);
     expect(mid?.stop.point.id).toBe("a");
     expect(mid?.progress).toBeCloseTo(0.5, 6);

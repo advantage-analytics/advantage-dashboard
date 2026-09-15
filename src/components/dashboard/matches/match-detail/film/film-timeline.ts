@@ -22,6 +22,14 @@ export const ASSUMED_POINT_SECONDS = 10;
 /** The cushion that makes "previous" go back a point instead of re-seeking. */
 const STEP_CUSHION_SECONDS = 0.5;
 
+/**
+ * How far before a stop's start still counts as "reached". A `<video>` seek
+ * lands on a decodable frame, which can sit a few milliseconds BEFORE the
+ * second asked for; without this a point just jumped to reads as not yet
+ * started, and the playing row, the position and Save point all go blank.
+ */
+const REACHED_EPSILON_SECONDS = 0.1;
+
 export function toFilmTime(pointTime: number, offset: number): number {
   return Math.max(0, pointTime - offset);
 }
@@ -85,7 +93,7 @@ export function activeStopAt(
 ): ActiveStop | null {
   let index = -1;
   for (let i = 0; i < stops.length; i += 1) {
-    if (stops[i].start <= filmTime) index = i;
+    if (stops[i].start - REACHED_EPSILON_SECONDS <= filmTime) index = i;
     else break;
   }
   if (index === -1) return null;
