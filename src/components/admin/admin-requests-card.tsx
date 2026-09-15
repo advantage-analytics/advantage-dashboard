@@ -19,6 +19,7 @@ import {
   requesterName,
   resendRole,
 } from "@/components/dashboard/team/roster-vocabulary";
+import { shortDate } from "@/lib/data/match-utils";
 import {
   adminInviteMember,
   adminResolveJoinRequest,
@@ -108,7 +109,7 @@ export function AdminRequestsCard({
             </span>
             <span className="flex-1" />
             <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
-              Sent {formatDate(invite.createdAt)}
+              Sent {shortDate(invite.createdAt)}
             </span>
             <StatePill outline>Invited</StatePill>
             <button
@@ -172,7 +173,7 @@ export function AdminRequestsCard({
               </span>
               <span className="flex-1" />
               <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
-                {formatDate(request.createdAt)}
+                {shortDate(request.createdAt)}
               </span>
               {/* "Invite" rather than "Approve": membership is only ever
                   self-created, so this sends a player invitation that reserves
@@ -219,12 +220,4 @@ export function AdminRequestsCard({
       <AdminCardNote message={error ? null : note} />
     </SettingsCard>
   );
-}
-
-/** `2026-08-04T…` → `Aug 4` — `TeamMembersCard`'s own invite date. */
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
 }

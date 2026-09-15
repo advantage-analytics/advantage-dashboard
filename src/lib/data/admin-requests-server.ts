@@ -4,6 +4,7 @@ import { claimRoleLabel } from "@/lib/services/programs/claim-roles";
 import { reviewReason } from "@/lib/services/programs/claim-state";
 import { programDisplayName } from "@/lib/data/programs-server";
 import { crestUrl } from "@/lib/data/teams-server";
+import { pgQuoteValue } from "@/lib/data/postgrest-filter";
 
 /**
  * The Admin › Requests list — every `program_claims` row that has left
@@ -184,19 +185,6 @@ export function parseCursor(cursor: string): RequestsCursorKey {
     i: string;
   };
   return { date: t, source: s, id: i };
-}
-
-/**
- * Quote a value for PostgREST's `or=`/`and=` mini-language — copied from
- * `admin-teams-server.ts`'s `pgQuoteValue`. An ISO timestamp needs this too:
- * the fractional-seconds `.` is one of the characters that grammar treats as
- * syntax.
- */
-function pgQuoteValue(value: string): string {
-  if (/[,."()]/.test(value)) {
-    return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-  }
-  return value;
 }
 
 // ---------------------------------------------------------------------------

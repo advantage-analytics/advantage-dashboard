@@ -454,31 +454,32 @@ async function readUsage(
   const jobIds = [
     ...new Set(rows.map((row) => row.job_id).filter(Boolean)),
   ] as string[];
+  const userIds = [...new Set(rows.map((row) => row.created_by))];
+
+  // Neither read depends on the other — run them together rather than
+  // sequentially.
+  const [jobsResult, usersResult] = await Promise.all([
+    jobIds.length > 0
+      ? admin.from("processing_jobs").select("id, match_id").in("id", jobIds)
+      : Promise.resolve({ data: [], error: null }),
+    admin.from("users").select("id, first_name, last_name").in("id", userIds),
+  ]);
+
   const matchByJob = new Map<string, string | null>();
-  if (jobIds.length > 0) {
-    const { data: jobs, error: jobsError } = await admin
-      .from("processing_jobs")
-      .select("id, match_id")
-      .in("id", jobIds);
-    if (jobsError) {
-      console.error("[admin team] could not read processing jobs", {
-        programId,
-        error: jobsError.message,
-      });
-    }
-    for (const job of (jobs ?? []) as {
-      id: string;
-      match_id: string | null;
-    }[]) {
-      matchByJob.set(job.id, job.match_id);
-    }
+  if (jobsResult.error) {
+    console.error("[admin team] could not read processing jobs", {
+      programId,
+      error: jobsResult.error.message,
+    });
+  }
+  for (const job of (jobsResult.data ?? []) as {
+    id: string;
+    match_id: string | null;
+  }[]) {
+    matchByJob.set(job.id, job.match_id);
   }
 
-  const userIds = [...new Set(rows.map((row) => row.created_by))];
-  const { data: users, error: usersError } = await admin
-    .from("users")
-    .select("id, first_name, last_name")
-    .in("id", userIds);
+  const { data: users, error: usersError } = usersResult;
   if (usersError) {
     console.error("[admin team] could not read usage member names", {
       programId,

@@ -19,23 +19,38 @@ export interface OwnershipTransferredInput {
   recipientName: string | null;
   programName: string;
   programId: string;
-  /** Whoever pressed transfer. Null when their profile has no name. */
+  /**
+   * Whoever held the role before. Null either because their profile has no
+   * name yet (there was still someone — the member-facing transfer always
+   * demotes a real caller), or because the admin console used this to fix a
+   * program that had no owner row at all. Which one is which matters: an
+   * ownerless program has no "previous owner" to name, or to say "stays on as
+   * a coach" — nobody was there to demote.
+   */
   previousOwnerName: string | null;
+  /** False for a program the admin fixed that had no owner row before this. */
+  hadPreviousOwner: boolean;
 }
 
 export function ownershipTransferredEmail(
   input: OwnershipTransferredInput,
 ): EmailMessage {
-  const { to, programName, programId } = input;
+  const { to, programName, programId, hadPreviousOwner } = input;
   const previous = input.previousOwnerName?.trim() || "The previous owner";
 
   const content: EmailContent = {
-    preheader: `${previous} handed you ${programName}. Roster, invites and settings are yours now.`,
+    preheader: hadPreviousOwner
+      ? `${previous} handed you ${programName}. Roster, invites and settings are yours now.`
+      : `${programName} is yours now. Roster, invites and settings are ready to set up.`,
     eyebrow: "Ownership",
     heading: `You own ${programName}`,
     body: [
-      `${previous} transferred ownership of ${programName} on Advantage Analytics to you.`,
-      "As the owner you decide who is on the roster and who may send video, and you are the one person who can change the program's name, squad and conference. The previous owner stays on as a coach.",
+      hadPreviousOwner
+        ? `${previous} transferred ownership of ${programName} on Advantage Analytics to you.`
+        : `You were made the owner of ${programName} on Advantage Analytics.`,
+      hadPreviousOwner
+        ? "As the owner you decide who is on the roster and who may send video, and you are the one person who can change the program's name, squad and conference. The previous owner stays on as a coach."
+        : "As the owner you decide who is on the roster and who may send video, and you are the one person who can change the program's name, squad and conference.",
     ],
     facts: [
       { label: "Program", value: programName },

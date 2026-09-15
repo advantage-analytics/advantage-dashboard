@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
@@ -38,22 +39,29 @@ export async function requireAdmin(): Promise<{ id: string } | null> {
  * session is genuinely a session problem, so it goes to login exactly like
  * the layout does; a signed-in non-admin gets `notFound()` — a 403 would
  * confirm the route exists and is worth probing, where a 404 says nothing.
+ *
+ * `cache()`d because the layout and every loader nested under it (e.g.
+ * `getAdminTeam`) call this once per request — without memoizing, that is two
+ * `users` round trips (one here, one inside the loader) for a check with no
+ * arguments to vary on.
  */
-export async function requireAdminOrNotFound(): Promise<{ id: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export const requireAdminOrNotFound = cache(
+  async (): Promise<{ id: string }> => {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) redirect("/login");
+    if (!user) redirect("/login");
 
-  const { data } = await supabase
-    .from("users")
-    .select("is_admin")
-    .eq("id", user.id)
-    .maybeSingle();
+    const { data } = await supabase
+      .from("users")
+      .select("is_admin")
+      .eq("id", user.id)
+      .maybeSingle();
 
-  if (!data?.is_admin) notFound();
+    if (!data?.is_admin) notFound();
 
-  return { id: user.id };
-}
+    return { id: user.id };
+  },
+);

@@ -276,6 +276,7 @@ export async function transferProgramOwnership(input: {
       programName: programLabel(member.program),
       programId: input.programId,
       previousOwnerName: member.viewer.name,
+      hadPreviousOwner: true,
     }),
   );
 

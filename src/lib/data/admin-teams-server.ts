@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { displayName } from "@/lib/services/programs/invite-acceptance";
 import { divisionLabel, programDisplayName } from "@/lib/data/programs-server";
 import { crestUrl } from "@/lib/data/teams-server";
+import { pgQuoteValue } from "@/lib/data/postgrest-filter";
 
 /**
  * The Admin › Teams list — every program in the directory (~1,940 rows),
@@ -165,21 +166,6 @@ export function parseCursor(cursor: string): DirectoryCursorKey {
 
   const { s, i } = parsed as { s: string; i: string };
   return { schoolName: s, id: i };
-}
-
-/**
- * Quote a value for PostgREST's `or=`/`and=` mini-language.
- *
- * That grammar treats `,`, `.`, `(` and `)` as syntax, and this dataset's
- * school names routinely contain commas — "University of California, Los
- * Angeles" is a real row. A value carrying any of those characters has to be
- * wrapped in double quotes, with internal backslashes and quotes escaped.
- */
-function pgQuoteValue(value: string): string {
-  if (/[,."()]/.test(value)) {
-    return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-  }
-  return value;
 }
 
 // ---------------------------------------------------------------------------

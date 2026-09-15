@@ -12,6 +12,7 @@ import {
   sendEmail,
 } from "@/lib/services/email";
 import { programDisplayName } from "@/lib/data/programs-server";
+import { displayName } from "./invite-acceptance";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 import { getAdminTeam } from "@/lib/data/admin-team-server";
@@ -100,19 +101,6 @@ async function programLabel(
     data.school_name as string,
     (data.team as string | null) ?? null,
   );
-}
-
-/** First + last, falling back to the address — the roster's own rule. */
-function personName(row: {
-  first_name: string | null;
-  last_name: string | null;
-  email: string | null;
-}): string | null {
-  const name = [row.first_name, row.last_name]
-    .filter((part): part is string => Boolean(part?.trim()))
-    .join(" ")
-    .trim();
-  return name || null;
 }
 
 /**
@@ -242,12 +230,9 @@ export async function adminTransferProgramOwnership(input: {
     };
   }
 
-  const recipientName = personName(
-    recipient as {
-      first_name: string | null;
-      last_name: string | null;
-      email: string | null;
-    },
+  const recipientName = displayName(
+    (recipient?.first_name as string | null) ?? null,
+    (recipient?.last_name as string | null) ?? null,
   );
 
   const sent = await sendEmail(
@@ -256,7 +241,13 @@ export async function adminTransferProgramOwnership(input: {
       recipientName,
       programName,
       programId: input.programId,
-      previousOwnerName: previousOwner ? personName(previousOwner) : null,
+      previousOwnerName: previousOwner
+        ? displayName(
+            (previousOwner.first_name as string | null) ?? null,
+            (previousOwner.last_name as string | null) ?? null,
+          )
+        : null,
+      hadPreviousOwner: previousOwner !== null,
     }),
   );
 
