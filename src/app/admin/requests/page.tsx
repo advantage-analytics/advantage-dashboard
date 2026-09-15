@@ -2,24 +2,22 @@ import {
   listAdminRequests,
   type AdminRequestsView,
 } from "@/lib/data/admin-requests-server";
-import { RequestsTable } from "@/components/admin/requests-table";
-import { RequestsViewPills } from "@/components/admin/requests-view-pills";
+import { RequestsPageContent } from "@/components/admin/requests-page-content";
 
 /**
- * Admin › Requests — the console's queue of claims and invite requests, T14.
+ * Admin › Requests — the console's queue of claims and invite requests.
  *
  * `force-dynamic` for the same reason `admin/teams/page.tsx` is: every read
  * here is service-role and per-request, gated on the *current* session's
  * `is_admin`, so a cached render would be one admin's queue served to
  * whoever asked next.
  *
- * TODO(T15): this should render `RequestsTable` inside `RequestsPageContent`
- * — the drawer + selection state machine that turns a row click into a peek
- * panel. That component doesn't exist yet (it's T15's file), so this page
- * renders `RequestsTable` directly for now, with `RequestsViewPills` doing
- * the minimum job of turning a pill click into a `?view=` URL change. Once
- * T15 lands, this page hands its rows/view to `RequestsPageContent` instead
- * and `RequestsViewPills` folds into it.
+ * The page fetches, words the empty state and renders the title; everything
+ * that needs a real event handler — the view pills, the row selection and the
+ * peek drawer — belongs to `RequestsPageContent` (T15). The title is passed
+ * down as a node, the way `roster/page.tsx` hands its own to `RosterView`, so
+ * the drawer can be the title column's flex sibling and the rail spans the
+ * page rather than starting below the heading.
  */
 export const dynamic = "force-dynamic";
 
@@ -63,18 +61,19 @@ export default async function AdminRequestsPage({
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Title slot. */}
-      <div>
-        <h1 className="text-display">Requests</h1>
-        <p className="text-body-sm mt-[9px]">
-          Program claims and invite requests, merged into one queue.
-        </p>
-      </div>
-
-      <RequestsViewPills view={view} />
-
-      <RequestsTable rows={page.rows} emptyTitle={emptyTitle[view]} />
-    </div>
+    <RequestsPageContent
+      rows={page.rows}
+      view={view}
+      initialSelectedId={one(params.id)}
+      emptyTitle={emptyTitle[view]}
+      title={
+        <div>
+          <h1 className="text-display">Requests</h1>
+          <p className="text-body-sm mt-[9px]">
+            Program claims and invite requests, merged into one queue.
+          </p>
+        </div>
+      }
+    />
   );
 }

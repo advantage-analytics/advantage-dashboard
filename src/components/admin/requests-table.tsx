@@ -42,6 +42,18 @@ import {
  * A client component: the row's `onClick`/`onKeyDown` need real event
  * handlers, which a Server Component page cannot pass across the boundary.
  */
+/**
+ * The DOM id of one row — not in T14's original shape, added for T15.
+ *
+ * The drawer's selection machine has to return focus to the row it closed
+ * from and scroll the next one into view as `↑`/`↓` walk the list, and both
+ * are `document.getElementById`. Mirrors `rosterRowId` in
+ * `team/roster-table.tsx`, which exists for exactly the same two jobs.
+ */
+export function requestRowId(id: string): string {
+  return `admin-request-${id}`;
+}
+
 export function RequestsTable({
   rows,
   emptyTitle = "No requests match this view",
@@ -106,6 +118,7 @@ function RequestRow({
 }) {
   return (
     <div
+      id={requestRowId(row.id)}
       role="button"
       tabIndex={0}
       aria-pressed={selected}
