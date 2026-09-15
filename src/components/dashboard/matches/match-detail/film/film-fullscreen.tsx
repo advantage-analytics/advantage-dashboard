@@ -440,14 +440,22 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               </button>
             )}
 
+            {/* A full-size positioning layer for the bottom block. It must never
+                take clicks itself: it sits above the video and the Points
+                trigger, and when it did, a real click on either landed here
+                and did nothing. Only the transport block is interactive, and
+                only while the chrome is showing. */}
             <div
               className={cn(
-                "absolute inset-0",
+                "pointer-events-none absolute inset-0",
                 fade,
                 panelOpen && "right-[320px]",
               )}
             >
               <FilmTransport
+                className={
+                  chrome ? "pointer-events-auto" : "pointer-events-none"
+                }
                 title={`${sides.you.name} v ${sides.opp.name}`}
                 subtitle={subtitle || null}
                 position={position}

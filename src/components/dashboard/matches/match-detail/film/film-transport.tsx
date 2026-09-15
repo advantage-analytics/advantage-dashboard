@@ -67,6 +67,8 @@ function Glyph({
 }
 
 export interface FilmTransportProps {
+  /** Extra classes on the block — the room passes its pointer-events state. */
+  className?: string;
   title: string;
   subtitle: string | null;
   /** 1-based position of the playing point in the walked sequence, and its size. */
@@ -101,7 +103,12 @@ export interface FilmTransportProps {
  */
 export function FilmTransport(p: FilmTransportProps) {
   return (
-    <div className="absolute inset-x-0 bottom-0 flex flex-col gap-[9px] px-6 pb-3.5">
+    <div
+      className={cn(
+        "absolute inset-x-0 bottom-0 flex flex-col gap-[9px] px-6 pb-3.5",
+        p.className,
+      )}
+    >
       <div className="flex items-end gap-3 pb-px">
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate text-[12px] font-medium text-white">
