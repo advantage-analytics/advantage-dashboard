@@ -43,8 +43,9 @@ test("shots are placed on the film clock in time order, untimed ones dropped", (
   expect(stops.map((s) => s.shot.id)).toEqual(["s1", "s2", "s3", "t1"]);
   expect(stops[0].start).toBeCloseTo(50, 6);
   expect(stops[0].end).toBeCloseTo(51.2, 6);
-  // The last shot of a point runs to the point's end (65 + 6 - 15 = 56).
-  expect(stops[2].end).toBeCloseTo(56, 6);
+  // The last shot of a point runs to the point's padded end
+  // (65 + 6 - 15 = 56, plus the 1.5s run-out).
+  expect(stops[2].end).toBeCloseTo(57.5, 6);
 });
 
 test("the playing shot, and nothing in the dead time between points", () => {

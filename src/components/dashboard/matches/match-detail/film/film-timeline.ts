@@ -21,6 +21,9 @@ import type { MatchPoint } from "@/lib/data/match-points-server";
 /** Fallback window for a point the source never timed, in seconds. */
 export const ASSUMED_POINT_SECONDS = 10;
 
+/** Lead-in before a point's serve and run-out after its end, in seconds. */
+export const POINT_BUFFER_SECONDS = 1.5;
+
 /** The cushion that makes "previous" go back a point instead of re-seeking. */
 const STEP_CUSHION_SECONDS = 0.5;
 
@@ -43,8 +46,10 @@ export function toPointTime(filmTime: number, offset: number): number {
 /** A point placed on the film's clock. */
 export interface FilmStop {
   point: MatchPoint;
-  /** Film seconds where the point starts. */
+  /** Film seconds where the point's window opens (the serve, less the buffer). */
   start: number;
+  /** Film seconds of serve contact — the point's own recorded start. */
+  serve: number;
   /** Film seconds where its window ends — see `filmStops` for the rule. */
   end: number;
 }
@@ -52,12 +57,21 @@ export interface FilmStop {
 /**
  * Every timed point, in film order, each with its window.
  *
- * A window ends at the point's own recorded `duration` when there is one (the
- * real length of the rally), otherwise at the next point's start (so the
- * progress rule still advances on a source that timed starts but not
- * lengths), otherwise `ASSUMED_POINT_SECONDS`. Built from ALL points rather
- * than the filtered cut: the playhead is somewhere in the match whether or
- * not the current filter admits the point it is inside.
+ * The point itself runs from its recorded start to its own `duration` when
+ * there is one (the real length of the rally), otherwise to the next point's
+ * start (so the progress rule still advances on a source that timed starts
+ * but not lengths), otherwise `ASSUMED_POINT_SECONDS`.
+ *
+ * The window is that span padded by `POINT_BUFFER_SECONDS` on both sides, so a
+ * jump lands just before the serve and the point plays out past its last ball.
+ * Every consumer — seeks, the playing row, its progress rule, next/previous,
+ * dead-time skipping, loop — walks the padded window. The pad never runs past
+ * film zero, and a window's end never runs past the next window's start, so
+ * windows never overlap.
+ *
+ * Built from ALL points rather than the filtered cut: the playhead is
+ * somewhere in the match whether or not the current filter admits the point
+ * it is inside.
  */
 export function filmStops(points: MatchPoint[], offset: number): FilmStop[] {
   const timed = points
@@ -65,16 +79,26 @@ export function filmStops(points: MatchPoint[], offset: number): FilmStop[] {
     .slice()
     .sort((a, b) => a.videoTime - b.videoTime);
 
+  const paddedStart = (videoTime: number) =>
+    Math.max(0, toFilmTime(videoTime, offset) - POINT_BUFFER_SECONDS);
+
   return timed.map((point, i) => {
-    const start = toFilmTime(point.videoTime, offset);
+    const serve = toFilmTime(point.videoTime, offset);
+    const start = paddedStart(point.videoTime);
     const next = timed[i + 1];
+    const nextStart = next ? paddedStart(next.videoTime) : Infinity;
     const end =
       point.duration && point.duration > 0
-        ? start + point.duration
+        ? serve + point.duration + POINT_BUFFER_SECONDS
         : next
-          ? toFilmTime(next.videoTime, offset)
-          : start + ASSUMED_POINT_SECONDS;
-    return { point, start, end: Math.max(end, start) };
+          ? nextStart
+          : serve + ASSUMED_POINT_SECONDS + POINT_BUFFER_SECONDS;
+    return {
+      point,
+      start,
+      serve,
+      end: Math.max(Math.min(end, nextStart), start),
+    };
   });
 }
 
@@ -179,7 +203,9 @@ export function breakSegments(
     if (!next) return;
     const broke =
       game.last.point.wonByPlayer1 !== game.first.point.serverIsPlayer1;
-    if (broke) cuts.push(next.first.start);
+    // At the next game's serve, not its lead-in: the buffer is playback
+    // comfort, the break is a fact about when the game changed hands.
+    if (broke) cuts.push(next.first.serve);
   });
 
   const segments: TrackSegment[] = [];

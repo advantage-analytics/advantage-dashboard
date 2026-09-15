@@ -38,9 +38,24 @@ test.describe("film clock", () => {
   test("stops drop untimed points and window on duration, then next start, then a default", () => {
     const stops = filmStops(points, OFFSET);
     expect(stops.map((s) => s.point.id)).toEqual(["a", "b", "c", "d"]);
-    expect(stops[0].end - stops[0].start).toBeCloseTo(16.4, 6);
+    // 1.5s before serve contact, 1.5s after the point's own end.
+    expect(stops[0].start).toBeCloseTo(3.164 - 1.5, 3);
+    expect(stops[0].end - stops[0].start).toBeCloseTo(16.4 + 3, 6);
     expect(stops[2].end).toBeCloseTo(stops[3].start, 6);
-    expect(stops[3].end - stops[3].start).toBe(10);
+    expect(stops[3].end - stops[3].start).toBeCloseTo(10 + 3, 6);
+  });
+
+  test("the buffer never runs before film zero or into the next point", () => {
+    const stops = filmStops(
+      [
+        pt({ id: "early", videoTime: 16, duration: 2, gameNumber: 1 }),
+        pt({ id: "close", videoTime: 20, duration: 1, gameNumber: 1 }),
+      ],
+      OFFSET,
+    );
+    expect(stops[0].start).toBe(0);
+    // early ends at 0.864 + 2 + 1.5 = 4.364, but close opens at 4.864 - 1.5.
+    expect(stops[0].end).toBeCloseTo(stops[1].start, 6);
   });
 
   test("the active stop is the last one started, with clamped progress", () => {
@@ -48,7 +63,7 @@ test.describe("film clock", () => {
     expect(activeStopAt(stops, 1)).toBeNull();
     // A seek that lands a few ms early still counts as reaching the point.
     expect(activeStopAt(stops, stops[0].start - 0.03)?.stop.point.id).toBe("a");
-    const mid = activeStopAt(stops, stops[0].start + 8.2);
+    const mid = activeStopAt(stops, stops[0].start + 9.7);
     expect(mid?.stop.point.id).toBe("a");
     expect(mid?.progress).toBeCloseTo(0.5, 6);
     const late = activeStopAt(stops, stops[1].start - 1);
