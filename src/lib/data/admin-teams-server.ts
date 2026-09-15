@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
@@ -30,10 +31,31 @@ export interface AdminTeamsFilters {
   /**
    * Case-insensitive prefix match on `school_name` — the same shape the
    * directory's own prefix index (`programs_school_name_prefix_idx`) is built
-   * for. Nothing else on this row is exposed as a filter yet; add one only
-   * once a screen actually needs it.
+   * for.
    */
   search?: string;
+  /**
+   * The three column facets the Teams table actually draws, added by T12 when
+   * the page grew a filter panel. All three are **raw column values**, not the
+   * display labels the row carries: `division` is `'D1'`, never `'D-I'` — the
+   * row's `division` field has already been through `divisionLabel()`, and
+   * filtering on that string would match nothing.
+   *
+   * Single-select each (`string`, not `string[]`): the panel offers one choice
+   * per facet, and a multi-select would need `.in()` here plus an array-shaped
+   * URL param for no benefit the console has asked for. Omitted or empty means
+   * "any".
+   */
+  division?: string;
+  conference?: string;
+  state?: string;
+}
+
+/** The value sets the filter panel offers, read once from the directory. */
+export interface AdminTeamsFacets {
+  divisions: string[];
+  conferences: string[];
+  states: string[];
 }
 
 export interface AdminTeamsQuery {
@@ -467,6 +489,12 @@ export async function listAdminTeams({
     query = query.ilike("school_name", `${search}%`);
   }
 
+  // Raw column values (see `AdminTeamsFilters`). Each is a plain equality, so
+  // a cursor page and its first page narrow identically.
+  if (filters?.division) query = query.eq("division", filters.division);
+  if (filters?.conference) query = query.eq("conference", filters.conference);
+  if (filters?.state) query = query.eq("state", filters.state);
+
   if (cursor) {
     const name = pgQuoteValue(cursor.schoolName);
     query = ascending
@@ -516,3 +544,64 @@ export async function listAdminTeams({
 
   return { rows, nextCursor };
 }
+
+// ---------------------------------------------------------------------------
+// Facet values for the filter panel (T12)
+// ---------------------------------------------------------------------------
+
+/**
+ * Every distinct division / conference / state in the directory, sorted.
+ *
+ * One read of three small columns over ~1,940 rows rather than three
+ * `SELECT DISTINCT`s: PostgREST has no `distinct` operator, so each of those
+ * would have to be an RPC, and three new database functions to populate one
+ * popover is not a trade worth making at this size. The rows are deduplicated
+ * here instead, and `cache()` collapses the repeat calls a single render makes
+ * (page body + any component that asks again) into one round trip.
+ *
+ * Raw values, deliberately — `divisionLabel()` is applied at the point of
+ * display, because these strings go back out as `?division=` and have to match
+ * the column (see `AdminTeamsFilters`).
+ */
+export const listAdminTeamFacets = cache(
+  async (): Promise<AdminTeamsFacets> => {
+    await requireAdminOrNotFound();
+    const admin = createAdminClient();
+
+    const { data, error } = await admin
+      .from("programs")
+      .select("division, conference, state");
+
+    if (error) {
+      console.error("[admin teams] could not read facet values", {
+        error: error.message,
+      });
+      return { divisions: [], conferences: [], states: [] };
+    }
+
+    const divisions = new Set<string>();
+    const conferences = new Set<string>();
+    const states = new Set<string>();
+    for (const row of (data ?? []) as {
+      division: string | null;
+      conference: string | null;
+      state: string | null;
+    }[]) {
+      if (row.division) divisions.add(row.division);
+      if (row.conference) conferences.add(row.conference);
+      if (row.state) states.add(row.state);
+    }
+
+    // Divisions sort by their display label so the panel reads
+    // D-I · D-II · D-III · NAIA · JUCO rather than by raw code, which is the
+    // same order here but would not be if a code were ever renamed.
+    const byLabel = (a: string, b: string) =>
+      (divisionLabel(a) ?? a).localeCompare(divisionLabel(b) ?? b);
+
+    return {
+      divisions: [...divisions].sort(byLabel),
+      conferences: [...conferences].sort((a, b) => a.localeCompare(b)),
+      states: [...states].sort((a, b) => a.localeCompare(b)),
+    };
+  },
+);

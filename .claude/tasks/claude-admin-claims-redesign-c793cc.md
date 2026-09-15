@@ -187,7 +187,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T12 · Teams page: content, approve-pilot popover, admin search
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T8, T11
 - **files:** src/app/admin/teams/page.tsx, src/components/admin/teams-page-content.tsx, src/components/admin/approve-pilot-popover.tsx, src/components/admin/admin-search.tsx, src/lib/data/admin-search-server.ts

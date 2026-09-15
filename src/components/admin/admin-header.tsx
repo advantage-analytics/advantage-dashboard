@@ -3,8 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search } from "lucide-react";
 import { AdminAccountMenu } from "@/components/admin/admin-account-menu";
+import { AdminSearch } from "@/components/admin/admin-search";
 
 /**
  * The admin area's chrome.
@@ -99,20 +99,9 @@ export function AdminHeader({
 
       {/* Search · account */}
       <div className="flex items-center justify-end gap-2">
-        {/* The slot exists; `AdminSearch` fills it. Held rather than hidden,
-            so the bar's geometry is the one the wired version lands into. */}
-        <button
-          type="button"
-          disabled
-          className="flex h-7 cursor-pointer items-center gap-1.5 rounded-[var(--radius-element)] px-2 transition-colors duration-200 hover:bg-[var(--surface-subtle)] disabled:pointer-events-none disabled:opacity-50"
-        >
-          <Search
-            className="size-3.5 text-[var(--ink-500)]"
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-          <span className="text-[12px] text-[var(--ink-600)]">Search</span>
-        </button>
+        {/* T8 held this slot with a disabled twin so the bar's geometry would
+            be the one the wired version landed into; T12 lands it. */}
+        <AdminSearch />
         <AdminAccountMenu
           name={viewer.name}
           email={viewer.email}
