@@ -112,7 +112,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T7 · Shared primitives: ViewPills, extracted vertical stepper, plan-pill tokens
 
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **files:** src/components/admin/view-pills.tsx, src/components/dashboard/shared/vertical-steps.tsx, src/components/dashboard/matches/new-match-wizard/UploadMatchSuccess.tsx, src/components/admin/plan-pills.tsx, src/styles/design-system/colors.css
 - **done when:**
