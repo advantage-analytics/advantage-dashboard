@@ -34,7 +34,7 @@ export function ApproveChip({
   onClick,
   disabled,
 }: {
-  onClick: () => void;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
   disabled?: boolean;
 }) {
   return (

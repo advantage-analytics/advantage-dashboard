@@ -136,7 +136,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
   - [ ] A 28px ghost Search trigger (icon + the word "Search", no bare-icon button) that will open `AdminSearch` (stubbed/wired in T12 — acceptable to leave as a no-op or `disabled` placeholder here if T12 hasn't landed yet, but the visual slot exists)
   - [ ] `AdminAccountMenu`: `PersonAvatar` + `FloatMenu`/`FloatMenuItem`/`FloatMenuDivider` (`src/components/ui/float-menu.tsx`) containing "Back to the dashboard" (→ `/dashboard`) and "Sign out" behind a `ConfirmDialog`, calling `createClient().auth.signOut({ scope: "local" })` exactly as `src/components/dashboard/logout-dialog.tsx` does
   - [ ] Body background is `--surface-page`; `<main>` capped at a reasonable max width (1200px) with standard page padding
-  - [ ] All four tab routes (even as placeholders from T9) render inside this shell for a real admin session; a non-admin gets 404; radius written only as `rounded-[var(--radius-*)]`; no `focus-visible:ring-*` utilities
+  - [ ] All four tab routes (even as placeholders from T9) render inside this shell for a real admin session; a non-admin gets 404; radius written only via `--radius-*` tokens (e.g. `rounded-[var(--radius-element)]`), never a bare Tailwind radius utility; no `focus-visible:ring` utilities
 
 ## T9 · Placeholders, redirects, deletions, MAP + drift seed
 
@@ -172,7 +172,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T11 · Teams table component
 
-- **status:** blocked
+- **status:** done
 - **model:** sonnet
 - **needs:** T7, T10
 - **files:** src/components/admin/teams-table-layout.ts, src/components/admin/teams-table.tsx
