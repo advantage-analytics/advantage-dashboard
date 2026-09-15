@@ -201,7 +201,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T13 · Requests list loader
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T3, T6
 - **files:** src/lib/data/admin-requests-server.ts
