@@ -68,7 +68,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T4 · RPCs: admin gates on existing functions + two new admin-only RPCs
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** supabase/migrations/20260914100200_admin_program_rpcs.sql
