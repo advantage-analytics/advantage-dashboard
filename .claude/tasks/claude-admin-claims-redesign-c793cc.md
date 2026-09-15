@@ -51,7 +51,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T3 · Schema: claim verification columns + admin query indexes
 
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **files:** supabase/migrations/20260914100100_claim_verification_and_admin_indexes.sql
 - **done when:**
