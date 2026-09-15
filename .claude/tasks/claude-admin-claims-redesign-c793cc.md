@@ -368,7 +368,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T25 · Route smoke tests + final repo-wide verification
 
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **needs:** T9, T12, T15, T19, T21, T22, T23, T24
 - **files:** tests/admin-routes.spec.ts, .env.example
