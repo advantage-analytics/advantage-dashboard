@@ -613,6 +613,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               board={board}
               pointName={activePoint ? activePoint.resultType || "Point" : null}
               collapsed={!chrome}
+              rightInset={panelOpen ? 320 : 0}
             />
 
             <button
