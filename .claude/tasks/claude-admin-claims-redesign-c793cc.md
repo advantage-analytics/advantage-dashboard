@@ -340,7 +340,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T23 · Create team dialog + program-creation action
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4, T6, T12, T20
 - **files:** src/components/admin/create-team-dialog.tsx, src/lib/services/programs/admin-program-actions.ts, src/lib/services/email/templates/claim.ts

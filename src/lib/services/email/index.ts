@@ -25,6 +25,7 @@
  * | Claim approved           | `approveClaim()`, to the claimant — WIRED       |
  * | Claim declined           | `rejectClaim()` / `handBackClaim()`, to the claimant — WIRED |
  * | Claim objection notice   | nothing — the announced claim was cut           |
+ * | Program claim invite     | `createProgram()` — an admin seeded a college row for a coach with no account — WIRED |
  * | Invite request received  | `requestInvite()`, to a signed-in requester's own address — WIRED |
  * | Join request owner notice | `requestInvite()` on a NEW open row, to the program owner · pref `notifyTeamActivity` — WIRED |
  * | Member joined            | every accept path in `join-actions.ts`, to the program owner · pref `notifyTeamActivity` — WIRED |
@@ -125,11 +126,13 @@ export {
   claimApprovedEmail,
   claimDeclinedEmail,
   claimObjectionNoticeEmail,
+  programClaimInviteEmail,
   type ClaimVerifyAddressInput,
   type ClaimVerifyIdentityInput,
   type ClaimApprovedInput,
   type ClaimDeclinedInput,
   type ClaimObjectionNoticeInput,
+  type ProgramClaimInviteInput,
 } from "./templates/claim";
 
 export {

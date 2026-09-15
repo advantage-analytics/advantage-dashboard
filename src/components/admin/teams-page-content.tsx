@@ -9,6 +9,7 @@ import {
   ApprovePilotPopover,
   type ApprovePilotTarget,
 } from "@/components/admin/approve-pilot-popover";
+import { CreateTeamDialog } from "@/components/admin/create-team-dialog";
 import { loadMoreAdminTeams } from "@/components/admin/teams-actions";
 import {
   FilterTrigger,
@@ -439,35 +440,25 @@ function FacetSection({
 }
 
 /**
- * The page's primary.
+ * The page's primary, and the dialog behind it.
  *
- * T23 builds the real dialog and the program-creation action behind it. Until
- * then the button exists and says why nothing happens when pressed, rather
- * than being absent — a title slot that grows a primary later is a title slot
- * that changes shape later.
+ * The dialog owns its own reset and its own two steps, so all this holds is
+ * whether it is open.
  */
 function CreateTeamButton() {
   const [open, setOpen] = useState(false);
   return (
-    <FloatMenu
-      open={open}
-      onOpenChange={setOpen}
-      label="Create team"
-      width={240}
-      trigger={
-        <button
-          type="button"
-          aria-expanded={open}
-          className={advButton("primary", "md")}
-        >
-          Create team
-        </button>
-      }
-    >
-      <p className="px-2.5 py-2 text-[12px] leading-[1.5] text-[var(--ink-600)]">
-        Creating a program from the console isn&rsquo;t wired up yet. A coach
-        claiming their school is still the only route in.
-      </p>
-    </FloatMenu>
+    <>
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        className={advButton("primary", "md")}
+        onClick={() => setOpen(true)}
+      >
+        Create team
+      </button>
+      <CreateTeamDialog open={open} onOpenChange={setOpen} />
+    </>
   );
 }
