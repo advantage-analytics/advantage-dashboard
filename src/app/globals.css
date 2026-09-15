@@ -4,6 +4,14 @@
    below. See src/styles/design-system/index.css for what was adapted on import. */
 @import "../styles/design-system/index.css";
 
+/* Tailwind v4's automatic content detection otherwise walks the whole repo
+   (anything not .gitignore'd), including tracked task docs under
+   .claude/tasks/. A code-snippet placeholder there once read literally as
+   `rounded-[var(--radius-*)]`, which Tailwind tried to synthesize into a real
+   utility and lightningcss failed to parse (a bare `*` inside `var()`),
+   500-ing every route. Excluding .claude/ keeps prose out of the class scan. */
+@source not "../../.claude";
+
 /* shadcn's oklch colour layer was removed here: it was a SECOND palette
    competing with the design system's own (--ink-*, --surface-*, --blue*), it
    painted `--primary` black where advButton() is Signal Blue, and because it
