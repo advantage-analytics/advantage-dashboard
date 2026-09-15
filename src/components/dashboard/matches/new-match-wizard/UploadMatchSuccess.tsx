@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
-import { Check, ExternalLink, X } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import { formatEta } from "@/lib/data/match-analysis";
@@ -18,6 +18,10 @@ import {
   type MatchStatsState,
 } from "@/hooks/use-match-stats-ready";
 import { AnalysisProgressTrack } from "../analysis-progress-track";
+import {
+  VerticalStep,
+  type StepState,
+} from "@/components/dashboard/shared/vertical-steps";
 import type { EventPreset } from "./types";
 import type { CreatedMatch, UploadState } from "./upload-progress";
 import { formatFileSize } from "./utils";
@@ -87,13 +91,15 @@ export function UploadMatchSuccess({
 
         <ol className="mt-9 flex flex-col" aria-label="Progress">
           {view.steps.map((step, index) => (
-            <Step
+            <VerticalStep
               key={step.key}
-              step={step}
+              label={step.label}
+              state={step.state}
+              value={step.value}
               last={index === view.steps.length - 1}
             >
               {stepBody(step.key, view, match, upload, onResubmitted)}
-            </Step>
+            </VerticalStep>
           ))}
         </ol>
 
@@ -145,7 +151,6 @@ export function UploadMatchSuccess({
 // ── View model ─────────────────────────────────────────────────────────────
 
 type StepKey = "saved" | "video" | "analysis";
-type StepState = "done" | "now" | "later" | "fail";
 
 interface StepView {
   key: StepKey;
@@ -491,112 +496,6 @@ function stepBody(
   }
 
   return null;
-}
-
-function Step({
-  step,
-  last,
-  children,
-}: {
-  step: StepView;
-  last: boolean;
-  children: ReactNode;
-}) {
-  const hasBody = Boolean(children);
-  return (
-    <li
-      className="flex gap-3.5"
-      aria-current={step.state === "now" ? "step" : undefined}
-    >
-      <div className="flex w-4 shrink-0 flex-col items-center pt-0.5">
-        <StepMark state={step.state} />
-        {!last && (
-          <div
-            aria-hidden="true"
-            className={cn(
-              "my-1.5 w-px flex-1",
-              step.state === "done"
-                ? "bg-[var(--ink-200)]"
-                : "bg-[var(--border-hairline)]",
-            )}
-          />
-        )}
-      </div>
-      <div
-        className={cn(
-          "flex min-w-0 flex-1 flex-col gap-2.5",
-          last ? "" : hasBody ? "pb-7" : "pb-5",
-        )}
-      >
-        <div className="flex items-center justify-between gap-4">
-          <span
-            className="text-[13px] leading-5"
-            style={{ color: LABEL_INK[step.state] }}
-          >
-            {step.label}
-          </span>
-          {step.value && (
-            <span className="text-[13px] text-[var(--ink-700)] tabular-nums">
-              {step.value}
-            </span>
-          )}
-        </div>
-        {children}
-      </div>
-    </li>
-  );
-}
-
-/** Inline colour: DS type classes are unlayered and beat Tailwind utilities. */
-const LABEL_INK: Record<StepState, string> = {
-  done: "var(--ink-600)",
-  now: "var(--ink-900)",
-  later: "var(--ink-400)",
-  fail: "var(--ink-900)",
-};
-
-function StepMark({ state }: { state: StepState }) {
-  switch (state) {
-    case "done":
-      return (
-        <span className="flex size-4 items-center justify-center rounded-full bg-[var(--ink-100)]">
-          <Check
-            className="size-2.5 text-[var(--ink-600)]"
-            strokeWidth={2.25}
-            aria-hidden="true"
-          />
-          <span className="sr-only">Done:</span>
-        </span>
-      );
-    case "now":
-      // Ink, not blue: blue stays on the bar and the one button.
-      return (
-        <span
-          className="size-4 animate-spin rounded-full border-[1.5px] border-[var(--ink-200)] border-t-[var(--ink-900)] motion-reduce:animate-none"
-          role="status"
-        >
-          <span className="sr-only">In progress:</span>
-        </span>
-      );
-    case "fail":
-      return (
-        <span className="flex size-4 items-center justify-center rounded-full bg-[rgba(229,24,55,0.08)]">
-          <X
-            className="size-2.5 text-[var(--danger)]"
-            strokeWidth={2.25}
-            aria-hidden="true"
-          />
-          <span className="sr-only">Failed:</span>
-        </span>
-      );
-    case "later":
-      // Dashed means waiting for something real.
-      return (
-        <span className="size-4 rounded-full border-[1.5px] border-dashed border-[var(--ink-300)]">
-          <span className="sr-only">Not started:</span>
-        </span>
-      );
-  }
 }
 
 /**

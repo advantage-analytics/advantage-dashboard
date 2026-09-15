@@ -123,6 +123,13 @@
   --warning-bg:#FFFBEB;
   --warning-border:#FDE68A;
   --warning-text:#92400E;
+  /* Pilot — the admin plan-pill tag for a team account's free pilot seat
+     (T7, admin console). Same bg/text shape as the warning triple above, no
+     border half: it names a plan, not a caution. Violet, not blue — v3
+     reserves blue-tinted pills for "New" alone (see SKILL.md), so this new
+     plan tag needed its own hue rather than a second blue. */
+  --pilot-bg:#F5F3FF;
+  --pilot-text:#6D28D9;
   --danger:#E51837;
   --danger-hover:#C41530;
   --danger-tint-15:rgba(229,24,55,0.15);
