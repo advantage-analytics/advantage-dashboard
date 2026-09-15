@@ -56,8 +56,8 @@
  *    people who never signed up, it reads like phishing, and it burns the
  *    sending domain the invitations depend on. The template stays because the
  *    decision could be revisited with real consent; the header on the admin
- *    requests page (`src/app/admin/requests/page.tsx`, née `/admin/claims`)
- *    is where it was made.
+ *    requests page (`src/app/admin/requests/page.tsx`, formerly the
+ *    claims-review page) is where it was made.
  *  - **"Claim approved" fires on the reviewed path only.** A claim that matches
  *    a recorded staff contact skips review entirely and lands live inside
  *    `complete_program_claim`, with the claimant already looking at their
