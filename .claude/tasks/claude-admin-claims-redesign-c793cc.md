@@ -228,7 +228,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T15 · Requests drawer + selection state machine
 
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T7, T14
 - **files:** src/components/admin/requests-page-content.tsx, src/components/admin/request-drawer.tsx
