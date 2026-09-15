@@ -538,7 +538,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
         onPointerMove={wake}
         onPointerDown={wake}
         onFocus={wake}
-        className="fixed inset-0 z-50 overflow-hidden bg-black outline-none"
+        className="fixed inset-0 z-50 overflow-clip bg-black outline-none"
       >
         {failed ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">

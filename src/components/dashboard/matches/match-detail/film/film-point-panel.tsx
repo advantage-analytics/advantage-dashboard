@@ -168,15 +168,26 @@ export function FilmPointPanel({
 
   // Keep the playing row in view as the film moves on, without fighting a
   // user who is scrolling the list themselves.
+  //
+  // Scrolls the list ONLY. `scrollIntoView` also scrolls every ancestor, and
+  // while the drawer is still off-canvas (mid-slide) that dragged the whole
+  // room — video included — sideways toward the row.
   useEffect(() => {
-    if (!listRef.current) return;
+    const list = listRef.current;
+    if (!list) return;
     const selector = showShots
       ? activeShotId && `[data-shot-id="${activeShotId}"]`
       : activePointId && `[data-point-id="${activePointId}"]`;
     if (!selector) return;
-    listRef.current
-      .querySelector<HTMLElement>(selector)
-      ?.scrollIntoView({ block: "nearest" });
+    const row = list.querySelector<HTMLElement>(selector);
+    if (!row) return;
+    const listBox = list.getBoundingClientRect();
+    const rowBox = row.getBoundingClientRect();
+    if (rowBox.top < listBox.top) {
+      list.scrollTop += rowBox.top - listBox.top;
+    } else if (rowBox.bottom > listBox.bottom) {
+      list.scrollTop += rowBox.bottom - listBox.bottom;
+    }
   }, [activePointId, activeShotId, showShots]);
 
   return (
