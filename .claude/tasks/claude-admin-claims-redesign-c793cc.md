@@ -172,7 +172,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T11 · Teams table component
 
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **needs:** T7, T10
 - **files:** src/components/admin/teams-table-layout.ts, src/components/admin/teams-table.tsx
