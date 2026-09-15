@@ -76,6 +76,10 @@ export function FilmScoreboard({
     board: BoardSize;
     room: BoardSize;
   } | null>(null);
+  // Glides only once the board has been placed: the first measurement puts a
+  // remembered spot straight where it belongs instead of flying it in from
+  // the top-left fallback every time the room opens.
+  const [placed, setPlaced] = useState(false);
   // The free position under the pointer, only while dragging.
   const [dragAt, setDragAt] = useState<BoardPosition | null>(null);
   const drag = useRef<{
@@ -83,6 +87,17 @@ export function FilmScoreboard({
     pointerY: number;
     start: BoardPosition;
   } | null>(null);
+
+  // When the drawer closes, the right-hand spots come back — but the sheet is
+  // still sliding out over them. Holding the board's return a beat keeps it
+  // from gliding underneath the leaving drawer. Derived during render from the
+  // change in `rightInset`; any move of the board's own clears it.
+  const [lastInset, setLastInset] = useState(rightInset);
+  const [holdReturn, setHoldReturn] = useState(false);
+  if (rightInset !== lastInset) {
+    setLastInset(rightInset);
+    setHoldReturn(rightInset < lastInset);
+  }
 
   const insets: BoardInsets = {
     ...BASE_BOARD_INSETS,
@@ -99,10 +114,14 @@ export function FilmScoreboard({
         room: { width: room.clientWidth, height: room.clientHeight },
       });
     measure();
+    const frame = requestAnimationFrame(() => setPlaced(true));
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     observer.observe(room);
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, []);
 
   const resting = sizes
@@ -119,6 +138,7 @@ export function FilmScoreboard({
       : null;
 
   const settle = useCallback((next: BoardAnchor, persist: boolean) => {
+    setHoldReturn(false);
     setAnchor(next);
     try {
       if (persist) localStorage.setItem(BOARD_POSITION_STORAGE_KEY, next);
@@ -174,10 +194,18 @@ export function FilmScoreboard({
           } catch {
             /* not capturable */
           }
+          // Start from where the board is on screen, not its resting spot:
+          // grabbed mid-glide, it must not jump to the end of the glide.
+          const box = e.currentTarget.getBoundingClientRect();
+          const roomBox = (
+            e.currentTarget.offsetParent as HTMLElement | null
+          )?.getBoundingClientRect();
           drag.current = {
             pointerX: e.clientX,
             pointerY: e.clientY,
-            start: position,
+            start: roomBox
+              ? { left: box.left - roomBox.left, top: box.top - roomBox.top }
+              : position,
           };
         }}
         onPointerMove={(e) => {
@@ -227,7 +255,13 @@ export function FilmScoreboard({
         }}
         className={cn(
           "absolute flex touch-none flex-col items-start gap-2 rounded-[var(--radius-element)] select-none focus-visible:outline-none",
-          dragAt ? "cursor-grabbing" : cn("cursor-grab", sizes && SETTLE_CLASS),
+          dragAt
+            ? "cursor-grabbing"
+            : cn(
+                "cursor-grab",
+                placed && SETTLE_CLASS,
+                holdReturn && "delay-[180ms]",
+              ),
         )}
         style={{ left: position.left, top: position.top }}
       >
