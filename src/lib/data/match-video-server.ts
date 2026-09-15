@@ -4,28 +4,25 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   mintPlaybackSas,
   resolveAzureStorageConfig,
+  videoContainerClient,
 } from "@/lib/services/splitstep/video-url/azure-sas";
+
+import { choosePlaybackFile, type PlaybackChoice } from "./match-video-choice";
 
 /**
  * The match video, if there is one and the viewer may watch it.
  *
- * The pipeline has kept a video since the trimmed-capture work landed and
- * nothing has ever rendered it: `MatchVideoPanel` was orphaned and built for
- * the upload flow, and the `matches/[matchId]/video/` route CLAUDE.md once
- * described never existed. The asset was secured and unshown.
- *
- * ── What the file actually is ───────────────────────────────────────────────
- * The vendor's "trimmed" video is the `StartTime`/`EndTime` window from our own
- * job request, re-encoded — not dead time removed, no overlays, no rally cut.
- * Measured at 5181.268s against a submitted 5181.207s window. So it is called
- * the match video and nothing more; anything promising a highlight reel would
- * be describing a file that does not exist.
+ * ── Which file ──────────────────────────────────────────────────────────────
+ * Our own upload when it still exists, the vendor's re-encode otherwise — the
+ * rule and its clock live in `match-video-choice.ts`. Either way it is the
+ * match video and nothing more: no dead time removed, no overlays, no rally
+ * cut, so nothing may call it a highlight reel.
  *
  * ── Access ──────────────────────────────────────────────────────────────────
  * The ownership check is a SELECT on `matches` through the CALLER's client, so
  * `visible_match_ids()` answers it — creator, either player, or program
  * membership under the roster-visible rule. Only after that does the admin
- * client read the object key, because `processing_jobs` is service-role
+ * client read the object keys, because `processing_jobs` is service-role
  * territory and a key is not something to hand out before the row above it has
  * said yes.
  */
@@ -35,17 +32,16 @@ export interface MatchVideo {
   url: string;
   expiresAt: string;
   /**
-   * Where this file starts inside the ORIGINAL recording, in seconds.
-   *
-   * `points.video_time` / `shots.video_time` are original-video seconds by
-   * design (`derivation/parse.ts`), but the only playable file is the vendor's
-   * trimmed copy, whose t=0 is the job's `start_time_seconds`. Every seek has
-   * to subtract this or it lands late by exactly the trim — 15s on the first
-   * real match, which read as "the serve is already over". `film-timeline.ts`
-   * is the one place the conversion happens.
+   * Seconds to subtract from `points.video_time` to seek in THIS file — 0 for
+   * our own upload, the job's `start_time_seconds` for the vendor's re-encode.
+   * `film-timeline.ts` is the one place the conversion happens.
    */
   startTimeSeconds: number;
+  source: PlaybackChoice["source"];
 }
+
+/** Newest few jobs are plenty: a match is resubmitted a handful of times at most. */
+const JOBS_CONSIDERED = 5;
 
 export const getMatchVideo = cache(async function getMatchVideo(
   matchId: string,
@@ -53,7 +49,7 @@ export const getMatchVideo = cache(async function getMatchVideo(
   // Without storage credentials there is nothing to sign, and this is a normal
   // state on a deployment that has never run a video job. Returning null keeps
   // the page rendering rather than throwing on a match that never had one.
-  if (!resolveAzureStorageConfig()) return null;
+  if (!resolveAzureStorageConfig().ok) return null;
 
   const supabase = await createClient();
 
@@ -67,28 +63,32 @@ export const getMatchVideo = cache(async function getMatchVideo(
   if (!match) return null;
 
   const admin = createAdminClient();
-  const { data: job } = await admin
+  const { data: jobs } = await admin
     .from("processing_jobs")
-    .select("trimmed_object_key, start_time_seconds")
+    .select("video_object_key, trimmed_object_key, start_time_seconds")
     .eq("match_id", matchId)
-    .not("trimmed_object_key", "is", null)
-    // A resubmitted match has several jobs; the newest trimmed copy is the one
-    // matching whatever analysis the page is showing.
+    .or("video_object_key.not.is.null,trimmed_object_key.not.is.null")
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const blobName = job?.trimmed_object_key as string | undefined;
-  if (!blobName) return null;
-  const start = Number(job?.start_time_seconds ?? 0);
-  const startTimeSeconds = Number.isFinite(start) && start > 0 ? start : 0;
+    .limit(JOBS_CONSIDERED);
 
   try {
-    const { playbackUrl, expiresAt } = mintPlaybackSas({ blobName });
+    const container = videoContainerClient();
+    const choice = await choosePlaybackFile(jobs ?? [], (blobName) =>
+      container
+        .getBlockBlobClient(blobName)
+        .exists()
+        .catch(() => false),
+    );
+    if (!choice) return null;
+
+    const { playbackUrl, expiresAt } = mintPlaybackSas({
+      blobName: choice.blobName,
+    });
     return {
       url: playbackUrl,
       expiresAt: expiresAt.toISOString(),
-      startTimeSeconds,
+      startTimeSeconds: choice.startTimeSeconds,
+      source: choice.source,
     };
   } catch (error) {
     // Signing throws only on a misconfigured account, which is an operator

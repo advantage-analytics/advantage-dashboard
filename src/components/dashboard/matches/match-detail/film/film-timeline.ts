@@ -5,11 +5,13 @@ import type { MatchPoint } from "@/lib/data/match-points-server";
  *
  * Two clocks exist and this file is the only place they meet:
  *
- * - **point time** — `points.video_time`, seconds into the ORIGINAL recording
- *   (`derivation/parse.ts` adds the trim start at ingest, by design);
- * - **film time** — `<video>.currentTime` on the file we actually serve, the
- *   vendor's trimmed copy, whose t=0 is the job's `start_time_seconds`
- *   (`MatchVideo.startTimeSeconds`).
+ * - **point time** — `points.video_time`, seconds on the analysis clock
+ *   (`derivation/parse.ts` adds the job's window start at ingest, by design);
+ * - **film time** — `<video>.currentTime` on the file we actually serve. For
+ *   our own upload that is the same clock (offset 0); for an older match that
+ *   only has the vendor's re-encode, t=0 is the job's `start_time_seconds`.
+ *   `MatchVideo.startTimeSeconds` carries whichever applies — see
+ *   `lib/data/match-video-choice.ts`.
  *
  * Every seek converts point → film, every playhead reading converts film →
  * point. Nothing else in the film subtree may do the arithmetic, because a

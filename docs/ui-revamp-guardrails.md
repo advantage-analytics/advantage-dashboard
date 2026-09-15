@@ -18,17 +18,17 @@ Redesign freely around those.
 Verified against a real job (86 min, vendor job `778912d7`, our job
 `2a11168d`), not a test harness:
 
-|                                  | Evidence                                                 |
-| -------------------------------- | -------------------------------------------------------- |
-| Chunked upload → Azure           | 1.54 GB committed                                        |
-| Auto-submit on upload completion | vendor accepted, `external_job_id` recorded              |
-| `VideoUrl` SAS                   | vendor fetched it                                        |
-| Webhook receipt + HMAC           | 2 deliveries, both `signature_verified: true`            |
-| Signature enforcement            | `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE=true`, suite green  |
-| Results JSON                     | 645 KB → `match-results` bucket                          |
-| Trimmed video capture            | 1.43 GB copied into our container, `copyStatus: success` |
-| Source reclaim                   | 1.54 GB deleted, vendor's SAS neutralised                |
-| Quota                            | reserved to the second; refund on failure tested         |
+|                                  | Evidence                                                                    |
+| -------------------------------- | --------------------------------------------------------------------------- |
+| Chunked upload → Azure           | 1.54 GB committed                                                           |
+| Auto-submit on upload completion | vendor accepted, `external_job_id` recorded                                 |
+| `VideoUrl` SAS                   | vendor fetched it                                                           |
+| Webhook receipt + HMAC           | 2 deliveries, both `signature_verified: true`                               |
+| Signature enforcement            | `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE=true`, suite green                     |
+| Results JSON                     | 645 KB → `match-results` bucket                                             |
+| Trimmed video capture            | 1.43 GB copied into our container, `copyStatus: success`                    |
+| Source reclaim                   | 1.54 GB deleted, vendor's SAS neutralised (policy since retired, see below) |
+| Quota                            | reserved to the second; refund on failure tested                            |
 
 Turnaround was 75 minutes for an 86-minute video. Their results SAS expires
 after ~7 days.
@@ -39,6 +39,14 @@ re-encoded. Not dead time removed, no annotations, no overlays. Submitted window
 5181.207s, returned video 5181.268s. Anything in the UI that offers this file to
 a player should call it the match video, never a highlight or condensed cut —
 for a player who trimmed nothing it is their upload at a lower bitrate.
+
+**Superseded, September 2026:** the vendor copy also arrived with **no audio
+track**. It is no longer downloaded, and the source is no longer deleted. The
+browser now cuts the selected window out of the athlete's own file before upload
+(a remux — `src/lib/video/trim.ts`), the job is sent as `StartTime 0 / EndTime =
+cut length`, and that file is what the film room plays
+(`src/lib/data/match-video-choice.ts`). It is still the match video, never a
+highlight.
 
 ---
 
@@ -120,7 +128,7 @@ src/app/api/splitstep/jobs/route.ts        wiring: clients, deps, the after() bl
 src/app/api/splitstep/jobs/handler.ts      the decision: eligibility, quota, vendor
 src/app/api/splitstep/upload-url/route.ts  wiring: clients, deps, the blob-name write
 src/app/api/splitstep/upload-url/handler.ts  the decision: eligibility, then the SAS
-src/lib/services/splitstep/**              payload build, keys, quota, Azure, reclaim
+src/lib/services/splitstep/**              payload build, keys, quota, Azure
 supabase/migrations/**                     never edit an applied migration
 ```
 
@@ -161,9 +169,13 @@ to `boolean` with a default.** A null coerced to `false` is a wrong answer that
 looks like a real one — see §4.
 
 **The trim window is not cosmetic.** `videoStartSeconds`/`videoEndSeconds` become
-the vendor's `StartTime`/`EndTime` _and_ `billable_seconds`, which is what the
-2-hour monthly cap is charged against. Removing the trim step means every job
-bills the full recording.
+`billable_seconds`, which is what the 2-hour monthly cap is charged against, and
+the file that is uploaded: the browser cuts the video to that window before any
+bytes move, and `submit-match-video.ts` rewrites the job row to `[0, cut length]`
+**before** the terminal `uploaded` write, because auto-submit builds the vendor's
+`StartTime`/`EndTime` from the row. When the file can't be cut, the original goes
+up and the row keeps the window the wizard wrote. Removing the trim step means
+every job bills — and stores — the full recording.
 
 **`useUploadMatchWizard.ts` invariants:**
 
@@ -243,10 +255,12 @@ plausible, and every statistic belongs to the wrong player.
 If a redesign changes how these are asked, keep the _meaning_ identical and
 re-read `job-request.ts`'s header comment first.
 
-**Open question:** our field says "video start", but the vendor analyses from
-`StartTime`. If a trim begins several games in, ends may have changed between
-frame zero and the trim point, and which one they mean is unconfirmed. Trim near
-the start of the match and the ambiguity disappears.
+**Resolved for cut uploads (September 2026):** our field said "video start", but
+the vendor analyses from `StartTime`, and ends may change between frame zero and a
+trim point several games in. A cut upload's frame zero IS the start of the
+selected window, so the answer must describe the window start — the trim step now
+asks it that way. An upload that could not be cut still goes up whole with the
+window as `StartTime`; the vendor's reading of that case remains unconfirmed.
 
 ---
 
@@ -256,10 +270,6 @@ the start of the match and the ambiguity disappears.
 
 - `SPLITSTEP_API_KEY` is set on Vercel **Preview only**. Production submissions
   will 503 until it is added there.
-- Vercel crons run against **Production only**, so `/api/cron/reclaim-videos`
-  never fires on the Preview deployment that serves `advantage-analytics.dev`.
-  Until this reaches Production, run the reclaim by hand:
-  `npx tsx scripts/cleanup-orphan-storage.ts --apply`
 
 **Ask the vendor** (contact: Christian; endpoint `https://splitstep.ngrok.io/jobs`)
 
@@ -286,17 +296,10 @@ the start of the match and the ambiguity disappears.
 - **Wire `GET {BASE_URL}/jobs/{job_id}`.** Three separate moments have wanted it:
   recovering a lost delivery, replacing the `vendor_first_downloaded_at` signal
   the Azure move killed, and answering "has it started yet".
-- **Revisit the source-video delete now that "trimmed" is understood.** The
-  policy retires our 1.54 GB master once the vendor's copy lands, which was
-  written believing that copy was a shorter, better cut. It is the same footage
-  at 2.2 Mbps minus the trim window, so the swap is a downgrade. Options: keep
-  the source, keep whichever is longer, or keep theirs only when the player
-  actually trimmed something. Not urgent — one job has run — but it decides
-  what a player can still be given if Phase 2 ever needs a re-submit.
-- **`trimmedCopyStatus()` cannot distinguish a failed copy from a pending one**
-  (`video-url/azure-sas.ts`) — the catch returns `pending` for a 404. A copy
-  whose blob never materialises looks in-progress forever while
-  `trimmed_video_url` expires.
+- ~~**Revisit the source-video delete now that "trimmed" is understood.**~~
+  **Done, September 2026:** the source is kept, cut to the selected window before
+  upload, and the vendor's copy is no longer downloaded (§1). The
+  `trimmedCopyStatus()` bug that sat here went with the copy.
 - **The untrimmed cost warning keys off the handles, not the cost.**
   `untrimmed = duration > 0 && start <= 0 && end >= duration - 1`, so trimming 15
   seconds off an 87-minute video suppressed a warning about spending 86 of 120

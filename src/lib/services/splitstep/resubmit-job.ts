@@ -17,9 +17,8 @@
  * ── Video recovery, and why there is no "re-stage" branch ────────────────────
  * The planning doc for this feature said to re-stage from "the R2 original"
  * when the SAS was stale. R2 is retired; the only copy of a failed job's video
- * is the Azure blob itself — and nothing deletes it on failure (the webhook's
- * failed branch releases quota and stops; the reclaim sweeper only examines
- * jobs with a trimmed copy, which a failed job never has). Signing a SAS is a
+ * is the Azure blob itself — and nothing deletes it (the source-video reclaim
+ * was retired; only deleting the match removes it). Signing a SAS is a
  * local operation, so the reuse-vs-restage split collapses: if the blob
  * exists, mint a fresh 14-day SAS bound to the child row; if it does not, the
  * job is unrecoverable and says so.

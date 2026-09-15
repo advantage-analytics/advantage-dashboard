@@ -49,8 +49,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // `video` joins the same wave rather than following it: it reads different
   // tables and nothing above depends on it, so awaiting it separately would add
   // a round trip in front of a page that is otherwise ready. It resolves to
-  // null for every imported match and every job that produced no trimmed copy,
-  // which is most of them.
+  // null for every imported match and every video job with no playable file
+  // left (neither our upload nor an older vendor copy), which is most of them.
   const [data, jobs, video] = await Promise.all([
     getMatchDetailData(matchId),
     createClient().then(async (supabase) => {
@@ -169,7 +169,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                   // `source_provider` in `lib/schedule/actions.ts`. Only the
                   // exact `swing-vision` value backs the SwingVision claim;
                   // every other no-video case gets the neutral copy, which is
-                  // true for all of them (splitstep missing its trimmed copy,
+                  // true for all of them (splitstep with no playable file,
                   // a hand-scored match, or any future provider).
                   match.sourceProvider === "swing-vision"
                   ? "note-swingvision"
@@ -186,7 +186,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
           ),
           shots: <ShotsTab />,
           // `video` is the short-lived playback SAS, or null when there is no
-          // trimmed copy to serve — FilmTab renders the 46d empty state for
+          // file to serve — FilmTab renders the 46d empty state for
           // the second case. Points come from `MatchDataProvider`, so the
           // whole tab needs exactly this one prop.
           film: <FilmTab video={video} />,

@@ -30,11 +30,10 @@ import { nextStop, prevStop, type FilmStop } from "./film-timeline";
  * The match video, with the 46c control bar over it (artboard lines 819–844).
  *
  * ── Called the match video, deliberately ────────────────────────────────────
- * The file is the `StartTime`/`EndTime` window from our own job request,
- * re-encoded — not dead time removed, no annotations, no rally-only cut
- * (`ui-revamp-guardrails.md` §1, written after somebody watched it). For a
- * player who trimmed nothing it is their own upload at a lower bitrate, so no
- * string in this subtree calls it a highlight or a condensed match.
+ * The file is the athlete's own upload, cut to the window they selected (or,
+ * on older matches, the vendor's re-encode of that window) — no dead time
+ * removed, no annotations, no rally-only cut (`ui-revamp-guardrails.md` §1).
+ * So no string in this subtree calls it a highlight or a condensed match.
  *
  * ── `preload="metadata"` ────────────────────────────────────────────────────
  * Not `auto`. These are multi-gigabyte files streamed from Azure at roughly
