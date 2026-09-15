@@ -357,7 +357,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T24 · Surface pilot end date in existing usage meters
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T6
 - **files:** src/components/dashboard/settings/teams/program-hours-summary.tsx, src/components/dashboard/matches/new-match-wizard/FooterMeter.tsx

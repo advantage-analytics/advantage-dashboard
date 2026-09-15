@@ -13,6 +13,7 @@ import {
   hoursSeverity,
   usageFraction,
 } from "@/lib/data/usage-format";
+import { formatPilotEnd } from "@/lib/services/splitstep/config";
 import { capitalize, cn } from "@/lib/utils";
 
 /**
@@ -208,8 +209,7 @@ export function ProgramHoursSummary({
           )}
 
           <span className="border-t border-[var(--border-hairline)] pt-3 text-[11px] leading-[1.5] text-[var(--ink-500)]">
-            Hours reserve at submit and reconcile on completion — a failed job
-            gives them back. Players see their own line plus the team total.
+            {`Hours reserve at submit and reconcile on completion — a failed job gives them back. Players see their own line plus the team total. · Pilot ends ${formatPilotEnd()}`}
           </span>
         </div>
       )}
