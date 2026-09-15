@@ -328,7 +328,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T22 · Usage tab
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T18, T19, T20
 - **files:** src/app/admin/teams/[programId]/usage/page.tsx, src/components/dashboard/settings/program-usage-card.tsx, src/lib/services/programs/admin-team-actions.ts

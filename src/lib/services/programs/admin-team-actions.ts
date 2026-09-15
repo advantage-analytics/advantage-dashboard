@@ -14,6 +14,8 @@ import {
 import { programDisplayName } from "@/lib/data/programs-server";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import type { MemberRole } from "@/lib/data/team-settings-server";
+import { getAdminTeam } from "@/lib/data/admin-team-server";
+import { emptyProgramUsage, type ProgramUsage } from "@/lib/data/usage-server";
 
 /**
  * The writes the admin console performs on somebody else's program.
@@ -585,4 +587,34 @@ export async function adminResolveJoinRequest(
 
   revalidatePath(ADMIN_PATH, "layout");
   return invite;
+}
+
+/**
+ * Re-read one program's ledger for a different month, as an admin.
+ *
+ * Mirrors `loadProgramUsage` (`components/dashboard/settings/usage-actions.ts`)
+ * for `ProgramUsageCard`'s month stepper, with the same two changes as every
+ * other action in this file: `requireAdmin()` instead of a membership lookup,
+ * and a program this admin is not a member of has to resolve anyway.
+ *
+ * A read, not a write — nothing here changes a row, so unlike the actions
+ * above there is no `revalidatePath` call.
+ *
+ * Built on `getAdminTeam(programId)`'s `usageByMonth`, not a second
+ * `readUsage` implementation: that function already carries the program's
+ * `orgType` (the processing cap depends on it) and is `cache()`-wrapped, so
+ * calling it here dedupes with the Usage page's own call within the same
+ * request rather than re-querying `programs`.
+ */
+export async function adminLoadProgramUsage(
+  programId: string,
+  month: string,
+): Promise<ProgramUsage> {
+  const admin = await requireAdmin();
+  if (!admin) return emptyProgramUsage(month);
+
+  const data = await getAdminTeam(programId);
+  if (!data) return emptyProgramUsage(month);
+
+  return data.usageByMonth(month);
 }

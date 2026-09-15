@@ -29,6 +29,7 @@ markers is hand-written — edit it as things move.
 | `/admin/teams/[programId]/people` | [`src/app/admin/teams/[programId]/people/page.tsx`](src/app/admin/teams/[programId]/people/page.tsx) |
 | `/admin/teams/[programId]/roster` | [`src/app/admin/teams/[programId]/roster/page.tsx`](src/app/admin/teams/[programId]/roster/page.tsx) |
 | `/admin/teams/[programId]/schedule` | [`src/app/admin/teams/[programId]/schedule/page.tsx`](src/app/admin/teams/[programId]/schedule/page.tsx) |
+| `/admin/teams/[programId]/usage` | [`src/app/admin/teams/[programId]/usage/page.tsx`](src/app/admin/teams/[programId]/usage/page.tsx) |
 | `/admin/teams` | [`src/app/admin/teams/page.tsx`](src/app/admin/teams/page.tsx) |
 | `/admin/uploads` | [`src/app/admin/uploads/page.tsx`](src/app/admin/uploads/page.tsx) |
 | `/claim/[programKey]/object` | [`src/app/claim/[programKey]/object/page.tsx`](src/app/claim/[programKey]/object/page.tsx) |
