@@ -157,7 +157,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T10 · Teams list loader
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T6
 - **files:** src/lib/data/admin-teams-server.ts
