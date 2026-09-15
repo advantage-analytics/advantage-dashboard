@@ -125,7 +125,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T8 · Admin shell: layout, header, account menu
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6, T7
 - **files:** src/app/admin/layout.tsx, src/components/admin/admin-header.tsx, src/components/admin/admin-account-menu.tsx
