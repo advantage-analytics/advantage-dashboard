@@ -100,7 +100,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T6 · Guard module, action revalidation, pilot constants
 
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **files:** src/lib/services/programs/admin-guard.ts, src/lib/services/programs/admin-actions.ts, src/lib/services/splitstep/config.ts
 - **done when:**
