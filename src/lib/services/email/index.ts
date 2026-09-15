@@ -21,6 +21,7 @@
  * | Usage alert (80% / spent) | `reserveQuota()` crosses a line, to owner + coaches · pref `notifyUsageAlerts` — WIRED |
  * | Weekly team digest       | Monday schedule · pref `weeklyTeamDigest` — NOT WIRED, row hidden |
  * | Claim verify address     | signed-in `startClaim()` / `resendClaim()` — WIRED |
+ * | Claim verify identity    | `sendClaimVerification()` — an admin, by hand, from the review queue — WIRED |
  * | Claim approved           | `approveClaim()`, to the claimant — WIRED       |
  * | Claim declined           | `rejectClaim()` / `handBackClaim()`, to the claimant — WIRED |
  * | Claim objection notice   | nothing — the announced claim was cut           |
@@ -37,7 +38,16 @@
  * its action: the row is written first and a failed send is logged, never
  * returned — same shape as `inviteMember`.
  *
- * Four qualifications on that table, each a decision rather than an omission:
+ * Five qualifications on that table, each a decision rather than an omission:
+ *
+ *  - **"Claim verify identity" is the one claim email a person sends by hand,
+ *    and the one that is meant to be sent twice.** Every other row here fires
+ *    from an event; this one fires because an admin looked at a claim they
+ *    could not decide and asked the claimed address to vouch for itself. It
+ *    therefore takes NO `claimSend()` key: that guard exists for triggers that
+ *    can fire twice for one event, where the second send is an accident, and
+ *    here the second send is an admin pressing Resend because the first did
+ *    not arrive. A dedupe key would eat the retry and report success.
  *
  *  - **The objection notice has no caller and is not waiting for one.** The
  *    announced claim — mail to every scraped contact on a program whenever
@@ -111,10 +121,12 @@ export {
 
 export {
   claimVerifyAddressEmail,
+  claimVerifyIdentityEmail,
   claimApprovedEmail,
   claimDeclinedEmail,
   claimObjectionNoticeEmail,
   type ClaimVerifyAddressInput,
+  type ClaimVerifyIdentityInput,
   type ClaimApprovedInput,
   type ClaimDeclinedInput,
   type ClaimObjectionNoticeInput,

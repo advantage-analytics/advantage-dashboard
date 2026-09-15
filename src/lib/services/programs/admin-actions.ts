@@ -8,9 +8,11 @@ import {
   sendEmail,
   claimApprovedEmail,
   claimDeclinedEmail,
+  claimVerifyIdentityEmail,
   inviteRequestDeclinedEmail,
 } from "@/lib/services/email";
 import { claimRoleLabel } from "./claim-roles";
+import { mintVerification, verifyIdentityUrl } from "./claim-verification";
 import {
   addHours,
   nextClaimStatus,
@@ -464,6 +466,156 @@ export async function reopenClaim(
     },
     { onConflict: "program_id,user_id" },
   );
+
+  revalidatePath("/admin", "layout");
+  return { ok: true };
+}
+
+/**
+ * Ask the claimed address to vouch for itself, and hand the admin the link.
+ *
+ * The move a reviewer makes when a claim carries nothing to decide on — no
+ * domain match, no recorded staff contact, a freemail address and a job title
+ * they cannot check. Rather than guess, the queue writes to the address on the
+ * claim and asks the one question the row cannot answer: are you this
+ * program's head coach?
+ *
+ * ── What it writes ──────────────────────────────────────────────────────────
+ * Only the hash of the token; the raw token exists in the email and in the
+ * return value and nowhere else. `verification_sent_at` is the clock — the
+ * link dies at `+ VERIFICATION_TTL_HOURS` and there is no second column
+ * asserting a different date (`claim-verification.ts` says why).
+ *
+ * `verification_opened_at` is cleared because it describes THIS link, and a
+ * fresh link has not been opened. `verified_at` is NOT cleared: it is the
+ * record that a human once confirmed, and an admin re-sending a link — for a
+ * lost mail, a typo'd address, a second look — should not be able to erase
+ * evidence by pressing a button labelled Resend. Confirming again is a no-op.
+ *
+ * ── Why it returns the URL ──────────────────────────────────────────────────
+ * For the queue's "Copy link", which is the escape hatch when mail is the
+ * problem: a bounced address, a school filter eating us, a coach on the phone
+ * right now. It is returned to an ALREADY-AUTHENTICATED admin — `requireAdmin`
+ * ran first — and the link authorizes nothing on its own beyond answering a
+ * question about a claim that admin can already see.
+ *
+ * **A failed send does not fail the call.** Same posture as `notifyClaimant`:
+ * the token is already durable, so the admin still gets a working link to pass
+ * on by hand. Reporting failure here would leave a live token behind a message
+ * saying nothing happened.
+ */
+export async function sendClaimVerification(
+  claimId: string,
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: "Not authorized." };
+
+  const db = createAdminClient();
+  const { data: claim } = await db
+    .from("program_claims")
+    .select("id, program_id, claimed_email, claimant_role")
+    .eq("id", claimId)
+    .maybeSingle();
+
+  if (!claim) return { ok: false, error: "That claim no longer exists." };
+
+  const to = (claim.claimed_email as string | null)?.trim();
+  if (!to) {
+    return { ok: false, error: "That claim has no address to write to." };
+  }
+
+  const { data: program } = await db
+    .from("programs")
+    .select("school_name, team")
+    .eq("id", claim.program_id)
+    .maybeSingle();
+
+  if (!program) return { ok: false, error: "That program no longer exists." };
+
+  const { token, tokenHash, sentAt } = mintVerification();
+
+  // Written BEFORE the send, like every other mail in this file: the link has
+  // to be answerable by the time it can be clicked. The unique partial index
+  // on the hash column means a collision would surface here rather than as two
+  // claims sharing a link — 256 bits of CSPRNG makes that theoretical.
+  const { error } = await db
+    .from("program_claims")
+    .update({
+      verification_token_hash: tokenHash,
+      verification_sent_at: sentAt.toISOString(),
+      verification_opened_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", claim.id);
+
+  if (error) {
+    console.error("[admin] could not issue claim verification", {
+      error: error.message,
+    });
+    return { ok: false, error: "Could not issue a verification link." };
+  }
+
+  const sent = await sendEmail(
+    claimVerifyIdentityEmail({
+      to,
+      programName: programDisplayName(
+        program.school_name as string,
+        (program.team as string | null) ?? null,
+      ),
+      // The label they picked, not the stored `head_coach`. The heading asks a
+      // question and "Are you X's head_coach?" is not one anybody answers.
+      claimantTitle: claimRoleLabel(claim.claimant_role as string),
+      token,
+    }),
+  );
+
+  if (!sent.ok) {
+    console.warn("[admin] claim verification email not sent", {
+      claimId: claim.id,
+    });
+  }
+
+  revalidatePath("/admin", "layout");
+  return { ok: true, url: verifyIdentityUrl(token) };
+}
+
+/**
+ * Save the reviewer's internal note, and nothing else.
+ *
+ * `review_notes` only — deliberately not a `transition()` event, not a status
+ * change, and not `reviewed_by`. Writing a note is the reviewer thinking out
+ * loud on a claim they have not decided yet, and the queue's whole shape
+ * depends on an undecided claim staying undecided: stamping `reviewed_by` here
+ * would mark it handled, and moving the status would decide it.
+ *
+ * It is `review_notes` and never `claimant_message` for the reason spelled out
+ * on `transition()` — two audiences, two columns. Nothing written here reaches
+ * the claimant; the decline email carries `claimant_message` alone.
+ */
+export async function saveClaimNote(
+  claimId: string,
+  notes: string,
+): Promise<AdminOutcome> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: "Not authorized." };
+
+  const db = createAdminClient();
+  const { error } = await db
+    .from("program_claims")
+    .update({
+      // Empty collapses to null: a row holding "" reads as "they wrote
+      // something" to every query that tests the column for presence.
+      review_notes: notes.trim() || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", claimId);
+
+  if (error) {
+    console.error("[admin] could not save claim note", {
+      error: error.message,
+    });
+    return { ok: false, error: "Could not save that note." };
+  }
 
   revalidatePath("/admin", "layout");
   return { ok: true };

@@ -245,7 +245,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T16 · Claimant identity verification email + `/claim/verify-identity`
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3, T6
 - **files:** src/lib/services/programs/claim-verification.ts, src/lib/services/programs/admin-actions.ts, src/lib/services/email/templates/claim.ts, src/lib/services/email/index.ts, src/app/claim/verify-identity/page.tsx, src/app/claim/verify-identity/actions.ts, tests/claim-verification.spec.ts

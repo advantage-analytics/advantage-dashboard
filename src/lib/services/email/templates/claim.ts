@@ -1,9 +1,10 @@
 import { siteUrl } from "@/lib/site-url";
+import { verifyIdentityUrl } from "@/lib/services/programs/claim-verification";
 import { renderEmail, renderText, type EmailContent } from "../shell";
 import type { EmailMessage } from "../send";
 
 /**
- * The four emails a program claim produces.
+ * The five emails a program claim produces.
  *
  * None of them is preference-driven, and none carries a "turn this off" line.
  * Each is the direct consequence of something a person did — claiming a
@@ -72,6 +73,80 @@ export function claimVerifyAddressEmail(
     html: renderEmail(content),
     text: renderText(content),
     tags: { type: "claim_verify_address" },
+  };
+}
+
+export interface ClaimVerifyIdentityInput {
+  /** The claimed school address — the person being asked to vouch for themselves. */
+  to: string;
+  programName: string;
+  /** The label, not the stored value: "Head coach", not `head_coach`. */
+  claimantTitle: string;
+  /** The raw verification token. Exists here and nowhere else — the row keeps only its hash. */
+  token: string;
+}
+
+/**
+ * "Are you who this claim says you are?"
+ *
+ * The one claim email an ADMIN sends by hand, from the review queue, when the
+ * automatic signals were not enough to decide — no domain match, no recorded
+ * staff contact, nothing to approve on. The mailbox check
+ * (`claimVerifyAddressEmail` above) proves someone can read mail at an
+ * address; this proves the person reading it agrees they hold the role the
+ * claim asserts. They are different questions, which is why this is a separate
+ * email and not a longer version of that one.
+ *
+ * ── Why it is this short ────────────────────────────────────────────────────
+ * The recipient did not necessarily start anything. They may be a head coach
+ * who has never heard of us, reading a message that names their program and
+ * their job title — which is exactly the shape of a phishing attempt. So: one
+ * question in the heading, one sentence under it, one button, and an explicit
+ * line saying that ignoring it costs them nothing. No urgency, no deadline in
+ * bold, no second ask. A message that pushes is a message that gets reported.
+ *
+ * There is no "No, that isn't me" button, and that is deliberate rather than
+ * an omission. A negative answer from an unauthenticated link is a vector — it
+ * would let anyone holding a forwarded token kill a legitimate claim — and the
+ * honest answer to "this isn't me" is a reply to a human, which the support
+ * line at the foot of every email already provides. Silence is a perfectly
+ * good "no" here: nothing moves without a confirmation.
+ *
+ * Resendable by design, so it takes no `claimSend()` key (`docs/email-system.md`
+ * §4.7). That step guards triggers that can fire twice for ONE event — a
+ * redelivered webhook, a re-run derivation — where the second send is an
+ * accident. Here the second send is the point: an admin pressing Resend has
+ * decided the first one did not arrive, and a dedupe key would silently eat
+ * the retry while telling them it went.
+ */
+export function claimVerifyIdentityEmail(
+  input: ClaimVerifyIdentityInput,
+): EmailMessage {
+  const { to, programName, claimantTitle, token } = input;
+
+  const content: EmailContent = {
+    preheader: "Confirm it's you",
+    eyebrow: "Verification",
+    heading: `Are you ${programName}'s ${claimantTitle}?`,
+    body: [
+      `Someone is setting up ${programName} on Advantage Analytics — a match analysis tool for collegiate programs — as its ${claimantTitle.toLowerCase()}, and gave this address. Confirming below is the whole check.`,
+    ],
+    facts: [
+      { label: "Program", value: programName },
+      { label: "Claimed as", value: claimantTitle },
+    ],
+    cta: { label: "Confirm it's me", url: verifyIdentityUrl(token) },
+    note: "The link lasts 7 days. If you weren't expecting this, ignoring this email is safe — nothing happens unless you confirm.",
+  };
+
+  return {
+    to,
+    // The heading again, not "Action required". This needs no action from
+    // anyone it wasn't meant for, and the question is the honest subject.
+    subject: `Are you ${programName}'s ${claimantTitle}?`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "claim_verify_identity" },
   };
 }
 
