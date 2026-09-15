@@ -299,7 +299,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T20 · Injectable actions on settings-team components + admin team actions
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4, T6
 - **files:** src/lib/services/programs/admin-team-actions.ts, src/components/dashboard/settings/teams/role-menu.tsx, src/components/dashboard/settings/teams/transfer-ownership-dialog.tsx, src/components/dashboard/settings/teams/crest-control.tsx

@@ -25,17 +25,28 @@ const CREST_EDGE_PX = 512;
  * uploaded as-is it came out small, lopsided and on the grey tile. Save bakes
  * the placed, backed square and posts that. "Adjust" reopens the current
  * crest so a nudge does not mean finding the file again.
+ *
+ * `upload` and `remove` default to the Settings actions, so every existing
+ * caller and test is untouched. The admin console passes the `admin*` pair,
+ * which run the identical upload → `set_program_crest` → delete-the-old
+ * sequence (rollback included) but authorize on `requireAdmin()` and do their
+ * storage writes with the service-role key, because the `program-crests`
+ * bucket policy is member-scoped and an admin is not a member.
  */
 export function CrestControl({
   programId,
   name,
   crestUrl,
   onError,
+  upload = uploadProgramCrest,
+  remove: removeAction = removeProgramCrest,
 }: {
   programId: string;
   name: string;
   crestUrl: string | null;
   onError: (message: string | null) => void;
+  upload?: typeof uploadProgramCrest;
+  remove?: typeof removeProgramCrest;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
@@ -51,7 +62,7 @@ export function CrestControl({
     );
     onError(null);
     startTransition(async () => {
-      const result = await uploadProgramCrest(formData);
+      const result = await upload(formData);
       if (!result.ok) onError(result.error);
       else setAdjusting(null);
     });
@@ -60,7 +71,7 @@ export function CrestControl({
   const remove = () => {
     onError(null);
     startTransition(async () => {
-      const result = await removeProgramCrest(programId);
+      const result = await removeAction(programId);
       if (!result.ok) onError(result.error);
     });
   };
