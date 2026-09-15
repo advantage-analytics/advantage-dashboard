@@ -11,7 +11,7 @@ import { FilmAdvancedFiltersDialog } from "./film-advanced-filters-dialog";
 import { describeFilmCut, lastNameOf, type FilmFilters } from "./film-filters";
 import { FilmQuickFilters } from "./film-quick-filters";
 import { filmProgressWidth } from "./film-clock";
-import { absolutize } from "./film-score";
+import { absolutize, serverFirstScore } from "./film-score";
 import { shotLabel, type ShotStop } from "./film-shots";
 
 /**
@@ -259,11 +259,7 @@ export function FilmPointPanel({
             shotGroups.map(({ point, stops }) => {
               const serverIsYou = point.serverIsPlayer1 === youIsPlayer1;
               const score = columns.hasPointScore
-                ? youFirst(
-                    point.pointScore,
-                    point.serverIsPlayer1,
-                    youIsPlayer1,
-                  )
+                ? serverFirstScore(point.pointScore)
                 : null;
               return (
                 <div key={point.id} className="flex flex-col">
@@ -323,11 +319,7 @@ export function FilmPointPanel({
                   point={point}
                   score={
                     columns.hasPointScore
-                      ? youFirst(
-                          point.pointScore,
-                          point.serverIsPlayer1,
-                          youIsPlayer1,
-                        )
+                      ? serverFirstScore(point.pointScore)
                       : null
                   }
                   isActive={point.id === activePointId}

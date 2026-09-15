@@ -43,7 +43,7 @@ test.describe("boardAt", () => {
     ],
   };
 
-  test("settled sets from the entered score, the live set from game_score, points you-first", () => {
+  test("settled sets from the entered score, the live set from game_score, board cells you-first, point line server-first", () => {
     const point = pt({
       id: "p",
       setNumber: 2,
@@ -68,7 +68,9 @@ test.describe("boardAt", () => {
       sets: [4, 3],
       game: "30",
     });
-    expect(board.pointLine).toBe("40\u201330");
+    // Revelli (player1) serves at 30-40: the line reads the server's 30 first
+    // even though the opponent's row is on top.
+    expect(board.pointLine).toBe("30\u201340");
   });
 
   test("a match with no score columns leaves the cells blank, never 0-0", () => {

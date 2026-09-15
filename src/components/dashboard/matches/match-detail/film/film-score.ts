@@ -36,6 +36,20 @@ export function absolutize(
     : { player1: returner, player2: server };
 }
 
+/**
+ * A point score read the way the umpire calls it: the server's number first,
+ * whoever is serving. "30-40" stays "30–40" when either player serves — the
+ * stored string is already server-first, so this only validates and dashes it.
+ * Rows and board cells that sit under a player's name are the ones that
+ * orient by player; a lone score string never does.
+ */
+export function serverFirstScore(
+  serverFirst: string | null | undefined,
+): string | null {
+  const pair = absolutize(serverFirst, true);
+  return pair ? `${pair.player1}\u2013${pair.player2}` : null;
+}
+
 /** "Giacomo Revelli" → "G. Revelli"; a single word is left alone. */
 export function initialSurname(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -58,7 +72,7 @@ export interface Board {
   rows: [BoardRow, BoardRow];
   /** Index into `sets` of the column currently in play. */
   liveSet: number;
-  /** "30–40", you-first, for the point line; null when unknown. */
+  /** "30–40", SERVER-first like tennis calls it, for the point line; null when unknown. */
   pointLine: string | null;
 }
 
@@ -141,7 +155,7 @@ export function boardAt(
       },
     ],
     liveSet,
-    pointLine: youPts && oppPts ? `${youPts}\u2013${oppPts}` : null,
+    pointLine: pts ? serverFirstScore(point.pointScore) : null,
   };
 }
 
