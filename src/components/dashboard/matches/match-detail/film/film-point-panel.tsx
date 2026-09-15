@@ -11,6 +11,7 @@ import { FilmAdvancedFiltersDialog } from "./film-advanced-filters-dialog";
 import { describeFilmCut, lastNameOf, type FilmFilters } from "./film-filters";
 import { FilmQuickFilters } from "./film-quick-filters";
 import { absolutize } from "./film-score";
+import { shotLabel, type ShotStop } from "./film-shots";
 
 /**
  * The 320px point list over the film (handoff F3). Slides in from the right;
@@ -22,6 +23,12 @@ import { absolutize } from "./film-score";
  * The same guardrails as the report list: the server's name and every score
  * orientation come from `useMatchSides()`, never from player order, and a
  * score column that is "0-0" from end to end is not printed at all.
+ *
+ * ── Shots ───────────────────────────────────────────────────────────────────
+ * A third tab, local to the room: the same cut of points, one row per shot,
+ * in rally order. It follows the film shot by shot and a row seeks to that
+ * stroke. The Points/Saved tab stays shared with the report list, so opening
+ * Shots here does not change what the report shows.
  */
 
 export interface FilmPointPanelProps {
@@ -38,6 +45,11 @@ export interface FilmPointPanelProps {
   onSelect: (point: MatchPoint) => void;
   onToggleSaved: (pointId: string) => void;
   onClose: () => void;
+  /** Every timed shot on the film clock. */
+  shotStops: ShotStop[];
+  activeShotId: string | null;
+  activeShotProgress: number;
+  onSelectShot: (stop: ShotStop) => void;
 }
 
 interface GameGroup {
@@ -76,13 +88,32 @@ export function FilmPointPanel({
   onSelect,
   onToggleSaved,
   onClose,
+  shotStops,
+  activeShotId,
+  activeShotProgress,
+  onSelectShot,
 }: FilmPointPanelProps) {
   const sides = useMatchSides();
   const youIsPlayer1 = sides.you.isPlayer1;
   const youName = sides.you.name;
   const oppName = sides.opp.name;
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [showShots, setShowShots] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+
+  // Shots of the points on screen, grouped by point, in film order. Built
+  // from the same visible cut so a filter narrows both tabs alike.
+  const shotGroups = useMemo(() => {
+    const visible = new Set(visiblePoints.map((p) => p.id));
+    const out: { point: MatchPoint; stops: ShotStop[] }[] = [];
+    for (const stop of shotStops) {
+      if (!visible.has(stop.point.id)) continue;
+      const last = out[out.length - 1];
+      if (last && last.point.id === stop.point.id) last.stops.push(stop);
+      else out.push({ point: stop.point, stops: [stop] });
+    }
+    return out;
+  }, [shotStops, visiblePoints]);
 
   const groups = useMemo(() => {
     const out: GameGroup[] = [];
@@ -119,12 +150,15 @@ export function FilmPointPanel({
   // Keep the playing row in view as the film moves on, without fighting a
   // user who is scrolling the list themselves.
   useEffect(() => {
-    if (!activePointId || !listRef.current) return;
-    const row = listRef.current.querySelector<HTMLElement>(
-      `[data-point-id="${activePointId}"]`,
-    );
-    row?.scrollIntoView({ block: "nearest" });
-  }, [activePointId]);
+    if (!listRef.current) return;
+    const selector = showShots
+      ? activeShotId && `[data-shot-id="${activeShotId}"]`
+      : activePointId && `[data-point-id="${activePointId}"]`;
+    if (!selector) return;
+    listRef.current
+      .querySelector<HTMLElement>(selector)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [activePointId, activeShotId, showShots]);
 
   return (
     <aside
@@ -137,15 +171,22 @@ export function FilmPointPanel({
           aria-label="Point list view"
           className="flex items-center gap-5"
         >
-          {(["points", "saved"] as const).map((value) => {
-            const active = value === tab;
+          {(["points", "saved", "shots"] as const).map((value) => {
+            const active = showShots ? value === "shots" : value === tab;
             return (
               <button
                 key={value}
                 type="button"
                 role="tab"
                 aria-selected={active}
-                onClick={() => onTabChange(value)}
+                onClick={() => {
+                  if (value === "shots") {
+                    setShowShots(true);
+                  } else {
+                    setShowShots(false);
+                    onTabChange(value);
+                  }
+                }}
                 className={cn(
                   "cursor-pointer px-0.5 pt-0.5 pb-2 text-[11px] font-medium transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
                   active
@@ -153,7 +194,11 @@ export function FilmPointPanel({
                     : "text-white/50 hover:text-white/80",
                 )}
               >
-                {value === "points" ? "Points" : "Saved"}
+                {value === "points"
+                  ? "Points"
+                  : value === "saved"
+                    ? "Saved"
+                    : "Shots"}
               </button>
             );
           })}
@@ -180,7 +225,65 @@ export function FilmPointPanel({
       </div>
 
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto">
-        {groups.length === 0 ? (
+        {showShots ? (
+          shotGroups.length === 0 ? (
+            <div className="flex flex-col items-center gap-1 px-6 py-14 text-center">
+              <span className="text-[12px] font-medium text-white/80">
+                No shot timeline
+              </span>
+              <span className="max-w-[240px] text-[11px] text-white/45">
+                {visiblePoints.length === 0
+                  ? "The current cut is too narrow to leave anything on the film."
+                  : "The shots on these points were never timed against the video."}
+              </span>
+            </div>
+          ) : (
+            shotGroups.map(({ point, stops }) => {
+              const serverIsYou = point.serverIsPlayer1 === youIsPlayer1;
+              const score = columns.hasPointScore
+                ? youFirst(
+                    point.pointScore,
+                    point.serverIsPlayer1,
+                    youIsPlayer1,
+                  )
+                : null;
+              return (
+                <div key={point.id} className="flex flex-col">
+                  <div className="flex items-center gap-2 px-4 pt-3 pb-[5px]">
+                    <span className="mono shrink-0 text-[9px] tracking-[1.4px] text-white/45 uppercase">
+                      Point {point.pointNumber}
+                    </span>
+                    <span className="min-w-0 truncate text-[10px] text-white/55">
+                      {point.resultType || "Point"}
+                    </span>
+                    <div className="flex-1" />
+                    <span className="mono tabular shrink-0 text-[10px] text-white/40">
+                      {score ? `${score} · ` : ""}
+                      {lastNameOf(serverIsYou ? youName : oppName)} serves
+                    </span>
+                  </div>
+                  {stops.map((stop, i) => (
+                    <ShotRow
+                      key={stop.shot.id}
+                      stop={stop}
+                      order={i + 1}
+                      playerName={lastNameOf(
+                        stop.shot.isPlayer1 === youIsPlayer1
+                          ? youName
+                          : oppName,
+                      )}
+                      isActive={stop.shot.id === activeShotId}
+                      progress={
+                        stop.shot.id === activeShotId ? activeShotProgress : 0
+                      }
+                      onSelect={onSelectShot}
+                    />
+                  ))}
+                </div>
+              );
+            })
+          )
+        ) : groups.length === 0 ? (
           <EmptyPanel
             tab={tab}
             hasAnySaved={savedCount > 0}
@@ -389,3 +492,81 @@ function EmptyPanel({
     </div>
   );
 }
+
+/** One stroke. Memoized for the same reason as `PanelRow`. */
+const ShotRow = memo(function ShotRow({
+  stop,
+  order,
+  playerName,
+  isActive,
+  progress,
+  onSelect,
+}: {
+  stop: ShotStop;
+  /**
+   * Position in the rally, 1-based. Not `shotNumber`: the derivation numbers a
+   * faulted first serve 0, which reads as a typo in a list.
+   */
+  order: number;
+  playerName: string;
+  isActive: boolean;
+  progress: number;
+  onSelect: (stop: ShotStop) => void;
+}) {
+  const { shot } = stop;
+  const detail = [
+    playerName,
+    shot.zone,
+    shot.result && shot.result !== "In" ? shot.result : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const label = shotLabel(shot);
+
+  return (
+    <button
+      type="button"
+      data-shot-id={shot.id}
+      aria-current={isActive ? "true" : undefined}
+      aria-label={`${label}, ${detail} — jump to this shot`}
+      onClick={() => onSelect(stop)}
+      className={cn(
+        "relative flex h-9 w-full cursor-pointer items-center gap-2.5 px-4 text-left transition-colors duration-200 hover:bg-white/[0.06] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        isActive && "bg-white/[0.09]",
+      )}
+    >
+      <span className="mono tabular w-4 shrink-0 text-right text-[10px] text-white/35">
+        {order}
+      </span>
+      <span className="flex min-w-0 flex-col">
+        <span
+          className={cn(
+            "truncate text-[11px] font-medium",
+            isActive ? "text-white" : "text-white/[0.88]",
+          )}
+        >
+          {label}
+        </span>
+        <span className="truncate text-[10px] text-white/45">{detail}</span>
+      </span>
+      <div className="flex-1" />
+      {shot.speedMph != null && (
+        <span
+          className={cn(
+            "mono tabular shrink-0 text-[11px]",
+            isActive ? "text-white" : "text-white/60",
+          )}
+        >
+          {Math.round(shot.speedMph)} mph
+        </span>
+      )}
+      {isActive && (
+        <span
+          aria-hidden="true"
+          className="absolute bottom-0 left-0 h-0.5 bg-[var(--blue)]"
+          style={{ width: `${Math.round(progress * 100)}%` }}
+        />
+      )}
+    </button>
+  );
+});

@@ -1,11 +1,22 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
+
 import { cn } from "@/lib/utils";
 
+import {
+  BOARD_KEY_STEP,
+  BOARD_KEY_STEP_LARGE,
+  BOARD_POSITION_STORAGE_KEY,
+  DEFAULT_BOARD_POSITION,
+  clampBoardPosition,
+  parseBoardPosition,
+  type BoardPosition,
+} from "./board-position";
 import type { Board } from "./film-score";
 
 /**
- * The board and the point line (handoff F1/F2), top-left at 24/18.
+ * The board and the point line (handoff F1/F2).
  *
  * Two 32px rows on rgba(13,13,13,.8): a 152px name panel on a 5% wash with
  * a 5px serve dot, the set columns in 12px mono on 24px centred cells (45%
@@ -13,6 +24,14 @@ import type { Board } from "./film-score";
  * behind a 1px inset rule. The point line sits under it, indented 12px so
  * its mono score lands under the names. Both survive the chrome collapse —
  * they are what the screen IS, not a control.
+ *
+ * ── Movable ─────────────────────────────────────────────────────────────────
+ * It opens a little lower than the handoff's 24/18 and can be dragged
+ * anywhere on the film, because wherever it sits it covers some of the court.
+ * Keyboard: focus it, arrows move it (Shift for bigger steps), 0 puts it back.
+ * Double-click also puts it back. The position is remembered per viewer
+ * (localStorage) and clamped inside the room on every resize. The room's own
+ * arrow keys stand down while the board has focus (`data-film-own-keys`).
  */
 export function FilmScoreboard({
   board,
@@ -24,8 +43,166 @@ export function FilmScoreboard({
   pointName: string | null;
   collapsed: boolean;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<BoardPosition>(() => {
+    try {
+      return (
+        parseBoardPosition(localStorage.getItem(BOARD_POSITION_STORAGE_KEY)) ??
+        DEFAULT_BOARD_POSITION
+      );
+    } catch {
+      return DEFAULT_BOARD_POSITION;
+    }
+  });
+  const [dragging, setDragging] = useState(false);
+  // The last position written, read on pointer-up: the render holding the
+  // final move may not have happened yet when the button is released.
+  const latest = useRef(position);
+  const drag = useRef<{
+    pointerX: number;
+    pointerY: number;
+    start: BoardPosition;
+  } | null>(null);
+
+  const clamp = useCallback((next: BoardPosition): BoardPosition => {
+    const el = ref.current;
+    const room = el?.offsetParent as HTMLElement | null;
+    if (!el || !room) return next;
+    return clampBoardPosition(
+      next,
+      { width: el.offsetWidth, height: el.offsetHeight },
+      { width: room.clientWidth, height: room.clientHeight },
+    );
+  }, []);
+
+  const save = useCallback((next: BoardPosition) => {
+    try {
+      localStorage.setItem(BOARD_POSITION_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* private window or storage blocked — the position just isn't kept */
+    }
+  }, []);
+
+  const moveTo = useCallback(
+    (next: BoardPosition, persist: boolean) => {
+      const clamped = clamp(next);
+      latest.current = clamped;
+      setPosition(clamped);
+      if (persist) save(clamped);
+    },
+    [clamp, save],
+  );
+
+  const reset = useCallback(() => {
+    const clamped = clamp(DEFAULT_BOARD_POSITION);
+    latest.current = clamped;
+    setPosition(clamped);
+    try {
+      localStorage.removeItem(BOARD_POSITION_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, [clamp]);
+
+  // A remembered position from a bigger screen, or a window made smaller
+  // while the room is open, must never leave the board off the film.
+  useEffect(() => {
+    const onResize = () => {
+      const clamped = clamp(latest.current);
+      latest.current = clamped;
+      setPosition(clamped);
+    };
+    const frame = requestAnimationFrame(onResize);
+    window.addEventListener("resize", onResize);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [clamp]);
+
   return (
-    <div className="absolute top-[18px] left-6 flex flex-col items-start gap-2">
+    <div
+      ref={ref}
+      role="group"
+      aria-label="Scoreboard"
+      aria-describedby="film-board-hint"
+      tabIndex={0}
+      data-film-own-keys=""
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        // Capture keeps the drag alive when the pointer outruns the board.
+        // Best-effort: it throws for a pointer the browser no longer tracks,
+        // and a drag without capture still works while over the board.
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          /* not capturable */
+        }
+        drag.current = {
+          pointerX: e.clientX,
+          pointerY: e.clientY,
+          start: position,
+        };
+        setDragging(true);
+      }}
+      onPointerMove={(e) => {
+        const d = drag.current;
+        if (!d) return;
+        moveTo(
+          {
+            left: d.start.left + (e.clientX - d.pointerX),
+            top: d.start.top + (e.clientY - d.pointerY),
+          },
+          false,
+        );
+      }}
+      onPointerUp={(e) => {
+        if (!drag.current) return;
+        drag.current = null;
+        setDragging(false);
+        try {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        } catch {
+          /* was never captured */
+        }
+        save(latest.current);
+      }}
+      onPointerCancel={() => {
+        drag.current = null;
+        setDragging(false);
+      }}
+      onDoubleClick={reset}
+      onKeyDown={(e) => {
+        const step = e.shiftKey ? BOARD_KEY_STEP_LARGE : BOARD_KEY_STEP;
+        const moves: Record<string, [number, number]> = {
+          ArrowLeft: [-step, 0],
+          ArrowRight: [step, 0],
+          ArrowUp: [0, -step],
+          ArrowDown: [0, step],
+        };
+        if (e.key === "0") {
+          e.preventDefault();
+          reset();
+          return;
+        }
+        const move = moves[e.key];
+        if (!move) return;
+        e.preventDefault();
+        moveTo(
+          { left: position.left + move[0], top: position.top + move[1] },
+          true,
+        );
+      }}
+      className={cn(
+        "absolute flex touch-none flex-col items-start gap-2 rounded-[var(--radius-element)] select-none focus-visible:outline-none",
+        dragging ? "cursor-grabbing" : "cursor-grab",
+      )}
+      style={{ left: position.left, top: position.top }}
+    >
+      <span id="film-board-hint" className="sr-only">
+        Drag, or use the arrow keys, to move it. Press 0 or double-click to put
+        it back.
+      </span>
       {board && (
         <div
           role="table"
@@ -97,7 +274,7 @@ export function FilmScoreboard({
           )}
           {pointName && (
             <span
-              className="text-[11px] font-medium"
+              className="text-[11px] font-medium whitespace-nowrap"
               style={{
                 color: collapsed ? "rgba(255,255,255,0.9)" : "#FFFFFF",
               }}

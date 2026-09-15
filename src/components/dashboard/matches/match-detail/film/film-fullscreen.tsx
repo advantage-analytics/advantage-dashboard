@@ -17,6 +17,7 @@ import type { FilmFilters } from "./film-filters";
 import { FilmPointPanel } from "./film-point-panel";
 import { boardAt, type BoardColumns } from "./film-score";
 import { FilmScoreboard } from "./film-scoreboard";
+import { activeShotAt, shotStops as buildShotStops } from "./film-shots";
 import {
   activeStopAt,
   breakSegments,
@@ -145,6 +146,15 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   );
   const activePoint = active?.stop.point ?? null;
 
+  const shotStops = useMemo(
+    () => buildShotStops(p.stops, p.video.startTimeSeconds),
+    [p.stops, p.video.startTimeSeconds],
+  );
+  const activeShot = useMemo(
+    () => activeShotAt(shotStops, currentTime),
+    [shotStops, currentTime],
+  );
+
   const position = useMemo(() => {
     if (!activePoint) return null;
     const index = p.walkStops.findIndex((s) => s.point.id === activePoint.id);
@@ -196,6 +206,20 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
       if (stop) seek(stop.start);
     },
     [p.walkStops, currentTime, seek],
+  );
+
+  // Stable, because the panel's rows are memoized on them and the room
+  // re-renders several times a second while the film plays.
+  const selectPoint = useCallback(
+    (point: MatchPoint) => {
+      const stop = p.stops.find((s) => s.point.id === point.id);
+      if (stop) seek(stop.start);
+    },
+    [p.stops, seek],
+  );
+  const selectShot = useCallback(
+    (stop: { start: number }) => seek(stop.start),
+    [seek],
   );
 
   const toggleSavedActive = useCallback(() => {
@@ -293,6 +317,14 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return;
+      // A control that owns its own keys (the movable scoreboard) — its
+      // arrows move it, not the film.
+      if (
+        e.target instanceof HTMLElement &&
+        e.target.closest("[data-film-own-keys]")
+      ) {
+        return;
+      }
       if (overlayIsOpen()) return;
       wake();
       switch (e.key) {
@@ -493,12 +525,13 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 activeProgress={active?.progress ?? 0}
                 position={position}
                 columns={p.columns}
-                onSelect={(point) => {
-                  const stop = p.stops.find((s) => s.point.id === point.id);
-                  if (stop) seek(stop.start);
-                }}
+                onSelect={selectPoint}
                 onToggleSaved={p.onToggleSaved}
                 onClose={() => setPanelOpen(false)}
+                shotStops={shotStops}
+                activeShotId={activeShot?.stop.shot.id ?? null}
+                activeShotProgress={activeShot?.progress ?? 0}
+                onSelectShot={selectShot}
               />
             )}
           </>
