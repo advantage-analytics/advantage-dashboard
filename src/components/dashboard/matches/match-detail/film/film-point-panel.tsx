@@ -43,7 +43,8 @@ export interface FilmPointPanelProps {
   /** Film-clock window of the playing point; the progress rule reads `--film-t`. */
   activeStart: number;
   activeEnd: number;
-  /** `open` slides in; `closing` slides out, then `onExited` unmounts it. */
+  /** `open` slides in; `closing` slides out, then `onExited` unmounts it.
+   *  Flipping `closing` back to `open` turns the slide around mid-flight. */
   state: "open" | "closing";
   onExited: () => void;
   position: { index: number; total: number } | null;
@@ -108,6 +109,17 @@ export function FilmPointPanel({
   const [showShots, setShowShots] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
+  // The drawer mounts off-canvas and slides in on the next frame. A CSS
+  // transition (not a keyframe) carries both directions, so a close caught
+  // mid-open, or a reopen caught mid-close, turns around from wherever the
+  // sheet is instead of snapping to an end and starting over.
+  const [arrived, setArrived] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setArrived(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  const shown = arrived && state === "open";
+
   // Shots of the points on screen, grouped by point, in film order. Built
   // from the same visible cut so a filter narrows both tabs alike.
   const shotGroups = useMemo(() => {
@@ -171,16 +183,20 @@ export function FilmPointPanel({
     <aside
       aria-label="Point list"
       data-film-chrome=""
-      data-state={state}
-      onAnimationEnd={(e) => {
+      data-state={shown ? "open" : "closed"}
+      onTransitionEnd={(e) => {
         if (e.target === e.currentTarget && state === "closing") onExited();
       }}
       className={cn(
-        "absolute inset-y-0 right-0 flex w-[320px] max-w-full flex-col bg-[rgba(13,13,13,0.88)] shadow-[inset_1px_0_0_rgba(255,255,255,0.1)]",
-        // In: the room's expo curve, long enough to read as the drawer arriving.
-        // Out: shorter and accelerating, so closing never feels like waiting.
-        "data-[state=open]:animate-in data-[state=open]:duration-[420ms] data-[state=open]:ease-[var(--ease-out-expo)] data-[state=open]:fade-in-0 motion-safe:data-[state=open]:slide-in-from-right",
-        "data-[state=closing]:animate-out data-[state=closing]:duration-[240ms] data-[state=closing]:ease-[cubic-bezier(0.4,0,1,1)] data-[state=closing]:fade-out-0 data-[state=closing]:fill-mode-forwards motion-safe:data-[state=closing]:slide-out-to-right",
+        "absolute inset-y-0 right-0 flex w-[320px] max-w-full flex-col bg-[rgba(13,13,13,0.88)] shadow-[inset_1px_0_0_rgba(255,255,255,0.1),-24px_0_48px_-12px_rgba(0,0,0,0.45)]",
+        // A solid sheet travelling in from the edge: no fade, so it reads as
+        // one surface arriving over the film rather than dissolving onto it.
+        // In on the room's expo curve; out quicker, accelerating off-screen.
+        // Reduced motion keeps the state change as a short fade, no travel.
+        "transition-[translate] motion-reduce:transition-opacity motion-reduce:duration-200",
+        shown
+          ? "translate-x-0 duration-[420ms] ease-[var(--ease-out-expo)] motion-reduce:opacity-100"
+          : "translate-x-full duration-[260ms] ease-[cubic-bezier(0.32,0,0.67,0)] motion-reduce:translate-x-0 motion-reduce:opacity-0",
       )}
     >
       <div className="flex items-center gap-5 px-4 pt-[13px] shadow-[inset_0_-1px_0_rgba(255,255,255,0.08)]">

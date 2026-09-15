@@ -24,8 +24,8 @@ export const FRAME_RADIUS_PX = 14;
 export const ROOM_ENTER_MS = 460;
 export const ROOM_EXIT_MS = 320;
 export const ROOM_EASE_ENTER = "cubic-bezier(0.23, 1, 0.32, 1)"; // --ease-out-expo
-/** The points drawer's slide-out; matches its `duration-[240ms]` class. */
-export const PANEL_EXIT_MS = 240;
+/** The points drawer's slide-out; matches its `duration-[260ms]` class. */
+export const PANEL_EXIT_MS = 260;
 export const ROOM_EASE_EXIT = "cubic-bezier(0.4, 0, 0.2, 1)";
 
 /** A Web Animations keyframe carrying the room's transform and crop. */

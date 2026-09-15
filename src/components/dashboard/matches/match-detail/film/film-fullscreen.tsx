@@ -538,7 +538,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
         onPointerMove={wake}
         onPointerDown={wake}
         onFocus={wake}
-        className="fixed inset-0 z-50 bg-black outline-none"
+        className="fixed inset-0 z-50 overflow-hidden bg-black outline-none"
       >
         {failed ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
@@ -620,11 +620,13 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               type="button"
               onClick={() => setPanel("open")}
               aria-expanded={panelOpen}
-              aria-hidden={panel !== "closed" ? true : undefined}
-              tabIndex={panel !== "closed" ? -1 : undefined}
+              aria-hidden={panelOpen ? true : undefined}
+              tabIndex={panelOpen ? -1 : undefined}
               className={cn(
                 "absolute top-[18px] right-6 inline-flex h-7 cursor-pointer items-center gap-[7px] rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium text-white transition-[opacity,transform,background-color] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                chrome && panel === "closed"
+                // Back as soon as the drawer starts leaving, so a quick re-open
+                // can catch the sheet mid-slide and turn it around.
+                chrome && !panelOpen
                   ? "opacity-100"
                   : "pointer-events-none opacity-0 motion-safe:translate-x-2",
               )}
