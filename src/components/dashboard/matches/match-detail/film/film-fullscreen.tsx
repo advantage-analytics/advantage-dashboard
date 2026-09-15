@@ -27,6 +27,7 @@ import { FilmScoreboard } from "./film-scoreboard";
 import { useFilmClockVars } from "./film-clock";
 import {
   OPEN_ROOM_FRAME,
+  PANEL_EXIT_MS,
   ROOM_EASE_ENTER,
   ROOM_EASE_EXIT,
   ROOM_ENTER_MS,
@@ -154,6 +155,19 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   const [panel, setPanel] = useState<PanelState>("closed");
   const panelOpen = panel === "open";
   const [videoReady, setVideoReady] = useState(false);
+
+  // The drawer unmounts when its slide-out ends. The end event is only the
+  // fast path: a page that stops painting (a hidden or throttled tab) never
+  // delivers it, and the drawer would sit there answering no clicks. The
+  // timer closes it regardless, a beat after the slide should have finished.
+  useEffect(() => {
+    if (panel !== "closing") return;
+    const timer = window.setTimeout(
+      () => setPanel((current) => (current === "closing" ? "closed" : current)),
+      PANEL_EXIT_MS + 60,
+    );
+    return () => window.clearTimeout(timer);
+  }, [panel]);
   // Set while the room is shrinking back into the report; everything that
   // would start a second exit or a new interaction checks it.
   const leavingRef = useRef(false);
