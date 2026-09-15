@@ -21,7 +21,9 @@ markers is hand-written — edit it as things move.
 | `/sign-up-success` | [`src/app/(auth)/sign-up-success/page.tsx`](src/app/(auth)/sign-up-success/page.tsx) |
 | `/sign-up` | [`src/app/(auth)/sign-up/page.tsx`](src/app/(auth)/sign-up/page.tsx) |
 | `/update-password` | [`src/app/(auth)/update-password/page.tsx`](src/app/(auth)/update-password/page.tsx) |
-| `/admin/claims` | [`src/app/admin/claims/page.tsx`](src/app/admin/claims/page.tsx) |
+| `/admin/conferences` | [`src/app/admin/conferences/page.tsx`](src/app/admin/conferences/page.tsx) |
+| `/admin` | [`src/app/admin/page.tsx`](src/app/admin/page.tsx) |
+| `/admin/uploads` | [`src/app/admin/uploads/page.tsx`](src/app/admin/uploads/page.tsx) |
 | `/claim/[programKey]/object` | [`src/app/claim/[programKey]/object/page.tsx`](src/app/claim/[programKey]/object/page.tsx) |
 | `/claim/[programKey]` | [`src/app/claim/[programKey]/page.tsx`](src/app/claim/[programKey]/page.tsx) |
 | `/claim/[programKey]/request` | [`src/app/claim/[programKey]/request/page.tsx`](src/app/claim/[programKey]/request/page.tsx) |

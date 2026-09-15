@@ -85,3 +85,10 @@ is the runner's. Newest entries at the bottom.
   2. `layout.tsx` calls `auth.getUser()` a second time after `requireAdminOrNotFound()` already resolved it — two session round-trips per admin page render. Not incorrect, just worth a look at `/pr-check`.
   3. The Requests count query uses the service-role client inside a layout (necessary — `program_requests` has no RLS policies at all, so it's the only way to read it), gated by the guard running first. Worth a specific look from `rls-boundary-reviewer` at `/pr-check` given the pattern (service role in a layout, not a server action) is new to this admin console.
   4. Full route-by-route coverage of "all four tabs render inside the shell" is still pending T9, which creates the three placeholder pages that don't exist yet — expected ordering, not a gap in this task.
+
+## T9 · Placeholders, redirects, deletions, MAP + drift seed — done
+
+- **gate:** mechanical — GATE PASS. completion — VERDICT: pass; the reviewer independently re-ran the full test suite (1195 passed), the two named specs directly, and the live redirect check on its own production server.
+- **changed:** `/admin` now redirects to `/admin/teams` (server-side, not yet a real page — lands in T12); `/admin/conferences` and `/admin/uploads` render `ComingSoonPage` pointing back to `/admin/teams`; `next.config.ts` temporarily redirects `/admin/claims` → `/admin/requests` (307, confirmed live); the old `admin/claims/page.tsx` and `review-rows.tsx` are deleted; the design-drift `hex` seed dropped to 0 now that its one tracked violation is gone with the file; the email service's stale doc-comment reference to the old admin route was repointed; `MAP.md` regenerated.
+- **follow-ups:**
+  1. Both `/admin` and the two Coming Soon pages link to `/admin/teams`, which doesn't exist until T12 — following them today 404s. Explicitly accepted ordering, flagged only so it isn't forgotten if T12 slips.

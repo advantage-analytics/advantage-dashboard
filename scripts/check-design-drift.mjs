@@ -312,14 +312,14 @@ for (const file of (await walk(SRC)).sort()) {
 const CHECKS = [
   {
     key: "hex",
-    // The one survivor is not drift a token can absorb: review-rows.tsx's
-    // #3F8A39 is a readable success ink on a success tint — a role SKILL.md's
-    // colour table never names, so promoting it would be inventing a token,
-    // not recording one. adv-field.ts used to be a second survivor — a hex
-    // quoted in PROSE, explaining why that value is NOT tokenized — until
-    // checks 1/3/5 started stripping comments before matching, the same way
-    // checks 4/6 already did.
-    seed: 1,
+    // The one survivor was review-rows.tsx's #3F8A39 — a readable success ink
+    // on a success tint, a role SKILL.md's colour table never named. T9
+    // deleted the file (the admin claims console it belonged to was replaced
+    // by Teams/Requests), taking the hex with it, so the seed drops to 0.
+    // adv-field.ts used to be a second survivor — a hex quoted in PROSE,
+    // explaining why that value is NOT tokenized — until checks 1/3/5 started
+    // stripping comments before matching, the same way checks 4/6 already did.
+    seed: 0,
     label: "off-palette hex",
     fix: "resolve to the token it duplicates, or promote a real role to colors.css",
   },

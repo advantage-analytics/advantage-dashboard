@@ -140,7 +140,7 @@ Full context, file tree and SQL skeletons: `/Users/cjgimena/.claude/plans/synchr
 
 ## T9 · Placeholders, redirects, deletions, MAP + drift seed
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T8
 - **files:** src/app/admin/page.tsx, src/app/admin/conferences/page.tsx, src/app/admin/uploads/page.tsx, src/app/admin/claims/page.tsx, src/components/admin/review-rows.tsx, next.config.ts, scripts/check-design-drift.mjs, src/lib/services/email/index.ts, MAP.md
