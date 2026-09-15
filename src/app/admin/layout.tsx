@@ -38,7 +38,7 @@ export default async function AdminLayout({
     <div className="min-h-screen bg-[var(--surface-page)]">
       <header className="flex items-center gap-4 border-b border-[var(--border-hairline)] bg-[var(--surface-card)] px-6 py-3">
         <Link
-          href="/admin/claims"
+          href="/admin"
           className="text-[13px] font-medium text-[var(--ink-900)]"
         >
           Review queue

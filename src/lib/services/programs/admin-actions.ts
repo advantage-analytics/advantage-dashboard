@@ -1,8 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "./admin-guard";
 import { programDisplayName } from "@/lib/data/programs-server";
 import {
   sendEmail,
@@ -22,33 +22,6 @@ import {
 export type AdminOutcome = { ok: true } | { ok: false; error: string };
 
 type AdminDb = ReturnType<typeof createAdminClient>;
-
-/**
- * Every admin write re-checks the session.
- *
- * The spec's original design was an emailed approve/reject link. Even there it
- * said the link is "a shortcut to a page, not the authorization itself" — so
- * the check lives here, on the action, and a leaked URL can no more approve a
- * claim than a stranger walking past a screen can.
- *
- * `is_admin` is a real column on `users` with a `false` default; it is not
- * inferred from an email domain.
- */
-async function requireAdmin(): Promise<{ id: string } | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data } = await supabase
-    .from("users")
-    .select("is_admin")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  return data?.is_admin ? { id: user.id } : null;
-}
 
 /**
  * UTC, for the same reason the invite's expiry is formatted in UTC.
@@ -262,7 +235,7 @@ async function transition(
       .eq("id", claim.program_id);
   }
 
-  revalidatePath("/admin/claims");
+  revalidatePath("/admin", "layout");
 
   // Last, and unconditionally ok: see `notifyClaimant`. Every write above is
   // already committed, so there is nothing left for a send to invalidate.
@@ -492,7 +465,7 @@ export async function reopenClaim(
     { onConflict: "program_id,user_id" },
   );
 
-  revalidatePath("/admin/claims");
+  revalidatePath("/admin", "layout");
   return { ok: true };
 }
 
@@ -576,7 +549,7 @@ export async function resolveRequest(
     return { ok: false, error: "Could not update that request." };
   }
 
-  revalidatePath("/admin/claims");
+  revalidatePath("/admin", "layout");
 
   // "Dismissed" is the decline — the Dismiss button in the queue. "Resolved"
   // is Done, which means they were dealt with, usually by being invited. The

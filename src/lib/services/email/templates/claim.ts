@@ -106,7 +106,7 @@ export function claimApprovedEmail(input: ClaimApprovedInput): EmailMessage {
     //
     // It does NOT say we told the program's contacts, because we don't: the
     // announced claim — mail to every scraped contact whenever a program was
-    // claimed — was cut before launch (see the /admin/claims header), and
+    // claimed — was cut before launch (see the admin review queue's header), and
     // `claimObjectionNoticeEmail` below has no caller. An email that claims a
     // notice nobody received is worse than one that stays quiet about it.
     note: `Someone at the program can still contest this. If nobody raises a concern by ${windowClosesOn}, the claim settles for good — there's nothing for you to do either way.`,

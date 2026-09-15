@@ -44,8 +44,8 @@
  *    somebody claimed it — was cut before launch. It is unsolicited mail to
  *    people who never signed up, it reads like phishing, and it burns the
  *    sending domain the invitations depend on. The template stays because the
- *    decision could be revisited with real consent; the header on
- *    `app/admin/claims/page.tsx` is where it was made.
+ *    decision could be revisited with real consent; the header on the admin
+ *    review queue's page is where it was made.
  *  - **"Claim approved" fires on the reviewed path only.** A claim that matches
  *    a recorded staff contact skips review entirely and lands live inside
  *    `complete_program_claim`, with the claimant already looking at their
