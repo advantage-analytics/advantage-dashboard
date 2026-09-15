@@ -33,6 +33,7 @@
  * | Expired-invite nudge     | `requestFreshInvite()` — WIRED                  |
  * | Ownership transferred    | `transferProgramOwnership()`, to the new owner — WIRED |
  * | Member left              | `leaveProgram()`, to the owner · pref `notifyTeamActivity` — WIRED |
+ * | Admin review needed      | `notifyAdminsReviewNeeded()` — a claim lands in `pending_review`/`objected`, or a new open `program_requests` row — to every `is_admin` user — WIRED |
  *
  * The claim and invite-request rows fire from
  * `services/programs/{admin-actions,claim-actions}.ts`. None of them can fail
@@ -164,3 +165,8 @@ export {
   type InviteRequestDeclinedInput,
   type ExpiredInviteNudgeInput,
 } from "./templates/invite-request";
+
+export {
+  adminReviewNeededEmail,
+  type AdminReviewNeededInput,
+} from "./templates/admin";

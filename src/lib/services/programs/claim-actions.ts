@@ -14,9 +14,10 @@ import {
 import { programDisplayName } from "@/lib/data/programs-server";
 import { checkClaimEmail } from "./domain-match";
 import { toClaimRole, type ClaimRoleValue } from "./claim-roles";
-import { nextClaimStatus, type ClaimStatus } from "./claim-state";
+import { nextClaimStatus, reviewReason, type ClaimStatus } from "./claim-state";
 import { getProgramOwner } from "./program-owner";
 import { wantsNotification } from "@/lib/services/notifications/should-notify";
+import { notifyAdminsReviewNeeded } from "@/lib/services/notifications/admin-review-mail";
 import { siteUrl } from "@/lib/site-url";
 
 export type ActionOutcome = { ok: true } | { ok: false; error: string };
@@ -688,6 +689,78 @@ interface ClaimRpcResult {
 }
 
 /**
+ * Shared by `completeClaim` and `completeClaimWithToken` — both call one of
+ * the two `complete_program_claim*` RPCs and end up holding the same three
+ * things: its jsonb result, the program row, and the claimant's own submitted
+ * name/role. This is the one piece of admin-notification wiring that reads
+ * from all three, so it lives once here rather than twice.
+ *
+ * Fires ONLY when the claim landed somewhere a human has to look —
+ * `status === "pending_review"` and `!contact_matched` (T17's own name for
+ * that flag is `autoApproved`). Never on `objection_window`/`approved`
+ * (`programStatusFor` already calls those "active" — nothing for an admin to
+ * decide) and never on the `already_owned` branch, which inserted no new
+ * `program_claims` row at all.
+ *
+ * Neither RPC returns the claim id — `pg_get_functiondef` shows both build
+ * their `jsonb_build_object` from only `program_id` / `status` /
+ * `already_owned` / `contact_matched`, and neither migration was in scope to
+ * change for this task. So this re-reads `program_claims` the same way the
+ * RPC itself already does for its OWN `already_owned` branch: newest row for
+ * this exact (program, claimant) pair — safe because the RPC's insert and this
+ * read are for the same claimant against the same program, and nothing else
+ * writes a `program_claims` row for that pair between them.
+ *
+ * Deliberately does not wrap itself in `after()` — that decision belongs to
+ * the caller, which knows whether a redirect is about to follow.
+ */
+async function notifyIfClaimNeedsReview(
+  db: ReturnType<typeof createAdminClient>,
+  rpc: Pick<ClaimRpcResult, "program_id" | "status" | "contact_matched"> | null,
+  claimantUserId: string,
+  claimantName: string,
+  claimedEmail: string,
+  programName: string,
+  domainMatched: boolean,
+): Promise<void> {
+  if (!rpc) return;
+  const autoApproved = rpc.contact_matched;
+  if (rpc.status !== "pending_review" || autoApproved) return;
+
+  const { data: claimRow } = await db
+    .from("program_claims")
+    .select("id")
+    .eq("program_id", rpc.program_id)
+    .eq("claimant_user_id", claimantUserId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!claimRow) return;
+
+  await notifyAdminsReviewNeeded(db, {
+    kind: "claim",
+    id: claimRow.id as string,
+    programName,
+    claimantName,
+    claimantEmail: claimedEmail,
+    reason: reviewReason({
+      domainMatched,
+      // No `program_contacts` count is read on this path (only the RPC reads
+      // it, to decide `contact_matched`, and that decision already came back
+      // false or we would not be here). `reviewReason` only branches on
+      // `announcedRecipients === 0` to tell "no contacts at all" apart from
+      // "contacts exist but the domain didn't match" — passing 1 steps past
+      // that branch so `domainMatched` decides instead, same precedent as
+      // `admin-requests-server.ts`'s `toClaimRow`, which threads the same
+      // placeholder through this helper for the same reason.
+      announcedRecipients: 1,
+      status: "pending_review",
+    }),
+  });
+}
+
+/**
  * Finish a claim after the emailed link is clicked.
  *
  * The domain check runs HERE, against the program row read from the database —
@@ -820,6 +893,22 @@ export async function completeClaim(): Promise<CompleteClaimResult> {
 
   const rpc = data as ClaimRpcResult | null;
 
+  // After the durable write, never before — the RPC above already inserted
+  // the `program_claims` row and moved the program to `claim_pending`/`active`
+  // by the time this runs. `after()` so the redirect to `/claim/review` (or
+  // `/claim/ready`) is not held up waiting on mail to every admin.
+  after(async () => {
+    await notifyIfClaimNeedsReview(
+      db,
+      rpc,
+      user.id,
+      pending.fullName,
+      email,
+      programDisplayName(program.school_name as string, program.team as string),
+      check.domainMatched,
+    );
+  });
+
   return {
     ok: true,
     programKey: pending.programKey,
@@ -877,7 +966,7 @@ export async function completeClaimWithToken(
   const db = createAdminClient();
   const { data: row } = await db
     .from("pending_claims")
-    .select("email, program_key, claimant_user_id, expires_at")
+    .select("email, program_key, claimant_user_id, expires_at, full_name, role")
     .eq("token_hash", tokenHash)
     .maybeSingle();
 
@@ -961,6 +1050,21 @@ export async function completeClaimWithToken(
     });
   }
 
+  // After the durable write, never before — same reasoning as `completeClaim`
+  // above, and the same reason this is `after()`-deferred: the redirect that
+  // follows must not wait on mail to every admin.
+  after(async () => {
+    await notifyIfClaimNeedsReview(
+      db,
+      rpc as ClaimRpcResult | null,
+      user.id,
+      row.full_name as string,
+      email,
+      programDisplayName(program.school_name as string, program.team as string),
+      check.domainMatched,
+    );
+  });
+
   return {
     ok: true,
     programKey: row.program_key as string,
@@ -993,41 +1097,50 @@ async function fileRequest(row: {
   team?: string | null;
 }): Promise<FileRequestOutcome> {
   const db = createAdminClient();
-  const { error } = await db.from("program_requests").insert({
-    kind: row.kind,
-    program_id: row.programId ?? null,
-    email: row.email.trim().toLowerCase(),
-    name: row.name?.trim() || null,
-    role: row.role ?? null,
-    note: row.note?.trim() || null,
-    school_name: row.schoolName?.trim() || null,
-    team: row.team ?? null,
-  });
+  const { data, error } = await db
+    .from("program_requests")
+    .insert({
+      kind: row.kind,
+      program_id: row.programId ?? null,
+      email: row.email.trim().toLowerCase(),
+      name: row.name?.trim() || null,
+      role: row.role ?? null,
+      note: row.note?.trim() || null,
+      school_name: row.schoolName?.trim() || null,
+      team: row.team ?? null,
+    })
+    .select("id")
+    .single();
 
   if (error) {
     // The partial unique index collapses repeat clicks into the one row the
     // reviewer already has. Telling someone their second request "failed"
     // would be wrong — it is already filed. `created: false` is for the
     // caller's own bookkeeping (it decides whether a notice fires) and must
-    // never surface to the requester — see `requestInvite`.
-    if (error.code === "23505") return { ok: true, created: false };
+    // never surface to the requester — see `requestInvite`. `id: null`
+    // alongside it: the row this collapsed into already got its own
+    // admin-review notice when it was first created, and no caller reads
+    // `id` without also checking `created`.
+    if (error.code === "23505") return { ok: true, created: false, id: null };
     console.error("[claim] could not file request", {
       kind: row.kind,
       error: error.message,
     });
     return { ok: false, error: "We could not record that. Try again." };
   }
-  return { ok: true, created: true };
+  return { ok: true, created: true, id: data.id as string };
 }
 
 /**
- * `ActionOutcome` plus one internal fact: did this call insert a row, or did
- * the unique index fold it into one already open? The public actions collapse
- * this back to a plain `ActionOutcome` before returning, so the distinction
- * never reaches the form.
+ * `ActionOutcome` plus two internal facts: did this call insert a row, or did
+ * the unique index fold it into one already open, and — only when it inserted
+ * one — that row's id. The public actions collapse this back to a plain
+ * `ActionOutcome` before returning, so neither ever reaches the form; `id` is
+ * for `notifyAdminsReviewNeeded`'s `?id=<id>` deep link alone.
  */
 type FileRequestOutcome =
-  { ok: true; created: boolean } | { ok: false; error: string };
+  | { ok: true; created: boolean; id: string | null }
+  | { ok: false; error: string };
 
 /**
  * Collapse the internal `created` flag: a caller that doesn't key behaviour
@@ -1141,6 +1254,27 @@ export async function requestInvite(input: {
         });
       }
     });
+
+    // The admin notice — separate from the owner notice above and NOT gated
+    // on `notifyTeamActivity` or on there being an owner at all. A program
+    // with no owner yet has nobody for the notice above to reach, but the
+    // request row still sits in the admin queue exactly like a claim would,
+    // and an admin working that queue needs to know it exists regardless of
+    // whether this particular program happens to have someone to tell.
+    if (filed.id) {
+      const requestId = filed.id;
+      after(async () => {
+        const requestDb = createAdminClient();
+        await notifyAdminsReviewNeeded(requestDb, {
+          kind: "request",
+          id: requestId,
+          programName,
+          requesterName: requesterName ?? email,
+          requesterEmail: email.toLowerCase(),
+          reason: "New invite request — nobody has acted on it yet",
+        });
+      });
+    }
   }
 
   // The receipt — deliberately NOT a mail relay, and deliberately NOT a timing
@@ -1216,7 +1350,7 @@ export async function raiseObjection(input: {
   const db = createAdminClient();
   const { data: program } = await db
     .from("programs")
-    .select("id, status")
+    .select("id, status, school_name, team")
     .eq("program_key", input.programKey)
     .maybeSingle();
 
@@ -1225,7 +1359,7 @@ export async function raiseObjection(input: {
   if (program.status === "claim_pending") {
     const { data: claim } = await db
       .from("program_claims")
-      .select("id, status")
+      .select("id, status, claimed_email, claimant_name, domain_matched")
       .eq("program_id", program.id)
       .in("status", ["pending_email", "pending_review", "objection_window"])
       .maybeSingle();
@@ -1252,6 +1386,47 @@ export async function raiseObjection(input: {
             claimed_at: null,
           })
           .eq("id", program.id);
+
+        // After the durable write, never before: the claim already reads
+        // `objected` and the program is already back to unclaimed by the time
+        // this fires. Only wired on THIS transition — `next === "objected"` —
+        // because that is the one outcome of an objection that actually needs
+        // a human: every other `next` this switch can produce here is null
+        // (an illegal move on an already-terminal claim), which files the
+        // dispute below and nothing else. `after()` so the objector's own
+        // response — same screen either way — is not held up waiting on mail
+        // to every admin, matching how the other three call sites defer this.
+        if (next === "objected") {
+          const claimId = claim.id;
+          const claimantName = claim.claimant_name;
+          const claimedEmail = claim.claimed_email;
+          const domainMatched = claim.domain_matched;
+          const programName = programDisplayName(
+            program.school_name,
+            program.team,
+          );
+          after(async () => {
+            await notifyAdminsReviewNeeded(db, {
+              kind: "claim",
+              id: claimId,
+              programName,
+              claimantName,
+              claimantEmail: claimedEmail,
+              // `announcedRecipients` is irrelevant here: `reviewReason`
+              // returns "Someone objected to this claim" for any
+              // `status: "objected"` before it ever looks at that argument or
+              // `domainMatched`, so there is no real count to pass — same
+              // precedent as `admin-requests-server.ts`'s `toClaimRow`, which
+              // threads a placeholder through the same helper for the same
+              // reason.
+              reason: reviewReason({
+                domainMatched,
+                announcedRecipients: 0,
+                status: "objected",
+              }),
+            });
+          });
+        }
       }
     }
   }
@@ -1285,5 +1460,26 @@ export async function submitUnlistedProgram(input: {
     schoolName: school,
     team: input.team,
   });
+
+  // Its own new open row, same as `requestInvite` above: there is no owner to
+  // notify at all — the whole point of this form is that the program does not
+  // exist in the directory yet — so an admin is the ONLY person who can act on
+  // it, and this is the only notice this row ever gets.
+  if (filed.ok && filed.created && filed.id) {
+    const requestId = filed.id;
+    const programName = programDisplayName(school, input.team);
+    after(async () => {
+      const db = createAdminClient();
+      await notifyAdminsReviewNeeded(db, {
+        kind: "request",
+        id: requestId,
+        programName,
+        requesterName: email,
+        requesterEmail: email.toLowerCase(),
+        reason: "New unlisted-program submission — not yet in the directory",
+      });
+    });
+  }
+
   return toActionOutcome(filed);
 }
