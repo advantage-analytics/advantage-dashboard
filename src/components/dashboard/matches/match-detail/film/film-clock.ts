@@ -10,17 +10,23 @@ import { useCallback, useEffect, type RefObject } from "react";
  * second hops reads as lag, not playback. This writes `--film-t` (seconds) and
  * `--film-d` (duration) onto an ancestor on every animation frame while the
  * video plays, and once on every seek or metadata change while it doesn't.
- * The bars read those variables in CSS (`scaleX(...)`, a gradient stop, a
+ * The bars read those variables in CSS (a `width`, a gradient stop, a
  * `translateX(...)`), so the motion is continuous and costs no React render.
  *
  * React state still drives everything that is text or identity — which row
  * is playing, the clock readout — at the element's own cadence.
  */
 
-/** `transform` for a fill that grows across a window as the film plays. */
-export function filmProgressTransform(start: number, end: number): string {
+/**
+ * `width` for a fill that grows left to right across a window as the film
+ * plays: 0% at `start`, 100% at `end`, held there after. A width on a
+ * left-pinned bar is anchored by layout itself, where a `scaleX` depends on
+ * `transform-origin` surviving compositing and was seen growing from the
+ * middle. Layout on one 2px absolutely placed bar per frame is negligible.
+ */
+export function filmProgressWidth(start: number, end: number): string {
   const span = Math.max(end - start, 0.001);
-  return `scaleX(clamp(0, calc((var(--film-t, 0) - ${start}) / ${span}), 1))`;
+  return `clamp(0%, calc((var(--film-t, 0) - ${start}) / ${span} * 100%), 100%)`;
 }
 
 export function useFilmClockVars(

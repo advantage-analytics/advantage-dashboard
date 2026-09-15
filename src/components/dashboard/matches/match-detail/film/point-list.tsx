@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-import { filmProgressTransform } from "./film-clock";
+import { filmProgressWidth } from "./film-clock";
 import {
   DEFAULT_FILM_FILTERS,
   FilmFiltersPanel,
@@ -456,8 +456,8 @@ const PointRow = memo(function PointRow({
           className="absolute inset-x-3 bottom-0 h-0.5 overflow-hidden rounded-[1px] bg-[var(--ink-100)]"
         >
           <span
-            className="block h-0.5 w-full origin-left rounded-[1px] bg-[var(--blue)] will-change-transform"
-            style={{ transform: filmProgressTransform(activeStart, activeEnd) }}
+            className="absolute inset-y-0 left-0 rounded-[1px] bg-[var(--blue)]"
+            style={{ width: filmProgressWidth(activeStart, activeEnd) }}
           />
         </span>
       )}

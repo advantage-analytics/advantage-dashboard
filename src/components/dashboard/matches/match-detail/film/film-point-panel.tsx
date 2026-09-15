@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { FilmAdvancedFiltersDialog } from "./film-advanced-filters-dialog";
 import { describeFilmCut, lastNameOf, type FilmFilters } from "./film-filters";
 import { FilmQuickFilters } from "./film-quick-filters";
-import { filmProgressTransform } from "./film-clock";
+import { filmProgressWidth } from "./film-clock";
 import { absolutize } from "./film-score";
 import { shotLabel, type ShotStop } from "./film-shots";
 
@@ -467,8 +467,8 @@ const PanelRow = memo(function PanelRow({
       {isActive && (
         <span
           aria-hidden="true"
-          className="absolute bottom-0 left-0 h-0.5 w-full origin-left bg-[var(--blue)] will-change-transform"
-          style={{ transform: filmProgressTransform(activeStart, activeEnd) }}
+          className="absolute bottom-0 left-0 h-0.5 bg-[var(--blue)]"
+          style={{ width: filmProgressWidth(activeStart, activeEnd) }}
         />
       )}
     </div>
@@ -582,8 +582,8 @@ const ShotRow = memo(function ShotRow({
       {isActive && (
         <span
           aria-hidden="true"
-          className="absolute bottom-0 left-0 h-0.5 w-full origin-left bg-[var(--blue)] will-change-transform"
-          style={{ transform: filmProgressTransform(stop.start, stop.end) }}
+          className="absolute bottom-0 left-0 h-0.5 bg-[var(--blue)]"
+          style={{ width: filmProgressWidth(stop.start, stop.end) }}
         />
       )}
     </button>

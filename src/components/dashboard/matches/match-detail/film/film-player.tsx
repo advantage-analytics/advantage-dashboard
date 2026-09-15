@@ -371,10 +371,10 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
               className="pointer-events-auto relative my-2 mb-2.5 h-0.5 cursor-pointer bg-white/[0.22] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
             >
               <span
-                className="absolute inset-0 origin-left bg-[var(--blue)] will-change-transform"
+                className="absolute inset-y-0 left-0 bg-[var(--blue)]"
                 style={{
-                  transform:
-                    "scaleX(clamp(0, calc(var(--film-t, 0) / var(--film-d, 1)), 1))",
+                  width:
+                    "clamp(0%, calc(var(--film-t, 0) / var(--film-d, 1) * 100%), 100%)",
                 }}
               />
             </div>
