@@ -36,12 +36,11 @@ export function MatchReportInsight() {
 }
 
 /**
- * One column, and the text runs the card's full width: the claim at the title
- * step (16px, the DS InsightCard's short falsifiable line), the evidence under
- * it at 12px, then a foot row with the engine credit and Collapse. Across the
- * whole pane a 600-character summary sets as a short block of a few lines
- * rather than a tall narrow one. No `max-w`, so the text's edges line up with
- * the widgets row below.
+ * One column, and the text runs the card's full width: the claim at 13px
+ * medium ink-900, the evidence under it at 11px, then a foot row with the
+ * engine credit and Collapse (sizes reduced at the user's request,
+ * 2026-09-16). Across the whole pane a 2–3 sentence summary sets as a line or
+ * two. No `max-w`, so the text's edges line up with the widgets row below.
  */
 export function InsightExpanded() {
   const { actions, meta } = useMatchReport();
@@ -53,8 +52,13 @@ export function InsightExpanded() {
       aria-label="Advantage Intelligence summary"
       className="flex shrink-0 flex-col gap-2 rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] p-[16px_20px_12px] shadow-[var(--shadow-card)]"
     >
-      {/* `.text-title` is the scale's 16px step: 400, 1.5, −0.4px, ink-900. */}
-      <p className="text-title [text-wrap:pretty]">
+      {/* `.text-body` is the scale's 13px step. It sets its own colour and
+          weight, and the class is unlayered, so the claim's ink-900 and 500
+          go inline. */}
+      <p
+        className="text-body [text-wrap:pretty]"
+        style={{ color: "var(--ink-900)", fontWeight: 500 }}
+      >
         {claim}
         {!evidence && (
           <>
@@ -65,7 +69,7 @@ export function InsightExpanded() {
       </p>
 
       {evidence && (
-        <p className="text-[12px] leading-[1.65] [text-wrap:pretty] text-[var(--ink-700)]">
+        <p className="text-[11px] leading-[1.6] [text-wrap:pretty] text-[var(--ink-700)]">
           {evidence} <WhyThisLink />
         </p>
       )}
@@ -173,7 +177,7 @@ function WhyThisLink() {
   return (
     <Link
       href="/dashboard/ask"
-      className="text-[12px] font-medium tracking-normal whitespace-nowrap text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
+      className="text-[11px] font-medium tracking-normal whitespace-nowrap text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
     >
       Why this
       <ArrowUpRight
