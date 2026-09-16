@@ -67,7 +67,12 @@ export default async function AdminRequestsPage({
       initialSelectedId={one(params.id)}
       emptyTitle={emptyTitle[view]}
       title={
-        <div>
+        // Keyed although it is not in a list: in dev, React Flight hands a
+        // Server Component's JSX prop to the client as a lazy reference, and
+        // a lazy child among static siblings cannot be key-validated when the
+        // JSX is created — so React warns on resolve unless the element
+        // carries a key. Production inlines the element and never warns.
+        <div key="title">
           <h1 className="text-display">Requests</h1>
           <p className="text-body-sm mt-[9px]">
             Program claims and invite requests, merged into one queue.
