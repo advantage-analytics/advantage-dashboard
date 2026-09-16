@@ -16,6 +16,12 @@ const EASE_OUT_EXPO = [0.23, 1, 0.32, 1] as const;
 type PendingFocus = RefObject<"collapse" | "show" | null>;
 
 /**
+ * The claim's type in both variants: `.text-body` (13px) sets its own colour
+ * and weight and is unlayered, so ink-900 and 500 go inline.
+ */
+const CLAIM_STYLE = { color: "var(--ink-900)", fontWeight: 500 } as const;
+
+/**
  * The Advantage Intelligence insight at the top of the Statistics view
  * (design 04 F2 expanded, F3 collapsed), successor to the rail's
  * `RailInsightCard`.
@@ -39,8 +45,13 @@ type PendingFocus = RefObject<"collapse" | "show" | null>;
  * Inside, `AnimatePresence`'s `popLayout` lifts the outgoing content out of
  * flow, so the height being measured is always the incoming layout's; the
  * outgoing content fades in 120ms under the clip, the incoming one fades in
- * and settles 4px. The height comes from a `ResizeObserver` on the content,
- * so a reflow at a new pane width follows too.
+ * and settles 4px. The height comes from a `ResizeObserver` on the content.
+ *
+ * Only a fold tweens. Any other reflow (a window resize, the sidebar
+ * collapsing, the pane crossing its 720px breakpoint) sets the new height on
+ * the same frame, because a tween there would clip the summary's last line or
+ * leave a blank band for the length of the fold. A fold is marked by the
+ * toggle's click handler and cleared when its height animation completes.
  *
  * Reduced motion: no height tween and no travel. The swap is immediate and
  * only the crossfade remains, which still says the content changed.
@@ -54,6 +65,17 @@ export function MatchReportInsight() {
   const reduceMotion = useReducedMotion();
   const pendingFocusRef = useRef<"collapse" | "show" | null>(null);
   const [contentHeight, setContentHeight] = useState<number | null>(null);
+  // The fold in flight, as the content height it started from. Raised by the
+  // toggle's click handler, just before the insight state changes; lowered
+  // once a height animation completes at a different height, so a no-op
+  // completion that fires before the incoming layout is measured cannot end
+  // the fold early.
+  const [foldFrom, setFoldFrom] = useState<number | null>(null);
+  const folding = foldFrom !== null;
+  const startFold = useCallback(
+    () => setFoldFrom(contentHeight ?? 0),
+    [contentHeight],
+  );
 
   const observerRef = useRef<ResizeObserver | null>(null);
   const measure = useCallback((node: HTMLDivElement | null) => {
@@ -77,60 +99,79 @@ export function MatchReportInsight() {
   const collapsed = state.insight === "collapsed";
 
   return (
-    <motion.section
+    <section
       aria-label="Advantage Intelligence summary"
-      className="relative shrink-0 overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]"
-      initial={false}
-      animate={{ height: contentHeight ?? "auto" }}
-      transition={{
-        duration: reduceMotion ? 0 : collapsed ? 0.24 : 0.32,
-        ease: EASE_OUT_EXPO,
-      }}
+      className="shrink-0 overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]"
     >
-      <div ref={measure}>
-        <AnimatePresence mode="popLayout" initial={false}>
-          <motion.div
-            key={collapsed ? "collapsed" : "expanded"}
-            initial={{ opacity: 0, y: reduceMotion ? 0 : collapsed ? -4 : 4 }}
-            animate={{
-              opacity: 1,
-              y: 0,
-              transition: {
-                duration: reduceMotion ? 0.15 : 0.22,
-                delay: reduceMotion ? 0 : 0.06,
-                ease: EASE_OUT_EXPO,
-              },
-            }}
-            exit={{
-              opacity: 0,
-              transition: { duration: 0.12, ease: "linear" },
-            }}
-          >
-            {collapsed ? (
-              <InsightCollapsed pendingFocusRef={pendingFocusRef} />
-            ) : (
-              <InsightExpanded pendingFocusRef={pendingFocusRef} />
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </div>
-    </motion.section>
+      {/* The tween runs inside the border, so the measured content height is
+          exactly the height the clip gets. On the bordered section itself it
+          would include the 2px of border and clip the content by that much. */}
+      <motion.div
+        className="relative"
+        initial={false}
+        animate={{ height: contentHeight ?? "auto" }}
+        transition={{
+          duration: reduceMotion || !folding ? 0 : collapsed ? 0.24 : 0.32,
+          ease: EASE_OUT_EXPO,
+        }}
+        onAnimationComplete={() => {
+          if (contentHeight !== foldFrom) setFoldFrom(null);
+        }}
+      >
+        <div ref={measure}>
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.div
+              key={collapsed ? "collapsed" : "expanded"}
+              initial={{ opacity: 0, y: reduceMotion ? 0 : collapsed ? -4 : 4 }}
+              animate={{
+                opacity: 1,
+                y: 0,
+                transition: {
+                  duration: reduceMotion ? 0.15 : 0.22,
+                  delay: reduceMotion ? 0 : 0.06,
+                  ease: EASE_OUT_EXPO,
+                },
+              }}
+              exit={{
+                opacity: 0,
+                transition: { duration: 0.12, ease: "linear" },
+              }}
+            >
+              {collapsed ? (
+                <InsightCollapsed
+                  pendingFocusRef={pendingFocusRef}
+                  onFold={startFold}
+                />
+              ) : (
+                <InsightExpanded
+                  pendingFocusRef={pendingFocusRef}
+                  onFold={startFold}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </motion.div>
+    </section>
   );
 }
 
 /**
- * A ref callback that focuses the toggle this variant was swapped in by, once,
- * and never on a first render (nothing requested it then).
+ * A stable ref callback that focuses the toggle this variant was swapped in
+ * by, once, and never on a first render (nothing requested it then).
  */
-function focusWhenRequested(
+function useFocusWhenRequested(
   pendingFocusRef: PendingFocus,
   which: "collapse" | "show",
 ) {
-  return (element: HTMLButtonElement | null) => {
-    if (!element || pendingFocusRef.current !== which) return;
-    pendingFocusRef.current = null;
-    element.focus({ preventScroll: true });
-  };
+  return useCallback(
+    (element: HTMLButtonElement | null) => {
+      if (!element || pendingFocusRef.current !== which) return;
+      pendingFocusRef.current = null;
+      element.focus({ preventScroll: true });
+    },
+    [pendingFocusRef, which],
+  );
 }
 
 /**
@@ -141,24 +182,22 @@ function focusWhenRequested(
  * two. No `max-w`, so the text's edges line up with the widgets row below.
  * The card's surface is `MatchReportInsight`'s; this is its content.
  */
-export function InsightExpanded({
+function InsightExpanded({
   pendingFocusRef,
+  onFold,
 }: {
   pendingFocusRef: PendingFocus;
+  /** Marks the height change about to follow as a fold, so it tweens. */
+  onFold: () => void;
 }) {
   const { actions, meta } = useMatchReport();
+  const focusRef = useFocusWhenRequested(pendingFocusRef, "collapse");
   if (!meta.summary) return null;
   const { claim, evidence } = splitInsight(meta.summary);
 
   return (
     <div className="flex flex-col gap-2 p-[16px_20px_12px]">
-      {/* `.text-body` is the scale's 13px step. It sets its own colour and
-          weight, and the class is unlayered, so the claim's ink-900 and 500
-          go inline. */}
-      <p
-        className="text-body [text-wrap:pretty]"
-        style={{ color: "var(--ink-900)", fontWeight: 500 }}
-      >
+      <p className="text-body [text-wrap:pretty]" style={CLAIM_STYLE}>
         {claim}
         {!evidence && (
           <>
@@ -181,12 +220,13 @@ export function InsightExpanded({
         <div className="flex-1" />
         <ChromeTooltip label="Collapse summary" side="top">
           <button
-            ref={focusWhenRequested(pendingFocusRef, "collapse")}
+            ref={focusRef}
             type="button"
             aria-label="Collapse summary"
             aria-expanded="true"
             onClick={() => {
               pendingFocusRef.current = "show";
+              onFold();
               actions.collapseInsight();
             }}
             className="-my-1 inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-400)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)]"
@@ -211,12 +251,16 @@ export function InsightExpanded({
  * 42px of content inside the card's 1px border keeps the row at F3's 44px.
  * The card's surface is `MatchReportInsight`'s; this is its content.
  */
-export function InsightCollapsed({
+function InsightCollapsed({
   pendingFocusRef,
+  onFold,
 }: {
   pendingFocusRef: PendingFocus;
+  /** Marks the height change about to follow as a fold, so it tweens. */
+  onFold: () => void;
 }) {
   const { actions, meta } = useMatchReport();
+  const focusRef = useFocusWhenRequested(pendingFocusRef, "show");
   if (!meta.summary) return null;
   const { claim } = splitInsight(meta.summary);
 
@@ -224,20 +268,16 @@ export function InsightCollapsed({
     <div className="flex h-[42px] items-center gap-2.5 pr-3 pl-5">
       {/* No credit line here, so the mark names the engine for a screen reader. */}
       <InsightMark label="Advantage Intelligence" />
-      {/* The same claim type as the expanded card: `.text-body` 13px with
-          ink-900 and 500 inline, since the class is unlayered. */}
-      <p
-        className="text-body min-w-0 flex-1 truncate"
-        style={{ color: "var(--ink-900)", fontWeight: 500 }}
-      >
+      <p className="text-body min-w-0 flex-1 truncate" style={CLAIM_STYLE}>
         {claim}
       </p>
       <button
-        ref={focusWhenRequested(pendingFocusRef, "show")}
+        ref={focusRef}
         type="button"
         aria-expanded="false"
         onClick={() => {
           pendingFocusRef.current = "collapse";
+          onFold();
           actions.expandInsight();
         }}
         className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-[var(--radius-element)] px-2 py-1 text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
