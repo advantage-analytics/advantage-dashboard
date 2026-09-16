@@ -17,7 +17,7 @@ import { DeleteMatchDialog } from "./delete-match-dialog";
  * the Schedule drawer's event menu draw it: 13px, neutral ink-400 — never
  * `--blue` (`FloatMenuItem`'s default).
  */
-const MENU_ROW_ICON = "size-[13px] shrink-0 text-[var(--ink-400)]";
+export const MENU_ROW_ICON = "size-[13px] shrink-0 text-[var(--ink-400)]";
 
 /**
  * The destructive row rests grey like its siblings and turns `--danger` — label
@@ -25,9 +25,9 @@ const MENU_ROW_ICON = "size-[13px] shrink-0 text-[var(--ink-400)]";
  * intent rather than standing in the menu (DS › Dropdown / Menu). The label
  * selector reaches into `FloatMenuItem`'s label span, which takes no class.
  */
-const DESTRUCTIVE_ROW =
+export const DESTRUCTIVE_ROW =
   "group hover:[&>span:last-child>span:first-child]:text-[var(--danger)] focus-visible:[&>span:last-child>span:first-child]:text-[var(--danger)]";
-const DESTRUCTIVE_ICON =
+export const DESTRUCTIVE_ICON =
   "group-hover:text-[var(--danger)] group-focus-visible:text-[var(--danger)]";
 
 /** The 28px trigger — the roster's and the schedule's, verbatim. */

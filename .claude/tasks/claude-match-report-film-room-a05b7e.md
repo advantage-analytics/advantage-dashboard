@@ -60,7 +60,7 @@ ready).
 
 ## T4 · Title row, facts, Compare and the ⋯ menu
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/components/dashboard/matches/match-detail/report-title-row.tsx, src/components/dashboard/matches/match-detail/report-facts.tsx, src/components/dashboard/matches/match-detail/report-compare-button.tsx, src/components/dashboard/matches/match-detail/report-more-menu.tsx, src/components/dashboard/matches/match-detail/match-report.tsx, src/components/ui/float-menu.tsx, src/components/dashboard/matches/match-actions/match-actions-menu.tsx (guess)

@@ -8,6 +8,14 @@ import {
 import type { ReportView } from "@/components/dashboard/matches/match-detail/report-view";
 import { MatchReportScoreboard } from "@/components/dashboard/matches/match-detail/report-scoreboard";
 import { MatchReportViewSwitcher } from "@/components/dashboard/matches/match-detail/report-view-switcher";
+import {
+  MatchReportTitle,
+  MatchReportTitleActions,
+  MatchReportTitleRow,
+} from "@/components/dashboard/matches/match-detail/report-title-row";
+import { MatchReportFacts } from "@/components/dashboard/matches/match-detail/report-facts";
+import { MatchReportCompareButton } from "@/components/dashboard/matches/match-detail/report-compare-button";
+import { MatchReportMoreMenu } from "@/components/dashboard/matches/match-detail/report-more-menu";
 // Parts that live in their own files: one import line here and one entry in
 // the `MatchReport` object at the bottom. Those files read `useMatchReport`
 // from `match-report-context.tsx`, never from this file, so adding one cannot
@@ -116,7 +124,12 @@ export const MatchReport = {
   Spacer: MatchReportSpacer,
   RailFooter: MatchReportRailFooter,
   Pane: MatchReportPane,
-  // Pane parts still to come: TitleRow, Title, Facts, TitleActions,
-  // CompareButton, MoreMenu (T4); Insight (T5).
+  TitleRow: MatchReportTitleRow,
+  Title: MatchReportTitle,
+  Facts: MatchReportFacts,
+  TitleActions: MatchReportTitleActions,
+  CompareButton: MatchReportCompareButton,
+  MoreMenu: MatchReportMoreMenu,
+  // Pane part still to come: Insight (T5), between the title row and When.
   When: MatchReportWhen,
 };
