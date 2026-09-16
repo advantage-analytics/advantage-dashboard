@@ -115,14 +115,40 @@ export async function createLogin(
   const client = createClient(SUPABASE_URL!, ANON_KEY!, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const signIn = await client.auth.signInWithPassword({
-    email,
-    password: opts.password,
-  });
+  const signIn = await signInWithBackoff(client, email, opts.password);
   if (signIn.error) {
     throw new Error(`signIn(${label}): ${signIn.error.message}`);
   }
   return { client, userId: data.user.id };
+}
+
+/**
+ * Password sign-in that waits out Supabase Auth's per-IP burst limiter.
+ *
+ * The limiter on `/auth/v1/token` is a token bucket with a small burst,
+ * independent of the dashboard's "sign-ins per 5 minutes" setting: the live
+ * suite runs in parallel workers and signs in ~38 fixture logins within one
+ * minute, and the auth logs show the ~37th in a burst coming back
+ * `429 over_request_rate_limit` even after minutes of idle. Raising the
+ * dashboard limit does not widen the burst, so the fixture retries instead.
+ */
+async function signInWithBackoff(
+  client: SupabaseClient,
+  email: string,
+  password: string,
+) {
+  const delaysMs = [500, 1_000, 2_000, 4_000, 4_000, 4_000];
+  for (let attempt = 0; ; attempt++) {
+    const result = await client.auth.signInWithPassword({ email, password });
+    const limited =
+      result.error &&
+      (result.error.status === 429 || /rate limit/i.test(result.error.message));
+    if (!limited || attempt >= delaysMs.length) return result;
+    const jitter = Math.floor(Math.random() * 250);
+    await new Promise((resolve) =>
+      setTimeout(resolve, delaysMs[attempt] + jitter),
+    );
+  }
 }
 
 /**
