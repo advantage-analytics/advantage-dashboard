@@ -77,3 +77,13 @@ is the runner's. Newest entries at the bottom.
 1. Decide once, for all three admin tables, whether the frame's 56px rows, sentence-case headers and `--surface-subtle` selected wash should replace the shipped 52px / `eyebrow-sm` / `--surface-muted` styling.
 2. The frame's 40px mark uses `--radius-element`; the criterion's `--radius-button` was followed.
 3. `ProgramCrest` still hard-codes `rounded-[8px]` instead of a radius token.
+
+## T7 · /admin/conferences page, page content, Add conference dialog — done
+
+**gate:** mechanical: pass · completion: pass
+**changed:** `src/app/admin/conferences/page.tsx` replaces the ComingSoon stub. It is force-dynamic, parses `view`/`sort`/`division`/`id` with `one()` (unknown values fall back to defaults), and loads `listAdminConferences()`. New `conferences-page-content.tsx` holds the Requests selection machine plus the Teams `pushCut`: view pills, a Division-only filter menu, a Most teams / Name A–Z sort menu, a render-50 "Show all" strip or a grey division cut sentence, and `AdminPage` with the drawer rail. New `add-conference-dialog.tsx` is a 440px one-step dialog (Name, Short name, Division `MenuSelect`, Website, gated on name ≥ 2, `DialogProblem`); on success it calls `onCreated(id)`, whose `syncUrl` opens the drawer once the refreshed rows include the id, then `router.refresh()`. New placeholder `conference-drawer.tsx` (`PeekDrawerFrame`, name and meta) for T8 to replace. New `src/lib/data/admin-conferences-view.ts` holds the client-safe row types and pure helpers, re-exported from `admin-conferences-server.ts`, which imports the Supabase server client. Map unchanged, drift seeds unchanged. Not seen in a browser: no admin session.
+**follow-ups:**
+
+1. The selection machine now exists three times (Roster, Requests, Conferences), the point the Requests file named for turning it into a shared hook.
+2. A newly added conference with no teams stays hidden under the "With teams on Advantage" view, so its drawer does not open there.
+3. The empty-state copy and "Show every conference" action are not in the frame; confirm the wording.

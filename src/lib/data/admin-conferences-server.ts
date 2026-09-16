@@ -3,10 +3,11 @@ import { cache } from "react";
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  divisionLongLabel,
-  programDisplayName,
-} from "@/lib/data/programs-server";
+import { programDisplayName } from "@/lib/data/programs-server";
+import type {
+  AdminConferenceRow,
+  ConferenceSquads,
+} from "@/lib/data/admin-conferences-view";
 import { crestUrl } from "@/lib/data/teams-server";
 
 /**
@@ -20,42 +21,29 @@ import { crestUrl } from "@/lib/data/teams-server";
  * admin has no membership path — the "teams with no conference" count and the
  * per-conference team listing (`programs` rows plus crests).
  *
- * The pure helpers below (`applyConferenceView`, `sortConferences`,
- * `conferenceMeta`) sit in this module the way `cursorFor`/`parseCursor` sit in
- * `admin-teams-server.ts`: nothing here runs at import time, so a pure spec can
- * import them directly.
+ * The pure helpers (`applyConferenceView`, `sortConferences`,
+ * `conferenceMeta`) and the row types live in `admin-conferences-view.ts`,
+ * which has no server import, so the client page content can filter and sort
+ * without pulling this module into the browser bundle. They are re-exported
+ * below, so a server file or a pure spec can still import them from here.
  */
 
 // ---------------------------------------------------------------------------
-// Public types
+// Public types — the row shapes and pure helpers live in the client-safe
+// `admin-conferences-view.ts`; re-exported here so server imports stay put.
 // ---------------------------------------------------------------------------
 
-export type AdminConferencesView = "all" | "on_advantage" | "missing";
-
-export type AdminConferencesSort = "most_teams" | "name_asc";
-
-export type ConferenceSquads = "mens" | "womens" | "both" | null;
-
-export interface AdminConferenceRow {
-  id: string;
-  name: string;
-  shortName: string | null;
-  /** Raw column value — `'D1'`, not `'D-I'`. */
-  division: string | null;
-  website: string | null;
-  /** "Ivy League (IVY)" — what `programs.conference` mirrors. */
-  label: string;
-  /** Every program pointing here. */
-  teams: number;
-  /** Programs in `active` or `claim_pending`. */
-  onAdvantage: number;
-  /** Programs in `active`. */
-  pilot: number;
-  /** Distinct `school_group`s — a school with both squads counts once. */
-  schools: number;
-  squads: ConferenceSquads;
-  updatedAt: string;
-}
+export type {
+  AdminConferenceRow,
+  AdminConferencesSort,
+  AdminConferencesView,
+  ConferenceSquads,
+} from "@/lib/data/admin-conferences-view";
+export {
+  applyConferenceView,
+  conferenceMeta,
+  sortConferences,
+} from "@/lib/data/admin-conferences-view";
 
 export interface AdminConferencesData {
   rows: AdminConferenceRow[];
@@ -119,73 +107,6 @@ export function toAdminConferenceRow(
     squads: squadsFor(Boolean(raw.has_mens), Boolean(raw.has_womens)),
     updatedAt: raw.updated_at,
   };
-}
-
-// ---------------------------------------------------------------------------
-// Pure helpers
-// ---------------------------------------------------------------------------
-
-/**
- * The three pills. "Missing details" is any of the three optional fields the
- * drawer can fill in still being empty.
- */
-export function applyConferenceView(
-  rows: readonly AdminConferenceRow[],
-  view: AdminConferencesView,
-): AdminConferenceRow[] {
-  switch (view) {
-    case "on_advantage":
-      return rows.filter((row) => row.onAdvantage > 0);
-    case "missing":
-      return rows.filter(
-        (row) =>
-          row.shortName === null ||
-          row.website === null ||
-          row.division === null,
-      );
-    case "all":
-    default:
-      return [...rows];
-  }
-}
-
-/** Never mutates its input. Ties in `most_teams` break by name. */
-export function sortConferences(
-  rows: readonly AdminConferenceRow[],
-  sort: AdminConferencesSort,
-): AdminConferenceRow[] {
-  const byName = (a: AdminConferenceRow, b: AdminConferenceRow) =>
-    a.name.localeCompare(b.name);
-
-  if (sort === "most_teams") {
-    return [...rows].sort((a, b) => b.teams - a.teams || byName(a, b));
-  }
-  return [...rows].sort(byName);
-}
-
-const SQUADS_PHRASE: Record<Exclude<ConferenceSquads, null>, string> = {
-  both: "men's and women's",
-  mens: "men's only",
-  womens: "women's only",
-};
-
-/**
- * "Division I · 8 schools, men's and women's". Each half is dropped when it
- * has nothing to say: no division, or no programs (0 schools, no squads).
- */
-export function conferenceMeta(
-  row: Pick<AdminConferenceRow, "division" | "schools" | "squads">,
-): string {
-  const division = divisionLongLabel(row.division);
-
-  const schoolsPart =
-    row.schools > 0
-      ? `${row.schools} ${row.schools === 1 ? "school" : "schools"}`
-      : null;
-  const squadsPart = row.squads ? SQUADS_PHRASE[row.squads] : null;
-  const composition = [schoolsPart, squadsPart].filter(Boolean).join(", ");
-
-  return [division, composition || null].filter(Boolean).join(" · ");
 }
 
 // ---------------------------------------------------------------------------

@@ -100,7 +100,7 @@ ready).
 
 ## T7 · /admin/conferences page, page content, Add conference dialog
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6
 - **files:** src/app/admin/conferences/page.tsx (replace stub), src/components/admin/conferences-page-content.tsx (new), src/components/admin/add-conference-dialog.tsx (new) — guesses per plan
