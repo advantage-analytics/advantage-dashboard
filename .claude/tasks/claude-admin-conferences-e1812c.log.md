@@ -163,3 +163,23 @@ The recurring `Owner Conference` orphan was deleted again (approved) before the 
 
 **gate:** mechanical: pass · completion: needs-work on criterion 3 only, accepted by the author
 **changed:** Author decision: the "Signed-In Users Can Execute SECURITY DEFINER Function" advisor warning on the five conference RPCs is the intended admin-RPC pattern (same as `admin_create_program` and the other admin RPCs; each gates on `is_admin()` first), so criterion 3 counts as met. Stash 2ab31962 was restored and dropped. The follow-ups comment block atop `src/lib/data/admin-conferences-server.ts` is committed. All other T11 verification results are as recorded in the blocked entry above.
+
+## T12 · Migration: owner-gated conference minting, merge/set lock order, list rewrite — blocked
+
+**gate:** mechanical: fail · completion: not run
+**failed stage:** mechanical (`npm test`), on the Supabase sign-in rate limit only.
+**reason:** Two gate runs, the second after a ~7-minute wait with no other test processes on this machine, each failed exactly one live test: `tests/rls-workspace-isolation.spec.ts:183`, failing inside `createLogins` with "Request rate limit reached". That spec passes alone (6 passed). The executor's own focused run of `admin-conferences-rpcs.spec.ts` passed 8/8. A single full-suite run (~38 sign-ins) now sits at the edge of the project's per-5-minute sign-in limit even after it was raised.
+**live DB state:** migration `conferences_owner_gate_and_locks` IS applied live and verified by the executor:
+
+- **Owner text:** stays unlinked and mints nothing. Admin and service_role still create.
+- **Merge:** locks the source FOR UPDATE and the target FOR KEY SHARE, and runs the audit and the move in one statement.
+- **Set:** takes FOR NO KEY UPDATE on the program.
+- **List:** a single join/group; output md5 unchanged (137 rows).
+- **Invariants:** label mismatches 0; security definer and search_path intact; no anon/PUBLIC grants; advisors clean beyond the accepted warning.
+- **Orphan cleanup:** two `Owner Conference` orphans from another checkout were deleted during the task.
+  **stash:** 2b7013984493e47c78334abbe21fd8c2b020a78b (the migration file, byte-identical to what was applied)
+  **to unblock (author's call):** raise the Supabase "Sign-ups and sign-ins" rate limit well above one suite's ~38 sign-ins per 5 minutes (e.g. 300), then restore the stash, reset T12 to `todo`/`doing`, and re-gate.
+  **follow-ups:**
+
+1. T13: `tests/teams-management.spec.ts` lines 58–62 comment and the `afterAll` conference delete (line 136) now describe a row owners no longer create; relax both and optionally assert `conference_id is null`.
+2. `20260915100000_conferences_table.sql` backfill still asserts the old T1 ⇔ invariant; relax it in the repo file for fresh-DB consistency.
