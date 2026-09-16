@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
@@ -23,10 +23,9 @@ import {
 // The room is a screenful of its own — the overlay, the drawer, the transport
 // and the track — and most visits to a match never open it. Loading it on the
 // click keeps that weight off every match page's bundle.
-const FilmFullscreen = dynamic(
-  () => import("./film-fullscreen").then((m) => m.FilmFullscreen),
-  { ssr: false },
-);
+const loadFilmFullscreen = () =>
+  import("./film-fullscreen").then((m) => m.FilmFullscreen);
+const FilmFullscreen = dynamic(loadFilmFullscreen, { ssr: false });
 
 /**
  * The Film room tab (artboard 46c with a video, 46d without), plus the
@@ -72,6 +71,18 @@ function FilmRoom({ video }: { video: MatchVideo }) {
   const [room, setRoom] = useState<{ time: number; playing: boolean } | null>(
     null,
   );
+  // Fetch the room's code once the tab is idle, so the fullscreen glyph opens
+  // it on the click rather than after a network round trip with nothing on
+  // screen. Still off the page's first load.
+  useEffect(() => {
+    const warm = () => void loadFilmFullscreen();
+    if ("requestIdleCallback" in window) {
+      const id = window.requestIdleCallback(warm, { timeout: 3000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = globalThis.setTimeout(warm, 1500);
+    return () => globalThis.clearTimeout(id);
+  }, []);
 
   const youIsPlayer1 = sides.you.isPlayer1;
   const offset = video.startTimeSeconds;
