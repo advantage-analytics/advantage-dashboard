@@ -24,8 +24,11 @@
  * the previous seek has landed, and the form learns the cut on release.
  *
  * ── Attribution ─────────────────────────────────────────────────────────────
- * `initialTopPlayerIsPlayer1` is camera-relative and about the OPENING of the
- * video only — ends change every odd game. It is what maps the vendor's
+ * `initialTopPlayerIsPlayer1` is camera-relative and about the START OF THE
+ * SELECTED WINDOW only — ends change every odd game. The browser cuts the file
+ * to this window before upload, so the window's first frame is the vendor's
+ * frame zero; an answer about the recording's first frame is wrong whenever
+ * the window starts after an odd number of games. It is what maps the vendor's
  * per-player predictions back onto the right person, so it is asked here
  * beside the frame it describes, never defaulted, and Continue sleeps until
  * both answers are given (`docs/ui-revamp-guardrails.md` §3.1).
@@ -1095,7 +1098,7 @@ function TrimStepContentImpl({
         />
         <Question
           label={`${who} at the start`}
-          hint="Ends change every odd game — only the opening counts"
+          hint="At the start of your selected window — ends change every odd game"
           value={initialTopPlayerIsPlayer1}
           options={[
             { value: true, label: "Top of frame" },

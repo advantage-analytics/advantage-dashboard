@@ -40,6 +40,7 @@ import {
 } from "./result-type";
 import { resolvePointWinners } from "./winners";
 import { pressureFor } from "./pressure";
+import { pointScoresOf } from "./scores";
 import type { SplitStepRally, SplitStepStroke } from "./types";
 
 export interface DerivedShot {
@@ -70,6 +71,10 @@ export interface DerivedPoint {
   is_break_point: boolean;
   is_set_point: boolean;
   is_match_point: boolean;
+  /** Server-first, verbatim from the vendor's first-stroke prediction — see scores.ts. */
+  set_score: string | null;
+  game_score: string | null;
+  point_score: string | null;
   video_time: number | null;
   duration: number | null;
   flags: string[];
@@ -409,6 +414,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
       is_break_point: pressure.isBreakPoint,
       is_set_point: pressure.isSetPoint,
       is_match_point: pressure.isMatchPoint,
+      ...pointScoresOf(rally),
       video_time: first?.videoTime ?? null,
       duration,
       flags: flagPoint({

@@ -3,6 +3,12 @@ import {
   UploadAbortedError,
   uploadFileInBlocks,
 } from "@/lib/services/upload/azure-block-upload";
+import { remuxedJobWindow } from "@/lib/video/trim-plan";
+import {
+  TrimCancelledError,
+  discardPreparedVideo,
+  prepareVideoForUpload,
+} from "@/lib/video/trim";
 
 /**
  * Getting one match's video to Advantage Intelligence.
@@ -20,6 +26,14 @@ import {
  *   - a submit failure must NOT mark the job failed. The bytes are in Azure and
  *     `uploaded` is the one state a retry needs nothing re-uploaded from.
  *
+ * Before any bytes move, the selected window is cut out of the file in the
+ * browser (`lib/video/trim.ts`, a remux — no re-encode, audio kept). When that
+ * succeeds the job row's window is rewritten to [0, cut length] BEFORE the
+ * terminal `uploaded` write, because auto-submit builds the vendor's
+ * StartTime/EndTime from the row and the file no longer starts where the
+ * original did. When it can't cut, the original goes up with the window the
+ * wizard wrote, exactly as before.
+ *
  * What deliberately did NOT come along is the rollback. The personal wizard
  * deletes its just-created match when the job insert fails, which is right for
  * a row that exists only to carry this video; deleting a dual line's match
@@ -28,6 +42,11 @@ import {
 
 /** Bytes moved so far, and what that implies. */
 export interface VideoUploadProgress {
+  /**
+   * `preparing` while the window is being cut out of the file in the browser,
+   * `uploading` once bytes move. `pct` restarts from 0 at the switch.
+   */
+  stage: "preparing" | "uploading";
   pct: number;
   bytesUploaded: number;
   bytesTotal: number;
@@ -138,6 +157,12 @@ export interface UploadAndSubmitInput {
   jobId: string;
   matchId: string;
   file: File;
+  /**
+   * The selected window, in seconds into `file` — the same values the job row
+   * was created with. When present and narrower than the clip, the file is cut
+   * to it before upload.
+   */
+  trim?: { startSeconds: number; endSeconds: number };
   answers: VideoAnswers;
   onEvent?: (event: VideoUploadEvent) => void;
   /** Fired on a transfer failure, after the job row has been marked failed. */
@@ -154,12 +179,103 @@ export async function uploadAndSubmitVideo({
   supabase,
   jobId,
   matchId,
-  file,
+  file: pickedFile,
+  trim,
   answers,
   onEvent,
   onTransferFailed,
 }: UploadAndSubmitInput): Promise<void> {
+  // Hand the canceller up before anything runs, so the screen that replaced
+  // the wizard can offer a Cancel that works during the cut as well as the
+  // transfer.
+  const controller = new AbortController();
+  onEvent?.({
+    matchId,
+    kind: "started",
+    fileName: pickedFile.name,
+    jobId,
+    cancel: () => controller.abort(),
+  });
+
+  // The wizard has already closed by this point, so this guard is the only
+  // thing telling the user the work is not finished. It says what is actually
+  // at risk: the match is saved and survives, only the transfer dies with the
+  // page.
+  const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+    event.preventDefault();
+    event.returnValue =
+      "Your video is still uploading. The match is saved, but leaving now cancels the upload and you'll have to add the video again.";
+    return event.returnValue;
+  };
+  window.addEventListener("beforeunload", handleBeforeUnload);
+
+  let preparedStorageName: string | null = null;
+
   try {
+    let file = pickedFile;
+
+    if (trim) {
+      // `reap_stalled_uploads()` marks a job failed after 15 minutes without a
+      // progress write. A long cut writes nothing, so keep the heartbeat going
+      // at the same 60-second cadence the transfer uses.
+      const heartbeat = window.setInterval(() => {
+        void supabase
+          .from("processing_jobs")
+          .update({ upload_progress_percent: 0 })
+          .eq("id", jobId);
+      }, 60_000);
+
+      let lastSentTenth = -1;
+      try {
+        const prepared = await prepareVideoForUpload(pickedFile, {
+          startSeconds: trim.startSeconds,
+          endSeconds: trim.endSeconds,
+          signal: controller.signal,
+          onProgress: (progress) => {
+            const tenth = Math.round(progress * 1000);
+            if (tenth === lastSentTenth) return;
+            lastSentTenth = tenth;
+            onEvent?.({
+              matchId,
+              kind: "progress",
+              progress: {
+                stage: "preparing",
+                pct: tenth / 10,
+                bytesUploaded: 0,
+                bytesTotal: pickedFile.size,
+                speed: 0,
+                etaSeconds: 0,
+              },
+            });
+          },
+        });
+
+        if (prepared.trimmed) {
+          preparedStorageName = prepared.storageName;
+          // The file now starts at the selected moment. The row must say so
+          // before `uploaded` is written, or the vendor is told to seek into a
+          // file that no longer has those seconds. Fatal if it doesn't land.
+          const { error: windowError } = await supabase
+            .from("processing_jobs")
+            .update(remuxedJobWindow(prepared.durationSeconds))
+            .eq("id", jobId);
+          if (windowError) {
+            throw new Error(
+              `Couldn't record the trimmed window: ${windowError.message}`,
+            );
+          }
+          file = prepared.file;
+        } else if (prepared.reason !== "whole-clip") {
+          console.info(
+            "Uploading the original video without cutting it:",
+            prepared.reason,
+          );
+        }
+      } finally {
+        window.clearInterval(heartbeat);
+      }
+    }
+
     const res = await fetch("/api/splitstep/upload-url", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -181,29 +297,7 @@ export async function uploadAndSubmitVideo({
     // devtools. The key is what you actually want when debugging anyway.
     console.log("🚀 Upload credential acquired for:", videoObjectKey);
 
-    // Hand the canceller up before any bytes move, so the screen that replaced
-    // the wizard can offer a Cancel that actually works.
-    const controller = new AbortController();
     const startedAt = Date.now();
-    onEvent?.({
-      matchId,
-      kind: "started",
-      fileName: file.name,
-      jobId,
-      cancel: () => controller.abort(),
-    });
-
-    // The wizard has already closed by this point, so this guard is the only
-    // thing telling the user the work is not finished. It says what is actually
-    // at risk: the match is saved and survives, only the transfer dies with the
-    // page.
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue =
-        "Your video is still uploading. The match is saved, but leaving now cancels the upload and you'll have to add the video again.";
-      return event.returnValue;
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
 
     try {
       // Write on a 2-point move or every 60 seconds, whichever comes first. The
@@ -240,6 +334,7 @@ export async function uploadAndSubmitVideo({
               matchId,
               kind: "progress",
               progress: {
+                stage: "uploading",
                 pct: tenth / 10,
                 bytesUploaded: loaded,
                 bytesTotal: total,
@@ -274,6 +369,12 @@ export async function uploadAndSubmitVideo({
       });
     } finally {
       window.removeEventListener("beforeunload", handleBeforeUnload);
+    }
+
+    // The bytes are committed in Azure; the local cut has done its job.
+    if (preparedStorageName) {
+      void discardPreparedVideo(preparedStorageName);
+      preparedStorageName = null;
     }
 
     await supabase
@@ -356,7 +457,12 @@ export async function uploadAndSubmitVideo({
       onEvent?.({ matchId, kind: "submit_failed", error: message });
     }
   } catch (uploadErr) {
-    const cancelled = uploadErr instanceof UploadAbortedError;
+    window.removeEventListener("beforeunload", handleBeforeUnload);
+    if (preparedStorageName) void discardPreparedVideo(preparedStorageName);
+
+    const cancelled =
+      uploadErr instanceof UploadAbortedError ||
+      uploadErr instanceof TrimCancelledError;
     console[cancelled ? "log" : "error"](
       cancelled ? "Upload cancelled by the user" : "❌ Video upload error:",
       cancelled ? "" : uploadErr,

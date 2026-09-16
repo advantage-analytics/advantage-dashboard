@@ -31,10 +31,11 @@
  *     from them yet, so they are fetched LAST in after(), best-effort, once the
  *     work the user actually sees has finished. A miss is recoverable by hand
  *     from the url on the job row for a week.
- *   • `trimmed_video_url` — their trimmed, re-encoded video, copied server-side
- *     into our own container. This one was dropped entirely until now, while
- *     the code below deleted our source video, so a successful job used to end
- *     with no video anywhere.
+ *   • `trimmed_video_url` — their trimmed, re-encoded video. Recorded on the job
+ *     row and NOT downloaded: it is a lower-bitrate copy that arrived without an
+ *     audio track. The video we keep is the athlete's own upload, cut to the
+ *     selected window in the browser before upload (lib/video/trim.ts), and it
+ *     is never deleted when the job completes.
  *
  * Nothing slow happens before the response. The vendor confirmed a 30s
  * connection timeout and NO retry policy, which makes their timeout the hard
@@ -49,11 +50,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { parseWebhookPayload } from "@/lib/services/splitstep/webhook-payload";
 import { selectDeliveryStorageKeys } from "@/lib/services/splitstep/delivery-storage-keys";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
-import {
-  deleteVideoBlob,
-  startTrimmedVideoCopy,
-  trimmedCopyStatus,
-} from "@/lib/services/splitstep/video-url";
 import { releaseQuota } from "@/lib/services/splitstep/quota";
 import {
   isDownloadFailure,
@@ -380,24 +376,26 @@ export async function POST(request: NextRequest) {
     const deliveryId = record.delivery_id;
     const jobId = record.matched_job_id;
 
-    // Four independent assets with four independent guards. Gating them all on
-    // `already_stored` — which is only ever about the strokes JSON — would mean
-    // a video copy or a per-frame download that failed once never got another
-    // chance, on a url that expires.
+    // Three independent assets with three independent guards. Gating them all
+    // on `already_stored` — which is only ever about the strokes JSON — would
+    // mean a per-frame download that failed once never got another chance, on
+    // a url that expires.
+    //
+    // The vendor's trimmed video is NOT one of them any more. It is a
+    // lower-bitrate re-encode that arrived without an audio track; the file we
+    // keep and play is the athlete's own upload, which the wizard now cuts to
+    // the selected window before it leaves the browser (lib/video/trim.ts).
+    // `trimmed_video_url` is still recorded on the row above, for recovery by
+    // hand, and nothing downloads it.
     const strokesUrl = record.already_stored ? null : payload.strokesUrl;
-    const trimmedVideoUrl = record.trimmed_object_key
-      ? null
-      : payload.trimmedVideoUrl;
     const playersUrl = record.players_object_key ? null : payload.playersUrl;
     const trajectoriesUrl = record.trajectories_object_key
       ? null
       : payload.trajectoriesUrl;
 
-    // Pick this delivery's storage keys. The JSON files are always keyed; the
-    // trimmed video is kept only when the match is nameable — which includes a
-    // retained match whose uploader deleted their account. The retain/orphan
-    // policy and its full rationale live in selectDeliveryStorageKeys.
-    const { resultsKey, playersKey, trajectoriesKey, trimmedKey } =
+    // Pick this delivery's storage keys. The retain/orphan policy and its full
+    // rationale live in selectDeliveryStorageKeys.
+    const { resultsKey, playersKey, trajectoriesKey } =
       selectDeliveryStorageKeys({
         jobId,
         createdBy: record.created_by,
@@ -406,12 +404,11 @@ export async function POST(request: NextRequest) {
         deliveryId,
       });
 
-    if (strokesUrl || trimmedVideoUrl || playersUrl || trajectoriesUrl) {
+    if (strokesUrl || playersUrl || trajectoriesUrl) {
       after(async () => {
         // Is the analysis durably ours? Either an earlier delivery stored it or
         // this one does. Tracked rather than assumed, because it is what gates
-        // the delete below — and a completion that arrives with no strokes url
-        // at all must NOT be read as "nothing left to save".
+        // grading and derivation below.
         let resultsSecured = record.already_stored;
 
         // Set only when this delivery did the download. Left undefined on a
@@ -464,40 +461,12 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // The trimmed video. Attempted even when the results download failed:
-        // they are separate urls on separate expiries, and skipping this would
-        // lose the video for a reason that has nothing to do with it.
+        // Grade after the results are stored. It is purely informational, so it
+        // must never delay securing an asset that expires.
         //
-        // This is the only video that survives the job — ours is deleted below
-        // and theirs is a SAS with about a week on it.
-        if (trimmedVideoUrl && trimmedKey && jobId) {
-          await copyTrimmedVideo({
-            supabase,
-            jobId,
-            sourceUrl: trimmedVideoUrl,
-            blobName: trimmedKey,
-          });
-        }
-
-        // The source video has done its job. Deleting it is the real bound on
-        // the vendor URL's lifetime: a SAS cannot be withdrawn once signed (see
-        // video-url/azure-sas.ts), so removing the bytes is the only revocation
-        // available. It also stops us paying to store a multi-GB file.
-        //
-        // Strictly after BOTH artifacts are safe, never before: while this is
-        // the only copy of the match, it is also the only way to re-run a job.
-        // In practice a cross-account copy of a real match is still `pending`
-        // when this runs, so the delete usually defers to
-        // scripts/cleanup-orphan-storage.ts — which is the intended behaviour,
-        // not a fallback. The cost is that the vendor's 14-day read SAS on the
-        // original stays live until the sweeper runs.
-        if (jobId && resultsSecured) {
-          await deleteSourceVideo({ supabase, jobId });
-        }
-
-        // Grade last. It is the only step here that is purely informational —
-        // everything above either secures an asset or frees storage, and none
-        // of them should wait behind it.
+        // The source video is deliberately NOT deleted here any more. It is the
+        // file the film room plays and the only way to re-run a job; the old
+        // delete-after-results policy is retired (docs/video-pipeline-overview.md).
         //
         // Gated on resultsSecured rather than on this delivery having done the
         // download, so a redelivery still grades a job whose first attempt
@@ -511,9 +480,9 @@ export async function POST(request: NextRequest) {
           });
 
           // Then derive. After grading, so `derivation_quality` is already on
-          // the row, and last overall because it is the only step here that can
-          // be re-run by hand from the stored results — everything above either
-          // secures an asset that expires or frees storage that costs money.
+          // the row, and after the results store because it is re-runnable by
+          // hand from the stored results — everything above secures an asset
+          // that expires.
           //
           // Not an Edge Function. Measured at well under two seconds against a
           // route that already declares maxDuration = 60 and has returned its
@@ -639,156 +608,10 @@ export async function POST(request: NextRequest) {
   // Still open, and genuinely needed: reprocessing. When DERIVATION_VERSION
   // bumps, every stored match must be rebuilt and no webhook will ever fire for
   // those jobs again. That wants a paged, authenticated route driven by a
-  // scheduler — the src/app/api/cron/reclaim-videos pattern — calling the same
+  // scheduler (behind `CRON_SECRET`, excluded from the proxy matcher) calling the same
   // deriveAndPublish() this does, not a second implementation.
 
   return NextResponse.json({ received: true, deliveryId: record.delivery_id });
-}
-
-/**
- * Copy the vendor's trimmed video into our own container.
- *
- * Until now we threw the url away and then deleted our own source, so a finished
- * job ended with no video anywhere.
- *
- * Note what this asset is NOT. "Trimmed" means trimmed to the StartTime/EndTime
- * window we sent, not dead time removed — so for a player who selected their
- * whole video it is the same match at a lower bitrate, and deleting our source
- * in its favour is a downgrade rather than an upgrade. See webhook-payload.ts
- * for the measurement.
- *
- * Best-effort, like every other cleanup step here: a failure logs and returns
- * rather than throwing, because aborting after() would take the source-video
- * delete down with it. The url survives on `processing_jobs.trimmed_video_url`
- * for about a week either way, which is the manual recovery path.
- *
- * The copy is STARTED, not awaited. Azure moves the bytes server-side; see
- * startTrimmedVideoCopy(). `pending` is the expected outcome for a real match
- * and is not a failure.
- */
-async function copyTrimmedVideo(params: {
-  supabase: ReturnType<typeof createAdminClient>;
-  jobId: string;
-  sourceUrl: string;
-  blobName: string;
-}): Promise<void> {
-  const { supabase, jobId, sourceUrl, blobName } = params;
-
-  try {
-    const { copyStatus } = await startTrimmedVideoCopy({ blobName, sourceUrl });
-
-    // Recorded as soon as the copy is accepted, not once it finishes. The key
-    // is what a later delivery checks to avoid starting a second copy, and what
-    // the sweeper needs to know a source video has a successor.
-    const { error } = await supabase.rpc("record_splitstep_trimmed_copy", {
-      p_job_id: jobId,
-      p_trimmed_object_key: blobName,
-    });
-
-    if (error) {
-      // The bytes are on their way to a key nothing points at. Loud, because
-      // the only way back is reading this line.
-      console.error(
-        `${LOG} trimmed copy started but the key was NOT recorded — ` +
-          `the blob will be orphaned`,
-        { jobId, blobName, error: error.message },
-      );
-      return;
-    }
-
-    console.log(`${LOG} trimmed video copy ${copyStatus}`, { jobId, blobName });
-  } catch (err) {
-    console.error(
-      `${LOG} trimmed video copy FAILED — recover from trimmed_video_url ` +
-        `on the job row, which is valid for about a week`,
-      { jobId, error: err instanceof Error ? err.message : String(err) },
-    );
-  }
-}
-
-/**
- * Delete a completed job's source video, once something better is safely ours.
- *
- * Best-effort by construction — every failure here logs and returns. The blob
- * is not lost if this misses: scripts/cleanup-orphan-storage.ts sweeps it once
- * the match is gone, and it expires from the vendor's reach on its own when the
- * SAS does. Throwing would abort the after() block for a cleanup step, which is
- * a worse trade than a stranded file.
- *
- * ── Why this is now conditional ──────────────────────────────────────────────
- * It used to delete unconditionally as soon as the results JSON stored, on the
- * reasoning that nobody reads the video again. That reasoning skipped the
- * vendor's trimmed re-encode, which we were not capturing — so the delete was
- * destroying the last video in existence for that match. It now refuses unless
- * a trimmed copy is confirmed `success`.
- *
- * Two consequences worth stating rather than discovering:
- *   • A real match is still copying when this runs, so this usually declines
- *     and the sweeper does it later.
- *   • A job whose payload carried no trimmed url keeps its source video
- *     indefinitely. That is deliberate: one video beats none.
- */
-async function deleteSourceVideo(params: {
-  supabase: ReturnType<typeof createAdminClient>;
-  jobId: string;
-}): Promise<void> {
-  const { supabase, jobId } = params;
-
-  // Not carried on the delivery record — record_splitstep_webhook() returns the
-  // results key, not the video's. One read, after the response is already out.
-  const { data, error } = await supabase
-    .from("processing_jobs")
-    .select("video_object_key, trimmed_object_key")
-    .eq("id", jobId)
-    .maybeSingle();
-
-  if (error || !data?.video_object_key) {
-    if (error) {
-      console.warn(`${LOG} could not read video_object_key for cleanup`, {
-        jobId,
-        error: error.message,
-      });
-    }
-    return;
-  }
-
-  if (!data.trimmed_object_key) {
-    console.log(
-      `${LOG} keeping source video — no trimmed copy exists for this job`,
-      { jobId },
-    );
-    return;
-  }
-
-  const copyStatus = await trimmedCopyStatus({
-    blobName: data.trimmed_object_key,
-  });
-
-  if (copyStatus !== "success") {
-    console.log(
-      `${LOG} keeping source video — trimmed copy is ${copyStatus}; ` +
-        `the sweeper will delete it once the copy lands`,
-      { jobId },
-    );
-    return;
-  }
-
-  try {
-    const { deleted } = await deleteVideoBlob({
-      blobName: data.video_object_key,
-    });
-    console.log(`${LOG} source video ${deleted ? "deleted" : "already gone"}`, {
-      jobId,
-    });
-  } catch (err) {
-    console.warn(
-      `${LOG} source video cleanup failed — the sweeper will catch it`,
-      {
-        jobId,
-        error: err instanceof Error ? err.message : String(err),
-      },
-    );
-  }
 }
 
 /**

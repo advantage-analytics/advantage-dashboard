@@ -36,7 +36,9 @@ export const PROVIDER_ID = "splitstep" as const;
  * 8e9 - 1 and NOT `8 * 1024 ** 3` (8.59e9, which would exceed it by 7%).
  *
  * Unrelated to `MAX_COMPRESS_SIZE` in src/lib/video/compress.ts (2 GB) — that
- * governs the ffmpeg.wasm path, which SplitStep uploads never take.
+ * governs the ffmpeg.wasm path, which SplitStep uploads never take. They are
+ * cut to the selected window by `src/lib/video/trim.ts` instead: a remux that
+ * reads the file lazily, so this cap still applies to the picked file.
  */
 export const MAX_VIDEO_SIZE_BYTES = 8_000_000_000 - 1;
 
