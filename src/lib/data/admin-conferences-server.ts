@@ -1,3 +1,25 @@
+/*
+ * ── Optional follow-ups (Phase 2a conferences plan — not required) ─────────
+ * Recorded verbatim from the plan's "Optional follow-ups" paragraph:
+ *
+ *   Optional follow-ups (not required): move `getConferenceTable`
+ *   (`opponents-server.ts:289`), `dual-school-step.tsx`, the Teams
+ *   `?conference=` filter, `search_programs` tiers 2–3 (join `conferences` to
+ *   answer "PL"), `update_program_settings`/`admin_create_program`
+ *   (`p_conference_id`), `ConferenceSelect` (ids), `scripts/seed-programs.ts`
+ *   to `conference_id`; eventually drop `programs.conference` and its two text
+ *   indexes.
+ *
+ * As a checklist:
+ *   - [ ] `getConferenceTable` (`opponents-server.ts:289`) → `conference_id`
+ *   - [ ] `dual-school-step.tsx` → `conference_id`
+ *   - [ ] the Teams `?conference=` filter → `conference_id`
+ *   - [ ] `search_programs` tiers 2–3 → join `conferences` (to answer "PL")
+ *   - [ ] `update_program_settings` / `admin_create_program` → `p_conference_id`
+ *   - [ ] `ConferenceSelect` → ids
+ *   - [ ] `scripts/seed-programs.ts` → `conference_id`
+ *   - [ ] eventually drop `programs.conference` and its two text indexes
+ */
 import { cache } from "react";
 
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";

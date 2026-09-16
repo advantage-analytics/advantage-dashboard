@@ -158,3 +158,8 @@ The ⋯ actions slot is left empty for T9. `conferences-page-content.tsx` is unc
 The recurring `Owner Conference` orphan was deleted again (approved) before the count.
 **stash:** 2ab3196200d47317eacae01c8254ead702d6197c (the comment block atop `src/lib/data/admin-conferences-server.ts`)
 **to unblock (author's call):** accept the SECURITY DEFINER warning as the intended admin-RPC pattern (reword criterion 3 to "no new class of finding" or mark T11 done by hand), then restore the stash and commit it.
+
+## T11 · Verification 2a pass + follow-up ledger — done
+
+**gate:** mechanical: pass · completion: needs-work on criterion 3 only, accepted by the author
+**changed:** Author decision: the "Signed-In Users Can Execute SECURITY DEFINER Function" advisor warning on the five conference RPCs is the intended admin-RPC pattern (same as `admin_create_program` and the other admin RPCs; each gates on `is_admin()` first), so criterion 3 counts as met. Stash 2ab31962 was restored and dropped. The follow-ups comment block atop `src/lib/data/admin-conferences-server.ts` is committed. All other T11 verification results are as recorded in the blocked entry above.
