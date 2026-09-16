@@ -14,6 +14,7 @@ import { PanelRight } from "lucide-react";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import { isFormControl } from "@/components/dashboard/matches/new-match-wizard/useWizardKeys";
 import { shortMonthDate } from "@/components/dashboard/matches/match-detail/format-clock";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -42,6 +43,7 @@ import {
   deadTimeJump,
   nextStop,
   prevStop,
+  REACHED_EPSILON_SECONDS,
   type FilmStop,
 } from "./film-timeline";
 import { FilmTransport, PLAYBACK_RATES } from "./film-transport";
@@ -126,15 +128,6 @@ function overlayIsOpen(): boolean {
   return document.querySelector('[role="dialog"][data-state="open"]') !== null;
 }
 
-function isTypingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return (
-    target.tagName === "INPUT" ||
-    target.tagName === "TEXTAREA" ||
-    target.isContentEditable
-  );
-}
-
 export function FilmFullscreen(p: FilmFullscreenProps) {
   const { match } = useMatchData();
   const sides = useMatchSides();
@@ -208,9 +201,15 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   );
   const activePoint = active?.stop.point ?? null;
 
+  // Only the drawer reads the shot feed, and a three-set match is a few
+  // thousand shots to place and then scan on every tick — so it is not built
+  // until the drawer is up.
   const shotStops = useMemo(
-    () => buildShotStops(p.stops, p.video.startTimeSeconds),
-    [p.stops, p.video.startTimeSeconds],
+    () =>
+      panel === "closed"
+        ? []
+        : buildShotStops(p.stops, p.video.startTimeSeconds),
+    [panel, p.stops, p.video.startTimeSeconds],
   );
   const activeShot = useMemo(
     () => activeShotAt(shotStops, currentTime),
@@ -255,7 +254,11 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   const togglePlay = useCallback(() => {
     const el = videoRef.current;
     if (!el) return;
-    if (el.paused) void el.play().catch(() => setFailed(true));
+    // A rejected play() is not a broken film: a pause landing before play
+    // resolves (a quick double Space) rejects with AbortError, and an autoplay
+    // refusal with NotAllowedError. Only the element's own `error` event means
+    // the file can't be played.
+    if (el.paused) void el.play().catch(() => {});
     else el.pause();
   }, []);
 
@@ -356,15 +359,30 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     void animation.finished.catch(() => {}).then(() => p.onExit(state));
   }, [p, currentTime]);
 
+  // The point the film was last inside, for Loop. Loop cannot ask
+  // `activeStopAt` at the end of a window: a window clamped to the next one's
+  // start (a point with no duration, or two points close together) hands over
+  // to the next point just before its own end, so "past the end of the active
+  // point" is never true and the film ran on.
+  const loopStopRef = useRef<FilmStop | null>(null);
+
   const onTimeUpdate = useCallback(
     (t: number) => {
       setCurrentTime(t);
       syncClock();
       const now = activeStopAt(p.stops, t);
-      if (looping && now && t >= now.stop.end) {
-        seek(now.stop.start);
+      const previous = loopStopRef.current;
+      // Crossing the end during playback (not a jump somewhere else).
+      if (
+        looping &&
+        previous &&
+        t >= previous.end - REACHED_EPSILON_SECONDS &&
+        t < previous.end + 1
+      ) {
+        seek(previous.start);
         return;
       }
+      loopStopRef.current = now?.stop ?? null;
       if (skipDead) {
         const jump = deadTimeJump(p.stops, t);
         if (jump !== null) seek(jump);
@@ -469,7 +487,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isTypingTarget(e.target)) return;
+      if (isFormControl(e.target)) return;
       // A control that owns its own keys (the movable scoreboard) — its
       // arrows move it, not the film.
       if (
@@ -487,11 +505,11 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
           break;
         case "ArrowRight":
           e.preventDefault();
-          seek((videoRef.current?.currentTime ?? currentTime) + 5);
+          seek((videoRef.current?.currentTime ?? 0) + 5);
           break;
         case "ArrowLeft":
           e.preventDefault();
-          seek((videoRef.current?.currentTime ?? currentTime) - 5);
+          seek((videoRef.current?.currentTime ?? 0) - 5);
           break;
         case "ArrowDown":
           e.preventDefault();
@@ -515,7 +533,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [wake, togglePlay, seek, step, toggleSavedActive, exit, currentTime]);
+  }, [wake, togglePlay, seek, step, toggleSavedActive, exit]);
 
   /* ── Render ──────────────────────────────────────────────────────────── */
 

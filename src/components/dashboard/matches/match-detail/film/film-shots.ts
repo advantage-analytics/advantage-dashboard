@@ -1,6 +1,10 @@
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 
-import { toFilmTime, type FilmStop } from "./film-timeline";
+import {
+  REACHED_EPSILON_SECONDS,
+  toFilmTime,
+  type FilmStop,
+} from "./film-timeline";
 
 /**
  * The shot feed's clock: every timed shot placed on the film.
@@ -41,9 +45,6 @@ export function shotStops(pointStops: FilmStop[], offset: number): ShotStop[] {
   }
   return out.sort((a, b) => a.start - b.start);
 }
-
-/** Same early-seek tolerance as `activeStopAt`. */
-const REACHED_EPSILON_SECONDS = 0.1;
 
 export interface ActiveShot {
   stop: ShotStop;

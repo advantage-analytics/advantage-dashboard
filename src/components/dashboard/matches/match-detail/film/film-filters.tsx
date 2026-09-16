@@ -130,17 +130,6 @@ export function hasActiveFilmFilters(f: FilmFilters): boolean {
   );
 }
 
-/** The F5 dialog's advanced axes only — what "Reset" there clears. */
-export function hasAdvancedFilmFilters(f: FilmFilters): boolean {
-  return (
-    f.set !== null ||
-    f.rallyMin !== null ||
-    f.ended.length > 0 ||
-    f.shot.length > 0 ||
-    f.court !== "any"
-  );
-}
-
 /* ── Predicates ─────────────────────────────────────────────────────────── */
 
 function scoreParts(point: MatchPoint): [string, string] | null {
@@ -362,13 +351,18 @@ export function applyFilmFilters(
 ): MatchPoint[] {
   if (!hasActiveFilmFilters(f)) return points;
 
+  // The court side costs a string split per point and the panel re-filters on
+  // every keystroke, so it is only worked out when a court filter asks for it.
   // `points` arrive in match order, so a point's index within its game is a
   // running count — computed once here rather than per predicate.
-  const hasPointScore = points.some((p) => p.pointScore !== "0-0");
+  const needsCourt = f.court !== "any";
+  const hasPointScore =
+    needsCourt && points.some((p) => p.pointScore !== "0-0");
   let gameKey = "";
   let indexInGame = 0;
 
   return points.filter((point) => {
+    if (!needsCourt) return matchesFilm(point, f, youIsPlayer1, "deuce");
     const key = `${point.setNumber}-${point.gameNumber}`;
     if (key !== gameKey) {
       gameKey = key;

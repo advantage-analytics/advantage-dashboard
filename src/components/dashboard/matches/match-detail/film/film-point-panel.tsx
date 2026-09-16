@@ -11,7 +11,7 @@ import { FilmAdvancedFiltersDialog } from "./film-advanced-filters-dialog";
 import { describeFilmCut, lastNameOf, type FilmFilters } from "./film-filters";
 import { FilmQuickFilters } from "./film-quick-filters";
 import { filmProgressWidth } from "./film-clock";
-import { absolutize, serverFirstScore } from "./film-score";
+import { absolutize, serverFirstScore, youFirst } from "./film-score";
 import { shotLabel, type ShotStop } from "./film-shots";
 
 /**
@@ -68,16 +68,16 @@ interface GameGroup {
   points: MatchPoint[];
 }
 
-function youFirst(
+/** A server-first score string read you-first, en-dashed for a header. */
+function youFirstScore(
   serverFirst: string,
   serverIsPlayer1: boolean,
   youIsPlayer1: boolean,
 ): string | null {
   const pair = absolutize(serverFirst, serverIsPlayer1);
   if (!pair) return null;
-  return youIsPlayer1
-    ? `${pair.player1}–${pair.player2}`
-    : `${pair.player2}–${pair.player1}`;
+  const [you, opp] = youFirst(pair, youIsPlayer1);
+  return `${you}\u2013${opp}`;
 }
 
 export function FilmPointPanel({
@@ -150,7 +150,11 @@ export function FilmPointPanel({
           gameNumber: point.gameNumber,
           serverName: lastNameOf(serverIsYou ? youName : oppName),
           gameScore: columns.hasGameScore
-            ? youFirst(point.gameScore, point.serverIsPlayer1, youIsPlayer1)
+            ? youFirstScore(
+                point.gameScore,
+                point.serverIsPlayer1,
+                youIsPlayer1,
+              )
             : null,
           points: [],
         };

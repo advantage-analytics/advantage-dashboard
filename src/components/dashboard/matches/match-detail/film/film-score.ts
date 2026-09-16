@@ -91,7 +91,11 @@ export interface BoardColumns {
   hasPointScore: boolean;
 }
 
-function youFirst(pair: ScorePair, youIsPlayer1: boolean): [string, string] {
+/** A server-first pair read you-first, for a board row or a list column. */
+export function youFirst(
+  pair: ScorePair,
+  youIsPlayer1: boolean,
+): [string, string] {
   return youIsPlayer1
     ? [pair.player1, pair.player2]
     : [pair.player2, pair.player1];

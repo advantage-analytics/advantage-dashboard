@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
@@ -9,7 +10,6 @@ import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import { createClient } from "@/lib/supabase/client";
 
 import { FilmEmptyState } from "./film-empty-state";
-import { FilmFullscreen } from "./film-fullscreen";
 import { FilmPlayer, type FilmPlayerHandle } from "./film-player";
 import { PointList } from "./point-list";
 import { scoreColumns } from "./film-score";
@@ -19,6 +19,14 @@ import {
   applyFilmFilters,
   type FilmFilters,
 } from "./film-filters";
+
+// The room is a screenful of its own — the overlay, the drawer, the transport
+// and the track — and most visits to a match never open it. Loading it on the
+// click keeps that weight off every match page's bundle.
+const FilmFullscreen = dynamic(
+  () => import("./film-fullscreen").then((m) => m.FilmFullscreen),
+  { ssr: false },
+);
 
 /**
  * The Film room tab (artboard 46c with a video, 46d without), plus the

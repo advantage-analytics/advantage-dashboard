@@ -33,7 +33,7 @@ const STEP_CUSHION_SECONDS = 0.5;
  * second asked for; without this a point just jumped to reads as not yet
  * started, and the playing row, the position and Save point all go blank.
  */
-const REACHED_EPSILON_SECONDS = 0.1;
+export const REACHED_EPSILON_SECONDS = 0.1;
 
 export function toFilmTime(pointTime: number, offset: number): number {
   return Math.max(0, pointTime - offset);

@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { filmProgressWidth } from "./film-clock";
+import { scoreColumns } from "./film-score";
 import {
   DEFAULT_FILM_FILTERS,
   FilmFiltersPanel,
@@ -84,12 +85,6 @@ interface GameGroup {
  * from end to end there is nothing behind it and it does not render. A real
  * match escapes the test on its second game, which is never 0-0 games.
  */
-function columnHasValues(
-  points: MatchPoint[],
-  read: (point: MatchPoint) => string,
-): boolean {
-  return points.length > 0 && points.some((point) => read(point) !== "0-0");
-}
 
 export function PointList({
   allPoints,
@@ -117,14 +112,8 @@ export function PointList({
   const youName = sides.you.name;
   const oppName = sides.opp.name;
 
-  const showGameScore = useMemo(
-    () => columnHasValues(allPoints, (p) => p.gameScore),
-    [allPoints],
-  );
-  const showPointScore = useMemo(
-    () => columnHasValues(allPoints, (p) => p.pointScore),
-    [allPoints],
-  );
+  const { hasGameScore: showGameScore, hasPointScore: showPointScore } =
+    useMemo(() => scoreColumns(allPoints), [allPoints]);
 
   // Grouped on `gameNumber`, not on the game score: the score is the label,
   // and on a match that has none every group would collapse into one.
