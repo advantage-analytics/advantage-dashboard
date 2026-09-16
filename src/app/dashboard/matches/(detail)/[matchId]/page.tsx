@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 
 import { getMatchDetailData } from "@/lib/data/match-detail-server";
+import { hasComparisonBaseline } from "@/lib/data/match-stats-server";
 import {
   isAnalysisFailed,
   isInFlight,
@@ -16,17 +17,43 @@ import {
 import { MatchAnalysisProgress } from "@/components/dashboard/matches/match-detail/match-analysis-progress";
 import { MarkReportSeen } from "@/components/dashboard/matches/match-detail/mark-report-seen";
 
-import { MatchDetailShell } from "@/components/dashboard/matches/match-detail/match-detail-shell";
-import { MatchRail } from "@/components/dashboard/matches/match-detail/match-rail";
+// The report's parts, by their named exports rather than the `MatchReport`
+// namespace object: this file is a Server Component, and dotting into a
+// `"use client"` module's object export from the server throws ("You cannot
+// dot into a client module from a server component"). The parts that live in
+// their own files are imported from there for the same reason —
+// `match-report.tsx` puts them on the object but does not re-export them.
+import {
+  MatchReportFrame,
+  MatchReportPane,
+  MatchReportProvider,
+  MatchReportRail,
+  MatchReportRailFooter,
+  MatchReportSpacer,
+  MatchReportWhen,
+} from "@/components/dashboard/matches/match-detail/match-report";
+import { MatchReportScoreboard } from "@/components/dashboard/matches/match-detail/report-scoreboard";
+import { MatchReportViewSwitcher } from "@/components/dashboard/matches/match-detail/report-view-switcher";
+import {
+  MatchReportTitle,
+  MatchReportTitleActions,
+  MatchReportTitleRow,
+} from "@/components/dashboard/matches/match-detail/report-title-row";
+import { MatchReportFacts } from "@/components/dashboard/matches/match-detail/report-facts";
+import { MatchReportCompareButton } from "@/components/dashboard/matches/match-detail/report-compare-button";
+import { MatchReportMoreMenu } from "@/components/dashboard/matches/match-detail/report-more-menu";
+import {
+  ShareMatchButton,
+  ShareRailTrigger,
+} from "@/components/dashboard/matches/match-detail/share-match-button";
+import { StatisticsView } from "@/components/dashboard/matches/match-detail/statistics-view";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
-import { StatisticsTab } from "@/components/dashboard/matches/match-detail/statistics-tab";
-import { SetScopeChips } from "@/components/dashboard/matches/match-detail/set-scope";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 
-// Statistics is the default tab and loads eagerly with the page; Shots and
+// Statistics is the default view and loads eagerly with the page; Shots and
 // Film are each a substantial subtree (filters, an SVG court, a video
 // player) that a visitor landing on Statistics never needs — code-split so
-// their JS is fetched only once the tab is actually opened.
+// their JS is fetched only once the view is actually opened.
 const ShotsTab = dynamic(() =>
   import("@/components/dashboard/matches/match-detail/shots/shots-tab").then(
     (m) => m.ShotsTab,
@@ -84,16 +111,17 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   if (!data) notFound();
 
-  const { match, statsResult, points, insights } = data;
+  const { match, statsResult, insights, kpiHistory } = data;
 
   // The single attribution point (guardrails §4): every you/opp decision on
   // this page routes through `getMatchSides`, keyed on `match.isUserPlayer1`.
   const sides = getMatchSides(match, statsResult);
 
   const userInsights = sides.pick(insights?.player1, insights?.player2);
-  // Synthesized prose insight (home-quality), generated once at upload. The
-  // rail is now its only home — the Statistics pane's own copy of it is gone,
-  // so this reads the same on every tab.
+  // Synthesized prose insight (home-quality), generated once at upload. It
+  // reaches the report as `meta.summary` and is drawn by the Statistics view's
+  // insight card and nowhere else; a match with no stored insight gets no
+  // card, never a stand-in paragraph (spec › Decisions 4).
   const summary = userInsights?.summary?.trim() || null;
 
   const p1 = statsResult?.statistics?.player1Stats;
@@ -132,69 +160,97 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const isAwaitingAnalysis =
     isInFlight(analysis.status) || isAnalysisFailed(analysis.status);
 
+  // The rail's foot on both variants: the share popover opening upward from
+  // its full-width trigger (F1).
+  const share = (
+    <MatchReportRailFooter>
+      <ShareMatchButton side="top" align="start">
+        <ShareRailTrigger />
+      </ShareMatchButton>
+    </MatchReportRailFooter>
+  );
+
   if (isAwaitingAnalysis) {
-    // Guardrails §3.3 — the short-circuit gate. Rail identity renders fine
-    // from `match`; the content pane holds the pipeline state and nothing
-    // else. No tabs, no stat section that would draw zeroes.
+    // Guardrails §3.3 — the short-circuit gate. The scoreboard renders fine
+    // from `match` (the score the player entered); the pane holds the pipeline
+    // state and nothing else. No view switcher — there are no views yet — no
+    // title row, and no stat section that would draw zeroes
+    // (spec › Decisions 9).
     return (
-      <MatchDetailShell rail={<MatchRail aiSummary={summary} film="none" />}>
-        <MatchAnalysisProgress analysis={analysis} matchId={matchId} />
-      </MatchDetailShell>
+      <MatchReportProvider
+        matchId={matchId}
+        summary={null}
+        canCompare={false}
+        isDerived={isDerived}
+        statsPublished={false}
+      >
+        <MatchReportFrame>
+          <MatchReportRail>
+            <MatchReportScoreboard />
+            <MatchReportSpacer />
+            {share}
+          </MatchReportRail>
+          <MatchReportPane>
+            <MatchAnalysisProgress analysis={analysis} matchId={matchId} />
+          </MatchReportPane>
+        </MatchReportFrame>
+      </MatchReportProvider>
     );
   }
 
   return (
     <>
       <MarkReportSeen matchId={matchId} />
-      <MatchDetailShell
-        rail={
-          <MatchRail
-            aiSummary={summary}
-            // `MatchDataBlock` is now the only home of the derived-match
-            // caveats (the retired `DerivedStatsNotice` said the same thing
-            // inside the Statistics pane), so this gate is the whole
-            // condition: a derived match whose stats haven't published yet —
-            // `timeline` — reaches this branch same as `completed` does, and
-            // has no winners/errors numbers yet for the caveats to be about.
-            isDerived={isDerived && statsPublished}
-            film={
-              video
-                ? // The rail's film cross-link card is gone in 47f — a match with
-                  // video shows nothing in the note slot, and its Film tab is
-                  // reached from the tab row instead.
-                  "none"
-                : // Allowlist, not "not splitstep": `sourceProvider` is also
-                  // `null` for a match a coach typed in by hand (never
-                  // imported, never analysed) — see the comment on
-                  // `source_provider` in `lib/schedule/actions.ts`. Only the
-                  // exact `swing-vision` value backs the SwingVision claim;
-                  // every other no-video case gets the neutral copy, which is
-                  // true for all of them (splitstep with no playable file,
-                  // a hand-scored match, or any future provider).
-                  match.sourceProvider === "swing-vision"
-                  ? "note-swingvision"
-                  : "note-neutral"
-            }
-          />
-        }
-        tabs={{
-          statistics: (
-            <StatisticsTab
-              statsPublished={statsPublished}
-              isDerived={isDerived}
-            />
-          ),
-          shots: <ShotsTab />,
-          // `video` is the short-lived playback SAS, or null when there is no
-          // file to serve — FilmTab renders the 46d empty state for
-          // the second case. Points come from `MatchDataProvider`, so the
-          // whole tab needs exactly this one prop.
-          film: <FilmTab video={video} />,
-        }}
-        // Statistics only: the scope narrows that pane's point-derived cards,
-        // and Shots and Film room answer to their own filters.
-        tabBarTrailing={{ statistics: <SetScopeChips /> }}
-      />
+      <MatchReportProvider
+        matchId={matchId}
+        summary={summary}
+        // Compare is drawn only once a second analysed match exists to compare
+        // against. `buildKpiHistory` already leaves this match out of the
+        // baseline, so a non-empty one is exactly that; `kpiHistory !== null`
+        // would be wrong on a first match, whose own stat row keeps the
+        // history non-null.
+        canCompare={hasComparisonBaseline(kpiHistory)}
+        isDerived={isDerived}
+        statsPublished={statsPublished}
+      >
+        <MatchReportFrame>
+          <MatchReportRail>
+            <MatchReportScoreboard />
+            <MatchReportViewSwitcher />
+            <MatchReportSpacer />
+            {share}
+          </MatchReportRail>
+
+          <MatchReportPane>
+            <MatchReportTitleRow>
+              {/* `min-w-0` (F1): a long facts line shrinks its block rather
+                  than pushing the actions out of the row. */}
+              <div className="min-w-0">
+                <MatchReportTitle />
+                <MatchReportFacts />
+              </div>
+              <MatchReportTitleActions>
+                <MatchReportCompareButton />
+                <MatchReportMoreMenu />
+              </MatchReportTitleActions>
+            </MatchReportTitleRow>
+
+            <MatchReportWhen view="statistics">
+              <StatisticsView />
+            </MatchReportWhen>
+            <MatchReportWhen view="shots">
+              <ShotsTab />
+            </MatchReportWhen>
+            <MatchReportWhen view="film">
+              {/* `video` is the short-lived playback SAS, or null when there
+                  is no file to serve — FilmTab renders `FilmEmptyState` for
+                  the second case. Points come from `MatchDataProvider`, so
+                  the whole view needs exactly this one prop. */}
+              <FilmTab video={video} />
+            </MatchReportWhen>
+          </MatchReportPane>
+        </MatchReportFrame>
+      </MatchReportProvider>
     </>
   );
 }

@@ -88,7 +88,7 @@ ready).
 
 ## T6 · Cut page.tsx over to MatchReport and retire the old shell
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T3, T4, T5
 - **files:** src/app/dashboard/matches/(detail)/[matchId]/page.tsx, src/app/dashboard/matches/(detail)/[matchId]/layout.tsx, src/components/dashboard/matches/match-detail/statistics-view.tsx, src/components/dashboard/matches/match-detail/set-scope.tsx, src/lib/data/match-detail-server.ts, src/lib/data/single-match-server.ts, src/components/dashboard/matches/match-detail/match-detail-shell.tsx, src/components/dashboard/matches/match-detail/match-tabs.tsx, src/components/dashboard/matches/match-detail/match-rail.tsx, src/components/dashboard/matches/match-detail/rail-insight-card.tsx, src/components/dashboard/matches/match-detail/statistics-tab.tsx, src/components/dashboard/matches/match-detail/match-kpi-strip.tsx (guess)

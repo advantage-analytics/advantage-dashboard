@@ -187,53 +187,6 @@ function transformDbMatchToMatch(
   };
 }
 
-const FILLER_INSIGHTS: NonNullable<DbMatch["insights"]> = {
-  player1: {
-    summary:
-      "Your second serve and baseline endurance are carrying you right now — keep leaning on those strengths under pressure. To take the next step, tighten up your backhand to cut down on unforced errors and look for more chances to finish points at the net.",
-    strengths: [
-      {
-        name: "Reliable Second Serve",
-        value: 75,
-        description:
-          "Your second serve was a consistent weapon, putting pressure on your opponent and preventing easy returns. The high placement accuracy forced defensive returns on the majority of second-serve points.",
-      },
-      {
-        name: "Strong Baseline Endurance",
-        value: 67,
-        description:
-          "You consistently outlasted your opponent in longer rallies, showcasing your fitness and consistency under pressure.",
-      },
-      {
-        name: "Effective Return Pressure",
-        value: 56,
-        description:
-          "Your ability to win return games and convert break points kept your opponent on the defensive throughout the match.",
-      },
-    ],
-    weaknesses: [
-      {
-        name: "Backhand Error Rate",
-        value: 71,
-        description:
-          "Focus on reducing unforced errors on your backhand to turn more defensive shots into offensive opportunities.",
-      },
-      {
-        name: "Net Play Integration",
-        value: 12,
-        description:
-          "Look for opportunities to come to the net and finish points proactively, adding variety to your game plan.",
-      },
-      {
-        name: "First Serve Point Conversion",
-        value: 68,
-        description:
-          "While your first serve percentage is solid, aim to win a higher percentage of those points to gain an even greater advantage.",
-      },
-    ],
-  },
-};
-
 const FILLER_KEY_MOMENTS = [
   {
     moment: "Early Break",
@@ -484,7 +437,11 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     keyMoments: dbRow.key_moments?.length
       ? dbRow.key_moments
       : FILLER_KEY_MOMENTS,
-    insights: dbRow.insights ?? FILLER_INSIGHTS,
+    // Read raw, never substituted: a match with no stored insight gets
+    // `null` and the report draws no insight card. A stand-in paragraph
+    // here would be attributed on screen to Advantage Intelligence
+    // (spec 2026-09-15 match report › Decisions 4).
+    insights: dbRow.insights ?? null,
     playerAverages,
     kpiHistory,
   };

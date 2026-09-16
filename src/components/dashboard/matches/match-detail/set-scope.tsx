@@ -1,34 +1,39 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import type { ScoreLineSet } from "@/lib/ui/score-format";
-import { cn } from "@/lib/utils";
 
 /**
- * The Statistics pane's set scope (artboard 47f) — the segmented control in the
- * tab row and the rule every point-derived card narrows itself by.
+ * The Statistics view's set scope — the rule every point-derived card narrows
+ * itself by, read from `?set=`.
+ *
+ * ── Where the control went ──────────────────────────────────────────────────
+ * The segmented control that wrote this parameter (artboard 47f's chips in the
+ * old tab row) is not in the settled report (design 04, F1–F8) and was
+ * retired with that tab row. The parameter itself is still honoured: a typed
+ * or bookmarked `?set=2` scopes the head-to-head table and the three charts
+ * exactly as before, and the pure rules below stay tested
+ * (`tests/set-scope.spec.ts`). Nothing in the app writes `?set=` today;
+ * `setScopeQuery` is kept for whichever surface next does, so it carries
+ * `?tab=` through rather than reinventing the rule.
  *
  * ── Why the URL and not React state ─────────────────────────────────────────
- * The control is rendered in the tab row and the cards that obey it are inside
- * the panel, so shared state would otherwise have to be lifted above both and
- * threaded back down. `?set=` costs no plumbing, survives a tab round-trip and
- * a reload, and is the same mechanism `?tab=` already uses on this page.
- * Writes go through `router.replace` rather than `push` (`match-tabs.tsx`
- * deliberately uses `push` for the opposite reason): a filter is not a place
- * the back button should return to — a reader who narrowed to three sets in
- * turn expects Back to leave the match, not to walk them out one set at a time.
+ * The cards that obey the scope sit in different corners of the view, so
+ * shared state would have to be lifted above all of them and threaded back
+ * down. `?set=` costs no plumbing, survives a view round-trip and a reload,
+ * and is the same mechanism `?tab=` uses on this page.
  *
  * ── Why a set can be unselectable ───────────────────────────────────────────
  * The published `match_stats` numbers are whole-match only, so a scoped view is
  * recomputed from `points`; a set with no point rows behind it can therefore
- * only ever produce an empty view. Those chips are disabled, and — the part
- * that is easy to forget — a hand-edited `?set=9` reads as the whole match for
- * the same reason. "Set 9 · 0 points" is a worse answer than ignoring the
- * param, and it is exactly what a filter that matches nothing looks like.
+ * only ever produce an empty view. So a hand-edited `?set=9`, or a `?set=2`
+ * for a set with no rows, reads as the whole match. "Set 9 · 0 points" is a
+ * worse answer than ignoring the param, and it is exactly what a filter that
+ * matches nothing looks like.
  *
  * Sets come from `useMatchSides().sets`, never from player order
  * (docs/ui-revamp-guardrails.md §4).
@@ -52,14 +57,12 @@ export interface SetScopeMeta {
 }
 
 export interface SetScope {
-  /** The set the pane is narrowed to, or `null` for the whole match. */
+  /** The set the view is narrowed to, or `null` for the whole match. */
   activeSet: number | null;
-  /** Write the scope to the URL. `null` clears it. */
-  select: (set: number | null) => void;
   /**
    * The set numbers a reader may actually scope to — the same rule the `?set=`
-   * parse used, handed back so a consumer (the chips' disabled state) reads it
-   * instead of recomputing it and risking a drift from what the URL accepts.
+   * parse used, handed back so a consumer reads it instead of recomputing it
+   * and risking a drift from what the URL accepts.
    */
   selectable: ReadonlySet<number>;
 }
@@ -70,9 +73,8 @@ export interface SetScope {
 
 /**
  * The set numbers a reader may actually scope to: present in the score AND
- * carrying point rows. One rule serving two consumers — the chips' disabled
- * state and the `?set=` parse — so a URL can never select what the control
- * refuses to.
+ * carrying point rows. One rule for the `?set=` parse and for any control that
+ * writes the parameter, so a URL can never select what a control would refuse.
  */
 export function selectableSets(
   sets: readonly ScoreLineSet[],
@@ -155,10 +157,12 @@ export function scopeMeta(
 
 /* ── Hook ───────────────────────────────────────────────────────────────── */
 
-/** The scope, for any client component under `MatchDataProvider`. */
+/**
+ * The scope, for any client component under `MatchDataProvider`. Read-only:
+ * it parses `?set=` and says which sets could be scoped to; nothing here
+ * writes the URL.
+ */
 export function useSetScope(): SetScope {
-  const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { points } = useMatchData();
   const sides = useMatchSides();
@@ -169,97 +173,5 @@ export function useSetScope(): SetScope {
   );
   const activeSet = parseSetParam(searchParams.get(SET_PARAM), selectable);
 
-  const select = useCallback(
-    (next: number | null) => {
-      const query = setScopeQuery(
-        new URLSearchParams(searchParams.toString()),
-        next,
-      );
-      router.replace(query ? `${pathname}?${query}` : pathname, {
-        scroll: false,
-      });
-    },
-    [router, pathname, searchParams],
-  );
-
-  return { activeSet, select, selectable };
-}
-
-/* ── Control ────────────────────────────────────────────────────────────── */
-
-/**
- * The segmented control itself: one chip per set, showing that set's games as
- * the scoreboard spells them. Rendered in the tab row's trailing slot on the
- * Statistics tab; the scope label and the reset appear only while filtered, so
- * an unfiltered pane carries the control alone.
- */
-export function SetScopeChips() {
-  const { points } = useMatchData();
-  const sides = useMatchSides();
-  const { activeSet, select, selectable } = useSetScope();
-
-  // A match with no sets on its score row would otherwise leave an empty 4 px
-  // pill sitting in the tab row.
-  if (sides.sets.length === 0) return null;
-
-  const filtered = activeSet !== null;
-  const meta = scopeMeta(sides.sets, points, activeSet);
-
-  return (
-    <div className="flex items-center gap-2.5">
-      {filtered && (
-        <span
-          className="text-micro tabular whitespace-nowrap"
-          style={{ color: "var(--ink-500)" }}
-        >
-          {meta.label} · {meta.points} points · {meta.games} games
-        </span>
-      )}
-
-      <div
-        role="group"
-        aria-label="Scope statistics to a set"
-        className="flex items-center gap-0.5 rounded-[var(--radius-button)] bg-[var(--surface-muted)] p-0.5"
-      >
-        {sides.sets.map((set, i) => {
-          const setNumber = i + 1;
-          const isActive = activeSet === setNumber;
-          const hasPoints = selectable.has(setNumber);
-          return (
-            <button
-              key={setNumber}
-              type="button"
-              disabled={!hasPoints}
-              aria-pressed={isActive}
-              aria-label={`Set ${setNumber}, ${set.player1}-${set.player2}`}
-              onClick={() => select(isActive ? null : setNumber)}
-              className={cn(
-                "text-scoreboard-sm tabular inline-flex h-[22px] items-center rounded-[4px] px-[9px] transition-[background-color,opacity] duration-200 ease-[cubic-bezier(0.25,0.46,0.45,0.94)]",
-                hasPoints
-                  ? "cursor-pointer hover:bg-[var(--surface-card)] hover:opacity-100"
-                  : "cursor-default opacity-40",
-                isActive && "bg-[var(--surface-card)]",
-                filtered && !isActive && hasPoints && "opacity-45",
-              )}
-              // `.text-scoreboard-sm` is unlayered, so it beats a Tailwind
-              // font-size utility — the artboard's 12px has to be inline.
-              style={{ fontSize: "12px", color: "var(--ink-900)" }}
-            >
-              {set.player1}-{set.player2}
-            </button>
-          );
-        })}
-      </div>
-
-      {filtered && (
-        <button
-          type="button"
-          onClick={() => select(null)}
-          className="cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)]"
-        >
-          Whole match
-        </button>
-      )}
-    </div>
-  );
+  return { activeSet, selectable };
 }
