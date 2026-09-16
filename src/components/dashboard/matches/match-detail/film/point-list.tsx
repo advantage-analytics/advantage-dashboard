@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
+import { filmProgressWidth } from "./film-clock";
+import { scoreColumns } from "./film-score";
 import {
   DEFAULT_FILM_FILTERS,
   FilmFiltersPanel,
@@ -55,7 +57,9 @@ interface PointListProps {
   onTabChange: (tab: "points" | "saved") => void;
   /** Point whose window contains the playhead, and how far through it is. */
   activePointId: string | null;
-  activeProgress: number;
+  /** Film-clock window of the playing point; its rule reads `--film-t`. */
+  activeStart: number;
+  activeEnd: number;
   /** Stable identity, please — `PointRow` is memoized on it. */
   onSelect: (point: MatchPoint) => void;
   onToggleSaved: (pointId: string) => void;
@@ -81,12 +85,6 @@ interface GameGroup {
  * from end to end there is nothing behind it and it does not render. A real
  * match escapes the test on its second game, which is never 0-0 games.
  */
-function columnHasValues(
-  points: MatchPoint[],
-  read: (point: MatchPoint) => string,
-): boolean {
-  return points.length > 0 && points.some((point) => read(point) !== "0-0");
-}
 
 export function PointList({
   allPoints,
@@ -97,7 +95,8 @@ export function PointList({
   tab,
   onTabChange,
   activePointId,
-  activeProgress,
+  activeStart,
+  activeEnd,
   onSelect,
   onToggleSaved,
 }: PointListProps) {
@@ -113,14 +112,8 @@ export function PointList({
   const youName = sides.you.name;
   const oppName = sides.opp.name;
 
-  const showGameScore = useMemo(
-    () => columnHasValues(allPoints, (p) => p.gameScore),
-    [allPoints],
-  );
-  const showPointScore = useMemo(
-    () => columnHasValues(allPoints, (p) => p.pointScore),
-    [allPoints],
-  );
+  const { hasGameScore: showGameScore, hasPointScore: showPointScore } =
+    useMemo(() => scoreColumns(allPoints), [allPoints]);
 
   // Grouped on `gameNumber`, not on the game score: the score is the label,
   // and on a match that has none every group would collapse into one.
@@ -303,7 +296,8 @@ export function PointList({
                     initials={isYou ? sides.you.initials : sides.opp.initials}
                     showPointScore={showPointScore}
                     isActive={point.id === activePointId}
-                    progress={point.id === activePointId ? activeProgress : 0}
+                    activeStart={point.id === activePointId ? activeStart : 0}
+                    activeEnd={point.id === activePointId ? activeEnd : 0}
                     onSelect={onSelect}
                     onToggleSaved={onToggleSaved}
                   />
@@ -345,7 +339,8 @@ const PointRow = memo(function PointRow({
   initials,
   showPointScore,
   isActive,
-  progress,
+  activeStart,
+  activeEnd,
   onSelect,
   onToggleSaved,
 }: {
@@ -354,7 +349,8 @@ const PointRow = memo(function PointRow({
   initials: string;
   showPointScore: boolean;
   isActive: boolean;
-  progress: number;
+  activeStart: number;
+  activeEnd: number;
   onSelect: (point: MatchPoint) => void;
   onToggleSaved: (pointId: string) => void;
 }) {
@@ -449,8 +445,8 @@ const PointRow = memo(function PointRow({
           className="absolute inset-x-3 bottom-0 h-0.5 overflow-hidden rounded-[1px] bg-[var(--ink-100)]"
         >
           <span
-            className="block h-0.5 rounded-[1px] bg-[var(--blue)]"
-            style={{ width: `${Math.round(progress * 100)}%` }}
+            className="absolute inset-y-0 left-0 rounded-[1px] bg-[var(--blue)]"
+            style={{ width: filmProgressWidth(activeStart, activeEnd) }}
           />
         </span>
       )}

@@ -55,6 +55,20 @@ export type ServeKey = "ace" | "double-fault" | "t" | "body" | "wide";
 export type ReturnKey = "in-play" | "winner" | "error";
 export type ResultKey = "winner" | "forced" | "unforced" | "long";
 
+/*
+ * The fullscreen film room's axes (Film Room Fullscreen handoff, F4 + F5).
+ * Additive: the report tab's panel above knows nothing about them, and both
+ * surfaces apply ONE `FilmFilters` value, so a cut made in either place is
+ * the cut ↑↓ walks in both.
+ */
+export type ServerCut = "any" | "you" | "opp";
+export type CourtCut = "any" | "deuce" | "ad";
+/** "Point ended with" — one OR group across serve and rally endings. */
+export type EndedKey =
+  "winner" | "forced" | "unforced" | "ace" | "double-fault";
+/** "Shot" — the shot that ended the point. */
+export type ShotKey = "forehand" | "backhand" | "volley" | "serve-plus-one";
+
 export interface FilmFilters {
   pressure: PressureCut;
   ball: BallCut;
@@ -64,6 +78,18 @@ export interface FilmFilters {
   serve: ServeKey[];
   returns: ReturnKey[];
   result: ResultKey[];
+  /** Who served the point. */
+  server: ServerCut;
+  /** Only bookmarked points — the quick menu's "Saved only". */
+  savedOnly: boolean;
+  /** One set, or every set. */
+  set: number | null;
+  /** Rallies of at least this many shots, or any length. */
+  rallyMin: number | null;
+  ended: EndedKey[];
+  shot: ShotKey[];
+  /** Which service court the point was played from. */
+  court: CourtCut;
 }
 
 export const DEFAULT_FILM_FILTERS: FilmFilters = {
@@ -75,6 +101,13 @@ export const DEFAULT_FILM_FILTERS: FilmFilters = {
   serve: [],
   returns: [],
   result: [],
+  server: "any",
+  savedOnly: false,
+  set: null,
+  rallyMin: null,
+  ended: [],
+  shot: [],
+  court: "any",
 };
 
 export function hasActiveFilmFilters(f: FilmFilters): boolean {
@@ -86,7 +119,14 @@ export function hasActiveFilmFilters(f: FilmFilters): boolean {
     f.score.length > 0 ||
     f.serve.length > 0 ||
     f.returns.length > 0 ||
-    f.result.length > 0
+    f.result.length > 0 ||
+    f.server !== "any" ||
+    f.savedOnly ||
+    f.set !== null ||
+    f.rallyMin !== null ||
+    f.ended.length > 0 ||
+    f.shot.length > 0 ||
+    f.court !== "any"
   );
 }
 
@@ -175,11 +215,99 @@ function matchesResult(point: MatchPoint, key: ResultKey): boolean {
   }
 }
 
+function matchesEnded(point: MatchPoint, key: EndedKey): boolean {
+  switch (key) {
+    case "winner":
+      return isWinnerResult(point);
+    case "forced":
+      return matchesResult(point, "forced");
+    case "unforced":
+      return matchesResult(point, "unforced");
+    case "ace":
+      return point.resultType === "Ace";
+    case "double-fault":
+      return point.resultType === "Double Fault";
+  }
+}
+
+function matchesShot(point: MatchPoint, key: ShotKey): boolean {
+  const last = (point.lastShotType ?? "").toLowerCase();
+  switch (key) {
+    case "forehand":
+      return last.includes("forehand") && !last.includes("volley");
+    case "backhand":
+      return last.includes("backhand") && !last.includes("volley");
+    case "volley":
+      return last.includes("volley") || last.includes("overhead");
+    // The server's first ball after the return decided the point: either it
+    // was the winner (third shot of the rally) or it forced the returner's
+    // next ball into an error (fourth shot). `rallyLength` counts from the
+    // serve in play. Product owner's definition, 2026-09-14.
+    case "serve-plus-one":
+      return (
+        (point.rallyLength === 3 && isWinnerResult(point)) ||
+        (point.rallyLength === 4 && /error$/i.test(point.resultType.trim()))
+      );
+  }
+}
+
+const RUNG: Record<string, number> = {
+  "0": 0,
+  "15": 1,
+  "30": 2,
+  "40": 3,
+  AD: 4,
+};
+
+/**
+ * Which service court a point was played from.
+ *
+ * Tennis alternates courts every point of a game, starting in the deuce
+ * court, so with a real point score the answer is the parity of the rungs
+ * (0-0, 15-15, 30-0 and 40-40 are deuce; 15-0, 30-15, AD-40 are ad). Without
+ * one, the point's index within its game gives the same parity — a let or a
+ * replayed point would shift it, which is the accepted approximation.
+ */
+export function courtSideOf(
+  point: MatchPoint,
+  indexInGame: number,
+  hasPointScore: boolean,
+): "deuce" | "ad" {
+  if (hasPointScore) {
+    const parts = point.pointScore
+      .split("-")
+      .map((p) => p.trim().toUpperCase());
+    const a = RUNG[parts[0] ?? ""];
+    const b = RUNG[parts[1] ?? ""];
+    if (a !== undefined && b !== undefined) {
+      return (a + b) % 2 === 0 ? "deuce" : "ad";
+    }
+  }
+  return indexInGame % 2 === 0 ? "deuce" : "ad";
+}
+
 function matchesFilm(
   point: MatchPoint,
   f: FilmFilters,
   youIsPlayer1: boolean,
+  court: "deuce" | "ad",
 ): boolean {
+  if (f.savedOnly && !point.saved) return false;
+  if (f.set !== null && point.setNumber !== f.set) return false;
+  if (f.rallyMin !== null && point.rallyLength < f.rallyMin) return false;
+  if (f.court !== "any" && court !== f.court) return false;
+  if (f.server !== "any") {
+    const youServed = point.serverIsPlayer1 === youIsPlayer1;
+    if (f.server === "you" && !youServed) return false;
+    if (f.server === "opp" && youServed) return false;
+  }
+  if (f.ended.length > 0 && !f.ended.some((k) => matchesEnded(point, k))) {
+    return false;
+  }
+  if (f.shot.length > 0 && !f.shot.some((k) => matchesShot(point, k))) {
+    return false;
+  }
+
   if (f.pressure === "break" && !point.isBreakPoint) return false;
   if (f.pressure === "set-match" && !(point.isSetPoint || point.isMatchPoint)) {
     return false;
@@ -222,7 +350,29 @@ export function applyFilmFilters(
   youIsPlayer1: boolean,
 ): MatchPoint[] {
   if (!hasActiveFilmFilters(f)) return points;
-  return points.filter((point) => matchesFilm(point, f, youIsPlayer1));
+
+  // The court side costs a string split per point and the panel re-filters on
+  // every keystroke, so it is only worked out when a court filter asks for it.
+  // `points` arrive in match order, so a point's index within its game is a
+  // running count — computed once here rather than per predicate.
+  const needsCourt = f.court !== "any";
+  const hasPointScore =
+    needsCourt && points.some((p) => p.pointScore !== "0-0");
+  let gameKey = "";
+  let indexInGame = 0;
+
+  return points.filter((point) => {
+    if (!needsCourt) return matchesFilm(point, f, youIsPlayer1, "deuce");
+    const key = `${point.setNumber}-${point.gameNumber}`;
+    if (key !== gameKey) {
+      gameKey = key;
+      indexInGame = 0;
+    } else {
+      indexInGame += 1;
+    }
+    const court = courtSideOf(point, indexInGame, hasPointScore);
+    return matchesFilm(point, f, youIsPlayer1, court);
+  });
 }
 
 /* ── The cut, in words ──────────────────────────────────────────────────── */
@@ -249,6 +399,19 @@ const RESULT_PHRASE: Record<ResultKey, string> = {
   unforced: "unforced errors",
   long: "rallies of 9+ shots",
 };
+const ENDED_PHRASE: Record<EndedKey, string> = {
+  winner: "winners",
+  forced: "forced errors",
+  unforced: "unforced errors",
+  ace: "aces",
+  "double-fault": "double faults",
+};
+const SHOT_PHRASE: Record<ShotKey, string> = {
+  forehand: "forehands",
+  backhand: "backhands",
+  volley: "volleys",
+  "serve-plus-one": "serve +1",
+};
 
 function orList(phrases: string[]): string {
   if (phrases.length <= 1) return phrases[0] ?? "";
@@ -268,8 +431,23 @@ export function lastNameOf(name: string): string {
 export function describeFilmCut(f: FilmFilters, sides: MatchSides): string {
   const clauses: string[] = [];
 
+  if (f.savedOnly) clauses.push("saved points");
+  if (f.set !== null) clauses.push(`set ${f.set}`);
   if (f.pressure === "break") clauses.push("break points");
   if (f.pressure === "set-match") clauses.push("set and match points");
+  if (f.server === "you") clauses.push("your serve");
+  if (f.server === "opp") {
+    clauses.push(`${lastNameOf(sides.opp.name)} serving`);
+  }
+  if (f.court === "deuce") clauses.push("deuce court");
+  if (f.court === "ad") clauses.push("ad court");
+  if (f.rallyMin !== null) clauses.push(`rallies of ${f.rallyMin}+ shots`);
+  if (f.ended.length > 0) {
+    clauses.push(orList(f.ended.map((k) => ENDED_PHRASE[k])));
+  }
+  if (f.shot.length > 0) {
+    clauses.push(`ended on ${orList(f.shot.map((k) => SHOT_PHRASE[k]))}`);
+  }
   if (f.score.length > 0) {
     clauses.push(orList(f.score.map((k) => SCORE_PHRASE[k])));
   }

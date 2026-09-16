@@ -27,8 +27,9 @@ which problem.
 
 ```
   browser
-    │  1. pick + trim video, local validation (≥1080p, ≥30fps, singles)
-    │     src/components/dashboard/matches/new-match-wizard/
+    │  1. pick + trim video, local validation (≥1080p, ≥30fps, singles),
+    │     then cut the selected window out of the file in the browser —
+    │     a remux, no re-encode (src/lib/video/trim.ts)
     ▼
   POST /api/splitstep/upload-url
     │  2. verifies the caller owns the match, mints a 6-hour `cw` SAS
@@ -47,7 +48,8 @@ which problem.
     ▼
   POST /api/webhooks/splitstep
        6. verify HMAC → record every delivery → return 200
-          → download results JSON in after() → store → delete the source blob
+          → download results JSON in after() → store → grade → derive
+          (the source blob is kept: it is the video the film room plays)
 ```
 
 Steps 1–3 are the upload path. Steps 4–6 are submission, serving and results.
@@ -61,22 +63,31 @@ you read the payload before anything is spent.
 
 ## 2. Two stores, two systems
 
-| Artifact                                                          | Where                                                                                      | Why there                                                               |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| Original video, 1–8 GB                                            | **Azure Blob** `advantage-videos`, `videos/…`                                              | the only host the vendor's `VideoUrl` accepts (§3)                      |
-| **Trimmed video**, returned by the vendor                         | **Azure Blob** `advantage-videos`, `trimmed/…`                                             | copied server-side from their SAS; the only video that outlives the job |
-| Raw strokes JSON, ~1 MB                                           | **Supabase Storage** `match-results` (private)                                             | beside `match-data`, and next to the Edge Function that will read it    |
-| Per-frame players / trajectories JSON (Sept 2026 API), tens of MB | **Supabase Storage** `match-results`, `…/{job}.players.json` / `…/{job}.trajectories.json` | fetched last in `after()`, best-effort; nothing reads them yet          |
-| Webhook envelopes, ~1 KB                                          | Postgres `splitstep_webhook_deliveries`                                                    | needs to be transactional with the job row                              |
+| Artifact                                                          | Where                                                                                      | Why there                                                            |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| Uploaded video (cut to the selected window), 1–8 GB               | **Azure Blob** `advantage-videos`, `videos/…`                                              | the only host the vendor's `VideoUrl` accepts (§3); kept and played  |
+| Vendor's trimmed video (older matches only)                       | **Azure Blob** `advantage-videos`, `trimmed/…`                                             | no longer copied (§2 note); played only where no upload survives     |
+| Raw strokes JSON, ~1 MB                                           | **Supabase Storage** `match-results` (private)                                             | beside `match-data`, and next to the Edge Function that will read it |
+| Per-frame players / trajectories JSON (Sept 2026 API), tens of MB | **Supabase Storage** `match-results`, `…/{job}.players.json` / `…/{job}.trajectories.json` | fetched last in `after()`, best-effort; nothing reads them yet       |
+| Webhook envelopes, ~1 KB                                          | Postgres `splitstep_webhook_deliveries`                                                    | needs to be transactional with the job row                           |
 
 The vendor hands their processed video back on `trimmed_video_url` beside `strokes_url`
 (named `sas_url` until September 2026 — the parser accepts both, and the column is still
 `processing_jobs.sas_url`). Two more urls arrived with that rename: `players_url` and
-`trajectories_url` (nullable), per-frame tracking that lands beside the strokes file. We
-ignored that field until 2026-08-13 while also deleting our own source video, so a
-successful job ended with **no video anywhere**. `startTrimmedVideoCopy()` now issues
-Azure's async Copy Blob, which means Azure pulls the bytes directly and none pass
-through a Vercel function bounded at 60s.
+`trajectories_url` (nullable), per-frame tracking that lands beside the strokes file.
+
+> **September 2026: we keep our own file and no longer copy theirs.** From 2026-08-13
+> the webhook copied `trimmed_video_url` into `trimmed/…` and then deleted our source.
+> Watching the first real match showed the vendor copy is a 2.2 Mbps re-encode **with no
+> audio track** (only a video track in its `moov`), and the original was already gone.
+> Now the wizard cuts the selected window out of the athlete's file in the browser with
+> Mediabunny — a remux: same frames, same audio, same resolution and frame rate — and
+> uploads that. The job goes to the vendor as `StartTime 0 / EndTime = cut length`, the
+> webhook records `trimmed_video_url` for recovery by hand and downloads nothing, and
+> nothing deletes the source. When a file can't be cut (unreadable container, a track
+> that can't be copied into MP4, no private file system or quota) the original goes up
+> with the selected window exactly as before. Playback prefers our upload and falls back
+> to an older match's vendor copy (`src/lib/data/match-video-choice.ts`).
 
 > **"Trimmed" means trimmed to the window we submitted — not dead time removed.**
 > This doc previously claimed the opposite, and the assumption survived until someone
@@ -86,11 +97,11 @@ through a Vercel function bounded at 60s.
 > match. No annotations, no rally detection, no cuts.
 >
 > Two consequences. A player who selects their whole video gets their whole video
-> back, so §3's delete of our 1.54 GB source in favour of a 1.33 GB / 2.2 Mbps
-> re-encode of the same footage is a **downgrade**, not the upgrade the policy was
-> written for — worth revisiting before more jobs run. And the offset between their
-> timeline and ours is not unknown: it is `start_time_seconds` on the job row (see
-> §3.6 of the integration spec).
+> back, so deleting our 1.54 GB source in favour of a 1.33 GB / 2.2 Mbps re-encode of
+> the same footage was a **downgrade** — which is why that policy is now retired (note
+> above). And the offset between their timeline and ours is not unknown: it is
+> `start_time_seconds` on the job row (see §3.6 of the integration spec). For a cut
+> upload that is 0.
 
 Results JSON was originally specced for R2. It moved: at ~1 MB, egress cost is worth
 pennies, nobody external reads it, and the derivation engine that will consume it runs
@@ -151,8 +162,11 @@ Two things bound the exposure instead, and neither is as good as a kill switch:
 
 1. `VENDOR_URL_TTL_SECONDS`, cut from 30 days to **14**. It was 30 when the number cost
    nothing; now the TTL _is_ the exposure rather than a ceiling above it.
-2. **Deleting the source blob once results are stored** (§6). This is the real bound,
-   and it is new — nothing deleted videos post-completion under R2 either.
+2. ~~**Deleting the source blob once results are stored**~~. Retired in September 2026:
+   the source is now the video we keep and play (§2). The 14-day TTL is the whole bound,
+   which the product owner accepted — the SAS grants read access only to footage the
+   vendor is already processing. If a tighter bound is ever needed, give the vendor a
+   server-side copy under a staging key and delete that instead.
 
 Note the earlier version of this section argued a presigned URL was unusable because
 SigV4 caps expiry at 7 days. Azure SAS has no equivalent ceiling, so that constraint no
@@ -235,8 +249,8 @@ What it does, in order:
    That is what makes the envelope, and the urls inside it, recoverable by hand.
 4. **Return 200.**
 5. **On `job_completed`, in `after()`**: fetch `strokes_url`, write the JSON verbatim to
-   `match-results`, then `finalize_splitstep_results()`; start the trimmed-video copy;
-   grade and derive; and only then fetch `players_url` / `trajectories_url` into
+   `match-results`, then `finalize_splitstep_results()`; grade and derive (the vendor's
+   trimmed video url is recorded on the row and not downloaded); and only then fetch `players_url` / `trajectories_url` into
    `players_object_key` / `trajectories_object_key`, best-effort in whatever budget is
    left.
 
@@ -337,10 +351,10 @@ that ordering is load-bearing for exactly that reason. They run concurrently und
    the match, since a re-submitted match points several jobs at one source blob; trimmed
    keys are per-job and naturally distinct.
 
-   > Reading only the source key was a live bug for one commit. Once the reclaim pass has
-   > removed the source, the trimmed copy is the **only** video for that match, so
-   > deleting the match stranded several GB with nothing able to name it — precisely the
-   > leak this whole section exists to prevent.
+   > Reading only the source key was a live bug for one commit. On older matches whose
+   > source was removed by the since-retired reclaim, the trimmed copy is the **only**
+   > video for that match, so deleting the match stranded several GB with nothing able to
+   > name it — precisely the leak this whole section exists to prevent.
 
 2. **Raw results JSON** in `match-results`, keyed off `processing_jobs.results_object_key`.
 3. **Uploaded provider files** (SwingVision `.xlsx` and friends) in `match-data`.
@@ -348,56 +362,21 @@ that ordering is load-bearing for exactly that reason. They run concurrently und
 Every step is **best-effort**. A stranded file is recoverable; a match the user cannot
 delete is not. Storage failures log and the row delete proceeds regardless.
 
-### The source video is deleted once something better is safely ours
+### The source video is no longer deleted when a job completes
 
-The thing that makes a 14-day unrevocable SAS acceptable. In the webhook's `after()`
-block, once the results JSON is stored **and** the vendor's trimmed re-encode has been
-confirmed copied into our container, the source blob is deleted.
+Until September 2026 the webhook (and a daily `/api/cron/reclaim-videos` pass) deleted the
+source blob once the results JSON was stored and the vendor's trimmed re-encode had been
+copied in. Both are gone, along with `reclaim-videos.ts`, `startTrimmedVideoCopy()` and
+`trimmedCopyStatus()`:
 
-Strictly in that order, and the second condition is not optional. While the video is the
-only copy of the match it is also the only way to re-run a job, so deleting before the
-results are safe would trade a recoverable failure for an unrecoverable one. The
-original version checked only the results and deleted unconditionally — which destroyed
-the last video in existence for that match, because we were not capturing the trimmed
-one. It only fires on success either way: a `failed` job keeps its video, because the
-whole point of a retry is having something to retry with.
+- the vendor's copy turned out to be a lower-bitrate re-encode with no audio track, so
+  swapping our file for it was a downgrade;
+- the source is now cut to the selected window before upload, so keeping it costs no more
+  than the vendor's copy did;
+- it is also the only way to re-run a job, which `resubmit-job.ts` already relied on.
 
-Two consequences worth knowing rather than discovering:
-
-- **In practice the webhook always declines.** A cross-account copy of a real match is
-  still `pending` when the request ends, and a redelivery cannot pick it up either —
-  by then both artifacts are recorded, so the webhook takes no `after()` path at all.
-  The delete therefore belongs to the scheduled pass below, not to the webhook.
-- **A job whose payload carried no trimmed url keeps its source indefinitely.** Also
-  deliberate. One video beats none.
-
-### The scheduled reclaim
-
-`reclaimSupersededSources()` in `src/lib/services/splitstep/reclaim-videos.ts` is the
-pass that actually removes source videos. Two callers, one definition:
-
-- **`/api/cron/reclaim-videos`**, daily at 04:00 UTC via `vercel.json`. This is the
-  automatic path, and it exists because the webhook's own delete is unreachable in
-  practice — without it, ~5 GB accumulated per completed match until a human ran a script.
-- **`scripts/cleanup-orphan-storage.ts`**, the manual handle: a dry run to see what would
-  go, and a way to force a sweep without waiting for the schedule.
-
-It clears `video_object_key` after a successful delete. Without that the same rows
-qualified on every run, re-issuing a no-op delete and reporting "N found / 0 deleted"
-forever — on a destructive script, indistinguishable from a broken sweep.
-
-A copy Azure reports `failed` or `aborted` is surfaced **separately** from one still
-running, and logged at error level. It means the job points at a trimmed video that does
-not exist, and `trimmed_video_url` — the only way to fetch it again — expires about a
-week after completion.
-
-> `CRON_SECRET` fails **closed**: unset, the route returns 503 and deletes nothing. That
-> is the opposite of the webhook's default and deliberately so. The webhook accepts an
-> unverifiable delivery because a refused one is gone permanently; here the repo is
-> public so the path is known, the endpoint destroys data, and a skipped run simply
-> happens tomorrow.
-
-Best-effort by construction: every failure logs and returns.
+The only thing that removes a video now is deleting its match (above) or the orphan
+sweeper (below). `CRON_SECRET` has no route to protect until the next scheduled job.
 
 ### Webhook deliveries cascade too
 
@@ -561,8 +540,8 @@ ordering, and match-deletion cleanup. What remains is almost entirely vendor-sid
 **Blocking, on the vendor:**
 
 - ~~**`SPLITSTEP_API_URL` and `SPLITSTEP_API_KEY` are not yet in hand.**~~ In hand, and
-  set on Vercel for **Preview only** — Production submissions 503 and the reclaim cron
-  never fires there. A real 86-minute match has since gone end-to-end
+  set on Vercel for **Preview only** — Production submissions 503. A real 86-minute match
+  has since gone end-to-end
   (browser → Azure → vendor → signed webhook → results + trimmed video).
 - **The 8,000,000,000-byte size limit is unconfirmed for our account.** Their docs mark
   it "Enforced"; an earlier call put it at 10–12 GB. `MAX_VIDEO_SIZE_BYTES` takes the
@@ -588,7 +567,7 @@ ordering, and match-deletion cleanup. What remains is almost entirely vendor-sid
   before it is coded. A genuinely stalled job
   (`85518306-2baf-427e-ad6c-79555041a523`) is waiting to be the retry path's first
   real test on a Preview deploy.
-- **Trimmed videos are in Azure, and object storage with free egress would be cheaper.**
+- **Played videos are in Azure, and object storage with free egress would be cheaper.**
   Egress is the whole argument: ~$0.087/GB against $0 on R2 or a similar store, with
   storage a wash. Azure won on the deadline, not on merit — a SAS expires and
   Azure→Azure copy is one server-side call, while copying out means streaming gigabytes
@@ -653,7 +632,7 @@ branch. The three that block Phase 2 are **Q8** (what `in` means on a serve), **
 | `SPLITSTEP_WEBHOOK_SECRET`               | Vercel                         | HMAC key, **issued by the vendor**. Unset = unsigned mode, which accepts anything                                                                                                                                                                                                                                                                                                                                                              |
 | `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE`    | Vercel                         | `true` = fail-closed on a missing signature. **Set this once a real delivery confirms `X-HMAC-Signature`**                                                                                                                                                                                                                                                                                                                                     |
 | `SPLITSTEP_API_URL`, `SPLITSTEP_API_KEY` | Vercel, **Preview only today** | key issued by the vendor. Production submissions 503 until set there                                                                                                                                                                                                                                                                                                                                                                           |
-| `CRON_SECRET`                            | Vercel                         | any long random string. Vercel sends it as `Authorization: Bearer <secret>` to `/api/cron/reclaim-videos`. **Unset = the reclaim never runs** and source videos accumulate                                                                                                                                                                                                                                                                     |
+| `CRON_SECRET`                            | Vercel                         | any long random string, for a future scheduled route (`Authorization: Bearer <secret>`, fail closed). Unused since `/api/cron/reclaim-videos` was retired in September 2026                                                                                                                                                                                                                                                                    |
 
 Note that the account key is the only credential and it does everything, which is why
 the write SAS is scoped to `cw` on one blob name — that scope is the containment, not
@@ -681,14 +660,14 @@ actually landed in the database and the bucket, and it **signs payloads with a r
 HMAC** rather than sending the raw secret, so it exercises the same path a vendor
 delivery will.
 
-Neither url on a completion is mocked: it uploads two fixtures to `match-results` and
-signs them, one standing in for the results JSON and one for the trimmed video, so both
-the download and the Azure server-side copy run over real HTTP. Because both happen in
-`after()`, the assertions poll rather than checking immediately.
+No url on a completion is mocked: it uploads fixtures to `match-results` and signs them,
+standing in for the results JSON, the players JSON and the trimmed video, so the downloads
+run over real HTTP. The trimmed video url must be recorded on the job row and **not**
+copied — the suite asserts `trimmed_object_key` stays null once the last `after()` step
+has landed. Because all of it happens in `after()`, the assertions poll rather than
+checking immediately.
 
-Everything it creates is removed on the way out — including a blob in the **real** videos
-container. Without local `AZURE_STORAGE_*` it cannot verify or clean that blob, so it
-skips the check and prints the key to delete by hand.
+Everything it creates is removed on the way out.
 
 > Two traps this suite fell into itself, both worth not repeating: the
 > `results_object_key` assertion read once instead of polling (`status` flips
@@ -697,8 +676,8 @@ skips the check and prints the key to delete by hand.
 > stopped being byte-identical the moment a field was added to the first. It is one
 > `completionBody` const now, because "identical body" is that test's entire premise.
 
-Last run: all green, `signature_verified: true`, results stored, trimmed copy confirmed
-`success` in Azure.
+Last run before the September 2026 change: all green, `signature_verified: true`, results
+stored. Re-run it against a Preview deploy of the change to confirm no copy is started.
 
 > If every delivery comes back `signature_verified: false`, the deployed build predates
 > the secret being set. Redeploy — Vercel injects env vars at deploy time. This has

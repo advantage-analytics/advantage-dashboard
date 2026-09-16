@@ -18,20 +18,17 @@
  * No url on a completion is mocked. The script uploads three fixtures into the
  * `match-results` bucket and signs them — one standing in for the strokes
  * JSON, one for the per-frame players JSON, one for the trimmed video — so the
- * downloads and the Azure server-side copy run end-to-end over real HTTP
- * without an external host. `trajectories_url` is sent as null, which the
- * vendor's docs allow and which must be tolerated.
+ * downloads run end-to-end over real HTTP without an external host.
+ * `trajectories_url` is sent as null, which the vendor's docs allow and which
+ * must be tolerated.
  *
- * The copy is worth testing precisely because its failure is silent: the vendor
- * sends `trimmed_video_url` alongside `strokes_url`, we used to ignore it, and
- * the webhook then deleted our own source video. Nothing about that looked
- * wrong until someone went looking for the match and found no video at all.
- * The same goes for the field names themselves: `sas_url` became `strokes_url`
- * in September 2026, and a rename the parser misses leaves a completed job with
- * no results and nothing on screen to say so.
+ * The trimmed video url must be RECORDED and NOT copied: the vendor's re-encode
+ * is no longer kept (it arrived without audio), and the athlete's own upload —
+ * cut before upload — is the video we play. The field names matter too:
+ * `sas_url` became `strokes_url` in September 2026, and a rename the parser
+ * misses leaves a completed job with no results and nothing on screen to say so.
  *
- * Everything it creates is removed on the way out, including after a failure,
- * and that now includes a blob in the real videos container.
+ * Everything it creates is removed on the way out, including after a failure.
  */
 
 import { createHmac } from "node:crypto";
@@ -42,14 +39,7 @@ import {
   playersObjectKey,
   resultsObjectKey,
   trajectoriesObjectKey,
-  trimmedObjectKey,
 } from "../src/lib/services/splitstep/object-keys";
-import {
-  AZURE_STORAGE_ENV_VARS,
-  deleteVideoBlob,
-  resolveAzureStorageConfig,
-  trimmedCopyStatus,
-} from "../src/lib/services/splitstep/video-url";
 
 /* ─── env ─── */
 
@@ -116,12 +106,7 @@ const PLAYERS_FIXTURE = JSON.stringify([
  * Stands in for the vendor's trimmed video.
  *
  * A handful of bytes rather than a real encode: what is under test is that the
- * url is parsed, the Azure server-side copy is started and the key recorded —
- * none of which cares what the bytes are. A real video would make the run take
- * minutes and prove nothing extra.
- *
- * It does have to be genuinely fetchable over public HTTPS, because AZURE pulls
- * it, not this script. A mock url would fail in Azure with nothing to read.
+ * url is recorded on the job row and that nothing copies it.
  */
 const VIDEO_FIXTURE_KEY = `__webhook_test__/${Date.now()}-trimmed.mp4`;
 const VIDEO_FIXTURE = "not-a-real-video-just-bytes-to-copy";
@@ -235,15 +220,6 @@ async function deliveryCount(externalJobId: string): Promise<number> {
  */
 const createdJobs: { id: string; matchId: string; userId: string }[] = [];
 
-/**
- * Whether this machine can talk to Azure.
- *
- * The COPY always happens — it runs on the server under test, which has its own
- * credentials. This only decides whether the script can verify and clean up
- * afterwards. Same resolver the app uses, so "configured" means one thing.
- */
-const azureConfigured = resolveAzureStorageConfig().ok;
-
 async function makeJob(externalJobId: string): Promise<{ id: string }> {
   // One live job per match is enforced by the partial unique index
   // `processing_jobs_one_live_per_match` (status not in failed / completed /
@@ -315,34 +291,6 @@ async function cleanup(): Promise<void> {
       VIDEO_FIXTURE_KEY,
       ...resultKeys,
     ]);
-
-  // Blobs the webhook copied into the REAL videos container. Nothing else will
-  // ever remove them: the orphan sweeper only deletes blobs whose match is gone,
-  // and this test attaches to a match that very much still exists.
-  for (const j of createdJobs) {
-    const blobName = trimmedObjectKey({
-      userId: j.userId,
-      matchId: j.matchId,
-      jobId: j.id,
-    });
-
-    if (!azureConfigured) {
-      console.error(
-        `LEFTOVER: ${blobName} may be in the videos container and this machine ` +
-          `has no Azure credentials to remove it. Delete it by hand.`,
-      );
-      continue;
-    }
-
-    try {
-      await deleteVideoBlob({ blobName });
-    } catch (err) {
-      console.error(
-        `Could not remove the test blob ${blobName} — delete it by hand:`,
-        err instanceof Error ? err.message : err,
-      );
-    }
-  }
 
   if (createdJobs.length) {
     await supabase
@@ -485,7 +433,7 @@ async function main(): Promise<void> {
   };
 
   console.log(
-    "2. job_completed — strokes and players fetched and stored, trimmed video copied",
+    "2. job_completed — strokes and players fetched and stored, trimmed video recorded, not copied",
   );
   {
     const r = await post(completionBody);
@@ -524,24 +472,6 @@ async function main(): Promise<void> {
       });
       await supabase.storage.from(RESULTS_BUCKET).remove([key]);
     }
-
-    // The trimmed video. Its own poll: the copy is started in the same after()
-    // block but finishes independently of the results download.
-    const gotTrimmedKey = await waitFor(async () => {
-      const { data } = await supabase
-        .from("processing_jobs")
-        .select("trimmed_object_key")
-        .eq("id", completedJob.id)
-        .maybeSingle();
-      return Boolean(
-        (data as { trimmed_object_key: string | null } | null)
-          ?.trimmed_object_key,
-      );
-    });
-    check(
-      "trimmed_object_key is set — the video url was not dropped",
-      gotTrimmedKey,
-    );
 
     const { data: jobRow } = await supabase
       .from("processing_jobs")
@@ -613,26 +543,20 @@ async function main(): Promise<void> {
       urls,
     );
 
-    // No bookkeeping for cleanup here — it derives the key from the job's ids,
-    // so a failure anywhere above still gets swept.
-    if (job?.trimmed_object_key) {
-      if (azureConfigured) {
-        // A few bytes cross-account still is not instantaneous, so poll. A real
-        // match takes minutes, which is exactly why the source delete defers to
-        // the sweeper rather than blocking the webhook.
-        const copied = await waitFor(
-          async () =>
-            (await trimmedCopyStatus({ blobName: job.trimmed_object_key! })) ===
-            "success",
-          30_000,
-        );
-        check("Azure reports the copy succeeded", copied);
-      } else {
-        console.log(
-          `  SKIP  copy verification — ${AZURE_STORAGE_ENV_VARS.join(" / ")} not in .env.local`,
-        );
-      }
-    }
+    // Checked after the players file landed, which is the last step of the
+    // after() block — so if a copy were still wired in, its key would be set by
+    // now.
+    const { data: afterRow } = await supabase
+      .from("processing_jobs")
+      .select("trimmed_object_key")
+      .eq("id", completedJob.id)
+      .maybeSingle();
+    check(
+      "the vendor's trimmed video is NOT copied — no trimmed_object_key",
+      !(afterRow as { trimmed_object_key: string | null } | null)
+        ?.trimmed_object_key,
+      afterRow,
+    );
   }
 
   console.log("3. duplicate delivery is a no-op");

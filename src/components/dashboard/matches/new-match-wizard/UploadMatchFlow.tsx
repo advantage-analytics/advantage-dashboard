@@ -44,6 +44,7 @@ import {
   type UploadState,
 } from "./upload-progress";
 import { WizardShell } from "./WizardShell";
+import { sweepPreparedVideos } from "@/lib/video/trim";
 
 /** Where the flow returns to when it is dismissed or finished. */
 const PERSONAL_EXIT_HREF = "/dashboard/matches";
@@ -108,6 +109,12 @@ export function UploadMatchFlow({
 
   const handleVideoUpload = useCallback((event: VideoUploadEvent) => {
     setUploads((prev) => applyVideoUploadEvent(prev, event));
+  }, []);
+
+  // A tab that closed mid-upload leaves its trimmed copy in this origin's
+  // private storage. Clear stale ones whenever the wizard opens.
+  useEffect(() => {
+    void sweepPreparedVideos();
   }, []);
 
   // `match-upload-failed` is the wizard's only word for the failures that

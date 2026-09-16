@@ -1,11 +1,27 @@
 import { createClient } from "@/lib/supabase/server";
 import { pickServeShot, pickReturnShot } from "@/lib/data/serve-return-shots";
 
+/** One shot inside a point, in rally order — the film room's shot feed. */
+export interface MatchShot {
+  id: string;
+  shotNumber: number;
+  isPlayer1: boolean;
+  shotType: string | null;
+  spinType: string | null;
+  speedMph: number | null;
+  zone: string | null;
+  result: string | null;
+  /** Same clock as `MatchPoint.videoTime`; null when the source never timed it. */
+  videoTime: number | null;
+}
+
 export interface MatchPoint {
   id: string;
   pointNumber: number;
   setNumber: number;
   gameNumber: number;
+  /** Sets won before this point, SERVER-FIRST like the two below ("1-0"). */
+  setScore: string;
   gameScore: string;
   pointScore: string;
   resultType: string;
@@ -21,6 +37,8 @@ export interface MatchPoint {
   duration: number | null;
   videoTime: number | null;
   saved: boolean;
+  /** Every shot in rally order. Optional so fixtures and imports without shots stay valid. */
+  shots?: MatchShot[];
   // Shot metadata used for Video filters
   firstShotType?: string | null;
   firstShotSpin?: string | null;
@@ -46,6 +64,7 @@ interface DbPoint {
   point_number: number;
   set_number: number;
   game_number: number;
+  set_score: string | null;
   game_score: string | null;
   point_score: string | null;
   result_type: string | null;
@@ -67,6 +86,8 @@ interface DbShot {
   is_player1: boolean;
   shot_type: string | null;
   spin_type: string | null;
+  speed_mph: number | null;
+  video_time: number | null;
   zone: string | null;
   result: string | null;
   contact_x: number | null;
@@ -137,7 +158,7 @@ export async function getMatchPointsFromSupabase(
   const { data: pointsData, error: pointsError } = await supabase
     .from("points")
     .select(
-      "id, point_number, set_number, game_number, game_score, point_score, result_type, won_by_player1, server_is_player1, is_break_point, is_set_point, is_match_point, rally_length, duration, video_time, saved",
+      "id, point_number, set_number, game_number, set_score, game_score, point_score, result_type, won_by_player1, server_is_player1, is_break_point, is_set_point, is_match_point, rally_length, duration, video_time, saved",
     )
     .eq("match_id", matchId)
     .order("point_number", { ascending: true });
@@ -153,20 +174,32 @@ export async function getMatchPointsFromSupabase(
   const points = pointsData as DbPoint[];
   const pointIds = points.map((p) => p.id);
 
-  // Fetch shots for these points
-  const { data: shotsData, error: shotsError } = await supabase
-    .from("shots")
-    .select(
-      "id, point_id, shot_number, is_player1, shot_type, spin_type, zone, result, contact_x, contact_y, landing_x, landing_y",
-    )
-    .in("point_id", pointIds)
-    .order("shot_number", { ascending: true });
+  // Fetch shots for these points, in pages. PostgREST caps a response at 1000
+  // rows by default, and a full three-set match passes that — a single request
+  // silently dropped the tail of the match, which the film room's shot feed
+  // shows row by row. The order is total (point, shot number, id) so pages
+  // never overlap or skip.
+  const SHOT_PAGE = 1000;
+  const shots: DbShot[] = [];
+  for (let from = 0; ; from += SHOT_PAGE) {
+    const { data: page, error: shotsError } = await supabase
+      .from("shots")
+      .select(
+        "id, point_id, shot_number, is_player1, shot_type, spin_type, speed_mph, video_time, zone, result, contact_x, contact_y, landing_x, landing_y",
+      )
+      .in("point_id", pointIds)
+      .order("point_id", { ascending: true })
+      .order("shot_number", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + SHOT_PAGE - 1);
 
-  if (shotsError) {
-    console.error("Failed to fetch shots:", shotsError.message);
+    if (shotsError) {
+      console.error("Failed to fetch shots:", shotsError.message);
+      break;
+    }
+    shots.push(...((page ?? []) as DbShot[]));
+    if (!page || page.length < SHOT_PAGE) break;
   }
-
-  const shots = (shotsData ?? []) as DbShot[];
 
   // Group shots by point_id
   const shotsByPointId = new Map<string, DbShot[]>();
@@ -207,6 +240,7 @@ export async function getMatchPointsFromSupabase(
       pointNumber: point.point_number,
       setNumber: point.set_number,
       gameNumber: point.game_number,
+      setScore: point.set_score ?? "0-0",
       gameScore: point.game_score ?? "0-0",
       pointScore: point.point_score ?? "0-0",
       resultType,
@@ -222,6 +256,17 @@ export async function getMatchPointsFromSupabase(
       duration: point.duration,
       videoTime: point.video_time,
       saved: point.saved,
+      shots: pointShots.map((shot) => ({
+        id: shot.id,
+        shotNumber: shot.shot_number,
+        isPlayer1: shot.is_player1,
+        shotType: shot.shot_type,
+        spinType: shot.spin_type,
+        speedMph: shot.speed_mph,
+        zone: shot.zone,
+        result: shot.result,
+        videoTime: shot.video_time,
+      })),
       firstShotType: firstShot?.shot_type ?? null,
       firstShotSpin: firstShot?.spin_type ?? null,
       firstShotZone: firstShot?.zone ?? null,

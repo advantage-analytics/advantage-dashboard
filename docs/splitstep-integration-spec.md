@@ -280,6 +280,8 @@ At ingest, add `start_time_seconds` to every `time` value so everything is store
 
 **Confirmed empirically, 2026-08-16.** The offset really is exactly `start_time_seconds` and nothing else. The vendor's "trimmed" output is the `StartTime`/`EndTime` window from our own job request, re-encoded — it does not additionally cut dead time, which would have made the mapping piecewise and unrecoverable from a single scalar. Measured on job `2a11168d`: submitted window 15.136 → 5196.343 = 5181.207s, returned video 5181.268s. So `original_time = splitstep_time + start_time_seconds` holds for the whole file, and the job row carries the only number needed.
 
+**September 2026 — cut uploads.** The browser now cuts the selected window out of the file before upload, and the job is sent as `StartTime 0 / EndTime = cut length`, so `start_time_seconds` is 0 and `points.video_time` is seconds into the stored file. The film room plays that file with no offset; only older matches that have nothing but the vendor's re-encode subtract `start_time_seconds` (`src/lib/data/match-video-choice.ts`). An upload that could not be cut keeps the original window and plays the original, also with no offset.
+
 This is the load-bearing assumption of that formula. If the vendor ever ships real dead-time trimming, a single offset stops working and this section is where it breaks first.
 
 Use `time`, not `frame`, for all seeking. They re-encode the trimmed video; frame indices may not map back to the original if framerate changed. Seconds survive re-encoding.

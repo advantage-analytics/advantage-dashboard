@@ -256,17 +256,19 @@ function successView(
       : undefined,
   };
 
+  const preparing = upload?.progress?.stage === "preparing";
+
   switch (upload?.phase ?? "starting") {
     case "starting":
     case "uploading":
       return {
-        title: "Uploading your video",
+        title: preparing ? "Preparing your video" : "Uploading your video",
         steps: [
           saved,
           {
             key: "video",
             state: "now",
-            label: "Uploading video",
+            label: preparing ? "Trimming video" : "Uploading video",
             value: pct === null ? undefined : `${pct}%`,
           },
           later,
@@ -440,13 +442,17 @@ function stepBody(
         <AnalysisProgressTrack
           percent={progress?.pct ?? 0}
           live
-          label="Video upload"
+          label={
+            progress?.stage === "preparing" ? "Video trim" : "Video upload"
+          }
         />
         <div className="-mt-1 flex items-baseline justify-between gap-3 text-[11px] text-[var(--ink-400)] tabular-nums">
           <span>
-            {progress
-              ? `${formatFileSize(progress.bytesUploaded)} of ${formatFileSize(progress.bytesTotal)} · ${formatEta(progress.etaSeconds)}`
-              : "Starting the upload…"}
+            {!progress
+              ? "Starting…"
+              : progress.stage === "preparing"
+                ? "Cutting your selected window out of the video, on this device"
+                : `${formatFileSize(progress.bytesUploaded)} of ${formatFileSize(progress.bytesTotal)} · ${formatEta(progress.etaSeconds)}`}
           </span>
           {upload?.cancel && (
             <button
