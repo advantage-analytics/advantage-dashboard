@@ -11,3 +11,9 @@ is the runner's. Newest entries at the bottom.
 - **subagent report:** all five `done when:` lines met — typecheck clean; `report-view`, `insight-text`, `report-scoreboard`, `match-kpi-history`, `client-bundle-boundary` specs 33/33. Baseline before edits: `npm run lint` 0 errors / 37 warnings (unchanged after), `npm run build` passed.
 - **stash:** `31b8722aa3f7955def919fa30a5b96c04e906ea2` (tag `blocked: T1 (claude/match-report-film-room-a05b7e)`) — `match-stats-server.ts`, `match-kpi-history.spec.ts`, and six new files: `report-view.ts`, `insight-text.ts`, `report-scoreboard.ts` and their three specs.
 - **to resume:** once the live auth API is healthy, `git stash apply 31b8722aa3f7955def919fa30a5b96c04e906ea2`, reset T1's `status:` to `todo`, and re-run `/task-next` — the runner re-gates; or re-gate by hand and commit.
+
+## T1 · Pure report rules and their specs — done
+
+- **gate:** mechanical — PASS (lint, typecheck, full suite incl. live-DB specs); completion — `VERDICT: pass`, all five criteria met, scope limited to `files:`. Re-run of the work restored from stash `31b8722a` after the Supabase Auth timeouts (07:30Z) cleared; the verifying subagent needed no changes.
+- **changed:** new pure modules `report-view.ts` (`REPORT_VIEWS`, `parseReportView`, `reportViewQuery`), `insight-text.ts` (`splitInsight`), `report-scoreboard.ts` (`setOutcome`) under `match-detail/`, each with a spec; `hasComparisonBaseline` added to `match-stats-server.ts` with three cases in `match-kpi-history.spec.ts`. Lint 0 errors / 37 warnings, unchanged from the pre-edit baseline; pre-edit `npm run build` passed.
+- **follow-ups:** 1. When the rail switcher ships, check that no other surface (search palette, breadcrumbs) still names the old tab labels "Shots & placement" / "Film room" — only the `?tab=` values stay stable.

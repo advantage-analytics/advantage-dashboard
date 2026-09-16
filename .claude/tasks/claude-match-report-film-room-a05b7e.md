@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Pure report rules and their specs
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/match-detail/report-view.ts, src/components/dashboard/matches/match-detail/insight-text.ts, src/components/dashboard/matches/match-detail/report-scoreboard.ts, src/lib/data/match-stats-server.ts, tests/report-view.spec.ts, tests/insight-text.spec.ts, tests/report-scoreboard.spec.ts, tests/match-kpi-history.spec.ts (guess)
 - **done when:**
