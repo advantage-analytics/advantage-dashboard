@@ -87,3 +87,22 @@ is the runner's. Newest entries at the bottom.
 1. The selection machine now exists three times (Roster, Requests, Conferences), the point the Requests file named for turning it into a shared hook.
 2. A newly added conference with no teams stays hidden under the "With teams on Advantage" view, so its drawer does not open there.
 3. The empty-state copy and "Show every conference" action are not in the frame; confirm the wording.
+
+## T8 · Conference drawer — done
+
+**gate:** mechanical: pass · completion: pass
+**changed:** `src/components/admin/conference-drawer.tsx` replaces the placeholder with the full drawer:
+
+- **Frame and identity:** `PeekDrawerFrame kind="Conference"`, `ConferenceMark` 40 with the wrapping name and `conferenceMeta`.
+- **Fields:** a 2-column grid of Name, Short name, Division (`MenuSelect` underline, helper passed as the menu `note`) and Website, with an `ArrowUpRight` link plus tooltip. The draft re-seeds on `row.id` during render, the `request-drawer.tsx` pattern. After a save it takes the stored form, so Save stays disabled.
+- **Footer:** "Save changes", disabled until `conferenceChanged`, with "Saving…" and a `role="alert"` error.
+- **Teams:** `loadConferenceTeams` behind a module-level `Map` cache with listeners. The exported `forgetConferenceTeams` clears an entry, and a cached list is only reused when its length matches `row.teams`. Rows are `ProgramCrest` 26, a link to `/admin/teams/[id]`, then `PilotPill` for active, else "Claim pending", "Suspended" or "Unclaimed". First 5, then "N more · Show all", or "No teams yet."
+- **Add a team:** a popover with debounced `adminSearchTeams`. A team with no conference is added at once. A team from another conference goes through the "Move {name} to {this}?" confirm. A team already here shows "Already here". Both affected caches are cleared, then `onChanged()`.
+
+The ⋯ actions slot is left empty for T9. `conferences-page-content.tsx` is unchanged; T7 already wires `onChanged`. Not seen in a browser.
+**follow-ups:**
+
+1. The Division menu has no "Not set" option, so a division can't be cleared once set. The Add dialog has the same gap.
+2. Export one shared division list for `add-conference-dialog.tsx` and the drawer.
+3. The teams loading state is a text line, not a skeleton.
+4. Manual admin pass still needed: rename, dirty-gated Save, add team, ↑/↓ re-seeding.

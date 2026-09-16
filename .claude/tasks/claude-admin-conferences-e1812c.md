@@ -114,7 +114,7 @@ ready).
 
 ## T8 · Conference drawer
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T7
 - **files:** src/components/admin/conference-drawer.tsx (new; guess), src/components/admin/conferences-page-content.tsx (wire the rail)
