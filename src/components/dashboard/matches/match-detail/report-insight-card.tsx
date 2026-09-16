@@ -120,7 +120,12 @@ export function InsightCollapsed() {
     >
       {/* No credit line here, so the mark names the engine for a screen reader. */}
       <InsightMark label="Advantage Intelligence" />
-      <p className="min-w-0 flex-1 truncate text-[13px] text-[var(--ink-700)]">
+      {/* The same claim type as the expanded card: `.text-body` 13px with
+          ink-900 and 500 inline, since the class is unlayered. */}
+      <p
+        className="text-body min-w-0 flex-1 truncate"
+        style={{ color: "var(--ink-900)", fontWeight: 500 }}
+      >
         {claim}
       </p>
       <button
