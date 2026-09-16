@@ -213,3 +213,19 @@ The header documents the relaxed invariant. Results: live 10 passed; env blanked
 **follow-ups:**
 
 1. `tests/teams-management.spec.ts` lines 58–62 comment and its `afterAll` conference delete are stale now that owners no longer mint.
+
+## T14 · Conference loaders: null-division options, surfaced errors, unlinked facet text — done
+
+**gate:** mechanical: pass (after the runner snapped the error heading from `text-[15px]` to `text-title-lg`; the first gate failed design-drift) · completion: pass
+**changed:**
+
+- **Conference options:** `getConferenceOptions` offers division-less conferences in every division via `.or(division.eq.X,division.is.null)`. The division is validated against `DIVISION_VALUES` first, and an unknown value returns `[]` without a query.
+- **Errors surfaced:** `listAdminConferences` and `readConferenceTeams` throw on a Supabase error instead of logging and returning empty.
+- **Error boundary:** new `src/app/admin/error.tsx`, a client boundary beside the admin layout. It uses `AdminPage`, a quiet icon, `text-title-lg`, `advButton` "Try again" with Next 16.3's `retry` prop, and shows the error digest.
+- **Teams facets:** `listAdminTeamFacets` unions unlinked `programs.conference` text into the conference facet, read in parallel.
+
+Map unchanged; logic and cursor specs 31 passed.
+**follow-ups:**
+
+1. The other Teams list loaders still log and return empty on error (out of scope for this branch).
+2. The admin error page, the drawer error state and the extra Teams facet values aren't browser-verified.

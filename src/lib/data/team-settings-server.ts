@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
+import { DIVISION_VALUES } from "@/lib/data/programs-server";
 import type {
   EventsPolicy,
   ProgramOrgType,
@@ -183,7 +184,10 @@ export async function getTeamSettings(
  * program directory. `conferences` grants select to `authenticated` only, so
  * this needs a signed-in caller; both callers (Settings › Teams and the admin
  * create dialog's action) are. Labels are returned whether or not any program
- * currently belongs to them. Its own loader, not part of `getTeamSettings`,
+ * currently belongs to them. A conference with no division is offered in every
+ * division — its row is a gap in the directory, not a claim that it belongs to
+ * none, and hiding it would leave a program unable to pick the conference it
+ * is actually in. Its own loader, not part of `getTeamSettings`,
  * because only the owner's form reads it and the schedule pages share that one.
  */
 export async function getConferenceOptions(
@@ -198,7 +202,14 @@ export async function getConferenceOptions(
   let query = supabase.from("conferences").select("label").order("label");
   // A college with no division is a gap in its row, not a different kind of
   // program — it still picks from the directory, just from every division.
-  if (division) query = query.eq("division", division);
+  if (division) {
+    // The value is interpolated into PostgREST's `or=` grammar, and the admin
+    // dialog's action forwards it from the client — so only the fixed codes
+    // pass. Anything else matched nothing under the old `.eq`, and still
+    // matches nothing.
+    if (!(DIVISION_VALUES as readonly string[]).includes(division)) return [];
+    query = query.or(`division.eq.${division},division.is.null`);
+  }
   const { data, error } = await query;
 
   if (error) {

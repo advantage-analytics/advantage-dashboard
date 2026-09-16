@@ -547,7 +547,12 @@ export async function listAdminTeams({
  * - **Conferences** come from the `conferences` table's `label`, which
  *   `programs.conference` mirrors exactly — so each one still round-trips as
  *   `?conference=` against the column (see `listAdminTeams`). A conference
- *   with no programs is still offered.
+ *   with no programs is still offered. They are unioned with the distinct
+ *   `programs.conference` text of programs that have no `conference_id` — a
+ *   club or high school's free-text league, which no `conferences` row names.
+ *   `?conference=` filters on the text column, so it still matches those
+ *   programs, and a value it matches has to be one the panel offers or those
+ *   teams can only be reached by hand-editing the URL.
  * - **States** have no table of their own, so they are still read off
  *   `programs` and deduplicated here: PostgREST has no `distinct` operator,
  *   and an RPC to populate one popover is not a trade worth making at ~1,940
@@ -565,10 +570,18 @@ export const listAdminTeamFacets = cache(
     await requireAdminOrNotFound();
     const admin = createAdminClient();
 
-    const [programsResult, conferencesResult] = await Promise.all([
-      admin.from("programs").select("state"),
-      admin.from("conferences").select("label"),
-    ]);
+    const [programsResult, conferencesResult, unlinkedResult] =
+      await Promise.all([
+        admin.from("programs").select("state"),
+        admin.from("conferences").select("label"),
+        // Conference text on programs with no `conference_id` — see the doc
+        // comment's Conferences bullet. A handful of rows, so no paging.
+        admin
+          .from("programs")
+          .select("conference")
+          .is("conference_id", null)
+          .not("conference", "is", null),
+      ]);
 
     // Divisions sort by their display label so the panel reads
     // D-I · D-II · D-III · NAIA · JUCO rather than by raw code, which is the
@@ -577,9 +590,11 @@ export const listAdminTeamFacets = cache(
       (divisionLabel(a) ?? a).localeCompare(divisionLabel(b) ?? b);
     const divisions = [...DIVISION_VALUES].sort(byLabel);
 
-    if (programsResult.error || conferencesResult.error) {
+    const facetError =
+      programsResult.error ?? conferencesResult.error ?? unlinkedResult.error;
+    if (facetError) {
       console.error("[admin teams] could not read facet values", {
-        error: (programsResult.error ?? conferencesResult.error)?.message,
+        error: facetError.message,
       });
       return { divisions: [], conferences: [], states: [] };
     }
@@ -591,11 +606,21 @@ export const listAdminTeamFacets = cache(
       if (row.state) states.add(row.state);
     }
 
+    const conferences = new Set<string>();
+    for (const { label } of (conferencesResult.data ?? []) as {
+      label: string;
+    }[]) {
+      conferences.add(label);
+    }
+    for (const { conference } of (unlinkedResult.data ?? []) as {
+      conference: string | null;
+    }[]) {
+      if (conference) conferences.add(conference);
+    }
+
     return {
       divisions,
-      conferences: ((conferencesResult.data ?? []) as { label: string }[])
-        .map(({ label }) => label)
-        .sort((a, b) => a.localeCompare(b)),
+      conferences: [...conferences].sort((a, b) => a.localeCompare(b)),
       states: [...states].sort((a, b) => a.localeCompare(b)),
     };
   },

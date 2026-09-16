@@ -138,15 +138,18 @@ export const listAdminConferences = cache(
         .is("conference_id", null),
     ]);
 
+    // Throw rather than fall back to `{ rows: [], unplaced: 0 }`: an empty
+    // table reads as "there are no conferences", which is a claim, not an
+    // error. `admin/error.tsx` catches this and says the page failed instead.
     if (listResult.error) {
-      console.error("[admin conferences] could not list conferences", {
-        error: listResult.error.message,
-      });
+      throw new Error(
+        `Could not list conferences: ${listResult.error.message}`,
+      );
     }
     if (unplacedResult.error) {
-      console.error("[admin conferences] could not count unplaced programs", {
-        error: unplacedResult.error.message,
-      });
+      throw new Error(
+        `Could not count unplaced programs: ${unplacedResult.error.message}`,
+      );
     }
 
     const raw = (listResult.data ?? []) as unknown as RawConferenceRow[];
@@ -161,6 +164,8 @@ export const listAdminConferences = cache(
 /**
  * The programs in one conference, for the drawer's Teams section — school
  * then squad, the order the Teams table uses.
+ *
+ * Throws on a failed read.
  *
  * **Unguarded.** The only caller is `loadConferenceTeams`, a server action
  * that runs `requireAdmin()` first; anything else that calls this must gate
@@ -179,12 +184,11 @@ export async function readConferenceTeams(
     .order("school_name", { ascending: true })
     .order("team", { ascending: true });
 
+  // Throw, not `[]`: an empty list would draw "no teams" for a conference that
+  // has them. `loadConferenceTeams` catches this and returns `{ ok: false }`,
+  // which is what puts the drawer in its error state.
   if (error) {
-    console.error("[admin conferences] could not list teams", {
-      conferenceId,
-      error: error.message,
-    });
-    return [];
+    throw new Error(`Could not list teams: ${error.message}`);
   }
 
   const rows = (data ?? []) as {

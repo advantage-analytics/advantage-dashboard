@@ -196,7 +196,7 @@ ready).
 
 ## T14 · Conference loaders: null-division options, surfaced errors, unlinked facet text
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/data/team-settings-server.ts, src/lib/data/admin-conferences-server.ts, src/lib/data/admin-teams-server.ts, src/app/admin/error.tsx (new, only if no boundary exists above `/admin/conferences`) — guesses
 - **done when:**
