@@ -40,7 +40,9 @@ import {
 } from "@/lib/services/programs/admin-conference-actions";
 import {
   conferenceChanged,
+  LOAD_TEAMS_ERROR,
   normalizeWebsite,
+  storedConferenceFields,
   websiteHref,
   type ConferenceDraft,
 } from "@/lib/services/programs/conference-format";
@@ -120,6 +122,10 @@ function useConferenceTeams(
     let stale = false;
 
     loadConferenceTeams(conferenceId)
+      // The action itself rejecting (network, a thrown auth check) is the
+      // same failure — without this the section would sit on "Loading teams…"
+      // for good.
+      .catch(() => ({ ok: false, error: LOAD_TEAMS_ERROR }) as const)
       .then((result) => {
         if (stale) return;
         setLoaded({
@@ -127,18 +133,6 @@ function useConferenceTeams(
           state: result.ok
             ? { status: "ready", teams: result.teams }
             : { status: "error", error: result.error },
-        });
-      })
-      // The action itself rejecting (network, a thrown auth check) — without
-      // this the section would sit on "Loading teams…" for good.
-      .catch(() => {
-        if (stale) return;
-        setLoaded({
-          id: conferenceId,
-          state: {
-            status: "error",
-            error: "Couldn't load that conference's teams.",
-          },
         });
       });
 
@@ -277,12 +271,7 @@ export function ConferenceDrawer({
         // "https://IvyLeague.com/" does not read as unsaved once the row comes
         // back as "ivyleague.com". Field by field: anything typed while the
         // save ran differs from what was sent, and is kept.
-        const stored: ConferenceDraft = {
-          name: sent.name?.trim() ?? "",
-          shortName: sent.shortName?.trim() || null,
-          division: sent.division?.trim() || null,
-          website: normalizeWebsite(sent.website),
-        };
+        const stored: ConferenceDraft = storedConferenceFields(sent);
         setDraft((current) => {
           const keep = <K extends keyof ConferenceDraft>(key: K) =>
             current[key] !== sent[key] ? current[key] : stored[key];

@@ -216,18 +216,13 @@ export function ConferencesPageContent({
   // Closing here also stops the drawer lingering on a merged-away source.
   if (pendingId && rows.some((row) => row.id === pendingId)) {
     const index = visible.findIndex((row) => row.id === pendingId);
+    const landed = index >= 0 ? pendingId : null;
     setPendingId(null);
-    if (index >= 0) {
-      if (index >= PAGE_SIZE) setExpandedFor(cutKey);
-      setSelectedId(pendingId);
-      setDrawerId(pendingId);
-      setClosing(false);
-    } else {
-      setSelectedId(null);
-      setDrawerId(null);
-      setClosing(false);
-      setClearUrl((n) => n + 1);
-    }
+    setSelectedId(landed);
+    setDrawerId(landed);
+    setClosing(false);
+    if (index >= PAGE_SIZE) setExpandedFor(cutKey);
+    if (!landed) setClearUrl((n) => n + 1);
   }
 
   // The row the drawer showed is gone — deleted or merged, or the cut no

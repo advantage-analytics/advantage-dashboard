@@ -78,6 +78,28 @@ export interface ConferenceDraft {
   website: string | null;
 }
 
+/**
+ * A draft in the form the RPC stores it: trimmed, empty → null, website
+ * normalised. The server action validates this; the drawer holds it after a
+ * save so the saved fields do not read as unsaved.
+ */
+export function storedConferenceFields(draft: ConferenceDraft): {
+  name: string;
+  shortName: string | null;
+  division: string | null;
+  website: string | null;
+} {
+  return {
+    name: draft.name?.trim() ?? "",
+    shortName: draft.shortName?.trim() || null,
+    division: draft.division?.trim() || null,
+    website: normalizeWebsite(draft.website),
+  };
+}
+
+/** The drawer's Teams section could not be read. */
+export const LOAD_TEAMS_ERROR = "Couldn't load that conference's teams.";
+
 function same(a: string | null | undefined, b: string | null | undefined) {
   return (a?.trim() ?? "") === (b?.trim() ?? "");
 }

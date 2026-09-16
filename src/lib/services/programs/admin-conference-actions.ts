@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "./admin-guard";
-import { normalizeWebsite } from "./conference-format";
+import { LOAD_TEAMS_ERROR, storedConferenceFields } from "./conference-format";
 import {
   readConferenceTeams,
   type AdminConferenceTeam,
@@ -86,24 +86,15 @@ function prepareInput(input: ConferenceInput):
       website: string | null;
     }
   | ConferenceActionError {
-  const name = input.name.trim();
-  if (name.length < 2) {
+  const stored = storedConferenceFields(input);
+  if (stored.name.length < 2) {
     return { ok: false, error: "Give the conference a name." };
   }
-
-  const rawWebsite = input.website?.trim() ?? "";
-  const website = normalizeWebsite(rawWebsite);
-  if (rawWebsite && !website) {
+  if (input.website?.trim() && !stored.website) {
     return { ok: false, error: "That doesn't look like a website." };
   }
 
-  return {
-    ok: true,
-    name,
-    shortName: input.shortName?.trim() || null,
-    division: input.division?.trim() || null,
-    website,
-  };
+  return { ok: true, ...stored };
 }
 
 async function upsert(
@@ -240,6 +231,6 @@ export async function loadConferenceTeams(
       conferenceId,
       error: error instanceof Error ? error.message : String(error),
     });
-    return { ok: false, error: "Couldn't load that conference's teams." };
+    return { ok: false, error: LOAD_TEAMS_ERROR };
   }
 }

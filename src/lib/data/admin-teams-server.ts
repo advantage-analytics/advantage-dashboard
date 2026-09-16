@@ -606,17 +606,15 @@ export const listAdminTeamFacets = cache(
       if (row.state) states.add(row.state);
     }
 
-    const conferences = new Set<string>();
-    for (const { label } of (conferencesResult.data ?? []) as {
-      label: string;
-    }[]) {
-      conferences.add(label);
-    }
-    for (const { conference } of (unlinkedResult.data ?? []) as {
-      conference: string | null;
-    }[]) {
-      if (conference) conferences.add(conference);
-    }
+    // The query already excludes null conference text.
+    const conferences = new Set<string>([
+      ...((conferencesResult.data ?? []) as { label: string }[]).map(
+        ({ label }) => label,
+      ),
+      ...((unlinkedResult.data ?? []) as { conference: string }[]).map(
+        ({ conference }) => conference,
+      ),
+    ]);
 
     return {
       divisions,

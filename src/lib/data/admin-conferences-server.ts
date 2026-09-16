@@ -165,8 +165,6 @@ export const listAdminConferences = cache(
  * The programs in one conference, for the drawer's Teams section — school
  * then squad, the order the Teams table uses.
  *
- * Throws on a failed read.
- *
  * **Unguarded.** The only caller is `loadConferenceTeams`, a server action
  * that runs `requireAdmin()` first; anything else that calls this must gate
  * on its own. Service role: an admin is not a member of these programs, and

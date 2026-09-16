@@ -200,13 +200,11 @@ export async function getConferenceOptions(
 
   const supabase = await createClient();
   let query = supabase.from("conferences").select("label").order("label");
-  // A college with no division is a gap in its row, not a different kind of
-  // program — it still picks from the directory, just from every division.
+  // A college with no division of its own picks from every division.
   if (division) {
     // The value is interpolated into PostgREST's `or=` grammar, and the admin
     // dialog's action forwards it from the client — so only the fixed codes
-    // pass. Anything else matched nothing under the old `.eq`, and still
-    // matches nothing.
+    // pass, and anything else matches nothing.
     if (!(DIVISION_VALUES as readonly string[]).includes(division)) return [];
     query = query.or(`division.eq.${division},division.is.null`);
   }

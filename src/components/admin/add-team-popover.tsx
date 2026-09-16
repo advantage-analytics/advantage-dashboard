@@ -56,19 +56,20 @@ export function AddTeamPopover({
 
     const timer = setTimeout(() => {
       adminSearchTeams(query)
-        .then((rows) => {
+        .then(
+          (rows) => ({ rows, failed: false }),
+          // A rejected search answers this query with nothing, so
+          // "Searching…" ends, and says why.
+          () => ({ rows: [] as AdminSearchResult[], failed: true }),
+        )
+        .then(({ rows, failed }) => {
           if (latest.current !== query) return;
           // A later search that works clears an earlier search failure, and
           // only that — an add's error stays.
-          setError((current) => (current === SEARCH_ERROR ? null : current));
+          setError((current) =>
+            failed ? SEARCH_ERROR : current === SEARCH_ERROR ? null : current,
+          );
           setAnswered({ query, rows });
-        })
-        // A rejected search answers this query with nothing, so "Searching…"
-        // ends, and says why.
-        .catch(() => {
-          if (latest.current !== query) return;
-          setError(SEARCH_ERROR);
-          setAnswered({ query, rows: [] });
         });
     }, SEARCH_DEBOUNCE_MS);
 
