@@ -130,7 +130,7 @@ ready).
 
 ## T9 · How-points-ended deltas and MatchDataBlock as a pane card
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T6
 - **files:** src/components/dashboard/matches/match-detail/point-endings-card.tsx, src/components/dashboard/matches/match-detail/match-data-block.tsx (guess)

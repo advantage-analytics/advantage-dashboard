@@ -1,8 +1,18 @@
 /**
- * The rail's "Match data" block (artboard 46c, lines 799–811) — the
- * redesigned home of `DerivedStatsNotice`'s content, for matches whose
- * statistics were derived from video (`match.sourceProvider === "splitstep"`)
- * rather than hand-scored or imported from a SwingVision export.
+ * The Statistics view's "Match data" block (originally artboard 46c, lines
+ * 799–811, when it lived in the old rail) — the redesigned home of
+ * `DerivedStatsNotice`'s content, for matches whose statistics were derived
+ * from video (`match.sourceProvider === "splitstep"`) rather than
+ * hand-scored or imported from a SwingVision export.
+ *
+ * Settled-statistics design (spec › `MatchDataBlock`, decisions 8): the rail
+ * is gone, so this is now a standalone full-width `surface-card` sitting
+ * under the widgets row — `statistics-view.tsx` already mounts it there. It
+ * is not drawn in any of that spec's frames (F1–F8), so unlike the cards
+ * above it in the widgets row its `16px 20px 14px` padding isn't traced to a
+ * frame; it follows the same card-padding idiom the rest of the Statistics
+ * view uses (`point-endings-card.tsx` et al.) now that this section carries
+ * its own border and shadow instead of a rail's `border-t`.
  *
  * Only two of the artboard's three caveat lines are real. Both come straight
  * from `derived-stats-notice.tsx`, which this block supersedes: an ace and a
@@ -30,7 +40,8 @@ export function MatchDataBlock() {
   return (
     <section
       aria-label="Match data"
-      className="flex flex-col gap-2.5 border-t border-[var(--border-hairline)] pt-5"
+      className="surface-card flex flex-col gap-2.5"
+      style={{ padding: "16px 20px 14px" }}
     >
       <div className="flex items-baseline gap-2">
         <span className="eyebrow">Match data</span>
