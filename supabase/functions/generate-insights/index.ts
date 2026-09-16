@@ -158,7 +158,7 @@ serve(async (req) => {
     const prompt = `
       You are an expert college tennis coach. Analyze the following match statistics and provide, for BOTH Player 1 and Player 2:
       - 3 key strengths and 3 areas to improve (weaknesses). The 'value' should be the relevant percentage (0-100) associated with that specific stat.
-      - a 'summary': a concise but insightful paragraph (4-5 sentences) speaking directly to the player about their performance and what to focus on next. Do not greet them, do not use markdown headers or bullet points, and do not restate the raw numbers as a list — synthesize them into a flowing observation with a clear recommendation.
+      - a 'summary': a short paragraph of 2-3 sentences, under 350 characters in total, speaking directly to the player. The first sentence is the single most important takeaway from this match; the rest gives the evidence and what to focus on next. Do not greet them, do not use markdown headers or bullet points, and do not restate the raw numbers as a list — synthesize them into a flowing observation with a clear recommendation.
 
       Crucially, contextualize their performances against each other. If Player 1 dominated at the net, factor that into Player 2's weaknesses.
       Keep everything encouraging and actionable for college athletes.
