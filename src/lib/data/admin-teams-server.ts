@@ -4,7 +4,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { displayName } from "@/lib/services/programs/invite-acceptance";
-import { divisionLabel, programDisplayName } from "@/lib/data/programs-server";
+import {
+  DIVISION_VALUES,
+  divisionLabel,
+  programDisplayName,
+} from "@/lib/data/programs-server";
 import { crestUrl } from "@/lib/data/teams-server";
 import { pgQuoteValue } from "@/lib/data/postgrest-filter";
 
@@ -536,14 +540,26 @@ export async function listAdminTeams({
 // ---------------------------------------------------------------------------
 
 /**
- * Every distinct division / conference / state in the directory, sorted.
+ * The division / conference / state values the filter panel offers, sorted.
  *
- * One read of three small columns over ~1,940 rows rather than three
- * `SELECT DISTINCT`s: PostgREST has no `distinct` operator, so each of those
- * would have to be an RPC, and three new database functions to populate one
- * popover is not a trade worth making at this size. The rows are deduplicated
- * here instead, and `cache()` collapses the repeat calls a single render makes
- * (page body + any component that asks again) into one round trip.
+ * - **Divisions** are the fixed set the check constraints allow, not a scan of
+ *   the directory.
+ * - **Conferences** come from the `conferences` table's `label`, which
+ *   `programs.conference` mirrors exactly — so each one still round-trips as
+ *   `?conference=` against the column (see `listAdminTeams`). A conference
+ *   with no programs is still offered. They are unioned with the distinct
+ *   `programs.conference` text of programs that have no `conference_id` — a
+ *   club or high school's free-text league, which no `conferences` row names.
+ *   `?conference=` filters on the text column, so it still matches those
+ *   programs, and a value it matches has to be one the panel offers or those
+ *   teams can only be reached by hand-editing the URL.
+ * - **States** have no table of their own, so they are still read off
+ *   `programs` and deduplicated here: PostgREST has no `distinct` operator,
+ *   and an RPC to populate one popover is not a trade worth making at ~1,940
+ *   rows.
+ *
+ * `cache()` collapses the repeat calls a single render makes (page body + any
+ * component that asks again) into one set of round trips.
  *
  * Raw values, deliberately — `divisionLabel()` is applied at the point of
  * display, because these strings go back out as `?division=` and have to match
@@ -554,38 +570,54 @@ export const listAdminTeamFacets = cache(
     await requireAdminOrNotFound();
     const admin = createAdminClient();
 
-    const { data, error } = await admin
-      .from("programs")
-      .select("division, conference, state");
-
-    if (error) {
-      console.error("[admin teams] could not read facet values", {
-        error: error.message,
-      });
-      return { divisions: [], conferences: [], states: [] };
-    }
-
-    const divisions = new Set<string>();
-    const conferences = new Set<string>();
-    const states = new Set<string>();
-    for (const row of (data ?? []) as {
-      division: string | null;
-      conference: string | null;
-      state: string | null;
-    }[]) {
-      if (row.division) divisions.add(row.division);
-      if (row.conference) conferences.add(row.conference);
-      if (row.state) states.add(row.state);
-    }
+    const [programsResult, conferencesResult, unlinkedResult] =
+      await Promise.all([
+        admin.from("programs").select("state"),
+        admin.from("conferences").select("label"),
+        // Conference text on programs with no `conference_id` — see the doc
+        // comment's Conferences bullet. A handful of rows, so no paging.
+        admin
+          .from("programs")
+          .select("conference")
+          .is("conference_id", null)
+          .not("conference", "is", null),
+      ]);
 
     // Divisions sort by their display label so the panel reads
     // D-I · D-II · D-III · NAIA · JUCO rather than by raw code, which is the
     // same order here but would not be if a code were ever renamed.
     const byLabel = (a: string, b: string) =>
       (divisionLabel(a) ?? a).localeCompare(divisionLabel(b) ?? b);
+    const divisions = [...DIVISION_VALUES].sort(byLabel);
+
+    const facetError =
+      programsResult.error ?? conferencesResult.error ?? unlinkedResult.error;
+    if (facetError) {
+      console.error("[admin teams] could not read facet values", {
+        error: facetError.message,
+      });
+      return { divisions: [], conferences: [], states: [] };
+    }
+
+    const states = new Set<string>();
+    for (const row of (programsResult.data ?? []) as {
+      state: string | null;
+    }[]) {
+      if (row.state) states.add(row.state);
+    }
+
+    // The query already excludes null conference text.
+    const conferences = new Set<string>([
+      ...((conferencesResult.data ?? []) as { label: string }[]).map(
+        ({ label }) => label,
+      ),
+      ...((unlinkedResult.data ?? []) as { conference: string }[]).map(
+        ({ conference }) => conference,
+      ),
+    ]);
 
     return {
-      divisions: [...divisions].sort(byLabel),
+      divisions,
       conferences: [...conferences].sort((a, b) => a.localeCompare(b)),
       states: [...states].sort((a, b) => a.localeCompare(b)),
     };

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
+import { DIVISION_VALUES } from "@/lib/data/programs-server";
 import type {
   EventsPolicy,
   ProgramOrgType,
@@ -169,20 +170,24 @@ export async function getTeamSettings(
   };
 }
 
-/** The API's per-response row cap (`max_rows`). */
-const CONFERENCE_PAGE = 1000;
-
 /**
- * The conferences of one division, read off the program directory itself.
+ * The conferences of one division, read from the `conferences` table.
  *
  * Conference is a join key, not a label: `getConferenceTable` and the dual-meet
  * wizard match other programs on the exact string, so a hand-typed "Pac 12"
  * beside the directory's "Pac-12" empties Opponents without an error. Offering
- * only names the directory already uses is what keeps that match honest.
+ * only existing `conferences.label`s is what keeps that match honest —
+ * `programs.conference` is a trigger-fed mirror of that label, so picking one
+ * here writes exactly the string every other program already carries.
  *
- * `programs` is publicly readable, so distinct-ing here is cheaper than a view
- * nobody else needs. It pages: the API caps a response at 1,000 rows, and the
- * whole directory (a college with no division) is ~1,940. Its own loader, not part of `getTeamSettings`,
+ * One small read (~140 rows) replaces the old page-through of the whole
+ * program directory. `conferences` grants select to `authenticated` only, so
+ * this needs a signed-in caller; both callers (Settings › Teams and the admin
+ * create dialog's action) are. Labels are returned whether or not any program
+ * currently belongs to them. A conference with no division is offered in every
+ * division — its row is a gap in the directory, not a claim that it belongs to
+ * none, and hiding it would leave a program unable to pick the conference it
+ * is actually in. Its own loader, not part of `getTeamSettings`,
  * because only the owner's form reads it and the schedule pages share that one.
  */
 export async function getConferenceOptions(
@@ -194,31 +199,23 @@ export async function getConferenceOptions(
   if (orgType !== "college") return [];
 
   const supabase = await createClient();
-  const names = new Set<string>();
-  for (let from = 0; ; from += CONFERENCE_PAGE) {
-    let query = supabase
-      .from("programs")
-      .select("conference")
-      .not("conference", "is", null)
-      .order("id")
-      .range(from, from + CONFERENCE_PAGE - 1);
-    // A college with no division is a gap in its row, not a different kind of
-    // program — it still picks from the directory, just from every division.
-    if (division) query = query.eq("division", division);
-    const { data, error } = await query;
-
-    if (error) {
-      console.error("[team settings] could not read conferences", {
-        error: error.message,
-      });
-      return [];
-    }
-
-    for (const { conference } of data as { conference: string }[]) {
-      const name = conference.trim();
-      if (name) names.add(name);
-    }
-    if (data.length < CONFERENCE_PAGE) break;
+  let query = supabase.from("conferences").select("label").order("label");
+  // A college with no division of its own picks from every division.
+  if (division) {
+    // The value is interpolated into PostgREST's `or=` grammar, and the admin
+    // dialog's action forwards it from the client — so only the fixed codes
+    // pass, and anything else matches nothing.
+    if (!(DIVISION_VALUES as readonly string[]).includes(division)) return [];
+    query = query.or(`division.eq.${division},division.is.null`);
   }
-  return [...names].sort((a, b) => a.localeCompare(b));
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("[team settings] could not read conferences", {
+      error: error.message,
+    });
+    return [];
+  }
+
+  return ((data ?? []) as { label: string }[]).map(({ label }) => label);
 }

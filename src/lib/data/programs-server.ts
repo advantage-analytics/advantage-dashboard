@@ -94,6 +94,14 @@ export function programDisplayName(
 }
 
 /**
+ * Every division `programs_division_check` / `conferences_division_check`
+ * allow, in the order every screen lists them.
+ */
+export const DIVISION_VALUES = ["D1", "D2", "D3", "NAIA", "JUCO"] as const;
+
+export type Division = (typeof DIVISION_VALUES)[number];
+
+/**
  * The dataset stores `D1`; every screen in the design writes `D-I`.
  *
  * NAIA and JUCO are already how they are said out loud, so they pass through.
@@ -107,6 +115,22 @@ const DIVISION_LABEL: Record<string, string> = {
 export function divisionLabel(division: string | null): string | null {
   if (!division) return null;
   return DIVISION_LABEL[division] ?? division;
+}
+
+/**
+ * The spelled-out form — "Division I" — for prose lines such as the admin
+ * conference drawer's meta ("Division I · 8 schools"). Tables keep the
+ * compact `divisionLabel` ("D-I"). NAIA and JUCO pass through, as above.
+ */
+const DIVISION_LONG_LABEL: Record<string, string> = {
+  D1: "Division I",
+  D2: "Division II",
+  D3: "Division III",
+};
+
+export function divisionLongLabel(division: string | null): string | null {
+  if (!division) return null;
+  return DIVISION_LONG_LABEL[division] ?? division;
 }
 
 /** "D-I · Big Sky", skipping whichever half is missing. */
