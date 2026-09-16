@@ -124,3 +124,11 @@ The ⋯ actions slot is left empty for T9. `conferences-page-content.tsx` is unc
 1. Manual admin pass: merge two throwaway conferences, delete an empty one, and confirm a console-driven delete of a populated one shows the refusal.
 2. The page keyboard handler excludes `role="dialog"` but not `role="alertdialog"` (what `ConfirmDialog` uses); check whether Esc inside a confirm also closes the drawer (also affects T8's Move team confirm).
 3. Until the refresh lands, the target drawer briefly shows its pre-merge team count.
+
+## T3 · Live spec: conference RPC gates + sync invariant — done
+
+**gate:** mechanical: pass · completion: pass
+**changed:** Unblocked after the author raised the Supabase project's sign-in rate limit. Stash 0ed5c76a was restored and dropped. New `tests/admin-conferences-rpcs.spec.ts` (serial, uses the `live-db.ts` fixtures, skips without env): 8 live tests covering admin create, non-admin 42501 on all five RPCs, known and unseen label resolution (college creates a parsed conference, club stays unlinked), set with audit row, rename mirroring, merge, and delete refusal then success. `afterAll` removes programs before conferences. The full suite passed with the spec included. Live check afterwards: no `admin-conf-%` conferences, programs or `program.conference_changed` audit rows left. Accepted deviation: `admin_upsert_conference` doesn't parse "Name (SHORT)", so test 1 passes the short name separately; the parse is asserted on the college trigger path.
+**follow-ups:**
+
+1. Also cover `admin_list_conferences` counts for an admin, the 23505 duplicate-name error, and the 22023 self-merge and bad-division checks.

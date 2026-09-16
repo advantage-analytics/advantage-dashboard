@@ -46,7 +46,7 @@ ready).
 
 ## T3 · Live spec: conference RPC gates + sync invariant
 
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** tests/admin-conferences-rpcs.spec.ts (new; guess), tests/fixtures/live-db.ts (read only)
