@@ -102,7 +102,7 @@ ready).
 
 ## T7 · Head-to-head card deltas
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T6
 - **files:** src/components/dashboard/matches/match-detail/head-to-head-card.tsx (guess)
