@@ -1,5 +1,7 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { analysedWindowSeconds } from "@/lib/data/match-video-choice";
 import {
   getMatchKpiHistory,
   getMatchStatisticsFromSupabase,
@@ -187,53 +189,6 @@ function transformDbMatchToMatch(
   };
 }
 
-const FILLER_INSIGHTS: NonNullable<DbMatch["insights"]> = {
-  player1: {
-    summary:
-      "Your second serve and baseline endurance are carrying you right now — keep leaning on those strengths under pressure. To take the next step, tighten up your backhand to cut down on unforced errors and look for more chances to finish points at the net.",
-    strengths: [
-      {
-        name: "Reliable Second Serve",
-        value: 75,
-        description:
-          "Your second serve was a consistent weapon, putting pressure on your opponent and preventing easy returns. The high placement accuracy forced defensive returns on the majority of second-serve points.",
-      },
-      {
-        name: "Strong Baseline Endurance",
-        value: 67,
-        description:
-          "You consistently outlasted your opponent in longer rallies, showcasing your fitness and consistency under pressure.",
-      },
-      {
-        name: "Effective Return Pressure",
-        value: 56,
-        description:
-          "Your ability to win return games and convert break points kept your opponent on the defensive throughout the match.",
-      },
-    ],
-    weaknesses: [
-      {
-        name: "Backhand Error Rate",
-        value: 71,
-        description:
-          "Focus on reducing unforced errors on your backhand to turn more defensive shots into offensive opportunities.",
-      },
-      {
-        name: "Net Play Integration",
-        value: 12,
-        description:
-          "Look for opportunities to come to the net and finish points proactively, adding variety to your game plan.",
-      },
-      {
-        name: "First Serve Point Conversion",
-        value: 68,
-        description:
-          "While your first serve percentage is solid, aim to win a higher percentage of those points to gain an even greater advantage.",
-      },
-    ],
-  },
-};
-
 const FILLER_KEY_MOMENTS = [
   {
     moment: "Early Break",
@@ -395,6 +350,44 @@ async function resolveKpiHistory(
  * React.cache deduplicates calls within the same request,
  * so both layout.tsx and page.tsx can call this without double-fetching.
  */
+/**
+ * The analysed window of a video match with no stored duration, in seconds.
+ *
+ * `matches.duration` is 0 on every video match the wizard created (it only
+ * reads a length out of a SwingVision export), so without this the report's
+ * scoreboard has no clock. The newest completed job's
+ * `end_time_seconds − start_time_seconds` is the part of the video the player
+ * marked as the match (`analysedWindowSeconds`).
+ *
+ * Read through the admin client only after the RLS-scoped `matches` read has
+ * returned this row, the same order `getMatchVideo` uses: `processing_jobs`
+ * RLS is per-creator, so a coach viewing a player's match would otherwise read
+ * nothing. Only the two window columns leave the query.
+ */
+async function resolveAnalysedWindowSeconds(
+  dbRow: DbMatch,
+): Promise<number | null> {
+  if (dbRow.source_provider !== "splitstep") return null;
+  if (dbRow.duration != null && dbRow.duration > 0) return null;
+
+  const { data: jobs, error } = await createAdminClient()
+    .from("processing_jobs")
+    .select("start_time_seconds, end_time_seconds")
+    .eq("match_id", dbRow.id)
+    .eq("status", "completed")
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  if (error) {
+    console.error("[match-detail] could not read the analysed window", {
+      matchId: dbRow.id,
+      message: error.message,
+    });
+    return null;
+  }
+  return analysedWindowSeconds(jobs ?? []);
+}
+
 export const getMatchDetailData = cache(async (matchId: string) => {
   const supabase = await createClient();
 
@@ -434,6 +427,7 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     eventId,
     uploadedBy,
     profileResult,
+    windowSeconds,
   ] = await Promise.all([
     getMatchStatisticsFromSupabase(matchId),
     getMatchPointsFromSupabase(matchId),
@@ -460,6 +454,10 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     playerIds.length > 0
       ? supabase.from("users").select("id, hand, backhand").in("id", playerIds)
       : Promise.resolve({ data: [] }),
+    // A video match's length, for the rail scoreboard's clock, when the row
+    // has none (the wizard writes 0 for video). Same wave: it needs only
+    // `dbRow`, and it skips the round trip for every match that has one.
+    resolveAnalysedWindowSeconds(dbRow),
   ]);
 
   const profiles = new Map<string, PlayerProfile>();
@@ -476,6 +474,10 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   const match = transformDbMatchToMatch(dbRow, myPlayerIds, profiles);
   match.eventId = eventId;
   match.uploadedBy = uploadedBy;
+  if (!(match.durationSec && match.durationSec > 0) && windowSeconds) {
+    match.durationSec = windowSeconds;
+    match.duration = formatDuration(windowSeconds * 1000);
+  }
 
   return {
     match,
@@ -484,7 +486,11 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     keyMoments: dbRow.key_moments?.length
       ? dbRow.key_moments
       : FILLER_KEY_MOMENTS,
-    insights: dbRow.insights ?? FILLER_INSIGHTS,
+    // Read raw, never substituted: a match with no stored insight gets
+    // `null` and the report draws no insight card. A stand-in paragraph
+    // here would be attributed on screen to Advantage Intelligence
+    // (spec 2026-09-15 match report › Decisions 4).
+    insights: dbRow.insights ?? null,
     playerAverages,
     kpiHistory,
   };

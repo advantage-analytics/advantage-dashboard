@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, use } from "react";
 import type {
   MatchKpiHistory,
   MatchStatisticsResult,
@@ -30,7 +30,7 @@ interface MatchDataContextValue {
 const MatchDataContext = createContext<MatchDataContextValue | null>(null);
 
 export function useMatchData(): MatchDataContextValue {
-  const ctx = useContext(MatchDataContext);
+  const ctx = use(MatchDataContext);
   if (!ctx) {
     throw new Error("useMatchData must be used within a MatchDataProvider");
   }
@@ -68,7 +68,7 @@ export function MatchDataProvider({
   children,
 }: MatchDataProviderProps) {
   return (
-    <MatchDataContext.Provider
+    <MatchDataContext
       value={{
         match,
         statsResult,
@@ -80,6 +80,6 @@ export function MatchDataProvider({
       }}
     >
       {children}
-    </MatchDataContext.Provider>
+    </MatchDataContext>
   );
 }

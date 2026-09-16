@@ -18,6 +18,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/set-scope";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { PlayerStatistics, StatFraction } from "@/lib/data/types";
+import { surnameLabels } from "@/lib/data/match-utils";
 
 /**
  * The Statistics pane's head-to-head table (artboard 47f).
@@ -475,8 +476,8 @@ function buildDerivedRows(
 
 /* ── Rendering ──────────────────────────────────────────────────────────── */
 
-/** Both value columns; the artboard's 104 px, right-aligned. */
-const COLUMN = "flex w-[104px] shrink-0 items-center justify-end gap-1";
+/** Both value columns and both name cells; the artboard's 64 px, right-aligned. */
+const COLUMN = "flex w-[64px] shrink-0 items-center justify-end gap-1";
 
 function ValueCell({
   value,
@@ -557,12 +558,12 @@ function RowTooltip({
     <ChartTooltip
       open={open}
       align="center"
-      bottomOffset={2}
-      className="gap-0.5 px-3 py-2"
+      bottomOffset={-4}
+      className="gap-0.5 px-2.5 py-2"
     >
       <span className="text-[12px] font-medium text-white">{row.label}</span>
       {detail && (
-        <span className="mono tabular text-[10px] text-white/[0.72]">
+        <span className="mono tabular text-[10px] text-white/[0.64]">
           {detail}
         </span>
       )}
@@ -579,6 +580,7 @@ export function HeadToHeadCard() {
   const youStats = sides.you.stats;
   const oppStats = sides.opp.stats;
   const youIsPlayer1 = sides.you.isPlayer1;
+  const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
 
   const scopedPoints = useMemo(
     () => scopePoints(points, activeSet),
@@ -620,9 +622,9 @@ export function HeadToHeadCard() {
     <section
       aria-labelledby="head-to-head-heading"
       className="surface-card flex flex-col"
-      style={{ padding: "18px 24px" }}
+      style={{ padding: "18px 20px 14px" }}
     >
-      <div className="flex items-baseline gap-3 pb-3">
+      <div className="flex items-baseline gap-3 pb-[14px]">
         <span id="head-to-head-heading" className="eyebrow">
           Head to head
         </span>
@@ -631,17 +633,19 @@ export function HeadToHeadCard() {
           className="text-micro tabular whitespace-nowrap"
           style={{ color: "var(--ink-400)" }}
         >
-          {meta.label} · {meta.points} points · {meta.games} games
+          {meta.label} · {meta.points} points
         </span>
       </div>
 
       {/* Column header — you first, always. `sides` decides, never player
-          order (guardrails §4). */}
-      <div className="flex items-center border-b border-[var(--border-hairline)] pb-2">
+          order (guardrails §4). Names are surnames: at 64px a full
+          `shortName` overruns the column the way `surnameLabels()` does not;
+          `truncate` on top is the backstop for a longer one-word surname. */}
+      <div className="flex items-center border-b border-[var(--border-hairline)] pb-[11px]">
         <span aria-hidden="true" className="min-w-0 flex-1" />
         <span className={COLUMN}>
-          <span className="truncate text-[12px] font-medium text-[var(--ink-900)]">
-            {sides.you.shortName}
+          <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-900)]">
+            {youName}
           </span>
           {/* Gated exactly as the rail's check is: the glyph claims a verified
               result, so it may not appear on a match that has none. */}
@@ -654,22 +658,24 @@ export function HeadToHeadCard() {
           ) : null}
         </span>
         <span className={COLUMN}>
-          <span className="truncate text-[12px] font-medium text-[var(--ink-600)]">
-            {sides.opp.shortName}
+          <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-600)]">
+            {oppName}
           </span>
         </span>
       </div>
 
       {sections.map((section) => (
         <div key={section.title} className="flex flex-col">
-          <div className="flex items-baseline pt-[13px] pb-[5px]">
-            <span className="eyebrow-sm">{section.title}</span>
+          <div className="flex items-baseline pt-3 pb-0.5">
+            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
+              {section.title}
+            </span>
           </div>
 
           {section.rows.map((row) => (
             <div
               key={row.label}
-              className="relative -mx-2 flex min-h-8 items-center rounded-[var(--radius-element)] px-2 transition-colors duration-200 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] hover:bg-[var(--surface-muted)]"
+              className="relative -mx-2 flex min-h-[30px] items-center rounded-[var(--radius-element)] px-2 transition-colors duration-200 ease-[var(--ease-primary)] hover:bg-[var(--surface-muted)]"
               onMouseEnter={() => setHovered(row.label)}
               onMouseLeave={() =>
                 setHovered((current) =>
@@ -695,8 +701,8 @@ export function HeadToHeadCard() {
               <RowTooltip
                 open={hovered === row.label}
                 row={row}
-                youName={sides.you.shortName}
-                oppName={sides.opp.shortName}
+                youName={youName}
+                oppName={oppName}
               />
             </div>
           ))}

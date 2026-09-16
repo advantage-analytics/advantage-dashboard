@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   KPI_SERIES_WINDOW,
   buildKpiHistory,
+  hasComparisonBaseline,
   type PlayerStatRow,
 } from "@/lib/data/match-stats-server";
 
@@ -231,6 +232,28 @@ test.describe("one measured match", () => {
 
     expect(baseline.firstServeIn).toBe(58);
     expect("firstServeIn" in series).toBe(false);
+  });
+});
+
+test.describe("hasComparisonBaseline", () => {
+  test("no history at all cannot compare", () => {
+    expect(hasComparisonBaseline(null)).toBe(false);
+  });
+
+  test("one measured match yields an empty baseline, not a comparison", () => {
+    // This match's own row is the only one there is, so there is nothing to
+    // average it against — the same fixture `buildKpiHistory` reports as an
+    // empty baseline for "the baseline" above.
+    const { baseline } = buildKpiHistory([currentMatch(70)], MATCH_ID);
+    expect(hasComparisonBaseline({ baseline })).toBe(false);
+  });
+
+  test("a second analysed match makes the baseline non-empty", () => {
+    const { baseline } = buildKpiHistory(
+      [currentMatch(70), firstServe("a", daysBefore(2), 60)],
+      MATCH_ID,
+    );
+    expect(hasComparisonBaseline({ baseline })).toBe(true);
   });
 });
 

@@ -11,6 +11,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/set-scope";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import type { MatchPoint } from "@/lib/data/match-points-server";
+import { surnameLabels } from "@/lib/data/match-utils";
 
 /**
  * The Statistics tab's "How points ended" card (artboard 46a, lines 550–556).
@@ -159,11 +160,12 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
   // "nobody hit a winner or made an error".
   if (youTotal === 0 && oppTotal === 0) return null;
 
+  const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
   const rows = [
     {
       id: "you",
-      name: sides.you.shortName,
-      otherName: sides.opp.shortName,
+      name: youName,
+      otherName: oppName,
       own: youTally,
       other: oppTally,
       total: youTotal,
@@ -171,8 +173,8 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
     },
     {
       id: "opp",
-      name: sides.opp.shortName,
-      otherName: sides.you.shortName,
+      name: oppName,
+      otherName: youName,
       own: oppTally,
       other: youTally,
       total: oppTotal,
@@ -183,22 +185,27 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
   return (
     <section
       aria-labelledby="point-endings-heading"
-      className="surface-card flex flex-col gap-2.5"
-      style={{ padding: "18px 20px 16px" }}
+      className="surface-card flex flex-col gap-3"
+      style={{ padding: "16px 20px 14px" }}
     >
       <div className="flex items-baseline gap-2">
         <span id="point-endings-heading" className="eyebrow">
           How points ended
         </span>
         <div className="flex-1" />
-        <span className="text-micro whitespace-nowrap">Own outcomes</span>
+        <span
+          className="text-micro whitespace-nowrap"
+          style={{ color: "var(--ink-400)" }}
+        >
+          Own outcomes
+        </span>
       </div>
 
       {rows.map((row) => {
         const segments = outcomes.filter((o) => row.own[o.key] > 0);
 
         return (
-          <div key={row.id} className="flex flex-col gap-[5px]">
+          <div key={row.id} className="flex flex-col gap-1.5">
             <div className="flex items-baseline gap-2">
               <span className="truncate text-[11px] text-[var(--ink-600)]">
                 {row.name}
@@ -271,7 +278,7 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
         );
       })}
 
-      <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-0.5">
+      <div className="flex flex-wrap gap-x-3.5 gap-y-1.5 pt-0.5">
         {/* Local swatch, not the shared `LegendSwatch` — this legend runs at
             6px, smaller than that component's fixed 8px dot. */}
         {outcomes.map((o) => (
@@ -281,7 +288,10 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
               className="h-1.5 w-1.5 shrink-0 rounded-[2px]"
               style={{ background: o.you }}
             />
-            <span className="text-micro whitespace-nowrap">
+            <span
+              className="text-micro whitespace-nowrap"
+              style={{ color: "var(--ink-400)" }}
+            >
               {o.legendLabel ?? o.label}
             </span>
           </span>

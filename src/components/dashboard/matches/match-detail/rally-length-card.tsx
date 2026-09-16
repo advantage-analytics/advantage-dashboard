@@ -12,6 +12,7 @@ import {
 import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { cn } from "@/lib/utils";
+import { surnameLabels } from "@/lib/data/match-utils";
 
 /**
  * The Statistics tab's rally-length marimekko (artboard 47f).
@@ -68,6 +69,7 @@ export function RallyLengthCard() {
   const [hovered, setHovered] = useState<Band["key"] | null>(null);
 
   const youIsPlayer1 = sides.you.isPlayer1;
+  const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
 
   // Narrow to the chosen set through the shared helper — the same read every
   // point-derived card on this tab makes, so the chip selection moves them
@@ -117,8 +119,8 @@ export function RallyLengthCard() {
   return (
     <section
       aria-labelledby="rally-length-heading"
-      className="surface-card flex min-h-0 flex-1 flex-col gap-3.5"
-      style={{ padding: "18px 20px 16px" }}
+      className="surface-card flex min-h-0 flex-1 flex-col gap-3"
+      style={{ padding: "16px 20px 14px" }}
     >
       <div className="flex items-baseline gap-2">
         <span id="rally-length-heading" className="eyebrow">
@@ -149,7 +151,7 @@ export function RallyLengthCard() {
                     : "2px solid var(--surface-card)",
                 }}
                 tabIndex={0}
-                aria-label={`${band.title}. ${band.count} points, ${Math.round(width)} percent of the match. ${sides.you.shortName} won ${band.youWon}, ${sides.opp.shortName} won ${band.oppWon}.`}
+                aria-label={`${band.title}. ${band.count} points, ${Math.round(width)} percent of the match. ${youName} won ${band.youWon}, ${oppName} won ${band.oppWon}.`}
                 onMouseEnter={() => setHovered(band.key)}
                 onMouseLeave={() => setHovered(null)}
                 onFocus={() => setHovered(band.key)}
@@ -159,8 +161,8 @@ export function RallyLengthCard() {
                   band={band}
                   open={hovered === band.key}
                   sharePct={width}
-                  youName={sides.you.shortName}
-                  oppName={sides.opp.shortName}
+                  youName={youName}
+                  oppName={oppName}
                   align={isFirst ? "start" : isLast ? "end" : "center"}
                 />
 
@@ -233,16 +235,10 @@ export function RallyLengthCard() {
       </div>
 
       <div className="flex items-center gap-3.5">
-        <LegendSwatch
-          color="var(--viz-you-mid)"
-          label={`${sides.you.shortName} won`}
-        />
-        <LegendSwatch
-          color="var(--viz-opp-light)"
-          label={`${sides.opp.shortName} won`}
-        />
+        <LegendSwatch color="var(--viz-you-mid)" label={`${youName} won`} />
+        <LegendSwatch color="var(--viz-opp-light)" label={`${oppName} won`} />
         <div className="flex-1" />
-        <span className="text-micro" style={{ color: "var(--ink-500)" }}>
+        <span className="text-micro" style={{ color: "var(--ink-400)" }}>
           Width is how often
         </span>
       </div>
@@ -270,17 +266,17 @@ function BandTooltip({
       open={open}
       align={align}
       bottomOffset={8}
-      className="gap-1 px-3 py-2.5"
+      className="gap-[3px] px-[11px] py-[9px]"
     >
       <span className="text-[12px] font-medium text-white">{band.title}</span>
       <span className="tabular text-[11px] text-white/[0.64]">
         {band.count} points · {sharePct.toFixed(1)}% of the match
       </span>
       <span className="tabular pt-0.5 text-[11px] text-white">
-        {youName} {band.youWon} · {Math.round(pct(band.youWon, band.count))}%
+        {youName} {Math.round(pct(band.youWon, band.count))}%
       </span>
       <span className="tabular text-[11px] text-white/[0.78]">
-        {oppName} {band.oppWon} · {Math.round(pct(band.oppWon, band.count))}%
+        {oppName} {Math.round(pct(band.oppWon, band.count))}%
       </span>
     </ChartTooltip>
   );

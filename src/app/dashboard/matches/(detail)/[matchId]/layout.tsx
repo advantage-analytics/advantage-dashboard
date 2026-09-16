@@ -45,8 +45,8 @@ export default async function MatchLayout({
     // this subtree from the viewport directly, independent of that chain —
     // same pattern as `new-match-wizard/UploadMatchFlow.tsx`'s
     // `min-h-[calc(100vh-44px)]`. Everything below this div (see
-    // `match-detail-shell.tsx`) already carries `min-h-0` correctly; this
-    // was the one broken link.
+    // `MatchReport.Frame` in `match-report.tsx`) already carries `min-h-0`
+    // correctly; this was the one broken link.
     <div className="flex h-[calc(100vh-var(--header-h))] w-full flex-col overflow-hidden bg-white">
       <MatchDataProvider
         match={match}

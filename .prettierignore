@@ -21,6 +21,11 @@ test-results/
 # compiled `_ds_bundle.js`. Copied in verbatim to be READ, not run or edited.
 work/
 
+# Claude Design artboards checked in beside a spec, same reason as `work/`:
+# copied in VERBATIM to be read and measured against, never edited. A reformat
+# would change the geometry a task's `done when:` cites.
+docs/superpowers/specs/*/
+
 # Vendored agent-skill tooling: largely bundled/minified browser scripts.
 .agents/
 

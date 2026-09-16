@@ -28,13 +28,15 @@ export interface TeamSingleMatch {
   status: AnalysisStatus;
   hasVideo: boolean;
   /**
-   * The engine's own sentence, read RAW.
+   * The engine's own sentence, read RAW. Null here means no panel.
    *
-   * `getMatchDetailData()` substitutes FILLER_INSIGHTS when this column is
-   * null — hardcoded prose about a second serve nobody measured. That is fine
-   * where it is, but a "From the report" panel that quotes it would be this
-   * page inventing analysis for a match that has none. Null here means no
-   * panel.
+   * `getMatchDetailData()` reads the same column the same way now. It used to
+   * substitute a hardcoded paragraph — prose about a second serve nobody
+   * measured — when the column was null; that went with the settled report,
+   * whose insight card credits every sentence to Advantage Intelligence. A
+   * "From the report" panel quoting a stand-in would have been this page
+   * inventing analysis for a match that has none, which is why this loader
+   * never took it.
    */
   summary: string | null;
 }
