@@ -106,3 +106,21 @@ The ⋯ actions slot is left empty for T9. `conferences-page-content.tsx` is unc
 2. Export one shared division list for `add-conference-dialog.tsx` and the drawer.
 3. The teams loading state is a text line, not a skeleton.
 4. Manual admin pass still needed: rename, dirty-gated Save, add team, ↑/↓ re-seeding.
+
+## T9 · Merge and Delete conference — done
+
+**gate:** mechanical: pass · completion: pass
+**changed:** The conference drawer gets a ⋯ actions menu: `ChromeTooltip` "Conference actions", `FloatMenu` 244, "Merge into…". With zero teams it adds a divider and a destructive Delete row, confirmed with "Delete {name}?" / "Delete conference", whose `deleteConference` error shows in the dialog's problem slot. With teams it shows only the `FloatMenuNote`, which draws its own hairline. New `merge-conference-dialog.tsx`:
+
+- 440px `Dialog` titled "Merge {source} into…".
+- `useListboxNav` typeahead over the loaded rows minus the source, filtering on name and short name, each option showing mark 24, name and "N teams".
+- After a pick: the chosen target with Change, then a `ConfirmList` with the three consequences.
+- Cancel plus a `danger-solid` "Merge conferences", disabled until a target is chosen.
+- On success: both team caches cleared, `syncUrl(target)`, `router.refresh()`.
+
+`conferences-page-content.tsx` passes `conferences`, a `syncUrl` that also sets `pendingId` so the drawer lands on the target, and `onDeleted` (which closes the drawer). `request-drawer.tsx` now exports `DESTRUCTIVE_ROW`, `DESTRUCTIVE_ICON` and `MENU_ROW_ICON` for reuse. Not seen in a browser.
+**follow-ups:**
+
+1. Manual admin pass: merge two throwaway conferences, delete an empty one, and confirm a console-driven delete of a populated one shows the refusal.
+2. The page keyboard handler excludes `role="dialog"` but not `role="alertdialog"` (what `ConfirmDialog` uses); check whether Esc inside a confirm also closes the drawer (also affects T8's Move team confirm).
+3. Until the refresh lands, the target drawer briefly shows its pre-merge team count.

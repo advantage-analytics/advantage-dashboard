@@ -128,7 +128,7 @@ ready).
 
 ## T9 · Merge and Delete conference
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T8
 - **files:** src/components/admin/conference-drawer.tsx (actions menu), src/components/admin/merge-conference-dialog.tsx (new) — guesses per plan

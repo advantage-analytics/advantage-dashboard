@@ -327,6 +327,15 @@ export function ConferencesPageContent({
             onClose={() => close(drawerRow.id)}
             onClosed={finishClose}
             onChanged={() => router.refresh()}
+            conferences={rows}
+            syncUrl={(id) => {
+              // The merge target is already a loaded row, so the pending-id
+              // pass below opens it at once; the refresh then brings its new
+              // counts and drops the source.
+              setPendingId(id);
+              syncUrl(id);
+            }}
+            onDeleted={() => close(null)}
           />
         )
       }
