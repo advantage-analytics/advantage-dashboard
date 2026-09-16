@@ -25,11 +25,10 @@
  * Deleting a match through the app now cleans all three itself; this exists for
  * strays created before that, and for rows deleted straight from the database.
  *
- * It also runs a SECOND, different sweep — see sweepSupersededSources(). That
- * one deletes source videos for matches that still exist, once the vendor's
- * trimmed re-encode has been confirmed copied into our container. The webhook
- * starts that copy but cannot wait for it, so this is where the original
- * actually gets removed.
+ * It used to run a second sweep that deleted source videos for matches that
+ * still exist, once the vendor's trimmed re-encode had been copied in. That
+ * policy is retired: the source (now cut to the selected window before upload)
+ * is the video we keep and play, and the vendor's copy is no longer downloaded.
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
@@ -43,7 +42,6 @@ import {
   resolveAzureStorageConfig,
   videoContainerClient,
 } from "../src/lib/services/splitstep/video-url";
-import { reclaimSupersededSources } from "../src/lib/services/splitstep/reclaim-videos";
 
 // Minimal .env.local loader (no dotenv dependency).
 try {
@@ -208,52 +206,6 @@ async function sweep(
   return { orphans: orphans.length, deleted };
 }
 
-/**
- * Delete source videos that a confirmed trimmed copy has superseded.
- *
- * Distinct from the orphan sweep above, and worth keeping distinct: that one
- * deletes bytes belonging to matches that no longer exist, this one deletes
- * bytes for matches that very much do. The justification is different too —
- * we hold a better copy of the same match, trimmed and re-encoded.
- *
- * The logic lives in src/lib/services/splitstep/reclaim-videos.ts because
- * /api/cron/reclaim-videos runs the same pass daily. This wrapper is the manual
- * handle on it: a dry run to see what would go, and a way to force a sweep
- * without waiting for the schedule.
- */
-async function sweepSupersededSources(): Promise<{
-  candidates: number;
-  deleted: number;
-}> {
-  const outcome = await reclaimSupersededSources({
-    supabase,
-    apply: APPLY,
-    log: (line: string) => console.log(`  · ${line}`),
-  });
-
-  console.log(
-    `[superseded] jobs with a trimmed copy: ${outcome.examined}, ` +
-      `safe to reclaim: ${outcome.eligible}` +
-      (APPLY ? `, reclaimed: ${outcome.reclaimed}` : "") +
-      `, still copying: ${outcome.pending}`,
-  );
-
-  if (outcome.broken.length > 0) {
-    console.error(
-      `[superseded] ${outcome.broken.length} trimmed copy/copies FAILED — the job ` +
-        `points at a video that does not exist. Re-copy from trimmed_video_url ` +
-        `before it expires (about a week after completion):`,
-    );
-    for (const b of outcome.broken) {
-      console.error(`    ${b.jobId}  ${b.status}  ${b.blobName}`);
-    }
-  }
-
-  console.log("");
-
-  return { candidates: outcome.eligible, deleted: outcome.reclaimed };
-}
-
 async function main() {
   console.log(`[cleanup] mode=${APPLY ? "APPLY" : "DRY-RUN"}\n`);
 
@@ -335,27 +287,15 @@ async function main() {
     totalDeleted += deleted;
   }
 
-  // Only meaningful with Azure configured — it reads copy state off the
-  // destination blob, and without credentials every job would read `pending`
-  // and nothing would ever be swept.
-  let superseded = { candidates: 0, deleted: 0 };
-  if (videos) {
-    superseded = await sweepSupersededSources();
-  }
-
-  const totalCandidates = totalOrphans + superseded.candidates;
-  const totalRemoved = totalDeleted + superseded.deleted;
-
-  if (totalCandidates === 0) {
-    console.log("[cleanup] nothing orphaned or superseded. Done.");
+  if (totalOrphans === 0) {
+    console.log("[cleanup] nothing orphaned. Done.");
   } else if (!APPLY) {
     console.log(
-      `[cleanup] ${totalOrphans} orphan(s) and ${superseded.candidates} ` +
-        `superseded source video(s) found. Rerun with --apply to delete.`,
+      `[cleanup] ${totalOrphans} orphan(s) found. Rerun with --apply to delete.`,
     );
   } else {
     console.log(
-      `[cleanup] done. removed ${totalRemoved}/${totalCandidates} object(s).`,
+      `[cleanup] done. removed ${totalDeleted}/${totalOrphans} object(s).`,
     );
   }
 }

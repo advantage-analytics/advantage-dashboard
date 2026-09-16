@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
@@ -11,21 +12,34 @@ import { createClient } from "@/lib/supabase/client";
 import { FilmEmptyState } from "./film-empty-state";
 import { FilmPlayer, type FilmPlayerHandle } from "./film-player";
 import { PointList } from "./point-list";
+import { scoreColumns } from "./film-score";
+import { activeStopAt, filmStops } from "./film-timeline";
 import {
   DEFAULT_FILM_FILTERS,
   applyFilmFilters,
   type FilmFilters,
 } from "./film-filters";
 
+// The room is a screenful of its own — the overlay, the drawer, the transport
+// and the track — and most visits to a match never open it. Loading it on the
+// click keeps that weight off every match page's bundle.
+const loadFilmFullscreen = () =>
+  import("./film-fullscreen").then((m) => m.FilmFullscreen);
+const FilmFullscreen = dynamic(loadFilmFullscreen, { ssr: false });
+
 /**
- * The Film room tab (artboard 46c with a video, 46d without).
+ * The Film room tab (artboard 46c with a video, 46d without), plus the
+ * fullscreen room it opens into.
  *
- * This component owns the state the player and the list have to agree on:
- * the playhead, the seek handle, the applied filter, and the saved flags. The
- * two children stay dumb about each other — the list asks for a seek, the
- * player reports where it got to, and the mapping from a playhead position to
- * "which row is playing" happens here, once, over the whole timeline rather
- * than per-row.
+ * This component owns the state the player, the list and the fullscreen have
+ * to agree on: the points and their saved flags, the applied filter, the tab,
+ * and the report player's playhead. The children stay dumb about each other —
+ * the list asks for a seek, the player reports where it got to, and the
+ * mapping from a playhead position to "which row is playing" happens once,
+ * over the whole timeline, in `film-timeline.ts`.
+ *
+ * Every time here is on the FILM clock (the trimmed file we serve); points
+ * are converted from the recording's clock once, in `filmStops`.
  */
 
 export function FilmTab({ video }: { video: MatchVideo | null }) {
@@ -33,14 +47,14 @@ export function FilmTab({ video }: { video: MatchVideo | null }) {
   return <FilmRoom video={video} />;
 }
 
-/** Fallback window for a point the source never timed, in seconds. */
-const ASSUMED_POINT_SECONDS = 10;
-
 function FilmRoom({ video }: { video: MatchVideo }) {
   const { points: serverPoints } = useMatchData();
   const sides = useMatchSides();
   const supabase = useMemo(() => createClient(), []);
   const playerRef = useRef<FilmPlayerHandle>(null);
+  // `--film-t` is written here, so the player's bar and the list's playing
+  // rule both move every frame.
+  const clockRef = useRef<HTMLDivElement>(null);
 
   const [points, setPoints] = useState<MatchPoint[]>(serverPoints);
   // The authoritative copy for the write path. `setPoints`' updater runs
@@ -54,8 +68,24 @@ function FilmRoom({ video }: { video: MatchVideo }) {
   const [filters, setFilters] = useState<FilmFilters>(DEFAULT_FILM_FILTERS);
   const [tab, setTab] = useState<"points" | "saved">("points");
   const [currentTime, setCurrentTime] = useState(0);
+  const [room, setRoom] = useState<{ time: number; playing: boolean } | null>(
+    null,
+  );
+  // Fetch the room's code once the tab is idle, so the fullscreen glyph opens
+  // it on the click rather than after a network round trip with nothing on
+  // screen. Still off the page's first load.
+  useEffect(() => {
+    const warm = () => void loadFilmFullscreen();
+    if ("requestIdleCallback" in window) {
+      const id = window.requestIdleCallback(warm, { timeout: 3000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = globalThis.setTimeout(warm, 1500);
+    return () => globalThis.clearTimeout(id);
+  }, []);
 
   const youIsPlayer1 = sides.you.isPlayer1;
+  const offset = video.startTimeSeconds;
 
   const filteredPoints = useMemo(
     () => applyFilmFilters(points, filters, youIsPlayer1),
@@ -68,61 +98,27 @@ function FilmRoom({ video }: { video: MatchVideo }) {
     [filteredPoints, tab],
   );
 
-  /**
-   * The film's own order — every point that carries a `videoTime`, sorted by
-   * it. Deliberately built from ALL points, not the filtered cut: the playhead
-   * is somewhere in the match whether or not the current filter admits the
-   * point it is inside, and a row that IS on screen should light up when the
-   * film reaches it regardless of how the list was narrowed.
-   */
-  const timeline = useMemo(
-    () =>
-      points
-        .filter((p) => p.videoTime != null)
-        .slice()
-        .sort((a, b) => (a.videoTime as number) - (b.videoTime as number)),
-    [points],
+  const stops = useMemo(() => filmStops(points, offset), [points, offset]);
+
+  const walkStops = useMemo(() => {
+    const ids = new Set(filteredPoints.map((p) => p.id));
+    return stops.filter((s) => ids.has(s.point.id));
+  }, [stops, filteredPoints]);
+
+  const columns = useMemo(() => scoreColumns(points), [points]);
+
+  const active = useMemo(
+    () => activeStopAt(stops, currentTime),
+    [stops, currentTime],
   );
 
-  /**
-   * Which row is playing, and how far through it.
-   *
-   * The playing point is the last one whose `videoTime` the playhead has
-   * passed. Its window ends at its own recorded `duration` when there is one —
-   * that is the real length of the point — and otherwise at the next point's
-   * start, so the underline still advances on a source that timed starts but
-   * not lengths. Progress is clamped, so the bar sits full through the
-   * changeover rather than overrunning into the next row.
-   */
-  const { activePointId, activeProgress } = useMemo(() => {
-    let index = -1;
-    for (let i = 0; i < timeline.length; i += 1) {
-      if ((timeline[i].videoTime as number) <= currentTime) index = i;
-      else break;
-    }
-    if (index === -1) return { activePointId: null, activeProgress: 0 };
-
-    const point = timeline[index];
-    const start = point.videoTime as number;
-    const next = timeline[index + 1];
-    const end =
-      point.duration && point.duration > 0
-        ? start + point.duration
-        : next
-          ? (next.videoTime as number)
-          : start + ASSUMED_POINT_SECONDS;
-
-    const span = Math.max(end - start, 0.001);
-    return {
-      activePointId: point.id,
-      activeProgress: Math.min(1, Math.max(0, (currentTime - start) / span)),
-    };
-  }, [timeline, currentTime]);
-
-  const handleSelect = useCallback((point: MatchPoint) => {
-    if (point.videoTime == null) return;
-    playerRef.current?.seekTo(point.videoTime);
-  }, []);
+  const handleSelect = useCallback(
+    (point: MatchPoint) => {
+      const stop = stops.find((s) => s.point.id === point.id);
+      if (stop) playerRef.current?.seekTo(stop.start);
+    },
+    [stops],
+  );
 
   /**
    * Bookmark a point, optimistically, and put it back if the write did not
@@ -167,13 +163,35 @@ function FilmRoom({ video }: { video: MatchVideo }) {
     [supabase],
   );
 
+  const enterRoom = useCallback(() => {
+    const snapshot = playerRef.current?.snapshot() ?? {
+      time: currentTime,
+      playing: false,
+    };
+    playerRef.current?.pause();
+    setRoom(snapshot);
+  }, [currentTime]);
+
+  // The room hands the playhead back as its exit starts (so the report frame
+  // is already on the right picture under the shrinking room), then unmounts.
+  const handoff = useCallback((time: number) => {
+    playerRef.current?.seekTo(time);
+  }, []);
+  const exitRoom = useCallback(() => setRoom(null), []);
+  const originRect = useCallback(
+    () => playerRef.current?.frameRect() ?? null,
+    [],
+  );
+
   return (
-    <div className="flex flex-col gap-4">
+    <div ref={clockRef} className="flex flex-col gap-4">
       <FilmPlayer
         ref={playerRef}
+        clockTargetRef={clockRef}
         video={video}
-        points={filteredPoints}
+        stops={walkStops}
         onTimeChange={setCurrentTime}
+        onEnterFullscreen={enterRoom}
       />
 
       <PointList
@@ -184,11 +202,32 @@ function FilmRoom({ video }: { video: MatchVideo }) {
         onFiltersChange={setFilters}
         tab={tab}
         onTabChange={setTab}
-        activePointId={activePointId}
-        activeProgress={activeProgress}
+        activePointId={active?.stop.point.id ?? null}
+        activeStart={active?.stop.start ?? 0}
+        activeEnd={active?.stop.end ?? 0}
         onSelect={handleSelect}
         onToggleSaved={handleToggleSaved}
       />
+
+      {room && (
+        <FilmFullscreen
+          video={video}
+          initial={room}
+          stops={stops}
+          walkStops={walkStops}
+          columns={columns}
+          allPoints={points}
+          visiblePoints={visiblePoints}
+          filters={filters}
+          onFiltersChange={setFilters}
+          tab={tab}
+          onTabChange={setTab}
+          onToggleSaved={handleToggleSaved}
+          onExit={exitRoom}
+          onHandoff={handoff}
+          originRect={originRect}
+        />
+      )}
     </div>
   );
 }

@@ -5,12 +5,10 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
-  useMemo,
   useRef,
   useState,
 } from "react";
 
-import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import {
@@ -26,15 +24,18 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
+import { useFilmClockVars } from "./film-clock";
+import type { Rect } from "./film-motion";
+import { nextStop, prevStop, type FilmStop } from "./film-timeline";
+
 /**
  * The match video, with the 46c control bar over it (artboard lines 819–844).
  *
  * ── Called the match video, deliberately ────────────────────────────────────
- * The file is the `StartTime`/`EndTime` window from our own job request,
- * re-encoded — not dead time removed, no annotations, no rally-only cut
- * (`ui-revamp-guardrails.md` §1, written after somebody watched it). For a
- * player who trimmed nothing it is their own upload at a lower bitrate, so no
- * string in this subtree calls it a highlight or a condensed match.
+ * The file is the athlete's own upload, cut to the window they selected (or,
+ * on older matches, the vendor's re-encode of that window) — no dead time
+ * removed, no annotations, no rally-only cut (`ui-revamp-guardrails.md` §1).
+ * So no string in this subtree calls it a highlight or a condensed match.
  *
  * ── `preload="metadata"` ────────────────────────────────────────────────────
  * Not `auto`. These are multi-gigabyte files streamed from Azure at roughly
@@ -59,17 +60,29 @@ import { cn } from "@/lib/utils";
 export interface FilmPlayerHandle {
   /** Jump playback to an absolute second inside the file. */
   seekTo: (seconds: number) => void;
+  pause: () => void;
+  /** Where the player is right now — what the fullscreen room opens from. */
+  snapshot: () => { time: number; playing: boolean };
+  /** The frame's box on screen, for the room's grow and shrink. */
+  frameRect: () => Rect | null;
 }
 
 interface FilmPlayerProps {
   video: MatchVideo;
   /**
-   * The points the prev/next buttons step through — the currently applied cut,
-   * so the buttons walk what the list is showing.
+   * The stops the prev/next buttons step through — the currently applied cut
+   * on the film clock, so the buttons walk what the list is showing.
    */
-  points: MatchPoint[];
+  stops: FilmStop[];
   /** Fires on `timeupdate`/`seeked`; drives the point list's playing row. */
   onTimeChange: (seconds: number) => void;
+  /** The fullscreen glyph. Entered by user action only, never automatically. */
+  onEnterFullscreen: () => void;
+  /**
+   * Where `--film-t` is written, so the point list beside the player can read
+   * it too. Defaults to the frame.
+   */
+  clockTargetRef?: React.RefObject<HTMLElement | null>;
 }
 
 const GLYPH =
@@ -107,11 +120,14 @@ function InertGlyph({
 }
 
 export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
-  function FilmPlayer({ video, points, onTimeChange }, ref) {
+  function FilmPlayer(
+    { video, stops, onTimeChange, onEnterFullscreen, clockTargetRef },
+    ref,
+  ) {
     const { match } = useMatchData();
     const videoRef = useRef<HTMLVideoElement>(null);
-    const frameRef = useRef<HTMLDivElement>(null);
     const barRef = useRef<HTMLDivElement>(null);
+    const frameRef = useRef<HTMLDivElement>(null);
 
     const [playing, setPlaying] = useState(false);
     const [muted, setMuted] = useState(false);
@@ -119,6 +135,12 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     const [duration, setDuration] = useState(0);
     const [failed, setFailed] = useState(false);
     const [scrubbing, setScrubbing] = useState(false);
+
+    const syncClock = useFilmClockVars(
+      videoRef,
+      clockTargetRef ?? frameRef,
+      playing,
+    );
 
     const seekTo = useCallback(
       (seconds: number) => {
@@ -132,23 +154,31 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
         el.currentTime = target;
         setCurrentTime(target);
         onTimeChange(target);
+        syncClock();
       },
-      [onTimeChange],
+      [onTimeChange, syncClock],
     );
 
-    useImperativeHandle(ref, () => ({ seekTo }), [seekTo]);
-
-    // Points carrying a `videoTime`, in film order — the prev/next targets.
-    // Memoized because `currentTime`/`timeupdate` state changes re-render this
-    // component at the video's native tick rate, and `points` itself changes
-    // far less often (only when the film filter is applied).
-    const stops = useMemo(
-      () =>
-        points
-          .map((p) => p.videoTime)
-          .filter((t): t is number => typeof t === "number")
-          .sort((a, b) => a - b),
-      [points],
+    useImperativeHandle(
+      ref,
+      () => ({
+        seekTo,
+        pause: () => videoRef.current?.pause(),
+        snapshot: () => {
+          const el = videoRef.current;
+          return {
+            time: el?.currentTime ?? 0,
+            playing: el ? !el.paused : false,
+          };
+        },
+        frameRect: () => {
+          const r = frameRef.current?.getBoundingClientRect();
+          return r
+            ? { left: r.left, top: r.top, width: r.width, height: r.height }
+            : null;
+        },
+      }),
+      [seekTo],
     );
 
     const togglePlay = useCallback(() => {
@@ -163,15 +193,10 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
 
     const step = useCallback(
       (direction: -1 | 1) => {
-        if (stops.length === 0) return;
         const now = videoRef.current?.currentTime ?? 0;
-        // A half-second cushion so "previous" on a point you just jumped to
-        // goes back a point rather than re-seeking the one you are on.
-        const target =
-          direction === 1
-            ? stops.find((t) => t > now + 0.5)
-            : [...stops].reverse().find((t) => t < now - 0.5);
-        if (typeof target === "number") seekTo(target);
+        const stop =
+          direction === 1 ? nextStop(stops, now) : prevStop(stops, now);
+        if (stop) seekTo(stop.start);
       },
       [stops, seekTo],
     );
@@ -181,16 +206,6 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       if (!el) return;
       el.muted = !el.muted;
       setMuted(el.muted);
-    }, []);
-
-    const toggleFullscreen = useCallback(() => {
-      const frame = frameRef.current;
-      if (!frame) return;
-      if (document.fullscreenElement) {
-        void document.exitFullscreen().catch(() => {});
-      } else {
-        void frame.requestFullscreen?.().catch(() => {});
-      }
     }, []);
 
     const seekFromPointer = useCallback(
@@ -227,7 +242,6 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       };
     }, [scrubbing, seekFromPointer]);
 
-    const progress = duration > 0 ? Math.min(1, currentTime / duration) : 0;
     const eventName = match.tournamentName?.trim() || null;
 
     if (failed) {
@@ -269,17 +283,25 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             onClick={togglePlay}
             onPlay={() => setPlaying(true)}
             onPause={() => setPlaying(false)}
-            onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
-            onDurationChange={(e) => setDuration(e.currentTarget.duration || 0)}
+            onLoadedMetadata={(e) => {
+              setDuration(e.currentTarget.duration || 0);
+              syncClock();
+            }}
+            onDurationChange={(e) => {
+              setDuration(e.currentTarget.duration || 0);
+              syncClock();
+            }}
             onTimeUpdate={(e) => {
               const t = e.currentTarget.currentTime;
               setCurrentTime(t);
               onTimeChange(t);
+              syncClock();
             }}
             onSeeked={(e) => {
               const t = e.currentTarget.currentTime;
               setCurrentTime(t);
               onTimeChange(t);
+              syncClock();
             }}
             onError={() => setFailed(true)}
           >
@@ -350,7 +372,10 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             >
               <span
                 className="absolute inset-y-0 left-0 bg-[var(--blue)]"
-                style={{ width: `${progress * 100}%` }}
+                style={{
+                  width:
+                    "clamp(0%, calc(var(--film-t, 0) / var(--film-d, 1) * 100%), 100%)",
+                }}
               />
             </div>
 
@@ -525,8 +550,8 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
 
               <button
                 type="button"
-                onClick={toggleFullscreen}
-                aria-label="Fullscreen"
+                onClick={onEnterFullscreen}
+                aria-label="Open the film room fullscreen"
                 className={GLYPH}
               >
                 <svg

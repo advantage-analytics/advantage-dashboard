@@ -38,8 +38,8 @@ interface MatchRailProps {
    * row), so `page.tsx` passes `"none"` in that case. The two note variants
    * render the same 44a strip shape but must not share copy: a `.xlsx` import
    * genuinely has no video behind it, but an Advantage Intelligence–analyzed
-   * match with no `video` only means its trimmed copy is missing or was
-   * reclaimed — it was never a SwingVision import, and saying so would misstate
+   * match with no `video` only means no playable file is left (an older match
+   * whose files were cleaned up) — it was never a SwingVision import, and saying so would misstate
    * where the stats came from.
    * `note-swingvision` = true SwingVision import, no video ever existed ·
    * `note-neutral` = video-analyzed match whose trimmed copy isn't available ·
@@ -215,8 +215,8 @@ export function MatchRail({
               {/* A match typed in by hand gets the video attached to itself.
                   One with a source keeps starting a new upload: a SwingVision
                   match already has points from the export (a video analysis
-                  would write a second set), and a video match whose film was
-                  reclaimed already has its analysis. */}
+                  would write a second set), and a video match with no
+                  playable file left already has its analysis. */}
               <Link
                 href={addVideoHref(match.sourceProvider ? null : match.id)}
                 className="text-[11px] font-medium text-[var(--blue)]"

@@ -24,8 +24,8 @@ import { addVideoHref } from "@/lib/matches/add-video-href";
  * ── The SwingVision claim is gated ──────────────────────────────────────────
  * The artboard's body copy says the statistics came from a SwingVision export.
  * That is only true when they did. `sourceProvider` is also null for a match
- * typed in by hand, and `splitstep` for a video-analysed match whose trimmed
- * copy was reclaimed — neither of those imported anything from SwingVision, so
+ * typed in by hand, and `splitstep` for a video-analysed match with no playable
+ * file left — neither of those imported anything from SwingVision, so
  * they get copy that is true for them. Same allowlist as the rail's no-video
  * strip (`match-rail.tsx`).
  *

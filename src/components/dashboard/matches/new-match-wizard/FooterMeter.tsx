@@ -1,4 +1,5 @@
 import { usageFraction } from "@/lib/data/usage-format";
+import { formatPilotEnd } from "@/lib/services/splitstep/config";
 import { formatHoursCap, formatHoursTenths } from "./utils";
 
 /**
@@ -62,7 +63,7 @@ export function FooterMeter({
           ? `Spends ${formatHoursTenths(selectedSeconds)} h · ${formatHoursTenths(
               Math.max(0, remainingSeconds - selectedSeconds),
             )} of ${cap} h left after`
-          : `${formatHoursTenths(remainingSeconds)} of ${cap} h left · ${suffix}`}
+          : `${formatHoursTenths(remainingSeconds)} of ${cap} h left · ${suffix} · Pilot ends ${formatPilotEnd()}`}
       </span>
     </span>
   );

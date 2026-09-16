@@ -2675,6 +2675,9 @@ export function useUploadMatchWizard({
               jobId,
               matchId,
               file: videoFileToUpload,
+              // Cut to the selected window in the browser before upload; the
+              // service falls back to the original when it can't.
+              trim: { startSeconds, endSeconds },
               answers: {
                 initialTopPlayerIsPlayer1: formData.initialTopPlayerIsPlayer1,
                 adScoring: formData.adScoring,
