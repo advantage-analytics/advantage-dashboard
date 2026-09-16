@@ -36,16 +36,12 @@ export function MatchReportInsight() {
 }
 
 /**
- * The card spans the pane, so its edges line up with the widgets row below;
- * its text does not run the full width.
- *
- * From 720px of pane (the `@container` on `MatchReport.Pane`) it is two
- * columns. The narrow one holds the claim at the title step (16px, the DS
- * InsightCard's short falsifiable line) with a foot row under it: the engine
- * credit and Collapse, pinned to the column's bottom so the column ends where
- * the evidence ends. The wide one holds the evidence at 12px, which keeps a
- * 600-character summary to a short block. Below 720px everything stacks as
- * claim, evidence, foot row, the same order as the DOM and the tab order.
+ * One column, and the text runs the card's full width: the claim at the title
+ * step (16px, the DS InsightCard's short falsifiable line), the evidence under
+ * it at 12px, then a foot row with the engine credit and Collapse. Across the
+ * whole pane a 600-character summary sets as a short block of a few lines
+ * rather than a tall narrow one. No `max-w`, so the text's edges line up with
+ * the widgets row below.
  */
 export function InsightExpanded() {
   const { actions, meta } = useMatchReport();
@@ -55,10 +51,10 @@ export function InsightExpanded() {
   return (
     <section
       aria-label="Advantage Intelligence summary"
-      className="grid shrink-0 grid-cols-1 gap-x-8 gap-y-3 rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] p-[16px_20px] shadow-[var(--shadow-card)] @min-[720px]:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] @min-[720px]:grid-rows-[auto_1fr] @min-[720px]:gap-y-4"
+      className="flex shrink-0 flex-col gap-2 rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] p-[16px_20px_12px] shadow-[var(--shadow-card)]"
     >
       {/* `.text-title` is the scale's 16px step: 400, 1.5, −0.4px, ink-900. */}
-      <p className="text-title [text-wrap:balance] @min-[720px]:col-start-1 @min-[720px]:row-start-1">
+      <p className="text-title [text-wrap:pretty]">
         {claim}
         {!evidence && (
           <>
@@ -69,14 +65,12 @@ export function InsightExpanded() {
       </p>
 
       {evidence && (
-        // `pt-[3px]` sets the 12px evidence's first line level with the
-        // 16px claim's when the two sit side by side.
-        <p className="text-[12px] leading-[1.65] [text-wrap:pretty] text-[var(--ink-700)] @min-[720px]:col-start-2 @min-[720px]:row-span-2 @min-[720px]:row-start-1 @min-[720px]:pt-[3px]">
+        <p className="text-[12px] leading-[1.65] [text-wrap:pretty] text-[var(--ink-700)]">
           {evidence} <WhyThisLink />
         </p>
       )}
 
-      <div className="flex items-center gap-[7px] @min-[720px]:col-start-1 @min-[720px]:row-start-2 @min-[720px]:self-end">
+      <div className="mt-1 flex items-center gap-[7px] border-t border-[var(--border-hairline)] pt-2.5">
         <InsightMark />
         {/* `.text-micro` already paints ink-500, which is the credit's colour. */}
         <span className="text-micro">Advantage Intelligence</span>
