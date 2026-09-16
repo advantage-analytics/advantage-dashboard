@@ -46,7 +46,7 @@ ready).
 
 ## T3 · Rail scoreboard, view switcher and composable Share
 
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T2
 - **files:** src/components/dashboard/matches/match-detail/report-scoreboard.tsx, src/components/dashboard/matches/match-detail/report-view-switcher.tsx, src/components/dashboard/matches/match-detail/share-match-button.tsx, src/components/dashboard/matches/match-detail/match-report.tsx, src/components/dashboard/score-line.tsx (guess)
