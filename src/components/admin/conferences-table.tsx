@@ -12,7 +12,7 @@ import {
 // `divisionLabel` from it (`schedule/static/new-dual-flow.tsx`).
 import { divisionLabel } from "@/lib/data/programs-server";
 import { cn } from "@/lib/utils";
-import type { AdminConferenceRow } from "@/lib/data/admin-conferences-server";
+import type { AdminConferenceRow } from "@/lib/data/admin-conferences-view";
 import {
   COL,
   CONFERENCES_COLUMNS,
@@ -32,8 +32,8 @@ import {
  * table renders correctly before the drawer is wired to it.
  *
  * A client component: the row's `onClick`/`onKeyDown` need real handlers. It
- * imports `AdminConferenceRow` as a type only — the loader module is
- * server-only and must not reach this bundle.
+ * imports `AdminConferenceRow` from the client-safe `admin-conferences-view.ts`
+ * — the loader module is server-only and must not reach this bundle.
  */
 export function ConferencesTable({
   rows,

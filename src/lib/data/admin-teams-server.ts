@@ -4,7 +4,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { displayName } from "@/lib/services/programs/invite-acceptance";
-import { divisionLabel, programDisplayName } from "@/lib/data/programs-server";
+import {
+  DIVISION_VALUES,
+  divisionLabel,
+  programDisplayName,
+} from "@/lib/data/programs-server";
 import { crestUrl } from "@/lib/data/teams-server";
 import { pgQuoteValue } from "@/lib/data/postgrest-filter";
 
@@ -535,9 +539,6 @@ export async function listAdminTeams({
 // Facet values for the filter panel (T12)
 // ---------------------------------------------------------------------------
 
-/** Every division `programs_division_check` / `conferences_division_check` allow. */
-const DIVISIONS = ["D1", "D2", "D3", "NAIA", "JUCO"] as const;
-
 /**
  * The division / conference / state values the filter panel offers, sorted.
  *
@@ -574,7 +575,7 @@ export const listAdminTeamFacets = cache(
     // same order here but would not be if a code were ever renamed.
     const byLabel = (a: string, b: string) =>
       (divisionLabel(a) ?? a).localeCompare(divisionLabel(b) ?? b);
-    const divisions = [...DIVISIONS].sort(byLabel);
+    const divisions = [...DIVISION_VALUES].sort(byLabel);
 
     if (programsResult.error || conferencesResult.error) {
       console.error("[admin teams] could not read facet values", {

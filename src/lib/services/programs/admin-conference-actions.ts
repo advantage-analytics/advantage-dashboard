@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "./admin-guard";
 import { normalizeWebsite } from "./conference-format";
 import {
-  getAdminConferenceTeams,
+  readConferenceTeams,
   type AdminConferenceTeam,
 } from "@/lib/data/admin-conferences-server";
 
@@ -18,7 +18,8 @@ import {
  * **SESSION client** for the RPC, because the RPCs gate on `is_admin()` from
  * `auth.uid()` and write that id into `program_audit_log.actor_user_id` — the
  * service key would put no one in the actor column. The one service-role read
- * (`loadConferenceTeams`) goes through the loader, which stays server-only.
+ * (`loadConferenceTeams`) goes through the loader, which stays server-only and
+ * is unguarded — this action's `requireAdmin()` is its gate.
  */
 
 const ADMIN_PATH = "/admin";
@@ -232,7 +233,7 @@ export async function loadConferenceTeams(
   if (!admin) return { ok: false, error: NOT_AUTHORIZED };
 
   try {
-    const teams = await getAdminConferenceTeams(conferenceId);
+    const teams = await readConferenceTeams(conferenceId);
     return { ok: true, teams };
   } catch (error) {
     console.error("[admin conferences] could not load teams", {

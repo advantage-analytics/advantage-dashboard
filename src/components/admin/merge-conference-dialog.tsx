@@ -8,7 +8,6 @@ import {
   useState,
   useTransition,
 } from "react";
-import { useRouter } from "next/navigation";
 import { Loader2, Search, X } from "lucide-react";
 import {
   Dialog,
@@ -19,7 +18,6 @@ import {
 import { DialogProblem } from "@/components/ui/dialog-problem";
 import { ConfirmList } from "@/components/ui/confirm-dialog";
 import { ConferenceMark } from "@/components/admin/conference-mark";
-import { forgetConferenceTeams } from "@/components/admin/conference-drawer";
 import { useListboxNav } from "@/hooks/use-listbox-nav";
 import { mergeConferences } from "@/lib/services/programs/admin-conference-actions";
 import type { AdminConferenceRow } from "@/lib/data/admin-conferences-view";
@@ -42,9 +40,9 @@ import { cn } from "@/lib/utils";
  *
  * The merge itself — move every program, let the mirror trigger rewrite each
  * `programs.conference`, delete the source, one audit row per program — is
- * `admin_merge_conferences`; this only calls `mergeConferences`. On success
- * both sides' cached team lists are dropped, `?id=` is pointed at the target
- * and the page refreshes, so the drawer lands on the conference that survived.
+ * `admin_merge_conferences`; this only calls `mergeConferences`. On success it
+ * hands the target to `onMerged`, and the page points `?id=` at it and
+ * refreshes, so the drawer lands on the conference that survived.
  */
 
 const teamsPhrase = (count: number) =>
@@ -55,18 +53,16 @@ export function MergeConferenceDialog({
   onOpenChange,
   source,
   conferences,
-  syncUrl,
+  onMerged,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   source: AdminConferenceRow;
   /** Every conference the page loaded — the source is dropped here. */
   conferences: readonly AdminConferenceRow[];
-  /** Points `?id=` (and the drawer) at the target once the merge lands. */
-  syncUrl: (id: string) => void;
+  /** The merge landed — the page points `?id=` (and the drawer) at the target. */
+  onMerged: (targetId: string) => void;
 }) {
-  const router = useRouter();
-
   const [query, setQuery] = useState("");
   const [targetId, setTargetId] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -151,12 +147,9 @@ export function MergeConferenceDialog({
         setProblem(result.error);
         return;
       }
-      forgetConferenceTeams(source.id);
-      forgetConferenceTeams(into.id);
       onOpenChange(false);
       reset();
-      syncUrl(result.targetId);
-      router.refresh();
+      onMerged(result.targetId);
     });
   };
 

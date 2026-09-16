@@ -30,7 +30,7 @@ import type {
   AdminConferenceRow,
   ConferenceSquads,
 } from "@/lib/data/admin-conferences-view";
-import { crestUrl } from "@/lib/data/teams-server";
+import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 
 /**
  * The Admin › Conferences page — the 137 conferences the directory's programs
@@ -46,26 +46,12 @@ import { crestUrl } from "@/lib/data/teams-server";
  * The pure helpers (`applyConferenceView`, `sortConferences`,
  * `conferenceMeta`) and the row types live in `admin-conferences-view.ts`,
  * which has no server import, so the client page content can filter and sort
- * without pulling this module into the browser bundle. They are re-exported
- * below, so a server file or a pure spec can still import them from here.
+ * without pulling this module into the browser bundle. Import them from there.
  */
 
 // ---------------------------------------------------------------------------
-// Public types — the row shapes and pure helpers live in the client-safe
-// `admin-conferences-view.ts`; re-exported here so server imports stay put.
+// Public types
 // ---------------------------------------------------------------------------
-
-export type {
-  AdminConferenceRow,
-  AdminConferencesSort,
-  AdminConferencesView,
-  ConferenceSquads,
-} from "@/lib/data/admin-conferences-view";
-export {
-  applyConferenceView,
-  conferenceMeta,
-  sortConferences,
-} from "@/lib/data/admin-conferences-view";
 
 export interface AdminConferencesData {
   rows: AdminConferenceRow[];
@@ -102,19 +88,14 @@ interface RawConferenceRow {
   updated_at: string;
 }
 
-export function squadsFor(
-  hasMens: boolean,
-  hasWomens: boolean,
-): ConferenceSquads {
+function squadsFor(hasMens: boolean, hasWomens: boolean): ConferenceSquads {
   if (hasMens && hasWomens) return "both";
   if (hasMens) return "mens";
   if (hasWomens) return "womens";
   return null;
 }
 
-export function toAdminConferenceRow(
-  raw: RawConferenceRow,
-): AdminConferenceRow {
+function toAdminConferenceRow(raw: RawConferenceRow): AdminConferenceRow {
   return {
     id: raw.id,
     name: raw.name,
@@ -181,13 +162,14 @@ export const listAdminConferences = cache(
  * The programs in one conference, for the drawer's Teams section — school
  * then squad, the order the Teams table uses.
  *
- * Service role: an admin is not a member of these programs, and the drawer
- * needs every one of them.
+ * **Unguarded.** The only caller is `loadConferenceTeams`, a server action
+ * that runs `requireAdmin()` first; anything else that calls this must gate
+ * on its own. Service role: an admin is not a member of these programs, and
+ * the drawer needs every one of them.
  */
-export async function getAdminConferenceTeams(
+export async function readConferenceTeams(
   conferenceId: string,
 ): Promise<AdminConferenceTeam[]> {
-  await requireAdminOrNotFound();
   const admin = createAdminClient();
 
   const { data, error } = await admin
@@ -213,12 +195,16 @@ export async function getAdminConferenceTeams(
     crest_path: string | null;
   }[];
 
-  return Promise.all(
-    rows.map(async (row) => ({
-      id: row.id,
-      name: programDisplayName(row.school_name, row.team),
-      crestUrl: await crestUrl(row.crest_path),
-      status: row.status,
-    })),
-  );
+  // `crestUrl()`'s rule on the client already open: the bucket is public, so
+  // the URL is a pure function of the key, and no key means no crest.
+  const crests = admin.storage.from(PROGRAM_CRESTS_BUCKET);
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: programDisplayName(row.school_name, row.team),
+    crestUrl: row.crest_path
+      ? crests.getPublicUrl(row.crest_path).data.publicUrl
+      : null,
+    status: row.status,
+  }));
 }

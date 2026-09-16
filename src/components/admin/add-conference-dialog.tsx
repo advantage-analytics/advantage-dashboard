@@ -11,8 +11,9 @@ import {
 } from "@/components/ui/dialog";
 import { DialogProblem } from "@/components/ui/dialog-problem";
 import { MenuSelect } from "@/components/ui/menu-select";
+import { Field } from "@/components/admin/create-team-dialog";
 import { createConference } from "@/lib/services/programs/admin-conference-actions";
-import { divisionLabel } from "@/lib/data/programs-server";
+import { DIVISION_VALUES, divisionLabel } from "@/lib/data/programs-server";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
 import { cn } from "@/lib/utils";
@@ -30,8 +31,6 @@ import { cn } from "@/lib/utils";
  * Fields are the underline vocabulary with `data-focus-ring="none"` — the
  * active rule thickening to 2px blue is the focus mark (`focus.md`).
  */
-
-const DIVISION_VALUES = ["D1", "D2", "D3", "NAIA", "JUCO"] as const;
 
 const DIVISIONS = DIVISION_VALUES.map((value) => ({
   value,
@@ -60,16 +59,19 @@ export function AddConferenceDialog({
   const [problem, setProblem] = useState<string | null>(null);
   const [pending, startCreating] = useTransition();
 
-  // Everything resets on close: reopening is a new conference.
-  const close = (next: boolean) => {
-    if (!next && pending) return;
-    onOpenChange(next);
-    if (next) return;
+  const reset = () => {
     setName("");
     setShortName("");
     setDivision(undefined);
     setWebsite("");
     setProblem(null);
+  };
+
+  // Everything resets on close: reopening is a new conference.
+  const close = (next: boolean) => {
+    if (!next && pending) return;
+    onOpenChange(next);
+    if (!next) reset();
   };
 
   const ready = name.trim().length >= 2;
@@ -89,10 +91,7 @@ export function AddConferenceDialog({
         return;
       }
       onOpenChange(false);
-      setName("");
-      setShortName("");
-      setDivision(undefined);
-      setWebsite("");
+      reset();
       onCreated(result.id);
       router.refresh();
     });
@@ -211,23 +210,5 @@ export function AddConferenceDialog({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/** Caption over control — the underline form's one row. */
-function Field({
-  label,
-  className,
-  children,
-}: {
-  label: string;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className={cn("flex min-w-0 flex-col gap-2", className)}>
-      <span className="text-[11px] text-[var(--ink-600)]">{label}</span>
-      {children}
-    </label>
   );
 }

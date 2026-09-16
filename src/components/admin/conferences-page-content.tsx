@@ -17,7 +17,7 @@ import {
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 // The client-safe half of the data layer — `admin-conferences-server.ts`
 // imports the Supabase server client at top level and must not reach this
-// bundle, so the pure helpers are imported from the module it re-exports.
+// bundle.
 import {
   applyConferenceView,
   sortConferences,
@@ -27,7 +27,11 @@ import type {
   AdminConferencesSort,
   AdminConferencesView,
 } from "@/lib/data/admin-conferences-view";
-import { divisionLabel, divisionLongLabel } from "@/lib/data/programs-server";
+import {
+  DIVISION_VALUES,
+  divisionLabel,
+  divisionLongLabel,
+} from "@/lib/data/programs-server";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
@@ -65,9 +69,6 @@ const SORT_OPTIONS: { value: AdminConferencesSort; label: string }[] = [
   { value: "most_teams", label: "Most teams" },
   { value: "name_asc", label: "Name A–Z" },
 ];
-
-/** The five `conferences.division` values, in the order every screen lists them. */
-const DIVISION_VALUES = ["D1", "D2", "D3", "NAIA", "JUCO"] as const;
 
 /** Rows drawn before "Show all". */
 const PAGE_SIZE = 50;
@@ -328,12 +329,13 @@ export function ConferencesPageContent({
             onClosed={finishClose}
             onChanged={() => router.refresh()}
             conferences={rows}
-            syncUrl={(id) => {
+            onMerged={(targetId) => {
               // The merge target is already a loaded row, so the pending-id
               // pass below opens it at once; the refresh then brings its new
               // counts and drops the source.
-              setPendingId(id);
-              syncUrl(id);
+              setPendingId(targetId);
+              syncUrl(targetId);
+              router.refresh();
             }}
             onDeleted={() => close(null)}
           />

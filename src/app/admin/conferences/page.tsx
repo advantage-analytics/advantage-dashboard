@@ -2,7 +2,8 @@ import { listAdminConferences } from "@/lib/data/admin-conferences-server";
 import type {
   AdminConferencesSort,
   AdminConferencesView,
-} from "@/lib/data/admin-conferences-server";
+} from "@/lib/data/admin-conferences-view";
+import { DIVISION_VALUES } from "@/lib/data/programs-server";
 import { ConferencesPageContent } from "@/components/admin/conferences-page-content";
 
 /**
@@ -23,7 +24,7 @@ export const metadata = { title: "Conferences" };
 
 const VIEWS = new Set<AdminConferencesView>(["all", "on_advantage", "missing"]);
 
-const DIVISIONS = new Set(["D1", "D2", "D3", "NAIA", "JUCO"]);
+const DIVISIONS = new Set<string>(DIVISION_VALUES);
 
 /** First non-empty value for a param, ignoring the array form Next allows. */
 function one(value: string | string[] | undefined): string | null {

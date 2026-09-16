@@ -10,8 +10,8 @@ import { divisionLongLabel } from "@/lib/data/programs-server";
  * client component importing `applyConferenceView` from it would pull the
  * server client into the browser bundle. `ConferencesPageContent` filters and
  * sorts on the client (all 137 rows load once, the view and sort are URL
- * state), so it imports from here; the server module re-exports everything
- * below so existing server-side imports keep working.
+ * state), so it imports from here — and so does every other importer, server
+ * or client: this is the one import path for these types and helpers.
  *
  * `programs-server.ts` is client-safe despite its name — a type import and
  * pure label helpers — and client components already import from it.

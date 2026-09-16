@@ -94,6 +94,14 @@ export function programDisplayName(
 }
 
 /**
+ * Every division `programs_division_check` / `conferences_division_check`
+ * allow, in the order every screen lists them.
+ */
+export const DIVISION_VALUES = ["D1", "D2", "D3", "NAIA", "JUCO"] as const;
+
+export type Division = (typeof DIVISION_VALUES)[number];
+
+/**
  * The dataset stores `D1`; every screen in the design writes `D-I`.
  *
  * NAIA and JUCO are already how they are said out loud, so they pass through.

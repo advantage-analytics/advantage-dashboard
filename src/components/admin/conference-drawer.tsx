@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Merge, MoreHorizontal, Trash2 } from "lucide-react";
 import {
@@ -11,6 +11,7 @@ import { ProgramCrest } from "@/components/dashboard/settings/teams/program-cres
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { ConferenceMark } from "@/components/admin/conference-mark";
 import { PilotPill } from "@/components/admin/plan-pills";
+import { AddTeamPopover } from "@/components/admin/add-team-popover";
 import { MergeConferenceDialog } from "@/components/admin/merge-conference-dialog";
 import {
   DESTRUCTIVE_ICON,
@@ -26,12 +27,6 @@ import {
 } from "@/components/ui/float-menu";
 import { MenuSelect } from "@/components/ui/menu-select";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  addTeamToConference,
   deleteConference,
   loadConferenceTeams,
   saveConference,
@@ -43,15 +38,15 @@ import {
   type ConferenceDraft,
 } from "@/lib/services/programs/conference-format";
 import {
-  adminSearchTeams,
-  type AdminSearchResult,
-} from "@/lib/data/admin-search-server";
-import {
   conferenceMeta,
   type AdminConferenceRow,
 } from "@/lib/data/admin-conferences-view";
 import type { AdminConferenceTeam } from "@/lib/data/admin-conferences-server";
-import { divisionLabel } from "@/lib/data/programs-server";
+import {
+  DIVISION_VALUES,
+  divisionLabel,
+  type Division,
+} from "@/lib/data/programs-server";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
 import { cn } from "@/lib/utils";
@@ -79,9 +74,6 @@ import { cn } from "@/lib/utils";
  * write: the `conferences_mirror_label` trigger rewrites it on a rename.
  */
 
-const DIVISION_VALUES = ["D1", "D2", "D3", "NAIA", "JUCO"] as const;
-type DivisionValue = (typeof DIVISION_VALUES)[number];
-
 const DIVISIONS = DIVISION_VALUES.map((value) => ({
   value,
   label: divisionLabel(value) ?? value,
@@ -90,31 +82,9 @@ const DIVISIONS = DIVISION_VALUES.map((value) => ({
 /** How many team rows show before "N more · Show all". */
 const TEAMS_PREVIEW = 5;
 
-/** The header search's own debounce. */
-const SEARCH_DEBOUNCE_MS = 180;
-
 // ---------------------------------------------------------------------------
-// Teams cache
+// Teams
 // ---------------------------------------------------------------------------
-
-/**
- * Each conference's teams, fetched on first open and kept for the page's life,
- * so stepping back with ↑ is a state change, not a round trip. Keyed by
- * conference id — `match-drawer.tsx`'s details-cache shape. Dropped by
- * `forgetConferenceTeams` after any write that moves a team.
- */
-const teamsCache = new Map<string, AdminConferenceTeam[]>();
-/** Open drawers, told when their conference's teams were dropped so they refetch. */
-const forgetListeners = new Set<(conferenceId: string) => void>();
-
-/**
- * Drop one conference's cached teams. Exported so the Merge / Delete actions
- * can drop both sides of a merge.
- */
-export function forgetConferenceTeams(conferenceId: string): void {
-  teamsCache.delete(conferenceId);
-  for (const listener of forgetListeners) listener(conferenceId);
-}
 
 type TeamsState =
   | { status: "loading" }
@@ -125,43 +95,25 @@ type TeamsState =
  * The conference's teams through `loadConferenceTeams` (an admin-gated server
  * action; the loader behind it is service-role and stays on the server).
  *
- * A cached list whose length disagrees with the row's `teams` count is treated
- * as stale — the refreshed row is the newer answer, whatever moved the team
- * (this drawer, another tab's merge, the Teams page).
+ * Fetched whenever the drawer points at a conference and again on `reload()`,
+ * which a write that moves a team calls. No cache: opening a conference always
+ * asks the database. A reply for a conference the drawer has since left, or
+ * one overtaken by a later reload, is dropped.
  */
 function useConferenceTeams(
   conferenceId: string,
-  expected: number,
-): TeamsState {
+): [state: TeamsState, reload: () => void] {
   const [loaded, setLoaded] = useState<{
     id: string;
     state: TeamsState;
   } | null>(null);
-  // Bumped when this conference's teams are dropped while the drawer is open —
-  // nothing else in the deps changes for a same-count move.
   const [revision, setRevision] = useState(0);
 
-  const cached = teamsCache.get(conferenceId);
-  const fresh = cached && cached.length === expected ? cached : undefined;
-
   useEffect(() => {
-    const listener = (id: string) => {
-      if (id === conferenceId) setRevision((r) => r + 1);
-    };
-    forgetListeners.add(listener);
-    return () => {
-      forgetListeners.delete(listener);
-    };
-  }, [conferenceId]);
-
-  useEffect(() => {
-    const hit = teamsCache.get(conferenceId);
-    if (hit && hit.length === expected) return;
-    let cancelled = false;
+    let stale = false;
 
     void loadConferenceTeams(conferenceId).then((result) => {
-      if (result.ok) teamsCache.set(conferenceId, result.teams);
-      if (cancelled) return;
+      if (stale) return;
       setLoaded({
         id: conferenceId,
         state: result.ok
@@ -171,15 +123,16 @@ function useConferenceTeams(
     });
 
     return () => {
-      cancelled = true;
+      stale = true;
     };
-  }, [conferenceId, expected, revision]);
+  }, [conferenceId, revision]);
 
-  if (fresh) return { status: "ready", teams: fresh };
-  // A previous answer for this id stays on screen while a refetch runs, so a
+  const reload = useCallback(() => setRevision((r) => r + 1), []);
+
+  // A previous answer for this id stays on screen while a reload runs, so a
   // refresh does not flash the list back to "Loading".
-  if (loaded?.id === conferenceId) return loaded.state;
-  return { status: "loading" };
+  if (loaded?.id === conferenceId) return [loaded.state, reload];
+  return [{ status: "loading" }, reload];
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +162,7 @@ export function ConferenceDrawer({
   onClosed,
   onChanged,
   conferences,
-  syncUrl,
+  onMerged,
   onDeleted,
 }: {
   row: AdminConferenceRow;
@@ -227,8 +180,8 @@ export function ConferenceDrawer({
   onChanged: () => void;
   /** Every loaded conference — the merge dialog's typeahead runs over these. */
   conferences: readonly AdminConferenceRow[];
-  /** Points `?id=` and the drawer at a conference — the merge target. */
-  syncUrl: (id: string) => void;
+  /** The merge landed — the page points `?id=` and the drawer at the target. */
+  onMerged: (targetId: string) => void;
   /** This conference was deleted — the page closes the drawer. */
   onDeleted: () => void;
 }) {
@@ -265,7 +218,7 @@ export function ConferenceDrawer({
   }
 
   const dirty = conferenceChanged(row, draft);
-  const teams = useConferenceTeams(row.id, row.teams);
+  const [teams, reloadTeams] = useConferenceTeams(row.id);
 
   const set = (patch: Partial<ConferenceDraft>) =>
     setDraft((current) => ({ ...current, ...patch }));
@@ -307,7 +260,6 @@ export function ConferenceDrawer({
         return;
       }
       setDeleting(false);
-      forgetConferenceTeams(row.id);
       onDeleted();
       onChanged();
     });
@@ -483,7 +435,7 @@ export function ConferenceDrawer({
             </Field>
 
             <Field label="Division">
-              <MenuSelect<DivisionValue>
+              <MenuSelect<Division>
                 label="Division"
                 variant="underline"
                 value={
@@ -553,9 +505,8 @@ export function ConferenceDrawer({
               </span>
               <AddTeamPopover
                 conference={row}
-                onAdded={(movedFrom) => {
-                  forgetConferenceTeams(row.id);
-                  if (movedFrom) forgetConferenceTeams(movedFrom);
+                onAdded={() => {
+                  reloadTeams();
                   onChanged();
                 }}
               />
@@ -575,7 +526,7 @@ export function ConferenceDrawer({
         onOpenChange={setMerging}
         source={row}
         conferences={conferences}
-        syncUrl={syncUrl}
+        onMerged={onMerged}
       />
 
       <ConfirmDialog
@@ -710,225 +661,6 @@ function TeamsList({
           </button>
         </p>
       )}
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Add a team
-// ---------------------------------------------------------------------------
-
-/**
- * "Add a team" — the admin header search's input and debounce, answering with
- * three kinds of row:
- *
- *   no conference         added at once; nothing is lost
- *   another conference    confirmed first — the team leaves that one
- *   this conference       "Already here", nothing to press
- *
- * Replies are stamped with the query that asked for them, as in
- * `admin-search.tsx`, so a slow early reply never repaints a later answer.
- */
-function AddTeamPopover({
-  conference,
-  onAdded,
-}: {
-  conference: AdminConferenceRow;
-  /** `movedFrom` is the conference the team left, when it had one. */
-  onAdded: (movedFrom: string | null) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [term, setTerm] = useState("");
-  const [answered, setAnswered] = useState<{
-    query: string;
-    rows: AdminSearchResult[];
-  }>({ query: "", rows: [] });
-  const [moving, setMoving] = useState<AdminSearchResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const latest = useRef("");
-
-  useEffect(() => {
-    const query = term.trim();
-    latest.current = query;
-    if (query.length === 0) return;
-
-    const timer = setTimeout(() => {
-      void adminSearchTeams(query).then((rows) => {
-        if (latest.current !== query) return;
-        setAnswered({ query, rows });
-      });
-    }, SEARCH_DEBOUNCE_MS);
-
-    return () => clearTimeout(timer);
-  }, [term]);
-
-  const reset = () => {
-    setTerm("");
-    setAnswered({ query: "", rows: [] });
-    setError(null);
-  };
-
-  const changeOpen = (next: boolean) => {
-    if (!next && pending) return;
-    setOpen(next);
-    if (!next) reset();
-  };
-
-  const add = (team: AdminSearchResult, done?: () => void) => {
-    start(async () => {
-      setError(null);
-      const result = await addTeamToConference(team.id, conference.id);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      done?.();
-      setOpen(false);
-      reset();
-      onAdded(team.conferenceId);
-    });
-  };
-
-  const query = term.trim();
-  const loading = answered.query !== query;
-  const results = loading ? [] : answered.rows;
-
-  return (
-    <>
-      <Popover open={open} onOpenChange={changeOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-expanded={open}
-            className="cursor-pointer rounded-[4px] text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-          >
-            Add a team
-          </button>
-        </PopoverTrigger>
-
-        <PopoverContent
-          align="end"
-          sideOffset={6}
-          collisionPadding={12}
-          aria-label={`Add a team to ${conference.name}`}
-          className="w-[320px] p-1.5"
-          onOpenAutoFocus={(event) => {
-            event.preventDefault();
-            inputRef.current?.focus();
-          }}
-        >
-          <input
-            ref={inputRef}
-            type="search"
-            value={term}
-            onChange={(event) => setTerm(event.target.value)}
-            placeholder="Search teams"
-            aria-label="Search teams"
-            className="h-8 w-full rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-2.5 text-[12px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]"
-          />
-
-          {query.length > 0 && (
-            <div className="mt-1 flex flex-col">
-              {results.length === 0 ? (
-                <p className="px-2.5 py-3 text-[12px] text-[var(--ink-500)]">
-                  {loading ? "Searching…" : `No team matches “${query}”`}
-                </p>
-              ) : (
-                results.map((result) =>
-                  result.conferenceId === conference.id ? (
-                    <div
-                      key={result.id}
-                      className="flex items-center gap-2 rounded-[7px] px-2.5 py-[7px]"
-                    >
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="truncate text-[12px] text-[var(--ink-600)]">
-                          {result.name}
-                        </span>
-                        {result.subtitle ? (
-                          <span className="mt-0.5 truncate text-[11px] text-[var(--ink-500)]">
-                            {result.subtitle}
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
-                        Already here
-                      </span>
-                    </div>
-                  ) : (
-                    <button
-                      key={result.id}
-                      type="button"
-                      disabled={pending}
-                      onClick={() => {
-                        if (result.conferenceId) {
-                          setError(null);
-                          setOpen(false);
-                          setMoving(result);
-                        } else {
-                          add(result);
-                        }
-                      }}
-                      className="flex cursor-pointer flex-col rounded-[7px] px-2.5 py-[7px] text-left transition-colors duration-100 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none disabled:cursor-default disabled:opacity-60"
-                    >
-                      <span className="truncate text-[12px] text-[var(--ink-900)]">
-                        {result.name}
-                      </span>
-                      {result.subtitle ? (
-                        <span className="mt-0.5 truncate text-[11px] text-[var(--ink-500)]">
-                          {result.subtitle}
-                        </span>
-                      ) : null}
-                    </button>
-                  ),
-                )
-              )}
-            </div>
-          )}
-
-          {pending && !moving && (
-            <p className="px-2.5 pt-1 pb-1.5 text-[11px] text-[var(--ink-500)]">
-              Adding…
-            </p>
-          )}
-          {error && !moving && (
-            <p
-              role="alert"
-              className="px-2.5 pt-1 pb-1.5 text-[11px] leading-[1.5] text-[var(--danger)]"
-            >
-              {error}
-            </p>
-          )}
-        </PopoverContent>
-      </Popover>
-
-      <ConfirmDialog
-        open={moving !== null}
-        onOpenChange={(next) => {
-          if (next || pending) return;
-          setMoving(null);
-          setError(null);
-          reset();
-        }}
-        title={
-          moving ? `Move ${moving.name} to ${conference.name}?` : "Move team?"
-        }
-        description={
-          moving?.conferenceLabel
-            ? `It leaves ${moving.conferenceLabel} and joins ${conference.label}.`
-            : `It joins ${conference.label}.`
-        }
-        confirmLabel="Move team"
-        pendingLabel="Moving…"
-        pending={pending}
-        error={moving ? error : null}
-        onConfirm={() => {
-          const team = moving;
-          if (!team) return;
-          add(team, () => setMoving(null));
-        }}
-      />
     </>
   );
 }
