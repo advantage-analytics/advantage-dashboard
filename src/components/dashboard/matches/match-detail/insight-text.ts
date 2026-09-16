@@ -23,11 +23,49 @@ export interface SplitInsight {
   evidence: string | null;
 }
 
-/** First sentence-ending punctuation followed by whitespace then a capital. */
-const SENTENCE_BOUNDARY = /[.!?]\s+(?=[A-Z])/;
+/** Sentence-ending punctuation followed by whitespace then a capital. */
+const SENTENCE_BOUNDARY = /[.!?]\s+(?=[A-Z])/g;
+
+/**
+ * Words whose period is an abbreviation's, not a sentence's, when a capital
+ * follows ("vs. Okafor", "St. Louis"). Compared lowercase without dots.
+ */
+const ABBREVIATIONS = new Set([
+  "vs",
+  "v",
+  "mr",
+  "mrs",
+  "ms",
+  "dr",
+  "st",
+  "jr",
+  "sr",
+  "approx",
+  "etc",
+]);
+
+/**
+ * Whether the period at `index` closes an abbreviation or an initial rather
+ * than a sentence: the word before it is a single letter ("J. Smith"), a
+ * dotted abbreviation ("U.S. Open"), or a known one ("vs. Okafor").
+ */
+function isAbbreviationPeriod(summary: string, index: number): boolean {
+  if (summary[index] !== ".") return false;
+  const word = /(\S+)$/.exec(summary.slice(0, index))?.[1] ?? "";
+  const bare = word.replace(/^[("'“‘]+/, "");
+  if (/^[A-Za-z]$/.test(bare)) return true;
+  if (/^(?:[A-Za-z]\.)+[A-Za-z]$/.test(bare)) return true;
+  return ABBREVIATIONS.has(bare.toLowerCase().replace(/\./g, ""));
+}
 
 export function splitInsight(summary: string): SplitInsight {
-  const boundary = SENTENCE_BOUNDARY.exec(summary);
+  let boundary: RegExpExecArray | null = null;
+  for (const candidate of summary.matchAll(SENTENCE_BOUNDARY)) {
+    if (!isAbbreviationPeriod(summary, candidate.index)) {
+      boundary = candidate as RegExpExecArray;
+      break;
+    }
+  }
   if (!boundary) return { claim: summary, evidence: null };
 
   // The punctuation stays on the claim; the whitespace between the two

@@ -104,7 +104,7 @@ export function MatchReportProvider({
         // Native history rather than `router.push`: Next keeps
         // `useSearchParams`/`usePathname` in sync with it without fetching the
         // report again, and each push is its own entry, so Back restores the
-        // previous view. `reportViewQuery` carries `?set=` and anything else
+        // previous view. `reportViewQuery` carries every other parameter
         // through.
         const query = reportViewQuery(searchParams, next);
         window.history.pushState(

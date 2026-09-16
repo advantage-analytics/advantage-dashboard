@@ -12,6 +12,7 @@ import {
 import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { cn } from "@/lib/utils";
+import { surnameLabels } from "@/lib/data/match-utils";
 
 /**
  * The Statistics tab's rally-length marimekko (artboard 47f).
@@ -60,19 +61,6 @@ function pct(part: number, whole: number): number {
   return whole > 0 ? (part / whole) * 100 : 0;
 }
 
-/**
- * "Reid" out of "Marcus Reid" — the legend and band readout only have room
- * for a surname (F1). `sides.*.shortName` (`shortName()` in `match-utils.ts`)
- * was sized for a wider column and still returns a full "Marcus Reid" at 11
- * characters; this reads the surname off `sides.*.name` instead. Kept local,
- * the same pattern `head-to-head-card.tsx`'s `surname()` uses, so this card's
- * only tie to player identity stays `useMatchSides()`.
- */
-function surname(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  return parts.length > 0 ? parts[parts.length - 1] : name;
-}
-
 export function RallyLengthCard() {
   const { points } = useMatchData();
   const sides = useMatchSides();
@@ -81,8 +69,7 @@ export function RallyLengthCard() {
   const [hovered, setHovered] = useState<Band["key"] | null>(null);
 
   const youIsPlayer1 = sides.you.isPlayer1;
-  const youName = surname(sides.you.name);
-  const oppName = surname(sides.opp.name);
+  const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
 
   // Narrow to the chosen set through the shared helper — the same read every
   // point-derived card on this tab makes, so the chip selection moves them

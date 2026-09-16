@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Calendar, CircleCheck, Swords } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { shortMonthDate } from "@/components/dashboard/matches/match-detail/format-clock";
+import { scopeMeta } from "@/components/dashboard/matches/match-detail/set-scope";
 import { cn } from "@/lib/utils";
 
 /** 13px lucide glyph at stroke 1.5 in ink-700 — the frame's fact icon. */
@@ -22,20 +23,17 @@ const FACT_ICON = "size-[13px] shrink-0 text-[var(--ink-700)]";
  * University", an opponent school `Match` does not carry — the tournament
  * name takes that slot with the tournament icon.
  *
- * The games count is the sum of both players' games, so it reads
- * `match.score.sets` directly: a total has no side to get wrong
- * (guardrails §4 governs who a figure belongs to, not a sum of both).
+ * The games count is the sum of both players' games, taken from the score
+ * through `scopeMeta` (the whole-match scope): a total has no side to get
+ * wrong (guardrails §4 governs who a figure belongs to, not a sum of both).
  */
 export function MatchReportFacts() {
   const { match, points } = useMatchData();
 
-  const games = match.score.sets.reduce(
-    (total, set) => total + set.player1 + set.player2,
-    0,
-  );
+  const { games } = scopeMeta(match.score.sets, points, null);
 
   return (
-    <div className="mt-[9px] flex h-[18px] flex-nowrap items-center gap-3.5">
+    <div className="mt-[9px] flex h-[18px] min-w-0 flex-nowrap items-center gap-3.5">
       {points.length > 0 ? (
         <Fact
           tabular
@@ -70,6 +68,7 @@ export function MatchReportFacts() {
           take `currentColor`, so they draw as `match-rail.tsx` drew them. */}
       {match.tournamentName ? (
         <Fact
+          truncate
           icon={
             <Image
               src="/icons/tournament-icon.svg"
@@ -77,6 +76,7 @@ export function MatchReportFacts() {
               height={13}
               alt=""
               aria-hidden="true"
+              className="shrink-0"
             />
           }
         >
@@ -120,23 +120,40 @@ export function MatchReportFacts() {
 function Fact({
   icon,
   tabular = false,
+  truncate = false,
   children,
 }: {
   icon: ReactNode;
   /** Figures that should line up — counts and dates. */
   tabular?: boolean;
+  /**
+   * Free text of any length (the tournament name): the one fact that gives
+   * up width, ending in an ellipsis, so a long name cannot push the line
+   * under the title row's Compare and ⋯ buttons.
+   */
+  truncate?: boolean;
   children: ReactNode;
 }) {
   return (
-    // `shrink-0` is the frame's `flex:0 0 auto`: a fact never squeezes, the
-    // line runs on instead.
-    <span className="inline-flex shrink-0 items-center gap-1.5">
+    // `shrink-0` is the frame's `flex:0 0 auto`: the short facts never
+    // squeeze. A truncating fact is `min-w-0` instead, so it absorbs the
+    // shortfall.
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5",
+        truncate ? "min-w-0" : "shrink-0",
+      )}
+    >
       {icon}
       {/* `.text-micro` is an unlayered DS class that paints ink-500, and
           unlayered CSS beats a Tailwind colour utility — so ink-700 goes
           inline. */}
       <span
-        className={cn("text-micro whitespace-nowrap", tabular && "tabular")}
+        className={cn(
+          "text-micro whitespace-nowrap",
+          tabular && "tabular",
+          truncate && "min-w-0 truncate",
+        )}
         style={{ color: "var(--ink-700)" }}
       >
         {children}

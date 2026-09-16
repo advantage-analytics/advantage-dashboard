@@ -31,8 +31,7 @@ export function parseReportView(value: string | null | undefined): ReportView {
 
 /**
  * The active view → the query string, carrying every other parameter through
- * (set scope, anything else the pane is doing) so switching views can never
- * drop `?set=`. Statistics is the default view, so selecting it clears `tab`
+ * so switching views never drops one. Statistics is the default view, so selecting it clears `tab`
  * rather than writing `tab=statistics` — the same "absent is default" rule
  * `setScopeQuery` uses for `?set=`.
  *

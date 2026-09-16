@@ -51,7 +51,9 @@ export function MatchReportTitleActions({ children }: { children: ReactNode }) {
   return (
     <>
       <div className="flex-1" />
-      <div className="flex items-center gap-2">{children}</div>
+      {/* `shrink-0`: when the title block runs long, the facts line gives up
+          width (its tournament fact truncates), never the actions. */}
+      <div className="flex shrink-0 items-center gap-2">{children}</div>
     </>
   );
 }

@@ -31,6 +31,27 @@ test.describe("splitInsight", () => {
     expect(splitInsight(summary)).toEqual({ claim: summary, evidence: null });
   });
 
+  test("an abbreviation or initial before a capital does not split", () => {
+    for (const claim of [
+      "Your win vs. Okafor came from second-serve returns.",
+      "You held serve better than J. Smith in every set.",
+      "Reid played the U.S. Open qualifier on hard courts.",
+      "The St. Louis final turned on break points.",
+    ]) {
+      expect(splitInsight(`${claim} Reid won 78% of them.`)).toEqual({
+        claim,
+        evidence: "Reid won 78% of them.",
+      });
+    }
+  });
+
+  test("a sentence ending in a longer word still splits", () => {
+    expect(splitInsight("Reid served well. Okafor did not.")).toEqual({
+      claim: "Reid served well.",
+      evidence: "Okafor did not.",
+    });
+  });
+
   test("a lowercase continuation after an abbreviation does not split", () => {
     const summary =
       "Reid mixed serve placement, e.g. the wide slice, to break rhythm.";

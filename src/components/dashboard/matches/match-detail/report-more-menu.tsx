@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import {
   FileDown,
   MoreHorizontal,
@@ -19,12 +20,27 @@ import {
   DESTRUCTIVE_ICON,
   DESTRUCTIVE_ROW,
   MENU_ROW_ICON,
-} from "@/components/dashboard/matches/match-actions/match-actions-menu";
-import { DeleteMatchDialog } from "@/components/dashboard/matches/match-actions/delete-match-dialog";
-import { EditMatchDialog } from "@/components/dashboard/matches/match-actions/edit-match-dialog";
+} from "@/components/dashboard/matches/match-actions/menu-row-classes";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { cn } from "@/lib/utils";
+
+// Both dialogs mount only once their row is chosen, so their code (the edit
+// form is large) is fetched then rather than with every match page.
+const EditMatchDialog = dynamic(
+  () =>
+    import("@/components/dashboard/matches/match-actions/edit-match-dialog").then(
+      (m) => m.EditMatchDialog,
+    ),
+  { ssr: false },
+);
+const DeleteMatchDialog = dynamic(
+  () =>
+    import("@/components/dashboard/matches/match-actions/delete-match-dialog").then(
+      (m) => m.DeleteMatchDialog,
+    ),
+  { ssr: false },
+);
 
 /** The handler a disabled row is given and never calls (`FloatMenuItem` skips it). */
 const NOT_AVAILABLE = () => undefined;

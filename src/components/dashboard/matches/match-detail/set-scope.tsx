@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import { useSearchParams } from "next/navigation";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
@@ -9,23 +8,18 @@ import type { ScoreLineSet } from "@/lib/ui/score-format";
 
 /**
  * The Statistics view's set scope — the rule every point-derived card narrows
- * itself by, read from `?set=`.
+ * itself by.
  *
- * ── Where the control went ──────────────────────────────────────────────────
- * The segmented control that wrote this parameter (artboard 47f's chips in the
- * old tab row) is not in the settled report (design 04, F1–F8) and was
- * retired with that tab row. The parameter itself is still honoured: a typed
- * or bookmarked `?set=2` scopes the head-to-head table and the three charts
- * exactly as before, and the pure rules below stay tested
- * (`tests/set-scope.spec.ts`). Nothing in the app writes `?set=` today;
- * `setScopeQuery` is kept for whichever surface next does, so it carries
- * `?tab=` through rather than reinventing the rule.
- *
- * ── Why the URL and not React state ─────────────────────────────────────────
- * The cards that obey the scope sit in different corners of the view, so
- * shared state would have to be lifted above all of them and threaded back
- * down. `?set=` costs no plumbing, survives a view round-trip and a reload,
- * and is the same mechanism `?tab=` uses on this page.
+ * ── The scope is always the whole match, for now ────────────────────────────
+ * The segmented control that wrote `?set=` (artboard 47f's chips, with their
+ * "Whole match" reset) is not in the settled report (design 04, F1–F8) and was
+ * retired with the old tab row. `useSetScope` therefore no longer reads the
+ * parameter: with no control on the page, a `?set=2` left in a link shared
+ * from the old report (Share copies the full URL) would narrow every card to
+ * one set with no way back short of editing the address. The cards keep their
+ * `activeSet` plumbing and the pure rules below stay tested
+ * (`tests/set-scope.spec.ts`), so a future control re-enables scoping by
+ * reading `parseSetParam` here again and writing through `setScopeQuery`.
  *
  * ── Why a set can be unselectable ───────────────────────────────────────────
  * The published `match_stats` numbers are whole-match only, so a scoped view is
@@ -158,12 +152,12 @@ export function scopeMeta(
 /* ── Hook ───────────────────────────────────────────────────────────────── */
 
 /**
- * The scope, for any client component under `MatchDataProvider`. Read-only:
- * it parses `?set=` and says which sets could be scoped to; nothing here
- * writes the URL.
+ * The scope, for any client component under `MatchDataProvider`. Always the
+ * whole match while the report has no control to choose or clear a set (see
+ * the note at the top of this file); it still says which sets could be
+ * scoped to.
  */
 export function useSetScope(): SetScope {
-  const searchParams = useSearchParams();
   const { points } = useMatchData();
   const sides = useMatchSides();
 
@@ -171,7 +165,6 @@ export function useSetScope(): SetScope {
     () => selectableSets(sides.sets, points),
     [sides.sets, points],
   );
-  const activeSet = parseSetParam(searchParams.get(SET_PARAM), selectable);
 
-  return { activeSet, selectable };
+  return { activeSet: null, selectable };
 }

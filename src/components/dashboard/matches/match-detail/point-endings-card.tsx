@@ -11,6 +11,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/set-scope";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import type { MatchPoint } from "@/lib/data/match-points-server";
+import { surnameLabels } from "@/lib/data/match-utils";
 
 /**
  * The Statistics tab's "How points ended" card (artboard 46a, lines 550–556).
@@ -86,20 +87,6 @@ const OUTCOMES: OutcomeMeta[] = [
   },
 ];
 
-/**
- * "Reid" out of "Marcus Reid" — F1 shows surnames in this card too, matching
- * `head-to-head-card.tsx` and `rally-length-card.tsx` directly above it in
- * the same 416px column. `sides.*.shortName` (`shortName()` in
- * `match-utils.ts`) still returns a full "Marcus Reid" at 11 characters; this
- * reads the surname off `sides.*.name` instead, the same local pattern the
- * two sibling cards use, so this card's only tie to player identity stays
- * `useMatchSides()`.
- */
-function surname(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  return parts.length > 0 ? parts[parts.length - 1] : name;
-}
-
 type Tally = Record<OutcomeKey, number>;
 
 function emptyTally(): Tally {
@@ -173,11 +160,12 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
   // "nobody hit a winner or made an error".
   if (youTotal === 0 && oppTotal === 0) return null;
 
+  const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
   const rows = [
     {
       id: "you",
-      name: surname(sides.you.name),
-      otherName: surname(sides.opp.name),
+      name: youName,
+      otherName: oppName,
       own: youTally,
       other: oppTally,
       total: youTotal,
@@ -185,8 +173,8 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
     },
     {
       id: "opp",
-      name: surname(sides.opp.name),
-      otherName: surname(sides.you.name),
+      name: oppName,
+      otherName: youName,
       own: oppTally,
       other: youTally,
       total: oppTotal,

@@ -11,6 +11,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/set-scope";
 import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
 import type { MatchPoint } from "@/lib/data/match-points-server";
+import { surnameLabels } from "@/lib/data/match-utils";
 
 /**
  * The Statistics tab's performance tracker (artboard 47f).
@@ -27,10 +28,10 @@ import type { MatchPoint } from "@/lib/data/match-points-server";
  * below the line and colour it as the opponent's — a chart that reads as its
  * own mirror image, with nothing on screen indicating the flip.
  *
- * Scope-aware: the series is `scopePoints(points, activeSet)`, so a set chosen
- * in the tab-row chips narrows the chart the same way it narrows every other
- * point-derived card on this tab (head-to-head-card.tsx makes the identical
- * `useSetScope()` / `scopePoints()` read).
+ * Scope-aware: the series is `scopePoints(points, activeSet)`, the same read
+ * every other point-derived card on this view makes (head-to-head-card.tsx
+ * makes the identical `useSetScope()` / `scopePoints()` read). `useSetScope`
+ * currently always answers the whole match.
  */
 
 const CHART_W = 1000;
@@ -93,26 +94,12 @@ function detectBreakIndices(points: MatchPoint[]): number[] {
   return breaks;
 }
 
-/**
- * "Reid" out of "Marcus Reid" — the label and readout only have room for a
- * surname (F1). `sides.*.shortName` (`shortName()` in `match-utils.ts`) was
- * sized for a wider column and still returns a full "Marcus Reid" at 11
- * characters; this reads the surname off `sides.*.name` instead. Kept local,
- * the same pattern `head-to-head-card.tsx`'s `surname()` uses, so this card's
- * only tie to player identity stays `useMatchSides()`.
- */
-function surname(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  return parts.length > 0 ? parts[parts.length - 1] : name;
-}
-
 export function PerformanceTrackerChart() {
   const { points } = useMatchData();
   const sides = useMatchSides();
   const { activeSet } = useSetScope();
   const shouldReduceMotion = useReducedMotion();
-  const youName = surname(sides.you.name);
-  const oppName = surname(sides.opp.name);
+  const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
 
   const rawId = useId();
   // `useId()` embeds colons; strip them before the value goes into a `url(#…)`

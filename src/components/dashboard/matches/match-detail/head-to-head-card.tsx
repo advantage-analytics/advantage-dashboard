@@ -18,6 +18,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/set-scope";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { PlayerStatistics, StatFraction } from "@/lib/data/types";
+import { surnameLabels } from "@/lib/data/match-utils";
 
 /**
  * The Statistics pane's head-to-head table (artboard 47f).
@@ -478,19 +479,6 @@ function buildDerivedRows(
 /** Both value columns and both name cells; the artboard's 64 px, right-aligned. */
 const COLUMN = "flex w-[64px] shrink-0 items-center justify-end gap-1";
 
-/**
- * "Reid" out of "Marcus Reid" — the only way a 64px name column holds a full
- * name. `sides.*.shortName` (`shortName()` in `match-utils.ts`, max 14 chars)
- * was sized for the old 104px column and still reads "Marcus Reid" at 11
- * characters; this reads the surname off `sides.*.name` instead. Kept local
- * rather than imported from `film/film-filters.tsx`'s identical `lastNameOf`
- * so this card's only tie to player identity stays `useMatchSides()`.
- */
-function surname(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  return parts.length > 0 ? parts[parts.length - 1] : name;
-}
-
 function ValueCell({
   value,
   emphasised,
@@ -592,8 +580,7 @@ export function HeadToHeadCard() {
   const youStats = sides.you.stats;
   const oppStats = sides.opp.stats;
   const youIsPlayer1 = sides.you.isPlayer1;
-  const youName = surname(sides.you.name);
-  const oppName = surname(sides.opp.name);
+  const [youName, oppName] = surnameLabels(sides.you.name, sides.opp.name);
 
   const scopedPoints = useMemo(
     () => scopePoints(points, activeSet),
@@ -652,7 +639,7 @@ export function HeadToHeadCard() {
 
       {/* Column header — you first, always. `sides` decides, never player
           order (guardrails §4). Names are surnames: at 64px a full
-          `shortName` overruns the column the way `surname()` does not;
+          `shortName` overruns the column the way `surnameLabels()` does not;
           `truncate` on top is the backstop for a longer one-word surname. */}
       <div className="flex items-center border-b border-[var(--border-hairline)] pb-[11px]">
         <span aria-hidden="true" className="min-w-0 flex-1" />

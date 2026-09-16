@@ -51,6 +51,71 @@ export function shortName(name: string, maxLen = 14): string {
   return [`${parts[0][0]}.`, ...midInitials, last].join(" ");
 }
 
+/** Generational suffixes that are never the surname ("Marcus Reid Jr."). */
+const NAME_SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv"]);
+
+/** A name's words, with trailing suffixes and the comma before them removed. */
+function nameWords(name: string): string[] {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  while (
+    words.length > 1 &&
+    NAME_SUFFIXES.has(
+      words[words.length - 1].toLowerCase().replace(/[.,]/g, ""),
+    )
+  ) {
+    words.pop();
+  }
+  if (words.length > 0) {
+    words[words.length - 1] = words[words.length - 1].replace(/,$/, "");
+  }
+  return words;
+}
+
+/** Doubles sides are stored as "Name & Partner" (see `getInitials`). */
+const PARTNER_SEPARATOR = /\s+[&/]\s+/;
+
+/**
+ * "Reid" out of "Marcus Reid". The settled match report's cards (design 04
+ * F1) label players by surname only, where `shortName()` still returns a full
+ * "Marcus Reid" at 11 characters. A generational suffix is skipped ("Marcus
+ * Reid Jr." → "Reid"), a doubles side keeps both partners ("Marcus Reid &
+ * Tom Okafor" → "Reid & Okafor"), and a single-word name comes back as-is.
+ */
+export function surname(name: string): string {
+  if (PARTNER_SEPARATOR.test(name)) {
+    return name.split(PARTNER_SEPARATOR).map(surname).join(" & ");
+  }
+  const words = nameWords(name);
+  return words.length > 0 ? words[words.length - 1] : name.trim();
+}
+
+/**
+ * The two labels a card prints for one match, `[you, opp]` in the order given.
+ * Surnames, unless both players share one — then each gains a first initial
+ * ("M. Reid" / "D. Reid"), and if that still matches, the full names come
+ * back. Two identical labels would make every readout unattributable.
+ */
+export function surnameLabels(you: string, opp: string): [string, string] {
+  const youSurname = surname(you);
+  const oppSurname = surname(opp);
+  if (youSurname.toLowerCase() !== oppSurname.toLowerCase()) {
+    return [youSurname, oppSurname];
+  }
+
+  const initialled = (name: string, last: string): string => {
+    const words = nameWords(name);
+    return words.length > 1 && !PARTNER_SEPARATOR.test(name)
+      ? `${words[0][0]}. ${last}`
+      : name.trim();
+  };
+  const youInitialled = initialled(you, youSurname);
+  const oppInitialled = initialled(opp, oppSurname);
+  if (youInitialled.toLowerCase() !== oppInitialled.toLowerCase()) {
+    return [youInitialled, oppInitialled];
+  }
+  return [you.trim(), opp.trim()];
+}
+
 /**
  * Format duration in minutes to "XHR YMIN" format
  */
