@@ -21,9 +21,11 @@
  * | Usage alert (80% / spent) | `reserveQuota()` crosses a line, to owner + coaches · pref `notifyUsageAlerts` — WIRED |
  * | Weekly team digest       | Monday schedule · pref `weeklyTeamDigest` — NOT WIRED, row hidden |
  * | Claim verify address     | signed-in `startClaim()` / `resendClaim()` — WIRED |
+ * | Claim verify identity    | `sendClaimVerification()` — an admin, by hand, from the review queue — WIRED |
  * | Claim approved           | `approveClaim()`, to the claimant — WIRED       |
  * | Claim declined           | `rejectClaim()` / `handBackClaim()`, to the claimant — WIRED |
  * | Claim objection notice   | nothing — the announced claim was cut           |
+ * | Program claim invite     | `createProgram()` — an admin seeded a college row for a coach with no account — WIRED |
  * | Invite request received  | `requestInvite()`, to a signed-in requester's own address — WIRED |
  * | Join request owner notice | `requestInvite()` on a NEW open row, to the program owner · pref `notifyTeamActivity` — WIRED |
  * | Member joined            | every accept path in `join-actions.ts`, to the program owner · pref `notifyTeamActivity` — WIRED |
@@ -31,21 +33,32 @@
  * | Expired-invite nudge     | `requestFreshInvite()` — WIRED                  |
  * | Ownership transferred    | `transferProgramOwnership()`, to the new owner — WIRED |
  * | Member left              | `leaveProgram()`, to the owner · pref `notifyTeamActivity` — WIRED |
+ * | Admin review needed      | `notifyAdminsReviewNeeded()` — a claim lands in `pending_review`/`objected`, or a new open `program_requests` row — to every `is_admin` user — WIRED |
  *
  * The claim and invite-request rows fire from
  * `services/programs/{admin-actions,claim-actions}.ts`. None of them can fail
  * its action: the row is written first and a failed send is logged, never
  * returned — same shape as `inviteMember`.
  *
- * Four qualifications on that table, each a decision rather than an omission:
+ * Five qualifications on that table, each a decision rather than an omission:
+ *
+ *  - **"Claim verify identity" is the one claim email a person sends by hand,
+ *    and the one that is meant to be sent twice.** Every other row here fires
+ *    from an event; this one fires because an admin looked at a claim they
+ *    could not decide and asked the claimed address to vouch for itself. It
+ *    therefore takes NO `claimSend()` key: that guard exists for triggers that
+ *    can fire twice for one event, where the second send is an accident, and
+ *    here the second send is an admin pressing Resend because the first did
+ *    not arrive. A dedupe key would eat the retry and report success.
  *
  *  - **The objection notice has no caller and is not waiting for one.** The
  *    announced claim — mail to every scraped contact on a program whenever
  *    somebody claimed it — was cut before launch. It is unsolicited mail to
  *    people who never signed up, it reads like phishing, and it burns the
  *    sending domain the invitations depend on. The template stays because the
- *    decision could be revisited with real consent; the header on
- *    `app/admin/claims/page.tsx` is where it was made.
+ *    decision could be revisited with real consent; the header on the admin
+ *    requests page (`src/app/admin/requests/page.tsx`, formerly the
+ *    claims-review page) is where it was made.
  *  - **"Claim approved" fires on the reviewed path only.** A claim that matches
  *    a recorded staff contact skips review entirely and lands live inside
  *    `complete_program_claim`, with the claimant already looking at their
@@ -110,13 +123,17 @@ export {
 
 export {
   claimVerifyAddressEmail,
+  claimVerifyIdentityEmail,
   claimApprovedEmail,
   claimDeclinedEmail,
   claimObjectionNoticeEmail,
+  programClaimInviteEmail,
   type ClaimVerifyAddressInput,
+  type ClaimVerifyIdentityInput,
   type ClaimApprovedInput,
   type ClaimDeclinedInput,
   type ClaimObjectionNoticeInput,
+  type ProgramClaimInviteInput,
 } from "./templates/claim";
 
 export {
@@ -148,3 +165,8 @@ export {
   type InviteRequestDeclinedInput,
   type ExpiredInviteNudgeInput,
 } from "./templates/invite-request";
+
+export {
+  adminReviewNeededEmail,
+  type AdminReviewNeededInput,
+} from "./templates/admin";

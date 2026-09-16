@@ -40,6 +40,15 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
+        // The admin claims console was replaced by Teams/Requests (T9). The
+        // old URL is short-lived — it never shipped past this branch's own
+        // work-in-progress state — so a temporary redirect is enough; no
+        // external link or bookmark depends on it yet.
+        source: "/admin/claims",
+        destination: "/admin/requests",
+        permanent: false,
+      },
+      {
         // A one-off team match is the ordinary wizard's job. This route wrapped
         // the same wizard in a preset that answered every question on step one,
         // including the one it had no business answering — the source — which

@@ -1,9 +1,10 @@
 import { siteUrl } from "@/lib/site-url";
+import { verifyIdentityUrl } from "@/lib/services/programs/claim-verification";
 import { renderEmail, renderText, type EmailContent } from "../shell";
 import type { EmailMessage } from "../send";
 
 /**
- * The four emails a program claim produces.
+ * The six emails a program claim produces.
  *
  * None of them is preference-driven, and none carries a "turn this off" line.
  * Each is the direct consequence of something a person did — claiming a
@@ -75,6 +76,158 @@ export function claimVerifyAddressEmail(
   };
 }
 
+export interface ClaimVerifyIdentityInput {
+  /** The claimed school address — the person being asked to vouch for themselves. */
+  to: string;
+  programName: string;
+  /** The label, not the stored value: "Head coach", not `head_coach`. */
+  claimantTitle: string;
+  /** The raw verification token. Exists here and nowhere else — the row keeps only its hash. */
+  token: string;
+}
+
+/**
+ * "Are you who this claim says you are?"
+ *
+ * The one claim email an ADMIN sends by hand, from the review queue, when the
+ * automatic signals were not enough to decide — no domain match, no recorded
+ * staff contact, nothing to approve on. The mailbox check
+ * (`claimVerifyAddressEmail` above) proves someone can read mail at an
+ * address; this proves the person reading it agrees they hold the role the
+ * claim asserts. They are different questions, which is why this is a separate
+ * email and not a longer version of that one.
+ *
+ * ── Why it is this short ────────────────────────────────────────────────────
+ * The recipient did not necessarily start anything. They may be a head coach
+ * who has never heard of us, reading a message that names their program and
+ * their job title — which is exactly the shape of a phishing attempt. So: one
+ * question in the heading, one sentence under it, one button, and an explicit
+ * line saying that ignoring it costs them nothing. No urgency, no deadline in
+ * bold, no second ask. A message that pushes is a message that gets reported.
+ *
+ * There is no "No, that isn't me" button, and that is deliberate rather than
+ * an omission. A negative answer from an unauthenticated link is a vector — it
+ * would let anyone holding a forwarded token kill a legitimate claim — and the
+ * honest answer to "this isn't me" is a reply to a human, which the support
+ * line at the foot of every email already provides. Silence is a perfectly
+ * good "no" here: nothing moves without a confirmation.
+ *
+ * Resendable by design, so it takes no `claimSend()` key (`docs/email-system.md`
+ * §4.7). That step guards triggers that can fire twice for ONE event — a
+ * redelivered webhook, a re-run derivation — where the second send is an
+ * accident. Here the second send is the point: an admin pressing Resend has
+ * decided the first one did not arrive, and a dedupe key would silently eat
+ * the retry while telling them it went.
+ */
+export function claimVerifyIdentityEmail(
+  input: ClaimVerifyIdentityInput,
+): EmailMessage {
+  const { to, programName, claimantTitle, token } = input;
+
+  const content: EmailContent = {
+    preheader: "Confirm it's you",
+    eyebrow: "Verification",
+    heading: `Are you ${programName}'s ${claimantTitle}?`,
+    body: [
+      `Someone is setting up ${programName} on Advantage Analytics — a match analysis tool for collegiate programs — as its ${claimantTitle.toLowerCase()}, and gave this address. Confirming below is the whole check.`,
+    ],
+    facts: [
+      { label: "Program", value: programName },
+      { label: "Claimed as", value: claimantTitle },
+    ],
+    cta: { label: "Confirm it's me", url: verifyIdentityUrl(token) },
+    note: "The link lasts 7 days. If you weren't expecting this, ignoring this email is safe — nothing happens unless you confirm.",
+  };
+
+  return {
+    to,
+    // The heading again, not "Action required". This needs no action from
+    // anyone it wasn't meant for, and the question is the honest subject.
+    subject: `Are you ${programName}'s ${claimantTitle}?`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "claim_verify_identity" },
+  };
+}
+
+export interface ProgramClaimInviteInput {
+  /** The coach's address, as the admin typed it. No account exists behind it yet. */
+  to: string;
+  programName: string;
+  /** The directory key — `/claim/[programKey]` is the whole point of this email. */
+  programKey: string;
+  /**
+   * Whether the pilot is already waiting on the other side. It changes what
+   * the recipient finds, so it changes what the email may promise.
+   */
+  pilot: boolean;
+}
+
+/**
+ * "Your program is on Advantage — come and take it."
+ *
+ * The one claim email that goes out BEFORE anybody has claimed anything. An
+ * admin seeded a collegiate row from the console and named a head coach who
+ * has no account yet, so there is nobody to make the owner: membership is
+ * only ever self-created (`program_members.user_id` is NOT NULL and every
+ * insert path keys on `auth.uid()`), and a program row cannot mint a login.
+ * What the admin CAN do is point them at the claim flow that already exists,
+ * which is this link.
+ *
+ * ── Why it is not an invitation ─────────────────────────────────────────────
+ * `programInviteEmail` carries a token that binds one address to one seat. This
+ * carries no token at all — just the program's public key — because the claim
+ * flow's own checks (the mailbox proof, the domain match, the recorded-contact
+ * test) are what decide whether the person opening it becomes the owner. A
+ * token here would be a second, weaker authority sitting beside the real one,
+ * and a forwarded one would hand a collegiate program to whoever opened it.
+ *
+ * ── The pilot line ──────────────────────────────────────────────────────────
+ * When the admin turned the pilot on, a `program_contacts` row goes in beside
+ * this send, so the claim RPC's exact-match approves them on completion and
+ * the workspace is live the moment they finish. Said plainly, because a coach
+ * who expects a wait will put the email down. With the pilot off there is a
+ * review step and the copy does not pretend otherwise.
+ *
+ * Like `claimVerifyIdentityEmail`, the recipient may never have heard of us,
+ * so it reads as an offer and not a summons: one question, one button, and an
+ * explicit line that ignoring it costs them nothing.
+ */
+export function programClaimInviteEmail(
+  input: ProgramClaimInviteInput,
+): EmailMessage {
+  const { to, programName, programKey, pilot } = input;
+
+  const content: EmailContent = {
+    preheader: `${programName} is set up on Advantage — finish setting it up in a couple of minutes.`,
+    eyebrow: "Your program",
+    heading: `${programName} is ready for you`,
+    body: [
+      `We've added ${programName} to Advantage Analytics — a match analysis tool for collegiate programs — and you're listed as its head coach. Setting it up takes a couple of minutes and confirms the address you read this at.`,
+      pilot
+        ? "Your program is already on the pilot, so the workspace opens as soon as you finish — there's no wait and nothing to pay."
+        : "Once you finish, we'll check the details and open the workspace.",
+    ],
+    facts: [
+      { label: "Program", value: programName },
+      { label: "You are", value: "Head coach" },
+    ],
+    cta: {
+      label: "Set up your program",
+      url: `${siteUrl()}/claim/${encodeURIComponent(programKey)}`,
+    },
+    note: "If this isn't your program, ignoring this email is safe — nothing happens unless you set it up, and the link grants nothing on its own.",
+  };
+
+  return {
+    to,
+    subject: `${programName} is ready for you on Advantage`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "program_claim_invite" },
+  };
+}
+
 export interface ClaimApprovedInput {
   to: string;
   programName: string;
@@ -106,7 +259,7 @@ export function claimApprovedEmail(input: ClaimApprovedInput): EmailMessage {
     //
     // It does NOT say we told the program's contacts, because we don't: the
     // announced claim — mail to every scraped contact whenever a program was
-    // claimed — was cut before launch (see the /admin/claims header), and
+    // claimed — was cut before launch (see the admin review queue's header), and
     // `claimObjectionNoticeEmail` below has no caller. An email that claims a
     // notice nobody received is worse than one that stays quiet about it.
     note: `Someone at the program can still contest this. If nobody raises a concern by ${windowClosesOn}, the claim settles for good — there's nothing for you to do either way.`,

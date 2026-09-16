@@ -31,6 +31,7 @@ export function ProgramUsageCard({
   program,
   initial,
   currentMonth,
+  load = loadProgramUsage,
 }: {
   /** The team workspace this ledger belongs to — name, squad and crest. */
   program: Pick<
@@ -40,6 +41,14 @@ export function ProgramUsageCard({
   initial: ProgramUsage;
   /** The live month — the stepper will not walk past it. */
   currentMonth: string;
+  /**
+   * How the stepper re-reads a month. Defaults to the member-facing
+   * `loadProgramUsage`, which resolves the id against the viewer's own
+   * workspaces — refusing exactly the program an admin console needs to
+   * open. Admin › Teams › Usage passes `adminLoadProgramUsage` instead; every
+   * other caller gets the existing behavior unchanged.
+   */
+  load?: (programId: string, month: string) => Promise<ProgramUsage>;
 }) {
   const [usage, setUsage] = useState(initial);
   const [isPending, startTransition] = useTransition();
@@ -48,7 +57,7 @@ export function ProgramUsageCard({
     const next = shiftBillingMonth(usage.billingMonth, months);
     if (next > currentMonth) return;
     startTransition(async () => {
-      setUsage(await loadProgramUsage(program.id, next));
+      setUsage(await load(program.id, next));
     });
   };
 

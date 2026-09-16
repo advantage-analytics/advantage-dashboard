@@ -32,6 +32,14 @@ const NOTE = "Ownership moves by transfer, not from this menu.";
  * from the caller (an owner sees three, a coach two), owner is never among
  * them, and the menu ends on where ownership moves instead. Picking commits
  * at once; the row behind it re-renders from the server.
+ *
+ * `action` exists so the admin console can reuse this row without a second
+ * copy of it. It defaults to the Settings action, so every existing caller —
+ * and every existing test — is untouched; the admin surface passes
+ * `adminSetProgramMemberRole`, which takes the same input and returns the same
+ * shape but is gated on `requireAdmin()` rather than membership. The component
+ * stays ignorant of which one it got: both refuse in the database, and both
+ * hand back a sentence this row can show.
  */
 export function RoleMenu({
   programId,
@@ -39,12 +47,14 @@ export function RoleMenu({
   role,
   options,
   onError,
+  action = setProgramMemberRole,
 }: {
   programId: string;
   userId: string;
   role: MemberRole;
   options: readonly AssignableRole[];
   onError: (message: string | null) => void;
+  action?: typeof setProgramMemberRole;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -64,7 +74,7 @@ export function RoleMenu({
       onChange={(next) => {
         onError(null);
         startTransition(async () => {
-          const result = await setProgramMemberRole({
+          const result = await action({
             programId,
             userId,
             role: next,

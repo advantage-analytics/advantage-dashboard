@@ -21,11 +21,12 @@ export function ProgramCrest({
 }: {
   name: string;
   crestUrl: string | null;
-  /** 38 in a list row, 52 at the head of the identity card. */
-  size?: 38 | 52;
+  /** 26 in the admin teams table, 38 in a list row, 52 at the head of the identity card. */
+  size?: 26 | 38 | 52;
   className?: string;
 }) {
-  const box = size === 52 ? "size-[52px]" : "size-[38px]";
+  const box =
+    size === 52 ? "size-[52px]" : size === 38 ? "size-[38px]" : "size-[26px]";
 
   if (crestUrl) {
     return (

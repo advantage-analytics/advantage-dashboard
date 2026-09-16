@@ -13,6 +13,7 @@ import {
   hoursSeverity,
   usageFraction,
 } from "@/lib/data/usage-format";
+import { formatPilotEnd } from "@/lib/services/splitstep/config";
 import { capitalize, cn } from "@/lib/utils";
 
 /**
@@ -38,6 +39,51 @@ const FILL: Record<ReturnType<typeof hoursSeverity>, string> = {
   low: "var(--viz-key)",
   spent: "var(--danger)",
 };
+
+/**
+ * The bar itself — the track, the fill and the `meter` role that makes it
+ * readable without eyes.
+ *
+ * Extracted so the admin console's `PilotUsageCard` draws this program's
+ * hours with the same bar the program's own staff see, rather than a second
+ * one that could drift a pixel or lose the ARIA. It takes the numbers and the
+ * colour already decided rather than deciding them, because severity belongs
+ * to the card that also prints the word beside the figure — a bar that went
+ * amber on its own would be colour alone, which this system does not do.
+ */
+export function HoursMeter({
+  usedSeconds,
+  capSeconds,
+  fraction,
+  fill,
+  label,
+}: {
+  usedSeconds: number;
+  capSeconds: number;
+  fraction: number;
+  fill: string;
+  label: string;
+}) {
+  return (
+    <div
+      className="h-1.5 overflow-hidden rounded-[3px]"
+      style={{ background: "var(--blue-soft)" }}
+      role="meter"
+      aria-valuemin={0}
+      aria-valuemax={capSeconds}
+      aria-valuenow={usedSeconds}
+      aria-label={label}
+    >
+      <div
+        className="h-1.5 rounded-[3px] transition-[width] duration-300"
+        style={{ width: `${fraction * 100}%`, background: fill }}
+      />
+    </div>
+  );
+}
+
+/** Severity → the fill's colour, so a card and its meter cannot disagree. */
+export const HOURS_FILL = FILL;
 
 export function ProgramHoursSummary({
   usage,
@@ -104,20 +150,13 @@ export function ProgramHoursSummary({
         )}
       </div>
 
-      <div
-        className="h-1.5 overflow-hidden rounded-[3px]"
-        style={{ background: "var(--blue-soft)" }}
-        role="meter"
-        aria-valuemin={0}
-        aria-valuemax={usage.capSeconds}
-        aria-valuenow={usage.usedSeconds}
-        aria-label="Program hours used this month"
-      >
-        <div
-          className="h-1.5 rounded-[3px] transition-[width] duration-300"
-          style={{ width: `${fraction * 100}%`, background: fill }}
-        />
-      </div>
+      <HoursMeter
+        usedSeconds={usage.usedSeconds}
+        capSeconds={usage.capSeconds}
+        fraction={fraction}
+        fill={fill}
+        label="Program hours used this month"
+      />
 
       <div className="flex items-center gap-2.5">
         <span className="text-[11px] text-[var(--ink-500)]">
@@ -208,8 +247,7 @@ export function ProgramHoursSummary({
           )}
 
           <span className="border-t border-[var(--border-hairline)] pt-3 text-[11px] leading-[1.5] text-[var(--ink-500)]">
-            Hours reserve at submit and reconcile on completion — a failed job
-            gives them back. Players see their own line plus the team total.
+            {`Hours reserve at submit and reconcile on completion — a failed job gives them back. Players see their own line plus the team total. · Pilot ends ${formatPilotEnd()}`}
           </span>
         </div>
       )}

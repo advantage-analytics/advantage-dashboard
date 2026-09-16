@@ -141,6 +141,31 @@ export const VENDOR_DOWNLOAD_STALL_SECONDS = 72 * 60 * 60;
  */
 export type AccountType = "individual" | "program";
 
+/**
+ * Last day of the pilot's free window, as a plain `YYYY-MM-DD` — deliberately
+ * not a `Date`, since it names a calendar date rather than an instant and has
+ * no timezone of its own to lose.
+ */
+export const PILOT_ENDS_AT = "2026-12-31";
+
+/**
+ * `PILOT_ENDS_AT`, formatted for display.
+ *
+ * UTC, for the same reason `formatWindowClose` in
+ * `services/programs/admin-actions.ts` is: the date is compared elsewhere
+ * against instants Postgres derives from `now()`, and formatting it in
+ * whatever zone the server happens to run in can print a day the database
+ * disagrees with.
+ */
+export function formatPilotEnd(): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${PILOT_ENDS_AT}T00:00:00Z`));
+}
+
 const MONTHLY_CAP_HOURS: Record<AccountType, number> = {
   individual: 2,
   program: 75,
@@ -149,6 +174,16 @@ const MONTHLY_CAP_HOURS: Record<AccountType, number> = {
 /** Monthly processing allowance, in seconds, for an account tier. */
 export function getMonthlyCapSeconds(accountType: AccountType): number {
   return MONTHLY_CAP_HOURS[accountType] * 60 * 60;
+}
+
+/**
+ * Monthly processing allowance, in hours, for an account tier.
+ *
+ * A thin wrapper over `getMonthlyCapSeconds`, not a second source of truth —
+ * `MONTHLY_CAP_HOURS` stays the only place the 2 and 75 are written down.
+ */
+export function getMonthlyCapHours(accountType: AccountType): number {
+  return getMonthlyCapSeconds(accountType) / 3600;
 }
 
 /** First of the current month, UTC — the `processing_usage.billing_month` key. */

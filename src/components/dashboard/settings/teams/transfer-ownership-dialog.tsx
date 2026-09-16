@@ -24,6 +24,13 @@ import type { TeamMember } from "@/lib/data/team-settings-server";
  * Done shows the swap in the members card's own vocabulary rather than a
  * green tick — `--success` is fenced to match outcomes, and two rows saying
  * "was Coach → Owner" is what actually happened, shown instead of asserted.
+ *
+ * `action` defaults to the Settings action, so every existing caller and test
+ * is untouched. The admin console passes `adminTransferProgramOwnership`,
+ * which takes the same input and returns the same three outcomes (ok, ok with
+ * a warning about the email, refusal) but runs `admin_transfer_program_
+ * ownership` — the variant that demotes whoever currently owns the program
+ * rather than the caller, because an admin owns nothing here.
  */
 export function TransferOwnershipDialog({
   open,
@@ -32,6 +39,7 @@ export function TransferOwnershipDialog({
   programName,
   target,
   viewerName,
+  action = transferProgramOwnership,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -40,6 +48,7 @@ export function TransferOwnershipDialog({
   /** The coach or staff member the row named. Null while closed. */
   target: TeamMember | null;
   viewerName: string;
+  action?: typeof transferProgramOwnership;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<"confirm" | "done">("confirm");
@@ -58,7 +67,7 @@ export function TransferOwnershipDialog({
     if (!target || !armed) return;
     setError(null);
     startTransition(async () => {
-      const result = await transferProgramOwnership({
+      const result = await action({
         programId,
         newOwnerUserId: target.userId,
       });
