@@ -183,3 +183,19 @@ The recurring `Owner Conference` orphan was deleted again (approved) before the 
 
 1. T13: `tests/teams-management.spec.ts` lines 58–62 comment and the `afterAll` conference delete (line 136) now describe a row owners no longer create; relax both and optionally assert `conference_id is null`.
 2. `20260915100000_conferences_table.sql` backfill still asserts the old T1 ⇔ invariant; relax it in the repo file for fresh-DB consistency.
+
+## T12 · Migration: owner-gated conference minting, merge/set lock order, list rewrite — done
+
+**gate:** mechanical: pass · completion: pass
+**changed:** Unblocked. The rate limit was diagnosed via auth logs: `/token` password grants got `429 over_request_rate_limit` in ~37-login bursts. The fix was the author raising the "Token refreshes" limit, plus the committed fixture retry (e5a22d2c). A back-to-back full suite then passed twice (1267). Stash 2b701398 was restored and dropped. New `supabase/migrations/20260916100000_conferences_owner_gate_and_locks.sql`, live as `conferences_owner_gate_and_locks`, byte-identical:
+
+- **Minting gate:** the sync trigger mints only for admin or service_role on colleges. Owner text stays unlinked; bare postgres mints nothing, which the header documents.
+- **Race-safe create:** `conference_id_for` does `on conflict do nothing` with a re-lookup.
+- **Merge:** locks the source FOR UPDATE and the target FOR KEY SHARE in id order, with the audit and the move in one CTE.
+- **Set:** FOR NO KEY UPDATE on the program.
+- **List:** `admin_list_conferences` is a single join/group, with identical output md5 at 137 rows and 13 ms live.
+- **Security:** all functions still security definer with `search_path=''`, no anon/PUBLIC grants, advisors clean beyond the accepted warning.
+  **follow-ups:**
+
+1. T13: relax `tests/teams-management.spec.ts` lines 58–62 comment and the `afterAll` conference delete (owners no longer mint); optionally assert `conference_id is null`.
+2. Relax the old T1 ⇔ assertion in `20260915100000_conferences_table.sql`'s backfill for fresh-DB consistency.

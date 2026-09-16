@@ -170,7 +170,7 @@ ready).
 
 ## T12 · Migration: owner-gated conference minting, merge/set lock order, list rewrite
 
-- **status:** blocked
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/20260916100000_conferences_owner_gate_and_locks.sql (new; guess — applied live via MCP `apply_migration`, file byte-identical to what was applied)
 - **done when:**
