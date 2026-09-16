@@ -82,12 +82,12 @@ import type { AdminRequestRow } from "@/lib/data/admin-requests-server";
  */
 
 /** The leading glyph on a ⋯ row: neutral ink, never `FloatMenuItem`'s blue. */
-const MENU_ROW_ICON = "size-[13px] shrink-0 text-[var(--ink-400)]";
+export const MENU_ROW_ICON = "size-[13px] shrink-0 text-[var(--ink-400)]";
 
 /** A destructive row rests grey and turns red at the moment of intent. */
-const DESTRUCTIVE_ROW =
+export const DESTRUCTIVE_ROW =
   "group hover:[&>span:last-child>span:first-child]:text-[var(--danger)] focus-visible:[&>span:last-child>span:first-child]:text-[var(--danger)]";
-const DESTRUCTIVE_ICON =
+export const DESTRUCTIVE_ICON =
   "group-hover:text-[var(--danger)] group-focus-visible:text-[var(--danger)]";
 
 /** "Sep 13 · 1 day" — when it landed, and how long it has been sitting. */
