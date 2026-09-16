@@ -74,7 +74,7 @@ ready).
 
 ## T5 · Move existing conference readers to the conferences table
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/lib/data/team-settings-server.ts, src/lib/data/admin-teams-server.ts, src/lib/data/admin-search-server.ts (edits; guesses per plan)

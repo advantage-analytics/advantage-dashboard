@@ -57,3 +57,13 @@ is the runner's. Newest entries at the bottom.
 
 1. The `Owner Conference` orphan keeps coming back until the teams-management spec fix (commit bbda63cc) reaches `splitstep-integration` or whichever checkout keeps running the old spec.
 2. `getAdminConferenceTeams` creates one Supabase client per crest; it could share one.
+
+## T5 · Move existing conference readers to the conferences table — done
+
+**gate:** mechanical: pass · completion: pass
+**changed:** `getConferenceOptions` (`team-settings-server.ts`) now runs one session-client `conferences.select('label').order('label')` query, with the optional division filter. `CONFERENCE_PAGE`, the paging loop and the dedup are removed. `listAdminTeamFacets` (`admin-teams-server.ts`) reads conferences from `conferences.label` and states from `programs.state` in parallel, and takes divisions from a fixed D1/D2/D3/NAIA/JUCO list sorted by `divisionLabel`. The `?conference=` filter is untouched. `AdminSearchResult` (`admin-search-server.ts`) gains `conferenceId` and `conferenceLabel`, filled from `conference_id` and the mirrored `conference` text. No UI files changed. No caller can be unauthenticated. Conference option order now follows the database collation rather than `localeCompare`.
+**follow-ups:**
+
+1. The states facet reads about 1,940 `programs` rows with no paging, so PostgREST's 1,000-row cap has probably always dropped some states (pre-existing).
+2. Share the D1/D2/D3/NAIA/JUCO list between `admin-teams-server.ts` and `dual-school-step.tsx`, e.g. in `programs-server.ts`.
+3. Both option lists include conferences with no teams, so the recurring `Owner Conference` orphan shows up in pickers until the spec fix merges.

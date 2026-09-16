@@ -33,6 +33,13 @@ export interface AdminSearchResult {
   name: string;
   /** "D-I · Pac-12", either half omitted when the column is null. */
   subtitle: string;
+  /** `programs.conference_id`; null for a program with no conference. */
+  conferenceId: string | null;
+  /**
+   * The conference's label — `programs.conference`, the trigger-fed mirror of
+   * `conferences.label`, so no join is needed to read it.
+   */
+  conferenceLabel: string | null;
 }
 
 /** How many rows the header's dropdown shows. Eight fits without scrolling. */
@@ -59,7 +66,7 @@ export async function adminSearchTeams(
 
   const { data, error } = await admin
     .from("programs")
-    .select("id, school_name, team, division, conference")
+    .select("id, school_name, team, division, conference, conference_id")
     .ilike("school_name", `%${pattern}%`)
     .order("school_name", { ascending: true })
     .limit(SEARCH_LIMIT);
@@ -78,10 +85,13 @@ export async function adminSearchTeams(
       team: string | null;
       division: string | null;
       conference: string | null;
+      conference_id: string | null;
     }[]
   ).map((row) => ({
     id: row.id,
     name: programDisplayName(row.school_name, row.team),
     subtitle: programSubtitle(row.division, row.conference),
+    conferenceId: row.conference_id,
+    conferenceLabel: row.conference,
   }));
 }
