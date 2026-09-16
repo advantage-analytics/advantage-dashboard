@@ -243,3 +243,16 @@ No lint suppressions.
 **follow-ups:**
 
 1. `remove()` in the drawer and `add()` in the popover still await server actions without try/catch; a rejected action there is unhandled.
+
+## T16 · Conferences page: alertdialog keydown guard + hidden landing target — done
+
+**gate:** mechanical: pass · completion: pass
+**changed:** `conferences-page-content.tsx`:
+
+- **Keydown guard:** now `[role="dialog"]:not([DRAWER_ATTR] [role="dialog"]), [role="alertdialog"]`, so Esc and ↑/↓ inside a ConfirmDialog no longer reach the page handler.
+- **Hidden landing target:** when the pending landing target (merge or add) is loaded but outside the current view, the drawer closes and a `clearUrl` counter effect clears `?id=`. There is no URL write during render, and the view doesn't switch to All.
+- **Unchanged:** the visible-target landing and the "row gone" close.
+  **follow-ups:**
+
+1. `requests-page-content.tsx` (lines ~182–186) has the same `alertdialog` gap in its keydown guard.
+2. `src/components/dashboard/schedule/static/static-schedule.tsx:340` uses the same selector; check whether a confirm can open there.

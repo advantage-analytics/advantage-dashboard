@@ -130,6 +130,13 @@ export function ConferencesPageContent({
   const [openedByKeyboard, setOpenedByKeyboard] = useState(false);
   /** A just-created conference, waiting for the refresh to bring its row. */
   const [pendingId, setPendingId] = useState<string | null>(null);
+  /**
+   * Bumped when a landing closes the drawer instead of opening it, so an
+   * effect drops `?id=` — the decision is made during render, and the URL
+   * write must not be. A counter rather than a boolean so a second hidden
+   * landing re-runs the effect without a reset.
+   */
+  const [clearUrl, setClearUrl] = useState(0);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -198,10 +205,15 @@ export function ConferencesPageContent({
     [shown, selectedId, select],
   );
 
-  // A conference just added: once the refresh brings its row into this cut,
-  // open it (past the first 50, open the list too). If the row arrives but
-  // this cut excludes it — a new conference has no teams on Advantage — there
-  // is nothing on screen to open, so stop waiting.
+  // A landing — a conference just added, or a merge target: once its row is
+  // loaded and in this cut, open it (past the first 50, open the list too).
+  //
+  // If the row is loaded but this cut excludes it — a new conference has no
+  // teams on Advantage, a merge target outside the division filter — the
+  // landing target is not in this view → close and clear the URL. Switching
+  // to the All view instead was rejected: the view is a URL-held cut
+  // (`pushCut`), and changing it on the user's behalf discards their filter.
+  // Closing here also stops the drawer lingering on a merged-away source.
   if (pendingId && rows.some((row) => row.id === pendingId)) {
     const index = visible.findIndex((row) => row.id === pendingId);
     setPendingId(null);
@@ -210,6 +222,11 @@ export function ConferencesPageContent({
       setSelectedId(pendingId);
       setDrawerId(pendingId);
       setClosing(false);
+    } else {
+      setSelectedId(null);
+      setDrawerId(null);
+      setClosing(false);
+      setClearUrl((n) => n + 1);
     }
   }
 
@@ -228,6 +245,11 @@ export function ConferencesPageContent({
     };
   }, []);
 
+  // The URL half of a hidden landing, kept out of render.
+  useEffect(() => {
+    if (clearUrl > 0) syncUrl(null);
+  }, [clearUrl]);
+
   useEffect(() => {
     if (!selectedId) return;
 
@@ -243,11 +265,12 @@ export function ConferencesPageContent({
       if (target) {
         if (target.closest("input, textarea, select, [contenteditable=true]"))
           return;
-        // The drawer's own `role="dialog"` is not a modal; a confirm dialog
-        // opened from inside it is, and Esc there belongs to the dialog.
+        // The drawer's own `role="dialog"` is not a modal; a dialog opened
+        // from inside it is — including `ConfirmDialog`, which renders
+        // `role="alertdialog"` — and Esc and ↑/↓ there belong to the dialog.
         if (
           target.closest(
-            `[role="dialog"]:not([${DRAWER_ATTR}] [role="dialog"])`,
+            `[role="dialog"]:not([${DRAWER_ATTR}] [role="dialog"]), [role="alertdialog"]`,
           )
         )
           return;
@@ -331,7 +354,8 @@ export function ConferencesPageContent({
             conferences={rows}
             onMerged={(targetId) => {
               // The merge target is already a loaded row, so the pending-id
-              // pass below opens it at once; the refresh then brings its new
+              // pass opens it at once — or, when this cut hides it, closes the
+              // drawer and clears `?id=`. The refresh then brings the new
               // counts and drops the source.
               setPendingId(targetId);
               syncUrl(targetId);

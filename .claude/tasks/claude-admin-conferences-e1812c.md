@@ -221,7 +221,7 @@ ready).
 
 ## T16 · Conferences page: alertdialog keydown guard + hidden landing target
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/admin/conferences-page-content.tsx — guess
 - **done when:**
