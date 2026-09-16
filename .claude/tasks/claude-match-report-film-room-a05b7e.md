@@ -32,7 +32,7 @@ ready).
 
 ## T2 · MatchReport context, frame parts and `use()` providers
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/components/dashboard/matches/match-detail/match-report-context.tsx, src/components/dashboard/matches/match-detail/match-report.tsx, src/components/dashboard/matches/match-data-provider.tsx (guess)
