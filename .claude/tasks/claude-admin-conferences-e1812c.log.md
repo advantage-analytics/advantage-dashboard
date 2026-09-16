@@ -48,3 +48,12 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The spec could also cover `admin_list_conferences` counts for an admin, the `23505` duplicate-name bubble, and the `22023` self-merge / bad-division checks.
+
+## T4 · Conferences loader, server actions, pure helpers — done
+
+**gate:** mechanical: pass · completion: pass
+**changed:** New `src/lib/data/admin-conferences-server.ts`: row and view types, cached `listAdminConferences()` (session-client `admin_list_conferences` plus a service-role null-`conference_id` count), `getAdminConferenceTeams()`, and the pure helpers `applyConferenceView`, `sortConferences`, `conferenceMeta`, `squadsFor`, `toAdminConferenceRow`. New `src/lib/services/programs/conference-format.ts` (`normalizeWebsite`, `websiteHref`, `conferenceInitials`, `conferenceChanged`). New `"use server"` file `admin-conference-actions.ts` (create, save, merge, delete, addTeam, loadTeams; `requireAdmin()` then the session-client RPC; 23505 and P0001 mapped; writes revalidate `/admin`). `divisionLongLabel()` added to `programs-server.ts`. Accepted deviations: `conferenceInitials` drops filler words ("Conference", "the", "of", "and") so "Big 12 Conference" gives "B12"; `normalizeWebsite` rejects input with no dotted host, and create/save return a readable error for it; extra mappings for 22023, P0002 and 42501. Live evidence: the admin RPC returned 137 real conferences plus the recurring `Owner Conference` orphan, and 2 unplaced programs. The runner deleted that orphan once. It reappeared within minutes: another checkout still runs the unfixed `tests/teams-management.spec.ts`.
+**follow-ups:**
+
+1. The `Owner Conference` orphan keeps coming back until the teams-management spec fix (commit bbda63cc) reaches `splitstep-integration` or whichever checkout keeps running the old spec.
+2. `getAdminConferenceTeams` creates one Supabase client per crest; it could share one.

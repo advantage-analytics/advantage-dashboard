@@ -109,6 +109,22 @@ export function divisionLabel(division: string | null): string | null {
   return DIVISION_LABEL[division] ?? division;
 }
 
+/**
+ * The spelled-out form — "Division I" — for prose lines such as the admin
+ * conference drawer's meta ("Division I · 8 schools"). Tables keep the
+ * compact `divisionLabel` ("D-I"). NAIA and JUCO pass through, as above.
+ */
+const DIVISION_LONG_LABEL: Record<string, string> = {
+  D1: "Division I",
+  D2: "Division II",
+  D3: "Division III",
+};
+
+export function divisionLongLabel(division: string | null): string | null {
+  if (!division) return null;
+  return DIVISION_LONG_LABEL[division] ?? division;
+}
+
 /** "D-I · Big Sky", skipping whichever half is missing. */
 export function programSubtitle(
   division: string | null,

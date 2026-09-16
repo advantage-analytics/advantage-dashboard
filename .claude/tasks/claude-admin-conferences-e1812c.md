@@ -60,7 +60,7 @@ ready).
 
 ## T4 · Conferences loader, server actions, pure helpers
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/lib/data/admin-conferences-server.ts (new), src/lib/services/programs/admin-conference-actions.ts (new), src/lib/services/programs/conference-format.ts (new), src/lib/data/programs-server.ts (edit) — all guesses per the plan's file tree
