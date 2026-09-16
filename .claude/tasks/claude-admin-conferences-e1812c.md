@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Migration: admin conference RPCs + audit action
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1
 - **files:** supabase/migrations/20260915100100_admin_conference_rpcs.sql (new; guess — applied live via MCP apply_migration)

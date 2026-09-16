@@ -27,3 +27,13 @@ is the runner's. Newest entries at the bottom.
 2. Merge `Ivy League (Ivy)` into `Ivy League (IVY)` once T2/T9 land, then tighten `conferences_label_key` to `lower(label)`.
 3. Rename `Northern Sun Intercollegiate Conference  (NSIC)` (double space) to name + `NSIC` via the admin UI.
 4. `programs` has no `updated_at` touch trigger; separate task if audit needs it.
+
+## T2 · Migration: admin conference RPCs + audit action — done
+
+**gate:** mechanical: pass · completion: pass
+**changed:** New `supabase/migrations/20260915100100_admin_conference_rpcs.sql`, applied live as `admin_conference_rpcs`. It re-creates `program_audit_log_action_check` from the live 18-action list plus `program.conference_changed`, and adds `admin_upsert_conference`, `admin_merge_conferences`, `admin_delete_conference`, `admin_set_program_conference` and `admin_list_conferences`. All five are security definer with `search_path = ''`, open with the `is_admin()` 42501 gate, and grant execute to `authenticated` only. Verified live: `admin_list_conferences()` as admin returns 137 rows summing to 1940 teams; a non-admin gets 42501 on all five. A rolled-back probe covered upsert, set, no-op, delete refusal with the P0001 message, merge, rename mirroring and detach. Extra validation beyond the spec: short name, website, unknown ids, self-merge. Nothing left live (137 conferences, 0 `program.conference_changed` rows). The executor also deleted one pre-existing orphan `Owner Conference` (0 programs, created by a test run in the main checkout, where the teams-management spec still hard-codes that name) through `admin_delete_conference`.
+**follow-ups:**
+
+1. T3's spec should count `program_audit_log` rows with the service-role client; RLS hides them from `authenticated`.
+2. The main checkout's `tests/teams-management.spec.ts` recreates the `Owner Conference` orphan on every live run until this branch merges; merge soon or cherry-pick the `MARK` fix.
+3. Merge `Ivy League (Ivy)` into `Ivy League (IVY)` once T9 ships, then tighten `conferences_label_key` to `lower(label)`.
