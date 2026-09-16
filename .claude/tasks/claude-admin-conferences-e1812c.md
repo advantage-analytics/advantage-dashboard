@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Migration: conferences table, programs.conference_id, backfill, sync triggers
 
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **files:** supabase/migrations/20260915100000_conferences_table.sql (new; guess — applied live via MCP apply_migration)
 - **done when:**
