@@ -134,8 +134,12 @@ async function get(
   });
 }
 
-/** The three routes proven for both the admin and non-admin session. */
-const TEAM_ROUTES = ["/admin/teams", "/admin/requests"] as const;
+/** The routes proven for both the admin and non-admin session. */
+const TEAM_ROUTES = [
+  "/admin/teams",
+  "/admin/requests",
+  "/admin/conferences",
+] as const;
 
 test.describe("Admin console route smoke test (live)", () => {
   test.describe.configure({ mode: "serial", timeout: 60_000 });

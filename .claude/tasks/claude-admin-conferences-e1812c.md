@@ -142,7 +142,7 @@ ready).
 
 ## T10 · Pure tests, route smoke, housekeeping
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T3, T5, T9
 - **files:** tests/admin-conferences-logic.spec.ts (new), tests/admin-routes.spec.ts (edit) — guesses per plan

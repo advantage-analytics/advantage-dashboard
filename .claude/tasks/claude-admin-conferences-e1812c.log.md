@@ -132,3 +132,13 @@ The ⋯ actions slot is left empty for T9. `conferences-page-content.tsx` is unc
 **follow-ups:**
 
 1. Also cover `admin_list_conferences` counts for an admin, the 23505 duplicate-name error, and the 22023 self-merge and bad-division checks.
+
+## T10 · Pure tests, route smoke, housekeeping — done
+
+**gate:** mechanical: pass · completion: pass
+**changed:** New `tests/admin-conferences-logic.spec.ts`, 22 pure tests of `applyConferenceView`, `sortConferences`, `conferenceMeta`, `conferenceInitials`, `normalizeWebsite` and `conferenceChanged`. It imports from the client-safe `admin-conferences-view.ts` and `conference-format.ts`. `tests/admin-routes.spec.ts` now includes `/admin/conferences` in `TEAM_ROUTES`; those smoke tests still skip without `ADMIN_SMOKE_BASE_URL`, by design. Results:
+
+- **Env blanked:** `npm test` gives 1178 passed, 153 skipped, 0 failed.
+- **Map:** unchanged.
+- **Drift seeds:** unchanged.
+- **Live:** `admin-conferences-rpcs` plus `admin-program-rpcs` give 15 passed.
