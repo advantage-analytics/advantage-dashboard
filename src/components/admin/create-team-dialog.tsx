@@ -676,8 +676,11 @@ function ownerHint(orgType: ProgramOrgType | undefined): string {
   return "Optional. An existing account becomes the owner; anyone else is invited as a coach, and you make them the owner from the team's page.";
 }
 
-/** Caption, control, optional line under it — the underline form's one row. */
-function Field({
+/**
+ * Caption, control, optional line under it — the underline form's one row.
+ * Shared with `add-conference-dialog.tsx`.
+ */
+export function Field({
   label,
   hint,
   className,

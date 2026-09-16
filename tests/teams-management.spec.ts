@@ -55,6 +55,11 @@ test.describe("Settings › Teams — owner gate, transfer, one owner (live)", (
   const authUserIds: string[] = [];
   let programId: string;
   const schoolName = `Teams Mgmt School ${MARK}`;
+  /** Unique per run: `programs_sync_conference` creates a `conferences` row
+   *  for an unseen label on a college program, so a fixed name would either
+   *  reuse a real conference or leave a shared orphan behind. `afterAll`
+   *  deletes the row this run caused. */
+  const ownerConference = `Owner Conference ${MARK}`;
 
   /** The current row, in the shape the RPC takes — what an unchanged re-send is. */
   async function currentSettings() {
@@ -125,6 +130,10 @@ test.describe("Settings › Teams — owner gate, transfer, one owner (live)", (
       await admin.from("program_members").delete().eq("program_id", programId);
       await admin.from("programs").delete().eq("id", programId);
     }
+    // The owner-conference test minted this row through the sync trigger;
+    // `on delete restrict` only protects rows a program still points at, so
+    // it would otherwise outlive the program.
+    await admin.from("conferences").delete().eq("name", ownerConference);
     await deleteAuthUsers(admin, authUserIds);
   });
 
@@ -225,7 +234,7 @@ test.describe("Settings › Teams — owner gate, transfer, one owner (live)", (
   test("the owner may rename the program", async () => {
     const result = await owner.client.rpc("update_program_settings", {
       ...(await currentSettings()),
-      p_conference: "Owner Conference",
+      p_conference: ownerConference,
     });
     expect(result.error).toBeNull();
 
@@ -234,7 +243,7 @@ test.describe("Settings › Teams — owner gate, transfer, one owner (live)", (
       .select("conference")
       .eq("id", programId)
       .single();
-    expect(row.data?.conference).toBe("Owner Conference");
+    expect(row.data?.conference).toBe(ownerConference);
   });
 
   // ── upload_policy ─────────────────────────────────────────────────────────
