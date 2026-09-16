@@ -183,7 +183,7 @@ ready).
 
 ## T13 · Live spec: owner cannot mint, merge audit matches moved rows
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T12
 - **files:** tests/admin-conferences-rpcs.spec.ts (edit), tests/fixtures/live-db.ts (read only) — guesses

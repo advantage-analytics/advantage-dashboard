@@ -199,3 +199,17 @@ The recurring `Owner Conference` orphan was deleted again (approved) before the 
 
 1. T13: relax `tests/teams-management.spec.ts` lines 58–62 comment and the `afterAll` conference delete (owners no longer mint); optionally assert `conference_id is null`.
 2. Relax the old T1 ⇔ assertion in `20260915100000_conferences_table.sql`'s backfill for fresh-DB consistency.
+
+## T13 · Live spec: owner cannot mint, merge audit matches moved rows — done
+
+**gate:** mechanical: pass · completion: pass
+**changed:** `tests/admin-conferences-rpcs.spec.ts` gains:
+
+- **Owner test:** an owner member on a college fixture calls `update_program_settings`; the text is kept, `conference_id` stays null and nothing is minted.
+- **Service-role test:** a direct `programs.conference` write mints a conference with short name `SL` and links it. It writes directly because `update_program_settings` refuses a caller with no `auth.uid()`.
+- **Merge audit check:** the count of `program.conference_changed` merge rows equals the RPC's return, and their program set equals the programs that pointed at A.
+
+The header documents the relaxed invariant. Results: live 10 passed; env blanked, 10 skipped; conferences count unchanged at 137 with no marked residue.
+**follow-ups:**
+
+1. `tests/teams-management.spec.ts` lines 58–62 comment and its `afterAll` conference delete are stale now that owners no longer mint.

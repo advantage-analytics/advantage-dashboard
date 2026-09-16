@@ -23,13 +23,21 @@ import {
  *     is `name (short_name)`, and a non-admin session gets `42501` from all
  *     five conference RPCs.
  *  2. `programs_sync_conference`: a known label resolves to its id; an unseen
- *     label creates a parsed conference only for `org_type='college'`, while a
- *     club keeps the text with `conference_id` null.
+ *     label creates a parsed conference only for `org_type='college'` written
+ *     by an admin session or the service-role client, while a club keeps the
+ *     text with `conference_id` null. Since
+ *     `20260916100000_conferences_owner_gate_and_locks.sql` (T12) a program
+ *     OWNER saving an unseen name through `update_program_settings` mints
+ *     nothing either: the text is kept unlinked. The invariant is therefore
+ *     the relaxed one — owner-typed text may sit on a college row with a null
+ *     `conference_id`, but linked text always equals the conference's label
+ *     (`conference_id is not null ⇒ conference = label`).
  *     `admin_set_program_conference` moves a program, rewrites the mirrored
  *     text and writes a `program.conference_changed` audit row.
  *  3. `conferences_mirror_label`: a rename rewrites every pointing program.
  *     `admin_merge_conferences` moves programs, deletes the source and returns
- *     the count; `admin_delete_conference` refuses a populated conference with
+ *     the count, writing exactly one `reason: 'merge'` audit row per moved
+ *     program; `admin_delete_conference` refuses a populated conference with
  *     `P0001` and succeeds once it is empty.
  *
  * Every conference name and program name starts with the run mark, so no
@@ -55,6 +63,11 @@ const UNSEEN_COLLEGE_LABEL = `${MARK}-new League (NL)`;
 /** Unseen on a club program → text kept, no conference created. */
 const UNSEEN_CLUB_LABEL = `${MARK}-club League (CL)`;
 
+/** An owner typing an unseen name → text kept unlinked, nothing minted. */
+const OWNER_LABEL = `${MARK}-owner League (OL)`;
+/** The service-role client writing an unseen name → minted and linked. */
+const SVC_LABEL = `${MARK}-svc League (SL)`;
+
 const RENAMED_NAME_B = `${MARK}-b Renamed League`;
 const RENAMED_LABEL_B = `${RENAMED_NAME_B} (MR)`;
 
@@ -65,6 +78,7 @@ test.describe("Admin conference RPC gates + sync invariant (live)", () => {
   let admin: SupabaseClient; // service role
   let adminSession: Session; // is_admin = true
   let stranger: Session; // not an admin
+  let owner: Session; // program_members owner of ownerProgram, not an admin
 
   const authUserIds: string[] = [];
   const programIds: string[] = [];
@@ -77,6 +91,8 @@ test.describe("Admin conference RPC gates + sync invariant (live)", () => {
   let programUnseen: string; // created with an unseen college label, moved to B
   let programOnB: string; // created with p_conference = LABEL_B
   let clubProgram: string; // club with an unseen label
+  let ownerProgram: string; // college whose owner saves an unseen label
+  let svcProgram: string; // college the service-role client relabels
 
   const createCollege = async (suffix: string, conference: string) => {
     const result = await adminSession.client.rpc("admin_create_program", {
@@ -111,9 +127,9 @@ test.describe("Admin conference RPC gates + sync invariant (live)", () => {
     test.setTimeout(120_000);
     admin = createAdminClient();
 
-    [adminSession, stranger] = await createLogins(
+    [adminSession, stranger, owner] = await createLogins(
       admin,
-      ["admin", "stranger"],
+      ["admin", "stranger", "owner"],
       { mark: MARK, password: PASSWORD, authUserIds },
     );
 
@@ -144,7 +160,7 @@ test.describe("Admin conference RPC gates + sync invariant (live)", () => {
       await admin.from("programs").delete().eq("id", id);
     }
 
-    // Then every conference this run created (A, B, and the trigger-made one).
+    // Then every conference this run created (A, B, and the trigger-made new + svc).
     await admin.from("conferences").delete().like("name", `${MARK}%`);
 
     await deleteAuthUsers(admin, authUserIds);
@@ -286,6 +302,88 @@ test.describe("Admin conference RPC gates + sync invariant (live)", () => {
     expect(noneForClub.data).toHaveLength(0);
   });
 
+  test("an owner saving an unseen conference through update_program_settings keeps the text unlinked and mints nothing", async () => {
+    ownerProgram = await createCollege("owner", "");
+
+    // `is_program_owner` reads `program_members.role` only; owner_user_id is
+    // set too so the fixture looks like a claimed program.
+    const claim = await admin
+      .from("programs")
+      .update({ owner_user_id: owner.userId, status: "active" })
+      .eq("id", ownerProgram);
+    expect(claim.error).toBeNull();
+    const membership = await admin.from("program_members").insert({
+      program_id: ownerProgram,
+      user_id: owner.userId,
+      role: "owner",
+    });
+    expect(membership.error).toBeNull();
+
+    const current = await admin
+      .from("programs")
+      .select("school_name, team, upload_policy, events_policy")
+      .eq("id", ownerProgram)
+      .single();
+    expect(current.error).toBeNull();
+
+    // Argument list mirrors saveTeamSettings in
+    // src/components/dashboard/settings/team-actions.ts.
+    const save = await owner.client.rpc("update_program_settings", {
+      p_program_id: ownerProgram,
+      p_school_name: current.data!.school_name,
+      p_team: current.data!.team,
+      p_conference: OWNER_LABEL,
+      p_home_venue: "",
+      p_default_surface: null,
+      p_season: "",
+      p_players_can_upload: current.data!.upload_policy === "everyone",
+      p_upload_policy: current.data!.upload_policy,
+      p_events_policy: current.data!.events_policy,
+    });
+    expect(save.error).toBeNull();
+
+    expect(await programRow(ownerProgram)).toEqual({
+      conference: OWNER_LABEL,
+      conference_id: null,
+    });
+
+    const minted = await admin
+      .from("conferences")
+      .select("id")
+      .like("name", `${MARK}-owner%`);
+    expect(minted.error).toBeNull();
+    expect(minted.data).toHaveLength(0);
+  });
+
+  test("the service-role client writing an unseen conference on a college mints and links it", async () => {
+    svcProgram = await createCollege("svc", "");
+
+    // update_program_settings refuses a caller with no auth.uid(), so the
+    // service role writes the programs row directly — the seed path.
+    const write = await admin
+      .from("programs")
+      .update({ conference: SVC_LABEL })
+      .eq("id", svcProgram);
+    expect(write.error).toBeNull();
+
+    const created = await admin
+      .from("conferences")
+      .select("id, name, short_name, label")
+      .eq("label", SVC_LABEL);
+    expect(created.error).toBeNull();
+    expect(created.data).toHaveLength(1);
+    expect(created.data![0]).toMatchObject({
+      name: `${MARK}-svc League`,
+      short_name: "SL",
+      label: SVC_LABEL,
+    });
+
+    expect(await programRow(svcProgram)).toEqual({
+      conference: SVC_LABEL,
+      conference_id: created.data![0].id,
+    });
+  });
+
   test("admin_set_program_conference moves the program, rewrites its text and audits the change", async () => {
     const result = await adminSession.client.rpc(
       "admin_set_program_conference",
@@ -350,6 +448,13 @@ test.describe("Admin conference RPC gates + sync invariant (live)", () => {
   });
 
   test("admin_merge_conferences(A, B) moves A's programs, deletes A and returns the count", async () => {
+    const before = await admin
+      .from("programs")
+      .select("id")
+      .eq("conference_id", conferenceA);
+    expect(before.error).toBeNull();
+    const pointedAtA = before.data!.map((row) => row.id as string).sort();
+
     const result = await adminSession.client.rpc("admin_merge_conferences", {
       p_source: conferenceA,
       p_target: conferenceB,
@@ -384,6 +489,19 @@ test.describe("Admin conference RPC gates + sync invariant (live)", () => {
         reason: "merge",
       },
     });
+
+    // One merge audit row per moved program — the CTE's count is the return.
+    const mergeAudit = await admin
+      .from("program_audit_log")
+      .select("program_id")
+      .eq("action", "program.conference_changed")
+      .eq("details->>reason", "merge")
+      .eq("subject_id", conferenceB);
+    expect(mergeAudit.error).toBeNull();
+    expect(mergeAudit.data).toHaveLength(result.data as number);
+    expect(
+      mergeAudit.data!.map((row) => row.program_id as string).sort(),
+    ).toEqual(pointedAtA);
   });
 
   test("admin_delete_conference rejects a populated conference with P0001, then succeeds once it is empty", async () => {
