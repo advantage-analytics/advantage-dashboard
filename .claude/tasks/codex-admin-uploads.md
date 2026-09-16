@@ -72,7 +72,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T1 · Verify live Phase 2b database contracts
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-6-astra
 - **files:** Best guesses: `docs/admin-uploads-contracts.md`; relevant live Supabase objects.
 - **done when:**
