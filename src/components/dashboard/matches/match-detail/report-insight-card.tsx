@@ -72,8 +72,13 @@ export function MatchReportInsight() {
   // the fold early.
   const [foldFrom, setFoldFrom] = useState<number | null>(null);
   const folding = foldFrom !== null;
+  // One call per toggle: mark the fold, and name the toggle that should take
+  // focus once the other variant has swapped in.
   const startFold = useCallback(
-    () => setFoldFrom(contentHeight ?? 0),
+    (focusNext: "collapse" | "show") => {
+      pendingFocusRef.current = focusNext;
+      setFoldFrom(contentHeight ?? 0);
+    },
     [contentHeight],
   );
 
@@ -188,7 +193,7 @@ function InsightExpanded({
 }: {
   pendingFocusRef: PendingFocus;
   /** Marks the height change about to follow as a fold, so it tweens. */
-  onFold: () => void;
+  onFold: (focusNext: "collapse" | "show") => void;
 }) {
   const { actions, meta } = useMatchReport();
   const focusRef = useFocusWhenRequested(pendingFocusRef, "collapse");
@@ -225,8 +230,7 @@ function InsightExpanded({
             aria-label="Collapse summary"
             aria-expanded="true"
             onClick={() => {
-              pendingFocusRef.current = "show";
-              onFold();
+              onFold("show");
               actions.collapseInsight();
             }}
             className="-my-1 inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-400)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)]"
@@ -257,7 +261,7 @@ function InsightCollapsed({
 }: {
   pendingFocusRef: PendingFocus;
   /** Marks the height change about to follow as a fold, so it tweens. */
-  onFold: () => void;
+  onFold: (focusNext: "collapse" | "show") => void;
 }) {
   const { actions, meta } = useMatchReport();
   const focusRef = useFocusWhenRequested(pendingFocusRef, "show");
@@ -276,8 +280,7 @@ function InsightCollapsed({
         type="button"
         aria-expanded="false"
         onClick={() => {
-          pendingFocusRef.current = "collapse";
-          onFold();
+          onFold("collapse");
           actions.expandInsight();
         }}
         className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-[var(--radius-element)] px-2 py-1 text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
