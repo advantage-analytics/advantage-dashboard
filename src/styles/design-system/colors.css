@@ -125,11 +125,12 @@
   --warning-text:#92400E;
   /* Pilot — the admin plan-pill tag for a team account's free pilot seat
      (T7, admin console). Same bg/text shape as the warning triple above, no
-     border half: it names a plan, not a caution. Violet, not blue — v3
-     reserves blue-tinted pills for "New" alone (see SKILL.md), so this new
-     plan tag needed its own hue rather than a second blue. */
-  --pilot-bg:#F5F3FF;
-  --pilot-text:#6D28D9;
+     border half: it names a plan, not a caution. Green — the Admin Console
+     canvas's chosen plan-pill colour option 5 (green Pilot, amber "Approve
+     pilot?"). Its own pair rather than --success-*: success is fenced to
+     match outcomes, and a plan is not an outcome. */
+  --pilot-bg:#EAF5E8;
+  --pilot-text:#2D6A27;
   --danger:#E51837;
   --danger-hover:#C41530;
   --danger-tint-15:rgba(229,24,55,0.15);

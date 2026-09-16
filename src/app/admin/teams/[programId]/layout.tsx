@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 
+import { AdminPage } from "@/components/admin/admin-page";
 import { TeamPageHeader } from "@/components/admin/team-page-header";
 import { TeamTabs } from "@/components/admin/team-tabs";
 import { getAdminTeam } from "@/lib/data/admin-team-server";
@@ -31,10 +32,10 @@ export default async function AdminTeamLayout({
   }
 
   return (
-    <div className="flex w-full flex-col">
+    <AdminPage>
       <TeamPageHeader program={data.program} claim={data.claim} />
       <TeamTabs programId={programId} />
       <div className="pt-6">{children}</div>
-    </div>
+    </AdminPage>
   );
 }

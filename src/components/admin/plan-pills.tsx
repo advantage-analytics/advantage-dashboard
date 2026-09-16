@@ -1,14 +1,22 @@
+"use client";
+
 /**
  * Small 22px plan/action pills for the admin console's Teams and Requests
  * surfaces (T7).
+ *
+ * `ApproveChip` takes an `onClick`, so this file needs the client boundary
+ * even though every existing caller already renders it from inside one —
+ * `TeamPageHeader` doesn't, and a plain DOM `<button onClick>` can't cross
+ * from a Server Component without an intervening Client Component to own it.
  */
 
 /**
  * The plan tag for a team account on the free pilot seat.
  *
- * Its own hue, not a second blue: v3 reserves blue-tinted pills for "New"
- * alone (`.skills/advantage-analytics-design/SKILL.md`), so this uses the
- * violet `--pilot-bg`/`--pilot-text` pair instead of reaching for the accent.
+ * Green, per the Admin Console canvas's chosen plan-pill colour (option 5:
+ * green Pilot, amber "Approve pilot?"). It gets its own `--pilot-bg`/
+ * `--pilot-text` pair rather than borrowing `--success-*`, which the design
+ * system fences to match outcomes — a plan is a state, not a result.
  */
 export function PilotPill() {
   return (

@@ -99,11 +99,14 @@ export default async function AdminLayout({
   };
 
   return (
-    <div className="min-h-screen bg-[var(--surface-page)]">
+    // One white surface, per the Admin Console canvas — `--surface-page` is
+    // for inset wells, not the page.
+    <div className="flex min-h-screen flex-col bg-[var(--surface-card)]">
       <AdminHeader requestsCount={requestsCount} viewer={viewer} />
-      <main className="mx-auto w-full max-w-[1200px] px-6 py-10">
-        {children}
-      </main>
+      {/* No padding or max-width here: each page renders its own `AdminPage`
+          column, so the Requests page can seat its peek drawer beside that
+          column, flush to the viewport's right edge — see admin-page.tsx. */}
+      <div className="flex flex-1 items-stretch">{children}</div>
     </div>
   );
 }

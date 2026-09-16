@@ -5,7 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { ViewPills } from "@/components/admin/view-pills";
 import { RequestsTable, requestRowId } from "@/components/admin/requests-table";
 import { RequestDrawer } from "@/components/admin/request-drawer";
+import { ADMIN_PAGE_CLASS } from "@/components/admin/admin-page";
 import { DRAWER_ATTR } from "@/components/dashboard/matches/match-drawer";
+import { cn } from "@/lib/utils";
 import type {
   AdminRequestRow,
   AdminRequestsView,
@@ -222,8 +224,11 @@ export function RequestsPageContent({
   );
 
   return (
-    <div className="flex w-full items-stretch">
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
+    <>
+      {/* The canvas's `.page`, eased to 40px on the right while the drawer is
+          open — the rail is this column's flex sibling in the layout's row,
+          not something inside it, which is what puts it on the screen edge. */}
+      <main className={cn(ADMIN_PAGE_CLASS, "gap-4", drawerRow && "pr-10")}>
         {title}
 
         <ViewPills options={VIEW_OPTIONS} value={view} onChange={pushView} />
@@ -236,7 +241,7 @@ export function RequestsPageContent({
             toggle(row, document.activeElement?.id === requestRowId(row.id))
           }
         />
-      </div>
+      </main>
 
       {drawerRow && (
         <RequestDrawer
@@ -254,7 +259,7 @@ export function RequestsPageContent({
           onChanged={() => router.refresh()}
         />
       )}
-    </div>
+    </>
   );
 }
 

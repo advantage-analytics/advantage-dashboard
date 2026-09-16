@@ -5,6 +5,7 @@ import {
   type AdminTeamsView,
 } from "@/lib/data/admin-teams-server";
 import { divisionLabel } from "@/lib/data/programs-server";
+import { AdminPage } from "@/components/admin/admin-page";
 import { TeamsPageContent } from "@/components/admin/teams-page-content";
 
 /**
@@ -75,20 +76,22 @@ export default async function AdminTeamsPage({
   const identity = (value: string) => ({ value, label: value });
 
   return (
-    <TeamsPageContent
-      rows={page.rows}
-      nextCursor={page.nextCursor}
-      view={view}
-      sort={sort}
-      cut={cut}
-      facets={{
-        divisions: facetValues.divisions.map((value) => ({
-          value,
-          label: divisionLabel(value) ?? value,
-        })),
-        conferences: facetValues.conferences.map(identity),
-        states: facetValues.states.map(identity),
-      }}
-    />
+    <AdminPage>
+      <TeamsPageContent
+        rows={page.rows}
+        nextCursor={page.nextCursor}
+        view={view}
+        sort={sort}
+        cut={cut}
+        facets={{
+          divisions: facetValues.divisions.map((value) => ({
+            value,
+            label: divisionLabel(value) ?? value,
+          })),
+          conferences: facetValues.conferences.map(identity),
+          states: facetValues.states.map(identity),
+        }}
+      />
+    </AdminPage>
   );
 }

@@ -48,7 +48,7 @@ export function AdminHeader({
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-30 grid h-[var(--header-h)] grid-cols-[1fr_auto_1fr] items-center border-b border-[var(--border-hairline)] bg-[var(--surface-card)] px-6">
+    <header className="sticky top-0 z-30 grid h-[var(--header-h)] grid-cols-[1fr_auto_1fr] items-center bg-[var(--surface-card)] px-6">
       {/* Wordmark · divider · area name */}
       <div className="flex min-w-0 items-center gap-2.5">
         <Link href="/admin" className="flex items-center">
