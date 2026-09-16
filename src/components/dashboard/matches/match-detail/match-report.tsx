@@ -6,6 +6,8 @@ import {
   useMatchReport,
 } from "@/components/dashboard/matches/match-detail/match-report-context";
 import type { ReportView } from "@/components/dashboard/matches/match-detail/report-view";
+import { MatchReportScoreboard } from "@/components/dashboard/matches/match-detail/report-scoreboard";
+import { MatchReportViewSwitcher } from "@/components/dashboard/matches/match-detail/report-view-switcher";
 // Parts that live in their own files: one import line here and one entry in
 // the `MatchReport` object at the bottom. Those files read `useMatchReport`
 // from `match-report-context.tsx`, never from this file, so adding one cannot
@@ -19,7 +21,7 @@ export { MatchReportProvider };
  *
  *   <MatchReport.Provider …>
  *     <MatchReport.Frame>
- *       <MatchReport.Rail> … <MatchReport.Spacer /> <MatchReport.RailFooter>…</MatchReport.RailFooter> </MatchReport.Rail>
+ *       <MatchReport.Rail> <MatchReport.Scoreboard /> <MatchReport.ViewSwitcher /> <MatchReport.Spacer /> <MatchReport.RailFooter>…</MatchReport.RailFooter> </MatchReport.Rail>
  *       <MatchReport.Pane> … <MatchReport.When view="statistics">…</MatchReport.When> </MatchReport.Pane>
  *     </MatchReport.Frame>
  *   </MatchReport.Provider>
@@ -109,7 +111,8 @@ export const MatchReport = {
   Provider: MatchReportProvider,
   Frame: MatchReportFrame,
   Rail: MatchReportRail,
-  // Rail parts still to come: Scoreboard, ViewSwitcher (T3).
+  Scoreboard: MatchReportScoreboard,
+  ViewSwitcher: MatchReportViewSwitcher,
   Spacer: MatchReportSpacer,
   RailFooter: MatchReportRailFooter,
   Pane: MatchReportPane,

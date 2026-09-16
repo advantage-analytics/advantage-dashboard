@@ -29,12 +29,16 @@ import { cn } from "@/lib/utils";
  * 0.6em, raised, offset 0.5px — round 44's numbers, set explicitly rather than
  * left to `<sup>`, whose raise comes from a UA/preflight rule this file does
  * not control. `lineHeight: 0` keeps the digit from growing the row's line box.
+ *
+ * Exported for surfaces that lay a score out per set rather than as one line —
+ * `match-detail/report-scoreboard.tsx` — so the raised digit is this one, not
+ * a copy of it.
  */
 // The exact spelling every locked Platform Audit frame draws — Pa2, Pb2, the
 // roster and schedule frames alike: `font-size:0.6em; vertical-align:1.05em;
 // margin-left:0.5px`. Round 44's "raised, 0.5px off" had been read as a
 // vertical nudge over `super`; the frames put the half-pixel to the right.
-const TIEBREAK_STYLE: React.CSSProperties = {
+export const TIEBREAK_STYLE: React.CSSProperties = {
   fontSize: "0.6em",
   verticalAlign: "1.05em",
   marginLeft: "0.5px",
