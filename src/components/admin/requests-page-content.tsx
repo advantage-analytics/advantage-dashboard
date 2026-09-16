@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ViewPills } from "@/components/admin/view-pills";
 import { RequestsTable, requestRowId } from "@/components/admin/requests-table";
 import { RequestDrawer } from "@/components/admin/request-drawer";
-import { ADMIN_PAGE_CLASS } from "@/components/admin/admin-page";
+import { AdminPage } from "@/components/admin/admin-page";
 import { DRAWER_ATTR } from "@/components/dashboard/matches/match-drawer";
 import { cn } from "@/lib/utils";
 import type {
@@ -67,15 +67,12 @@ export function RequestsPageContent({
   view,
   initialSelectedId,
   emptyTitle,
-  title,
 }: {
   rows: AdminRequestRow[];
   view: AdminRequestsView;
   /** `?id=` from the URL, or null. Ignored unless it names a row on this page. */
   initialSelectedId: string | null;
   emptyTitle: string;
-  /** Rendered by the server page, so the drawer can be its flex sibling. */
-  title: React.ReactNode;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -224,42 +221,47 @@ export function RequestsPageContent({
   );
 
   return (
-    <>
-      {/* The canvas's `.page`, eased to 40px on the right while the drawer is
-          open — the rail is this column's flex sibling in the layout's row,
-          not something inside it, which is what puts it on the screen edge. */}
-      <main className={cn(ADMIN_PAGE_CLASS, "gap-4", drawerRow && "pr-10")}>
-        {title}
+    // The column eases to 40px on the right while the drawer is open; the
+    // drawer itself goes in `rail`, outside the padding, on the screen edge.
+    <AdminPage
+      className={cn("gap-4", drawerRow && "pr-10")}
+      rail={
+        drawerRow && (
+          <RequestDrawer
+            row={drawerRow}
+            index={drawerIndex}
+            total={rows.length}
+            canPrev={drawerIndex > 0}
+            canNext={drawerIndex < rows.length - 1}
+            closing={closing}
+            autoFocus={openedByKeyboard}
+            onPrev={() => step(-1)}
+            onNext={() => step(1)}
+            onClose={() => close(drawerRow.id)}
+            onClosed={finishClose}
+            onChanged={() => router.refresh()}
+          />
+        )
+      }
+    >
+      <div>
+        <h1 className="text-display">Requests</h1>
+        <p className="text-body-sm mt-[9px]">
+          Program claims and invite requests, merged into one queue.
+        </p>
+      </div>
 
-        <ViewPills options={VIEW_OPTIONS} value={view} onChange={pushView} />
+      <ViewPills options={VIEW_OPTIONS} value={view} onChange={pushView} />
 
-        <RequestsTable
-          rows={rows}
-          emptyTitle={emptyTitle}
-          selectedId={selectedId}
-          onSelect={(row) =>
-            toggle(row, document.activeElement?.id === requestRowId(row.id))
-          }
-        />
-      </main>
-
-      {drawerRow && (
-        <RequestDrawer
-          row={drawerRow}
-          index={drawerIndex}
-          total={rows.length}
-          canPrev={drawerIndex > 0}
-          canNext={drawerIndex < rows.length - 1}
-          closing={closing}
-          autoFocus={openedByKeyboard}
-          onPrev={() => step(-1)}
-          onNext={() => step(1)}
-          onClose={() => close(drawerRow.id)}
-          onClosed={finishClose}
-          onChanged={() => router.refresh()}
-        />
-      )}
-    </>
+      <RequestsTable
+        rows={rows}
+        emptyTitle={emptyTitle}
+        selectedId={selectedId}
+        onSelect={(row) =>
+          toggle(row, document.activeElement?.id === requestRowId(row.id))
+        }
+      />
+    </AdminPage>
   );
 }
 

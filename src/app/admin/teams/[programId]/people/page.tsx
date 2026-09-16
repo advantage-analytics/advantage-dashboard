@@ -1,4 +1,4 @@
-import { ComingSoonPage } from "@/components/dashboard/coming-soon";
+import { ComingSoon } from "@/components/dashboard/coming-soon";
 
 export const metadata = { title: "People" };
 
@@ -15,8 +15,7 @@ export default async function AdminTeamPeoplePage({
   const { programId } = await params;
 
   return (
-    <ComingSoonPage
-      title="People"
+    <ComingSoon
       heading="People isn't built yet."
       description="Members, outstanding invites and open join requests for this program, in one roster an admin can act on directly."
       action={{ label: "Back to overview", href: `/admin/teams/${programId}` }}

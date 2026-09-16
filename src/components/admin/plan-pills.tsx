@@ -1,14 +1,22 @@
-"use client";
-
 /**
  * Small 22px plan/action pills for the admin console's Teams and Requests
  * surfaces (T7).
  *
- * `ApproveChip` takes an `onClick`, so this file needs the client boundary
- * even though every existing caller already renders it from inside one —
- * `TeamPageHeader` doesn't, and a plain DOM `<button onClick>` can't cross
- * from a Server Component without an intervening Client Component to own it.
+ * Server-renderable on purpose: both exports here are static markup, and the
+ * one interactive sibling — `ApproveChip`, which takes an `onClick` — lives in
+ * its own `"use client"` file so that rendering a plan tag from a Server
+ * Component (`TeamPageHeader`) does not drag a client boundary with it.
  */
+
+/** The amber "waiting on an admin" register, shared with `ApproveChip`. */
+export const APPROVE_PILL_CLASS =
+  "inline-flex h-[22px] items-center rounded-[var(--radius-pill)] px-[9px] text-[12px] font-medium whitespace-nowrap";
+
+export const APPROVE_PILL_STYLE = {
+  background: "var(--warning-bg)",
+  color: "var(--warning-text)",
+  boxShadow: "inset 0 0 0 1px var(--warning-border)",
+} as const;
 
 /**
  * The plan tag for a team account on the free pilot seat.
@@ -33,31 +41,18 @@ export function PilotPill() {
 }
 
 /**
- * A clickable "Approve" pill for a pending claim/request row — the amber
- * warning register (`--warning-bg`/`--warning-border`/`--warning-text`),
- * same 22px/12px sizing as `PilotPill`, but a real `<button>` since it takes
- * an action rather than just naming a state.
+ * The same amber tag as `ApproveChip`, with nothing to press.
+ *
+ * For surfaces that report a program is waiting on a decision without being
+ * the place the decision is made — today the Team page header, where the
+ * approve flow is the Teams list's and hasn't been brought over. A button
+ * that does nothing is worse than a label: it invites a click and then eats
+ * it.
  */
-export function ApproveChip({
-  onClick,
-  disabled,
-}: {
-  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  disabled?: boolean;
-}) {
+export function ApprovePill() {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="inline-flex h-[22px] cursor-pointer items-center rounded-[var(--radius-pill)] px-[9px] text-[12px] font-medium whitespace-nowrap transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60"
-      style={{
-        background: "var(--warning-bg)",
-        color: "var(--warning-text)",
-        boxShadow: "inset 0 0 0 1px var(--warning-border)",
-      }}
-    >
-      Approve
-    </button>
+    <span className={APPROVE_PILL_CLASS} style={APPROVE_PILL_STYLE}>
+      Approve pilot?
+    </span>
   );
 }

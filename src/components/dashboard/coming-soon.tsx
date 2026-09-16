@@ -59,7 +59,15 @@ export function ComingSoonPage({
   );
 }
 
-function ComingSoon({
+/**
+ * The statement on its own, without the page frame.
+ *
+ * For a route that already has a column and a heading above it — the admin
+ * console's team tabs sit inside the layout's `AdminPage` under the program's
+ * own `<h1>`, where `ComingSoonPage` would nest a second `<main>`, a second
+ * 56px gutter and a second title.
+ */
+export function ComingSoon({
   heading,
   description,
   action,

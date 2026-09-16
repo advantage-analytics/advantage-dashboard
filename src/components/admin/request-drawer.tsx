@@ -27,7 +27,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
-import { getInitials } from "@/lib/data/match-utils";
+import { getInitials, shortDate } from "@/lib/data/match-utils";
 import { cn } from "@/lib/utils";
 import {
   approveClaim,
@@ -93,10 +93,7 @@ const DESTRUCTIVE_ICON =
 /** "Sep 13 · 1 day" — when it landed, and how long it has been sitting. */
 function ageLine(iso: string): string {
   const then = new Date(iso);
-  const day = then.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
+  const day = shortDate(iso);
   const days = Math.max(
     0,
     Math.floor((Date.now() - then.getTime()) / 86_400_000),
@@ -106,11 +103,7 @@ function ageLine(iso: string): string {
 }
 
 function shortStamp(iso: string | null): string | undefined {
-  if (!iso) return undefined;
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
+  return iso ? shortDate(iso) : undefined;
 }
 
 /** Division / state / men's–women's, as the quiet pills under the team name. */

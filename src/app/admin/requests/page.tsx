@@ -12,12 +12,11 @@ import { RequestsPageContent } from "@/components/admin/requests-page-content";
  * `is_admin`, so a cached render would be one admin's queue served to
  * whoever asked next.
  *
- * The page fetches, words the empty state and renders the title; everything
- * that needs a real event handler — the view pills, the row selection and the
- * peek drawer — belongs to `RequestsPageContent` (T15). The title is passed
- * down as a node, the way `roster/page.tsx` hands its own to `RosterView`, so
- * the drawer can be the title column's flex sibling and the rail spans the
- * page rather than starting below the heading.
+ * The page fetches and words the empty state; everything below it — the
+ * heading, the view pills, the row selection and the peek drawer — belongs to
+ * `RequestsPageContent`, which renders them inside `AdminPage` so the drawer
+ * can be the column's sibling and the rail spans the page rather than
+ * starting below the heading.
  */
 export const dynamic = "force-dynamic";
 
@@ -66,19 +65,6 @@ export default async function AdminRequestsPage({
       view={view}
       initialSelectedId={one(params.id)}
       emptyTitle={emptyTitle[view]}
-      title={
-        // Keyed although it is not in a list: in dev, React Flight hands a
-        // Server Component's JSX prop to the client as a lazy reference, and
-        // a lazy child among static siblings cannot be key-validated when the
-        // JSX is created — so React warns on resolve unless the element
-        // carries a key. Production inlines the element and never warns.
-        <div key="title">
-          <h1 className="text-display">Requests</h1>
-          <p className="text-body-sm mt-[9px]">
-            Program claims and invite requests, merged into one queue.
-          </p>
-        </div>
-      }
     />
   );
 }

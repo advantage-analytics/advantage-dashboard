@@ -1,6 +1,6 @@
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import { StatePill } from "@/components/ui/state-pill";
-import { PilotPill, ApproveChip } from "@/components/admin/plan-pills";
+import { PilotPill, ApprovePill } from "@/components/admin/plan-pills";
 import { programSubtitle } from "@/lib/data/programs-server";
 import type {
   AdminTeamClaim,
@@ -30,23 +30,24 @@ function programStatusLabel(status: string): string {
  * The Admin › Teams detail page's header: crest, name, state, plan, and the
  * facts line every settings identity card already uses `programSubtitle` for.
  *
- * `PilotPill` wins over `ApproveChip` on an active program for the same
+ * `PilotPill` wins over `ApprovePill` on an active program for the same
  * reason `toAdminTeamRow` gives `plan` that order — once a program is active,
  * the claim that got it there is settled history, not a decision still
  * pending, and the two conditions cannot both be true for a real row.
  *
- * `onApprove` is optional and defaults to nothing: the actual approve/decline
- * flow (`ApprovePilotPopover`) is wired to the Teams list row today and is a
- * later task's job to bring here. This header only has to get the pill right.
+ * The approve case is the static `ApprovePill`, not the Teams list's
+ * clickable `ApproveChip`: the approve/decline flow lives on that list today
+ * and is a later task's job to bring here, and this is a Server Component —
+ * handing a handler across that boundary is what 500'd every waiting
+ * program's page before. A tag that reports the state is the honest shape
+ * until there is something real to press.
  */
 export function TeamPageHeader({
   program,
   claim,
-  onApprove,
 }: {
   program: AdminTeamProgram;
   claim: AdminTeamClaim | null;
-  onApprove?: () => void;
 }) {
   const needsDecision = claim !== null && NEEDS_DECISION.has(claim.status);
   const plan: "pilot" | "approve" | "none" =
@@ -69,7 +70,7 @@ export function TeamPageHeader({
           {plan === "pilot" ? (
             <PilotPill />
           ) : plan === "approve" ? (
-            <ApproveChip onClick={() => onApprove?.()} />
+            <ApprovePill />
           ) : null}
         </div>
         {facts ? (

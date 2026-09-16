@@ -1,4 +1,4 @@
-import { ComingSoonPage } from "@/components/dashboard/coming-soon";
+import { ComingSoon } from "@/components/dashboard/coming-soon";
 
 export const metadata = { title: "Activity log" };
 
@@ -15,8 +15,7 @@ export default async function AdminTeamActivityPage({
   const { programId } = await params;
 
   return (
-    <ComingSoonPage
-      title="Activity log"
+    <ComingSoon
       heading="Activity log isn't built yet."
       description="A timeline of what has happened on this program — claims, invites and role changes — so a support case does not have to be reconstructed by hand."
       action={{ label: "Back to overview", href: `/admin/teams/${programId}` }}

@@ -1,4 +1,4 @@
-import { ComingSoonPage } from "@/components/dashboard/coming-soon";
+import { ComingSoon } from "@/components/dashboard/coming-soon";
 
 export const metadata = { title: "Roster" };
 
@@ -14,8 +14,7 @@ export default async function AdminTeamRosterPage({
   const { programId } = await params;
 
   return (
-    <ComingSoonPage
-      title="Roster"
+    <ComingSoon
       heading="Roster isn't built yet."
       description="Every player on this program's roster, with the same detail Team Home's own roster page gives its coaches."
       action={{ label: "Back to overview", href: `/admin/teams/${programId}` }}

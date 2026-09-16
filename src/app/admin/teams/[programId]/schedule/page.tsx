@@ -1,4 +1,4 @@
-import { ComingSoonPage } from "@/components/dashboard/coming-soon";
+import { ComingSoon } from "@/components/dashboard/coming-soon";
 
 export const metadata = { title: "Schedule & results" };
 
@@ -14,8 +14,7 @@ export default async function AdminTeamSchedulePage({
   const { programId } = await params;
 
   return (
-    <ComingSoonPage
-      title="Schedule & results"
+    <ComingSoon
       heading="Schedule & results isn't built yet."
       description="This program's matches and scheduled events, so an admin can see what it has played without asking its coach."
       action={{ label: "Back to overview", href: `/admin/teams/${programId}` }}

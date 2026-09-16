@@ -5,7 +5,8 @@ import { ChevronRight } from "lucide-react";
 import { GalleryHorizontalEnd } from "lucide-react";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import { EmptyMark } from "@/components/ui/empty-mark";
-import { PilotPill, ApproveChip } from "@/components/admin/plan-pills";
+import { PilotPill } from "@/components/admin/plan-pills";
+import { ApproveChip } from "@/components/admin/approve-chip";
 import {
   TableEmptyBody,
   type TableEmptyAction,
