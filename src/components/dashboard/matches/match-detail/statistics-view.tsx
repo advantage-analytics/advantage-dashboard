@@ -31,12 +31,12 @@ import { cn } from "@/lib/utils";
  * winners/errors figures the caveats are about (`isDerived && statsPublished`,
  * the same gate the old rail used).
  *
- * `shrink-0` on the notice's slot and the widgets row: `When` is a `min-h-0`
- * flex column, and once the view overflows the scrolling pane a flex item
- * whose minimum height is not its content — the notice's `overflow-hidden`
- * card, a fixed-height row — gets squeezed (a 44px row measured 21.5px). F1
- * gives the row `flex: 0 0 auto` for the same reason. The insight card
- * carries its own.
+ * `shrink-0` on the notice's slot and the widgets row: this view renders in a
+ * flex column, and a flex item whose minimum height is not its content — the
+ * notice's `overflow-hidden` card, a fixed-height row — gets squeezed the
+ * moment that column is ever shorter than what it holds (a 44px row measured
+ * 21.5px when `When` still carried `min-h-0`). F1 gives the row
+ * `flex: 0 0 auto` for the same reason. The insight card carries its own.
  *
  * None of the cards take a player name or a points array: each reads
  * `points` from `MatchDataProvider` and its you/opp orientation from
@@ -56,8 +56,12 @@ export function StatisticsView() {
       <MatchReport.Insight />
 
       {/* F1: 436px + 416px in the 868px pane. The head-to-head's slot takes
-          what the fixed column leaves. */}
-      <div className="flex shrink-0 items-start gap-4">
+          what the fixed column leaves. Under 720px of pane (the `@container`
+          on `MatchReport.Pane`) the row stacks: head-to-head first, the
+          charts under it, both full width — `items-start` only applies side
+          by side, since in a column it would shrink each child to its
+          content's width. */}
+      <div className="flex shrink-0 flex-col gap-4 @min-[720px]:flex-row @min-[720px]:items-start">
         {meta.statsPublished && (
           <div className="min-w-0 flex-1">
             <HeadToHeadCard />
@@ -67,7 +71,9 @@ export function StatisticsView() {
         <div
           className={cn(
             "flex flex-col gap-4",
-            meta.statsPublished ? "w-[416px] shrink-0" : "min-w-0 flex-1",
+            meta.statsPublished
+              ? "w-full shrink-0 @min-[720px]:w-[416px]"
+              : "min-w-0 flex-1",
           )}
         >
           <PerformanceTrackerChart />

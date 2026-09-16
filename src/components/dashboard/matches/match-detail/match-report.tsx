@@ -37,8 +37,9 @@ export { MatchReportProvider };
  *
  * The rail and the pane scroll independently only inside `layout.tsx`'s
  * `h-[calc(100vh-var(--header-h))] overflow-hidden` box, and only while every
- * flex link carries `min-h-0` — Frame → Rail / Pane → When. Drop one and that
- * pane grows to its content and the page scrolls as a whole instead.
+ * flex link carries `min-h-0` — Frame → Rail / Pane. Drop one and that pane
+ * grows to its content and the page scrolls as a whole instead. `When` is the
+ * one link that must not: it sits inside the scroller (see its note).
  *
  * Every part is also exported by name. A Server Component that imports this
  * `"use client"` module receives client references, and dotting into one
@@ -70,10 +71,17 @@ export function MatchReportRailFooter({ children }: { children: ReactNode }) {
   return <div className="p-3">{children}</div>;
 }
 
+/**
+ * `@container` makes the pane the size container the Statistics view's widgets
+ * row queries (`@min-[720px]:` in `statistics-view.tsx`): the row answers to
+ * the pane's own content width, which the sidebar and the rail both take from,
+ * not to the window. It is the only unnamed container inside the pane; name it
+ * (`@container/report`) if a nested one ever appears.
+ */
 export function MatchReportPane({ children }: { children: ReactNode }) {
   return (
     <div
-      className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto"
+      className="@container flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto"
       // F1 draws the pane on the grey page ground with white cards on it. That
       // conflicts with design-system principle 6 ("the dashboard is white" —
       // the report and its rail are `--surface-card`, separation comes from
@@ -94,6 +102,12 @@ export function MatchReportPane({ children }: { children: ReactNode }) {
  * Renders its children only while `view` is the active one. An inactive view
  * unmounts rather than hides, so nothing in it (the Video view's player, a
  * chart's hover state) outlives the switch away from it.
+ *
+ * `flex-1` without `min-h-0`: a short view (the Video empty state) still fills
+ * the pane, and a long one grows the panel to its content, so the pane's 24px
+ * bottom padding lands under the last card. With `min-h-0` the panel stayed
+ * pane-height, its content overflowed it, and the scroll ended flush against
+ * the last card (measured 0px on an overflowing Statistics view, 24px without).
  */
 export function MatchReportWhen({
   view,
@@ -105,7 +119,7 @@ export function MatchReportWhen({
   const { state } = useMatchReport();
   if (state.view !== view) return null;
   return (
-    <div role="tabpanel" className="flex min-h-0 flex-1 flex-col gap-4">
+    <div role="tabpanel" className="flex flex-1 flex-col gap-4">
       {children}
     </div>
   );

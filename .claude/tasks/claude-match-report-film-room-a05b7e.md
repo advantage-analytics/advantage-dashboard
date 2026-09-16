@@ -143,7 +143,7 @@ ready).
 
 ## T10 · Container-query stacking, visual pass, guardrails review, full gate
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T7, T8, T9
 - **files:** src/components/dashboard/matches/match-detail/match-report.tsx, src/components/dashboard/matches/match-detail/statistics-view.tsx (guess)
