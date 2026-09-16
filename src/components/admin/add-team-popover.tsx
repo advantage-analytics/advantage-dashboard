@@ -17,6 +17,8 @@ import type { AdminConferenceRow } from "@/lib/data/admin-conferences-view";
 /** The header search's own debounce. */
 const SEARCH_DEBOUNCE_MS = 180;
 
+const SEARCH_ERROR = "Couldn't search teams.";
+
 /**
  * "Add a team" — the admin header search's input and debounce, answering with
  * three kinds of row:
@@ -53,10 +55,21 @@ export function AddTeamPopover({
     if (query.length === 0) return;
 
     const timer = setTimeout(() => {
-      void adminSearchTeams(query).then((rows) => {
-        if (latest.current !== query) return;
-        setAnswered({ query, rows });
-      });
+      adminSearchTeams(query)
+        .then((rows) => {
+          if (latest.current !== query) return;
+          // A later search that works clears an earlier search failure, and
+          // only that — an add's error stays.
+          setError((current) => (current === SEARCH_ERROR ? null : current));
+          setAnswered({ query, rows });
+        })
+        // A rejected search answers this query with nothing, so "Searching…"
+        // ends, and says why.
+        .catch(() => {
+          if (latest.current !== query) return;
+          setError(SEARCH_ERROR);
+          setAnswered({ query, rows: [] });
+        });
     }, SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);

@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import Link from "next/link";
 import { ArrowUpRight, Merge, MoreHorizontal, Trash2 } from "lucide-react";
 import {
@@ -112,15 +119,28 @@ function useConferenceTeams(
   useEffect(() => {
     let stale = false;
 
-    void loadConferenceTeams(conferenceId).then((result) => {
-      if (stale) return;
-      setLoaded({
-        id: conferenceId,
-        state: result.ok
-          ? { status: "ready", teams: result.teams }
-          : { status: "error", error: result.error },
+    loadConferenceTeams(conferenceId)
+      .then((result) => {
+        if (stale) return;
+        setLoaded({
+          id: conferenceId,
+          state: result.ok
+            ? { status: "ready", teams: result.teams }
+            : { status: "error", error: result.error },
+        });
+      })
+      // The action itself rejecting (network, a thrown auth check) — without
+      // this the section would sit on "Loading teams…" for good.
+      .catch(() => {
+        if (stale) return;
+        setLoaded({
+          id: conferenceId,
+          state: {
+            status: "error",
+            error: "Couldn't load that conference's teams.",
+          },
+        });
       });
-    });
 
     return () => {
       stale = true;
@@ -217,6 +237,16 @@ export function ConferenceDrawer({
     setDeleteError(null);
   }
 
+  // The id the drawer shows *now*, for a save that resolves after ↑ ↓ moved
+  // on — `save`'s closure only knows the id it started on. Written in a layout
+  // effect, not during render (`react-hooks/refs`); it commits before any
+  // awaited reply can run, so the reply always compares against the id on
+  // screen.
+  const currentId = useRef(row.id);
+  useLayoutEffect(() => {
+    currentId.current = row.id;
+  }, [row.id]);
+
   const dirty = conferenceChanged(row, draft);
   const [teams, reloadTeams] = useConferenceTeams(row.id);
 
@@ -225,27 +255,46 @@ export function ConferenceDrawer({
 
   const save = () => {
     if (!dirty) return;
+    const savedId = row.id;
+    const sent = draft;
     start(async () => {
       setError(null);
-      const result = await saveConference(row.id, {
-        name: draft.name ?? "",
-        shortName: draft.shortName,
-        division: draft.division,
-        website: draft.website,
+      const result = await saveConference(savedId, {
+        name: sent.name ?? "",
+        shortName: sent.shortName,
+        division: sent.division,
+        website: sent.website,
       });
+      // The drawer has stepped to another conference: this reply's fields and
+      // error belong to `savedId`, not to the one on screen.
+      const stillHere = currentId.current === savedId;
       if (!result.ok) {
-        setError(result.error);
+        if (stillHere) setError(result.error);
         return;
       }
-      // Hold the draft in the stored form, so a website typed as
-      // "https://IvyLeague.com/" does not read as unsaved once the row comes
-      // back as "ivyleague.com".
-      setDraft({
-        name: draft.name?.trim() ?? "",
-        shortName: draft.shortName?.trim() || null,
-        division: draft.division?.trim() || null,
-        website: normalizeWebsite(draft.website),
-      });
+      if (stillHere) {
+        // Hold the draft in the stored form, so a website typed as
+        // "https://IvyLeague.com/" does not read as unsaved once the row comes
+        // back as "ivyleague.com". Field by field: anything typed while the
+        // save ran differs from what was sent, and is kept.
+        const stored: ConferenceDraft = {
+          name: sent.name?.trim() ?? "",
+          shortName: sent.shortName?.trim() || null,
+          division: sent.division?.trim() || null,
+          website: normalizeWebsite(sent.website),
+        };
+        setDraft((current) => {
+          const keep = <K extends keyof ConferenceDraft>(key: K) =>
+            current[key] !== sent[key] ? current[key] : stored[key];
+          return {
+            name: keep("name"),
+            shortName: keep("shortName"),
+            division: keep("division"),
+            website: keep("website"),
+          };
+        });
+      }
+      // The write landed either way — the page still refreshes.
       onChanged();
     });
   };

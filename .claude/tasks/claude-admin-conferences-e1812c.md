@@ -209,7 +209,7 @@ ready).
 
 ## T15 · Drawer save race + unhandled rejections in drawer and Add-team popover
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/admin/conference-drawer.tsx, src/components/admin/add-team-popover.tsx — guesses
 - **done when:**

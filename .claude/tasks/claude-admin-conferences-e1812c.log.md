@@ -229,3 +229,17 @@ Map unchanged; logic and cursor specs 31 passed.
 
 1. The other Teams list loaders still log and return empty on error (out of scope for this branch).
 2. The admin error page, the drawer error state and the extra Teams facet values aren't browser-verified.
+
+## T15 · Drawer save race + unhandled rejections in drawer and Add-team popover — done
+
+**gate:** mechanical: pass · completion: pass
+**changed:**
+
+- **Save race:** `save()` records `savedId` and `sent` before awaiting. A `currentId` ref updated in `useLayoutEffect` gates both the post-save field merge and the error write. The merge is a field-wise functional `setDraft`: fields edited during the save are kept, the rest take the saved normalised values. A save that lands after the drawer moved on still refreshes but leaves the other conference's draft alone.
+- **Teams load:** the load gains a `.catch`, so "Loading teams…" becomes an error state.
+- **Search:** the add-team popover's debounced search gains a `.catch` ("Couldn't search teams.", empty answer), and a later success clears that error.
+
+No lint suppressions.
+**follow-ups:**
+
+1. `remove()` in the drawer and `add()` in the popover still await server actions without try/catch; a rejected action there is unhandled.
