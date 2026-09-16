@@ -74,7 +74,7 @@ ready).
 
 ## T5 · Insight card variants
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/components/dashboard/matches/match-detail/report-insight-card.tsx, src/components/dashboard/matches/match-detail/match-report.tsx, scripts/check-design-drift.mjs (guess)

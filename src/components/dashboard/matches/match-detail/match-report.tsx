@@ -16,6 +16,7 @@ import {
 import { MatchReportFacts } from "@/components/dashboard/matches/match-detail/report-facts";
 import { MatchReportCompareButton } from "@/components/dashboard/matches/match-detail/report-compare-button";
 import { MatchReportMoreMenu } from "@/components/dashboard/matches/match-detail/report-more-menu";
+import { MatchReportInsight } from "@/components/dashboard/matches/match-detail/report-insight-card";
 // Parts that live in their own files: one import line here and one entry in
 // the `MatchReport` object at the bottom. Those files read `useMatchReport`
 // from `match-report-context.tsx`, never from this file, so adding one cannot
@@ -130,6 +131,8 @@ export const MatchReport = {
   TitleActions: MatchReportTitleActions,
   CompareButton: MatchReportCompareButton,
   MoreMenu: MatchReportMoreMenu,
-  // Pane part still to come: Insight (T5), between the title row and When.
+  // Rendered inside the Statistics view's `When`, not beside it (spec ›
+  // Decisions 5); it follows the title row in reading order either way.
+  Insight: MatchReportInsight,
   When: MatchReportWhen,
 };
