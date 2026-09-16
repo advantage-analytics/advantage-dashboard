@@ -32,7 +32,7 @@ export function MatchReportViewSwitcher() {
       role="tablist"
       aria-orientation="vertical"
       aria-label="Match report views"
-      className="flex flex-col gap-0.5 px-3 pt-0.5"
+      className="flex flex-col gap-0.5 px-3 pt-2.5"
     >
       {REPORT_VIEWS.map((view) => {
         const Icon = VIEW_ICONS[view.value];

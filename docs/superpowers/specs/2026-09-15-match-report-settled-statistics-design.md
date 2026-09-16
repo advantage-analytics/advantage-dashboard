@@ -193,7 +193,7 @@ design; the Video row simply opens `FilmEmptyState`).
 
 ## Geometry — what each part draws (from the frames)
 
-**Rail scoreboard (F8/F1).** Outer `p-3`; card `padding:15px 13px; border-radius:var(--radius-card); border:1px solid var(--border-hairline)`, column `gap:14px`.
+**Rail scoreboard (F1).** Outer `padding:0 12px`; no card: the block is `padding:18px 13px 20px; border-bottom:1px solid var(--border-hairline)`, column `gap:14px` (F1 updated 2026-09-16 in `F1 - Statistics settled.dc.html`; F8's bordered card is superseded).
 Header row `items-baseline gap-2`: status word `.text-micro` at ink-500 ("Final", via
 `formatScoreboardStatus(match.matchContext)` sentence-cased: Final / Unfinished /
 Retired / Withdrew / Defaulted) · spacer · duration `mono tabular` 10px ink-400
@@ -206,7 +206,7 @@ level set both ink-900. Tiebreak digit as `ScoreLine`'s superscript (0.6em,
 `vertical-align:1.05em`, 0.5px) inside the slot — DS `Score` rule; the frame has none.
 Sets from `useMatchSides().sets` (you-first, tiebreaks swapped together).
 
-**Rail view switcher (F1).** Container `padding:2px 12px 0; gap:2px`; row `h-10 rounded-[var(--radius-element)] text-[13px] cursor-pointer`; leading `w-10 h-10` cell with a 16px lucide icon stroke 1.5 (`Table2` Statistics · `ScatterChart` Visualizations · `Video` Video); label `flex-1 truncate`. Active: `bg-[var(--surface-subtle)] text-[var(--ink-900)] font-medium`; inactive: `text-[var(--nav-fg)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]`, 200ms `--ease-primary`. `role="tablist" aria-orientation="vertical"`, rows `role="tab" aria-selected`. Focus: write nothing (`focus.css` rings buttons).
+**Rail view switcher (F1).** Container `padding:10px 12px 0; gap:2px`; row `h-10 rounded-[var(--radius-element)] text-[13px] cursor-pointer`; leading `w-10 h-10` cell with a 16px lucide icon stroke 1.5 (`Table2` Statistics · `ScatterChart` Visualizations · `Video` Video); label `flex-1 truncate`. Active: `bg-[var(--surface-subtle)] text-[var(--ink-900)] font-medium`; inactive: `text-[var(--nav-fg)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]`, 200ms `--ease-primary`. `role="tablist" aria-orientation="vertical"`, rows `role="tab" aria-selected`. Focus: write nothing (`focus.css` rings buttons).
 
 **Rail footer Share (F1).** `p-3`; a full-width `h-9` button, `rounded-[var(--radius-button)] bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-[13px] font-medium`, `gap-[7px]`, `Share2` 15px stroke 1.7, label "Share". It is the trigger of the existing share popover: refactor `share-match-button.tsx` (no importers — free API) to read `match` from `useMatchData()`, take `children` as the `PopoverTrigger asChild` element and `side`/`align` props (`side="top" align="start"` here); keep `SharePopoverPanel` and the ⌘⇧L shortcut; replace the `useEffect`+`setIsMac` with a lazy `useState` initialiser guarded on `typeof navigator`.
 

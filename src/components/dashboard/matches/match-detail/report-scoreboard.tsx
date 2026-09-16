@@ -52,7 +52,7 @@ export function setOutcome(set: ScoreLineSet): "you" | "opp" | "level" {
 
 /**
  * `formatScoreboardStatus` spells the old rail's uppercase eyebrow ("FINAL");
- * this card sets the same word in sentence case ("Final"). Cased here rather
+ * this scoreboard sets the same word in sentence case ("Final"). Cased here rather
  * than in `match-utils.ts`, so the shared helper keeps its one spelling.
  */
 function sentenceCase(word: string): string {
@@ -60,8 +60,9 @@ function sentenceCase(word: string): string {
 }
 
 /**
- * The rail scoreboard (design 04 F8, and F1's rail): the match status and its
- * clock over two score rows, the viewer's first.
+ * The rail scoreboard (design 04 F1's rail, which supersedes F8's bordered
+ * card): the match status and its clock over two score rows, the viewer's
+ * first.
  *
  * Which row is "you", and which digit belongs to whom, comes from
  * `useMatchSides()` and nothing else (guardrails §4): the names from
@@ -88,10 +89,13 @@ export function MatchReportScoreboard() {
   const sets = playedSets(sides.sets);
 
   return (
-    <div className="p-3">
+    // F1 (settled, 2026-09-16): no card of its own. The scoreboard is the
+    // rail's head, set off from the view switcher by a hairline rule that
+    // stops 12px short of each rail edge.
+    <div className="px-3">
       <div
-        className="flex flex-col gap-[14px] rounded-[var(--radius-card)] border border-[var(--border-hairline)]"
-        style={{ padding: "15px 13px" }}
+        className="flex flex-col gap-[14px] border-b border-[var(--border-hairline)]"
+        style={{ padding: "18px 13px 20px" }}
       >
         <div className="flex items-baseline gap-2">
           {/* `.text-micro` already paints ink-500, the frame's colour, so no
@@ -130,7 +134,7 @@ function ScoreRow({
   return (
     <div className="flex min-w-0 items-center gap-[7px]">
       {/* The frame never wraps a name; a name too long for the 300px rail
-          ends in an ellipsis instead of pushing the digits out of the card. */}
+          ends in an ellipsis instead of pushing the digits out of the rail. */}
       <span
         className={cn(
           "min-w-0 overflow-hidden text-[13px] text-ellipsis whitespace-nowrap",
