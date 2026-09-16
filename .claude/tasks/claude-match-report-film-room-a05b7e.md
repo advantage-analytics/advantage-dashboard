@@ -116,7 +116,7 @@ ready).
 
 ## T8 · Performance tracker and rally length deltas
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T6
 - **files:** src/components/dashboard/matches/match-detail/performance-tracker-chart.tsx, src/components/dashboard/matches/match-detail/rally-length-card.tsx (guess)

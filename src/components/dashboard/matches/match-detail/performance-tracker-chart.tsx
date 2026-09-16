@@ -10,11 +10,6 @@ import {
   useSetScope,
 } from "@/components/dashboard/matches/match-detail/set-scope";
 import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 
 /**
@@ -98,11 +93,26 @@ function detectBreakIndices(points: MatchPoint[]): number[] {
   return breaks;
 }
 
+/**
+ * "Reid" out of "Marcus Reid" — the label and readout only have room for a
+ * surname (F1). `sides.*.shortName` (`shortName()` in `match-utils.ts`) was
+ * sized for a wider column and still returns a full "Marcus Reid" at 11
+ * characters; this reads the surname off `sides.*.name` instead. Kept local,
+ * the same pattern `head-to-head-card.tsx`'s `surname()` uses, so this card's
+ * only tie to player identity stays `useMatchSides()`.
+ */
+function surname(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : name;
+}
+
 export function PerformanceTrackerChart() {
   const { points } = useMatchData();
   const sides = useMatchSides();
   const { activeSet } = useSetScope();
   const shouldReduceMotion = useReducedMotion();
+  const youName = surname(sides.you.name);
+  const oppName = surname(sides.opp.name);
 
   const rawId = useId();
   // `useId()` embeds colons; strip them before the value goes into a `url(#…)`
@@ -233,7 +243,7 @@ export function PerformanceTrackerChart() {
   const marginBase =
     hoveredDiff === 0
       ? "Level"
-      : `${hoveredDiff > 0 ? sides.you.shortName : sides.opp.shortName} +${Math.abs(hoveredDiff)} on margin`;
+      : `${hoveredDiff > 0 ? youName : oppName} +${Math.abs(hoveredDiff)} on margin`;
   const marginLine =
     showScores && hovered ? `${marginBase} · ${hovered.gameScore}` : marginBase;
 
@@ -253,32 +263,16 @@ export function PerformanceTrackerChart() {
   return (
     <section
       aria-labelledby="performance-tracker-heading"
-      className="surface-card flex flex-col gap-2"
+      className="surface-card flex flex-col gap-2.5"
       style={{ padding: "16px 20px 12px" }}
     >
+      {/* Eyebrow + spacer only — the "Expand" affordance (flags-doc #11) was
+          never wired to anything and is not in the settled frame. */}
       <div className="flex items-center gap-2.5">
         <span id="performance-tracker-heading" className="eyebrow">
           Performance tracker
         </span>
         <div className="flex-1" />
-        {/* Drawn as the blue affordance it will become, wired to nothing yet
-            (flags-doc #11). `aria-disabled` rather than `disabled` so the
-            tooltip that explains the inert control still opens — a `disabled`
-            button swallows the pointer events the tooltip listens for. */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-disabled="true"
-              aria-label="Expand — not available yet"
-              onClick={(e) => e.preventDefault()}
-              className="cursor-default rounded-[2px] text-[11px] font-medium text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-            >
-              Expand
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top">Expanded view coming soon</TooltipContent>
-        </Tooltip>
       </div>
 
       <div
@@ -286,14 +280,15 @@ export function PerformanceTrackerChart() {
         role="figure"
         aria-label={`Momentum across ${scopedPoints.length} points. ${sides.you.name} above the midline, ${sides.opp.name} below.`}
       >
-        {/* Which half is the viewer's: the label carries a card backing so it
-            stays legible over the area fill it sits on. */}
+        {/* Which half is the viewer's: the label sits on a plain card-colour
+            backing (not the `surface-card` class, which also adds a border
+            and shadow) so it stays legible over the area fill it sits on. */}
         <span
           aria-hidden="true"
-          className="surface-card pointer-events-none absolute top-2 left-2 z-[2] px-1.5 py-0.5 text-[10px] whitespace-nowrap"
+          className="pointer-events-none absolute top-0 left-0 z-[2] bg-[var(--surface-card)] pr-1.5 text-[10px] whitespace-nowrap"
           style={{ color: "var(--ink-400)" }}
         >
-          {sides.you.shortName} above
+          {youName} above
         </span>
 
         <svg
@@ -417,7 +412,7 @@ export function PerformanceTrackerChart() {
         {hovered && hoverCoord && (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute z-[3] flex flex-col gap-0.5 rounded-[12px] bg-[var(--ink-900)] px-3 py-2 whitespace-nowrap"
+            className="pointer-events-none absolute z-[3] flex flex-col gap-[3px] rounded-[12px] bg-[var(--ink-900)] px-[11px] py-[9px] whitespace-nowrap"
             style={{
               boxShadow: "var(--shadow-dropdown)",
               left: `${(hoverCoord[0] / CHART_W) * 100}%`,
@@ -438,10 +433,10 @@ export function PerformanceTrackerChart() {
             <span className="text-[12px] font-medium text-white">
               {eventLine}
             </span>
-            <span className="tabular text-[11px] text-white/[0.72]">
+            <span className="tabular text-[11px] text-white/[0.64]">
               {marginLine}
             </span>
-            <span className="mono tabular text-[10px] text-white/[0.52]">
+            <span className="mono tabular pt-px text-[10px] text-white/[0.64]">
               {monoLine}
             </span>
           </div>
