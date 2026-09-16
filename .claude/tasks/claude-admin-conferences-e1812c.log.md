@@ -37,3 +37,14 @@ is the runner's. Newest entries at the bottom.
 1. T3's spec should count `program_audit_log` rows with the service-role client; RLS hides them from `authenticated`.
 2. The main checkout's `tests/teams-management.spec.ts` recreates the `Owner Conference` orphan on every live run until this branch merges; merge soon or cherry-pick the `MARK` fix.
 3. Merge `Ivy League (Ivy)` into `Ivy League (IVY)` once T9 ships, then tighten `conferences_label_key` to `lower(label)`.
+
+## T3 · Live spec: conference RPC gates + sync invariant — blocked
+
+**gate:** mechanical: fail · completion: not run
+**failed stage:** mechanical (`npm test`).
+**reason:** Supabase auth rate limit, not the spec's own assertions. The new `tests/admin-conferences-rpcs.spec.ts` passes alone against the live DB (8 passed), skips cleanly with env blanked (8 skipped), and left no live residue (137 conferences, nothing carrying its mark). In the full suite, other live specs fail inside `createLogins` with `signIn(...): Request rate limit reached`. First gate run: 7 failures. Diagnostic re-run: 6 failures, all rate-limit sign-ins. Gate re-run after a 7-minute wait: 1 failure (`rls-workspace-isolation.spec.ts`, same error). Those specs pass in isolation. T1 and T2's gates passed the full suite without this spec, so its 2 extra sign-ins plausibly push the live suite over the per-window sign-in limit.
+**stash:** 0ed5c76a7076bb25f8433136f47f716f77e23c2c
+**to unblock (author's call):** raise the project's auth sign-in rate limit, have live specs reuse logins or sign in fewer times, or run live specs with fewer workers. Then restore the stash and reset T3 to `todo`.
+**follow-ups:**
+
+1. The spec could also cover `admin_list_conferences` counts for an admin, the `23505` duplicate-name bubble, and the `22023` self-merge / bad-division checks.
