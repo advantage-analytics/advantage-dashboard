@@ -142,3 +142,19 @@ The ⋯ actions slot is left empty for T9. `conferences-page-content.tsx` is unc
 - **Map:** unchanged.
 - **Drift seeds:** unchanged.
 - **Live:** `admin-conferences-rpcs` plus `admin-program-rpcs` give 15 passed.
+
+## T11 · Verification 2a pass + follow-up ledger — blocked
+
+**gate:** mechanical: pass · completion: needs-work
+**failed stage:** completion review, on criterion 3 (advisors) only.
+**reason:** `get_advisors` (security) lists the five new RPCs (`admin_delete_conference`, `admin_list_conferences`, `admin_merge_conferences`, `admin_set_program_conference`, `admin_upsert_conference`) under the project-wide WARN "Signed-In Users Can Execute SECURITY DEFINER Function" (58 functions). The same warning already covers `admin_create_program`, `admin_transfer_program_ownership`, `update_program_settings` and every other intended signed-in RPC, and each conference RPC gates on `is_admin()` first. The reviewer judged this a criterion-wording issue ("no new findings" as written), not a code defect. Everything else passed:
+
+- **Mechanical:** lint, typecheck and test pass (on a fresh sign-in window, after two rate-limited runs); map current; drift seeds matched.
+- **Live:** 137 conferences, 2 unplaced, 0 mirror mismatches; indexes and triggers present; `is_admin()` first in all five RPCs; no anon/PUBLIC execute; `search_programs('b1g')` unchanged.
+- **Advisors, rest:** no conference-related RLS, search_path, anon-exec, unindexed-FK or unused-index findings.
+- **Route protection:** confirmed from code; the rolled-back `update programs set conference` set the matching `conference_id`.
+- **Comment block:** follow-ups ledger added.
+
+The recurring `Owner Conference` orphan was deleted again (approved) before the count.
+**stash:** 2ab3196200d47317eacae01c8254ead702d6197c (the comment block atop `src/lib/data/admin-conferences-server.ts`)
+**to unblock (author's call):** accept the SECURITY DEFINER warning as the intended admin-RPC pattern (reword criterion 3 to "no new class of finding" or mark T11 done by hand), then restore the stash and commit it.

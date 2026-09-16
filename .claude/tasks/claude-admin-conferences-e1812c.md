@@ -156,7 +156,7 @@ ready).
 
 ## T11 · Verification 2a pass + follow-up ledger
 
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T10
 - **files:** src/lib/data/admin-conferences-server.ts (comment block only); no other source edits expected
