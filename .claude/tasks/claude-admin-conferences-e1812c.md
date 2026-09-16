@@ -87,7 +87,7 @@ ready).
 
 ## T6 · ConferenceMark + conferences table
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4
 - **files:** src/components/admin/conference-mark.tsx, src/components/admin/conferences-table-layout.ts, src/components/admin/conferences-table.tsx (new; guesses per plan)

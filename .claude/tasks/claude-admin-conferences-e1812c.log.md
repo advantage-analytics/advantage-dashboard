@@ -67,3 +67,13 @@ is the runner's. Newest entries at the bottom.
 1. The states facet reads about 1,940 `programs` rows with no paging, so PostgREST's 1,000-row cap has probably always dropped some states (pre-existing).
 2. Share the D1/D2/D3/NAIA/JUCO list between `admin-teams-server.ts` and `dual-school-step.tsx`, e.g. in `programs-server.ts`.
 3. Both option lists include conferences with no teams, so the recurring `Owner Conference` orphan shows up in pickers until the spec fix merges.
+
+## T6 · ConferenceMark + conferences table — done
+
+**gate:** mechanical: pass · completion: pass
+**changed:** New `src/components/admin/conference-mark.tsx` (`ConferenceMark`, a 24/28/40 initials square on `--radius-button` and `--surface-subtle`), `conferences-table-layout.ts` (`COL`, `ROW`, `CONFERENCES_COLUMNS`, `conferenceRowId`, on the frame's 64/56/104/48 grid), and the client component `conferences-table.tsx` (`ConferencesTable`: `role="button"` container rows with no chevron and a persistent selected wash, `TableEmptyBody` when empty, mark 28 plus name, "D-I"-style division or `EmptyMark`, three tabular counts with zeros in `--ink-600`). Row height, header and wash copy the shipped requests and teams tables (52px, `eyebrow-sm`, `--surface-muted`) instead of the frame's 56px, so the admin tabs stay consistent. Drift seeds unchanged. Not rendered on a page yet.
+**follow-ups:**
+
+1. Decide once, for all three admin tables, whether the frame's 56px rows, sentence-case headers and `--surface-subtle` selected wash should replace the shipped 52px / `eyebrow-sm` / `--surface-muted` styling.
+2. The frame's 40px mark uses `--radius-element`; the criterion's `--radius-button` was followed.
+3. `ProgramCrest` still hard-codes `rounded-[8px]` instead of a radius token.
