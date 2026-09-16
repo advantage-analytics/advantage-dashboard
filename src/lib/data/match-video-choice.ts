@@ -62,3 +62,35 @@ export async function choosePlaybackFile(
   }
   return null;
 }
+
+/** The two columns `analysedWindowSeconds` reads off a job row. */
+export interface AnalysedWindowJobRow {
+  start_time_seconds: number | string | null;
+  end_time_seconds: number | string | null;
+}
+
+/**
+ * How long the analysed stretch of a video match lasted, in whole seconds, or
+ * `null` when no job says.
+ *
+ * The upload wizard stores `matches.duration` for a SwingVision export (read
+ * from the file) but writes 0 for a video match, so the report's scoreboard
+ * had no clock. The job's window — the part of the video the player marked as
+ * the match, from `start_time_seconds` to `end_time_seconds` — is that length:
+ * where a video match does carry a stored duration, it equals this window.
+ *
+ * @param jobs The match's COMPLETED jobs, NEWEST FIRST. The first one with a
+ *   positive window answers; a zero or unreadable window is skipped.
+ */
+export function analysedWindowSeconds(
+  jobs: AnalysedWindowJobRow[],
+): number | null {
+  for (const job of jobs) {
+    const start = Number(job.start_time_seconds ?? Number.NaN);
+    const end = Number(job.end_time_seconds ?? Number.NaN);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+    const seconds = Math.round(end - Math.max(start, 0));
+    if (seconds > 0) return seconds;
+  }
+  return null;
+}

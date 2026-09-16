@@ -1,5 +1,7 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { analysedWindowSeconds } from "@/lib/data/match-video-choice";
 import {
   getMatchKpiHistory,
   getMatchStatisticsFromSupabase,
@@ -348,6 +350,44 @@ async function resolveKpiHistory(
  * React.cache deduplicates calls within the same request,
  * so both layout.tsx and page.tsx can call this without double-fetching.
  */
+/**
+ * The analysed window of a video match with no stored duration, in seconds.
+ *
+ * `matches.duration` is 0 on every video match the wizard created (it only
+ * reads a length out of a SwingVision export), so without this the report's
+ * scoreboard has no clock. The newest completed job's
+ * `end_time_seconds − start_time_seconds` is the part of the video the player
+ * marked as the match (`analysedWindowSeconds`).
+ *
+ * Read through the admin client only after the RLS-scoped `matches` read has
+ * returned this row, the same order `getMatchVideo` uses: `processing_jobs`
+ * RLS is per-creator, so a coach viewing a player's match would otherwise read
+ * nothing. Only the two window columns leave the query.
+ */
+async function resolveAnalysedWindowSeconds(
+  dbRow: DbMatch,
+): Promise<number | null> {
+  if (dbRow.source_provider !== "splitstep") return null;
+  if (dbRow.duration != null && dbRow.duration > 0) return null;
+
+  const { data: jobs, error } = await createAdminClient()
+    .from("processing_jobs")
+    .select("start_time_seconds, end_time_seconds")
+    .eq("match_id", dbRow.id)
+    .eq("status", "completed")
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  if (error) {
+    console.error("[match-detail] could not read the analysed window", {
+      matchId: dbRow.id,
+      message: error.message,
+    });
+    return null;
+  }
+  return analysedWindowSeconds(jobs ?? []);
+}
+
 export const getMatchDetailData = cache(async (matchId: string) => {
   const supabase = await createClient();
 
@@ -387,6 +427,7 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     eventId,
     uploadedBy,
     profileResult,
+    windowSeconds,
   ] = await Promise.all([
     getMatchStatisticsFromSupabase(matchId),
     getMatchPointsFromSupabase(matchId),
@@ -413,6 +454,10 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     playerIds.length > 0
       ? supabase.from("users").select("id, hand, backhand").in("id", playerIds)
       : Promise.resolve({ data: [] }),
+    // A video match's length, for the rail scoreboard's clock, when the row
+    // has none (the wizard writes 0 for video). Same wave: it needs only
+    // `dbRow`, and it skips the round trip for every match that has one.
+    resolveAnalysedWindowSeconds(dbRow),
   ]);
 
   const profiles = new Map<string, PlayerProfile>();
@@ -429,6 +474,10 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   const match = transformDbMatchToMatch(dbRow, myPlayerIds, profiles);
   match.eventId = eventId;
   match.uploadedBy = uploadedBy;
+  if (!(match.durationSec && match.durationSec > 0) && windowSeconds) {
+    match.durationSec = windowSeconds;
+    match.duration = formatDuration(windowSeconds * 1000);
+  }
 
   return {
     match,
