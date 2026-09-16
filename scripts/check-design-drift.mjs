@@ -325,13 +325,10 @@ const CHECKS = [
   },
   {
     key: "size",
-    // 4 → 5: report-insight-card.tsx's claim is `text-[15px]`. Design 04's F2
-    // frame draws the insight claim at `font-size:15px;font-weight:300`,
-    // between the scale's 14 and 16 steps. That is a recorded frame-over-DS
-    // conflict (spec 2026-09-15-match-report-settled-statistics-design.md ›
-    // Geometry › Insight card), counted here rather than hidden in an inline
-    // `fontSize`.
-    seed: 5,
+    // 5 → 4: report-insight-card.tsx's claim moved from design 04 F2's
+    // off-scale `text-[15px]` to the scale's `.text-title` (16px) when the
+    // card was re-laid out on 2026-09-16 (spec › Decisions 5).
+    seed: 4,
     label: "off-scale text-[Npx]",
     fix: "snap to the SKILL.md type scale, or add the missing step to it",
   },

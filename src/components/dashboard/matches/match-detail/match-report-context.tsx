@@ -2,7 +2,6 @@
 
 import { createContext, use, useMemo, useState, type ReactNode } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useInsightDismissal } from "@/components/dashboard/matches/match-detail/insight-dismissal";
 import {
   parseReportView,
   reportViewQuery,
@@ -15,9 +14,9 @@ import {
  * — React 19 `createContext` read with `use()`, rendered as `<Context value>`.
  *
  * This provider is the only thing that knows where the report's state lives:
- * the active view in the URL (`?tab=`, through `report-view.ts`), the insight's
- * dismissal in localStorage (`insight-dismissal.ts`, key unchanged), and its
- * collapse in component state. Every `MatchReport` part reads the interface,
+ * the active view in the URL (`?tab=`, through `report-view.ts`) and the
+ * insight's collapse in component state. The insight has no dismiss: it is the
+ * report's own summary, so it can be folded away but not thrown out. Every `MatchReport` part reads the interface,
  * so none of them can drift from another about which view is showing.
  *
  * `meta` is what `page.tsx` already decided on the server and passes in as
@@ -25,7 +24,7 @@ import {
  * insight, already `sides.pick`ed (guardrails §4); nothing below re-picks it.
  */
 
-export type InsightStatus = "expanded" | "collapsed" | "dismissed";
+export type InsightStatus = "expanded" | "collapsed";
 
 export interface MatchReportState {
   view: ReportView;
@@ -37,8 +36,6 @@ export interface MatchReportActions {
   selectView(view: ReportView): void;
   collapseInsight(): void;
   expandInsight(): void;
-  /** Permanent for this match — `advantage-ai-insight-dismissed:${matchId}`. */
-  dismissInsight(): void;
 }
 
 export interface MatchReportMeta {
@@ -86,16 +83,8 @@ export function MatchReportProvider({
   // Anything that is not a known view reads as Statistics, never an error.
   const view = parseReportView(searchParams.get("tab"));
 
-  // Dismissal is the stored, cross-tab flag; collapse is only this visit's
-  // state. The dismissal hook's server snapshot says "dismissed", so the
-  // server markup and the hydration render agree and the insight card mounts
-  // just after hydration — never flashing in and back out for a player who
-  // already dismissed it. Accepted, not a bug.
-  const { dismissed, dismiss } = useInsightDismissal(matchId);
-  const [expansion, setExpansion] = useState<"expanded" | "collapsed">(
-    "expanded",
-  );
-  const insight: InsightStatus = dismissed ? "dismissed" : expansion;
+  // Collapse is only this visit's state; every visit opens expanded.
+  const [insight, setInsight] = useState<InsightStatus>("expanded");
 
   const actions = useMemo<MatchReportActions>(
     () => ({
@@ -114,16 +103,13 @@ export function MatchReportProvider({
         );
       },
       collapseInsight() {
-        setExpansion("collapsed");
+        setInsight("collapsed");
       },
       expandInsight() {
-        setExpansion("expanded");
-      },
-      dismissInsight() {
-        dismiss();
+        setInsight("expanded");
       },
     }),
-    [view, searchParams, pathname, dismiss],
+    [view, searchParams, pathname],
   );
 
   const meta = useMemo<MatchReportMeta>(
