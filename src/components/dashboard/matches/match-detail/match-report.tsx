@@ -82,15 +82,13 @@ export function MatchReportPane({ children }: { children: ReactNode }) {
   return (
     <div
       className="@container flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto"
-      // F1 draws the pane on the grey page ground with white cards on it. That
-      // conflicts with design-system principle 6 ("the dashboard is white" —
-      // the report and its rail are `--surface-card`, separation comes from
-      // the hairline). The frame wins here by decision (spec › Decisions 1);
-      // this is the one place the page token is referenced, so reverting to
-      // white is this one line.
+      // White, per design-system principle 6 ("the dashboard is white" — the
+      // report and its rail are `--surface-card`, and the cards separate by
+      // their hairline and shadow). F1 draws this pane on the grey page
+      // ground; that was overruled after the build (spec › Decisions 1).
       style={{
         padding: "20px 56px 24px",
-        background: "var(--surface-page)",
+        background: "var(--surface-card)",
       }}
     >
       {children}
