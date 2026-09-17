@@ -94,6 +94,13 @@ async function login(
   if (error || !data.user)
     throw new Error(`createUser(${label}): ${error?.message}`);
   authUserIds.push(data.user.id);
+  // A schema-only local restore can omit the Auth schema signup trigger.
+  // Seed its public profile explicitly; this is idempotent when the trigger exists.
+  const profile = await root
+    .from("users")
+    .upsert({ id: data.user.id, email }, { onConflict: "id" });
+  if (profile.error)
+    throw new Error(`publicUser(${label}): ${profile.error.message}`);
 
   const client = createClient(LOCAL_URL!, LOCAL_ANON_KEY!, {
     auth: { persistSession: false, autoRefreshToken: false },

@@ -168,3 +168,23 @@ test("content-addressed retries verify stored bytes and never dispatch started/f
     message: expect.stringContaining("recorded result was not changed"),
   });
 });
+
+test("file admission preserves wizard court labels and permits unanswered optional surface", async () => {
+  const file = await workbook();
+  for (const court of [
+    "",
+    "Outdoor Hard Court",
+    "Indoor Hard Court",
+    "Clay Court",
+    "Grass Court",
+  ]) {
+    const h = harness();
+    const body = form(file);
+    body.set("courtType", court);
+    expect((await submitAdminMatchFile(body, h.deps)).ok).toBe(true);
+    expect(
+      h.calls.find((c) => c.name === "admin_submit_match_file")!.args.p_request
+        .courtType,
+    ).toBe(court || null);
+  }
+});

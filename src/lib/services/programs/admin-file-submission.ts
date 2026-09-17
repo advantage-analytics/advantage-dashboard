@@ -1,3 +1,4 @@
+import { adminUploadCourt } from "@/lib/admin/uploads/court";
 import { createHash } from "node:crypto";
 import { requireAdmin } from "./admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -67,7 +68,7 @@ export async function submitAdminMatchFile(
   const playerId = string("playerId").toLowerCase() || null;
   const date = string("date");
   const matchType = string("matchType");
-  const courtType = string("courtType");
+  const courtType = adminUploadCourt(string("courtType"));
   const file = form.get("file");
   if (
     ![operationId, itemId, programId].every((id) => uuid.test(id)) ||
@@ -81,7 +82,7 @@ export async function submitAdminMatchFile(
         !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
         !Number.isFinite(Date.parse(date)) ||
         !["Singles", "Doubles"].includes(matchType) ||
-        !["Hard", "Clay", "Grass", "Carpet"].includes(courtType))) ||
+        courtType === undefined)) ||
     !(file instanceof File)
   )
     return failure(

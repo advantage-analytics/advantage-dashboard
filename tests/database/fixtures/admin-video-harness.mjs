@@ -20,7 +20,7 @@ export async function setup(db = new PGlite()) {
  create table processing_jobs(id uuid primary key default gen_random_uuid(),match_id uuid,created_by uuid,status text,results_object_key text,derivation_version integer,provider text,start_time_seconds numeric,end_time_seconds numeric,billable_seconds integer,initial_top_player_is_player1 boolean,ad_scoring boolean,fixed_camera boolean,external_job_id text,video_object_key text,error_message text,upload_progress_percent numeric,updated_at timestamptz);
  create table match_files(id uuid primary key default gen_random_uuid(),match_id uuid,uploaded_by uuid,provider_id text,file_name text,file_size bigint,storage_path text,status text);
  create table processing_usage(account_id uuid,account_type text,billing_month date,job_id uuid,created_by uuid,reserved_seconds integer,actual_seconds integer,released boolean default false);
- create table match_stats(match_id uuid); create table points(match_id uuid); create table shots(match_id uuid);
+ create table match_stats(match_id uuid); create table points(id uuid primary key default gen_random_uuid(),match_id uuid); create table shots(point_id uuid references points(id));
  create table program_audit_log(id bigint generated always as identity primary key,program_id uuid,actor_user_id uuid,action text,subject_id uuid,details jsonb,constraint program_audit_log_action_check check(action='program.conference_changed'));
  insert into users(id,is_admin) values ('${id(1)}',true),('${id(2)}',true),('${id(3)}',false);
  insert into programs values ('${id(10)}','active','college'),('${id(11)}','active','club');
@@ -38,6 +38,7 @@ export async function setup(db = new PGlite()) {
     "20260917004400_prepare_admin_analysis_attachments.sql",
     "20260917010000_submit_admin_match_files.sql",
     "20260917011813_submit_admin_match_videos.sql",
+    "20260917065829_fix_admin_attachment_shot_lookup.sql",
   ])
     await db.exec(
       await readFile(

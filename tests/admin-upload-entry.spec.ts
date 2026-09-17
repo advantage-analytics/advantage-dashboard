@@ -261,12 +261,21 @@ test("file/video mount shared wizard with target and stable retry identifiers; r
   const pushes: string[] = [];
   const entry = load("src/components/admin/admin-upload-entry.tsx", {
     react: {
-      useState: (init: () => unknown) => {
+      useState: (init: unknown) => {
         const index = cursor++;
-        state[index] ??= init();
+        state[index] ??= typeof init === "function" ? init() : init;
         return [state[index], () => {}];
       },
     },
+    "@/app/admin/uploads/new/attachment-actions": {
+      loadAdminAttachmentTargetsAction: async () => ({ ok: true, options: [] }),
+      prepareAdminAttachmentAction: async () => ({
+        ok: false,
+        message: "refused",
+      }),
+    },
+    "@/lib/ui/adv-button": { advButton: () => "" },
+    "@/lib/ui/adv-field": { advField: () => "" },
     "next/navigation": {
       useRouter: () => ({
         push: (url: string) => pushes.push(url),
@@ -285,10 +294,11 @@ test("file/video mount shared wizard with target and stable retry identifiers; r
     const boundary = elements(tree).find((e) => typeof e.type === "function");
     expect(boundary).toBeDefined();
     cursor = 0;
-    const wizard = (boundary!.type as (props: unknown) => Element)(
+    const rendered = (boundary!.type as (props: unknown) => Element)(
       boundary!.props,
     );
-    expect(wizard.type).toBe("wizard");
+    const wizard = elements(rendered).find((e) => e.type === "wizard")!;
+    expect(wizard).toBeDefined();
     expect(wizard.props.initialProvider).toBe(
       kind === "file" ? "swing-vision" : "splitstep",
     );
@@ -298,8 +308,9 @@ test("file/video mount shared wizard with target and stable retry identifiers; r
     expect(mode.successHref).toBe("/admin/uploads");
     cursor = 0;
     expect(
-      (boundary!.type as (props: unknown) => Element)(boundary!.props).props
-        .mode,
+      elements(
+        (boundary!.type as (props: unknown) => Element)(boundary!.props),
+      ).find((e) => e.type === "wizard")!.props.mode,
     ).toEqual(mode);
     const radio = elements(tree).find(
       (e) => e.type === "input" && e.props.value === "tournament",

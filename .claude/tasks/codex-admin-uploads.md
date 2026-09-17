@@ -279,7 +279,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T19 · Verify all four flows and desktop fidelity
 
-- **status:** blocked
+- **status:** done
 - **model:** gpt-5.6-sol
 - **needs:** T13, T14, T16, T17, T18
 - **files:** Best guesses: admin flow tests, `docs/admin-uploads-verification.md`, scoped integration corrections.

@@ -1,3 +1,4 @@
+import { adminUploadCourt } from "@/lib/admin/uploads/court";
 import { requireAdmin } from "./admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAdminUploadContext } from "@/lib/data/admin-upload-server";
@@ -116,12 +117,12 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
     typeof body.date !== "string" ||
     !/^\d{4}-\d{2}-\d{2}$/.test(body.date) ||
     !Number.isFinite(Date.parse(body.date)) ||
-    !["Hard", "Clay", "Grass", "Carpet"].includes(String(body.courtType)) ||
+    adminUploadCourt(body.courtType) === undefined ||
     ![1, 3, 5].includes(Number(body.bestOf))
   ) {
     return {
       ok: false as const,
-      message: "Choose a roster athlete, match date, surface and format.",
+      message: "Choose a roster athlete, match date and format.",
     };
   }
   if (
@@ -183,7 +184,7 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
           player2_tiebreaks: tieScores.player2_tiebreaks ?? [],
         },
     date: matchId ? null : body.date,
-    courtType: matchId ? null : body.courtType,
+    courtType: matchId ? null : adminUploadCourt(body.courtType),
     bestOf: matchId ? null : Number(body.bestOf),
     startSeconds: body.startSeconds,
     endSeconds: body.endSeconds,

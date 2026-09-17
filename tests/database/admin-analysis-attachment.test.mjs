@@ -23,7 +23,7 @@ test("attachment SQL preserves results, revalidates and serializes reservation i
  create table matches(id uuid primary key,created_by uuid,program_id uuid,event_entry_id uuid,player1_id uuid,player2_id uuid,opponent_player_id uuid,player1_name text,player2_name text,score jsonb,result text,round text,tournament_name text,date timestamptz,match_type text,format jsonb,court_type text,source_provider text,analysis_method text);
  create table processing_jobs(id uuid primary key,match_id uuid,created_by uuid,status text,results_object_key text,derivation_version integer);
  create table match_files(id uuid primary key,match_id uuid,uploaded_by uuid);
- create table match_stats(match_id uuid); create table points(match_id uuid); create table shots(match_id uuid);
+ create table match_stats(match_id uuid); create table points(id uuid primary key default gen_random_uuid(),match_id uuid); create table shots(point_id uuid references points(id));
  create table program_audit_log(id bigint generated always as identity primary key,program_id uuid,actor_user_id uuid,action text,subject_id uuid,details jsonb,constraint program_audit_log_action_check check(action='program.conference_changed'));
  insert into users values ('${id(1)}',true),('${id(2)}',true),('${id(3)}',false);
  insert into programs values ('${id(10)}','active','college'),('${id(11)}','active','club');
@@ -35,6 +35,7 @@ test("attachment SQL preserves results, revalidates and serializes reservation i
     for (const name of [
       "20260917000513_persist_admin_upload_submissions.sql",
       "20260917004400_prepare_admin_analysis_attachments.sql",
+      "20260917065829_fix_admin_attachment_shot_lookup.sql",
     ])
       await db.exec(
         await readFile(
@@ -150,8 +151,8 @@ test("attachment SQL preserves results, revalidates and serializes reservation i
         `delete from match_files`,
         "existing-analysis",
       ],
-      ...["match_stats", "points", "shots"].map((t) => [
-        `insert into ${t} values ('${id(20)}')`,
+      ...["match_stats", "points"].map((t) => [
+        `insert into ${t}(match_id) values ('${id(20)}')`,
         `delete from ${t}`,
         "existing-analysis",
       ]),

@@ -10,6 +10,14 @@ import {
   Trophy,
   Check,
 } from "lucide-react";
+import {
+  loadAdminAttachmentTargetsAction,
+  prepareAdminAttachmentAction,
+} from "@/app/admin/uploads/new/attachment-actions";
+import type { AdminAttachmentOption } from "@/lib/data/admin-attachment-server";
+import type { AdminWizardMode } from "@/components/dashboard/matches/new-match-wizard/admin-mode";
+import { advButton } from "@/lib/ui/adv-button";
+import { advField } from "@/lib/ui/adv-field";
 import type { AdminUploadContext } from "@/lib/data/admin-upload-server";
 import { AdminUploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard/admin-mode";
 import {
@@ -57,16 +65,130 @@ function FileOrVideo({
     operationId: crypto.randomUUID(),
     itemId: crypto.randomUUID(),
   }));
-  return (
-    <AdminUploadMatchFlow
-      mode={{
-        context,
+  const [target, setTarget] = useState("new");
+  const [options, setOptions] = useState<AdminAttachmentOption[]>([]);
+  const [attachment, setAttachment] = useState<AdminWizardMode["attachment"]>();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function chooseExisting() {
+    setTarget("existing");
+    setPending(true);
+    setError(null);
+    try {
+      const result = await loadAdminAttachmentTargetsAction(
+        context.workspace.id,
+      );
+      if (result.ok)
+        setOptions(
+          result.options.filter((o) => kind === "file" || o.supportsVideo),
+        );
+      else setError(result.message);
+    } catch {
+      setError("We couldn’t load recorded results. Try again.");
+    } finally {
+      setPending(false);
+    }
+  }
+  async function prepare() {
+    setPending(true);
+    setError(null);
+    try {
+      const result = await prepareAdminAttachmentAction({
+        programId: context.workspace.id,
+        matchId: target,
         ...ids,
-        exitHref: adminUploadHref(context.workspace.id, null),
-        successHref: "/admin/uploads",
-      }}
-      initialProvider={kind === "file" ? "swing-vision" : "splitstep"}
-    />
+      });
+      if (result.ok) setAttachment(result.attachment);
+      else setError(result.message);
+    } catch {
+      setError("We couldn’t prepare this result. Try again.");
+    } finally {
+      setPending(false);
+    }
+  }
+  return (
+    <div className="flex flex-col gap-5">
+      {!attachment && (
+        <section aria-label="Analysis target" className="flex flex-col gap-3">
+          <div className="flex gap-4 text-[13px]">
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="analysis-target"
+                checked={target === "new"}
+                disabled={pending}
+                onChange={() => {
+                  setTarget("new");
+                  setError(null);
+                }}
+              />
+              New match
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="analysis-target"
+                checked={target !== "new"}
+                disabled={pending}
+                onChange={chooseExisting}
+              />
+              Existing recorded result
+            </label>
+          </div>
+          {target !== "new" && (
+            <>
+              <label className="flex flex-col gap-2 text-[12px]">
+                Recorded result
+                <select
+                  aria-label="Recorded result"
+                  className={advField("boxed")}
+                  value={target === "existing" ? "" : target}
+                  disabled={pending}
+                  onChange={(e) => setTarget(e.target.value || "existing")}
+                >
+                  <option value="">Choose a recorded result</option>
+                  {options.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {!pending && options.length === 0 && (
+                <p role="status" className="text-[13px] text-[var(--ink-600)]">
+                  No eligible recorded results for this analysis kind.
+                </p>
+              )}
+              <button
+                type="button"
+                className={advButton("primary", "md")}
+                disabled={pending || target === "existing"}
+                onClick={prepare}
+              >
+                {pending ? "Loading…" : "Use recorded result"}
+              </button>
+            </>
+          )}
+          {error && (
+            <p role="alert" className="text-[13px] text-[var(--red)]">
+              {error}
+            </p>
+          )}
+        </section>
+      )}
+      {(target === "new" || attachment) && (
+        <AdminUploadMatchFlow
+          mode={{
+            context,
+            ...ids,
+            attachment,
+            exitHref: adminUploadHref(context.workspace.id, null),
+            successHref: "/admin/uploads",
+          }}
+          initialProvider={kind === "file" ? "swing-vision" : "splitstep"}
+        />
+      )}
+    </div>
   );
 }
 
@@ -161,7 +283,7 @@ export function AdminUploadEntry({
             {choices.map(({ kind: value, label, detail, icon: Icon }) => (
               <label
                 key={value}
-                className={`relative flex cursor-pointer flex-col gap-1 rounded-[var(--radius-float)] border bg-[var(--surface-card)] px-[18px] pt-[18px] pb-5 ${kind === value ? "border-[var(--blue)] shadow-[0_0_0_3px_var(--blue-tint-12)]" : "border-[var(--border-field)] hover:border-[var(--ink-300)]"}`}
+                className={`relative flex cursor-pointer flex-col gap-1 rounded-[var(--radius-dropdown)] border bg-[var(--surface-card)] px-[18px] pt-[18px] pb-5 ${kind === value ? "border-[var(--blue)] shadow-[0_0_0_3px_var(--blue-tint-12)]" : "border-[var(--border-field)] hover:border-[var(--ink-300)]"}`}
               >
                 <span className="absolute top-4 right-4 size-3.5">
                   <input

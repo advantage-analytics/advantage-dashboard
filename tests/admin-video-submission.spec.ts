@@ -147,3 +147,22 @@ test("attachment reads protected scores and rejects replacements or wrong progra
   ).toBe(false);
   expect(replacement.calls).toEqual([]);
 });
+
+test("video admission preserves wizard court labels and permits unanswered optional surface", async () => {
+  for (const court of [
+    null,
+    "",
+    "Outdoor Hard Court",
+    "Indoor Hard Court",
+    "Clay Court",
+    "Grass Court",
+  ]) {
+    const h = harness();
+    expect(
+      (await submitAdminMatchVideo({ ...input, courtType: court }, h.deps)).ok,
+    ).toBe(true);
+    expect(
+      (h.calls[0].args.p_request as Record<string, unknown>).courtType,
+    ).toBe(court || null);
+  }
+});
