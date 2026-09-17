@@ -82,7 +82,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T2 · Persist explicit console submission provenance
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-6-astra
 - **needs:** T1
 - **files:** Best guesses: new submission migration, `src/lib/admin/uploads/types.ts`, database contract tests.
