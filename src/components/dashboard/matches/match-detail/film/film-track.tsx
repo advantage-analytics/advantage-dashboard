@@ -78,15 +78,10 @@ export function FilmTrack({
         setScrubbing(true);
         seekFromPointer(e.clientX);
       }}
-      onKeyDown={(e) => {
-        if (e.key === "ArrowRight") {
-          e.preventDefault();
-          onSeek(currentTime + 5);
-        } else if (e.key === "ArrowLeft") {
-          e.preventDefault();
-          onSeek(currentTime - 5);
-        }
-      }}
+      // No keys of its own: the view that holds the track — the room, or the
+      // Video tab — answers the arrows page-wide (← → step points, ↑ ↓ move
+      // 5 seconds), and a second handler here made a focused track seek
+      // twice.
       className={cn(
         "relative flex h-4 cursor-pointer items-center rounded-[2px] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
         className,

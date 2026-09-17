@@ -241,7 +241,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
             <MatchReportWhen view="shots">
               <ShotsTab />
             </MatchReportWhen>
-            <MatchReportWhen view="film">
+            <MatchReportWhen view="film" scrollsInside>
               {/* `video` is the short-lived playback SAS, or null when there
                   is no file to serve — FilmTab renders `FilmEmptyState` for
                   the second case. Points come from `MatchDataProvider`, so

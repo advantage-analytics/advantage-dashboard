@@ -1,10 +1,13 @@
 "use client";
 
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Bookmark, Filter, SlidersHorizontal } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
+import type { Workspace } from "@/lib/workspace/types";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
   Popover,
   PopoverContent,
@@ -13,7 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { filmProgressWidth } from "./film-clock";
-import { scoreColumns } from "./film-score";
+import { scoreColumns, youFirstScore } from "./film-score";
 import {
   DEFAULT_FILM_FILTERS,
   FilmFiltersPanel,
@@ -26,22 +29,25 @@ import {
 /**
  * The Film room's point list (artboard 46c, lines 845–1131).
  *
- * Rows are grouped by GAME and headed "Set 3 · Reid serving" with the game
- * score on the right, exactly as the artboard draws it. Two things about that
+ * Rows are grouped by GAME and headed the way the fullscreen room's panel
+ * heads them (`film-point-panel.tsx`): "SET 3 · GAME 7" on the left, the
+ * you-first game score and "Reid serves" on the right. Two things about that
  * header are load-bearing:
  *
  * - the server's name comes from `serverIsPlayer1` resolved through
  *   `useMatchSides()`, never from player order;
  * - `gameScore` and `pointScore` are written SERVER-FIRST by the parser
- *   (`process-match/index.ts`: `serverIsPlayer1 ? host-guest : guest-host`),
- *   so the header naming the server is what makes the chip readable. Nothing
- *   here re-orients them, because re-orienting one without the other is how a
- *   score ends up describing the wrong player.
+ *   (`process-match/index.ts`: `serverIsPlayer1 ? host-guest : guest-host`).
+ *   The header's game score is read you-first through `youFirstScore`, which
+ *   absolutizes on the server first and orients on the viewer second; the
+ *   row's point score stays server-first, as the umpire calls it.
  *
- * The decisive-player chip is `point.player` — the player who hit the last
- * shot — coloured `--viz-you` when that is the viewer and `--surface-subtle`
- * when it is not. Initials come from `sides`, so a two-letter chip is never a
- * hardcoded artboard string.
+ * The decisive-player mark is `point.player` — the player who hit the last
+ * shot: the workspace's mark (profile photo on personal, crest on a team)
+ * when that is the viewer, an initials chip on `--surface-subtle` when it is
+ * not. Initials come from `sides`, so a two-letter chip is never a hardcoded
+ * artboard string. The row's hover, the score sliding aside for the bookmark,
+ * is the room's (handoff F3) in the light treatment.
  */
 
 interface PointListProps {
@@ -70,7 +76,8 @@ interface GameGroup {
   setNumber: number;
   gameNumber: number;
   serverName: string;
-  gameScore: string;
+  /** You-first, en-dashed, or null when the column is empty. */
+  gameScore: string | null;
   points: MatchPoint[];
 }
 
@@ -101,6 +108,10 @@ export function PointList({
   onToggleSaved,
 }: PointListProps) {
   const sides = useMatchSides();
+  // The viewer's rows lead with the workspace's own mark — the profile photo
+  // on personal, the program's crest on a team — so a point you decided reads
+  // as yours at a glance; the opponent's rows keep their initials.
+  const { active: workspace } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<FilmFilters>(filters);
 
@@ -133,7 +144,15 @@ export function PointList({
           setNumber: point.setNumber,
           gameNumber: point.gameNumber,
           serverName: lastNameOf(serverIsYou ? youName : oppName),
-          gameScore: point.gameScore,
+          // You-first for a header under the viewer's name, the way the room
+          // reads it; null when the match has no real game score column.
+          gameScore: showGameScore
+            ? youFirstScore(
+                point.gameScore,
+                point.serverIsPlayer1,
+                youIsPlayer1,
+              )
+            : null,
           points: [],
         };
         out.push(current);
@@ -142,25 +161,52 @@ export function PointList({
     }
 
     return out;
-  }, [visiblePoints, youIsPlayer1, youName, oppName]);
+  }, [visiblePoints, youIsPlayer1, youName, oppName, showGameScore]);
 
   const clearAll = () => {
     setDraft(DEFAULT_FILM_FILTERS);
     onFiltersChange(DEFAULT_FILM_FILTERS);
   };
 
+  // Keep the playing row in view as the film moves on, without fighting a
+  // user who is scrolling the list themselves — the room's rule. Scrolls
+  // the list ONLY, never the pane: `scrollIntoView` would walk every
+  // ancestor.
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || !activePointId) return;
+    const row = list.querySelector<HTMLElement>(
+      `[data-point-id="${activePointId}"]`,
+    );
+    if (!row) return;
+    const listBox = list.getBoundingClientRect();
+    const rowBox = row.getBoundingClientRect();
+    if (rowBox.top < listBox.top) {
+      list.scrollTop += rowBox.top - listBox.top;
+    } else if (rowBox.bottom > listBox.bottom) {
+      list.scrollTop += rowBox.bottom - listBox.bottom;
+    }
+  }, [activePointId]);
+
   return (
     <section
       aria-label="Point list"
-      className="surface-card flex flex-col"
+      // `max-h-full min-h-0`: the card never runs past the column the film
+      // tab gives it — the rows scroll inside it (below) — but a short cut
+      // stays a short card rather than stretching to the column's height.
+      className="surface-card flex max-h-full min-h-0 flex-col"
       style={{ padding: "10px 8px" }}
     >
-      {/* Points / Saved + the filter trigger */}
-      <div className="flex items-center gap-5 border-b border-[var(--border-hairline)] px-3 pt-1">
+      {/* Points / Saved + the filter trigger. The view switcher is the
+          design system's status-pill row (design canvas "Video A3"): 26px
+          hairline pills, the chosen one on the surface-subtle wash — a fixed
+          two-view switcher, not a filter, so no counts on it. */}
+      <div className="flex items-center gap-5 border-b border-[var(--border-hairline)] px-3 pt-1 pb-2.5">
         <div
           role="tablist"
           aria-label="Point list view"
-          className="flex items-center gap-5"
+          className="flex items-center gap-1.5"
         >
           {(["points", "saved"] as const).map((value) => {
             const active = value === tab;
@@ -172,10 +218,10 @@ export function PointList({
                 aria-selected={active}
                 onClick={() => onTabChange(value)}
                 className={cn(
-                  "cursor-pointer px-0.5 pt-1.5 pb-2 text-[11px] font-medium",
+                  "inline-flex h-[26px] cursor-pointer items-center rounded-[var(--radius-pill)] border px-[11px] text-[12px] transition-colors duration-200",
                   active
-                    ? "text-[var(--ink-900)] shadow-[inset_0_-2px_0_var(--blue)]"
-                    : "text-[var(--ink-500)] hover:text-[var(--ink-700)]",
+                    ? "border-[var(--surface-subtle)] bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
+                    : "border-[var(--border-field)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",
                 )}
               >
                 {value === "points" ? "Points" : "Saved"}
@@ -198,7 +244,7 @@ export function PointList({
           <PopoverTrigger asChild>
             <button
               type="button"
-              className="mb-1.5 inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-2.5 text-[11px] font-medium text-[var(--ink-900)]"
+              className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-2.5 text-[11px] font-medium text-[var(--ink-900)]"
             >
               <SlidersHorizontal
                 className="h-[13px] w-[13px]"
@@ -227,7 +273,8 @@ export function PointList({
         </Popover>
       </div>
 
-      {/* Applied cut, stated in words — never chips. */}
+      {/* Applied cut, stated in words — never chips. Drawn only while a
+          filter narrows the list; the unfiltered list needs no strip. */}
       {filtered && (
         <div className="mx-3 mt-2.5 mb-1 flex items-center gap-2 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-2.5 py-2">
           <Filter
@@ -235,7 +282,7 @@ export function PointList({
             strokeWidth={1.5}
             aria-hidden="true"
           />
-          <span className="text-[11px] text-[var(--ink-700)]">
+          <span className="min-w-0 truncate text-[11px] text-[var(--ink-700)]">
             {describeFilmCut(filters, sides)} ·{" "}
             <span className="tabular">{filteredCount}</span> of{" "}
             <span className="tabular">{allPoints.length}</span>
@@ -261,29 +308,28 @@ export function PointList({
           onGoToPoints={() => onTabChange("points")}
         />
       ) : (
-        <div className="flex flex-col">
+        // The one scroller in the card: the header, the cut strip and the
+        // tabs stay put while the rows scroll, the way the room's panel
+        // scrolls its list under a fixed tab row.
+        <div
+          ref={listRef}
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+        >
           {groups.map((group) => (
             <div key={group.key} className="flex flex-col">
-              <div className="mb-1 flex items-center gap-2.5 border-b border-[var(--border-hairline)] px-3 pt-3.5 pb-2">
-                <span className="inline-flex items-baseline gap-[5px]">
-                  <span className="text-[10px] font-medium tracking-[1.2px] text-[var(--ink-400)] uppercase">
-                    Set {group.setNumber} ·
-                  </span>
-                  <span className="text-[10px] font-medium tracking-[1.2px] text-[var(--ink-600)] uppercase">
-                    {group.serverName} serving
-                  </span>
+              {/* The room's game header (film-point-panel.tsx), in the light
+                  treatment: "SET 1 · GAME 3" in tracked mono on the left, the
+                  you-first game score and the server on the right. No rule
+                  under it — the rows' own spacing separates the games. */}
+              <div className="flex items-center px-3 pt-3 pb-[5px]">
+                <span className="mono text-[9px] tracking-[1.4px] text-[var(--ink-400)] uppercase">
+                  Set {group.setNumber} · Game {group.gameNumber}
                 </span>
                 <div className="flex-1" />
-                {showGameScore && (
-                  <span className="inline-flex items-baseline rounded-[var(--radius-cell)] bg-[var(--surface-subtle)] px-2 py-0.5">
-                    <span
-                      className="text-scoreboard-sm tabular"
-                      style={{ fontSize: "13px", color: "var(--ink-900)" }}
-                    >
-                      {group.gameScore}
-                    </span>
-                  </span>
-                )}
+                <span className="mono tabular text-[10px] text-[var(--ink-400)]">
+                  {group.gameScore ? `${group.gameScore} · ` : ""}
+                  {group.serverName} serves
+                </span>
               </div>
 
               {group.points.map((point) => {
@@ -294,6 +340,7 @@ export function PointList({
                     point={point}
                     isYou={isYou}
                     initials={isYou ? sides.you.initials : sides.opp.initials}
+                    workspace={workspace}
                     showPointScore={showPointScore}
                     isActive={point.id === activePointId}
                     activeStart={point.id === activePointId ? activeStart : 0}
@@ -333,10 +380,11 @@ export function PointList({
  * do — which is why the callbacks arrive already-stable rather than as inline
  * arrows closing over the row's own point.
  */
-const PointRow = memo(function PointRow({
+export const PointRow = memo(function PointRow({
   point,
   isYou,
   initials,
+  workspace,
   showPointScore,
   isActive,
   activeStart,
@@ -347,6 +395,8 @@ const PointRow = memo(function PointRow({
   point: MatchPoint;
   isYou: boolean;
   initials: string;
+  /** The active workspace, whose mark leads the viewer's own rows. */
+  workspace: Pick<Workspace, "kind" | "mark" | "iconUrl">;
   showPointScore: boolean;
   isActive: boolean;
   activeStart: number;
@@ -360,6 +410,7 @@ const PointRow = memo(function PointRow({
 
   return (
     <div
+      data-point-id={point.id}
       role={seekable ? "button" : undefined}
       tabIndex={seekable ? 0 : undefined}
       aria-label={
@@ -375,7 +426,11 @@ const PointRow = memo(function PointRow({
         }
       }}
       className={cn(
-        "group/row relative flex min-h-[52px] items-center gap-3 rounded-[var(--radius-element)] px-3 py-1.5",
+        // The room's row hover (film-point-panel.tsx, handoff F3), in the
+        // light treatment: the wash fades in, the score slides 26px left and
+        // the bookmark fades in where it was — one motion vocabulary for the
+        // same row in the tab and in the room.
+        "group/row relative flex min-h-[52px] items-center gap-3 rounded-[var(--radius-element)] px-3 py-1.5 transition-colors duration-200",
         seekable
           ? "cursor-pointer hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
           : "cursor-default opacity-45",
@@ -383,16 +438,19 @@ const PointRow = memo(function PointRow({
       )}
     >
       <span className="inline-flex shrink-0 basis-[34px] items-center justify-center">
-        <span
-          className={cn(
-            "flex h-[30px] w-[30px] items-center justify-center rounded-[var(--radius-button)] text-[11px] font-medium tracking-[0.3px]",
-            isYou
-              ? "bg-[var(--viz-you)] text-white"
-              : "bg-[var(--surface-subtle)] text-[var(--ink-700)]",
-          )}
-        >
-          {initials}
-        </span>
+        {isYou ? (
+          <WorkspaceMark
+            workspace={workspace}
+            className="size-[30px] rounded-[var(--radius-button)] text-[11px] tracking-[0.3px]"
+          />
+        ) : (
+          <span
+            aria-hidden="true"
+            className="flex h-[30px] w-[30px] items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] text-[11px] font-medium tracking-[0.3px] text-[var(--ink-700)]"
+          >
+            {initials}
+          </span>
+        )}
       </span>
 
       <span className="flex min-w-0 flex-col gap-px">
@@ -406,7 +464,17 @@ const PointRow = memo(function PointRow({
 
       {showPointScore && (
         <span
-          className="text-scoreboard-sm tabular min-w-[52px] text-right"
+          // The room's row (film-point-panel.tsx `PanelRow`): the score slides
+          // 26px left on hover to make room for the bookmark fading in over
+          // the row's right edge — same distance, same 200ms, every row.
+          className={cn(
+            "text-scoreboard-sm tabular inline-block min-w-[52px] text-right transition-transform duration-200 ease-[var(--ease-primary)]",
+            // A saved point's bookmark stays lit, so its score stays aside
+            // for it rather than sliding back under it when the hover ends.
+            point.saved
+              ? "-translate-x-[26px]"
+              : "motion-safe:group-focus-within/row:-translate-x-[26px] motion-safe:group-hover/row:-translate-x-[26px]",
+          )}
           style={{ fontSize: "13px", color: "var(--ink-900)" }}
         >
           {point.pointScore}
@@ -422,7 +490,9 @@ const PointRow = memo(function PointRow({
         aria-label={point.saved ? "Remove bookmark" : "Bookmark this point"}
         aria-pressed={point.saved}
         className={cn(
-          "inline-flex shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-cell)] p-0.5 focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+          "absolute right-3 inline-flex cursor-pointer items-center justify-center rounded-[var(--radius-cell)] p-0.5 transition-opacity duration-200 focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+          // The room's row: the bookmark sits over the row's right edge and
+          // fades in as the score slides aside; a saved point's stays lit.
           point.saved
             ? "opacity-100"
             : "opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100",
@@ -439,16 +509,15 @@ const PointRow = memo(function PointRow({
         />
       </button>
 
+      {/* The playing row's rule, as the room draws it (`PanelRow`): a bare
+          2px blue line growing from the row's left edge across its full
+          width as the point plays — no grey track under it. */}
       {isActive && (
         <span
           aria-hidden="true"
-          className="absolute inset-x-3 bottom-0 h-0.5 overflow-hidden rounded-[1px] bg-[var(--ink-100)]"
-        >
-          <span
-            className="absolute inset-y-0 left-0 rounded-[1px] bg-[var(--blue)]"
-            style={{ width: filmProgressWidth(activeStart, activeEnd) }}
-          />
-        </span>
+          className="absolute bottom-0 left-0 h-0.5 bg-[var(--blue)]"
+          style={{ width: filmProgressWidth(activeStart, activeEnd) }}
+        />
       )}
     </div>
   );
