@@ -49,6 +49,20 @@ the runner must not advance to stage 03.
    corrections, and failed replacements. Avoid in favor of preserving the source
    clock and applying one saved offset consistently to playback.
 
+## Confirmed visual direction
+
+The user requires the same wizard upload flow style used when creating a match
+from a file or video. Use that existing full-page wizard as the visual and
+interaction reference for attaching and replacing video: its layout, step
+navigation, file selection, preview, progress, and action placement. This
+supersedes the earlier provisional dialog direction.
+
+Keep the flow scoped to video attachment and alignment for the existing match;
+do not ask users to enter match details again. Alignment correction should use
+the same alignment-step presentation with the current video already loaded.
+Trace the new-match wizard during the resumed design stage before choosing
+components to reuse; these notes do not claim that reuse has been verified.
+
 ## Provisional interaction and timing direction
 
 - In Film, offer Add video when absent and Replace video / Adjust alignment when
@@ -64,8 +78,9 @@ the runner must not advance to stage 03.
   fit. How to determine the final event's end requires the live timing schema.
 - Keep the old attachment and alignment active until a replacement or correction
   succeeds. Failed or cancelled work must preserve them.
-- Follow the design system's white surfaces, dialog and field vocabulary,
-  accessible controls, and one primary action. Keep upload progress factual.
+- Follow the existing new-match upload wizard's presentation and the design
+  system's white surfaces, field vocabulary, accessible controls, and one primary
+  action per step. Keep upload progress factual.
 - Use the existing near-8 GB ceiling as the proposed initial attachment size
   policy, separate from vendor analysis requirements. Final format support needs
   an explicit playback/normalization decision; an extension allowlist alone does
@@ -83,7 +98,9 @@ the runner must not advance to stage 03.
 Remaining design work: confirm the persistence and permission contracts; define
 safe attachment commit/replacement and cleanup; settle supported codecs and any
 conversion requirement; resolve retention; and write the full architecture,
-components, data flow, error handling, and test cases in `design.md`.
+components, data flow, error handling, and test cases in `design.md`. Trace the
+existing new-match upload wizard and identify the presentation pieces to reuse
+for the user's confirmed visual direction.
 
 ## Also consulted
 
@@ -92,7 +109,8 @@ empty references directory:
 
 - `.claude/skills/trace-route/SKILL.md` — required route-tracing procedure.
 - `.skills/advantage-analytics-design/reference/chrome.md`, Dialog section —
-  dialog geometry, controls, and action grammar.
+  originally consulted for the provisional dialog direction, since superseded
+  by the user's requirement to follow the new-match upload wizard.
 - `src/app/dashboard/matches/(detail)/[matchId]/page.tsx` — Film import and props.
 - `src/app/dashboard/matches/(detail)/[matchId]/layout.tsx` — match-data provider.
 - `src/components/dashboard/matches/match-detail/film/film-tab.tsx` — entry state,
@@ -106,3 +124,5 @@ empty references directory:
   no credentials copied into this artifact.
 - Supabase MCP `get_project_url` — configured project confirmed;
   `execute_sql` and `list_tables` — schema access unavailable (`Insufficient scope`).
+- User design clarification in this conversation — use the same wizard upload
+  flow style as uploading a file/video when creating a match.
