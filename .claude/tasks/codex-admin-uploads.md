@@ -198,7 +198,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T12 · Build the admin upload entry route
 
-- **status:** blocked
+- **status:** done
 - **model:** gpt-5.6-sol
 - **needs:** T3, T8
 - **files:** Best guesses: `src/app/admin/uploads/new/page.tsx`, admin upload shell/components, `MAP.md`.
