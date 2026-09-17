@@ -502,6 +502,25 @@ export function buildKpiHistory(
 }
 
 /**
+ * Whether a second analysed match exists to compare this one against — the
+ * report's Compare button gate (spec decisions #3). `buildKpiHistory` already
+ * excludes the current match from `baseline`, so a non-empty baseline IS "a
+ * second analysed match exists": `history !== null` is the wrong shortcut for
+ * this, since this match's own stat row keeps `getMatchKpiHistory` non-null
+ * even on a player's first-ever analysed match, where there is nothing yet to
+ * compare against.
+ *
+ * Pure, like `buildKpiHistory` above — the caller passes the object that
+ * function (or `getMatchKpiHistory`) already returned rather than this doing
+ * its own fetch.
+ */
+export function hasComparisonBaseline(
+  history: Pick<MatchKpiHistory, "baseline"> | null,
+): boolean {
+  return Object.keys(history?.baseline ?? {}).length > 0;
+}
+
+/**
  * The baseline and series behind one match page's KPI strip.
  *
  * This match enters the row set on the same terms as every other one, because

@@ -107,11 +107,19 @@ export function ChosenCheck({
  * One row. `chosen` draws the check at the right edge; `description` is the
  * second line — use it when the label alone would not tell a coach what
  * they are choosing ("Staff"), and leave it off when it would ("Clay").
+ *
+ * `disabled` is for a row the menu shows but cannot act on yet — pair it with
+ * a `FloatMenuNote` saying so. The row stays a focusable `<button>` with
+ * `aria-disabled` (never the `disabled` attribute), so keyboard and
+ * screen-reader users still find it in the menu and hear that it is
+ * unavailable (ARIA APG: disabled menu items may stay focusable); a click,
+ * Enter or Space does nothing because `onSelect` is never wired to it.
  */
 export function FloatMenuItem({
   label,
   description,
   chosen = false,
+  disabled = false,
   onSelect,
   icon,
   className,
@@ -119,6 +127,8 @@ export function FloatMenuItem({
   label: string;
   description?: string;
   chosen?: boolean;
+  /** Shown, dimmed and inert: `aria-disabled`, no wash, `onSelect` never called. */
+  disabled?: boolean;
   onSelect: () => void;
   /** A 12px leading glyph for action menus, which have no chosen row. */
   icon?: React.ReactNode;
@@ -129,11 +139,21 @@ export function FloatMenuItem({
       type="button"
       role={icon ? "menuitem" : "menuitemradio"}
       aria-checked={icon ? undefined : chosen}
-      onClick={onSelect}
+      aria-disabled={disabled || undefined}
+      onClick={disabled ? undefined : onSelect}
       className={cn(
         "flex cursor-pointer items-start gap-2.5 rounded-[7px] px-2.5 py-[7px] text-left transition-colors duration-100",
         "focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none",
         !chosen && "hover:bg-[var(--surface-subtle)]",
+        // A disabled row takes no wash on hover OR keyboard focus: the wash is
+        // what says "this row acts", and `cn`'s tailwind-merge drops the two
+        // `--surface-subtle` classes above in favour of these later ones.
+        // The system focus ring (`focus.css`, a box-shadow on the button)
+        // still draws, so a keyboard user can see where they are. The dimming
+        // goes on the row's children rather than the button for the same
+        // reason — opacity on the button would fade that ring to 45% with it.
+        disabled &&
+          "cursor-default *:opacity-45 hover:bg-transparent focus-visible:bg-transparent",
         className,
       )}
     >

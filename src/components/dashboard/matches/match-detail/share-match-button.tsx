@@ -1,31 +1,54 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ArrowUpRight, Check, Copy, Link2, Mail } from "lucide-react";
+import {
+  useEffect,
+  useState,
+  type ComponentProps,
+  type ReactElement,
+} from "react";
+import { ArrowUpRight, Check, Copy, Mail, Share2 } from "lucide-react";
+import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import type { Match } from "@/lib/data/types";
 
+type PopoverContentProps = ComponentProps<typeof PopoverContent>;
+
 interface ShareMatchButtonProps {
-  match: Match;
+  /**
+   * The trigger, rendered through `PopoverTrigger asChild`: one element that
+   * spreads the props it is handed — `ref` included, which the popover
+   * positions from — onto its `<button>`. `ShareRailTrigger` is the rail's.
+   */
+  children: ReactElement;
+  side?: PopoverContentProps["side"];
+  align?: PopoverContentProps["align"];
 }
 
+/**
+ * The share popover for the match on the page, around whatever trigger the
+ * surface draws:
+ *
+ *   <ShareMatchButton side="top" align="start">
+ *     <ShareRailTrigger />
+ *   </ShareMatchButton>
+ *
+ * It owns the popover, its panel and the ⌘⇧L / Ctrl+Shift+L shortcut; the
+ * trigger owns only how it looks. The match comes from `MatchDataProvider`, so
+ * this must render under the match detail layout.
+ */
 export function ShareMatchButton({
-  match,
+  children,
+  side = "bottom",
+  align = "end",
 }: ShareMatchButtonProps): React.JSX.Element {
+  const { match } = useMatchData();
   const [open, setOpen] = useState(false);
-  const [isMac, setIsMac] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    const platform =
-      (navigator as Navigator & { userAgentData?: { platform: string } })
-        .userAgentData?.platform ?? navigator.platform;
-    setIsMac(/mac/i.test(platform));
-  }, []);
 
   // Keyboard shortcut: Cmd+Shift+L / Ctrl+Shift+L — opens popover
   useEffect(() => {
@@ -45,32 +68,11 @@ export function ShareMatchButton({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label="Share match"
-          aria-keyshortcuts={isMac ? "Meta+Shift+L" : "Control+Shift+L"}
-          className={cn(
-            "flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-[6px] pr-4 pl-3.5 text-white",
-            "bg-[#3B82F6] hover:bg-[#2563EB] active:bg-[#2563EB] data-[state=open]:bg-[#2563EB]",
-            "text-[13px] font-medium tracking-[0.5px]",
-            "shadow-[0_1px_3px_rgba(57,134,243,0.25)]",
-            "transition-[color,background-color,transform] duration-200 ease-out active:scale-[0.97]",
-            "focus-visible:outline-none",
-          )}
-        >
-          <Link2 className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-          Share Match
-          {isMac !== null && (
-            <kbd className="ml-1 inline-block rounded bg-white/20 px-1 py-0.5 text-[10px] leading-none font-medium text-white">
-              {isMac ? "⌘⇧L" : "Ctrl+Shift+L"}
-            </kbd>
-          )}
-        </button>
-      </PopoverTrigger>
+      <PopoverTrigger asChild>{children}</PopoverTrigger>
 
       <PopoverContent
-        align="end"
+        side={side}
+        align={align}
         sideOffset={8}
         className={cn(
           // Override base popover styling to match design system Dropdown / Menu spec
@@ -81,6 +83,58 @@ export function ShareMatchButton({
         <SharePopoverPanel match={match} onClose={() => setOpen(false)} />
       </PopoverContent>
     </Popover>
+  );
+}
+
+/**
+ * Whether to name the shortcut with ⌘ rather than Ctrl. `useState`'s lazy
+ * initialiser, so it runs once per mount, during render, with no effect and
+ * no second render.
+ *
+ * The `typeof navigator` guard is the only one, on purpose. Node 21+ has a
+ * `navigator` global whose `platform` names the SERVER's OS ("MacIntel",
+ * "Linux x86_64"), so this runs on both sides of hydration and they agree
+ * whenever server and browser share an OS family — as they do when `next dev`
+ * and the browser run on one machine, the only place a mismatch logs.
+ * Guarding on `typeof window` as well would make the server always say "no"
+ * and every Mac hydration disagree. Where they genuinely differ — a Linux server rendering
+ * for a Mac browser — React 19 keeps the server's attribute (it never patches
+ * attribute mismatches, and production does not compare them), so the button
+ * announces Control+Shift+L; the listener above accepts Ctrl as well as ⌘ on
+ * every platform, so that is still a shortcut that works, never a false one.
+ * An environment with no `navigator` at all lands on the same Ctrl spelling.
+ */
+function detectIsMac(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const platform =
+    (navigator as Navigator & { userAgentData?: { platform: string } })
+      .userAgentData?.platform ?? navigator.platform;
+  return /mac/i.test(platform);
+}
+
+/**
+ * The rail footer's Share button (design 04 F1): full width, the DS primary at
+ * 36px, `Share2` and "Share". Pass it as `ShareMatchButton`'s child — Radix
+ * hands it `onClick`, the popover ARIA and a `ref`, and it spreads all of them
+ * onto the `<button>` (React 19 passes `ref` as a plain prop; no
+ * `forwardRef`). Focus is `advButton()`'s own ring, so none is written here.
+ */
+export function ShareRailTrigger({
+  className,
+  ...props
+}: Omit<ComponentProps<"button">, "children">): React.JSX.Element {
+  const [isMac] = useState(detectIsMac);
+
+  return (
+    <button
+      type="button"
+      aria-keyshortcuts={isMac ? "Meta+Shift+L" : "Control+Shift+L"}
+      {...props}
+      className={cn(advButton("primary", "md"), "w-full gap-[7px]", className)}
+    >
+      <Share2 className="size-[15px]" strokeWidth={1.7} aria-hidden="true" />
+      Share
+    </button>
   );
 }
 
