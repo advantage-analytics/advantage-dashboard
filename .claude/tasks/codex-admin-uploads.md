@@ -187,7 +187,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T11 · Save tournament results through the retry contract
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-6-astra
 - **needs:** T10
 - **files:** Best guesses: admin tournament submission service/actions and tests.

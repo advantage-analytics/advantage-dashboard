@@ -40,3 +40,44 @@ export type AdminDualSubmissionResult =
       eventId: string;
       items: AdminResultItemOutcome[];
     };
+
+/** One singles athlete and one canonical tournament round per operation. */
+export interface AdminTournamentSubmissionInput {
+  operationId: string;
+  itemId: string;
+  programId: string;
+  event:
+    | { kind: "existing"; eventId: string; fingerprint: string }
+    | {
+        kind: "new";
+        tournament: Omit<
+          import("@/lib/schedule/write-types").CreateTournamentInput,
+          "entries"
+        >;
+      };
+  entry:
+    | {
+        kind: "existing";
+        entryId: string;
+        playerId: string;
+        fingerprint: string;
+      }
+    | {
+        kind: "new";
+        playerId: string;
+        playerLabel: string;
+        draw: string | null;
+        seed: number | null;
+      };
+  round: string;
+  result: AdminLineResult;
+}
+export type AdminTournamentSubmissionResult =
+  | { ok: false; message: string }
+  | {
+      ok: true;
+      operationId: string;
+      eventId: string;
+      entryId: string;
+      item: Omit<AdminResultItemOutcome, "slot"> & { round: string };
+    };

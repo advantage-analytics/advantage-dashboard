@@ -26,6 +26,7 @@ const SERVER_ONLY = [
   "lib/user/roles.ts",
   "lib/schedule/writes-server.ts",
   "lib/services/programs/admin-dual-submission.ts",
+  "lib/services/programs/admin-tournament-submission.ts",
 ].map((p) => join(SRC, p));
 
 const EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];

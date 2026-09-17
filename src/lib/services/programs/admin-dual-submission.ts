@@ -33,7 +33,10 @@ const ties = (v: unknown): v is (number | null)[] =>
   Array.isArray(v) &&
   v.length <= 5 &&
   v.every((n) => n === null || (Number.isInteger(n) && n >= 0 && n <= 999));
-function resultValid(value: unknown, slot: string): value is AdminLineResult {
+export function validateAdminLineResult(
+  value: unknown,
+  slot: string,
+): value is AdminLineResult {
   if (!object(value)) return false;
   if (value.kind === "outcome")
     return (
@@ -92,7 +95,7 @@ export function validateAdminDualSubmission(value: unknown): string | null {
       !(DUAL_SLOTS as readonly string[]).includes(String(item.slot)) ||
       ids.has(String(item.itemId).toLowerCase()) ||
       slots.has(String(item.slot)) ||
-      !resultValid(item.result, String(item.slot))
+      !validateAdminLineResult(item.result, String(item.slot))
     )
       return "Every result needs a unique item ID and court, valid scores or a complete outcome.";
     ids.add(String(item.itemId).toLowerCase());
