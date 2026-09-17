@@ -21,7 +21,13 @@ import { FilmUnavailableState } from "./film-unavailable-state";
 import { FilmPlayer, type FilmPlayerHandle } from "./film-player";
 import { PointList } from "./point-list";
 import { scoreColumns } from "./film-score";
-import { activeStopAt } from "./film-timeline";
+import {
+  activeShotAt,
+  shotStops as buildShotStops,
+  type ShotStop,
+} from "./film-shots";
+import { FilmThisPoint } from "./film-this-point";
+import { activeStopAt, filmStops } from "./film-timeline";
 import { useAttachmentPlayback } from "./use-attachment-playback";
 import {
   DEFAULT_FILM_FILTERS,
@@ -193,7 +199,7 @@ function FilmRoom({
       // The controller IS the external system this effect subscribes to, and
       // this is its update arriving — not a render cascading into itself. It
       // runs once per installed credential, never per frame.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+
       setCurrentTime(resume.filmTime);
     }
     resumeApplied();
@@ -221,6 +227,46 @@ function FilmRoom({
     () => activeStopAt(stops, currentTime),
     [stops, currentTime],
   );
+
+  // "This point": the point under the playhead, its shots on the film clock
+  // and the stroke being played. Shots are built from ALL points, like the
+  // stops, so the card follows the film whether or not the cut admits it.
+  //
+  // The clock comes from the HOOK, not from `video.startTimeSeconds`. On an
+  // attachment-backed match the controller owns it, and a corrected alignment
+  // moves it — building shots off the server's original value would leave
+  // every shot marker where the old alignment put it while the point stops
+  // beside them moved, which reads as the shot data being wrong.
+  const allShotStops = useMemo(
+    () => buildShotStops(stops, clock),
+    [stops, clock],
+  );
+  const activeShot = useMemo(
+    () => activeShotAt(allShotStops, currentTime),
+    [allShotStops, currentTime],
+  );
+  const activePoint = active?.stop.point ?? null;
+  const activeIsYou = activePoint
+    ? (activePoint.player === "player1") === youIsPlayer1
+    : true;
+  const pointShots = useMemo(
+    () =>
+      activePoint
+        ? allShotStops.filter((s) => s.point.id === activePoint.id)
+        : [],
+    [allShotStops, activePoint],
+  );
+
+  const handleSelectShot = useCallback((stop: ShotStop) => {
+    playerRef.current?.seekTo(stop.start);
+  }, []);
+
+  // "Point n / N" over the applied cut — the sequence prev/next walk.
+  const position = useMemo(() => {
+    if (!activePoint) return null;
+    const index = walkStops.findIndex((s) => s.point.id === activePoint.id);
+    return index === -1 ? null : { index: index + 1, total: walkStops.length };
+  }, [walkStops, activePoint]);
 
   const handleSelect = useCallback(
     (point: MatchPoint) => {
@@ -273,6 +319,73 @@ function FilmRoom({
     [supabase],
   );
 
+  const activePointId = activePoint?.id ?? null;
+  const toggleSavedActive = useCallback(() => {
+    if (activePointId) void handleToggleSaved(activePointId);
+  }, [activePointId, handleToggleSaved]);
+
+  /**
+   * The room's keys, on the page while this view is open: ← → step points,
+   * ↑ ↓ move 5 seconds, space plays and pauses, S saves the point on screen.
+   * Off while the room is open (it has its own), while something is typing
+   * (an input, a textarea, anything editable), while a dialog or popover is
+   * open (the filters panel wants its own arrows), on a button under space,
+   * and on any
+   * key with a modifier, which is the browser's.
+   */
+  const roomOpen = room !== null;
+  useEffect(() => {
+    if (roomOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.closest(
+          "input, textarea, select, [contenteditable], [role=dialog], [data-radix-popper-content-wrapper]",
+        )
+      ) {
+        return;
+      }
+      if (
+        document.querySelector(
+          "[role=dialog][data-state=open], [data-radix-popper-content-wrapper]",
+        )
+      ) {
+        return;
+      }
+      switch (e.key) {
+        case " ":
+          if (target?.closest("button, [role=button], [role=slider]")) return;
+          e.preventDefault();
+          playerRef.current?.togglePlay();
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          playerRef.current?.step(1);
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          playerRef.current?.step(-1);
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          playerRef.current?.seekBy(5);
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          playerRef.current?.seekBy(-5);
+          break;
+        case "s":
+        case "S":
+          e.preventDefault();
+          toggleSavedActive();
+          break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [roomOpen, toggleSavedActive]);
+
   const enterRoom = useCallback(() => {
     const snapshot = playerRef.current?.snapshot() ?? {
       time: currentTime,
@@ -294,48 +407,87 @@ function FilmRoom({
   );
 
   return (
-    <div ref={clockRef} className="flex flex-col gap-4">
-      {/* Above the player and right-aligned: maintenance for the person who
-          owns the file, out of the way of the person watching. Renders
-          nothing at all for everyone else. */}
-      <FilmEntryActions matchId={match.id} entry={entry} />
+    // Design canvas "Video B4": the player on the left with "This point"
+    // under it, the point list beside them in a fixed 320px column (the
+    // room's own panel width) running the pane's full height, so finding a
+    // point, watching it and reading its shots happen side by side. The view
+    // takes the pane's height (`min-h-0 flex-1`, handed down by `When
+    // scrollsInside`); the list column is a stretched flex item with no
+    // content height of its own — its card is absolutely positioned inside
+    // it — so it inherits that height and its rows scroll within the card.
+    // Under 720px of pane (the `@container` breakpoint `statistics-view.tsx`
+    // stacks at) the columns stack and the list takes what is left.
+    <div
+      ref={clockRef}
+      className="flex min-h-0 flex-1 flex-col gap-4 @min-[720px]:flex-row"
+    >
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+        {/* Above the player and right-aligned: maintenance for the person who
+            owns the file, out of the way of the person watching. Renders
+            nothing at all for everyone else. */}
+        <FilmEntryActions matchId={match.id} entry={entry} />
 
-      <FilmPlayer
-        ref={playerRef}
-        clockTargetRef={clockRef}
-        url={playback.url}
-        generation={generation}
-        resume={resume}
-        problem={playback.problem}
-        passthrough={playback.passthrough}
-        // While the room is up it is the surface being watched: this player
-        // keeps its playhead through a refresh but stays silent, and the room
-        // is what reports to the hook.
-        background={room !== null}
-        stops={walkStops}
-        onTimeChange={setCurrentTime}
-        onPlaybackTime={reportTime}
-        onPlaybackPlaying={reportPlaying}
-        onLoadFailure={reportLoadFailure}
-        onPlayRejected={reportPlayRejected}
-        onRetry={retry}
-        onEnterFullscreen={enterRoom}
-      />
+        <FilmPlayer
+          ref={playerRef}
+          clockTargetRef={clockRef}
+          url={playback.url}
+          generation={generation}
+          resume={resume}
+          problem={playback.problem}
+          passthrough={playback.passthrough}
+          // While the room is up it is the surface being watched: this player
+          // keeps its playhead through a refresh but stays silent, and the room
+          // is what reports to the hook.
+          background={room !== null}
+          stops={walkStops}
+          allStops={stops}
+          saved={activePoint ? activePoint.saved : null}
+          onTimeChange={setCurrentTime}
+          onPlaybackTime={reportTime}
+          onPlaybackPlaying={reportPlaying}
+          onLoadFailure={reportLoadFailure}
+          onPlayRejected={reportPlayRejected}
+          onRetry={retry}
+          onToggleSaved={toggleSavedActive}
+          onEnterFullscreen={enterRoom}
+        />
+        <FilmThisPoint
+          point={activePoint}
+          isYou={activeIsYou}
+          initials={activeIsYou ? sides.you.initials : sides.opp.initials}
+          showPointScore={columns.hasPointScore}
+          activeStart={active?.stop.start ?? 0}
+          activeEnd={active?.stop.end ?? 0}
+          shots={pointShots}
+          position={position}
+          activeShotId={activeShot?.stop.shot.id ?? null}
+          onSelectPoint={handleSelect}
+          onToggleSaved={handleToggleSaved}
+          onSelectShot={handleSelectShot}
+          onOpenRoom={enterRoom}
+        />
+      </div>
 
-      <PointList
-        allPoints={points}
-        visiblePoints={visiblePoints}
-        filteredCount={filteredPoints.length}
-        filters={filters}
-        onFiltersChange={setFilters}
-        tab={tab}
-        onTabChange={setTab}
-        activePointId={active?.stop.point.id ?? null}
-        activeStart={active?.stop.start ?? 0}
-        activeEnd={active?.stop.end ?? 0}
-        onSelect={handleSelect}
-        onToggleSaved={handleToggleSaved}
-      />
+      <div className="relative flex min-h-0 w-full shrink-0 flex-col @min-[720px]:w-[320px] @min-[720px]:self-stretch">
+        {/* Side by side this box is out of flow, so the column contributes
+            no height and inherits the row's (see the note on the row). */}
+        <div className="flex min-h-0 flex-1 flex-col @min-[720px]:absolute @min-[720px]:inset-0">
+          <PointList
+            allPoints={points}
+            visiblePoints={visiblePoints}
+            filteredCount={filteredPoints.length}
+            filters={filters}
+            onFiltersChange={setFilters}
+            tab={tab}
+            onTabChange={setTab}
+            activePointId={active?.stop.point.id ?? null}
+            activeStart={active?.stop.start ?? 0}
+            activeEnd={active?.stop.end ?? 0}
+            onSelect={handleSelect}
+            onToggleSaved={handleToggleSaved}
+          />
+        </div>
+      </div>
 
       {room && (
         <FilmFullscreen
