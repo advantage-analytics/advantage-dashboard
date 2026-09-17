@@ -130,3 +130,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** Mechanical verdict unavailable after interrupted session: process 56049 no longer exists and no GATE PASS was received. Fail-closed per task-next; completion review not run. Focused lint/typecheck and 9 history tests passed, and browser fixture verified six columns, canonical analysis labels, partial details, cursor navigation and empty/error/loading states. These do not replace the full gate.
 
 **changed:** Work preserved in stash 5c3927aedc0a6fb401407de13afec76b59ed344f: admin history page, six-column component and loading route. No implementation failure established; recovery requires fresh mechanical gate then completion review. T17 remains independently eligible; T19 waits on T16 and T17.
+
+## T16 · Render console submission history — done
+
+**gate:** Mechanical GATE PASS, preserved in /private/tmp/t16-retry-gate.log; completion review VERDICT: pass. Pipeline guardrails skipped: no dashboard/wizard edits. RLS boundary skipped: no data-layer/API/schema or new query changes; uses existing guarded history loader. Prior 9 focused tests and actual-component browser checks verified columns, authorized links, partial/analysis states, cursor navigation and empty/error/loading behavior.
+
+**changed:** Restored history implementation after interrupted gate and verified it without code changes: six-column console history, Upload for a team action, cursor pagination, expandable item details and session-authorized match links, canonical analysis states and partial-save counts, recoverable error/empty/loading states. Prior stash retained. No live writes, deployment, push or merge. T17 is next eligible.

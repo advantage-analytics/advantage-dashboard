@@ -245,7 +245,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T16 · Render console submission history
 
-- **status:** blocked
+- **status:** done
 - **model:** gpt-5.6-sol
 - **needs:** T12, T15
 - **files:** Best guesses: `src/app/admin/uploads/page.tsx`, admin history table/content components.
