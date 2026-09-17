@@ -256,7 +256,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T17 · Add the team upload shortcut
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-5.6-terra
 - **needs:** T12
 - **files:** Best guesses: admin team page and its header component.

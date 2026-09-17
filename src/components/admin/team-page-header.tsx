@@ -1,7 +1,11 @@
+import Link from "next/link";
+
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import { StatePill } from "@/components/ui/state-pill";
 import { PilotPill, ApprovePill } from "@/components/admin/plan-pills";
+import { adminUploadHref } from "@/components/admin/admin-upload-selection";
 import { programSubtitle } from "@/lib/data/programs-server";
+import { advButton } from "@/lib/ui/adv-button";
 import type {
   AdminTeamClaim,
   AdminTeamProgram,
@@ -61,22 +65,36 @@ export function TeamPageHeader({
     .join(" · ");
 
   return (
-    <div className="flex items-start gap-4 pb-6">
-      <ProgramCrest name={program.name} crestUrl={program.crestUrl} size={52} />
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-display truncate">{program.name}</h1>
-          <StatePill>{programStatusLabel(program.status)}</StatePill>
-          {plan === "pilot" ? (
-            <PilotPill />
-          ) : plan === "approve" ? (
-            <ApprovePill />
+    <div className="flex flex-wrap items-start gap-4 pb-6">
+      <div className="flex min-w-0 flex-1 items-start gap-4">
+        <ProgramCrest
+          name={program.name}
+          crestUrl={program.crestUrl}
+          size={52}
+        />
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-display truncate">{program.name}</h1>
+            <StatePill>{programStatusLabel(program.status)}</StatePill>
+            {plan === "pilot" ? (
+              <PilotPill />
+            ) : plan === "approve" ? (
+              <ApprovePill />
+            ) : null}
+          </div>
+          {facts ? (
+            <p className="truncate text-[12px] text-[var(--ink-600)]">
+              {facts}
+            </p>
           ) : null}
         </div>
-        {facts ? (
-          <p className="truncate text-[12px] text-[var(--ink-600)]">{facts}</p>
-        ) : null}
       </div>
+      <Link
+        href={adminUploadHref(program.id, null)}
+        className={advButton("primary", "md")}
+      >
+        Upload for this team
+      </Link>
     </div>
   );
 }

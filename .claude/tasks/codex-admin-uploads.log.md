@@ -136,3 +136,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** Mechanical GATE PASS, preserved in /private/tmp/t16-retry-gate.log; completion review VERDICT: pass. Pipeline guardrails skipped: no dashboard/wizard edits. RLS boundary skipped: no data-layer/API/schema or new query changes; uses existing guarded history loader. Prior 9 focused tests and actual-component browser checks verified columns, authorized links, partial/analysis states, cursor navigation and empty/error/loading behavior.
 
 **changed:** Restored history implementation after interrupted gate and verified it without code changes: six-column console history, Upload for a team action, cursor pagination, expandable item details and session-authorized match links, canonical analysis states and partial-save counts, recoverable error/empty/loading states. Prior stash retained. No live writes, deployment, push or merge. T17 is next eligible.
+
+## T17 · Add the team upload shortcut — done
+
+**gate:** Mechanical GATE PASS (/private/tmp/t17-gate.log); completion review VERDICT: pass. Focused formatting, ESLint and typecheck passed.
+
+**changed:** Added Upload for this team in the admin team header using the existing primary button primitive and adminUploadHref(program.id, null). Preserved crest, heading, status/plan pills and facts with a wrapping action layout. No other source changes or live effects. T19 is now eligible for integrated flow and desktop verification.
