@@ -94,7 +94,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T3 · Resolve a guarded admin team workspace
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-6-astra
 - **needs:** T1
 - **files:** Best guesses: `src/lib/data/admin-upload-server.ts`, workspace helpers and tests.
