@@ -175,7 +175,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T10 · Save dual results with durable retries
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-6-astra
 - **needs:** T2, T3, T9
 - **files:** Best guesses: admin result actions/services, verified RPC migration, retry tests.

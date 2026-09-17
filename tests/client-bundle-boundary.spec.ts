@@ -25,6 +25,7 @@ const SERVER_ONLY = [
   "lib/supabase/server.ts",
   "lib/user/roles.ts",
   "lib/schedule/writes-server.ts",
+  "lib/services/programs/admin-dual-submission.ts",
 ].map((p) => join(SRC, p));
 
 const EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];
