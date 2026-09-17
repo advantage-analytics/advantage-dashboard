@@ -152,7 +152,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T8 · Add the shared wizard’s admin variant
 
-- **status:** todo
+- **status:** blocked
 - **model:** gpt-5.6-sol
 - **needs:** T4, T6, T7
 - **files:** Best guesses: `UploadMatchFlow.tsx`, wizard provider/footer, `useUploadMatchWizard.ts`.
