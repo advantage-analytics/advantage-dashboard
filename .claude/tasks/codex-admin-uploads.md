@@ -105,7 +105,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T4 · Add explicit program scope to wizard lookups
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-6-astra
 - **needs:** T3
 - **files:** Best guesses: `src/lib/wizard/actions.ts`, scoped workspace resolver, action tests.
