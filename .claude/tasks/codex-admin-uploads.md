@@ -116,7 +116,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T5 · Prepare analysis attachments without rewriting results
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-6-astra
 - **needs:** T2, T3
 - **files:** Best guesses: `src/lib/data/add-video-server.ts`, admin attachment service, scoped RPC and tests.
