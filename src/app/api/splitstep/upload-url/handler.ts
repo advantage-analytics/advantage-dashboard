@@ -36,6 +36,8 @@ import {
   type Workspace,
 } from "@/lib/workspace/types";
 
+import type { AdminVideoAuthorization } from "@/lib/services/programs/admin-video-access";
+
 const LOG = "[splitstep-upload-url]";
 
 /** The columns of `matches` this decision reads. */
@@ -54,6 +56,10 @@ export interface UploadUrlMatch {
 }
 
 export interface UploadUrlDeps {
+  authorizeAdminVideo?(
+    userId: string,
+    matchId: string,
+  ): Promise<AdminVideoAuthorization | null>;
   /** The signed-in login, or null. */
   currentUserId(): Promise<string | null>;
   /**
@@ -82,6 +88,7 @@ export interface UploadUrlDeps {
   recordBlobName(
     matchId: string,
     blobName: string,
+    adminJobId?: string,
   ): Promise<{ error: string | null }>;
 }
 
@@ -145,7 +152,22 @@ export async function handleUploadUrl(
 
   // Same 404 for missing and not-yours: telling an unauthorized caller that a
   // match id exists is itself a disclosure.
-  if (!match || match.created_by !== userId) {
+  let adminVideo: AdminVideoAuthorization | null = null;
+  try {
+    adminVideo = (await deps.authorizeAdminVideo?.(userId, matchId)) ?? null;
+  } catch {
+    return NextResponse.json(
+      { error: "No such video operation" },
+      { status: 403 },
+    );
+  }
+  if (
+    !match ||
+    (match.created_by !== userId && !adminVideo) ||
+    (adminVideo &&
+      (adminVideo.matchId !== match.id ||
+        adminVideo.programId !== match.program_id))
+  ) {
     return NextResponse.json({ error: "No such match" }, { status: 404 });
   }
 
@@ -169,10 +191,12 @@ export async function handleUploadUrl(
   // above proves the caller created this match; it does not prove the budget it
   // bills is open to them, which is a different question with three answers:
   // the program's claim state and the two upload switches.
-  const billingWorkspace = billingWorkspaceFor(
-    await deps.availableWorkspaces(),
-    match.program_id, // NULL = personal upload
-  );
+  const billingWorkspace =
+    adminVideo?.workspace ??
+    billingWorkspaceFor(
+      await deps.availableWorkspaces(),
+      match.program_id, // NULL = personal upload
+    );
 
   if (!billingWorkspace) {
     return NextResponse.json(
@@ -197,9 +221,10 @@ export async function handleUploadUrl(
   // even in principle — the two layers hold disjoint jurisdictions, and this
   // one owns the credential. See the same note in `jobs/handler.ts`.
   const roster =
-    billingWorkspace.kind === "team"
+    adminVideo?.roster ??
+    (billingWorkspace.kind === "team"
       ? await deps.loadRoster(billingWorkspace.id)
-      : undefined;
+      : undefined);
 
   const eligibility = uploadEligibility({
     workspace: billingWorkspace,
@@ -293,7 +318,18 @@ export async function handleUploadUrl(
   // Keyed on match_id to match the wizard's other writes: the insert never
   // selects the row id back. Deliberately does not touch `status` — the browser
   // owns that transition.
-  const { error: recordError } = await deps.recordBlobName(matchId, blobName);
+  const { error: recordError } = await deps.recordBlobName(
+    matchId,
+    blobName,
+    adminVideo?.jobId,
+  );
+
+  if (recordError && adminVideo) {
+    return NextResponse.json(
+      { error: "Could not reserve the video upload" },
+      { status: 409 },
+    );
+  }
 
   if (recordError) {
     // Not fatal. A blob we cannot name is recoverable via the sweeper; refusing

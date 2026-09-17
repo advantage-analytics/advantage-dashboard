@@ -16,6 +16,7 @@
  * so the refusal ladder can be tested without a database and without signing.
  */
 
+import { authorizeAdminVideo } from "@/lib/services/programs/admin-video-access";
 import { type NextRequest } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
@@ -43,6 +44,15 @@ export async function POST(request: NextRequest) {
   let userId: string | null = null;
 
   const deps: UploadUrlDeps = {
+    authorizeAdminVideo(actorId, matchId) {
+      return authorizeAdminVideo(
+        adminClient(),
+        actorId,
+        matchId,
+        null,
+        "upload",
+      );
+    },
     async currentUserId() {
       const {
         data: { user },
@@ -85,7 +95,17 @@ export async function POST(request: NextRequest) {
 
     mintUploadSas,
 
-    async recordBlobName(matchId, blobName) {
+    async recordBlobName(matchId, blobName, adminJobId) {
+      if (adminJobId) {
+        const { error } = await adminClient().rpc("admin_video_access", {
+          p_actor_id: userId,
+          p_match_id: matchId,
+          p_job_id: adminJobId,
+          p_action: "blob",
+          p_blob_name: blobName,
+        });
+        return { error: error?.message ?? null };
+      }
       const { error } = await adminClient()
         .from("processing_jobs")
         .update({ video_object_key: blobName })

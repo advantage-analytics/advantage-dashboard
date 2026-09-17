@@ -492,3 +492,44 @@ test("athleteOnRow: team rows name whoever the row names — the viewer's own lo
     playerId: VIEWER,
   });
 });
+
+for (const member of [false, true]) {
+  test(`verified ${member ? "member" : "non-member"} admin attachment uploads to its exact job`, async () => {
+    const h = harness({
+      match: match({ created_by: OTHER_USER }),
+      workspaces: member ? [team()] : [personal()],
+    });
+    h.deps.authorizeAdminVideo = async () => ({
+      jobId: "admin-job",
+      matchId: "m-1",
+      programId: PROGRAM,
+      workspace: team({ role: "owner" }),
+      roster: ROSTER,
+    });
+    const writes: unknown[] = [];
+    h.deps.recordBlobName = async (...args) => {
+      writes.push(args);
+      return { error: null };
+    };
+    expect((await call(h)).status).toBe(200);
+    expect(writes).toEqual([["m-1", expect.any(String), "admin-job"]]);
+    expect(h.rosterReads).toEqual([]);
+  });
+}
+
+test("console upload discovery refuses revoked admin and wrong-program authorization", async () => {
+  const denied = harness({});
+  denied.deps.authorizeAdminVideo = async () => {
+    throw new Error("revoked");
+  };
+  expectDenied(denied, 403, await call(denied));
+  const wrong = harness({});
+  wrong.deps.authorizeAdminVideo = async () => ({
+    jobId: "j",
+    matchId: "m-1",
+    programId: OTHER_PROGRAM,
+    workspace: team({ id: OTHER_PROGRAM }),
+    roster: ROSTER,
+  });
+  expectDenied(wrong, 404, await call(wrong));
+});

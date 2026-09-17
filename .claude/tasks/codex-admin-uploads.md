@@ -140,7 +140,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T7 · Authorize admin video submission and program billing
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-6-astra
 - **needs:** T5
 - **files:** Best guesses: video upload-URL and jobs handlers/routes, submission service, authorization tests.
