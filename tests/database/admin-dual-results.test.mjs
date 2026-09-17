@@ -1,62 +1,9 @@
+import { dualRequest as request } from "./fixtures/admin-result-requests.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { id, setup as setupBase } from "./fixtures/admin-schedule-harness.mjs";
 const setup = () =>
   setupBase(["20260917032144_save_admin_tournament_results.sql"]);
-function request(op = 100) {
-  const lines = Array.from({ length: 9 }, (_, n) => {
-    const doubles = n >= 6;
-    const indexes = doubles ? [(n - 6) * 2, (n - 6) * 2 + 1] : [n];
-    return {
-      slot: doubles ? `D${n - 5}` : `S${n + 1}`,
-      discipline: doubles ? "doubles" : "singles",
-      position: n,
-      playerUserIds: indexes.map((i) => id(20 + i)),
-      playerLabels: indexes.map((i) => `Player${i + 1} Athlete`),
-      opponentLabels: indexes.map((i) => `Opponent${i + 1}`),
-    };
-  });
-  return {
-    operationId: id(op),
-    programId: id(10),
-    event: {
-      kind: "new",
-      dual: {
-        opponent: "Other",
-        opponentProgramKey: "other",
-        date: "2026-09-15",
-        startsAtTime: null,
-        site: "home",
-        surface: "Hard",
-        bestOf: 3,
-        adScoring: null,
-        doublesGamesTo: 8,
-        doublesAdScoring: false,
-        lines,
-      },
-    },
-    items: [
-      {
-        itemId: id(op + 1),
-        slot: "S1",
-        result: {
-          kind: "score",
-          ourGames: [6, 7],
-          theirGames: [4, 6],
-          ourTiebreaks: [null, 7],
-          theirTiebreaks: [null, 4],
-          opponentLabels: ["Opponent1"],
-          ending: null,
-        },
-      },
-      {
-        itemId: id(op + 2),
-        slot: "S2",
-        result: { kind: "outcome", outcome: "default", side: "theirs" },
-      },
-    ],
-  };
-}
 const rejects = (fn, text) =>
   assert.rejects(fn, (e) => e.message.includes(text));
 test("dual setup validates everything before writes and replays exact actor-owned setup", async () => {

@@ -1,46 +1,10 @@
+import { tournamentRequest as request } from "./fixtures/admin-result-requests.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { id, setup } from "./fixtures/admin-schedule-harness.mjs";
 const migration = "20260917032144_save_admin_tournament_results.sql";
 const reject = (fn, message) =>
   assert.rejects(fn, (e) => e.message.includes(message));
-function request(op = 100) {
-  return {
-    operationId: id(op),
-    itemId: id(op + 1),
-    programId: id(10),
-    event: {
-      kind: "new",
-      tournament: {
-        name: "Invitational",
-        startsOn: "2026-09-15",
-        endsOn: "2026-09-20",
-        site: "away",
-        surface: "Hard",
-        host: "Host",
-        bestOf: 3,
-        adScoring: false,
-      },
-    },
-    entry: {
-      kind: "new",
-      playerId: id(20),
-      playerLabel: "Player1 Athlete",
-      draw: "Main",
-      seed: 2,
-    },
-    round: "R16",
-    result: {
-      kind: "score",
-      ourGames: [6, 7],
-      theirGames: [4, 6],
-      ourTiebreaks: [null, 7],
-      theirTiebreaks: [null, 5],
-      opponentLabels: ["Opponent"],
-      ending: null,
-    },
-  };
-}
 async function harness() {
   const h = await setup([migration]);
   return {

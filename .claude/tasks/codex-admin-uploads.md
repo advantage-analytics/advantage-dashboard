@@ -267,7 +267,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T18 · Verify authorization and retry concurrency
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-6-astra
 - **needs:** T6, T7, T10, T11, T15
 - **files:** Best guesses: admin authorization/retry specs and focused service corrections.

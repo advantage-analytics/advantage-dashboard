@@ -20,7 +20,8 @@
     "test:parser": "playwright test tests/swingvision-parser.spec.ts",
     "test:report": "playwright show-report",
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks && git config blame.ignoreRevsFile .git-blame-ignore-revs || true",
-    "test:database": "node --test tests/database/*.test.mjs"
+    "test:database": "node --test tests/database/*.test.mjs",
+    "test:database:postgres": "node --test --test-concurrency=1 tests/database/postgres/*.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.85.0",
@@ -70,6 +71,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.2.12",
     "eslint-config-prettier": "10.1.8",
+    "pg": "^8.16.3",
     "prettier": "3.9.6",
     "prettier-plugin-tailwindcss": "0.8.1",
     "tailwindcss": "^4.2.2",

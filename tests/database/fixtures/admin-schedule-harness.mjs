@@ -3,8 +3,7 @@ import { PGlite } from "@electric-sql/pglite";
 export const id = (n) =>
   `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const migration = "20260917025856_save_admin_dual_results.sql";
-export async function setup(extraMigrations = []) {
-  const db = new PGlite();
+export async function setup(extraMigrations = [], db = new PGlite()) {
   await db.exec(`
  create role anon; create role authenticated; create role service_role;
  create schema auth; create schema schedule_private;
