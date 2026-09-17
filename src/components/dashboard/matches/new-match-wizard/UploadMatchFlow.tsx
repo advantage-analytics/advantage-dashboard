@@ -15,6 +15,8 @@
  * about how the state behind it is managed.
  */
 
+import { AdminFileSubmissionStatus } from "./AdminFileSubmissionStatus";
+import { useAdminWizardMode } from "./admin-mode";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderId } from "@/lib/services/upload";
 import type { EventPreset, MatchDraft } from "./types";
@@ -71,6 +73,7 @@ export function UploadMatchFlow({
   /** A roster player named by the link that opened the wizard — see the hook. */
   initialSubject?: RosterSubject | null;
 } = {}) {
+  const admin = useAdminWizardMode();
   // The line this flow is filling. State rather than the prop because the
   // pinned bar's Change menu swaps it for another line of the same event
   // (design 10a) without leaving the page — the file already dropped stays.
@@ -79,7 +82,7 @@ export function UploadMatchFlow({
   );
   // A team upload came from a line and goes back to it. A personal one has the
   // matches list, which is where its match will appear.
-  const EXIT_HREF = preset?.eventHref ?? PERSONAL_EXIT_HREF;
+  const EXIT_HREF = admin?.exitHref ?? preset?.eventHref ?? PERSONAL_EXIT_HREF;
   const [created, setCreated] = useState<CreatedMatch | null>(null);
   // Read by the failure listener below, which is registered once. Set where
   // `created` is, rather than mirrored from it by an effect.
@@ -153,6 +156,28 @@ export function UploadMatchFlow({
     return () => window.removeEventListener("match-upload-failed", onFailure);
   }, []);
 
+  if (created && admin) {
+    const upload = uploads.get(created.matchId);
+    return (
+      <div className="mx-auto max-w-[640px] py-10">
+        <h1 className="text-display">Video submission</h1>
+        <p role="status" className="mt-6">
+          {upload?.error ??
+            (upload?.phase === "submitted"
+              ? "Video submitted. Analysis is pending."
+              : upload?.phase === "failed" || upload?.phase === "submit_failed"
+                ? "Administrator review is required before another attempt."
+                : "The reserved video is uploading. Keep this page open.")}
+        </p>
+        <a
+          href={admin.successHref}
+          className="mt-6 inline-block text-[var(--blue)]"
+        >
+          Return to uploads
+        </a>
+      </div>
+    );
+  }
   if (created) {
     return (
       <UploadMatchSuccess
@@ -226,13 +251,33 @@ const UploadMatchWizard = memo(function UploadMatchWizard(
 
 /** The shell, with the step body and footer pieces composed into its slots. */
 function UploadWizardPage() {
+  const admin = useAdminWizardMode();
   const {
-    wizard: { step, stepOrder, progressTotalSteps, firstStep, handleBack },
+    wizard: {
+      step,
+      stepOrder,
+      progressTotalSteps,
+      firstStep,
+      handleBack,
+      adminFileResult,
+      error,
+      isCreating,
+    },
     view: { title, description, continueLabel, continueDisabled },
     actions,
     meta: { contentRef, exitHref, preset, onSwitchPreset },
   } = useUploadWizard();
 
+  if (adminFileResult && admin)
+    return (
+      <AdminFileSubmissionStatus
+        result={adminFileResult}
+        error={error}
+        pending={isCreating}
+        onRetry={actions.continue}
+        successHref={admin.successHref}
+      />
+    );
   return (
     <WizardShell
       stepIndex={stepOrder.indexOf(step)}
@@ -241,7 +286,8 @@ function UploadWizardPage() {
       description={description}
       pinned={
         /* Step 1, already answered: the line this flow is filling, pinned. */
-        preset && (
+        preset &&
+        !admin && (
           <PinnedLineBar
             preset={preset}
             onSwitch={onSwitchPreset}
@@ -257,7 +303,7 @@ function UploadWizardPage() {
       cancelHref={step === firstStep ? exitHref : undefined}
       meter={<WizardQuotaMeter />}
       status={<WizardFooterStatus />}
-      secondary={<SaveDraftButton />}
+      secondary={admin ? undefined : <SaveDraftButton />}
       continueLabel={continueLabel}
       onContinue={actions.continue}
       continueDisabled={continueDisabled}

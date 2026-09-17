@@ -152,7 +152,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T8 · Add the shared wizard’s admin variant
 
-- **status:** blocked
+- **status:** done
 - **model:** gpt-5.6-sol
 - **needs:** T4, T6, T7
 - **files:** Best guesses: `UploadMatchFlow.tsx`, wizard provider/footer, `useUploadMatchWizard.ts`.
@@ -164,7 +164,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T9 · Extract reusable schedule writes
 
-- **status:** blocked
+- **status:** todo
 - **model:** gpt-6-astra
 - **needs:** T1
 - **files:** Best guesses: `src/lib/schedule/actions.ts`, server-only schedule services, existing schedule tests.

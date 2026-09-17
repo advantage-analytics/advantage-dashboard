@@ -56,6 +56,11 @@ export function deferred<T>() {
 export function uploadWizardHarness(
   options: {
     team?: boolean;
+    adminFetch?: (
+      url: string,
+      init: { body: unknown },
+    ) => Promise<{ ok: boolean; json: () => Promise<unknown> }>;
+    admin?: import("@/components/dashboard/matches/new-match-wizard/admin-mode").AdminWizardMode;
     props?: Partial<UseUploadMatchWizardProps>;
     /** Overrides on the active workspace — `programStatus`, `role`, … */
     workspace?: Partial<Workspace>;
@@ -260,6 +265,7 @@ export function uploadWizardHarness(
   };
   const dependencies: Record<string, unknown> = {
     react,
+    "./admin-mode": { useAdminWizardMode: () => options.admin ?? null },
     "@/lib/utils": { capitalize: (value: string) => value },
     "next/navigation": { useRouter: () => ({ refresh() {} }) },
     "@/lib/supabase/client": { createClient: () => supabase },
@@ -373,15 +379,18 @@ export function uploadWizardHarness(
         this.onload?.();
       }
     },
-    fetch: async (url: string, init: { body: string }) => ({
-      ok: true,
-      json: async () =>
-        url === "/api/validate-file"
-          ? (apiChecks.get(JSON.parse(init.body).fileName)?.promise ?? {
-              success: true,
-            })
-          : { success: true },
-    }),
+    fetch: async (url: string, init: { body: string }) =>
+      url.startsWith("/api/admin/") && options.adminFetch
+        ? options.adminFetch(url, init)
+        : {
+            ok: true,
+            json: async () =>
+              url === "/api/validate-file"
+                ? (apiChecks.get(JSON.parse(init.body).fileName)?.promise ?? {
+                    success: true,
+                  })
+                : { success: true },
+          },
   });
   const props: UseUploadMatchWizardProps = {
     open: true,

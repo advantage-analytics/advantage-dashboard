@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminWizardMode } from "./admin-mode";
 import {
   createContext,
   use,
@@ -109,6 +110,7 @@ export function UploadWizardProvider({
   initialSubject,
   children,
 }: UploadWizardProviderProps) {
+  const admin = useAdminWizardMode();
   const router = useRouter();
   // Which workspace this match will be created in, and billed against.
   const workspaces = useWorkspace();
@@ -160,7 +162,9 @@ export function UploadWizardProvider({
         ? wizard.handleFileContinue
         : step === "trim"
           ? wizard.handleTrimContinue
-          : scoreCheck.saveMatch;
+          : admin?.attachment
+            ? wizard.handleCreateMatch
+            : scoreCheck.saveMatch;
 
   // The same `gates.continueDisabled` the footer button is disabled by.
   useWizardKeys({

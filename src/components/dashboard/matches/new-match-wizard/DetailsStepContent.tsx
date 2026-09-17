@@ -39,6 +39,7 @@
  * The player's own name is never re-asked here: it was settled on step 1.
  */
 
+import { useAdminWizardMode } from "./admin-mode";
 import {
   memo,
   useCallback,
@@ -946,8 +947,17 @@ function DetailsStepContentImpl({
     Boolean(lineProgramKey);
   const fromLine = Boolean(attachedLine || line);
   const [pendingFormat, setPendingFormat] = useState<string | null>(null);
+  const admin = useAdminWizardMode();
+  const lookupScope = useMemo(
+    () =>
+      admin
+        ? { source: "admin" as const, programId: admin.context.workspace.id }
+        : undefined,
+    [admin],
+  );
   const { active: activeWorkspace } = useWorkspace();
   const canAttach =
+    !admin &&
     workspaceKind === "team" &&
     activeWorkspace.kind === "team" &&
     canManageTeamSchedule(activeWorkspace);
@@ -958,6 +968,7 @@ function DetailsStepContentImpl({
   const loadUploadLines = useCallback(
     (query: string) =>
       findUploadLines({
+        scope: lookupScope,
         date: formData.date,
         round: roundFact,
         player: { id: subject.playerId ?? subject.userId, name: subject.name },
@@ -966,6 +977,7 @@ function DetailsStepContentImpl({
         query,
       }),
     [
+      lookupScope,
       formData.date,
       roundFact,
       subject.playerId,
@@ -1007,23 +1019,24 @@ function DetailsStepContentImpl({
 
   useEffect(() => {
     let cancelled = false;
-    void opponentsPlayed().then((rows) => {
+    void opponentsPlayed(lookupScope).then((rows) => {
       if (!cancelled) setPlayed(rows);
     });
-    void yourEvents().then((rows) => {
+    void yourEvents(lookupScope).then((rows) => {
       if (!cancelled) setEvents(rows);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [lookupScope]);
 
   // The schedule only offers in a team workspace, with no line pinned, for a
   // date. Re-asked when the date or the subject changes.
   useEffect(() => {
-    if (workspaceKind !== "team" || line || !formData.date) return;
+    if (admin || workspaceKind !== "team" || line || !formData.date) return;
     let cancelled = false;
     void findLineOffers({
+      scope: lookupScope,
       date: formData.date,
       playerUserId: subject.playerId ?? subject.userId,
       playerName: subject.name,
@@ -1034,6 +1047,8 @@ function DetailsStepContentImpl({
       cancelled = true;
     };
   }, [
+    admin,
+    lookupScope,
     workspaceKind,
     line,
     formData.date,
@@ -1046,6 +1061,7 @@ function DetailsStepContentImpl({
     if (!inDual || !lineProgramKey) return;
     let cancelled = false;
     void opponentRosterForLine({
+      scope: lookupScope,
       opponentProgramKey: lineProgramKey,
       slot: lineSlot,
     }).then((rows) => {
@@ -1054,7 +1070,7 @@ function DetailsStepContentImpl({
     return () => {
       cancelled = true;
     };
-  }, [inDual, lineProgramKey, lineSlot]);
+  }, [inDual, lineProgramKey, lineSlot, lookupScope]);
 
   // A roster player has no profile to read; their last match is the record.
   const styleAsked = useRef(false);
@@ -1174,6 +1190,7 @@ function DetailsStepContentImpl({
         // A program-scoped player, saved to their roster — best-effort: the
         // pool refuses where that program manages its own roster, and the
         // typed name stands either way.
+        if (admin) return;
         const result = await saveOpponentPlayer({
           opponentProgramKey: lineProgramKey,
           name,
@@ -1181,10 +1198,11 @@ function DetailsStepContentImpl({
         if (result.saved) setSavedSchool(lineSchool);
       }
     },
-    [inDual, lineProgramKey, lineSchool, onInputChange],
+    [inDual, lineProgramKey, lineSchool, onInputChange, admin],
   );
 
   const saveProfile = async () => {
+    if (admin) return;
     setSavingProfile("saving");
     const { saved } = await saveMyStyle({
       hand: playerHand,
@@ -1383,7 +1401,7 @@ function DetailsStepContentImpl({
             <span className="flex min-w-0 flex-col gap-0.5 sm:pt-1.5">
               <span className="inline-flex items-center gap-2 text-[13px] text-[var(--ink-900)]">
                 <span className="truncate">{subject.name}</span>
-                {subject.isSelf && <YouPill />}
+                {!admin && subject.isSelf && <YouPill />}
               </span>
               {playerProvenance && (
                 <span className="text-micro whitespace-nowrap">
@@ -1434,7 +1452,8 @@ function DetailsStepContentImpl({
             </div>
             {/* Directly under the two answers it saves, in the one quiet blue a
                 text action carries — it read as a caption under the name. */}
-            {subject.isSelf &&
+            {!admin &&
+              subject.isSelf &&
               (playerHand || playerBackhand) &&
               formData.playerStyleSource !== "profile" && (
                 <button

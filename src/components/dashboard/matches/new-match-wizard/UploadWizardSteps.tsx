@@ -1,5 +1,7 @@
 "use client";
 
+import { AdvSelect } from "@/components/ui/adv-select";
+import { useAdminWizardMode, AdminResultLock } from "./admin-mode";
 import { useCallback, useMemo } from "react";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { AnimatedHeight } from "./AnimatedHeight";
@@ -268,6 +270,7 @@ export function TrimStep() {
  * match is the last thing on the page.
  */
 export function MatchStep() {
+  const admin = useAdminWizardMode();
   const {
     wizard: {
       formData,
@@ -312,6 +315,67 @@ export function MatchStep() {
     ],
   );
 
+  if (admin?.attachment)
+    return (
+      <div className="flex flex-col gap-6">
+        <p>
+          The recorded result is preserved. The server checks the selected
+          analysis against it.
+        </p>
+        <AdminResultLock>
+          <p>
+            {admin.attachment.preset.playerName} vs{" "}
+            {admin.attachment.preset.opponentName} ·{" "}
+            {admin.attachment.preset.date}
+          </p>
+          <p>
+            {admin.attachment.preset.score?.player1
+              .map(
+                (n, i) =>
+                  `${n ?? "–"}–${admin.attachment!.preset.score!.player2[i] ?? "–"}`,
+              )
+              .join(" ")}
+          </p>
+          <p>
+            {admin.attachment.preset.surface ?? "Surface not recorded"} · Best
+            of {admin.attachment.preset.bestOf} ·{" "}
+            {admin.attachment.preset.discipline ?? "singles"}
+          </p>
+          {admin.attachment.preset.eventName && (
+            <p>
+              {admin.attachment.preset.eventName} ·{" "}
+              {admin.attachment.preset.round}
+            </p>
+          )}
+          {admin.attachment.preset.ending && (
+            <p>{admin.attachment.preset.ending}</p>
+          )}
+        </AdminResultLock>
+        {isProcessingProvider && (
+          <label>
+            Scoring rule
+            <AdvSelect
+              kind="underline"
+              aria-label="Scoring rule"
+              disabled={admin.attachment.preset.adScoring != null}
+              value={
+                formData.adScoring == null ? "" : String(formData.adScoring)
+              }
+              onChange={(e) =>
+                handleInputChange("adScoring", e.target.value === "true")
+              }
+            >
+              <option value="" disabled>
+                Choose scoring
+              </option>
+              <option value="true">Advantage</option>
+              <option value="false">No-ad</option>
+            </AdvSelect>
+          </label>
+        )}
+        {error && <p role="alert">{error}</p>}
+      </div>
+    );
   return (
     <DetailsStepContent
       formData={formData}

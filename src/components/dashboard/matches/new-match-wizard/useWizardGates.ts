@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminWizardMode } from "./admin-mode";
 import { useMemo } from "react";
 import type { UseUploadMatchWizardReturn } from "./useUploadMatchWizard";
 import {
@@ -22,6 +23,7 @@ export function useWizardGates(
   /** The early-end question, on screen and still waiting (`useScoreCheck`). */
   scoreCheckUnanswered: boolean,
 ) {
+  const admin = useAdminWizardMode();
   const {
     step,
     formData,
@@ -56,7 +58,7 @@ export function useWizardGates(
    * Only for processing providers. A SwingVision import gets its scores and
    * names from the parsed file, so demanding them by hand would ask twice.
    */
-  const missing = useMemo(
+  const ordinaryMissing = useMemo(
     () =>
       // The single contract `validation.ts` describes: this is the "earlier,
       // visible half" (the footer pill, and the Continue gate) and
@@ -98,6 +100,21 @@ export function useWizardGates(
     ],
   );
 
+  const missing = admin?.attachment
+    ? {
+        ...ordinaryMissing,
+        labels: isProcessingProvider
+          ? [
+              ...(typeof formData.adScoring === "boolean" ? [] : ["scoring"]),
+              ...(typeof formData.fixedCamera === "boolean" ? [] : ["camera"]),
+              ...(typeof formData.initialTopPlayerIsPlayer1 === "boolean"
+                ? []
+                : ["camera position"]),
+            ]
+          : [],
+      }
+    : ordinaryMissing;
+
   const stepBusy = stepBusyLabel(wizard, trimSelected);
 
   /**
@@ -130,7 +147,8 @@ export function useWizardGates(
     step,
     busy: stepBusy !== null,
     // The early-end question, once on screen, is one more unanswered field.
-    missingMatchAnswers: missing.labels.length > 0 || scoreCheckUnanswered,
+    missingMatchAnswers:
+      missing.labels.length > 0 || (!admin?.attachment && scoreCheckUnanswered),
     importIdentityBlocked: identityNoticeVisible && importIdentity.blocked,
     // `|| rosterStillLoading` is the one deliberate exception to T7's
     // "the visible notice decides the gate": there is nothing to explain

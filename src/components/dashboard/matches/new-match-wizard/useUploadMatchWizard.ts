@@ -10,6 +10,7 @@
  * - Match creation
  */
 
+import { useAdminWizardMode } from "./admin-mode";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { capitalize } from "@/lib/utils";
 import { useRouter } from "next/navigation";
@@ -371,6 +372,7 @@ export type RosterOption = RosterPlayerOption & {
 export type { MatchSubject, RosterSubject, WizardEligibility };
 
 export interface UseUploadMatchWizardReturn {
+  adminFileResult: { state: string; matchId: string; message?: string } | null;
   // State
   step: Step;
   selectedProvider: ProviderId | null;
@@ -583,6 +585,8 @@ export function useUploadMatchWizard({
   initialProvider,
   initialSubject,
 }: UseUploadMatchWizardProps): UseUploadMatchWizardReturn {
+  const admin = useAdminWizardMode();
+  const isAdminMode = Boolean(admin);
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   // The workspace this match will belong to and be billed against. Resolved
@@ -621,6 +625,11 @@ export function useUploadMatchWizard({
   const [isOver, setIsOver] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [adminFileResult, setAdminFileResult] = useState<{
+    state: string;
+    matchId: string;
+    message?: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isPrivateMatch] = useState(true);
@@ -672,7 +681,11 @@ export function useUploadMatchWizard({
    * `rosterLoadFailed` says which, and `uploadEligibility()` refuses both as
    * `roster-unknown` (retryable) rather than passing anyone.
    */
-  const [teamRoster, setTeamRoster] = useState<RosterOption[] | null>(null);
+  const [teamRoster, setTeamRoster] = useState<RosterOption[] | null>(() =>
+    admin
+      ? admin.context.roster.map((row) => ({ ...row, invitedEmail: null }))
+      : null,
+  );
   const [rosterLoadFailed, setRosterLoadFailed] = useState(false);
   /** Bumped by `reloadRoster()`; the roster effect depends on it. */
   const [rosterAttempt, setRosterAttempt] = useState(0);
@@ -870,7 +883,9 @@ export function useUploadMatchWizard({
   // Cap by tier, not by ledger: a custom org files under the program ledger
   // (`quotaAccountType` above, which the remaining-quota read filters on) but
   // draws the individual figure until a paid plan raises it — quotaTierFor().
-  const quotaCapSeconds = monthlyCapSecondsFor(activeWorkspace);
+  const quotaCapSeconds =
+    admin?.context.videoAllowance.capSeconds ??
+    monthlyCapSecondsFor(activeWorkspace);
   // "Sep 1". Settings › Usage already answers "when does this come back" from
   // the same billing-month key, so the wizard asks it rather than re-deriving.
   const quotaResetsOn = formatResetDate(currentBillingMonth());
@@ -887,9 +902,10 @@ export function useUploadMatchWizard({
    */
   const [remainingQuotaSeconds, setRemainingQuotaSeconds] = useState<
     number | undefined
-  >(undefined);
+  >(admin?.context.videoAllowance.remainingSeconds);
 
   useEffect(() => {
+    if (admin) return;
     if (!isProcessingProvider) return;
     let cancelled = false;
 
@@ -915,6 +931,7 @@ export function useUploadMatchWizard({
       cancelled = true;
     };
   }, [
+    admin,
     isProcessingProvider,
     supabase,
     activeWorkspace.id,
@@ -942,15 +959,16 @@ export function useUploadMatchWizard({
   // written only by Save draft — the footer action decides where you go, not
   // whether the answers are kept.
   useEffect(() => {
-    if (!open) return;
+    if (!open || admin) return;
     const handle = window.setTimeout(() => {
       saveFormDataToStorage(formData);
       setLastChangedAt(Date.now());
     }, 400);
     return () => window.clearTimeout(handle);
-  }, [open, formData]);
+  }, [open, formData, admin]);
 
   const saveDraft = useCallback(async (): Promise<boolean> => {
+    if (admin) return false;
     const id = draftId ?? crypto.randomUUID();
     const order = STEP_ORDER_BY_KIND[progressKind];
     setDraftSaving(true);
@@ -983,6 +1001,7 @@ export function useUploadMatchWizard({
       setDraftSaving(false);
     }
   }, [
+    admin,
     draftId,
     progressKind,
     step,
@@ -1002,7 +1021,7 @@ export function useUploadMatchWizard({
     // the preset early-return below: the footer offers Save draft on a preset
     // flow too, and a flag left standing there would stop the shell clearing
     // storage on every later exit.
-    localStorage.removeItem(STORAGE_KEYS.DRAFT_KEPT);
+    if (!isAdminMode) localStorage.removeItem(STORAGE_KEYS.DRAFT_KEPT);
 
     // A team upload never resumes a personal draft. The line it is filling is
     // named in the URL, and restoring a half-finished personal match over it
@@ -1012,9 +1031,13 @@ export function useUploadMatchWizard({
       // is why it may only be built where the answer is a fact — see the bar
       // on `EventPreset`. `job-request.ts` refusing a doubles line is what
       // makes `supportsVideo: false` one.
-      const presetProvider = preset.supportsVideo
+      const dashboardPresetProvider = preset.supportsVideo
         ? DEFAULT_PROVIDER_ID
         : DEFAULT_IMPORT_PROVIDER_ID;
+      const presetProvider =
+        isAdminMode && initialProvider
+          ? initialProvider
+          : dashboardPresetProvider;
       setSelectedProvider(presetProvider);
       setFormData((prev) => ({
         ...prev,
@@ -1055,7 +1078,13 @@ export function useUploadMatchWizard({
       // bar re-runs this effect and must leave the step where it is.
       if (!seededRef.current) {
         seededRef.current = true;
-        setProgressKind(preset.supportsVideo ? "processing" : "import");
+        setProgressKind(
+          isAdminMode && initialProvider
+            ? getProviderKind(initialProvider)
+            : preset.supportsVideo
+              ? "processing"
+              : "import",
+        );
         setStep("file");
       }
       return;
@@ -1086,6 +1115,12 @@ export function useUploadMatchWizard({
       return;
     }
 
+    if (isAdminMode) {
+      setSelectedProvider(initialProvider ?? DEFAULT_PROVIDER_ID);
+      if (seededPlayerName)
+        setFormData({ ...getDefaultFormData(), playerName: seededPlayerName });
+      return;
+    }
     const existingProvider = localStorage.getItem(
       STORAGE_KEYS.SELECTED_PROVIDER,
     );
@@ -1218,7 +1253,16 @@ export function useUploadMatchWizard({
     return () => {
       cancelled = true;
     };
-  }, [open, supabase, preset, draft, askWhoPlayed, seededPlayerName]);
+  }, [
+    open,
+    supabase,
+    preset,
+    draft,
+    askWhoPlayed,
+    seededPlayerName,
+    initialProvider,
+    isAdminMode,
+  ]);
 
   /**
    * The workspace an EXISTING match belongs to — pinned the moment a preset
@@ -1286,6 +1330,12 @@ export function useUploadMatchWizard({
   const refreshApproval = useCallback(async (): Promise<
     ProgramApprovalReading | undefined
   > => {
+    if (admin) {
+      const reading = admin.context.workspace
+        .programStatus as ProgramApprovalReading;
+      setApprovalReading(reading);
+      return reading;
+    }
     if (eligibilityWorkspace.kind !== "team") return undefined;
     const programId = eligibilityWorkspace.id;
     const token = ++approvalRequestRef.current;
@@ -1300,7 +1350,7 @@ export function useUploadMatchWizard({
         : (data.status as ProgramApprovalReading);
     if (approvalRequestRef.current === token) setApprovalReading(reading);
     return reading;
-  }, [eligibilityWorkspace.kind, eligibilityWorkspace.id, supabase]);
+  }, [admin, eligibilityWorkspace.kind, eligibilityWorkspace.id, supabase]);
   /**
    * "Returning to the page" re-check: a program's approval can change while
    * this tab sits in the background (a claim gets approved, or a violation
@@ -1356,6 +1406,7 @@ export function useUploadMatchWizard({
    * against this list too.
    */
   useEffect(() => {
+    if (admin) return;
     if (!open || eligibilityWorkspace.kind !== "team") return;
     let cancelled = false;
 
@@ -1445,6 +1496,7 @@ export function useUploadMatchWizard({
     viewer.id,
     supabase,
     rosterAttempt,
+    admin,
   ]);
 
   /**
@@ -1616,16 +1668,17 @@ export function useUploadMatchWizard({
       // Validate provider ID before setting
       if (providerId && isProviderSupported(providerId)) {
         setSelectedProvider(providerId as ProviderId);
-        localStorage.setItem(STORAGE_KEYS.SELECTED_PROVIDER, providerId);
+        if (!admin)
+          localStorage.setItem(STORAGE_KEYS.SELECTED_PROVIDER, providerId);
       } else {
         setSelectedProvider(null);
-        localStorage.removeItem(STORAGE_KEYS.SELECTED_PROVIDER);
+        if (!admin) localStorage.removeItem(STORAGE_KEYS.SELECTED_PROVIDER);
       }
       // Clear any previous upload errors when changing provider
       setUploadError(null);
       setUploadedFile(null);
     },
-    [resetFileGeneration],
+    [resetFileGeneration, admin],
   );
 
   const handleProviderContinue = useCallback(() => {
@@ -2008,10 +2061,11 @@ export function useUploadMatchWizard({
         status: "Ready",
         type: file.type,
       };
-      localStorage.setItem(
-        STORAGE_KEYS.UPLOADED_FILE,
-        JSON.stringify(fileDataForStorage),
-      );
+      if (!admin)
+        localStorage.setItem(
+          STORAGE_KEYS.UPLOADED_FILE,
+          JSON.stringify(fileDataForStorage),
+        );
 
       // Attempt to parse file if parser exists for this provider
       const parserExists = await hasParser(selectedProvider);
@@ -2154,7 +2208,7 @@ export function useUploadMatchWizard({
       // overwrite. Same for the who-played answer, which owns the player name
       // the same way.
     },
-    [selectedProvider, preset, askWhoPlayed, resetFileGeneration],
+    [selectedProvider, preset, askWhoPlayed, resetFileGeneration, admin],
   );
 
   const handleDrop: React.DragEventHandler<HTMLDivElement> = useCallback(
@@ -2178,8 +2232,8 @@ export function useUploadMatchWizard({
 
   const handleRemoveFile = useCallback(() => {
     resetFileGeneration();
-    localStorage.removeItem(STORAGE_KEYS.UPLOADED_FILE);
-  }, [resetFileGeneration]);
+    if (!admin) localStorage.removeItem(STORAGE_KEYS.UPLOADED_FILE);
+  }, [resetFileGeneration, admin]);
 
   // Form handling
   const handleInputChange = useCallback(
@@ -2310,6 +2364,17 @@ export function useUploadMatchWizard({
           formData.playerScores.some((n) => (n ?? 0) > 0) ||
           formData.opponentScores.some((n) => (n ?? 0) > 0),
       });
+      if (admin?.attachment) {
+        missing.labels = isProcessingProvider
+          ? [
+              ...(typeof formData.adScoring === "boolean" ? [] : ["scoring"]),
+              ...(typeof formData.fixedCamera === "boolean" ? [] : ["camera"]),
+              ...(typeof formData.initialTopPlayerIsPlayer1 === "boolean"
+                ? []
+                : ["camera position"]),
+            ]
+          : [];
+      }
       if (missing.labels.length > 0) {
         setError(`Complete the required fields: ${missing.labels.join(", ")}.`);
         return;
@@ -2319,6 +2384,7 @@ export function useUploadMatchWizard({
       // plain final score that just happens to be missing a set.
       const undecided = scoreUndecided(scoreGames(formData));
       if (
+        !admin?.attachment &&
         undecided &&
         asksIfEndedEarly(selectedProvider) &&
         !scoreCheckAnswered(formData)
@@ -2335,6 +2401,119 @@ export function useUploadMatchWizard({
       setError(null);
 
       try {
+        if (admin) {
+          const identity = {
+            operationId: admin.operationId,
+            itemId: admin.itemId,
+            programId: activeWorkspace.id,
+          };
+          const attachment = admin.attachment;
+          const target = attachment
+            ? {
+                matchId: attachment.matchId,
+                fingerprint: attachment.fingerprint,
+              }
+            : {
+                playerId: freshEligibility.attribution,
+                date: formData.date,
+                courtType: formData.courtType,
+              };
+          let response: Response;
+          if (isProcessingProvider) {
+            response = await fetch("/api/admin/uploads/video", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ...identity,
+                ...target,
+                ...(attachment
+                  ? {}
+                  : {
+                      opponentName: formData.opponentName,
+                      bestOf: Number(formData.bestOf),
+                      score: {
+                        player1: getAdjustedScores(
+                          formData.playerScores,
+                          formData.bestOf,
+                          formData.numberOfSets,
+                        ),
+                        player2: getAdjustedScores(
+                          formData.opponentScores,
+                          formData.bestOf,
+                          formData.numberOfSets,
+                        ),
+                        player1_tiebreaks: formData.playerTiebreaks,
+                        player2_tiebreaks: formData.opponentTiebreaks,
+                      },
+                    }),
+                startSeconds: formData.videoStartSeconds,
+                endSeconds: formData.videoEndSeconds,
+                initialTopPlayerIsPlayer1: formData.initialTopPlayerIsPlayer1,
+                adScoring: formData.adScoring,
+                fixedCamera: formData.fixedCamera,
+              }),
+            });
+          } else {
+            const body = new globalThis.FormData();
+            body.set("file", uploadedFile.file);
+            for (const [key, value] of Object.entries({
+              ...identity,
+              ...target,
+              ...(attachment
+                ? {}
+                : {
+                    matchType:
+                      formData.matchType === "Doubles" ? "Doubles" : "Singles",
+                  }),
+            }))
+              body.set(key, String(value));
+            response = await fetch("/api/admin/uploads/file", {
+              method: "POST",
+              body,
+            });
+          }
+          const result = await response.json();
+          if (!response.ok || !result.ok)
+            throw new Error(
+              result.message ??
+                "Submission was refused. Retry with this same operation after checking the target.",
+            );
+          if (!isProcessingProvider) {
+            setError(null);
+            setAdminFileResult(result);
+            return;
+          }
+          if (!result.jobId || !result.matchId)
+            throw new Error(
+              "The server did not return the reserved job. Administrator review is required.",
+            );
+          onCreated?.({
+            matchId: result.matchId,
+            playerName: formData.playerName,
+            opponentName: formData.opponentName,
+            sets: [],
+            won: null,
+            follows: "video",
+          });
+          void uploadAndSubmitVideo({
+            supabase,
+            jobId: result.jobId,
+            matchId: result.matchId,
+            file: uploadedFile.file,
+            trim: {
+              startSeconds: formData.videoStartSeconds!,
+              endSeconds: formData.videoEndSeconds!,
+            },
+            answers: {
+              initialTopPlayerIsPlayer1: formData.initialTopPlayerIsPlayer1,
+              adScoring: formData.adScoring,
+              fixedCamera: formData.fixedCamera,
+            },
+            onEvent: (event) => onVideoUpload?.(event),
+            onTransferFailed: () => {},
+          });
+          return;
+        }
         // Use the userId cached on modal open. Falls back to auth.getUser() only
         // if the cache hasn't populated yet (race against modal open).
         let userId = cachedUserIdRef.current;
@@ -2766,6 +2945,7 @@ export function useUploadMatchWizard({
     // activeWorkspace is in here on purpose: a coach who switches workspaces
     // with the wizard open must not create the match against the one they left.
   }, [
+    admin,
     formData,
     uploadedFile,
     selectedProvider,
@@ -2774,6 +2954,8 @@ export function useUploadMatchWizard({
     isPrivateMatch,
     onOpenChange,
     onCreated,
+    onVideoUpload,
+    processingStrategy,
     router,
     activeWorkspace.id,
     activeWorkspace.kind,
@@ -2795,6 +2977,7 @@ export function useUploadMatchWizard({
 
   return {
     // State
+    adminFileResult,
     step,
     selectedProvider,
     uploadedFile,
