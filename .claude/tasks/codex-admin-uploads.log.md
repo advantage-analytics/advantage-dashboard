@@ -50,3 +50,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** Mechanical GATE FAIL. ESLint rejects tests/admin-wizard-mode.spec.ts:148 assigning variable module (@next/next/no-assign-module-variable). Full tests: 1302 passed, 155 skipped, 1 failed: tests/upload-player-details.spec.ts:347 expects the shared missing-answers source block; renaming const missing to ordinaryMissing makes its extraction empty. Completion review not run because mechanical gate failed.
 
 **changed:** Implementation and tests preserved in stash a7a0e59fc3c8229ffb84a400c268310da2a9dd1c; no T8 source changes committed. Root also found queued-file retry refusals hidden by the prior status screen: current wizard.error is not rendered while adminFileResult remains queued. Worker was stopped after gate failure before completing that correction. Restore stash and address these findings before rerunning T8; queued criteria/order remain unchanged.
+
+## T9 · Extract reusable schedule writes — blocked
+
+**gate:** Dispatch failed: collaboration.spawn_agent with exact requested model gpt-6-astra returned "agent thread limit reached". No implementation agent started; mechanical and completion gates did not run.
+
+**changed:** No stash — the task produced no changes. Only blocked status and this log entry are committed. No model substitution or source edits. All remaining tasks depend directly or transitively on blocked T8 or T9; queue automation paused pending recovery of these blockers, not marked complete.

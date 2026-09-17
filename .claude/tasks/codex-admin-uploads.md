@@ -164,7 +164,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T9 · Extract reusable schedule writes
 
-- **status:** todo
+- **status:** blocked
 - **model:** gpt-6-astra
 - **needs:** T1
 - **files:** Best guesses: `src/lib/schedule/actions.ts`, server-only schedule services, existing schedule tests.
