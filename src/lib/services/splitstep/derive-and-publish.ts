@@ -15,6 +15,7 @@
 
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { persistTranscript } from "./persist-transcript";
+import { requestMatchInsights } from "./request-insights";
 import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
 import type { Transcript } from "./derivation";
 
@@ -125,6 +126,13 @@ export async function deriveAndPublish(params: {
     // page readable — and here rather than in each caller so a re-run from the
     // CLI announces itself the same way. Deduped per job; never throws.
     await notifyAnalysisOutcome({ supabase, jobId, outcome: "ready" });
+
+    // The Advantage Intelligence summary the report's insight card shows, as
+    // `process-match` requests it for a SwingVision import. After `completed`
+    // and the mail, because it is the slow step (one model call) and the only
+    // optional one; never throws, so a failure leaves the published report
+    // without a card rather than failing the analysis.
+    await requestMatchInsights({ supabase, matchId });
 
     // `unreconciled` is reachable now (ACCEPT_UNRECONCILED_FOLD): the fold did
     // not reproduce the entered score and the rows were written anyway, with
