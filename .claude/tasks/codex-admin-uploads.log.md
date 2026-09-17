@@ -64,3 +64,9 @@ is the runner's. Newest entries at the bottom.
 **changed:** Shared AdminUploadMatchFlow isolates the server-resolved target workspace/roster/allowance and scopes wizard lookups. Explicit exit/success destinations, no draft writes/switching, static preserved-result summary, stable operation IDs, secure file/video endpoint submissions and exact video job reuse. File retry refusals and pending state are visible. Attachment gates no longer demand inaccessible ending controls. Fixed prior test lint error and adapted existing source-contract extraction without removing its assertions. Dashboard defaults retained. T12 mounts the entry route; T19 owns full browser fidelity. No live effects.
 
 **follow-ups:** User-authorized queue recovery resets T9 from blocked to todo; existing Astra worker and reviewer reuse handles the agent thread limit without model substitution. Queue automation resumed with this dispatch fallback.
+
+## T9 · Extract reusable schedule writes — done
+
+**gate:** Mechanical GATE PASS (lint, typecheck, full test suite); completion reviewer VERDICT: pass. Focused schedule/boundary regressions: 172 passed, 48 opt-in database skips. Formatting and diff checks passed. Reused exact gpt-6-astra worker and completion reviewer under authorized thread-limit fallback.
+
+**changed:** Extracted six dual/tournament creation/update, result and outcome operations plus shared lineup helpers into writes-server.ts, with input contracts in write-types.ts and compatible type re-exports. Member actions retain authorization before service construction, lazy session-client RLS, scoped event reads and revalidation. Service is not a Server Action and is registered in the enforced server-only boundary list. Existing action harnesses execute the actual extracted service; added all-six authorization and cross-program tests. No schema, UI, admin writes or live mutations. Existing nontransactional member behavior is unchanged; T10/T11 own durable admin results.
