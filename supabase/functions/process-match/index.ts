@@ -30,6 +30,8 @@ interface ProcessMatchRequest {
 
 Deno.serve(async (req: Request) => {
   console.log("🚀 Edge Function 'process-match' invoked");
+  let consoleAttempt: { matchId: string; claimToken: string } | null = null;
+  let processingClient: ReturnType<typeof createClient> | null = null;
   try {
     // CORS headers
     if (req.method === "OPTIONS") {
@@ -43,7 +45,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const {
+    let {
       matchId,
       userId,
       fileNames,
@@ -91,6 +93,63 @@ Deno.serve(async (req: Request) => {
       },
     });
 
+    processingClient = supabase;
+    // Every call consults the durable match linkage, even if a caller omits
+    // console fields. Only verified service dispatch or the submitting admin
+    // may claim a console file; request body userId is never authorization.
+    const authorization =
+      req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+    const serviceDispatch = authorization === supabaseServiceKey;
+    const identity = serviceDispatch
+      ? null
+      : await supabase.auth.getUser(authorization);
+    const { data: claim, error: claimError } = await supabase.rpc(
+      "admin_claim_match_file",
+      {
+        p_match_id: matchId,
+        p_actor_id: identity?.data.user?.id ?? null,
+        p_service: serviceDispatch,
+      },
+    );
+    if (claimError) throw new Error("File processing authorization failed.");
+    let expectedSha256: string | undefined;
+    if (claim) {
+      if (!claim.claimed) {
+        return new Response(
+          JSON.stringify({
+            success: claim.state === "completed",
+            state: claim.state,
+            operationId: claim.operationId,
+            itemId: claim.itemId,
+          }),
+          {
+            status: claim.state === "failed" ? 409 : 200,
+            headers: {
+              "Content-Type": "application/json",
+              "Access-Control-Allow-Origin": "*",
+            },
+          },
+        );
+      }
+      consoleAttempt = { matchId, claimToken: claim.claim_token };
+      // Use ONLY the server-validated durable file, never submitted filenames,
+      // provider, bucket or user identity from the incoming request.
+      userId = claim.actorId;
+      fileNames = [claim.request.storagePath];
+      bucketId = "match-data";
+      sourceProvider = "swing-vision";
+      expectedSha256 = claim.request.sha256;
+    }
+
+    // Console bytes are never eligible for the legacy caller-supplied file
+    // list. Also reject encoded/path-separator aliases before storage's URL
+    // normalization can turn a legacy path into the reserved namespace.
+    if (
+      !claim &&
+      [userId, ...fileNames].some((path) => /_admin-console|%|\\/.test(path))
+    )
+      throw new Error("Console files require their durable processing claim.");
+
     // Fetch match record for source_provider and format (JSONB with best_of)
     const { data: match, error: matchError } = await supabase
       .from("matches")
@@ -99,6 +158,7 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (matchError) {
+      if (consoleAttempt) throw matchError;
       console.error("Error fetching match:", matchError);
       return new Response(
         JSON.stringify({
@@ -146,8 +206,17 @@ Deno.serve(async (req: Request) => {
       fileNames,
       bucketId,
       matchFormat,
+      expectedSha256,
     });
 
+    if (consoleAttempt) {
+      const finished = await supabase.rpc("admin_finish_match_file", {
+        p_match_id: matchId,
+        p_claim_token: consoleAttempt.claimToken,
+        p_error: null,
+      });
+      if (finished.error) throw finished.error;
+    }
     console.log("✅ Match data processing completed successfully");
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
@@ -157,6 +226,13 @@ Deno.serve(async (req: Request) => {
       },
     });
   } catch (error: any) {
+    if (consoleAttempt && processingClient) {
+      await processingClient.rpc("admin_finish_match_file", {
+        p_match_id: consoleAttempt.matchId,
+        p_claim_token: consoleAttempt.claimToken,
+        p_error: "processing-failed-review-required",
+      });
+    }
     console.error("Error in process-match Edge Function:", error);
     return new Response(
       JSON.stringify({
@@ -185,6 +261,7 @@ async function processMatchToDb({
   fileNames,
   bucketId = "match-data",
   matchFormat = 3,
+  expectedSha256,
 }: {
   supabase: ReturnType<typeof createClient>;
   matchId: string;
@@ -192,6 +269,7 @@ async function processMatchToDb({
   fileNames: string[];
   bucketId?: string;
   matchFormat?: number;
+  expectedSha256?: string;
 }): Promise<void> {
   // 1. Combine sheets across all files
   console.log(`📋 Processing ${fileNames.length} file(s):`, fileNames);
@@ -200,6 +278,7 @@ async function processMatchToDb({
     userId,
     fileNames,
     bucketId,
+    expectedSha256,
   });
 
   const pointsRows = combined.Points ?? [];
@@ -345,8 +424,10 @@ async function createCombinedSheets({
   supabase,
   userId,
   fileNames,
+  expectedSha256,
   bucketId = "match-data",
 }: {
+  expectedSha256?: string;
   supabase: ReturnType<typeof createClient>;
   userId: string;
   fileNames: string[];
@@ -397,6 +478,15 @@ async function createCombinedSheets({
       console.log(`✅ Successfully downloaded ${filePath}`);
 
       const arrayBuffer = await data.arrayBuffer();
+      if (expectedSha256) {
+        const digest = Array.from(
+          new Uint8Array(await crypto.subtle.digest("SHA-256", arrayBuffer)),
+        )
+          .map((byte) => byte.toString(16).padStart(2, "0"))
+          .join("");
+        if (digest !== expectedSha256)
+          throw new Error("Validated file bytes changed; review required.");
+      }
       // ExcelJS in Deno: Workbook is available directly on the module
       const Workbook = ExcelJS.Workbook;
       if (!Workbook) {
@@ -434,6 +524,7 @@ async function createCombinedSheets({
         }
       }
     } catch (err) {
+      if (expectedSha256) throw err;
       console.error(`⚠️ Error with ${filePath}:`, err);
       continue;
     }

@@ -11,7 +11,7 @@
 async function getExcelJS() {
   // Dynamic import that Next.js won't try to bundle for SSR
   const exceljs = await import("exceljs");
-  return exceljs;
+  return exceljs.default ?? exceljs;
 }
 import {
   IFileParser,

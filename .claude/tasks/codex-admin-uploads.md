@@ -128,7 +128,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T6 · Integrate admin match-file submissions
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-6-astra
 - **needs:** T4, T5
 - **files:** Best guesses: `useUploadMatchWizard.ts`, admin file submission service, relevant upload action and tests.

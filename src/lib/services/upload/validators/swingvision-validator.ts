@@ -11,7 +11,7 @@
 // Dynamic import to prevent SSR bundling issues
 async function getExcelJS() {
   const exceljs = await import("exceljs");
-  return exceljs;
+  return exceljs.default ?? exceljs;
 }
 
 export interface ValidationResult {
