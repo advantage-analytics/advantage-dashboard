@@ -42,20 +42,29 @@ serve(async (req) => {
     try {
       const { data: matchRow } = await supabase
         .from("matches")
-        .select("player1_id, date")
+        .select("player1_id, date, program_id")
         .eq("id", matchId)
         .single();
 
       const userId = matchRow?.player1_id;
       const matchDate = matchRow?.date;
 
-      if (userId && matchDate) {
-        const { data: priorMatches } = await supabase
+      if (userId && matchDate && matchRow.program_id !== undefined) {
+        let historyQuery = supabase
           .from("matches")
           .select("id, date")
           .eq("player1_id", userId)
-          .lt("date", matchDate)
-          .order("date", { ascending: false });
+          .lt("date", matchDate);
+
+        // This client bypasses RLS. History must stay in the match's own
+        // workspace so a team report never reveals personal/other-team stats.
+        historyQuery =
+          matchRow.program_id === null
+            ? historyQuery.is("program_id", null)
+            : historyQuery.eq("program_id", matchRow.program_id);
+        const { data: priorMatches } = await historyQuery.order("date", {
+          ascending: false,
+        });
 
         if (priorMatches && priorMatches.length > 0) {
           const priorIds = priorMatches.map((m) => m.id);
