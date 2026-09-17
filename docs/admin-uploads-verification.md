@@ -1,4 +1,4 @@
-# Admin uploads verification — T19
+# Admin uploads verification — T19 and T20
 
 Executed September 17, 2026 UTC in the isolated `codex/admin-uploads` worktree,
 starting at `6f769786`. These are authenticated checks of the actual Next app,
@@ -147,3 +147,131 @@ completion review are recorded in its appended T19 run log after execution.
 Production build, complete-branch RLS/pipeline reviews and release checks belong
 to T20. Hosted migrations, deployed processing functions, real vendor execution,
 AI commentary, push and merge remain unperformed.
+
+## T20 release checks — September 17, 2026 UTC
+
+Review scope is the complete `codex/admin-uploads` change from merge base
+`e3a6c4d7` with `splitstep-integration`, through T19 commit `394ea3aa` plus the
+T20 corrections below. Local `splitstep-integration` is `71b126a1`; its newer
+insights changes are base-only, not deletions introduced by this branch.
+Preserve those changes when integrating. The branch targets
+`splitstep-integration`; no push, PR, merge or production deployment was performed.
+
+### Release evidence
+
+- Production build uses the disposable local Supabase configuration, an inert
+  build-only Stripe API key/webhook secret, and local site URL. The initial
+  keyless attempts failed at Stripe module evaluation; these were configuration
+  failures, not successful builds. The final run is recorded in
+  `/private/tmp/t20-release/build-final.log`. Build success does not verify
+  production credentials, remote services or production execution.
+- Route-map freshness: `npm run map` reports **73 routes, already current**;
+  `/private/tmp/t20-release/route-map.log`.
+- Design drift: all seven checks pass at their existing seeds;
+  `/private/tmp/t20-release/design-drift.log`. This is the repository's ratchet,
+  not a claim that every historical nonzero seed has been removed.
+- Formatting: the final `npm run format:check` output is
+  `/private/tmp/t20-release/format-final.log`.
+- Focused deletion tests: 10 Playwright cases preserve bytes on refusal/error,
+  retain ordinary cleanup, and stop account cleanup before side effects;
+  `/private/tmp/t20-release/deletion-playwright.log`. The PGlite SQL test covers
+  every protected reference, privileges, durable admission refusal, idempotent
+  claim retry, cascade cleanup, and rollback on ownership refusal;
+  `/private/tmp/t20-release/deletion-database.log`.
+- Independent-session PostgreSQL coverage is
+  `tests/database/postgres/admin-delete-concurrency.test.mjs`. It proves actual
+  blocking through `pg_blocking_pids`, for both deletion-first and admission-first
+  ordering on match and actor claims. All four orderings passed against the
+  disposable PostgreSQL cluster; `/private/tmp/t20-delete-concurrency.log`.
+  The final full lint/typecheck/test gate is recorded in the appended T20 queue
+  run log and is not implied by these focused tests or build.
+
+These are local evidence paths. Copy relevant artifacts into the review bundle
+before removing the disposable environment; they are not hosted CI attachments.
+
+### Complete-branch specialist reviews and correction
+
+The final **RLS-boundary reviewer** found no actionable authorization issues.
+It reviewed new tables/policies, mutation RPC grants and actor bindings, workspace
+filters, service/client import boundaries, webhook authentication and secrets.
+The final correction keeps both claim tables under RLS with direct access
+revoked, service-only claim RPCs, and an authenticated no-argument account
+wrapper deriving `auth.uid()`. Client-bundle boundary checks passed. Live catalog
+reads confirmed console tables were not deployed; this is not a live behavioral
+RLS approval.
+
+The **pipeline-guardrails reviewer** verified the three attribution bindings:
+camera orientation at the selected window start, top-player-first game scores,
+and tiebreak game counts. Its initial P1 finding was that existing deletion
+purged bytes before the new provenance foreign keys/job trigger refused the row
+delete. Follow-up review identified a concurrent attachment race and partial
+account-cleanup risk for nonmember console admins.
+
+The correction adds durable match/actor deletion claims. Claim creation and
+console admission lock the same parent; a committed claim prevents subsequent
+console admission while storage cleanup runs. Protected matches refuse before
+any keys or bytes are touched. Account preparation claims the actor and calls
+the existing program release in one transaction: owner refusal rolls the claim
+back, and protected console history refuses before membership release or personal
+cleanup. The final specialist reviews reported **no remaining actionable
+findings**. Their locking verdict is static; the PostgreSQL concurrency test is
+the separate runtime proof.
+
+Claims intentionally remain after cleanup has started or its outcome is uncertain,
+so a failed deletion cannot reopen console admission while bytes may be missing.
+Deletion retries reuse claims; successful row deletion cascades them away.
+Console provenance is retained: self-service deletion refuses recorded/analyzed
+console matches and accounts with retained submissions. Any future retention or
+support deletion workflow must handle provenance and stored media together.
+
+### Required deployment work — not performed
+
+1. Refresh the target project's complete migration ledger and current function
+   definitions before applying anything. Historical local filenames do not fully
+   match the live ledger; do not run an unreviewed blanket `supabase db push`.
+2. Apply these **eight** new migrations in order, after confirming the correct
+   target and compatibility with its current catalog:
+   - `20260917000513_persist_admin_upload_submissions.sql`
+   - `20260917004400_prepare_admin_analysis_attachments.sql`
+   - `20260917010000_submit_admin_match_files.sql`
+   - `20260917011813_submit_admin_match_videos.sql`
+   - `20260917025856_save_admin_dual_results.sql`
+   - `20260917032144_save_admin_tournament_results.sql`
+   - `20260917065829_fix_admin_attachment_shot_lookup.sql`
+   - `20260917072323_guard_admin_match_storage_purge.sql`
+3. Verify table RLS, function ACLs, admission/preservation triggers and both
+   deletion claim contracts on that target. The first seven were exercised in
+   the disposable T19 schema. The eighth was then applied successfully with
+   `ON_ERROR_STOP` to the same full-schema local database,
+   `supabase_db_admin-uploads-t19`; `/private/tmp/t20-local-migration.log` records
+   that application. None was applied to the hosted project in this task.
+4. Deploy the changed `supabase/functions/process-match/index.ts` with its shared
+   dependencies. Its required `generate-key-moments` function is absent from this
+   repository; confirm the deployed dependency and its schema contract. Confirm
+   optional `generate-insights` separately. Deploy database contracts and worker
+   compatibility before exposing the new application paths.
+5. Deploy the application through the normal reviewed integration workflow.
+   Verify actual target environment variables, Azure account/container/CORS,
+   storage access, Stripe configuration, vendor credentials and webhook secret;
+   earlier guardrail documents contain dated environment observations. Keep the
+   loopback emulator endpoint unset in deployment. No production credential or
+   configuration is established by the local build.
+6. Run `/pr-check` against `splitstep-integration` and obtain actual hosted CI and
+   preview evidence. Local success is not a merged or deployed release.
+
+### Outstanding live checks — separate from deployment steps
+
+- Repeat administrator/member/nonmember and non-admin authorization checks after
+  hosted migration/function/application deployment, including stale sessions,
+  direct writes, cross-program access and both deletion refusal paths.
+- Exercise all four flows, attachments, partial retries and history on the hosted
+  preview with controlled test data; verify original coach result identity,
+  exact target-program quota charging, schedule/report visibility and media
+  preservation on refused deletion.
+- Run real vendor analysis on approved footage. Confirm athlete attribution,
+  selected-window semantics for the uncut fallback, score reconciliation and
+  final derivation. Synthetic local transport cannot establish vendor accuracy.
+- Verify deployed key moments and AI commentary. Optional commentary was not
+  executed locally, and production function deployment was not performed.
+- Complete any required responsive/cross-browser checks and retain a durable
+  screenshot bundle. T19 documents the actual inspected desktop scope.

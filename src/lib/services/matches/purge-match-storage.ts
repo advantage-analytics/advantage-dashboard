@@ -1,3 +1,4 @@
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
 import { deleteVideoBlob } from "@/lib/services/splitstep/video-url";
@@ -29,6 +30,21 @@ export async function purgeMatchStorage(
   label = "match delete",
 ): Promise<void> {
   if (matchIds.length === 0) return;
+
+  // Console references intentionally block row deletion. Ordinary creators cannot
+  // see this provenance through RLS, so a server-only claim RPC checks it for
+  // both single-match and account cleanup before any object is removed.
+  const { data: protectedMatch, error: protectionError } =
+    await createAdminClient().rpc("admin_claim_match_storage_purge", {
+      p_match_ids: matchIds,
+    });
+  if (protectionError || protectedMatch !== true) {
+    throw new Error(
+      protectionError
+        ? "We could not verify whether these matches can be deleted. Try again."
+        : "Matches recorded or analyzed through the admin console cannot be deleted here.",
+    );
+  }
 
   // Both storage cleanups key off the same rows, so they are read once here
   // rather than issuing two near-identical SELECTs.

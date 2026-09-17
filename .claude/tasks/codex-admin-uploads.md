@@ -291,7 +291,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T20 · Complete release checks and reviews
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-6-astra
 - **needs:** T19
 - **files:** Best guesses: verification documentation and narrowly scoped fixes.

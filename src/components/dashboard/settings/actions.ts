@@ -249,14 +249,20 @@ export async function deleteAccount(): Promise<ActionResult> {
     };
   }
 
-  // 1. Programs first, and as the user: the RPC derives its subject from
-  //    auth.uid(), so the admin client would have nobody to act for. Failing
-  //    here changes nothing, which is the point of doing it first.
+  // Claim deletion and release program data atomically. A refused release rolls
+  // back the claim; successful release blocks concurrent console admissions.
   const { data: released, error: releaseError } = await supabase.rpc(
-    "release_my_account_from_programs",
+    "prepare_my_account_deletion",
   );
 
   if (releaseError) {
+    if (releaseError.message?.includes("console-history-protected")) {
+      return {
+        ok: false,
+        error:
+          "Your account has retained console submissions. Contact support before deleting your account.",
+      };
+    }
     if (releaseError.code === "42501") {
       return {
         ok: false,
@@ -312,7 +318,17 @@ export async function deleteAccount(): Promise<ActionResult> {
 
   // Storage BEFORE rows — the object keys live on `processing_jobs`, which
   // cascades away with the match.
-  await purgeMatchStorage(adminClient, matchIds, "account delete");
+  try {
+    await purgeMatchStorage(adminClient, matchIds, "account delete");
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Match deletion is unavailable.",
+    };
+  }
 
   if (matchIds.length > 0) {
     const { error: matchDeleteError } = await adminClient

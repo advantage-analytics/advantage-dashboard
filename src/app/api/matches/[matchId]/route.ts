@@ -301,7 +301,19 @@ export async function DELETE(
   // Storage first, then the row. The ordering is load-bearing and the reason
   // this is a function call rather than a foreign-key cascade — see
   // purgeMatchStorage().
-  await purgeMatchStorage(supabase, [matchId]);
+  try {
+    await purgeMatchStorage(supabase, [matchId]);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Match deletion is unavailable.",
+      },
+      { status: 409 },
+    );
+  }
 
   const { error: deleteError } = await supabase
     .from("matches")
