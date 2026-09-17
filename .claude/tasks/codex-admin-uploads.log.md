@@ -118,3 +118,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** Mechanical GATE PASS (lint, typecheck, full test suite); completion review VERDICT: pass. Focused route/form tests: 15 passed. Prior mocked-browser checks verified coach read-only results, invalid review gating, two-line review, retained partial success and retry completion.
 
 **changed:** Restored T13 implementation and repaired route harness mocks for the new actions, form and guarded event queries, adding program/kind scoping and refusal coverage. Added nine-line existing/new dual entry using shared lineup, format, score and outcome helpers; guarded saved-result context; read-only coach results; frozen review requests and durable retry status retaining successes. Wired the dual route slot. Existing stash remains preserved. No deployment or live writes. T14 is now eligible; queue automation remains active.
+
+## T14 · Build tournament entry and review — done
+
+**gate:** Mechanical GATE PASS (lint, typecheck, full tests); completion review VERDICT: pass. Focused tests 21 passed. Mocked actual-component browser checks verified invalid gating, existing recorded round read-only, nullable scoring display, quarter-final review and interrupted-save retry to success. Recorded-result fixture view checked; full live integration remains T19.
+
+**changed:** Added existing/new tournament and singles entry form, shared result review, score/outcome validation, immutable operation snapshot and retained retry inputs. Guarded context adapter filters eligible singles entries and preserves legacy scoring; result links use session-readable report access or exact guarded event/entry/round selection, plus admin destination. Wired tournament route slot and adapted route harness. No live writes, migrations or deployment. T16 is next eligible.

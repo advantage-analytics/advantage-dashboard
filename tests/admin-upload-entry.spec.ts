@@ -56,6 +56,13 @@ function routeHarness({
     "@/components/admin/admin-dual-result-form": {
       AdminDualResultForm: "dual-form",
     },
+    "@/components/admin/admin-tournament-result-form": {
+      AdminTournamentResultForm: "tournament-form",
+    },
+    "./tournament-actions": {
+      loadAdminTournamentAction: async () => {},
+      submitAdminTournamentAction: async () => {},
+    },
     "./dual-actions": {
       loadAdminDualAction: async () => {},
       submitAdminDualAction: async () => {},
@@ -202,8 +209,8 @@ test("dual event reads require authorization and valid target context", async ()
   ]);
 });
 
-test("other upload kinds skip privileged event reads and dual failures retain form", async () => {
-  for (const kind of ["file", "video", "tournament"]) {
+test("file/video skip privileged event reads and result failures retain forms", async () => {
+  for (const kind of ["file", "video"]) {
     const h = routeHarness();
     await h.page({ searchParams: Promise.resolve({ team: TEAM, kind }) });
     expect(h.reads).toEqual(["guard", `context:${TEAM}`]);
@@ -327,4 +334,14 @@ test("file/video mount shared wizard with target and stable retry identifiers; r
       (e) => e.type === "a" && e.props.href === "/admin/uploads/new?kind=file",
     ),
   ).toBe(true);
+});
+
+test("tournament slot is scoped to the selected program", async () => {
+  const h = routeHarness();
+  const result = await h.page({
+    searchParams: Promise.resolve({ team: TEAM, kind: "tournament" }),
+  });
+  expect(h.reads).toContain("events:kind:tournament");
+  expect(result.props.tournamentResult.type).toBe("tournament-form");
+  expect(result.props.tournamentResult.props.context).toBe(context);
 });

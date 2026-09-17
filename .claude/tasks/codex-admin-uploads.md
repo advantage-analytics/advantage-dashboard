@@ -222,7 +222,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T14 · Build tournament entry and review
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-5.6-sol
 - **needs:** T11, T13
 - **files:** Best guesses: admin tournament form and shared review/status components.

@@ -1,3 +1,8 @@
+import { AdminTournamentResultForm } from "@/components/admin/admin-tournament-result-form";
+import {
+  loadAdminTournamentAction,
+  submitAdminTournamentAction,
+} from "./tournament-actions";
 import Link from "next/link";
 import { AdminDualResultForm } from "@/components/admin/admin-dual-result-form";
 import { loadAdminDualAction, submitAdminDualAction } from "./dual-actions";
@@ -23,6 +28,9 @@ export default async function AdminNewUploadPage({
     team?: string | string[];
     kind?: string | string[];
     q?: string | string[];
+    event?: string | string[];
+    entry?: string | string[];
+    round?: string | string[];
   }>;
 }) {
   // The layout is not an authorization dependency: the page guards before any
@@ -60,13 +68,16 @@ export default async function AdminNewUploadPage({
   }
   let dualEvents: AdminDualOption[] = [];
   let dualEventsError: string | null = null;
-  if (context && selection.kind === "dual") {
+  if (
+    context &&
+    (selection.kind === "dual" || selection.kind === "tournament")
+  ) {
     try {
       const result = await createAdminClient()
         .from("program_events")
         .select("id,name,starts_on")
         .eq("program_id", context.workspace.id)
-        .eq("kind", "dual")
+        .eq("kind", selection.kind)
         .order("starts_on", { ascending: false })
         .order("id")
         .limit(100);
@@ -76,10 +87,15 @@ export default async function AdminNewUploadPage({
         label: `${event.name} · ${event.starts_on}`,
       }));
     } catch {
-      dualEventsError =
-        "We couldn’t load existing duals. Refresh to try again.";
+      dualEventsError = `We couldn’t load existing ${selection.kind === "dual" ? "duals" : "tournaments"}. Refresh to try again.`;
     }
   }
+  const initialTournament =
+    context &&
+    selection.kind === "tournament" &&
+    typeof params.event === "string"
+      ? await loadAdminTournamentAction(context.workspace.id, params.event)
+      : null;
   const picker = (
     <section aria-label="Choose a team" className="flex flex-col gap-3">
       <form
@@ -141,6 +157,29 @@ export default async function AdminNewUploadPage({
       kind={selection.kind}
       picker={picker}
       error={error}
+      tournamentResult={
+        context && selection.kind === "tournament" ? (
+          <AdminTournamentResultForm
+            key={`${context.workspace.id}:${typeof params.event === "string" ? params.event : "new"}`}
+            context={context}
+            events={dualEvents}
+            eventsError={
+              initialTournament && !initialTournament.ok
+                ? initialTournament.message
+                : dualEventsError
+            }
+            initialContext={
+              initialTournament?.ok ? initialTournament.context : null
+            }
+            initialEntry={typeof params.entry === "string" ? params.entry : ""}
+            initialRound={
+              typeof params.round === "string" ? params.round : "R16"
+            }
+            loadAction={loadAdminTournamentAction}
+            submitAction={submitAdminTournamentAction}
+          />
+        ) : undefined
+      }
       dualResult={
         context && selection.kind === "dual" ? (
           <AdminDualResultForm
