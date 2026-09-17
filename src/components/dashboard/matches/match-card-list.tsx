@@ -57,9 +57,8 @@ import { cn } from "@/lib/utils";
  * So the leftover width IS the lifecycle column. It carries a 96px minimum, so
  * at the narrow end of `lg` the upload's bar collapses before its words do —
  * the chip is what has to survive — and every bounded column gives up its own
- * slack first. It heads nothing: the cell is an annotation, self-describing on
- * the rows that use it, and a label over a column that is blank eight rows in
- * ten only draws attention to the blanks.
+ * slack first. It is headed Analysis and names the settled outcome as well as
+ * active work, so an empty-looking trailing track is no longer ambiguous.
  *
  * Opponent's cap was measured with the 26px mark it no longer carries (a full
  * 13/500 name plus the "New" pill came to 240px); the freed 36px is left as
@@ -233,11 +232,10 @@ export function MatchCardList({
         )}
       </span>
 
-      {/* Lifecycle — silent on a settled row; the upload's chip and bar, or the
+      {/* Analysis — the settled outcome, the upload's chip and bar, or the
           one word that explains an exception, on the rest. `grid` blockifies
           the chip onto the cell's line and stretches it across the track;
-          `row-lifecycle` gates the rotating copy on this cell's width (see
-          globals.css). */}
+          `row-lifecycle` identifies the lifecycle container (see globals.css). */}
       <div className="row-lifecycle grid min-w-0 items-center">
         <RowLifecycle
           analysis={match.analysis}

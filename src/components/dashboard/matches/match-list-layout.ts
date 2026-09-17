@@ -55,15 +55,15 @@ export function listGridCols(scope: "personal" | "team", compact = false) {
 
 /**
  * One header label per track, shared by `MatchesGrid` and the loading skeleton
- * so the two cannot drift. Lifecycle heads nothing but keeps an empty label so
- * the header's column count stays in step with the row's; Event stays in the
+ * so the two cannot drift. Analysis labels the trailing lifecycle track;
+ * Event stays in the
  * team header beside the drawer, fading with the cells under it.
  */
 export function listColumnLabels(scope: "personal" | "team"): string[] {
   if (scope === "personal") {
-    return ["Date", "Opponent", "Result", "Score", "Event", ""];
+    return ["Date", "Opponent", "Result", "Score", "Event", "Analysis"];
   }
-  return ["Date", "Player", "Opponent", "Result", "Score", "Event", ""];
+  return ["Date", "Player", "Opponent", "Result", "Score", "Event", "Analysis"];
 }
 
 export const LIST_ROW_FRAME = "grid items-center gap-x-4";

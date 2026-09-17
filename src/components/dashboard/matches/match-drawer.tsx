@@ -1,18 +1,23 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   Calendar,
+  Clock,
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  Clock,
   MapPin,
+  Trophy,
   TriangleAlert,
   X,
 } from "lucide-react";
+import { providers } from "@/lib/providers";
+import { shortName } from "@/lib/data/match-utils";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import {
   ANALYSIS_LABEL,
@@ -45,6 +50,7 @@ interface Snapshot {
 
 /** The scheduled line a match was recorded against, when it has one. */
 interface ScheduleLink {
+  site: string | null;
   eventId: string;
   name: string;
   slot: string | null;
@@ -81,19 +87,17 @@ export function forgetMatchDetails(matchId: string): void {
  * The shell is `PeekDrawerFrame`, shared with a draft's drawer; the header's
  * ⋯ is the uploader's Edit · Delete — the only place a match row's actions live.
  *
- * Body, top to bottom: the match's name as the link to its report (it wraps,
- * never truncates) over its event and round; the outcome glyph and score with
- * one nowrap row of date, duration and surface; the analysis state when there
- * is one; four snapshot figures once numbers exist — absent, not empty, before
- * that; and on a team match, the scheduled line it counts toward.
+ * Body, top to bottom: the abbreviated match name links to its report, followed
+ * by the outcome and score; compact icon-and-value metadata rows; the analysis
+ * state when there is one; four snapshot figures once numbers exist — absent,
+ * not empty, before that; and on a team match, its scheduled line.
  *
  * ── The footer ─────────────────────────────────────────────────────────────
- * A ghost "Open match" for everyone, always — so a player, or a coach whose
+ * A blue "View match" for everyone, always — so a player, or a coach whose
  * events policy grants no schedule rights, is never left with an empty footer,
- * and the footer does not change shape from one viewer to the next. The one
- * primary sits under it only when there is something to do here: "Try again"
- * on a failed analysis, for the person who uploaded it (the resubmit route
- * refuses anyone else).
+ * and the footer does not change shape from one viewer to the next. An outlined
+ * "Retry" sits under it on a failed analysis for the person who uploaded it
+ * (the resubmit route refuses anyone else).
  *
  * ── Row-click law ──────────────────────────────────────────────────────────
  * On the Matches page a match row peeks instead of travelling — the ruling is
@@ -134,9 +138,8 @@ export function MatchDrawer({
   const details = useMatchDetails(match, scope);
   const href = `/dashboard/matches/${match.id}`;
   const isTeam = scope === "team";
-  const title = isTeam
-    ? `${match.player1.name} vs ${match.player2.name}`
-    : `vs ${match.player2.name}`;
+  const title = `${drawerSideName(match.player1.name)} vs ${drawerSideName(match.player2.name)}`;
+  const provider = providers.find((p) => p.id === match.sourceProvider);
   const status = match.analysis?.status;
   const inFlight = status ? isInFlight(status) : false;
   const failed = status ? isAnalysisFailed(status) : false;
@@ -147,14 +150,6 @@ export function MatchDrawer({
   // No numbers while a match is still being worked on or has failed: the
   // score and snapshot would draw zeroes that read as "no serves".
   const settled = !inFlight && !failed;
-
-  const facts = [
-    { icon: Calendar, text: formatShortDate(match.date), mono: true },
-    match.duration ? { icon: Clock, text: match.duration, mono: true } : null,
-    match.courtType
-      ? { icon: MapPin, text: capitalize(match.courtType), mono: false }
-      : null,
-  ].filter((fact) => fact !== null);
 
   return (
     <PeekDrawerFrame
@@ -184,8 +179,11 @@ export function MatchDrawer({
       }
       footer={
         <>
-          <Link href={href} className={cn(advButton("ghost", "md"), "w-full")}>
-            Open match
+          <Link
+            href={href}
+            className={cn(advButton("primary", "md"), "w-full")}
+          >
+            View match
           </Link>
           {canRetry && match.analysis?.jobId && (
             <RetryButton jobId={match.analysis.jobId} />
@@ -193,28 +191,18 @@ export function MatchDrawer({
         </>
       }
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6 pb-[22px]">
-        {/* Identity — the match's name is the bridge to its report. */}
-        <div className="flex flex-col gap-1">
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-[22px] pt-5 pb-[22px]">
+        <div className="flex min-w-0 flex-col gap-2.5">
           <h2 className="text-title-lg">
             <Link
               href={href}
-              className="rounded-[var(--radius-cell)] [text-wrap:balance] text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+              aria-label={`${match.player1.name} vs ${match.player2.name}`}
+              className="block truncate rounded-[var(--radius-cell)] text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
             >
               {title}
             </Link>
           </h2>
-          <p className="text-[12px] leading-[1.5] text-[var(--ink-600)]">
-            {match.tournamentName}
-            {match.round && ` · ${match.round}`}
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-2.5">
           {settled && match.score.sets.length > 0 && (
-            // A fixed-height row with the score's line box pinned to it, so
-            // the glyph centres on the digits — the tiebreak superscript
-            // otherwise raises the line box and drops the score below it.
             <div className="flex h-5 items-center gap-2">
               <ResultMark won={match.score.winner === "player1"} />
               <ScoreLine
@@ -223,25 +211,79 @@ export function MatchDrawer({
               />
             </div>
           )}
-          <div className="flex items-center gap-3.5 whitespace-nowrap">
-            {facts.map(({ icon: Icon, text, mono }) => (
-              <span key={text} className="flex items-center gap-[5px]">
-                <Icon
-                  className="size-[13px] text-[var(--ink-400)]"
-                  strokeWidth={1.5}
-                  aria-hidden
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-2">
+          <dl className="flex min-w-0 flex-col gap-0.5 text-left">
+            <DrawerFact label="Date" icon={<Calendar />}>
+              <span className="tabular">{formatShortDate(match.date)}</span>
+            </DrawerFact>
+            <DrawerFact
+              label="Court"
+              icon={
+                <Image
+                  src="/icons/tennis-court-icon.svg"
+                  alt=""
+                  width={16}
+                  height={16}
                 />
-                <span
-                  className={cn(
-                    "text-[var(--ink-600)]",
-                    mono ? "mono tabular text-[11px]" : "text-[12px]",
-                  )}
-                >
-                  {text}
+              }
+            >
+              {match.courtType ? capitalize(match.courtType) : "Not specified"}
+            </DrawerFact>
+            <DrawerFact label="Home/Away" icon={<MapPin />}>
+              {details?.schedule?.site
+                ? capitalize(details.schedule.site)
+                : "Not specified"}
+            </DrawerFact>
+            <DrawerFact label="Event" icon={<Trophy />}>
+              {match.tournamentName ||
+                details?.schedule?.name ||
+                "Not specified"}
+              {match.round && (
+                <span className="ml-1 text-[11px] text-[var(--ink-500)]">
+                  {match.round}
                 </span>
-              </span>
-            ))}
-          </div>
+              )}
+            </DrawerFact>
+            {match.duration && (
+              <DrawerFact label="Duration" icon={<Clock />}>
+                <span className="tabular">{match.duration}</span>
+              </DrawerFact>
+            )}
+            {provider && (
+              <DrawerFact
+                label="Provider"
+                icon={
+                  provider.id === "splitstep" ? (
+                    <span className="flex size-4 items-center justify-center rounded-[3px] bg-[var(--ink-900)]">
+                      <Image
+                        src="/logos/logo3.svg"
+                        alt=""
+                        width={10}
+                        height={7}
+                        className="brightness-0 invert"
+                      />
+                    </span>
+                  ) : (
+                    <Image
+                      src={
+                        provider.id === "swing-vision"
+                          ? "/providers/swingvision-icon.png"
+                          : provider.logo
+                      }
+                      alt=""
+                      width={16}
+                      height={16}
+                      className="size-4 object-contain"
+                    />
+                  )
+                }
+              >
+                {provider.name}
+              </DrawerFact>
+            )}
+          </dl>
         </div>
 
         {inFlight && status && (
@@ -279,9 +321,9 @@ export function MatchDrawer({
         )}
 
         {settled && details?.snapshot && (
-          <div className="flex flex-col gap-3 border-t border-[var(--border-hairline)] pt-4">
+          <div className="flex flex-col gap-3">
             <span className="eyebrow-sm">Snapshot</span>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-3.5">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
               {(
                 [
                   ["1st serve in", details.snapshot.firstServeIn],
@@ -324,6 +366,42 @@ export function MatchDrawer({
         )}
       </div>
     </PeekDrawerFrame>
+  );
+}
+
+/** Abbreviate each partner separately so doubles retain both surnames. */
+function drawerSideName(name: string): string {
+  return name
+    .split(/\s+[&/]\s+/)
+    .map((partner) => shortName(partner, 0))
+    .join(" & ");
+}
+
+/** One shared icon rail keeps every match fact aligned. */
+function DrawerFact({
+  label,
+  icon,
+  children,
+}: {
+  label: string;
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-5 min-w-0 items-center gap-2">
+      <dt className="shrink-0">
+        <span className="sr-only">{label}</span>
+        <span
+          aria-hidden="true"
+          className="flex size-4 items-center justify-center text-[var(--ink-400)] [&>svg]:size-3.5 [&>svg]:stroke-[1.5]"
+        >
+          {icon}
+        </span>
+      </dt>
+      <dd className="min-w-0 flex-1 truncate text-[11px] leading-4 text-[var(--ink-700)]">
+        {children}
+      </dd>
+    </div>
   );
 }
 
@@ -485,9 +563,9 @@ function RetryButton({ jobId }: { jobId: string }) {
             router.refresh();
           })
         }
-        className={cn(advButton("primary", "md"), "w-full")}
+        className={cn(advButton("outline", "md"), "w-full")}
       >
-        {pending ? "Trying again…" : "Try again"}
+        {pending ? "Retrying…" : "Retry"}
       </button>
       {error && (
         <p
@@ -550,7 +628,7 @@ function useMatchDetails(
         ? supabase
             .from("matches")
             .select(
-              "entry:program_event_entries(slot, event:program_events(id, name))",
+              "entry:program_event_entries(slot, event:program_events(id, name, site))",
             )
             .eq("id", match.id)
             .maybeSingle()
@@ -615,9 +693,17 @@ function toSnapshot(
 
 function toSchedule(row: unknown): ScheduleLink | null {
   const entry = (row as { entry?: unknown } | null)?.entry as
-    | { slot: string | null; event: { id: string; name: string } | null }
+    | {
+        slot: string | null;
+        event: { id: string; name: string; site: string | null } | null;
+      }
     | null
     | undefined;
   if (!entry?.event) return null;
-  return { eventId: entry.event.id, name: entry.event.name, slot: entry.slot };
+  return {
+    eventId: entry.event.id,
+    name: entry.event.name,
+    site: entry.event.site,
+    slot: entry.slot,
+  };
 }
