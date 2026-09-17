@@ -142,3 +142,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** Mechanical GATE PASS (/private/tmp/t17-gate.log); completion review VERDICT: pass. Focused formatting, ESLint and typecheck passed.
 
 **changed:** Added Upload for this team in the admin team header using the existing primary button primitive and adminUploadHref(program.id, null). Preserved crest, heading, status/plan pills and facts with a wrapping action layout. No other source changes or live effects. T19 is now eligible for integrated flow and desktop verification.
+
+## T19 · Verify all four flows and desktop fidelity — blocked
+
+**gate:** Mechanical GATE PASS (/private/tmp/t19-gate.log); completion review VERDICT: needs-work. All four integrated submission/history/schedule/report flows, attachment/partial retry E2E, actual dashboard browser regressions and final route/frame desktop comparison remain incomplete. Fresh focused tests 253 passed, 31 skipped; PGlite 18 passed.
+
+**changed:** Verification record and concrete disposable integration setup/replay checklist preserved in stash 9f7bb1afd11f311affed363bbd016c9a635af38b, also readable at /private/tmp/admin-uploads-verification-t19.md. Requires isolated full Supabase schema/Auth/Storage/Edge with Phase2b migrations, seeded admin/member/nonmember accounts and program fixtures, actual Next routes, test media and isolated vendor transport; previous component mocks do not meet E2E. No live writes or deployment. T20 waits on blocked T19, so queue automation pauses for integration verification.
