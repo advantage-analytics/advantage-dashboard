@@ -124,3 +124,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** Mechanical GATE PASS (lint, typecheck, full tests); completion review VERDICT: pass. Focused tests 21 passed. Mocked actual-component browser checks verified invalid gating, existing recorded round read-only, nullable scoring display, quarter-final review and interrupted-save retry to success. Recorded-result fixture view checked; full live integration remains T19.
 
 **changed:** Added existing/new tournament and singles entry form, shared result review, score/outcome validation, immutable operation snapshot and retained retry inputs. Guarded context adapter filters eligible singles entries and preserves legacy scoring; result links use session-readable report access or exact guarded event/entry/round selection, plus admin destination. Wired tournament route slot and adapted route harness. No live writes, migrations or deployment. T16 is next eligible.
+
+## T16 · Render console submission history — blocked
+
+**gate:** Mechanical verdict unavailable after interrupted session: process 56049 no longer exists and no GATE PASS was received. Fail-closed per task-next; completion review not run. Focused lint/typecheck and 9 history tests passed, and browser fixture verified six columns, canonical analysis labels, partial details, cursor navigation and empty/error/loading states. These do not replace the full gate.
+
+**changed:** Work preserved in stash 5c3927aedc0a6fb401407de13afec76b59ed344f: admin history page, six-column component and loading route. No implementation failure established; recovery requires fresh mechanical gate then completion review. T17 remains independently eligible; T19 waits on T16 and T17.
