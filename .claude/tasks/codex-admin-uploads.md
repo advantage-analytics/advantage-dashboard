@@ -210,7 +210,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T13 · Build dual entry, review, and retry states
 
-- **status:** blocked
+- **status:** done
 - **model:** gpt-5.6-sol
 - **needs:** T10, T12
 - **files:** Best guesses: admin dual form and shared result review/status components.

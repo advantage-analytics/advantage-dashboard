@@ -1,4 +1,8 @@
 import Link from "next/link";
+import { AdminDualResultForm } from "@/components/admin/admin-dual-result-form";
+import { loadAdminDualAction, submitAdminDualAction } from "./dual-actions";
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { AdminDualOption } from "@/lib/admin/results/dual-form";
 import { AdminUploadEntry } from "@/components/admin/admin-upload-entry";
 import {
   adminUploadHref,
@@ -52,6 +56,28 @@ export default async function AdminNewUploadPage({
       });
     } catch {
       error = "We couldn’t search teams. Try again.";
+    }
+  }
+  let dualEvents: AdminDualOption[] = [];
+  let dualEventsError: string | null = null;
+  if (context && selection.kind === "dual") {
+    try {
+      const result = await createAdminClient()
+        .from("program_events")
+        .select("id,name,starts_on")
+        .eq("program_id", context.workspace.id)
+        .eq("kind", "dual")
+        .order("starts_on", { ascending: false })
+        .order("id")
+        .limit(100);
+      if (result.error) throw result.error;
+      dualEvents = (result.data ?? []).map((event) => ({
+        id: event.id,
+        label: `${event.name} · ${event.starts_on}`,
+      }));
+    } catch {
+      dualEventsError =
+        "We couldn’t load existing duals. Refresh to try again.";
     }
   }
   const picker = (
@@ -115,6 +141,18 @@ export default async function AdminNewUploadPage({
       kind={selection.kind}
       picker={picker}
       error={error}
+      dualResult={
+        context && selection.kind === "dual" ? (
+          <AdminDualResultForm
+            key={context.workspace.id}
+            context={context}
+            events={dualEvents}
+            eventsError={dualEventsError}
+            loadAction={loadAdminDualAction}
+            submitAction={submitAdminDualAction}
+          />
+        ) : undefined
+      }
     />
   );
 }

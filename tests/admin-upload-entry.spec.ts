@@ -48,10 +48,41 @@ function routeHarness({
   allowed = true,
   refusal = false,
   searchFails = false,
+  dualEventsFail = false,
 } = {}) {
   const reads: string[] = [];
   const mocks = {
     "@/components/admin/admin-upload-entry": { AdminUploadEntry: "entry" },
+    "@/components/admin/admin-dual-result-form": {
+      AdminDualResultForm: "dual-form",
+    },
+    "./dual-actions": {
+      loadAdminDualAction: async () => {},
+      submitAdminDualAction: async () => {},
+    },
+    "@/lib/supabase/admin": {
+      createAdminClient: () => {
+        reads.push("admin-client");
+        const query = {
+          select: () => query,
+          eq: (column: string, value: string) => {
+            reads.push(`events:${column}:${value}`);
+            return query;
+          },
+          order: () => query,
+          limit: async () => ({
+            data: [{ id: TEAM, name: "Stanford", starts_on: "2026-09-16" }],
+            error: dualEventsFail ? new Error("read failure") : null,
+          }),
+        };
+        return {
+          from: (table: string) => {
+            reads.push(`table:${table}`);
+            return query;
+          },
+        };
+      },
+    },
     "@/components/admin/admin-upload-selection": {
       adminUploadHref,
       adminUploadSelection,
@@ -130,6 +161,62 @@ test("resolved target reaches entry without using active workspace", async () =>
   expect(result.props.context).toBe(context);
   expect(result.props.kind).toBe("file");
   expect(h.reads).toEqual(["guard", `context:${TEAM}`]);
+});
+
+test("dual event reads require authorization and valid target context", async () => {
+  const denied = routeHarness({ allowed: false });
+  await expect(
+    denied.page({
+      searchParams: Promise.resolve({ team: TEAM, kind: "dual" }),
+    }),
+  ).rejects.toThrow("not found");
+  expect(denied.reads).toEqual(["guard"]);
+
+  const refused = routeHarness({ refusal: true });
+  await refused.page({
+    searchParams: Promise.resolve({ team: TEAM, kind: "dual" }),
+  });
+  expect(refused.reads).toEqual(["guard", `context:${TEAM}`]);
+
+  const malformed = routeHarness();
+  await malformed.page({
+    searchParams: Promise.resolve({ team: "bad", kind: "dual" }),
+  });
+  expect(malformed.reads).toEqual(["guard"]);
+
+  const resolved = routeHarness();
+  const result = await resolved.page({
+    searchParams: Promise.resolve({ team: TEAM, kind: "dual" }),
+  });
+  expect(resolved.reads).toEqual([
+    "guard",
+    `context:${TEAM}`,
+    "admin-client",
+    "table:program_events",
+    `events:program_id:${TEAM}`,
+    "events:kind:dual",
+  ]);
+  expect(result.props.dualResult.type).toBe("dual-form");
+  expect(result.props.dualResult.props.events).toEqual([
+    { id: TEAM, label: "Stanford · 2026-09-16" },
+  ]);
+});
+
+test("other upload kinds skip privileged event reads and dual failures retain form", async () => {
+  for (const kind of ["file", "video", "tournament"]) {
+    const h = routeHarness();
+    await h.page({ searchParams: Promise.resolve({ team: TEAM, kind }) });
+    expect(h.reads).toEqual(["guard", `context:${TEAM}`]);
+  }
+  const h = routeHarness({ dualEventsFail: true });
+  const result = await h.page({
+    searchParams: Promise.resolve({ team: TEAM, kind: "dual" }),
+  });
+  expect(result.props.context).toBe(context);
+  expect(result.props.dualResult.props.events).toEqual([]);
+  expect(result.props.dualResult.props.eventsError).toContain(
+    "couldn’t load existing duals",
+  );
 });
 
 test("bad scope refuses wizard and search results preserve valid kind", async () => {

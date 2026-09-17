@@ -112,3 +112,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** Mechanical GATE FAIL: lint and typecheck passed; full tests had 1334 passed, 155 skipped, 4 failed in tests/admin-upload-entry.spec.ts because its route harness does not mock the new ./dual-actions import. Completion review not run.
 
 **changed:** Preserved implementation in stash 046938dc6fe331e1b76dcc165a38485e5fa9096b. Focused form/service tests and mocked-browser existing-result read-only, review, partial-save and retry checks passed, but full gate remains authoritative. Recovery must update the existing route harness for the new guarded dependencies, then rerun both gates. No task code committed. T14 waits on T13; T16 and T17 remain independently eligible.
+
+## T13 · Build dual entry, review, and retry states — done
+
+**gate:** Mechanical GATE PASS (lint, typecheck, full test suite); completion review VERDICT: pass. Focused route/form tests: 15 passed. Prior mocked-browser checks verified coach read-only results, invalid review gating, two-line review, retained partial success and retry completion.
+
+**changed:** Restored T13 implementation and repaired route harness mocks for the new actions, form and guarded event queries, adding program/kind scoping and refusal coverage. Added nine-line existing/new dual entry using shared lineup, format, score and outcome helpers; guarded saved-result context; read-only coach results; frozen review requests and durable retry status retaining successes. Wired the dual route slot. Existing stash remains preserved. No deployment or live writes. T14 is now eligible; queue automation remains active.
