@@ -88,3 +88,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** Mechanical GATE PASS; completion reviewer VERDICT: needs-work. The upload-kind selection uses native radio glyphs, but the approved frame and design primitive require the blue check-dot with white check (reference/primitives.md:167). Criterion 3 did not pass.
 
 **changed:** Failed implementation preserved in stash 1810d3eb9105ac04b1e9419f1024d7a9488c6973; only blocked status and this log entry are committed. Focused regressions passed (24 tests, including 6 new). Disposable browser fixture verified kind/provider/slot selection, URL preservation through team changes, Cancel destination and invalid-team recovery, with shared wizard/navigation mocked; no authenticated end-to-end claim. No live mutations or deployment. T15 remains independently eligible, so queue automation stays active.
+
+## T15 · Load paginated console history — done
+
+**gate:** Mechanical GATE PASS (lint, typecheck, full test suite); completion reviewer VERDICT: pass. Nine actual-loader fixture tests passed, covering authorization, provenance, states, batch reads and cursor traversal. Implementation dispatched on exact gpt-6-astra model.
+
+**changed:** Added admin-guarded console history loader and row/item contracts, with session provenance reads and guarded privileged metadata hydration. Explicit origin includes member/nonmember admins and existing-result attachments, excluding dashboard activity. Persisted item/attempt/job/stat evidence drives partial-save and canonical analysis states; session-readable match IDs alone receive report links. Descending timestamp/operation-ID pagination preserves microseconds and handles equal timestamps; related reads are chunked and paginated. Contract documentation records unapplied migration prerequisites and read-only catalog evidence. No UI, migration or live mutation. T13 was passed over waiting on T12; T14 waits on T13. T18 remains independently eligible.

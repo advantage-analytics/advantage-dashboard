@@ -233,7 +233,7 @@ The approved task criteria below supersede conflicting details in the earlier Ph
 
 ## T15 · Load paginated console history
 
-- **status:** todo
+- **status:** done
 - **model:** gpt-6-astra
 - **needs:** T6, T7, T10, T11
 - **files:** Best guesses: `src/lib/data/admin-uploads-server.ts`, history types and tests.
