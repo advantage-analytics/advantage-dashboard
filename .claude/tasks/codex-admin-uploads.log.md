@@ -106,3 +106,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** User explicitly authorized recovery and queue resume. Restored stash 1810d3eb9105ac04b1e9419f1024d7a9488c6973; exact gpt-5.6-sol worker corrected selection primitive. Mechanical GATE PASS; completion reviewer VERDICT: pass. Focused regressions 24 passed; typecheck, lint, formatting and route-map checks passed. Browser fixture confirmed blue check-dot rendering and native ArrowRight selection with URL update.
 
 **changed:** Added guarded /admin/uploads/new team search and four URL-preserved kinds, shared admin file/video wizard mounting with stable per-mount operation/item IDs, recoverable invalid selections, cancellation and dual/tournament integration slots. Generated MAP includes route. Approved shell uses required blue check-dot with white check while retaining native radio semantics. Copy reflects supported team attribution. Browser fixture used actual shell with mocked wizard/navigation; authenticated end-to-end verification remains T19. Original stash retained. Queue automation resumes after commit; no live writes, push or merge.
+
+## T13 · Build dual entry, review, and retry states — blocked
+
+**gate:** Mechanical GATE FAIL: lint and typecheck passed; full tests had 1334 passed, 155 skipped, 4 failed in tests/admin-upload-entry.spec.ts because its route harness does not mock the new ./dual-actions import. Completion review not run.
+
+**changed:** Preserved implementation in stash 046938dc6fe331e1b76dcc165a38485e5fa9096b. Focused form/service tests and mocked-browser existing-result read-only, review, partial-save and retry checks passed, but full gate remains authoritative. Recovery must update the existing route harness for the new guarded dependencies, then rerun both gates. No task code committed. T14 waits on T13; T16 and T17 remain independently eligible.
