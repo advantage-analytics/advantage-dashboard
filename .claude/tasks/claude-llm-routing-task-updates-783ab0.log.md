@@ -419,3 +419,52 @@ caller's own pending row is confirmed untouched by the guess. The spec grows fro
    Clients should send no body or `{}`; if the wizard ends up sending an empty string, soften it.
 3. T3's lease check is time-based only. **T10 must clear the finalization lease on failure**,
    or a crashed completion blocks cancellation for the lease's full duration.
+
+## T10 · Finalize uploads with resumable publication and atomic activation — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** New `src/lib/services/match-video/complete.ts` and its POST route. Every poll re-runs
+T8's full access ladder, then takes a fresh finalization lease through T4's
+`match_video_begin_finalization`, which freezes the confirmed time and rechecks the expected-active
+belief. Only then is storage touched: on first entry T6's bounded probe of the staged blob; on
+resume a single HEAD pinned to the recorded ETag, so overwritten staging is `stale_attachment`
+before the copy is even polled. A pending copy answers 202 with `retryAfterSeconds: 2` and a
+matching `Retry-After`. On success the published length is checked against staged, the _final_
+blob is probed, and those measured values — never the staged or client-declared ones — are what
+activation receives, with coverage recomputed from source rows inside T4's transaction.
+
+The property an athlete would notice is that the previous active video survives every failure,
+and it is proven per-path rather than once: each failure test snapshots the active row with
+`structuredClone` and asserts deep equality afterwards, across an 11-entry boundary table
+(begin, probe staged, begin publication, persist, probe published, activate — each as a returned
+error and as a thrown exception) plus the cancellation, deletion, retired-attempt, too-short and
+undecodable scenarios. The attempt stays `pending` throughout; no new state was invented, no
+source row is written, and no vendor job, billing or quota was introduced.
+
+T9's carried constraint is honoured. The lease is per _request_, not per attempt — the client
+never holds a token — and `finalize()` releases it in a `try/finally` on every exit except a
+successful commit, where activation cleared it in-transaction. A failed release is logged and does
+not change the answer. `FINALIZATION_LEASE_SECONDS = 90`, chosen to outlast two 15-second probe
+deadlines plus round trips while capping how long a crashed request can block cancellation, since
+T3's lease check is time-based only.
+
+The never-landed bound closes T6's open question: a 404 on the staged blob stays a retryable 503
+while `upload_sas_expires_at` is in the future, because a credential could still write that key,
+and becomes a terminal 413 once it has passed, because T8 persists the expiry _before_ minting so
+nothing can ever write it afterwards. That reuses a guarantee the system already makes instead of
+adding a column or a timer. `tests/match-video-completion.spec.ts` holds 72 cases; 162 pass across
+the four specs checked.
+
+**follow-ups:**
+
+1. `parseExpectedActive` is now duplicated verbatim in `uploads.ts` and `complete.ts` — ten lines,
+   private in both. The reviewer flagged it as acceptable-but-noted rather than blocking. Worth
+   hoisting into `http.ts` in a cleanup pass.
+2. The never-landed 503 window can be up to six hours. A tighter bound (an attempt counter or a
+   `first_completion_at` column) would end the polling sooner; the wizard's own bounded transient
+   retries are what keep this tolerable today.
+3. T14 must abort a pending copy before deleting a retired row's blobs — cancellation during
+   publication is now reachable and tested, so that path is live rather than theoretical.
+4. A second concurrent poll gets 409 `pending_attempt_conflict/finalizing`. The wizard (T20)
+   should serialise its polls; mapping that detail to a 202 instead would be the alternative.

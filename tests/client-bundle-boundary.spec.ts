@@ -42,6 +42,9 @@ const SERVER_ONLY = [
   "lib/services/match-video/access.ts",
   "lib/services/match-video/http.ts",
   "lib/services/match-video/uploads.ts",
+  // T10: completion reaches `probe.ts`, `storage.ts` and the service-role
+  // RPCs, and mints the finalization lease token.
+  "lib/services/match-video/complete.ts",
 ].map((p) => join(SRC, p));
 
 const EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];

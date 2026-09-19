@@ -162,7 +162,7 @@ contract and stops for review.
 
 ## T10 · Finalize uploads with resumable publication and atomic activation
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T4, T6, T7, T8, T9
 - **files:** Best guess: src/lib/services/match-video/complete.ts; src/app/api/matches/[matchId]/video/uploads/[attachmentId]/complete/route.ts; tests/match-video-completion.spec.ts (new)
