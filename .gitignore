@@ -154,3 +154,8 @@ supabase/.temp/
 # repository's history forever. The notebook documents the same command in its
 # first cell, so a fresh clone is one line away from running it.
 analysis/data/
+
+# `npx skills add` lockfile. It pins hashes for the vendored Supabase skills,
+# which .claude/skills/* above deliberately does not track — so the lock has
+# nothing to reproduce for anyone else.
+skills-lock.json
