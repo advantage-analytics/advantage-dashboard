@@ -355,7 +355,7 @@ contract and stops for review.
 
 ## T25 · Implement attachment playback credential refresh state
 
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **needs:** T12, T23, T24
 - **files:** Best guess: src/components/dashboard/matches/match-detail/film/use-attachment-playback.ts; focused hook/service tests (new)

@@ -1233,3 +1233,59 @@ specs the reviewer ran.
 4. A second tab correcting the alignment is only noticed at the next scheduled refresh, up to 28
    minutes. A `visibilitychange` refresh on focus would close that, but it is a behaviour change
    rather than state, so it was deliberately left out.
+
+## T25 · Implement attachment playback credential refresh state — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+(re-review after the earlier `needs-work`; the reviewer re-judged all four criteria, traced every
+rescheduling path itself rather than accepting the two reported fixes, and looked for a third)
+
+**changed:** Unblocked from the stash `f1b48576` rather than rewritten. New
+`use-attachment-playback.ts` holds pure helpers, a React-free controller and a thin hook. The
+spin the first review found is closed by an `expiryStalled` guard: the first answer whose
+`expiresAt` did not advance is waited out at the real expiry as before, a second one goes terminal
+with no timer, and a credential that genuinely advances clears the flag, so a server briefly behind
+and then catching up costs nothing.
+
+Fixing it surfaced a _second_ unbounded path the first review had not found: the `stale` branch of
+`install` re-armed with `previous = null`, so a server repeatedly answering with a version lower
+than the one held produced the same one-request-per-second loop once the held credential's lead
+window passed. It now goes through the same guard. The reviewer traced every reschedule path
+independently and confirmed no third exists — `start()`'s initial arm is the first schedule, not a
+reschedule, so it is not a loop candidate.
+
+The terminal state is `unplayable`: `removed` and `denied` are factually false since the attachment
+exists and access is fine, `unreachable` misdescribes a server that answered correctly every time,
+and `unplayable`'s existing copy already says a fresher credential is what would help. Its
+`canRetry: true` is a human-gated retry — one press, one request — not an automatic loop.
+
+The replacement test observes the real steady state rather than one more reschedule: it queues two
+non-advancing answers, still asserts the first re-arms at the full lead rather than a second, lets
+the timer fire again, then asserts the terminal state, `hasTimer() === false`, and a call count
+pinned at 2 after advancing four more lifetimes with another answer waiting. Both the implementer
+and the reviewer verified it fails against the pre-fix arithmetic by reverting the guard — the
+reviewer saw `Expected: 120000, Received: 1000`, the one-second floor re-triggering exactly as
+predicted — and confirmed zero residual diff afterwards.
+
+Everything else survived the modification: same-asset refresh keeps playhead and play/pause intent;
+replacement and correction re-anchor through `{pointId, pointTime}` on the source clock, which
+matters most for a correction since the old raw second is the one the wrong offset produced; stale
+responses are dropped by version and by run id; `reportPlayRejected` is inert with a test asserting
+zero fetches and an intact budget; and a non-attachment source gets a passthrough with no
+controller, timer or request, leaving the Advantage Intelligence lineage untouched. 24 cases;
+93 pass across the five specs checked.
+
+**follow-ups for T26:**
+
+1. `generation` is the element's reload key, and `resume` must be consumed via `resumeApplied()`
+   after the seek or the intent is re-applied on the next render. `realign: true` should move the
+   point list's selection, not just the playhead.
+2. The hook exposes `stops` and `clock` so the players stop deriving their own. `film-tab.tsx` and
+   `film-fullscreen.tsx` currently build them from `filmClock(video)` and must read them from here
+   instead, or the two will disagree after a correction.
+3. `film-player.tsx`'s "The film stopped loading → Reload" panel becomes redundant for the
+   attachment lineage once `problem` is rendered, but must stay for the provider lineage, which has
+   no refresh endpoint.
+4. A second tab correcting the alignment is only noticed at the next scheduled refresh, up to 28
+   minutes. A `visibilitychange` refresh on focus would close that; deliberately left out here as a
+   behaviour change rather than state.
