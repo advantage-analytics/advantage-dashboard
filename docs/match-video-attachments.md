@@ -253,32 +253,52 @@ Azure, and this repo's live database needs to take before or shortly after
 this ships to production. Do not read the tests passing locally as evidence
 any of these are done — they are not.
 
-1. **Azure account**: `.env.local` currently points at `advantagedashboard`,
-   which answers `AccountIsDisabled`. `advantagedashboardca` (Canada East) is
-   the live account and the env flip to it is a Vercel/`.env.local` step, not
-   a code one. `tests/match-video-azure-smoke.spec.ts` (9 cases, exercising
-   the production storage and probe functions against a real account) has
-   never run to completion — it skips with the `AccountIsDisabled` reason
-   until the account is flipped. Run it once the flip happens; it is the
-   remaining verification for this feature's Azure-integration criterion.
-2. **Azure CORS**, per §4 above — not verified from a real browser.
-3. **`CRON_SECRET`**, per §3 above — not set in Vercel for any environment.
+1. **Azure CORS**, per §4 above — not verified from a real browser. The smoke
+   test proves the wire format from Node, which does not send a preflight.
+2. **`CRON_SECRET`**, per §3 above — not set in Vercel for any environment.
    `vercel.json`'s schedule is already committed and correct; only the
-   secret is missing.
-4. **`scripts/cleanup-orphan-storage.ts --apply` must not run against
-   attachment storage before it is fixed.** That script attributes a blob to
-   a match by the _third_ path segment of its key. Under this feature's
-   `match-video/<matchId>/<attachmentId>/…` layout, that segment is the
-   attachment id, not a match id — so as written today, `--apply` would
-   delete every attachment blob as an orphan. It needs to skip or
-   re-attribute the `match-video/` prefix before any deploy carries
-   attachments. This is tracked as its own follow-up task, not fixed here.
+   secret is missing. Until it is set, the cleanup route refuses every call
+   (fail-closed, by design) and storage grows unbounded.
+3. **Vercel's own `AZURE_STORAGE_*` values** must name `advantagedashboardca`
+   and carry that account's key. Local `.env.local` now does (see below), but
+   the two are set separately — a deploy still reading the westus2 account
+   would fail every upload with `AuthenticationFailed`.
+
+### Closed since this document was first written
+
+- **Azure account and smoke test.** `.env.local` now names
+  `advantagedashboardca` (Canada East) with that account's key, and
+  `tests/match-video-azure-smoke.spec.ts` runs to completion: **9/9 pass
+  against the live account**, covering direct upload in the browser's block
+  sequence, bounded range-read verification, ETag-conditioned publication, a
+  changed staged object refused, a stranger's object left untouched,
+  credential-scoped playback, replacement, and tracked-object collection. That
+  closes this feature's Azure-integration criterion.
+
+  Two things that cost time and are worth knowing. A disabled _subscription_
+  makes every account under it answer `AccountIsDisabled`, however healthy the
+  account itself is — and `az account list --refresh` reports `Enabled` while
+  ARM still enforces read-only, so the CLI's state field is not evidence. The
+  authoritative signal is whether a write succeeds: `az storage account keys
+list` is a write and fails with `ReadOnlyDisabledSubscription` until the
+  subscription is genuinely back. Separately, the account name and the account
+  key are flipped independently; changing only the name yields
+  `AuthenticationFailed`, not `AccountIsDisabled`.
+
+- **The orphan sweeper.** `scripts/cleanup-orphan-storage.ts` attributed a blob
+  to a match by the _third_ path segment, which under this feature's
+  `match-video/<matchId>/<attachmentId>/…` layout is the attachment id — so
+  `--apply` would have deleted every attachment blob as an orphan. Fixed on its
+  own branch: each store now declares the layouts it writes and anything
+  unexplained is reported, never deleted. `match-video/` is deliberately not a
+  declared layout, because those blobs belong to the cleanup worker in §5, which
+  has the leases and copy-abort ordering that sweeper cannot replicate.
 
 Everything else is verified, not just claimed: the live database
 (`pouxujkhtbvkdwbzfvka`) carries all four migrations with their RPCs, checked
 privileges, and trigger; 42 attachment cases plus 10 retention cases pass
 against it; the full repository test suite passes (1954 passed, 73 skipped —
-9 of those are the Azure smoke cases above, the rest pre-existing env-gated
-specs — 0 failed); and near-limit behavior (multi-gigabyte files, the byte
+pre-existing env-gated specs, with the 9 Azure smoke cases now running rather
+than skipping — 0 failed); and near-limit behavior (multi-gigabyte files, the byte
 cap) is verified through virtual sources rather than real multi-gigabyte
 transfers.

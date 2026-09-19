@@ -1451,3 +1451,45 @@ was touched.
 
 1. Once the Azure account flip lands and `CRON_SECRET` is set, running the smoke spec and a real cron
    sweep would earn section 7 a short "verified in production" addendum.
+
+## T27 · criterion 3 closed — Azure smoke test run against the live account
+
+Appended after the drain, when the Azure subscription came back. Not a re-run of
+the task; the queue stays `done`.
+
+`tests/match-video-azure-smoke.spec.ts` now passes **9/9 against
+`advantagedashboardca`**, so T27's only unverified criterion is closed: direct
+upload in the browser's exact block sequence landing on the staged key and
+nowhere else, bounded range-read verification without a download,
+ETag-conditioned publication, a changed staged object refused with nothing at
+the final key, a stranger's object left byte-for-byte alone, the read credential
+serving only the final key, replacement publishing beside the first while it
+stays playable, and every tracked object collected with nothing untracked left
+behind.
+
+One assertion needed widening, committed as `8aae08ca`. The anonymous-read case
+listed only 401/403/404 — written from expectation, never executed, because the
+account answered `AccountIsDisabled` on every prior attempt. Run for real it
+returns **409 `PublicAccessNotPermitted`**, which is the strongest of the four:
+`allowBlobPublicAccess=false` refuses anonymous reads at the account level,
+before the container's access level or the blob's existence is consulted. The
+property under test — no bytes without the SAS — held throughout.
+
+Two diagnostic facts worth keeping, both of which cost time here:
+
+1. A disabled _subscription_ makes every account under it answer
+   `AccountIsDisabled`, however healthy the account is — both accounts did.
+   Worse, `az account list --refresh` reports `Enabled` while ARM still enforces
+   read-only, so the CLI's state field is not evidence. The authoritative signal
+   is whether a **write** succeeds: `az storage account keys list` is a write and
+   fails with `ReadOnlyDisabledSubscription` until the subscription is genuinely
+   back. I called the subscription enabled off the refresh output and was wrong.
+2. The account name and the account key flip independently. Changing only the
+   name gives `AuthenticationFailed` (403), not `AccountIsDisabled` — the keys
+   are per-account.
+
+`docs/match-video-attachments.md` §7 rewritten to match: the Azure account gate
+and the orphan sweeper both move to a "closed" section, the sweeper because it
+was fixed on its own branch (PR #232). Remaining gates are Azure CORS from a real
+browser, `CRON_SECRET` in Vercel, and Vercel's own `AZURE_STORAGE_*` values,
+which are set separately from `.env.local`.
