@@ -1289,3 +1289,56 @@ controller, timer or request, leaving the Advantage Intelligence lineage untouch
 4. A second tab correcting the alignment is only noticed at the next scheduled refresh, up to 28
    minutes. A `visibilitychange` refresh on focus would close that; deliberately left out here as a
    behaviour change rather than state.
+
+## T26 · Wire credential refresh into embedded and fullscreen players — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** One `useAttachmentPlayback` hook lives in `FilmRoom` and threads `url`, `generation`,
+`resume`, `problem`, `passthrough` and the report callbacks to both players. Each keeps a landing
+ref of playhead plus play/pause intent and restores it on the new element, so a same-asset refresh
+is invisible: a paused viewer stays paused in the same second on the new credential, a playing one
+keeps playing.
+
+All four of T25's handoff notes were answered. `generation` is the element key on both `<video>`s.
+`resume` is consumed by `film-tab`, not by either player, and the reasoning holds up: child effects
+run before the parent's, so both players have already copied the intent by the time the parent
+consumes it — whereas if a _player_ consumed it, the room mounting over a live report player would
+let whichever called first take it from the other. `realign` writes `currentTime` directly rather
+than waiting for a media event, so the point list's row moves even when the new file is slow. And
+`filmClock`/`filmStops` are gone from `film-tab` entirely — both surfaces read `playback.clock` and
+`playback.stops`, so a correction rebuilds them once and the two cannot disagree.
+
+The provider lineage is untouched and proven so: `provider-quiet` asserts zero `/video` requests
+over 2.5 seconds, well past the schedule's one-second floor, with the playhead intact, and
+`provider-broken` asserts a media error still draws the Reload panel with its button and no hook
+panel. `problem` outranks that panel, but `failed` is only ever set when `passthrough` is true.
+
+**A real bug was found and fixed along the way, and it is very likely live rather than a harness
+artifact.** The fullscreen room loads the _same URL the report player has already buffered_, so the
+element can reach `readyState 1` before React mounts the subtree — meaning `loadedmetadata` has
+already fired and the hand-off seek was silently skipped, opening the room on frame one. Both
+players now settle from an effect that asks `el.readyState` first and falls back to a native
+listener. The reviewer independently judged the mechanism real.
+
+Also worth recording: `play()` rejections no longer raise the embedded error panel — they route to
+the inert `reportPlayRejected`, so an autoplay refusal no longer claims "The film stopped loading".
+The element's own `error` event remains the only thing that draws it. Plan step 16 mandates this and
+the room already behaved this way.
+
+`point-list.tsx` gained two data attributes so "the selection moved" is assertable without pinning a
+token's value; no visual change. 11 new browser cases run three times over; 97 pass across the seven
+specs the reviewer checked, and all 525 `match-video-*` tests pass. Widget-states checklist run and
+gate marked.
+
+**follow-ups:**
+
+1. The `loadedmetadata` race is worth checking anywhere else a second `<video>` mounts on a URL that
+   is already buffered — the shots tab is the obvious candidate.
+2. The room's _playing_-across-refresh case is not separately exercised; only paused-in-room is
+   asserted. The `land()` logic is symmetric with the report player's, which is tested both ways, so
+   this is a coverage gap rather than a behaviour gap. T27 is the right place.
+3. `point-list.tsx` marks the playing row only with a background wash. `aria-current` would be an
+   honest accessibility improvement but changes semantics, so it belongs in a design-reviewed change.
+4. The three inert glyphs in the embedded control bar now sit beside a player whose fullscreen room
+   does have a loop — worth deciding whether the embedded bar should borrow it.

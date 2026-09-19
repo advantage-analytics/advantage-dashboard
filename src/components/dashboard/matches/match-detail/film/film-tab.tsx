@@ -21,7 +21,8 @@ import { FilmUnavailableState } from "./film-unavailable-state";
 import { FilmPlayer, type FilmPlayerHandle } from "./film-player";
 import { PointList } from "./point-list";
 import { scoreColumns } from "./film-score";
-import { activeStopAt, filmClock, filmStops } from "./film-timeline";
+import { activeStopAt } from "./film-timeline";
+import { useAttachmentPlayback } from "./use-attachment-playback";
 import {
   DEFAULT_FILM_FILTERS,
   applyFilmFilters,
@@ -131,17 +132,72 @@ function FilmRoom({
   }, []);
 
   const youIsPlayer1 = sides.you.isPlayer1;
-  // The one clock for this match's film. Built here and threaded down — the
-  // room gets this object rather than the video, so the embedded player and
-  // the fullscreen room can never be walking two different alignments.
-  const clock = useMemo(
-    () =>
-      filmClock({
-        startTimeSeconds: video.startTimeSeconds,
-        attachment: video.attachment,
-      }),
-    [video.startTimeSeconds, video.attachment],
-  );
+
+  /**
+   * The credential, and the clock it implies.
+   *
+   * ONE hook for the whole room, not one per surface: a second controller
+   * would be a second timer, a second recovery budget and — the part that
+   * shows — a second `generation`, so the report player and the fullscreen
+   * room could end up holding two different URLs for the same match.
+   *
+   * It is also the only clock now. `filmClock(video)` used to be built here
+   * and `filmStops` derived from it, which was correct right up until a
+   * correction arrived: the hook would rebuild its stops on the NEW offset
+   * while this component kept deriving the old ones, and the two would
+   * disagree about where every point is. The hook holds them both, and the
+   * Advantage Intelligence lineage gets the same two values out of its
+   * passthrough branch, built from exactly the same `filmClock` fields.
+   */
+  const playback = useAttachmentPlayback({
+    matchId: match.id,
+    video,
+    points,
+  });
+  const clock = playback.clock;
+  const stops = playback.stops;
+  const {
+    generation,
+    resume,
+    resumeApplied,
+    reportTime,
+    reportPlaying,
+    reportLoadFailure,
+    reportPlayRejected,
+    retry,
+  } = playback;
+
+  /**
+   * The resume intent: handed to the players, then given back to the hook.
+   *
+   * T25's note 1 — `resume` must be consumed with `resumeApplied()` or the
+   * intent is re-offered on every render. It is consumed HERE rather than in a
+   * player because both players may need it: the room mounts over a report
+   * player that is still alive, and whichever called `resumeApplied()` first
+   * would take it from the other. The order works out because child effects
+   * run before the parent's: each player has already copied the intent into
+   * its own landing ref by the time this runs. `install()` emits the new
+   * `generation` and the intent in ONE snapshot, so the players receive both on
+   * the same render — the remount and the instruction never arrive apart.
+   *
+   * T25's note 2 — `realign: true` means the stops were rebuilt and `filmTime`
+   * is a resolved point start, so the point list's SELECTION has to move, not
+   * just the playhead. It moves here rather than waiting for the element to
+   * load and report back: a corrected alignment that took a while to fetch
+   * would otherwise leave the list highlighting a row the new stops no longer
+   * put the playhead inside.
+   */
+  useEffect(() => {
+    if (!resume) return;
+    if (resume.realign) {
+      // The controller IS the external system this effect subscribes to, and
+      // this is its update arriving — not a render cascading into itself. It
+      // runs once per installed credential, never per frame.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCurrentTime(resume.filmTime);
+    }
+    resumeApplied();
+  }, [resume, resumeApplied]);
 
   const filteredPoints = useMemo(
     () => applyFilmFilters(points, filters, youIsPlayer1),
@@ -153,8 +209,6 @@ function FilmRoom({
       tab === "saved" ? filteredPoints.filter((p) => p.saved) : filteredPoints,
     [filteredPoints, tab],
   );
-
-  const stops = useMemo(() => filmStops(points, clock), [points, clock]);
 
   const walkStops = useMemo(() => {
     const ids = new Set(filteredPoints.map((p) => p.id));
@@ -249,9 +303,22 @@ function FilmRoom({
       <FilmPlayer
         ref={playerRef}
         clockTargetRef={clockRef}
-        video={video}
+        url={playback.url}
+        generation={generation}
+        resume={resume}
+        problem={playback.problem}
+        passthrough={playback.passthrough}
+        // While the room is up it is the surface being watched: this player
+        // keeps its playhead through a refresh but stays silent, and the room
+        // is what reports to the hook.
+        background={room !== null}
         stops={walkStops}
         onTimeChange={setCurrentTime}
+        onPlaybackTime={reportTime}
+        onPlaybackPlaying={reportPlaying}
+        onLoadFailure={reportLoadFailure}
+        onPlayRejected={reportPlayRejected}
+        onRetry={retry}
         onEnterFullscreen={enterRoom}
       />
 
@@ -272,7 +339,16 @@ function FilmRoom({
 
       {room && (
         <FilmFullscreen
-          video={video}
+          url={playback.url}
+          generation={generation}
+          resume={resume}
+          problem={playback.problem}
+          passthrough={playback.passthrough}
+          onPlaybackTime={reportTime}
+          onPlaybackPlaying={reportPlaying}
+          onLoadFailure={reportLoadFailure}
+          onPlayRejected={reportPlayRejected}
+          onRetry={retry}
           clock={clock}
           initial={room}
           stops={stops}

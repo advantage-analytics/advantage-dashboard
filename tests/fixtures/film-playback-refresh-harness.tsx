@@ -1,0 +1,157 @@
+import { createRoot } from "react-dom/client";
+
+import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
+import { FilmTab } from "@/components/dashboard/matches/match-detail/film/film-tab";
+import type { MatchPoint } from "@/lib/data/match-points-server";
+import type { MatchVideo } from "@/lib/data/match-video-server";
+import type { Match } from "@/lib/data/types";
+
+import type { FilmRefreshHarnessWindow } from "./film-playback-refresh-window";
+
+/**
+ * The Film tab, both players, in a real browser with a real `<video>`.
+ *
+ * What this harness exists to make observable is the one thing the controller
+ * spec next door cannot: whether the ELEMENT follows. `film-attachment-playback.spec.ts`
+ * drives T25's state machine with an injected clock and proves what it decides;
+ * nothing there has a video in it, so "the renewed URL actually loaded and the
+ * viewer did not move" is a claim only a browser can settle.
+ *
+ * Nothing on this side is stubbed but Supabase (the bookmark write, which no
+ * test here touches) and `next/dynamic` (Next's runtime, not this feature's).
+ * The refresh goes out over real `fetch` to the spec's own server, and the file
+ * the element plays is a real 2-second clip served with range support.
+ *
+ * ── The timing ──────────────────────────────────────────────────────────────
+ * The scheduled refresh fires `REFRESH_LEAD_MS` (two minutes) before the
+ * credential expires, floored at one second. A harness that rendered a
+ * half-hour credential would therefore wait half an hour, so the boot below
+ * renders one that expires in `?ttl` milliseconds — a page opened on a stale
+ * server render, which is a real case rather than a contrivance. Refreshed
+ * credentials come back with a full lifetime, so exactly one pass runs unless
+ * the spec asks for more.
+ *
+ * ── The clock ───────────────────────────────────────────────────────────────
+ * Source times sit in the last half-second of the clip on purpose.
+ * `POINT_BUFFER_SECONDS` is 1.5s, so any serve earlier than that has its
+ * padded window start clamped to film zero and every stop would begin in the
+ * same place — which would make "the selection moved" unassertable. At 1.7 /
+ * 1.85 / 1.95 the three windows start at 0.2 / 0.35 / 0.45, far enough apart
+ * that `REACHED_EPSILON_SECONDS` (0.1) still leaves a stretch of film before
+ * the first point where no row is lit at all.
+ */
+
+const harness = window as unknown as FilmRefreshHarnessWindow;
+
+const ATTACHMENT = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+
+/** The published file's server-verified length. The clip really is 2.000s. */
+const DURATION = 2;
+
+function point(
+  id: string,
+  videoTime: number | null,
+  overrides: Partial<MatchPoint> = {},
+): MatchPoint {
+  return {
+    id,
+    pointNumber: 1,
+    setNumber: 1,
+    gameNumber: 1,
+    setScore: "0-0",
+    gameScore: "0-0",
+    pointScore: "0-0",
+    resultType: "Forehand Winner",
+    eventType: "Forehand Winner",
+    description: "Rally",
+    player: "player1",
+    wonByPlayer1: true,
+    serverIsPlayer1: true,
+    isBreakPoint: false,
+    isSetPoint: false,
+    isMatchPoint: false,
+    rallyLength: 4,
+    duration: null,
+    videoTime,
+    saved: false,
+    ...overrides,
+  };
+}
+
+/** Three timed points and one the source never timed, which has no stop. */
+const POINTS: MatchPoint[] = [
+  point("a", 1.7),
+  point("b", 1.85, { pointNumber: 2, resultType: "Ace" }),
+  point("c", 1.95, { pointNumber: 3, resultType: "Backhand Winner" }),
+  point("untimed", null, { pointNumber: 4, resultType: "Double Fault" }),
+];
+
+function match(id: string): Match {
+  return {
+    id,
+    tournamentName: "Spring Invitational",
+    date: "2026-04-18",
+    matchType: "Singles",
+    round: "R1",
+    player1: { name: "Marcus Reid", school: "Riverside" },
+    player2: { name: "Jordan Alvarez", school: "Northgate" },
+    score: {
+      sets: [{ player1: 6, player2: 4 }],
+      winner: "player1",
+      finalScore: "6-4",
+    },
+    won: true,
+    isUserPlayer1: true,
+  };
+}
+
+function boot() {
+  const params = new URLSearchParams(location.search);
+  const matchId = params.get("matchId") ?? "ok-default";
+  const ttl = Number(params.get("ttl") ?? "1000");
+  const lineage = params.get("lineage") ?? "attachment";
+  // Only the provider lineage ever needs a deliberately broken URL: an
+  // attachment's load failure goes to the hook, and the point of the provider
+  // case is the reload panel that has to survive all of this.
+  const file = params.get("file") ?? "h264-faststart.mp4";
+
+  const video: MatchVideo =
+    lineage === "attachment"
+      ? {
+          url: `/fixtures/${file}?cred=initial`,
+          expiresAt: new Date(Date.now() + ttl).toISOString(),
+          startTimeSeconds: 0,
+          source: "attachment",
+          attachment: {
+            id: ATTACHMENT,
+            version: 1,
+            durationSeconds: DURATION,
+            contentType: "video/mp4",
+            filename: "spring-invitational-r1.mp4",
+          },
+        }
+      : {
+          url: `/fixtures/${file}?cred=initial`,
+          expiresAt: new Date(Date.now() + ttl).toISOString(),
+          startTimeSeconds: 0,
+          source: "vendor-copy",
+          attachment: null,
+        };
+
+  const root = createRoot(document.getElementById("root")!);
+  harness.unmount = () => root.unmount();
+
+  root.render(
+    <MatchDataProvider
+      match={match(matchId)}
+      statsResult={null}
+      points={POINTS}
+    >
+      <FilmTab video={video} />
+    </MatchDataProvider>,
+  );
+
+  document.documentElement.dataset.hydrated = "true";
+}
+
+boot();

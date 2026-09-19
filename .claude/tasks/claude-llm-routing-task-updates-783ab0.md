@@ -368,7 +368,7 @@ contract and stops for review.
 
 ## T26 · Wire credential refresh into embedded and fullscreen players
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T25
 - **files:** Best guess: src/components/dashboard/matches/match-detail/film/film-player.tsx and film-fullscreen.tsx; focused browser tests
