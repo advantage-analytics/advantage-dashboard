@@ -72,7 +72,7 @@ contract and stops for review.
 
 ## T3 · Implement reservation renewal and cancellation transactions
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1, T2
 - **files:** Best guess: supabase/migrations/<new>_match_video_attachment_reservations.sql; tests/match-video-attachments-db.spec.ts
