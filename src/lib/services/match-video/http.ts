@@ -21,9 +21,12 @@
 import { NextResponse } from "next/server";
 
 import type {
+  ExpectedActiveAttachment,
   MatchVideoError,
   MatchVideoErrorCode,
 } from "@/lib/match-video/types";
+
+import { isUuid } from "./access";
 
 /* -------------------------------------------------------------------------
  * Errors
@@ -245,6 +248,72 @@ export async function readNoMetadataBody(
     return transportError("invalid_request", "unexpected_body");
   }
   return null;
+}
+
+/* -------------------------------------------------------------------------
+ * Shared body parsing
+ * ---------------------------------------------------------------------- */
+
+/**
+ * A JSON object literal — not an array, not a class instance, not `null`.
+ * Every mutation body is one, and the prototype check is what keeps a
+ * `{"__proto__": …}` payload from arriving as something with inherited keys.
+ */
+export function isPlainObject(
+  value: unknown,
+): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Object.prototype
+  );
+}
+
+/** The 400 every body-shape refusal returns, with its cause slug. */
+export function invalidRequest(detail: string): HttpResult<never> {
+  return { ok: false, error: transportError("invalid_request", detail) };
+}
+
+/**
+ * The caller's belief about which attachment is currently active.
+ *
+ * Shared by reservation (T8) and completion (T10) — one copy, because the
+ * two must agree exactly on what counts as a well-formed belief. Three rules
+ * carry the design:
+ *
+ *   an explicit `null` is a claim ("this match has no video"), and callers
+ *   check for the KEY's presence separately, so a client that simply forgot
+ *   the field cannot pass as one asserting an empty match;
+ *
+ *   unknown keys are refused by name rather than dropped, so a client that
+ *   starts sending a field learns on its first request that it has none;
+ *
+ *   the id is lower-cased, because a UUID that differs only in case is the
+ *   same row and must not lose an optimistic-concurrency comparison.
+ */
+export function parseExpectedActive(
+  value: unknown,
+): HttpResult<ExpectedActiveAttachment | null> {
+  if (value === null) return { ok: true, value: null };
+  if (!isPlainObject(value)) return invalidRequest("expected_active_type");
+  for (const key of Object.keys(value)) {
+    if (key !== "id" && key !== "version") {
+      return invalidRequest(`expected_active_field:${key}`);
+    }
+  }
+  if (!isUuid(value.id)) return invalidRequest("expected_active_id");
+  if (
+    typeof value.version !== "number" ||
+    !Number.isInteger(value.version) ||
+    value.version < 0
+  ) {
+    return invalidRequest("expected_active_version");
+  }
+  return {
+    ok: true,
+    value: { id: value.id.toLowerCase(), version: value.version },
+  };
 }
 
 /* -------------------------------------------------------------------------

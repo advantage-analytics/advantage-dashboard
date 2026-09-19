@@ -45,6 +45,11 @@ const SERVER_ONLY = [
   // T10: completion reaches `probe.ts`, `storage.ts` and the service-role
   // RPCs, and mints the finalization lease token.
   "lib/services/match-video/complete.ts",
+  // T11: alignment correction touches no storage, but it does reach the
+  // service-role RPC through the branded access value. The wizard computes
+  // the same offset locally from `lib/match-video/alignment.ts` — the pure
+  // twin one directory away — and asks this one over HTTP.
+  "lib/services/match-video/alignment.ts",
 ].map((p) => join(SRC, p));
 
 const EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];

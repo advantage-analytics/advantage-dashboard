@@ -56,7 +56,6 @@ import {
   matchVideoError,
   ok,
   type CancelUploadResult,
-  type ExpectedActiveAttachment,
   type MatchVideoResult,
   type RenewUploadResult,
   type ReserveUploadRequest,
@@ -72,8 +71,11 @@ import {
 import {
   checkSameOrigin,
   errorResponse,
+  invalidRequest as invalid,
+  isPlainObject,
   jsonResponse,
   MUTATION_BODY_MAX_BYTES,
+  parseExpectedActive,
   readBoundedJson,
   readNoMetadataBody,
   transportError,
@@ -104,19 +106,6 @@ const REQUEST_FIELDS = new Set<keyof ReserveUploadRequest>([
 /** RFC 2045 token on each side of the slash — enough to say "this is a type". */
 const MIME_PATTERN =
   /^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/i;
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Object.getPrototypeOf(value) === Object.prototype
-  );
-}
-
-function invalid(detail: string): HttpResult<never> {
-  return { ok: false, error: transportError("invalid_request", detail) };
-}
 
 /**
  * The five contract fields, strictly, and nothing else.
@@ -183,27 +172,6 @@ export function parseReserveUploadBody(
     clientRequestId: clientRequestId.toLowerCase(),
     expectedActive: expectedActive.value,
   });
-}
-
-function parseExpectedActive(
-  value: unknown,
-): HttpResult<ExpectedActiveAttachment | null> {
-  if (value === null) return ok(null);
-  if (!isPlainObject(value)) return invalid("expected_active_type");
-  for (const key of Object.keys(value)) {
-    if (key !== "id" && key !== "version") {
-      return invalid(`expected_active_field:${key}`);
-    }
-  }
-  if (!isUuid(value.id)) return invalid("expected_active_id");
-  if (
-    typeof value.version !== "number" ||
-    !Number.isInteger(value.version) ||
-    value.version < 0
-  ) {
-    return invalid("expected_active_version");
-  }
-  return ok({ id: value.id.toLowerCase(), version: value.version });
 }
 
 /* -------------------------------------------------------------------------

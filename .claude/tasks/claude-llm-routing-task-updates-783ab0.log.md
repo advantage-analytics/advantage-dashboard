@@ -468,3 +468,55 @@ the four specs checked.
    publication is now reachable and tested, so that path is live rather than theoretical.
 4. A second concurrent poll gets 409 `pending_attempt_conflict/finalizing`. The wizard (T20)
    should serialise its polls; mapping that detail to a 202 instead would be the alternative.
+
+## T11 · Expose alignment correction without re-upload — done
+
+**gate:** mechanical GATE FAIL then GATE PASS on re-run · completion VERDICT: pass
+
+The first gate run failed in `tests/pending-invites.spec.ts`, a live-DB spec this task never
+touches, inside its `beforeAll` program insert. Run in isolation it passed 9/9, and the full
+gate passed on re-run — the known shared-IP live-DB flake, not a T11 regression. Recorded here
+because a bare "GATE PASS" would have hidden a re-run.
+
+**changed:** New `src/lib/services/match-video/alignment.ts` and its PATCH route. The body is
+exactly three fields — attachment id, expected version, confirmed time — with unknown keys
+refused by name; a malformed clock is `invalid_alignment` (422) rather than a generic
+`invalid_request`, because the time goes through T1's own parser. Order is same-origin,
+sign-in, bounded body, parse, `authorizeMatchVideoMutation`, RPC, with the branded access value
+the only source of actor and workspace. T4's version CAS then recomputes from source rows
+against the _saved_ verified duration and writes only time, offset and version.
+
+No re-upload is structural, proven three independent ways: `UpdateAlignmentDeps` has no storage
+seam at all (a test asserts its exact key list), the route file's source is read from disk and
+asserted to mention no storage, probe, Azure SDK or SAS module, and the service module's own
+import specifiers are scanned for the same. The success response is also asserted to carry no
+`sig=`, `uploadUrl` or `playbackUrl`.
+
+Source rows are read-only, proven four ways: the `points` and `shots` fixtures are deeply
+`Object.freeze`d so a write throws in strict mode, a JSON snapshot is compared before and after,
+every recorded write is asserted to name `match_video_attachments:`, and — the interesting one —
+a test reads T4's migration and asserts its assertion block still guards
+`match_video_correct_alignment` under the imported-data rule. Weakening the SQL-side check
+therefore fails a test in the HTTP layer.
+
+Repeated corrections do not accumulate: a 5→4→8→4 sequence lands offset 6→2→6, returning to
+exactly the original value, which is what recompute-from-anchor looks like and what accumulation
+would not produce. A no-op leaves the version alone. Error codes stay distinct — only
+`insufficient_coverage` carries "This video is not long enough.", and the missing-timing test
+explicitly asserts its own message does _not_ contain that phrase.
+
+Also resolved T10's flagged duplication rather than extending it: `parseExpectedActive`, with the
+`isPlainObject` and `invalid` helpers it depends on, moved into `http.ts` and both local copies
+were deleted — about 60 lines net removed. No import cycle (`http.ts` → `access.ts` only), no
+behaviour change, both existing specs still green. `tests/match-video-access-handlers.spec.ts`
+holds 35 cases; 197 pass across the five specs checked.
+
+**follow-ups:**
+
+1. `parseAttachmentId` is still duplicated verbatim in `uploads.ts` and `complete.ts` — the same
+   finding, one function later. Worth the same hoist next time either file is touched.
+2. T12's `GET /api/matches/[matchId]/video` is the other half of plan step 8 and belongs in this
+   same spec file, which is named for both and currently covers only alignment.
+3. The route answers only PATCH; Next synthesises `OPTIONS` with an `Allow` header. If the wizard
+   ever preflights explicitly, confirm that synthesised response suits a `private, no-store`
+   endpoint.

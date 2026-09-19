@@ -176,7 +176,7 @@ contract and stops for review.
 
 ## T11 · Expose alignment correction without re-upload
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4, T8
 - **files:** Best guess: src/lib/services/match-video/alignment.ts; src/app/api/matches/[matchId]/video/alignment/route.ts; tests/match-video-access-handlers.spec.ts (new)
