@@ -1138,3 +1138,55 @@ the reviewer's own full-suite run came back 1896 passed with zero failures.
    read would also close the last theoretical gap where the two disagree about the same row.
 3. `confirmedVideoTimeSeconds` is deliberately absent from `MatchVideo`. If T25's refresh or an
    alignment-correction surface wants to show where the anchor sits in the file, it needs adding.
+
+## T24 · Apply attachment alignment throughout the shared Film timeline — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**consumer inspection, which the task asked for before editing:** the surface is narrower than the
+`files:` guess feared — no separate surface was needed. Grepping every exported symbol found six
+consumers, of which only two ever held the offset: `film-tab.tsx` and `film-fullscreen.tsx`. That
+second one was a latent hazard: the fullscreen room re-derived the offset from `p.video` while its
+stops had been built by the tab, so a corrected alignment could leave the two walking different
+clocks. `film-player.tsx`, `film-track.tsx` and `film-transport.tsx` never see the offset at all and
+are untouched — the reviewer confirmed that independently. Displayed clock readouts needed no change
+either: every one formats the element's own `currentTime`, which is already film time, and nothing
+renders a raw `point.videoTime` — so there was no display path to convert, and none to convert twice.
+
+**changed:** the conversion helpers now take a `FilmClock { offset, duration }` rather than a bare
+number, so there is one value to thread, one place a stale offset can live, and no call site where
+the wrong number can be passed — which is what made the fullscreen hazard possible. `filmClock()`
+builds it structurally, keeping the module free of a `MatchVideo` import, and treats a non-finite or
+non-positive duration as _unmeasured_ rather than as a zero-length film.
+
+Each clamp was reasoned about rather than adjusted by feel. `Math.max(0, …)` stays because it
+protects the provider lineage — the offset there is the trim's start, so points the trim cut away
+convert negative — and it remains the live lower bound for a corrected attachment alignment that
+pushes an early point before frame one. A new `Math.min(…, duration)` protects the window
+arithmetic, which was never element-clamped the way seeks are, since alignment validates against the
+file with a 0.1s tolerance and a final shot may legitimately round past the last frame. The
+overlap bound gains the limit, and `Math.max(…, start)` is deliberately applied last so a window
+cannot invert on the final frame. One redundant bound was removed because a second bound there would
+imply a second conversion. On the provider path `duration` is null → `Infinity` → the arithmetic is
+identical to before, proven by pairing a bounded and unbounded clock at the same offset.
+
+"Exactly once" is enforced structurally — `filmStops` converts once per point into a `serves[]`
+array and does arithmetic on the result, where the old code called the conversion three times per
+point — and proven by a dedicated block whose assertions each name the doubled value they must _not_
+equal, so they cannot pass by coincidence. Repeated correction A → B → A restores stops that
+deep-equal the originals, with no drift per nudge, and a test asserts the source rows' `videoTime`
+and `duration` are never mutated. Untimed rows keep having no seek target: they are filtered out,
+and a doc line records why deriving a timestamp from neighbours would be wrong.
+
+596 pass across the Film and attachment specs; the reviewer's own run of eight specs came back 87
+passed, 0 failed. Widget-states checklist run and gate marked.
+
+**follow-ups:**
+
+1. `film-player.tsx`'s `seekTo` and `film-fullscreen.tsx`'s `seek` each re-derive their max from
+   `el.duration`. With a verified `durationSeconds` now available they could share one bounded-seek
+   helper — best done alongside T26's player wiring rather than as its own change.
+2. The Loop glyph in the embedded player is still inert; loop works only in the fullscreen room. Out
+   of scope here, but a visible asymmetry now that both surfaces share one clock.
+3. `breakSegments` takes the element's duration; using the verified duration instead would let the
+   scrub track tile correctly before metadata loads.

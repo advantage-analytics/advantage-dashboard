@@ -342,7 +342,7 @@ contract and stops for review.
 
 ## T24 · Apply attachment alignment throughout the shared Film timeline
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1, T22, T23
 - **files:** Best guess: src/components/dashboard/matches/match-detail/film/film-timeline.ts and its embedded/fullscreen consumers; tests/film-timeline.spec.ts and related Film tests

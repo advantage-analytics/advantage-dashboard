@@ -21,7 +21,7 @@ import { FilmUnavailableState } from "./film-unavailable-state";
 import { FilmPlayer, type FilmPlayerHandle } from "./film-player";
 import { PointList } from "./point-list";
 import { scoreColumns } from "./film-score";
-import { activeStopAt, filmStops } from "./film-timeline";
+import { activeStopAt, filmClock, filmStops } from "./film-timeline";
 import {
   DEFAULT_FILM_FILTERS,
   applyFilmFilters,
@@ -131,7 +131,17 @@ function FilmRoom({
   }, []);
 
   const youIsPlayer1 = sides.you.isPlayer1;
-  const offset = video.startTimeSeconds;
+  // The one clock for this match's film. Built here and threaded down — the
+  // room gets this object rather than the video, so the embedded player and
+  // the fullscreen room can never be walking two different alignments.
+  const clock = useMemo(
+    () =>
+      filmClock({
+        startTimeSeconds: video.startTimeSeconds,
+        attachment: video.attachment,
+      }),
+    [video.startTimeSeconds, video.attachment],
+  );
 
   const filteredPoints = useMemo(
     () => applyFilmFilters(points, filters, youIsPlayer1),
@@ -144,7 +154,7 @@ function FilmRoom({
     [filteredPoints, tab],
   );
 
-  const stops = useMemo(() => filmStops(points, offset), [points, offset]);
+  const stops = useMemo(() => filmStops(points, clock), [points, clock]);
 
   const walkStops = useMemo(() => {
     const ids = new Set(filteredPoints.map((p) => p.id));
@@ -263,6 +273,7 @@ function FilmRoom({
       {room && (
         <FilmFullscreen
           video={video}
+          clock={clock}
           initial={room}
           stops={stops}
           walkStops={walkStops}

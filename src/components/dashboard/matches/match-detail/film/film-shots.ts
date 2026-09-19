@@ -3,6 +3,7 @@ import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import {
   REACHED_EPSILON_SECONDS,
   toFilmTime,
+  type FilmClock,
   type FilmStop,
 } from "./film-timeline";
 
@@ -10,10 +11,15 @@ import {
  * The shot feed's clock: every timed shot placed on the film.
  *
  * Shots share the points' clock (`shots.video_time` is written by the same
- * ingest as `points.video_time`), so they convert with the same offset. A
- * shot's window runs to the next shot in its point, and the last shot's to the
- * point's own end — so the playing shot goes quiet in the dead time between
- * points instead of staying lit until the next serve.
+ * ingest, or the same import, as `points.video_time`), so they convert through
+ * the same {@link FilmClock} — the caller passes the clock the point stops were
+ * built from, never a second one. A shot's window runs to the next shot in its
+ * point, and the last shot's to the point's own end — so the playing shot goes
+ * quiet in the dead time between points instead of staying lit until the next
+ * serve.
+ *
+ * An untimed shot is dropped, for the same reason an untimed point is: it has
+ * no position on the film and therefore no seek target.
  */
 
 export interface ShotStop {
@@ -24,7 +30,10 @@ export interface ShotStop {
   end: number;
 }
 
-export function shotStops(pointStops: FilmStop[], offset: number): ShotStop[] {
+export function shotStops(
+  pointStops: FilmStop[],
+  clock: FilmClock,
+): ShotStop[] {
   const out: ShotStop[] = [];
   for (const stop of pointStops) {
     const timed = (stop.point.shots ?? [])
@@ -35,10 +44,10 @@ export function shotStops(pointStops: FilmStop[], offset: number): ShotStop[] {
       .sort((a, b) => a.videoTime - b.videoTime);
 
     timed.forEach((shot, i) => {
-      const start = toFilmTime(shot.videoTime, offset);
+      const start = toFilmTime(shot.videoTime, clock);
       const next = timed[i + 1];
       const end = next
-        ? toFilmTime(next.videoTime, offset)
+        ? toFilmTime(next.videoTime, clock)
         : Math.max(stop.end, start);
       out.push({ shot, point: stop.point, start, end: Math.max(end, start) });
     });

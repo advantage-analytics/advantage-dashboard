@@ -5,17 +5,28 @@ import type { MatchPoint } from "@/lib/data/match-points-server";
  *
  * Two clocks exist and this file is the only place they meet:
  *
- * - **point time** — `points.video_time`, seconds on the analysis clock
+ * - **point time** — `points.video_time`, seconds on the source clock. For the
+ *   Advantage Intelligence lineage that is the analysis clock
  *   (`derivation/parse.ts` adds the job's window start at ingest, by design);
+ *   for an imported SwingVision match it is the spreadsheet's own clock,
+ *   measured against a recording we never received.
  * - **film time** — `<video>.currentTime` on the file we actually serve. For
  *   our own upload that is the same clock (offset 0); for an older match that
- *   only has the vendor's re-encode, t=0 is the job's `start_time_seconds`.
+ *   only has the vendor's re-encode, t=0 is the job's `start_time_seconds`;
+ *   for an attached SwingVision video it is
+ *   `firstPointSourceTime - confirmedVideoTime`, which is NEGATIVE whenever the
+ *   camera was rolling before the source clock's first point.
  *   `MatchVideo.startTimeSeconds` carries whichever applies — see
- *   `lib/data/match-video-choice.ts`.
+ *   `lib/data/match-video-choice.ts` and `lib/match-video/alignment.ts`.
  *
  * Every seek converts point → film, every playhead reading converts film →
  * point. Nothing else in the film subtree may do the arithmetic, because a
  * second copy is how one of them ends up 15 seconds late again.
+ *
+ * The conversion travels as a {@link FilmClock} rather than a bare number, so
+ * there is one value to thread and one place that can hold a stale offset. It
+ * also carries the film's verified length, which is what bounds the padded
+ * windows below.
  */
 
 /** Fallback window for a point the source never timed, in seconds. */
@@ -35,12 +46,74 @@ const STEP_CUSHION_SECONDS = 0.5;
  */
 export const REACHED_EPSILON_SECONDS = 0.1;
 
-export function toFilmTime(pointTime: number, offset: number): number {
-  return Math.max(0, pointTime - offset);
+/**
+ * The film's clock: the one offset, and the film's own length.
+ *
+ * `offset` is SIGNED. `duration` is the server-verified length of the file in
+ * seconds, or `null` when we have not measured it — the Advantage Intelligence
+ * lineage, whose length is whatever the vendor returned. A `null` duration
+ * means "no upper bound", so every bound below is inert on that path.
+ */
+export interface FilmClock {
+  offset: number;
+  duration: number | null;
 }
 
-export function toPointTime(filmTime: number, offset: number): number {
-  return filmTime + offset;
+/**
+ * Build the clock once, from the resolved video.
+ *
+ * Structural rather than typed to `MatchVideo` so this stays a pure module the
+ * tests can call without the server loader. A duration that is not a finite
+ * positive number is treated as unmeasured, never as a zero-length film.
+ */
+export function filmClock(video: {
+  startTimeSeconds: number;
+  attachment: { durationSeconds: number } | null;
+}): FilmClock {
+  const measured = video.attachment?.durationSeconds;
+  return {
+    offset: video.startTimeSeconds,
+    duration:
+      typeof measured === "number" && Number.isFinite(measured) && measured > 0
+        ? measured
+        : null,
+  };
+}
+
+/** The last second that exists in the file, or `Infinity` when unmeasured. */
+function filmEnd(clock: FilmClock): number {
+  return clock.duration ?? Infinity;
+}
+
+/**
+ * A source time on the film's clock, bounded by the film.
+ *
+ * Two bounds, and they guard different things:
+ *
+ * - **0.** A point that sits before the file starts has nowhere earlier to go.
+ *   On the provider lineage the offset is the trim's start, so every point the
+ *   trim cut away converts negative; without this the player would be handed a
+ *   negative `currentTime`. It is a no-op for a negative attachment offset,
+ *   where the result is already larger than the source time — but it is still
+ *   the lower bound for a corrected alignment that puts an early point before
+ *   frame one.
+ * - **`duration`.** Alignment validates the source times against the file with
+ *   a 0.1s tolerance, so a final shot may legitimately round past the last
+ *   frame. Seeks are clamped by the element anyway; the window arithmetic is
+ *   not, which is what this protects.
+ */
+export function toFilmTime(pointTime: number, clock: FilmClock): number {
+  return Math.min(Math.max(0, pointTime - clock.offset), filmEnd(clock));
+}
+
+/**
+ * A playhead reading back on the source clock.
+ *
+ * Deliberately unbounded: the film may hold footage before the first point and
+ * after the last, and the reading is what it is.
+ */
+export function toPointTime(filmTime: number, clock: FilmClock): number {
+  return filmTime + clock.offset;
 }
 
 /** A point placed on the film's clock. */
@@ -66,27 +139,41 @@ export interface FilmStop {
  * jump lands just before the serve and the point plays out past its last ball.
  * Every consumer — seeks, the playing row, its progress rule, next/previous,
  * dead-time skipping, loop — walks the padded window. The pad never runs past
- * film zero, and a window's end never runs past the next window's start, so
- * windows never overlap.
+ * film zero or past the end of the film, and a window's end never runs past the
+ * next window's start, so windows never overlap and none of them points at a
+ * second the file does not contain.
+ *
+ * A point the source never timed is not here at all. It has no place on the
+ * film's clock, so it has no seek target, and inventing one from its neighbours
+ * would send the player to a rally that is not the one the row names.
+ *
+ * `offset` is applied exactly once, in the single {@link toFilmTime} call that
+ * produces `serve`; `start` and `end` are derived from that result, never from
+ * a second conversion.
  *
  * Built from ALL points rather than the filtered cut: the playhead is
  * somewhere in the match whether or not the current filter admits the point
  * it is inside.
  */
-export function filmStops(points: MatchPoint[], offset: number): FilmStop[] {
+export function filmStops(points: MatchPoint[], clock: FilmClock): FilmStop[] {
   const timed = points
     .filter((p): p is MatchPoint & { videoTime: number } => p.videoTime != null)
     .slice()
     .sort((a, b) => a.videoTime - b.videoTime);
 
-  const paddedStart = (videoTime: number) =>
-    Math.max(0, toFilmTime(videoTime, offset) - POINT_BUFFER_SECONDS);
+  const limit = filmEnd(clock);
+  // One conversion per point, reused for that point's own window and as the
+  // next-window bound of the point before it.
+  const serves = timed.map((point) => toFilmTime(point.videoTime, clock));
+  // `serve` is already inside the film, so the lead-in only needs its floor.
+  const paddedStart = (serve: number) =>
+    Math.max(0, serve - POINT_BUFFER_SECONDS);
 
   return timed.map((point, i) => {
-    const serve = toFilmTime(point.videoTime, offset);
-    const start = paddedStart(point.videoTime);
+    const serve = serves[i];
+    const start = paddedStart(serve);
     const next = timed[i + 1];
-    const nextStart = next ? paddedStart(next.videoTime) : Infinity;
+    const nextStart = next ? paddedStart(serves[i + 1]) : Infinity;
     const end =
       point.duration && point.duration > 0
         ? serve + point.duration + POINT_BUFFER_SECONDS
@@ -97,7 +184,9 @@ export function filmStops(points: MatchPoint[], offset: number): FilmStop[] {
       point,
       start,
       serve,
-      end: Math.max(Math.min(end, nextStart), start),
+      // `start` wins last so a window is never inverted, even for a point
+      // sitting on the final frame.
+      end: Math.max(Math.min(end, nextStart, limit), start),
     };
   });
 }

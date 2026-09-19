@@ -44,6 +44,7 @@ import {
   nextStop,
   prevStop,
   REACHED_EPSILON_SECONDS,
+  type FilmClock,
   type FilmStop,
 } from "./film-timeline";
 import { FilmTransport, PLAYBACK_RATES } from "./film-transport";
@@ -83,6 +84,12 @@ import { FilmTransport, PLAYBACK_RATES } from "./film-transport";
 
 export interface FilmFullscreenProps {
   video: MatchVideo;
+  /**
+   * The film clock `stops` were built from — passed in rather than rebuilt
+   * from `video`, so the room's shot feed converts through the very same
+   * alignment the report tab's points did.
+   */
+  clock: FilmClock;
   /** Where the report player was when the room opened. */
   initial: { time: number; playing: boolean };
   /** Every timed point on the film clock — the board, the track, the playing row. */
@@ -205,11 +212,8 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   // thousand shots to place and then scan on every tick — so it is not built
   // until the drawer is up.
   const shotStops = useMemo(
-    () =>
-      panel === "closed"
-        ? []
-        : buildShotStops(p.stops, p.video.startTimeSeconds),
-    [panel, p.stops, p.video.startTimeSeconds],
+    () => (panel === "closed" ? [] : buildShotStops(p.stops, p.clock)),
+    [panel, p.stops, p.clock],
   );
   const activeShot = useMemo(
     () => activeShotAt(shotStops, currentTime),
