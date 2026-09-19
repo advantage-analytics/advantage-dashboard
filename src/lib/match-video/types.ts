@@ -344,3 +344,16 @@ export interface PlaybackMetadata extends ActiveAttachment {
   /** ISO 8601 expiry of `playbackUrl`. */
   playbackExpiresAt: string;
 }
+
+/**
+ * The `GET` body.
+ *
+ * `attachment: null` is the normal answer for a match that has no video — not
+ * a 404, which would be a claim about the match itself, and not an invitation
+ * to create one: it carries no mode, no reservation hint and no credential.
+ * Same key, same envelope, so a client branches on one field rather than on a
+ * status code.
+ */
+export interface PlaybackMetadataResult {
+  attachment: PlaybackMetadata | null;
+}

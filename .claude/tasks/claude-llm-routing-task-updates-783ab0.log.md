@@ -520,3 +520,58 @@ holds 35 cases; 197 pass across the five specs checked.
 3. The route answers only PATCH; Next synthesises `OPTIONS` with an `Allow` header. If the wizard
    ever preflights explicitly, confirm that synthesised response suits a `private, no-store`
    endpoint.
+
+## T12 · Expose authorized playback metadata and refresh — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** New `src/lib/services/match-video/playback.ts` and its GET route complete plan
+step 8. The gate is `authorizeMatchVisibility`, not the mutation helper — a teammate who can see
+a match may watch its video without being able to change it. One test proves both sides with a
+single identity: 200 with playable metadata from the playback handler, 403 `not_creator` from
+the alignment handler. The active row is read with the service role because T2 gives the table
+no RLS policy and no client grant, with `state = 'active'` in the `where` clause rather than
+checked afterwards. The body carries id, version, offset, confirmed time, the duration verified
+at publication, content type, filename, and the read URL with its expiry.
+
+No upload credential or staged object can leak, proven against the _raw serialized body_ —
+assertions for `uploadUrl`, the staged key's literal value, the substring `staged`, and the
+write permission sets `sp=cw`/`sp=rcw`/`sp=w`, run on the populated, empty, non-creator and 409
+answers alike. Structurally the leak is unreachable: `PlaybackAttachmentRow` has no
+`staged_blob_key` field at all, the credential type has no `uploadUrl`, and a source test
+asserts the module never names the upload minter or `beginPublication`.
+
+A match with no active attachment answers `200 {"attachment": null}` rather than 404 — a 404
+would be a claim about the match, which the caller can plainly see exists. The body deliberately
+carries no `mode`, `canUpload`, `attachmentId` or reservation hint, so it reads as information
+rather than an invitation; a client that goes on to reserve still faces T3's partial unique
+index. A vanished final object is _not_ reported as "no video", which is the answer that would
+get a duplicate uploaded over a still-active match: it is 409 `stale_attachment` /
+`final_object_missing`, while an unreachable store is a retryable 503.
+
+Replacement and correction are distinguishable from the returned fields: a different `id` means
+the video was replaced and the player must reload its source; the same id with a higher
+`version` means only the alignment moved, so the source stays and the timeline shifts by the new
+offset. A test walks that exact sequence.
+
+Deliberate and documented: no same-origin check on this GET. Browsers send no `Origin` on a
+same-origin GET, so `checkSameOrigin` — written for mutations, as its own doc comment says —
+would refuse every legitimate call. The credential is protected instead by the route setting no
+CORS header at all, so a cross-site page can cause the request but never read the response, plus
+`private, no-store`. Nothing on this path changes state. The reviewer judged the reasoning sound.
+
+`tests/match-video-access-handlers.spec.ts` grows from 35 to 53 cases; 215 pass across the five
+specs checked.
+
+**follow-ups:**
+
+1. Playback does one blob HEAD per refresh to tell a vanished object from a live one. Cheap for a
+   30-minute SAS, but if T25's refresh hook polls harder it is worth caching that check for the
+   life of the credential — or dropping it once T13/T14 can be trusted never to delete an active
+   final key.
+2. `MAP.md`'s API line is hand-maintained: `scripts/generate-map.mjs` only walks `page.tsx`, so
+   every new API route depends on someone remembering to edit one prose cell. A generator pass
+   over `route.ts` files would make `npm run map` actually cover them.
+3. `finalBlobOf` fills `staged_blob_key` with the final key to satisfy T6's row shape, which reads
+   only `final_blob_key`. Harmless but awkward; a `publishedBlobOf` overload taking just the final
+   key would remove the wart.

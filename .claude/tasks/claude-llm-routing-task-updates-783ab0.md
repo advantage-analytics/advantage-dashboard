@@ -188,7 +188,7 @@ contract and stops for review.
 
 ## T12 · Expose authorized playback metadata and refresh
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T7, T8
 - **files:** Best guess: src/lib/services/match-video/playback.ts; src/app/api/matches/[matchId]/video/route.ts; tests/match-video-access-handlers.spec.ts

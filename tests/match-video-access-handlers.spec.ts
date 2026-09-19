@@ -20,6 +20,11 @@ import {
   type UpdateAlignmentDeps,
 } from "@/lib/services/match-video/alignment";
 import type { HttpResult } from "@/lib/services/match-video/http";
+import {
+  handleGetPlayback,
+  type PlaybackAttachmentRow,
+  type PlaybackDeps,
+} from "@/lib/services/match-video/playback";
 import type { Workspace } from "@/lib/workspace/types";
 
 /**
@@ -984,4 +989,487 @@ test("the migration forbids source-row writes in the correction function", async
   const assertion = sql.slice(sql.indexOf("-- 7. Assertions"));
   expect(assertion).toContain("match_video_correct_alignment");
   expect(assertion).toContain("writes an imported-data table");
+});
+
+/* =========================================================================
+ * `GET /api/matches/[matchId]/video` (T12) — the playback half of step 8
+ *
+ * The same access module, asked the OTHER question. Every test below drives
+ * `handleGetPlayback` through `PlaybackDeps`, whose seams are a row read, a
+ * blob existence check and a read-only signer — there is no upload seam to
+ * stub, and the last section proves it of the serialized response as well as
+ * of the type.
+ * ====================================================================== */
+
+const FINAL_KEY = `match-video/${PERSONAL_MATCH}/final.mp4`;
+const STAGED_KEY = `match-video/${PERSONAL_MATCH}/staged.mp4`;
+/** What a read-only SAS looks like: `sp=r`, never `sp=cw`. */
+const READ_SAS = `https://acct.blob.core.windows.net/videos/${FINAL_KEY}?sp=r&sig=READONLY`;
+
+interface PlaybackRowState {
+  row: PlaybackAttachmentRow;
+  /** Whether the final object is actually in storage. */
+  objectPresent: boolean;
+}
+
+class FakePlayback {
+  /** At most one active row per match, exactly as the partial index allows. */
+  active = new Map<string, PlaybackRowState>();
+  /** Rows that exist but are not active. A viewer must never see these. */
+  inactive: PlaybackAttachmentRow[] = [];
+  reads: string[] = [];
+  minted: string[] = [];
+
+  publish(
+    matchId: string,
+    overrides: Partial<PlaybackAttachmentRow> = {},
+  ): PlaybackAttachmentRow {
+    const row: PlaybackAttachmentRow = {
+      id: randomUUID(),
+      version: 1,
+      offset_seconds: ANCHOR_SECONDS - 5,
+      confirmed_video_time_seconds: 5,
+      verified_duration_seconds: VERIFIED_DURATION,
+      verified_content_type: "video/mp4",
+      filename: "match.mp4",
+      final_blob_key: FINAL_KEY,
+      ...overrides,
+    };
+    this.active.set(matchId, { row, objectPresent: true });
+    return row;
+  }
+
+  /** A pending or retired attempt: present in the table, absent from playback. */
+  seedInactive(matchId: string): PlaybackAttachmentRow {
+    const row = this.publish(matchId);
+    this.active.delete(matchId);
+    this.inactive.push(row);
+    return row;
+  }
+}
+
+interface PlaybackHarness {
+  deps: PlaybackDeps;
+  events: string[];
+  store: FakePlayback;
+}
+
+interface PlaybackHarnessOptions {
+  userId?: string | null;
+  workspace?: Pick<Workspace, "id" | "kind"> | null;
+  visible?: string[];
+  readError?: string;
+  store?: FakePlayback;
+  loadActiveAttachment?: PlaybackDeps["loadActiveAttachment"];
+  finalObjectExists?: PlaybackDeps["finalObjectExists"];
+  mintPlayback?: PlaybackDeps["mintPlayback"];
+}
+
+function playbackHarness(
+  options: PlaybackHarnessOptions = {},
+): PlaybackHarness {
+  const events: string[] = [];
+  const store = options.store ?? new FakePlayback();
+  const userId = options.userId === undefined ? CREATOR : options.userId;
+  const workspace =
+    options.workspace === undefined ? personal(CREATOR) : options.workspace;
+
+  const deps: PlaybackDeps = {
+    async currentUserId() {
+      events.push("auth");
+      return userId;
+    },
+    async loadVisibleMatch(matchId: string) {
+      events.push(`read:${matchId}`);
+      if (options.readError) return { match: null, error: options.readError };
+      const row = MATCHES[matchId];
+      const visible = options.visible
+        ? options.visible.includes(matchId)
+        : Boolean(row);
+      return { match: visible ? row : null, error: null };
+    },
+    async activeWorkspace() {
+      // Playback never asks this. The tests assert the event never appears.
+      events.push("workspace");
+      return workspace;
+    },
+    async loadActiveAttachment(matchId) {
+      events.push("load");
+      store.reads.push(matchId);
+      if (options.loadActiveAttachment) {
+        return options.loadActiveAttachment(matchId);
+      }
+      const state = store.active.get(matchId);
+      return { ok: true as const, value: state ? state.row : null };
+    },
+    async finalObjectExists(row) {
+      events.push("head");
+      if (options.finalObjectExists) return options.finalObjectExists(row);
+      const state = [...store.active.values()].find(
+        (candidate) => candidate.row.id === row.id,
+      );
+      return { ok: true as const, value: state?.objectPresent ?? false };
+    },
+    mintPlayback(row) {
+      events.push("mint");
+      if (options.mintPlayback) return options.mintPlayback(row);
+      store.minted.push(row.final_blob_key);
+      return {
+        ok: true as const,
+        value: {
+          playbackUrl: READ_SAS,
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+        },
+      };
+    },
+  };
+
+  return { deps, events, store };
+}
+
+async function watch(h: PlaybackHarness, matchId: string) {
+  const request = new Request(`${SITE}/api/matches/${matchId}/video`, {
+    method: "GET",
+  });
+  const response = await handleGetPlayback(request, matchId, h.deps);
+  const text = await response.text();
+  return {
+    response,
+    text,
+    json: JSON.parse(text) as Record<string, unknown>,
+  };
+}
+
+/** No credential, no key, no write verb — asserted on the raw body text. */
+function expectNoUploadCredential(text: string) {
+  expect(text).not.toContain("uploadUrl");
+  expect(text).not.toContain("uploadExpiresAt");
+  expect(text).not.toContain(STAGED_KEY);
+  expect(text).not.toContain("staged");
+  // `sp=` is the SAS permission set. A write credential carries `cw`.
+  expect(text).not.toContain("sp=cw");
+  expect(text).not.toContain("sp=rcw");
+  expect(text).not.toContain("sp=w");
+}
+
+/* -------------------------------------------------------------------------
+ * Access — who may watch
+ * ---------------------------------------------------------------------- */
+
+test("playback refuses an expired session before reading anything", async () => {
+  const h = playbackHarness({ userId: null });
+  h.store.publish(PERSONAL_MATCH);
+  const { response, json } = await watch(h, PERSONAL_MATCH);
+  expect(response.status).toBe(401);
+  expect(json.code).toBe("unauthenticated");
+  expect(json.detail).toBe("no_session");
+  expectNoStore(response);
+  expect(h.events).not.toContain("load");
+  expect(h.events).not.toContain("mint");
+});
+
+test("playback of an inaccessible match is a 404, and names no attachment", async () => {
+  const h = playbackHarness({ userId: OTHER_USER, visible: [] });
+  h.store.publish(PERSONAL_MATCH);
+  const { response, json } = await watch(h, PERSONAL_MATCH);
+  expect(response.status).toBe(404);
+  expect(json.code).toBe("match_not_found");
+  expect(json.detail).toBe("not_visible");
+  // Absent and invisible answer alike, and neither leaks that a video exists.
+  expect(h.store.reads).toEqual([]);
+  expect(h.events).not.toContain("mint");
+});
+
+test("a malformed match id is refused before the attachment table is touched", async () => {
+  const h = playbackHarness();
+  const { response, json } = await watch(h, "not-a-uuid");
+  expect(response.status).toBe(404);
+  expect(json.detail).toBe("malformed_match_id");
+  expect(h.store.reads).toEqual([]);
+});
+
+test("a failed visibility read is a 503, not an empty match", async () => {
+  const h = playbackHarness({ readError: "connection reset" });
+  const { response, json } = await watch(h, PERSONAL_MATCH);
+  expect(response.status).toBe(503);
+  expect(json.code).toBe("storage_unavailable");
+  expect(json.detail).toBe("match_read_failed");
+  expect(json).not.toHaveProperty("attachment");
+  expect(h.store.reads).toEqual([]);
+});
+
+test("a visible noncreator may watch, and still may not write", async () => {
+  // One person, one match, two questions. This is the distinction the whole
+  // access module exists to draw: a teammate who can SEE a match gets its
+  // video; the same teammate gets 403 from every route that changes it.
+  const store = new FakePlayback();
+  const row = store.publish(TEAM_MATCH);
+  const viewer = playbackHarness({
+    userId: OTHER_USER,
+    workspace: personal(OTHER_USER),
+    visible: [TEAM_MATCH],
+    store,
+  });
+
+  const watched = await watch(viewer, TEAM_MATCH);
+  expect(watched.response.status).toBe(200);
+  const playable = attachmentOf(watched.json);
+  expect(playable.id).toBe(row.id);
+  expect(playable.playbackUrl).toBe(READ_SAS);
+  expectNoUploadCredential(watched.text);
+
+  // The same identity, against the mutation half of step 8.
+  const writer = harness({
+    userId: OTHER_USER,
+    workspace: personal(OTHER_USER),
+    visible: [TEAM_MATCH],
+  });
+  const aligning = writer.store.activate(TEAM_MATCH);
+  const refused = await align(
+    writer,
+    TEAM_MATCH,
+    validBody({ attachmentId: aligning.id }),
+  );
+  expect(refused.response.status).toBe(403);
+  expect(refused.json.code).toBe("forbidden");
+  expect(refused.json.detail).toBe("not_creator");
+  expectNoCorrection(writer);
+});
+
+test("playback never asks which workspace is active", async () => {
+  // A coach looking at a team match from their personal workspace is watching,
+  // not writing: the workspace rule belongs to mutations, and asking it here
+  // would blank the player for anyone who had switched.
+  const h = playbackHarness({
+    userId: OTHER_USER,
+    workspace: personal(OTHER_USER),
+    visible: [TEAM_MATCH],
+  });
+  h.store.publish(TEAM_MATCH);
+  const { response } = await watch(h, TEAM_MATCH);
+  expect(response.status).toBe(200);
+  expect(h.events).not.toContain("workspace");
+});
+
+/* -------------------------------------------------------------------------
+ * The empty answer
+ * ---------------------------------------------------------------------- */
+
+test("a match with no video answers 200 and a null attachment", async () => {
+  const h = playbackHarness();
+  const { response, json, text } = await watch(h, PERSONAL_MATCH);
+  expect(response.status).toBe(200);
+  expect(json).toEqual({ attachment: null });
+  expectNoStore(response);
+  // Not an error, and not a suggestion to make one: no mode, no reservation
+  // hint, no credential — nothing a client could read as "create a second".
+  expect(json).not.toHaveProperty("error");
+  expect(json).not.toHaveProperty("code");
+  expect(json).not.toHaveProperty("mode");
+  expect(json).not.toHaveProperty("canUpload");
+  expect(json).not.toHaveProperty("attachmentId");
+  expectNoUploadCredential(text);
+  expect(h.events).not.toContain("mint");
+});
+
+test("a pending or retired attempt is not playable and is not disclosed", async () => {
+  const h = playbackHarness();
+  const hidden = h.store.seedInactive(PERSONAL_MATCH);
+  const { response, json, text } = await watch(h, PERSONAL_MATCH);
+  expect(response.status).toBe(200);
+  expect(json).toEqual({ attachment: null });
+  // Someone else's in-progress upload is not a viewer's business.
+  expect(text).not.toContain(hidden.id);
+});
+
+/* -------------------------------------------------------------------------
+ * The populated answer, and the refresh contract
+ * ---------------------------------------------------------------------- */
+
+test("playback returns id, version, duration, offset, URL and expiry", async () => {
+  const h = playbackHarness();
+  const row = h.store.publish(PERSONAL_MATCH, {
+    confirmed_video_time_seconds: 4,
+    offset_seconds: 6,
+    filename: "quarterfinal.mp4",
+  });
+
+  const { response, json, text } = await watch(h, PERSONAL_MATCH);
+  expect(response.status).toBe(200);
+  expectNoStore(response);
+
+  const attachment = attachmentOf(json);
+  expect(attachment.id).toBe(row.id);
+  expect(attachment.version).toBe(1);
+  expect(attachment.offsetSeconds).toBe(6);
+  expect(attachment.confirmedVideoTimeSeconds).toBe(4);
+  // The duration measured at publication — nothing re-probes a played file.
+  expect(attachment.durationSeconds).toBe(VERIFIED_DURATION);
+  expect(attachment.contentType).toBe("video/mp4");
+  expect(attachment.filename).toBe("quarterfinal.mp4");
+  expect(attachment.playbackUrl).toBe(READ_SAS);
+  expect(Date.parse(attachment.playbackExpiresAt as string)).toBeGreaterThan(
+    Date.now(),
+  );
+  expectNoUploadCredential(text);
+  // Only the final key was ever signed.
+  expect(h.store.minted).toEqual([FINAL_KEY]);
+});
+
+test("a replaced video changes the id; a corrected one only the version", async () => {
+  const h = playbackHarness();
+  const first = h.store.publish(PERSONAL_MATCH);
+  const before = attachmentOf((await watch(h, PERSONAL_MATCH)).json);
+
+  // An alignment correction: same row, same bytes, higher version. A client
+  // holding `before` keeps its source and shifts its timeline.
+  h.store.active.get(PERSONAL_MATCH)!.row.version = 2;
+  h.store.active.get(PERSONAL_MATCH)!.row.offset_seconds = 6;
+  const corrected = attachmentOf((await watch(h, PERSONAL_MATCH)).json);
+  expect(corrected.id).toBe(before.id);
+  expect(corrected.version).toBe(2);
+  expect(corrected.offsetSeconds).toBe(6);
+
+  // A replacement: a different row entirely. The player must reload its src.
+  const second = h.store.publish(PERSONAL_MATCH);
+  const replaced = attachmentOf((await watch(h, PERSONAL_MATCH)).json);
+  expect(replaced.id).toBe(second.id);
+  expect(replaced.id).not.toBe(first.id);
+});
+
+/* -------------------------------------------------------------------------
+ * Storage — a vanished object and an unreachable store are different answers
+ * ---------------------------------------------------------------------- */
+
+test("an active attachment whose blob is gone is a 409, never a null attachment", async () => {
+  const h = playbackHarness();
+  h.store.publish(PERSONAL_MATCH);
+  h.store.active.get(PERSONAL_MATCH)!.objectPresent = false;
+
+  const { response, json, text } = await watch(h, PERSONAL_MATCH);
+  expect(response.status).toBe(409);
+  expect(json.code).toBe("stale_attachment");
+  expect(json.detail).toBe("final_object_missing");
+  expectNoStore(response);
+  // Not `{attachment: null}`: telling a creator their active match has no
+  // video is exactly the answer that gets a duplicate uploaded over it.
+  expect(json).not.toHaveProperty("attachment");
+  expect(h.store.minted).toEqual([]);
+  expectNoUploadCredential(text);
+});
+
+test("a storage outage is a 503, and says something different from a missing blob", async () => {
+  const h = playbackHarness({
+    async finalObjectExists() {
+      return {
+        ok: false,
+        error: matchVideoError("storage_unavailable", "properties_failed"),
+      };
+    },
+  });
+  h.store.publish(PERSONAL_MATCH);
+
+  const { response, json } = await watch(h, PERSONAL_MATCH);
+  expect(response.status).toBe(503);
+  expect(json.code).toBe("storage_unavailable");
+  expect(json.detail).toBe("properties_failed");
+  // Retryable, and distinct from the 409 above in status, code and copy.
+  expect(json.error).not.toBe(matchVideoError("stale_attachment", "x").message);
+  expect(h.store.minted).toEqual([]);
+});
+
+test("a signer that cannot sign is a 503, not a URL that will not play", async () => {
+  const h = playbackHarness({
+    mintPlayback() {
+      return {
+        ok: false,
+        error: matchVideoError("storage_unavailable", "storage_not_configured"),
+      };
+    },
+  });
+  h.store.publish(PERSONAL_MATCH);
+  const { response, json } = await watch(h, PERSONAL_MATCH);
+  expect(response.status).toBe(503);
+  expect(json.detail).toBe("storage_not_configured");
+  expect(json).not.toHaveProperty("attachment");
+});
+
+test("a failed attachment read is a 500, distinct from a missing video", async () => {
+  const h = playbackHarness({
+    async loadActiveAttachment() {
+      return {
+        ok: false,
+        error: {
+          code: "internal_error" as const,
+          status: 500,
+          message: "Something went wrong on our side. Try again in a moment.",
+          detail: "attachment_read_failed",
+        },
+      };
+    },
+  });
+  const { response, json } = await watch(h, PERSONAL_MATCH);
+  expect(response.status).toBe(500);
+  expect(json.detail).toBe("attachment_read_failed");
+  expect(json).not.toHaveProperty("attachment");
+});
+
+test("a seam that throws answers 500 rather than a half-built body", async () => {
+  const h = playbackHarness({
+    async loadActiveAttachment() {
+      throw new Error("connection reset");
+    },
+  });
+  const { response, json } = await watch(h, PERSONAL_MATCH);
+  expect(response.status).toBe(500);
+  expect(json.code).toBe("internal_error");
+  expect(json.detail).toBe("unhandled");
+  expectNoStore(response);
+});
+
+/* -------------------------------------------------------------------------
+ * No write credential — structurally
+ * ---------------------------------------------------------------------- */
+
+test("playback has no seam that could produce an upload credential", async () => {
+  const h = playbackHarness();
+  // `PlaybackDeps` is the complete list. A row read, one properties call, one
+  // read-only signature — and `activeWorkspace`, which it never consults.
+  expect(Object.keys(h.deps).sort()).toEqual([
+    "activeWorkspace",
+    "currentUserId",
+    "finalObjectExists",
+    "loadActiveAttachment",
+    "loadVisibleMatch",
+    "mintPlayback",
+  ]);
+});
+
+test("the playback service module never reaches the upload signer", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(
+    "src/lib/services/match-video/playback.ts",
+    "utf8",
+  );
+  // The two things that mint or name a writable object.
+  expect(source).not.toContain("mintAttachmentUploadCredential");
+  expect(source).not.toContain("mintUploadSas");
+  expect(source).not.toContain("beginPublication");
+  // The staged key appears only as the word in prose, never as a column read.
+  expect(source).not.toContain("row.staged_blob_key");
+});
+
+test("the playback route exposes GET and nothing that writes", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(
+    "src/app/api/matches/[matchId]/video/route.ts",
+    "utf8",
+  );
+  expect(source).toContain("export async function GET");
+  for (const verb of ["POST", "PUT", "PATCH", "DELETE"]) {
+    expect(source).not.toContain(`export async function ${verb}`);
+  }
+  // Nothing on this route authorizes a write.
+  expect(source).not.toContain("authorizeMatchVideoMutation");
+  expect(source).toContain("matchVideoAccessDeps");
 });

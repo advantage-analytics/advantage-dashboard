@@ -50,6 +50,10 @@ const SERVER_ONLY = [
   // the same offset locally from `lib/match-video/alignment.ts` — the pure
   // twin one directory away — and asks this one over HTTP.
   "lib/services/match-video/alignment.ts",
+  // T12: playback reads the active row through the service-role client and
+  // mints the read-only SAS through `storage.ts`. A player asks it over HTTP
+  // and gets back a URL; it never imports the signer.
+  "lib/services/match-video/playback.ts",
 ].map((p) => join(SRC, p));
 
 const EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];
