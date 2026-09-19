@@ -1084,3 +1084,57 @@ including the live-DB ones. Widget-states checklist run and gate marked.
 4. The unauthenticated preview harness was deliberately not run. The reviewer judged that
    acceptable: the risk here is the wrong action reaching the wrong viewer or a failure rendering as
    absence, which the 21 rule-and-resolver cases cover better than a screenshot would.
+
+## T23 · Load active attachment playback alongside existing video sources — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+The widget-states hook blocked once more, again not for a missed check: T23's diff contains no
+`.tsx` at all, and the receipt went stale because T22's components moved from untracked to
+committed — the same mechanism recorded under T19. Confirmed zero `.tsx` in the diff, then re-marked
+as its own command.
+
+**changed:** `src/lib/data/match-video-server.ts` becomes an injectable ladder:
+`authorizeMatchVisibility` first, then the active-attachment read, and only then the object check
+and URL signing. A match with no active attachment falls through to `loadProviderVideo`, which the
+reviewer verified byte-for-byte against the pre-diff body — the only change is that the `matches`
+visibility SELECT moved up into the ladder. It borrows T12's exact seams
+(`supabaseActiveAttachment`, `finalObjectExists`, `mintPlayback`) following T22's precedent, rather
+than writing a third way to read an active attachment.
+
+`MatchVideo` now carries the attachment's id, version, verified duration, content type and filename,
+and `startTimeSeconds` takes `offset_seconds` straight through — no `Math.abs`, no `Math.max`, no
+validity guard, with a doc comment saying why. A negative offset is a legitimate video that starts
+rolling _before_ the first point; clamping it would break every such file. The test covers −125.25,
++125.25 and 0, and asserts a 3-second source point lands at 128.25s in the file, which is the
+assertion that fails if anyone reintroduces a clamp.
+
+Visibility before privilege is proven by ordering, not by reading: every dep is instrumented, and
+one test asserts the exact sequence while another asserts that four kinds of refusal — invisible,
+signed out, malformed id, failed read — reach no attachment read, no object check and no signature
+at all. The production wiring also builds the admin client lazily behind a proxy, so a refused visit
+never constructs a service-role client. Staged and retired assets cannot be returned because
+`state = 'active'` is a WHERE clause at the seam rather than a post-filter, and the staged key is not
+even in the projection. A test strips comments and asserts the loader performs no insert, upsert,
+update, delete or rpc, names no `points`, `shots` or `matches` table, and never mentions
+`source_provider` — attaching a video does not rewrite a SwingVision import's provenance.
+
+T22's "present but unplayable" branch has narrowed exactly as predicted and its copy is correct as
+written: before this task an attachment-backed match routinely hit that branch because the loader
+only knew about provider jobs. Now the remaining routes to it are genuine playback failures.
+
+9 new cases (16 in that spec); 172 pass across the 13 Film, match-detail and attachment specs, and
+the reviewer's own full-suite run came back 1896 passed with zero failures.
+
+**follow-ups:**
+
+1. **T24 must handle the negative offset in `film-timeline.ts`.** `toFilmTime` is
+   `Math.max(0, pointTime - offset)`; that clamp is harmless for non-negative provider offsets, and
+   for a negative attachment offset it is a no-op only because the result is already larger. The
+   real risk is the padded-window math and the new `durationSeconds` clamp. Flagged so it is not
+   assumed handled.
+2. `getMatchVideo` and `getMatchFilmEntry` are separately cached and each runs `auth.getUser()`, the
+   `matches` SELECT and the attachment read on the same request. Collapsing them into one cached
+   read would also close the last theoretical gap where the two disagree about the same row.
+3. `confirmedVideoTimeSeconds` is deliberately absent from `MatchVideo`. If T25's refresh or an
+   alignment-correction surface wants to show where the anchor sits in the file, it needs adding.

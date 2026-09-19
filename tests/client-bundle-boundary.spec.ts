@@ -66,6 +66,14 @@ const SERVER_ONLY = [
   // `next/server`'s `after`. Deletion is asked for over HTTP or a server
   // action; no client ever holds this.
   "lib/services/match-video/purge.ts",
+  // T22/T23: the two match-detail loaders. Both reach `playback.ts` (and so
+  // `storage.ts`) and build a service-role client; `match-video-server.ts`
+  // also signs the provider-job SAS. They were already server-only through
+  // `lib/supabase/admin.ts`, which is a transitive catch and names the wrong
+  // file when it fires — the film subtree imports `MatchVideo` as a TYPE from
+  // the loader, one keyword away from dragging the signer into the bundle.
+  "lib/data/match-film-entry-server.ts",
+  "lib/data/match-video-server.ts",
 ].map((p) => join(SRC, p));
 
 const EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];

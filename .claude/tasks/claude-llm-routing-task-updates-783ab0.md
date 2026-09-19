@@ -330,7 +330,7 @@ contract and stops for review.
 
 ## T23 · Load active attachment playback alongside existing video sources
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T12, T21, T22
 - **files:** Best guess: src/lib/data/match-video-server.ts; shared MatchVideo types; tests/match-video-choice.spec.ts
