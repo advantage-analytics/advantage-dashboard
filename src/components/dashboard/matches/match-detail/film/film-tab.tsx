@@ -9,7 +9,15 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { createClient } from "@/lib/supabase/client";
 
+import {
+  filmEntryView,
+  NO_FILM_ENTRY,
+  type MatchFilmEntry,
+} from "@/lib/match-video/film-entry";
+
 import { FilmEmptyState } from "./film-empty-state";
+import { FilmEntryActions } from "./film-entry-actions";
+import { FilmUnavailableState } from "./film-unavailable-state";
 import { FilmPlayer, type FilmPlayerHandle } from "./film-player";
 import { PointList } from "./point-list";
 import { scoreColumns } from "./film-score";
@@ -42,13 +50,51 @@ const FilmFullscreen = dynamic(loadFilmFullscreen, { ssr: false });
  * are converted from the recording's clock once, in `filmStops`.
  */
 
-export function FilmTab({ video }: { video: MatchVideo | null }) {
-  if (!video) return <FilmEmptyState />;
-  return <FilmRoom video={video} />;
+/**
+ * `entry` is the server's answer to two questions this component must not
+ * answer itself: is there a video at all, and may this viewer change it. It
+ * decides which of the three no-video states is the truthful one —
+ * `filmEntryView` holds that rule — so a storage failure can never arrive here
+ * wearing the empty state's "Add video" button.
+ *
+ * It defaults to {@link NO_FILM_ENTRY}, which offers nothing: a caller that
+ * forgot the prop gets a page with no controls, never one with the wrong ones.
+ */
+export function FilmTab({
+  video,
+  entry = NO_FILM_ENTRY,
+}: {
+  video: MatchVideo | null;
+  entry?: MatchFilmEntry;
+}) {
+  if (video) return <FilmRoom video={video} entry={entry} />;
+  const view = filmEntryView(entry);
+  if (view === "empty") return <FilmEmptyState entry={entry} />;
+  return <UnavailableFilm entry={entry} state={view} />;
 }
 
-function FilmRoom({ video }: { video: MatchVideo }) {
-  const { points: serverPoints } = useMatchData();
+/** Split out only so the match id can come from the provider, as it does below. */
+function UnavailableFilm({
+  entry,
+  state,
+}: {
+  entry: MatchFilmEntry;
+  state: "unavailable" | "stale";
+}) {
+  const { match } = useMatchData();
+  return (
+    <FilmUnavailableState matchId={match.id} entry={entry} state={state} />
+  );
+}
+
+function FilmRoom({
+  video,
+  entry,
+}: {
+  video: MatchVideo;
+  entry: MatchFilmEntry;
+}) {
+  const { match, points: serverPoints } = useMatchData();
   const sides = useMatchSides();
   const supabase = useMemo(() => createClient(), []);
   const playerRef = useRef<FilmPlayerHandle>(null);
@@ -185,6 +231,11 @@ function FilmRoom({ video }: { video: MatchVideo }) {
 
   return (
     <div ref={clockRef} className="flex flex-col gap-4">
+      {/* Above the player and right-aligned: maintenance for the person who
+          owns the file, out of the way of the person watching. Renders
+          nothing at all for everyone else. */}
+      <FilmEntryActions matchId={match.id} entry={entry} />
+
       <FilmPlayer
         ref={playerRef}
         clockTargetRef={clockRef}

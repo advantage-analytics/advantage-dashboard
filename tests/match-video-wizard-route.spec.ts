@@ -582,9 +582,11 @@ test("both wizards are returned as the page root, so the footer pins alike", () 
   // whatever column the page is rendered into. Neither flow is wrapped in
   // anything this page adds, so the attachment wizard sits in the same
   // dashboard container the upload wizard has always pinned against.
-  expect(PAGE).toContain("return <MatchVideoAttachmentFlow {...target.props}");
+  // T22 swapped the flow for `AttachmentWizardRoute`, which renders the flow
+  // and adds `onSaved` — no element of its own, so the claim is unchanged.
+  expect(PAGE).toContain("return <AttachmentWizardRoute {...target.props}");
   expect(PAGE).toMatch(/return <UploadMatchFlow\b/);
-  expect(PAGE).not.toMatch(/<div[^>]*>\s*<MatchVideoAttachmentFlow/);
+  expect(PAGE).not.toMatch(/<div[^>]*>\s*<AttachmentWizardRoute/);
 });
 
 test("the four existing entry points still have their branches", () => {

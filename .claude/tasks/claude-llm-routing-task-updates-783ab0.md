@@ -317,7 +317,7 @@ contract and stops for review.
 
 ## T22 · Add Film entry actions and return-to-Film behavior
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T12, T20, T21
 - **files:** Best guess: src/app/dashboard/matches/(detail)/[matchId]/page.tsx; src/components/dashboard/matches/match-detail/film/film-tab.tsx and film-empty-state.tsx; browser tests

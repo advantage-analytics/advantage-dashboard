@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { UploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard/UploadMatchFlow";
-import { MatchVideoAttachmentFlow } from "@/components/dashboard/matches/match-video-attachment/MatchVideoAttachmentFlow";
+import { AttachmentWizardRoute } from "@/components/dashboard/matches/match-video-attachment/AttachmentWizardRoute";
 import type { RosterSubject } from "@/components/dashboard/matches/new-match-wizard/useUploadMatchWizard";
 import {
   draftBelongsToWorkspace,
@@ -156,7 +156,11 @@ export default async function NewMatchPage({
     // both are a `WizardShell`, and the sticky footer pins against the same
     // dashboard scroll container because nothing here wraps one and not the
     // other.
-    return <MatchVideoAttachmentFlow {...target.props} />;
+    //
+    // `AttachmentWizardRoute` is the flow plus one client-only behaviour a
+    // Server Component cannot supply: `onSaved`, which returns to this same
+    // match with the Video view selected (T22). It adds no markup of its own.
+    return <AttachmentWizardRoute {...target.props} />;
   }
 
   if (match) {

@@ -1031,3 +1031,56 @@ existing branches are byte-identical below the new one, the diff outside `page.t
 3. Stale upload localStorage: `DashboardShell` clears it only when the path _leaves_
    `/dashboard/matches/new`, so an attachment visit on that same path leaves a half-finished
    creation draft in storage. Pre-existing for `?match=` too, but now reachable by a second door.
+
+## T22 · Add Film entry actions and return-to-Film behavior — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** `trace-route` confirmed the chain before any edit: the detail page `dynamic()`-imports
+`FilmTab` and renders it inside `<MatchReportWhen view="film">`, and that page is the _only_
+importer of `film-tab.tsx`. New `src/lib/match-video/film-entry.ts` holds the pure, client-safe
+rule — `filmEntryView()`, `canTakeFilmAction()`, `matchVideoWizardHref()` — and
+`src/lib/data/match-film-entry-server.ts` resolves it, borrowing T12's
+`supabaseActiveAttachment` and `finalObjectExists` rather than restating them and gating actions
+through T8's `authorizeMatchVideoMutation`. The capability is three fields — attachment presence,
+actions, problem — resolved in the page's existing `Promise.all` wave and passed down as one prop.
+A spec asserts no Film component reads `createdBy` or `useWorkspace`, so the client cannot decide
+for itself.
+
+The dangerous failure is a storage or playback error rendering as "no video, add one", which is how
+a duplicate gets uploaded over a still-active match. `filmEntryView()` reaches `empty` only from a
+_demonstrated_ absence with no problem; a failed match read, a failed or throwing attachment read,
+an unreachable store and a vanished final object all resolve to unavailable or stale, and none of
+them puts `add` on the page. A test loops six failure scenarios and asserts exactly one yields an
+`add`. The unavailable copy carries three sentences for the three amounts the page can actually
+know, including "we could not read whether this match has a video" — so an unknown state never
+claims one exists _or_ that none does.
+
+A non-creator sees nothing rather than something disabled: `FilmEntryActions` returns null on an
+empty list, and the resolver yields no actions for a teammate, for a creator in the wrong workspace,
+and for a vendor-analysed match. `FilmEmptyState` drops its CTA row and switches copy for a
+SwingVision import when `add` is absent, while non-SwingVision matches keep their existing offer
+untouched.
+
+The analysing short-circuit is untouched — `filmEntry` is fetched in the same wave but simply unread
+inside the early return, and a test pins that the gate, its condition and `MatchAnalysisProgress`
+all precede `FilmTab`. The return uses the server-built `matchFilmHref`, the same value Cancel uses,
+with the spec asserting the component constructs no URL of its own and that `parseReportView` reads
+`film` off the returned href. `AttachmentWizardRoute.tsx` is the client seam that supplies
+`onSaved`; the flow itself is a pure passthrough.
+
+21 new cases; 85 pass across the six specs checked, and 516 across all `match-video-*` specs
+including the live-DB ones. Widget-states checklist run and gate marked.
+
+**follow-ups:**
+
+1. `getMatchFilmEntry` runs the attachment read for every match, including vendor-analysed and
+   hand-typed ones that can never have an attachment. Skipping it on non-SwingVision provenance
+   needs the provider before the `Promise.all` resolves — a cheap restructure worth doing later.
+2. Once T23 lands, `attachment: "present"` with no playable video should become unreachable, so the
+   "could not be opened" branch will mean only a genuine playback failure and its copy can tighten.
+3. `src/lib/data/match-film-entry-server.ts` is reached transitively by the client-bundle-boundary
+   walk but is not in its explicit `SERVER_ONLY` list; adding it would make the intent explicit.
+4. The unauthenticated preview harness was deliberately not run. The reviewer judged that
+   acceptable: the risk here is the wrong action reaching the wrong viewer or a failure rendering as
+   absence, which the 21 rule-and-resolver cases cover better than a screenshot would.
