@@ -27,7 +27,7 @@ import {
   type ShotStop,
 } from "./film-shots";
 import { FilmThisPoint } from "./film-this-point";
-import { activeStopAt, filmStops } from "./film-timeline";
+import { activeStopAt } from "./film-timeline";
 import { useAttachmentPlayback } from "./use-attachment-playback";
 import {
   DEFAULT_FILM_FILTERS,
@@ -199,7 +199,7 @@ function FilmRoom({
       // The controller IS the external system this effect subscribes to, and
       // this is its update arriving — not a render cascading into itself. It
       // runs once per installed credential, never per frame.
-
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrentTime(resume.filmTime);
     }
     resumeApplied();
@@ -438,7 +438,7 @@ function FilmRoom({
           // While the room is up it is the surface being watched: this player
           // keeps its playhead through a refresh but stays silent, and the room
           // is what reports to the hook.
-          background={room !== null}
+          background={roomOpen}
           stops={walkStops}
           allStops={stops}
           saved={activePoint ? activePoint.saved : null}

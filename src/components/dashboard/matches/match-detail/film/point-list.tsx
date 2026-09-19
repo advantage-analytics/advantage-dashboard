@@ -93,7 +93,17 @@ interface GameGroup {
  * match escapes the test on its second game, which is never 0-0 games.
  */
 
-export function PointList({
+/**
+ * Memoized, because the playhead re-renders the tab about four times a second
+ * and none of this list's props move at that rate: the point arrays are
+ * memoized upstream, the callbacks are stable, and `activePointId` changes
+ * only when the film crosses into another point — roughly once every ten
+ * seconds. Without the memo every tick re-allocates a row element per point
+ * and re-renders each game header, whose subtrees are inline and so cannot
+ * bail out on their own; `PointRow`'s own memo stops the row bodies but not
+ * the work of offering them.
+ */
+export const PointList = memo(function PointList({
   allPoints,
   visiblePoints,
   filteredCount,
@@ -369,7 +379,7 @@ export function PointList({
       )}
     </section>
   );
-}
+});
 
 /* ── Row ────────────────────────────────────────────────────────────────── */
 

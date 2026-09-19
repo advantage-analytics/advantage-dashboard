@@ -23,11 +23,7 @@ import {
   VolumeOff,
 } from "lucide-react";
 
-import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
-import {
-  shortMonthDate,
-  formatClock,
-} from "@/components/dashboard/matches/match-detail/format-clock";
+import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
 import { advButton } from "@/lib/ui/adv-button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
@@ -514,15 +510,24 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       [allStops, looping, skipDead, seekTo, pushTime],
     );
 
-    // A rate chosen before the element existed still applies once it does —
-    // and again on every `generation`, because a refreshed credential is a NEW
-    // element that starts at 1×. Without that dependency a viewer watching at
-    // half speed is silently returned to full speed by a swap they never asked
-    // for and cannot see coming.
+    // Element state React does not carry, restored in ONE place.
+    //
+    // `playbackRate` and `muted` are set imperatively on the element, and a
+    // refreshed credential is a NEW element (`key={generation}`) that starts
+    // at 1× and unmuted. Both are therefore silently lost on a swap the viewer
+    // never asked for: half speed becomes full speed, and a muted film becomes
+    // audible while the glyph still reads muted.
+    //
+    // Keyed on `generation` as well as the values, so this is also the "a rate
+    // or mute chosen before the element existed" path. Anything else set
+    // imperatively belongs here too rather than in an effect of its own — an
+    // effect per property is how one of them gets forgotten.
     useEffect(() => {
       const el = videoRef.current;
-      if (el) el.playbackRate = rate;
-    }, [rate, generation]);
+      if (!el) return;
+      el.playbackRate = rate;
+      el.muted = muted;
+    }, [rate, muted, generation]);
 
     // The hook's terminal state. It outranks the reload panel because it knows
     // something the panel is guessing at: whether the credential is even the

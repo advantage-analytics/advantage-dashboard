@@ -28,7 +28,7 @@ import { PointRow } from "./point-list";
  * name all come from `useMatchSides()` upstream or here — never from
  * player1/player2 read off the point.
  */
-export function FilmThisPoint({
+export const FilmThisPoint = memo(function FilmThisPoint({
   point,
   isYou,
   initials,
@@ -159,7 +159,7 @@ export function FilmThisPoint({
       </div>
     </section>
   );
-}
+});
 
 /**
  * One stroke — the room's `ShotRow` in the light treatment. Memoized for the
