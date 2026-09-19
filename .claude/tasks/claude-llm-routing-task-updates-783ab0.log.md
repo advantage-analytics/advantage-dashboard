@@ -149,3 +149,31 @@ live before accepting it.
 3. Copy bookkeeping (`copy_id`, `copy_status`, `source_etag`) still has no RPC. T7's completion
    service can write it with the admin client, or T7/T10 may want a narrow
    `match_video_record_publication` RPC — worth deciding once rather than twice.
+
+## T5 · Implement bounded shared media inspection — blocked
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: needs-work —
+the second `done when:` line names five budgets and requires each to be enforced; the 8 MiB
+cache budget (`MEDIA_PROBE_CACHE_BYTES`) is declared and passed to Mediabunny's `maxCacheSize`
+but no test drives it, and the constant is never referenced from the spec. The other four
+budgets (32 MiB total, 2 MiB chunk, 128 requests, 15s deadline) and abort/disposal are each
+enforced and tested.
+
+**changed:** Nothing committed. Stashed at `726273e360d40b5044ee130588e3d54dbbd27d1f`
+(`git stash apply 726273e3`) — note `refs/stash` is shared across worktrees and other branches
+have entries, so apply by SHA, not by index. The stash holds a substantially complete
+implementation: `src/lib/match-video/media-inspection.ts` (isomorphic, injectable byte-source
+seam for T6, no Azure/Supabase/Next imports, T1's error codes only),
+`tests/match-video-probe.spec.ts` (24 passing cases) and `tests/fixtures/match-video/` — five
+self-generated clips of 9–22 KB plus the `generate.mjs` that produced them via
+Mediabunny/WebCodecs. The browser clock-agreement test is real: it serves the fixtures over a
+range-capable server and seeks a live `<video>` element, comparing against the parser rather
+than hardcoding numbers on both sides.
+
+This run was also interrupted by the user partway through, so the implementing subagent never
+wrote a final report; the verdict above comes from reviewing the artifacts directly.
+
+**follow-ups:**
+
+1. To unblock: apply the stash and add one test that drives the 8 MiB cache budget, then
+   re-run. That is the only criterion gap the review found.

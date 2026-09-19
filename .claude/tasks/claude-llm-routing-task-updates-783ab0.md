@@ -99,7 +99,7 @@ contract and stops for review.
 
 ## T5 · Implement bounded shared media inspection
 
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T1
 - **files:** Best guess: src/lib/match-video/media-inspection.ts; tests/match-video-probe.spec.ts; tests/fixtures/match-video/ (new)
