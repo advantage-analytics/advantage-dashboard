@@ -2,43 +2,34 @@
 
 These tasks decompose `work/swingvision-add-video/03_plan/output/plan.md` as approved for stage 04. All file lists are
 best guesses; new paths are proposed. Read the named plan step and Shared
-contracts before implementation. No task authorizes production deployment.
-Per the user's explicit request, this queue overrides task-add's legacy tier
-labels with exact Codex model names. Use gpt-6-astra with high reasoning for
-transactional, security, lifecycle, and acceptance work; gpt-5.6-sol with high
-reasoning for service and integration work; and gpt-5.6-terra with medium
-reasoning for bounded contracts and UI work. T28 requests gpt-5.3-codex-spark
-for the documentation update; use its runtime-supported reasoning setting.
+contracts before implementation. No task authorizes a code deployment; the
+migration tasks (T2–T4, T13) do apply their additive migrations to the live
+database, which is where this repo's DB specs run (decided 2026-09-18).
+Routing follows task-add's standard tiers (re-routed 2026-09-18 when the
+queue moved from Codex to Claude Code; the task blocks are otherwise as
+drafted). `fable` — migrations, RPC privilege boundaries, the shared access
+helper, SAS scoping, finalization/cleanup lifecycle, deletion integration and
+final acceptance (T2–T4, T7, T8, T10, T13, T14, T16, T27). `opus` — service,
+route-handler, Film and wizard UI work with clear criteria. `sonnet` — T28,
+documentation only. The runner dispatches on each task's `model:` line.
 
-Spark is not exposed in this session's callable model list or local model
-cache. Check availability again at dispatch; if it is still unavailable, use
-gpt-5.6-luna with medium reasoning and explicitly report the substitution in
-the run log and user update. Never claim Spark ran when another model ran.
-All other assigned models are exposed here. The runner reads model fields
-from the queue; this user-authorized override is scoped to this queue and
-does not change repository-wide skills.
-
-Fable planner availability was absent, so task-add's inline drafting fallback
-was used. No implementation model has run during task drafting. Stage 04
-follows its append-and-commit contract and stops for review.
+The tasks were drafted inline under Codex, without task-add's Fable planner.
+No implementation model has run. Stage 04 follows its append-and-commit
+contract and stops for review.
 
 ## Also consulted
 
 - `.claude/skills/task-add/reference/queue-format.md` — exact queue/log headers,
-  task grammar, default model labels, numbering, and dependency semantics.
+  task grammar, `model:` values, numbering, and dependency semantics.
 - `.claude/skills/task-next/SKILL.md` and `check.sh` — dispatch guidance and
-  verification script; the script does not enforce legacy model labels.
-- `/Users/cjgimena/.codex/models_cache.json` — model availability metadata
-  checked for this session; Spark was absent.
-- [OpenAI Spark announcement](https://openai.com/index/introducing-gpt-5-3-codex-spark/)
-  — confirms the Spark model name and suitability for targeted work.
+  the gate script.
 - `MAP.md` — route/file orientation; UI trace facts are recorded in the approved
   plan and were previously verified in this feature's design stage.
 
 ## T1 · Define attachment timing and request contracts
 
 - **status:** todo
-- **model:** gpt-5.6-terra
+- **model:** opus
 - **files:** Best guess: src/lib/match-video/{types,limits,alignment}.ts; tests/match-video-alignment.spec.ts (new)
 - **done when:**
   - [ ] Shared types define the planned modes, request/result unions, error codes, and 7,999,999,999-byte limit without importing Azure or Supabase.
@@ -50,7 +41,7 @@ follows its append-and-commit contract and stops for review.
 ## T2 · Create attachment persistence and privilege boundaries
 
 - **status:** todo
-- **model:** gpt-6-astra
+- **model:** fable
 - **needs:** T1
 - **files:** Best guess: supabase/migrations/<new>_match_video_attachments.sql; tests/match-video-attachments-db.spec.ts (new)
 - **done when:**
@@ -58,12 +49,12 @@ follows its append-and-commit contract and stops for review.
   - [ ] Partial indexes enforce one active attachment per non-null match and one pending attempt per match/uploader; uploader/client-request uniqueness supports idempotency.
   - [ ] RLS and grants deny direct browser reads/writes; nullable match and uploader foreign keys use ON DELETE SET NULL and retain storage keys.
   - [ ] Controlled database tests prove constraints, denied anon/authenticated access, retained metadata after FK nulling, and that the uploader FK does not prevent account deletion.
-- **notes:** Split from plan step 2: table/security only; reservation RPCs are T3. New migration only, never edit an applied migration; no production migration application in this task.
+- **notes:** Split from plan step 2: table/security only; reservation RPCs are T3. New migration only, never edit an applied migration. Apply this task's migration to the live project with the Supabase MCP `apply_migration` (see `.claude/skills/create-migration/SKILL.md`) — it is additive and touches no existing table or athlete data — then prove it with specs built on `tests/fixtures/live-db`, which clean up their own rows.
 
 ## T3 · Implement reservation renewal and cancellation transactions
 
 - **status:** todo
-- **model:** gpt-6-astra
+- **model:** fable
 - **needs:** T1, T2
 - **files:** Best guess: supabase/migrations/<new>_match_video_attachment_reservations.sql; tests/match-video-attachments-db.spec.ts
 - **done when:**
@@ -71,12 +62,12 @@ follows its append-and-commit contract and stops for review.
   - [ ] Reservation stores server-generated keys, expected active identity/version, and client request ID before credentials are issued; identical retries reuse the attempt and changed metadata conflicts.
   - [ ] Renewal records the latest SAS expiry and only succeeds for authorized pending work before finalization; cancellation retires pending work idempotently and cannot retire an active asset.
   - [ ] Retired work cannot renew or return to pending; controlled tests cover authorization, competing reservations, idempotency, state transitions, and direct RPC privilege denial.
-- **notes:** Remaining plan step 2. Actor/workspace arguments originate in authenticated server code, not request bodies. Use the lifecycle fields established by T2.
+- **notes:** Remaining plan step 2. Actor/workspace arguments originate in authenticated server code, not request bodies. Use the lifecycle fields established by T2. Apply this task's migration to the live project with the Supabase MCP `apply_migration` (see `.claude/skills/create-migration/SKILL.md`) — it is additive and touches no existing table or athlete data — then prove it with specs built on `tests/fixtures/live-db`, which clean up their own rows.
 
 ## T4 · Implement atomic activation and alignment transactions
 
 - **status:** todo
-- **model:** gpt-6-astra
+- **model:** fable
 - **needs:** T1, T2, T3
 - **files:** Best guess: supabase/migrations/<new>_match_video_attachment_activation.sql; tests/match-video-attachments-db.spec.ts
 - **done when:**
@@ -85,12 +76,12 @@ follows its append-and-commit contract and stops for review.
   - [ ] Correction uses saved verified duration, updates time/offset/version atomically, and never rewrites imported match, point, shot, or statistic data.
   - [ ] Finalization lease/CAS and frozen-input transitions prevent duplicate finalization, renewal after finalization, or activation of retired work; retry after a successful commit only succeeds while that same attachment remains active.
   - [ ] Database tests cover stale versions, replacement/correction/cancellation/deletion races, SQL/TypeScript timing parity, idempotency, coverage refusal, and unchanged source rows.
-- **notes:** Plan step 3 plus the approved completion lifecycle in steps 2 and 7. Expose the narrowly scoped lease transitions T10 needs; do not hand unrestricted writes to clients.
+- **notes:** Plan step 3 plus the approved completion lifecycle in steps 2 and 7. Expose the narrowly scoped lease transitions T10 needs; do not hand unrestricted writes to clients. Apply this task's migration to the live project with the Supabase MCP `apply_migration` (see `.claude/skills/create-migration/SKILL.md`) — it is additive and touches no existing table or athlete data — then prove it with specs built on `tests/fixtures/live-db`, which clean up their own rows.
 
 ## T5 · Implement bounded shared media inspection
 
 - **status:** todo
-- **model:** gpt-5.6-sol
+- **model:** opus
 - **needs:** T1
 - **files:** Best guess: src/lib/match-video/media-inspection.ts; tests/match-video-probe.spec.ts; tests/fixtures/match-video/ (new)
 - **done when:**
@@ -103,7 +94,7 @@ follows its append-and-commit contract and stops for review.
 ## T6 · Verify stored video metadata through bounded Azure ranges
 
 - **status:** todo
-- **model:** gpt-5.6-sol
+- **model:** opus
 - **needs:** T1, T5
 - **files:** Best guess: src/lib/services/match-video/probe.ts; tests/match-video-probe.spec.ts (new/extend)
 - **done when:**
@@ -115,7 +106,7 @@ follows its append-and-commit contract and stops for review.
 ## T7 · Implement immutable Azure attachment publication
 
 - **status:** todo
-- **model:** gpt-5.6-sol
+- **model:** fable
 - **needs:** T2, T6
 - **files:** Best guess: src/lib/services/match-video/storage.ts; tests/match-video-storage.spec.ts (new)
 - **done when:**
@@ -128,7 +119,7 @@ follows its append-and-commit contract and stops for review.
 ## T8 · Authorize and prepare attachment uploads
 
 - **status:** todo
-- **model:** gpt-5.6-sol
+- **model:** fable
 - **needs:** T1, T3, T7
 - **files:** Best guess: src/lib/services/match-video/access.ts and uploads.ts; src/app/api/matches/[matchId]/video/uploads/route.ts; tests/match-video-upload-handlers.spec.ts (new)
 - **done when:**
@@ -141,7 +132,7 @@ follows its append-and-commit contract and stops for review.
 ## T9 · Expose upload renewal and cancellation endpoints
 
 - **status:** todo
-- **model:** gpt-5.6-sol
+- **model:** opus
 - **needs:** T3, T8
 - **files:** Best guess: src/lib/services/match-video/uploads.ts; src/app/api/matches/[matchId]/video/uploads/[attachmentId]/route.ts and renew/route.ts; tests/match-video-upload-handlers.spec.ts
 - **done when:**
@@ -153,7 +144,7 @@ follows its append-and-commit contract and stops for review.
 ## T10 · Finalize uploads with resumable publication and atomic activation
 
 - **status:** todo
-- **model:** gpt-6-astra
+- **model:** fable
 - **needs:** T4, T6, T7, T8, T9
 - **files:** Best guess: src/lib/services/match-video/complete.ts; src/app/api/matches/[matchId]/video/uploads/[attachmentId]/complete/route.ts; tests/match-video-completion.spec.ts (new)
 - **done when:**
@@ -167,7 +158,7 @@ follows its append-and-commit contract and stops for review.
 ## T11 · Expose alignment correction without re-upload
 
 - **status:** todo
-- **model:** gpt-5.6-sol
+- **model:** opus
 - **needs:** T4, T8
 - **files:** Best guess: src/lib/services/match-video/alignment.ts; src/app/api/matches/[matchId]/video/alignment/route.ts; tests/match-video-access-handlers.spec.ts (new)
 - **done when:**
@@ -179,7 +170,7 @@ follows its append-and-commit contract and stops for review.
 ## T12 · Expose authorized playback metadata and refresh
 
 - **status:** todo
-- **model:** gpt-5.6-sol
+- **model:** opus
 - **needs:** T7, T8
 - **files:** Best guess: src/lib/services/match-video/playback.ts; src/app/api/matches/[matchId]/video/route.ts; tests/match-video-access-handlers.spec.ts
 - **done when:**
@@ -191,7 +182,7 @@ follows its append-and-commit contract and stops for review.
 ## T13 · Add cleanup claim and fencing transactions
 
 - **status:** todo
-- **model:** gpt-6-astra
+- **model:** fable
 - **needs:** T3, T4
 - **files:** Best guess: supabase/migrations/<new>_match_video_attachment_cleanup.sql; tests/match-video-attachments-db.spec.ts
 - **done when:**
@@ -199,12 +190,12 @@ follows its append-and-commit contract and stops for review.
   - [ ] Eligibility covers retired/orphaned assets and pending attempts idle for 24 hours, while an active retained match’s final key is never collectible merely because its uploader is null.
   - [ ] Staged-key eligibility requires the latest upload SAS expiry plus five minutes; active attachments may shed only eligible staging data.
   - [ ] Database tests cover competing cleanup/finalization/renewal, stale leases/versions, null-match versus null-uploader behavior, and retries that retain keys until deletion is confirmed.
-- **notes:** Database portion of plan step 9. Keep parent-first lock ordering consistent with T3/T4; do not allow a worker claim to turn into late activation.
+- **notes:** Database portion of plan step 9. Keep parent-first lock ordering consistent with T3/T4; do not allow a worker claim to turn into late activation. Apply this task's migration to the live project with the Supabase MCP `apply_migration` (see `.claude/skills/create-migration/SKILL.md`) — it is additive and touches no existing table or athlete data — then prove it with specs built on `tests/fixtures/live-db`, which clean up their own rows.
 
 ## T14 · Implement retryable attachment cleanup worker
 
 - **status:** todo
-- **model:** gpt-6-astra
+- **model:** fable
 - **needs:** T7, T10, T13
 - **files:** Best guess: src/lib/services/match-video/cleanup.ts; tests/match-video-cleanup.spec.ts (new)
 - **done when:**
@@ -217,7 +208,7 @@ follows its append-and-commit contract and stops for review.
 ## T15 · Schedule and protect attachment cleanup
 
 - **status:** todo
-- **model:** gpt-5.6-sol
+- **model:** opus
 - **needs:** T14
 - **files:** Best guess: src/app/api/cron/cleanup-match-videos/route.ts; vercel.json; .env.example; tests/match-video-cleanup.spec.ts
 - **done when:**
@@ -229,7 +220,7 @@ follows its append-and-commit contract and stops for review.
 ## T16 · Integrate attachment cleanup with match and account deletion
 
 - **status:** todo
-- **model:** gpt-6-astra
+- **model:** fable
 - **needs:** T13, T14
 - **files:** Best guess: src/lib/services/matches/purge-match-storage.ts; src/lib/services/match-video/purge.ts (new); deletion tests and tests/account-deletion-retention.spec.ts
 - **done when:**
@@ -242,7 +233,7 @@ follows its append-and-commit contract and stops for review.
 ## T17 · Build the wizard-style attachment file step
 
 - **status:** todo
-- **model:** gpt-5.6-terra
+- **model:** opus
 - **needs:** T1, T5
 - **files:** Best guess: src/components/dashboard/matches/match-video-attachment/AttachmentFileStep.tsx and use-attachment-file.ts; focused browser tests (new)
 - **done when:**
@@ -255,7 +246,7 @@ follows its append-and-commit contract and stops for review.
 ## T18 · Build the first-point alignment step
 
 - **status:** todo
-- **model:** gpt-5.6-terra
+- **model:** opus
 - **needs:** T1, T17
 - **files:** Best guess: src/components/dashboard/matches/match-video-attachment/AttachmentAlignmentStep.tsx; focused browser tests (new)
 - **done when:**
@@ -268,7 +259,7 @@ follows its append-and-commit contract and stops for review.
 ## T19 · Implement bounded browser upload transport
 
 - **status:** todo
-- **model:** gpt-5.6-sol
+- **model:** opus
 - **needs:** T8, T9, T10
 - **files:** Best guess: src/components/dashboard/matches/match-video-attachment/attachment-upload.ts; tests/match-video-upload-transport.spec.ts (new)
 - **done when:**
@@ -281,7 +272,7 @@ follows its append-and-commit contract and stops for review.
 ## T20 · Compose the attachment wizard and save states
 
 - **status:** todo
-- **model:** gpt-5.6-terra
+- **model:** opus
 - **needs:** T11, T12, T17, T18, T19
 - **files:** Best guess: src/components/dashboard/matches/match-video-attachment/MatchVideoAttachmentFlow.tsx and use-attachment-flow.ts; flow tests (new)
 - **done when:**
@@ -295,7 +286,7 @@ follows its append-and-commit contract and stops for review.
 ## T21 · Route authorized attachment wizard visits
 
 - **status:** todo
-- **model:** gpt-5.6-sol
+- **model:** opus
 - **needs:** T8, T12, T20
 - **files:** Best guess: src/app/dashboard/matches/new/page.tsx; src/lib/data/match-video-attachment-server.ts (new); route/permission tests
 - **done when:**
@@ -308,7 +299,7 @@ follows its append-and-commit contract and stops for review.
 ## T22 · Add Film entry actions and return-to-Film behavior
 
 - **status:** todo
-- **model:** gpt-5.6-terra
+- **model:** opus
 - **needs:** T12, T20, T21
 - **files:** Best guess: src/app/dashboard/matches/(detail)/[matchId]/page.tsx; src/components/dashboard/matches/match-detail/film/film-tab.tsx and film-empty-state.tsx; browser tests
 - **done when:**
@@ -321,7 +312,7 @@ follows its append-and-commit contract and stops for review.
 ## T23 · Load active attachment playback alongside existing video sources
 
 - **status:** todo
-- **model:** gpt-5.6-sol
+- **model:** opus
 - **needs:** T12, T21, T22
 - **files:** Best guess: src/lib/data/match-video-server.ts; shared MatchVideo types; tests/match-video-choice.spec.ts
 - **done when:**
@@ -333,7 +324,7 @@ follows its append-and-commit contract and stops for review.
 ## T24 · Apply attachment alignment throughout the shared Film timeline
 
 - **status:** todo
-- **model:** gpt-5.6-sol
+- **model:** opus
 - **needs:** T1, T22, T23
 - **files:** Best guess: src/components/dashboard/matches/match-detail/film/film-timeline.ts and its embedded/fullscreen consumers; tests/film-timeline.spec.ts and related Film tests
 - **done when:**
@@ -346,7 +337,7 @@ follows its append-and-commit contract and stops for review.
 ## T25 · Implement attachment playback credential refresh state
 
 - **status:** todo
-- **model:** gpt-5.6-terra
+- **model:** opus
 - **needs:** T12, T23, T24
 - **files:** Best guess: src/components/dashboard/matches/match-detail/film/use-attachment-playback.ts; focused hook/service tests (new)
 - **done when:**
@@ -359,7 +350,7 @@ follows its append-and-commit contract and stops for review.
 ## T26 · Wire credential refresh into embedded and fullscreen players
 
 - **status:** todo
-- **model:** gpt-5.6-terra
+- **model:** opus
 - **needs:** T25
 - **files:** Best guess: src/components/dashboard/matches/match-detail/film/film-player.tsx and film-fullscreen.tsx; focused browser tests
 - **done when:**
@@ -371,7 +362,7 @@ follows its append-and-commit contract and stops for review.
 ## T27 · Verify end-to-end attachment acceptance and regression safety
 
 - **status:** todo
-- **model:** gpt-6-astra
+- **model:** fable
 - **needs:** T10, T11, T15, T16, T20, T22, T23, T24, T26
 - **files:** Best guess: tests/match-video-attachment-flow.spec.ts; tests/fixtures/match-video/; controlled storage smoke harness and existing targeted regression tests (new/extend)
 - **done when:**
@@ -379,13 +370,13 @@ follows its append-and-commit contract and stops for review.
   - [ ] Controlled database tests verify actual authorization/privileges, one-active constraints, stale versions, concurrent operations, and account/team retention rather than substituting mocks for those guarantees.
   - [ ] A controlled Azure smoke test with isolated small fixtures proves direct upload, conditional publication, authorized playback, replacement, and tracked-object cleanup; virtual sources cover near-limit behavior.
   - [ ] Relevant upload/Film/account-deletion regressions and repository typecheck, lint, and format checks pass; assertions show no changed imported timing/statistics, vendor jobs, or analysis quota charges.
-  - [ ] Verification evidence names the actual environment and any remaining deployment gates; no production migration application, push, merge, or changes to existing athlete data occur in this task.
-- **notes:** Verification split from plan step 17 and closing Test strategy. Unavailable controlled DB/Azure fixtures are a real blocker, not grounds to claim success from mocks.
+  - [ ] Verification evidence names the actual environment and any remaining deployment gates; no new migration, push, merge, Vercel deploy, or change to existing athlete data occurs in this task.
+- **notes:** Verification split from plan step 17 and closing Test strategy. The database is the live project, where T2–T4 and T13 already applied their additive migrations; specs use `tests/fixtures/live-db` throwaway users and rows. Unavailable DB/Azure fixtures are a real blocker, not grounds to claim success from mocks.
 
 ## T28 · Document attachment operations and rollout order
 
 - **status:** todo
-- **model:** gpt-5.3-codex-spark
+- **model:** sonnet
 - **needs:** T15, T16, T27
 - **files:** Best guess: docs/match-video-attachments.md (new); docs/README.md
 - **done when:**
