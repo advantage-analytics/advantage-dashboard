@@ -490,10 +490,18 @@ test.describe("attachment storage against the real Azure account (smoke)", () =>
     expect(tail.body).toEqual(CLIP_A.subarray(CLIP_A.length - 64));
 
     // No credential, no bytes: the container is not public.
+    //
+    // 409 is the one this account actually returns, and it is the strongest of
+    // the four: `allowBlobPublicAccess=false` makes Azure refuse anonymous
+    // reads at the account level with `PublicAccessNotPermitted`, before the
+    // container's own access level or the blob's existence is consulted. An
+    // account that merely kept the container private would answer 404, and one
+    // that wanted a credential 401/403 — all of them mean "no bytes without
+    // the SAS", which is the property under test.
     const bare = new URL(playbackUrl);
     bare.search = "";
     const anonymous = await azureStatus(bare.toString());
-    expect([401, 403, 404]).toContain(anonymous.status);
+    expect([401, 403, 404, 409]).toContain(anonymous.status);
     expect(anonymous.body.length).toBeLessThan(CLIP_A.length);
 
     // `r` cannot write…
