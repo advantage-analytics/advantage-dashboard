@@ -329,9 +329,10 @@ function FilmRoom({
    * ↑ ↓ move 5 seconds, space plays and pauses, S saves the point on screen.
    * Off while the room is open (it has its own), while something is typing
    * (an input, a textarea, anything editable), while a dialog or popover is
-   * open (the filters panel wants its own arrows), on a button under space,
-   * and on any
-   * key with a modifier, which is the browser's.
+   * open (the filters panel wants its own arrows), whenever focus is on a
+   * control — a point row, a shot row, any button — because those own their
+   * own keys and a keyboard user must still be able to walk the list and
+   * scroll the pane, and on any key with a modifier, which is the browser's.
    */
   const roomOpen = room !== null;
   useEffect(() => {
@@ -353,9 +354,22 @@ function FilmRoom({
       ) {
         return;
       }
+      // Focus belongs to a control, so its keys do too.
+      //
+      // These shortcuts are for someone WATCHING — focus on the body, hands
+      // off the page. The point list's rows are `role="button"` and
+      // `tabIndex={0}`, so a keyboard user tabs into them, and arrows there
+      // mean "move through the list" and "scroll", not "seek five seconds".
+      // Taking them on `window` and calling `preventDefault` would leave that
+      // viewer with no way to walk the list or scroll the pane at all — the
+      // fullscreen room can claim the arrows because it covers the screen and
+      // has nothing to scroll; a tab beside a scrolling list cannot.
+      if (target?.closest("button, [role=button], [role=slider], a[href]")) {
+        return;
+      }
+
       switch (e.key) {
         case " ":
-          if (target?.closest("button, [role=button], [role=slider]")) return;
           e.preventDefault();
           playerRef.current?.togglePlay();
           break;

@@ -720,3 +720,45 @@ test("an unmounted tab stops asking", async ({ page }) => {
   ).json();
   expect(count).toBe(0);
 });
+
+/* -------------------------------------------------------------------------
+ * The transport does not fight the viewer
+ * ---------------------------------------------------------------------- */
+
+test("Loop never undoes a jump to another point", async ({ page }) => {
+  const matchId = "loop-jump";
+  await open(page, matchId);
+
+  // Inside point a, so Loop adopts it as the point being repeated.
+  await seekTo(page, REPORT, 0.25);
+  expect(await playingRow(page)).toBe("a");
+
+  await page.getByRole("button", { name: "Loop this point — off" }).click();
+
+  // Now ask to watch a DIFFERENT point. These fixtures sit about a tenth of a
+  // second apart, so b's window opens inside a's end window — precisely the
+  // shape that used to read as "the loop came round" rather than "the viewer
+  // jumped", and sent them straight back to a.
+  await page.click('[data-point-id="b"][role="button"]');
+
+  // The viewer is where they asked to be. Point a begins at 0.2s, so the
+  // regression this pins is unmistakable: it put them back there.
+  const after = await state(page, REPORT);
+  expect(after?.time).toBeGreaterThan(0.3);
+});
+
+test("a focused point row keeps the arrow keys", async ({ page }) => {
+  const matchId = "keys-rows";
+  await open(page, matchId);
+  await seekTo(page, REPORT, 0.25);
+
+  // A keyboard user tabs into the list. Arrows there mean "walk the list" and
+  // "scroll the pane" — the tab may not take them, because unlike the
+  // fullscreen room it sits beside a list that scrolls.
+  await page.focus('[data-point-id="c"][role="button"]');
+  await page.keyboard.press("ArrowDown");
+
+  // Unmoved. Seeking five seconds would clamp to the clip's two.
+  const after = await state(page, REPORT);
+  expect(after?.time).toBeCloseTo(0.25, 1);
+});

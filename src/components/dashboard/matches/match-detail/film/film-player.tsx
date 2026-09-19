@@ -293,6 +293,8 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     const readyRef = useRef(false);
     /** The generation whose resume intent has already been taken. */
     const appliedRef = useRef(-1);
+    /** The point the film was last inside, for Loop (see the file note). */
+    const loopStopRef = useRef<FilmStop | null>(null);
 
     /** One place that moves the playhead everywhere it is read. */
     const pushTime = useCallback(
@@ -321,9 +323,21 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             : undefined;
         const target = Math.max(0, max ? Math.min(seconds, max) : seconds);
         el.currentTime = target;
+        // Loop follows the viewer. Every seek is someone asking to be
+        // somewhere — a point row, a shot row, the track, a step, an arrow —
+        // so the loop's idea of "the point we are repeating" moves with them.
+        //
+        // Without this the ref still names the PREVIOUS point when the
+        // `seeked` event reaches `onTime`, and a landing inside that point's
+        // end window reads as "the loop came round" rather than "the viewer
+        // jumped". The seek is then undone and they are thrown back, which for
+        // two points a second apart makes the next row unreachable while Loop
+        // is on. Looping itself still works: it seeks to the same point's
+        // start, so this rewrites the ref with the point it already held.
+        loopStopRef.current = activeStopAt(allStops, target)?.stop ?? null;
         pushTime(target);
       },
-      [pushTime],
+      [allStops, pushTime],
     );
 
     /**
@@ -475,9 +489,6 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       if (el) el.playbackRate = next;
       setRate(next);
     }, [rate]);
-
-    // The point the film was last inside, for Loop (see the file note).
-    const loopStopRef = useRef<FilmStop | null>(null);
 
     /**
      * A playhead report, plus what Loop and Skip dead time do with it.
