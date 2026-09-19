@@ -57,6 +57,10 @@ const SERVER_ONLY = [
   // T14: the cleanup worker deletes blobs through `storage.ts` and settles
   // rows through the service-role RPCs. Nothing in a browser ever sweeps.
   "lib/services/match-video/cleanup.ts",
+  // T15: the schedule's bearer check. It reads `CRON_SECRET` and gates the
+  // worker; a bundle that contained it would ship the comparison — and the
+  // env read — to every visitor.
+  "lib/services/match-video/cleanup-schedule.ts",
 ].map((p) => join(SRC, p));
 
 const EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];

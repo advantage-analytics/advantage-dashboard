@@ -226,7 +226,7 @@ contract and stops for review.
 
 ## T15 · Schedule and protect attachment cleanup
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T14
 - **files:** Best guess: src/app/api/cron/cleanup-match-videos/route.ts; vercel.json; .env.example; tests/match-video-cleanup.spec.ts

@@ -663,3 +663,50 @@ metadata. A 404 from delete is success, since the object being absent is the des
    failure. Harmless, but T15 may want to count it separately in logs.
 4. `storage.ts`'s `isRestStatus` is duplicated inline in `pendingCopyAt`; exporting it from T7
    would remove the second `RestError` import.
+
+## T15 · Schedule and protect attachment cleanup — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** New `src/app/api/cron/cleanup-match-videos/route.ts` (wiring only, Node runtime,
+`maxDuration = 60`) and `src/lib/services/match-video/cleanup-schedule.ts`, which holds
+`authorizeCronRequest` and `handleCleanupCron`. The split follows the house pattern every
+`/api/matches/[matchId]/video/*` route already uses, and is forced besides: Next reserves route-file
+exports for handler names, so an injectable, testable handler cannot live in `route.ts`. The
+reviewer judged it sound rather than creep.
+
+No CRON_SECRET house pattern existed — grep found the variable only in `.env.example`, a comment in
+the splitstep webhook prescribing `Authorization: Bearer <secret>`, and two doc lines saying it had
+no route to protect. This establishes the pattern those comments describe and borrows the
+digest-then-`timingSafeEqual` idiom from that webhook's HMAC check, so the repo has one comparison
+style. Both sides are SHA-256 digested before comparison, because raw `timingSafeEqual` throws on a
+length mismatch and that throw is itself a length oracle. An unset, blank or whitespace secret
+refuses _before the request is read_, and the misconfiguration is logged by variable name only.
+Every refusal returns one identical body with `private, no-store`; no log line or response carries
+the configured or presented value.
+
+The gate runs before anything else, and that is what the tests actually check: 11 table-driven
+refusal cases — no header, wrong secret, prefix, secret-plus-suffix, empty bearer, raw secret
+without scheme, `Basic`, secret in its own header, correct bearer with the secret unset, and two
+blank-secret variants — each assert four things: 401, zero worker invocations, an empty database
+event log, and an empty storage event log with both blobs still present. So the proof is that
+nothing was reached, not that a status code was returned.
+
+Schedule is `0 5 * * *` on `/api/cron/cleanup-match-videos`; a test parses `vercel.json` and asserts
+both the preserved `$schema` and that the scheduled path resolves to a real route file. `.env.example`
+keeps exactly one valueless `CRON_SECRET=`, its comment block rewritten from "no scheduled routes
+exist today" to document the consumer, the cadence, the 24–48 hour collection window, how to
+generate a value, and that unset fails closed. An authorized sweep is proven bounded: 60 eligible
+rows yield one claim, 50 collected, 10 left for tomorrow. `MAP.md`'s API row named
+`cron/reclaim-videos`, a route that no longer exists; replaced with this one. The spec grows from 22
+to 47 cases.
+
+**follow-ups:**
+
+1. **`CRON_SECRET` must be set in Vercel for production and preview before this does anything.**
+   Until then every call is refused and logged, and storage grows without bound. That is a
+   deployment step, deliberately not taken here.
+2. `docs/video-pipeline-overview.md` lines 379 and 635 still say `CRON_SECRET` has no route to
+   protect and is unused — now false. T28 already owns cron-secret and schedule documentation.
+3. The plan's other cron need is still open: reprocessing when `DERIVATION_VERSION` bumps, noted in
+   the splitstep webhook. It can reuse `authorizeCronRequest` unchanged.
