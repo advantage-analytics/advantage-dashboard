@@ -173,9 +173,22 @@ CORS rule for attachments:
 
 - **Allowed methods:** `PUT, GET, HEAD, OPTIONS`
 - **Allowed headers:** `x-ms-blob-type, x-ms-blob-content-type, x-ms-version, content-type`
+- **Exposed headers:** `x-ms-request-id, x-ms-error-code`
 - **Allowed origins:** every origin this feature is reachable from — the
   production app origin and every Preview deployment origin exercised before
   launch.
+
+Two things that look like gaps and are not. **Playback needs nothing from
+CORS**: no player sets `crossOrigin`, so the `<video>` loads in no-cors mode
+and the rule is never consulted — do not add origins on playback's account.
+And **`DELETE` is absent on purpose**: cancelling an upload is a `DELETE` to
+this app's own API, never to Azure.
+
+`x-ms-error-code` is exposed for diagnostics only. The transport reads it to
+turn `Azure returned 403` into `Azure returned 403 (AuthenticationFailed)`;
+every retry, renewal and credential-refresh decision branches on the numeric
+status, which a browser can always read. Losing the exposure degrades error
+messages, not behaviour.
 
 A missing or incomplete rule looks exactly like a network outage: the browser
 blocks the cross-origin request and reports an indistinguishable error with no
@@ -184,9 +197,11 @@ first thing to check here. `docs/video-pipeline-overview.md` §4 and its
 troubleshooting section (near the end) cover the same failure mode for the
 sibling pipeline; the fix is identical since it is the same account.
 
-This has not been verified from a real browser against this feature's own
-upload path — `tests/match-video-azure-smoke.spec.ts` proves the wire format
-from Node, not a browser preflight (see the deployment gates below).
+The rule on `advantagedashboardca` was checked against this transport's actual
+requests and covers them. What remains unproven is narrow: no browser has yet
+performed the preflight, because `tests/match-video-azure-smoke.spec.ts` runs
+from Node, which does not send one. The first real upload from
+`localhost:3000` or a deployed origin closes that.
 
 ---
 
@@ -253,8 +268,11 @@ Azure, and this repo's live database needs to take before or shortly after
 this ships to production. Do not read the tests passing locally as evidence
 any of these are done — they are not.
 
-1. **Azure CORS**, per §4 above — not verified from a real browser. The smoke
-   test proves the wire format from Node, which does not send a preflight.
+1. **A real browser preflight**, per §4 above. The rule on
+   `advantagedashboardca` is correct for this transport, but every check so far
+   has been from Node, which sends no preflight. The first upload from
+   `localhost:3000` or a deployed origin settles it — and a CORS failure looks
+   exactly like a network outage, so check this before chasing anything else.
 2. **`CRON_SECRET`**, per §3 above — not set in Vercel for any environment.
    `vercel.json`'s schedule is already committed and correct; only the
    secret is missing. Until it is set, the cleanup route refuses every call
@@ -265,6 +283,16 @@ any of these are done — they are not.
    would fail every upload with `AuthenticationFailed`.
 
 ### Closed since this document was first written
+
+- **The CORS rule itself.** Checked against the transport's real requests on
+  `advantagedashboardca` and correct: `PUT`/`OPTIONS` for the block upload and
+  the block-list commit, `content-type` and `x-ms-blob-content-type` for the
+  commit's headers, and all four origins. `x-ms-error-code` was added to
+  `ExposedHeaders` so failed uploads carry Azure's code into the browser. Note
+  `az storage cors add` **appends** rather than edits, and Azure evaluates rules
+  in order, so the update was `clear` then `add` — two overlapping rules is a
+  worse state than one correct one. Only the browser preflight is still
+  unproven; see gate 1.
 
 - **Azure account and smoke test.** `.env.local` now names
   `advantagedashboardca` (Canada East) with that account's key, and
