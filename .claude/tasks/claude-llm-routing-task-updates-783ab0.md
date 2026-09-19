@@ -264,7 +264,7 @@ contract and stops for review.
 
 ## T18 · Build the first-point alignment step
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1, T17
 - **files:** Best guess: src/components/dashboard/matches/match-video-attachment/AttachmentAlignmentStep.tsx; focused browser tests (new)

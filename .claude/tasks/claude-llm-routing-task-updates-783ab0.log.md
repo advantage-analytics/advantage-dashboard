@@ -820,3 +820,52 @@ and the gate marked; loading, empty and error states are all present with no bar
    size and content type the reservation body wants, so re-deriving any of them would reopen the
    `content_type_format` bug from the other side.
 5. `docs/ui-revamp-guardrails.md` §7 says to expect 43 pre-existing lint warnings; the tree is at 36. Minor doc drift.
+
+## T18 · Build the first-point alignment step — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** New `AttachmentAlignmentStep.tsx` and `use-attachment-alignment.ts`, following T17's
+idiom — presentation plus hook, wizard primitives from `new-match-wizard/styles.ts`, `advButton()`
+for the actions, no bare `return null`, object URL created and revoked in one effect closure. The
+player carries named Play/Pause, one-second skips and fine steps, plus a hand-built `role="slider"`
+scrub rail with arrows at 1/30s, Shift at 1s, PageUp/Down at 10s and Home/End, its `aria-valuetext`
+in the same clock as the field. The field is parsed only by T1's `parseConfirmedVideoTime` and
+written only by `formatConfirmedVideoTime`; no second clock parser or formatter exists in the new
+code. Local and saved sources both drive it.
+
+Zero confirmation cannot be bypassed because there is only one writer: `setConfirmedTime` clears
+the acknowledgement, and both typing and "Use current time" route through it. Confirmation is
+scoped to the value, so editing away and back asks again — tested from both directions.
+
+A rejected `play()` promise is kept distinct from a broken file, which matters because browsers
+reject play for autoplay policy and interrupted loads: the rejection sets a quiet `role="status"`
+notice ("Press play again"), while `mediaError` is set _only_ by the element's `onError` and
+renders a `role="alert"`, clearing any stale play notice. The spec drives each separately and
+asserts the other surface is absent.
+
+The too-short error never rewrites the field — the hook only changes what renders beside it — so a
+carefully scrubbed time survives. A test types `00:00:16.123`, takes the refusal, and asserts the
+field still reads exactly that. Nothing is ever invented: missing source timing renders its own
+amber notice that deliberately does not borrow the "not long enough" copy, and untimed interior
+points and shots are counted and named without blocking. Repeated corrections do not drift —
+6s → 9s → 6s yields an identical first and third offset, because `planAlignment` recomputes from
+the anchor rather than adjusting a running value.
+
+The widget-states checklist was run and the gate marked. 19 new browser cases; 34 pass with the
+sibling file-step and bundle-boundary specs.
+
+**follow-ups:**
+
+1. `SourceTimingSummary` carries the final point's end but not its start, so "Preview the last
+   point" approximates with a fixed six-second lead-in. Exposing `finalPointSourceSeconds` would
+   let the preview start on the actual serve contact.
+2. `FINE_STEP_SECONDS` is a fixed 1/30 because the saved-video path has no container parse behind
+   it. T20 could pass the parsed frame rate for the local path so the control can honestly say
+   "one frame" there.
+3. The source-change reset — a new file swapped in while this step stays mounted — is implemented
+   but not browser-tested, since the harness mounts a single source. T20's flow tests are the right
+   home for it, because that is where a file change actually happens.
+4. The preview seek clamps to the element's duration, which on the two-second fixture makes the
+   assertion weaker than ideal. A longer fixture clip would let the spec assert the exact landing
+   position rather than the published target.
