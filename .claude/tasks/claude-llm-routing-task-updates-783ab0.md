@@ -47,7 +47,7 @@ contract and stops for review.
 
 ## T1 · Define attachment timing and request contracts
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** Best guess: src/lib/match-video/{types,limits,alignment}.ts; tests/match-video-alignment.spec.ts (new)
 - **done when:**
