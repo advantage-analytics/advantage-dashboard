@@ -24,6 +24,12 @@ const SERVER_ONLY = [
   "lib/supabase/admin.ts",
   "lib/supabase/server.ts",
   "lib/user/roles.ts",
+  // Imports `@azure/storage-blob`, which signs with the storage account key and
+  // is a `serverExternalPackages` entry precisely so it never bundles. The
+  // wizard runs the SAME media inspection locally, from
+  // `lib/match-video/media-inspection.ts`, so the tempting import is one
+  // directory away.
+  "lib/services/match-video/probe.ts",
 ].map((p) => join(SRC, p));
 
 const EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];

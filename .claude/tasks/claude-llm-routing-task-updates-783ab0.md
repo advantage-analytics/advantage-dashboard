@@ -112,7 +112,7 @@ contract and stops for review.
 
 ## T6 · Verify stored video metadata through bounded Azure ranges
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1, T5
 - **files:** Best guess: src/lib/services/match-video/probe.ts; tests/match-video-probe.spec.ts (new/extend)

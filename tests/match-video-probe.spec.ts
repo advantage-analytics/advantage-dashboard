@@ -17,6 +17,15 @@ import {
   type SliceableFile,
 } from "@/lib/match-video/media-inspection";
 import { MATCH_VIDEO_MAX_BYTES } from "@/lib/match-video/limits";
+import {
+  probeStoredVideo,
+  publishedBlobOf,
+  stagedBlobOf,
+  type StoredAttachmentBlobRow,
+  type StoredBlobReader,
+  type StoredVideoBlob,
+} from "@/lib/services/match-video/probe";
+import { RestError } from "@azure/storage-blob";
 
 /**
  * The attachment's duration is the one number the whole feature rests on: it
@@ -675,5 +684,548 @@ test.describe("parsed clocks agree with the browser", () => {
       expect(observed.seekableEnd).toBeCloseTo(parsed.value.durationSeconds, 1);
       expect(observed.landed).toBeCloseTo(observed.target, 2);
     });
+  }
+});
+
+/* -------------------------------------------------------------------------
+ * Server probe: the same inspection, over Azure ranges
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Everything above answers "what is in these bytes". The probe answers "WHICH
+ * bytes", and it is the half that can be lied to: by the time it runs, a
+ * browser has uploaded a file and told us what it thinks that file is.
+ *
+ * Two properties are worth the length of this section. Nothing a caller sends
+ * can name the object read — proved by the type system below, because prose
+ * does not fail a build. And a blob swapped underneath a running probe is
+ * refused rather than measured, because a duration spliced from two files is
+ * the failure of this feature that looks completely normal on screen.
+ */
+
+interface ConditionedRead {
+  start: number;
+  end: number;
+  ifMatch: string;
+}
+
+/** A stored object the tests can replace, stall or break mid-probe. */
+class StoredBlobFake {
+  etag: string;
+  contentType: string | null;
+  readonly reads: ConditionedRead[] = [];
+  propertyCalls = 0;
+  /** Runs before each properties call; may mutate this fake or throw. */
+  onProperties?: (fake: StoredBlobFake, index: number) => void;
+
+  constructor(
+    public bytes: Uint8Array,
+    options: { etag?: string; contentType?: string | null } = {},
+  ) {
+    this.etag = options.etag ?? '"v1"';
+    this.contentType = options.contentType ?? "video/mp4";
+  }
+
+  reader(): StoredBlobReader {
+    return {
+      properties: async () => {
+        this.onProperties?.(this, this.propertyCalls);
+        this.propertyCalls += 1;
+        return {
+          contentLength: this.bytes.byteLength,
+          etag: this.etag,
+          contentType: this.contentType,
+        };
+      },
+      read: async (start, end, ifMatch) => {
+        this.reads.push({ start, end, ifMatch });
+        return { bytes: this.bytes.subarray(start, end), etag: this.etag };
+      },
+    };
+  }
+}
+
+/** Serve an existing `MediaByteSource` as a stored blob. */
+function readerOverSource(
+  source: MediaByteSource,
+  etag = '"v1"',
+): StoredBlobReader {
+  return {
+    async properties() {
+      return {
+        contentLength: source.byteLength,
+        etag,
+        contentType: "video/mp4",
+      };
+    },
+    async read(start, end, _ifMatch, signal) {
+      return { bytes: await source.read(start, end, signal), etag };
+    },
+  };
+}
+
+const ATTACHMENT_ROW: StoredAttachmentBlobRow = {
+  staged_blob_key: "match-video/staged/6f1c.mp4",
+  final_blob_key: "match-video/final/6f1c.mp4",
+  source_etag: null,
+};
+
+function staged(
+  row: StoredAttachmentBlobRow = ATTACHMENT_ROW,
+): StoredVideoBlob {
+  const blob = stagedBlobOf(row);
+  if (!blob.ok) throw new Error(`refused: ${blob.error.detail}`);
+  return blob.value;
+}
+
+test("a stored video's duration is read out of the stored bytes", async () => {
+  const fake = new StoredBlobFake(fixture("h264-faststart.mp4"));
+  const result = await probeStoredVideo(
+    { blob: staged() },
+    { reader: fake.reader() },
+  );
+
+  if (!result.ok) throw new Error(`refused: ${result.error.detail}`);
+  expect(result.value.durationSeconds).toBeCloseTo(FIXTURE_DURATION_SECONDS, 2);
+  expect(result.value.sizeBytes).toBe(fake.bytes.byteLength);
+  expect(result.value.contentType).toBe("video/mp4");
+  expect(result.value.videoCodec).toBe("avc");
+  expect(result.value.etag).toBe('"v1"');
+
+  // Every range is conditioned on the one ETag, and the ETag is confirmed
+  // again after the parse rather than only before it.
+  expect(fake.reads.length).toBeGreaterThan(0);
+  for (const read of fake.reads) {
+    expect(read.ifMatch).toBe('"v1"');
+    expect(read.end - read.start).toBeLessThanOrEqual(
+      MEDIA_PROBE_MAX_CHUNK_BYTES,
+    );
+  }
+  expect(fake.propertyCalls).toBe(2);
+});
+
+test("the published blob is probed by its own key", async () => {
+  const published = publishedBlobOf(ATTACHMENT_ROW);
+  if (!published.ok) throw new Error(`refused: ${published.error.detail}`);
+  const result = await probeStoredVideo(
+    { blob: published.value },
+    { reader: new StoredBlobFake(fixture("vp9.webm")).reader() },
+  );
+  if (!result.ok) throw new Error(`refused: ${result.error.detail}`);
+  expect(result.value.contentType).toBe("video/webm");
+});
+
+test("a key that is not a plain object name is never fetched", async () => {
+  for (const key of [
+    "https://someone-else.blob.core.windows.net/c/b.mp4",
+    "match-video/staged/6f1c.mp4?sig=stolen",
+    "/match-video/staged/6f1c.mp4",
+    "match-video/../../secrets.mp4",
+    "",
+  ]) {
+    const blob = stagedBlobOf({ ...ATTACHMENT_ROW, staged_blob_key: key });
+    expect(blob.ok).toBe(false);
+    if (!blob.ok) expect(blob.error.code).toBe("storage_unavailable");
+  }
+});
+
+test("no caller-supplied value can name the blob", async () => {
+  // The rule "a request body may not choose a storage key" is enforced by the
+  // type system, not by a code review: `StoredVideoBlob` is branded and the
+  // only things that mint one take a persisted row.
+  //
+  // @ts-expect-error a plain object is not a server-selected blob
+  const forged: StoredVideoBlob = {
+    blobName: "match-video/final/someone-elses.mp4",
+    expectedEtag: null,
+  };
+  expect(forged.blobName).toContain("someone-elses");
+
+  const fake = new StoredBlobFake(fixture("h264-faststart.mp4"));
+  const result = await probeStoredVideo(
+    {
+      blob: staged(),
+      // @ts-expect-error the probe takes no url, container, account or key
+      blobUrl: "https://someone-else.blob.core.windows.net/c/b.mp4",
+    },
+    { reader: fake.reader() },
+  );
+  expect(result.ok).toBe(true);
+  // The extra field is not merely ignored at runtime — it does not compile.
+  expect(fake.reads.length).toBeGreaterThan(0);
+});
+
+test("a recorded ETag that no longer matches refuses before a byte is read", async () => {
+  const fake = new StoredBlobFake(fixture("h264-faststart.mp4"), {
+    etag: '"v2"',
+  });
+  const result = await probeStoredVideo(
+    { blob: staged({ ...ATTACHMENT_ROW, source_etag: '"v1"' }) },
+    { reader: fake.reader() },
+  );
+
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error.code).toBe("stale_attachment");
+    expect(result.error.detail).toBe("etag_mismatch");
+    expect(result.error.status).toBe(409);
+  }
+  expect(fake.reads).toHaveLength(0);
+});
+
+/**
+ * A blob big enough that the parse takes several ranges, so a replacement can
+ * land between two of them.
+ *
+ * The fixture-sized fakes above are answered in a single read, which is exactly
+ * the case where nothing can change mid-parse — a test built on one would pass
+ * without the probe checking anything at all.
+ */
+function multiReadReader(etagForRead: (index: number) => string): {
+  reader: StoredBlobReader;
+  readCount: () => number;
+} {
+  const source = virtualLargeMp4(64 * 1024 * 1024);
+  let reads = 0;
+  return {
+    readCount: () => reads,
+    reader: {
+      async properties() {
+        return {
+          contentLength: source.byteLength,
+          etag: '"v1"',
+          contentType: "video/mp4",
+        };
+      },
+      async read(start, end, _ifMatch, signal) {
+        // May throw, standing in for storage refusing the condition.
+        const etag = etagForRead(reads);
+        reads += 1;
+        return { bytes: await source.read(start, end, signal), etag };
+      },
+    },
+  };
+}
+
+test("a blob replaced mid-parse is refused, never spliced", async () => {
+  // The bytes keep parsing perfectly. That is the point: the refusal cannot
+  // come from the file failing to decode, only from noticing that the object
+  // being read is no longer the one the first range came from.
+  const fake = multiReadReader((index) => (index === 0 ? '"v1"' : '"v2"'));
+
+  const result = await probeStoredVideo(
+    { blob: staged() },
+    { reader: fake.reader },
+  );
+  expect(fake.readCount()).toBeGreaterThan(1);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error.code).toBe("stale_attachment");
+    expect(result.error.detail).toBe("etag_changed_during_read");
+    // Not a storage blip: retrying would read the OTHER file and succeed.
+    expect(result.error.message).toContain("Reload");
+  }
+});
+
+test("a conditional range read that storage refuses is not a retry", async () => {
+  // What Azure actually does when the pinned ETag is gone: 412 ConditionNotMet.
+  // It arrives through the same throw path as a reset socket, so the probe has
+  // to tell them apart — one is retryable and the other must not be.
+  const fake = multiReadReader((index) => {
+    if (index === 0) return '"v1"';
+    throw new RestError(
+      "The condition specified using HTTP conditional header(s) is not met.",
+      { statusCode: 412, code: "ConditionNotMet" },
+    );
+  });
+
+  const result = await probeStoredVideo(
+    { blob: staged() },
+    { reader: fake.reader },
+  );
+  expect(fake.readCount()).toBeGreaterThan(0);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error.code).toBe("stale_attachment");
+    expect(result.error.detail).toBe("etag_changed_during_read");
+  }
+});
+
+test("a blob replaced after the last read is still refused", async () => {
+  // The parse finished and the answer is correct for the bytes it saw. It is
+  // still not an answer about the object we are about to publish.
+  const fake = new StoredBlobFake(fixture("h264-faststart.mp4"));
+  fake.onProperties = (blob, index) => {
+    if (index === 1) blob.etag = '"v2"';
+  };
+
+  const result = await probeStoredVideo(
+    { blob: staged() },
+    { reader: fake.reader() },
+  );
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error.code).toBe("stale_attachment");
+    expect(result.error.detail).toBe("etag_changed_during_read");
+  }
+});
+
+test("forged browser metadata cannot change the verdict", async () => {
+  const bytes = fixture("h264-faststart.mp4");
+  // Every declared field is a lie, including the content type storage itself
+  // was told on upload. A caller that could move any of these could make the
+  // match room seek against a duration no file has.
+  const forged = new StoredBlobFake(bytes, { contentType: "text/plain" });
+  const lied = await probeStoredVideo(
+    {
+      blob: staged(),
+      declared: {
+        sizeBytes: 12,
+        contentType: "video/x-matroska",
+        durationSeconds: 99_999,
+      },
+    },
+    { reader: forged.reader() },
+  );
+
+  const honest = new StoredBlobFake(bytes);
+  const plain = await probeStoredVideo(
+    { blob: staged() },
+    { reader: honest.reader() },
+  );
+
+  if (!lied.ok || !plain.ok) throw new Error("refused");
+  expect(lied.value.durationSeconds).toBe(plain.value.durationSeconds);
+  expect(lied.value.sizeBytes).toBe(plain.value.sizeBytes);
+  expect(lied.value.contentType).toBe("video/mp4");
+  // The disagreement is reported, and reporting it is all it does.
+  expect(lied.value.declaredMismatches).toEqual([
+    "size",
+    "content_type",
+    "duration",
+  ]);
+  expect(plain.value.declaredMismatches).toEqual([]);
+
+  const truthful = await probeStoredVideo(
+    {
+      blob: staged(),
+      declared: {
+        sizeBytes: bytes.byteLength,
+        contentType: "video/mp4",
+        durationSeconds: plain.value.durationSeconds,
+      },
+    },
+    { reader: new StoredBlobFake(bytes).reader() },
+  );
+  if (!truthful.ok) throw new Error("refused");
+  expect(truthful.value.declaredMismatches).toEqual([]);
+});
+
+test("the measured length governs the size gate, not the declared one", async () => {
+  const oversized: StoredBlobReader = {
+    async properties() {
+      return {
+        contentLength: MATCH_VIDEO_MAX_BYTES + 1,
+        etag: '"v1"',
+        contentType: "video/mp4",
+      };
+    },
+    async read() {
+      throw new Error("must not read");
+    },
+  };
+  const tooBig = await probeStoredVideo(
+    { blob: staged(), declared: { sizeBytes: 1024 } },
+    { reader: oversized },
+  );
+  expect(tooBig.ok).toBe(false);
+  if (!tooBig.ok) expect(tooBig.error.code).toBe("file_too_large");
+
+  // A transfer that never started. Declaring gigabytes does not fill it.
+  const emptied = new StoredBlobFake(new Uint8Array(0));
+  const empty = await probeStoredVideo(
+    { blob: staged(), declared: { sizeBytes: 1_000_000 } },
+    { reader: emptied.reader() },
+  );
+  expect(empty.ok).toBe(false);
+  if (!empty.ok) expect(empty.error.code).toBe("empty_file");
+  expect(emptied.reads).toHaveLength(0);
+});
+
+test("stored bytes that do not decode are refused as unsupported media", async () => {
+  const noise = new Uint8Array(4096);
+  for (let i = 0; i < noise.length; i++) noise[i] = (i * 37 + 11) % 256;
+
+  const cases: { bytes: Uint8Array; detail?: string }[] = [
+    { bytes: noise },
+    { bytes: fixture("audio-only.webm"), detail: "no_video_track" },
+    {
+      bytes: fixture("h264-tail.mp4").subarray(0, 4096),
+    },
+  ];
+
+  for (const entry of cases) {
+    const result = await probeStoredVideo(
+      { blob: staged() },
+      { reader: new StoredBlobFake(entry.bytes).reader() },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("unsupported_media");
+      if (entry.detail) expect(result.error.detail).toBe(entry.detail);
+      // A file we cannot decode is the user's to re-export, not ours to retry.
+      expect(result.error.message).toContain("Export it as an MP4");
+    }
+  }
+});
+
+test("the probe inspects a multi-gigabyte blob without downloading it", async () => {
+  const source = virtualLargeMp4(3 * 1024 * 1024 * 1024);
+  const result = await probeStoredVideo(
+    { blob: staged() },
+    { reader: readerOverSource(source) },
+  );
+
+  if (!result.ok) throw new Error(`refused: ${result.error.detail}`);
+  expect(result.value.durationSeconds).toBeCloseTo(FIXTURE_DURATION_SECONDS, 2);
+  expect(result.value.sizeBytes).toBe(source.byteLength);
+  expect(result.value.bytesRead).toBeLessThan(1024 * 1024);
+  expect(result.value.rangeRequests).toBeLessThanOrEqual(
+    MEDIA_PROBE_MAX_RANGE_REQUESTS,
+  );
+  for (const read of source.reads) {
+    expect(read.end - read.start).toBeLessThanOrEqual(
+      MEDIA_PROBE_MAX_CHUNK_BYTES,
+    );
+  }
+});
+
+test("a stored file whose structure exceeds the budget is refused", async () => {
+  // The same 64 MiB `moov` the local inspector refuses, served over ranges.
+  // T5's budgets have to survive the adapter: a server that re-implemented the
+  // metering here would be the one place this file gets to allocate freely.
+  const real = fixture("h264-faststart.mp4");
+  const moov = topLevelBoxes(real).find((box) => box.type === "moov");
+  if (!moov) throw new Error("fixture layout changed");
+  const claimed = 64 * 1024 * 1024;
+  const head = real.slice(0, moov.start + moov.size);
+  new DataView(head.buffer).setUint32(moov.start, claimed);
+
+  const reads: RecordedRead[] = [];
+  const reader = readerOverSource({
+    byteLength: moov.start + claimed,
+    async read(start, end) {
+      reads.push({ start, end });
+      const out = new Uint8Array(end - start);
+      for (let at = start; at < end && at < head.byteLength; at++) {
+        out[at - start] = head[at];
+      }
+      return out;
+    },
+  });
+
+  const result = await probeStoredVideo({ blob: staged() }, { reader });
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error.code).toBe("media_probe_budget");
+    expect(result.error.detail).toBe("total_bytes_limit");
+  }
+  const total = reads.reduce((sum, read) => sum + (read.end - read.start), 0);
+  expect(total).toBeLessThanOrEqual(MEDIA_PROBE_MAX_TOTAL_BYTES);
+  expect(reads.length).toBeLessThanOrEqual(MEDIA_PROBE_MAX_RANGE_REQUESTS);
+});
+
+test("a stored blob that stops answering ends at the deadline", async () => {
+  let aborted = false;
+  const reader: StoredBlobReader = {
+    async properties() {
+      return {
+        contentLength: 1024 * 1024,
+        etag: '"v1"',
+        contentType: "video/mp4",
+      };
+    },
+    read(_start, _end, _ifMatch, signal) {
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => {
+          aborted = true;
+          reject(new Error("aborted"));
+        });
+      });
+    },
+  };
+
+  const started = Date.now();
+  const result = await probeStoredVideo(
+    { blob: staged() },
+    { reader, deadlineMs: 250 },
+  );
+  expect(Date.now() - started).toBeLessThan(5000);
+  expect(aborted).toBe(true);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error.code).toBe("media_probe_budget");
+    expect(result.error.detail).toBe("deadline_exceeded");
+  }
+});
+
+test("storage failing to answer stays retryable", async () => {
+  // None of these learned anything about the file, so none of them may send a
+  // user off to re-export a video that is probably fine.
+  const failures: { reader: StoredBlobReader; detail: string }[] = [
+    {
+      detail: "properties_failed",
+      reader: {
+        async properties() {
+          throw new RestError("Server busy", { statusCode: 503 });
+        },
+        async read() {
+          throw new Error("must not read");
+        },
+      },
+    },
+    {
+      detail: "blob_not_found",
+      reader: {
+        async properties() {
+          throw new RestError("The specified blob does not exist.", {
+            statusCode: 404,
+            code: "BlobNotFound",
+          });
+        },
+        async read() {
+          throw new Error("must not read");
+        },
+      },
+    },
+    {
+      detail: "read_failed",
+      reader: {
+        async properties() {
+          return {
+            contentLength: 1024 * 1024,
+            etag: '"v1"',
+            contentType: "video/mp4",
+          };
+        },
+        async read() {
+          throw new Error("ECONNRESET");
+        },
+      },
+    },
+  ];
+
+  for (const failure of failures) {
+    const result = await probeStoredVideo(
+      { blob: staged() },
+      { reader: failure.reader },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("storage_unavailable");
+      expect(result.error.detail).toBe(failure.detail);
+      expect(result.error.status).toBe(503);
+      expect(result.error.message).toContain("Try again");
+    }
   }
 });

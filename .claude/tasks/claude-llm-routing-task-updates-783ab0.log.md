@@ -219,3 +219,51 @@ before accepting the test as the honest best available.
    when T6 builds on it.
 2. `MEDIA_PROBE_CACHE_BYTES` can never be proven at its exact magnitude by a black-box test.
    If that matters later, it would need a Mediabunny-internals assertion, which is not worth it.
+
+## T6 · Verify stored video metadata through bounded Azure ranges — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** New `src/lib/services/match-video/probe.ts` adapts T5's inspection to Azure range
+reads without forking it: the adapter implements only T5's `MediaByteSource`, so `MeteredSource`
+still owns the 32 MiB total, 2 MiB chunk, 128 request, 8 MiB cache and 15s deadline budgets and
+the disposal. Reads go through the existing `videoContainerClient()` from
+`video-url/azure-sas.ts` — the SDK path, not a minted SAS URL, so there is no bearer credential
+in play. Ranged downloads only; no whole-blob fetch, no codec or transcode dependency.
+
+Caller authority is refused at compile time, not by convention: `StoredVideoBlob` is branded
+with a module-private `unique symbol`, so the only way to get one is `stagedBlobOf(row)` or
+`publishedBlobOf(row)`, whose argument is the `match_video_attachments` row shape that only
+server code writes. Both factories re-check the key is a plain object name, duplicating T2's
+check constraint. The spec pins this with `@ts-expect-error` on a forged literal and on an extra
+`blobUrl` field; `tsconfig.json` includes `tests/**`, so if either ever became assignable the
+now-unused directive would fail the build.
+
+ETag handling is the subtle part. One ETag is pinned from the first `getProperties`; a recorded
+`source_etag` that differs refuses before a byte is read, every range carries `ifMatch`, and
+properties are re-read after the parse. The mid-parse case needed an out-of-band `replaced`
+flag checked _before_ the inspection result, because Mediabunny can swallow a failed prefetch
+and still return a successful parse — without that flag a replaced blob could have returned a
+duration spliced from two files. The test proves exactly that: the bytes still decode, and the
+result is refused anyway.
+
+Browser metadata stays advisory. A forged declared size of 12, content type
+`video/x-matroska`, duration 99999 and a `text/plain` storage header produce a verdict
+identical to declaring nothing; the lies surface only as `declaredMismatches`, which no branch
+reads. Measured length drives the size gates.
+
+`tests/match-video-probe.spec.ts` grows by 14 cases to 27, and
+`tests/client-bundle-boundary.spec.ts` gains the new module in its `SERVER_ONLY` list so the
+server-only property is machine-enforced. 41 tests pass across the two files.
+
+**follow-ups:**
+
+1. `classifyStorageFailure` maps a 404 to a retryable `storage_unavailable`. That is right while
+   bytes may still be landing, but T10's completion endpoint needs its own bound on how long it
+   retries a blob that genuinely never arrived.
+2. `azureBlobReader` uses `videoContainerClient()`, the vendor-pipeline container. If
+   attachments get their own container, that helper and the key prefixes belong in T7's storage
+   adapter and the probe should take its reader from there.
+3. The `content_type_not_supported` branch is currently unreachable — every format in
+   `INSPECTED_FORMATS` maps into `MATCH_VIDEO_MIME_TYPES`. Worth keeping as a guard, but if the
+   two lists drift a test should pin the mapping.
