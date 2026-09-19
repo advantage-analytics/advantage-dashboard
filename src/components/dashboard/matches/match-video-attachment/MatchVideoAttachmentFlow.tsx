@@ -39,7 +39,7 @@
  */
 
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
-import { AlertTriangle, Check, Info, Loader2, XCircle } from "lucide-react";
+import { TriangleAlert, Check, Info, Loader2, XCircle } from "lucide-react";
 
 import { advButton } from "@/lib/ui/adv-button";
 import type { SourcePoint, SourceShot } from "@/lib/match-video/alignment";
@@ -543,7 +543,7 @@ export function MatchVideoAttachmentFlow({
             role="alert"
             data-testid="attachment-blocked"
           >
-            <AlertTriangle
+            <TriangleAlert
               className={noteIconCls}
               strokeWidth={1.5}
               aria-hidden="true"

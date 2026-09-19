@@ -140,6 +140,13 @@ export interface AttachmentResumeIntent {
   realign: boolean;
 }
 
+/**
+ * One frozen empty array, so the passthrough memo can short-circuit without
+ * handing a fresh `[]` to consumers on every render — a new identity there
+ * would defeat the memoisation it is standing in for.
+ */
+const EMPTY_STOPS: FilmStop[] = [];
+
 export interface AttachmentPlaybackSnapshot {
   /** The URL to play, or `null` once a problem is terminal. */
   url: string | null;
@@ -168,6 +175,17 @@ export const REFRESH_LEAD_MS = 2 * 60 * 1000;
 
 /** Never schedule a refresh closer than this, whatever the arithmetic says. */
 export const MIN_REFRESH_DELAY_MS = 1000;
+
+/**
+ * Consecutive stale replies tolerated before playback is reported terminal.
+ *
+ * A stale reply — a version older than the one already installed — is what a
+ * lost race looks like, and one or two of those are ordinary around a
+ * correction or a replacement. A server that answers nothing else is a server
+ * that will not hand over a fresher credential, and since the floor on the
+ * re-arm is a second, that would otherwise be one request a second forever.
+ */
+export const MAX_STALE_REPLIES = 3;
 
 /**
  * How late a credential has to be for a load failure to be blamed on it.
@@ -384,9 +402,10 @@ export async function fetchPlaybackSource(
   if (response.status === 404) {
     return { kind: "removed", detail: "match_not_found" };
   }
-  if (response.status === 401 || response.status === 403) {
-    return { kind: "denied", detail: `http_${response.status}` };
-  }
+  // Every remaining 4xx is a denial, 401 and 403 included. They were once
+  // branched separately, which advertised a distinction the code did not make:
+  // both arms returned the same kind and the same detail, so anyone adding a
+  // sign-in prompt to the 401 case would have silently changed 403 too.
   if (response.status >= 400 && response.status < 500) {
     return { kind: "denied", detail: `http_${response.status}` };
   }
@@ -531,6 +550,14 @@ export function createAttachmentPlaybackController(
    * Cleared by any credential that genuinely moves the expiry forward.
    */
   let expiryStalled = false;
+  /**
+   * Consecutive replies carrying a version older than the one already
+   * installed. Its own budget, separate from {@link expiryStalled}: a stale
+   * reply is a race that lost, not a server refusing to move the expiry, and
+   * conflating the two let one lost race end playback. Cleared by any reply
+   * that installs something.
+   */
+  let staleReplies = 0;
 
   let lastFilmTime = 0;
   let lastPlaying = false;
@@ -616,15 +643,36 @@ export function createAttachmentPlaybackController(
     // URL, not the clock, not the schedule's basis.
     if (change === "stale") {
       emit({ refreshing: false });
-      // Re-armed off the credential still in hand, and through the same guard:
-      // a server that keeps answering with a version older than the one held
-      // is not advancing anything either, and re-arming off an expiry whose
-      // lead window has passed would ask again in a second, and again.
-      if (current) scheduleAfterInstall(current, current);
+      // Re-armed off the credential still in hand, under its OWN budget.
+      //
+      // Not through `scheduleAfterInstall`: that decides "did the expiry
+      // advance" by comparing two sources, and the only source here is the one
+      // already installed. Passing it as both arguments made the comparison
+      // `x.expiresAt <= x.expiresAt` — true every time — so two stale replies
+      // in a row drove a healthy credential to a terminal `unplayable`. A
+      // stale reply is a response that lost a race; it says nothing about the
+      // credential in hand, which may have its full lifetime left.
+      //
+      // It still cannot spin: once the held credential's lead window has
+      // passed, `refreshDelayMs` floors at a second, so a server answering
+      // nothing but stale versions would ask once a second forever. That is
+      // what this counter bounds, and only a reply that actually installs
+      // something clears it.
+      if (current) {
+        staleReplies += 1;
+        if (staleReplies > MAX_STALE_REPLIES) {
+          fail("unplayable");
+          return;
+        }
+        schedule(refreshDelayMs(current, deps.now()));
+      }
       return;
     }
 
     transientRetrySpent = false;
+    // Anything that reaches here installed a source, so the run of stale
+    // replies is over.
+    staleReplies = 0;
 
     if (change === "unchanged") {
       // Same frames, same alignment: hand the playhead and the intent back.
@@ -894,15 +942,19 @@ export function useAttachmentPlayback(
     controller?.setPoints(points);
   }, [controller, points]);
 
-  // The Advantage Intelligence lineage's clock and stops, built whether or not
-  // this is that lineage: a hook may not skip a hook, and the work is a sort.
+  // The Advantage Intelligence lineage's clock and stops. The hook itself runs
+  // unconditionally — a hook may not skip a hook — but the work inside it does
+  // not: on an attachment-backed match the controller owns the stops, and
+  // sorting every point a second time only to discard the result is a cost the
+  // lineage that needs it never sees. Bookmarking a point re-creates `points`,
+  // which would otherwise sort the whole match twice on one interaction.
   const passthroughClock = useMemo<FilmClock>(
     () => ({ offset: video.startTimeSeconds, duration: null }),
     [video.startTimeSeconds],
   );
   const passthroughStops = useMemo(
-    () => filmStops(points, passthroughClock),
-    [points, passthroughClock],
+    () => (controller ? EMPTY_STOPS : filmStops(points, passthroughClock)),
+    [controller, points, passthroughClock],
   );
 
   if (!controller || !snapshot) {

@@ -8,6 +8,7 @@ import {
   EXPIRY_BLAME_WINDOW_MS,
   fetchPlaybackSource,
   isExpiryRelated,
+  MAX_STALE_REPLIES,
   MIN_REFRESH_DELAY_MS,
   REFRESH_LEAD_MS,
   refreshDelayMs,
@@ -469,6 +470,56 @@ test.describe("the footage or the alignment changed", () => {
     expect(snap.generation).toBe(0);
     // Still watching the schedule rather than stalled.
     expect(h.hasTimer()).toBe(true);
+  });
+
+  test("two lost races in a row do not end a healthy credential", async () => {
+    // The bug this pins: the stale branch re-armed through the
+    // "did the expiry advance" guard, passing the held source as BOTH
+    // arguments — `x.expiresAt <= x.expiresAt`, true every time. So the first
+    // stale reply set the stall flag and the second reported `unplayable`,
+    // killing playback while the credential in hand still had its full
+    // lifetime. A lost race says nothing about the credential in hand.
+    const h = harness({
+      initial: source({ version: 5, url: "https://b/v5" }),
+      answers: [
+        attachmentAnswer({ version: 4, url: "https://b/v4" }),
+        attachmentAnswer({ version: 3, url: "https://b/v3" }),
+      ],
+    });
+    h.controller.reportTime(240);
+
+    await h.advance(TTL - REFRESH_LEAD_MS);
+    expect(h.controller.snapshot().problem).toBeNull();
+
+    await h.advance(TTL);
+    const snap = h.controller.snapshot();
+
+    // Still playing the version it holds, with no terminal state.
+    expect(snap.problem).toBeNull();
+    expect(snap.url).toBe("https://b/v5");
+    expect(snap.source!.version).toBe(5);
+    expect(h.hasTimer()).toBe(true);
+  });
+
+  test("a server answering nothing but stale versions is given up on", async () => {
+    // The other half: the re-arm floors at a second once the lead window has
+    // passed, so an endless run of stale replies would be one request a second
+    // forever. Bounded by its own budget, not by the expiry-advance guard.
+    const h = harness({
+      initial: source({ version: 9, url: "https://b/v9" }),
+      answers: Array.from({ length: MAX_STALE_REPLIES + 2 }, (_, i) =>
+        attachmentAnswer({ version: 8 - i, url: `https://b/stale${i}` }),
+      ),
+    });
+
+    await h.advance(TTL - REFRESH_LEAD_MS);
+    for (let i = 0; i <= MAX_STALE_REPLIES; i += 1) {
+      await h.advance(TTL);
+    }
+
+    const snap = h.controller.snapshot();
+    expect(snap.problem?.reason).toBe("unplayable");
+    expect(h.hasTimer()).toBe(false);
   });
 
   test("a refresh overtaken by a newer one lands nowhere", async () => {

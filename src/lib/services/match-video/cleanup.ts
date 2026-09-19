@@ -240,7 +240,6 @@ export interface CleanupRunOptions {
   /** Rows to lease, 1–{@link CLEANUP_BATCH_LIMIT}. */
   limit?: number;
   leaseSeconds?: number;
-  concurrency?: number;
   /** Free text for the log line, e.g. `"cron"` or `"replace:<match>"`. */
   reason?: string;
 }
@@ -304,11 +303,9 @@ export async function runMatchVideoCleanup(
     1,
     3600,
   );
-  const concurrency = clamp(
-    options.concurrency ?? CLEANUP_CONCURRENCY,
-    1,
-    CLEANUP_BATCH_LIMIT,
-  );
+  // Not an option: no caller has ever tuned lane count, and offering the knob
+  // implied one did. The bound is the constant, whose reasoning lives with it.
+  const concurrency = CLEANUP_CONCURRENCY;
   const reason = options.reason ?? "sweep";
 
   const summary: CleanupRunSummary = {

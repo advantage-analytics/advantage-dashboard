@@ -31,7 +31,10 @@
 
 import { createHash, timingSafeEqual } from "node:crypto";
 
+import type { NextResponse } from "next/server";
+
 import type { CleanupRunSummary } from "./cleanup";
+import { jsonResponse } from "./http";
 
 const LOG = "[match-video-cleanup-cron]";
 
@@ -124,16 +127,18 @@ export interface CleanupCronBody {
   durationMs: number;
 }
 
-function jsonResponse(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "content-type": "application/json",
-      // A sweep report is not cacheable by anything, and a 401 from this path
-      // must never be served to the next caller from an edge cache.
-      "cache-control": "private, no-store",
-    },
-  });
+/**
+ * `(status, body)` — the reverse of `http.ts`'s `jsonResponse(body, status)`.
+ *
+ * This file used to declare its own `jsonResponse` with that reversed shape,
+ * which is a trap rather than a preference: two functions of the same name in
+ * one directory, so a call moved between them compiles and answers with the
+ * body where the status goes. The name now says which order it takes, and the
+ * `private, no-store` guarantee comes from `http.ts` rather than being spelled
+ * a second time here.
+ */
+function jsonWithStatus(status: number, body: unknown): NextResponse {
+  return jsonResponse(body, status);
 }
 
 /**
@@ -164,7 +169,7 @@ export async function handleCleanupCron(
     }
     // Deliberately uniform, and deliberately empty of detail: no echo of what
     // was presented, no hint of what was expected.
-    return jsonResponse(401, { ok: false, error: "unauthorized" });
+    return jsonWithStatus(401, { ok: false, error: "unauthorized" });
   }
 
   const startedAt = Date.now();
@@ -178,7 +183,7 @@ export async function handleCleanupCron(
     console.error(`${LOG} sweep threw`, {
       message: cause instanceof Error ? cause.message : String(cause),
     });
-    return jsonResponse(500, { ok: false, error: "cleanup_failed" });
+    return jsonWithStatus(500, { ok: false, error: "cleanup_failed" });
   }
 
   const body: CleanupCronBody = {
@@ -198,8 +203,8 @@ export async function handleCleanupCron(
       code: summary.claimError.code,
       detail: summary.claimError.detail,
     });
-    return jsonResponse(500, { ...body, error: "claim_failed" });
+    return jsonWithStatus(500, { ...body, error: "claim_failed" });
   }
 
-  return jsonResponse(200, body);
+  return jsonWithStatus(200, body);
 }

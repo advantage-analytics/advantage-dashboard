@@ -386,7 +386,10 @@ export function supabaseAttachmentSourceRows(
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabase
         .from("shots")
-        .select("id, video_time, points!inner(match_id)")
+        // `id` orders the page but is never read back — Postgres sorts on it
+        // whether or not it is projected, and a shot row here is its time and
+        // nothing else. Selecting it shipped a uuid per row for no reader.
+        .select("video_time, points!inner(match_id)")
         .eq("points.match_id", matchId)
         .order("id", { ascending: true })
         .range(from, from + PAGE - 1);

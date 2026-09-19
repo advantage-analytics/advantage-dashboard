@@ -38,7 +38,7 @@
 
 import { memo, useId } from "react";
 import {
-  AlertTriangle,
+  TriangleAlert,
   Info,
   Loader2,
   Pause,
@@ -254,7 +254,7 @@ function AttachmentAlignmentStepImpl({
             data-testid="alignment-timing-missing"
             data-error-code={timing.ok ? undefined : timing.error.code}
           >
-            <AlertTriangle
+            <TriangleAlert
               className={noteIconCls}
               strokeWidth={1.5}
               aria-hidden="true"
@@ -524,7 +524,7 @@ function AttachmentAlignmentStepImpl({
             role="alert"
             data-testid="alignment-zero-confirm"
           >
-            <AlertTriangle
+            <TriangleAlert
               className={noteIconCls}
               strokeWidth={1.5}
               aria-hidden="true"

@@ -87,14 +87,13 @@ const LOG = "[match-video-alignment]";
  * Body
  * ---------------------------------------------------------------------- */
 
-/** The validated body. All three fields are required. */
-export interface UpdateAlignmentBody {
-  attachmentId: string;
-  /** The version the caller believes is active. T4 does the CAS. */
-  expectedVersion: number;
-  /** Millisecond-rounded, non-negative. */
-  confirmedVideoTimeSeconds: number;
-}
+/**
+ * The validated body is exactly `UpdateAlignmentRequest` from `types.ts` — the
+ * wire contract, which this file already imports and already keys `BODY_FIELDS`
+ * on. It was briefly restated here as its own interface; two names for one
+ * shape let the contract and the parser's output drift apart without a compile
+ * error, which is the whole thing `types.ts` exists to prevent.
+ */
 
 const BODY_FIELDS = new Set<keyof UpdateAlignmentRequest>([
   "attachmentId",
@@ -121,7 +120,7 @@ const BODY_FIELDS = new Set<keyof UpdateAlignmentRequest>([
  */
 export function parseUpdateAlignmentBody(
   body: unknown,
-): HttpResult<UpdateAlignmentBody> {
+): HttpResult<UpdateAlignmentRequest> {
   if (!isPlainObject(body)) return invalid("body_not_object");
 
   for (const key of Object.keys(body)) {
