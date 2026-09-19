@@ -1190,3 +1190,46 @@ passed, 0 failed. Widget-states checklist run and gate marked.
    of scope here, but a visible asymmetry now that both surfaces share one clock.
 3. `breakSegments` takes the element's duration; using the verified duration instead would let the
    scrub track tile correctly before metadata loads.
+
+## T25 · Implement attachment playback credential refresh state — blocked
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: needs-work
+
+The review found a real spin loop in `scheduleAfterInstall`, inside the very behaviour the first
+criterion names. The module's own docstring claims it refuses to pre-empt an expiry that did not
+advance, and the arithmetic does not deliver that: once `now` catches up to a non-advancing
+`expiresAt`, `installed.expiresAt - now` goes non-positive, floors to `MIN_REFRESH_DELAY_MS`, and
+reschedules again — once per second, forever, never reaching a terminal state. The reviewer traced
+the arithmetic and confirmed it by simulation. The existing test
+("an expiry that did not advance is waited out, not pre-empted") only observes the _first_
+reschedule and never lets the timer fire again, so the steady state is untested.
+
+Everything else passed: same-asset refresh preserves playhead and intent, replacement and correction
+re-anchor through `{pointId, pointTime}` on the source clock rather than reusing a raw second,
+terminal states are actionable with honest `canRetry`, `reportPlayRejected` is genuinely inert with
+a test asserting zero fetches and an intact budget, stale responses are dropped by both version and
+run id, and a non-attachment source gets a passthrough with no controller, timer or request.
+
+**changed:** Nothing committed. Stashed at `f1b48576601956cc281f0561e9da97c06a08c4c0`
+(`git stash apply f1b48576`) — apply by SHA, since `refs/stash` is shared across worktrees and
+`codex/admin-uploads` has entries below it. The stash holds
+`src/components/dashboard/matches/match-detail/film/use-attachment-playback.ts` and
+`tests/film-attachment-playback.spec.ts`, 23 cases, all passing as written; 93 pass across the five
+specs the reviewer ran.
+
+**follow-ups:**
+
+1. To unblock: make the non-advancing-expiry path terminal instead of flooring to the minimum
+   delay — a server that will not issue a fresher credential is a state to report, not to poll — and
+   add a test that lets the timer fire a second time so the steady state is actually observed.
+2. Carried for T26: `generation` is the element's reload key and `resume` must be consumed via
+   `resumeApplied()` after the seek, or the intent is re-applied on the next render. `realign: true`
+   should move the point list's selection, not just the playhead. The hook exposes `stops`/`clock`
+   so the players stop deriving their own — `film-tab.tsx` and `film-fullscreen.tsx` must read them
+   from here or the two will disagree after a correction.
+3. `film-player.tsx`'s "The film stopped loading → Reload" panel becomes redundant for the
+   attachment lineage once `problem` is rendered, but must stay for the provider lineage, which has
+   no refresh endpoint.
+4. A second tab correcting the alignment is only noticed at the next scheduled refresh, up to 28
+   minutes. A `visibilitychange` refresh on focus would close that, but it is a behaviour change
+   rather than state, so it was deliberately left out.
