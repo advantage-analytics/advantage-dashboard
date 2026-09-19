@@ -177,3 +177,45 @@ wrote a final report; the verdict above comes from reviewing the artifacts direc
 
 1. To unblock: apply the stash and add one test that drives the 8 MiB cache budget, then
    re-run. That is the only criterion gap the review found.
+
+## T5 · Implement bounded shared media inspection — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+(re-review after the earlier `needs-work`; the reviewer re-judged all four criteria, not just
+the one that had been blocking, since the module was touched)
+
+**changed:** Unblocked from the stash `726273e3` rather than rewritten. New
+`src/lib/match-video/media-inspection.ts` — isomorphic (no Azure, Supabase or Next imports),
+T1's error codes only, with the byte source an injectable seam so T6 can adapt it to Azure
+range reads. It uses only Mediabunny's MP4/QTFF/Matroska/WebM readers, requires a video track,
+and takes the media end from that track's own clock rather than audio duration or any
+client-supplied value. `MeteredSource` enforces the 32 MiB total, 2 MiB chunking and 128
+request cap; a 15-second deadline runs on an AbortController, and a `finally` clears the timer,
+aborts, and disposes both input and source on every exit. Local preflight slices the File
+rather than buffering it. AVI is refused at both the extension and content gates; external
+resource formats, audio-only, corrupt, truncated, nonfinite-duration and unsupported timing
+layouts each refuse with their own code.
+
+`tests/match-video-probe.spec.ts` holds 25 cases and `tests/fixtures/match-video/` five
+self-generated clips of 9–22 KB plus the `generate.mjs` that produced them. The browser
+clock-agreement test serves the fixtures over a range-capable server and seeks a live `<video>`
+element, comparing against the parser rather than hardcoding numbers on both sides.
+
+The gap that blocked the first attempt — the 8 MiB cache budget being wired but untested — is
+closed by running the same production path twice over the same 3 GiB virtual file, once at the
+production budget and once with caching disabled, and asserting the re-read amplification
+differs (0 bytes refetched versus about 1.65 MiB) while both runs return the same duration.
+A `cacheBytes` test seam was added for this; it defaults to the constant and no production
+caller sets it. Worth recording honestly: the _magnitude_ 8 MiB is not observable from outside
+Mediabunny — its eviction loop refuses to evict when that would bring the cache back under the
+limit, and `CustomSource`'s own default is also 8 MiB — so only caching-on versus caching-off
+can be proven. The reviewer checked that claim against `node_modules/mediabunny` directly
+before accepting the test as the honest best available.
+
+**follow-ups:**
+
+1. The first attempt was interrupted mid-run, so no implementer report exists for the bulk of
+   this module; the verdict came from reviewing the artifacts. Worth a closer read than usual
+   when T6 builds on it.
+2. `MEDIA_PROBE_CACHE_BYTES` can never be proven at its exact magnitude by a black-box test.
+   If that matters later, it would need a Mediabunny-internals assertion, which is not worth it.
