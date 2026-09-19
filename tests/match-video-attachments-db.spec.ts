@@ -4,6 +4,13 @@ import { expect, test } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  planAlignment,
+  summarizeSourceTiming,
+  type SourcePoint,
+  type SourceShot,
+} from "@/lib/match-video/alignment";
+
+import {
   ANON_KEY,
   HAVE_ENV,
   INSUFFICIENT_PRIVILEGE,
@@ -372,6 +379,25 @@ type RpcResult = {
   } | null;
 };
 
+const firstRow = (result: RpcResult) => {
+  expect(result.error).toBeNull();
+  const rows = result.data as Record<string, unknown>[];
+  expect(rows).toHaveLength(1);
+  return rows[0];
+};
+
+const expectRefused = (
+  result: RpcResult,
+  code: string,
+  message: string,
+  details: string,
+  label = message,
+) => {
+  expect(result.error?.code, `${label} code`).toBe(code);
+  expect(result.error?.message, `${label} message`).toBe(message);
+  expect(result.error?.details, `${label} detail`).toBe(details);
+};
+
 const { mark: RPC_MARK, password: RPC_PASSWORD } = runMarker("mvr");
 
 test.describe("match_video_attachments reservation RPCs (live)", () => {
@@ -444,25 +470,6 @@ test.describe("match_video_attachments reservation RPCs (live)", () => {
       p_attachment_id: attachmentId,
       ...overrides,
     }) as unknown as Promise<RpcResult>;
-
-  const firstRow = (result: RpcResult) => {
-    expect(result.error).toBeNull();
-    const rows = result.data as Record<string, unknown>[];
-    expect(rows).toHaveLength(1);
-    return rows[0];
-  };
-
-  const expectRefused = (
-    result: RpcResult,
-    code: string,
-    message: string,
-    details: string,
-    label = message,
-  ) => {
-    expect(result.error?.code, `${label} code`).toBe(code);
-    expect(result.error?.message, `${label} message`).toBe(message);
-    expect(result.error?.details, `${label} detail`).toBe(details);
-  };
 
   const rowsFor = async (matchId: string) => {
     const result = await admin
@@ -1056,5 +1063,1287 @@ test.describe("match_video_attachments reservation RPCs (live)", () => {
     );
     expect(pending).toHaveLength(1);
     expect(pending[0].id).toBe(firstRow(won[0]).attachment_id);
+  });
+});
+
+/**
+ * `20260919052002_match_video_attachment_activation.sql` (T4) — the
+ * finalization lease, atomic activation and alignment correction, proven
+ * against the live database with throwaway users and matches.
+ *
+ *  1. Privilege boundary: anon and authenticated sessions cannot execute any
+ *     of the six new functions (`42501`).
+ *  2. SQL/TypeScript timing parity: `match_video_source_timing` and
+ *     `match_video_plan_alignment` are driven over the SAME fixture rows as
+ *     `summarizeSourceTiming()` / `planAlignment()` and must return the same
+ *     numbers (exact `toBe`, no tolerance) and the same refusal slugs —
+ *     including the MAX-over-every-known-bound rule, a shot before the anchor,
+ *     and coverage at the 0.1 s tolerance edge on both sides.
+ *  3. Lease: begin freezes the confirmed time, refuses another token, refuses
+ *     a changed input under the same live lease, blocks renew/cancel, and
+ *     release lets a failed completion retry.
+ *  4. Activation: needs the lease, server-verified metadata and coverage;
+ *     retires the previous active row and activates the new one atomically;
+ *     a replay is success only while that row is still active; a retired
+ *     attempt never publishes; concurrent replays converge on one commit.
+ *  5. Correction: version CAS, no-op leaves the version alone, saved duration
+ *     is what coverage is checked against, concurrent corrections leave one
+ *     winner.
+ *  6. Races: cancel vs. begin, and match deletion during activation.
+ *  7. Imported data: `matches`, `points`, `shots` and `match_stats` rows are
+ *     deep-equal before and after every activation and correction.
+ */
+
+const DATA_EXCEPTION = "22000";
+
+/**
+ * A double as the database RENDERS it.
+ *
+ * The SQL stores and compares the same IEEE double the TypeScript computes
+ * (12.345 − 10 = 2.3450000000000006 on both sides — the tolerance-edge cases
+ * below would flip otherwise). But this project runs Postgres with
+ * `extra_float_digits = 0`, so every float8 leaves the database printed to 15
+ * significant digits: 2.3450000000000006 arrives as 2.345 — from this RPC and
+ * from a plain read of `offset_seconds` alike, which is the only offset the
+ * application will ever see. Parity is therefore asserted on the exact value
+ * after that one rendering step, never with a tolerance. If the setting ever
+ * changes to shortest-round-trip output, this helper is what to delete.
+ */
+const rendered = (value: number): number => Number(value.toPrecision(15));
+
+const { mark: ACT_MARK, password: ACT_PASSWORD } = runMarker("mva4");
+
+type SourceRows = { points: SourcePoint[]; shots: SourceShot[] };
+
+test.describe("match_video_attachments activation + alignment RPCs (live)", () => {
+  test.describe.configure({ mode: "serial", timeout: 60_000 });
+  test.skip(!HAVE_ENV, SKIP_REASON);
+
+  let admin: SupabaseClient;
+  let owner: Session; // creator and uploader
+  let outsider: Session;
+
+  const authUserIds: string[] = [];
+  let alignMatch: string; // full timing fixture; activation/correction target
+  let emptyMatch: string; // no points at all
+  let deleteMatch: string; // deleted while an activation is in flight
+
+  /** `points.id` by point_number on alignMatch, for the fault mutations. */
+  const pointIds: Record<number, string> = {};
+  let anchorShotId: string;
+
+  const VERIFIED_DURATION = 200;
+  const CONFIRMED = 10;
+
+  const hoursFromNow = (hours: number) =>
+    new Date(Date.now() + hours * 3_600_000).toISOString();
+
+  const actor = (session: Session, matchId: string) => ({
+    p_actor_id: session.userId,
+    p_workspace_kind: "personal",
+    p_workspace_id: session.userId,
+    p_match_id: matchId,
+  });
+
+  const rpc = (fn: string, args: Record<string, unknown>) =>
+    admin.rpc(fn, args) as unknown as Promise<RpcResult>;
+
+  const reserve = (
+    matchId: string,
+    expected: { id: string; version: number } | null,
+    overrides: Record<string, unknown> = {},
+  ) =>
+    rpc("match_video_reserve_upload", {
+      ...actor(owner, matchId),
+      p_filename: `${ACT_MARK}-a.mp4`,
+      p_declared_size_bytes: 2_000_000,
+      p_declared_content_type: "video/mp4",
+      p_client_request_id: randomUUID(),
+      p_expected_active_id: expected?.id ?? null,
+      p_expected_active_version: expected?.version ?? null,
+      p_upload_sas_expires_at: hoursFromNow(6),
+      ...overrides,
+    });
+
+  const begin = (
+    matchId: string,
+    attachmentId: string,
+    token: string,
+    expected: { id: string; version: number } | null,
+    overrides: Record<string, unknown> = {},
+  ) =>
+    rpc("match_video_begin_finalization", {
+      ...actor(owner, matchId),
+      p_attachment_id: attachmentId,
+      p_lease_token: token,
+      p_lease_seconds: 300,
+      p_confirmed_video_time_seconds: CONFIRMED,
+      p_expected_active_id: expected?.id ?? null,
+      p_expected_active_version: expected?.version ?? null,
+      ...overrides,
+    });
+
+  const release = (matchId: string, attachmentId: string, token: string) =>
+    rpc("match_video_release_finalization", {
+      ...actor(owner, matchId),
+      p_attachment_id: attachmentId,
+      p_lease_token: token,
+    });
+
+  const activate = (
+    matchId: string,
+    attachmentId: string,
+    token: string,
+    overrides: Record<string, unknown> = {},
+  ) =>
+    rpc("match_video_activate_attachment", {
+      ...actor(owner, matchId),
+      p_attachment_id: attachmentId,
+      p_lease_token: token,
+      p_confirmed_video_time_seconds: CONFIRMED,
+      p_verified_size_bytes: 1_999_000,
+      p_verified_content_type: "video/mp4",
+      p_verified_duration_seconds: VERIFIED_DURATION,
+      ...overrides,
+    });
+
+  const correct = (
+    attachmentId: string,
+    expectedVersion: number,
+    confirmed: number,
+    overrides: Record<string, unknown> = {},
+  ) =>
+    rpc("match_video_correct_alignment", {
+      ...actor(owner, alignMatch),
+      p_attachment_id: attachmentId,
+      p_expected_version: expectedVersion,
+      p_confirmed_video_time_seconds: confirmed,
+      ...overrides,
+    });
+
+  const cancel = (matchId: string, attachmentId: string) =>
+    rpc("match_video_cancel_upload", {
+      ...actor(owner, matchId),
+      p_attachment_id: attachmentId,
+    });
+
+  const renew = (matchId: string, attachmentId: string) =>
+    rpc("match_video_renew_upload", {
+      ...actor(owner, matchId),
+      p_attachment_id: attachmentId,
+      p_upload_sas_expires_at: hoursFromNow(8),
+    });
+
+  const attachment = async (id: string) => {
+    const result = await admin.from(TABLE).select("*").eq("id", id).single();
+    expect(result.error).toBeNull();
+    return result.data as Record<string, unknown>;
+  };
+
+  const insertMatch = async (label: string) => {
+    const match = await admin
+      .from("matches")
+      .insert({
+        created_by: owner.userId,
+        player1_id: owner.userId,
+        player1_name: "Activation Player",
+        player2_name: "Activation Opponent",
+        date: new Date().toISOString(),
+        tournament_name: `${ACT_MARK}-${label}`,
+        source_provider: "swing-vision",
+      })
+      .select("id")
+      .single();
+    if (match.error) throw new Error(`match: ${match.error.message}`);
+    return match.data.id as string;
+  };
+
+  const insertPoint = async (
+    matchId: string,
+    pointNumber: number,
+    videoTime: number | null,
+    duration: number | null,
+  ) => {
+    const point = await admin
+      .from("points")
+      .insert({
+        match_id: matchId,
+        point_number: pointNumber,
+        set_number: 1,
+        game_number: 1,
+        server_is_player1: true,
+        won_by_player1: pointNumber % 2 === 0,
+        video_time: videoTime,
+        duration,
+      })
+      .select("id")
+      .single();
+    if (point.error) throw new Error(`point: ${point.error.message}`);
+    return point.data.id as string;
+  };
+
+  const insertShot = async (
+    pointId: string,
+    shotNumber: number,
+    videoTime: number | null,
+  ) => {
+    const shot = await admin
+      .from("shots")
+      .insert({
+        point_id: pointId,
+        shot_number: shotNumber,
+        is_player1: true,
+        video_time: videoTime,
+      })
+      .select("id")
+      .single();
+    if (shot.error) throw new Error(`shot: ${shot.error.message}`);
+    return shot.data.id as string;
+  };
+
+  /**
+   * The source rows exactly as the application would read them — through
+   * PostgREST, so a `real` arrives as the shortest round-trip text parsed
+   * into a double. This is the input the TypeScript side of the parity
+   * check gets; the SQL side reads the same rows through `::text`.
+   */
+  const sourceRows = async (matchId: string): Promise<SourceRows> => {
+    const points = await admin
+      .from("points")
+      .select("id, point_number, video_time, duration")
+      .eq("match_id", matchId)
+      .order("point_number");
+    expect(points.error).toBeNull();
+    const ids = points.data!.map((p) => p.id as string);
+    const shots =
+      ids.length === 0
+        ? { data: [], error: null }
+        : await admin
+            .from("shots")
+            .select("video_time")
+            .in("point_id", ids)
+            .order("id");
+    expect(shots.error).toBeNull();
+    return {
+      points: points.data!.map((p) => ({
+        pointNumber: p.point_number as number,
+        videoTime: p.video_time as number | null,
+        duration: p.duration as number | null,
+      })),
+      shots: (shots.data ?? []).map((s) => ({
+        videoTime: s.video_time as number | null,
+      })),
+    };
+  };
+
+  /** Everything imported for a match, in a stable order, for the byte-equal check. */
+  const importedSnapshot = async (matchId: string) => {
+    const match = await admin.from("matches").select("*").eq("id", matchId);
+    const points = await admin
+      .from("points")
+      .select("*")
+      .eq("match_id", matchId)
+      .order("point_number");
+    const shots = await admin
+      .from("shots")
+      .select("*")
+      .in(
+        "point_id",
+        (points.data ?? []).map((p) => p.id as string),
+      )
+      .order("id");
+    const stats = await admin
+      .from("match_stats")
+      .select("*")
+      .eq("match_id", matchId)
+      .order("is_player1");
+    for (const r of [match, points, shots, stats]) expect(r.error).toBeNull();
+    return {
+      match: match.data,
+      points: points.data,
+      shots: shots.data,
+      stats: stats.data,
+    };
+  };
+
+  /**
+   * Run the TypeScript contract and the SQL twin over the same rows and
+   * demand the same answer: every number exactly equal on success, the same
+   * code and detail slug on refusal.
+   */
+  const expectTimingParity = async (matchId: string, label: string) => {
+    const rows = await sourceRows(matchId);
+    const ts = summarizeSourceTiming(rows.points, rows.shots);
+    const sql = await rpc("match_video_source_timing", { p_match_id: matchId });
+
+    if (ts.ok) {
+      const row = firstRow(sql);
+      expect(row, label).toEqual({
+        anchor_point_number: ts.value.anchorPointNumber,
+        anchor_source_seconds: rendered(ts.value.anchorSourceSeconds),
+        final_point_number: ts.value.finalPointNumber,
+        required_source_end_seconds: rendered(
+          ts.value.requiredSourceEndSeconds,
+        ),
+        earliest_source_seconds: rendered(ts.value.earliestSourceSeconds),
+        untimed_point_count: ts.value.untimedPointCount,
+        untimed_shot_count: ts.value.untimedShotCount,
+      });
+    } else {
+      expectRefused(
+        sql,
+        DATA_EXCEPTION,
+        ts.error.code,
+        ts.error.detail,
+        `${label} (timing)`,
+      );
+    }
+    return ts;
+  };
+
+  const expectAlignmentParity = async (
+    matchId: string,
+    confirmed: number,
+    duration: number,
+    label: string,
+  ) => {
+    const rows = await sourceRows(matchId);
+    const ts = planAlignment({
+      points: rows.points,
+      shots: rows.shots,
+      confirmedVideoTime: confirmed,
+      videoDurationSeconds: duration,
+    });
+    const sql = await rpc("match_video_plan_alignment", {
+      p_match_id: matchId,
+      p_confirmed_video_time_seconds: confirmed,
+      p_video_duration_seconds: duration,
+    });
+
+    if (ts.ok) {
+      const row = firstRow(sql);
+      expect(row, label).toEqual({
+        offset_seconds: rendered(ts.value.offsetSeconds),
+        confirmed_video_time_seconds: ts.value.confirmedVideoTimeSeconds,
+        required_video_start_seconds: rendered(
+          ts.value.coverage.requiredVideoStartSeconds,
+        ),
+        required_video_end_seconds: rendered(
+          ts.value.coverage.requiredVideoEndSeconds,
+        ),
+        video_duration_seconds: rendered(
+          ts.value.coverage.videoDurationSeconds,
+        ),
+        tolerance_seconds: rendered(ts.value.coverage.toleranceSeconds),
+        anchor_point_number: ts.value.timing.anchorPointNumber,
+        anchor_source_seconds: rendered(ts.value.timing.anchorSourceSeconds),
+        final_point_number: ts.value.timing.finalPointNumber,
+        required_source_end_seconds: rendered(
+          ts.value.timing.requiredSourceEndSeconds,
+        ),
+        earliest_source_seconds: rendered(
+          ts.value.timing.earliestSourceSeconds,
+        ),
+        untimed_point_count: ts.value.timing.untimedPointCount,
+        untimed_shot_count: ts.value.timing.untimedShotCount,
+      });
+    } else {
+      expectRefused(
+        sql,
+        DATA_EXCEPTION,
+        ts.error.code,
+        ts.error.detail,
+        `${label} (alignment)`,
+      );
+    }
+    return ts;
+  };
+
+  test.beforeAll(async () => {
+    test.setTimeout(120_000);
+    admin = createAdminClient();
+
+    [owner, outsider] = await createLogins(admin, ["owner", "outsider"], {
+      mark: ACT_MARK,
+      password: ACT_PASSWORD,
+      authUserIds,
+    });
+
+    alignMatch = await insertMatch("align");
+    emptyMatch = await insertMatch("empty");
+    deleteMatch = await insertMatch("delete");
+
+    // The timing fixture. Anchor is point 1 at 12.345 s. The final point (6)
+    // ends at 131.0, but point 4 — an interior point with a long duration —
+    // ends at 150.125 and a shot on point 6 lands at 140.6, so the REQUIRED
+    // end is 150.125, not the final point's end. A shot on point 1 at 5.5 is
+    // earlier than the anchor. Point 3 is untimed; point 5 has a zero
+    // ("unknown") duration; one shot is untimed.
+    const spec: [number, number | null, number | null][] = [
+      [1, 12.345, 8.5],
+      [2, 30.25, null],
+      [3, null, null],
+      [4, 60.125, 90],
+      [5, 100.5, 0],
+      [6, 120.75, 10.25],
+    ];
+    for (const [n, t, d] of spec) {
+      pointIds[n] = await insertPoint(alignMatch, n, t, d);
+    }
+    anchorShotId = await insertShot(pointIds[1], 1, 12.345);
+    await insertShot(pointIds[1], 0, 5.5);
+    await insertShot(pointIds[2], 1, 31.5);
+    await insertShot(pointIds[4], 1, null);
+    await insertShot(pointIds[6], 1, 140.6);
+
+    // Statistics rows, so the "imported data is untouched" check covers them.
+    const stats = await admin.from("match_stats").insert([
+      { match_id: alignMatch, is_player1: true, aces: 3, winners: 11 },
+      { match_id: alignMatch, is_player1: false, aces: 1, winners: 7 },
+    ]);
+    if (stats.error) throw new Error(`match_stats: ${stats.error.message}`);
+
+    // A minimal alignable timeline on the match that gets deleted mid-flight.
+    await insertPoint(deleteMatch, 1, 12.345, 8.5);
+    await insertPoint(deleteMatch, 2, 20, 5);
+  });
+
+  test.afterAll(async () => {
+    if (!admin) return;
+    await admin.from(TABLE).delete().like("filename", `${ACT_MARK}%`);
+    // points, shots and match_stats cascade from the match.
+    await admin
+      .from("matches")
+      .delete()
+      .like("tournament_name", `${ACT_MARK}%`);
+    await deleteAuthUsers(admin, authUserIds);
+  });
+
+  // ── 1. Privilege boundary ─────────────────────────────────────────────────
+
+  test("anon and authenticated sessions cannot execute any activation, alignment or lease RPC", async () => {
+    const anon = createClient(SUPABASE_URL!, ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const token = randomUUID();
+    const attachmentId = randomUUID();
+    const calls: [string, Record<string, unknown>][] = [
+      ["match_video_source_timing", { p_match_id: alignMatch }],
+      [
+        "match_video_plan_alignment",
+        {
+          p_match_id: alignMatch,
+          p_confirmed_video_time_seconds: CONFIRMED,
+          p_video_duration_seconds: VERIFIED_DURATION,
+        },
+      ],
+      [
+        "match_video_begin_finalization",
+        {
+          ...actor(owner, alignMatch),
+          p_attachment_id: attachmentId,
+          p_lease_token: token,
+          p_lease_seconds: 300,
+          p_confirmed_video_time_seconds: CONFIRMED,
+          p_expected_active_id: null,
+          p_expected_active_version: null,
+        },
+      ],
+      [
+        "match_video_release_finalization",
+        {
+          ...actor(owner, alignMatch),
+          p_attachment_id: attachmentId,
+          p_lease_token: token,
+        },
+      ],
+      [
+        "match_video_activate_attachment",
+        {
+          ...actor(owner, alignMatch),
+          p_attachment_id: attachmentId,
+          p_lease_token: token,
+          p_confirmed_video_time_seconds: CONFIRMED,
+          p_verified_size_bytes: 1,
+          p_verified_content_type: "video/mp4",
+          p_verified_duration_seconds: VERIFIED_DURATION,
+        },
+      ],
+      [
+        "match_video_correct_alignment",
+        {
+          ...actor(owner, alignMatch),
+          p_attachment_id: attachmentId,
+          p_expected_version: 0,
+          p_confirmed_video_time_seconds: CONFIRMED,
+        },
+      ],
+    ];
+
+    for (const [label, client] of [
+      ["anon", anon],
+      ["authenticated (owner)", owner.client],
+      ["authenticated (outsider)", outsider.client],
+    ] as const) {
+      for (const [fn, args] of calls) {
+        const result = (await client.rpc(fn, args)) as unknown as RpcResult;
+        expect(result.error?.code, `${label} ${fn}`).toBe(
+          INSUFFICIENT_PRIVILEGE,
+        );
+      }
+    }
+  });
+
+  // ── 2. SQL / TypeScript timing parity ────────────────────────────────────
+
+  test("source timing: SQL and TypeScript agree on the anchor, the MAX-over-all-bounds end, the earliest shot and the untimed counts", async () => {
+    const ts = await expectTimingParity(alignMatch, "full fixture");
+    expect(ts.ok).toBe(true);
+    if (!ts.ok) return;
+    // The numbers themselves, so a bug that breaks both sides the same way
+    // cannot hide behind parity.
+    expect(ts.value).toEqual({
+      anchorPointNumber: 1,
+      anchorSourceSeconds: 12.345,
+      finalPointNumber: 6,
+      requiredSourceEndSeconds: 150.125,
+      earliestSourceSeconds: 5.5,
+      untimedPointCount: 1,
+      untimedShotCount: 1,
+    });
+  });
+
+  test("alignment: SQL and TypeScript agree on offset and coverage, including both tolerance edges", async () => {
+    // start = confirmed − 6.845 ; end = confirmed + 137.78 (for this fixture)
+    const cases: [number, number, string, string | null][] = [
+      [CONFIRMED, VERIFIED_DURATION, "comfortably inside", null],
+      // A shot sits 6.845 s before the anchor, so zero cannot cover it.
+      [0, VERIFIED_DURATION, "confirmed at zero", "coverage_before_start"],
+      [6.75, VERIFIED_DURATION, "start −0.095: inside tolerance", null],
+      [
+        6.7,
+        VERIFIED_DURATION,
+        "start −0.145: before start",
+        "coverage_before_start",
+      ],
+      [CONFIRMED, 147.7, "end at the tolerance edge", null],
+      [CONFIRMED, 147.6, "end 0.18 past: too short", "coverage_past_end"],
+      [
+        300,
+        VERIFIED_DURATION,
+        "confirmed past the end",
+        "confirmed_time_past_end",
+      ],
+      [CONFIRMED, 0, "zero duration", "video_duration_unusable"],
+      [-1, VERIFIED_DURATION, "negative confirmed", "confirmed_time_negative"],
+      [12.345, VERIFIED_DURATION, "confirmed equals anchor (offset 0)", null],
+    ];
+    for (const [confirmed, duration, label, refusal] of cases) {
+      const ts = await expectAlignmentParity(
+        alignMatch,
+        confirmed,
+        duration,
+        label,
+      );
+      expect(ts.ok, label).toBe(refusal === null);
+      if (!ts.ok) expect(ts.error.detail, label).toBe(refusal);
+    }
+
+    // The SQL side accepts only what parseConfirmedVideoTime() already
+    // produced — millisecond precision — and refuses to round a second time
+    // by a rule of its own. (The TypeScript parser rounds a raw number, so
+    // this input is outside the parity contract on purpose.)
+    expectRefused(
+      await rpc("match_video_plan_alignment", {
+        p_match_id: alignMatch,
+        p_confirmed_video_time_seconds: 1.2345,
+        p_video_duration_seconds: VERIFIED_DURATION,
+      }),
+      DATA_EXCEPTION,
+      "invalid_alignment",
+      "confirmed_time_not_milliseconds",
+    );
+  });
+
+  test("source timing refusals: every missing-data and corrupt-data slug matches between SQL and TypeScript", async () => {
+    const setPoint = async (n: number, patch: Record<string, unknown>) => {
+      const r = await admin.from("points").update(patch).eq("id", pointIds[n]);
+      expect(r.error).toBeNull();
+    };
+    const setShot = async (patch: Record<string, unknown>) => {
+      const r = await admin.from("shots").update(patch).eq("id", anchorShotId);
+      expect(r.error).toBeNull();
+    };
+    const refusal = async (matchId: string, label: string, detail: string) => {
+      const ts = await expectTimingParity(matchId, label);
+      expect(ts.ok, label).toBe(false);
+      if (!ts.ok) {
+        expect(ts.error.code, label).toBe("missing_source_timing");
+        expect(ts.error.detail, label).toBe(detail);
+      }
+    };
+
+    await refusal(emptyMatch, "no points", "no_points");
+
+    await setPoint(6, { duration: null });
+    await refusal(
+      alignMatch,
+      "final duration null",
+      "missing_final_point_duration",
+    );
+    await setPoint(6, { duration: 0 });
+    await refusal(
+      alignMatch,
+      "final duration zero",
+      "missing_final_point_duration",
+    );
+    await setPoint(6, { video_time: null, duration: 10.25 });
+    await refusal(alignMatch, "final time null", "missing_final_point_time");
+    await setPoint(6, { video_time: 120.75 });
+
+    await setPoint(1, { video_time: null });
+    await refusal(alignMatch, "anchor time null", "missing_first_point_time");
+    await setPoint(1, { video_time: 12.345 });
+
+    await setPoint(2, { video_time: -1 });
+    await refusal(alignMatch, "negative point time", "point_time_invalid");
+    await setPoint(2, { video_time: 30.25, duration: -1 });
+    await refusal(
+      alignMatch,
+      "negative point duration",
+      "point_duration_invalid",
+    );
+    await setPoint(2, { duration: null });
+
+    await setShot({ video_time: -3 });
+    await refusal(alignMatch, "negative shot time", "shot_time_invalid");
+    await setShot({ video_time: 12.345 });
+
+    // A duplicate point_number is ambiguous order, not a tie to break.
+    const duplicate = await insertPoint(alignMatch, 6, 200, 1);
+    await refusal(
+      alignMatch,
+      "duplicate point number",
+      "ambiguous_point_order",
+    );
+    const removed = await admin.from("points").delete().eq("id", duplicate);
+    expect(removed.error).toBeNull();
+
+    // Back to the pristine fixture.
+    const ts = await expectTimingParity(alignMatch, "restored");
+    expect(ts.ok).toBe(true);
+  });
+
+  // ── 3–4. Lease and activation ─────────────────────────────────────────────
+
+  let snapshotBefore: Awaited<ReturnType<typeof importedSnapshot>>;
+  let attachmentA: string;
+  let tokenA: string;
+  let attachmentB: string;
+  let expectedOffset: number;
+
+  test("begin_finalization freezes the confirmed time, holds the row against renew/cancel/other tokens, and release lets a retry start over", async () => {
+    snapshotBefore = await importedSnapshot(alignMatch);
+
+    attachmentA = firstRow(await reserve(alignMatch, null))
+      .attachment_id as string;
+    tokenA = randomUUID();
+
+    expectRefused(
+      await begin(alignMatch, attachmentA, tokenA, null, {
+        p_actor_id: outsider.userId,
+        p_workspace_id: outsider.userId,
+      }),
+      INSUFFICIENT_PRIVILEGE,
+      "forbidden",
+      "not_creator",
+      "outsider begin",
+    );
+    expectRefused(
+      await begin(alignMatch, randomUUID(), tokenA, null),
+      RPC_NOT_FOUND,
+      "match_not_found",
+      "no_such_attachment",
+      "unknown attachment",
+    );
+    expectRefused(
+      await begin(alignMatch, attachmentA, tokenA, {
+        id: randomUUID(),
+        version: 0,
+      }),
+      RPC_STATE_CONFLICT,
+      "stale_attachment",
+      "expected_active_changed",
+      "disagrees with its own reservation",
+    );
+    expectRefused(
+      await begin(alignMatch, attachmentA, tokenA, null, {
+        p_confirmed_video_time_seconds: 1.2345,
+      }),
+      DATA_EXCEPTION,
+      "invalid_alignment",
+      "confirmed_time_not_milliseconds",
+      "sub-millisecond confirmed time",
+    );
+
+    const leased = firstRow(await begin(alignMatch, attachmentA, tokenA, null));
+    expect(leased).toMatchObject({
+      attachment_id: attachmentA,
+      state: "pending",
+      staged_blob_key: `match-video/${alignMatch}/${attachmentA}/staged.mp4`,
+      final_blob_key: `match-video/${alignMatch}/${attachmentA}/final.mp4`,
+      confirmed_video_time_seconds: CONFIRMED,
+    });
+    const until = new Date(leased.finalize_lease_until as string).getTime();
+    expect(until).toBeGreaterThan(Date.now() + 240_000);
+
+    // Held: no renewal, no cancellation, no other completion.
+    expectRefused(
+      await renew(alignMatch, attachmentA),
+      RPC_STATE_CONFLICT,
+      "pending_attempt_conflict",
+      "finalizing",
+      "renew under lease",
+    );
+    expectRefused(
+      await cancel(alignMatch, attachmentA),
+      RPC_STATE_CONFLICT,
+      "pending_attempt_conflict",
+      "finalizing",
+      "cancel under lease",
+    );
+    expectRefused(
+      await begin(alignMatch, attachmentA, randomUUID(), null),
+      RPC_STATE_CONFLICT,
+      "pending_attempt_conflict",
+      "finalizing",
+      "another token",
+    );
+    // Frozen: the same lease may not change its confirmed time between polls.
+    expectRefused(
+      await begin(alignMatch, attachmentA, tokenA, null, {
+        p_confirmed_video_time_seconds: 11,
+      }),
+      RPC_STATE_CONFLICT,
+      "pending_attempt_conflict",
+      "finalization_inputs_changed",
+      "changed confirmed time",
+    );
+    // Same token, same inputs: extend.
+    const extended = firstRow(
+      await begin(alignMatch, attachmentA, tokenA, null),
+    );
+    expect(
+      new Date(extended.finalize_lease_until as string).getTime(),
+    ).toBeGreaterThanOrEqual(until);
+
+    // Release: only the holder, only once it matters.
+    expect(
+      firstRow(await release(alignMatch, attachmentA, randomUUID())),
+    ).toEqual({
+      attachment_id: attachmentA,
+      state: "pending",
+      released: false,
+    });
+    expect(firstRow(await release(alignMatch, attachmentA, tokenA))).toEqual({
+      attachment_id: attachmentA,
+      state: "pending",
+      released: true,
+    });
+    expectRefused(
+      await activate(alignMatch, attachmentA, tokenA),
+      RPC_STATE_CONFLICT,
+      "pending_attempt_conflict",
+      "lease_not_held",
+      "activate without lease",
+    );
+    // A released lease can change its inputs; the frozen value follows.
+    const retaken = firstRow(
+      await begin(alignMatch, attachmentA, tokenA, null, {
+        p_confirmed_video_time_seconds: 11,
+      }),
+    );
+    expect(retaken.confirmed_video_time_seconds).toBe(11);
+    firstRow(await release(alignMatch, attachmentA, tokenA));
+    firstRow(await begin(alignMatch, attachmentA, tokenA, null));
+
+    expect(await attachment(attachmentA)).toMatchObject({
+      state: "pending",
+      confirmed_video_time_seconds: CONFIRMED,
+      finalize_lease_token: tokenA,
+      offset_seconds: null,
+      activated_at: null,
+    });
+  });
+
+  test("activation refuses a wrong token, changed inputs, unverified metadata, a too-short file and a non-creator — and leaves the row pending", async () => {
+    const refusals: [
+      Record<string, unknown>,
+      string,
+      string,
+      string,
+      string,
+    ][] = [
+      [
+        { p_lease_token: randomUUID() },
+        RPC_STATE_CONFLICT,
+        "pending_attempt_conflict",
+        "finalizing",
+        "wrong token",
+      ],
+      [
+        { p_confirmed_video_time_seconds: 11 },
+        RPC_STATE_CONFLICT,
+        "pending_attempt_conflict",
+        "finalization_inputs_changed",
+        "not the frozen time",
+      ],
+      [
+        { p_verified_size_bytes: 0 },
+        DATA_EXCEPTION,
+        "empty_file",
+        "verified_size_not_positive",
+        "zero bytes",
+      ],
+      [
+        { p_verified_size_bytes: 8_000_000_000 },
+        DATA_EXCEPTION,
+        "file_too_large",
+        "verified_size_over_limit",
+        "over the cap",
+      ],
+      [
+        { p_verified_content_type: null },
+        DATA_EXCEPTION,
+        "unsupported_media",
+        "verified_content_type_missing",
+        "no content type",
+      ],
+      [
+        { p_verified_duration_seconds: 0 },
+        DATA_EXCEPTION,
+        "unsupported_media",
+        "video_duration_unusable",
+        "no duration",
+      ],
+      [
+        { p_verified_duration_seconds: 100 },
+        DATA_EXCEPTION,
+        "insufficient_coverage",
+        "coverage_past_end",
+        "too short",
+      ],
+      [
+        { p_actor_id: outsider.userId, p_workspace_id: outsider.userId },
+        INSUFFICIENT_PRIVILEGE,
+        "forbidden",
+        "not_creator",
+        "outsider",
+      ],
+      [
+        { p_attachment_id: randomUUID() },
+        RPC_NOT_FOUND,
+        "match_not_found",
+        "no_such_attachment",
+        "unknown attachment",
+      ],
+    ];
+    for (const [overrides, code, message, detail, label] of refusals) {
+      expectRefused(
+        await activate(alignMatch, attachmentA, tokenA, overrides),
+        code,
+        message,
+        detail,
+        label,
+      );
+    }
+    expect(await attachment(attachmentA)).toMatchObject({
+      state: "pending",
+      finalize_lease_token: tokenA,
+      verified_duration_seconds: null,
+      offset_seconds: null,
+    });
+  });
+
+  test("activation publishes the row with server-verified metadata and the recomputed offset, clears the lease, and is idempotent only for the same time", async () => {
+    const rows = await sourceRows(alignMatch);
+    const plan = planAlignment({
+      points: rows.points,
+      shots: rows.shots,
+      confirmedVideoTime: CONFIRMED,
+      videoDurationSeconds: VERIFIED_DURATION,
+    });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expectedOffset = rendered(plan.value.offsetSeconds);
+
+    const first = firstRow(await activate(alignMatch, attachmentA, tokenA));
+    expect(first).toEqual({
+      attachment_id: attachmentA,
+      version: 0,
+      offset_seconds: expectedOffset,
+      confirmed_video_time_seconds: CONFIRMED,
+      duration_seconds: VERIFIED_DURATION,
+      content_type: "video/mp4",
+      filename: `${ACT_MARK}-a.mp4`,
+      previous_active_id: null,
+      reused: false,
+    });
+
+    const stored = await attachment(attachmentA);
+    expect(stored).toMatchObject({
+      state: "active",
+      version: 0,
+      verified_size_bytes: 1_999_000,
+      verified_content_type: "video/mp4",
+      verified_duration_seconds: VERIFIED_DURATION,
+      confirmed_video_time_seconds: CONFIRMED,
+      offset_seconds: expectedOffset,
+      finalize_lease_token: null,
+      finalize_lease_until: null,
+      retired_at: null,
+    });
+    expect(stored.activated_at).not.toBeNull();
+
+    // No renewal after finalization.
+    expectRefused(
+      await renew(alignMatch, attachmentA),
+      RPC_STATE_CONFLICT,
+      "mode_conflict",
+      "attempt_active",
+      "renew after activation",
+    );
+
+    // Lost-response replay: same answer, nothing rewritten.
+    const replay = firstRow(await activate(alignMatch, attachmentA, tokenA));
+    expect(replay).toEqual({ ...first, reused: true });
+    expect(await attachment(attachmentA)).toEqual(stored);
+
+    expectRefused(
+      await activate(alignMatch, attachmentA, tokenA, {
+        p_confirmed_video_time_seconds: 11,
+      }),
+      RPC_STATE_CONFLICT,
+      "mode_conflict",
+      "attachment_active_other_time",
+      "replay with another time",
+    );
+    // begin on a published row is a read: the caller learns it is active.
+    expect(
+      firstRow(await begin(alignMatch, attachmentA, randomUUID(), null)),
+    ).toMatchObject({ attachment_id: attachmentA, state: "active" });
+    expect(await attachment(attachmentA)).toEqual(stored);
+  });
+
+  test("replacement: concurrent activations of the same attempt converge on one commit, the old row is retired atomically, and a replay of the retired one is refused", async () => {
+    // Reserving against the wrong belief is stopped at the door (T3);
+    // reserving against the right one records it for activation to recheck.
+    expectRefused(
+      await reserve(alignMatch, null),
+      RPC_STATE_CONFLICT,
+      "stale_attachment",
+      "attachment_now_active",
+    );
+    attachmentB = firstRow(
+      await reserve(alignMatch, { id: attachmentA, version: 0 }),
+    ).attachment_id as string;
+    const tokenB = randomUUID();
+    firstRow(
+      await begin(alignMatch, attachmentB, tokenB, {
+        id: attachmentA,
+        version: 0,
+      }),
+    );
+
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        activate(alignMatch, attachmentB, tokenB),
+      ),
+    );
+    const rows = results.map((r) => firstRow(r));
+    expect(rows.filter((r) => r.reused === false)).toHaveLength(1);
+    expect(rows.filter((r) => r.reused === true)).toHaveLength(4);
+    expect(rows.find((r) => r.reused === false)!.previous_active_id).toBe(
+      attachmentA,
+    );
+
+    const retired = await attachment(attachmentA);
+    expect(retired.state).toBe("retired");
+    expect(retired.retired_at).not.toBeNull();
+    expect(retired.cleanup_next_attempt_at).not.toBeNull();
+    // Keys survive for the cleanup worker.
+    expect(retired.final_blob_key).toBe(
+      `match-video/${alignMatch}/${attachmentA}/final.mp4`,
+    );
+    expect(await attachment(attachmentB)).toMatchObject({
+      state: "active",
+      version: 0,
+      offset_seconds: expectedOffset,
+    });
+
+    const active = await admin
+      .from(TABLE)
+      .select("id")
+      .eq("match_id", alignMatch)
+      .eq("state", "active");
+    expect(active.data).toEqual([{ id: attachmentB }]);
+
+    // The lost-response replay of A's completion now lands AFTER a
+    // replacement: a conflict, never a reactivation.
+    expectRefused(
+      await activate(alignMatch, attachmentA, tokenA),
+      RPC_STATE_CONFLICT,
+      "mode_conflict",
+      "attempt_retired",
+      "replay after replacement",
+    );
+    expectRefused(
+      await begin(alignMatch, attachmentA, tokenA, null),
+      RPC_STATE_CONFLICT,
+      "mode_conflict",
+      "attempt_retired",
+      "begin on retired",
+    );
+    expectRefused(
+      await cancel(alignMatch, attachmentB),
+      RPC_STATE_CONFLICT,
+      "mode_conflict",
+      "attachment_active",
+      "cancel the new active",
+    );
+  });
+
+  // ── 5. Correction ─────────────────────────────────────────────────────────
+
+  test("correction recomputes from the source rows and the SAVED duration under a version CAS; a no-op leaves the version alone", async () => {
+    const rows = await sourceRows(alignMatch);
+    const plan12 = planAlignment({
+      points: rows.points,
+      shots: rows.shots,
+      confirmedVideoTime: 12,
+      videoDurationSeconds: VERIFIED_DURATION,
+    });
+    expect(plan12.ok).toBe(true);
+    if (!plan12.ok) return;
+
+    const corrected = firstRow(await correct(attachmentB, 0, 12));
+    expect(corrected).toEqual({
+      attachment_id: attachmentB,
+      version: 1,
+      offset_seconds: rendered(plan12.value.offsetSeconds),
+      confirmed_video_time_seconds: 12,
+      duration_seconds: VERIFIED_DURATION,
+      content_type: "video/mp4",
+      filename: `${ACT_MARK}-a.mp4`,
+      changed: true,
+    });
+    const stored = await attachment(attachmentB);
+    expect(stored).toMatchObject({
+      state: "active",
+      version: 1,
+      confirmed_video_time_seconds: 12,
+      offset_seconds: rendered(plan12.value.offsetSeconds),
+      verified_duration_seconds: VERIFIED_DURATION,
+    });
+
+    // No-op: same time, same offset, same version.
+    expect(firstRow(await correct(attachmentB, 1, 12))).toEqual({
+      ...corrected,
+      changed: false,
+    });
+    expect(await attachment(attachmentB)).toEqual(stored);
+
+    const refusals: [
+      Record<string, unknown>,
+      string,
+      string,
+      string,
+      string,
+    ][] = [
+      [
+        { p_expected_version: 0 },
+        RPC_STATE_CONFLICT,
+        "stale_attachment",
+        "active_version_changed",
+        "stale version",
+      ],
+      [
+        { p_attachment_id: attachmentA },
+        RPC_STATE_CONFLICT,
+        "mode_conflict",
+        "attachment_retired",
+        "retired row",
+      ],
+      [
+        { p_confirmed_video_time_seconds: 6.7 },
+        DATA_EXCEPTION,
+        "insufficient_coverage",
+        "coverage_before_start",
+        "before start",
+      ],
+      // Coverage is checked against the SAVED verified duration (200 s).
+      [
+        { p_confirmed_video_time_seconds: 62.4 },
+        DATA_EXCEPTION,
+        "insufficient_coverage",
+        "coverage_past_end",
+        "past the saved duration",
+      ],
+      [
+        { p_confirmed_video_time_seconds: 300 },
+        DATA_EXCEPTION,
+        "invalid_alignment",
+        "confirmed_time_past_end",
+        "past the end",
+      ],
+      [
+        { p_confirmed_video_time_seconds: 1.2345 },
+        DATA_EXCEPTION,
+        "invalid_alignment",
+        "confirmed_time_not_milliseconds",
+        "sub-millisecond",
+      ],
+      [
+        { p_actor_id: outsider.userId, p_workspace_id: outsider.userId },
+        INSUFFICIENT_PRIVILEGE,
+        "forbidden",
+        "not_creator",
+        "outsider",
+      ],
+    ];
+    for (const [overrides, code, message, detail, label] of refusals) {
+      expectRefused(
+        await correct(attachmentB, 1, 12, overrides),
+        code,
+        message,
+        detail,
+        label,
+      );
+    }
+    expect(await attachment(attachmentB)).toEqual(stored);
+  });
+
+  test("concurrent corrections with the same expected version leave exactly one winner", async () => {
+    const results = await Promise.all(
+      [13, 14, 15, 16, 17].map((t) => correct(attachmentB, 1, t)),
+    );
+    const won = results.filter((r) => r.error === null);
+    const lost = results.filter((r) => r.error !== null);
+    expect(won).toHaveLength(1);
+    expect(lost).toHaveLength(4);
+    for (const r of lost) {
+      expectRefused(
+        r,
+        RPC_STATE_CONFLICT,
+        "stale_attachment",
+        "active_version_changed",
+        "losing correction",
+      );
+    }
+    const winner = firstRow(won[0]);
+    expect(winner.version).toBe(2);
+    expect(await attachment(attachmentB)).toMatchObject({
+      version: 2,
+      confirmed_video_time_seconds: winner.confirmed_video_time_seconds,
+      offset_seconds: winner.offset_seconds,
+    });
+  });
+
+  test("a reservation whose belief went stale after a correction cannot begin finalization", async () => {
+    // Reserved against version 2, then the version moves on.
+    const stale = firstRow(
+      await reserve(alignMatch, { id: attachmentB, version: 2 }),
+    ).attachment_id as string;
+    firstRow(await correct(attachmentB, 2, 12));
+    expectRefused(
+      await begin(alignMatch, stale, randomUUID(), {
+        id: attachmentB,
+        version: 2,
+      }),
+      RPC_STATE_CONFLICT,
+      "stale_attachment",
+      "active_version_changed",
+    );
+    expect(firstRow(await cancel(alignMatch, stale)).state).toBe("retired");
+  });
+
+  // ── 6. Races ──────────────────────────────────────────────────────────────
+
+  test("cancel racing begin_finalization: exactly one wins", async () => {
+    const version = (await attachment(attachmentB)).version as number;
+    const attempt = firstRow(
+      await reserve(alignMatch, { id: attachmentB, version }),
+    ).attachment_id as string;
+    const token = randomUUID();
+
+    const [began, cancelled] = await Promise.all([
+      begin(alignMatch, attempt, token, { id: attachmentB, version }),
+      cancel(alignMatch, attempt),
+    ]);
+    const beganOk = began.error === null;
+    const cancelledOk = cancelled.error === null;
+    expect(beganOk !== cancelledOk, "exactly one wins").toBe(true);
+    if (beganOk) {
+      expectRefused(
+        cancelled,
+        RPC_STATE_CONFLICT,
+        "pending_attempt_conflict",
+        "finalizing",
+        "cancel lost",
+      );
+      firstRow(await release(alignMatch, attempt, token));
+      expect(firstRow(await cancel(alignMatch, attempt)).state).toBe("retired");
+    } else {
+      expectRefused(
+        began,
+        RPC_STATE_CONFLICT,
+        "mode_conflict",
+        "attempt_retired",
+        "begin lost",
+      );
+    }
+    expect((await attachment(attempt)).state).toBe("retired");
+  });
+
+  test("match deleted during activation: either the activation commits first and the row is orphaned with its keys, or it finds no match", async () => {
+    const attempt = firstRow(await reserve(deleteMatch, null))
+      .attachment_id as string;
+    const token = randomUUID();
+    firstRow(await begin(deleteMatch, attempt, token, null));
+
+    const [activated, deleted] = await Promise.all([
+      activate(deleteMatch, attempt, token),
+      admin.from("matches").delete().eq("id", deleteMatch),
+    ]);
+    expect(deleted.error).toBeNull();
+
+    const row = await attachment(attempt);
+    expect(row.match_id).toBeNull();
+    expect(row.final_blob_key).toBe(
+      `match-video/${deleteMatch}/${attempt}/final.mp4`,
+    );
+    if (activated.error === null) {
+      expect(firstRow(activated).reused).toBe(false);
+      expect(row.state).toBe("active");
+    } else {
+      expectRefused(
+        activated,
+        RPC_NOT_FOUND,
+        "match_not_found",
+        "no_such_match",
+        "deleted first",
+      );
+      expect(row.state).toBe("pending");
+    }
+    deleteMatch = "";
+  });
+
+  // ── 7. Imported data is never rewritten ──────────────────────────────────
+
+  test("matches, points, shots and match_stats are unchanged after every activation and correction", async () => {
+    expect(snapshotBefore.points).toHaveLength(6);
+    expect(snapshotBefore.shots).toHaveLength(5);
+    expect(snapshotBefore.stats).toHaveLength(2);
+    expect(await importedSnapshot(alignMatch)).toEqual(snapshotBefore);
   });
 });

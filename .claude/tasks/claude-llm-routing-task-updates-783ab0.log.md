@@ -104,3 +104,48 @@ privilege denial for anon and two authenticated sessions across all four functio
 3. T13's cleanup worker gets `cleanup_next_attempt_at` seeded by cancel; it only needs T2's
    partial index to find the rows.
 4. An RPC wrapper in `src/lib/match-video/` is deliberately absent — that is T8's job.
+
+## T4 · Implement atomic activation and alignment transactions — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** New `supabase/migrations/20260919052002_match_video_attachment_activation.sql`
+adds six functions, all `security definer` with `search_path = ''`, EXECUTE revoked from
+public/anon/authenticated and granted to `service_role` only. Two are read-only SQL twins of
+T1's TypeScript: `match_video_source_timing` mirrors `summarizeSourceTiming` and
+`match_video_plan_alignment` mirrors `planAlignment`, both shared by the writers.
+`match_video_begin_finalization` takes the lease by CAS (free, expired, or the same token),
+freezes the confirmed time and rechecks the reservation's expected-active belief against
+reality; `match_video_release_finalization` drops it holder-only for the failure path;
+`match_video_activate_attachment` retires the old active row and activates the new one in one
+transaction, returning `reused = true` on an idempotent replay;
+`match_video_correct_alignment` does a version CAS and recomputes from source rows against the
+saved verified duration, returning `changed = false` on a no-op. All call T3's
+`match_video_authorize_match` first, so the parent `matches` row is locked before any
+attachment row. The migration carries a self-checking `do` block asserting the privileges, the
+secdef/search_path pinning, the lock order, and that no function body writes `points`,
+`shots`, `matches` or `match_stats`. Applied to live and verified there. The spec grows from
+16 to 30 live cases, all passing.
+
+Timing parity is proven, not asserted: one fixture match is shaped so an interior point ends
+at 150.125s — past the final point's 131.0s end — with a shot at 140.6s after the final point
+and another at 5.5s before the anchor, plus untimed and zero-duration rows. The test reads
+those rows through PostgREST the way the app does, runs the TypeScript helper, calls the SQL
+twins on the same match, and demands equality on every field, including the tolerance edges
+(147.7 accepted, 147.6 refused) and ten fault fixtures whose refusal slug must match exactly.
+The project runs `extra_float_digits = 0`, so float8 values come back rendered to 15
+significant digits; the test normalises the TypeScript value through that one rendering step
+rather than hiding the difference under a tolerance, and the reviewer confirmed the setting
+live before accepting it.
+
+**follow-ups:**
+
+1. `extra_float_digits = 0` truncates `real` columns on every read path — `points.video_time`
+   1234.567 reads back as 1234.57 through PostgREST. Pre-existing platform config, not this
+   feature's doing, but it caps Film seek precision past about 1000 seconds and deserves its
+   own look.
+2. Neither `types.ts` nor the SQL defines an HTTP mapping for SQLSTATE `22000`; the route
+   wrappers in T8–T12 should map it to the `MatchVideoErrorCode` carried in the message.
+3. Copy bookkeeping (`copy_id`, `copy_status`, `source_etag`) still has no RPC. T7's completion
+   service can write it with the admin client, or T7/T10 may want a narrow
+   `match_video_record_publication` RPC — worth deciding once rather than twice.

@@ -85,7 +85,7 @@ contract and stops for review.
 
 ## T4 · Implement atomic activation and alignment transactions
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1, T2, T3
 - **files:** Best guess: supabase/migrations/<new>_match_video_attachment_activation.sql; tests/match-video-attachments-db.spec.ts
