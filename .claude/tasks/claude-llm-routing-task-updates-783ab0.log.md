@@ -32,3 +32,37 @@ kept as a test.
    milliseconds while a string with a fourth fractional digit is refused rather than
    silently rounded; and a zero point duration counts as "unknown end" except on the final
    point, where it still refuses.
+
+## T2 · Create attachment persistence and privilege boundaries — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** New `supabase/migrations/20260919045208_create_match_video_attachments.sql`
+creates `public.match_video_attachments` — 36 columns covering identity, the
+pending/active/retired lifecycle and version, staged/final blob keys, copy id/status,
+verified media facts, `confirmed_video_time_seconds` at millisecond precision, offset,
+`client_request_id`, expected-active id/version, SAS expiry, and the finalize/cleanup lease
+and retry metadata. 15 check constraints, 8 indexes and a BEFORE UPDATE trigger that
+refuses retired→anything, active→pending and any blob-key change. Both `match_id` and
+`uploaded_by` are nullable with ON DELETE SET NULL. RLS is enabled with no policy, all
+privileges revoked from public/anon/authenticated and granted to service_role only —
+the same server-only shape as `pending_claims` and `program_requests`. A check constraint
+refuses a `scheme://` prefix or any `?`/`#` in either key, so a SAS URL cannot be stored
+as a key. Applied to the live project with the Supabase MCP and verified there against
+`pg_class`, `pg_policies`, `role_table_grants`, `pg_constraint`, `pg_indexes` and
+`pg_trigger`; the only new advisor entry is the INFO-level `rls_enabled_no_policy` that
+every server-only table here carries. New `tests/match-video-attachments-db.spec.ts`,
+8 live-DB tests on `tests/fixtures/live-db`, all passing, rows self-cleaned.
+
+**follow-ups:**
+
+1. `DbMatchVideoAttachment` in `src/lib/data/types.ts` is still missing — create-migration's
+   step 6 asks for it, but this task forbade application code. T3's server readers are the
+   natural place.
+2. `match_video_attachments_active_verified_check` constrains T4: activation must set all
+   six verified/alignment fields plus `activated_at` in one statement, and `retired_at`
+   exactly when state is retired. Write the RPCs to those constraints, not around them.
+3. The trigger enforces one-way transitions but deliberately does not stamp
+   `activated_at`/`retired_at` — the transaction owns those timestamps.
+4. Unrelated: `20260913230000_notification_prefs_team.sql` fails `create-migration`'s
+   `check.sh` policy-or-marker rule. Left alone; worth its own task.

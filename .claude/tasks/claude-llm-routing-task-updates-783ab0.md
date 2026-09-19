@@ -59,7 +59,7 @@ contract and stops for review.
 
 ## T2 · Create attachment persistence and privilege boundaries
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1
 - **files:** Best guess: supabase/migrations/<new>_match_video_attachments.sql; tests/match-video-attachments-db.spec.ts (new)
