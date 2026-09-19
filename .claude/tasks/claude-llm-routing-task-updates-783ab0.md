@@ -200,7 +200,7 @@ contract and stops for review.
 
 ## T13 · Add cleanup claim and fencing transactions
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T3, T4
 - **files:** Best guess: supabase/migrations/<new>_match_video_attachment_cleanup.sql; tests/match-video-attachments-db.spec.ts

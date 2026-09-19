@@ -2347,3 +2347,922 @@ test.describe("match_video_attachments activation + alignment RPCs (live)", () =
     expect(await importedSnapshot(alignMatch)).toEqual(snapshotBefore);
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * T13 · cleanup claim + fencing RPCs
+ * `20260919080217_match_video_attachment_cleanup.sql`
+ *
+ *  1. Privilege boundary: anon and a signed-in session are refused every
+ *     cleanup RPC; malformed arguments are 22023.
+ *  2. Eligibility: retired on schedule, orphans, pending idle 24 h, active
+ *     staged-only — and every "not yet" (fresh, SAS still live, SAS expired
+ *     under five minutes, backoff, live finalization lease, already parked).
+ *  3. The retained-team-asset rule: an active team attachment whose uploader
+ *     account was DELETED sheds only its staged key. Its final key is never
+ *     collectible while the match stands; an orphan (match deleted) is.
+ *  4. The fence: a claimed pending row cannot be renewed, finalized,
+ *     activated, re-reserved or flipped back by a direct update.
+ *  5. Competing cleanup / finalization / renewal: exactly one wins, and the
+ *     loser sees the winner.
+ *  6. Stale leases and versions are outcomes that record nothing.
+ *  7. A failed delete retains keys, counts, backs off and retries to
+ *     completion; a retirement between claim and confirm reschedules.
+ *  8. At most 50 per claim; concurrent sweeps never share a row.
+ *
+ * The claim is a global sweep, so a batch may contain rows from other
+ * describe blocks or a crashed run; every assertion here filters to this
+ * run's mark and loops the claim while batches come back full.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+const INVALID_PARAMETER = "22023";
+
+const { mark: CLN_MARK, password: CLN_PASSWORD } = runMarker("mva13");
+
+test.describe("match_video_attachments cleanup claim + fencing RPCs (live)", () => {
+  test.describe.configure({ mode: "serial", timeout: 60_000 });
+  test.skip(!HAVE_ENV, SKIP_REASON);
+
+  let admin: SupabaseClient;
+  let owner: Session; // creator + uploader of the personal matches
+  let member: Session; // creates the team match, belongs to the program
+  let leaver: Session; // uploads to the team match; account deleted in test 3
+  let outsider: Session; // signed in, owns nothing here
+
+  const authUserIds: string[] = [];
+  let programId: string;
+
+  const minutes = (n: number) =>
+    new Date(Date.now() + n * 60_000).toISOString();
+  const ago = (min: number) => minutes(-min);
+  const HOURS = 60;
+
+  const rpc = (fn: string, args: Record<string, unknown>) =>
+    admin.rpc(fn, args) as unknown as Promise<RpcResult>;
+
+  const claim = (token: string, limit = 50, leaseSeconds = 300) =>
+    rpc("match_video_claim_cleanup", {
+      p_worker_token: token,
+      p_lease_seconds: leaseSeconds,
+      p_limit: limit,
+    });
+
+  type Claimed = Record<string, unknown>;
+
+  /**
+   * Every row of THIS run the sweep hands out for `token`, looping while a
+   * batch comes back full so foreign rows cannot hide ours behind the cap.
+   * Asserts the cap on every batch.
+   */
+  const claimMine = async (token: string): Promise<Claimed[]> => {
+    const mine: Claimed[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      const rows = firstRows(await claim(token));
+      expect(rows.length).toBeLessThanOrEqual(50);
+      mine.push(
+        ...rows.filter((r) =>
+          (r.staged_blob_key as string).startsWith(`${CLN_MARK}/`),
+        ),
+      );
+      if (rows.length < 50) break;
+    }
+    return mine;
+  };
+
+  const firstRows = (result: RpcResult) => {
+    expect(result.error).toBeNull();
+    return result.data as Claimed[];
+  };
+
+  const confirm = (
+    id: string,
+    token: string,
+    version: number,
+    collectedFinal: boolean,
+  ) =>
+    rpc("match_video_confirm_cleanup", {
+      p_attachment_id: id,
+      p_lease_token: token,
+      p_expected_version: version,
+      p_collected_final: collectedFinal,
+    });
+
+  const fail = (
+    id: string,
+    token: string,
+    error: string | null,
+    retryAfterSeconds: number | null,
+  ) =>
+    rpc("match_video_fail_cleanup", {
+      p_attachment_id: id,
+      p_lease_token: token,
+      p_error: error,
+      p_retry_after_seconds: retryAfterSeconds,
+    });
+
+  const row = async (id: string) => {
+    const result = await admin.from(TABLE).select("*").eq("id", id).single();
+    expect(result.error).toBeNull();
+    return result.data as Record<string, unknown>;
+  };
+
+  const setRow = async (id: string, patch: Record<string, unknown>) => {
+    const result = await admin.from(TABLE).update(patch).eq("id", id);
+    expect(result.error).toBeNull();
+  };
+
+  const insertMatch = async (
+    createdBy: string,
+    label: string,
+    extra: Record<string, unknown> = {},
+  ) => {
+    const match = await admin
+      .from("matches")
+      .insert({
+        created_by: createdBy,
+        player1_id: createdBy,
+        player1_name: "Cleanup Player",
+        player2_name: "Cleanup Opponent",
+        date: new Date().toISOString(),
+        tournament_name: `${CLN_MARK}-${label}`,
+        source_provider: "swing-vision",
+        ...extra,
+      })
+      .select("id")
+      .single();
+    if (match.error) throw new Error(`match: ${match.error.message}`);
+    return match.data.id as string;
+  };
+
+  const activeFields = (): Record<string, unknown> => ({
+    state: "active",
+    verified_size_bytes: 1_000_000,
+    verified_content_type: "video/mp4",
+    verified_duration_seconds: 5400.5,
+    confirmed_video_time_seconds: 12.345,
+    offset_seconds: -12.345,
+    activated_at: ago(2 * HOURS),
+  });
+
+  const retiredFields = (): Record<string, unknown> => ({
+    state: "retired",
+    retired_at: ago(HOURS),
+    cleanup_next_attempt_at: ago(HOURS),
+  });
+
+  /**
+   * A row as the service role would find it. Defaults are the plainest
+   * collectible shape: the last upload SAS died an hour ago and the row
+   * has never been claimed. `match_id` must be given (null = orphan).
+   */
+  const insertRow = async (
+    overrides: Record<string, unknown> & { match_id: string | null },
+  ) => {
+    const id = randomUUID();
+    const result = await admin
+      .from(TABLE)
+      .insert({
+        id,
+        uploaded_by: owner.userId,
+        state: "pending",
+        filename: `${CLN_MARK}-${id.slice(0, 8)}.mp4`,
+        declared_size_bytes: 1_000_000,
+        declared_content_type: "video/mp4",
+        staged_blob_key: `${CLN_MARK}/staged/${id}.mp4`,
+        final_blob_key: `${CLN_MARK}/final/${id}.mp4`,
+        client_request_id: randomUUID(),
+        upload_sas_expires_at: ago(HOURS),
+        last_attempt_at: new Date().toISOString(),
+        ...overrides,
+      })
+      .select("id")
+      .single();
+    if (result.error) throw new Error(`insert: ${result.error.message}`);
+    return id;
+  };
+
+  const actor = (session: Session, matchId: string) => ({
+    p_actor_id: session.userId,
+    p_workspace_kind: "personal",
+    p_workspace_id: session.userId,
+    p_match_id: matchId,
+  });
+
+  const begin = (matchId: string, attachmentId: string, token: string) =>
+    rpc("match_video_begin_finalization", {
+      ...actor(owner, matchId),
+      p_attachment_id: attachmentId,
+      p_lease_token: token,
+      p_lease_seconds: 300,
+      p_confirmed_video_time_seconds: 10,
+      p_expected_active_id: null,
+      p_expected_active_version: null,
+    });
+
+  const renew = (matchId: string, attachmentId: string) =>
+    rpc("match_video_renew_upload", {
+      ...actor(owner, matchId),
+      p_attachment_id: attachmentId,
+      p_upload_sas_expires_at: minutes(6 * HOURS),
+    });
+
+  const ids = (rows: Claimed[]) => rows.map((r) => r.attachment_id as string);
+  const find = (rows: Claimed[], id: string) =>
+    rows.find((r) => r.attachment_id === id);
+
+  test.beforeAll(async () => {
+    test.setTimeout(120_000);
+    admin = createAdminClient();
+
+    [owner, member, leaver, outsider] = await createLogins(
+      admin,
+      ["owner", "member", "leaver", "outsider"],
+      { mark: CLN_MARK, password: CLN_PASSWORD, authUserIds },
+    );
+
+    const program = await admin
+      .from("programs")
+      .insert({
+        org_type: "club",
+        school_name: `${CLN_MARK} Club`,
+        status: "active",
+        owner_user_id: member.userId,
+      })
+      .select("id")
+      .single();
+    if (program.error) throw new Error(`program: ${program.error.message}`);
+    programId = program.data.id;
+
+    const membership = await admin.from("program_members").insert([
+      { program_id: programId, user_id: member.userId, role: "owner" },
+      { program_id: programId, user_id: leaver.userId, role: "player" },
+    ]);
+    if (membership.error) {
+      throw new Error(`membership: ${membership.error.message}`);
+    }
+  });
+
+  test.afterAll(async () => {
+    if (!admin) return;
+    await admin.from(TABLE).delete().like("filename", `${CLN_MARK}%`);
+    await admin
+      .from("matches")
+      .delete()
+      .like("tournament_name", `${CLN_MARK}%`);
+    if (programId) {
+      await admin.from("program_members").delete().eq("program_id", programId);
+      await admin.from("programs").delete().eq("id", programId);
+    }
+    await deleteAuthUsers(admin, authUserIds);
+  });
+
+  // ── 1. Privilege boundary + arguments ─────────────────────────────────────
+
+  test("anon and authenticated sessions cannot execute any cleanup RPC; malformed arguments are refused", async () => {
+    const anon = createClient(SUPABASE_URL!, ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const token = randomUUID();
+    const id = randomUUID();
+    const calls: [string, Record<string, unknown>][] = [
+      [
+        "match_video_claim_cleanup",
+        { p_worker_token: token, p_lease_seconds: 60, p_limit: 10 },
+      ],
+      [
+        "match_video_confirm_cleanup",
+        {
+          p_attachment_id: id,
+          p_lease_token: token,
+          p_expected_version: 0,
+          p_collected_final: true,
+        },
+      ],
+      [
+        "match_video_fail_cleanup",
+        {
+          p_attachment_id: id,
+          p_lease_token: token,
+          p_error: "x",
+          p_retry_after_seconds: null,
+        },
+      ],
+    ];
+    for (const [fn, args] of calls) {
+      for (const [label, client] of [
+        ["anon", anon],
+        ["authenticated", outsider.client],
+      ] as const) {
+        const result = (await client.rpc(fn, args)) as unknown as RpcResult;
+        expect(result.error?.code, `${label} ${fn}`).toBe(
+          INSUFFICIENT_PRIVILEGE,
+        );
+      }
+    }
+
+    expectRefused(
+      await claim(token, 0),
+      INVALID_PARAMETER,
+      "limit must be 1–50",
+      "bad_limit",
+      "limit 0",
+    );
+    expectRefused(
+      await claim(token, 51),
+      INVALID_PARAMETER,
+      "limit must be 1–50",
+      "bad_limit",
+      "limit 51",
+    );
+    expectRefused(
+      await claim(token, 10, 0),
+      INVALID_PARAMETER,
+      "lease must be 1–3600 seconds",
+      "bad_lease_seconds",
+    );
+    expectRefused(
+      await rpc("match_video_claim_cleanup", {
+        p_worker_token: null,
+        p_lease_seconds: 60,
+        p_limit: 10,
+      }),
+      INVALID_PARAMETER,
+      "worker token is required",
+      "missing_worker_token",
+    );
+    expectRefused(
+      await fail(id, token, "x", 0),
+      INVALID_PARAMETER,
+      "retry_after must be 1 second to 7 days",
+      "bad_retry_after",
+    );
+    expectRefused(
+      await confirm(randomUUID(), token, 0, true),
+      RPC_NOT_FOUND,
+      "match_not_found",
+      "no_such_attachment",
+    );
+  });
+
+  // ── 2. Eligibility ────────────────────────────────────────────────────────
+
+  test("eligibility: retired on schedule, orphans and day-idle pending work are claimed and retired; active rows shed staging only; everything still live or parked is left alone", async () => {
+    const retiredMatch = await insertMatch(owner.userId, "retired");
+    const [m1, m2, m3, m4, mA, mB] = await Promise.all(
+      ["p1", "p2", "p3", "p4", "a1", "a2"].map((l) =>
+        insertMatch(owner.userId, l),
+      ),
+    );
+
+    // Retired rows.
+    const rDue = await insertRow({
+      match_id: retiredMatch,
+      ...retiredFields(),
+    });
+    const rSasLive = await insertRow({
+      match_id: retiredMatch,
+      ...retiredFields(),
+      upload_sas_expires_at: minutes(HOURS),
+    });
+    const rSasJustExpired = await insertRow({
+      match_id: retiredMatch,
+      ...retiredFields(),
+      upload_sas_expires_at: ago(2),
+    });
+    const rBackoff = await insertRow({
+      match_id: retiredMatch,
+      ...retiredFields(),
+      cleanup_next_attempt_at: minutes(30),
+    });
+    const rDone = await insertRow({
+      match_id: retiredMatch,
+      ...retiredFields(),
+      cleaned_up_at: ago(10),
+    });
+    // A cancel seeds cleanup_next_attempt_at = SAS expiry without the five
+    // minutes; the claim must still add them.
+    const rSasSixMinutes = await insertRow({
+      match_id: retiredMatch,
+      ...retiredFields(),
+      upload_sas_expires_at: ago(6),
+      cleanup_next_attempt_at: ago(6),
+    });
+
+    // Pending rows, one per match (one pending per match per uploader).
+    const pIdle = await insertRow({
+      match_id: m1,
+      last_attempt_at: ago(25 * HOURS),
+    });
+    const pRecent = await insertRow({
+      match_id: m2,
+      last_attempt_at: ago(23 * HOURS),
+    });
+    const pFinalizing = await insertRow({
+      match_id: m3,
+      last_attempt_at: ago(25 * HOURS),
+      finalize_lease_token: randomUUID(),
+      finalize_lease_until: minutes(5),
+    });
+    const pSasLive = await insertRow({
+      match_id: m4,
+      last_attempt_at: ago(25 * HOURS),
+      upload_sas_expires_at: minutes(HOURS),
+    });
+
+    // Active rows.
+    const aShed = await insertRow({ match_id: mA, ...activeFields() });
+    const aParked = await insertRow({
+      match_id: mB,
+      ...activeFields(),
+      cleanup_next_attempt_at: "infinity",
+    });
+
+    // Orphans: the match is gone.
+    const oPending = await insertRow({ match_id: null });
+    const oActive = await insertRow({ match_id: null, ...activeFields() });
+
+    const token = randomUUID();
+    const claimed = await claimMine(token);
+    const got = ids(claimed);
+
+    expect(new Set(got)).toEqual(
+      new Set([rDue, rSasSixMinutes, pIdle, aShed, oPending, oActive]),
+    );
+    for (const id of [
+      rSasLive,
+      rSasJustExpired,
+      rBackoff,
+      rDone,
+      pRecent,
+      pFinalizing,
+      pSasLive,
+      aParked,
+    ]) {
+      expect((await row(id)).cleanup_lease_token, id).toBeNull();
+    }
+
+    // What each claim says, and what it did to the row.
+    for (const id of [rDue, rSasSixMinutes, pIdle, oPending, oActive]) {
+      const c = find(claimed, id)!;
+      expect(c.state, id).toBe("retired");
+      expect(c.collect_staged, id).toBe(true);
+      expect(c.collect_final, id).toBe(true);
+      const r = await row(id);
+      expect(r.state).toBe("retired");
+      expect(r.retired_at).not.toBeNull();
+      expect(r.cleanup_lease_token).toBe(token);
+      expect(Date.parse(r.cleanup_lease_until as string)).toBeGreaterThan(
+        Date.now() + 200_000,
+      );
+      expect(r.finalize_lease_until).toBeNull();
+    }
+    const shed = find(claimed, aShed)!;
+    expect(shed.state).toBe("active");
+    expect(shed.collect_staged).toBe(true);
+    expect(shed.collect_final).toBe(false);
+    expect((await row(aShed)).state).toBe("active");
+
+    // The claim carries what the worker needs, and only keys.
+    expect(shed.staged_blob_key).toBe(`${CLN_MARK}/staged/${aShed}.mp4`);
+    expect(shed.final_blob_key).toBe(`${CLN_MARK}/final/${aShed}.mp4`);
+    expect(shed).toHaveProperty("copy_id");
+    expect(shed).toHaveProperty("copy_status");
+    expect(shed).toHaveProperty("version");
+
+    // Claimed rows are under lease: a second sweep leaves them alone.
+    expect(await claimMine(randomUUID())).toHaveLength(0);
+  });
+
+  test("an abandoned publication is handed over with its copy identity so the worker can abort it", async () => {
+    const m = await insertMatch(owner.userId, "copy");
+    const id = await insertRow({
+      match_id: m,
+      last_attempt_at: ago(30 * HOURS),
+      source_etag: '"0x8DC"',
+      copy_id: "copy-abc",
+      copy_status: "pending",
+      copy_started_at: ago(30 * HOURS),
+    });
+    const claimed = find(await claimMine(randomUUID()), id)!;
+    expect(claimed.copy_id).toBe("copy-abc");
+    expect(claimed.copy_status).toBe("pending");
+    expect(claimed.state).toBe("retired");
+    expect(claimed.collect_final).toBe(true);
+  });
+
+  // ── 3. The retained-team-asset rule ───────────────────────────────────────
+
+  test("an active team attachment whose uploader account was deleted sheds only its staged key; its final key is never collectible, while an orphan's is", async () => {
+    const teamMatch = await insertMatch(member.userId, "team", {
+      program_id: programId,
+    });
+    const retained = await insertRow({
+      match_id: teamMatch,
+      uploaded_by: leaver.userId,
+      ...activeFields(),
+    });
+    const orphan = await insertRow({
+      match_id: null,
+      uploaded_by: owner.userId,
+      ...activeFields(),
+    });
+
+    // The uploader leaves. The FK nulls; the match and its row stay.
+    await deleteAuthUsers(admin, [leaver.userId]);
+    authUserIds.splice(authUserIds.indexOf(leaver.userId), 1);
+    const afterLeaving = await row(retained);
+    expect(afterLeaving.uploaded_by).toBeNull();
+    expect(afterLeaving.match_id).toBe(teamMatch);
+    expect(afterLeaving.state).toBe("active");
+
+    const token = randomUUID();
+    const claimed = await claimMine(token);
+
+    const keep = find(claimed, retained)!;
+    expect(keep, "null uploader: claimed for staging only").toBeDefined();
+    expect(keep.state).toBe("active");
+    expect(keep.collect_staged).toBe(true);
+    expect(keep.collect_final).toBe(false);
+
+    const gone = find(claimed, orphan)!;
+    expect(gone, "null match: fully collectible").toBeDefined();
+    expect(gone.state).toBe("retired");
+    expect(gone.collect_final).toBe(true);
+    expect((await row(orphan)).state).toBe("retired");
+
+    // A worker that reports the final key of an active row collected is
+    // refused — and the row is untouched by the refusal.
+    expectRefused(
+      await confirm(retained, token, 0, true),
+      INVALID_PARAMETER,
+      "an active attachment's final key must never be collected",
+      "active_final_collected",
+    );
+
+    const shed = firstRow(await confirm(retained, token, 0, false));
+    expect(shed.outcome).toBe("staged_shed");
+    const after = await row(retained);
+    expect(after.state).toBe("active");
+    expect(after.uploaded_by).toBeNull();
+    expect(after.final_blob_key).toBe(`${CLN_MARK}/final/${retained}.mp4`);
+    expect(after.cleaned_up_at).toBeNull();
+    expect(after.cleanup_next_attempt_at).toBe("infinity");
+    expect(after.cleanup_lease_token).toBeNull();
+
+    // Parked: no sweep touches it again while it stays active.
+    expect(find(await claimMine(randomUUID()), retained)).toBeUndefined();
+
+    // Until a replacement retires it (activation writes exactly this), at
+    // which point the final key is scheduled like any other.
+    await setRow(retained, {
+      state: "retired",
+      retired_at: new Date().toISOString(),
+      cleanup_next_attempt_at: new Date().toISOString(),
+    });
+    const later = find(await claimMine(randomUUID()), retained)!;
+    expect(later.state).toBe("retired");
+    expect(later.collect_final).toBe(true);
+  });
+
+  // ── 4. The fence ──────────────────────────────────────────────────────────
+
+  test("a claimed pending attempt can no longer be renewed, finalized, activated, re-reserved or flipped back", async () => {
+    const m = await insertMatch(owner.userId, "fence");
+    const requestId = randomUUID();
+    const id = await insertRow({
+      match_id: m,
+      last_attempt_at: ago(25 * HOURS),
+      client_request_id: requestId,
+    });
+
+    const token = randomUUID();
+    const claimed = find(await claimMine(token), id)!;
+    expect(claimed.state).toBe("retired");
+
+    expectRefused(
+      await renew(m, id),
+      RPC_STATE_CONFLICT,
+      "mode_conflict",
+      "attempt_retired",
+      "renew",
+    );
+    expectRefused(
+      await begin(m, id, randomUUID()),
+      RPC_STATE_CONFLICT,
+      "mode_conflict",
+      "attempt_retired",
+      "begin_finalization",
+    );
+    expectRefused(
+      await rpc("match_video_activate_attachment", {
+        ...actor(owner, m),
+        p_attachment_id: id,
+        p_lease_token: randomUUID(),
+        p_confirmed_video_time_seconds: 10,
+        p_verified_size_bytes: 999_000,
+        p_verified_content_type: "video/mp4",
+        p_verified_duration_seconds: 200,
+      }),
+      RPC_STATE_CONFLICT,
+      "mode_conflict",
+      "attempt_retired",
+      "activate",
+    );
+    expectRefused(
+      await rpc("match_video_reserve_upload", {
+        ...actor(owner, m),
+        p_filename: `${CLN_MARK}-${id.slice(0, 8)}.mp4`,
+        p_declared_size_bytes: 1_000_000,
+        p_declared_content_type: "video/mp4",
+        p_client_request_id: requestId,
+        p_expected_active_id: null,
+        p_expected_active_version: null,
+        p_upload_sas_expires_at: minutes(6 * HOURS),
+      }),
+      RPC_STATE_CONFLICT,
+      "pending_attempt_conflict",
+      "request_id_retired",
+      "reserve replay",
+    );
+    const flipped = await admin.from(TABLE).update(activeFields()).eq("id", id);
+    expect(flipped.error?.code).toBe(RAISE_EXCEPTION);
+
+    const after = await row(id);
+    expect(after.state).toBe("retired");
+    expect(after.staged_blob_key).toBe(`${CLN_MARK}/staged/${id}.mp4`);
+    expect(after.final_blob_key).toBe(`${CLN_MARK}/final/${id}.mp4`);
+
+    // The worker finishes; the row is closed and never offered again.
+    expect(firstRow(await confirm(id, token, 0, true)).outcome).toBe(
+      "cleaned_up",
+    );
+    expect((await row(id)).cleaned_up_at).not.toBeNull();
+    expect(find(await claimMine(randomUUID()), id)).toBeUndefined();
+  });
+
+  // ── 5. Competing transactions ─────────────────────────────────────────────
+
+  test("claim racing begin_finalization on idle pending work: exactly one wins, and the loser sees the winner", async () => {
+    const m = await insertMatch(owner.userId, "race-begin");
+    const id = await insertRow({
+      match_id: m,
+      last_attempt_at: ago(25 * HOURS),
+    });
+    const token = randomUUID();
+    const leaseToken = randomUUID();
+
+    const [claimed, began] = await Promise.all([
+      claim(token),
+      begin(m, id, leaseToken),
+    ]);
+    const claimedIt = ids(firstRows(claimed)).includes(id);
+    const beganOk = began.error === null;
+    expect(claimedIt !== beganOk, "exactly one wins").toBe(true);
+
+    const after = await row(id);
+    if (claimedIt) {
+      expectRefused(
+        began,
+        RPC_STATE_CONFLICT,
+        "mode_conflict",
+        "attempt_retired",
+        "begin lost",
+      );
+      expect(after.state).toBe("retired");
+      expect(after.finalize_lease_token).toBeNull();
+    } else {
+      expect(after.state).toBe("pending");
+      expect(after.finalize_lease_token).toBe(leaseToken);
+      // Under a live finalization lease the row is not collectible.
+      expect(find(await claimMine(randomUUID()), id)).toBeUndefined();
+    }
+  });
+
+  test("claim racing renewal on idle pending work: exactly one wins, and a renewed attempt is no longer idle", async () => {
+    const m = await insertMatch(owner.userId, "race-renew");
+    const id = await insertRow({
+      match_id: m,
+      last_attempt_at: ago(25 * HOURS),
+    });
+    const token = randomUUID();
+
+    const [claimed, renewed] = await Promise.all([claim(token), renew(m, id)]);
+    const claimedIt = ids(firstRows(claimed)).includes(id);
+    const renewedOk = renewed.error === null;
+    expect(claimedIt !== renewedOk, "exactly one wins").toBe(true);
+
+    const after = await row(id);
+    if (claimedIt) {
+      expectRefused(
+        renewed,
+        RPC_STATE_CONFLICT,
+        "mode_conflict",
+        "attempt_retired",
+        "renew lost",
+      );
+      expect(after.state).toBe("retired");
+    } else {
+      expect(after.state).toBe("pending");
+      // Renewal bumped last_attempt_at and issued a live SAS: not collectible.
+      expect(find(await claimMine(randomUUID()), id)).toBeUndefined();
+    }
+  });
+
+  // ── 6. Stale leases and versions ──────────────────────────────────────────
+
+  test("an expired lease, another worker's lease and a changed version all record nothing; only the live holder with the right version settles", async () => {
+    const m = await insertMatch(owner.userId, "stale");
+    const id = await insertRow({ match_id: m, ...retiredFields() });
+
+    const t1 = randomUUID();
+    expect(find(await claimMine(t1), id)).toBeDefined();
+
+    // Lease expired underneath the worker.
+    await setRow(id, { cleanup_lease_until: ago(1) });
+    expect(firstRow(await confirm(id, t1, 0, true)).outcome).toBe("lease_lost");
+    expect(firstRow(await fail(id, t1, "late", null)).outcome).toBe(
+      "lease_lost",
+    );
+    let r = await row(id);
+    expect(r.cleaned_up_at).toBeNull();
+    expect(r.cleanup_attempts).toBe(0);
+
+    // Another worker takes it; the first token is now someone else's.
+    const t2 = randomUUID();
+    expect(find(await claimMine(t2), id)).toBeDefined();
+    expect(firstRow(await confirm(id, t1, 0, true)).outcome).toBe("lease_lost");
+    r = await row(id);
+    expect(r.cleanup_lease_token).toBe(t2);
+    expect(r.cleaned_up_at).toBeNull();
+
+    // Right holder, wrong version: nothing recorded, lease released.
+    expect(firstRow(await confirm(id, t2, 99, true)).outcome).toBe(
+      "version_changed",
+    );
+    r = await row(id);
+    expect(r.cleanup_lease_token).toBeNull();
+    expect(r.cleaned_up_at).toBeNull();
+
+    // A fresh claim re-evaluates; the right holder closes it.
+    const t3 = randomUUID();
+    const again = find(await claimMine(t3), id)!;
+    expect(again.version).toBe(0);
+    const done = firstRow(await confirm(id, t3, 0, true));
+    expect(done.outcome).toBe("cleaned_up");
+    expect(done.cleaned_up_at).not.toBeNull();
+  });
+
+  test("an active row corrected under the worker is version_changed; the next sweep offers the new version", async () => {
+    const m = await insertMatch(owner.userId, "version");
+    const id = await insertRow({ match_id: m, ...activeFields() });
+
+    const t1 = randomUUID();
+    const first = find(await claimMine(t1), id)!;
+    expect(first.version).toBe(0);
+    expect(first.collect_final).toBe(false);
+
+    // A correction lands (correct_alignment bumps version).
+    await setRow(id, { version: 1 });
+    expect(firstRow(await confirm(id, t1, 0, false)).outcome).toBe(
+      "version_changed",
+    );
+    let r = await row(id);
+    expect(r.state).toBe("active");
+    expect(r.cleanup_next_attempt_at).toBeNull();
+
+    const t2 = randomUUID();
+    const second = find(await claimMine(t2), id)!;
+    expect(second.version).toBe(1);
+    expect(firstRow(await confirm(id, t2, 1, false)).outcome).toBe(
+      "staged_shed",
+    );
+    r = await row(id);
+    expect(r.state).toBe("active");
+    expect(r.cleanup_next_attempt_at).toBe("infinity");
+  });
+
+  // ── 7. Retries ────────────────────────────────────────────────────────────
+
+  test("a failed delete retains the keys, counts the failure and backs off; the retry closes the row only when the final key is confirmed gone", async () => {
+    const m = await insertMatch(owner.userId, "retry");
+    const id = await insertRow({ match_id: m, ...retiredFields() });
+
+    const t1 = randomUUID();
+    expect(find(await claimMine(t1), id)).toBeDefined();
+
+    const failed = firstRow(await fail(id, t1, "storage 503", null));
+    expect(failed.outcome).toBe("failed");
+    expect(failed.cleanup_attempts).toBe(1);
+    expect(failed.cleanup_last_error).toBe("storage 503");
+    let r = await row(id);
+    expect(r.state).toBe("retired");
+    expect(r.cleaned_up_at).toBeNull();
+    expect(r.cleanup_lease_token).toBeNull();
+    expect(r.staged_blob_key).toBe(`${CLN_MARK}/staged/${id}.mp4`);
+    expect(r.final_blob_key).toBe(`${CLN_MARK}/final/${id}.mp4`);
+    const next = Date.parse(r.cleanup_next_attempt_at as string);
+    expect(next).toBeGreaterThan(Date.now() + 9 * 60_000);
+    expect(next).toBeLessThan(Date.now() + 11 * 60_000);
+
+    // Backing off: not offered until the schedule says so.
+    expect(find(await claimMine(randomUUID()), id)).toBeUndefined();
+    await setRow(id, { cleanup_next_attempt_at: ago(1) });
+
+    const t2 = randomUUID();
+    const retry = find(await claimMine(t2), id)!;
+    expect(retry.cleanup_attempts).toBe(1);
+    expect(retry.collect_final).toBe(true);
+
+    const done = firstRow(await confirm(id, t2, 0, true));
+    expect(done.outcome).toBe("cleaned_up");
+    r = await row(id);
+    expect(r.cleaned_up_at).not.toBeNull();
+    expect(r.cleanup_last_error).toBeNull();
+    expect(r.cleanup_attempts).toBe(1);
+    expect(r.final_blob_key).toBe(`${CLN_MARK}/final/${id}.mp4`);
+    expect(find(await claimMine(randomUUID()), id)).toBeUndefined();
+
+    // A worker may name its own retry interval.
+    const other = await insertRow({ match_id: m, ...retiredFields() });
+    const t3 = randomUUID();
+    expect(find(await claimMine(t3), other)).toBeDefined();
+    const explicit = firstRow(await fail(other, t3, "", 3600));
+    expect(explicit.cleanup_last_error).toBe("unknown");
+    const at = Date.parse(explicit.cleanup_next_attempt_at as string);
+    expect(at).toBeGreaterThan(Date.now() + 59 * 60_000);
+    expect(at).toBeLessThan(Date.now() + 61 * 60_000);
+  });
+
+  test("a row retired between a staged-only claim and its confirm is rescheduled, not closed", async () => {
+    const m = await insertMatch(owner.userId, "mid-sweep");
+    const id = await insertRow({ match_id: m, ...activeFields() });
+
+    const t1 = randomUUID();
+    const first = find(await claimMine(t1), id)!;
+    expect(first.collect_final).toBe(false);
+
+    // A replacement retires it while the worker is deleting staging.
+    await setRow(id, {
+      state: "retired",
+      retired_at: new Date().toISOString(),
+      cleanup_next_attempt_at: new Date().toISOString(),
+    });
+    const settled = firstRow(await confirm(id, t1, 0, false));
+    expect(settled.outcome).toBe("rescheduled");
+    let r = await row(id);
+    expect(r.cleaned_up_at).toBeNull();
+    expect(r.cleanup_lease_token).toBeNull();
+
+    const t2 = randomUUID();
+    const second = find(await claimMine(t2), id)!;
+    expect(second.collect_final).toBe(true);
+    expect(firstRow(await confirm(id, t2, 0, true)).outcome).toBe("cleaned_up");
+    r = await row(id);
+    expect(r.cleaned_up_at).not.toBeNull();
+  });
+
+  // ── 8. Batch size and concurrent sweeps ───────────────────────────────────
+
+  test("at most 50 rows per claim, and two concurrent sweeps never share a row", async () => {
+    const batch = Array.from({ length: 55 }, () => {
+      const id = randomUUID();
+      return {
+        id,
+        match_id: null,
+        uploaded_by: owner.userId,
+        filename: `${CLN_MARK}-${id.slice(0, 8)}.mp4`,
+        declared_size_bytes: 1_000_000,
+        declared_content_type: "video/mp4",
+        staged_blob_key: `${CLN_MARK}/staged/${id}.mp4`,
+        final_blob_key: `${CLN_MARK}/final/${id}.mp4`,
+        client_request_id: randomUUID(),
+        upload_sas_expires_at: ago(HOURS),
+        ...retiredFields(),
+      };
+    });
+    const inserted = await admin.from(TABLE).insert(batch);
+    expect(inserted.error).toBeNull();
+    const mine = new Set<string>(batch.map((b) => b.id));
+
+    const [a, b] = await Promise.all([
+      claim(randomUUID()),
+      claim(randomUUID()),
+    ]);
+    const aIds = ids(firstRows(a));
+    const bIds = ids(firstRows(b));
+    expect(aIds.length).toBeLessThanOrEqual(50);
+    expect(bIds.length).toBeLessThanOrEqual(50);
+    expect(aIds.filter((id) => bIds.includes(id))).toEqual([]);
+
+    // Between the two sweeps and any follow-ups, every row of ours is
+    // handed out exactly once.
+    const seen = [...aIds, ...bIds].filter((id) => mine.has(id));
+    for (let i = 0; i < 4 && seen.length < mine.size; i += 1) {
+      seen.push(
+        ...ids(await claimMine(randomUUID())).filter((id) => mine.has(id)),
+      );
+    }
+    expect(new Set(seen).size).toBe(mine.size);
+    expect(seen).toHaveLength(mine.size);
+    expect(Math.max(aIds.length, bIds.length)).toBe(50);
+  });
+});

@@ -575,3 +575,45 @@ specs checked.
 3. `finalBlobOf` fills `staged_blob_key` with the final key to satisfy T6's row shape, which reads
    only `final_blob_key`. Harmless but awkward; a `publishedBlobOf` overload taking just the final
    key would remove the wart.
+
+## T13 · Add cleanup claim and fencing transactions — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** New `supabase/migrations/20260919080217_match_video_attachment_cleanup.sql` adds
+three service-role RPCs plus two private helpers, all with a pinned empty `search_path`.
+`match_video_claim_cleanup(worker_token, lease_seconds, limit)` leases at most 50 collectible
+rows — the limit is enforced, not merely documented — and returns each row's keys, `copy_id`,
+`copy_status`, `version` and per-key `collect_staged`/`collect_final` flags, which is exactly
+what T14 needs to abort an in-flight copy before deleting. `match_video_confirm_cleanup` settles
+a confirmed deletion under a lease and version CAS; `match_video_fail_cleanup` counts the
+failure, backs off (ten minutes doubling to a 24-hour cap), releases the lease and _keeps the
+keys_, so nothing is forgotten before its bytes are gone.
+
+The rule that protects real athlete video holds: when an uploader's account is deleted,
+`uploaded_by` goes null but the team keeps the match and its playable video. The eligibility
+predicate never reads `uploaded_by` at all, the migration's own `DO` block asserts that it
+never will, and the test deletes an actual auth user rather than simulating a null — after
+which the active row is returned with `collect_final = false`, sheds only its staging data, and
+a later sweep parks it at `'infinity'`. An orphan row with a null `match_id` is treated
+differently and is fully collectible, which is the distinction that matters.
+
+Fencing is atomic rather than advisory: a claim retires abandoned pending work in the same
+transaction as the lease, so renew, `begin_finalization`, activate and a reserve replay all
+refuse afterwards, and T2's trigger refuses a direct flip back. Two `Promise.all` races — claim
+versus begin, claim versus renew — show exactly one winner with the loser seeing it, so a worker
+claim can never become a late activation. Every staged branch requires the latest upload SAS
+expiry plus five minutes, distinguished in tests by a credential two minutes expired (not
+eligible) versus six (eligible), so a writer holding a valid credential never loses its target.
+
+Applied to live and verified there: `prosecdef` true, `proconfig` pinning the empty search path,
+EXECUTE denied to anon and authenticated and granted to `service_role` only, with the private
+helpers unreachable. The spec grows from 30 to 42 live cases, all passing, and the live project
+was left with zero fixture rows.
+
+**follow-ups:**
+
+1. A partial index on `(cleanup_next_attempt_at) where cleaned_up_at is null` would help the
+   sweep once the table grows; T2's `cleanup_due_idx` only covers `state = 'retired'`.
+2. The claim holds up to 50 match locks until commit. If that ever contends with live uploads,
+   T14 can sweep in smaller batches — `p_limit = 10` in a loop — without any SQL change.
