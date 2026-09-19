@@ -27,7 +27,7 @@ import {
   rpcCorrectAlignment,
 } from "@/lib/services/match-video/alignment";
 import { siteUrl } from "@/lib/site-url";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { lazyAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
@@ -41,15 +41,7 @@ export async function PATCH(
   const { matchId } = await params;
   const supabase = await createClient();
 
-  let admin: ReturnType<typeof createAdminClient> | null = null;
-  const correct = rpcCorrectAlignment(
-    new Proxy({} as ReturnType<typeof createAdminClient>, {
-      get(_target, property, receiver) {
-        admin ??= createAdminClient();
-        return Reflect.get(admin, property, receiver);
-      },
-    }),
-  );
+  const correct = rpcCorrectAlignment(lazyAdminClient());
 
   return handleUpdateAlignment(request, matchId, {
     ...matchVideoAccessDeps({

@@ -55,7 +55,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { createAdminClient } from "@/lib/supabase/admin";
+import { lazyAdminClient } from "@/lib/supabase/admin";
 
 import {
   BEST_EFFORT_BATCH_LIMIT,
@@ -229,8 +229,9 @@ async function scheduleAfterResponse(task: () => Promise<void>): Promise<void> {
 
 /** The service-role client, T14's production seams and Next's `after`. */
 export function productionAttachmentPurgeDeps(
-  admin: SupabaseClient = createAdminClient(),
+  admin: SupabaseClient = lazyAdminClient(),
 ): AttachmentPurgeDeps {
+  let cleanup: CleanupDeps | null = null;
   return {
     async listAttachments(matchIds) {
       const { data, error } = await admin
@@ -242,7 +243,15 @@ export function productionAttachmentPurgeDeps(
       }
       return (data ?? []) as AttachmentPurgeRow[];
     },
-    cleanup: productionCleanupDeps(admin),
+    // Lazy, because building it reaches `requireAzureStorageConfig()`, which
+    // THROWS on a deployment that has no Azure credentials. Only a match that
+    // actually has attachment rows ever reads this — by the caller's own
+    // reckoning, most do not — and constructing it eagerly would turn every
+    // delete on such a deployment into a caught-and-logged error for work it
+    // was never going to do.
+    get cleanup(): CleanupDeps {
+      return (cleanup ??= productionCleanupDeps(admin));
+    },
     schedule: scheduleAfterResponse,
   };
 }

@@ -9,7 +9,6 @@ import {
 import type { HttpResult } from "@/lib/services/match-video/http";
 import {
   azurePlaybackStorage,
-  supabaseActiveAttachment,
   type PlaybackAttachmentRow,
 } from "@/lib/services/match-video/playback";
 import type { AttachmentPlaybackCredential } from "@/lib/services/match-video/storage";
@@ -18,11 +17,12 @@ import {
   resolveAzureStorageConfig,
   videoContainerClient,
 } from "@/lib/services/splitstep/video-url/azure-sas";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { type AdminClient, lazyAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
 import { choosePlaybackFile, type PlaybackChoice } from "./match-video-choice";
+import { activeAttachment, finalObjectExists } from "./match-video-seams";
 
 /**
  * The match video, if there is one and the viewer may watch it.
@@ -294,7 +294,7 @@ const JOBS_CONSIDERED = 5;
  * else about the selection changed.
  */
 function supabaseProviderVideo(
-  admin: ReturnType<typeof createAdminClient>,
+  admin: AdminClient,
 ): MatchVideoDeps["loadProviderVideo"] {
   return async (matchId) => {
     const { data: jobs } = await admin
@@ -352,27 +352,21 @@ export const getMatchVideo = cache(async function getMatchVideo(
 
   const supabase = await createClient();
 
-  // Built lazily behind a proxy, so a visit the visibility check refuses never
-  // constructs a service-role client at all — the same shape
-  // `getMatchFilmEntry` uses.
-  type Admin = ReturnType<typeof createAdminClient>;
-  let admin: Admin | null = null;
-  const adminProxy = new Proxy({} as Admin, {
-    get(_target, property, receiver) {
-      admin ??= createAdminClient();
-      return Reflect.get(admin, property, receiver);
-    },
-  });
+  // Built lazily, so a visit the visibility check refuses never constructs a
+  // service-role client at all — the same helper `getMatchFilmEntry` uses.
+  const adminProxy = lazyAdminClient();
 
-  const storage = azurePlaybackStorage();
+  // The attachment read and the blob probe come from the shared seams, so the
+  // match-detail page's `getMatchVideo` + `getMatchFilmEntry` pair costs one
+  // of each rather than two. `mintPlayback` is this loader's alone.
   return resolveMatchVideo(matchId, {
     ...matchVideoAccessDeps({
       supabase,
       workspaceContext: getWorkspaceContext,
     }),
-    loadActiveAttachment: supabaseActiveAttachment(adminProxy),
-    finalObjectExists: storage.finalObjectExists,
-    mintPlayback: storage.mintPlayback,
+    loadActiveAttachment: activeAttachment,
+    finalObjectExists,
+    mintPlayback: azurePlaybackStorage().mintPlayback,
     loadProviderVideo: supabaseProviderVideo(adminProxy),
   });
 });

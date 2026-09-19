@@ -367,11 +367,17 @@ test("a negative offset plays: the video started before the first point", async 
 test("only the ACTIVE final asset is ever fetched — staged and retired are not filtered, they are not selected", async () => {
   // The loader borrows T12's seam rather than writing a third way to read the
   // row, so `state = 'active'` is in the WHERE clause and the staged key is
-  // not even in the projection.
+  // not even in the projection. It reaches that seam through the shared
+  // request-scoped wrapper, so both the loader and the wrapper are checked —
+  // neither may grow a query of its own.
   const source = readFileSync("src/lib/data/match-video-server.ts", "utf8");
-  expect(source).toContain("supabaseActiveAttachment");
   expect(source).not.toContain("staged_blob_key");
   expect(source).not.toContain("staged");
+
+  const shared = readFileSync("src/lib/data/match-video-seams.ts", "utf8");
+  expect(shared).toContain("supabaseActiveAttachment");
+  expect(shared).not.toContain("staged");
+  expect(shared).not.toContain(".from(");
 
   const seam = readFileSync("src/lib/services/match-video/playback.ts", "utf8");
   expect(seam).toMatch(/\.eq\("state",\s*"active"\)/);

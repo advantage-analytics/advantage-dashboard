@@ -20,7 +20,7 @@ import {
   rpcRenewUpload,
 } from "@/lib/services/match-video/uploads";
 import { siteUrl } from "@/lib/site-url";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { lazyAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
@@ -34,15 +34,7 @@ export async function POST(
   const { matchId, attachmentId } = await params;
   const supabase = await createClient();
 
-  let admin: ReturnType<typeof createAdminClient> | null = null;
-  const renew = rpcRenewUpload(
-    new Proxy({} as ReturnType<typeof createAdminClient>, {
-      get(_target, property, receiver) {
-        admin ??= createAdminClient();
-        return Reflect.get(admin, property, receiver);
-      },
-    }),
-  );
+  const renew = rpcRenewUpload(lazyAdminClient());
 
   return handleRenewUpload(request, matchId, attachmentId, {
     ...matchVideoAccessDeps({

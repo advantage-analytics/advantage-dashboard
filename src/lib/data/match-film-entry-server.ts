@@ -47,14 +47,11 @@ import {
   type MatchVideoAccessDeps,
 } from "@/lib/services/match-video/access";
 import type { HttpResult } from "@/lib/services/match-video/http";
-import {
-  azurePlaybackStorage,
-  supabaseActiveAttachment,
-  type PlaybackAttachmentRow,
-} from "@/lib/services/match-video/playback";
-import { createAdminClient } from "@/lib/supabase/admin";
+import type { PlaybackAttachmentRow } from "@/lib/services/match-video/playback";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+
+import { activeAttachment, finalObjectExists } from "./match-video-seams";
 
 const LOG = "[match-film-entry]";
 
@@ -193,7 +190,7 @@ export async function resolveMatchFilmEntry(
  * layout and the page are one request, and a capability asked twice is two
  * round trips for one answer.
  *
- * The admin client is built lazily behind a proxy, so a visit refused above
+ * The admin client is built lazily, so a visit refused above
  * the attachment read — every access check runs first — never constructs a
  * service-role client at all.
  */
@@ -201,21 +198,13 @@ export const getMatchFilmEntry = cache(async function getMatchFilmEntry(
   matchId: string,
 ): Promise<MatchFilmEntry> {
   const supabase = await createClient();
-  type Admin = ReturnType<typeof createAdminClient>;
-  let admin: Admin | null = null;
-  const adminProxy = new Proxy({} as Admin, {
-    get(_target, property, receiver) {
-      admin ??= createAdminClient();
-      return Reflect.get(admin, property, receiver);
-    },
-  });
 
   return resolveMatchFilmEntry(matchId, {
     ...matchVideoAccessDeps({
       supabase,
       workspaceContext: getWorkspaceContext,
     }),
-    loadActiveAttachment: supabaseActiveAttachment(adminProxy),
-    finalObjectExists: azurePlaybackStorage().finalObjectExists,
+    loadActiveAttachment: activeAttachment,
+    finalObjectExists,
   });
 });

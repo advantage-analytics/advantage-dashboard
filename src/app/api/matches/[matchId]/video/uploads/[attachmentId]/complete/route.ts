@@ -26,7 +26,7 @@ import {
   rpcCompletionDeps,
 } from "@/lib/services/match-video/complete";
 import { siteUrl } from "@/lib/site-url";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { lazyAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
@@ -40,15 +40,7 @@ export async function POST(
   const { matchId, attachmentId } = await params;
   const supabase = await createClient();
 
-  let admin: ReturnType<typeof createAdminClient> | null = null;
-  const database = rpcCompletionDeps(
-    new Proxy({} as ReturnType<typeof createAdminClient>, {
-      get(_target, property, receiver) {
-        admin ??= createAdminClient();
-        return Reflect.get(admin, property, receiver);
-      },
-    }),
-  );
+  const database = rpcCompletionDeps(lazyAdminClient());
 
   return handleCompleteUpload(request, matchId, attachmentId, {
     ...matchVideoAccessDeps({

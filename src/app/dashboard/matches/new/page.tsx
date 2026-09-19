@@ -25,7 +25,7 @@ import {
   MATCHES_LIST_HREF,
 } from "@/lib/data/match-video-attachment-server";
 import { matchVideoAccessDeps } from "@/lib/services/match-video/access";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { lazyAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -128,15 +128,7 @@ export default async function NewMatchPage({
     const supabase = await createClient();
     // Lazy: a refused visit — and every check in the ladder runs before the
     // attachment row is read — never constructs a service-role client.
-    let admin: ReturnType<typeof createAdminClient> | null = null;
-    const storage = attachmentWizardStorageDeps(
-      new Proxy({} as ReturnType<typeof createAdminClient>, {
-        get(_target, property, receiver) {
-          admin ??= createAdminClient();
-          return Reflect.get(admin, property, receiver);
-        },
-      }),
-    );
+    const storage = attachmentWizardStorageDeps(lazyAdminClient());
 
     const target = await resolveAttachmentWizardTarget(
       visit.matchId,

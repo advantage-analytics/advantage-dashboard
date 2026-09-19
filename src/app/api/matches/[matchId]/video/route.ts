@@ -29,7 +29,7 @@ import {
   handleGetPlayback,
   supabaseActiveAttachment,
 } from "@/lib/services/match-video/playback";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { lazyAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
@@ -43,15 +43,7 @@ export async function GET(
   const { matchId } = await params;
   const supabase = await createClient();
 
-  let admin: ReturnType<typeof createAdminClient> | null = null;
-  const loadActiveAttachment = supabaseActiveAttachment(
-    new Proxy({} as ReturnType<typeof createAdminClient>, {
-      get(_target, property, receiver) {
-        admin ??= createAdminClient();
-        return Reflect.get(admin, property, receiver);
-      },
-    }),
-  );
+  const loadActiveAttachment = supabaseActiveAttachment(lazyAdminClient());
 
   return handleGetPlayback(request, matchId, {
     ...matchVideoAccessDeps({

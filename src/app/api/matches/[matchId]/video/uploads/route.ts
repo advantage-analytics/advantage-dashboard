@@ -15,7 +15,7 @@
 
 import type { NextRequest } from "next/server";
 
-import { createAdminClient } from "@/lib/supabase/admin";
+import { lazyAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { matchVideoAccessDeps } from "@/lib/services/match-video/access";
 import { mintAttachmentUploadCredential } from "@/lib/services/match-video/storage";
@@ -36,15 +36,7 @@ export async function POST(
   const { matchId } = await params;
   const supabase = await createClient();
 
-  let admin: ReturnType<typeof createAdminClient> | null = null;
-  const reserve = rpcReserveUpload(
-    new Proxy({} as ReturnType<typeof createAdminClient>, {
-      get(_target, property, receiver) {
-        admin ??= createAdminClient();
-        return Reflect.get(admin, property, receiver);
-      },
-    }),
-  );
+  const reserve = rpcReserveUpload(lazyAdminClient());
 
   return handlePrepareUpload(request, matchId, {
     ...matchVideoAccessDeps({

@@ -31,8 +31,6 @@
 
 import { createHash, timingSafeEqual } from "node:crypto";
 
-import type { NextResponse } from "next/server";
-
 import type { CleanupRunSummary } from "./cleanup";
 import { jsonResponse } from "./http";
 
@@ -128,20 +126,6 @@ export interface CleanupCronBody {
 }
 
 /**
- * `(status, body)` — the reverse of `http.ts`'s `jsonResponse(body, status)`.
- *
- * This file used to declare its own `jsonResponse` with that reversed shape,
- * which is a trap rather than a preference: two functions of the same name in
- * one directory, so a call moved between them compiles and answers with the
- * body where the status goes. The name now says which order it takes, and the
- * `private, no-store` guarantee comes from `http.ts` rather than being spelled
- * a second time here.
- */
-function jsonWithStatus(status: number, body: unknown): NextResponse {
-  return jsonResponse(body, status);
-}
-
-/**
  * Authorize, then sweep.
  *
  * Statuses: 401 for any refusal (one body for all of them — which rule was
@@ -169,7 +153,7 @@ export async function handleCleanupCron(
     }
     // Deliberately uniform, and deliberately empty of detail: no echo of what
     // was presented, no hint of what was expected.
-    return jsonWithStatus(401, { ok: false, error: "unauthorized" });
+    return jsonResponse({ ok: false, error: "unauthorized" }, 401);
   }
 
   const startedAt = Date.now();
@@ -183,7 +167,7 @@ export async function handleCleanupCron(
     console.error(`${LOG} sweep threw`, {
       message: cause instanceof Error ? cause.message : String(cause),
     });
-    return jsonWithStatus(500, { ok: false, error: "cleanup_failed" });
+    return jsonResponse({ ok: false, error: "cleanup_failed" }, 500);
   }
 
   const body: CleanupCronBody = {
@@ -203,8 +187,8 @@ export async function handleCleanupCron(
       code: summary.claimError.code,
       detail: summary.claimError.detail,
     });
-    return jsonWithStatus(500, { ...body, error: "claim_failed" });
+    return jsonResponse({ ...body, error: "claim_failed" }, 500);
   }
 
-  return jsonWithStatus(200, body);
+  return jsonResponse(body, 200);
 }
