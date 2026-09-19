@@ -5,34 +5,63 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from "react";
+import {
+  Bookmark,
+  Maximize,
+  Pause,
+  Play,
+  Repeat,
+  SkipBack,
+  SkipForward,
+  Timer,
+  TimerOff,
+  Volume2,
+  VolumeOff,
+} from "lucide-react";
 
-import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
-import {
-  shortMonthDate,
-  formatClock,
-} from "@/components/dashboard/matches/match-detail/format-clock";
+import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
 import { advButton } from "@/lib/ui/adv-button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { cn } from "@/lib/utils";
 
 import { useFilmClockVars } from "./film-clock";
+import { RepeatOff } from "./film-glyphs";
 import type { Rect } from "./film-motion";
-import { nextStop, prevStop, type FilmStop } from "./film-timeline";
+import { FilmTrack } from "./film-track";
+import {
+  REACHED_EPSILON_SECONDS,
+  activeStopAt,
+  breakSegments,
+  deadTimeJump,
+  nextStop,
+  prevStop,
+  type FilmStop,
+} from "./film-timeline";
+import { PLAYBACK_RATES } from "./film-transport";
 import type {
   AttachmentPlaybackProblem,
   AttachmentResumeIntent,
 } from "./use-attachment-playback";
 
 /**
- * The match video, with the 46c control bar over it (artboard lines 819–844).
+ * The match video with the room's transport under it, in the tab.
+ *
+ * The control bar is the fullscreen room's (`film-transport.tsx`) minus what
+ * only makes sense over a screenful — the title, the point position, exit:
+ * the break-of-serve track, then the control row — play, previous and next
+ * point, the clock — and on the right Save point (filled once saved), skip
+ * dead time, speed, loop, sound and fullscreen, in the room's order. The
+ * same glyphs at the tab's scale: 13px on a 32px row 14px apart, where the
+ * room draws 15px on 40px 18px apart — a 353px frame has no room for the
+ * room's bar. Every glyph is Lucide at 1.6, and every toggle reads its state the same
+ * way — the plain glyph when on, Lucide's slashed variant when off
+ * (`TimerOff`, `VolumeOff`, and `RepeatOff` in `film-glyphs.tsx` for the one
+ * the library lacks). Save fills once the point is saved; nothing else is filled.
  *
  * ── Called the match video, deliberately ────────────────────────────────────
  * The file is the athlete's own upload, cut to the window they selected (or,
@@ -66,16 +95,23 @@ import type {
  * That panel below is not dead code — it is the whole error story for every
  * match the video pipeline produced.
  *
- * ── Glyphs with nothing behind them ─────────────────────────────────────────
- * The artboard's bar carries three more controls (a timer, a loop, a kebab)
- * that no spec defines. They render — the bar is drawn 1:1 — but they are
- * inert and say so on hover, which is honest in a way that either guessing at
- * a behaviour or silently dropping them from the artboard is not.
+ * ── Loop and skip dead time ─────────────────────────────────────────────────
+ * Both walk `allStops` — every timed point, not the cut — exactly as the room
+ * does: the playhead is inside some point whether or not the filter admits
+ * it. Loop remembers the point the film was last inside rather than asking
+ * `activeStopAt` at the end of a window, for the reason the room's note gives:
+ * a window clamped to the next one's start hands over just before its own
+ * end, so "past the end of the active point" would never be true.
  */
 
 export interface FilmPlayerHandle {
   /** Jump playback to an absolute second inside the file. */
   seekTo: (seconds: number) => void;
+  /** Move the playhead by `delta` seconds, either way. */
+  seekBy: (delta: number) => void;
+  togglePlay: () => void;
+  /** Jump to the previous (-1) or next (1) point in the applied cut. */
+  step: (direction: -1 | 1) => void;
   pause: () => void;
   /** Where the player is right now — what the fullscreen room opens from. */
   snapshot: () => { time: number; playing: boolean };
@@ -123,6 +159,10 @@ interface FilmPlayerProps {
    * on the film clock, so the buttons walk what the list is showing.
    */
   stops: FilmStop[];
+  /** Every timed point, for the break-of-serve track, loop and dead time. */
+  allStops: FilmStop[];
+  /** Whether the playing point is bookmarked; null when no point is playing. */
+  saved: boolean | null;
   /** Fires on `timeupdate`/`seeked`; drives the point list's playing row. */
   onTimeChange: (seconds: number) => void;
   /** The playhead, for the hook's anchor. Suppressed while `background`. */
@@ -135,6 +175,8 @@ interface FilmPlayerProps {
   onPlayRejected: () => void;
   /** The terminal state's button, where the hook says one could help. */
   onRetry: () => void;
+  /** Bookmark or un-bookmark the playing point. */
+  onToggleSaved: () => void;
   /** The fullscreen glyph. Entered by user action only, never automatically. */
   onEnterFullscreen: () => void;
   /**
@@ -157,38 +199,46 @@ const PROBLEM_TITLES: Record<AttachmentPlaybackProblem["reason"], string> = {
 };
 
 const GLYPH =
-  "block h-[15px] w-[15px] cursor-pointer text-white/85 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)] rounded-[2px]";
+  "block h-[13px] w-[13px] cursor-pointer rounded-[2px] text-white/85 transition-opacity duration-200 hover:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-default disabled:opacity-35";
 
-/** An artboard glyph with no behaviour behind it yet — drawn, not wired. */
-function InertGlyph({
+/**
+ * An icon-only control: `aria-label` plus the design system's dark tooltip
+ * (`ChromeTooltip`, the one every icon-only control in the shell answers
+ * hover with), always — with the key that does the same thing where there
+ * is one.
+ */
+function Glyph({
   label,
+  shortcut,
+  pressed,
+  disabled,
+  onClick,
   children,
 }: {
   label: string;
+  shortcut?: string;
+  pressed?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {/* `aria-disabled` rather than `disabled`: a disabled button swallows
-            pointer events, and then the tooltip that explains why it does
-            nothing never appears. */}
-        <button
-          type="button"
-          aria-disabled="true"
-          aria-label={`${label} — not available yet`}
-          onClick={(e) => e.preventDefault()}
-          className="block cursor-default rounded-[2px] opacity-45 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-        >
-          {children}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top">
-        {label} isn&rsquo;t wired up yet
-      </TooltipContent>
-    </Tooltip>
+    <ChromeTooltip label={label} shortcut={shortcut} side="top">
+      <button
+        type="button"
+        aria-label={label}
+        aria-pressed={pressed}
+        disabled={disabled}
+        onClick={onClick}
+        className={cn(GLYPH, pressed && "text-white")}
+      >
+        {children}
+      </button>
+    </ChromeTooltip>
   );
 }
+
+const ICON = { className: "h-full w-full", strokeWidth: 1.6 } as const;
 
 export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
   function FilmPlayer(
@@ -200,28 +250,31 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       passthrough,
       background,
       stops,
+      allStops,
+      saved,
       onTimeChange,
       onPlaybackTime,
       onPlaybackPlaying,
       onLoadFailure,
       onPlayRejected,
       onRetry,
+      onToggleSaved,
       onEnterFullscreen,
       clockTargetRef,
     },
     ref,
   ) {
-    const { match } = useMatchData();
     const videoRef = useRef<HTMLVideoElement>(null);
-    const barRef = useRef<HTMLDivElement>(null);
     const frameRef = useRef<HTMLDivElement>(null);
 
     const [playing, setPlaying] = useState(false);
     const [muted, setMuted] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
+    const [rate, setRate] = useState<number>(1);
+    const [looping, setLooping] = useState(false);
+    const [skipDead, setSkipDead] = useState(false);
     const [failed, setFailed] = useState(false);
-    const [scrubbing, setScrubbing] = useState(false);
 
     const syncClock = useFilmClockVars(
       videoRef,
@@ -240,6 +293,8 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     const readyRef = useRef(false);
     /** The generation whose resume intent has already been taken. */
     const appliedRef = useRef(-1);
+    /** The point the film was last inside, for Loop (see the file note). */
+    const loopStopRef = useRef<FilmStop | null>(null);
 
     /** One place that moves the playhead everywhere it is read. */
     const pushTime = useCallback(
@@ -253,6 +308,11 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       [background, onPlaybackTime, onTimeChange, syncClock],
     );
 
+    const segments = useMemo(
+      () => breakSegments(allStops, duration),
+      [allStops, duration],
+    );
+
     const seekTo = useCallback(
       (seconds: number) => {
         const el = videoRef.current;
@@ -263,9 +323,21 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             : undefined;
         const target = Math.max(0, max ? Math.min(seconds, max) : seconds);
         el.currentTime = target;
+        // Loop follows the viewer. Every seek is someone asking to be
+        // somewhere — a point row, a shot row, the track, a step, an arrow —
+        // so the loop's idea of "the point we are repeating" moves with them.
+        //
+        // Without this the ref still names the PREVIOUS point when the
+        // `seeked` event reaches `onTime`, and a landing inside that point's
+        // end window reads as "the loop came round" rather than "the viewer
+        // jumped". The seek is then undone and they are thrown back, which for
+        // two points a second apart makes the next row unreachable while Loop
+        // is on. Looping itself still works: it seeks to the same point's
+        // start, so this rewrites the ref with the point it already held.
+        loopStopRef.current = activeStopAt(allStops, target)?.stop ?? null;
         pushTime(target);
       },
-      [pushTime],
+      [allStops, pushTime],
     );
 
     /**
@@ -352,28 +424,6 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       land();
     }, [resume, generation, land]);
 
-    useImperativeHandle(
-      ref,
-      () => ({
-        seekTo,
-        pause: () => videoRef.current?.pause(),
-        snapshot: () => {
-          const el = videoRef.current;
-          return {
-            time: el?.currentTime ?? 0,
-            playing: el ? !el.paused : false,
-          };
-        },
-        frameRect: () => {
-          const r = frameRef.current?.getBoundingClientRect();
-          return r
-            ? { left: r.left, top: r.top, width: r.width, height: r.height }
-            : null;
-        },
-      }),
-      [seekTo],
-    );
-
     const togglePlay = useCallback(() => {
       const el = videoRef.current;
       if (!el) return;
@@ -400,6 +450,31 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       [stops, seekTo],
     );
 
+    useImperativeHandle(
+      ref,
+      () => ({
+        seekTo,
+        seekBy: (delta) => seekTo((videoRef.current?.currentTime ?? 0) + delta),
+        togglePlay,
+        step,
+        pause: () => videoRef.current?.pause(),
+        snapshot: () => {
+          const el = videoRef.current;
+          return {
+            time: el?.currentTime ?? 0,
+            playing: el ? !el.paused : false,
+          };
+        },
+        frameRect: () => {
+          const r = frameRef.current?.getBoundingClientRect();
+          return r
+            ? { left: r.left, top: r.top, width: r.width, height: r.height }
+            : null;
+        },
+      }),
+      [seekTo, togglePlay, step],
+    );
+
     const toggleMute = useCallback(() => {
       const el = videoRef.current;
       if (!el) return;
@@ -407,41 +482,63 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       setMuted(el.muted);
     }, []);
 
-    const seekFromPointer = useCallback(
-      (clientX: number) => {
-        const bar = barRef.current;
-        const el = videoRef.current;
-        if (!bar || !el) return;
-        const rect = bar.getBoundingClientRect();
-        if (rect.width === 0) return;
-        const total = Number.isFinite(el.duration) ? el.duration : duration;
-        if (!total) return;
-        const fraction = Math.min(
-          1,
-          Math.max(0, (clientX - rect.left) / rect.width),
-        );
-        seekTo(fraction * total);
+    const cycleRate = useCallback(() => {
+      const el = videoRef.current;
+      const i = PLAYBACK_RATES.indexOf(rate as (typeof PLAYBACK_RATES)[number]);
+      const next = PLAYBACK_RATES[(i + 1) % PLAYBACK_RATES.length];
+      if (el) el.playbackRate = next;
+      setRate(next);
+    }, [rate]);
+
+    /**
+     * A playhead report, plus what Loop and Skip dead time do with it.
+     *
+     * The write itself goes through `pushTime`, never around it: that is also
+     * where the landing ref and the hook's anchor are kept, and a playhead this
+     * surface recorded without telling them is a swap that lands in the wrong
+     * place — or an alignment anchored to a time nobody was watching.
+     */
+    const onTime = useCallback(
+      (t: number) => {
+        pushTime(t);
+        const now = activeStopAt(allStops, t);
+        const previous = loopStopRef.current;
+        if (
+          looping &&
+          previous &&
+          t >= previous.end - REACHED_EPSILON_SECONDS &&
+          t < previous.end + 1
+        ) {
+          seekTo(previous.start);
+          return;
+        }
+        loopStopRef.current = now?.stop ?? null;
+        if (skipDead) {
+          const jump = deadTimeJump(allStops, t);
+          if (jump !== null) seekTo(jump);
+        }
       },
-      [duration, seekTo],
+      [allStops, looping, skipDead, seekTo, pushTime],
     );
 
-    // Drag-to-scrub. The listeners live on the window so the pointer can leave
-    // the 2px bar mid-drag without the scrub dying.
+    // Element state React does not carry, restored in ONE place.
+    //
+    // `playbackRate` and `muted` are set imperatively on the element, and a
+    // refreshed credential is a NEW element (`key={generation}`) that starts
+    // at 1× and unmuted. Both are therefore silently lost on a swap the viewer
+    // never asked for: half speed becomes full speed, and a muted film becomes
+    // audible while the glyph still reads muted.
+    //
+    // Keyed on `generation` as well as the values, so this is also the "a rate
+    // or mute chosen before the element existed" path. Anything else set
+    // imperatively belongs here too rather than in an effect of its own — an
+    // effect per property is how one of them gets forgotten.
     useEffect(() => {
-      if (!scrubbing) return;
-      const move = (e: PointerEvent) => seekFromPointer(e.clientX);
-      const up = () => setScrubbing(false);
-      window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", up);
-      window.addEventListener("pointercancel", up);
-      return () => {
-        window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", up);
-        window.removeEventListener("pointercancel", up);
-      };
-    }, [scrubbing, seekFromPointer]);
-
-    const eventName = match.tournamentName?.trim() || null;
+      const el = videoRef.current;
+      if (!el) return;
+      el.playbackRate = rate;
+      el.muted = muted;
+    }, [rate, muted, generation]);
 
     // The hook's terminal state. It outranks the reload panel because it knows
     // something the panel is guessing at: whether the credential is even the
@@ -538,15 +635,15 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
               setDuration(e.currentTarget.duration || 0);
               syncClock();
             }}
-            onTimeUpdate={(e) => pushTime(e.currentTarget.currentTime)}
-            onSeeked={(e) => pushTime(e.currentTarget.currentTime)}
+            onTimeUpdate={(e) => onTime(e.currentTarget.currentTime)}
+            onSeeked={(e) => onTime(e.currentTarget.currentTime)}
             onError={() => (passthrough ? setFailed(true) : onLoadFailure())}
           >
             Your browser cannot play this video.
           </video>
 
-          {/* The artboard's centre play affordance — only while paused, so it
-              never sits on top of live play. */}
+          {/* The centre play affordance — only while paused, so it never
+              sits on top of live play. */}
           {!playing && (
             <button
               type="button"
@@ -554,288 +651,130 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
               aria-label="Play"
               className="absolute inset-0 flex cursor-pointer items-center justify-center"
             >
-              <span className="flex h-12 w-12 items-center justify-center rounded-[var(--radius-pill)] bg-white/[0.14]">
-                <svg
-                  width="17"
-                  height="17"
-                  viewBox="0 0 24 24"
+              <span className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-pill)] bg-white/[0.14]">
+                <Play
+                  className="ml-0.5 h-[15px] w-[15px] fill-white text-white"
+                  strokeWidth={0}
                   aria-hidden="true"
-                  className="block"
-                >
-                  <polygon points="7 4 20 12 7 20" fill="#FFFFFF" />
-                </svg>
+                />
               </span>
             </button>
           )}
 
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-20 flex-col justify-end bg-[linear-gradient(to_top,rgba(13,13,13,0.68)_0%,rgba(13,13,13,0)_100%)] px-5 pb-3">
-            <div className="pointer-events-auto flex items-baseline gap-2">
-              {eventName && (
-                <span className="text-[11px] text-white/85">{eventName}</span>
-              )}
-              <span className="text-[10px] text-white/45">
-                {shortMonthDate(match.date)}
-              </span>
-              <div className="flex-1" />
-              <span className="mono tabular text-[10px] text-white/50">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col justify-end gap-1.5 bg-[linear-gradient(to_top,rgba(13,13,13,0.68)_0%,rgba(13,13,13,0)_100%)] px-4 pt-7 pb-2">
+            <FilmTrack
+              className="pointer-events-auto"
+              segments={segments}
+              duration={duration}
+              currentTime={currentTime}
+              onSeek={seekTo}
+            />
+
+            <div className="pointer-events-auto flex h-8 items-center gap-3.5">
+              <Glyph
+                label={playing ? "Pause" : "Play"}
+                shortcut="space"
+                onClick={togglePlay}
+              >
+                {playing ? (
+                  <Pause {...ICON} fill="currentColor" aria-hidden="true" />
+                ) : (
+                  <Play {...ICON} fill="currentColor" aria-hidden="true" />
+                )}
+              </Glyph>
+              <Glyph
+                label="Previous point"
+                shortcut="←"
+                disabled={stops.length === 0}
+                onClick={() => step(-1)}
+              >
+                <SkipBack {...ICON} fill="currentColor" aria-hidden="true" />
+              </Glyph>
+              <Glyph
+                label="Next point"
+                shortcut="→"
+                disabled={stops.length === 0}
+                onClick={() => step(1)}
+              >
+                <SkipForward {...ICON} fill="currentColor" aria-hidden="true" />
+              </Glyph>
+              <span className="mono tabular text-[10px] text-white/75">
                 {formatClock(currentTime)} / {formatClock(duration)}
               </span>
-            </div>
-
-            <div
-              ref={barRef}
-              role="slider"
-              tabIndex={0}
-              aria-label="Seek"
-              aria-valuemin={0}
-              aria-valuemax={Math.round(duration)}
-              aria-valuenow={Math.round(currentTime)}
-              aria-valuetext={`${formatClock(currentTime)} of ${formatClock(duration)}`}
-              onPointerDown={(e) => {
-                e.preventDefault();
-                setScrubbing(true);
-                seekFromPointer(e.clientX);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowRight") {
-                  e.preventDefault();
-                  seekTo(currentTime + 5);
-                } else if (e.key === "ArrowLeft") {
-                  e.preventDefault();
-                  seekTo(currentTime - 5);
-                }
-              }}
-              className="pointer-events-auto relative my-2 mb-2.5 h-0.5 cursor-pointer bg-white/[0.22] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-            >
-              <span
-                className="absolute inset-y-0 left-0 bg-[var(--blue)]"
-                style={{
-                  width:
-                    "clamp(0%, calc(var(--film-t, 0) / var(--film-d, 1) * 100%), 100%)",
-                }}
-              />
-            </div>
-
-            <div className="pointer-events-auto flex items-center gap-[18px]">
-              <button
-                type="button"
-                onClick={togglePlay}
-                aria-label={playing ? "Pause" : "Play"}
-                className={GLYPH}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                  className="block h-full w-full"
-                >
-                  {playing ? (
-                    <>
-                      <rect
-                        x="7"
-                        y="4"
-                        width="4"
-                        height="16"
-                        fill="currentColor"
-                      />
-                      <rect
-                        x="14"
-                        y="4"
-                        width="4"
-                        height="16"
-                        fill="currentColor"
-                      />
-                    </>
-                  ) : (
-                    <polygon points="7 4 20 12 7 20" fill="currentColor" />
-                  )}
-                </svg>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => step(-1)}
-                disabled={stops.length === 0}
-                aria-label="Previous point"
-                className={cn(
-                  GLYPH,
-                  "disabled:cursor-default disabled:opacity-35",
-                )}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                  className="block h-full w-full"
-                >
-                  <polygon
-                    points="18 5 8 12 18 19"
-                    fill="currentColor"
-                    stroke="none"
-                  />
-                  <line x1="5" y1="5" x2="5" y2="19" />
-                </svg>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => step(1)}
-                disabled={stops.length === 0}
-                aria-label="Next point"
-                className={cn(
-                  GLYPH,
-                  "disabled:cursor-default disabled:opacity-35",
-                )}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                  className="block h-full w-full"
-                >
-                  <polygon
-                    points="6 5 16 12 6 19"
-                    fill="currentColor"
-                    stroke="none"
-                  />
-                  <line x1="19" y1="5" x2="19" y2="19" />
-                </svg>
-              </button>
 
               <div className="flex-1" />
 
-              <InertGlyph label="Playback timer">
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="rgba(255,255,255,0.85)"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+              <Glyph
+                label={saved ? "Saved — remove bookmark" : "Save point"}
+                shortcut="S"
+                pressed={saved === true}
+                disabled={saved === null}
+                onClick={onToggleSaved}
+              >
+                <Bookmark
+                  {...ICON}
                   aria-hidden="true"
-                  className="block"
-                >
-                  <circle cx="12" cy="13" r="7" />
-                  <line x1="12" y1="13" x2="12" y2="9" />
-                  <line x1="12" y1="3" x2="12" y2="6" />
-                </svg>
-              </InertGlyph>
+                  fill={saved ? "currentColor" : "none"}
+                />
+              </Glyph>
 
-              <InertGlyph label="Loop">
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="rgba(255,255,255,0.85)"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                  className="block"
-                >
-                  <polyline points="17 2 21 6 17 10" />
-                  <path d="M3 12V9a3 3 0 0 1 3-3h15" />
-                  <polyline points="7 22 3 18 7 14" />
-                  <path d="M21 12v3a3 3 0 0 1-3 3H3" />
-                </svg>
-              </InertGlyph>
+              <Glyph
+                label={
+                  skipDead ? "Skip dead time — on" : "Skip dead time — off"
+                }
+                pressed={skipDead}
+                onClick={() => setSkipDead((v) => !v)}
+              >
+                {skipDead ? (
+                  <Timer {...ICON} aria-hidden="true" />
+                ) : (
+                  <TimerOff {...ICON} aria-hidden="true" />
+                )}
+              </Glyph>
 
-              <button
-                type="button"
+              <ChromeTooltip label="Playback speed" side="top">
+                <button
+                  type="button"
+                  aria-label={`Playback speed, ${rate}×`}
+                  onClick={cycleRate}
+                  className="mono cursor-pointer rounded-[2px] text-[10px] font-medium text-white/85 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                >
+                  {rate}×
+                </button>
+              </ChromeTooltip>
+
+              <Glyph
+                label={
+                  looping ? "Loop this point — on" : "Loop this point — off"
+                }
+                pressed={looping}
+                onClick={() => setLooping((v) => !v)}
+              >
+                {looping ? (
+                  <Repeat {...ICON} aria-hidden="true" />
+                ) : (
+                  <RepeatOff {...ICON} aria-hidden="true" />
+                )}
+              </Glyph>
+
+              <Glyph
+                label={muted ? "Sound — off" : "Sound — on"}
+                pressed={!muted}
                 onClick={toggleMute}
-                aria-label={muted ? "Unmute" : "Mute"}
-                className={GLYPH}
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                  className="block h-full w-full"
-                >
-                  <polygon
-                    points="3 9 7 9 12 5 12 19 7 15 3 15"
-                    fill="currentColor"
-                    stroke="none"
-                  />
-                  {muted ? (
-                    <>
-                      <line x1="16" y1="9" x2="22" y2="15" />
-                      <line x1="22" y1="9" x2="16" y2="15" />
-                    </>
-                  ) : (
-                    <>
-                      <path d="M16 9a4 4 0 0 1 0 6" />
-                      <path d="M19 6.5a8 8 0 0 1 0 11" />
-                    </>
-                  )}
-                </svg>
-              </button>
+                {muted ? (
+                  <VolumeOff {...ICON} aria-hidden="true" />
+                ) : (
+                  <Volume2 {...ICON} aria-hidden="true" />
+                )}
+              </Glyph>
 
-              <button
-                type="button"
+              <Glyph
+                label="Open the film room fullscreen"
                 onClick={onEnterFullscreen}
-                aria-label="Open the film room fullscreen"
-                className={GLYPH}
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                  className="block h-full w-full"
-                >
-                  <polyline points="4 9 4 4 9 4" />
-                  <polyline points="20 9 20 4 15 4" />
-                  <polyline points="4 15 4 20 9 20" />
-                  <polyline points="20 15 20 20 15 20" />
-                </svg>
-              </button>
-
-              <InertGlyph label="More playback options">
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                  className="block"
-                >
-                  <circle
-                    cx="12"
-                    cy="5"
-                    r="1.4"
-                    fill="rgba(255,255,255,0.85)"
-                  />
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="1.4"
-                    fill="rgba(255,255,255,0.85)"
-                  />
-                  <circle
-                    cx="12"
-                    cy="19"
-                    r="1.4"
-                    fill="rgba(255,255,255,0.85)"
-                  />
-                </svg>
-              </InertGlyph>
+                <Maximize {...ICON} aria-hidden="true" />
+              </Glyph>
             </div>
           </div>
         </div>

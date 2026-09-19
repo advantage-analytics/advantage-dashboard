@@ -4,14 +4,17 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Bookmark, PanelRightClose } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
+import type { Workspace } from "@/lib/workspace/types";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { cn } from "@/lib/utils";
 
 import { FilmAdvancedFiltersDialog } from "./film-advanced-filters-dialog";
 import { describeFilmCut, lastNameOf, type FilmFilters } from "./film-filters";
 import { FilmQuickFilters } from "./film-quick-filters";
 import { filmProgressWidth } from "./film-clock";
-import { absolutize, serverFirstScore, youFirst } from "./film-score";
+import { serverFirstScore, youFirstScore } from "./film-score";
 import { shotLabel, type ShotStop } from "./film-shots";
 
 /**
@@ -68,18 +71,6 @@ interface GameGroup {
   points: MatchPoint[];
 }
 
-/** A server-first score string read you-first, en-dashed for a header. */
-function youFirstScore(
-  serverFirst: string,
-  serverIsPlayer1: boolean,
-  youIsPlayer1: boolean,
-): string | null {
-  const pair = absolutize(serverFirst, serverIsPlayer1);
-  if (!pair) return null;
-  const [you, opp] = youFirst(pair, youIsPlayer1);
-  return `${you}\u2013${opp}`;
-}
-
 export function FilmPointPanel({
   allPoints,
   visiblePoints,
@@ -105,6 +96,9 @@ export function FilmPointPanel({
   const youIsPlayer1 = sides.you.isPlayer1;
   const youName = sides.you.name;
   const oppName = sides.opp.name;
+  // The room is a portal on `body`, but context crosses portals: the same
+  // workspace mark the report list draws leads the viewer's rows here too.
+  const { active: workspace } = useWorkspace();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [showShots, setShowShots] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -348,6 +342,13 @@ export function FilmPointPanel({
                 <PanelRow
                   key={point.id}
                   point={point}
+                  isYou={(point.player === "player1") === youIsPlayer1}
+                  initials={
+                    (point.player === "player1") === youIsPlayer1
+                      ? sides.you.initials
+                      : sides.opp.initials
+                  }
+                  workspace={workspace}
                   score={
                     columns.hasPointScore
                       ? serverFirstScore(point.pointScore)
@@ -396,6 +397,9 @@ export function FilmPointPanel({
  */
 const PanelRow = memo(function PanelRow({
   point,
+  isYou,
+  initials,
+  workspace,
   score,
   isActive,
   activeStart,
@@ -404,6 +408,11 @@ const PanelRow = memo(function PanelRow({
   onToggleSaved,
 }: {
   point: MatchPoint;
+  /** Whether the viewer hit the point's last shot (`point.player`, via `useMatchSides`). */
+  isYou: boolean;
+  initials: string;
+  /** The active workspace, whose mark leads the viewer's own rows. */
+  workspace: Pick<Workspace, "kind" | "mark" | "iconUrl">;
   score: string | null;
   isActive: boolean;
   activeStart: number;
@@ -431,23 +440,41 @@ const PanelRow = memo(function PanelRow({
         }
       }}
       className={cn(
-        "group/row relative flex h-11 items-center gap-2.5 px-4 transition-colors duration-200",
+        // Sized as the report list's row (point-list.tsx `PointRow`): 52px
+        // minimum, 30px mark, 12/11px text — one row, two treatments.
+        "group/row relative flex min-h-[52px] items-center gap-3 px-4 py-1.5 transition-colors duration-200",
         seekable
           ? "cursor-pointer hover:bg-white/[0.06] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
           : "cursor-default opacity-45",
         isActive && "bg-white/[0.09]",
       )}
     >
+      {/* Who decided the point: the workspace's mark on the viewer's rows,
+          initials on the opponent's — the report list's chip at the room's
+          22px scale. */}
+      {isYou ? (
+        <WorkspaceMark
+          workspace={workspace}
+          className="size-[30px] rounded-[var(--radius-button)] text-[11px] tracking-[0.3px]"
+        />
+      ) : (
+        <span
+          aria-hidden="true"
+          className="flex size-[30px] shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-white/10 text-[11px] font-medium tracking-[0.3px] text-white/80"
+        >
+          {initials}
+        </span>
+      )}
       <span className="flex min-w-0 flex-col gap-0.5">
         <span
           className={cn(
-            "truncate text-[11px] font-medium",
+            "truncate text-[12px] font-medium",
             isActive ? "text-white" : "text-white/[0.88]",
           )}
         >
           {point.resultType || "Point"}
         </span>
-        <span className="truncate text-[10px] text-white/45">
+        <span className="truncate text-[11px] text-white/45">
           {point.description}
         </span>
       </span>
@@ -455,7 +482,12 @@ const PanelRow = memo(function PanelRow({
       {score && (
         <span
           className={cn(
-            "mono tabular inline-block text-[11px] transition-transform duration-200 motion-safe:group-focus-within/row:-translate-x-[26px] motion-safe:group-hover/row:-translate-x-[26px]",
+            "mono tabular inline-block text-[11px] transition-transform duration-200",
+            // A saved point's bookmark stays lit, so its score stays aside
+            // for it instead of sliding back under it when the hover ends.
+            point.saved
+              ? "-translate-x-[26px]"
+              : "motion-safe:group-focus-within/row:-translate-x-[26px] motion-safe:group-hover/row:-translate-x-[26px]",
             isActive ? "text-white" : "text-white/60",
           )}
         >

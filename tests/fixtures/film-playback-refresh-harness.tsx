@@ -1,10 +1,12 @@
 import { createRoot } from "react-dom/client";
 
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
+import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
 import { FilmTab } from "@/components/dashboard/matches/match-detail/film/film-tab";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
 import type { Match } from "@/lib/data/types";
+import type { WorkspaceContextValue } from "@/lib/workspace/types";
 
 import type { FilmRefreshHarnessWindow } from "./film-playback-refresh-window";
 
@@ -79,6 +81,48 @@ function point(
 }
 
 /** Three timed points and one the source never timed, which has no stop. */
+/**
+ * A personal workspace, because the Film subtree now reads one.
+ *
+ * `PointList` and "This point" lead the viewer's own rows with the workspace's
+ * mark, so both call `useWorkspace()`, which THROWS without a provider — in the
+ * app `dashboard/layout.tsx` supplies it. Nothing here asserts on the mark; the
+ * provider is present so the tree renders at all.
+ */
+const WORKSPACE: WorkspaceContextValue = {
+  active: {
+    id: "viewer-1",
+    kind: "personal",
+    name: "Personal",
+    team: null,
+    orgType: null,
+    timeZone: "UTC",
+    role: "owner",
+    mark: "CG",
+    iconUrl: null,
+    canSubmitVideo: true,
+    programStatus: null,
+    playersCanUpload: true,
+    memberUploadEnabled: true,
+    uploadPolicy: "everyone",
+    eventsPolicy: "owner",
+    myPlayerId: null,
+  },
+  available: [],
+  viewer: {
+    id: "viewer-1",
+    email: "viewer@example.com",
+    name: "Viewer",
+    firstName: "Viewer",
+    initials: "CG",
+    avatarUrl: null,
+    plan: "free",
+    role: null,
+    memberSince: null,
+    onboardedAt: null,
+  },
+};
+
 const POINTS: MatchPoint[] = [
   point("a", 1.7),
   point("b", 1.85, { pointNumber: 2, resultType: "Ace" }),
@@ -142,13 +186,15 @@ function boot() {
   harness.unmount = () => root.unmount();
 
   root.render(
-    <MatchDataProvider
-      match={match(matchId)}
-      statsResult={null}
-      points={POINTS}
-    >
-      <FilmTab video={video} />
-    </MatchDataProvider>,
+    <WorkspaceProvider value={WORKSPACE}>
+      <MatchDataProvider
+        match={match(matchId)}
+        statsResult={null}
+        points={POINTS}
+      >
+        <FilmTab video={video} />
+      </MatchDataProvider>
+    </WorkspaceProvider>,
   );
 
   document.documentElement.dataset.hydrated = "true";

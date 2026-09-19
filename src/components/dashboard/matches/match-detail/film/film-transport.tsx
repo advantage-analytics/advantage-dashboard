@@ -12,18 +12,16 @@ import {
   SkipBack,
   SkipForward,
   Timer,
+  TimerOff,
   Volume2,
-  VolumeX,
+  VolumeOff,
 } from "lucide-react";
 
 import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { cn } from "@/lib/utils";
 
+import { RepeatOff } from "./film-glyphs";
 import { FilmTrack } from "./film-track";
 import type { TrackSegment } from "./film-timeline";
 
@@ -33,36 +31,40 @@ export const PLAYBACK_RATES = [0.5, 1, 1.5, 2] as const;
 const GLYPH =
   "block h-[15px] w-[15px] cursor-pointer rounded-[2px] text-white/85 transition-opacity duration-200 hover:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-default disabled:opacity-35";
 
-/** An icon-only control: `aria-label` plus the dark tooltip, always. */
+/**
+ * An icon-only control: `aria-label` plus the design system's dark tooltip
+ * (`ChromeTooltip`, the one every icon-only control in the shell answers
+ * hover with), always — with the key that does the same thing where there
+ * is one.
+ */
 function Glyph({
   label,
+  shortcut,
   pressed,
   disabled,
   onClick,
   children,
 }: {
   label: string;
+  shortcut?: string;
   pressed?: boolean;
   disabled?: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          aria-pressed={pressed}
-          disabled={disabled}
-          onClick={onClick}
-          className={cn(GLYPH, pressed && "text-white")}
-        >
-          {children}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top">{label}</TooltipContent>
-    </Tooltip>
+    <ChromeTooltip label={label} shortcut={shortcut} side="top">
+      <button
+        type="button"
+        aria-label={label}
+        aria-pressed={pressed}
+        disabled={disabled}
+        onClick={onClick}
+        className={cn(GLYPH, pressed && "text-white")}
+      >
+        {children}
+      </button>
+    </ChromeTooltip>
   );
 }
 
@@ -98,8 +100,15 @@ export interface FilmTransportProps {
 /**
  * The bottom block of the fullscreen frame (handoff F1): title row, the
  * break-of-serve track, then the control row. Every glyph is 15px at 85%
- * white 18px apart; Save point is the one filled control. Text shadows are
+ * white 18px apart; Save point fills once the point is saved, and nothing
+ * else is filled. Text shadows are
  * off — the scrim under this block carries the contrast.
+ *
+ * Every toggle reads its state the same way here and in the tab's player
+ * (`film-player.tsx`): the plain glyph when on, Lucide's slashed variant when
+ * off — `TimerOff`, `VolumeOff`, and `RepeatOff` from `film-glyphs.tsx` for
+ * the one the library lacks. Labels follow: "Loop this point — on/off",
+ * "Skip dead time — on/off", "Sound — on/off".
  */
 export function FilmTransport(p: FilmTransportProps) {
   return (
@@ -167,7 +176,11 @@ export function FilmTransport(p: FilmTransportProps) {
       />
 
       <div className="flex h-10 items-center gap-[18px]">
-        <Glyph label={p.playing ? "Pause" : "Play"} onClick={p.onTogglePlay}>
+        <Glyph
+          label={p.playing ? "Pause" : "Play"}
+          shortcut="space"
+          onClick={p.onTogglePlay}
+        >
           {p.playing ? (
             <Pause
               className="h-full w-full"
@@ -186,6 +199,7 @@ export function FilmTransport(p: FilmTransportProps) {
         </Glyph>
         <Glyph
           label="Previous point"
+          shortcut="←"
           disabled={!p.canStep}
           onClick={() => p.onStep(-1)}
         >
@@ -198,6 +212,7 @@ export function FilmTransport(p: FilmTransportProps) {
         </Glyph>
         <Glyph
           label="Next point"
+          shortcut="→"
           disabled={!p.canStep}
           onClick={() => p.onStep(1)}
         >
@@ -214,24 +229,20 @@ export function FilmTransport(p: FilmTransportProps) {
 
         <div className="flex-1" />
 
-        <button
-          type="button"
-          aria-pressed={p.saved ?? false}
+        <Glyph
+          label={p.saved ? "Saved — remove bookmark" : "Save point"}
+          shortcut="S"
+          pressed={p.saved === true}
           disabled={p.saved === null}
           onClick={p.onToggleSaved}
-          className="inline-flex h-7 cursor-pointer items-center gap-[7px] rounded-[var(--radius-button)] bg-white/[0.14] px-[11px] text-[11px] font-medium text-white transition-colors duration-200 hover:bg-white/[0.22] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-default disabled:opacity-45"
         >
           <Bookmark
-            className="h-3.5 w-3.5"
+            className="h-full w-full"
             strokeWidth={1.6}
             fill={p.saved ? "currentColor" : "none"}
             aria-hidden="true"
           />
-          {p.saved ? "Saved" : "Save point"}
-          <span className="mono text-[10px] text-white/60" aria-hidden="true">
-            S
-          </span>
-        </button>
+        </Glyph>
 
         <Glyph
           label={
@@ -240,42 +251,59 @@ export function FilmTransport(p: FilmTransportProps) {
           pressed={p.skippingDeadTime}
           onClick={p.onToggleSkipDeadTime}
         >
-          <Timer
-            className="h-full w-full"
-            strokeWidth={1.6}
-            aria-hidden="true"
-          />
+          {p.skippingDeadTime ? (
+            <Timer
+              className="h-full w-full"
+              strokeWidth={1.6}
+              aria-hidden="true"
+            />
+          ) : (
+            <TimerOff
+              className="h-full w-full"
+              strokeWidth={1.6}
+              aria-hidden="true"
+            />
+          )}
         </Glyph>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-label={`Playback speed, ${p.rate}×`}
-              onClick={p.onCycleRate}
-              className="mono cursor-pointer rounded-[2px] text-[11px] font-medium text-white/85 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-            >
-              {p.rate}×
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top">Playback speed</TooltipContent>
-        </Tooltip>
+        <ChromeTooltip label="Playback speed" side="top">
+          <button
+            type="button"
+            aria-label={`Playback speed, ${p.rate}×`}
+            onClick={p.onCycleRate}
+            className="mono cursor-pointer rounded-[2px] text-[11px] font-medium text-white/85 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          >
+            {p.rate}×
+          </button>
+        </ChromeTooltip>
 
         <Glyph
-          label={p.looping ? "Stop looping this point" : "Loop this point"}
+          label={p.looping ? "Loop this point — on" : "Loop this point — off"}
           pressed={p.looping}
           onClick={p.onToggleLoop}
         >
-          <Repeat
-            className="h-full w-full"
-            strokeWidth={1.6}
-            aria-hidden="true"
-          />
+          {p.looping ? (
+            <Repeat
+              className="h-full w-full"
+              strokeWidth={1.6}
+              aria-hidden="true"
+            />
+          ) : (
+            <RepeatOff
+              className="h-full w-full"
+              strokeWidth={1.6}
+              aria-hidden="true"
+            />
+          )}
         </Glyph>
 
-        <Glyph label={p.muted ? "Unmute" : "Mute"} onClick={p.onToggleMute}>
+        <Glyph
+          label={p.muted ? "Sound — off" : "Sound — on"}
+          pressed={!p.muted}
+          onClick={p.onToggleMute}
+        >
           {p.muted ? (
-            <VolumeX
+            <VolumeOff
               className="h-full w-full"
               strokeWidth={1.6}
               aria-hidden="true"
@@ -298,26 +326,21 @@ export function FilmTransport(p: FilmTransportProps) {
         </Glyph>
 
         {/* Drawn on the handoff, defined nowhere. Inert and says so. */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-disabled="true"
-              aria-label="More — not available yet"
-              onClick={(e) => e.preventDefault()}
-              className="block h-[15px] w-[15px] cursor-default rounded-[2px] text-white/85 opacity-45 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-            >
-              <MoreVertical
-                className="h-full w-full"
-                strokeWidth={1.6}
-                aria-hidden="true"
-              />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            More isn&rsquo;t wired up yet
-          </TooltipContent>
-        </Tooltip>
+        <ChromeTooltip label="More" detail="Not wired up yet" side="top">
+          <button
+            type="button"
+            aria-disabled="true"
+            aria-label="More — not available yet"
+            onClick={(e) => e.preventDefault()}
+            className="block h-[15px] w-[15px] cursor-default rounded-[2px] text-white/85 opacity-45 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          >
+            <MoreVertical
+              className="h-full w-full"
+              strokeWidth={1.6}
+              aria-hidden="true"
+            />
+          </button>
+        </ChromeTooltip>
       </div>
     </div>
   );

@@ -101,6 +101,23 @@ export function youFirst(
     : [pair.player2, pair.player1];
 }
 
+/**
+ * A server-first score string read you-first, en-dashed, for a game header
+ * that sits under the viewer's name — the room's panel and the report's list
+ * both draw it, so it lives here rather than in either. Null when the string
+ * is not a score.
+ */
+export function youFirstScore(
+  serverFirst: string,
+  serverIsPlayer1: boolean,
+  youIsPlayer1: boolean,
+): string | null {
+  const pair = absolutize(serverFirst, serverIsPlayer1);
+  if (!pair) return null;
+  const [you, opp] = youFirst(pair, youIsPlayer1);
+  return `${you}–${opp}`;
+}
+
 function asGames(value: string): number | null {
   const n = Number(value);
   return Number.isInteger(n) && n >= 0 ? n : null;

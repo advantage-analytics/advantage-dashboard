@@ -115,7 +115,7 @@ export interface FilmFullscreenProps {
   initial: { time: number; playing: boolean };
   /** Every timed point on the film clock — the board, the track, the playing row. */
   stops: FilmStop[];
-  /** The applied cut on the film clock — what ↑↓ and prev/next walk. */
+  /** The applied cut on the film clock — what ← → and prev/next walk. */
   walkStops: FilmStop[];
   columns: BoardColumns;
   allPoints: MatchPoint[];
@@ -651,19 +651,19 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
           break;
         case "ArrowRight":
           e.preventDefault();
-          seek((videoRef.current?.currentTime ?? 0) + 5);
+          step(1);
           break;
         case "ArrowLeft":
           e.preventDefault();
-          seek((videoRef.current?.currentTime ?? 0) - 5);
+          step(-1);
           break;
         case "ArrowDown":
           e.preventDefault();
-          step(1);
+          seek((videoRef.current?.currentTime ?? 0) + 5);
           break;
         case "ArrowUp":
           e.preventDefault();
-          step(-1);
+          seek((videoRef.current?.currentTime ?? 0) - 5);
           break;
         case "s":
         case "S":
