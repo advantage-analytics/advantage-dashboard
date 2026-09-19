@@ -213,7 +213,7 @@ contract and stops for review.
 
 ## T14 · Implement retryable attachment cleanup worker
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T7, T10, T13
 - **files:** Best guess: src/lib/services/match-video/cleanup.ts; tests/match-video-cleanup.spec.ts (new)

@@ -617,3 +617,49 @@ was left with zero fixture rows.
    sweep once the table grows; T2's `cleanup_due_idx` only covers `state = 'retired'`.
 2. The claim holds up to 50 match locks until commit. If that ever contends with live uploads,
    T14 can sweep in smaller batches — `p_limit = 10` in a loop — without any SQL change.
+
+## T14 · Implement retryable attachment cleanup worker — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** New `src/lib/services/match-video/cleanup.ts` consumes T13's claims — it never
+re-derives eligibility, which stays in SQL. One claim per run with a fresh worker token, drained
+through a four-lane pool; `CLEANUP_CONCURRENCY = 4` because a 50-row batch is then about thirteen
+rounds of a handful of cheap calls, finishing well inside the fifteen-minute lease, and an outage
+trickles 50 rows into backoff rather than bursting. The bound is enforced by a shared-queue pool,
+not merely declared: a test asserts `maxConcurrent` stays at or below 4 while exceeding 1 under
+real async interleaving. Two entry points, `runMatchVideoCleanup` for T15's cron and
+`requestBestEffortCleanup` for T16's replacement path, both over the same worker.
+
+The copy race is the dangerous failure here — a copy still running can recreate a final blob just
+deleted, leaving an untracked object nobody will ever collect. The worker aborts before deleting,
+and if a delete still reports a pending copy (reachable after a lost response left a new copy id
+unpersisted) it HEADs the destination, aborts the id actually in flight, and deletes once more; a
+copy surviving both is failed with a ten-minute retry rather than worked around. The proof is
+real: the fake container holds copy bytes in an in-flight map and only writes them in an explicit
+`settleCopies()` the test calls _after_ the worker returns, so a recreated blob would be visible.
+Three cases — the ordinary race, the same race with the backend's 409 disabled (so the guarantee
+demonstrably comes from the worker's ordering, not Azure's refusal), and the stale-copy-id
+discovery — all settle to nothing at the key.
+
+An active row's final key is protected three ways: T13 returns `collect_final: false`, the worker
+independently refuses a final delete for any non-retired state, and it always sends
+`collected_final: false` so the SQL's `active_final_collected` raise can never fire. A "lying
+claim" test rewrites the flag to true on an active row and the object survives untouched. A row
+closes only when every tracked object is gone; partial deletion keeps the keys and the retry
+metadata. A 404 from delete is success, since the object being absent is the desired end state.
+
+`tests/match-video-cleanup.spec.ts` holds 22 cases; 45 pass across the three specs checked.
+
+**follow-ups:**
+
+1. T15 should call `runMatchVideoCleanup(productionCleanupDeps(createAdminClient()), { reason:
+"cron" })` and treat a rejected promise as its own 500; `claimError` on the summary is the
+   "ran but the database refused" signal.
+2. T16 can fire `void requestBestEffortCleanup(deps, { reason: \`replace:${matchId}\` })` after
+   activation or cancel. Expect the just-retired row to stay held until its upload SAS plus five
+   minutes passes, so that immediate run mostly collects _other_ due rows — by design, not a bug.
+3. `rpcFailure` maps SQLSTATE `P0002` (row deleted between claim and settle) to a retryable
+   failure. Harmless, but T15 may want to count it separately in logs.
+4. `storage.ts`'s `isRestStatus` is duplicated inline in `pendingCopyAt`; exporting it from T7
+   would remove the second `RestError` import.

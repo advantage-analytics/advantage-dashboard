@@ -54,6 +54,9 @@ const SERVER_ONLY = [
   // mints the read-only SAS through `storage.ts`. A player asks it over HTTP
   // and gets back a URL; it never imports the signer.
   "lib/services/match-video/playback.ts",
+  // T14: the cleanup worker deletes blobs through `storage.ts` and settles
+  // rows through the service-role RPCs. Nothing in a browser ever sweeps.
+  "lib/services/match-video/cleanup.ts",
 ].map((p) => join(SRC, p));
 
 const EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];
