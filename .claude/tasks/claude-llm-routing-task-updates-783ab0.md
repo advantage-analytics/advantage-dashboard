@@ -137,7 +137,7 @@ contract and stops for review.
 
 ## T8 · Authorize and prepare attachment uploads
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1, T3, T7
 - **files:** Best guess: src/lib/services/match-video/access.ts and uploads.ts; src/app/api/matches/[matchId]/video/uploads/route.ts; tests/match-video-upload-handlers.spec.ts (new)

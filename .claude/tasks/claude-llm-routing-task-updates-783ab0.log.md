@@ -318,3 +318,59 @@ holds videos" definition as exactly the drift it exists to clean up.
    private behind the public `beginCopyFromURL`. Worth a note if `@azure/storage-blob` is bumped.
 3. The 1-hour source-SAS TTL assumes a same-account copy finishes well inside it; T10 could
    surface `bytesCopied`/`bytesTotal` if a copy ever approaches that.
+
+## T8 · Authorize and prepare attachment uploads — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** New `src/lib/services/match-video/access.ts` is the shared helper T9–T12 will all
+call: `authorizeMatchVisibility` for reads and `authorizeMatchVideoMutation` for writes, in a
+fixed order — sign-in, then UUID shape (refused before any read), then an RLS-scoped read through
+the _caller's own_ client so the database decides visibility, then creator, then `swing-vision`
+provenance, then the exact active workspace. A personal match requires the personal workspace
+whose id is the actor; a team match requires the team workspace for that exact program. The
+detail slugs match T3's SQL so the HTTP and database layers agree.
+
+Supporting modules: `http.ts` (same-origin check, a 4 KiB bounded stream reader instead of
+`request.json()`, and `private, no-store` stamped on every response) and `rpc-errors.ts`
+(SQLSTATE plus the `MatchVideoErrorCode` the RPCs raise as the message → HTTP status). That
+closes T4's open question: status comes from the code in the message, so `22000` is 422 for
+timing and alignment failures and 413 for size ones, while `23505` is a 409 backstop, `40001`
+and `40P01` are retryable, and anything unrecognised is a logged 500 rather than a guess.
+`uploads.ts` and the single POST route do preparation: origin, auth, bounded body, strict parse,
+access, reserve via T3, then mint.
+
+No caller-supplied authority is enforced by the type system, not by validation alone.
+`MatchVideoMutationAccess` is branded with a `unique symbol` that `access.ts` never exports, so a
+request body cannot produce one, and the reserve call reads actor, workspace and match id only
+off that branded value. The parser additionally refuses unknown keys _by name_; the spec walks
+21 forged fields — `attachmentId`, `stagedBlobKey`, `uploadUrl`, `container`, `offsetSeconds`,
+`workspaceId`, `userId` among them — and one test inspects the actual RPC call to confirm the
+arguments equal the session and switcher fakes.
+
+Ordering is right for the failure case: the expiry is persisted before the SAS is minted, and
+`mintAttachmentUploadCredential` gained a `notAfter` option so the credential cannot outlive the
+recorded window. A signer failure therefore leaves a usable reservation rather than a minted but
+unrecorded credential, and a same-request retry gets its credential — tested.
+
+`tests/match-video-upload-handlers.spec.ts` holds 60 injected-handler cases. Every denial asserts
+from an event log that neither `reserve` nor the credential minter was ever called and the store
+is empty, rather than only checking a status code. T3's precedence is honoured and pinned: a
+stale expected-active on a retried request id answers `stale_attachment`, not
+`pending_attempt_conflict`.
+
+Out-of-`files:` edits, each judged required by the reviewer: `types.ts` gained an
+`isMatchVideoErrorCode` guard that `rpc-errors.ts` consumes; `storage.ts` gained the `notAfter`
+option criterion 2 needs; `MAP.md` gained the route line this repo's `npm run map` convention
+requires; `client-bundle-boundary.spec.ts` gained the three new server-only modules.
+
+**follow-ups:**
+
+1. T9–T12 should reuse `matchVideoAccessDeps()`, `checkSameOrigin`, `readBoundedJson`,
+   `errorResponse` and `matchVideoRpcError` rather than re-deriving any of it. The
+   `internal_error` fallback in `rpcReserveUpload` is the template.
+2. Content-type validation accepts any plausible MIME token because browsers report `""` for
+   `.mkv`. The wizard (T17/T18) must substitute a type from the extension before calling, or the
+   server answers 400 `content_type_format`.
+3. `checkSameOrigin` refuses any request without an `Origin` header. A non-browser client — a
+   Playwright `request` smoke test, say — must set it explicitly. Worth knowing at T27.

@@ -193,6 +193,19 @@ const ERROR_SPECS: Record<
   },
 };
 
+/**
+ * Whether a string is one of the stable codes — the guard the RPC wrappers
+ * use, because the SQL functions raise the code AS the exception message.
+ */
+export function isMatchVideoErrorCode(
+  value: unknown,
+): value is MatchVideoErrorCode {
+  return (
+    typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(ERROR_SPECS, value)
+  );
+}
+
 export function matchVideoError(
   code: MatchVideoErrorCode,
   detail: string,

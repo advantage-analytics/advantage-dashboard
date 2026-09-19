@@ -252,19 +252,40 @@ export interface AttachmentPlaybackCredential {
  * Takes the ROW, not a key. The staged key is read from `staged_blob_key`
  * through {@link stagedBlobOf}; there is no argument through which the final
  * key — or any other name — could be signed for writing.
+ *
+ * `notAfter` (T8) is the expiry the database has ALREADY recorded for this
+ * attempt. The credential is cut to end at or before it — never after — so
+ * `upload_sas_expires_at` is never behind a live credential, which is what the
+ * cleanup worker relies on to know when a staged key stops being writable.
+ * A recorded expiry that has already passed is refused rather than signed
+ * for zero seconds.
  */
 export function mintAttachmentUploadCredential(
   row: AttachmentStorageRow,
+  options: { notAfter?: Date } = {},
 ): MatchVideoResult<AttachmentUploadCredential> {
   const staged = stagedBlobOf(row);
   if (!staged.ok) return staged;
   if (row.staged_blob_key === row.final_blob_key) {
     return fail("storage_unavailable", "keys_not_distinct");
   }
+  let ttlSeconds = ATTACHMENT_UPLOAD_SAS_TTL_SECONDS;
+  if (options.notAfter) {
+    // Floor, then one more second off: the signer stamps its own `Date.now()`
+    // a tick after this one, and a SAS expiry is serialised to whole seconds.
+    // Both round the wrong way for "never after"; the extra second covers them.
+    const remaining = Math.floor(
+      (options.notAfter.getTime() - Date.now()) / 1000,
+    );
+    ttlSeconds = Math.min(ttlSeconds, remaining - 1);
+    if (ttlSeconds <= 0) {
+      return fail("storage_unavailable", "upload_window_closed");
+    }
+  }
   try {
     const { uploadUrl, expiresAt } = mintUploadSas({
       blobName: staged.value.blobName,
-      ttlSeconds: ATTACHMENT_UPLOAD_SAS_TTL_SECONDS,
+      ttlSeconds,
     });
     return ok({ uploadUrl, expiresAt });
   } catch (cause) {

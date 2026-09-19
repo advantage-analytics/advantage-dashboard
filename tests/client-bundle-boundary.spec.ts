@@ -34,6 +34,14 @@ const SERVER_ONLY = [
   // key and mints the copy's source-read credential. The wizard needs the
   // pure contracts in `lib/match-video/`, never this.
   "lib/services/match-video/storage.ts",
+  // T8: the attachment routes' decision modules. `access.ts` is where the
+  // session, RLS read and active workspace are turned into the branded
+  // authorization every RPC wrapper takes; `uploads.ts` reaches `storage.ts`
+  // and the service-role RPC; `http.ts` is their shared edge. None of them
+  // has any business in a browser — the wizard speaks to them over HTTP.
+  "lib/services/match-video/access.ts",
+  "lib/services/match-video/http.ts",
+  "lib/services/match-video/uploads.ts",
 ].map((p) => join(SRC, p));
 
 const EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];
