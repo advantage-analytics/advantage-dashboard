@@ -1493,3 +1493,43 @@ and the orphan sweeper both move to a "closed" section, the sweeper because it
 was fixed on its own branch (PR #232). Remaining gates are Azure CORS from a real
 browser, `CRON_SECRET` in Vercel, and Vercel's own `AZURE_STORAGE_*` values,
 which are set separately from `.env.local`.
+
+## Deployment gates — CORS verified, Vercel environment configured
+
+Appended after the drain. No task re-run; the queue stays `done`.
+
+Azure CORS on `advantagedashboardca` was checked against what the transport
+actually sends rather than against general guidance, and covers it: PUT and
+OPTIONS for the block upload and the block-list commit, `content-type` and
+`x-ms-blob-content-type` for the commit's headers, all four origins. Added
+`x-ms-error-code` to `ExposedHeaders` so a failed upload carries Azure's code
+into the browser — diagnostics only, since every retry, renewal and
+credential-refresh decision branches on the numeric status, which is always
+readable. Two things that look like gaps and are not, now written into §4 so
+nobody "fixes" them: playback never consults CORS because no player sets
+`crossOrigin`, and `DELETE` is absent because cancellation goes to this app's
+API rather than to Azure.
+
+Vercel now has `AZURE_STORAGE_ACCOUNT` and `AZURE_STORAGE_KEY` naming
+`advantagedashboardca` in both Production and Preview, `AZURE_STORAGE_CONTAINER`
+left alone (already correct on that account), and `CRON_SECRET` set for
+Production. That last one is worth noting: it had existed only for Preview,
+which is the environment Vercel crons never run in — so the schedule would have
+refused every call while appearing configured.
+
+Two operational lessons, both now in the doc, both learned the slow way here:
+
+1. `vercel env add` takes `--force` and `--yes`. Preview prompts for a git
+   branch and Production does not, and piping a value cannot answer that prompt
+   because the CLI reads _all_ of stdin as the value — a `\n\n` trick only
+   produces `! Value contains newlines`. I handed over three `rm`-then-`add`
+   variants before reading `--help`, and each failed attempt left the variable
+   absent because the `rm` had already succeeded. `--force` makes the operation
+   idempotent and removes the window entirely; it was the right tool from the
+   start.
+2. `az storage cors add` appends rather than edits, and Azure evaluates rules in
+   order, so updating means `clear` then `add`.
+
+Remaining gates are now only things that cannot be done from a terminal: a
+redeploy (Vercel binds env at build time, so production still runs the old
+values), the first real browser preflight, and the first production cron fire.

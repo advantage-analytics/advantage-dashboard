@@ -263,26 +263,38 @@ commits, and the row is eligible in any state once its match is gone.
 
 ## 7. Open deployment gates
 
-None of these are code changes; all are steps someone with access to Vercel,
-Azure, and this repo's live database needs to take before or shortly after
-this ships to production. Do not read the tests passing locally as evidence
-any of these are done — they are not.
+None of these are code changes. Do not read the tests passing locally as
+evidence any of them are done.
 
-1. **A real browser preflight**, per §4 above. The rule on
+1. **A redeploy.** Vercel binds environment variables at build time, so the
+   running Production deployment still carries the values it was built with —
+   the westus2 account, and no `CRON_SECRET`. Everything in the closed list
+   below takes effect on the next build and not before.
+2. **A real browser preflight**, per §4 above. The rule on
    `advantagedashboardca` is correct for this transport, but every check so far
    has been from Node, which sends no preflight. The first upload from
    `localhost:3000` or a deployed origin settles it — and a CORS failure looks
    exactly like a network outage, so check this before chasing anything else.
-2. **`CRON_SECRET`**, per §3 above — not set in Vercel for any environment.
-   `vercel.json`'s schedule is already committed and correct; only the
-   secret is missing. Until it is set, the cleanup route refuses every call
-   (fail-closed, by design) and storage grows unbounded.
-3. **Vercel's own `AZURE_STORAGE_*` values** must name `advantagedashboardca`
-   and carry that account's key. Local `.env.local` now does (see below), but
-   the two are set separately — a deploy still reading the westus2 account
-   would fail every upload with `AuthenticationFailed`.
+3. **The first cron fire.** `vercel.json` schedules 05:00 UTC; the secret is
+   now set, but no sweep has run in production yet. The first one is worth
+   watching in the function logs — §5 describes what a healthy run logs.
 
 ### Closed since this document was first written
+
+- **Vercel environment variables.** `AZURE_STORAGE_ACCOUNT` and
+  `AZURE_STORAGE_KEY` now name `advantagedashboardca` and carry its key in both
+  Production and Preview; `AZURE_STORAGE_CONTAINER` was already
+  `advantage-videos` on that account and was deliberately left alone.
+  `CRON_SECRET` is set for Production — it had existed only for Preview, which
+  is the environment Vercel crons never run in, so the schedule would have
+  refused every call while looking configured.
+
+  Use `vercel env add … --force --yes` to change one. `--force` replaces in
+  place, and `--yes` accepts the default for the **Preview-only git-branch
+  prompt** — Preview asks which branch, Production does not. Without those
+  flags the obvious `rm`-then-`add` shape leaves the variable absent whenever
+  the second half does not complete, and piping a value cannot answer the
+  prompt because the CLI reads all of stdin as the value.
 
 - **The CORS rule itself.** Checked against the transport's real requests on
   `advantagedashboardca` and correct: `PUT`/`OPTIONS` for the block upload and
