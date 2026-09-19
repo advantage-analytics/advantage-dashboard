@@ -869,3 +869,62 @@ sibling file-step and bundle-boundary specs.
 4. The preview seek clamps to the element's duration, which on the two-second fixture makes the
    assertion weaker than ideal. A longer fixture clip would let the spec assert the exact landing
    position rather than the published target.
+
+## T19 · Implement bounded browser upload transport — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+The widget-states hook blocked the commit twice, neither time for a missed check.
+`attachment-upload.ts` is a pure module with no JSX, and the two `.tsx` files the hook flagged are
+T17's and T18's, both already checked and marked. The receipt went stale because T18's component
+was _untracked_ when its gate was marked — `git diff <base>` does not list untracked files — so
+committing it changed the hash. The second block was my own doing: the hook is a PreToolUse check
+on the command string, so a compound command containing `git commit` is denied before the `mark`
+inside it can run. Marking must be its own call. Verified first that both components still carry
+their loading, empty and error states and that neither has a bare `return null` — the only matches
+are doc comments asserting as much.
+
+**changed:** New `attachment-upload.ts` exports `transferAttachment()`, a plain async helper with
+no hook, no effect and no module-level side effect — so nothing can fire on file selection; T20
+calls it after confirmation. 8 MiB blocks (grown only to respect Azure's 50,000-block ceiling)
+through a four-wide worker pool. The block PUT uses `XMLHttpRequest` deliberately, because `fetch`
+has no upload-progress event: progress is completed bytes plus each in-flight request's own
+`loaded`, monotonically clamped. A test injects a mid-block progress event and asserts a 4 MiB
+reading, which block counting could not produce, and another proves a block that failed at 75% and
+retried cannot walk the bar backwards.
+
+Credentials never leave memory, and the test is not vacuous: it stubs `localStorage`,
+`sessionStorage`, `indexedDB` and a `document.cookie` setter, captures all five console methods,
+forces a renewal so _both_ signatures are in play, asserts neither appears in storage, cookies,
+logs, any first-party URL or body, or the returned result — and then asserts the Azure PUTs _do_
+carry `sig=`, so the assertion can only pass for the right reason. A structural test also scans the
+module's import specifiers; it imports only T1's pure contracts.
+
+Renewal goes through T9's endpoint and cannot loop: a 403 renews once per block, a second 403 on a
+fresh credential is terminal, and four workers hitting 403 together share one single-flight renewal
+guarded by a credential epoch (four rejections, one renew call). Four separate bounded budgets
+cover block attempts, first-party request attempts, transient completion failures and total polls;
+only a null status, 408, 429 or 5xx consumes an attempt, so a 400 is not retried at all.
+
+A lost success response is recovered by replaying _completion_, never by re-uploading: the body is
+serialised once and the same bytes go to the same attachment on every poll, so T10's begin returns
+the already-active row and activation answers `reused`. The test throws on the first poll and
+asserts the block PUT count stayed at three while completion calls went to two. Polls are strictly
+sequential (peak concurrency asserted at 1) because T10 409s a second concurrent poll, and a 202
+waits the advertised interval. On any non-committed exit the module issues the cancel _without_ a
+signal — handing it the signal that just fired would abort the cleanup request itself.
+
+25 new cases; 59 pass across the four specs checked.
+
+**follow-ups for T20:**
+
+1. `transferAttachment` takes an optional `clientRequestId`. T20 should generate one per _logical_
+   attempt and hold it across a user-visible "Try again", so a retry after a lost reservation
+   response finds the same pending attempt rather than colliding with it.
+2. The `aborted: true` result carries `storage_unavailable`/`aborted` only to keep the shape
+   uniform. T20 should branch on `aborted` and render nothing, not that message.
+3. Progress arrives at whatever rate XHR fires; the transport deliberately does not throttle, since
+   it cannot know the UI's needs. T20 owns the throttling the plan asks for.
+4. Worth considering: a `pagehide` handler firing the cancel as a `sendBeacon`. A tab closed
+   mid-upload currently sends no cancellation at all, so the attempt sits pending until its SAS
+   expires — T14 collects it, but slowly.

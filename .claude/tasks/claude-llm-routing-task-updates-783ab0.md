@@ -277,7 +277,7 @@ contract and stops for review.
 
 ## T19 · Implement bounded browser upload transport
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T8, T9, T10
 - **files:** Best guess: src/components/dashboard/matches/match-video-attachment/attachment-upload.ts; tests/match-video-upload-transport.spec.ts (new)
