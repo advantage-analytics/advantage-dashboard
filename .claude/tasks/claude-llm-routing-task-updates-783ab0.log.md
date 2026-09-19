@@ -757,3 +757,66 @@ T14's 44 cases pass unchanged. 67 tests pass across the four specs checked.
 3. The retire-on-claim fence leaves an orphan under a live SAS in `pending` — though unreachable —
    for up to the SAS plus five minutes. Nothing needs it today; a service-role `retire_by_match`
    RPC would close the window if a UI ever wants to show "deleted" immediately.
+
+## T17 · Build the wizard-style attachment file step — done
+
+**gate:** mechanical GATE FAIL then GATE PASS on re-run · completion VERDICT: pass
+
+The first gate run failed T13's own `at most 50 rows per claim` case, which T17 touches in no way.
+Its final assertion requires one of two _concurrent_ claims to come back with a full 50, which only
+holds when that spec's 55 rows are the only eligible ones in the table — under the full parallel
+suite another spec's rows can take the capacity. It passed 42/42 in isolation and the full gate
+passed on re-run. Flaky assertion inherited from T13, not a T17 regression; see follow-up 1.
+
+**changed:** New `src/components/dashboard/matches/match-video-attachment/` holds
+`use-attachment-file.ts` (selection state machine, local verification, content-type substitution)
+and `AttachmentFileStep.tsx`, plus a browser spec and its harness. `trace-route` resolved the real
+wizard file step through `page.tsx` → `UploadMatchFlow` → `UploadWizardSteps` →
+`new-match-wizard/FileStepContent.tsx` — the `processing` branch of `STEP_ORDER_BY_KIND` — and the
+new step reuses that file's actual primitives rather than imitating them: `noteStripCls` and
+`noteIconCls` from its `styles.ts`, `formatFileSize` and `formatTimecode` from its `utils.ts`, and
+its 280px dashed drop-zone geometry, 40px-lead file row, Replace/Remove pair and mono-facts
+subline.
+
+Verification is two-stage: T5's bounded `inspectLocalVideoFile` (extension gate, size gate, then a
+`File.slice` parse) and then a real decode check — `loadedmetadata`, dimensions, a verification
+seek, and `readyState >= HAVE_CURRENT_DATA`. AVI, audio-only, empty, oversized and undecodable
+files each refuse with a T1 error code; no codes were invented. Vendor resolution and FPS gates are
+absent by construction: nothing imports `src/lib/video/probe.ts`, nothing reads either value, and a
+test asserts the copy never states such a requirement.
+
+Stale probes are handled with a generation counter and a per-selection `AbortController`, and
+`onSelectionChange(null)` fires _synchronously before any async work_, so a confirmed alignment is
+void the instant a new file is in play. Object URLs are revoked on every exit path and again in the
+poster's effect cleanup. Two tests prove it from both sides — an abandoned _success_ and an
+abandoned _refusal_, neither of which reaches the screen even after a 500ms grace window.
+
+No upload happens on selection, and the proof is real: the spec attaches its request listener only
+after the harness sets `data-hydrated`, so fixture bytes fetched during boot cannot mask a later
+call, and the only recorded entries are `blob:` URLs from the `<video>` elements.
+
+T8's follow-up is closed here. `contentTypeForFilename()` derives the type from the validated
+extension through a table typed against both `MATCH_VIDEO_EXTENSIONS` and `MATCH_VIDEO_MIME_TYPES`,
+so adding a container without a type is a compile error. A test asserts Chromium really does report
+`""` for the `.mkv` fixture and that the selection still carries `video/x-matroska` — without this
+the reservation would have come back 400 `content_type_format`. The widget-states checklist was run
+and the gate marked; loading, empty and error states are all present with no bare `return null`.
+14 new browser cases, 15 passing with the bundle-boundary spec.
+
+**follow-ups:**
+
+1. T13's `at most 50 rows per claim` assertion is contention-sensitive and will keep failing
+   intermittently in full-suite runs. Scoping the claim to the spec's own marker, or asserting the
+   two claims partition the rows without demanding a full 50, would settle it.
+2. Two decode findings for T19/T20: Chromium does decode the `vp9.mkv` fixture, so `.mkv` is
+   genuinely accepted rather than a paper entry; and the decode gate is codec-dependent, not
+   extension-dependent — a Matroska carrying HEVC is what it actually catches. Safari's stricter
+   decoder list may refuse files Chrome accepts, so a manual pass before launch is worth it.
+3. `inspectLocalVideoFile` takes no `AbortSignal` (T5's API), so an abandoned container parse runs
+   to its own 15-second deadline in the background and is discarded by generation. Correct, but a
+   `signal` parameter on `inspectMedia` would stop an abandoned parse reading immediately — a real
+   saving when someone reselects twice over a large file.
+4. T19's transport should take `AttachmentSelection` whole: it already carries the exact filename,
+   size and content type the reservation body wants, so re-deriving any of them would reopen the
+   `content_type_format` bug from the other side.
+5. `docs/ui-revamp-guardrails.md` §7 says to expect 43 pre-existing lint warnings; the tree is at 36. Minor doc drift.

@@ -251,7 +251,7 @@ contract and stops for review.
 
 ## T17 · Build the wizard-style attachment file step
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1, T5
 - **files:** Best guess: src/components/dashboard/matches/match-video-attachment/AttachmentFileStep.tsx and use-attachment-file.ts; focused browser tests (new)
