@@ -267,3 +267,54 @@ server-only property is machine-enforced. 41 tests pass across the two files.
 3. The `content_type_not_supported` branch is currently unreachable — every format in
    `INSPECTED_FORMATS` maps into `MATCH_VIDEO_MIME_TYPES`. Worth keeping as a guard, but if the
    two lists drift a test should pin the mapping.
+
+## T7 · Implement immutable Azure attachment publication — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** New `src/lib/services/match-video/storage.ts` publishes a staged upload to its final
+key through a server-side copy, never a re-upload. Keys come from the persisted row via T6's
+`stagedBlobOf`/`publishedBlobOf` — T3's SQL mints them and the adapter does not invent a second
+layout. `mintAttachmentUploadCredential` signs `cw` on the staged key only for six hours;
+`mintAttachmentPlaybackCredential` signs `r` on the final key for thirty minutes. The
+`AttachmentBlobOps` seam deliberately has no download or read method, so byte access is
+impossible by type rather than by convention. Deletion is `deleteIfExists`, idempotent, with a
+409 `PendingCopyOperation` surfacing as a retryable failure so a copy is aborted before its
+destination is collected.
+
+`beginPublication` issues one Start Copy conditioned on the staged ETag with
+`ifNoneMatch: "*"`, stamping ownership metadata on the destination, and returns immediately —
+a 6 GiB copy is never awaited inside a request. `inspectPublication` polls; `copyId` is exposed
+for T10 and `abortPublication` is the seam T14 needs. On a 409 or 412 the adapter reads the
+destination once and decides: absent means the source ETag moved, present and owned means resume
+with its copy id (which covers both a concurrent attempt and a lost response), present and not
+owned is refused outright. That refusal is the immutability property in the task title — the
+reviewer confirmed every path that could write or delete a final key leaves a stranger's object
+byte-for-byte unchanged, with zero delete calls.
+
+The browser-cannot-write-final proof is real signing, not prose: the test signs with a throwaway
+account key, recomputes the signature for the staged blob (it matches, so the recomputation is
+faithful) and for the final blob (it differs), so a client that swaps the path presents a
+signature Azure rejects. The source-read SAS the copy needs is minted inside the function and
+never returned; a test JSON-stringifies the result and asserts no `sig=` and no storage host.
+`tests/match-video-storage.spec.ts` holds 19 cases; `storage.ts` joins `SERVER_ONLY` so
+`@azure/storage-blob` cannot reach a client bundle. Nothing here writes to Supabase — T10 owns
+that.
+
+Container decision, made deliberately: the same `AZURE_STORAGE_CONTAINER` with a `match-video/`
+prefix, not a new container. The existing primitives are bound to that container, T3 already
+fixed the prefix in SQL with DB tests behind it, the browser upload needs the CORS rule that
+account already carries, and `cleanup-orphan-storage.ts` documents a second "which container
+holds videos" definition as exactly the drift it exists to clean up.
+
+**follow-ups:**
+
+1. Real hazard, worth its own task before any deployment carries attachments:
+   `scripts/cleanup-orphan-storage.ts` attributes a blob to a match by its _third_ path segment.
+   Under `match-video/<matchId>/<attachmentId>/…` that segment is the attachment id, never a
+   valid match id — so `--apply` would delete every attachment blob as an orphan. It must skip or
+   re-attribute the `match-video/` prefix first.
+2. `startCopy` casts `poller.getOperationState()` because the SDK keeps `startCopyFromURL`
+   private behind the public `beginCopyFromURL`. Worth a note if `@azure/storage-blob` is bumped.
+3. The 1-hour source-SAS TTL assumes a same-account copy finishes well inside it; T10 could
+   surface `bytesCopied`/`bytesTotal` if a copy ever approaches that.

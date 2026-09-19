@@ -30,6 +30,10 @@ const SERVER_ONLY = [
   // `lib/match-video/media-inspection.ts`, so the tempting import is one
   // directory away.
   "lib/services/match-video/probe.ts",
+  // Same package, plus it signs upload and playback SAS URLs with the account
+  // key and mints the copy's source-read credential. The wizard needs the
+  // pure contracts in `lib/match-video/`, never this.
+  "lib/services/match-video/storage.ts",
 ].map((p) => join(SRC, p));
 
 const EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];

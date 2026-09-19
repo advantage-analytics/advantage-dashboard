@@ -124,7 +124,7 @@ contract and stops for review.
 
 ## T7 · Implement immutable Azure attachment publication
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T2, T6
 - **files:** Best guess: src/lib/services/match-video/storage.ts; tests/match-video-storage.spec.ts (new)
