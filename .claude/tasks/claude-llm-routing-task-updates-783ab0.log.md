@@ -980,3 +980,54 @@ new-match wizard consumers.
    the matches-list formatter rather than introducing a second one.
 5. The wizard's `px-14` gutter leaves 278px of content at 390px. Shared shell, so out of scope here,
    but a narrow-width gutter step is worth a look.
+
+## T21 · Route authorized attachment wizard visits — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** New `src/lib/data/match-video-attachment-server.ts` (the target loader, plus
+`matchFilmHref`) and `src/lib/matches/new-match-visit.ts` (a pure URL classifier split out of the
+page so a spec can import it without dragging the client upload wizard in — that import actually
+broke the first test run). `page.tsx` gains the `videoFor` branch and a `generateMetadata` replacing
+its static export.
+
+The classifier runs as the first statement after `await searchParams`, above every match-creation
+branch. `videoFor` beside any of draft, source, player or match is refused outright rather than
+silently ignored, as is a mode with no subject. An invalid id is refused inside
+`authorizeMatchVideoMutation` before any attachment read — the test asserts the read is never
+reached. The loader's ladder is sign-in, RLS visibility, creator, `swing-vision` provenance, exact
+active workspace, then mode, then attachment state, then source timing.
+
+A stale mode is refused by `modeRequiresActiveAttachment(mode) !== (row !== null)`, so Add opened in
+one tab while an upload finished in another lands back on Film showing the video that now exists
+instead of starting a duplicate, and Replace or Align against a video removed elsewhere is refused
+rather than rendering a wizard with no subject. One failure deliberately does _not_ redirect: a
+playback SAS that cannot be minted for Align opens the wizard with `savedPlaybackUrl: null` and
+T20's retryable notice, because bouncing to Film there would invite pressing Add over a row that is
+still active.
+
+**The Film selection mechanism, which T22 depends on, was identified rather than invented:**
+`?tab=film` on `/dashboard/matches/<matchId>`. `match-detail/report-view.ts` owns `REPORT_VIEWS`,
+`parseReportView` and `reportViewQuery`; its only consumer is `match-report-context.tsx`, which
+reads `searchParams.get("tab")`. Anything unrecognised reads as `statistics`, so the parameter is
+tolerant rather than an error surface. `returnTarget.href` is already that exact href, and a test
+round-trips it through the real `parseReportView` to prove it is the contract and not a lookalike.
+
+Preserving the existing page was the larger risk and was checked rather than assumed: the four
+existing branches are byte-identical below the new one, the diff outside `page.tsx` is empty, and
+210 tests pass across the existing wizard specs plus 297 across the attachment and route specs.
+27 new route cases. The widget-states checklist was run and the gate marked.
+
+**follow-ups:**
+
+1. The footer-pin assertion is structural, not a live pixel check — there is no authenticated
+   dashboard browser harness in `tests/`, so the proof is that both flows are returned as the page's
+   own root with nothing wrapping one and not the other. A real assertion needs the screenshot
+   harness and is worth its own task.
+2. `shots` paging is unverified against the live database: `shots` has no `match_id`, so the loader
+   filters through `points!inner(match_id)` like every other shot loader in `lib/data`. The Supabase
+   MCP needed authorization in that session, so the embedded filter plus `.range()` pairing was not
+   confirmed on a real match.
+3. Stale upload localStorage: `DashboardShell` clears it only when the path _leaves_
+   `/dashboard/matches/new`, so an attachment visit on that same path leaves a half-finished
+   creation draft in storage. Pre-existing for `?match=` too, but now reachable by a second door.

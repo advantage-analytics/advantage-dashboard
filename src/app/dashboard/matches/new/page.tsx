@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { UploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard/UploadMatchFlow";
+import { MatchVideoAttachmentFlow } from "@/components/dashboard/matches/match-video-attachment/MatchVideoAttachmentFlow";
 import type { RosterSubject } from "@/components/dashboard/matches/new-match-wizard/useUploadMatchWizard";
 import {
   draftBelongsToWorkspace,
@@ -11,10 +12,49 @@ import { getAddVideoTarget } from "@/lib/data/add-video-server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { getRosterPlayerOptions } from "@/lib/data/roster-server";
 import { isProviderSupported, type ProviderId } from "@/lib/services/upload";
+import { isMatchVideoMode } from "@/lib/match-video/types";
+import {
+  classifyNewMatchVisit,
+  type NewMatchSearchParams,
+} from "@/lib/matches/new-match-visit";
+import {
+  attachmentWizardStorageDeps,
+  resolveAttachmentWizardTarget,
+  supabaseAttachmentSourceRows,
+  supabaseAttachmentSummary,
+  MATCHES_LIST_HREF,
+} from "@/lib/data/match-video-attachment-server";
+import { matchVideoAccessDeps } from "@/lib/services/match-video/access";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
-export const metadata: Metadata = {
-  title: "New match",
-};
+/**
+ * "New match" everywhere but an attachment visit, which is not one.
+ *
+ * `generateMetadata` replaces the static export because the title is the only
+ * chrome outside the page that names the task, and a tab reading "New match"
+ * while the page says "Replace the match video" is the kind of small lie that
+ * makes someone close the wrong tab. The mode is read but never authorized
+ * here: a title is not a disclosure — every id in it came from the caller's own
+ * URL — and running the ladder twice would double every read.
+ */
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<NewMatchSearchParams>;
+}): Promise<Metadata> {
+  const visit = classifyNewMatchVisit(await searchParams);
+  if (visit.kind !== "attach" || !isMatchVideoMode(visit.mode)) {
+    return { title: "New match" };
+  }
+  return {
+    title: {
+      add: "Add match video",
+      replace: "Replace match video",
+      align: "Adjust match video",
+    }[visit.mode],
+  };
+}
 
 /**
  * Who a `?player=` link names, or null for an id that names nobody here.
@@ -60,6 +100,13 @@ async function rosterSubjectFor(
  * `getAddVideoTarget()` for which matches the wizard takes and where the rest
  * are sent. That one DOES skip step one, because the match already answered it.
  *
+ * `?videoFor=&mode=` is a different wizard entirely: the SwingVision video
+ * attachment flow, which creates no match, no draft and no processing job. It
+ * is resolved FIRST, before any of the branches below, so that nothing on the
+ * creation path can run for a visit that was never about creating anything —
+ * and a URL carrying both readings is refused rather than ranked. See
+ * `classifyNewMatchVisit()` and `resolveAttachmentWizardTarget()`.
+ *
  * All are validated rather than trusted: an unknown or retired provider id
  * falls through to the wizard's own default, and a player id that names nobody
  * on the ACTIVE program's roster opens an unseeded wizard.
@@ -67,14 +114,50 @@ async function rosterSubjectFor(
 export default async function NewMatchPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    draft?: string;
-    source?: string;
-    player?: string;
-    match?: string;
-  }>;
+  searchParams: Promise<NewMatchSearchParams>;
 }): Promise<React.JSX.Element> {
-  const { draft: draftId, source, player, match } = await searchParams;
+  const params = await searchParams;
+  const { draft: draftId, source, player, match } = params;
+
+  // FIRST, before any branch that can insert a match. An attachment visit and
+  // a creation visit are different products sharing one URL, and the only safe
+  // order is the one where the creation path is never entered by accident.
+  const visit = classifyNewMatchVisit(params);
+  if (visit.kind === "refuse") redirect(MATCHES_LIST_HREF);
+  if (visit.kind === "attach") {
+    const supabase = await createClient();
+    // Lazy: a refused visit — and every check in the ladder runs before the
+    // attachment row is read — never constructs a service-role client.
+    let admin: ReturnType<typeof createAdminClient> | null = null;
+    const storage = attachmentWizardStorageDeps(
+      new Proxy({} as ReturnType<typeof createAdminClient>, {
+        get(_target, property, receiver) {
+          admin ??= createAdminClient();
+          return Reflect.get(admin, property, receiver);
+        },
+      }),
+    );
+
+    const target = await resolveAttachmentWizardTarget(
+      visit.matchId,
+      visit.mode,
+      {
+        ...matchVideoAccessDeps({
+          supabase,
+          workspaceContext: getWorkspaceContext,
+        }),
+        ...storage,
+        loadSummary: supabaseAttachmentSummary(supabase),
+        loadSourceRows: supabaseAttachmentSourceRows(supabase),
+      },
+    );
+    if (target.kind === "redirect") redirect(target.href);
+    // Rendered as the page's own root, exactly as `UploadMatchFlow` is below:
+    // both are a `WizardShell`, and the sticky footer pins against the same
+    // dashboard scroll container because nothing here wraps one and not the
+    // other.
+    return <MatchVideoAttachmentFlow {...target.props} />;
+  }
 
   if (match) {
     const context = await getWorkspaceContext();

@@ -304,7 +304,7 @@ contract and stops for review.
 
 ## T21 · Route authorized attachment wizard visits
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T8, T12, T20
 - **files:** Best guess: src/app/dashboard/matches/new/page.tsx; src/lib/data/match-video-attachment-server.ts (new); route/permission tests
