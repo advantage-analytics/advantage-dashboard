@@ -150,7 +150,7 @@ contract and stops for review.
 
 ## T9 · Expose upload renewal and cancellation endpoints
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3, T8
 - **files:** Best guess: src/lib/services/match-video/uploads.ts; src/app/api/matches/[matchId]/video/uploads/[attachmentId]/route.ts and renew/route.ts; tests/match-video-upload-handlers.spec.ts

@@ -374,3 +374,48 @@ requires; `client-bundle-boundary.spec.ts` gained the three new server-only modu
    server answers 400 `content_type_format`.
 3. `checkSameOrigin` refuses any request without an `Origin` header. A non-browser client — a
    Playwright `request` smoke test, say — must set it explicitly. Worth knowing at T27.
+
+## T9 · Expose upload renewal and cancellation endpoints — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** Two new routes — POST `…/uploads/[attachmentId]/renew` and DELETE
+`…/uploads/[attachmentId]` — both wiring only, with the work in `uploads.ts` alongside T8's
+preparation handler. T8's helpers were reused rather than re-derived: `access.ts` and
+`rpc-errors.ts` are untouched, and the reviewer confirmed the only `http.ts` addition
+(`readNoMetadataBody`) delegates the bounded read to the existing `readBoundedJson` instead of
+re-implementing it.
+
+Renewal runs origin → sign-in → id shape → empty body → access → renew → mint as an asserted
+event sequence, and cuts the credential against `upload_sas_expires_at` _as the RPC returned it_
+— never the value this process proposed. A test with a backwards-skewed clock shows the stored
+later expiry winning and the issued credential bounded by it, which is what makes T3's
+never-roll-back rule hold end to end. Retired, active and finalizing work are refused by the
+database, with no second opinion in the handler that could drift from the transaction's.
+
+The safety crux is cancellation, and it is structural rather than conventional:
+`CancelUploadDeps` has no signer and no storage field at all, so the handler _cannot_ delete a
+staging blob whose write SAS is still live — which would otherwise let a still-uploading browser
+write to a deleted key and recreate an untracked blob. Cancellation only retires the record and
+seeds `cleanup_next_attempt_at` from the last SAS expiry; T14 collects the bytes afterwards. One
+test asserts the dep object's complete key set, another that the route file's source imports
+neither the storage module nor `@azure/storage-blob`. Three consecutive DELETEs return identical
+bodies with an unchanged `retiredAt`; an active attachment is refused and stays active.
+
+A forged attachment id is refused by the database's own predicates, not a handler guess. The
+tests assert the full access ladder ran and the id reached the RPC seam, with T3's own detail
+slugs coming back: an attachment belonging to another match is refused by `match_id`
+(`no_such_attachment`), one uploaded by someone else by `uploaded_by` (`not_uploader`), and the
+caller's own pending row is confirmed untouched by the guess. The spec grows from 60 to 87 cases;
+90 pass across the three files checked.
+
+**follow-ups:**
+
+1. Renewal's RPC returns no `final_blob_key`, so the handler passes `""` into the signer's row
+   shape. Safe and documented at the call site, but a narrower
+   `mintUploadCredentialForStagedKey({ id, staged_blob_key })` in `storage.ts` would remove the
+   sentinel — worth folding in if T10 wants a similar narrow seam.
+2. `readNoMetadataBody` refuses `body: ""` as `malformed_json` rather than as an empty body.
+   Clients should send no body or `{}`; if the wizard ends up sending an empty string, soften it.
+3. T3's lease check is time-based only. **T10 must clear the finalization lease on failure**,
+   or a crashed completion blocks cancellation for the lease's full duration.

@@ -16,12 +16,22 @@ import {
 import { matchVideoRpcError } from "@/lib/services/match-video/rpc-errors";
 import type { AttachmentStorageRow } from "@/lib/services/match-video/storage";
 import {
+  handleCancelUpload,
   handlePrepareUpload,
+  handleRenewUpload,
   parseReserveUploadBody,
+  type CancelUploadDeps,
+  type CancelUploadInput,
   type PrepareUploadDeps,
+  type RenewUploadDeps,
+  type RenewUploadInput,
   type ReservedAttachment,
   type ReserveUploadInput,
 } from "@/lib/services/match-video/uploads";
+import {
+  matchVideoError,
+  type MatchVideoErrorCode,
+} from "@/lib/match-video/types";
 import { MATCH_VIDEO_MAX_BYTES } from "@/lib/match-video/limits";
 import type { Workspace } from "@/lib/workspace/types";
 
@@ -121,6 +131,15 @@ function post(
 }
 
 /**
+ * A refusal shaped exactly as `matchVideoRpcError` produces one — the fakes
+ * stand in for the SQL function AND for the mapping in between, so a spec
+ * that asserts a status is asserting the same path production takes.
+ */
+function rpcRefusal(code: MatchVideoErrorCode, detail: string) {
+  return { ok: false as const, error: matchVideoError(code, detail) };
+}
+
+/**
  * In-memory T3. Keyed the way the RPC is: an active row per match, and
  * pending attempts by (uploader, client request id). Checks reality
  * BEFORE the request-id lookup, which is the precedence T3 recorded.
@@ -141,6 +160,11 @@ class FakeReservations {
       expectedActiveId: string | null;
       expectedActiveVersion: number | null;
       uploadSasExpiresAt: Date;
+      /** T3's finalization lease: set while completion (T10) holds the row. */
+      finalizeLeaseUntil?: Date;
+      retiredAt?: Date;
+      /** Seeded from the last SAS expiry, never from `now()` alone. */
+      cleanupNextAttemptAt?: Date;
     }
   >();
 
@@ -158,6 +182,115 @@ class FakeReservations {
       expectedActiveId: null,
       expectedActiveVersion: null,
       uploadSasExpiresAt: NOW,
+    });
+  }
+
+  /** A pending attempt as `match_video_reserve_upload` would have left it. */
+  seedPending(
+    matchId: string,
+    options: {
+      id?: string;
+      uploadedBy?: string;
+      state?: "pending" | "active" | "retired";
+      uploadSasExpiresAt?: Date;
+      finalizeLeaseUntil?: Date;
+    } = {},
+  ): string {
+    const id = options.id ?? randomUUID();
+    this.rows.set(id, {
+      id,
+      matchId,
+      uploadedBy: options.uploadedBy ?? CREATOR,
+      state: options.state ?? "pending",
+      version: 0,
+      filename: "match.mp4",
+      sizeBytes: 1_234_567,
+      contentType: "video/mp4",
+      clientRequestId: randomUUID(),
+      expectedActiveId: null,
+      expectedActiveVersion: null,
+      uploadSasExpiresAt:
+        options.uploadSasExpiresAt ?? new Date(NOW.getTime() + 3_600_000),
+      finalizeLeaseUntil: options.finalizeLeaseUntil,
+    });
+    return id;
+  }
+
+  /**
+   * T3's renewal, including the two refusals this handler must NOT second-guess
+   * and the predicate that makes a forged id a database decision: the row is
+   * found only when it belongs to this match, and extended only when it
+   * belongs to this uploader.
+   */
+  renew(input: RenewUploadInput): ReturnType<RenewUploadDeps["renew"]> {
+    const { access, attachmentId, uploadSasExpiresAt } = input;
+    const row = this.rows.get(attachmentId);
+    if (!row || row.matchId !== access.match.id) {
+      return Promise.resolve(
+        rpcRefusal("match_not_found", "no_such_attachment"),
+      );
+    }
+    if (row.uploadedBy !== access.actor.id) {
+      return Promise.resolve(rpcRefusal("forbidden", "not_uploader"));
+    }
+    if (row.state !== "pending") {
+      return Promise.resolve(
+        rpcRefusal("mode_conflict", `attempt_${row.state}`),
+      );
+    }
+    if (row.finalizeLeaseUntil && row.finalizeLeaseUntil > NOW) {
+      return Promise.resolve(
+        rpcRefusal("pending_attempt_conflict", "finalizing"),
+      );
+    }
+    // `greatest(stored, proposed)`: a renewal never rolls the window back.
+    if (uploadSasExpiresAt > row.uploadSasExpiresAt) {
+      row.uploadSasExpiresAt = uploadSasExpiresAt;
+    }
+    return Promise.resolve({
+      ok: true,
+      value: {
+        id: row.id,
+        staged_blob_key: `match-video/${row.matchId}/${row.id}/staged.mp4`,
+        upload_sas_expires_at: row.uploadSasExpiresAt.toISOString(),
+      },
+    });
+  }
+
+  /** T3's cancellation: idempotent, pending-only, and it deletes nothing. */
+  cancel(input: CancelUploadInput): ReturnType<CancelUploadDeps["cancel"]> {
+    const { access, attachmentId } = input;
+    const row = this.rows.get(attachmentId);
+    if (!row || row.matchId !== access.match.id) {
+      return Promise.resolve(
+        rpcRefusal("match_not_found", "no_such_attachment"),
+      );
+    }
+    if (row.uploadedBy !== access.actor.id) {
+      return Promise.resolve(rpcRefusal("forbidden", "not_uploader"));
+    }
+    if (row.state === "active") {
+      return Promise.resolve(rpcRefusal("mode_conflict", "attachment_active"));
+    }
+    if (row.state === "retired") {
+      return Promise.resolve({
+        ok: true,
+        value: { id: row.id, state: row.state },
+      });
+    }
+    if (row.finalizeLeaseUntil && row.finalizeLeaseUntil > NOW) {
+      return Promise.resolve(
+        rpcRefusal("pending_attempt_conflict", "finalizing"),
+      );
+    }
+    row.state = "retired";
+    row.retiredAt = NOW;
+    row.cleanupNextAttemptAt = new Date(
+      Math.max(NOW.getTime(), row.uploadSasExpiresAt.getTime()),
+    );
+    return Promise.resolve({
+      ok: true,
+      value: { id: row.id, state: "retired" },
     });
   }
 
@@ -1092,4 +1225,762 @@ test("a malformed-argument (22023) or unknown RPC failure is not a refusal", () 
   ).toBeNull();
   expect(matchVideoRpcError({ code: "XX000", message: "boom" })).toBeNull();
   expect(matchVideoRpcError({ message: "boom" })).toBeNull();
+});
+
+/* =========================================================================
+ * T9 · Renewal and cancellation
+ *
+ * The attachment id now arrives in the PATH, and the rule the whole section
+ * turns on is that it still carries no authority: the handler checks only
+ * that it is a UUID, and every question about WHOSE attempt it is, and what
+ * state that attempt is in, is answered inside the transaction. The fakes
+ * below model T3's predicates — `match_id = p_match_id`, `uploaded_by =
+ * p_actor_id`, the state ladder and the finalization lease — so a test that
+ * shows a forged id refused is showing the database refusing it.
+ * ====================================================================== */
+
+interface RenewHarness {
+  deps: RenewUploadDeps;
+  events: string[];
+  renewCalls: RenewUploadInput[];
+  mintCalls: { row: AttachmentStorageRow; notAfter: Date }[];
+  store: FakeReservations;
+}
+
+interface CancelHarness {
+  deps: CancelUploadDeps;
+  events: string[];
+  cancelCalls: CancelUploadInput[];
+  store: FakeReservations;
+}
+
+interface AccessOptions {
+  userId?: string | null;
+  workspace?: Pick<Workspace, "id" | "kind"> | null;
+  visible?: string[];
+  readError?: string;
+  store?: FakeReservations;
+}
+
+/** The three access seams, recorded, shared by both T9 harnesses. */
+function accessDeps(options: AccessOptions, events: string[]) {
+  const userId = options.userId === undefined ? CREATOR : options.userId;
+  const workspace =
+    options.workspace === undefined ? personal(CREATOR) : options.workspace;
+  return {
+    async currentUserId() {
+      events.push("auth");
+      return userId;
+    },
+    async loadVisibleMatch(matchId: string) {
+      events.push(`read:${matchId}`);
+      if (options.readError) return { match: null, error: options.readError };
+      const row = MATCHES[matchId];
+      const visible = options.visible
+        ? options.visible.includes(matchId)
+        : Boolean(row);
+      return { match: visible ? row : null, error: null };
+    },
+    async activeWorkspace() {
+      events.push("workspace");
+      return workspace;
+    },
+    allowedOrigins: [SITE],
+  };
+}
+
+function renewHarness(
+  options: AccessOptions & {
+    mint?: RenewUploadDeps["mintUploadCredential"];
+    now?: () => Date;
+  } = {},
+): RenewHarness {
+  const events: string[] = [];
+  const renewCalls: RenewUploadInput[] = [];
+  const mintCalls: RenewHarness["mintCalls"] = [];
+  const store = options.store ?? new FakeReservations();
+
+  const deps: RenewUploadDeps = {
+    ...accessDeps(options, events),
+    now: options.now ?? (() => NOW),
+    async renew(input) {
+      events.push("renew");
+      renewCalls.push(input);
+      return store.renew(input);
+    },
+    mintUploadCredential(row, notAfter) {
+      events.push("mint");
+      mintCalls.push({ row, notAfter });
+      if (options.mint) return options.mint(row, notAfter);
+      return {
+        ok: true,
+        value: {
+          uploadUrl: `${STUB_URL}/${row.staged_blob_key}`,
+          expiresAt: new Date(notAfter.getTime() - 1000),
+        },
+      };
+    },
+  };
+
+  return { deps, events, renewCalls, mintCalls, store };
+}
+
+function cancelHarness(options: AccessOptions = {}): CancelHarness {
+  const events: string[] = [];
+  const cancelCalls: CancelUploadInput[] = [];
+  const store = options.store ?? new FakeReservations();
+
+  const deps: CancelUploadDeps = {
+    ...accessDeps(options, events),
+    async cancel(input) {
+      events.push("cancel");
+      cancelCalls.push(input);
+      return store.cancel(input);
+    },
+  };
+
+  return { deps, events, cancelCalls, store };
+}
+
+function renewRequest(
+  matchId: string,
+  attachmentId: string,
+  options: RequestOptions = {},
+): Request {
+  const headers = new Headers(options.headers ?? {});
+  if (options.origin !== null) headers.set("origin", options.origin ?? SITE);
+  if (options.contentType !== null) {
+    headers.set("content-type", options.contentType ?? "application/json");
+  }
+  return new Request(
+    `${SITE}/api/matches/${matchId}/video/uploads/${attachmentId}/renew`,
+    { method: "POST", headers, body: options.body },
+  );
+}
+
+function cancelRequest(
+  matchId: string,
+  attachmentId: string,
+  options: RequestOptions = {},
+): Request {
+  const headers = new Headers(options.headers ?? {});
+  if (options.origin !== null) headers.set("origin", options.origin ?? SITE);
+  if (options.contentType !== null) {
+    headers.set("content-type", options.contentType ?? "application/json");
+  }
+  return new Request(
+    `${SITE}/api/matches/${matchId}/video/uploads/${attachmentId}`,
+    { method: "DELETE", headers, body: options.body },
+  );
+}
+
+async function renew(
+  h: RenewHarness,
+  matchId: string,
+  attachmentId: string,
+  options?: RequestOptions,
+) {
+  const response = await handleRenewUpload(
+    renewRequest(matchId, attachmentId, options),
+    matchId,
+    attachmentId,
+    h.deps,
+  );
+  const json = (await response.json()) as Record<string, unknown>;
+  return { response, json };
+}
+
+async function cancel(
+  h: CancelHarness,
+  matchId: string,
+  attachmentId: string,
+  options?: RequestOptions,
+) {
+  const response = await handleCancelUpload(
+    cancelRequest(matchId, attachmentId, options),
+    matchId,
+    attachmentId,
+    h.deps,
+  );
+  const json = (await response.json()) as Record<string, unknown>;
+  return { response, json };
+}
+
+/** The renewal denial assertion: nothing renewed, nothing signed. */
+function expectNoRenewal(h: RenewHarness) {
+  expect(h.events).not.toContain("renew");
+  expect(h.events).not.toContain("mint");
+  expect(h.renewCalls).toHaveLength(0);
+  expect(h.mintCalls).toHaveLength(0);
+}
+
+/* -------------------------------------------------------------------------
+ * Renewal — the edge, unchanged
+ * ---------------------------------------------------------------------- */
+
+test("renewal refuses a cross-origin request before anything is read", async () => {
+  const h = renewHarness();
+  const id = h.store.seedPending(PERSONAL_MATCH);
+  const { response, json } = await renew(h, PERSONAL_MATCH, id, {
+    origin: "https://evil.example",
+  });
+  expect(response.status).toBe(403);
+  expect(json.code).toBe("cross_origin");
+  expectNoStore(response);
+  expect(h.events).toEqual([]);
+  expectNoRenewal(h);
+});
+
+test("renewal refuses an anonymous caller with nothing read", async () => {
+  const h = renewHarness({ userId: null });
+  const id = h.store.seedPending(PERSONAL_MATCH);
+  const { response, json } = await renew(h, PERSONAL_MATCH, id);
+  expect(response.status).toBe(401);
+  expect(json.code).toBe("unauthenticated");
+  expectNoStore(response);
+  expect(h.events).toEqual(["auth"]);
+  expectNoRenewal(h);
+});
+
+test("renewal accepts no body, and refuses one that carries fields", async () => {
+  const empty = renewHarness();
+  const idA = empty.store.seedPending(PERSONAL_MATCH);
+  const none = await renew(empty, PERSONAL_MATCH, idA);
+  expect(none.response.status).toBe(200);
+
+  const braces = renewHarness();
+  const idB = braces.store.seedPending(PERSONAL_MATCH);
+  const object = await renew(braces, PERSONAL_MATCH, idB, { body: "{}" });
+  expect(object.response.status).toBe(200);
+
+  // There is no field a renewal may set, so one is refused rather than ignored.
+  const forged = renewHarness();
+  const idC = forged.store.seedPending(PERSONAL_MATCH);
+  const withFields = await renew(forged, PERSONAL_MATCH, idC, {
+    body: JSON.stringify({ uploadSasExpiresAt: "2099-01-01T00:00:00Z" }),
+  });
+  expect(withFields.response.status).toBe(400);
+  expect(withFields.json.detail).toBe("unexpected_body");
+  expectNoRenewal(forged);
+
+  // And the preflight-forcing content type is still required.
+  const plain = renewHarness();
+  const idD = plain.store.seedPending(PERSONAL_MATCH);
+  const text = await renew(plain, PERSONAL_MATCH, idD, {
+    contentType: "text/plain",
+  });
+  expect(text.response.status).toBe(400);
+  expect(text.json.detail).toBe("content_type");
+  expectNoRenewal(plain);
+});
+
+/* -------------------------------------------------------------------------
+ * Renewal — the attachment id carries no authority
+ * ---------------------------------------------------------------------- */
+
+test("a non-UUID attachment id is 404 without reaching the database", async () => {
+  const h = renewHarness();
+  h.store.seedPending(PERSONAL_MATCH);
+  const { response, json } = await renew(h, PERSONAL_MATCH, "../../etc/passwd");
+  expect(response.status).toBe(404);
+  expect(json.code).toBe("match_not_found");
+  expect(json.detail).toBe("malformed_attachment_id");
+  expect(h.events).toEqual(["auth"]);
+  expectNoRenewal(h);
+});
+
+test("a forged but well-formed attachment id is refused BY THE DATABASE, not the handler", async () => {
+  const h = renewHarness();
+  h.store.seedPending(PERSONAL_MATCH);
+  const forged = randomUUID();
+
+  const { response, json } = await renew(h, PERSONAL_MATCH, forged);
+  expect(response.status).toBe(404);
+  expect(json.code).toBe("match_not_found");
+  // T3's own detail, raised under the row lock — not a slug this handler owns.
+  expect(json.detail).toBe("no_such_attachment");
+
+  // The proof that the refusal is the transaction's: the handler ran the full
+  // access ladder and HANDED the id to `renew`, which is what said no. It did
+  // not guess, and it never reached the signer.
+  expect(h.events).toEqual([
+    "auth",
+    "auth",
+    `read:${PERSONAL_MATCH}`,
+    "workspace",
+    "renew",
+  ]);
+  expect(h.renewCalls).toHaveLength(1);
+  expect(h.renewCalls[0].attachmentId).toBe(forged);
+  expect(h.mintCalls).toHaveLength(0);
+});
+
+test("an attachment belonging to ANOTHER match is refused by the database's match predicate", async () => {
+  const h = renewHarness({ workspace: personal(CREATOR) });
+  // A real, pending attempt of this caller's — on a different match.
+  const elsewhere = h.store.seedPending(TEAM_MATCH);
+
+  const { response, json } = await renew(h, PERSONAL_MATCH, elsewhere);
+  expect(response.status).toBe(404);
+  expect(json.detail).toBe("no_such_attachment");
+  expect(h.renewCalls[0].attachmentId).toBe(elsewhere);
+  expect(h.renewCalls[0].access.match.id).toBe(PERSONAL_MATCH);
+  expect(h.mintCalls).toHaveLength(0);
+  // Untouched: the other match's attempt keeps its window.
+  expect(h.store.rows.get(elsewhere)?.state).toBe("pending");
+});
+
+test("an attachment another person uploaded is 403 from the database's uploader test", async () => {
+  const h = renewHarness({ workspace: team(PROGRAM) });
+  const theirs = h.store.seedPending(TEAM_MATCH, { uploadedBy: OTHER_USER });
+  const { response, json } = await renew(h, TEAM_MATCH, theirs);
+  expect(response.status).toBe(403);
+  expect(json.code).toBe("forbidden");
+  expect(json.detail).toBe("not_uploader");
+  expect(h.mintCalls).toHaveLength(0);
+});
+
+/* -------------------------------------------------------------------------
+ * Renewal — access, which is preparation's gate unchanged
+ * ---------------------------------------------------------------------- */
+
+test("renewal runs the same access ladder as preparation", async () => {
+  const cases: [AccessOptions, string, number, string][] = [
+    [{ userId: OTHER_USER, visible: [] }, PERSONAL_MATCH, 404, "not_visible"],
+    [
+      { userId: OTHER_USER, workspace: team(PROGRAM) },
+      TEAM_MATCH,
+      403,
+      "not_creator",
+    ],
+    [{}, VENDOR_MATCH, 403, "not_swingvision"],
+    [
+      { workspace: team(PROGRAM) },
+      PERSONAL_MATCH,
+      403,
+      "team_match_in_personal_workspace",
+    ],
+    [
+      { workspace: team(OTHER_PROGRAM) },
+      TEAM_MATCH,
+      403,
+      "match_in_other_program",
+    ],
+    [{ workspace: null }, PERSONAL_MATCH, 403, "no_active_workspace"],
+    [
+      { readError: "connection reset" },
+      PERSONAL_MATCH,
+      503,
+      "match_read_failed",
+    ],
+  ];
+
+  for (const [options, matchId, status, detail] of cases) {
+    const h = renewHarness(options);
+    const id = h.store.seedPending(matchId);
+    const { response, json } = await renew(h, matchId, id);
+    expect(response.status, detail).toBe(status);
+    expect(json.detail).toBe(detail);
+    expectNoStore(response);
+    expectNoRenewal(h);
+    // The attempt is untouched — a refusal changes nothing.
+    expect(h.store.rows.get(id)?.state).toBe("pending");
+  }
+});
+
+test("a workspace that changed since the reservation stops renewal of an existing attempt", async () => {
+  // The attempt was reserved from the team workspace; the switcher has since
+  // moved to personal. The row is real and the caller is its uploader — the
+  // refusal is the workspace gate, and it happens before the RPC.
+  const store = new FakeReservations();
+  const id = store.seedPending(TEAM_MATCH);
+
+  const inTeam = renewHarness({ store, workspace: team(PROGRAM) });
+  expect((await renew(inTeam, TEAM_MATCH, id)).response.status).toBe(200);
+
+  const switched = renewHarness({ store, workspace: personal(CREATOR) });
+  const { response, json } = await renew(switched, TEAM_MATCH, id);
+  expect(response.status).toBe(403);
+  expect(json.code).toBe("workspace_mismatch");
+  expect(json.detail).toBe("personal_match_in_team_workspace");
+  expectNoRenewal(switched);
+});
+
+/* -------------------------------------------------------------------------
+ * Renewal — persist first, then sign; never roll the window back
+ * ---------------------------------------------------------------------- */
+
+test("renewal persists the new expiry BEFORE it mints, and signs only the staged key", async () => {
+  const h = renewHarness();
+  const id = h.store.seedPending(PERSONAL_MATCH);
+
+  const { response, json } = await renew(h, PERSONAL_MATCH, id);
+  expect(response.status).toBe(200);
+  expectNoStore(response);
+
+  expect(Object.keys(json).sort()).toEqual([
+    "attachmentId",
+    "uploadExpiresAt",
+    "uploadUrl",
+  ]);
+  expect(json.attachmentId).toBe(id);
+  expect(json.uploadUrl).toContain("/staged.mp4");
+  expect(json.uploadUrl).not.toContain("final");
+
+  expect(h.events).toEqual([
+    "auth",
+    "auth",
+    `read:${PERSONAL_MATCH}`,
+    "workspace",
+    "renew",
+    "mint",
+  ]);
+  expect(h.events.indexOf("renew")).toBeLessThan(h.events.indexOf("mint"));
+
+  // Clock plus six hours, committed, and the credential cut against what the
+  // ROW holds — not against the value this process proposed.
+  expect(h.renewCalls[0].uploadSasExpiresAt.toISOString()).toBe(
+    "2026-09-18T18:00:00.000Z",
+  );
+  expect(h.store.rows.get(id)?.uploadSasExpiresAt.toISOString()).toBe(
+    "2026-09-18T18:00:00.000Z",
+  );
+  expect(h.mintCalls[0].notAfter.toISOString()).toBe(
+    "2026-09-18T18:00:00.000Z",
+  );
+  expect(
+    new Date(json.uploadExpiresAt as string).getTime(),
+  ).toBeLessThanOrEqual(h.mintCalls[0].notAfter.getTime());
+
+  // The final key is never in the signer's hands on this path.
+  expect(h.mintCalls[0].row.final_blob_key).toBe("");
+  expect(h.mintCalls[0].row.staged_blob_key).toContain("/staged.mp4");
+});
+
+test("a renewal with a skewed-backwards clock keeps the LATER stored expiry", async () => {
+  const store = new FakeReservations();
+  const later = new Date(NOW.getTime() + 20 * 60 * 60 * 1000);
+  const id = store.seedPending(PERSONAL_MATCH, { uploadSasExpiresAt: later });
+
+  const h = renewHarness({ store });
+  const { response, json } = await renew(h, PERSONAL_MATCH, id);
+  expect(response.status).toBe(200);
+  // `greatest(stored, proposed)`: the window is never shortened under a
+  // credential the browser may already be uploading with.
+  expect(h.mintCalls[0].notAfter.toISOString()).toBe(later.toISOString());
+  expect(store.rows.get(id)?.uploadSasExpiresAt.toISOString()).toBe(
+    later.toISOString(),
+  );
+  expect(
+    new Date(json.uploadExpiresAt as string).getTime(),
+  ).toBeLessThanOrEqual(later.getTime());
+});
+
+test("when the signer fails the longer window is already recorded and a retry succeeds", async () => {
+  const store = new FakeReservations();
+  const id = store.seedPending(PERSONAL_MATCH);
+  const broken = renewHarness({
+    store,
+    mint: () => ({
+      ok: false,
+      error: matchVideoError("storage_unavailable", "storage_not_configured"),
+    }),
+  });
+  const { response, json } = await renew(broken, PERSONAL_MATCH, id);
+  expect(response.status).toBe(503);
+  expect(json.code).toBe("storage_unavailable");
+  expect(broken.events.indexOf("renew")).toBeLessThan(
+    broken.events.indexOf("mint"),
+  );
+  expect(store.rows.get(id)?.uploadSasExpiresAt.toISOString()).toBe(
+    "2026-09-18T18:00:00.000Z",
+  );
+
+  const retry = renewHarness({ store });
+  expect((await renew(retry, PERSONAL_MATCH, id)).response.status).toBe(200);
+});
+
+/* -------------------------------------------------------------------------
+ * Renewal — retired, active and finalizing work
+ * ---------------------------------------------------------------------- */
+
+test("renewal after finalization has begun is denied, and mints nothing", async () => {
+  const store = new FakeReservations();
+  const id = store.seedPending(PERSONAL_MATCH, {
+    finalizeLeaseUntil: new Date(NOW.getTime() + 60_000),
+  });
+  const h = renewHarness({ store });
+
+  const { response, json } = await renew(h, PERSONAL_MATCH, id);
+  expect(response.status).toBe(409);
+  expect(json.code).toBe("pending_attempt_conflict");
+  expect(json.detail).toBe("finalizing");
+  expectNoStore(response);
+  // The whole point: no second write credential while the staged bytes are
+  // being verified and copied.
+  expect(h.mintCalls).toHaveLength(0);
+  expect(h.renewCalls).toHaveLength(1);
+});
+
+test("renewal of a retired attempt is mode_conflict — a cancelled upload never resumes", async () => {
+  const store = new FakeReservations();
+  const id = store.seedPending(PERSONAL_MATCH);
+
+  const c = cancelHarness({ store });
+  expect((await cancel(c, PERSONAL_MATCH, id)).response.status).toBe(200);
+
+  const h = renewHarness({ store });
+  const { response, json } = await renew(h, PERSONAL_MATCH, id);
+  expect(response.status).toBe(409);
+  expect(json.code).toBe("mode_conflict");
+  expect(json.detail).toBe("attempt_retired");
+  expect(h.mintCalls).toHaveLength(0);
+});
+
+test("renewal of an active attachment is mode_conflict — there is no upload to extend", async () => {
+  const store = new FakeReservations();
+  const id = randomUUID();
+  store.activate(PERSONAL_MATCH, id, 1);
+
+  const h = renewHarness({ store });
+  const { response, json } = await renew(h, PERSONAL_MATCH, id);
+  expect(response.status).toBe(409);
+  expect(json.detail).toBe("attempt_active");
+  expect(h.mintCalls).toHaveLength(0);
+  expect(store.rows.get(id)?.state).toBe("active");
+});
+
+/* -------------------------------------------------------------------------
+ * Cancellation
+ * ---------------------------------------------------------------------- */
+
+test("cancellation retires the caller's pending attempt and says so", async () => {
+  const h = cancelHarness();
+  const id = h.store.seedPending(PERSONAL_MATCH);
+
+  const { response, json } = await cancel(h, PERSONAL_MATCH, id);
+  expect(response.status).toBe(200);
+  expectNoStore(response);
+  expect(json).toEqual({ attachmentId: id, state: "retired" });
+  expect(h.events).toEqual([
+    "auth",
+    "auth",
+    `read:${PERSONAL_MATCH}`,
+    "workspace",
+    "cancel",
+  ]);
+  expect(h.store.rows.get(id)?.state).toBe("retired");
+});
+
+test("cancelling twice is one cancellation: the retry is a 200, not a 404 or a second retire", async () => {
+  const store = new FakeReservations();
+  const id = store.seedPending(PERSONAL_MATCH);
+
+  // The browser aborts, and the first DELETE's response is lost on the way
+  // back; the client cannot know whether it landed, so it sends it again.
+  const first = cancelHarness({ store });
+  const a = await cancel(first, PERSONAL_MATCH, id);
+  const retiredAt = store.rows.get(id)?.retiredAt;
+
+  const second = cancelHarness({ store });
+  const b = await cancel(second, PERSONAL_MATCH, id);
+  const third = cancelHarness({ store });
+  const c = await cancel(third, PERSONAL_MATCH, id);
+
+  expect([a.response.status, b.response.status, c.response.status]).toEqual([
+    200, 200, 200,
+  ]);
+  expect(b.json).toEqual(a.json);
+  expect(c.json).toEqual(a.json);
+  // Idempotent in the row too: the retirement instant did not move.
+  expect(store.rows.get(id)?.retiredAt).toBe(retiredAt);
+  expect(store.rows.size).toBe(1);
+});
+
+test("cancellation never deletes the staging blob while its write SAS is valid", async () => {
+  const store = new FakeReservations();
+  const expiry = new Date(NOW.getTime() + 5 * 60 * 60 * 1000);
+  const id = store.seedPending(PERSONAL_MATCH, { uploadSasExpiresAt: expiry });
+
+  const h = cancelHarness({ store });
+  expect((await cancel(h, PERSONAL_MATCH, id)).response.status).toBe(200);
+
+  const row = store.rows.get(id)!;
+  // The record is retired; the bytes are left for the cleanup worker, which
+  // is told to wait until the last issued credential has expired. Deleting
+  // now would let a browser that is still uploading recreate the key as an
+  // object no row points at.
+  expect(row.state).toBe("retired");
+  expect(row.cleanupNextAttemptAt?.toISOString()).toBe(expiry.toISOString());
+  expect(row.cleanupNextAttemptAt!.getTime()).toBeGreaterThanOrEqual(
+    row.uploadSasExpiresAt.getTime(),
+  );
+
+  // And structurally: cancellation has no storage seam to delete through.
+  // `CancelUploadDeps` is the complete list of what this path may call.
+  expect(Object.keys(h.deps).sort()).toEqual([
+    "activeWorkspace",
+    "allowedOrigins",
+    "cancel",
+    "currentUserId",
+    "loadVisibleMatch",
+  ]);
+});
+
+test("the cancellation route file imports no storage module", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(
+    "src/app/api/matches/[matchId]/video/uploads/[attachmentId]/route.ts",
+    "utf8",
+  );
+  expect(source).not.toContain("match-video/storage");
+  expect(source).not.toContain("@azure/storage-blob");
+});
+
+test("cancellation preserves an active video: the published attachment is refused", async () => {
+  const store = new FakeReservations();
+  const activeId = randomUUID();
+  store.activate(PERSONAL_MATCH, activeId, 3);
+
+  const h = cancelHarness({ store });
+  const { response, json } = await cancel(h, PERSONAL_MATCH, activeId);
+  expect(response.status).toBe(409);
+  expect(json.code).toBe("mode_conflict");
+  expect(json.detail).toBe("attachment_active");
+  expectNoStore(response);
+  // Still active — the match did not lose its video.
+  expect(store.rows.get(activeId)?.state).toBe("active");
+  expect(store.rows.get(activeId)?.retiredAt).toBeUndefined();
+});
+
+test("cancelling a pending attempt leaves an active attachment on the same match alone", async () => {
+  const store = new FakeReservations();
+  const activeId = randomUUID();
+  store.activate(PERSONAL_MATCH, activeId, 1);
+  const pendingId = store.seedPending(PERSONAL_MATCH);
+
+  const h = cancelHarness({ store });
+  expect((await cancel(h, PERSONAL_MATCH, pendingId)).response.status).toBe(
+    200,
+  );
+  expect(store.rows.get(pendingId)?.state).toBe("retired");
+  expect(store.rows.get(activeId)?.state).toBe("active");
+});
+
+test("cancellation while completion holds the row is refused, not forced", async () => {
+  const store = new FakeReservations();
+  const id = store.seedPending(PERSONAL_MATCH, {
+    finalizeLeaseUntil: new Date(NOW.getTime() + 60_000),
+  });
+  const h = cancelHarness({ store });
+
+  const { response, json } = await cancel(h, PERSONAL_MATCH, id);
+  expect(response.status).toBe(409);
+  expect(json.code).toBe("pending_attempt_conflict");
+  expect(json.detail).toBe("finalizing");
+  expect(store.rows.get(id)?.state).toBe("pending");
+});
+
+test("cancellation refuses a forged attachment id at the database, with no retirement", async () => {
+  const h = cancelHarness();
+  const mine = h.store.seedPending(PERSONAL_MATCH);
+  const forged = randomUUID();
+
+  const { response, json } = await cancel(h, PERSONAL_MATCH, forged);
+  expect(response.status).toBe(404);
+  expect(json.detail).toBe("no_such_attachment");
+  expect(h.cancelCalls).toHaveLength(1);
+  expect(h.cancelCalls[0].attachmentId).toBe(forged);
+  // Nothing of the caller's was retired as a side effect of guessing.
+  expect(h.store.rows.get(mine)?.state).toBe("pending");
+});
+
+test("cancellation refuses another person's attempt at the database", async () => {
+  const h = cancelHarness({ workspace: team(PROGRAM) });
+  const theirs = h.store.seedPending(TEAM_MATCH, { uploadedBy: OTHER_USER });
+  const { response, json } = await cancel(h, TEAM_MATCH, theirs);
+  expect(response.status).toBe(403);
+  expect(json.detail).toBe("not_uploader");
+  expect(h.store.rows.get(theirs)?.state).toBe("pending");
+});
+
+test("cancellation runs the same edge and access ladder, and retires nothing when refused", async () => {
+  const edge: [RequestOptions, number, string][] = [
+    [{ origin: "https://evil.example" }, 403, "origin_not_allowed"],
+    [
+      { headers: { "sec-fetch-site": "cross-site" } },
+      403,
+      "sec_fetch_site_cross-site",
+    ],
+    [{ contentType: "text/plain" }, 400, "content_type"],
+    [{ body: JSON.stringify({ force: true }) }, 400, "unexpected_body"],
+  ];
+  for (const [options, status, detail] of edge) {
+    const h = cancelHarness();
+    const id = h.store.seedPending(PERSONAL_MATCH);
+    const { response, json } = await cancel(h, PERSONAL_MATCH, id, options);
+    expect(response.status, detail).toBe(status);
+    expect(json.detail).toBe(detail);
+    expectNoStore(response);
+    expect(h.cancelCalls).toHaveLength(0);
+    expect(h.store.rows.get(id)?.state).toBe("pending");
+  }
+
+  const access: [AccessOptions, string, number, string][] = [
+    [{ userId: null }, PERSONAL_MATCH, 401, "no_session"],
+    [{ userId: OTHER_USER, visible: [] }, PERSONAL_MATCH, 404, "not_visible"],
+    [
+      { userId: OTHER_USER, workspace: team(PROGRAM) },
+      TEAM_MATCH,
+      403,
+      "not_creator",
+    ],
+    [
+      { workspace: team(OTHER_PROGRAM) },
+      TEAM_MATCH,
+      403,
+      "match_in_other_program",
+    ],
+    [{ workspace: null }, PERSONAL_MATCH, 403, "no_active_workspace"],
+  ];
+  for (const [options, matchId, status, detail] of access) {
+    const h = cancelHarness(options);
+    const id = h.store.seedPending(matchId);
+    const { response, json } = await cancel(h, matchId, id);
+    expect(response.status, detail).toBe(status);
+    expect(json.detail).toBe(detail);
+    expect(h.cancelCalls).toHaveLength(0);
+    expect(h.store.rows.get(id)?.state).toBe("pending");
+  }
+});
+
+test("a non-UUID attachment id is refused before cancellation reaches the database", async () => {
+  const h = cancelHarness();
+  const { response, json } = await cancel(h, PERSONAL_MATCH, "0000");
+  expect(response.status).toBe(404);
+  expect(json.detail).toBe("malformed_attachment_id");
+  expect(h.events).toEqual(["auth"]);
+  expect(h.cancelCalls).toHaveLength(0);
+});
+
+test("cancelling frees the match for a fresh attempt", async () => {
+  // The end-to-end reason cancellation exists: one pending attempt per match
+  // per uploader, so the abandoned one must be retired before a retry.
+  const store = new FakeReservations();
+  const prepare = harness({ store });
+  const first = await run(prepare, PERSONAL_MATCH, validBody());
+  expect(first.response.status).toBe(201);
+
+  const blocked = await run(harness({ store }), PERSONAL_MATCH, validBody());
+  expect(blocked.response.status).toBe(409);
+
+  const c = cancelHarness({ store });
+  expect(
+    (await cancel(c, PERSONAL_MATCH, first.json.attachmentId as string))
+      .response.status,
+  ).toBe(200);
+
+  const again = await run(harness({ store }), PERSONAL_MATCH, validBody());
+  expect(again.response.status).toBe(201);
+  expect(again.json.attachmentId).not.toBe(first.json.attachmentId);
 });

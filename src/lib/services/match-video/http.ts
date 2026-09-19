@@ -202,6 +202,51 @@ export async function readBoundedJson(
   }
 }
 
+/**
+ * The check for a mutation that carries NO metadata — renewal and
+ * cancellation (T9), whose only argument is the attachment id in the path.
+ *
+ * Two things are asserted, and they are two different concerns:
+ *
+ *   the JSON content type, even though there is nothing to parse, because
+ *   that is what makes the request one a browser preflights — the other half
+ *   of {@link checkSameOrigin}'s story, and a header a cross-origin form or
+ *   `<img>` cannot set;
+ *
+ *   an absent or EMPTY body, because these endpoints have no field a client
+ *   may set. A body with keys in it is refused by name rather than ignored,
+ *   for the reason `parseReserveUploadBody` gives: a client that starts
+ *   sending `expectedActive` should learn on the first request that it has no
+ *   effect, not assume it had one.
+ *
+ * Built on {@link readBoundedJson}, so a body that IS sent is still capped
+ * and never fully buffered.
+ */
+export async function readNoMetadataBody(
+  request: Request,
+  maxBytes: number = MUTATION_BODY_MAX_BYTES,
+): Promise<MatchVideoHttpError | null> {
+  const contentType = request.headers.get("content-type") ?? "";
+  if (!/^application\/json(\s*;.*)?$/i.test(contentType.trim())) {
+    return transportError("invalid_request", "content_type");
+  }
+  if (!request.body) return null;
+
+  const parsed = await readBoundedJson(request, maxBytes);
+  if (!parsed.ok) return parsed.error;
+
+  const value = parsed.value;
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    Object.keys(value).length > 0
+  ) {
+    return transportError("invalid_request", "unexpected_body");
+  }
+  return null;
+}
+
 /* -------------------------------------------------------------------------
  * Responses
  * ---------------------------------------------------------------------- */
