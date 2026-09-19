@@ -380,7 +380,7 @@ contract and stops for review.
 
 ## T27 · Verify end-to-end attachment acceptance and regression safety
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T10, T11, T15, T16, T20, T22, T23, T24, T26
 - **files:** Best guess: tests/match-video-attachment-flow.spec.ts; tests/fixtures/match-video/; controlled storage smoke harness and existing targeted regression tests (new/extend)

@@ -603,6 +603,55 @@ test("the room swaps with the report player and hands the playhead back", async 
   expect(handed?.time).toBeCloseTo(0.5, 1);
 });
 
+test("a room that is PLAYING keeps playing across the swap, and the player behind it stays silent", async ({
+  page,
+}) => {
+  // T26 asserted the paused room only; this is the other half of `land()`.
+  const matchId = "ok-room-playing";
+  await open(page, matchId);
+  await seekTo(page, REPORT, 0.05);
+
+  await page
+    .getByRole("button", { name: "Open the film room fullscreen" })
+    .click();
+  await page.waitForSelector(ROOM);
+  await page.waitForFunction(
+    (sel) => {
+      const el = document.querySelector<HTMLVideoElement>(sel);
+      return (
+        !!el && el.readyState >= 1 && Math.abs(el.currentTime - 0.05) < 0.1
+      );
+    },
+    ROOM,
+    { timeout: 10_000 },
+  );
+
+  // The room's own transport, not the report player's.
+  await page.getByRole("button", { name: "Play", exact: true }).last().click();
+  await page.waitForFunction(
+    (sel) => document.querySelector<HTMLVideoElement>(sel)?.paused === false,
+    ROOM,
+  );
+
+  await release(page, matchId);
+  await awaitCredential(page, ROOM, 1);
+  await awaitCredential(page, REPORT, 1);
+
+  // The intent survived the element swap: playing again with no second
+  // press, and not from the top.
+  await page.waitForFunction(
+    (sel) => document.querySelector<HTMLVideoElement>(sel)?.paused === false,
+    ROOM,
+    { timeout: 5000 },
+  );
+  const room = await state(page, ROOM);
+  expect(room?.time).toBeGreaterThan(0.04);
+
+  // One sound track: the background player did not start playing too.
+  const report = await state(page, REPORT);
+  expect(report?.paused).toBe(true);
+});
+
 /* -------------------------------------------------------------------------
  * The lineage that has no refresh, and the tab that left
  * ---------------------------------------------------------------------- */

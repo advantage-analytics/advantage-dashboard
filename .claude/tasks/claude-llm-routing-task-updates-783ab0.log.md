@@ -1342,3 +1342,76 @@ gate marked.
    honest accessibility improvement but changes semantics, so it belongs in a design-reviewed change.
 4. The three inert glyphs in the embedded control bar now sit beside a player whose fullscreen room
    does have a loop — worth deciding whether the embedded bar should borrow it.
+
+## T27 · Verify end-to-end attachment acceptance and regression safety — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+**with one criterion explicitly unverified in this environment — see the deployment gates below.**
+
+**changed:** New `tests/match-video-azure-smoke.spec.ts` — 9 serial cases driving the _production_
+`storage.ts` and `probe.ts` functions against a real account: direct upload in the browser's exact
+Put Block / Put Block List wire format, the `cw` credential refused on the final key and for reads,
+a bounded range-read probe of the staged bytes, ETag-conditioned publication and resume-on-second-
+begin, `source_etag_mismatch` leaving nothing at the final key, a stranger's object left
+byte-for-byte unchanged, the `r` credential serving only the final key, replacement beside the old
+asset then collection, and a before/after enumeration of each fresh prefix proving nothing untracked
+appears and nothing survives. `tests/fixtures/live-db.ts` exposes its existing env lookup as
+`loadedEnv` so the smoke spec gates the same way the live-DB specs do.
+
+`tests/match-video-attachment-flow.spec.ts` gains the differently-trimmed case the criterion names:
+two clips from one anchor — an mp4 at 0.500 giving +0.5 and a `.mov` replacement at 1.200 giving
+−0.2 — plus a too-short position refused in-tab with zero requests. Its fake `/complete` now derives
+the committed offset from the real `planAlignment` rather than echoing one, and both completion
+bodies are asserted to carry only the confirmed time, never an offset. `tests/film-playback-refresh.spec.ts`
+closes the gap T26 deferred here: a _playing_ room keeps playing across the credential swap without
+restarting while the report player behind it stays paused.
+
+**Criterion 3 is NOT verified here, and that is the honest result rather than a failure to fix.**
+`.env.local` names Azure account `advantagedashboard`, which answers `AccountIsDisabled` — the
+Canada East account `advantagedashboardca` exists and the env flip is the user's step. All 9 cases
+skip with a reason naming that exact Azure error code, so a red suite can never stand in for
+"unverified" and a green one can never hide it. The reviewer reproduced the skip independently and
+confirmed the harness calls the real production functions rather than doubles, so a broken harness
+could not present as skipped. Near-limit behaviour _is_ verified by virtual sources: a 3 GiB file
+inspected without reading it, the byte cap refused, a 6 GiB copy never materialised.
+
+Everything else verified for real: the live database at project `pouxujkhtbvkdwbzfvka` (42 attachment
+cases plus 10 retention cases, privilege denial across the table and all 13 RPCs, one-active and
+one-pending constraints, stale versions, 5-way reservation races, concurrent activation, correction,
+cancel-vs-begin and claim-vs-renew, a real auth-user deletion, and "matches, points, shots and
+match_stats unchanged"), with the live table left holding zero rows. Repository checks: typecheck
+clean, lint 0 errors, `format:check` clean. Full suite 1954 passed, 73 skipped (9 Azure, 64
+pre-existing env-gated), 0 failed.
+
+One honest partial inside criterion 1, which the reviewer judged accurate rather than an over-claim:
+the browser proves "file and time survive a refused completion", while the stronger "previous active
+row survives every failure path" is proven at the completion-service layer (the 11-entry boundary
+table) and in the live database, not through the UI.
+
+**remaining deployment gates — none of these are code:**
+
+1. **Run `tests/match-video-azure-smoke.spec.ts` once the Azure env points at `advantagedashboardca`.**
+   Criterion 3 stays open until it passes there.
+2. Browser-side Azure CORS for the app origins — the harness proves the wire format from Node, not a
+   browser preflight.
+3. `CRON_SECRET` in Vercel, plus the `vercel.json` schedule for `/api/cron/cleanup-match-videos`.
+4. `scripts/cleanup-orphan-storage.ts --apply` must skip or re-attribute the `match-video/` prefix
+   before any deploy carries attachments — it would otherwise delete every attachment blob as an
+   orphan. Already raised as its own task.
+
+**flakes observed, named rather than re-run to green silently:**
+
+- `match-video-attachment-flow › a tab closing mid-upload still retires the attempt` failed once when
+  run alongside `film-playback-refresh` (both webpack-bundle at startup); 4/4 in isolation and green
+  in the full run. Contention.
+- The reviewer's own run saw `teams-management.spec.ts` fail on the known shared-IP live-DB auth
+  bucket, passing in isolation. Unrelated to this branch.
+
+**follow-ups:**
+
+1. An opt-in `AZURE_SMOKE_ACCOUNT/KEY/CONTAINER` override would let the harness target a scratch
+   account without editing `.env.local`.
+2. A browser-driven variant running the real `transferAttachment` over Chromium would additionally
+   prove CORS; it needs the account's CORS rule to include the test origin.
+3. A Film-tab render of both committed offsets against the fixture clip would close the last visual
+   gap on criterion 1.

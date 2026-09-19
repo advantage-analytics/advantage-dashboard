@@ -23,4 +23,6 @@ export interface AttachmentFlowSavedEvent {
   id: string;
   version: number;
   confirmedVideoTimeSeconds: number;
+  /** The committed offset — what two differently trimmed files differ by. */
+  offsetSeconds: number;
 }

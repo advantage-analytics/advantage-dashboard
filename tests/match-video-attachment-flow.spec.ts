@@ -9,6 +9,7 @@ import tailwind from "@tailwindcss/postcss";
 import * as nextWebpack from "next/dist/compiled/webpack/webpack";
 
 import type { AttachmentFlowHarnessWindow } from "./fixtures/match-video-attachment-flow-window";
+import { planAlignment } from "@/lib/match-video/alignment";
 
 /**
  * The attachment wizard, composed, in a real browser.
@@ -45,6 +46,28 @@ let origin: string;
 const FIXTURES = resolve("tests/fixtures/match-video");
 const CLIP = join(FIXTURES, "h264-faststart.mp4");
 const OTHER_CLIP = join(FIXTURES, "h264.mov");
+
+/**
+ * The harness's source timing, restated here so the fake server's committed
+ * offset comes from the SAME planner the wizard ran — the server side of
+ * "browser and server agree", rather than a hard-coded `1 - T`. Both fixture
+ * clips run 2.000s; the harness comment spells out the geometry.
+ */
+const SOURCE_POINTS = [
+  { pointNumber: 1, videoTime: 1, duration: 0.2 },
+  { pointNumber: 2, videoTime: 1.4, duration: 0.2 },
+];
+const SOURCE_SHOTS = [{ videoTime: 0.9 }];
+const FIXTURE_DURATION_SECONDS = 2;
+
+function serverAlignment(confirmedVideoTime: unknown) {
+  return planAlignment({
+    points: SOURCE_POINTS,
+    shots: SOURCE_SHOTS,
+    confirmedVideoTime,
+    videoDurationSeconds: FIXTURE_DURATION_SECONDS,
+  });
+}
 
 /** Every request the server saw, per match. */
 const seen = new Map<string, RecordedRequest[]>();
@@ -242,15 +265,25 @@ test.beforeAll(async () => {
           response.destroy();
           return;
         }
-        const confirmed = Number(parsed.confirmedVideoTimeSeconds ?? 0);
+        // The server recomputes from the source rows, exactly as T4's SQL
+        // does; it never trusts an offset the browser could have sent.
+        const planned = serverAlignment(parsed.confirmedVideoTimeSeconds);
+        if (!planned.ok) {
+          json(planned.error.status, {
+            code: planned.error.code,
+            error: planned.error.message,
+            detail: planned.error.detail,
+          });
+          return;
+        }
         json(200, {
           status: "committed",
           attachment: {
             id: attachmentIdFor(matchId),
             version: 4,
-            offsetSeconds: 1 - confirmed,
-            confirmedVideoTimeSeconds: confirmed,
-            durationSeconds: 2,
+            offsetSeconds: planned.value.offsetSeconds,
+            confirmedVideoTimeSeconds: planned.value.confirmedVideoTimeSeconds,
+            durationSeconds: FIXTURE_DURATION_SECONDS,
             contentType: "video/mp4",
             filename: "match.mp4",
           },
@@ -513,6 +546,74 @@ test("add claims no attachment; replace claims the one it was given", async ({
     id: "6f1d4a7e-2c83-4a51-9f0e-1b7c5d3e9a42",
     version: 3,
   });
+});
+
+/* -------------------------------------------------------------------------
+ * Differently trimmed recordings (T27 acceptance 1 and 3)
+ * ---------------------------------------------------------------------- */
+
+test("two recordings trimmed differently anchor to opposite offsets, and a too-short one never leaves the tab", async ({
+  page,
+}) => {
+  // Recording A: the first serve is 0.5s into the file, so the camera started
+  // half a second AFTER the source clock — a positive offset.
+  const first = matchIdFor("ok");
+  await armAdd(page, first, "00:00:00.500");
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+  // The harness starts a fresh event log on every visit.
+  const firstEvents = await savedEvents(page);
+
+  // Recording B replaces it: a different container (`.mov`) with more
+  // lead-in, so the same serve sits at 1.2s — the camera started BEFORE the
+  // source clock, a negative offset. First a position the 2.000s file cannot
+  // cover (the final point would end at 1.9 + 0.6): refused in the tab, with
+  // the coverage sentence, and nothing is uploaded for it.
+  const second = matchIdFor("ok");
+  await open(page, { mode: "replace", matchId: second });
+  await pickFile(page, OTHER_CLIP);
+  await expect(page.getByTestId("attachment-file-name")).toHaveText("h264.mov");
+  await continueButton(page).click();
+  await expect(page.getByTestId("alignment-media-loading")).toHaveCount(0);
+
+  await timeField(page).fill("00:00:01.900");
+  await expect(page.getByTestId("alignment-error")).toHaveAttribute(
+    "data-error-code",
+    "insufficient_coverage",
+  );
+  await expect(page.getByTestId("alignment-error")).toContainText(
+    "not long enough",
+  );
+  await expect(continueButton(page)).toBeDisabled();
+  expect(await requests(page, second)).toEqual([]);
+
+  // Nudged back inside the file, the same recording is accepted.
+  await timeField(page).fill("00:00:01.200");
+  await expect(page.getByTestId("alignment-error")).toHaveCount(0);
+  await expect(page.getByTestId("alignment-ready")).toBeVisible();
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const events = [...firstEvents, ...(await savedEvents(page))];
+  expect(events).toHaveLength(2);
+  // One anchor (source 1.000s), two files, two offsets of opposite sign —
+  // each `anchor − confirmed`, recomputed by the server from the source rows
+  // and never carried across from the other recording.
+  expect(events[0].confirmedVideoTimeSeconds).toBeCloseTo(0.5, 3);
+  expect(events[0].offsetSeconds).toBeCloseTo(0.5, 3);
+  expect(events[1].confirmedVideoTimeSeconds).toBeCloseTo(1.2, 3);
+  expect(events[1].offsetSeconds).toBeCloseTo(-0.2, 3);
+
+  // Both completions carried only the confirmed time: the browser proposes a
+  // position, never an offset, so a wrong client cannot misalign a match.
+  for (const matchId of [first, second]) {
+    const complete = (await requests(page, matchId)).find((entry) =>
+      entry.path.endsWith("/complete"),
+    )!;
+    const body = JSON.parse(complete.body) as Record<string, unknown>;
+    expect(body).not.toHaveProperty("offsetSeconds");
+    expect(typeof body.confirmedVideoTimeSeconds).toBe("number");
+  }
 });
 
 test("a correction calls the alignment endpoint and nothing else", async ({

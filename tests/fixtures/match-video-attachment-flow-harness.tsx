@@ -85,6 +85,7 @@ function boot() {
           id: attachment.id,
           version: attachment.version,
           confirmedVideoTimeSeconds: attachment.confirmedVideoTimeSeconds,
+          offsetSeconds: attachment.offsetSeconds,
         });
       }}
     />,
