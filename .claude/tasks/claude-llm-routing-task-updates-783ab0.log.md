@@ -928,3 +928,55 @@ signal — handing it the signal that just fired would abort the cleanup request
 4. Worth considering: a `pagehide` handler firing the cancel as a `sendBeacon`. A tab closed
    mid-upload currently sends no cancellation at all, so the attempt sits pending until its SAS
    expires — T14 collects it, but slowly.
+
+## T20 · Compose the attachment wizard and save states — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** New `use-attachment-flow.ts` (step machine, save states, `clientRequestId` lifetime,
+progress throttling, cancel/unmount/`pagehide`, and the PATCH-only `updateAlignment`) and
+`MatchVideoAttachmentFlow.tsx`, which composes the _existing_ `WizardShell` and `useWizardKeys`
+through their published slots. `WizardShell.tsx` and its siblings have a zero diff, and the
+reviewer re-ran an existing new-match consumer spec to confirm it still passes. `attachment-upload.ts`
+gained exactly one additive optional `onReserved?(attachmentId)` callback and its single call site —
+needed because `pagehide` cancellation requires the attempt id — with T19's own spec still green.
+
+Only final confirmation uploads: a test asserts zero requests after both picking a file and marking
+the time. Duplicate submission is held by a `busy` ref rather than a disabled button, so Enter and a
+synthetic click both bounce off it, and the content column is `inert` while saving so the file and
+time cannot be edited mid-flight. Progress shows real bytes with a one-decimal percent, then
+switches to "Saving video" with no invented percentage. This task owns the throttling T19 deferred:
+a report reaches React only on a phase change, the last byte, or a 0.1-point move.
+
+The side-effect proof is thorough — it enumerates every same-origin request of a whole add and
+compares the set against exactly reserve, Azure block and complete, asserts no URL contains
+`splitstep`, and asserts `localStorage` stays empty, which is the new-match wizard's own draft
+surface. Neither new file imports the wizard hook or the splitstep services. Adjust mode's recorded
+request list is exactly one `PATCH /video/alignment`.
+
+`onSaved` fires only after a committed completion, never optimistically, so nobody navigates away
+believing a save landed while it is still in flight. `clientRequestId` is minted once per logical
+attempt and reused by "Try again" — the test asserts both reservation bodies carry the same id — and
+dropped only on publication or a genuine file change. A selection change also clears the alignment
+and the attempt, which is the browser coverage T18's single-source harness could not provide.
+`pagehide` fires the cancel as `fetch(..., { keepalive: true })` rather than `sendBeacon`, since a
+beacon can only POST and cancellation is a DELETE.
+
+19 new flow cases; 78 pass across the five specs checked, and 155 pass across the existing
+new-match wizard consumers.
+
+**follow-ups:**
+
+1. Honest caveat carried forward: the layout test asserts no horizontal overflow and that all shell
+   chrome is visible at 390px and desktop, but _not_ that the footer pins. `globals.css` makes
+   `body` the scrollport, so `position: sticky` cannot engage in a bare harness. That is the host
+   page's scroll container and identical for the existing consumer — T21 can assert it on the real
+   route.
+2. T21 should pass `savedPlaybackUrl` from `GET …/video` and own the case where minting it fails;
+   the flow already renders a retryable notice for that.
+3. The adjust path does not refresh its playback SAS — fine for a few minutes of scrubbing, but a
+   long session needs the `GET` refresh T25 owns.
+4. `AttachmentMatchSummary.score` arrives pre-formatted. When T21 wires the loader it should reuse
+   the matches-list formatter rather than introducing a second one.
+5. The wizard's `px-14` gutter leaves 278px of content at 390px. Shared shell, so out of scope here,
+   but a narrow-width gutter step is worth a look.

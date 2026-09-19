@@ -232,6 +232,16 @@ export interface AttachmentTransferOptions {
   clientRequestId?: string;
   signal?: AbortSignal;
   onProgress?: (progress: AttachmentTransferProgress) => void;
+  /**
+   * The id of the attempt this call reserved, published the moment it exists.
+   *
+   * Read by the orchestration step so a tab closed mid-upload can still retire
+   * the attempt from a `pagehide` handler — this function's own cleanup never
+   * runs when the document is going away. Purely informational: the transfer
+   * still cancels its own attempt on every failing path, and the cleanup
+   * worker is the durable backstop either way.
+   */
+  onReserved?: (attachmentId: string) => void;
   /** Test seam. Production passes nothing. */
   deps?: Partial<AttachmentTransferDeps>;
 }
@@ -621,6 +631,7 @@ export async function transferAttachment(
     attachmentId = reserved.value.attachmentId;
     uploadUrl = reserved.value.uploadUrl;
     uploadExpiresAtMs = Date.parse(reserved.value.uploadExpiresAt);
+    options.onReserved?.(attachmentId);
 
     /* ---- 2. Renewal, asked for and never invented -------------------- */
 

@@ -290,7 +290,7 @@ contract and stops for review.
 
 ## T20 · Compose the attachment wizard and save states
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T11, T12, T17, T18, T19
 - **files:** Best guess: src/components/dashboard/matches/match-video-attachment/MatchVideoAttachmentFlow.tsx and use-attachment-flow.ts; flow tests (new)
