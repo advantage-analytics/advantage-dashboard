@@ -68,6 +68,17 @@ export const HAVE_ENV = Boolean(SUPABASE_URL && ANON_KEY && SERVICE_ROLE_KEY);
 export const SKIP_REASON =
   "NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY not set";
 
+/**
+ * One value from the same `.env.local`-or-process lookup the Supabase keys use.
+ *
+ * For specs that gate on ANOTHER live service (Azure Blob Storage, say) with
+ * the same skip discipline: present means run for real, absent means skip
+ * with a reason — never a mock standing in for the service.
+ */
+export function loadedEnv(key: string): string | undefined {
+  return env(key);
+}
+
 // ---------------------------------------------------------------------------
 // Postgres error codes, surfaced by PostgREST as `error.code`.
 // ---------------------------------------------------------------------------

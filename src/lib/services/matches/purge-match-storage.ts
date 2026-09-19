@@ -1,7 +1,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  productionAttachmentPurgeDeps,
+  purgeMatchAttachments,
+  type AttachmentPurgeDeps,
+} from "@/lib/services/match-video/purge";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
 import { deleteVideoBlob } from "@/lib/services/splitstep/video-url";
 import { MATCH_DATA_BUCKET } from "@/lib/services/upload/storage.service";
+
+export interface PurgeMatchStorageOptions {
+  /**
+   * The video-attachment lane's seams. Production builds them from the
+   * service-role client; `tests/match-video-purge.spec.ts` injects fakes.
+   */
+  attachments?: AttachmentPurgeDeps;
+}
 
 /**
  * Remove every stored object belonging to a set of matches.
@@ -18,6 +31,13 @@ import { MATCH_DATA_BUCKET } from "@/lib/services/upload/storage.service";
  * left in Azure, still billed, still holding footage the person just asked to
  * have erased.
  *
+ * The fourth lane — SwingVision video attachments (`match_video_attachments`)
+ * — is the exception to the ordering rule, and deliberately so: that table's
+ * `match_id` is `on delete set null`, so its blob keys survive the delete and
+ * the cleanup worker collects the orphaned objects afterwards. The lane only
+ * authorizes, counts and schedules that run; see
+ * `lib/services/match-video/purge.ts`.
+ *
  * Every step is best-effort. A stranded file is recoverable (see
  * `scripts/cleanup-orphan-storage.ts`); a match or account the user cannot
  * delete is not. So failures log and the caller proceeds regardless.
@@ -27,6 +47,7 @@ export async function purgeMatchStorage(
   matchIds: string[],
   /** Prefixes the logs, so a stranded object says which path left it. */
   label = "match delete",
+  options: PurgeMatchStorageOptions = {},
 ): Promise<void> {
   if (matchIds.length === 0) return;
 
@@ -50,10 +71,10 @@ export async function purgeMatchStorage(
     );
   }
 
-  // The three cleanups key only off the ids and none reads another's output, so
+  // The four cleanups key only off the ids and none reads another's output, so
   // they run concurrently rather than costing the sum of their latencies. Each
   // keeps its own try/catch: a throw in the video step must not skip the other
-  // two, which is exactly what a single wrapping try would do.
+  // three, which is exactly what a single wrapping try would do.
   await Promise.all([
     (async () => {
       try {
@@ -152,6 +173,30 @@ export async function purgeMatchStorage(
         }
       } catch (err) {
         console.error(`[${label}] storage cleanup threw:`, err);
+      }
+    })(),
+
+    (async () => {
+      try {
+        // 4. SwingVision video attachments. Nothing is deleted here: the
+        //    rows outlive the match (FK set null) and the worker collects
+        //    them once it is gone. This lane authorizes the ids, counts what
+        //    the delete strands, and schedules that run for after the
+        //    caller's response. A failure here strands nothing new — the
+        //    daily sweep finds the same orphans — and must not skip the
+        //    three lanes above, whose keys do NOT survive the delete.
+        await purgeMatchAttachments({
+          caller: supabase,
+          matchIds,
+          label,
+          deps: options.attachments ?? productionAttachmentPurgeDeps(),
+        });
+      } catch (err) {
+        console.error(
+          `[${label}] attachment cleanup threw — rows keep their keys and ` +
+            `the daily sweep collects them once the match is gone:`,
+          err,
+        );
       }
     })(),
   ]);

@@ -24,6 +24,56 @@ const SERVER_ONLY = [
   "lib/supabase/admin.ts",
   "lib/supabase/server.ts",
   "lib/user/roles.ts",
+  // Imports `@azure/storage-blob`, which signs with the storage account key and
+  // is a `serverExternalPackages` entry precisely so it never bundles. The
+  // wizard runs the SAME media inspection locally, from
+  // `lib/match-video/media-inspection.ts`, so the tempting import is one
+  // directory away.
+  "lib/services/match-video/probe.ts",
+  // Same package, plus it signs upload and playback SAS URLs with the account
+  // key and mints the copy's source-read credential. The wizard needs the
+  // pure contracts in `lib/match-video/`, never this.
+  "lib/services/match-video/storage.ts",
+  // T8: the attachment routes' decision modules. `access.ts` is where the
+  // session, RLS read and active workspace are turned into the branded
+  // authorization every RPC wrapper takes; `uploads.ts` reaches `storage.ts`
+  // and the service-role RPC; `http.ts` is their shared edge. None of them
+  // has any business in a browser — the wizard speaks to them over HTTP.
+  "lib/services/match-video/access.ts",
+  "lib/services/match-video/http.ts",
+  "lib/services/match-video/uploads.ts",
+  // T10: completion reaches `probe.ts`, `storage.ts` and the service-role
+  // RPCs, and mints the finalization lease token.
+  "lib/services/match-video/complete.ts",
+  // T11: alignment correction touches no storage, but it does reach the
+  // service-role RPC through the branded access value. The wizard computes
+  // the same offset locally from `lib/match-video/alignment.ts` — the pure
+  // twin one directory away — and asks this one over HTTP.
+  "lib/services/match-video/alignment.ts",
+  // T12: playback reads the active row through the service-role client and
+  // mints the read-only SAS through `storage.ts`. A player asks it over HTTP
+  // and gets back a URL; it never imports the signer.
+  "lib/services/match-video/playback.ts",
+  // T14: the cleanup worker deletes blobs through `storage.ts` and settles
+  // rows through the service-role RPCs. Nothing in a browser ever sweeps.
+  "lib/services/match-video/cleanup.ts",
+  // T15: the schedule's bearer check. It reads `CRON_SECRET` and gates the
+  // worker; a bundle that contained it would ship the comparison — and the
+  // env read — to every visitor.
+  "lib/services/match-video/cleanup-schedule.ts",
+  // T16: the deletion lane. It builds the service-role client, reaches the
+  // worker (and so `storage.ts`) and schedules the post-delete run with
+  // `next/server`'s `after`. Deletion is asked for over HTTP or a server
+  // action; no client ever holds this.
+  "lib/services/match-video/purge.ts",
+  // T22/T23: the two match-detail loaders. Both reach `playback.ts` (and so
+  // `storage.ts`) and build a service-role client; `match-video-server.ts`
+  // also signs the provider-job SAS. They were already server-only through
+  // `lib/supabase/admin.ts`, which is a transitive catch and names the wrong
+  // file when it fires — the film subtree imports `MatchVideo` as a TYPE from
+  // the loader, one keyword away from dragging the signer into the bundle.
+  "lib/data/match-film-entry-server.ts",
+  "lib/data/match-video-server.ts",
 ].map((p) => join(SRC, p));
 
 const EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];

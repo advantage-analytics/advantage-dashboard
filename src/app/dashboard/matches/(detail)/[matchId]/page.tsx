@@ -49,6 +49,7 @@ import {
 import { StatisticsView } from "@/components/dashboard/matches/match-detail/statistics-view";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { getMatchVideo } from "@/lib/data/match-video-server";
+import { getMatchFilmEntry } from "@/lib/data/match-film-entry-server";
 
 // Statistics is the default view and loads eagerly with the page; Shots and
 // Film are each a substantial subtree (filters, an SVG court, a video
@@ -78,7 +79,12 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // a round trip in front of a page that is otherwise ready. It resolves to
   // null for every imported match and every video job with no playable file
   // left (neither our upload nor an older vendor copy), which is most of them.
-  const [data, jobs, video] = await Promise.all([
+  //
+  // `filmEntry` rides along for the same reason and answers what `video`
+  // structurally cannot: whether an attachment EXISTS (a null `video` is not
+  // the same fact), and which of Add / Replace / Adjust this viewer may take.
+  // Both are server decisions — see `match-film-entry-server.ts`.
+  const [data, jobs, video, filmEntry] = await Promise.all([
     getMatchDetailData(matchId),
     createClient().then(async (supabase) => {
       // Ask the vendor about jobs that look stuck BEFORE reading, so what the
@@ -107,6 +113,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
       return loadMatchAnalysis(supabase, [matchId], { reap: true });
     }),
     getMatchVideo(matchId),
+    getMatchFilmEntry(matchId),
   ]);
 
   if (!data) notFound();
@@ -243,10 +250,11 @@ export default async function MatchDetailPage({ params }: PageProps) {
             </MatchReportWhen>
             <MatchReportWhen view="film">
               {/* `video` is the short-lived playback SAS, or null when there
-                  is no file to serve — FilmTab renders `FilmEmptyState` for
-                  the second case. Points come from `MatchDataProvider`, so
-                  the whole view needs exactly this one prop. */}
-              <FilmTab video={video} />
+                  is no file to serve. `entry` says which no-video case that
+                  is — genuinely none, or a storage problem over a match that
+                  has one — and which actions this viewer may take. Points
+                  come from `MatchDataProvider`. */}
+              <FilmTab video={video} entry={filmEntry} />
             </MatchReportWhen>
           </MatchReportPane>
         </MatchReportFrame>

@@ -12,7 +12,6 @@ import { createPortal } from "react-dom";
 import { PanelRight } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
-import type { MatchVideo } from "@/lib/data/match-video-server";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { isFormControl } from "@/components/dashboard/matches/new-match-wizard/useWizardKeys";
 import { shortMonthDate } from "@/components/dashboard/matches/match-detail/format-clock";
@@ -44,9 +43,14 @@ import {
   nextStop,
   prevStop,
   REACHED_EPSILON_SECONDS,
+  type FilmClock,
   type FilmStop,
 } from "./film-timeline";
 import { FilmTransport, PLAYBACK_RATES } from "./film-transport";
+import type {
+  AttachmentPlaybackProblem,
+  AttachmentResumeIntent,
+} from "./use-attachment-playback";
 
 /**
  * The fullscreen film room (Film Room Fullscreen handoff, F1–F5).
@@ -82,7 +86,31 @@ import { FilmTransport, PLAYBACK_RATES } from "./film-transport";
  */
 
 export interface FilmFullscreenProps {
-  video: MatchVideo;
+  /**
+   * The credential to play — the refresh hook's current URL, shared with the
+   * report player, so the two surfaces can never hold two different ones.
+   */
+  url: string | null;
+  /** The hook's reload key; it keys this room's element too. */
+  generation: number;
+  /** Where to land after a swap. See `film-player.tsx` for the race it settles. */
+  resume: AttachmentResumeIntent | null;
+  /** The hook's terminal state, rendered over the room rather than the report. */
+  problem: AttachmentPlaybackProblem | null;
+  /** The Advantage Intelligence lineage: the reload panel stays its only repair. */
+  passthrough: boolean;
+  /** The playhead and the intent, for the hook's anchor and its resume. */
+  onPlaybackTime: (seconds: number) => void;
+  onPlaybackPlaying: (playing: boolean) => void;
+  onLoadFailure: () => void;
+  onPlayRejected: () => void;
+  onRetry: () => void;
+  /**
+   * The film clock `stops` were built from — passed in rather than rebuilt
+   * from `video`, so the room's shot feed converts through the very same
+   * alignment the report tab's points did.
+   */
+  clock: FilmClock;
   /** Where the report player was when the room opened. */
   initial: { time: number; playing: boolean };
   /** Every timed point on the film clock — the board, the track, the playing row. */
@@ -105,6 +133,19 @@ export interface FilmFullscreenProps {
 }
 
 const IDLE_MS = 3000;
+
+/**
+ * A heading per terminal reason. Same four as `film-player.tsx`, because one
+ * hook state must not read as two different events depending on which surface
+ * the viewer happened to be on.
+ */
+const ROOM_PROBLEM_TITLES: Record<AttachmentPlaybackProblem["reason"], string> =
+  {
+    removed: "This video is no longer attached",
+    denied: "You can no longer watch this video",
+    unreachable: "The video could not be reached",
+    unplayable: "The film stopped loading",
+  };
 
 function prefersReducedMotion(): boolean {
   return (
@@ -168,6 +209,25 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
 
   const syncClock = useFilmClockVars(videoRef, rootRef, playing);
 
+  /**
+   * Where a fresh element has to come back to. Seeded from the report player's
+   * hand-off and kept current by playback, so a credential swap mid-rally
+   * lands on the rally rather than on frame one — and so does a swap that
+   * happens before the hook has resolved a resume intent.
+   */
+  const landingRef = useRef({
+    time: p.initial.time,
+    playing: p.initial.playing,
+  });
+  const readyRef = useRef(false);
+  /**
+   * Seeded with the generation the room opened on, not with a sentinel: a
+   * refresh that happened BEFORE the room was opened has an intent that is
+   * still current, and applying it here would throw away the hand-off the room
+   * was actually seeded with — which is the more recent of the two.
+   */
+  const appliedRef = useRef(p.generation);
+
   /* ── Derived ─────────────────────────────────────────────────────────── */
 
   const active = useMemo(
@@ -205,11 +265,8 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   // thousand shots to place and then scan on every tick — so it is not built
   // until the drawer is up.
   const shotStops = useMemo(
-    () =>
-      panel === "closed"
-        ? []
-        : buildShotStops(p.stops, p.video.startTimeSeconds),
-    [panel, p.stops, p.video.startTimeSeconds],
+    () => (panel === "closed" ? [] : buildShotStops(p.stops, p.clock)),
+    [panel, p.stops, p.clock],
   );
   const activeShot = useMemo(
     () => activeShotAt(shotStops, currentTime),
@@ -240,16 +297,104 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
 
   /* ── Playback ────────────────────────────────────────────────────────── */
 
-  const seek = useCallback((seconds: number) => {
+  /** One place that moves the playhead everywhere it is read. */
+  const mark = useCallback(
+    (seconds: number) => {
+      landingRef.current.time = seconds;
+      setCurrentTime(seconds);
+      p.onPlaybackTime(seconds);
+    },
+    // `p` is the props object; only the callback is used, and it is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [p.onPlaybackTime],
+  );
+
+  const seek = useCallback(
+    (seconds: number) => {
+      const el = videoRef.current;
+      if (!el) return;
+      const max =
+        Number.isFinite(el.duration) && el.duration > 0
+          ? el.duration
+          : undefined;
+      const target = Math.max(0, max ? Math.min(seconds, max) : seconds);
+      el.currentTime = target;
+      mark(target);
+      rootRef.current?.style.setProperty("--film-t", String(target));
+    },
+    [mark],
+  );
+
+  /**
+   * Put a fresh element back where the old one was — the room's half of the
+   * credential swap. Either the element's metadata or the hook's resume intent
+   * can arrive last, so both call this.
+   */
+  const land = useCallback(() => {
     const el = videoRef.current;
-    if (!el) return;
+    if (!el || !readyRef.current) return;
+    const { time, playing: wasPlaying } = landingRef.current;
     const max =
       Number.isFinite(el.duration) && el.duration > 0 ? el.duration : undefined;
-    const target = Math.max(0, max ? Math.min(seconds, max) : seconds);
-    el.currentTime = target;
-    setCurrentTime(target);
-    rootRef.current?.style.setProperty("--film-t", String(target));
-  }, []);
+    const target = Math.max(0, max ? Math.min(time, max) : time);
+    // See `film-player.tsx`: small enough that a real correction always
+    // lands, large enough that a repeated settle is not a stutter.
+    if (Math.abs(el.currentTime - target) > 0.01) {
+      el.currentTime = target;
+      mark(target);
+      rootRef.current?.style.setProperty("--film-t", String(target));
+    }
+    if (wasPlaying && el.paused) {
+      void el.play().catch(() => p.onPlayRejected());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mark, p.onPlayRejected]);
+
+  /** Metadata is in: take the duration and put the playhead where it belongs. */
+  const settle = useCallback(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    setDuration(el.duration || 0);
+    el.playbackRate = rate;
+    readyRef.current = true;
+    land();
+    syncClock();
+  }, [land, rate, syncClock]);
+
+  /**
+   * Metadata, however it arrives — and this element cannot rely on the event.
+   *
+   * The room opens on the SAME URL the report player has already buffered, so
+   * the browser serves it from memory and the element can reach `readyState 1`
+   * before React has finished mounting the subtree — the `loadedmetadata` the
+   * `onLoadedMetadata` prop is waiting for has already been and gone, and the
+   * room sits on frame one with the viewer's playhead lost. Asking the element
+   * what it has is the only reading that is true either way; the prop below
+   * stays as the fast path for the ordinary case.
+   */
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (el.readyState >= 1) {
+      settle();
+      return;
+    }
+    readyRef.current = false;
+    const onReady = () => settle();
+    el.addEventListener("loadedmetadata", onReady);
+    return () => el.removeEventListener("loadedmetadata", onReady);
+  }, [p.generation, settle]);
+
+  // The room moves its own selection on a realign, not just its playhead:
+  // `mark` inside `land` sets `currentTime`, which is what the board, the
+  // position counter and the drawer's playing row all read.
+  useEffect(() => {
+    const resume = p.resume;
+    if (!resume || appliedRef.current === p.generation) return;
+    appliedRef.current = p.generation;
+    landingRef.current = { time: resume.filmTime, playing: resume.playing };
+    land();
+  }, [p.resume, p.generation, land]);
 
   const togglePlay = useCallback(() => {
     const el = videoRef.current;
@@ -258,9 +403,10 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     // resolves (a quick double Space) rejects with AbortError, and an autoplay
     // refusal with NotAllowedError. Only the element's own `error` event means
     // the file can't be played.
-    if (el.paused) void el.play().catch(() => {});
+    if (el.paused) void el.play().catch(() => p.onPlayRejected());
     else el.pause();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.onPlayRejected]);
 
   const step = useCallback(
     (direction: -1 | 1) => {
@@ -368,7 +514,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
 
   const onTimeUpdate = useCallback(
     (t: number) => {
-      setCurrentTime(t);
+      mark(t);
       syncClock();
       const now = activeStopAt(p.stops, t);
       const previous = loopStopRef.current;
@@ -388,7 +534,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
         if (jump !== null) seek(jump);
       }
     },
-    [p.stops, looping, skipDead, seek, syncClock],
+    [p.stops, looping, skipDead, seek, syncClock, mark],
   );
 
   /* ── Mount: seed the player, lock the page, take focus ───────────────── */
@@ -558,8 +704,50 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
         onFocus={wake}
         className="fixed inset-0 z-50 overflow-clip bg-black outline-none"
       >
-        {failed ? (
-          <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+        {p.problem ? (
+          // The hook's terminal state, in the room's own palette. "Back to the
+          // report" comes first because leaving is the one thing that always
+          // works; the second button appears only where asking again could
+          // honestly change the answer.
+          <div
+            role="alert"
+            data-testid="film-room-problem"
+            data-film-problem={p.problem.reason}
+            className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center"
+          >
+            <span className="text-[16px] text-white">
+              {ROOM_PROBLEM_TITLES[p.problem.reason]}
+            </span>
+            <span className="max-w-[380px] text-[12px] text-white/60">
+              {p.problem.message}
+            </span>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={exit}
+                className={advButton("outline", "md")}
+              >
+                Back to the report
+              </button>
+              {p.problem.canRetry && (
+                <button
+                  type="button"
+                  onClick={p.onRetry}
+                  className={advButton("primary", "md")}
+                >
+                  Try again
+                </button>
+              )}
+            </div>
+          </div>
+        ) : failed ? (
+          // The Advantage Intelligence lineage, unchanged: nothing re-signs
+          // that URL, so a reload is the whole repair.
+          <div
+            role="alert"
+            data-testid="film-room-reload"
+            className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center"
+          >
             <span className="text-[16px] text-white">
               The film stopped loading
             </span>
@@ -587,36 +775,47 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
         ) : (
           <>
             <video
+              // The reload key. `videoReady` is deliberately NOT reset with
+              // it: a silent refresh should be invisible, and fading the room
+              // to black and back is the most visible thing it could do.
+              key={p.generation}
               ref={videoRef}
-              src={p.video.url}
+              src={p.url ?? undefined}
               preload="metadata"
               playsInline
+              data-testid="film-room-video"
               className={cn(
                 "absolute inset-0 h-full w-full object-contain transition-opacity duration-200",
                 videoReady ? "opacity-100" : "opacity-0",
               )}
               onLoadedData={() => setVideoReady(true)}
               onClick={togglePlay}
-              onPlay={() => setPlaying(true)}
-              onPause={() => setPlaying(false)}
-              onLoadedMetadata={(e) => {
-                const el = e.currentTarget;
-                setDuration(el.duration || 0);
-                el.currentTime = p.initial.time;
-                el.playbackRate = rate;
-                if (p.initial.playing) void el.play().catch(() => {});
-                syncClock();
+              onPlay={() => {
+                setPlaying(true);
+                landingRef.current.playing = true;
+                p.onPlaybackPlaying(true);
               }}
+              onPause={() => {
+                setPlaying(false);
+                landingRef.current.playing = false;
+                p.onPlaybackPlaying(false);
+              }}
+              // `landingRef` is seeded from the report player's hand-off, so
+              // the first mount seeds exactly as it always did; later mounts
+              // are credential swaps and land where playback had got to.
+              onLoadedMetadata={settle}
               onDurationChange={(e) => {
                 setDuration(e.currentTarget.duration || 0);
                 syncClock();
               }}
               onTimeUpdate={(e) => onTimeUpdate(e.currentTarget.currentTime)}
               onSeeked={(e) => {
-                setCurrentTime(e.currentTarget.currentTime);
+                mark(e.currentTarget.currentTime);
                 syncClock();
               }}
-              onError={() => setFailed(true)}
+              onError={() =>
+                p.passthrough ? setFailed(true) : p.onLoadFailure()
+              }
             >
               Your browser cannot play this video.
             </video>

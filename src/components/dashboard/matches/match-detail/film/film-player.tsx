@@ -9,7 +9,6 @@ import {
   useState,
 } from "react";
 
-import type { MatchVideo } from "@/lib/data/match-video-server";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import {
   shortMonthDate,
@@ -27,6 +26,10 @@ import { cn } from "@/lib/utils";
 import { useFilmClockVars } from "./film-clock";
 import type { Rect } from "./film-motion";
 import { nextStop, prevStop, type FilmStop } from "./film-timeline";
+import type {
+  AttachmentPlaybackProblem,
+  AttachmentResumeIntent,
+} from "./use-attachment-playback";
 
 /**
  * The match video, with the 46c control bar over it (artboard lines 819–844).
@@ -43,12 +46,25 @@ import { nextStop, prevStop, type FilmStop } from "./film-timeline";
  * scrolls past. Metadata is enough for the duration and the scrubber; bytes
  * move when somebody presses play.
  *
- * ── The SAS expires ─────────────────────────────────────────────────────────
+ * ── The SAS expires, and only one lineage can do anything about it ──────────
  * `getMatchVideo()` mints a short-lived playback SAS on the server. Leave a
  * match page open past it and the next range request 403s, which the element
- * surfaces as a media error. There is nothing a client can do to re-sign, so
- * the error state offers the one action that works: reload, which runs
- * `getMatchVideo()` again.
+ * surfaces as a media error.
+ *
+ * For an ATTACHMENT that is now recoverable without losing the page:
+ * `useAttachmentPlayback` (T25) holds the credential, refreshes it before
+ * expiry and hands back a {@link AttachmentResumeIntent} saying where to land.
+ * This component is the element half of that — it swaps `src`, lands, and
+ * renders the hook's terminal {@link AttachmentPlaybackProblem} when there is
+ * one. It decides nothing: no timer, no request and no retry budget lives here.
+ *
+ * For the **Advantage Intelligence lineage** nothing changed. That path has no
+ * refresh endpoint (see the hook's docstring for why pointing it at one would
+ * blank a film that plays perfectly well), so it still arrives as
+ * `passthrough`, still surfaces a media error as `failed`, and still offers
+ * the one action that works there: reload, which runs `getMatchVideo()` again.
+ * That panel below is not dead code — it is the whole error story for every
+ * match the video pipeline produced.
  *
  * ── Glyphs with nothing behind them ─────────────────────────────────────────
  * The artboard's bar carries three more controls (a timer, a loop, a kebab)
@@ -68,7 +84,40 @@ export interface FilmPlayerHandle {
 }
 
 interface FilmPlayerProps {
-  video: MatchVideo;
+  /**
+   * The credential to play — `AttachmentPlaybackApi.url`, not
+   * `MatchVideo.url`, so a refreshed credential reaches the element without
+   * the page reloading. `null` only once a problem is terminal, where the
+   * panel renders instead of an element.
+   */
+  url: string | null;
+  /**
+   * The hook's reload key. It keys the `<video>`, so every installed
+   * credential gets a fresh element rather than a mutated `src` — a swap
+   * mid-stream otherwise leaves the old buffer's frames on screen.
+   */
+  generation: number;
+  /**
+   * Where to land after a swap, once the hook has resolved it. Applied when
+   * the new element has metadata, whichever of the two arrives last.
+   */
+  resume: AttachmentResumeIntent | null;
+  /** The hook's terminal state. Non-null means playback has stopped for good. */
+  problem: AttachmentPlaybackProblem | null;
+  /**
+   * The Advantage Intelligence lineage, where none of the above applies and
+   * the reload panel is still the error story.
+   */
+  passthrough: boolean;
+  /**
+   * The fullscreen room is mounted over this player.
+   *
+   * It keeps its playhead through a refresh but never takes the play intent —
+   * two elements playing one match is two soundtracks — and stops reporting to
+   * the hook, because while the room is up the room is what the viewer is
+   * watching and its playhead is the one an alignment must be anchored to.
+   */
+  background: boolean;
   /**
    * The stops the prev/next buttons step through — the currently applied cut
    * on the film clock, so the buttons walk what the list is showing.
@@ -76,6 +125,16 @@ interface FilmPlayerProps {
   stops: FilmStop[];
   /** Fires on `timeupdate`/`seeked`; drives the point list's playing row. */
   onTimeChange: (seconds: number) => void;
+  /** The playhead, for the hook's anchor. Suppressed while `background`. */
+  onPlaybackTime: (seconds: number) => void;
+  /** The play/pause intent, for the hook's resume. Suppressed while `background`. */
+  onPlaybackPlaying: (playing: boolean) => void;
+  /** The element could not fetch bytes. The hook decides what that means. */
+  onLoadFailure: () => void;
+  /** A rejected `play()` — autoplay policy, never an expired credential. */
+  onPlayRejected: () => void;
+  /** The terminal state's button, where the hook says one could help. */
+  onRetry: () => void;
   /** The fullscreen glyph. Entered by user action only, never automatically. */
   onEnterFullscreen: () => void;
   /**
@@ -84,6 +143,18 @@ interface FilmPlayerProps {
    */
   clockTargetRef?: React.RefObject<HTMLElement | null>;
 }
+
+/**
+ * A heading per terminal reason. The hook owns the sentence; the title is a
+ * player's job, and "The film stopped loading" is not what a viewer who has
+ * lost access needs to read.
+ */
+const PROBLEM_TITLES: Record<AttachmentPlaybackProblem["reason"], string> = {
+  removed: "This video is no longer attached",
+  denied: "You can no longer watch this video",
+  unreachable: "The video could not be reached",
+  unplayable: "The film stopped loading",
+};
 
 const GLYPH =
   "block h-[15px] w-[15px] cursor-pointer text-white/85 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)] rounded-[2px]";
@@ -121,7 +192,23 @@ function InertGlyph({
 
 export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
   function FilmPlayer(
-    { video, stops, onTimeChange, onEnterFullscreen, clockTargetRef },
+    {
+      url,
+      generation,
+      resume,
+      problem,
+      passthrough,
+      background,
+      stops,
+      onTimeChange,
+      onPlaybackTime,
+      onPlaybackPlaying,
+      onLoadFailure,
+      onPlayRejected,
+      onRetry,
+      onEnterFullscreen,
+      clockTargetRef,
+    },
     ref,
   ) {
     const { match } = useMatchData();
@@ -142,6 +229,30 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       playing,
     );
 
+    /**
+     * Where a fresh element has to come back to: the last playhead and intent
+     * this surface saw, overwritten by the hook's `resume` when the stops moved
+     * under it. Kept in a ref rather than state because it is read from a media
+     * event handler that must not wait for a render.
+     */
+    const landingRef = useRef({ time: 0, playing: false });
+    /** Whether THIS element has metadata — reset by every generation. */
+    const readyRef = useRef(false);
+    /** The generation whose resume intent has already been taken. */
+    const appliedRef = useRef(-1);
+
+    /** One place that moves the playhead everywhere it is read. */
+    const pushTime = useCallback(
+      (seconds: number) => {
+        landingRef.current.time = seconds;
+        setCurrentTime(seconds);
+        onTimeChange(seconds);
+        if (!background) onPlaybackTime(seconds);
+        syncClock();
+      },
+      [background, onPlaybackTime, onTimeChange, syncClock],
+    );
+
     const seekTo = useCallback(
       (seconds: number) => {
         const el = videoRef.current;
@@ -152,12 +263,94 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             : undefined;
         const target = Math.max(0, max ? Math.min(seconds, max) : seconds);
         el.currentTime = target;
-        setCurrentTime(target);
-        onTimeChange(target);
-        syncClock();
+        pushTime(target);
       },
-      [onTimeChange, syncClock],
+      [pushTime],
     );
+
+    /**
+     * Put the new element where the old one was.
+     *
+     * Called from both ends of the race — the element gaining metadata and the
+     * resume intent arriving — because either can be last, and a swap that
+     * lands nowhere is a viewer thrown back to the first frame.
+     */
+    const land = useCallback(() => {
+      const el = videoRef.current;
+      if (!el || !readyRef.current) return;
+      const { time, playing: wasPlaying } = landingRef.current;
+      const max =
+        Number.isFinite(el.duration) && el.duration > 0
+          ? el.duration
+          : undefined;
+      const target = Math.max(0, max ? Math.min(time, max) : time);
+      // A seek to where the element already is — within a hundredth of a
+      // second — is skipped, because `settle()` can run more than once for one
+      // element and re-seeking a playing one stutters it for nothing. The
+      // threshold stays far below the smallest real correction: an alignment
+      // that moved by less than a frame is not one anybody asked for.
+      if (Math.abs(el.currentTime - target) > 0.01) {
+        el.currentTime = target;
+        pushTime(target);
+      }
+      if (wasPlaying && !background && el.paused) {
+        void el.play().catch(() => {
+          setPlaying(false);
+          onPlayRejected();
+        });
+      }
+    }, [background, onPlayRejected, pushTime]);
+
+    /** Metadata is in: take the duration and put the playhead back. */
+    const settle = useCallback(() => {
+      const el = videoRef.current;
+      if (!el) return;
+      setDuration(el.duration || 0);
+      readyRef.current = true;
+      // Generation zero is the server's own render: the element is already
+      // where it should be, and seeking it would move a viewer who has not
+      // asked for anything.
+      if (generation > 0) land();
+      syncClock();
+    }, [generation, land, syncClock]);
+
+    /**
+     * Metadata, however it arrives.
+     *
+     * A new credential is a new element (`key={generation}`), so nothing is
+     * loaded yet — usually. A swap onto a URL the browser still has buffered
+     * can reach `readyState 1` before React has mounted the subtree, and then
+     * the `loadedmetadata` the prop is waiting for has already happened; the
+     * element would sit on frame one holding the viewer's place in a variable
+     * nothing ever read. Asking the element is the reading that is true either
+     * way. `playing` is deliberately NOT reset here: a silent refresh should be
+     * invisible, and flashing the centre play glyph for the length of a
+     * metadata fetch is the opposite of that.
+     */
+    useEffect(() => {
+      const el = videoRef.current;
+      if (!el) return;
+      if (el.readyState >= 1) {
+        settle();
+        return;
+      }
+      readyRef.current = false;
+      const onReady = () => settle();
+      el.addEventListener("loadedmetadata", onReady);
+      return () => el.removeEventListener("loadedmetadata", onReady);
+    }, [generation, settle]);
+
+    // Note 1 of T25's handoff: the intent has to be consumed, and the parent
+    // is what consumes it — in its own effect, which React runs after this
+    // one, so the copy below is already taken by then. What arrives here is a
+    // plain value tied to one generation, and the guard
+    // below is about a re-render, not about the hook re-offering it.
+    useEffect(() => {
+      if (!resume || appliedRef.current === generation) return;
+      appliedRef.current = generation;
+      landingRef.current = { time: resume.filmTime, playing: resume.playing };
+      land();
+    }, [resume, generation, land]);
 
     useImperativeHandle(
       ref,
@@ -185,11 +378,17 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       const el = videoRef.current;
       if (!el) return;
       if (el.paused) {
-        void el.play().catch(() => setFailed(true));
+        // A rejected promise here is autoplay policy or a load interrupted by
+        // the next seek — never evidence that the file or its credential is
+        // broken, which is why it goes to `onPlayRejected` and not to the
+        // error panel. The fullscreen room has always swallowed it; this
+        // surface used to raise "The film stopped loading" over a click the
+        // browser simply declined.
+        void el.play().catch(() => onPlayRejected());
       } else {
         el.pause();
       }
-    }, []);
+    }, [onPlayRejected]);
 
     const step = useCallback(
       (direction: -1 | 1) => {
@@ -244,9 +443,48 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
 
     const eventName = match.tournamentName?.trim() || null;
 
+    // The hook's terminal state. It outranks the reload panel because it knows
+    // something the panel is guessing at: whether the credential is even the
+    // problem, and whether asking again could change the answer.
+    if (problem) {
+      return (
+        <div
+          role="alert"
+          data-testid="film-playback-problem"
+          data-film-problem={problem.reason}
+          className="flex flex-col items-center justify-center gap-4 rounded-[14px] border border-[var(--border-hairline)] bg-[var(--surface-card)] px-6 py-16 text-center"
+        >
+          <span className="text-title" style={{ fontSize: "16px" }}>
+            {PROBLEM_TITLES[problem.reason]}
+          </span>
+          <span
+            className="text-body-sm max-w-[380px] [text-wrap:pretty]"
+            style={{ color: "var(--ink-600)" }}
+          >
+            {problem.message}
+          </span>
+          {problem.canRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className={advButton("primary", "md")}
+            >
+              Try again
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    // The Advantage Intelligence lineage's whole error story, unchanged: no
+    // endpoint re-signs that URL, so reloading the page is the only repair.
     if (failed) {
       return (
-        <div className="flex flex-col items-center justify-center gap-4 rounded-[14px] border border-[var(--border-hairline)] bg-[var(--surface-card)] px-6 py-16 text-center">
+        <div
+          role="alert"
+          data-testid="film-reload-panel"
+          className="flex flex-col items-center justify-center gap-4 rounded-[14px] border border-[var(--border-hairline)] bg-[var(--surface-card)] px-6 py-16 text-center"
+        >
           <span className="text-title" style={{ fontSize: "16px" }}>
             The film stopped loading
           </span>
@@ -275,35 +513,34 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
           className="relative aspect-video w-full overflow-hidden rounded-[14px] bg-[#1A1A1C]"
         >
           <video
+            // The reload key. A `src` swap on a live element can keep serving
+            // the old buffer; a keyed remount cannot.
+            key={generation}
             ref={videoRef}
-            src={video.url}
+            src={url ?? undefined}
             preload="metadata"
             playsInline
+            data-testid="film-player-video"
             className="absolute inset-0 h-full w-full object-contain"
             onClick={togglePlay}
-            onPlay={() => setPlaying(true)}
-            onPause={() => setPlaying(false)}
-            onLoadedMetadata={(e) => {
-              setDuration(e.currentTarget.duration || 0);
-              syncClock();
+            onPlay={() => {
+              setPlaying(true);
+              landingRef.current.playing = true;
+              if (!background) onPlaybackPlaying(true);
             }}
+            onPause={() => {
+              setPlaying(false);
+              landingRef.current.playing = false;
+              if (!background) onPlaybackPlaying(false);
+            }}
+            onLoadedMetadata={settle}
             onDurationChange={(e) => {
               setDuration(e.currentTarget.duration || 0);
               syncClock();
             }}
-            onTimeUpdate={(e) => {
-              const t = e.currentTarget.currentTime;
-              setCurrentTime(t);
-              onTimeChange(t);
-              syncClock();
-            }}
-            onSeeked={(e) => {
-              const t = e.currentTarget.currentTime;
-              setCurrentTime(t);
-              onTimeChange(t);
-              syncClock();
-            }}
-            onError={() => setFailed(true)}
+            onTimeUpdate={(e) => pushTime(e.currentTarget.currentTime)}
+            onSeeked={(e) => pushTime(e.currentTarget.currentTime)}
+            onError={() => (passthrough ? setFailed(true) : onLoadFailure())}
           >
             Your browser cannot play this video.
           </video>

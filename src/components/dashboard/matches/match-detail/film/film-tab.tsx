@@ -9,11 +9,20 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { createClient } from "@/lib/supabase/client";
 
+import {
+  filmEntryView,
+  NO_FILM_ENTRY,
+  type MatchFilmEntry,
+} from "@/lib/match-video/film-entry";
+
 import { FilmEmptyState } from "./film-empty-state";
+import { FilmEntryActions } from "./film-entry-actions";
+import { FilmUnavailableState } from "./film-unavailable-state";
 import { FilmPlayer, type FilmPlayerHandle } from "./film-player";
 import { PointList } from "./point-list";
 import { scoreColumns } from "./film-score";
-import { activeStopAt, filmStops } from "./film-timeline";
+import { activeStopAt } from "./film-timeline";
+import { useAttachmentPlayback } from "./use-attachment-playback";
 import {
   DEFAULT_FILM_FILTERS,
   applyFilmFilters,
@@ -42,13 +51,51 @@ const FilmFullscreen = dynamic(loadFilmFullscreen, { ssr: false });
  * are converted from the recording's clock once, in `filmStops`.
  */
 
-export function FilmTab({ video }: { video: MatchVideo | null }) {
-  if (!video) return <FilmEmptyState />;
-  return <FilmRoom video={video} />;
+/**
+ * `entry` is the server's answer to two questions this component must not
+ * answer itself: is there a video at all, and may this viewer change it. It
+ * decides which of the three no-video states is the truthful one —
+ * `filmEntryView` holds that rule — so a storage failure can never arrive here
+ * wearing the empty state's "Add video" button.
+ *
+ * It defaults to {@link NO_FILM_ENTRY}, which offers nothing: a caller that
+ * forgot the prop gets a page with no controls, never one with the wrong ones.
+ */
+export function FilmTab({
+  video,
+  entry = NO_FILM_ENTRY,
+}: {
+  video: MatchVideo | null;
+  entry?: MatchFilmEntry;
+}) {
+  if (video) return <FilmRoom video={video} entry={entry} />;
+  const view = filmEntryView(entry);
+  if (view === "empty") return <FilmEmptyState entry={entry} />;
+  return <UnavailableFilm entry={entry} state={view} />;
 }
 
-function FilmRoom({ video }: { video: MatchVideo }) {
-  const { points: serverPoints } = useMatchData();
+/** Split out only so the match id can come from the provider, as it does below. */
+function UnavailableFilm({
+  entry,
+  state,
+}: {
+  entry: MatchFilmEntry;
+  state: "unavailable" | "stale";
+}) {
+  const { match } = useMatchData();
+  return (
+    <FilmUnavailableState matchId={match.id} entry={entry} state={state} />
+  );
+}
+
+function FilmRoom({
+  video,
+  entry,
+}: {
+  video: MatchVideo;
+  entry: MatchFilmEntry;
+}) {
+  const { match, points: serverPoints } = useMatchData();
   const sides = useMatchSides();
   const supabase = useMemo(() => createClient(), []);
   const playerRef = useRef<FilmPlayerHandle>(null);
@@ -85,7 +132,72 @@ function FilmRoom({ video }: { video: MatchVideo }) {
   }, []);
 
   const youIsPlayer1 = sides.you.isPlayer1;
-  const offset = video.startTimeSeconds;
+
+  /**
+   * The credential, and the clock it implies.
+   *
+   * ONE hook for the whole room, not one per surface: a second controller
+   * would be a second timer, a second recovery budget and — the part that
+   * shows — a second `generation`, so the report player and the fullscreen
+   * room could end up holding two different URLs for the same match.
+   *
+   * It is also the only clock now. `filmClock(video)` used to be built here
+   * and `filmStops` derived from it, which was correct right up until a
+   * correction arrived: the hook would rebuild its stops on the NEW offset
+   * while this component kept deriving the old ones, and the two would
+   * disagree about where every point is. The hook holds them both, and the
+   * Advantage Intelligence lineage gets the same two values out of its
+   * passthrough branch, built from exactly the same `filmClock` fields.
+   */
+  const playback = useAttachmentPlayback({
+    matchId: match.id,
+    video,
+    points,
+  });
+  const clock = playback.clock;
+  const stops = playback.stops;
+  const {
+    generation,
+    resume,
+    resumeApplied,
+    reportTime,
+    reportPlaying,
+    reportLoadFailure,
+    reportPlayRejected,
+    retry,
+  } = playback;
+
+  /**
+   * The resume intent: handed to the players, then given back to the hook.
+   *
+   * T25's note 1 — `resume` must be consumed with `resumeApplied()` or the
+   * intent is re-offered on every render. It is consumed HERE rather than in a
+   * player because both players may need it: the room mounts over a report
+   * player that is still alive, and whichever called `resumeApplied()` first
+   * would take it from the other. The order works out because child effects
+   * run before the parent's: each player has already copied the intent into
+   * its own landing ref by the time this runs. `install()` emits the new
+   * `generation` and the intent in ONE snapshot, so the players receive both on
+   * the same render — the remount and the instruction never arrive apart.
+   *
+   * T25's note 2 — `realign: true` means the stops were rebuilt and `filmTime`
+   * is a resolved point start, so the point list's SELECTION has to move, not
+   * just the playhead. It moves here rather than waiting for the element to
+   * load and report back: a corrected alignment that took a while to fetch
+   * would otherwise leave the list highlighting a row the new stops no longer
+   * put the playhead inside.
+   */
+  useEffect(() => {
+    if (!resume) return;
+    if (resume.realign) {
+      // The controller IS the external system this effect subscribes to, and
+      // this is its update arriving — not a render cascading into itself. It
+      // runs once per installed credential, never per frame.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCurrentTime(resume.filmTime);
+    }
+    resumeApplied();
+  }, [resume, resumeApplied]);
 
   const filteredPoints = useMemo(
     () => applyFilmFilters(points, filters, youIsPlayer1),
@@ -97,8 +209,6 @@ function FilmRoom({ video }: { video: MatchVideo }) {
       tab === "saved" ? filteredPoints.filter((p) => p.saved) : filteredPoints,
     [filteredPoints, tab],
   );
-
-  const stops = useMemo(() => filmStops(points, offset), [points, offset]);
 
   const walkStops = useMemo(() => {
     const ids = new Set(filteredPoints.map((p) => p.id));
@@ -185,12 +295,30 @@ function FilmRoom({ video }: { video: MatchVideo }) {
 
   return (
     <div ref={clockRef} className="flex flex-col gap-4">
+      {/* Above the player and right-aligned: maintenance for the person who
+          owns the file, out of the way of the person watching. Renders
+          nothing at all for everyone else. */}
+      <FilmEntryActions matchId={match.id} entry={entry} />
+
       <FilmPlayer
         ref={playerRef}
         clockTargetRef={clockRef}
-        video={video}
+        url={playback.url}
+        generation={generation}
+        resume={resume}
+        problem={playback.problem}
+        passthrough={playback.passthrough}
+        // While the room is up it is the surface being watched: this player
+        // keeps its playhead through a refresh but stays silent, and the room
+        // is what reports to the hook.
+        background={room !== null}
         stops={walkStops}
         onTimeChange={setCurrentTime}
+        onPlaybackTime={reportTime}
+        onPlaybackPlaying={reportPlaying}
+        onLoadFailure={reportLoadFailure}
+        onPlayRejected={reportPlayRejected}
+        onRetry={retry}
         onEnterFullscreen={enterRoom}
       />
 
@@ -211,7 +339,17 @@ function FilmRoom({ video }: { video: MatchVideo }) {
 
       {room && (
         <FilmFullscreen
-          video={video}
+          url={playback.url}
+          generation={generation}
+          resume={resume}
+          problem={playback.problem}
+          passthrough={playback.passthrough}
+          onPlaybackTime={reportTime}
+          onPlaybackPlaying={reportPlaying}
+          onLoadFailure={reportLoadFailure}
+          onPlayRejected={reportPlayRejected}
+          onRetry={retry}
+          clock={clock}
           initial={room}
           stops={stops}
           walkStops={walkStops}

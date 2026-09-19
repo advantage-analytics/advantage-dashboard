@@ -22,7 +22,8 @@ const shot = (id: string, videoTime: number | null, extra = {}) => ({
   ...extra,
 });
 
-const OFFSET = 15;
+/** The legacy Advantage Intelligence shape: a trim offset, no measured file. */
+const OFFSET = { offset: 15, duration: null };
 const points = [
   pt({
     id: "p1",
@@ -56,6 +57,34 @@ test("the playing shot, and nothing in the dead time between points", () => {
   expect(activeShotAt(stops, 53)?.stop.shot.id).toBe("s3");
   expect(activeShotAt(stops, 70)).toBeNull();
   expect(activeShotAt(stops, 80.5)?.stop.shot.id).toBe("t1");
+});
+
+test("shots convert through the same clock as their point, once", () => {
+  // The camera rolled 20s before the source clock's first point, in a file
+  // measured at 300s. A doubled offset would put s1 at 105, not 85.
+  const attached = { offset: -20, duration: 300 };
+  const stops = shotStops(filmStops(points, attached), attached);
+  expect(stops[0].shot.id).toBe("s1");
+  expect(stops[0].start).toBeCloseTo(85, 6);
+  expect(stops[0].start).not.toBeCloseTo(65 + 2 * 20, 6);
+  // A shot shares its point's serve contact, so the two agree exactly.
+  expect(stops[0].start).toBeCloseTo(filmStops(points, attached)[0].serve, 6);
+});
+
+test("a shot past the last frame sits on it rather than off the end", () => {
+  const attached = { offset: -20, duration: 300 };
+  const late = [
+    pt({
+      id: "p",
+      videoTime: 275,
+      duration: 4,
+      shots: [shot("s", 275), shot("edge", 280.04)],
+    }),
+  ];
+  const stops = shotStops(filmStops(late, attached), attached);
+  expect(stops[1].start).toBe(300);
+  expect(stops[1].end).toBe(300);
+  expect(stops[0].end).toBe(300);
 });
 
 test("labels", () => {

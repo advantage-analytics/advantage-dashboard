@@ -362,6 +362,12 @@ const PointRow = memo(function PointRow({
     <div
       role={seekable ? "button" : undefined}
       tabIndex={seekable ? 0 : undefined}
+      // Which row the playhead is in, in the DOM rather than only in a class
+      // name. A credential refresh that corrects the alignment has to move the
+      // SELECTION and not just the playhead, and a background wash is not
+      // something a test can assert on without pinning a token's value.
+      data-point-id={point.id}
+      data-playing={isActive ? "true" : undefined}
       aria-label={
         seekable ? `${point.resultType} — jump to this point` : undefined
       }
