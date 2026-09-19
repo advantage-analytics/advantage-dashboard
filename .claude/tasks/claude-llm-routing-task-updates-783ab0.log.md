@@ -1415,3 +1415,39 @@ table) and in the live database, not through the UI.
    prove CORS; it needs the account's CORS rule to include the test origin.
 3. A Film-tab render of both committed offsets against the fixture clip would close the last visual
    gap on criterion 1.
+
+## T28 · Document attachment operations and rollout order — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** New `docs/match-video-attachments.md` is the operations note for whoever runs and
+supports this feature: creator-only management and the exact authorization ladder; the accepted
+containers and MIME types with the AVI and unsupported-MP4 guidance; the size limit and the
+`empty_file` versus `file_too_large` split; first-point alignment and the coverage tolerance;
+migration-before-code rollout naming all four migrations in order; the cron schedule and secret; the
+Azure CORS rule to verify; the cleanup worker's concurrency, batch limit and backoff; and the
+retained-team-asset rule. `docs/README.md` gains an index row in the table's existing convention.
+
+Two lines in `docs/video-pipeline-overview.md` were factually stale as a direct consequence of this
+feature — they said `CRON_SECRET` had no route to protect and was unused since
+`/api/cron/reclaim-videos` was retired. T15 gave it a route. Both corrected minimally, in that
+file's voice.
+
+Because this is documentation, accuracy _is_ the acceptance criterion, and the review checked it
+that way rather than confirming topics were mentioned: extensions and MIME types verified
+byte-for-byte against `limits.ts`, the byte cap and its error split against `checkAttachmentSize`,
+all four migration filenames against the directory _and_ their presence confirmed live (the table
+plus all 16 `match_video_*` functions), the `0 5 * * *` schedule against `vercel.json`, and the
+backoff formula against the cleanup migration's own SQL. The implementer read these from source
+rather than from this log.
+
+Section 7 states the four open gates exactly as T27 found them, and claims no rollout that has not
+happened: the Azure account answers `AccountIsDisabled` with the env flip pending, CORS unverified
+from a browser, `CRON_SECRET` unset in Vercel, and the orphan sweeper's third-path-segment
+attribution still able to delete every attachment blob. `format:check` clean; no file under `src/`
+was touched.
+
+**follow-ups:**
+
+1. Once the Azure account flip lands and `CRON_SECRET` is set, running the smoke spec and a real cron
+   sweep would earn section 7 a short "verified in production" addendum.

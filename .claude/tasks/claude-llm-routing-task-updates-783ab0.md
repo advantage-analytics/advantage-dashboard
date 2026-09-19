@@ -394,7 +394,7 @@ contract and stops for review.
 
 ## T28 · Document attachment operations and rollout order
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T15, T16, T27
 - **files:** Best guess: docs/match-video-attachments.md (new); docs/README.md

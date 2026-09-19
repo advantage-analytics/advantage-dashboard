@@ -376,7 +376,8 @@ copied in. Both are gone, along with `reclaim-videos.ts`, `startTrimmedVideoCopy
 - it is also the only way to re-run a job, which `resubmit-job.ts` already relied on.
 
 The only thing that removes a video now is deleting its match (above) or the orphan
-sweeper (below). `CRON_SECRET` has no route to protect until the next scheduled job.
+sweeper (below). `CRON_SECRET` now protects a scheduled route — see
+`docs/match-video-attachments.md` — but this pipeline still has no cron of its own.
 
 ### Webhook deliveries cascade too
 
@@ -632,7 +633,7 @@ branch. The three that block Phase 2 are **Q8** (what `in` means on a serve), **
 | `SPLITSTEP_WEBHOOK_SECRET`               | Vercel                         | HMAC key, **issued by the vendor**. Unset = unsigned mode, which accepts anything                                                                                                                                                                                                                                                                                                                                                              |
 | `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE`    | Vercel                         | `true` = fail-closed on a missing signature. **Set this once a real delivery confirms `X-HMAC-Signature`**                                                                                                                                                                                                                                                                                                                                     |
 | `SPLITSTEP_API_URL`, `SPLITSTEP_API_KEY` | Vercel, **Preview only today** | key issued by the vendor. Production submissions 503 until set there                                                                                                                                                                                                                                                                                                                                                                           |
-| `CRON_SECRET`                            | Vercel                         | any long random string, for a future scheduled route (`Authorization: Bearer <secret>`, fail closed). Unused since `/api/cron/reclaim-videos` was retired in September 2026                                                                                                                                                                                                                                                                    |
+| `CRON_SECRET`                            | Vercel                         | any long random string, checked as `Authorization: Bearer <secret>`, fail closed. Protects `/api/cron/cleanup-match-videos` (see `docs/match-video-attachments.md`), not this pipeline. Not yet set in Vercel                                                                                                                                                                                                                                  |
 
 Note that the account key is the only credential and it does everything, which is why
 the write SAS is scoped to `cw` on one blob name — that scope is the containment, not
