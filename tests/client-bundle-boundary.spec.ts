@@ -61,6 +61,11 @@ const SERVER_ONLY = [
   // worker; a bundle that contained it would ship the comparison — and the
   // env read — to every visitor.
   "lib/services/match-video/cleanup-schedule.ts",
+  // T16: the deletion lane. It builds the service-role client, reaches the
+  // worker (and so `storage.ts`) and schedules the post-delete run with
+  // `next/server`'s `after`. Deletion is asked for over HTTP or a server
+  // action; no client ever holds this.
+  "lib/services/match-video/purge.ts",
 ].map((p) => join(SRC, p));
 
 const EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];

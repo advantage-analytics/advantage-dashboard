@@ -710,3 +710,50 @@ to 47 cases.
    protect and is unused — now false. T28 already owns cron-secret and schedule documentation.
 3. The plan's other cron need is still open: reprocessing when `DERIVATION_VERSION` bumps, noted in
    the splitstep webhook. It can reuse `authorizeCronRequest` unchanged.
+
+## T16 · Integrate attachment cleanup with match and account deletion — done
+
+**gate:** mechanical GATE PASS (lint, typecheck, full suite) · completion VERDICT: pass
+
+**changed:** New `src/lib/services/match-video/purge.ts` adds a fourth lane to
+`purgeMatchStorage`, each lane in its own try/catch inside one `Promise.all`. The lane is
+authorized before it is privileged: it re-reads `matches` through the _caller's_ client and keeps
+only ids that client can already see, so it narrows and never widens, before the service-role
+client is touched. It deletes no blob itself — it snapshots the rows and schedules T14's
+`requestBestEffortCleanup` through `after()`, so nothing runs inside the deletion transaction.
+
+"Eventually collect" is the mechanism, and it composes from pieces already built: the delete
+commits, the FK nulls `match_id`, and T13 treats an orphan row as collectible in _any_ state.
+Late activity cannot slip past, because every T3/T4 RPC looks a row up by `id AND match_id`
+behind the shared guard — so renew, finalize and activate all answer `match_not_found` the moment
+the delete lands. A browser holding a valid SAS may keep writing its staged blob; T13 holds that
+row until the SAS plus five minutes, then sweeps it. A copy in flight is left alone while its
+finalization lease is live, then aborted before the final delete, and one settling afterwards
+recreates nothing.
+
+Isolation is the load-bearing word and is proven by injection: three parametrised tests fail the
+attachment lane three different ways — `listAttachments` throws, `schedule` throws, the caller's
+read errors — and each asserts `processing_jobs` and `match_files` were still read and that
+`storage.remove` still ran against both buckets. Recorded honestly: the Azure video lane has no
+injectable seam, so its half of that proof is by construction rather than by test.
+
+Retention policy is untouched — `actions.ts` is not in the diff at all. A unit test pins the
+`created_by` plus `program_id is null` filter and the `purgeMatchStorage` call, and the live-DB
+retention spec now seeds active attachment rows and proves a ghost uploader's row on a team match
+survives `deleteUser` with only `uploaded_by` nulled, keys and state intact. That spec ran for
+real against the live database — 10 passed, not skipped — and the reviewer confirmed it is not
+silently skipping.
+
+T14's worker is reused unmodified (`cleanup.ts` has zero diff). T14's fakes were lifted into
+`tests/fixtures/match-video-cleanup-fakes.ts` so both specs share one model of T13's semantics;
+T14's 44 cases pass unchanged. 67 tests pass across the four specs checked.
+
+**follow-ups:**
+
+1. `after()` falls back to running the sweep inline when called outside a request scope, as in a
+   script. A script that wants the post-delete run must invoke the worker itself.
+2. The Azure video lane in `purgeMatchStorage` has no injectable seam, so the isolation proof
+   covers two of the three sibling lanes by test. A `deleteVideoBlob` seam would close that.
+3. The retire-on-claim fence leaves an orphan under a live SAS in `pending` — though unreachable —
+   for up to the SAS plus five minutes. Nothing needs it today; a service-role `retire_by_match`
+   RPC would close the window if a UI ever wants to show "deleted" immediately.

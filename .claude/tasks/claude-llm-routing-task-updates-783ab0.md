@@ -238,7 +238,7 @@ contract and stops for review.
 
 ## T16 · Integrate attachment cleanup with match and account deletion
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T13, T14
 - **files:** Best guess: src/lib/services/matches/purge-match-storage.ts; src/lib/services/match-video/purge.ts (new); deletion tests and tests/account-deletion-retention.spec.ts
