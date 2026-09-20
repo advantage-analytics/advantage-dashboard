@@ -5,6 +5,7 @@ import {
   computeViz,
   computeVizStats,
   filterKeysFor,
+  statRowAnnouncement,
   statsAreEmpty,
   subjectFor,
   type Cut,
@@ -846,5 +847,75 @@ test.describe("computeVizStats — precomputed result (M2)", () => {
       precomputed,
     );
     expect(withPrecomputed).toEqual(withoutPrecomputed);
+  });
+});
+
+test.describe("statRowAnnouncement", () => {
+  test("carries a non-empty label for a row from each of the three cuts", () => {
+    const serveStats = computeVizStats(
+      [point({ firstShotLandingX: ZONE_LX["deuce-wide"] })],
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    const placementStats = computeVizStats(
+      [
+        point({
+          serverIsPlayer1: false,
+          secondShotLandingX: 2.5,
+          secondShotLandingY: 4.0,
+          secondShotType: "Forehand",
+        }),
+      ],
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    const contactStats = computeVizStats(
+      [
+        point({
+          serverIsPlayer1: false,
+          secondShotLandingX: 0,
+          secondShotLandingY: 0,
+          secondShotType: "Forehand",
+        }),
+      ],
+      "returnContact",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+
+    for (const stats of [serveStats, placementStats, contactStats]) {
+      for (const group of stats.groups) {
+        for (const row of group.rows) {
+          const announcement = statRowAnnouncement(row);
+          expect(row.label.length).toBeGreaterThan(0);
+          expect(announcement).toContain(row.label);
+          expect(announcement.startsWith(":")).toBe(false);
+          expect(announcement.length).toBeGreaterThan(row.label.length);
+        }
+      }
+    }
+  });
+
+  test("exact wording: a row with points, and a row with none", () => {
+    const withPoints = {
+      key: "crosscourt",
+      label: "Crosscourt",
+      count: 4,
+      won: 4,
+      winPct: 100,
+    };
+    const noPoints = {
+      key: "ad-t",
+      label: "Ad T",
+      count: 0,
+      won: 0,
+      winPct: null,
+    };
+    expect(statRowAnnouncement(withPoints)).toBe(
+      "Crosscourt: 100% of 4 points won",
+    );
+    expect(statRowAnnouncement(noPoints)).toBe("Ad T: no points");
   });
 });

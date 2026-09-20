@@ -482,6 +482,21 @@ export interface StatRow {
   winPct: number | null; // null when count === 0
 }
 
+/**
+ * The single accessible sentence for one stat row — "Crosscourt: 100% of 4
+ * points won" / "Ad T: no points". The only place this string is built:
+ * `stats-card.tsx` renders it verbatim into a visually-hidden node and
+ * hides its own visible label/number markup from assistive tech, so a
+ * screen reader announces this sentence exactly once per row, never the
+ * label alone and never twice. A test in `tests/viz-model.spec.ts` builds
+ * rows through `computeVizStats` (not by hand) so a card row can never ship
+ * with an empty label again the way the live app briefly did.
+ */
+export function statRowAnnouncement(row: StatRow): string {
+  if (row.winPct === null) return `${row.label}: no points`;
+  return `${row.label}: ${row.winPct}% of ${row.count} points won`;
+}
+
 export interface StatGroup {
   key: string;
   label: string | null;
