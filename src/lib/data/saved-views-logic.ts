@@ -382,6 +382,26 @@ export function mergeManageableOrder(
   );
 }
 
+/**
+ * What `saved-views-band.tsx` should render, given the current view count and
+ * whether a transient status message (the delete Undo window, or any
+ * error/status line) is showing. P1b: with zero views and nothing pending,
+ * the whole band is absent — `"hidden"`. But deleting the LAST view sets
+ * `viewCount` to 0 the same instant the Undo status appears, and the 6s Undo
+ * window must stay reachable, so that combination renders `"status-only"`:
+ * the heading and status line stay mounted, with no tiles and no "New view"
+ * tile. Any other view count renders the full band regardless of status.
+ */
+export type BandVisibility = "hidden" | "status-only" | "full";
+
+export function bandVisibility(
+  viewCount: number,
+  hasStatus: boolean,
+): BandVisibility {
+  if (viewCount > 0) return "full";
+  return hasStatus ? "status-only" : "hidden";
+}
+
 /** One row of the ⋯ tile menu, in the order `manage-tile-menu.tsx` draws them. */
 export type ManageMenuRowKind =
   "rename" | "duplicate" | "share" | "unshare" | "delete";

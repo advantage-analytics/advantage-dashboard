@@ -20,6 +20,7 @@ import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import {
   applyIdOrder,
+  bandVisibility,
   canManageSavedView,
   hasDuplicateViewName,
   mergeManageableOrder,
@@ -50,8 +51,13 @@ import { truncatePillLabels } from "./viz-labels";
  * its `savedViewsBand` slot) and `VizFocused` (ditto), so it is the SAME
  * band on both surfaces — one component, two mount points.
  *
- * P1b: renders nothing at all with zero views — never an empty band, a
- * skeleton or sample tiles.
+ * P1b: renders nothing at all with zero views and nothing pending — never an
+ * empty band, a skeleton or sample tiles. The one exception is transient: if
+ * deleting the LAST view leaves a status message (the Undo window, or an
+ * error) on screen, the band stays mounted status-only (heading + status
+ * line, no tiles) until that status clears — see `bandVisibility`. Otherwise
+ * the 6-second Undo affordance for the last view would be unreachable, since
+ * the whole band carrying it would vanish the instant the delete lands.
  *
  * Manage mode (Part B) is entirely this component's own client state — on/off,
  * which tile's ⋯ menu is open, which tile is mid-rename, drag state, the
@@ -89,6 +95,10 @@ export function SavedViewsBand({
   const tileElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const menuTriggerElsRef = useRef<Map<string, HTMLButtonElement>>(new Map());
   const doneButtonRef = useRef<HTMLButtonElement>(null);
+  // Latest `optimisticViews.length`, kept current by an effect below so the
+  // `setStatusMessage` expiry timer can read the count AT EXPIRY without
+  // closing over a stale value from when the timer was scheduled.
+  const optimisticViewCountRef = useRef(0);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragSnapshotRef = useRef<Map<string, DOMRect>>(new Map());
   const dragStartOrderRef = useRef<string[]>([]);
@@ -121,6 +131,16 @@ export function SavedViewsBand({
     },
     [],
   );
+
+  // Keeps `optimisticViewCountRef` current after every commit — a ref write,
+  // not `setState`, so this doesn't trigger `react-hooks/set-state-in-effect`;
+  // it also isn't a render-time ref write (`react-hooks/refs` forbids that),
+  // since it runs in the effect phase. Read by `setStatusMessage`'s expiry
+  // timer below to see the count AT EXPIRY, not whatever it was when the
+  // timer was scheduled.
+  useEffect(() => {
+    optimisticViewCountRef.current = optimisticViews.length;
+  }, [optimisticViews]);
 
   const manageableIds = useMemo(
     () =>
@@ -183,14 +203,30 @@ export function SavedViewsBand({
     prevRectsRef.current = rects;
   }, [manageMode]);
 
-  if (views.length === 0) {
+  // `optimisticViews.length`, not the `views` prop: the prop only catches up
+  // once `router.refresh()` resolves, but the band must already know it's
+  // down to zero the instant `handleDelete`'s optimistic update removes the
+  // last row, so `status-only` visibility kicks in from that first render
+  // rather than a beat later.
+  const visibility = bandVisibility(optimisticViews.length, status !== null);
+
+  if (visibility === "hidden") {
     return null;
   }
 
   function setStatusMessage(text: string, undo?: () => void, ms = 6000) {
     if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
     setStatus({ text, undo });
-    statusTimerRef.current = setTimeout(() => setStatus(null), ms);
+    statusTimerRef.current = setTimeout(() => {
+      setStatus(null);
+      // The band is `status-only` right now precisely because it has zero
+      // views (see `bandVisibility`) — once this status clears it will
+      // unmount on the next render. Switch Manage mode off so it isn't still
+      // "on" if a view is ever added back and the band remounts fresh.
+      if (optimisticViewCountRef.current === 0) {
+        setManageMode(false);
+      }
+    }, ms);
   }
 
   function toggleManageMode() {
@@ -275,6 +311,13 @@ export function SavedViewsBand({
     );
     setRenamingId(null);
     setRenameDuplicate(false);
+    // Enter commits and unmounts the rename field the same way Esc's
+    // `cancelRename` does — focus must return to the tile's ⋯ button here
+    // too, not just on cancel. The button itself is unaffected by
+    // `renamingId` (only the name slot swaps), so it's already mounted and
+    // `.focus()` lands immediately, before `router.refresh()` below re-renders
+    // the tile with the server-confirmed name.
+    menuTriggerElsRef.current.get(view.id)?.focus();
 
     startTransition(async () => {
       const result = await renameSavedView(view.id, trimmed);
@@ -383,9 +426,20 @@ export function SavedViewsBand({
   function handleUndo(view: SavedViewRow) {
     if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
     setStatus(null);
+    // Optimistic re-add, mirroring every other rollback in this file — and
+    // load-bearing here specifically: clearing `status` above with zero views
+    // still in `optimisticViews` would otherwise read as `bandVisibility`'s
+    // "hidden" case for the one render between this click and
+    // `router.refresh()` landing, unmounting the band a beat into its own
+    // Undo. Restoring the row immediately keeps `visibility` at "full"
+    // throughout, so the band "continues normally in Manage mode" with no gap.
+    setOptimisticViews((prev) =>
+      [...prev, view].sort((a, b) => a.order - b.order),
+    );
     startTransition(async () => {
       const result = await restoreSavedView(view);
       if (!result.ok) {
+        setOptimisticViews((prev) => prev.filter((v) => v.id !== view.id));
         setStatusMessage("Couldn't save that change");
         return;
       }
@@ -575,9 +629,12 @@ export function SavedViewsBand({
           >
             Saved views
           </h2>
-          <span className="text-micro">
-            {views.length} saved view{views.length === 1 ? "" : "s"}
-          </span>
+          {visibility === "full" && (
+            <span className="text-micro">
+              {optimisticViews.length} saved view
+              {optimisticViews.length === 1 ? "" : "s"}
+            </span>
+          )}
         </div>
         {manageMode ? (
           <div className="flex shrink-0 items-center gap-3">
@@ -633,67 +690,71 @@ export function SavedViewsBand({
         </div>
       )}
 
-      <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}
-      >
-        {optimisticViews.map((view) => {
-          const manageable = canManageSavedView(view, workspaceRole);
-          const data = tileDataFor(view);
+      {visibility === "full" && (
+        <div
+          className="grid gap-4"
+          style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}
+        >
+          {optimisticViews.map((view) => {
+            const manageable = canManageSavedView(view, workspaceRole);
+            const data = tileDataFor(view);
 
-          if (manageMode && manageable) {
+            if (manageMode && manageable) {
+              return (
+                <ManageableSavedViewTile
+                  key={view.id}
+                  view={view}
+                  data={data}
+                  workspaceKind={workspaceKind}
+                  workspaceRole={workspaceRole}
+                  isDragging={dragId === view.id}
+                  isRenaming={renamingId === view.id}
+                  renameValue={renameValue}
+                  renameDuplicate={renameDuplicate}
+                  menuOpen={openMenuId === view.id}
+                  onMenuOpenChange={(open) =>
+                    handleMenuOpenChange(view.id, open)
+                  }
+                  onRegisterTileEl={(el) => registerTileEl(view.id, el)}
+                  onRegisterMenuTriggerEl={(el) =>
+                    registerMenuTriggerEl(view.id, el)
+                  }
+                  onRenameValueChange={(value) => {
+                    setRenameValue(value);
+                    setRenameDuplicate(false);
+                  }}
+                  onRenameCommit={() => commitRename(view)}
+                  onRenameCancel={cancelRename}
+                  onStartRename={() => startRename(view)}
+                  onDuplicate={() => handleDuplicate(view)}
+                  onShare={() => handleShare(view)}
+                  onUnshare={() => handleUnshare(view)}
+                  onDelete={() => handleDelete(view)}
+                  onPointerDownTile={(e) => handleTilePointerDown(e, view)}
+                  onPointerMoveTile={(e) => handleTilePointerMove(e, view)}
+                  onPointerEndTile={(e) => handleTilePointerEnd(e, view)}
+                  onKeyDownTile={(e) => handleTileKeyDown(e, view)}
+                />
+              );
+            }
+
             return (
-              <ManageableSavedViewTile
+              <CourtTile
                 key={view.id}
-                view={view}
-                data={data}
-                workspaceKind={workspaceKind}
-                workspaceRole={workspaceRole}
-                isDragging={dragId === view.id}
-                isRenaming={renamingId === view.id}
-                renameValue={renameValue}
-                renameDuplicate={renameDuplicate}
-                menuOpen={openMenuId === view.id}
-                onMenuOpenChange={(open) => handleMenuOpenChange(view.id, open)}
-                onRegisterTileEl={(el) => registerTileEl(view.id, el)}
-                onRegisterMenuTriggerEl={(el) =>
-                  registerMenuTriggerEl(view.id, el)
-                }
-                onRenameValueChange={(value) => {
-                  setRenameValue(value);
-                  setRenameDuplicate(false);
-                }}
-                onRenameCommit={() => commitRename(view)}
-                onRenameCancel={cancelRename}
-                onStartRename={() => startRename(view)}
-                onDuplicate={() => handleDuplicate(view)}
-                onShare={() => handleShare(view)}
-                onUnshare={() => handleUnshare(view)}
-                onDelete={() => handleDelete(view)}
-                onPointerDownTile={(e) => handleTilePointerDown(e, view)}
-                onPointerMoveTile={(e) => handleTilePointerMove(e, view)}
-                onPointerEndTile={(e) => handleTilePointerEnd(e, view)}
-                onKeyDownTile={(e) => handleTileKeyDown(e, view)}
+                playerName={data.subjectName}
+                name={view.name}
+                nameAdornment={view.shared ? <SharedGlyph /> : undefined}
+                pills={data.pills}
+                countLabel={data.countLabel}
+                cut={view.cut}
+                dots={data.dots}
+                href={data.href}
               />
             );
-          }
-
-          return (
-            <CourtTile
-              key={view.id}
-              playerName={data.subjectName}
-              name={view.name}
-              nameAdornment={view.shared ? <SharedGlyph /> : undefined}
-              pills={data.pills}
-              countLabel={data.countLabel}
-              cut={view.cut}
-              dots={data.dots}
-              href={data.href}
-            />
-          );
-        })}
-        <NewViewTile hrefFor={hrefFor} />
-      </div>
+          })}
+          <NewViewTile hrefFor={hrefFor} />
+        </div>
+      )}
     </div>
   );
 }

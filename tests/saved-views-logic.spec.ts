@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
   applyIdOrder,
+  bandVisibility,
   canManageSavedView,
   filtersToParams,
   hasDuplicateViewName,
@@ -497,4 +498,20 @@ test("savedViewsCountFact singularizes exactly one", () => {
 test("savedViewsCountFact pluralizes more than one", () => {
   expect(savedViewsCountFact(2)).toBe(" · 2 saved views");
   expect(savedViewsCountFact(11)).toBe(" · 11 saved views");
+});
+
+/* ── bandVisibility ──────────────────────────────────────────────────── */
+
+test("bandVisibility is hidden with zero views and nothing pending", () => {
+  expect(bandVisibility(0, false)).toBe("hidden");
+});
+
+test("bandVisibility stays status-only with zero views while a status message is showing", () => {
+  expect(bandVisibility(0, true)).toBe("status-only");
+});
+
+test("bandVisibility is full with at least one view, status or not", () => {
+  expect(bandVisibility(1, false)).toBe("full");
+  expect(bandVisibility(1, true)).toBe("full");
+  expect(bandVisibility(3, false)).toBe("full");
 });
