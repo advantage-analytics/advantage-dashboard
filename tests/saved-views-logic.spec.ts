@@ -515,3 +515,17 @@ test("bandVisibility is full with at least one view, status or not", () => {
   expect(bandVisibility(1, true)).toBe("full");
   expect(bandVisibility(3, false)).toBe("full");
 });
+
+// R1 fix: `saved-views-band.tsx`'s status/Undo line is gated on `status !==
+// null` alone (`hasStatus` here), never on Manage mode. `bandVisibility`
+// takes exactly `(viewCount, hasStatus)` — no third `manageMode` parameter
+// — so pressing "Done" (which only flips Manage mode, never `status`) has
+// no way to reach this decision at all. Asserting the arity documents that
+// invariant directly, rather than by example: the prior bug was a
+// component-level gate (`saved-views-band.tsx` rendering the status line
+// only `manageMode && …`) that disagreed with this already-correct pure
+// decision, not a defect in `bandVisibility` itself, and this pins the
+// function's shape so a future edit can't reintroduce that coupling here.
+test("bandVisibility takes only viewCount and hasStatus — manage mode is not one of its inputs", () => {
+  expect(bandVisibility.length).toBe(2);
+});

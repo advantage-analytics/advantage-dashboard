@@ -663,7 +663,14 @@ export function SavedViewsBand({
         )}
       </div>
 
-      {manageMode && (
+      {/* Gated on `status !== null` alone, never `manageMode`: pressing Done
+          only toggles Manage mode off (`toggleManageMode` doesn't touch
+          `status`) and must not also hide a live status/Undo line — that
+          line stays reachable until it expires or Undo is clicked,
+          regardless of Manage mode. If Undo then restores a view, this
+          renders in the band's normal (non-manage) mode, same as any other
+          `full`-visibility render. */}
+      {status !== null && (
         <div
           role="status"
           aria-live="polite"
