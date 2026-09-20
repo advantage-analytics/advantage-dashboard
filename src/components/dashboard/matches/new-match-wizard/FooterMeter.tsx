@@ -1,6 +1,10 @@
 import { usageFraction } from "@/lib/data/usage-format";
 import { formatPilotEnd } from "@/lib/services/splitstep/config";
-import { formatHoursCap, formatHoursTenths, formatOverage } from "./utils";
+import {
+  formatHoursCap,
+  formatHoursTenths,
+  formatAllowanceSpan,
+} from "./utils";
 
 /**
  * The monthly allowance, in the footer beside the primary action.
@@ -54,11 +58,13 @@ export function FooterMeter({
       <span
         role="img"
         aria-label={
-          over
-            ? `${formatHoursTenths(usedSeconds)} of ${cap} hours used, ${formatHoursTenths(selectedSeconds)} pending — over the allowance by ${formatOverage(overSeconds, true)}`
-            : priced
-              ? `${formatHoursTenths(usedSeconds)} of ${cap} hours used, ${formatHoursTenths(selectedSeconds)} pending`
-              : `${formatHoursTenths(usedSeconds)} of ${cap} hours used`
+          priced
+            ? `${formatHoursTenths(usedSeconds)} of ${cap} hours used, ${formatHoursTenths(selectedSeconds)} pending${
+                over
+                  ? ` — over the allowance by ${formatAllowanceSpan(overSeconds, true)}`
+                  : ""
+              }`
+            : `${formatHoursTenths(usedSeconds)} of ${cap} hours used`
         }
         className="inline-flex h-[3px] w-14 shrink-0 overflow-hidden rounded-[2px] bg-[var(--ink-100)]"
       >
@@ -68,14 +74,10 @@ export function FooterMeter({
         />
         <span
           className="h-full shrink-0 bg-[var(--viz-you-light)] transition-[width] duration-300 ease-[var(--ease-chart)]"
-          style={
-            over
-              ? {
-                  width: `${pendingFraction * 100}%`,
-                  backgroundColor: "var(--error)",
-                }
-              : { width: `${pendingFraction * 100}%` }
-          }
+          style={{
+            width: `${pendingFraction * 100}%`,
+            ...(over && { backgroundColor: "var(--error)" }),
+          }}
         />
       </span>
       <span
@@ -83,7 +85,7 @@ export function FooterMeter({
         style={over ? { color: "var(--error)" } : undefined}
       >
         {over
-          ? `Spends ${formatHoursTenths(selectedSeconds)} h · Over by ${formatOverage(overSeconds)}`
+          ? `Spends ${formatHoursTenths(selectedSeconds)} h · Over by ${formatAllowanceSpan(overSeconds)}`
           : priced
             ? `Spends ${formatHoursTenths(selectedSeconds)} h · ${formatHoursTenths(
                 Math.max(0, remainingSeconds - selectedSeconds),

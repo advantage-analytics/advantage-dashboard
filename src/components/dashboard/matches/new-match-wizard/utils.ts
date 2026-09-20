@@ -528,14 +528,18 @@ export function formatHoursTenths(seconds: number): string {
 }
 
 /**
- * How far over the allowance a video is — "2 min", "45 min", "1.3 h".
+ * A span of allowance, either side of the line — "2 min", "45 min", "1.3 h".
  *
  * Minutes under an hour, because tenths of an hour cannot say a small number:
- * two minutes over rounds to "0.0 h", and a refusal whose own figure reads as
+ * two minutes rounds to "0.0 h", and a refusal whose own figures read as
  * nothing is a refusal nobody believes. Never less than one minute, for the
  * same reason. `long` is the spoken form for an `aria-label`.
+ *
+ * Used for BOTH figures in the over-allowance refusal — how far over the trim
+ * is, and how much is left — because a sentence that says "5 min over the
+ * 0.0 h left" contradicts itself in its own second clause.
  */
-export function formatOverage(seconds: number, long = false): string {
+export function formatAllowanceSpan(seconds: number, long = false): string {
   if (seconds < 3600) {
     const minutes = Math.max(1, Math.ceil(seconds / 60));
     return long

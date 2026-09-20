@@ -12,7 +12,7 @@ import { formatPilotEnd } from "@/lib/services/splitstep/config";
 import {
   formatHoursCap,
   formatHoursTenths,
-  formatOverage,
+  formatAllowanceSpan,
 } from "@/components/dashboard/matches/new-match-wizard/utils";
 
 /**
@@ -68,7 +68,7 @@ const FooterMeter = (() => {
       if (id === "@/lib/data/usage-format") return { usageFraction };
       if (id === "@/lib/services/splitstep/config") return { formatPilotEnd };
       if (id === "./utils")
-        return { formatHoursCap, formatHoursTenths, formatOverage };
+        return { formatHoursCap, formatHoursTenths, formatAllowanceSpan };
       throw new Error(`unexpected import in the meter: ${id}`);
     },
   });
@@ -109,7 +109,7 @@ test("over the allowance, the readout names the overage instead of a clamped rem
     selectedSeconds: 3 * HOUR,
   });
   // The real formatter, not a literal: 3.0 spent against 2.0 left.
-  expect(readout(html)).toContain(`Over by ${formatOverage(HOUR)}`);
+  expect(readout(html)).toContain(`Over by ${formatAllowanceSpan(HOUR)}`);
   expect(readout(html)).toContain("Over by 1.0 h");
   expect(readout(html)).toContain("Spends 3.0 h");
   // The clamped sentence is what this replaces, so it must be gone.

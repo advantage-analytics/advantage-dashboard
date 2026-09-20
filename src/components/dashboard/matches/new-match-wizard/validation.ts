@@ -1,7 +1,7 @@
 import { normalizedPersonName } from "@/lib/data/person-name";
 import type { WorkspaceKind } from "@/lib/workspace/types";
 
-import { formatHoursTenths, formatOverage } from "./utils";
+import { formatAllowanceSpan } from "./utils";
 import type {
   IdentityConfirmationScope,
   Step,
@@ -189,11 +189,13 @@ export function quotaRefusal(input: {
 
   const neededWhole = Math.ceil(neededSeconds);
   if (neededWhole > remainingSeconds) {
-    // The overage leads, in minutes when it is small: "needs 1.0 h but only
-    // 1.0 h is left" is what two minutes over reads as in tenths of an hour.
-    const over = formatOverage(neededWhole - remainingSeconds);
-    const remaining = formatHoursTenths(remainingSeconds);
-    return `This trim is ${over} over the ${remaining} h left this month. Shorten the selection to continue.`;
+    // Both figures in minutes when they are small: "needs 1.0 h but only 1.0 h
+    // is left" is what two minutes over reads as in tenths of an hour, and
+    // "5 min over the 0.0 h left" is the same rounding on the other number —
+    // a sentence refusing on the grounds of an allowance it prints as empty.
+    const over = formatAllowanceSpan(neededWhole - remainingSeconds);
+    const remaining = formatAllowanceSpan(remainingSeconds);
+    return `This trim is ${over} over the ${remaining} left this month. Shorten the selection to continue.`;
   }
 
   return null;

@@ -67,8 +67,25 @@ test("a trim over the remaining budget by one second is refused, and the overage
       workspaceKind: "personal",
     }),
   ).toBe(
-    "This trim is 1 min over the 0.2 h left this month. Shorten the selection to continue.",
+    "This trim is 1 min over the 10 min left this month. Shorten the selection to continue.",
   );
+});
+
+test("neither figure in the refusal rounds away to nothing", () => {
+  // 30 s left, a 6 min window. In tenths of an hour the remainder reads "0.0",
+  // so the sentence would refuse on the grounds of an allowance it prints as
+  // empty — the same rounding the overage figure already avoids.
+  const message = quotaRefusal({
+    ...BASE,
+    neededSeconds: 360,
+    remainingSeconds: 30,
+    workspaceKind: "personal",
+  });
+
+  expect(message).toBe(
+    "This trim is 6 min over the 1 min left this month. Shorten the selection to continue.",
+  );
+  expect(message).not.toContain("0.0");
 });
 
 test("no user-visible string mentions splitstep", () => {

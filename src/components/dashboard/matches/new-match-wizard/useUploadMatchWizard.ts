@@ -37,7 +37,7 @@ import {
   monthlyCapSecondsFor,
   sumUsedSeconds,
 } from "@/lib/services/splitstep/quota";
-import { formatResetDate } from "@/lib/data/usage-format";
+import { formatResetDate, secondsLeft } from "@/lib/data/usage-format";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import type { Workspace } from "@/lib/workspace/types";
 import type { ProgramApprovalReading } from "@/lib/workspace/upload-eligibility";
@@ -119,6 +119,27 @@ import {
  * the frame, which produces the same wrong answer this rule exists to prevent.
  */
 export const TOP_PLAYER_ANSWER_RESET_SECONDS = 30;
+
+/**
+ * Both camera answers, dropped — never defaulted.
+ *
+ * `fixedCamera` describes the whole recording and `initialTopPlayerIsPlayer1`
+ * its first frame (`docs/ui-revamp-guardrails.md` §3.1, §4), so a DIFFERENT
+ * recording invalidates both. `handleTrimChange` drops the top-player answer
+ * when the window start travels; that rule alone was not enough, because
+ * swapping the video never moves a handle — it rewrites the window from
+ * `onVideoPick`, so the drift rule never runs and the question would render as
+ * already answered, for a frame from the previous file.
+ */
+const CLEARED_CAMERA_ANSWERS = {
+  fixedCamera: undefined,
+  initialTopPlayerIsPlayer1: undefined,
+} as const;
+
+/** Name, size and mtime — enough to tell one picked recording from another. */
+function videoSignature(file: File): string {
+  return `${file.name}:${file.size}:${file.lastModified}`;
+}
 
 export interface ImportIdentityState {
   /** Original parser perspective, never rewritten by display-name edits. */
@@ -765,6 +786,17 @@ export function useUploadMatchWizard({
     start: number | undefined;
     answered: boolean;
   }>({ start: undefined, answered: false });
+  /**
+   * The recording the camera answers describe, as {@link videoSignature}.
+   *
+   * Null means "no answer belongs to a file in this session" — which includes
+   * a RESUMED DRAFT, whose answers come back without the video they were given
+   * for. Re-picking then re-asks both questions rather than assuming the file
+   * chosen is the one they were answered for; two recordings can share a name,
+   * and the guardrail's own rule is that a false clear costs one click while a
+   * false keep costs the match.
+   */
+  const cameraAnswerFileRef = useRef<string | null>(null);
   useEffect(() => {
     topPlayerAnswerRef.current = {
       start: formData.videoStartSeconds,
@@ -1041,7 +1073,7 @@ export function useUploadMatchWizard({
         used = sumUsedSeconds(data ?? []);
       }
 
-      setRemainingQuotaSeconds(Math.max(0, quotaCapSeconds - used));
+      setRemainingQuotaSeconds(secondsLeft(used, quotaCapSeconds));
     })();
 
     return () => {
@@ -1878,6 +1910,21 @@ export function useUploadMatchWizard({
    * from the file itself so an unusable video is refused at pick time rather
    * than after a twenty-minute upload.
    */
+  /**
+   * Forget which recording the camera answers belonged to.
+   *
+   * The answers themselves are cleared in the same `setFormData` that rewrites
+   * the window, so the form and these refs move together. Not marked STALE:
+   * that hint says the window start moved, and a new recording is a different
+   * reason — both questions are simply asked again, with their usual hints.
+   */
+  const forgetCameraAnswers = useCallback(() => {
+    cameraAnswerFileRef.current = null;
+    topPlayerAnswerStartRef.current = null;
+    topPlayerAnswerRef.current = { start: undefined, answered: false };
+    setTopPlayerAnswerStale(false);
+  }, []);
+
   const onVideoPick = useCallback(
     async (file: File | null) => {
       if (!file || !selectedProvider) return;
@@ -1926,6 +1973,15 @@ export function useUploadMatchWizard({
         // Default the trim to the whole video. The user narrows it on the rail;
         // starting at the full extent means a straight-through flow still submits
         // a valid window.
+        // A DIFFERENT recording invalidates both camera answers — see
+        // CLEARED_CAMERA_ANSWERS. Re-picking the identical file (Remove, then
+        // add the same one back) is not a swap and keeps them; an unknown
+        // signature, which is what a resumed draft has, counts as different.
+        const signature = videoSignature(file);
+        const sameRecording = cameraAnswerFileRef.current === signature;
+        if (!sameRecording) forgetCameraAnswers();
+        cameraAnswerFileRef.current = signature;
+
         setFormData((prev) => {
           const end = summary?.durationSeconds ?? prev.videoEndSeconds;
           return {
@@ -1933,6 +1989,7 @@ export function useUploadMatchWizard({
             ...(fileDate && prev.dateSource !== "event"
               ? { ...fileDate, dateSource: "file" as const }
               : {}),
+            ...(sameRecording ? {} : CLEARED_CAMERA_ANSWERS),
             videoStartSeconds: 0,
             videoEndSeconds: end,
             // Same rule as handleTrimChange: the untrimmed clip is the starting
@@ -1953,7 +2010,7 @@ export function useUploadMatchWizard({
         if (generation === fileGenerationRef.current) setIsProbing(false);
       }
     },
-    [selectedProvider, resetFileGeneration],
+    [selectedProvider, resetFileGeneration, forgetCameraAnswers],
   );
 
   /** Set the trim window. Values are seconds into the original video. */
@@ -2012,14 +2069,17 @@ export function useUploadMatchWizard({
     setVideoWarnings([]);
     setUploadedFile(null);
     setUploadError(null);
+    forgetCameraAnswers();
     setFormData((prev) => ({
       ...prev,
       videoStartSeconds: undefined,
       videoEndSeconds: undefined,
+      // No video, no window, and no frame for either camera answer to describe.
+      ...CLEARED_CAMERA_ANSWERS,
       // The duration came from the window; without a video there is no window.
       duration: 0,
     }));
-  }, [resetFileGeneration]);
+  }, [resetFileGeneration, forgetCameraAnswers]);
 
   /**
    * Accept the schedule's offer (design 7a). Six fields fill from the line
