@@ -418,35 +418,95 @@ test.describe("computeVizStats — total", () => {
 test.describe("computeVizStats — sentence", () => {
   test("every number in the sentence comes from an actual row", () => {
     const pts = [
-      point({
-        firstShotLandingX: ZONE_LX["deuce-wide"],
-        wonByPlayer1: true,
-      }),
-      point({
-        firstShotLandingX: ZONE_LX["deuce-wide"],
-        wonByPlayer1: true,
-      }),
-      point({
-        firstShotLandingX: ZONE_LX["deuce-wide"],
-        wonByPlayer1: true,
-      }),
+      point({ firstShotLandingX: ZONE_LX["deuce-wide"], wonByPlayer1: true }),
+      point({ firstShotLandingX: ZONE_LX["deuce-wide"], wonByPlayer1: true }),
+      point({ firstShotLandingX: ZONE_LX["deuce-wide"], wonByPlayer1: true }),
+      point({ firstShotLandingX: ZONE_LX["deuce-wide"], wonByPlayer1: true }),
+      point({ firstShotLandingX: ZONE_LX["deuce-wide"], wonByPlayer1: true }),
+      // A lower QUALIFYING (count >= 3) comparator in the same group —
+      // the ceiling must come from this row, not from the higher-but-
+      // small-sample rows below.
+      point({ firstShotLandingX: ZONE_LX["ad-t"], wonByPlayer1: true }),
+      point({ firstShotLandingX: ZONE_LX["ad-t"], wonByPlayer1: true }),
       point({ firstShotLandingX: ZONE_LX["ad-t"], wonByPlayer1: false }),
-      point({ firstShotLandingX: ZONE_LX["ad-body"], wonByPlayer1: false }),
+      point({ firstShotLandingX: ZONE_LX["ad-t"], wonByPlayer1: false }),
+      // Small-sample rows sitting ABOVE the headline's win rate — since
+      // neither clears the count >= 3 floor, they must NOT set the ceiling
+      // (round 1 bug: a 2-serve 100% zone inflated "sits at or under").
+      point({ firstShotLandingX: ZONE_LX["ad-body"], wonByPlayer1: true }),
     ];
     const stats = computeVizStats(pts, "serve", EMPTY_VIZ_FILTERS, true);
     expect(stats.sentence).not.toBeNull();
     const rows = stats.groups[0].rows;
     const deuceWide = rows.find((r) => r.key === "deuce-wide")!;
+    const adT = rows.find((r) => r.key === "ad-t")!;
+    const adBody = rows.find((r) => r.key === "ad-body")!;
     expect(deuceWide.winPct).toBe(100);
-    expect(deuceWide.count).toBe(3);
+    expect(deuceWide.count).toBe(5);
+    expect(adT.winPct).toBe(50);
+    expect(adT.count).toBe(4);
+    // The non-qualifying row sits ABOVE the headline — proof this number
+    // must not appear as the sentence's ceiling.
+    expect(adBody.winPct).toBe(100);
+    expect(adBody.count).toBe(1);
+
     expect(stats.sentence).toContain(`${deuceWide.winPct}%`);
     expect(stats.sentence).toContain(`${deuceWide.count} serves`);
-    const otherPcts = rows
-      .filter((r) => r.key !== "deuce-wide")
-      .map((r) => r.winPct)
-      .filter((p): p is number => p !== null);
-    const nextBest = Math.max(...otherPcts);
-    expect(stats.sentence).toContain(`${nextBest}%.`);
+    expect(stats.sentence).toContain(`${adT.winPct}%.`);
+    expect(stats.sentence).toBe(
+      "Deuce wide: 100% won on 5 serves — every other zone with 3+ serves sits at or under 50%.",
+    );
+  });
+
+  test("no other qualifying row in the headline's group → the comparison clause is dropped", () => {
+    const pts = [
+      point({ firstShotLandingX: ZONE_LX["deuce-wide"], wonByPlayer1: true }),
+      point({ firstShotLandingX: ZONE_LX["deuce-wide"], wonByPlayer1: true }),
+      point({ firstShotLandingX: ZONE_LX["deuce-wide"], wonByPlayer1: true }),
+      // Below the count >= 3 floor — never qualifies as a comparator.
+      point({ firstShotLandingX: ZONE_LX["ad-t"], wonByPlayer1: false }),
+      point({ firstShotLandingX: ZONE_LX["ad-body"], wonByPlayer1: false }),
+    ];
+    const stats = computeVizStats(pts, "serve", EMPTY_VIZ_FILTERS, true);
+    expect(stats.sentence).toBe("Deuce wide: 100% won on 3 serves.");
+  });
+
+  test("a tied qualifying comparator reads 'level with', never 'at or under' its own value — the exact live case", () => {
+    // The round-1 bug report's exact rows: 100%/2, 75%/4, 75%/4, 50%/2,
+    // 50%/2, 0%/3 across the six serve zones, filtered to first serves.
+    const zonePoints = (
+      key: keyof typeof ZONE_LX,
+      wins: number,
+      losses: number,
+    ) =>
+      Array.from({ length: wins }, () =>
+        point({ firstShotLandingX: ZONE_LX[key], wonByPlayer1: true }),
+      ).concat(
+        Array.from({ length: losses }, () =>
+          point({ firstShotLandingX: ZONE_LX[key], wonByPlayer1: false }),
+        ),
+      );
+    const pts = [
+      ...zonePoints("deuce-wide", 2, 0), // 100%, count 2 — not qualifying
+      ...zonePoints("deuce-body", 3, 1), // 75%, count 4 — qualifying
+      ...zonePoints("ad-body", 3, 1), // 75%, count 4 — qualifying
+      ...zonePoints("deuce-t", 1, 1), // 50%, count 2 — not qualifying
+      ...zonePoints("ad-t", 1, 1), // 50%, count 2 — not qualifying
+      ...zonePoints("ad-wide", 0, 3), // 0%, count 3 — qualifying
+    ];
+    const stats = computeVizStats(
+      pts,
+      "serve",
+      { ...EMPTY_VIZ_FILTERS, ball: "first" },
+      true,
+    );
+    const rows = stats.groups[0].rows;
+    expect(rows.find((r) => r.key === "deuce-wide")!.winPct).toBe(100);
+    expect(rows.find((r) => r.key === "ad-body")!.winPct).toBe(75);
+    expect(rows.find((r) => r.key === "deuce-body")!.winPct).toBe(75);
+    expect(stats.sentence).toBe(
+      "Ad body: 75% won on 4 first serves — level with Deuce body.",
+    );
   });
 
   test("no qualifying row (every row under 3 points) → sentence is null", () => {

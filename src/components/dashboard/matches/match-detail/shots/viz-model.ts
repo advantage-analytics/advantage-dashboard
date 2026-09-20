@@ -546,31 +546,61 @@ function sortRows(rows: StatRow[]): StatRow[] {
 }
 
 /**
- * The claim→evidence sentence: the strongest row with `count >= 3`, compared
- * against the best of every OTHER row in the card (any group, any count) —
- * so the claim never invents a number and never gets contradicted by a
- * small-sample row sitting higher. `null` when no row clears the `count >=
- * 3` bar, or when there is no other row to compare against.
+ * The claim→evidence sentence. Only rows with `count >= 3` ("qualifying")
+ * take part — as the headline AND as the comparison set — so the clause
+ * never gets its ceiling from a small-sample row a reader has no reason to
+ * trust (review F3 round 1: a 2-serve 100% zone was inflating the "every
+ * other zone" ceiling above the headline's own win rate, reading as
+ * nonsense: "75% won — every other zone sits at or under 100%.").
+ *
+ * Headline: the qualifying row with the highest `winPct`, ties broken by
+ * higher `count`. Comparison ceiling: the highest `winPct` among the OTHER
+ * qualifying rows in the HEADLINE'S OWN GROUP only — a return-placement
+ * headline in "Direction" is never compared against "Depth" rows, since
+ * they answer different questions and a shared ceiling there would be as
+ * misleading as the small-sample bug this replaces.
+ *
+ * Three shapes, depending on what the headline's group offers:
+ * - a strictly lower ceiling → "…— every other {rowNoun} with 3+ {noun}
+ *   sits at or under {ceiling}%."
+ * - a tied ceiling → "…— level with {otherLabel}." (never "at or under
+ *   100%" when another qualifying row EQUALS the headline — that reads as
+ *   true of everything and states nothing)
+ * - no other qualifying row in the group → the clause is dropped entirely:
+ *   "{label}: {winPct}% won on {count} {noun}."
+ *
+ * `null` when no row clears the `count >= 3` bar at all.
  */
 function buildSentence(groups: StatGroup[], noun: string): string | null {
-  const flat = groups.flatMap((g) =>
-    g.rows.map((row) => ({ row, groupLabel: g.label })),
-  );
-  const qualifying = flat.filter(
-    (e) => e.row.count >= 3 && e.row.winPct !== null,
-  );
+  const flat = groups.flatMap((g) => g.rows.map((row) => ({ row, group: g })));
+  const qualifying = flat.filter((e) => e.row.count >= 3);
   if (qualifying.length === 0) return null;
-  const top = qualifying.reduce((best, e) =>
-    (e.row.winPct as number) > (best.row.winPct as number) ? e : best,
+
+  const top = qualifying.reduce((best, e) => {
+    if (e.row.winPct! > best.row.winPct!) return e;
+    if (e.row.winPct! === best.row.winPct! && e.row.count > best.row.count) {
+      return e;
+    }
+    return best;
+  });
+
+  const headline = `${top.row.label}: ${top.row.winPct}% won on ${top.row.count} ${noun}`;
+
+  const sameGroupOthers = qualifying.filter(
+    (e) => e.group === top.group && e !== top,
   );
-  const otherPcts = flat
-    .filter((e) => e !== top)
-    .map((e) => e.row.winPct)
-    .filter((p): p is number => p !== null);
-  if (otherPcts.length === 0) return null;
-  const nextBestPct = Math.max(...otherPcts);
-  const rowNoun = top.groupLabel ? top.groupLabel.toLowerCase() : "zone";
-  return `${top.row.label}: ${top.row.winPct}% won on ${top.row.count} ${noun} — every other ${rowNoun} sits at or under ${nextBestPct}%.`;
+  if (sameGroupOthers.length === 0) return `${headline}.`;
+
+  const ceiling = Math.max(...sameGroupOthers.map((e) => e.row.winPct!));
+  if (ceiling < top.row.winPct!) {
+    const rowNoun = top.group.label ? top.group.label.toLowerCase() : "zone";
+    return `${headline} — every other ${rowNoun} with 3+ ${noun} sits at or under ${ceiling}%.`;
+  }
+
+  // Tied ceiling (never a HIGHER one: `top` is the global max, so a same-
+  // group row can equal it but never exceed it).
+  const tiedOther = sameGroupOthers.find((e) => e.row.winPct === ceiling)!;
+  return `${headline} — level with ${tiedOther.row.label}.`;
 }
 
 function serveNoun(ball: BallFilter): string {
