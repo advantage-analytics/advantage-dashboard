@@ -171,13 +171,22 @@ export interface VizState {
    * `tests/viz-url.spec.ts`, which rely on a missing key and `{fullscreen:
    * undefined}` comparing equal (`{fullscreen: false}` would not).
    *
-   * Unlike `draft`, `applyVizUpdate` never clears it — a filter/cut/chart
-   * change made while the viewer is open keeps it open (the viewer reads
-   * the same `cut`/`chart`/`filters` the focused court does, so those
-   * changes are meant to apply live underneath it). It is NOT part of
-   * `viewIdentityKey`/`sameView`: opening or closing the viewer is not a
-   * different court or a different view, only a different way of looking
-   * at the same one.
+   * Unlike `draft`, `applyVizUpdate` does not clear it on an ordinary
+   * filter/cut/chart change — the viewer reads the same `cut`/`chart`/
+   * `filters` the focused court does, so those changes are meant to apply
+   * live underneath it. But it is NOT unconditional: `applyVizUpdate` is
+   * also the one place `fullscreen` is dropped from the OUTPUT (mirroring
+   * `draft`'s own clearing) when the resolved state has `cut: null` (Back
+   * to wall — the viewer has no court to show) or `draft: true` (draft
+   * wins, same precedence `parseVizState` applies) — see that function's
+   * own doc comment. This is enforced in-memory, at `applyVizUpdate`
+   * itself, not only at the URL layer (`vizStateQuery`'s `cut === null`
+   * early return also never serializes it, but the provider renders from
+   * the in-memory `VizState`, not the URL, so relying on serialization
+   * alone would let "viewer open over the wall" exist as live state for a
+   * render or two). It is NOT part of `viewIdentityKey`/`sameView`:
+   * opening or closing the viewer is not a different court or a different
+   * view, only a different way of looking at the same one.
    */
   fullscreen?: boolean;
 }
@@ -278,14 +287,37 @@ export function canonicalSetValues(values: readonly number[]): number[] {
  * there's nothing here to do for those. Only touches the object when
  * `draft` was actually set, so the common (never-drafted) path returns
  * `resolved` unchanged rather than a new object every call.
+ *
+ * Fix round 1: also the one place `fullscreen` is dropped from the OUTPUT
+ * — omitted, not set to `false` (same convention as `draft` itself; see
+ * `VizState.fullscreen`'s doc comment) — when the resolved state has
+ * `cut: null` (Back to wall: no court for the viewer to show) or
+ * `draft: true` (draft wins, same precedence `parseVizState` applies to a
+ * URL that somehow carries both). This runs BEFORE the draft-clearing
+ * step below, so it sees `resolved.draft` as the caller left it, not the
+ * `false` this function itself writes afterward. Only builds a new object
+ * when there's actually a `fullscreen: true` to drop, so the common
+ * (viewer-closed) path is untouched.
  */
 export function applyVizUpdate(
   prev: VizState,
   update: VizState | ((prev: VizState) => VizState),
 ): VizState {
   const resolved = typeof update === "function" ? update(prev) : update;
-  if (!resolved.draft) return resolved;
-  return { ...resolved, draft: false };
+
+  const withFullscreenRule =
+    resolved.fullscreen === true &&
+    (resolved.cut === null || resolved.draft === true)
+      ? omitFullscreen(resolved)
+      : resolved;
+
+  if (!withFullscreenRule.draft) return withFullscreenRule;
+  return { ...withFullscreenRule, draft: false };
+}
+
+function omitFullscreen(state: VizState): VizState {
+  const { fullscreen: _fullscreen, ...rest } = state;
+  return rest;
 }
 
 /**

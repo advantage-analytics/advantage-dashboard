@@ -831,7 +831,7 @@ test("applyVizUpdate: fullscreen survives a cut/chart change made while open", (
   expect(next.cut).toBe("returnContact");
 });
 
-test("vizStateQuery: fullscreen is dropped by setting cut back to null (Back to wall)", () => {
+test("applyVizUpdate: fullscreen is dropped from the OUTPUT by setting cut back to null (Back to wall)", () => {
   const openState = parseVizState(
     new URLSearchParams("cut=serve&fullscreen=1"),
   );
@@ -839,10 +839,31 @@ test("vizStateQuery: fullscreen is dropped by setting cut back to null (Back to 
     ...prev,
     cut: null,
   }));
+  // Omitted, not `false` — matches `draft`'s own convention.
+  expect("fullscreen" in wallState).toBe(false);
+  expect(wallState.fullscreen).not.toBe(true);
+
+  // The URL layer agrees, but the point of this fix is that the IN-MEMORY
+  // state itself never carries "viewer open over the wall" even for one
+  // render before the URL round-trips back through parseVizState.
   const q = vizStateQuery(new URLSearchParams(), wallState);
   const back = new URLSearchParams(q);
   expect(back.get("fullscreen")).toBeNull();
   expect(parseVizState(back).fullscreen).not.toBe(true);
+});
+
+test("applyVizUpdate: draft wins over fullscreen — an update that sets draft while fullscreen is open drops fullscreen from the OUTPUT", () => {
+  const openState = parseVizState(
+    new URLSearchParams("cut=serve&fullscreen=1"),
+  );
+  const next = applyVizUpdate(openState, (prev) => ({
+    ...prev,
+    draft: true,
+  }));
+  expect("fullscreen" in next).toBe(false);
+  expect(next.fullscreen).not.toBe(true);
+  // applyVizUpdate's existing draft-clearing rule still applies on top.
+  expect(next.draft).not.toBe(true);
 });
 
 test("viewIdentityKey: fullscreen does not change the view identity", () => {
