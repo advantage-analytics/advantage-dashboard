@@ -1,6 +1,7 @@
 # Visualizations tab — Phase 1 (in-shell) design
 
-**Status:** Phase 1 implemented on `claude/visualizations-tab-design-aefa43` · 2026-09-19/20
+**Status:** Phase 1 and the Phase 1.1 design-fidelity pass implemented on
+`claude/visualizations-tab-design-aefa43` · 2026-09-19/20
 **Branch:** `claude/visualizations-tab-design-aefa43` → `splitstep-integration`
 
 ## As built
@@ -21,6 +22,38 @@ Where the shipped code differs from the spec text below:
   against the real app; flows were verified by hand on 2026-09-19/20 and are
   covered by pure specs (`viz-model`, `viz-url`, `court-geometry`,
   `saved-views-logic`, `viz-labels`, `saved-views-rls`).
+
+**Phase 1.1 (2026-09-20)** — design-fidelity pass, driven by a code review of
+Phase 1:
+
+- Courts are drawn from the design's own frames: serve half court `viewBox
+"93 9 334 216"` scaled 0.85 with the net at the bottom; return views are the
+  full court turned upright (`viewBox "-43.6 -11.5 431 279"`) inside the green
+  field; geometry and both projections live in `shots/court-geometry.ts`;
+  return dots travel as normalised court metres.
+- Tile pills, applied-filter tokens and Filters options are full pills
+  (`VIZ_PILL_RADIUS`); buttons stay 6px.
+- A stats card renders for every view (`shots/stats-card.tsx`,
+  `computeVizStats`): serve zones; return placement = Direction (Crosscourt /
+  Middle / Down the line, side from the point's serve side) + Depth (Deep /
+  Mid / Short), in-court landings only; return contact = Inside the baseline /
+  0–5 ft behind / 5 ft+ behind + Forehand / Backhand. Rows sort by win rate;
+  the sentence compares only rows with 3+ points within a group. This is new
+  design — the handoff drew the card for serve only.
+- The focused view has a "Views" grid under the court — the wall's
+  three-column wrapping grid, reached by scrolling the page: both players'
+  default views first (`shots/default-tiles.ts`), then saved views, then "New
+  view"; the current view is ringed (`sameView`). Always present. It is NOT a
+  horizontal row (an earlier reading of frame P1d was wrong).
+- One animation only: the clicked court opens into the focused view and
+  settles back on "Back to wall", via the browser View Transitions API
+  (React's `<ViewTransition>` is not in this React build); reduced motion =
+  crossfade; focus and scroll-to-top follow the view change itself
+  (`viewIdentityKey`), not the animation, so a skipped transition (hidden tab,
+  unsupported browser) still lands focus on the focused view.
+- Two review findings deliberately left: return dot radius 2.4 is the frame's
+  own value; the return-contact clip path's asymmetric corners in the frame
+  are the card's corner rounding, which the tile wrapper already provides.
 
 ## Source
 
@@ -69,6 +102,10 @@ editor, and **Settings › Units** (P1i/P1j) with `formatDistance()`.
    match-scoped, so `player: "you"` is the only portable spelling: a view shared
    team-wide draws _each viewer's own_ player (the tile's chip names who that
    is). This is deliberate — do not "fix" it by storing a player id.
+6. **Return stats cards: Direction + Depth for placement, contact Depth +
+   Stroke for contact.**
+7. **The focused view's Views are a wrapping grid (scroll the page), defaults
+   first; the only animation is the wall ↔ focused transition.**
 
 ## Where the handoff and the code disagree
 
