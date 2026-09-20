@@ -53,3 +53,15 @@ is the runner's. Newest entries at the bottom.
 1. The control row is now eight 28px buttons (~260px); a portrait clip's player can be ~228px wide, so the row may overflow the frame — wants a wrap or min-width rule.
 2. `LONG_JUMP_SECONDS` could live beside `JUMP_STEP_SECONDS` in `use-attachment-alignment.ts` if a third surface needs it.
 3. PageUp/PageDown on the trim handles, matching the alignment step's rail.
+
+## T8 · Add set-to-playhead buttons and step-scoped keys to the trim step — done
+
+**gate:** mechanical PASS (lint, typecheck, full test suite); completion review `VERDICT: pass` (5/5 criteria met, scope clean). widget-states: loading ✓ / empty ✓ unchanged by the diff, error n/a (client step, no server region).
+
+**changed:** `TrimStepContent.tsx` — "Set start here" / "Set end here" (`advButton("ghost", "sm")` + `focusRingCls`) beside the readouts, calling the existing `moveHandle` with `wantedSeekRef.current ?? el.currentTime`; disabled when the playhead is past the opposite handle (± one frame), fed by a 150 ms throttled `playheadTime` state mirrored from the imperative `playheadRef`. A React `onKeyDown` on the step root (`tabIndex={-1}`) maps Space play/pause, ←/→ ±10 s, Shift+←/→ ±60 s, I/O set start/end; bails on ctrl/meta/alt and `isFormControl`, leaves Enter/Escape to the wizard, and leaves Space alone on a focused button. Handles `stopPropagation()` arrows so a focused handle still nudges one frame / 1 s. Mono key hint under the rail. No new clamp, no direct `onTrimChange`.
+
+**follow-ups:**
+
+1. Keys fire only when focus is inside the step (click the player or rail first). If that proves too subtle, a window listener that bails on `role="slider"` targets is the alternative.
+2. T9 should assert: focused-handle ArrowRight moves one frame and does not seek; click the video then Space toggles playback.
+3. With Shift+arrow covering ±1 min, the `±1m` buttons could be dropped if the control row gets crowded.

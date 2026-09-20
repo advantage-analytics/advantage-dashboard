@@ -111,7 +111,7 @@ ready).
 
 ## T8 · Add set-to-playhead buttons and step-scoped keys to the trim step
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T7
 - **files:** src/components/dashboard/matches/new-match-wizard/TrimStepContent.tsx (guess — beside the readouts ~L1051-1068; handle onKeyDown ~L1019)

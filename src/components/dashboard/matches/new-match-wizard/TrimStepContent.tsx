@@ -8,8 +8,10 @@
  * ranged longest-outward around play, then mute — and the playhead time in a
  * mono capsule; beneath it the filmstrip,
  * trimmed-out ends washed in page tone, the kept window one 2px Signal Blue
- * bracket whose ends are the handles; then the two camera questions the vendor
- * refuses a job without. Design: Upload Wizard v5, frame 3c.
+ * bracket whose ends are the handles; under it the two cut readouts, each
+ * paired with the button that moves that cut to wherever the video already is,
+ * and one line naming the keys that do the same; then the two camera questions
+ * the vendor refuses a job without. Design: Upload Wizard v5, frame 3c.
  *
  * Everything runs against the LOCAL file through an object URL, so trimming
  * is instant and nothing leaves the browser. Holding a handle zooms the window
@@ -48,9 +50,11 @@ import {
   XCircle,
 } from "lucide-react";
 import { useVideoFilmstrip } from "@/hooks/use-video-filmstrip";
+import { advButton } from "@/lib/ui/adv-button";
 import { JUMP_STEP_SECONDS } from "../match-video-attachment/use-attachment-alignment";
 import type { VideoProbeSummary } from "./types";
 import { focusRingCls, noteStripCls } from "./styles";
+import { isFormControl } from "./useWizardKeys";
 import { formatClipLength, formatClock, formatTimecode } from "./utils";
 import { FieldCaption } from "./FieldCaption";
 
@@ -115,6 +119,18 @@ const PLAYER_MAX_HEIGHT = "405px";
  * hours-long recording without dragging the rail.
  */
 const LONG_JUMP_SECONDS = 60;
+
+/**
+ * How often the playhead is republished into React state.
+ *
+ * The marker and the clock are written imperatively (see `applyPlayhead`) and
+ * must not cost a render. But "Set start here" has to be able to go grey when
+ * the playhead crosses the other cut, and `disabled` is a rendered attribute —
+ * so the value is mirrored into state on a trailing timer: one re-render per
+ * interval at most, and always eventually correct because the timer reads the
+ * ref at the moment it fires rather than closing over a stale sample.
+ */
+const PLAYHEAD_PUBLISH_MS = 150;
 
 const controlCls = `inline-flex size-7 items-center justify-center rounded-[var(--radius-element)] text-white transition-colors duration-150 hover:bg-white/10 ${focusRingCls}`;
 
@@ -268,6 +284,24 @@ function TrimStepContentImpl({
   const playheadRef = useRef(0);
   const playheadElRef = useRef<HTMLDivElement>(null);
   const clockElRef = useRef<HTMLSpanElement>(null);
+  // The same playhead at a cadence React can afford — see PLAYHEAD_PUBLISH_MS.
+  const [playheadTime, setPlayheadTime] = useState(0);
+  const publishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const publishPlayhead = useCallback(() => {
+    if (publishTimerRef.current !== null) return;
+    publishTimerRef.current = setTimeout(() => {
+      publishTimerRef.current = null;
+      setPlayheadTime(playheadRef.current);
+    }, PLAYHEAD_PUBLISH_MS);
+  }, []);
+  useEffect(
+    () => () => {
+      if (publishTimerRef.current !== null) {
+        clearTimeout(publishTimerRef.current);
+      }
+    },
+    [],
+  );
   // Mirrors `dragging` for the imperative playhead and the seek callbacks,
   // which must not re-subscribe on every drag. Declared before the callbacks
   // that read it; written in an effect below, never during render.
@@ -299,6 +333,7 @@ function TrimStepContentImpl({
   }, [videoFile]);
 
   const applyPlayhead = useCallback(() => {
+    publishPlayhead();
     const clock = clockElRef.current;
     if (clock) clock.textContent = formatTimecode(playheadRef.current);
     const el = playheadElRef.current;
@@ -312,7 +347,7 @@ function TrimStepContentImpl({
     // the one the cut is landing on, and hiding the only marker that says
     // where the video actually is left the drag looking unanchored.
     el.style.opacity = pct < 0 || pct > 100 ? "0" : "1";
-  }, []);
+  }, [publishPlayhead]);
 
   // Mirror `view` into a ref for the imperative playhead and the window-level
   // pointer handlers. Written in an effect, never during render.
@@ -324,13 +359,17 @@ function TrimStepContentImpl({
   // A new source rewinds the playhead and cancels any zoom still animating.
   useEffect(() => {
     playheadRef.current = 0;
+    // Through the same trailing timer the rest of the step uses, rather than a
+    // synchronous setState in an effect body — it reads the ref when it fires,
+    // which is now zero either way.
+    publishPlayhead();
     return () => {
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
     };
-  }, [videoFile]);
+  }, [videoFile, publishPlayhead]);
 
   // Rail width drives how many thumbnails tile across it.
   useEffect(() => {
@@ -676,6 +715,88 @@ function TrimStepContentImpl({
   }, []);
 
   /**
+   * Put a cut where the video already is — scrub to the first serve, press the
+   * button, and the window starts there. `moveHandle` owns the clamp and the
+   * write; this only decides *which* time is meant.
+   */
+  const setHandleToPlayhead = useCallback(
+    (handle: Handle) => {
+      const el = videoRef.current;
+      if (!el) return;
+      // A pending seek is the truthful position, for the same reason `seekBy`
+      // reads it: `currentTime` lags while one is in flight, so pressing this
+      // straight after a jump would otherwise cut at the frame you left.
+      const time = wantedSeekRef.current ?? el.currentTime;
+      // Refused rather than clamped on the wrong side of the other cut: a
+      // clamp would land one frame off that cut, which reads as the button
+      // having picked a time of its own. The button is `disabled` there too —
+      // this is the same rule against the live value, for the I/O keys.
+      if (
+        handle === "start" ? time >= end - frameStep : time <= start + frameStep
+      ) {
+        return;
+      }
+      moveHandle(handle, time);
+    },
+    [start, end, frameStep, moveHandle],
+  );
+
+  // What the two buttons render. `playheadTime` rather than the ref, because
+  // `disabled` is an attribute and only a render can change it.
+  const canSetStart = playheadTime < end - frameStep;
+  const canSetEnd = playheadTime > start + frameStep;
+
+  /**
+   * The step's own keyboard, scoped to this subtree.
+   *
+   * A React handler on the step root rather than a listener on `window`: the
+   * trim handles own their arrows (one frame, or a second with Shift) and stop
+   * the event here, which a native document listener would never see because
+   * React delegates at the root. Everything the wizard itself reads is left
+   * alone — `Enter` is Continue and `Escape` is Back (`useWizardKeys`), and a
+   * ctrl/meta/alt chord is somebody else's shortcut.
+   */
+  const onStepKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (isFormControl(e.target)) return;
+      switch (e.key) {
+        case " ":
+        case "Spacebar": {
+          // Space on a focused <button> is that button's own activation.
+          // Handling it here would toggle playback AND press the button.
+          const node = e.target as HTMLElement | null;
+          if (node?.closest?.("button")) return;
+          e.preventDefault();
+          togglePlay();
+          return;
+        }
+        case "ArrowLeft":
+          e.preventDefault();
+          seekBy(e.shiftKey ? -LONG_JUMP_SECONDS : -JUMP_STEP_SECONDS);
+          return;
+        case "ArrowRight":
+          e.preventDefault();
+          seekBy(e.shiftKey ? LONG_JUMP_SECONDS : JUMP_STEP_SECONDS);
+          return;
+        case "i":
+        case "I":
+          e.preventDefault();
+          setHandleToPlayhead("start");
+          return;
+        case "o":
+        case "O":
+          e.preventDefault();
+          setHandleToPlayhead("end");
+          return;
+        default:
+          return;
+      }
+    },
+    [togglePlay, seekBy, setHandleToPlayhead],
+  );
+
+  /**
    * Keep the playhead marker in step, and paint the floating preview from the
    * main player — the drag already seeks it, so the frame it just landed on
    * costs a canvas blit instead of a whole extra decode.
@@ -800,7 +921,16 @@ function TrimStepContentImpl({
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    // `tabIndex={-1}` so a click on the player or the rail — neither of which
+    // is focusable — lands focus on this root instead of the body, and the
+    // keys below work without first tabbing to a control. It stays out of the
+    // tab order, and out of the wizard chord's field walk, which skips
+    // `tabindex="-1"` on purpose.
+    <div
+      tabIndex={-1}
+      onKeyDown={onStepKeyDown}
+      className="flex flex-col gap-5 outline-none"
+    >
       {/* Player — local playback, no network. Native controls are omitted
           because the rail below is the scrub surface; a second timeline inside
           the frame would compete with it. */}
@@ -1069,13 +1199,20 @@ function TrimStepContentImpl({
                         startDrag(handle, e.clientX);
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === "ArrowLeft") {
-                          e.preventDefault();
-                          nudge(handle, -1, e.shiftKey);
-                        } else if (e.key === "ArrowRight") {
-                          e.preventDefault();
-                          nudge(handle, 1, e.shiftKey);
+                        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") {
+                          return;
                         }
+                        // A focused handle owns its arrows: one frame, or a
+                        // second with Shift. Stopping here keeps the step's
+                        // ±10s / ±60s seek from firing as well — it is a React
+                        // handler on the step root for exactly this reason.
+                        e.preventDefault();
+                        e.stopPropagation();
+                        nudge(
+                          handle,
+                          e.key === "ArrowLeft" ? -1 : 1,
+                          e.shiftKey,
+                        );
                       }}
                       className={`group/handle absolute -top-0.5 -bottom-0.5 z-[3] w-6 cursor-ew-resize ${focusRingCls}`}
                       style={{ left: `calc(${handlePct}% - 13px)` }}
@@ -1103,34 +1240,66 @@ function TrimStepContentImpl({
             way back to its own cut: after scrubbing away, the number you want
             to check is the thing you click. Seeking only moves the playhead —
             the cut itself is untouched. */}
-        <div className="flex items-baseline justify-between px-0.5 pt-0.5">
-          <button
-            type="button"
-            onClick={() => seekLatest(start)}
-            aria-label="Jump to the trim start"
-            className={`inline-flex cursor-pointer items-baseline gap-1.5 rounded-[var(--radius-cell)] ${focusRingCls}`}
-          >
-            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-              Start
-            </span>
-            <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
-              {formatTimecode(start)}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => seekLatest(end)}
-            aria-label="Jump to the trim end"
-            className={`inline-flex cursor-pointer items-baseline gap-1.5 rounded-[var(--radius-cell)] ${focusRingCls}`}
-          >
-            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-              End
-            </span>
-            <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
-              {formatTimecode(end)}
-            </span>
-          </button>
+        <div className="flex items-center justify-between gap-3 px-0.5 pt-0.5">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => seekLatest(start)}
+              aria-label="Jump to the trim start"
+              className={`inline-flex cursor-pointer items-baseline gap-1.5 rounded-[var(--radius-cell)] ${focusRingCls}`}
+            >
+              <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
+                Start
+              </span>
+              <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
+                {formatTimecode(start)}
+              </span>
+            </button>
+            {/* The other direction: the readout seeks to the cut, this moves
+                the cut to where you have already scrubbed. */}
+            <button
+              type="button"
+              onClick={() => setHandleToPlayhead("start")}
+              disabled={!canSetStart}
+              className={`${advButton("ghost", "sm")} ${focusRingCls}`}
+            >
+              Set start here
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setHandleToPlayhead("end")}
+              disabled={!canSetEnd}
+              className={`${advButton("ghost", "sm")} ${focusRingCls}`}
+            >
+              Set end here
+            </button>
+            <button
+              type="button"
+              onClick={() => seekLatest(end)}
+              aria-label="Jump to the trim end"
+              className={`inline-flex cursor-pointer items-baseline gap-1.5 rounded-[var(--radius-cell)] ${focusRingCls}`}
+            >
+              <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
+                End
+              </span>
+              <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
+                {formatTimecode(end)}
+              </span>
+            </button>
+          </div>
         </div>
+
+        {/* The keys, once, where the hands already are. `mono` sets only the
+            family, but the DS type classes are unlayered and outrank a
+            Tailwind colour utility — so the tone is an inline style. */}
+        <p
+          className="mono tabular text-[10px] leading-[1.6]"
+          style={{ color: "var(--ink-400)" }}
+        >
+          Space play · ← → 10s · Shift ← → 1m · I / O set start / end
+        </p>
 
         {tooShort ? (
           <div className={noteStripCls}>
