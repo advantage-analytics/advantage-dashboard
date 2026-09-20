@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Extract the film filter model to filters/types.ts and add cut helpers
 
-- **status:** doing
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/filters/types.ts (new), film/film-filters.tsx, tests/film-filters-model.spec.ts (new)
 - **done when:**
