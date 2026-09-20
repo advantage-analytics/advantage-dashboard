@@ -117,6 +117,16 @@ export interface VizResult {
   total: number; // drawable points in the cut's pool (rallyPosition: drawable SHOTS)
   noun: "serves" | "returns" | "shots";
   zoneStats: Record<ZoneKey, ZoneStats> | null; // serve cut only
+  /**
+   * Serve cut only (undefined on every other cut) — how many of the drawn
+   * serves (`dots`, matching `count`) have `kind === "out" || kind ===
+   * "net"` (Task 2's `servePlacementMetrics`). Fix round 3: `zoneStats`'s
+   * own population (`pointToServeDot`'s) is NOT an "in" count — it keeps
+   * double faults and faults whose landing the tracker imputed at the
+   * service line — so the stats-card subtitle needs this separate, honest
+   * count instead of deriving one from `zoneStats`.
+   */
+  serveOutOrNetCount?: number;
 }
 
 /**
@@ -704,6 +714,7 @@ export function computeViz(
   const frame = cutFrame(cut);
   let total = 0;
   let count = 0;
+  let serveOutOrNetCount = 0;
   const dots: VizDot[] = [];
   const serveDots: ServeDot[] = [];
 
@@ -746,6 +757,9 @@ export function computeViz(
       total++;
       if (!pointMatchesFilters(p, filters, "serve", subjectIsPlayer1)) continue;
       count++;
+      if (metrics.kind === "out" || metrics.kind === "net") {
+        serveOutOrNetCount++;
+      }
 
       // The zone-stats population is UNCHANGED — still exactly what
       // `pointToServeDot` returns (Task 2's brief: `serve-zones.ts` isn't
@@ -806,6 +820,7 @@ export function computeViz(
     noun: frame === "serve" ? "serves" : "returns",
     zoneStats:
       cut === "serve" ? computeZoneStatsFromServeZones(serveDots) : null,
+    serveOutOrNetCount: cut === "serve" ? serveOutOrNetCount : undefined,
   };
 }
 
@@ -1250,19 +1265,21 @@ export function computeVizStats(
   if (cut === "serve") {
     const noun = serveNoun(filters.ball, total);
     const groups = [serveStatsGroup(result.zoneStats)];
-    // Task 2: `total` (== result.count) now includes out/net serves, but the
-    // zone rows' own population is still exactly what `pointToServeDot`
-    // returns (unchanged) — the sum across every zone's own count IS that
-    // "in" population. When it's smaller than `total`, say so the same way
-    // returnPlacement's own subtitle already does, instead of silently
-    // printing a bare count next to a court/header that both show `total`.
-    const inCount = result.zoneStats
-      ? Object.values(result.zoneStats).reduce((sum, zs) => sum + zs.count, 0)
-      : 0;
+    // Fix round 3: the zone rows' population is `pointToServeDot`'s
+    // (unchanged, `serve-zones.ts` isn't touched) — it KEEPS double faults
+    // and it KEEPS faults whose landing the tracker never actually
+    // measured (SwingVision imputes an at-the-line coordinate for a fault
+    // it didn't track), so it has never been a count of serves that landed
+    // in and must not be labelled as one (that's what produced the false
+    // "33 of 34 landed in" reading round 2 shipped). The honest number
+    // instead: `result.serveOutOrNetCount`, built alongside the dots
+    // themselves from each serve's own `kind` ("out"/"net"), independent of
+    // the zone population entirely.
+    const outOrNet = result.serveOutOrNetCount ?? 0;
     const subtitle =
-      inCount === total
+      outOrNet === 0
         ? `Points won by zone · ${total} ${noun}`
-        : `Points won by zone · ${inCount} of ${total} ${noun} landed in`;
+        : `Points won by zone · ${total} ${noun} · ${outOrNet} out or into the net`;
     return {
       title: "Where the serve went",
       subtitle,

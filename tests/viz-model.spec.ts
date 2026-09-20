@@ -295,6 +295,21 @@ test.describe("computeViz — serve cut, out & net (Task 2)", () => {
     const outcomes = r.dots.map((d) => d.outcome).sort();
     expect(outcomes).toEqual(["miss", "miss", "won"]);
     expect(r.dots.map((d) => d.shape)).toContain("net");
+
+    // Fix round 3: serveOutOrNetCount counts kind "out"/"net" directly, not
+    // zoneStats — the out and net points both contribute (2), the in point
+    // does not, regardless of what zoneStats itself happens to keep.
+    expect(r.serveOutOrNetCount).toBe(2);
+  });
+
+  test("serveOutOrNetCount is undefined off the serve cut", () => {
+    const r = computeViz(
+      [point({ secondShotLandingX: 1, secondShotLandingY: 1 })],
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(r.serveOutOrNetCount).toBeUndefined();
   });
 
   test('no projected serve dot falls outside heatBoundsFor("serve")', () => {
@@ -484,6 +499,50 @@ test.describe("computeVizStats — serve", () => {
       true,
     );
     expect(stats.subtitle).toContain("second serves");
+  });
+
+  /* ── Fix round 3: the subtitle reports out/net serves honestly, not a
+   * derived-from-zoneStats "in" count (zoneStats keeps double faults and
+   * line-imputed faults, so it was never an "in" population). ── */
+
+  function outServe(): MatchPoint {
+    return point({
+      firstShotLandingX: 0.5,
+      firstShotLandingY: -0.155, // ~12.04m past the net
+      firstShotResult: "Out",
+      shots: [
+        shot({
+          shotNumber: 1,
+          shotType: "First Serve",
+          isPlayer1: true,
+          contactX: 0,
+          contactY: 20,
+          landingX: 0.5,
+          landingY: -0.155,
+          result: "Out",
+        }),
+      ],
+    });
+  }
+
+  test("subtitle names the out/net count when the pool has any", () => {
+    const pts = [
+      point({ firstShotLandingX: ZONE_LX["deuce-t"] }), // in
+      outServe(),
+    ];
+    const stats = computeVizStats(pts, "serve", EMPTY_VIZ_FILTERS, true);
+    expect(stats.subtitle).toBe(
+      "Points won by zone · 2 serves · 1 out or into the net",
+    );
+  });
+
+  test("subtitle keeps today's wording when nothing is out/net", () => {
+    const pts = [
+      point({ firstShotLandingX: ZONE_LX["deuce-t"] }),
+      point({ firstShotLandingX: ZONE_LX["ad-t"] }),
+    ];
+    const stats = computeVizStats(pts, "serve", EMPTY_VIZ_FILTERS, true);
+    expect(stats.subtitle).toBe("Points won by zone · 2 serves");
   });
 });
 
