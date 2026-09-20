@@ -87,9 +87,21 @@ test.describe("computeViz — return cuts", () => {
     const contact = computeViz([ret], "returnContact", EMPTY_VIZ_FILTERS, true);
     expect(place.dots).toHaveLength(1);
     expect(contact.dots).toHaveLength(1);
-    expect(place.dots[0].y).not.toBe(contact.dots[0].y);
+    // Placement's depthM is distance-from-net (landing); contact's is
+    // signed distance from the returner's own baseline — different
+    // quantities for the same point, so they should differ.
+    expect(place.dots[0].depthM).not.toBe(contact.dots[0].depthM);
     expect(place.zoneStats).toBeNull();
     expect(place.noun).toBe("returns");
+  });
+
+  test("return dots carry metres, not the legacy pixel frame", () => {
+    const place = computeViz([ret], "returnPlacement", EMPTY_VIZ_FILTERS, true);
+    // secondShotLandingX: 1.2, secondShotLandingY: 4.0 — well within the net
+    // (REAL_NET_Y=11.885), so no end-change flip: lateralM is the mirrored
+    // (leading-minus) landing x, depthM is the landing y unchanged.
+    expect(place.dots[0].lateralM).toBeCloseTo(-1.2, 5);
+    expect(place.dots[0].depthM).toBeCloseTo(4.0, 5);
   });
 
   test("a return without contact coords counts for placement only", () => {

@@ -1,24 +1,13 @@
-import {
-  SERVICE_Y,
-  BASELINE_Y,
-  CENTER_X,
-  FULL_SVG_NET_Y,
-  FULL_SVG_NEAR_BASELINE,
-  FULL_SVG_PAD_TOP,
-  FULL_SVG_PAD_BOTTOM,
-} from "@/components/dashboard/matches/visuals/half-court-svg";
+import { useId } from "react";
 import { ZONES, type ZoneKey, type ZoneStats } from "@/lib/data/serve-zones";
 import {
   SERVE_COURT,
-  NET_LEFT,
-  NET_RIGHT,
-  COURT_W,
-  COURT_H,
-  DOUBLES_LEFT,
-  DOUBLES_RIGHT,
-  SINGLES_LEFT,
-  SINGLES_RIGHT,
+  SERVE_BACKGROUND_PATH,
+  RETURN_COURT,
+  RETURN_BACKGROUND_PATH,
   projectServeDot,
+  projectReturnDot,
+  zoneCellX,
   zoneOpacity,
 } from "./court-geometry";
 import type { Cut, VizDot } from "./viz-model";
@@ -26,15 +15,18 @@ import type { Cut, VizDot } from "./viz-model";
 /**
  * The recoloured court SVG for one cut — the wall tile's art and the focused
  * view's court alike (`viz-focused.tsx` reuses this here, not a second copy).
- * Deliberately NOT `HalfCourtSVG`/`FullCourtSVG` from `visuals/half-court-svg.tsx`:
- * this is the redesign's own palette (green apron, blue court), while those
- * keep the legacy pastel court for other surfaces still on the old model.
  *
- * Geometry only. Return-cut dots arrive from `computeViz` already in this
- * SVG's `FULL_SVG_*` coordinate space. Serve-cut dots do not: `computeViz`
- * passes the underlying `ServeDot`'s x/y straight through, and those are a
- * 0..1 fraction of the service box, not a canvas position — `projectServeDot`
- * below does the same projection the retired zones-court component used to.
+ * Geometry only, drawn straight from `court-geometry.ts`'s constants — those
+ * are copied verbatim from the design handoff's own SVG markup (F4, frame
+ * P1a: see `.superpowers/sdd/2026-09-19-visualizations-tab-phase-1/
+ * design-court-frames.md`), padded inside a green apron rather than the
+ * cropped half-courts an earlier plan drew.
+ *
+ * Serve draws inside the design's `<g transform="translate(260,117)
+ * scale(0.85) translate(-260,-125)">`; the two return cuts share the design's
+ * landscape full-court frame (`<g rotate(90) …><g scale(1.02) …>`), clipped
+ * to the viewBox — `returnPlacement` additionally sets `style="transform:
+ * rotate(180deg)"` on the `<svg>` itself, exactly as the design does.
  */
 
 // Exported so `court-tile.tsx` can give the art box the same apron colour
@@ -43,11 +35,13 @@ import type { Cut, VizDot } from "./viz-model";
 export const APRON_FILL = "#86AC91";
 const COURT_FILL = "#6092CE";
 const LINE_COLOR = "#FFFFFF";
-const LINE_W = 1.5;
-const NET_W = 2.5;
-const DOT_R = 2.5;
 const DOT_STROKE = "#000";
 const DOT_STROKE_W = 0.4;
+
+// Serve marks are 2.54 radius, return marks 2.4 — the design's own two
+// sizes, not a shared constant (visualizations-tab-phase-1 spec).
+const SERVE_DOT_R = 2.54;
+const RETURN_DOT_R = 2.4;
 
 // Area-match a triangle to a circle of the same nominal radius — see
 // `visuals/half-court-svg.tsx`'s `trianglePoints` for the derivation; kept as
@@ -67,32 +61,22 @@ function colorFor(outcome: VizDot["outcome"]): string {
   return "var(--ink-300)";
 }
 
-interface ViewBox {
-  minY: number;
-  h: number;
-}
-
-// Serve draws the half court as-is; the two return cuts share the
-// `FullCourtSVG` frame and differ only in which half of it the viewBox shows —
-// far half (+ top pad) for placement, near half (+ bottom pad) for contact.
-function viewBoxFor(cut: Cut): ViewBox {
-  if (cut === "serve") {
-    return { minY: 0, h: COURT_H };
-  }
-  if (cut === "returnPlacement") {
-    return { minY: -FULL_SVG_PAD_TOP, h: FULL_SVG_NET_Y + FULL_SVG_PAD_TOP };
-  }
-  return {
-    minY: FULL_SVG_NET_Y,
-    h: FULL_SVG_NEAR_BASELINE + FULL_SVG_PAD_BOTTOM - FULL_SVG_NET_Y,
-  };
-}
-
 const CUT_NOUN: Record<Cut, string> = {
   serve: "serve placement",
   returnPlacement: "return placement",
   returnContact: "return contact",
 };
+
+// Re-tuned zone-cell label sizes: the old 447-wide legacy frame's cells were
+// ~46.4 units wide (10.37% of the frame) drawn with no group scale, at
+// fontSize 11/9. The new cell is 31.25 units wide (7.95% of the 334-wide
+// frame) AND sits inside the serve `<g>`'s 0.85 scale, so a fontSize
+// attribute here renders at 0.85× in the unscaled viewBox. Scaling the old
+// sizes by the cell's narrower share (31.25/334 ÷ 46.4/447 ≈ 0.767) and then
+// dividing by 0.85 to cancel the group scale gives the attribute values that
+// read at roughly the same apparent size as before: 11 → 10, 9 → 8.
+const ZONE_LABEL_COUNT_SIZE = 10;
+const ZONE_LABEL_PCT_SIZE = 8;
 
 export function CourtArt({
   cut,
@@ -128,7 +112,7 @@ export function CourtArt({
    */
   labels?: boolean;
 }) {
-  const box = viewBoxFor(cut);
+  const clipId = useId();
   const showZones = cut === "serve" && zones != null;
   const maxZonePct = zones
     ? Math.max(...ZONES.map((z) => zones[z.key].pct))
@@ -137,54 +121,52 @@ export function CourtArt({
     ? "Serve placement by zone: six service-box zones shaded by serve frequency"
     : `${CUT_NOUN[cut]} court, ${dots.length} point${dots.length === 1 ? "" : "s"} shown`;
 
-  return (
-    <svg
-      viewBox={`0 ${box.minY} ${COURT_W} ${box.h}`}
-      {...(fill ? { height: "100%" } : {})}
-      width="100%"
-      preserveAspectRatio="xMidYMid meet"
-      role="img"
-      aria-label={ariaLabel}
-      className={className}
-    >
-      <rect
-        x={0}
-        y={box.minY}
-        width={COURT_W}
-        height={box.h}
-        fill={APRON_FILL}
-      />
-
-      {cut === "serve" ? (
-        <>
-          {/* Court fill: far baseline (top, y=0) down to the net (bottom,
-              y=`netY`) — the far half-court, matching the legacy court this
-              redesign replaced. */}
+  if (cut === "serve") {
+    return (
+      <svg
+        viewBox={`${SERVE_COURT.viewBox.minX} ${SERVE_COURT.viewBox.minY} ${SERVE_COURT.viewBox.w} ${SERVE_COURT.viewBox.h}`}
+        {...(fill ? { height: "100%" } : {})}
+        width="100%"
+        preserveAspectRatio="xMidYMid meet"
+        role="img"
+        aria-label={ariaLabel}
+        className={className}
+      >
+        <path d={SERVE_BACKGROUND_PATH} fill={APRON_FILL} />
+        <g transform={SERVE_COURT.groupTransform}>
           <rect
-            x={DOUBLES_LEFT}
+            x={SERVE_COURT.doublesLeft}
             y={SERVE_COURT.baselineY}
-            width={DOUBLES_RIGHT - DOUBLES_LEFT}
+            width={SERVE_COURT.doublesRight - SERVE_COURT.doublesLeft}
             height={SERVE_COURT.netY - SERVE_COURT.baselineY}
             fill={COURT_FILL}
           />
+          <rect
+            x={SERVE_COURT.singlesLeft}
+            y={SERVE_COURT.baselineY}
+            width={SERVE_COURT.singlesRight - SERVE_COURT.singlesLeft}
+            height={SERVE_COURT.netY - SERVE_COURT.baselineY}
+            fill={COURT_FILL}
+          />
+
           {/* Zone cells span the service line down to the net, same as the
-              service boxes below — not the baseline down to the service
-              line. White fill/outline (not a blue tint): the cells sit on
-              the blue court fill, so a blue-on-blue overlay was unreadable —
-              white at 0.06–0.42 opacity, scaled to the busiest zone actually
-              drawn, reads at every share. */}
+              service boxes. White fill/outline (not a blue tint): the cells
+              sit on the blue court fill, so a blue-on-blue overlay was
+              unreadable — white at 0.06–0.42 opacity, scaled to the busiest
+              zone actually drawn, reads at every share. */}
           {showZones &&
             zones &&
-            ZONES.map((z) => {
+            ZONES.map((z, i) => {
               const zs = zones[z.key];
-              const cellCx = (z.x1 + z.x2) / 2;
+              const cell = zoneCellX(i);
+              const cellCx = (cell.x1 + cell.x2) / 2;
               const cellCy = (SERVE_COURT.zoneTop + SERVE_COURT.zoneBottom) / 2;
               return (
                 <g key={z.key}>
                   <rect
-                    x={z.x1}
+                    x={cell.x1}
                     y={SERVE_COURT.zoneTop}
-                    width={z.x2 - z.x1}
+                    width={cell.x2 - cell.x1}
                     height={SERVE_COURT.zoneBottom - SERVE_COURT.zoneTop}
                     fill={LINE_COLOR}
                     fillOpacity={zoneOpacity(zs.pct, maxZonePct)}
@@ -199,7 +181,7 @@ export function CourtArt({
                         y={cellCy - 3}
                         textAnchor="middle"
                         fill={LINE_COLOR}
-                        fontSize={11}
+                        fontSize={ZONE_LABEL_COUNT_SIZE}
                         fontWeight={600}
                         style={{ fontVariantNumeric: "tabular-nums" }}
                       >
@@ -207,16 +189,15 @@ export function CourtArt({
                       </text>
                       {/* Win rate only, no " won" suffix (review M1) — the
                           zone card beside the court already says these are
-                          win rates, and the ~46-unit-wide cell can't fit
-                          "80% won" beneath "38%" without the two lines'
-                          text colliding. */}
+                          win rates, and the cell can't fit "80% won" beneath
+                          "38%" without the two lines' text colliding. */}
                       <text
                         x={cellCx}
                         y={cellCy + 10}
                         textAnchor="middle"
                         fill={LINE_COLOR}
                         fillOpacity={0.8}
-                        fontSize={9}
+                        fontSize={ZONE_LABEL_PCT_SIZE}
                         fontWeight={400}
                         style={{ fontVariantNumeric: "tabular-nums" }}
                       >
@@ -227,208 +208,267 @@ export function CourtArt({
                 </g>
               );
             })}
+
           <line
-            x1={DOUBLES_LEFT}
+            x1={SERVE_COURT.doublesLeft}
             y1={SERVE_COURT.baselineY}
-            x2={DOUBLES_LEFT}
-            y2={SERVE_COURT.netY}
-            stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
-          />
-          <line
-            x1={DOUBLES_RIGHT}
-            y1={SERVE_COURT.baselineY}
-            x2={DOUBLES_RIGHT}
-            y2={SERVE_COURT.netY}
-            stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
-          />
-          <line
-            x1={SINGLES_LEFT}
-            y1={SERVE_COURT.baselineY}
-            x2={SINGLES_LEFT}
-            y2={SERVE_COURT.netY}
-            stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
-          />
-          <line
-            x1={SINGLES_RIGHT}
-            y1={SERVE_COURT.baselineY}
-            x2={SINGLES_RIGHT}
-            y2={SERVE_COURT.netY}
-            stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
-          />
-          {/* Baseline — far court boundary, top of the frame. */}
-          <line
-            x1={DOUBLES_LEFT}
-            y1={SERVE_COURT.baselineY}
-            x2={DOUBLES_RIGHT}
+            x2={SERVE_COURT.doublesRight}
             y2={SERVE_COURT.baselineY}
             stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
+            strokeWidth={SERVE_COURT.lineWidth}
+          />
+          <line
+            x1={SERVE_COURT.doublesLeft}
+            y1={SERVE_COURT.baselineY}
+            x2={SERVE_COURT.doublesLeft}
+            y2={SERVE_COURT.netY}
+            stroke={LINE_COLOR}
+            strokeWidth={SERVE_COURT.lineWidth}
+          />
+          <line
+            x1={SERVE_COURT.doublesRight}
+            y1={SERVE_COURT.baselineY}
+            x2={SERVE_COURT.doublesRight}
+            y2={SERVE_COURT.netY}
+            stroke={LINE_COLOR}
+            strokeWidth={SERVE_COURT.lineWidth}
+          />
+          <line
+            x1={SERVE_COURT.singlesLeft}
+            y1={SERVE_COURT.baselineY}
+            x2={SERVE_COURT.singlesLeft}
+            y2={SERVE_COURT.netY}
+            stroke={LINE_COLOR}
+            strokeWidth={SERVE_COURT.lineWidth}
+          />
+          <line
+            x1={SERVE_COURT.singlesRight}
+            y1={SERVE_COURT.baselineY}
+            x2={SERVE_COURT.singlesRight}
+            y2={SERVE_COURT.netY}
+            stroke={LINE_COLOR}
+            strokeWidth={SERVE_COURT.lineWidth}
           />
           {/* Service line. */}
           <line
-            x1={SINGLES_LEFT}
-            y1={SERVE_COURT.serviceY}
-            x2={SINGLES_RIGHT}
-            y2={SERVE_COURT.serviceY}
+            x1={SERVE_COURT.singlesLeft}
+            y1={SERVE_COURT.serviceLineY}
+            x2={SERVE_COURT.singlesRight}
+            y2={SERVE_COURT.serviceLineY}
             stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
+            strokeWidth={SERVE_COURT.lineWidth}
           />
           {/* Centre service line — splits the two service boxes, service
               line down to the net. */}
           <line
-            x1={CENTER_X}
-            y1={SERVE_COURT.serviceY}
-            x2={CENTER_X}
+            x1={SERVE_COURT.centerX}
+            y1={SERVE_COURT.serviceLineY}
+            x2={SERVE_COURT.centerX}
             y2={SERVE_COURT.netY}
             stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
+            strokeWidth={SERVE_COURT.lineWidth}
           />
-          {/* Net — bottom of the frame, extending slightly past the doubles
+          {/* Centre mark on the baseline. */}
+          <line
+            x1={SERVE_COURT.centerX}
+            y1={SERVE_COURT.centerMarkTopY}
+            x2={SERVE_COURT.centerX}
+            y2={SERVE_COURT.centerMarkBottomY}
+            stroke={LINE_COLOR}
+            strokeWidth={SERVE_COURT.lineWidth}
+          />
+          {/* Net — bottom of the frame, extending past the doubles
               sidelines as a physical net does. */}
           <line
-            x1={NET_LEFT}
+            x1={SERVE_COURT.netLineLeft}
             y1={SERVE_COURT.netY}
-            x2={NET_RIGHT}
+            x2={SERVE_COURT.netLineRight}
             y2={SERVE_COURT.netY}
             stroke={LINE_COLOR}
-            strokeWidth={NET_W}
+            strokeWidth={SERVE_COURT.netStrokeWidth}
           />
-        </>
-      ) : (
-        <>
-          <rect
-            x={DOUBLES_LEFT}
-            y={0}
-            width={DOUBLES_RIGHT - DOUBLES_LEFT}
-            height={FULL_SVG_NEAR_BASELINE}
-            fill={COURT_FILL}
-          />
-          <line
-            x1={DOUBLES_LEFT}
-            y1={0}
-            x2={DOUBLES_LEFT}
-            y2={FULL_SVG_NEAR_BASELINE}
-            stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
-          />
-          <line
-            x1={DOUBLES_RIGHT}
-            y1={0}
-            x2={DOUBLES_RIGHT}
-            y2={FULL_SVG_NEAR_BASELINE}
-            stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
-          />
-          <line
-            x1={SINGLES_LEFT}
-            y1={0}
-            x2={SINGLES_LEFT}
-            y2={FULL_SVG_NEAR_BASELINE}
-            stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
-          />
-          <line
-            x1={SINGLES_RIGHT}
-            y1={0}
-            x2={SINGLES_RIGHT}
-            y2={FULL_SVG_NEAR_BASELINE}
-            stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
-          />
-          {/* Far baseline */}
-          <line
-            x1={DOUBLES_LEFT}
-            y1={0}
-            x2={DOUBLES_RIGHT}
-            y2={0}
-            stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
-          />
-          {/* Far service line + centre */}
-          <line
-            x1={SINGLES_LEFT}
-            y1={BASELINE_Y - SERVICE_Y}
-            x2={SINGLES_RIGHT}
-            y2={BASELINE_Y - SERVICE_Y}
-            stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
-          />
-          <line
-            x1={CENTER_X}
-            y1={BASELINE_Y - SERVICE_Y}
-            x2={CENTER_X}
-            y2={FULL_SVG_NET_Y}
-            stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
-          />
-          {/* Near service line + centre */}
-          <line
-            x1={SINGLES_LEFT}
-            y1={FULL_SVG_NET_Y + SERVICE_Y}
-            x2={SINGLES_RIGHT}
-            y2={FULL_SVG_NET_Y + SERVICE_Y}
-            stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
-          />
-          <line
-            x1={CENTER_X}
-            y1={FULL_SVG_NET_Y}
-            x2={CENTER_X}
-            y2={FULL_SVG_NET_Y + SERVICE_Y}
-            stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
-          />
-          {/* Near baseline */}
-          <line
-            x1={DOUBLES_LEFT}
-            y1={FULL_SVG_NEAR_BASELINE}
-            x2={DOUBLES_RIGHT}
-            y2={FULL_SVG_NEAR_BASELINE}
-            stroke={LINE_COLOR}
-            strokeWidth={LINE_W}
-          />
-          {/* Net */}
-          <line
-            x1={0}
-            y1={FULL_SVG_NET_Y}
-            x2={COURT_W}
-            y2={FULL_SVG_NET_Y}
-            stroke={LINE_COLOR}
-            strokeWidth={NET_W}
-          />
-        </>
-      )}
 
-      {!showZones &&
-        dots.map((d) => {
-          const color = colorFor(d.outcome);
-          const { x, y } = cut === "serve" ? projectServeDot(d) : d;
-          return d.shape === "triangle" ? (
-            <polygon
-              key={d.id}
-              points={trianglePoints(x, y, DOT_R)}
-              fill={color}
-              stroke={DOT_STROKE}
-              strokeWidth={DOT_STROKE_W}
-              vectorEffect="non-scaling-stroke"
+          {!showZones &&
+            dots.map((d) => {
+              const color = colorFor(d.outcome);
+              const { cx, cy } = projectServeDot(d);
+              return d.shape === "triangle" ? (
+                <polygon
+                  key={d.id}
+                  points={trianglePoints(cx, cy, SERVE_DOT_R)}
+                  fill={color}
+                  stroke={DOT_STROKE}
+                  strokeWidth={DOT_STROKE_W}
+                  vectorEffect="non-scaling-stroke"
+                />
+              ) : (
+                <circle
+                  key={d.id}
+                  cx={cx}
+                  cy={cy}
+                  r={SERVE_DOT_R}
+                  fill={color}
+                  stroke={DOT_STROKE}
+                  strokeWidth={DOT_STROKE_W}
+                  vectorEffect="non-scaling-stroke"
+                />
+              );
+            })}
+        </g>
+      </svg>
+    );
+  }
+
+  // Return cuts — one shared landscape full-court frame. `returnPlacement`
+  // sets the design's own `rotate(180deg)` on the svg; `returnContact` does
+  // not. `projectReturnDot` accounts for that extra flip in the lateral
+  // sign it uses for each kind — see its own doc comment.
+  const kind = cut === "returnPlacement" ? "placement" : "contact";
+  return (
+    <svg
+      viewBox={`${RETURN_COURT.viewBox.minX} ${RETURN_COURT.viewBox.minY} ${RETURN_COURT.viewBox.w} ${RETURN_COURT.viewBox.h}`}
+      {...(fill ? { height: "100%" } : {})}
+      width="100%"
+      preserveAspectRatio="xMidYMid meet"
+      role="img"
+      aria-label={ariaLabel}
+      className={className}
+      style={kind === "placement" ? { transform: "rotate(180deg)" } : undefined}
+    >
+      <path d={RETURN_BACKGROUND_PATH} fill={APRON_FILL} />
+      <clipPath id={clipId}>
+        <path d={RETURN_BACKGROUND_PATH} />
+      </clipPath>
+      <g clipPath={`url(#${clipId})`}>
+        <g transform={RETURN_COURT.outerGroupTransform}>
+          <g transform={RETURN_COURT.innerGroupTransform}>
+            <rect
+              x={RETURN_COURT.farBaselineX}
+              y={RETURN_COURT.doublesTop}
+              width={RETURN_COURT.nearBaselineX - RETURN_COURT.farBaselineX}
+              height={RETURN_COURT.doublesBottom - RETURN_COURT.doublesTop}
+              fill={COURT_FILL}
             />
-          ) : (
-            <circle
-              key={d.id}
-              cx={x}
-              cy={y}
-              r={DOT_R}
-              fill={color}
-              stroke={DOT_STROKE}
-              strokeWidth={DOT_STROKE_W}
-              vectorEffect="non-scaling-stroke"
+            <rect
+              x={RETURN_COURT.farBaselineX}
+              y={RETURN_COURT.singlesTop}
+              width={RETURN_COURT.nearBaselineX - RETURN_COURT.farBaselineX}
+              height={RETURN_COURT.singlesBottom - RETURN_COURT.singlesTop}
+              fill={COURT_FILL}
             />
-          );
-        })}
+            <line
+              x1={RETURN_COURT.farBaselineX}
+              y1={RETURN_COURT.doublesTop}
+              x2={RETURN_COURT.nearBaselineX}
+              y2={RETURN_COURT.doublesTop}
+              stroke={LINE_COLOR}
+              strokeWidth={RETURN_COURT.lineWidth}
+            />
+            <line
+              x1={RETURN_COURT.farBaselineX}
+              y1={RETURN_COURT.doublesBottom}
+              x2={RETURN_COURT.nearBaselineX}
+              y2={RETURN_COURT.doublesBottom}
+              stroke={LINE_COLOR}
+              strokeWidth={RETURN_COURT.lineWidth}
+            />
+            <line
+              x1={RETURN_COURT.farBaselineX}
+              y1={RETURN_COURT.singlesTop}
+              x2={RETURN_COURT.nearBaselineX}
+              y2={RETURN_COURT.singlesTop}
+              stroke={LINE_COLOR}
+              strokeWidth={RETURN_COURT.lineWidth}
+            />
+            <line
+              x1={RETURN_COURT.farBaselineX}
+              y1={RETURN_COURT.singlesBottom}
+              x2={RETURN_COURT.nearBaselineX}
+              y2={RETURN_COURT.singlesBottom}
+              stroke={LINE_COLOR}
+              strokeWidth={RETURN_COURT.lineWidth}
+            />
+            <line
+              x1={RETURN_COURT.farBaselineX}
+              y1={RETURN_COURT.doublesTop}
+              x2={RETURN_COURT.farBaselineX}
+              y2={RETURN_COURT.doublesBottom}
+              stroke={LINE_COLOR}
+              strokeWidth={RETURN_COURT.lineWidth}
+            />
+            <line
+              x1={RETURN_COURT.nearBaselineX}
+              y1={RETURN_COURT.doublesTop}
+              x2={RETURN_COURT.nearBaselineX}
+              y2={RETURN_COURT.doublesBottom}
+              stroke={LINE_COLOR}
+              strokeWidth={RETURN_COURT.lineWidth}
+            />
+            <line
+              x1={RETURN_COURT.serviceLineFarX}
+              y1={RETURN_COURT.singlesTop}
+              x2={RETURN_COURT.serviceLineFarX}
+              y2={RETURN_COURT.singlesBottom}
+              stroke={LINE_COLOR}
+              strokeWidth={RETURN_COURT.lineWidth}
+            />
+            <line
+              x1={RETURN_COURT.serviceLineNearX}
+              y1={RETURN_COURT.singlesTop}
+              x2={RETURN_COURT.serviceLineNearX}
+              y2={RETURN_COURT.singlesBottom}
+              stroke={LINE_COLOR}
+              strokeWidth={RETURN_COURT.lineWidth}
+            />
+            <line
+              x1={RETURN_COURT.serviceLineFarX}
+              y1={RETURN_COURT.centerY}
+              x2={RETURN_COURT.serviceLineNearX}
+              y2={RETURN_COURT.centerY}
+              stroke={LINE_COLOR}
+              strokeWidth={RETURN_COURT.lineWidth}
+            />
+            {/* Net. */}
+            <line
+              x1={RETURN_COURT.netX}
+              y1={RETURN_COURT.netTopY}
+              x2={RETURN_COURT.netX}
+              y2={RETURN_COURT.netBottomY}
+              stroke={LINE_COLOR}
+              strokeWidth={RETURN_COURT.netStrokeWidth}
+            />
+
+            {dots.map((d) => {
+              const color = colorFor(d.outcome);
+              const { cx, cy } = projectReturnDot(kind, {
+                lateralM: d.lateralM ?? 0,
+                depthM: d.depthM ?? 0,
+              });
+              return d.shape === "triangle" ? (
+                <polygon
+                  key={d.id}
+                  points={trianglePoints(cx, cy, RETURN_DOT_R)}
+                  fill={color}
+                  stroke={DOT_STROKE}
+                  strokeWidth={DOT_STROKE_W}
+                  vectorEffect="non-scaling-stroke"
+                />
+              ) : (
+                <circle
+                  key={d.id}
+                  cx={cx}
+                  cy={cy}
+                  r={RETURN_DOT_R}
+                  fill={color}
+                  stroke={DOT_STROKE}
+                  strokeWidth={DOT_STROKE_W}
+                  vectorEffect="non-scaling-stroke"
+                />
+              );
+            })}
+          </g>
+        </g>
+      </g>
     </svg>
   );
 }

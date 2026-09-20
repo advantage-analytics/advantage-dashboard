@@ -199,7 +199,7 @@ export function VizFocused({
           </div>
 
           <div className="flex items-center gap-3 px-4 pt-[10px] pb-[14px]">
-            <LegendDot color="var(--viz-good)" label="Won" />
+            <LegendDot color="var(--viz-good)" label="Point won" />
             <LegendDot color="var(--viz-bad)" label="Lost" />
             <LegendDot color="var(--ink-300)" label="Miss" />
             <div className="flex-1" />
@@ -239,11 +239,26 @@ export function VizFocused({
 function LegendDot({ color, label }: { color: string; label: string }) {
   return (
     <span className="inline-flex items-center gap-[6px]">
-      <span
+      {/* An SVG circle, not a CSS dot: the legend mark carries the same
+          0.4px black stroke as the court's own marks (`court-art.tsx`'s
+          `DOT_STROKE`/`DOT_STROKE_W`), which a plain `background-color` div
+          can't reproduce. */}
+      <svg
         aria-hidden="true"
-        className="size-2 shrink-0 rounded-full"
-        style={{ backgroundColor: color }}
-      />
+        width={8}
+        height={8}
+        viewBox="0 0 8 8"
+        className="shrink-0"
+      >
+        <circle
+          cx={4}
+          cy={4}
+          r={3.6}
+          fill={color}
+          stroke="#000"
+          strokeWidth={0.4}
+        />
+      </svg>
       <span className="text-micro" style={{ color: "var(--ink-500)" }}>
         {label}
       </span>

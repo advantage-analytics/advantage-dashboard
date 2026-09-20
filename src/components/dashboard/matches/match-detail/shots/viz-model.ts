@@ -17,15 +17,6 @@ import {
   type ZoneKey,
   type ZoneStats,
 } from "@/lib/data/serve-zones";
-import {
-  CENTER_X,
-  COURT_W,
-  FULL_SVG_NET_Y,
-  FULL_SVG_FAR_BASELINE,
-  FULL_SVG_NEAR_BASELINE,
-  FULL_SVG_PAD_BOTTOM,
-  type CourtDot,
-} from "@/components/dashboard/matches/visuals/half-court-svg";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
@@ -71,12 +62,25 @@ export const EMPTY_VIZ_FILTERS: VizFilters = {
 
 export type Outcome = "won" | "lost" | "miss";
 
+/**
+ * Serve dots carry a 0..1 service-box fraction (`x`/`y`) — `projectServeDot`
+ * in `court-geometry.ts` maps that onto the serve frame. Return dots carry
+ * normalised court METRES instead (`lateralM`/`depthM`) — `projectReturnDot`
+ * maps those onto the shared return frame, which kind (`returnPlacement` vs
+ * `returnContact`) determining how `depthM` is read. `cut` (known by every
+ * caller already) says which fields are populated; `x`/`y` are always 0 on a
+ * return dot and `lateralM`/`depthM` are always 0 on a serve dot, rather than
+ * making every caller narrow a union for two fields it already knows how to
+ * read.
+ */
 export interface VizDot {
   id: string;
-  x: number;
-  y: number;
   outcome: Outcome;
   shape: "circle" | "triangle";
+  x: number;
+  y: number;
+  lateralM: number;
+  depthM: number;
 }
 
 export interface VizResult {
@@ -189,10 +193,37 @@ export function returnOutcome(
   return p.wonByPlayer1 === subjectIsPlayer1 ? "won" : "lost";
 }
 
+export interface ReturnDotMetric {
+  id: string;
+  variant: "landing" | "contact";
+  shape: "circle" | "triangle";
+  /** Signed metres from the centre line — positive = the returner's right. */
+  lateralM: number;
+  /**
+   * Landing: metres from the net (`projectReturnDot`'s "placement" depth).
+   * Contact: signed metres behind (+) / inside (−) the returner's own
+   * baseline (`projectReturnDot`'s "contact" depth).
+   */
+  depthM: number;
+}
+
+/**
+ * The return frame's two dot kinds, in normalised court METRES rather than
+ * any one SVG frame's pixels — `court-geometry.ts`'s `projectReturnDot`
+ * turns these into the shared return frame's coordinates, separately for
+ * "placement" (landing) and "contact".
+ *
+ * Same end-change normalisation the legacy pixel version used: SwingVision
+ * doesn't tag which end of the court a shot happened at, so a landing whose
+ * raw `ly` falls beyond the net (`REAL_NET_Y`) is read as having happened at
+ * the FAR end and gets mirrored (`didFlip`) onto the near end before use —
+ * both the landing and (when present) the contact point share that one
+ * flip decision, since they're the same shot.
+ */
 export function pointToReturnDots(
   p: MatchPoint,
   subjectIsPlayer1: boolean,
-): CourtDot[] {
+): ReturnDotMetric[] {
   if (p.secondShotLandingX == null || p.secondShotLandingY == null) return [];
 
   const typeLower = (p.secondShotType ?? "").toLowerCase();
@@ -200,13 +231,6 @@ export function pointToReturnDots(
     typeLower.includes("backhand") || typeLower.startsWith("bh")
       ? "triangle"
       : "circle";
-  const outcome = returnOutcome(p, subjectIsPlayer1);
-  const color =
-    outcome === "won"
-      ? "var(--viz-good)"
-      : outcome === "lost"
-        ? "var(--viz-bad)"
-        : "var(--ink-400)";
 
   const landingRaw = { lx: p.secondShotLandingX, ly: p.secondShotLandingY };
   const didFlip = landingRaw.ly > REAL_NET_Y;
@@ -214,23 +238,14 @@ export function pointToReturnDots(
     ? { lx: -landingRaw.lx, ly: REAL_COURT_LENGTH - landingRaw.ly }
     : landingRaw;
 
-  const farH = FULL_SVG_NET_Y - FULL_SVG_FAR_BASELINE;
   // Mirrored world-x (leading minus) so the court reads from BEHIND the
-  // returner.
-  const landingCx = CENTER_X - (landing.lx / REAL_HALF_DOUBLES) * (COURT_W / 2);
-  const landingCy = FULL_SVG_FAR_BASELINE + (landing.ly / REAL_NET_Y) * farH;
-  const landingDot: CourtDot = {
-    cx: Math.max(4, Math.min(COURT_W - 4, landingCx)),
-    cy: Math.max(
-      FULL_SVG_FAR_BASELINE + 4,
-      Math.min(FULL_SVG_NET_Y - 4, landingCy),
-    ),
-    color,
-    opacity: 0.85,
+  // returner — positive lateralM is the returner's RIGHT.
+  const landingDot: ReturnDotMetric = {
     id: p.id,
-    pairId: p.id,
     variant: "landing",
     shape,
+    lateralM: -landing.lx,
+    depthM: landing.ly, // already 0 (net) .. ~11.885 (that half's baseline)
   };
 
   if (p.secondShotContactX == null || p.secondShotContactY == null) {
@@ -242,28 +257,22 @@ export function pointToReturnDots(
         ly: REAL_COURT_LENGTH - p.secondShotContactY,
       }
     : { lx: p.secondShotContactX, ly: p.secondShotContactY };
-  const nearH = FULL_SVG_NEAR_BASELINE - FULL_SVG_NET_Y;
-  const nearSpanY = REAL_COURT_LENGTH - REAL_NET_Y;
-  const contactCx =
-    CENTER_X - (contactNorm.lx / REAL_HALF_DOUBLES) * (COURT_W / 2);
-  const contactCy =
-    FULL_SVG_NET_Y + ((contactNorm.ly - REAL_NET_Y) / nearSpanY) * nearH;
-  // Contact on/in front of the net is a tracking artifact, not a real strike.
-  if (contactCy <= FULL_SVG_NET_Y + 4) {
+  // Contact on/in front of the net is a tracking artifact, not a real
+  // strike — the returner's own baseline sits at `REAL_COURT_LENGTH` in this
+  // normalised frame, so `ly` at/below the net (`REAL_NET_Y`) is nowhere
+  // near it.
+  if (contactNorm.ly <= REAL_NET_Y) {
     return [landingDot];
   }
-  const contactDot: CourtDot = {
-    cx: Math.max(4, Math.min(COURT_W - 4, contactCx)),
-    cy: Math.max(
-      FULL_SVG_NET_Y + 4,
-      Math.min(FULL_SVG_NEAR_BASELINE + FULL_SVG_PAD_BOTTOM - 4, contactCy),
-    ),
-    color,
-    opacity: 0.85,
+  const contactDot: ReturnDotMetric = {
     id: `${p.id}:contact`,
-    pairId: p.id,
     variant: "contact",
     shape,
+    lateralM: -contactNorm.lx,
+    // Positive = behind the baseline (outside the court), negative =
+    // inside it — signed distance from `REAL_COURT_LENGTH`, the returner's
+    // own baseline in this normalised frame.
+    depthM: contactNorm.ly - REAL_COURT_LENGTH,
   };
 
   return [landingDot, contactDot];
@@ -389,6 +398,8 @@ export function computeViz(
         id: p.id,
         x: dot.x,
         y: dot.y,
+        lateralM: 0,
+        depthM: 0,
         outcome: serveOutcome(dot.result),
         shape: "circle",
       });
@@ -406,11 +417,13 @@ export function computeViz(
       const o = returnOutcome(p, subjectIsPlayer1);
       for (const d of mine) {
         dots.push({
-          id: String(d.id),
-          x: d.cx,
-          y: d.cy,
+          id: d.id,
+          x: 0,
+          y: 0,
+          lateralM: d.lateralM,
+          depthM: d.depthM,
           outcome: o === "outnet" ? "miss" : o,
-          shape: d.shape ?? "circle",
+          shape: d.shape,
         });
       }
     }
