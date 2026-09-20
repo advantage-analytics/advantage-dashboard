@@ -1,10 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { type SupabaseClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  ANON_KEY,
   HAVE_ENV,
   INSUFFICIENT_PRIVILEGE,
   SKIP_REASON,
+  SUPABASE_URL,
   type Session,
   createAdminClient,
   createLogins,
@@ -28,6 +30,14 @@ import {
  *     rename or delete it. A non-member cannot insert against that
  *     `account_id`. Two players may each own a private view with the same
  *     name; two shared views with the same name collide.
+ *  3. Column privileges (fix round 1): the UPDATE policy's staff-moderation
+ *     branch has no column restriction of its own, so `id`, `account_id`,
+ *     `created_by` and `created_at` are locked down at the grant level
+ *     instead — neither staff nor the row's own creator can rewrite them.
+ *     Staff CAN still flip `shared` back to `false` (the column the grant
+ *     does allow), and the creator keeps seeing their own row either way.
+ *     An unauthenticated (anon) client gets no rows and/or a permission
+ *     error — `anon` was revoked along with everyone else.
  *
  * **This spec is written ahead of the migration being applied** — Task 7
  * Step 2 (`apply_migration`) is a separate, human-approved step. Before
@@ -374,5 +384,147 @@ test.describe("saved_views RLS (live)", () => {
       shared: true,
     });
     expect(two.error?.code).toBe(UNIQUE_VIOLATION);
+  });
+
+  // ── column privileges (fix round 1) ───────────────────────────────────
+  // The UPDATE policy's staff-moderation branch (`or public.is_program_staff(account_id)`)
+  // has no column restriction of its own — without the grant, a moderator
+  // could reassign authorship or move a view to another program through it.
+  // Column privileges are checked before RLS, so these are permission
+  // errors (42501), not RLS 0-row no-ops.
+
+  test("staff cannot rewrite created_by on a shared view (column privilege)", async () => {
+    const insert = await player1.client
+      .from("saved_views")
+      .insert({
+        account_id: programId,
+        name: "Guard Created_by",
+        cut: "serve",
+        chart: "scatter",
+        shared: true,
+      })
+      .select("id")
+      .single();
+    expect(insert.error).toBeNull();
+    const rowId = insert.data!.id as string;
+
+    const update = await staff.client
+      .from("saved_views")
+      .update({ created_by: staff.userId })
+      .eq("id", rowId);
+    expect(update.error?.code).toBe(INSUFFICIENT_PRIVILEGE);
+
+    const unchanged = await admin
+      .from("saved_views")
+      .select("created_by")
+      .eq("id", rowId)
+      .single();
+    expect(unchanged.data?.created_by).toBe(player1.userId);
+  });
+
+  test("staff cannot rewrite account_id on a shared view (column privilege)", async () => {
+    const insert = await player1.client
+      .from("saved_views")
+      .insert({
+        account_id: programId,
+        name: "Guard Account_id Staff",
+        cut: "serve",
+        chart: "scatter",
+        shared: true,
+      })
+      .select("id")
+      .single();
+    expect(insert.error).toBeNull();
+    const rowId = insert.data!.id as string;
+
+    const update = await staff.client
+      .from("saved_views")
+      .update({ account_id: userA.userId })
+      .eq("id", rowId);
+    expect(update.error?.code).toBe(INSUFFICIENT_PRIVILEGE);
+
+    const unchanged = await admin
+      .from("saved_views")
+      .select("account_id")
+      .eq("id", rowId)
+      .single();
+    expect(unchanged.data?.account_id).toBe(programId);
+  });
+
+  test("the creator cannot rewrite account_id on their own row (column privilege)", async () => {
+    const insert = await player1.client
+      .from("saved_views")
+      .insert({
+        account_id: programId,
+        name: "Guard Account_id Owner",
+        cut: "serve",
+        chart: "scatter",
+      })
+      .select("id")
+      .single();
+    expect(insert.error).toBeNull();
+    const rowId = insert.data!.id as string;
+
+    const update = await player1.client
+      .from("saved_views")
+      .update({ account_id: userA.userId })
+      .eq("id", rowId);
+    expect(update.error?.code).toBe(INSUFFICIENT_PRIVILEGE);
+
+    const unchanged = await admin
+      .from("saved_views")
+      .select("account_id")
+      .eq("id", rowId)
+      .single();
+    expect(unchanged.data?.account_id).toBe(programId);
+  });
+
+  test("staff can unshare a view; the creator still sees it", async () => {
+    const insert = await player1.client
+      .from("saved_views")
+      .insert({
+        account_id: programId,
+        name: "Staff Unshares This",
+        cut: "serve",
+        chart: "scatter",
+        shared: true,
+      })
+      .select("id")
+      .single();
+    expect(insert.error).toBeNull();
+    const rowId = insert.data!.id as string;
+
+    const update = await staff.client
+      .from("saved_views")
+      .update({ shared: false })
+      .eq("id", rowId)
+      .select("id");
+    expect(update.error).toBeNull();
+    expect(update.data).toHaveLength(1);
+
+    const byCreator = await player1.client
+      .from("saved_views")
+      .select("id")
+      .eq("id", rowId);
+    expect(byCreator.data).toHaveLength(1);
+
+    // No longer shared, and player2 never owned it — invisible again.
+    const byPlayer2 = await player2.client
+      .from("saved_views")
+      .select("id")
+      .eq("id", rowId);
+    expect(byPlayer2.data).toHaveLength(0);
+  });
+
+  test("an anonymous client cannot read saved_views", async () => {
+    const anon = createClient(SUPABASE_URL!, ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const select = await anon.from("saved_views").select("id").limit(1);
+    if (select.error) {
+      expect(select.error.code).toBeTruthy();
+    } else {
+      expect(select.data).toHaveLength(0);
+    }
   });
 });

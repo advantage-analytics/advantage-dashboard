@@ -4,15 +4,17 @@ create table public.saved_views (
   name        text not null check (char_length(btrim(name)) between 1 and 60),
   cut         text not null check (cut in ('serve','returnPlacement','returnContact')),
   chart       text not null check (chart in ('scatter','zones')),
-  filters     jsonb not null default '{}'::jsonb,
+  filters     jsonb not null default '{}'::jsonb
+              check (pg_column_size(filters) < 8192),
   sort_order  integer not null default 0,
   shared      boolean not null default false, -- false = private to created_by (default); true = its creator shared it team-wide
   created_by  uuid not null default auth.uid() references auth.users(id) on delete cascade,
   created_at  timestamptz not null default now()
 );
 
--- Names are unique within what one person can see as a list: the team's shared
--- views, and each person's own private views.
+-- Names are unique among a program's shared views, and separately among each
+-- person's own private views — a person may hold a private and a shared view
+-- with the same name.
 create unique index saved_views_shared_name_key
   on public.saved_views (account_id, lower(btrim(name))) where shared;
 create unique index saved_views_private_name_key
@@ -61,3 +63,12 @@ create policy saved_views_delete on public.saved_views for delete to authenticat
       and (account_id = (select auth.uid()) or public.user_program_role(account_id) is not null))
     or (shared and public.is_program_staff(account_id))
   );
+
+-- Supabase's default privileges grant ALL (incl. TRUNCATE, which RLS never covers) to anon and
+-- authenticated on every new table. Start from nothing. id, account_id, created_by and created_at
+-- are immutable for every non-service-role writer: that is what stops a moderator reassigning
+-- authorship or moving a view to another program through the UPDATE policy's staff branch.
+revoke all on public.saved_views from public, anon, authenticated;
+grant select, insert, delete on public.saved_views to authenticated;
+grant update (name, cut, chart, filters, sort_order, shared) on public.saved_views to authenticated;
+grant all on public.saved_views to service_role;
