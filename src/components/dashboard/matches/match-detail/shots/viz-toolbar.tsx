@@ -1,7 +1,8 @@
 "use client";
 
-import { CutMenu, type SavedViewLite } from "./cut-menu";
+import { CutMenu } from "./cut-menu";
 import { ChartMenu } from "./chart-menu";
+import type { SavedViewLite } from "./viz-labels";
 
 /**
  * The Visualizations tab's toolbar row (P1d/P1e): the cut menu, the chart

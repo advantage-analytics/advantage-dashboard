@@ -11,20 +11,12 @@ import {
 import type { Cut, Chart, VizFilters } from "./viz-model";
 import { activeFilterEntries, carryFilters } from "./viz-url";
 import { useVizState } from "./use-viz-state";
-import { CHART_LABEL, CUT_LABEL, VizMenuTrigger } from "./viz-labels";
-
-/**
- * A saved view as the menu needs it — just enough to render a row and switch
- * to it. The full saved-view record (with its id's storage/ownership) lives
- * wherever views are persisted; this is the read shape.
- */
-export interface SavedViewLite {
-  id: string;
-  name: string;
-  cut: Cut;
-  chart: Chart;
-  filters: VizFilters;
-}
+import {
+  CHART_LABEL,
+  CUT_LABEL,
+  VizMenuTrigger,
+  type SavedViewLite,
+} from "./viz-labels";
 
 function filterCountLabel(cut: Cut, chart: Chart, filters: VizFilters): string {
   const n = activeFilterEntries({ cut, chart, filters, viewId: null }).length;
