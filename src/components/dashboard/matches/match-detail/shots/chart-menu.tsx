@@ -26,7 +26,12 @@ export function ChartMenu() {
     setOpen(false);
   }
 
-  const triggerIcon = state.chart === "zones" ? Grid3x3 : ScatterChart;
+  const triggerIcon =
+    state.chart === "zones"
+      ? Grid3x3
+      : state.chart === "heat"
+        ? Flame
+        : ScatterChart;
 
   return (
     <FloatMenu
@@ -52,8 +57,8 @@ export function ChartMenu() {
       />
       <FloatMenuItem
         label="Heat"
-        description="Fullscreen viewer"
-        disabled
+        description="Where they cluster — the ramp replaces the legend"
+        chosen={state.chart === "heat"}
         icon={
           <Flame
             className="size-[13px] shrink-0 text-[var(--ink-400)]"
@@ -61,7 +66,7 @@ export function ChartMenu() {
             aria-hidden="true"
           />
         }
-        onSelect={() => undefined}
+        onSelect={() => selectChart("heat")}
       />
       {state.cut === "serve" && (
         <FloatMenuItem

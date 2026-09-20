@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
-import type { MatchPoint } from "@/lib/data/match-points-server";
+import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import {
   EMPTY_VIZ_FILTERS,
+  binDots,
+  chartAllowedOn,
   computeViz,
   computeVizStats,
   filterKeysFor,
@@ -40,6 +42,31 @@ function point(over: Partial<MatchPoint>): MatchPoint {
     firstShotLandingY: 8.0,
     ...over,
   } as MatchPoint;
+}
+
+/** A rally shot (shotNumber >= 3) with real contact/landing coords — same
+ * fixed match-frame convention as `MatchPoint`'s own `secondShot*` fields
+ * (`match-points-server.ts`'s `MatchShot` doc comment: metres, not varied
+ * by which end a player is on). Defaults land well inside the near half
+ * (no end-change flip) so a test only needs to override what it cares
+ * about. */
+function shot(over: Partial<MatchShot>): MatchShot {
+  return {
+    id: crypto.randomUUID(),
+    shotNumber: 3,
+    isPlayer1: true,
+    shotType: "Forehand",
+    spinType: null,
+    speedMph: null,
+    zone: null,
+    result: "In",
+    videoTime: null,
+    contactX: 0.5,
+    contactY: 22.0, // just inside the near baseline (23.77)
+    landingX: 0.5,
+    landingY: 4.0, // well within the net (11.885) — no end-change flip
+    ...over,
+  };
 }
 
 test.describe("computeViz — serve cut", () => {
@@ -917,5 +944,349 @@ test.describe("statRowAnnouncement", () => {
       "Crosscourt: 100% of 4 points won",
     );
     expect(statRowAnnouncement(noPoints)).toBe("Ad T: no points");
+  });
+});
+
+/* ── G3a: chartAllowedOn ───────────────────────────────────────────────── */
+
+test.describe("chartAllowedOn", () => {
+  test("zones is serve-only", () => {
+    expect(chartAllowedOn("serve", "zones")).toBe(true);
+    expect(chartAllowedOn("returnPlacement", "zones")).toBe(false);
+    expect(chartAllowedOn("returnContact", "zones")).toBe(false);
+    expect(chartAllowedOn("rallyPosition", "zones")).toBe(false);
+  });
+
+  test("scatter and heat are legal on every cut", () => {
+    const cuts: Cut[] = [
+      "serve",
+      "returnPlacement",
+      "returnContact",
+      "rallyPosition",
+    ];
+    for (const cut of cuts) {
+      expect(chartAllowedOn(cut, "scatter")).toBe(true);
+      expect(chartAllowedOn(cut, "heat")).toBe(true);
+    }
+  });
+});
+
+/* ── G3a: computeViz — rallyPosition cut ──────────────────────────────── */
+
+test.describe("computeViz — rallyPosition cut", () => {
+  test("only shots numbered 3+ struck by the subject count", () => {
+    const pts = [
+      point({
+        shots: [
+          shot({ shotNumber: 1, isPlayer1: true }),
+          shot({ shotNumber: 2, isPlayer1: false }),
+          shot({ shotNumber: 3, isPlayer1: true, id: "keep-1" }),
+          shot({ shotNumber: 4, isPlayer1: false, id: "opponent-shot" }),
+          shot({ shotNumber: 5, isPlayer1: true, id: "keep-2" }),
+        ],
+      }),
+    ];
+    const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true);
+    expect(r.dots.map((d) => d.id).sort()).toEqual(["keep-1", "keep-2"]);
+    expect(r.total).toBe(2);
+    expect(r.count).toBe(2);
+    expect(r.noun).toBe("shots");
+    expect(r.zoneStats).toBeNull();
+  });
+
+  test("a shot with null contact or landing coords is skipped, not crashed on", () => {
+    const pts = [
+      point({
+        shots: [
+          shot({ shotNumber: 3, isPlayer1: true, contactX: null }),
+          shot({ shotNumber: 3, isPlayer1: true, landingY: null }),
+          shot({ shotNumber: 3, isPlayer1: true, id: "valid" }),
+        ],
+      }),
+    ];
+    const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true);
+    expect(r.dots.map((d) => d.id)).toEqual(["valid"]);
+    expect(r.total).toBe(1);
+  });
+
+  test("pool is every point, not gated on who served — the subject's rally shots in a point the OPPONENT served still count", () => {
+    const pts = [
+      point({
+        serverIsPlayer1: false,
+        shots: [shot({ shotNumber: 3, isPlayer1: true, id: "returner-rally" })],
+      }),
+    ];
+    const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true);
+    expect(r.dots.map((d) => d.id)).toEqual(["returner-rally"]);
+  });
+
+  test("outcome is the subject's own point result — a player-1 viewer", () => {
+    const pts = [
+      point({
+        wonByPlayer1: true,
+        shots: [shot({ shotNumber: 3, isPlayer1: true, id: "won-shot" })],
+      }),
+      point({
+        wonByPlayer1: false,
+        shots: [shot({ shotNumber: 3, isPlayer1: true, id: "lost-shot" })],
+      }),
+    ];
+    const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true);
+    const byId = new Map(r.dots.map((d) => [d.id, d]));
+    expect(byId.get("won-shot")?.outcome).toBe("won");
+    expect(byId.get("lost-shot")?.outcome).toBe("lost");
+    // No "miss" class for rally dots.
+    expect(r.dots.every((d) => d.outcome !== "miss")).toBe(true);
+  });
+
+  test("outcome flips for a player-2 viewer", () => {
+    const pts = [
+      point({
+        wonByPlayer1: true, // player 1 won -> player 2 (the subject) lost
+        shots: [shot({ shotNumber: 3, isPlayer1: false, id: "p2-shot" })],
+      }),
+    ];
+    const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, false);
+    expect(r.dots[0].outcome).toBe("lost");
+  });
+
+  test("outcome for the opponent subject reads the OTHER player's result", () => {
+    const pts = [
+      point({
+        wonByPlayer1: true,
+        shots: [shot({ shotNumber: 3, isPlayer1: false, id: "opp-shot" })],
+      }),
+    ];
+    const opponentSubject = subjectFor(
+      { ...EMPTY_VIZ_FILTERS, player: "opponent" },
+      true,
+    );
+    expect(opponentSubject).toBe(false);
+    const r = computeViz(
+      pts,
+      "rallyPosition",
+      { ...EMPTY_VIZ_FILTERS, player: "opponent" },
+      opponentSubject,
+    );
+    // Player 1 won the point, subject is player 2 -> subject lost.
+    expect(r.dots[0].outcome).toBe("lost");
+  });
+
+  test("dot metrics match the same conversion pointToReturnDots uses for contact", () => {
+    // contactX=0.5, contactY=22.0, landingY=4.0 (< net, no flip):
+    // lateralM = -0.5, depthM = 22.0 - 23.77 = -1.77 (inside the court).
+    const pts = [
+      point({ shots: [shot({ shotNumber: 3, isPlayer1: true, id: "s" })] }),
+    ];
+    const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true);
+    expect(r.dots[0].lateralM).toBeCloseTo(-0.5, 5);
+    expect(r.dots[0].depthM).toBeCloseTo(-1.77, 5);
+  });
+
+  test("shape follows the shot's own shotType, backhand -> triangle", () => {
+    const pts = [
+      point({
+        shots: [
+          shot({
+            shotNumber: 3,
+            isPlayer1: true,
+            id: "fh",
+            shotType: "Forehand",
+          }),
+          shot({
+            shotNumber: 3,
+            isPlayer1: true,
+            id: "bh",
+            shotType: "Backhand Slice",
+          }),
+          shot({ shotNumber: 3, isPlayer1: true, id: "bh2", shotType: "bh" }),
+        ],
+      }),
+    ];
+    const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true);
+    const byId = new Map(r.dots.map((d) => [d.id, d]));
+    expect(byId.get("fh")?.shape).toBe("circle");
+    expect(byId.get("bh")?.shape).toBe("triangle");
+    expect(byId.get("bh2")?.shape).toBe("triangle");
+  });
+
+  test("total counts every qualifying shot before filtering; count only the filtered ones", () => {
+    const pts = [
+      point({
+        isBreakPoint: true,
+        shots: [shot({ shotNumber: 3, isPlayer1: true, id: "bp-shot" })],
+      }),
+      point({
+        isBreakPoint: false,
+        shots: [shot({ shotNumber: 3, isPlayer1: true, id: "regular-shot" })],
+      }),
+    ];
+    const r = computeViz(
+      pts,
+      "rallyPosition",
+      { ...EMPTY_VIZ_FILTERS, pressure: ["break"] },
+      true,
+    );
+    expect(r.total).toBe(2);
+    expect(r.count).toBe(1);
+    expect(r.dots.map((d) => d.id)).toEqual(["bp-shot"]);
+  });
+
+  test("the ball filter reads the serve-frame meaning (first/second serve point)", () => {
+    const firstServePoint = point({
+      firstShotType: "First Serve",
+      shots: [shot({ shotNumber: 3, isPlayer1: true, id: "on-first" })],
+    });
+    const secondServePoint = point({
+      firstShotType: "Second Serve",
+      shots: [shot({ shotNumber: 3, isPlayer1: true, id: "on-second" })],
+    });
+    const r = computeViz(
+      [firstServePoint, secondServePoint],
+      "rallyPosition",
+      { ...EMPTY_VIZ_FILTERS, ball: ["first"] },
+      true,
+    );
+    expect(r.dots.map((d) => d.id)).toEqual(["on-first"]);
+  });
+
+  test("filterKeysFor(rallyPosition) has no zone key (serve-only concept)", () => {
+    expect(filterKeysFor("rallyPosition")).not.toContain("zone");
+  });
+});
+
+/* ── G3a: binDots ──────────────────────────────────────────────────────── */
+
+test.describe("binDots", () => {
+  const bounds = { xMin: 0, xMax: 10, yMin: 0, yMax: 10 };
+
+  test("bins a dot into the cell its position falls in", () => {
+    const { cells, max } = binDots([{ x: 5, y: 5 }], 2, 2, bounds);
+    // x=5,y=5 is exactly on the boundary -> floor(0.5*2)=1 for both axes.
+    expect(cells[1][1]).toBe(1);
+    expect(max).toBe(1);
+  });
+
+  test("sum of cells always equals dots.length", () => {
+    const dots = [
+      { x: 1, y: 1 },
+      { x: 9, y: 9 },
+      { x: 5, y: 1 },
+      { x: 1, y: 9 },
+      { x: 5, y: 5 },
+    ];
+    const { cells } = binDots(dots, 4, 3, bounds);
+    const sum = cells.flat().reduce((a, b) => a + b, 0);
+    expect(sum).toBe(dots.length);
+  });
+
+  test("out-of-bounds dots clamp to the edge cell rather than being dropped", () => {
+    const dots = [
+      { x: -100, y: -100 }, // far below/left of bounds
+      { x: 1000, y: 1000 }, // far above/right of bounds
+    ];
+    const { cells } = binDots(dots, 3, 3, bounds);
+    expect(cells[0][0]).toBe(1); // clamped to the top-left edge cell
+    expect(cells[2][2]).toBe(1); // clamped to the bottom-right edge cell
+    const sum = cells.flat().reduce((a, b) => a + b, 0);
+    expect(sum).toBe(2);
+  });
+
+  test("an empty dot list bins to an all-zero grid with max 0", () => {
+    const { cells, max } = binDots([], 3, 2, bounds);
+    expect(cells).toEqual([
+      [0, 0, 0],
+      [0, 0, 0],
+    ]);
+    expect(max).toBe(0);
+  });
+});
+
+/* ── G3a: VizResult.heat ───────────────────────────────────────────────── */
+
+test.describe("computeViz — heat population", () => {
+  const servePts = [
+    point({ serverIsPlayer1: true, wonByPlayer1: true }),
+    point({ serverIsPlayer1: true, wonByPlayer1: false }),
+  ];
+
+  test("heat is null when the chart isn't 'heat'", () => {
+    expect(
+      computeViz(servePts, "serve", EMPTY_VIZ_FILTERS, true).heat,
+    ).toBeNull();
+    expect(
+      computeViz(servePts, "serve", EMPTY_VIZ_FILTERS, true, "scatter").heat,
+    ).toBeNull();
+  });
+
+  test("serve heat is a 6x7 grid whose cells sum to the dot count", () => {
+    const r = computeViz(servePts, "serve", EMPTY_VIZ_FILTERS, true, "heat");
+    expect(r.heat).not.toBeNull();
+    expect(r.heat!.cells).toHaveLength(7);
+    for (const row of r.heat!.cells) expect(row).toHaveLength(6);
+    expect(r.heat!.cells.flat().reduce((a, b) => a + b, 0)).toBe(r.dots.length);
+  });
+
+  test("return cuts' heat is a 6x7 grid", () => {
+    const ret = point({
+      serverIsPlayer1: false,
+      secondShotLandingX: 1.0,
+      secondShotLandingY: 4.0,
+      secondShotContactX: 0.5,
+      secondShotContactY: 22.0,
+      secondShotType: "Forehand",
+    });
+    for (const cut of ["returnPlacement", "returnContact"] as const) {
+      const r = computeViz([ret], cut, EMPTY_VIZ_FILTERS, true, "heat");
+      expect(r.heat!.cells).toHaveLength(7);
+      for (const row of r.heat!.cells) expect(row).toHaveLength(6);
+      expect(r.heat!.cells.flat().reduce((a, b) => a + b, 0)).toBe(
+        r.dots.length,
+      );
+    }
+  });
+
+  test("rallyPosition heat is a finer 10x12 grid", () => {
+    const pts = [
+      point({ shots: [shot({ shotNumber: 3, isPlayer1: true, id: "s" })] }),
+    ];
+    const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true, "heat");
+    expect(r.heat!.cells).toHaveLength(12);
+    for (const row of r.heat!.cells) expect(row).toHaveLength(10);
+    expect(r.heat!.cells.flat().reduce((a, b) => a + b, 0)).toBe(r.dots.length);
+  });
+});
+
+/* ── G3a: computeVizStats — rallyPosition cut ─────────────────────────── */
+
+test.describe("computeVizStats — rallyPosition cut", () => {
+  test("reuses the depth-band + Forehand/Backhand builder, with rally copy", () => {
+    const pts = [
+      point({
+        wonByPlayer1: true,
+        shots: [
+          shot({
+            shotNumber: 3,
+            isPlayer1: true,
+            id: "s1",
+            shotType: "Forehand",
+          }),
+        ],
+      }),
+    ];
+    const stats = computeVizStats(
+      pts,
+      "rallyPosition",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(stats.title).toBe("Where rally shots were struck");
+    expect(stats.total).toBe(1);
+    const groupKeys = stats.groups.map((g) => g.key).sort();
+    expect(groupKeys).toEqual(["depth", "stroke"]);
+    const stroke = stats.groups.find((g) => g.key === "stroke")!;
+    const forehandRow = stroke.rows.find((r) => r.key === "forehand")!;
+    expect(forehandRow.count).toBe(1);
+    expect(forehandRow.won).toBe(1);
   });
 });

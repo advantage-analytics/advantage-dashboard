@@ -21,11 +21,13 @@ export const CUT_LABEL: Record<Cut, string> = {
   serve: "Serve placement",
   returnPlacement: "Return placement",
   returnContact: "Return contact",
+  rallyPosition: "Rally position",
 };
 
 export const CHART_LABEL: Record<Chart, string> = {
   scatter: "Scatter",
   zones: "Zones",
+  heat: "Heat",
 };
 
 /**
@@ -100,11 +102,22 @@ const BACKHAND_ITEM: LegendItem = {
  * Ace (the only shape a serve dot takes), the two return cuts add
  * Forehand/Backhand (every return dot is one or the other).
  *
- * Extend for a later cut/chart (G3's "rallyPosition"/"heat") by adding a
- * case here — nowhere else needs to change.
+ * G3a: `chart === "heat"` isn't special-cased here — the ramp legend that
+ * chart wants instead of this dot-shape legend is G3b's (Drawing's) call to
+ * make, at the render site, since `legendItemsFor` only ever describes dot
+ * glyphs. Falling through to the ordinary per-cut legend keeps this
+ * function total (never throws) in the meantime.
+ *
+ * `cut === "rallyPosition"` has no Miss class — a rally shot's own outcome
+ * is just the subject's point result (`computeRallyViz` never emits
+ * `"miss"`), so drawing a Miss swatch nobody's dot will ever match would be
+ * a legend entry with an empty meaning.
  */
 export function legendItemsFor(cut: Cut, chart: Chart): LegendItem[] {
   if (chart === "zones") return OUTCOME_ITEMS;
+  if (cut === "rallyPosition") {
+    return [WON_ITEM, LOST_ITEM, FOREHAND_ITEM, BACKHAND_ITEM];
+  }
   if (cut === "serve") return [...OUTCOME_ITEMS, ACE_ITEM];
   return [...OUTCOME_ITEMS, FOREHAND_ITEM, BACKHAND_ITEM];
 }

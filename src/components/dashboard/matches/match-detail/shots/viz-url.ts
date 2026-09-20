@@ -9,7 +9,7 @@
  */
 
 import type { Cut, Chart, VizFilters } from "./viz-model";
-import { EMPTY_VIZ_FILTERS, filterKeysFor } from "./viz-model";
+import { EMPTY_VIZ_FILTERS, chartAllowedOn, filterKeysFor } from "./viz-model";
 
 /* ── sameView (F4) ─────────────────────────────────────────────────────── */
 
@@ -264,17 +264,24 @@ export function parseVizState(params: URLSearchParams): VizState {
   if (
     cutParam === "serve" ||
     cutParam === "returnPlacement" ||
-    cutParam === "returnContact"
+    cutParam === "returnContact" ||
+    cutParam === "rallyPosition"
   ) {
     cut = cutParam;
   }
 
+  // Stays "scatter" — the default — when the requested chart is unknown, the
+  // cut is null (the wall), or `chartAllowedOn` rejects the pairing (zones
+  // off serve reads as scatter rather than being rejected outright: a URL
+  // must always resolve to something drawable).
   let chart: Chart = "scatter";
-  if (params.get("chart") === "zones") {
-    if (cut === "serve") {
-      chart = "zones";
-    }
-    // else: stays "scatter" (zones off serve reads as scatter)
+  const chartParam = params.get("chart");
+  if (
+    cut !== null &&
+    (chartParam === "zones" || chartParam === "heat") &&
+    chartAllowedOn(cut, chartParam)
+  ) {
+    chart = chartParam;
   }
 
   const viewId = params.get("view");

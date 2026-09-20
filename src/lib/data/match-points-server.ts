@@ -13,6 +13,21 @@ export interface MatchShot {
   result: string | null;
   /** Same clock as `MatchPoint.videoTime`; null when the source never timed it. */
   videoTime: number | null;
+  /**
+   * Raw world-frame court coordinates (same fixed-for-the-match frame as
+   * `MatchPoint`'s own `firstShot*`/`secondShot*` coordinate fields —
+   * `court.ts`'s doc comment on `metersToCourtFrame` is the ground truth:
+   * metres, y measured from one baseline, NOT varied by which end a player
+   * is on). Optional so every existing test fixture that builds a `shots`
+   * array by hand (film room specs, video-alignment specs) keeps typing —
+   * `getMatchPointsFromSupabase` below always populates them from the
+   * `shots` table's own `contact_x/y`/`landing_x/y` columns, which the
+   * query already selects.
+   */
+  contactX?: number | null;
+  contactY?: number | null;
+  landingX?: number | null;
+  landingY?: number | null;
 }
 
 export interface MatchPoint {
@@ -266,6 +281,10 @@ export async function getMatchPointsFromSupabase(
         zone: shot.zone,
         result: shot.result,
         videoTime: shot.video_time,
+        contactX: shot.contact_x,
+        contactY: shot.contact_y,
+        landingX: shot.landing_x,
+        landingY: shot.landing_y,
       })),
       firstShotType: firstShot?.shot_type ?? null,
       firstShotSpin: firstShot?.spin_type ?? null,

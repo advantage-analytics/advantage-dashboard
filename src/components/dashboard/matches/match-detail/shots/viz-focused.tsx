@@ -55,6 +55,9 @@ const LEGEND_CAPTION: Record<Cut, string> = {
   serve: "Half court · landing point",
   returnPlacement: "Far half · landing point",
   returnContact: "Near half · contact point",
+  // rallyPosition renders through the returnContact frame (G3's Drawing
+  // task, not yet built) — same caption, since it's the same half.
+  rallyPosition: "Near half · contact point",
 };
 
 export function VizFocused({
@@ -131,8 +134,9 @@ export function VizFocused({
 
   const subject = subjectFor(state.filters, you.isPlayer1);
   const result = useMemo(
-    () => (cut ? computeViz(points, cut, state.filters, subject) : null),
-    [points, cut, state.filters, subject],
+    () =>
+      cut ? computeViz(points, cut, state.filters, subject, state.chart) : null,
+    [points, cut, state.filters, subject, state.chart],
   );
   const stats = useMemo(
     () =>

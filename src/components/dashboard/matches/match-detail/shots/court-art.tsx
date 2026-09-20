@@ -69,6 +69,9 @@ const CUT_NOUN: Record<Cut, string> = {
   serve: "serve placement",
   returnPlacement: "return placement",
   returnContact: "return contact",
+  // G3a: not yet drawn (rallyPosition renders through the returnContact
+  // frame per the task boundary) — only used for the aria-label below.
+  rallyPosition: "rally position",
 };
 
 // Re-tuned zone-cell label sizes: the old 447-wide legacy frame's cells were

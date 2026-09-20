@@ -8,7 +8,12 @@ import {
   FloatMenuItem,
   FloatMenuNote,
 } from "@/components/ui/float-menu";
-import type { Cut, Chart, VizFilters } from "./viz-model";
+import {
+  chartAllowedOn,
+  type Cut,
+  type Chart,
+  type VizFilters,
+} from "./viz-model";
 import { activeFilterEntries, carryFilters } from "./viz-url";
 import { useVizState } from "./use-viz-state";
 import {
@@ -56,7 +61,10 @@ export function CutMenu({
     setState((prev) => ({
       ...prev,
       cut,
-      chart: cut === "serve" ? prev.chart : "scatter",
+      // Zones falls back to scatter off serve; heat (allowed on every cut)
+      // survives the switch — `chartAllowedOn` is the one pure rule behind
+      // this, also used by `parseVizState` and `validateVizInput`.
+      chart: chartAllowedOn(cut, prev.chart) ? prev.chart : "scatter",
       filters: carryFilters(prev.filters, cut),
       viewId: null,
     }));
@@ -135,9 +143,9 @@ export function CutMenu({
       />
       <FloatMenuItem
         label="Rally position"
-        description="Fullscreen viewer"
-        disabled
-        onSelect={() => undefined}
+        description="Where every rally shot was struck"
+        chosen={state.cut === "rallyPosition"}
+        onSelect={() => selectCut("rallyPosition")}
       />
 
       <FloatMenuDivider />

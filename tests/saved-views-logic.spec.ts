@@ -140,6 +140,40 @@ test("validateVizInput rejects zones off serve rather than downgrading it", () =
   ).toBeNull();
 });
 
+/* ── G3a: rallyPosition + heat ────────────────────────────────────────── */
+
+test("validateVizInput accepts cut=rallyPosition with chart=scatter", () => {
+  const result = validateVizInput({
+    cut: "rallyPosition",
+    chart: "scatter",
+    filters: {},
+  });
+  expect(result).toEqual({
+    cut: "rallyPosition",
+    chart: "scatter",
+    filters: EMPTY_VIZ_FILTERS,
+  });
+});
+
+test("validateVizInput accepts chart=heat on every cut, including rallyPosition", () => {
+  for (const cut of [
+    "serve",
+    "returnPlacement",
+    "returnContact",
+    "rallyPosition",
+  ]) {
+    const result = validateVizInput({ cut, chart: "heat", filters: {} });
+    expect(result?.chart).toBe("heat");
+    expect(result?.cut).toBe(cut);
+  }
+});
+
+test("validateVizInput rejects heat combined with an unknown cut", () => {
+  expect(
+    validateVizInput({ cut: "nonsense", chart: "heat", filters: {} }),
+  ).toBeNull();
+});
+
 test("validateVizInput drops a filter value outside its enum", () => {
   const result = validateVizInput({
     cut: "serve",

@@ -8,7 +8,7 @@
  * together for a player-2 viewer.
  */
 
-import type { MatchPoint } from "@/lib/data/match-points-server";
+import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import {
   computeZoneStats as computeZoneStatsFromServeZones,
   pointToServeDot as pointToServeDotFromServeZones,
@@ -17,11 +17,22 @@ import {
   type ZoneKey,
   type ZoneStats,
 } from "@/lib/data/serve-zones";
+import {
+  projectServeDot,
+  projectReturnDot,
+  SERVE_HEAT_BOUNDS,
+  RETURN_HEAT_BOUNDS,
+  SERVE_HEAT_GRID,
+  RETURN_HEAT_GRID,
+  RALLY_HEAT_GRID,
+  type HeatBounds,
+} from "./court-geometry";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
-export type Cut = "serve" | "returnPlacement" | "returnContact";
-export type Chart = "scatter" | "zones";
+export type Cut =
+  "serve" | "returnPlacement" | "returnContact" | "rallyPosition";
+export type Chart = "scatter" | "zones" | "heat";
 export type PlayerFilter = "you" | "opponent";
 
 // Every dimension below is multi-select: an empty list means "any" (no
@@ -100,12 +111,105 @@ export interface VizDot {
   depthM: number;
 }
 
+/** One binned heat grid — `cells[row][col]` counts, `max` the busiest cell
+ * (0 when every dot binned, including when there are no dots at all). */
+export interface HeatGrid {
+  cells: number[][];
+  max: number;
+}
+
 export interface VizResult {
   dots: VizDot[];
-  count: number; // points matching the filters
-  total: number; // drawable points in the cut's pool
-  noun: "serves" | "returns";
+  count: number; // points matching the filters (rallyPosition: matching SHOTS)
+  total: number; // drawable points in the cut's pool (rallyPosition: drawable SHOTS)
+  noun: "serves" | "returns" | "shots";
   zoneStats: Record<ZoneKey, ZoneStats> | null; // serve cut only
+  /** Populated only when the caller's chart is "heat" — null otherwise
+   * (including for chart === "zones", where the cells ARE the chart). */
+  heat: HeatGrid | null;
+}
+
+/**
+ * Zones only exists off serve; scatter and heat draw on every cut. The one
+ * pure rule behind every chart-coercion decision in the tab: `parseVizState`
+ * (a garbage/legacy URL), `cut-menu.tsx`'s `selectCut` (switching cuts keeps
+ * the current chart when it's still legal, drops to scatter otherwise — so
+ * heat survives a cut switch but zones doesn't survive leaving serve) and
+ * `validateVizInput` (a saved-view row) all decide "is this chart legal on
+ * this cut" through this function, never by re-deriving the rule inline.
+ */
+export function chartAllowedOn(cut: Cut, chart: Chart): boolean {
+  if (chart === "zones") return cut === "serve";
+  return true;
+}
+
+/**
+ * Bins projected dot positions into a `cols`×`rows` grid over `bounds` (the
+ * SAME projected coordinate space `court-art.tsx` draws dots in — see
+ * `court-geometry.ts`'s heat-bounds doc comment). A dot outside `bounds`
+ * clamps into the nearest edge cell rather than being dropped, so
+ * `sum(cells) === dots.length` always holds. Pure — no VizDot/Cut knowledge,
+ * so a caller projects first (`projectServeDot`/`projectReturnDot`) and bins
+ * second.
+ */
+export function binDots(
+  dots: { x: number; y: number }[],
+  cols: number,
+  rows: number,
+  bounds: HeatBounds,
+): HeatGrid {
+  const cells: number[][] = Array.from(
+    { length: rows },
+    () => new Array(cols).fill(0) as number[],
+  );
+  const xSpan = bounds.xMax - bounds.xMin || 1;
+  const ySpan = bounds.yMax - bounds.yMin || 1;
+
+  for (const d of dots) {
+    const colFrac = (d.x - bounds.xMin) / xSpan;
+    const rowFrac = (d.y - bounds.yMin) / ySpan;
+    const col = Math.min(cols - 1, Math.max(0, Math.floor(colFrac * cols)));
+    const row = Math.min(rows - 1, Math.max(0, Math.floor(rowFrac * rows)));
+    cells[row][col]++;
+  }
+
+  let max = 0;
+  for (const row of cells) {
+    for (const v of row) {
+      if (v > max) max = v;
+    }
+  }
+
+  return { cells, max };
+}
+
+/** `computeViz`'s heat pass, once its dots are known — projects each dot
+ * through the same frame `court-art.tsx` draws it in, then bins. Serve dots
+ * carry `x`/`y` (0..1 service-box fractions); return/rally dots carry
+ * `lateralM`/`depthM` — `projectServeDot`/`projectReturnDot` read whichever
+ * pair the cut populates (see `VizDot`'s own doc comment). rallyPosition
+ * always projects through the "contact" kind, same as its scatter dots. */
+function computeHeatForCut(cut: Cut, dots: VizDot[]): HeatGrid {
+  if (cut === "serve") {
+    const projected = dots.map((d) => projectServeDot({ x: d.x, y: d.y }));
+    return binDots(
+      projected.map((p) => ({ x: p.cx, y: p.cy })),
+      SERVE_HEAT_GRID.cols,
+      SERVE_HEAT_GRID.rows,
+      SERVE_HEAT_BOUNDS,
+    );
+  }
+  const kind = cut === "returnPlacement" ? "placement" : "contact";
+  const grid = cut === "rallyPosition" ? RALLY_HEAT_GRID : RETURN_HEAT_GRID;
+  const projected = dots.map((d) =>
+    projectReturnDot(kind, { lateralM: d.lateralM, depthM: d.depthM }),
+  );
+  return binDots(
+    projected.map((p) => ({ x: p.cx, y: p.cy })),
+    grid.cols,
+    grid.rows,
+    RETURN_HEAT_BOUNDS,
+  );
 }
 
 /* ── Helpers moved from the retired shot-filters hook ────────────────────── */
@@ -237,6 +341,55 @@ export interface ReturnDotMetric {
  * both the landing and (when present) the contact point share that one
  * flip decision, since they're the same shot.
  */
+interface ContactMetrics {
+  lateralM: number;
+  depthM: number;
+}
+
+/**
+ * The contact-dot mirroring `pointToReturnDots` used to compute inline,
+ * pulled out so G3's rally dots — any shot with its own contact/landing
+ * pair, not just a point's second shot — reuse the IDENTICAL conversion.
+ * `landingX`/`landingY` decide which raw half (near/far) the shot happened
+ * at (SwingVision doesn't tag ends, so a landing beyond the net reads as
+ * the FAR end and gets mirrored onto the near one — `didFlip`); that same
+ * decision then carries over to `contactX`/`contactY`, since a shot's
+ * contact and its own landing are always the same shot, always the same
+ * end. A point doesn't change ends mid-rally, so calling this once per
+ * SHOT (rather than once per point, as `pointToReturnDots` effectively
+ * does for the second shot) still lands on the same `didFlip` for every
+ * shot in that point — it's just derived from data every shot already
+ * carries, rather than assumed to match the second shot's.
+ *
+ * Returns null when either pair is missing (nothing to place), or when the
+ * flipped contact doesn't clear the net — a tracking artifact, not a real
+ * strike, since the hitter's own baseline sits at `REAL_COURT_LENGTH` in
+ * this normalised frame and `ly` at/below the net is nowhere near it.
+ */
+function contactMetricsFromLanding(
+  contactX: number | null | undefined,
+  contactY: number | null | undefined,
+  landingX: number | null | undefined,
+  landingY: number | null | undefined,
+): ContactMetrics | null {
+  if (landingX == null || landingY == null) return null;
+  if (contactX == null || contactY == null) return null;
+
+  const didFlip = landingY > REAL_NET_Y;
+  const contactNorm = didFlip
+    ? { lx: -contactX, ly: REAL_COURT_LENGTH - contactY }
+    : { lx: contactX, ly: contactY };
+  if (contactNorm.ly <= REAL_NET_Y) return null;
+
+  return {
+    lateralM: -contactNorm.lx,
+    // Positive = behind the baseline (outside the court), negative = inside
+    // it — signed distance from `REAL_COURT_LENGTH`, the hitter's own
+    // baseline in this normalised frame.
+    depthM: contactNorm.ly - REAL_COURT_LENGTH,
+  };
+}
+
 export function pointToReturnDots(
   p: MatchPoint,
   subjectIsPlayer1: boolean,
@@ -265,31 +418,21 @@ export function pointToReturnDots(
     depthM: landing.ly, // already 0 (net) .. ~11.885 (that half's baseline)
   };
 
-  if (p.secondShotContactX == null || p.secondShotContactY == null) {
-    return [landingDot];
-  }
-  const contactNorm = didFlip
-    ? {
-        lx: -p.secondShotContactX,
-        ly: REAL_COURT_LENGTH - p.secondShotContactY,
-      }
-    : { lx: p.secondShotContactX, ly: p.secondShotContactY };
-  // Contact on/in front of the net is a tracking artifact, not a real
-  // strike — the returner's own baseline sits at `REAL_COURT_LENGTH` in this
-  // normalised frame, so `ly` at/below the net (`REAL_NET_Y`) is nowhere
-  // near it.
-  if (contactNorm.ly <= REAL_NET_Y) {
+  const contact = contactMetricsFromLanding(
+    p.secondShotContactX,
+    p.secondShotContactY,
+    p.secondShotLandingX,
+    p.secondShotLandingY,
+  );
+  if (!contact) {
     return [landingDot];
   }
   const contactDot: ReturnDotMetric = {
     id: `${p.id}:contact`,
     variant: "contact",
     shape,
-    lateralM: -contactNorm.lx,
-    // Positive = behind the baseline (outside the court), negative =
-    // inside it — signed distance from `REAL_COURT_LENGTH`, the returner's
-    // own baseline in this normalised frame.
-    depthM: contactNorm.ly - REAL_COURT_LENGTH,
+    lateralM: contact.lateralM,
+    depthM: contact.depthM,
   };
 
   return [landingDot, contactDot];
@@ -405,12 +548,97 @@ function serveOutcome(r: ServeDot["result"]): Outcome {
   return r === "lost" ? "lost" : r === "doubleFault" ? "miss" : "won";
 }
 
+/** Backhand-vs-forehand shape, from a shot's own `shotType` — the same
+ * regex `pointToReturnDots` applies to `secondShotType`, generalised to any
+ * shot rather than just a point's second one. */
+function shapeFromShotType(
+  shotType: string | null | undefined,
+): "circle" | "triangle" {
+  const typeLower = (shotType ?? "").toLowerCase();
+  return typeLower.includes("backhand") || typeLower.startsWith("bh")
+    ? "triangle"
+    : "circle";
+}
+
+/**
+ * Rally position (G3a): every shot AFTER the return (`shotNumber >= 3`) the
+ * SUBJECT struck, across every point — not gated on who served, unlike the
+ * serve/return arms above, since a rally shot can come from either the
+ * server or the returner. `count`/`total`/`noun` are shot-counted rather
+ * than point-counted (a single point can contribute several dots): `total`
+ * is every qualifying rally shot regardless of filters (the drawable pool,
+ * same "before filtering" meaning `total` carries for every other cut, just
+ * measured in shots here), `count` the ones whose POINT also passes
+ * `filters`. Outcome is the subject's own point result (won/lost — no
+ * "miss" class; a rally shot's own placement carries no separate
+ * ace/fault-style failure the way a serve or a return does).
+ */
+function computeRallyViz(
+  points: MatchPoint[],
+  filters: VizFilters,
+  subjectIsPlayer1: boolean,
+  chart: Chart,
+): VizResult {
+  let total = 0;
+  let count = 0;
+  const dots: VizDot[] = [];
+
+  for (const p of points) {
+    // "ball" reads as the serve-frame meaning here (first/second serve
+    // point) — the rally itself has no "first/second" concept of its own,
+    // it's whichever serve started the point that's being asked about.
+    const passes = pointMatchesFilters(p, filters, "serve", subjectIsPlayer1);
+    const subjectWon = p.wonByPlayer1 === subjectIsPlayer1;
+
+    for (const shot of p.shots ?? []) {
+      if (shot.shotNumber < 3) continue;
+      if (shot.isPlayer1 !== subjectIsPlayer1) continue;
+
+      const metrics = contactMetricsFromLanding(
+        shot.contactX,
+        shot.contactY,
+        shot.landingX,
+        shot.landingY,
+      );
+      if (!metrics) continue;
+
+      total++;
+      if (!passes) continue;
+      count++;
+
+      dots.push({
+        id: shot.id,
+        x: 0,
+        y: 0,
+        lateralM: metrics.lateralM,
+        depthM: metrics.depthM,
+        outcome: subjectWon ? "won" : "lost",
+        shape: shapeFromShotType(shot.shotType),
+      });
+    }
+  }
+
+  return {
+    dots,
+    count,
+    total,
+    noun: "shots",
+    zoneStats: null,
+    heat: chart === "heat" ? computeHeatForCut("rallyPosition", dots) : null,
+  };
+}
+
 export function computeViz(
   points: MatchPoint[],
   cut: Cut,
   filters: VizFilters,
   subjectIsPlayer1: boolean,
+  chart: Chart = "scatter",
 ): VizResult {
+  if (cut === "rallyPosition") {
+    return computeRallyViz(points, filters, subjectIsPlayer1, chart);
+  }
+
   const frame = cutFrame(cut);
   let total = 0;
   let count = 0;
@@ -470,6 +698,7 @@ export function computeViz(
     noun: frame === "serve" ? "serves" : "returns",
     zoneStats:
       cut === "serve" ? computeZoneStatsFromServeZones(serveDots) : null,
+    heat: chart === "heat" ? computeHeatForCut(cut, dots) : null,
   };
 }
 
@@ -938,6 +1167,22 @@ export function computeVizStats(
     return {
       title: "Where the return went",
       subtitle,
+      groups,
+      sentence: buildSentence(groups, noun),
+      total,
+    };
+  }
+
+  if (cut === "rallyPosition") {
+    // Same depth-band + Forehand/Backhand builder returnContact uses —
+    // `returnContactStats` only reads `result.dots`' `depthM`/`shape`, which
+    // rally dots carry in the identical shape, so nothing rally-specific is
+    // needed here beyond the noun and copy.
+    const noun = total === 1 ? "shot" : "shots";
+    const groups = returnContactStats(result);
+    return {
+      title: "Where rally shots were struck",
+      subtitle: `Points won by contact point · ${total} ${noun}`,
       groups,
       sentence: buildSentence(groups, noun),
       total,

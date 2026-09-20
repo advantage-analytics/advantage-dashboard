@@ -126,20 +126,27 @@ export function validateVizInput(input: {
   chart: string;
   filters: unknown;
 }): { cut: Cut; chart: Chart; filters: VizFilters } | null {
-  if (input.chart !== "scatter" && input.chart !== "zones") return null;
+  if (
+    input.chart !== "scatter" &&
+    input.chart !== "zones" &&
+    input.chart !== "heat"
+  ) {
+    return null;
+  }
 
   const params = filtersToParams(input.filters);
   params.set("cut", input.cut);
-  if (input.chart === "zones") params.set("chart", "zones");
+  if (input.chart !== "scatter") params.set("chart", input.chart);
 
   const parsed = parseVizState(params);
 
   if (parsed.cut === null || parsed.cut !== input.cut) return null;
-  // "zones" only exists off "serve" — `parseVizState` silently downgrades
-  // that combination to "scatter" rather than rejecting it (a URL must
-  // always resolve to something drawable). A stored or submitted row asking
-  // for the impossible pairing is invalid, not a scatter chart in disguise.
-  if (input.chart === "zones" && parsed.chart !== "zones") return null;
+  // A chart `chartAllowedOn` (`viz-model.ts`) rejects for this cut — "zones"
+  // off serve — silently downgrades to "scatter" in `parseVizState` rather
+  // than being rejected there (a URL must always resolve to something
+  // drawable). A stored or submitted row asking for the impossible pairing
+  // is invalid, not a scatter chart in disguise, so it's caught here instead.
+  if (input.chart !== parsed.chart) return null;
 
   return { cut: parsed.cut, chart: parsed.chart, filters: parsed.filters };
 }

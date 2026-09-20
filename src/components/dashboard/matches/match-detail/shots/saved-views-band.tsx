@@ -191,7 +191,13 @@ export function SavedViewsBand({
 
   function tileDataFor(view: SavedViewRow) {
     const subjectIsPlayer1 = subjectFor(view.filters, you.isPlayer1);
-    const result = computeViz(points, view.cut, view.filters, subjectIsPlayer1);
+    const result = computeViz(
+      points,
+      view.cut,
+      view.filters,
+      subjectIsPlayer1,
+      view.chart,
+    );
     const subjectName = view.filters.player === "you" ? you.name : opp.name;
     const entries = activeFilterEntries({
       cut: view.cut,

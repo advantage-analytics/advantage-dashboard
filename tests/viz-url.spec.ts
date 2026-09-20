@@ -166,6 +166,49 @@ test("garbage values read as defaults; zones off serve reads as scatter", () => 
   expect(parseVizState(new URLSearchParams("cut=nope")).cut).toBeNull();
 });
 
+/* ── G3a: rallyPosition + heat ────────────────────────────────────────── */
+
+test("parseVizState accepts cut=rallyPosition", () => {
+  const s = parseVizState(new URLSearchParams("cut=rallyPosition"));
+  expect(s.cut).toBe("rallyPosition");
+  expect(s.chart).toBe("scatter");
+});
+
+test("round trip: cut=rallyPosition&chart=heat", () => {
+  const q = vizStateQuery(new URLSearchParams(""), {
+    cut: "rallyPosition",
+    chart: "heat",
+    viewId: null,
+    filters: EMPTY_VIZ_FILTERS,
+  });
+  const back = new URLSearchParams(q);
+  expect(back.get("cut")).toBe("rallyPosition");
+  expect(back.get("chart")).toBe("heat");
+  expect(parseVizState(back)).toEqual({
+    cut: "rallyPosition",
+    chart: "heat",
+    viewId: null,
+    filters: EMPTY_VIZ_FILTERS,
+  });
+});
+
+test("heat parses on every cut, including a serve-only zones URL swapped for heat", () => {
+  for (const cut of [
+    "serve",
+    "returnPlacement",
+    "returnContact",
+    "rallyPosition",
+  ]) {
+    const s = parseVizState(new URLSearchParams(`cut=${cut}&chart=heat`));
+    expect(s.chart).toBe("heat");
+  }
+});
+
+test("zones still reads as scatter off serve even for rallyPosition", () => {
+  const s = parseVizState(new URLSearchParams("cut=rallyPosition&chart=zones"));
+  expect(s.chart).toBe("scatter");
+});
+
 test("cut = null clears every viz key", () => {
   const q = vizStateQuery(
     new URLSearchParams("tab=shots&cut=serve&ball=first&view=abc"),

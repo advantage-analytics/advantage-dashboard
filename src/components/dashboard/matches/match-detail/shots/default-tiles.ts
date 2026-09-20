@@ -69,7 +69,13 @@ export function buildDefaultTiles(
         ...cut.filters,
         player: row.subject,
       };
-      const result = computeViz(points, cut.cut, filters, row.side.isPlayer1);
+      const result = computeViz(
+        points,
+        cut.cut,
+        filters,
+        row.side.isPlayer1,
+        cut.chart,
+      );
       const state: VizState = {
         cut: cut.cut,
         chart: cut.chart,

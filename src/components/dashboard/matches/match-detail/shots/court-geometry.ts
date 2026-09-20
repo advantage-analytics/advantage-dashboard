@@ -199,6 +199,54 @@ export function projectReturnDot(
   return { cx, cy };
 }
 
+/* ── Heat-cell binning bounds (G3a, Data) ──────────────────────────────────
+ *
+ * Where `binDots` (`viz-model.ts`) bins a cut's dots, in the SAME projected
+ * (pre-transform) coordinates `court-art.tsx` draws them in — `projectServeDot`/
+ * `projectReturnDot`'s own output — so the Drawing task can place a heat
+ * cell's `<rect>` directly off a bin index without re-deriving where it
+ * sits. Grid resolution is fixed per cut (`SERVE_HEAT_GRID`/`RETURN_HEAT_GRID`
+ * 6×7, `RALLY_HEAT_GRID` 10×12 — rallyPosition's own scatter spans a wider
+ * slice of the court, per the design brief); the bounds below are shared by
+ * every chart using that frame.
+ *
+ * `RETURN_HEAT_BOUNDS` covers returnPlacement, returnContact AND
+ * rallyPosition alike (only grid resolution differs) — the visible half
+ * (net → that half's own baseline) plus a run-off margin past the baseline,
+ * matching the positive `depthM` a contact dot can carry when struck behind
+ * the line (`projectReturnDot`'s "contact" doc comment). The run-off's exact
+ * extent is a visual call the Drawing task (G3b) verifies live against the
+ * court's own clipped apron — `RETURN_DEPTH_RUN_OFF` here is a placeholder
+ * proportion, not a value read off the design handoff.
+ */
+export interface HeatBounds {
+  xMin: number;
+  xMax: number;
+  yMin: number;
+  yMax: number;
+}
+
+export const SERVE_HEAT_BOUNDS: HeatBounds = {
+  xMin: SERVE_COURT.singlesLeft,
+  xMax: SERVE_COURT.singlesRight,
+  yMin: SERVE_COURT.serviceLineY,
+  yMax: SERVE_COURT.netY,
+};
+
+const RETURN_DEPTH_RUN_OFF =
+  (RETURN_COURT.nearBaselineX - RETURN_COURT.netX) * 0.3;
+
+export const RETURN_HEAT_BOUNDS: HeatBounds = {
+  xMin: RETURN_COURT.netX,
+  xMax: RETURN_COURT.nearBaselineX + RETURN_DEPTH_RUN_OFF,
+  yMin: RETURN_COURT.doublesTop,
+  yMax: RETURN_COURT.doublesBottom,
+};
+
+export const SERVE_HEAT_GRID = { cols: 6, rows: 7 } as const;
+export const RETURN_HEAT_GRID = { cols: 6, rows: 7 } as const;
+export const RALLY_HEAT_GRID = { cols: 10, rows: 12 } as const;
+
 /* ── Shared exports ────────────────────────────────────────────────────── */
 
 // Zone cell opacity (visual-fix-round-2, Defect B): the six zone cells sit on
