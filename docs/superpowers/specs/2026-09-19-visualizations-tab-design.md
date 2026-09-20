@@ -263,41 +263,59 @@ Shipped ahead of the rest of Phase 2, on `claude/visualizations-tab-design-aefa4
   focused court explaining the shape/colour/star encoding for that cut.
 - **Heat chart, in-shell** (`chart-menu.tsx`'s Heat row, `Chart = "heat"` in
   `viz-model.ts`): **by user decision, a real density heatmap — blobs, not
-  the P2i/P2j binned-cell grid it superseded.** Every cut draws one white
-  `<circle>` per dot (`heatDotCircle`, radius `heatDotRadiusFor(cut)` — 1.1
-  real metres on the return frame (`RETURN_HEAT_DOT_RADIUS`), a screen-size-
-  matched equivalent on the serve frame (`SERVE_HEAT_DOT_RADIUS`, ≈17.2
-  units) — straight off the SAME `VizDot[]` every other chart draws, so
-  `VizResult` carries no separate binned-grid field any more (`HeatGrid`,
-  `binDots`, `computeHeatForCut` are gone). One `<filter>`
+  the P2i/P2j binned-cell grid it superseded**, tuned across two follow-up
+  rounds ("more focused per point" and "the tint is not consistent on the
+  view"). Every cut draws one white `<circle>` per dot (`heatDotCircle`,
+  radius `heatDotRadiusFor(cut)` — 0.55 real metres on the return frame
+  (`RETURN_HEAT_DOT_RADIUS`, tightened from an initial 1.1m so individual
+  shots read as distinct small hot spots, only merging on a real overlap), a
+  screen-size-matched equivalent on the serve frame (`SERVE_HEAT_DOT_RADIUS`,
+  ≈8.6 units), fill-opacity 0.55 — straight off the SAME `VizDot[]` every
+  other chart draws, so `VizResult` carries no separate binned-grid field any
+  more (`HeatGrid`, `binDots`, `computeHeatForCut` are gone). One `<filter>`
   (`HeatFilterDef`/`heatFilterRegionFor`, `court-art.tsx`/`court-geometry.ts`,
   one `useId()`-scoped instance per `CourtArt`) chains `feGaussianBlur`
-  (`stdDeviation` = half the blob radius) → `feColorMatrix` (copies alpha
-  into R/G/B, `color-interpolation-filters="sRGB"`) → `feComponentTransfer`,
-  whose `feFuncR`/`feFuncG`/`feFuncB` walk the `--viz-heatmap-0..3` ramp
-  (`HEAT_RAMP_*_TABLE`, derived from the same hex the tokens carry) and whose
-  `feFuncA` climbs steeply — `"0.1 0.45 0.65 0.75 0.82"`
-  (`HEAT_ALPHA_TABLE`) — so a single dot already reads clearly (the "make it
-  more sensitive" feedback) while overlapping dots still have headroom to
-  read hotter. Overlapping circles accumulate alpha before the filter even
-  runs, which is what turns a cluster into a visible hot spot. The filter's
-  own `x`/`y`/`width`/`height` (`filterUnits="userSpaceOnUse"`,
-  `heatFilterRegionFor`) is `heatBoundsFor(cut)` — each frame's WHOLE VISIBLE
-  VIEW, unchanged from the P2j full-view derivation — padded by two blob
-  radii; because `feComponentTransfer`'s table lookups touch every pixel of
-  that region regardless of whether a dot reached it, this is what makes the
-  floor tint (`HEAT_ALPHA_TABLE`'s own first value) fill the entire view with
-  no hard rectangular edge, no separate background rect needed. The serve
-  frame gained its own `<clipPath>` (previously only the return frame had
-  one) so the filter's margin can't bleed past `SERVE_BACKGROUND_PATH`'s
-  rounded corners. Zero dots still draw no heat layer at all — the filter
-  would otherwise wash an empty result in the floor tint, so `CourtArt` gates
-  it on `dots.length > 0` and leaves the existing empty-state overlay to
-  cover that case. (c) the focused view's (and wall tile's) letterbox strips
-  either side of the svg composite the SAME floor tint
-  (`heatFloorTintRgba()`, derived from the identical ramp/alpha constants)
-  over `HEAT_APRON_FILL`, so a sliver of letterboxing reads as the same green
-  as the svg's own filter-painted floor rather than a visibly different one.
+  (`stdDeviation` = 0.4× the blob radius, tightened alongside it) →
+  `feColorMatrix` (copies alpha into R/G/B, `color-interpolation-filters="sRGB"`)
+  → `feComponentTransfer`, whose `feFuncR`/`feFuncG`/`feFuncB` walk the
+  `--viz-heatmap-0..3` ramp (`HEAT_RAMP_*_TABLE`, derived from the same hex
+  the tokens carry) and whose `feFuncA` starts at 0 and climbs steeply —
+  `"0 0.5 0.68 0.77 0.82"` (`HEAT_ALPHA_TABLE`) — so a single dot's now-
+  smaller blob still reads clearly on its own (the "more sensitive"
+  feedback) while overlapping dots have headroom to read hotter.
+  Overlapping circles accumulate alpha before the filter even runs (plain
+  Porter-Duff "over" compositing: N same-centred dots combine to
+  `1-(1-0.55)^N` before the filter sees them), which is what turns a cluster
+  into a visible hot spot — checked analytically against `HEAT_ALPHA_TABLE`'s
+  own table-lookup interpolation: 1 overlapping dot resolves to output alpha
+  ≈0.70 (clearly above the old floor), 5 dots ≈0.82 (already near the
+  ceiling), 15+ dots stays at that same 0.82 ceiling — 1-vs-5 is clearly
+  distinguishable and doesn't saturate at a single dot (satisfying "not too
+  early"); 5-vs-15 converging is the expected shape of an accumulation-based
+  heatmap (many fully-overlapping shots all read equally "hot"), not a defect.
+  The filter's own
+  `x`/`y`/`width`/`height` (`filterUnits="userSpaceOnUse"`,
+  `heatFilterRegionFor`) is `heatBoundsFor(cut)` padded by two blob radii —
+  generous enough that no blob's blur gets clipped at the region's own edge,
+  but (unlike the P2j round) it no longer needs to span the frame's whole
+  visible view, because **the filter paints no floor tint any more**
+  (`HEAT_ALPHA_TABLE`'s first value is 0, not a floor) — that removed the bug
+  "the tint is not consistent on the view" traced to: the filter's old floor
+  only covered the svg's own CONTENT box, while a separate CSS gradient on
+  the wrapper tried (and failed) to match it across the sliver the svg's
+  `preserveAspectRatio` letterboxes inside ITSELF, reading as two visibly
+  different greens. The floor now lives entirely OUTSIDE the svg: one flat,
+  `pointer-events-none`, `aria-hidden` wash `<div>` (`heatFloorTintRgba()` —
+  `--viz-heatmap-0` at `HEAT_WASH_ALPHA`, 0.1) absolutely positioned over the
+  WHOLE art box, above the svg, in both `viz-focused.tsx` and
+  `court-tile.tsx` — a single tint with nothing else to stay consistent
+  with. `HEAT_APRON_FILL` stays the wrapper's own plain background colour
+  either way. The serve frame kept its own `<clipPath>` (added alongside the
+  return frame's existing one in the P2j round) so a blob's blur still can't
+  bleed past `SERVE_BACKGROUND_PATH`'s rounded corners. Zero dots still draw
+  no heat layer AND no wash at all — `CourtArt` gates the filtered `<g>` and
+  both wrappers gate the wash `<div>` on `dots.length > 0`, leaving the
+  existing empty-state overlay to cover that case untinted.
 - **Rally position cut** (`Cut = "rallyPosition"`): every shot after the
   return the subject struck, across every point, drawn on the same
   near-half return frame `returnContact` uses. Shots are selected by ROLE

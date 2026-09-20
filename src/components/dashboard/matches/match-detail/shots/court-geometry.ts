@@ -397,10 +397,12 @@ export function heatBoundsFor(
  */
 
 // The blob radius, in the return frame's own pre-transform units — the
-// user's "sensitivity" pick, expressed as a real-world size (1.1 m) via
-// `UNITS_PER_METER` (the depth axis' own metres→units scale — see that
-// constant's own doc comment). ≈18.51 units.
-export const RETURN_HEAT_DOT_RADIUS = 1.1 * UNITS_PER_METER;
+// user's "more focused" pick (tightened from an earlier 1.1 m: "the heatmap
+// should be more focused for each point" — a distinct small hot spot per
+// shot, only merging on a real overlap), expressed as a real-world size
+// (0.55 m) via `UNITS_PER_METER` (the depth axis' own metres→units scale —
+// see that constant's own doc comment). ≈9.26 units.
+export const RETURN_HEAT_DOT_RADIUS = 0.55 * UNITS_PER_METER;
 
 // The serve frame's own design units aren't calibrated to real metres the
 // way the return frame's are (see `UNITS_PER_METER`'s doc comment), so
@@ -420,7 +422,7 @@ export const RETURN_HEAT_DOT_RADIUS = 1.1 * UNITS_PER_METER;
 //     × (RETURN's own inner-group scale ÷ SERVE's own group scale)
 //     × (SERVE_COURT.viewBox.w ÷ RETURN_COURT.viewBox.w)
 // `tests/court-geometry.spec.ts` cross-checks this against an independent
-// re-implementation of both scale factors. ≈17.20 units.
+// re-implementation of both scale factors. ≈8.61 units.
 export const SERVE_HEAT_DOT_RADIUS =
   RETURN_HEAT_DOT_RADIUS *
   (RETURN_INNER_SCALE / SERVE_GROUP_SCALE) *
@@ -499,31 +501,42 @@ export const HEAT_RAMP_R_TABLE = heatRampChannelTable("r");
 export const HEAT_RAMP_G_TABLE = heatRampChannelTable("g");
 export const HEAT_RAMP_B_TABLE = heatRampChannelTable("b");
 
-// The alpha ramp `feFuncA` walks: starts at the floor tint (0.1, same floor
-// the old cell grid's own P2j opacity ramp used) and climbs STEEPLY — the
-// "make the heatmap more sensitive" feedback — so a single dot's blob is
-// already clearly visible rather than reading as a flat, hard-to-see
+// The alpha ramp `feFuncA` walks: starts at 0 now (NOT a floor — "the tint is
+// not consistent on the view" traced to the filter itself painting a floor
+// across its whole region while the letterbox strips outside the svg's own
+// content box painted a SEPARATE, slightly different green; the fix moves
+// the floor tint out of the filter entirely, onto one uniform wash div over
+// the whole art box — see `heatFloorTintRgba` below) and climbs STEEPLY — the
+// "more sensitive" feedback — so a single dot's blob is already clearly
+// visible against that wash rather than reading as a flat, hard-to-see
 // minimum; a denser cluster still has headroom up to 0.82 (P2i's own
 // ceiling) before it flattens out.
-export const HEAT_ALPHA_TABLE = "0.1 0.45 0.65 0.75 0.82";
-export const HEAT_FLOOR_ALPHA = 0.1;
+export const HEAT_ALPHA_TABLE = "0 0.5 0.68 0.77 0.82";
+
+// The uniform wash's own alpha — NOT the filter's floor any more (that's 0,
+// above). Same 0.1 the filter's floor used to be, kept as its own named
+// constant since the two are no longer the same number by construction, only
+// by coincidence of matching the old value.
+export const HEAT_WASH_ALPHA = 0.1;
 
 /**
- * The exact colour the floor tint paints (`HEAT_RAMP_HEX[0]` at
- * `HEAT_FLOOR_ALPHA`) as a CSS `rgba()` string, derived from the SAME
- * constants the filter's own tables use rather than a second hand-picked
- * literal. Used outside the SVG — `viz-focused.tsx`/`court-tile.tsx`
- * composite this over `HEAT_APRON_FILL` on the letterbox strips either side
- * of the court svg, so the strip matches the filter-painted tint inside it
- * exactly instead of reading as a slightly different green (I3/heat-blob
- * follow-up).
+ * The uniform heat wash's colour (`HEAT_RAMP_HEX[0]` at `HEAT_WASH_ALPHA`) as
+ * a CSS `rgba()` string, derived from the SAME ramp constant the filter's own
+ * colour tables use rather than a second hand-picked literal. `viz-focused.tsx`/
+ * `court-tile.tsx` paint this as ONE flat div covering the whole art box
+ * (above the svg, not inside it) so the tint reads as a single consistent
+ * colour across the entire box — including any sliver the svg's own
+ * `preserveAspectRatio` letterboxes inside itself — rather than two
+ * different-looking greens (the bug this replaces: the filter's old floor
+ * tint painted only the svg's own content box, and a CSS gradient painted a
+ * second, visibly different green underneath the letterbox strips).
  */
 export function heatFloorTintRgba(): string {
   const hex = HEAT_RAMP_HEX[0];
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${HEAT_FLOOR_ALPHA})`;
+  return `rgba(${r}, ${g}, ${b}, ${HEAT_WASH_ALPHA})`;
 }
 
 /* ── Shared exports ────────────────────────────────────────────────────── */

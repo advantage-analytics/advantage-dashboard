@@ -173,19 +173,16 @@ export function VizFocused({
   // EXCEPT while drafting, where `CourtArt` below is told to draw normal
   // (non-desaturated) colours regardless of `state.chart`.
   const showHeat = state.chart === "heat" && !isDraft;
-  // heat-blob follow-up (I3): with dots, `CourtArt`'s own filter paints the
-  // floor tint over the WHOLE svg — including the sliver of letterbox the
-  // court column's own box can leave either side of it. Compositing the SAME
-  // tint here (`heatFloorTintRgba()`, derived from the identical ramp/alpha
-  // constants the svg's filter uses) over `HEAT_APRON_FILL` keeps that
-  // sliver from reading as a slightly different green. No dots ⇒ plain
-  // colour, same as before.
+  // heat-blob follow-up (I3, "the tint is not consistent on the view"): the
+  // filter used to paint its own floor tint, covering only the svg's own
+  // content box — a CSS gradient here then tried to match it on any
+  // letterbox sliver the svg's `preserveAspectRatio` leaves inside ITSELF,
+  // but the two never quite lined up (visibly different greens). The floor
+  // now lives ONLY here — a single flat wash div covering the WHOLE art box,
+  // above the svg — so there is one tint, not two to keep consistent. No
+  // dots ⇒ no wash, plain colour.
   const heatHasDots = showHeat && result.dots.length > 0;
-  const artBoxFill = showHeat
-    ? heatHasDots
-      ? `linear-gradient(${heatFloorTintRgba()}, ${heatFloorTintRgba()}), ${HEAT_APRON_FILL}`
-      : HEAT_APRON_FILL
-    : APRON_FILL;
+  const artBoxFill = showHeat ? HEAT_APRON_FILL : APRON_FILL;
 
   function backToWall() {
     // F5: the reverse morph. `targetKey` is the WALL TILE's dom id for
@@ -288,7 +285,7 @@ export function VizFocused({
             ref={courtArtRef}
             className="relative w-full"
             style={{
-              background: artBoxFill,
+              backgroundColor: artBoxFill,
               viewTransitionName: isMorphTarget
                 ? VIZ_COURT_TRANSITION_NAME
                 : undefined,
@@ -325,6 +322,13 @@ export function VizFocused({
               // (round 1's regression).
               className="block max-h-[400px] w-full"
             />
+            {heatHasDots && (
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0"
+                style={{ backgroundColor: heatFloorTintRgba() }}
+              />
+            )}
             {isDraft ? (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
                 <div

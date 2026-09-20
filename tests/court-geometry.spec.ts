@@ -22,7 +22,7 @@ import {
   HEAT_RAMP_G_TABLE,
   HEAT_RAMP_B_TABLE,
   HEAT_ALPHA_TABLE,
-  HEAT_FLOOR_ALPHA,
+  HEAT_WASH_ALPHA,
   heatFilterRegionFor,
   heatFloorTintRgba,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
@@ -383,8 +383,8 @@ function parseTrianglePointsLoose(
  * read straight off.
  */
 test.describe("heatDotRadiusFor", () => {
-  test("RETURN_HEAT_DOT_RADIUS is 1.1 real metres on the return frame's own depth scale", () => {
-    expect(RETURN_HEAT_DOT_RADIUS).toBeCloseTo(1.1 * UNITS_PER_METER, 6);
+  test("RETURN_HEAT_DOT_RADIUS is 0.55 real metres on the return frame's own depth scale", () => {
+    expect(RETURN_HEAT_DOT_RADIUS).toBeCloseTo(0.55 * UNITS_PER_METER, 6);
   });
 
   test("serve and return radii read as the SAME apparent screen size", () => {
@@ -451,12 +451,14 @@ test.describe("heatRampChannelTable", () => {
 });
 
 /**
- * `HEAT_ALPHA_TABLE` — the "more sensitive" feedback: a steep floor-to-
- * ceiling climb so a single dot's blob already reads, not a flat minimum.
+ * `HEAT_ALPHA_TABLE` — the "more sensitive" feedback: a steep 0-to-ceiling
+ * climb so a single dot's blob already reads, not a flat minimum. Starts at
+ * 0 (NOT a floor — see `heatFloorTintRgba`'s own doc comment for why the
+ * floor moved out of the filter entirely, onto a separate wash element).
  */
-test("HEAT_ALPHA_TABLE starts at the floor and climbs monotonically to the P2i ceiling", () => {
+test("HEAT_ALPHA_TABLE starts at 0 and climbs monotonically to the P2i ceiling", () => {
   const values = HEAT_ALPHA_TABLE.split(" ").map(Number);
-  expect(values[0]).toBeCloseTo(HEAT_FLOOR_ALPHA, 10);
+  expect(values[0]).toBe(0);
   expect(values[values.length - 1]).toBeCloseTo(0.82, 10);
   for (let i = 1; i < values.length; i++) {
     expect(values[i]).toBeGreaterThan(values[i - 1]);
@@ -497,12 +499,15 @@ test.describe("heatFilterRegionFor", () => {
 });
 
 /**
- * `heatFloorTintRgba` — the letterbox-strip composite fix (I3): the exact
- * colour the SVG filter's own floor tint paints, as a CSS `rgba()` string,
- * derived from the SAME ramp/alpha constants rather than a second literal.
+ * `heatFloorTintRgba` — the "tint is not consistent on the view" fix (I3):
+ * the floor tint moved OUT of the SVG filter (whose `HEAT_ALPHA_TABLE` now
+ * starts at 0) and onto one uniform wash div covering the whole art box, so
+ * there's a single colour to be consistent instead of two that could drift.
+ * This is that colour, derived from the SAME ramp constant the filter's own
+ * colour tables use rather than a second hand-picked literal.
  */
-test("heatFloorTintRgba derives from HEAT_RAMP_HEX[0] and HEAT_FLOOR_ALPHA", () => {
-  expect(heatFloorTintRgba()).toBe(`rgba(242, 242, 242, ${HEAT_FLOOR_ALPHA})`);
+test("heatFloorTintRgba derives from HEAT_RAMP_HEX[0] and HEAT_WASH_ALPHA", () => {
+  expect(heatFloorTintRgba()).toBe(`rgba(242, 242, 242, ${HEAT_WASH_ALPHA})`);
 });
 
 /**

@@ -171,20 +171,15 @@ export function CourtTile({
   // box wrapper (the letterbox strips around the svg) desaturates in lockstep
   // with the court it surrounds instead of staying the normal apron green.
   const showHeat = chart === "heat";
-  // heat-blob follow-up (I3): with dots, `CourtArt`'s own filter paints the
-  // floor tint over its whole svg — including the sliver of letterbox the
-  // tile's fixed 334/216 aspect can leave against a return-cut svg's own
-  // (very slightly different) aspect ratio. Compositing the SAME tint here
-  // (`heatFloorTintRgba()`, derived from the identical ramp/alpha constants
-  // the svg's filter uses) over `HEAT_APRON_FILL` keeps that sliver, if any,
-  // from reading as a different green. No dots (or not heat mode) ⇒ plain
-  // colour, same as before.
+  // heat-blob follow-up (I3, "the tint is not consistent on the view"): the
+  // filter used to paint its own floor tint, covering only the svg's own
+  // content box — a CSS gradient here then tried to match it on any
+  // letterbox sliver the svg's `preserveAspectRatio` leaves inside ITSELF,
+  // but the two never quite lined up (visibly different greens). The floor
+  // now lives ONLY here — a single flat wash div covering the WHOLE art box,
+  // above the svg — so there is one tint, not two to keep consistent. No
+  // dots (or not heat mode) ⇒ no wash, plain `HEAT_APRON_FILL`/`APRON_FILL`.
   const heatHasDots = showHeat && dots.length > 0;
-  const artBoxBackground = showHeat
-    ? heatHasDots
-      ? `linear-gradient(${heatFloorTintRgba()}, ${heatFloorTintRgba()}), ${HEAT_APRON_FILL}`
-      : HEAT_APRON_FILL
-    : APRON_FILL;
 
   const body = (
     <>
@@ -193,7 +188,7 @@ export function CourtTile({
         className="relative overflow-hidden rounded-t-[var(--radius-card)]"
         style={{
           aspectRatio: "334 / 216",
-          background: artBoxBackground,
+          backgroundColor: showHeat ? HEAT_APRON_FILL : APRON_FILL,
           viewTransitionName: isMorphTarget
             ? VIZ_COURT_TRANSITION_NAME
             : undefined,
@@ -206,6 +201,13 @@ export function CourtTile({
           fill
           className="block h-full w-full"
         />
+        {heatHasDots && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0"
+            style={{ backgroundColor: heatFloorTintRgba() }}
+          />
+        )}
         <span
           className="absolute top-[10px] left-[10px] inline-flex h-5 items-center rounded-full px-[7px] text-[10px] font-medium text-white"
           style={{ backgroundColor: "rgba(13,13,13,.72)" }}

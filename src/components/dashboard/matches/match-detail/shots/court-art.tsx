@@ -59,15 +59,16 @@ const HEAT_COURT_FILL = "#9DB4CE";
 // User decision (heat-blob rewrite): "just blobs/blurs like a regular
 // [heatmap]" — one white circle per dot, blurred and colourized by a single
 // SVG filter (`heatFilter` below), rather than a binned grid of `<rect>`s.
-// `HEAT_DOT_FILL_OPACITY` is the "sensitivity" knob: how much each
-// individual dot's circle contributes before the filter's own alpha ramp
-// (`HEAT_ALPHA_TABLE`, `court-geometry.ts`) takes over — higher means fewer
-// overlapping dots are needed to read as "hot". `HEAT_BLUR_RADIUS_RATIO`
-// sets the Gaussian blur's `stdDeviation` as a fraction of the dot radius
-// (`heatDotRadiusFor`), so the blur scales with the same per-frame radius
-// that already equalises the two frames' apparent blob size.
-const HEAT_DOT_FILL_OPACITY = 0.4;
-const HEAT_BLUR_RADIUS_RATIO = 0.5;
+// "More focused for each point" (follow-up): a smaller `HEAT_BLUR_RADIUS_RATIO`
+// (0.4× the dot radius, down from 0.5×) keeps the blur tight enough that
+// individual shots read as distinct small hot spots — only a real overlap
+// merges two into one. `HEAT_DOT_FILL_OPACITY` is the "sensitivity" knob: how
+// much each individual dot's circle contributes before the filter's own
+// alpha ramp (`HEAT_ALPHA_TABLE`, `court-geometry.ts`) takes over — raised to
+// 0.55 (from 0.4) alongside the tighter radius so a single, now-smaller blob
+// still reads clearly on its own.
+const HEAT_DOT_FILL_OPACITY = 0.55;
+const HEAT_BLUR_RADIUS_RATIO = 0.4;
 const HEAT_DOT_FILL = "#FFFFFF";
 
 // Serve marks are 2.54 radius, return marks 2.4 — the design's own two
@@ -151,17 +152,25 @@ function heatDotCircle(
  * blob; `feColorMatrix` copies the resulting alpha into R/G/B so the next
  * step reads a plain grayscale "how much heat here" signal; `feComponentTransfer`
  * colourizes that signal through the ramp (`HEAT_RAMP_*_TABLE`) and lifts its
- * alpha through the floor-to-ceiling curve (`HEAT_ALPHA_TABLE`) — since a
- * `type="table"` lookup runs over the WHOLE filter region regardless of
- * whether `SourceGraphic` painted anything there, every pixel in that region
- * gets at least the floor tint (`HEAT_ALPHA_TABLE`'s own first value), which
- * is what makes the tint cover the entire view with no hard rectangular edge
- * — the filter region (`heatFilterRegionFor`, `court-geometry.ts`) IS the
- * frame's whole visible view (`heatBoundsFor`) padded by margin, so "the
- * whole filter region" and "the whole visible court" are the same rectangle.
- * `color-interpolation-filters="sRGB"` keeps the maths in the same colour
- * space the ramp's own 0..1 numbers were derived in (SVG's filter default,
- * linearRGB, would shift every colour).
+ * alpha through `HEAT_ALPHA_TABLE`, which now starts at 0 (NOT a floor — see
+ * "the tint is not consistent on the view" below). The filter region
+ * (`heatFilterRegionFor`, `court-geometry.ts`) only needs to be generous
+ * enough that no blob's blur gets clipped at its edge; it no longer needs to
+ * span the frame's whole visible view, since nothing paints a floor there any
+ * more. `color-interpolation-filters="sRGB"` keeps the maths in the same
+ * colour space the ramp's own 0..1 numbers were derived in (SVG's filter
+ * default, linearRGB, would shift every colour).
+ *
+ * The floor tint used to live HERE, painted by `type="table"` running over
+ * the whole filter region regardless of whether a dot reached a given pixel
+ * — but that only covered the svg's own CONTENT box, while the wrapper
+ * around it (`viz-focused.tsx`/`court-tile.tsx`) painted a second, separate
+ * green under any letterbox `preserveAspectRatio` left inside the svg
+ * (the return frame's viewBox doesn't quite match the wrapper's own
+ * aspect ratio) — two different tints that read as visibly inconsistent.
+ * The floor now lives entirely OUTSIDE the svg, as one flat wash div over
+ * the whole art box (`heatFloorTintRgba()`), so there is only ever one tint
+ * to be consistent with.
  */
 function HeatFilterDef({ id, cut }: { id: string; cut: Cut }) {
   const region = heatFilterRegionFor(cut);
