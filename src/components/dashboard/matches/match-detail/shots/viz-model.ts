@@ -78,19 +78,22 @@ export const EMPTY_VIZ_FILTERS: VizFilters = {
 export type Outcome = "won" | "lost" | "miss";
 
 /**
- * Every cut now carries normalised court METRES (`lateralM`/`depthM`) —
+ * Every cut carries normalised court METRES (`lateralM`/`depthM`) —
  * `court-geometry.ts`'s `projectServeMetricDot`/`projectReturnDot` map those
  * onto their frame. Serve dots (Task 2): `depthM` holds
  * `ServePlacementMetrics.depthPastNetM` — negative for a net ball — and
  * `lateralM` the same signed metres `normalizeLanding` always produced.
  * Return dots: `projectReturnDot`'s "placement" vs "contact" kind
  * (`returnPlacement` vs `returnContact`) determines how `depthM` is read.
- * `x`/`y` are the legacy 0..1 service-box fraction `mapRealCoordsToServeDot`
- * produces — no current reader still needs them (both `court-art.tsx` call
- * sites moved to the metre fields so an out/net serve, which that fraction
- * can't represent, can plot), so they're always 0 now; kept on the type
- * rather than removed since `default-tiles.ts`/`court-tile.tsx` type through
- * `VizDot` and a field removal would ripple further than this task's scope.
+ *
+ * (Fix round 1, F3: this type used to also carry `x`/`y`, the legacy 0..1
+ * service-box fraction `mapRealCoordsToServeDot` produces — Task 2 moved
+ * both `court-art.tsx` serve call sites onto the metre fields above (an
+ * out/net serve can't be represented as an in-box fraction), which left
+ * `x`/`y` hardcoded to 0 and read by nothing. Removed rather than left
+ * unexplained; `projectServeDot`/`ServeDotFraction` in `court-geometry.ts`
+ * still exist as a plain, independently-tested projection function — see
+ * that file's own note — they just no longer feed this type.)
  *
  * `shape: "star"` is a serve-only addition (G2b): an ace draws as a star
  * instead of the usual outcome-coloured circle. `shape: "net"` (Task 2) is a
@@ -104,8 +107,6 @@ export interface VizDot {
   id: string;
   outcome: Outcome;
   shape: "circle" | "triangle" | "star" | "net";
-  x: number;
-  y: number;
   lateralM: number;
   depthM: number;
 }
@@ -382,55 +383,62 @@ export function pointToReturnDots(
   p: MatchPoint,
   subjectIsPlayer1: boolean,
 ): ReturnDotMetric[] {
-  if (p.secondShotLandingX == null || p.secondShotLandingY == null) return [];
-
   const typeLower = (p.secondShotType ?? "").toLowerCase();
   const shape: "circle" | "triangle" =
     typeLower.includes("backhand") || typeLower.startsWith("bh")
       ? "triangle"
       : "circle";
 
-  // End detection from the RETURNER's own contact point (Task 2c), same
-  // `farEnd` primitive `servePlacementMetrics` uses — falls back to today's
-  // landing-based flip (negated: `farEnd` and the old `didFlip` are the same
-  // decision read from opposite ends of the shot) only when there's no
-  // contact point to read at all, rather than dropping the dot.
-  const farEnd =
-    p.secondShotContactY != null
-      ? p.secondShotContactY > REAL_NET_Y
-      : !(p.secondShotLandingY > REAL_NET_Y);
-  const placement = classifyServePlacement(
-    farEnd,
-    p.secondShotLandingX,
-    p.secondShotLandingY,
-  );
+  const dots: ReturnDotMetric[] = [];
 
-  // Mirrored world-x (leading minus, the same sign `classifyServePlacement`
-  // already applies) so the court reads from BEHIND the returner — positive
-  // lateralM is the returner's RIGHT. A netted return (`depthPastNetM < 0`)
-  // draws at the net gutter (`shape: "net"`), never its real landing — that
-  // spot is on the RETURNER's own side and was never a placement.
-  const landingDot: ReturnDotMetric = {
-    id: p.id,
-    variant: "landing",
-    shape: placement.depthPastNetM < 0 ? "net" : shape,
-    lateralM: placement.lateralM,
-    depthM: placement.depthPastNetM,
-  };
+  // The landing/placement dot needs a landing — the contact dot (below)
+  // does not (Task 2d: `contactMetrics` only needs the contact pair), so a
+  // missing landing must gate ONLY this dot, not the whole function (fix
+  // round 1, F2 — the earlier single `if (...) return []` guard at the top
+  // dropped the contact dot too whenever a return's landing was missing).
+  if (p.secondShotLandingX != null && p.secondShotLandingY != null) {
+    // End detection from the RETURNER's own contact point (Task 2c), same
+    // `farEnd` primitive `servePlacementMetrics` uses — falls back to
+    // today's landing-based flip (negated: `farEnd` and the old `didFlip`
+    // are the same decision read from opposite ends of the shot) only when
+    // there's no contact point to read at all, rather than dropping the dot.
+    const farEnd =
+      p.secondShotContactY != null
+        ? p.secondShotContactY > REAL_NET_Y
+        : !(p.secondShotLandingY > REAL_NET_Y);
+    const placement = classifyServePlacement(
+      farEnd,
+      p.secondShotLandingX,
+      p.secondShotLandingY,
+    );
+
+    // Mirrored world-x (leading minus, the same sign `classifyServePlacement`
+    // already applies) so the court reads from BEHIND the returner —
+    // positive lateralM is the returner's RIGHT. A netted return
+    // (`depthPastNetM < 0`) draws at the net gutter (`shape: "net"`), never
+    // its real landing — that spot is on the RETURNER's own side and was
+    // never a placement.
+    dots.push({
+      id: p.id,
+      variant: "landing",
+      shape: placement.depthPastNetM < 0 ? "net" : shape,
+      lateralM: placement.lateralM,
+      depthM: placement.depthPastNetM,
+    });
+  }
 
   const contact = contactMetrics(p.secondShotContactX, p.secondShotContactY);
-  if (!contact) {
-    return [landingDot];
+  if (contact) {
+    dots.push({
+      id: `${p.id}:contact`,
+      variant: "contact",
+      shape,
+      lateralM: contact.lateralM,
+      depthM: contact.depthM,
+    });
   }
-  const contactDot: ReturnDotMetric = {
-    id: `${p.id}:contact`,
-    variant: "contact",
-    shape,
-    lateralM: contact.lateralM,
-    depthM: contact.depthM,
-  };
 
-  return [landingDot, contactDot];
+  return dots;
 }
 
 /**
@@ -621,8 +629,6 @@ function computeRallyViz(
 
       dots.push({
         id: shot.id,
-        x: 0,
-        y: 0,
         lateralM: metrics.lateralM,
         depthM: metrics.depthM,
         outcome: subjectWon ? "won" : "lost",
@@ -694,8 +700,6 @@ export function computeViz(
 
       dots.push({
         id: p.id,
-        x: 0,
-        y: 0,
         lateralM: metrics.lateralM,
         depthM: metrics.depthPastNetM,
         // "in" reads the point's own result (won/lost/ace/doubleFault, same
@@ -729,8 +733,6 @@ export function computeViz(
       for (const d of mine) {
         dots.push({
           id: d.id,
-          x: 0,
-          y: 0,
           lateralM: d.lateralM,
           depthM: d.depthM,
           outcome: o === "outnet" ? "miss" : o,

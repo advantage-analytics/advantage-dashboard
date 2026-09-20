@@ -59,6 +59,14 @@ export interface ServeDotFraction {
  * coordinates: `x=0` → `singlesLeft` (166.25), `x=1` → `singlesRight`
  * (353.75); `y=0` → `serviceLineY` (116.5), `y=1` → `netY` (236) — the same
  * box the fraction was measured against.
+ *
+ * (Fix round 1, F3: `VizDot` no longer carries the `x`/`y` fraction this
+ * reads — both `court-art.tsx` serve call sites moved to
+ * `projectServeMetricDot`, since an out/net serve can't be represented as
+ * an in-box fraction. This function stays: it's a plain, correct projection
+ * with no other dependency, `tests/court-geometry.spec.ts` exercises it
+ * directly against `SERVE_COURT`'s own constants, and removing it would
+ * mean deleting that coverage for no behavioural gain.)
  */
 export function projectServeDot(d: ServeDotFraction): {
   cx: number;
@@ -556,11 +564,18 @@ export const ZONE_OPACITY_MAX = 0.42;
 /**
  * `maxPct` is the largest `pct` among the zones actually being drawn (not a
  * fixed 100) — so the shade spread always uses the full 0.06–0.42 range even
- * when every zone's share is small. `maxPct <= 0` (no zones drawn, or every
- * zone tied at 0%) returns the minimum shade rather than dividing by zero.
+ * when every zone's share is small. A non-positive `maxPct` (no zones drawn,
+ * or every zone tied at 0%) returns the minimum shade rather than dividing
+ * by zero — written as `!(maxPct > 0)`, not `maxPct <= 0`, so it also catches
+ * `NaN` (Task 2 fix round 1, F1): `serve-zones.ts`'s `computeZoneStats`
+ * divides by `dots.length`, which is 0 (every `pct` becomes `NaN`) whenever
+ * every serve reaching this chart is out/net — `count > 0` no longer implies
+ * a non-empty `serveDots` the way it did before Task 2. `NaN <= 0` is
+ * `false`, so the old guard let `NaN` through into `fillOpacity`; `NaN > 0`
+ * is also `false`, so negating it still catches this case.
  */
 export function zoneOpacity(pct: number, maxPct: number): number {
-  if (maxPct <= 0) return ZONE_OPACITY_MIN;
+  if (!(maxPct > 0)) return ZONE_OPACITY_MIN;
   const t = Math.min(1, Math.max(0, pct / maxPct));
   return ZONE_OPACITY_MIN + t * (ZONE_OPACITY_MAX - ZONE_OPACITY_MIN);
 }

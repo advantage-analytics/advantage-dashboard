@@ -322,6 +322,29 @@ test.describe("computeViz — return cuts", () => {
       computeViz([noContact], "returnContact", EMPTY_VIZ_FILTERS, true).total,
     ).toBe(0);
   });
+
+  test("Task 2d fix round 1 (F2): a return with contact coords but NO landing still counts for returnContact — only the placement dot needs a landing", () => {
+    const noLanding = {
+      ...ret,
+      secondShotLandingX: null,
+      secondShotLandingY: null,
+    } as MatchPoint;
+    const placement = computeViz(
+      [noLanding],
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    const contact = computeViz(
+      [noLanding],
+      "returnContact",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(placement.total).toBe(0); // no landing -> no placement dot
+    expect(contact.total).toBe(1); // contact coords alone are enough
+    expect(contact.dots).toHaveLength(1);
+  });
 });
 
 test("filterKeysFor: zone exists on serve only", () => {
@@ -1550,13 +1573,12 @@ test.describe("computeViz — rallyPosition cut", () => {
     expect(r.count).toBe(1);
   });
 
-  test("a rally shot landing at the far end mirrors through contactMetricsFromLanding's didFlip branch", () => {
-    // landingY (19.77) > REAL_NET_Y (11.885) -> didFlip. contactY (1.77) is
-    // chosen so the flipped contactNorm.ly (23.77 - 1.77 = 22.0) and the
-    // flipped contactNorm.lx (-0.5) land exactly where the no-flip fixture
-    // above (`contactX=0.5, contactY=22.0, landingY=4.0`) does, but with the
-    // lateral sign mirrored — proving the flip, not just a coincidence of
-    // depth math that ignores it.
+  test("a rally shot's contact near the net (Task 2d: contactMetrics reads only contactY, never the landing)", () => {
+    // contactY (1.77) is near-half (<= REAL_NET_Y), so farEnd = false:
+    // lateralM = contactX (unflipped) = 0.5, depthM = -contactY = -1.77.
+    // landingX/Y below are deliberately far-end-looking (would have driven
+    // the OLD landing-based `didFlip`) to prove `contactMetrics` no longer
+    // reads them at all — only `contactY` decides the sign.
     const pts = [
       point({
         shots: [

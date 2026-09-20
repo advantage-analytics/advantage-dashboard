@@ -204,6 +204,23 @@ test("zoneOpacity: maxPct=0 reads at the minimum shade (no divide-by-zero)", () 
 });
 
 /**
+ * Fix round 1, F1: `serve-zones.ts`'s `computeZoneStats` divides `pct` by
+ * `dots.length`, which is 0 (every `pct` becomes `NaN`) whenever every serve
+ * reaching the zones chart is out/net — reachable since Task 2 made `count`
+ * include out/net serves while `serveDots` (the zones population) can still
+ * be empty. `maxPct <= 0` doesn't catch `NaN` (`NaN <= 0` is `false`), so a
+ * `NaN` used to slip through into `fillOpacity`.
+ */
+test("zoneOpacity: a NaN maxPct (every zone's pct is NaN, e.g. computeZoneStats over zero dots) reads at the minimum shade, not NaN", () => {
+  expect(zoneOpacity(NaN, NaN)).toBe(ZONE_OPACITY_MIN);
+  expect(Number.isNaN(zoneOpacity(NaN, NaN))).toBe(false);
+});
+
+test("zoneOpacity: a negative maxPct also reads at the minimum shade", () => {
+  expect(zoneOpacity(0, -5)).toBe(ZONE_OPACITY_MIN);
+});
+
+/**
  * G2 — the apex must land screen-UP for every kind `trianglePointsFor`
  * draws, not just look plausible in local coordinates. `court-art.tsx`
  * applies these frame transforms on top of whatever this module returns:
