@@ -190,10 +190,12 @@ test("a swap re-anchors the drift rule instead of keeping the old baseline", asy
   expect(h.current.topPlayerAnswerStale).toBe(true);
 });
 
-test("re-picking the identical file is not a swap and keeps the answers", async () => {
+test("re-picking the same file without removing it keeps the answers", async () => {
   const h = await answeredFor(videoFile("court-one.mp4"));
 
-  // Remove, then add the same recording back — nothing it describes changed.
+  // Picking the same recording again — through the file input, no Remove in
+  // between — changes nothing either answer describes. (Remove IS a clear, and
+  // it nulls the signature, so that route is the test above, not this one.)
   await h.current.onVideoPick(videoFile("court-one.mp4"));
   await h.flush();
 
