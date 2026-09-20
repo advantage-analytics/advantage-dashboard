@@ -85,9 +85,12 @@ the focused court (P1c/P1g), the cut and chart menus (P1d/P1e), the Filters
 popover (P1f), saved views with Manage (P1h) and a Save dialog on the light
 surface.
 
+**Phase 1.2 (2026-09-20, own section below)** — Heat and the Rally position
+cut shipped ahead of the rest of Phase 2; see "As built — Phase 1.2".
+
 **Phase 2 (own spec, later)** — the fullscreen viewer and its corner glyph,
-`FloatMenu`'s dark `tone`, Heat and Rally-position charts, depth/contact band
-editor, and **Settings › Units** (P1i/P1j) with `formatDistance()`.
+`FloatMenu`'s dark `tone`, the depth/contact band editor, and
+**Settings › Units** (P1i/P1j) with `formatDistance()`.
 
 ### Decisions made with the user (do not re-infer)
 
@@ -113,14 +116,14 @@ editor, and **Settings › Units** (P1i/P1j) with `formatDistance()`.
 
 ## Where the handoff and the code disagree
 
-| Handoff                                                   | Code today                                                                 | Resolution                                                                        |
-| --------------------------------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| One row of courts per player + a Player filter            | `use-shot-filters.ts` takes `youIsPlayer1` once; only your shots are drawn | Model becomes per-subject (below)                                                 |
-| Cut / chart / filters are URL state                       | `useState` inside the hook                                                 | Pure parse/serialize layer                                                        |
-| `SavedView` per workspace                                 | no table                                                                   | New table + RLS (slice 1D)                                                        |
-| Cuts: Serve placement · Return placement · Return contact | one return court draws landing + contact together                          | Two cuts over the same dot builder, filtered by `variant`                         |
-| Heat / Rally position rows in menus                       | not built                                                                  | Rows render disabled with a "Fullscreen viewer" second line; phase 2 enables them |
-| Save dialog drawn only dark (P2f)                         | —                                                                          | Same layout on the light surface: `surface-card`, `border-field`, `--blue` focus  |
+| Handoff                                                   | Code today                                                                 | Resolution                                                                       |
+| --------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| One row of courts per player + a Player filter            | `use-shot-filters.ts` takes `youIsPlayer1` once; only your shots are drawn | Model becomes per-subject (below)                                                |
+| Cut / chart / filters are URL state                       | `useState` inside the hook                                                 | Pure parse/serialize layer                                                       |
+| `SavedView` per workspace                                 | no table                                                                   | New table + RLS (slice 1D)                                                       |
+| Cuts: Serve placement · Return placement · Return contact | one return court draws landing + contact together                          | Two cuts over the same dot builder, filtered by `variant`                        |
+| Heat / Rally position rows in menus                       | shipped Phase 1.2                                                          | Both cuts/charts are live; see "As built — Phase 1.2" below                      |
+| Save dialog drawn only dark (P2f)                         | —                                                                          | Same layout on the light surface: `surface-card`, `border-field`, `--blue` focus |
 
 ## Architecture
 
@@ -237,5 +240,70 @@ Each is independently shippable and its own commit series.
 
 ## Out of scope
 
-Fullscreen glyph and viewer, dark surface, Heat / Rally charts, depth and
-contact bands, Units preference, Advantage Intelligence–specific cuts.
+Fullscreen glyph and viewer, dark surface, depth and contact bands, Units
+preference, Advantage Intelligence–specific cuts.
+
+## As built — Phase 1.2 (2026-09-20)
+
+Shipped ahead of the rest of Phase 2, on `claude/visualizations-tab-design-aefa43`:
+
+- **Every filter dimension is multi-select** — Set, Game, Ball, Court, Zone,
+  Pressure, Result and Rally each accept a list of values (empty = "any",
+  non-empty = OR'd), rather than the single-scalar filters this spec's
+  original draft assumed. The URL is the canonical representation
+  (`viz-url.ts`'s `OPTIONS`/`ORDER`/`VIZ_KEYS`): each dimension gets its own
+  repeatable query param, sorted into `OPTIONS` order so two equal selections
+  always serialize identically. A saved view's stored `filters` column can
+  still carry an old single-scalar shape from before this — `validateVizInput`
+  reads a bare value as a one-element list rather than rejecting the row.
+- **Triangles point apex-up** and an ace draws as a 5-point star
+  (`#F8C84F`, `starPoints()`, outer/inner radius ratio 0.5) instead of the
+  usual outcome-coloured circle — both in `court-geometry.ts`
+  (`trianglePointsFor`/`starPoints`), with a per-view legend drawn beside each
+  focused court explaining the shape/colour/star encoding for that cut.
+- **Heat chart, in-shell** (`chart-menu.tsx`'s Heat row, `Chart = "heat"` in
+  `viz-model.ts`): a binned grid over the same projected coordinate space
+  `court-art.tsx` already draws dots in. Serve and the two return cuts use a
+  6×7 grid; rallyPosition uses a finer 10×12 grid and draws its cells
+  slightly Gaussian-blurred (`RALLY_HEAT_BLUR_STD_DEVIATION`, filter region
+  padded to -25%/-25%/150%/150% so the blur isn't clipped at each cell's
+  edge) so the heat reads as a smoothed cluster rather than a hard grid. The
+  court desaturates in heat mode (`HEAT_COURT_FILL`/`HEAT_APRON_FILL`) so the
+  colour ramp (`--viz-heatmap-{0..3}`, `heatCellStyle`) reads clearly. Each
+  cut's heat bounds are its own — `heatBoundsFor(cut)` in `court-geometry.ts`
+  is the single source both the binning (`viz-model.ts`'s
+  `computeHeatForCut`) and the drawing (`court-art.tsx`) read, so they cannot
+  drift apart: `returnPlacement` spans net→baseline (where placement dots
+  actually land), `returnContact` is a baseline-centred ±5m band (where
+  contact dots actually cluster), and `rallyPosition` keeps the full
+  net-to-run-off span.
+- **Rally position cut** (`Cut = "rallyPosition"`): every shot after the
+  return the subject struck, across every point, drawn on the same
+  near-half return frame `returnContact` uses. Shots are selected by ROLE
+  (`pickRallyShots` in `src/lib/data/serve-return-shots.ts`), not by
+  `shot_number` — shot_number is unreliable (a faulted first serve and the
+  second serve actually played can share a number, colliding the return
+  with it too, and SwingVision emits a `Feed` row at shot_number=0): drop
+  every Feed/serve row, then drop the first remaining row (the return),
+  keep the rest. The cut's own `court` filter stays score-based
+  (`getPointSide(p.pointScore)`), not the serve's landing side — a rally
+  shot has no serve-box landing side of its own, unlike the actual serve
+  cut.
+- **"Create view" draft state** (G4): the trailing dashed tile in the
+  saved-views band/Views grid opens a blank court with no cut/chart chosen
+  yet — a "pick what to plot" prompt (an accessible "Empty court — pick what
+  to plot" label, not "0 points shown") rather than defaulting straight into
+  a real cut.
+- **The `saved_views.cut`/`chart` check constraints widen** to accept
+  `rallyPosition`/`heat`
+  (`supabase/migrations/20260920120000_saved_views_heat_rally.sql`) — this
+  migration is **committed but not yet applied** to the live database (a
+  human approves that step separately); `tests/saved-views-rls.spec.ts` has
+  two insert specs that are expected to fail with a 23514 check violation
+  until it lands, and `saved-views-actions.ts` maps that code to its own
+  `"unsupported_cut_chart"` result so the Save dialog can say "This kind of
+  view can't be saved yet." instead of the generic retry copy.
+
+Still Phase 2, unchanged by this round: the fullscreen viewer and its corner
+glyph, `FloatMenu`'s dark `tone`, the depth/contact band editor, and
+**Settings › Units**.
