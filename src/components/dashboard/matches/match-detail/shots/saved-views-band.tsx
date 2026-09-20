@@ -213,7 +213,15 @@ export function SavedViewsBand({
       filters: view.filters,
       viewId: view.id,
     });
-    return { subjectName, pills, countLabel, dots: result.dots, href };
+    return {
+      subjectName,
+      pills,
+      countLabel,
+      dots: result.dots,
+      chart: view.chart,
+      heat: result.heat,
+      href,
+    };
   }
 
   // Review I1: `tileDataFor` runs `computeViz(points, …)` — an O(points) scan
@@ -795,6 +803,8 @@ export function SavedViewsBand({
         countLabel={data.countLabel}
         cut={view.cut}
         dots={data.dots}
+        chart={data.chart}
+        heat={data.heat}
         href={data.href}
         current={opts.current}
         navigateState={{

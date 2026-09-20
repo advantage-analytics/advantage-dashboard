@@ -96,4 +96,30 @@ test.describe("legendItemsFor", () => {
       expect(new Set(items.map((i) => i.key)).size).toBe(items.length);
     }
   });
+
+  // G3b — heat always reads as the one ramp entry, regardless of cut: the
+  // cells' own shade IS the chart, same as zones, so it takes priority over
+  // any per-cut dot-shape legend (rallyPosition's Forehand/Backhand included).
+  test("chart heat: exactly one ramp entry, on every cut", () => {
+    for (const cut of [
+      "serve",
+      "returnPlacement",
+      "returnContact",
+      "rallyPosition",
+    ] as const) {
+      const items = legendItemsFor(cut, "heat");
+      expect(items).toHaveLength(1);
+      expect(items[0].glyph).toBe("ramp");
+    }
+  });
+
+  test("rallyPosition scatter: won, lost, forehand(circle), backhand(triangle) — no miss", () => {
+    const items = legendItemsFor("rallyPosition", "scatter");
+    expect(items.map((i) => i.label)).toEqual([
+      "Point won",
+      "Lost",
+      "Forehand",
+      "Backhand",
+    ]);
+  });
 });

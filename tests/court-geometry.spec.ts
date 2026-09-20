@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 import {
   SERVE_COURT,
   RETURN_COURT,
+  SERVE_HEAT_BOUNDS,
+  RETURN_HEAT_BOUNDS,
   projectServeDot,
   projectReturnDot,
   zoneCellX,
@@ -10,6 +12,9 @@ import {
   ZONE_OPACITY_MAX,
   trianglePointsFor,
   starPoints,
+  heatCellRect,
+  heatCellStyle,
+  type HeatBounds,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
 
 /**
@@ -359,3 +364,145 @@ function parseTrianglePointsLoose(
       return { x, y };
     });
 }
+
+/**
+ * G3b — heatCellRect: pure cell geometry, in the same projected coordinate
+ * space `bounds` is already expressed in (`SERVE_HEAT_BOUNDS`/
+ * `RETURN_HEAT_BOUNDS`). No court/cut knowledge — just a rect-per-index
+ * calculation `binDots`' own row/col indexing must line up with.
+ */
+test.describe("heatCellRect", () => {
+  const bounds: HeatBounds = { xMin: 0, xMax: 100, yMin: 0, yMax: 50 };
+
+  test("cell (0,0) starts at the bounds' own top-left", () => {
+    const r = heatCellRect(bounds, 10, 5, 0, 0);
+    expect(r.x).toBe(0);
+    expect(r.y).toBe(0);
+    expect(r.width).toBeCloseTo(10, 10);
+    expect(r.height).toBeCloseTo(10, 10);
+  });
+
+  test("the last column/row's cell ends exactly at xMax/yMax", () => {
+    const cols = 10;
+    const rows = 5;
+    const r = heatCellRect(bounds, cols, rows, cols - 1, rows - 1);
+    expect(r.x + r.width).toBeCloseTo(bounds.xMax, 10);
+    expect(r.y + r.height).toBeCloseTo(bounds.yMax, 10);
+  });
+
+  test("cells tile the bounds with no gaps or overlaps (adjacent cells share an edge)", () => {
+    const cols = 6;
+    const rows = 7;
+    for (let col = 0; col < cols - 1; col++) {
+      const a = heatCellRect(bounds, cols, rows, col, 0);
+      const b = heatCellRect(bounds, cols, rows, col + 1, 0);
+      expect(a.x + a.width).toBeCloseTo(b.x, 10);
+    }
+    for (let row = 0; row < rows - 1; row++) {
+      const a = heatCellRect(bounds, cols, rows, 0, row);
+      const b = heatCellRect(bounds, cols, rows, 0, row + 1);
+      expect(a.y + a.height).toBeCloseTo(b.y, 10);
+    }
+  });
+
+  test("real SERVE_HEAT_BOUNDS/6x7 grid: cell(0,0) starts at the singles-left/service-line corner", () => {
+    const r = heatCellRect(SERVE_HEAT_BOUNDS, 6, 7, 0, 0);
+    expect(r.x).toBe(SERVE_COURT.singlesLeft);
+    expect(r.y).toBe(SERVE_COURT.serviceLineY);
+  });
+});
+
+/**
+ * G3b — heatCellStyle: the P2i ramp rule — colour index by quartile of
+ * count/max, opacity linear 0.1→0.82 across the same ratio.
+ */
+test.describe("heatCellStyle", () => {
+  test("the busiest cell (count === max) is colour index 3 at the max opacity", () => {
+    const { colorIndex, opacity } = heatCellStyle(10, 10);
+    expect(colorIndex).toBe(3);
+    expect(opacity).toBeCloseTo(0.82, 10);
+  });
+
+  test("a cell at 1/max is colour index 0, above the minimum opacity", () => {
+    const { colorIndex, opacity } = heatCellStyle(1, 100);
+    expect(colorIndex).toBe(0);
+    expect(opacity).toBeGreaterThan(0.1);
+    expect(opacity).toBeCloseTo(0.1 + 0.01 * 0.72, 10);
+  });
+
+  test("quartile boundaries: ratios just under 0.25/0.5/0.75 stay in the lower bucket", () => {
+    expect(heatCellStyle(24, 100).colorIndex).toBe(0);
+    expect(heatCellStyle(25, 100).colorIndex).toBe(1);
+    expect(heatCellStyle(49, 100).colorIndex).toBe(1);
+    expect(heatCellStyle(50, 100).colorIndex).toBe(2);
+    expect(heatCellStyle(74, 100).colorIndex).toBe(2);
+    expect(heatCellStyle(75, 100).colorIndex).toBe(3);
+  });
+
+  test("opacity is linear across the ratio", () => {
+    expect(heatCellStyle(50, 100).opacity).toBeCloseTo(0.1 + 0.5 * 0.72, 10);
+  });
+
+  test("max <= 0 never divides by zero — reads as the minimum", () => {
+    const { colorIndex, opacity } = heatCellStyle(0, 0);
+    expect(colorIndex).toBe(0);
+    expect(opacity).toBeCloseTo(0.1, 10);
+  });
+});
+
+/**
+ * G3b — `RETURN_HEAT_BOUNDS.xMax` settles G3a's placeholder run-off with the
+ * depth value actually visible inside the return frame's own viewBox before
+ * its clipPath (`RETURN_BACKGROUND_PATH`, drawn exactly at the viewBox rect)
+ * hides it. Verified here against an INDEPENDENT re-implementation of the
+ * same two transform strings (`RETURN_COURT.innerGroupTransform`/
+ * `outerGroupTransform`), rather than importing `court-geometry.ts`'s own
+ * derivation — a real cross-check, not a self-confirming one.
+ */
+test.describe("RETURN_HEAT_BOUNDS depth run-off", () => {
+  function applyReturnFrameTransforms(
+    x: number,
+    y: number,
+  ): { x: number; y: number } {
+    // innerGroupTransform: translate(240,112) scale(1.02) translate(-240,-104.5)
+    let px = (x - 240) * 1.02 + 240;
+    let py = (y - 104.5) * 1.02 + 112;
+    // outerGroupTransform: translate(-60.6,-125) rotate(90 240 104.5)
+    // rotate(90 cx cy): (x,y) -> (cx - (y-cy), cy + (x-cx))
+    const rx = 240 - (py - 104.5);
+    const ry = 104.5 + (px - 240);
+    px = rx - 60.6;
+    py = ry - 125;
+    return { x: px, y: py };
+  }
+
+  test("xMax lands right at the viewBox's own far edge (within rounding)", () => {
+    const { y } = applyReturnFrameTransforms(
+      RETURN_HEAT_BOUNDS.xMax,
+      RETURN_COURT.centerY,
+    );
+    const viewBoxFarEdge = RETURN_COURT.viewBox.minY + RETURN_COURT.viewBox.h;
+    expect(y).toBeCloseTo(viewBoxFarEdge, 6);
+  });
+
+  test("a depth value past xMax would fall outside the viewBox", () => {
+    const { y } = applyReturnFrameTransforms(
+      RETURN_HEAT_BOUNDS.xMax + 10,
+      RETURN_COURT.centerY,
+    );
+    const viewBoxFarEdge = RETURN_COURT.viewBox.minY + RETURN_COURT.viewBox.h;
+    expect(y).toBeGreaterThan(viewBoxFarEdge);
+  });
+
+  test("xMax is well past nearBaselineX — real run-off, not the old 30% placeholder", () => {
+    expect(RETURN_HEAT_BOUNDS.xMax).toBeGreaterThan(RETURN_COURT.nearBaselineX);
+    // The old placeholder (`(nearBaselineX - netX) * 0.3`) landed at 500;
+    // the geometry-derived value is noticeably further out (~522.35).
+    expect(RETURN_HEAT_BOUNDS.xMax).toBeGreaterThan(510);
+    expect(RETURN_HEAT_BOUNDS.xMax).toBeLessThan(530);
+  });
+
+  test("xMin is still the net (unchanged — only the run-off needed settling)", () => {
+    expect(RETURN_HEAT_BOUNDS.xMin).toBe(RETURN_COURT.netX);
+  });
+});

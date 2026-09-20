@@ -1,18 +1,26 @@
-import { useId } from "react";
+import { useId, type ReactNode } from "react";
 import { ZONES, type ZoneKey, type ZoneStats } from "@/lib/data/serve-zones";
 import {
   SERVE_COURT,
   SERVE_BACKGROUND_PATH,
   RETURN_COURT,
   RETURN_BACKGROUND_PATH,
+  SERVE_HEAT_BOUNDS,
+  RETURN_HEAT_BOUNDS,
+  SERVE_HEAT_GRID,
+  RETURN_HEAT_GRID,
+  RALLY_HEAT_GRID,
   projectServeDot,
   projectReturnDot,
   zoneCellX,
   zoneOpacity,
   trianglePointsFor,
   starPoints,
+  heatCellRect,
+  heatCellStyle,
+  type HeatBounds,
 } from "./court-geometry";
-import type { Cut, VizDot } from "./viz-model";
+import type { Chart, Cut, HeatGrid, VizDot } from "./viz-model";
 
 /**
  * The recoloured court SVG for one cut — the wall tile's art and the focused
@@ -39,6 +47,26 @@ const COURT_FILL = "#6092CE";
 const LINE_COLOR = "#FFFFFF";
 const DOT_STROKE = "#000";
 const DOT_STROKE_W = 0.4;
+
+// G3b (P2i): while a heat chart is showing, the court desaturates — the
+// design's own two literals, allowlisted alongside this file's other three
+// (`scripts/check-design-drift.mjs`). Lines stay white regardless.
+const HEAT_APRON_FILL = "#9FB3A5";
+const HEAT_COURT_FILL = "#9DB4CE";
+
+// G3b (P2j): the rally-position grid's cells draw slightly blurred so the
+// heat reads as a smoothed cluster rather than a hard 10×12 grid. The
+// return frame's own scale (`RETURN_COURT.innerGroupTransform`'s
+// `scale(1.02)`, no further scale from `outerGroupTransform`) keeps this
+// filter's local user-space close to 1:1 with the coordinates it draws in;
+// on top of that, `preserveAspectRatio="xMidYMid meet"` scales the whole
+// 431-wide viewBox up to fill whatever box the caller gives it — roughly
+// 1.1–1.3× at the focused view's court column (≈480–560px wide, per
+// `viz-focused.tsx`'s 400px-tall cap and its neighbouring 292px stats
+// card), smaller at a wall/saved-view tile. Combined, a local stdDeviation
+// of 5 reads close to a 6px screen blur at the focused size without
+// vanishing at tile scale.
+const RALLY_HEAT_BLUR_STD_DEVIATION = 5;
 
 // Serve marks are 2.54 radius, return marks 2.4 — the design's own two
 // sizes, not a shared constant (visualizations-tab-phase-1 spec).
@@ -69,10 +97,60 @@ const CUT_NOUN: Record<Cut, string> = {
   serve: "serve placement",
   returnPlacement: "return placement",
   returnContact: "return contact",
-  // G3a: not yet drawn (rallyPosition renders through the returnContact
-  // frame per the task boundary) — only used for the aria-label below.
   rallyPosition: "rally position",
 };
+
+// Heat mode's aria-label reads "Serve placement heat map, 63 serves" — a
+// capitalised cut name (this file doesn't import `viz-labels.tsx`'s
+// `CUT_LABEL`: that module already imports `ACE_STAR_FILL` from here, and a
+// second import back would reopen the circular-import trap that file's own
+// doc comment warns about) plus the same noun `VizResult.noun` uses.
+const HEAT_CUT_LABEL: Record<Cut, string> = {
+  serve: "Serve placement",
+  returnPlacement: "Return placement",
+  returnContact: "Return contact",
+  rallyPosition: "Rally position",
+};
+const HEAT_NOUN: Record<Cut, "serves" | "returns" | "shots"> = {
+  serve: "serves",
+  returnPlacement: "returns",
+  returnContact: "returns",
+  rallyPosition: "shots",
+};
+
+/**
+ * One `<rect>` per non-zero cell in `heat`, positioned off `heatCellRect`
+ * and coloured off `heatCellStyle` — shared by the serve and return
+ * branches below, which differ only in `bounds`/`grid`. Zero cells are
+ * skipped rather than drawn at the minimum shade: a cell nobody hit isn't
+ * "the emptiest visible shade", it's simply not part of the heat.
+ */
+function heatRects(
+  heat: HeatGrid,
+  bounds: HeatBounds,
+  grid: { cols: number; rows: number },
+): ReactNode[] {
+  const rects: ReactNode[] = [];
+  heat.cells.forEach((rowCells, row) => {
+    rowCells.forEach((count, col) => {
+      if (count <= 0) return;
+      const { colorIndex, opacity } = heatCellStyle(count, heat.max);
+      const r = heatCellRect(bounds, grid.cols, grid.rows, col, row);
+      rects.push(
+        <rect
+          key={`${row}-${col}`}
+          x={r.x}
+          y={r.y}
+          width={r.width}
+          height={r.height}
+          fill={`var(--viz-heatmap-${colorIndex})`}
+          fillOpacity={opacity}
+        />,
+      );
+    });
+  });
+  return rects;
+}
 
 // Re-tuned zone-cell label sizes: the old 447-wide legacy frame's cells were
 // ~46.4 units wide (10.37% of the frame) drawn with no group scale, at
@@ -89,6 +167,8 @@ export function CourtArt({
   cut,
   dots,
   zones,
+  chart = "scatter",
+  heat = null,
   className,
   fill,
   labels,
@@ -102,6 +182,17 @@ export function CourtArt({
    * serve cut (Zones has no meaning there and the toolbar never offers it).
    */
   zones?: Record<ZoneKey, ZoneStats>;
+  /**
+   * G3b: `"heat"` draws `heat`'s cells instead of `dots` (no dots at all in
+   * heat mode) and desaturates the court. Every other chart draws `dots` as
+   * before — this prop only ever changes drawing, never `computeViz`'s own
+   * output, so a caller that forgets to pass it just gets the ordinary
+   * scatter court.
+   */
+  chart?: Chart;
+  /** Required (non-null) exactly when `chart === "heat"` — the caller's own
+   * `VizResult.heat`. Ignored otherwise. */
+  heat?: HeatGrid | null;
   className?: string;
   /**
    * "Fill the box" sizing — `width:100%; height:100%` with no presentation
@@ -120,13 +211,19 @@ export function CourtArt({
   labels?: boolean;
 }) {
   const clipId = useId();
-  const showZones = cut === "serve" && zones != null;
+  const rallyBlurId = useId();
+  const showHeat = chart === "heat" && heat != null;
+  const showZones = !showHeat && cut === "serve" && zones != null;
   const maxZonePct = zones
     ? Math.max(...ZONES.map((z) => zones[z.key].pct))
     : 0;
-  const ariaLabel = showZones
-    ? "Serve placement by zone: six service-box zones shaded by serve frequency"
-    : `${CUT_NOUN[cut]} court, ${dots.length} point${dots.length === 1 ? "" : "s"} shown`;
+  const apronFill = showHeat ? HEAT_APRON_FILL : APRON_FILL;
+  const courtFillColor = showHeat ? HEAT_COURT_FILL : COURT_FILL;
+  const ariaLabel = showHeat
+    ? `${HEAT_CUT_LABEL[cut]} heat map, ${dots.length} ${HEAT_NOUN[cut]}`
+    : showZones
+      ? "Serve placement by zone: six service-box zones shaded by serve frequency"
+      : `${CUT_NOUN[cut]} court, ${dots.length} point${dots.length === 1 ? "" : "s"} shown`;
 
   if (cut === "serve") {
     return (
@@ -139,21 +236,21 @@ export function CourtArt({
         aria-label={ariaLabel}
         className={className}
       >
-        <path d={SERVE_BACKGROUND_PATH} fill={APRON_FILL} />
+        <path d={SERVE_BACKGROUND_PATH} fill={apronFill} />
         <g transform={SERVE_COURT.groupTransform}>
           <rect
             x={SERVE_COURT.doublesLeft}
             y={SERVE_COURT.baselineY}
             width={SERVE_COURT.doublesRight - SERVE_COURT.doublesLeft}
             height={SERVE_COURT.netY - SERVE_COURT.baselineY}
-            fill={COURT_FILL}
+            fill={courtFillColor}
           />
           <rect
             x={SERVE_COURT.singlesLeft}
             y={SERVE_COURT.baselineY}
             width={SERVE_COURT.singlesRight - SERVE_COURT.singlesLeft}
             height={SERVE_COURT.netY - SERVE_COURT.baselineY}
-            fill={COURT_FILL}
+            fill={courtFillColor}
           />
 
           {/* Zone cells span the service line down to the net, same as the
@@ -295,7 +392,12 @@ export function CourtArt({
             strokeWidth={SERVE_COURT.netStrokeWidth}
           />
 
-          {!showZones &&
+          {showHeat &&
+            heat &&
+            heatRects(heat, SERVE_HEAT_BOUNDS, SERVE_HEAT_GRID)}
+
+          {!showHeat &&
+            !showZones &&
             dots.map((d) => {
               const { cx, cy } = projectServeDot(d);
               // G2b: an ace draws as a star, regardless of outcome colour —
@@ -357,10 +459,15 @@ export function CourtArt({
       className={className}
       style={kind === "placement" ? { transform: "rotate(180deg)" } : undefined}
     >
-      <path d={RETURN_BACKGROUND_PATH} fill={APRON_FILL} />
+      <path d={RETURN_BACKGROUND_PATH} fill={apronFill} />
       <clipPath id={clipId}>
         <path d={RETURN_BACKGROUND_PATH} />
       </clipPath>
+      {cut === "rallyPosition" && (
+        <filter id={rallyBlurId}>
+          <feGaussianBlur stdDeviation={RALLY_HEAT_BLUR_STD_DEVIATION} />
+        </filter>
+      )}
       <g clipPath={`url(#${clipId})`}>
         <g transform={RETURN_COURT.outerGroupTransform}>
           <g transform={RETURN_COURT.innerGroupTransform}>
@@ -369,14 +476,14 @@ export function CourtArt({
               y={RETURN_COURT.doublesTop}
               width={RETURN_COURT.nearBaselineX - RETURN_COURT.farBaselineX}
               height={RETURN_COURT.doublesBottom - RETURN_COURT.doublesTop}
-              fill={COURT_FILL}
+              fill={courtFillColor}
             />
             <rect
               x={RETURN_COURT.farBaselineX}
               y={RETURN_COURT.singlesTop}
               width={RETURN_COURT.nearBaselineX - RETURN_COURT.farBaselineX}
               height={RETURN_COURT.singlesBottom - RETURN_COURT.singlesTop}
-              fill={COURT_FILL}
+              fill={courtFillColor}
             />
             <line
               x1={RETURN_COURT.farBaselineX}
@@ -460,34 +567,49 @@ export function CourtArt({
               strokeWidth={RETURN_COURT.netStrokeWidth}
             />
 
-            {dots.map((d) => {
-              const color = colorFor(d.outcome);
-              const { cx, cy } = projectReturnDot(kind, {
-                lateralM: d.lateralM ?? 0,
-                depthM: d.depthM ?? 0,
-              });
-              return d.shape === "triangle" ? (
-                <polygon
-                  key={d.id}
-                  points={trianglePointsFor(kind, cx, cy, RETURN_DOT_R)}
-                  fill={color}
-                  stroke={DOT_STROKE}
-                  strokeWidth={DOT_STROKE_W}
-                  vectorEffect="non-scaling-stroke"
-                />
+            {showHeat &&
+              heat &&
+              (cut === "rallyPosition" ? (
+                // P2j: rally position's cells draw slightly blurred so the
+                // heat reads as a smoothed cluster — still inside the same
+                // clipPath, still in the same logical coordinates the
+                // unblurred cells below use.
+                <g filter={`url(#${rallyBlurId})`}>
+                  {heatRects(heat, RETURN_HEAT_BOUNDS, RALLY_HEAT_GRID)}
+                </g>
               ) : (
-                <circle
-                  key={d.id}
-                  cx={cx}
-                  cy={cy}
-                  r={RETURN_DOT_R}
-                  fill={color}
-                  stroke={DOT_STROKE}
-                  strokeWidth={DOT_STROKE_W}
-                  vectorEffect="non-scaling-stroke"
-                />
-              );
-            })}
+                heatRects(heat, RETURN_HEAT_BOUNDS, RETURN_HEAT_GRID)
+              ))}
+
+            {!showHeat &&
+              dots.map((d) => {
+                const color = colorFor(d.outcome);
+                const { cx, cy } = projectReturnDot(kind, {
+                  lateralM: d.lateralM ?? 0,
+                  depthM: d.depthM ?? 0,
+                });
+                return d.shape === "triangle" ? (
+                  <polygon
+                    key={d.id}
+                    points={trianglePointsFor(kind, cx, cy, RETURN_DOT_R)}
+                    fill={color}
+                    stroke={DOT_STROKE}
+                    strokeWidth={DOT_STROKE_W}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ) : (
+                  <circle
+                    key={d.id}
+                    cx={cx}
+                    cy={cy}
+                    r={RETURN_DOT_R}
+                    fill={color}
+                    stroke={DOT_STROKE}
+                    strokeWidth={DOT_STROKE_W}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                );
+              })}
           </g>
         </g>
       </g>

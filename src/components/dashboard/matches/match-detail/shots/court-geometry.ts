@@ -212,12 +212,11 @@ export function projectReturnDot(
  *
  * `RETURN_HEAT_BOUNDS` covers returnPlacement, returnContact AND
  * rallyPosition alike (only grid resolution differs) — the visible half
- * (net → that half's own baseline) plus a run-off margin past the baseline,
- * matching the positive `depthM` a contact dot can carry when struck behind
- * the line (`projectReturnDot`'s "contact" doc comment). The run-off's exact
- * extent is a visual call the Drawing task (G3b) verifies live against the
- * court's own clipped apron — `RETURN_DEPTH_RUN_OFF` here is a placeholder
- * proportion, not a value read off the design handoff.
+ * (net → that half's own baseline) plus the run-off past the baseline that
+ * the frame's OWN clipPath (`RETURN_BACKGROUND_PATH`, drawn exactly at the
+ * viewBox rect — see `court-art.tsx`) actually leaves visible, computed
+ * (not guessed) below via `depthToViewBoxY` (G3b settles this; G3a's
+ * placeholder `RETURN_DEPTH_RUN_OFF` proportion is gone).
  */
 export interface HeatBounds {
   xMin: number;
@@ -233,12 +232,62 @@ export const SERVE_HEAT_BOUNDS: HeatBounds = {
   yMax: SERVE_COURT.netY,
 };
 
-const RETURN_DEPTH_RUN_OFF =
-  (RETURN_COURT.nearBaselineX - RETURN_COURT.netX) * 0.3;
+// The two return-frame transform numbers that matter for the depth→viewBox
+// projection below — copied from `RETURN_COURT.innerGroupTransform`'s own
+// `scale(1.02)` and `RETURN_COURT.outerGroupTransform`'s own
+// `translate(-60.6,-125)` y-component, so `depthToViewBoxY`'s algebra reads
+// straight off the same numbers `court-art.tsx` renders with instead of a
+// second, driftable copy.
+const RETURN_INNER_SCALE = 1.02;
+const RETURN_OUTER_TRANSLATE_Y = -125;
+
+/**
+ * Maps a pre-transform depth-x value — the SAME coordinate
+ * `projectReturnDot`'s `cx` uses for `"contact"`/`"placement"` — to the y it
+ * lands on in the return frame's OWN viewBox, after the frame's real two
+ * `<g>` transforms (`innerGroupTransform` then `outerGroupTransform`,
+ * innermost-first, exactly as `court-art.tsx` nests them).
+ *
+ * Composing `translate(240,112) scale(1.02) translate(-240,-104.5)` with
+ * `translate(-60.6,-125) rotate(90 240 104.5)`: because the rotation is an
+ * exact 90°, the composed transform's output-y depends ONLY on input
+ * depth-x (the lateral input drops out of the y-component entirely) —
+ * algebra, using `RETURN_COURT.netX` (240, both the inner translate's x
+ * target AND the rotation centre's x) and `RETURN_COURT.centerY` (104.5,
+ * the rotation centre's y):
+ *   innerX(depthX) = RETURN_INNER_SCALE*(depthX - netX) + netX
+ *   rotatedY = centerY + (innerX(depthX) - netX)
+ *            = RETURN_INNER_SCALE*(depthX - netX) + centerY
+ *   outputY = rotatedY + RETURN_OUTER_TRANSLATE_Y
+ * `tests/court-geometry.spec.ts` cross-checks this against an independent
+ * re-implementation of the same two transform strings.
+ */
+function depthToViewBoxY(depthX: number): number {
+  return (
+    RETURN_INNER_SCALE * (depthX - RETURN_COURT.netX) +
+    RETURN_COURT.centerY +
+    RETURN_OUTER_TRANSLATE_Y
+  );
+}
+
+// The deepest pre-transform depth-x value that still lands inside the
+// viewBox's own far y-edge (`viewBox.minY + viewBox.h`) before
+// `RETURN_BACKGROUND_PATH`'s clipPath hides it — solving `depthToViewBoxY`
+// for depthX at that edge. `RETURN_INNER_SCALE` is linear, so a plain
+// algebraic inverse (no bisection) gives the exact value: ≈522.35, i.e.
+// ≈82.35 units of run-off past `nearBaselineX` (440) — not the 60-unit (30%)
+// placeholder G3a shipped with.
+const RETURN_HEAT_DEPTH_MAX =
+  RETURN_COURT.netX +
+  (RETURN_COURT.viewBox.minY +
+    RETURN_COURT.viewBox.h -
+    RETURN_COURT.centerY -
+    RETURN_OUTER_TRANSLATE_Y) /
+    RETURN_INNER_SCALE;
 
 export const RETURN_HEAT_BOUNDS: HeatBounds = {
   xMin: RETURN_COURT.netX,
-  xMax: RETURN_COURT.nearBaselineX + RETURN_DEPTH_RUN_OFF,
+  xMax: RETURN_HEAT_DEPTH_MAX,
   yMin: RETURN_COURT.doublesTop,
   yMax: RETURN_COURT.doublesBottom,
 };
@@ -246,6 +295,62 @@ export const RETURN_HEAT_BOUNDS: HeatBounds = {
 export const SERVE_HEAT_GRID = { cols: 6, rows: 7 } as const;
 export const RETURN_HEAT_GRID = { cols: 6, rows: 7 } as const;
 export const RALLY_HEAT_GRID = { cols: 10, rows: 12 } as const;
+
+/**
+ * A heat cell's on-court rect, in the SAME projected (pre-transform)
+ * coordinate space `bounds` is expressed in — `court-art.tsx` draws this
+ * directly, no further conversion. `col`/`row` are 0-indexed and MUST match
+ * `binDots`' own indexing (`viz-model.ts`): col grows along `bounds`' x-span,
+ * row along its y-span — so a caller iterating `HeatGrid.cells[row][col]`
+ * passes `(col, row)` here and lands on the exact cell `binDots` counted
+ * into.
+ */
+export interface HeatCellRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export function heatCellRect(
+  bounds: HeatBounds,
+  cols: number,
+  rows: number,
+  col: number,
+  row: number,
+): HeatCellRect {
+  const width = (bounds.xMax - bounds.xMin) / cols;
+  const height = (bounds.yMax - bounds.yMin) / rows;
+  return {
+    x: bounds.xMin + col * width,
+    y: bounds.yMin + row * height,
+    width,
+    height,
+  };
+}
+
+/**
+ * A heat cell's colour-ramp index (`--viz-heatmap-{0..3}`, by quartile of
+ * `count/max`) and `fill-opacity` (linear 0.1 → 0.82 across the same ratio)
+ * — P2i's rule verbatim. Callers skip drawing a cell whose `count` is 0
+ * entirely (a zero cell is never "the emptiest visible shade", it's just
+ * absent) rather than calling this with `count <= 0`.
+ */
+export interface HeatCellStyle {
+  colorIndex: 0 | 1 | 2 | 3;
+  opacity: number;
+}
+
+const HEAT_OPACITY_MIN = 0.1;
+const HEAT_OPACITY_MAX = 0.82;
+
+export function heatCellStyle(count: number, max: number): HeatCellStyle {
+  const ratio = max > 0 ? Math.min(1, Math.max(0, count / max)) : 0;
+  const colorIndex = Math.min(3, Math.floor(ratio * 4)) as 0 | 1 | 2 | 3;
+  const opacity =
+    HEAT_OPACITY_MIN + ratio * (HEAT_OPACITY_MAX - HEAT_OPACITY_MIN);
+  return { colorIndex, opacity };
+}
 
 /* ── Shared exports ────────────────────────────────────────────────────── */
 

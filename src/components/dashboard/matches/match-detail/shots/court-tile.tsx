@@ -4,7 +4,7 @@ import type { MouseEvent, ReactNode } from "react";
 import Link from "next/link";
 import { APRON_FILL, CourtArt } from "./court-art";
 import { VIZ_PILL_RADIUS } from "./viz-labels";
-import type { Cut, VizDot } from "./viz-model";
+import type { Chart, Cut, HeatGrid, VizDot } from "./viz-model";
 import type { VizState } from "./viz-url";
 import { viewIdentityKey } from "./viz-url";
 import { useVizState } from "./use-viz-state";
@@ -63,6 +63,8 @@ export function CourtTile({
   countLabel,
   cut,
   dots,
+  chart = "scatter",
+  heat = null,
   href,
   overlay,
   as = "link",
@@ -87,6 +89,12 @@ export function CourtTile({
   countLabel: string;
   cut: Cut;
   dots: VizDot[];
+  /** G3b: forwarded straight to `CourtArt` — a saved-view tile can be a heat
+   * chart same as the focused view; the six default tiles never are
+   * (`DEFAULT_CUTS` is scatter-only), so they simply omit both and get the
+   * ordinary dot court. */
+  chart?: Chart;
+  heat?: HeatGrid | null;
   href: string;
   overlay?: ReactNode;
   /**
@@ -173,7 +181,14 @@ export function CourtTile({
             : undefined,
         }}
       >
-        <CourtArt cut={cut} dots={dots} fill className="block h-full w-full" />
+        <CourtArt
+          cut={cut}
+          dots={dots}
+          chart={chart}
+          heat={heat}
+          fill
+          className="block h-full w-full"
+        />
         <span
           className="absolute top-[10px] left-[10px] inline-flex h-5 items-center rounded-full px-[7px] text-[10px] font-medium text-white"
           style={{ backgroundColor: "rgba(13,13,13,.72)" }}

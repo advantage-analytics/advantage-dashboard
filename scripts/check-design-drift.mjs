@@ -100,10 +100,15 @@ const ALLOWED_HEX = {
   // list, not promoted to colors.css: it's an outcome-independent "ace" read
   // (star shape, not a won/lost/miss colour), one call site, same reasoning
   // as the court/apron pair above.
+  // `#9FB3A5`/`#9DB4CE` (G3b) are the desaturated apron/court the design
+  // switches to while a heat chart shows (P2i) — same one-call-site
+  // reasoning, not promoted to colors.css.
   "src/components/dashboard/matches/match-detail/shots/court-art.tsx": [
     "#86AC91",
     "#6092CE",
     "#F8C84F",
+    "#9FB3A5",
+    "#9DB4CE",
   ],
 };
 

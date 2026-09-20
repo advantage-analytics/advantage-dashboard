@@ -259,6 +259,8 @@ export function VizFocused({
             <CourtArt
               cut={cut}
               dots={result.dots}
+              chart={state.chart}
+              heat={result.heat}
               zones={
                 state.chart === "zones" && cut === "serve"
                   ? (result.zoneStats ?? undefined)
@@ -313,9 +315,13 @@ export function VizFocused({
           </div>
 
           <div className="flex items-center gap-3 px-4 pt-[10px] pb-[14px]">
-            {legendItemsFor(cut, state.chart).map((item) => (
-              <LegendMark key={item.key} item={item} />
-            ))}
+            {legendItemsFor(cut, state.chart).map((item) =>
+              item.glyph === "ramp" ? (
+                <HeatRampLegend key={item.key} />
+              ) : (
+                <LegendMark key={item.key} item={item} />
+              ),
+            )}
             <div className="flex-1" />
             <span className="text-micro" style={{ color: "var(--ink-400)" }}>
               {LEGEND_CAPTION[cut]}
@@ -341,6 +347,43 @@ export function VizFocused({
         onSaved={(view) => setState((prev) => ({ ...prev, viewId: view.id }))}
       />
     </div>
+  );
+}
+
+// G3b (P2i): the heat chart's legend — a micro "Fewer" caption, four 22x8
+// swatches drawn as one joined pill (no gap between them, rounded only at
+// the outer ends via the wrapping span's own `overflow-hidden` pill), then
+// micro "More" — replacing the outcome legend entirely (`legendItemsFor`
+// returns exactly this one item for `chart === "heat"`).
+const HEAT_RAMP_SWATCH_W = 22;
+const HEAT_RAMP_SWATCH_H = 8;
+
+function HeatRampLegend() {
+  return (
+    <span className="inline-flex items-center gap-[6px]">
+      <span className="text-micro" style={{ color: "var(--ink-500)" }}>
+        Fewer
+      </span>
+      <span
+        className="inline-flex shrink-0 overflow-hidden"
+        style={{ borderRadius: "var(--radius-pill)" }}
+        aria-hidden="true"
+      >
+        {[0, 1, 2, 3].map((i) => (
+          <span
+            key={i}
+            style={{
+              width: HEAT_RAMP_SWATCH_W,
+              height: HEAT_RAMP_SWATCH_H,
+              backgroundColor: `var(--viz-heatmap-${i})`,
+            }}
+          />
+        ))}
+      </span>
+      <span className="text-micro" style={{ color: "var(--ink-500)" }}>
+        More
+      </span>
+    </span>
   );
 }
 

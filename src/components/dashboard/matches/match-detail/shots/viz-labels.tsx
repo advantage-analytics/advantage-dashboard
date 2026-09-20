@@ -40,10 +40,16 @@ export const CHART_LABEL: Record<Chart, string> = {
  * STROKE, an axis orthogonal to outcome, so they draw as a neutral ink
  * outline rather than a won/lost/miss fill — otherwise a plain circle in
  * `--ink-500` would read as a fourth outcome next to Miss's `--ink-300`.
+ *
+ * `glyph: "ramp"` (G3b) is the one heat-chart entry — it carries no
+ * meaningful `color`/`label`/`outline` (the render site draws the "Fewer" ·
+ * 4 swatches · "More" ramp itself off the token, not off this item's
+ * fields), it only exists so `legendItemsFor` stays the single place that
+ * decides "what does this (cut, chart) legend show".
  */
 export interface LegendItem {
   key: string;
-  glyph: "circle" | "triangle" | "star";
+  glyph: "circle" | "triangle" | "star" | "ramp";
   color: string;
   label: string;
   outline?: boolean;
@@ -94,19 +100,25 @@ const BACKHAND_ITEM: LegendItem = {
   outline: true,
 };
 
+// G3b: the one entry `chart === "heat"` ever returns — see `LegendItem`'s
+// own doc comment for why its non-key fields are empty.
+const RAMP_ITEM: LegendItem = {
+  key: "heat-ramp",
+  glyph: "ramp",
+  color: "",
+  label: "",
+};
+
 /**
- * `chart === "zones"` always reads as the outcome trio — the cells ARE the
- * chart there (`court-art.tsx`'s `showZones` branch skips dots entirely), so
- * no dot-shape legend applies regardless of `cut`. Otherwise (scatter) each
- * cut adds the shape its own dots vary on beyond outcome colour: serve adds
- * Ace (the only shape a serve dot takes), the two return cuts add
+ * `chart === "heat"` always reads as the ramp — the cells' own shade IS the
+ * chart there, same reasoning `chart === "zones"` already gets below, so it
+ * takes priority over any per-cut dot legend. Otherwise `chart === "zones"`
+ * reads as the outcome trio — the cells ARE the chart there
+ * (`court-art.tsx`'s `showZones` branch skips dots entirely), so no
+ * dot-shape legend applies regardless of `cut`. Otherwise (scatter) each cut
+ * adds the shape its own dots vary on beyond outcome colour: serve adds Ace
+ * (the only shape a serve dot takes), the two return cuts add
  * Forehand/Backhand (every return dot is one or the other).
- *
- * G3a: `chart === "heat"` isn't special-cased here — the ramp legend that
- * chart wants instead of this dot-shape legend is G3b's (Drawing's) call to
- * make, at the render site, since `legendItemsFor` only ever describes dot
- * glyphs. Falling through to the ordinary per-cut legend keeps this
- * function total (never throws) in the meantime.
  *
  * `cut === "rallyPosition"` has no Miss class — a rally shot's own outcome
  * is just the subject's point result (`computeRallyViz` never emits
@@ -114,6 +126,7 @@ const BACKHAND_ITEM: LegendItem = {
  * a legend entry with an empty meaning.
  */
 export function legendItemsFor(cut: Cut, chart: Chart): LegendItem[] {
+  if (chart === "heat") return [RAMP_ITEM];
   if (chart === "zones") return OUTCOME_ITEMS;
   if (cut === "rallyPosition") {
     return [WON_ITEM, LOST_ITEM, FOREHAND_ITEM, BACKHAND_ITEM];
