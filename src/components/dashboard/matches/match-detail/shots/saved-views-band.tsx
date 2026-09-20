@@ -2,7 +2,6 @@
 
 import {
   useEffect,
-  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -11,20 +10,16 @@ import {
   useTransition,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
-  type ReactElement,
   type ReactNode,
 } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal, Plus, Users } from "lucide-react";
+import { Plus, Users } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
-import {
-  useMatchSides,
-  type MatchSide,
-} from "@/components/dashboard/matches/match-detail/use-match-sides";
-import type { MatchPoint } from "@/lib/data/match-points-server";
+import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import {
+  applyIdOrder,
   canManageSavedView,
   hasDuplicateViewName,
   mergeManageableOrder,
@@ -40,13 +35,12 @@ import {
   setSavedViewShared,
 } from "@/app/dashboard/matches/(detail)/[matchId]/saved-views-actions";
 import { CourtTile } from "./court-tile";
-import { ManageTileMenu } from "./manage-tile-menu";
+import { ManageableSavedViewTile } from "./manageable-saved-view-tile";
 import { useVizState } from "./use-viz-state";
 import type { VizState } from "./viz-url";
 import { activeFilterEntries } from "./viz-url";
 import { computeViz, subjectFor, EMPTY_VIZ_FILTERS } from "./viz-model";
 import { truncatePillLabels } from "./viz-labels";
-import { cn } from "@/lib/utils";
 
 /**
  * Task 9 (P1a band + Part B Manage mode): every saved view the viewer can
@@ -417,11 +411,25 @@ export function SavedViewsBand({
     return merged;
   }
 
-  function commitReorder(merged: string[]) {
+  /**
+   * `preSnapshotIds` is the full band order as of just BEFORE the optimistic
+   * reorder this call is committing — captured at the gesture's start
+   * (`dragStartOrderRef.current` for a drag; taken fresh for a keyboard
+   * move). On failure, that snapshot is replayed onto whatever the list
+   * looks like NOW via `applyIdOrder` inside a functional update, rather
+   * than overwriting with the closed-over `views` prop: a row created or
+   * deleted by another actor (or a router refresh from a DIFFERENT
+   * in-flight action) while this reorder was in flight is neither
+   * duplicated nor silently discarded — every other rollback in this file
+   * restores a captured snapshot or uses a functional update, and this one
+   * previously didn't, which `views` going stale between the optimistic
+   * write and this failure resolving could snap the band back to.
+   */
+  function commitReorder(merged: string[], preSnapshotIds: string[]) {
     startTransition(async () => {
       const result = await reorderSavedViews(merged);
       if (!result.ok) {
-        setOptimisticViews(views);
+        setOptimisticViews((prev) => applyIdOrder(prev, preSnapshotIds));
         setStatusMessage("Couldn't save that change");
         return;
       }
@@ -446,8 +454,9 @@ export function SavedViewsBand({
     const newManageableOrder = moveItem(manageableIds, idx, idx + dir);
     if (newManageableOrder.join("|") === manageableIds.join("|")) return;
 
+    const preSnapshotIds = optimisticViews.map((v) => v.id);
     const merged = previewManageableOrder(newManageableOrder);
-    commitReorder(merged);
+    commitReorder(merged, preSnapshotIds);
     const newIdx = newManageableOrder.indexOf(view.id);
     setStatusMessage(
       `Moved "${view.name}" to position ${newIdx + 1} of ${manageableIds.length}`,
@@ -521,7 +530,7 @@ export function SavedViewsBand({
 
     const currentIds = optimisticViews.map((v) => v.id);
     if (currentIds.join("|") !== dragStartOrderRef.current.join("|")) {
-      commitReorder(currentIds);
+      commitReorder(currentIds, dragStartOrderRef.current);
     }
   }
 
@@ -689,7 +698,8 @@ export function SavedViewsBand({
   );
 }
 
-function SharedGlyph() {
+/** Exported for `manageable-saved-view-tile.tsx`, the other tile it's used from. */
+export function SharedGlyph() {
   return (
     <Users
       className="size-3 shrink-0"
@@ -698,245 +708,6 @@ function SharedGlyph() {
       aria-label="Shared with team"
       role="img"
     />
-  );
-}
-
-/**
- * One manageable tile in Manage mode: the same `CourtTile`, plus the ⋯
- * overlay button/menu, an in-place rename field standing in for the name,
- * and the pointer/keyboard reorder handlers on the wrapping div.
- *
- * The wrapper intercepts the inner `<Link>`'s own click in the capture phase
- * — `preventDefault` there cancels the anchor's navigation before it fires,
- * for both a mouse click and an Enter/Space activation, without needing to
- * turn the tile into a non-link element. That is what keeps it "keyboard
- * reachable" (task-9-brief.md's own wording): it is still a real, focusable
- * `<a>`, just one whose default action this wrapper cancels while the tile
- * is a drag target instead of a navigation target.
- */
-function ManageableSavedViewTile({
-  view,
-  data,
-  workspaceKind,
-  workspaceRole,
-  isDragging,
-  isRenaming,
-  renameValue,
-  renameDuplicate,
-  menuOpen,
-  onMenuOpenChange,
-  onRegisterTileEl,
-  onRegisterMenuTriggerEl,
-  onRenameValueChange,
-  onRenameCommit,
-  onRenameCancel,
-  onStartRename,
-  onDuplicate,
-  onShare,
-  onUnshare,
-  onDelete,
-  onPointerDownTile,
-  onPointerMoveTile,
-  onPointerEndTile,
-  onKeyDownTile,
-}: {
-  view: SavedViewRow;
-  data: {
-    subjectName: string;
-    pills: string[];
-    countLabel: string;
-    dots: ReturnType<typeof computeViz>["dots"];
-    href: string;
-  };
-  workspaceKind: WorkspaceKind;
-  workspaceRole: ProgramRole;
-  isDragging: boolean;
-  isRenaming: boolean;
-  renameValue: string;
-  renameDuplicate: boolean;
-  menuOpen: boolean;
-  onMenuOpenChange: (open: boolean) => void;
-  onRegisterTileEl: (el: HTMLDivElement | null) => void;
-  onRegisterMenuTriggerEl: (el: HTMLButtonElement | null) => void;
-  onRenameValueChange: (value: string) => void;
-  onRenameCommit: () => void;
-  onRenameCancel: () => void;
-  onStartRename: () => void;
-  onDuplicate: () => void;
-  onShare: () => void;
-  onUnshare: () => void;
-  onDelete: () => void;
-  onPointerDownTile: (e: ReactPointerEvent<HTMLDivElement>) => void;
-  onPointerMoveTile: (e: ReactPointerEvent<HTMLDivElement>) => void;
-  onPointerEndTile: (e: ReactPointerEvent<HTMLDivElement>) => void;
-  onKeyDownTile: (e: ReactKeyboardEvent<HTMLDivElement>) => void;
-}) {
-  const renameFieldId = useId();
-
-  return (
-    <div
-      ref={onRegisterTileEl}
-      onPointerDown={onPointerDownTile}
-      onPointerMove={onPointerMoveTile}
-      onPointerUp={onPointerEndTile}
-      onPointerCancel={onPointerEndTile}
-      onKeyDown={onKeyDownTile}
-      onClickCapture={(e) => e.preventDefault()}
-      className={cn(
-        "rounded-[var(--radius-card)]",
-        isDragging && "relative z-10",
-      )}
-      style={
-        isDragging
-          ? {
-              boxShadow: "var(--shadow-card-emphasis)",
-              outline: "2px solid var(--blue)",
-              outlineOffset: "-1px",
-              cursor: "grabbing",
-            }
-          : { cursor: "grab" }
-      }
-    >
-      <CourtTile
-        playerName={data.subjectName}
-        name={view.name}
-        nameAdornment={view.shared ? <SharedGlyph /> : undefined}
-        nameSlot={
-          isRenaming ? (
-            <RenameField
-              id={renameFieldId}
-              value={renameValue}
-              duplicate={renameDuplicate}
-              onChange={onRenameValueChange}
-              onCommit={onRenameCommit}
-              onCancel={onRenameCancel}
-            />
-          ) : undefined
-        }
-        pills={data.pills}
-        countLabel={data.countLabel}
-        cut={view.cut}
-        dots={data.dots}
-        href={data.href}
-        overlay={
-          // Only `onPointerDown` needs to stop here — it keeps a press on the
-          // ⋯ button from also being read as the START of a drag by the tile
-          // wrapper's own (bubble-phase) pointerdown handler. A click does
-          // NOT need stopping: the wrapper's `onClickCapture` above only
-          // calls `preventDefault()` (cancelling the anchor's navigation),
-          // never `stopPropagation()`, so the button's own click — and every
-          // `FloatMenuItem` inside the portaled menu, which React still
-          // treats as a descendant for event purposes — keeps working.
-          <div
-            className="absolute top-[10px] right-[10px]"
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <ManageTileMenu
-              viewName={view.name}
-              view={view}
-              workspaceKind={workspaceKind}
-              role={workspaceRole}
-              open={menuOpen}
-              onOpenChange={onMenuOpenChange}
-              onRename={onStartRename}
-              onDuplicate={onDuplicate}
-              onShare={onShare}
-              onUnshare={onUnshare}
-              onDelete={onDelete}
-              trigger={
-                <button
-                  type="button"
-                  ref={onRegisterMenuTriggerEl}
-                  aria-label={`Manage "${view.name}"`}
-                  aria-haspopup="menu"
-                  aria-expanded={menuOpen}
-                  className="flex size-6 cursor-pointer items-center justify-center rounded-full text-white"
-                  style={{ backgroundColor: "rgba(13,13,13,.72)" }}
-                >
-                  <MoreHorizontal
-                    className="size-3.5"
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                </button>
-              }
-            />
-          </div>
-        }
-      />
-    </div>
-  );
-}
-
-/**
- * The in-place rename control that stands in for a tile's name in Manage
- * mode. Enter commits, Esc reverts and returns focus to the ⋯ button (both
- * handled by the parent's callbacks) — no blur-commit: unmounting a focused
- * input on Escape's own re-render can fire a native blur the synthetic event
- * system does not reliably see, so committing on blur risked a double-fire
- * race. The parent instead abandons an in-progress rename outright whenever
- * another tile's menu opens (`handleMenuOpenChange`).
- */
-function RenameField({
-  id,
-  value,
-  duplicate,
-  onChange,
-  onCommit,
-  onCancel,
-}: {
-  id: string;
-  value: string;
-  duplicate: boolean;
-  onChange: (value: string) => void;
-  onCommit: () => void;
-  onCancel: () => void;
-}) {
-  const errorId = `${id}-error`;
-  return (
-    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <label htmlFor={id} className="sr-only">
-        Rename view
-      </label>
-      <input
-        id={id}
-        value={value}
-        autoFocus
-        onPointerDown={(e) => e.stopPropagation()}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          // Stop every key here from also reaching the tile wrapper's own
-          // keydown handler (⌥←/→/↑/↓ reorder) — typing a name with Alt held
-          // for an accented character, say, must never be read as a reorder
-          // request.
-          e.stopPropagation();
-          if (e.key === "Enter") {
-            e.preventDefault();
-            onCommit();
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            onCancel();
-          }
-        }}
-        aria-invalid={duplicate || undefined}
-        aria-describedby={duplicate ? errorId : undefined}
-        className={cn(
-          "w-full truncate border-b bg-transparent pb-0.5 text-[16px] leading-tight font-normal outline-none",
-          duplicate ? "border-[var(--error)]" : "border-[var(--blue)]",
-        )}
-        style={{ letterSpacing: "-0.2px", color: "var(--ink-900)" }}
-      />
-      {duplicate && (
-        <span
-          id={errorId}
-          role="alert"
-          className="text-[10px]"
-          style={{ color: "var(--error)" }}
-        >
-          A view with this name already exists.
-        </span>
-      )}
-    </span>
   );
 }
 

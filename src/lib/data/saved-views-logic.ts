@@ -309,6 +309,39 @@ export function moveItem<T>(
 }
 
 /**
+ * Reorder `items` to match `ids`, appending anything not named in `ids` at
+ * the end in its original relative order, and silently dropping any id in
+ * `ids` that no longer has a matching item. `saved-views-band.tsx`'s reorder
+ * rollback uses this: a snapshot of ids taken BEFORE an optimistic reorder,
+ * replayed onto whatever the CURRENT list is (via a functional `setState`
+ * update) rather than overwriting it with the stale closed-over `views` prop
+ * — a row created or deleted by another actor while the failed reorder was
+ * in flight is neither duplicated nor lost, it just lands wherever this
+ * snapshot doesn't have an opinion about it (the end, in its own order).
+ */
+export function applyIdOrder<T extends { id: string }>(
+  items: readonly T[],
+  ids: readonly string[],
+): T[] {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const ordered: T[] = [];
+  const used = new Set<string>();
+
+  for (const id of ids) {
+    const item = byId.get(id);
+    if (!item || used.has(id)) continue;
+    ordered.push(item);
+    used.add(id);
+  }
+
+  for (const item of items) {
+    if (!used.has(item.id)) ordered.push(item);
+  }
+
+  return ordered;
+}
+
+/**
  * Splice a freshly-reordered run of manageable ids back into the full band
  * order, leaving every non-manageable id in its original slot. Manage mode
  * only lets a viewer drag tiles they `canManageSavedView` — the others (a

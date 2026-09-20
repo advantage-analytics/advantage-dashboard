@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
+  applyIdOrder,
   canManageSavedView,
   filtersToParams,
   hasDuplicateViewName,
@@ -420,4 +421,64 @@ test("manageMenuRows: staff managing a teammate's shared view gets no share/unsh
       { workspaceKind: "team", role: "staff" },
     ),
   ).toEqual(["rename", "duplicate", "delete"]);
+});
+
+/* ── applyIdOrder ───────────────────────────────────────────────────────── */
+
+interface Item {
+  id: string;
+  name: string;
+}
+
+test("applyIdOrder reorders items to match the given id order", () => {
+  const items: Item[] = [
+    { id: "a", name: "A" },
+    { id: "b", name: "B" },
+    { id: "c", name: "C" },
+  ];
+  expect(applyIdOrder(items, ["c", "a", "b"])).toEqual([
+    { id: "c", name: "C" },
+    { id: "a", name: "A" },
+    { id: "b", name: "B" },
+  ]);
+});
+
+test("applyIdOrder appends items not named in ids, keeping their relative order, at the end", () => {
+  const items: Item[] = [
+    { id: "a", name: "A" },
+    { id: "b", name: "B" },
+    { id: "c", name: "C" },
+    { id: "d", name: "D" },
+  ];
+  // "b" and "d" arrived after the snapshot (`ids`) was taken and are not in it.
+  expect(applyIdOrder(items, ["c", "a"])).toEqual([
+    { id: "c", name: "C" },
+    { id: "a", name: "A" },
+    { id: "b", name: "B" },
+    { id: "d", name: "D" },
+  ]);
+});
+
+test("applyIdOrder drops an id from the snapshot that is no longer present in items", () => {
+  const items: Item[] = [
+    { id: "a", name: "A" },
+    { id: "c", name: "C" },
+  ];
+  // "b" was in the snapshot but no longer exists in `items` (deleted since).
+  expect(applyIdOrder(items, ["c", "b", "a"])).toEqual([
+    { id: "c", name: "C" },
+    { id: "a", name: "A" },
+  ]);
+});
+
+test("applyIdOrder returns an empty list unchanged", () => {
+  expect(applyIdOrder([], ["a", "b"])).toEqual([]);
+});
+
+test("applyIdOrder with an empty snapshot keeps every item in its original order", () => {
+  const items: Item[] = [
+    { id: "a", name: "A" },
+    { id: "b", name: "B" },
+  ];
+  expect(applyIdOrder(items, [])).toEqual(items);
 });
