@@ -176,6 +176,18 @@ function normalizeLanding(lx: number, ly: number): { lx: number; ly: number } {
  * doesn't have that problem: the server always stands on their own side to
  * serve, so which side `contactY` falls on reliably says which end the
  * point is being served from, independent of where the ball ends up.
+ *
+ * (Fix round 2.) The in/out/net VERDICT, though, comes from the tracker's
+ * own `result` string ("In" | "Out" | "Net"), not from geometry — SwingVision
+ * does not measure a faulted serve's actual landing, it IMPUTES one at the
+ * service line, so a real fault's landing coordinates read as "0.04m past
+ * the line" and geometry alone (the box+tolerance rule below) misreads a
+ * large share of genuine faults as "in". Ground truth across 25 matches: 334
+ * `"Out"` serves (median depth 6.70m, up to 11.67m — real positions exist),
+ * 37% of them pinned exactly at the service line by imputation; 76 `"Net"`
+ * serves, several with a POSITIVE recorded depth (up to +6.23m) that
+ * geometry alone would read as in-box. The geometric rule (unchanged) is
+ * now only the FALLBACK, for a shot whose `result` is null/unrecognised.
  */
 export type ServePlacementKind = "in" | "out" | "net";
 
@@ -189,25 +201,45 @@ export interface ServePlacementMetrics {
   kind: ServePlacementKind;
 }
 
-/** The classification core, shared by `servePlacementMetrics`'s real
+/**
+ * The classification core, shared by `servePlacementMetrics`'s real
  * contact-based end detection and `computeViz`'s own defensive fallback
  * (a serve point whose `shots` row can't be resolved — no contact point to
  * read at all — falls back to the landing-based flip every other
- * normalisation in this file already uses, rather than dropping the point). */
+ * normalisation in this file already uses, rather than dropping the point).
+ *
+ * `result` is the shot's own tracked call ("In" | "Out" | "Net" | null) —
+ * the AUTHORITY for `kind` (fix round 2), checked before geometry:
+ * - `"net"` when `result === "Net"` OR `depthPastNetM < 0` — a negative
+ *   depth is physically a net ball no matter what the string says (a few
+ *   corpus rows carry a positive recorded depth for a genuinely netted
+ *   serve; this OR keeps those caught too).
+ * - otherwise `"out"` when `result === "Out"`, `"in"` when
+ *   `result === "In"` — trust the tracker's call over the (possibly
+ *   imputed) coordinates.
+ * - otherwise (no usable `result`) the geometric box+tolerance rule below,
+ *   unchanged from round 1 — the only path a null/unrecognised `result`
+ *   still has.
+ */
 function classifyServePlacement(
   farEnd: boolean,
   landingX: number,
   landingY: number,
+  result: string | null | undefined,
 ): ServePlacementMetrics {
   const depthPastNetM = farEnd ? REAL_NET_Y - landingY : landingY - REAL_NET_Y;
   const lateralM = farEnd ? -landingX : landingX;
   const kind: ServePlacementKind =
-    depthPastNetM < 0
+    result === "Net" || depthPastNetM < 0
       ? "net"
-      : depthPastNetM <= SERVE_BOX_DEPTH_M + SERVE_LINE_TOL_M &&
-          Math.abs(lateralM) <= SERVE_BOX_HALF_WIDTH_M + SERVE_LINE_TOL_M
-        ? "in"
-        : "out";
+      : result === "Out"
+        ? "out"
+        : result === "In"
+          ? "in"
+          : depthPastNetM <= SERVE_BOX_DEPTH_M + SERVE_LINE_TOL_M &&
+              Math.abs(lateralM) <= SERVE_BOX_HALF_WIDTH_M + SERVE_LINE_TOL_M
+            ? "in"
+            : "out";
   return { lateralM, depthPastNetM, kind };
 }
 
@@ -215,9 +247,15 @@ export function servePlacementMetrics(
   contactY: number | null | undefined,
   landingX: number | null | undefined,
   landingY: number | null | undefined,
+  result: string | null | undefined,
 ): ServePlacementMetrics | null {
   if (contactY == null || landingX == null || landingY == null) return null;
-  return classifyServePlacement(contactY > REAL_NET_Y, landingX, landingY);
+  return classifyServePlacement(
+    contactY > REAL_NET_Y,
+    landingX,
+    landingY,
+    result,
+  );
 }
 
 const SCORE_MAP: Record<string, number> = {
@@ -406,22 +444,28 @@ export function pointToReturnDots(
       p.secondShotContactY != null
         ? p.secondShotContactY > REAL_NET_Y
         : !(p.secondShotLandingY > REAL_NET_Y);
+    // `result` (fix round 2): the tracker's own call is the authority over
+    // geometry, same reasoning `servePlacementMetrics`'s doc comment gives
+    // — a netted return can carry a positive recorded depth, which
+    // `classifyServePlacement`'s `result === "Net"` check still catches.
     const placement = classifyServePlacement(
       farEnd,
       p.secondShotLandingX,
       p.secondShotLandingY,
+      p.secondShotResult,
     );
 
     // Mirrored world-x (leading minus, the same sign `classifyServePlacement`
     // already applies) so the court reads from BEHIND the returner —
-    // positive lateralM is the returner's RIGHT. A netted return
-    // (`depthPastNetM < 0`) draws at the net gutter (`shape: "net"`), never
-    // its real landing — that spot is on the RETURNER's own side and was
-    // never a placement.
+    // positive lateralM is the returner's RIGHT. A netted return (`kind ===
+    // "net"`) draws at the net gutter (`shape: "net"`), never its real
+    // landing — that spot is on the RETURNER's own side and was never a
+    // placement. Routed on `kind`, not the sign of `depthPastNetM` — a
+    // tracker-flagged net ball can carry a positive recorded depth.
     dots.push({
       id: p.id,
       variant: "landing",
-      shape: placement.depthPastNetM < 0 ? "net" : shape,
+      shape: placement.kind === "net" ? "net" : shape,
       lateralM: placement.lateralM,
       depthM: placement.depthPastNetM,
     });
@@ -679,10 +723,23 @@ export function computeViz(
       // normalisation in this file used before Task 2, negated (`farEnd`
       // and the old `didFlip` read the same decision from opposite ends of
       // the shot — see `classifyServePlacement`'s own doc comment).
+      // `result` (fix round 2): the resolved shot's own tracked call on the
+      // primary path, the point's flattened `firstShotResult` on the
+      // fallback path — both are the AUTHORITY over the geometric rule.
       const metrics =
-        servePlacementMetrics(serveShot?.contactY, landingX, landingY) ??
+        servePlacementMetrics(
+          serveShot?.contactY,
+          landingX,
+          landingY,
+          serveShot?.result,
+        ) ??
         (landingX != null && landingY != null
-          ? classifyServePlacement(!(landingY > REAL_NET_Y), landingX, landingY)
+          ? classifyServePlacement(
+              !(landingY > REAL_NET_Y),
+              landingX,
+              landingY,
+              p.firstShotResult,
+            )
           : null);
       if (!metrics) continue;
 

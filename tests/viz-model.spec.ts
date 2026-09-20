@@ -145,56 +145,94 @@ test.describe("computeViz — serve cut", () => {
 /* ── Task 2a: servePlacementMetrics ───────────────────────────────────── */
 
 test.describe("servePlacementMetrics (Task 2a)", () => {
+  // Every call below passes `result: null` deliberately — these tests cover
+  // the GEOMETRIC fallback (fix round 2: `kind` is authoritative from the
+  // shot's own `result` when present; the box+tolerance rule below only
+  // ever runs when `result` is null/unrecognised).
   test("null when contactY, landingX or landingY is missing", () => {
-    expect(servePlacementMetrics(null, 1, 2)).toBeNull();
-    expect(servePlacementMetrics(5, null, 2)).toBeNull();
-    expect(servePlacementMetrics(5, 1, null)).toBeNull();
-    expect(servePlacementMetrics(undefined, undefined, undefined)).toBeNull();
+    expect(servePlacementMetrics(null, 1, 2, null)).toBeNull();
+    expect(servePlacementMetrics(5, null, 2, null)).toBeNull();
+    expect(servePlacementMetrics(5, 1, null, null)).toBeNull();
+    expect(
+      servePlacementMetrics(undefined, undefined, undefined, undefined),
+    ).toBeNull();
   });
 
   test("end detection from contactY works in both directions — far-side and near-side contacts for the same real depth agree once mirrored", () => {
-    const far = servePlacementMetrics(20, 1.0, 8.0)!; // contactY far half
+    const far = servePlacementMetrics(20, 1.0, 8.0, null)!; // contactY far half
     expect(far.kind).toBe("in");
     expect(far.lateralM).toBeCloseTo(-1.0, 5);
     expect(far.depthPastNetM).toBeCloseTo(3.885, 5);
 
-    const near = servePlacementMetrics(2, 1.0, 15.77)!; // contactY near half
+    const near = servePlacementMetrics(2, 1.0, 15.77, null)!; // contactY near half
     expect(near.kind).toBe("in");
     expect(near.lateralM).toBeCloseTo(1.0, 5);
     expect(near.depthPastNetM).toBeCloseTo(3.885, 5);
   });
 
   test("kind: net — a shallow (-0.11m) and a deep (-7.80m) net ball both classify as net, from either end", () => {
-    const shallow = servePlacementMetrics(20, 0.5, 11.995)!; // far-half contact
+    const shallow = servePlacementMetrics(20, 0.5, 11.995, null)!; // far-half
     expect(shallow.kind).toBe("net");
     expect(shallow.depthPastNetM).toBeCloseTo(-0.11, 5);
 
-    const deep = servePlacementMetrics(2, 0.5, 4.085)!; // near-half contact
+    const deep = servePlacementMetrics(2, 0.5, 4.085, null)!; // near-half
     expect(deep.kind).toBe("net");
     expect(deep.depthPastNetM).toBeCloseTo(-7.8, 5);
   });
 
   test("kind: out — a 12.04m serve is out, not silently mirrored into net or in", () => {
-    const m = servePlacementMetrics(20, 0.5, -0.155)!;
+    const m = servePlacementMetrics(20, 0.5, -0.155, null)!;
     expect(m.kind).toBe("out");
     expect(m.depthPastNetM).toBeCloseTo(12.04, 2);
   });
 
   test("kind: out — lateral excess beyond the box+tolerance is out even at a normal depth", () => {
-    const m = servePlacementMetrics(20, 5.0, 8.0)!;
+    const m = servePlacementMetrics(20, 5.0, 8.0, null)!;
     expect(m.kind).toBe("out");
     expect(m.lateralM).toBeCloseTo(-5.0, 5);
   });
 
   test("tolerance: 0.1m past the service line still reads as in", () => {
-    const m = servePlacementMetrics(20, 0, 5.385)!; // depthPastNetM = 6.5
+    const m = servePlacementMetrics(20, 0, 5.385, null)!; // depthPastNetM = 6.5
     expect(m.depthPastNetM).toBeCloseTo(6.5, 5);
     expect(m.kind).toBe("in");
   });
 
   test("just past the 20cm tolerance reads as out", () => {
-    const m = servePlacementMetrics(20, 0, 5.275)!; // depthPastNetM = 6.61
+    const m = servePlacementMetrics(20, 0, 5.275, null)!; // depthPastNetM = 6.61
     expect(m.kind).toBe("out");
+  });
+
+  /* ── Fix round 2: `result` is the authority, geometry is the fallback ── */
+
+  test("Fix round 2: an 'Out' serve recorded 6.41m past the net (inside the geometric tolerance) is still 'out' — the tracker's call wins over geometry", () => {
+    // 6.41m is within SERVE_BOX_DEPTH_M(6.4)+tol(0.2)=6.6 and 0.96m is
+    // within 4.115+0.2 — geometry alone would call this "in" (an imputed,
+    // at-the-line landing). The real corpus case this models.
+    const m = servePlacementMetrics(20, 0.96, 11.885 - 6.41, "Out")!;
+    expect(m.kind).toBe("out");
+  });
+
+  test("Fix round 2: a 'Net' serve recorded with a POSITIVE depth (+6.23m) still reads as net", () => {
+    // Geometry alone (positive depth, in-box) would call this "in"; the
+    // tracker's own "Net" call must win.
+    const m = servePlacementMetrics(20, 0, 11.885 - 6.23, "Net")!;
+    expect(m.depthPastNetM).toBeGreaterThan(0);
+    expect(m.kind).toBe("net");
+  });
+
+  test("Fix round 2: a null result still falls back to geometry and produces today's answer", () => {
+    const withResult = servePlacementMetrics(20, 1.0, 8.0, "In")!;
+    const withNull = servePlacementMetrics(20, 1.0, 8.0, null)!;
+    expect(withNull.kind).toBe("in");
+    expect(withNull.kind).toBe(withResult.kind);
+    expect(withNull.lateralM).toBeCloseTo(withResult.lateralM, 5);
+    expect(withNull.depthPastNetM).toBeCloseTo(withResult.depthPastNetM, 5);
+  });
+
+  test("Fix round 2: an unrecognised result string also falls back to geometry", () => {
+    const m = servePlacementMetrics(20, 1.0, 8.0, "Winner")!;
+    expect(m.kind).toBe("in");
   });
 });
 
