@@ -16,3 +16,13 @@ is the runner's. Newest entries at the bottom.
 1. Make the fixture's `rpc` stub take the function name and count only the roster RPC; return a scalar for `program_usage_total`.
 2. `program_usage_total` is now called from the browser — confirm its body is SECURITY DEFINER with a membership check (only the grant was verified).
 3. `quotaAccountType` in the hook now only matters on the personal branch; could be simplified.
+
+## T2 · Add the pure quotaRefusal gate and its spec — done
+
+**gate:** mechanical PASS (lint, typecheck, full test suite); completion review `VERDICT: pass` (5/5 criteria met, scope clean).
+
+**changed:** `validation.ts` exports pure `quotaRefusal()` — unknown remaining never refuses, zero allowance returns the personal/team "used up" sentence with the reset date, an over-allowance trim returns the "needs {x} h but only {y} h is left" sentence via `formatHoursTenths`; exact fit passes. New `tests/upload-quota-gate.spec.ts` covers unknown, zero (both copies), exactly-fits, over-by-one-second, and that no string says "splitstep".
+
+**follow-ups:**
+
+1. `capSeconds` is accepted by the signature but unused in any message — available if T3 wants a richer sentence.

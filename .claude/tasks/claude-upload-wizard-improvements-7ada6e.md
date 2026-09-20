@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Add the pure quotaRefusal gate and its spec
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/new-match-wizard/validation.ts, tests/upload-quota-gate.spec.ts (new) (guess)
 - **done when:**
