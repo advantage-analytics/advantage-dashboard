@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { createServer, type Server } from "node:http";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -179,6 +179,30 @@ const jumpStart = (page: Page) =>
 /** The rail: the ink-900 track the filmstrip and the bracket sit on. */
 function rail(page: Page) {
   return page.locator("div.relative.cursor-pointer.touch-none").first();
+}
+
+/**
+ * Press and release an element inside ONE task — no microtask, no React render
+ * between the two. Playwright's own mouse cannot do this: it round-trips over
+ * the protocol, so the page gets a render in the gap. The events are synthetic,
+ * so they carry no active pointer id and `setPointerCapture` refuses them —
+ * which is exactly the harness case the try/catch keeps alive.
+ */
+async function clickInOneTask(locator: Locator, ratio = 0.5) {
+  await locator.evaluate((el, atRatio) => {
+    const rect = el.getBoundingClientRect();
+    const init = {
+      bubbles: true,
+      cancelable: true,
+      clientX: rect.left + rect.width * atRatio,
+      clientY: rect.top + rect.height / 2,
+      pointerId: 1,
+      pointerType: "mouse",
+      isPrimary: true,
+    };
+    el.dispatchEvent(new PointerEvent("pointerdown", { ...init, buttons: 1 }));
+    el.dispatchEvent(new PointerEvent("pointerup", { ...init, buttons: 0 }));
+  }, ratio);
 }
 
 /** Press the rail at a fraction of its width. */
@@ -505,6 +529,79 @@ test("dragging across the kept window moves nothing", async ({ page }) => {
   await page.waitForTimeout(250);
 
   expect(await trimEvents(page)).toEqual([]);
+});
+
+/* -------------------------------------------------------------------------
+ * A release that beats the render
+ * ---------------------------------------------------------------------- */
+
+/**
+ * The failure these two guard is invisible on a fast machine and ordinary on a
+ * slow one: press and release inside the same task — a click while the main
+ * thread is busy decoding a large file — and React has not re-rendered in
+ * between. A gesture that learned about the release from a window listener
+ * subscribed in an effect never saw it, so the step latched: the video stayed
+ * paused, the body kept the drag's cursor, and every later mouse move seeked
+ * with no button held. Both dispatch synthetic events, which carry no active
+ * pointer id and so cannot be captured — the handlers still sit on the element
+ * that was pressed, which is the point.
+ */
+
+test("a rail press and release in the same task ends the gesture", async ({
+  page,
+}) => {
+  await open(page, { start: 0, end: CLIP_SECONDS });
+  const box = await rail(page).boundingBox();
+  if (!box) throw new Error("the rail has no box");
+  const y = box.y + box.height / 2;
+
+  await clickInOneTask(rail(page), 0.1);
+
+  // The release landed: a scrub that ends plays from where it stopped.
+  await expect.poll(() => paused(page)).toBe(false);
+  expect(await page.evaluate(() => document.body.style.cursor)).not.toBe(
+    "grabbing",
+  );
+
+  // And the gesture is gone, not latched: a move across the rail with no
+  // button held must not walk the playhead. Three-quarters along a declared
+  // two seconds is 1.5s — the position the latched scrub would have seeked to.
+  await page.mouse.move(box.x + box.width * 0.75, y);
+  await page.waitForTimeout(250);
+  await page.evaluate(() => document.querySelector("video")?.pause());
+  await page.waitForTimeout(100);
+  expect(await playhead(page)).toBeLessThan(1.2);
+  expect(await trimEvents(page)).toEqual([]);
+});
+
+test("a handle press and release in the same task writes one cut and no stray cursor", async ({
+  page,
+}) => {
+  await open(page, { start: 0.5, end: 1.5 });
+  await clickInOneTask(page.getByRole("slider", { name: "Trim start" }));
+
+  await page.waitForTimeout(250);
+  // Release is the ONE write, and a press that never moved commits the cut
+  // where it already was.
+  const events = await trimEvents(page);
+  expect(events).toHaveLength(1);
+  expect(events[0].startSeconds).toBeCloseTo(0.5, 2);
+  expect(events[0].endSeconds).toBeCloseTo(1.5, 2);
+  // The drag's cursor was handed back rather than left on the body.
+  expect(await page.evaluate(() => document.body.style.cursor)).not.toBe(
+    "ew-resize",
+  );
+
+  // Nothing is still dragging: moving across the rail with no button held
+  // writes nothing more.
+  const railBox = await rail(page).boundingBox();
+  if (!railBox) throw new Error("the rail has no box");
+  await page.mouse.move(
+    railBox.x + railBox.width * 0.9,
+    railBox.y + railBox.height / 2,
+  );
+  await page.waitForTimeout(250);
+  expect(await trimEvents(page)).toEqual(events);
 });
 
 /* -------------------------------------------------------------------------

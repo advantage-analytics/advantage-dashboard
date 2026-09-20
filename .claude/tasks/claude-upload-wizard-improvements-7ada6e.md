@@ -139,7 +139,7 @@ ready).
 
 ## T10 · Capture the pointer on the trim rail and handles so a fast release ends the gesture
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/new-match-wizard/TrimStepContent.tsx (guess — window-listener effect ~L601-656, `draggingRef` mirror ~L409, `dragCtx` ~L580, `startDrag` ~L658, rail `onPointerDown` ~L1095, handle `onPointerDown` ~L1182), tests/trim-step-navigation.spec.ts
 - **done when:**

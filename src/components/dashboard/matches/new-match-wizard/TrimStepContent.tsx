@@ -41,6 +41,17 @@
  * a ref at frame cadence, the video seeks to the LATEST position only once
  * the previous seek has landed, and the form learns the cut on release.
  *
+ * ── Why the gesture captures the pointer ────────────────────────────────────
+ * Every gesture — a handle drag, a rail scrub, and the click that is a scrub of
+ * zero distance — runs on handlers bound to the element that was pressed, with
+ * `setPointerCapture` routing the rest of the gesture there. It used to
+ * subscribe window listeners from an effect keyed on the drag state, and React
+ * runs a passive effect AFTER the render that state schedules: a `pointerup`
+ * delivered before that — a click while the thread is decoding a large file —
+ * was never observed, so the step latched in scrub, the video never played and
+ * every later mouse move seeked with no button held. Capture removes the
+ * subscription, and so removes its timing.
+ *
  * ── Attribution ─────────────────────────────────────────────────────────────
  * `initialTopPlayerIsPlayer1` is camera-relative and about the START OF THE
  * SELECTED WINDOW only — ends change every odd game. The browser cuts the file
@@ -53,6 +64,7 @@
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   ArrowLeftToLine,
   ArrowRightToLine,
@@ -357,8 +369,8 @@ function TrimStepContentImpl({
   const [railWidth, setRailWidth] = useState(0);
 
   const duration = probe?.durationSeconds ?? 0;
-  // Mirrored for the imperative playhead and the window-level pointer
-  // handlers, which must not re-subscribe when a new file changes the length.
+  // Mirrored for the imperative playhead and the pointer handlers, which must
+  // not be rebuilt when a new file changes the length.
   const durationRef = useRef(duration);
   useEffect(() => {
     durationRef.current = duration;
@@ -384,9 +396,13 @@ function TrimStepContentImpl({
   const playheadRef = useRef(0);
   const playheadElRef = useRef<HTMLDivElement>(null);
   const clockElRef = useRef<HTMLSpanElement>(null);
-  // Mirrors `dragging` for the imperative playhead and the seek callbacks,
-  // which must not re-subscribe on every drag. Declared before the callbacks
-  // that read it; written in an effect below, never during render.
+  // The gesture in progress, written SYNCHRONOUSLY in `onPointerDown` and
+  // cleared synchronously on release. It is the authority, not `dragging`:
+  // a `pointerup` that arrives before React has re-rendered — a click while
+  // the main thread is decoding a large file — must still end the gesture,
+  // so nothing about ending it may wait on a render or an effect. `dragging`
+  // remains for what only paint needs (the handle's pressed tone, the drag
+  // readout). Declared before the callbacks that read it.
   const draggingRef = useRef<Handle | "scrub" | null>(null);
   // The same playhead React can read — see PLAYHEAD_PUBLISH_MS.
   const [playheadTime, setPlayheadTime] = useState(0);
@@ -406,10 +422,6 @@ function TrimStepContentImpl({
     },
     [],
   );
-  useEffect(() => {
-    draggingRef.current = dragging;
-  }, [dragging]);
-
   // One object URL per file, created AND revoked inside the effect, and the
   // element's src set from there rather than rendered. Leaking these pins the
   // file handle for the life of the page — but revoking a memoised URL from a
@@ -575,8 +587,9 @@ function TrimStepContentImpl({
     if (el?.paused) void el.play().catch(() => undefined);
   }, []);
 
-  // Drag inputs go through a ref so the window subscription keys only on
-  // `dragging`. Written in an effect, not during render.
+  // Drag inputs go through a ref so the pointer handlers can be built once and
+  // never depend on a render having happened. Written in an effect, not during
+  // render.
   const dragCtx = useRef({
     applyDrag,
     positionFromEvent,
@@ -598,70 +611,91 @@ function TrimStepContentImpl({
     };
   });
 
-  useEffect(() => {
-    if (!dragging) return;
+  // What `document.body.style.cursor` was before the gesture took it. Set and
+  // restored by the two functions below, never by an effect — a release that
+  // beats the render must be able to hand the cursor back on its own.
+  const previousCursorRef = useRef("");
 
-    // The cursor stays the drag's own for the whole gesture, even when the
-    // pointer leaves the 24px handle — otherwise it flickers to an arrow the
-    // moment you move faster than the handle can follow.
-    const previousCursor = document.body.style.cursor;
-    document.body.style.cursor =
-      dragging === "scrub" ? "grabbing" : "ew-resize";
-
-    const onMove = (e: PointerEvent) => {
-      const ctx = dragCtx.current;
-      const time = ctx.positionFromEvent(e.clientX);
-      // A scrub writes nothing: it walks the playhead, and the player is the
-      // output. Seeks coalesce, so a fast sweep across a multi-gigabyte file
-      // decodes the frames it can keep up with rather than queueing all of
-      // them.
-      if (dragging === "scrub") ctx.seekLatest(time);
-      else ctx.applyDrag(dragging, time);
-    };
-
-    const onUp = () => {
-      if (liveRafRef.current !== null) {
-        cancelAnimationFrame(liveRafRef.current);
-        liveRafRef.current = null;
+  /**
+   * Take the gesture, synchronously.
+   *
+   * The ref, the body cursor and the pointer capture are all in place before
+   * this returns, so every later pointer event for this `pointerId` is routed
+   * to the element that was pressed and is understood the moment it lands.
+   */
+  const beginGesture = useCallback(
+    (grab: Handle | "scrub", e: ReactPointerEvent<HTMLElement>) => {
+      draggingRef.current = grab;
+      // The cursor stays the gesture's own for its whole length, even when the
+      // pointer leaves the 24px handle — otherwise it flickers to an arrow the
+      // moment you move faster than the handle can follow.
+      previousCursorRef.current = document.body.style.cursor;
+      document.body.style.cursor = grab === "scrub" ? "grabbing" : "ew-resize";
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // A synthetic PointerEvent carries no active pointer id, so this
+        // throws NotFoundError under a test harness. The handlers still sit
+        // on the element the press landed on, so the gesture works without it.
       }
-      // Let go of a scrub and it plays from where you landed — the same thing
-      // a press on the rail does, a click being a scrub that never moved.
-      if (dragging === "scrub") {
-        setDragging(null);
-        dragCtx.current.play();
-        return;
-      }
-      // Release is the one write: the form learns the cuts, and the video is
-      // asked for the frame the cut actually landed on.
-      const value = liveRef.current;
-      liveRef.current = null;
-      wantedSeekRef.current = null;
-      if (value) {
-        dragCtx.current.onTrimChange(value.start, value.end);
-        dragCtx.current.seekTo(dragging === "end" ? value.end : value.start);
-      }
-      setLive(null);
-      setDragging(null);
-    };
-
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
-    return () => {
-      document.body.style.cursor = previousCursor;
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
-    };
-  }, [dragging]);
-
-  const startDrag = useCallback(
-    (grab: Handle) => {
-      liveRef.current = { start: committedStart, end: committedEnd };
-      setLive(liveRef.current);
       setDragging(grab);
     },
-    [committedStart, committedEnd],
+    [],
+  );
+
+  const onGesturePointerMove = useCallback((e: ReactPointerEvent) => {
+    const grab = draggingRef.current;
+    // No gesture in progress: a plain hover across the rail moves nothing.
+    if (!grab) return;
+    const ctx = dragCtx.current;
+    const time = ctx.positionFromEvent(e.clientX);
+    // A scrub writes nothing: it walks the playhead, and the player is the
+    // output. Seeks coalesce, so a fast sweep across a multi-gigabyte file
+    // decodes the frames it can keep up with rather than queueing all of them.
+    if (grab === "scrub") ctx.seekLatest(time);
+    else ctx.applyDrag(grab, time);
+  }, []);
+
+  /**
+   * End it. The release, a cancel and a lost capture are the same event here,
+   * and the ref makes the second one a no-op.
+   */
+  const endGesture = useCallback(() => {
+    const grab = draggingRef.current;
+    if (!grab) return;
+    draggingRef.current = null;
+    document.body.style.cursor = previousCursorRef.current;
+    if (liveRafRef.current !== null) {
+      cancelAnimationFrame(liveRafRef.current);
+      liveRafRef.current = null;
+    }
+    // Let go of a scrub and it plays from where you landed — the same thing
+    // a press on the rail does, a click being a scrub that never moved.
+    if (grab === "scrub") {
+      setDragging(null);
+      dragCtx.current.play();
+      return;
+    }
+    // Release is the one write: the form learns the cuts, and the video is
+    // asked for the frame the cut actually landed on.
+    const value = liveRef.current;
+    liveRef.current = null;
+    wantedSeekRef.current = null;
+    if (value) {
+      dragCtx.current.onTrimChange(value.start, value.end);
+      dragCtx.current.seekTo(grab === "end" ? value.end : value.start);
+    }
+    setLive(null);
+    setDragging(null);
+  }, []);
+
+  const startDrag = useCallback(
+    (grab: Handle, e: ReactPointerEvent<HTMLElement>) => {
+      liveRef.current = { start: committedStart, end: committedEnd };
+      setLive(liveRef.current);
+      beginGesture(grab, e);
+    },
+    [committedStart, committedEnd, beginGesture],
   );
 
   const nudge = useCallback(
@@ -1093,13 +1127,18 @@ function TrimStepContentImpl({
           <div
             ref={railRef}
             onPointerDown={(e) => {
-              // Press, and keep the pointer: the playhead follows it for as
-              // long as you hold, so a sweep along the rail is a look through
-              // the match. Let go and it plays from where you stopped.
+              // Press, and keep the pointer: the rail CAPTURES it, so the
+              // playhead follows it for as long as you hold no matter where it
+              // wanders, and a sweep along the rail is a look through the
+              // match. Let go and it plays from where you stopped.
               e.preventDefault();
               seekLatest(positionFromEvent(e.clientX));
-              setDragging("scrub");
+              beginGesture("scrub", e);
             }}
+            onPointerMove={onGesturePointerMove}
+            onPointerUp={endGesture}
+            onPointerCancel={endGesture}
+            onLostPointerCapture={endGesture}
             className="relative cursor-pointer touch-none rounded-[var(--radius-element)] bg-[var(--ink-900)] select-none"
             style={{ height: RAIL_HEIGHT_PX }}
           >
@@ -1182,7 +1221,27 @@ function TrimStepContentImpl({
                       onPointerDown={(e) => {
                         e.stopPropagation();
                         e.preventDefault();
-                        startDrag(handle);
+                        startDrag(handle, e);
+                      }}
+                      // The handle captures the pointer, so these fire for the
+                      // whole drag wherever it goes. They stop at the handle:
+                      // the rail below carries the same three, and a captured
+                      // event still bubbles to it.
+                      onPointerMove={(e) => {
+                        e.stopPropagation();
+                        onGesturePointerMove(e);
+                      }}
+                      onPointerUp={(e) => {
+                        e.stopPropagation();
+                        endGesture();
+                      }}
+                      onPointerCancel={(e) => {
+                        e.stopPropagation();
+                        endGesture();
+                      }}
+                      onLostPointerCapture={(e) => {
+                        e.stopPropagation();
+                        endGesture();
                       }}
                       onKeyDown={(e) => {
                         if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") {

@@ -131,3 +131,15 @@ is the runner's. Newest entries at the bottom.
 
 1. `docs/video-pipeline-overview.md` §8's closing paragraph ("Only the `individual` tier is reachable … no membership to read") is stale: `quotaTierFor()` returns `"program"` for a verified collegiate team. Left untouched as the task instructed; wants a one-paragraph correction.
 2. STILL OPEN — render the hook's `error` on the trim step (see T3 and T4 entries); the guardrails doc now records it as a known gap, so close that sentence when it lands.
+
+## T10 · Capture the pointer on the trim rail and handles so a fast release ends the gesture — done
+
+**gate:** mechanical PASS (lint, typecheck, full test suite); completion review `VERDICT: pass` (5/5 criteria met, scope clean). widget-states: loading ✓ / empty ✓ untouched, error n/a — pointer plumbing only.
+
+**changed:** `TrimStepContent.tsx` — the window `pointermove`/`pointerup`/`pointercancel` subscription and the `[dragging]` ref-mirroring effect are both gone. `beginGesture` writes `draggingRef` synchronously in `onPointerDown`, saves and sets the body cursor, and captures the pointer (try/catch: a synthetic `PointerEvent` carries no active id and throws). `onGesturePointerMove` returns early on a null ref, so a button-less hover seeks nothing; `endGesture` reads and nulls the ref — making the second of pointerup/lostpointercapture a no-op — restores the cursor, and takes the unchanged release paths. `dragging` state now only drives paint. Rail and both handles carry the four handlers, the handles `stopPropagation()`-ing first. New `clickInOneTask` helper in `tests/trim-step-navigation.spec.ts` dispatches pointerdown+pointerup in one task (Playwright's mouse round-trips and cannot reproduce the race); two tests use it, and the "did not follow the pointer" assertion is anchored at 1.2 s against the 1.5 s a latched scrub would have reached. 18 tests × 3 = 54 pass. The subagent verified the tests are not vacuous by stubbing the release handlers and watching both fail.
+
+**follow-ups:**
+
+1. `dragCtx` now exists only so the three gesture callbacks can be `useCallback([])`; they are rebuilt each render anyway, so both could go. Its `duration` field is already dead.
+2. The four handlers are duplicated on each handle purely to `stopPropagation()`. The reviewer notes a captured event still bubbles to the rail, so the rail's own set would likely suffice — worth confirming before simplifying.
+3. `tests/trim-step-navigation.spec.ts` is ~600 lines covering jumps, keys, Set buttons, rail gestures and capture; the pointer half could be its own spec.
