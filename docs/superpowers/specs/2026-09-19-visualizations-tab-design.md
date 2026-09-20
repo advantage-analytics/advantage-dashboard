@@ -41,8 +41,8 @@ editor, and **Settings › Units** (P1i/P1j) with `formatDistance()`.
    opponent's row green means the opponent won the point.
 3. **Saved views are private by default; sharing is a choice.** In a team
    workspace any member — player or coach — can share a view team-wide
-   (`saved_views.shared`) and un-share it. Staff can also manage a view once it
-   is shared. Personal-workspace views are always private.
+   (`saved_views.shared`) and un-share it. Staff can also rename or delete a view once
+   it is shared; only its creator can make it private again. Personal-workspace views are always private.
 4. **Units moves to Phase 2** — nothing in Phase 1 reads a distance, and a
    setting that visibly does nothing should not ship. This deviates from the
    handoff's phase-1 list on purpose.
