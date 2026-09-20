@@ -53,24 +53,24 @@ export function CutMenu({
   const [open, setOpen] = useState(false);
 
   function selectCut(cut: Cut) {
-    setState({
-      ...state,
+    setState((prev) => ({
+      ...prev,
       cut,
-      chart: cut === "serve" ? state.chart : "scatter",
-      filters: carryFilters(state.filters, cut),
+      chart: cut === "serve" ? prev.chart : "scatter",
+      filters: carryFilters(prev.filters, cut),
       viewId: null,
-    });
+    }));
     setOpen(false);
   }
 
   function selectSavedView(view: SavedViewLite) {
-    setState({
-      ...state,
+    setState((prev) => ({
+      ...prev,
       cut: view.cut,
       chart: view.chart,
       filters: view.filters,
       viewId: view.id,
-    });
+    }));
     setOpen(false);
   }
 

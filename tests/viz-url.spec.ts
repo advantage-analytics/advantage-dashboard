@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
   activeFilterEntries,
+  applyVizUpdate,
   carryFilters,
   clearedFilters,
   parseVizState,
@@ -109,4 +110,59 @@ test("prototype chain pollution is rejected", () => {
   );
   expect(s.filters.ball).toBe("any");
   expect(s.filters.zone).toBe("any");
+});
+
+test("applyVizUpdate: two updaters in sequence both survive (ball then zone)", () => {
+  const start = {
+    cut: "serve" as const,
+    chart: "scatter" as const,
+    viewId: null,
+    filters: { ...EMPTY_VIZ_FILTERS },
+  };
+  const afterBall = applyVizUpdate(start, (prev) => ({
+    ...prev,
+    filters: { ...prev.filters, ball: "first" },
+  }));
+  const afterZone = applyVizUpdate(afterBall, (prev) => ({
+    ...prev,
+    filters: { ...prev.filters, zone: "t" },
+  }));
+  expect(afterZone.filters.ball).toBe("first");
+  expect(afterZone.filters.zone).toBe("t");
+});
+
+test("applyVizUpdate: an updater after clearedFilters sees cleared filters", () => {
+  const start = {
+    cut: "serve" as const,
+    chart: "scatter" as const,
+    viewId: "abc",
+    filters: {
+      ...EMPTY_VIZ_FILTERS,
+      player: "opponent" as const,
+      ball: "first" as const,
+    },
+  };
+  const cleared = applyVizUpdate(start, (prev) => clearedFilters(prev));
+  const afterZone = applyVizUpdate(cleared, (prev) => ({
+    ...prev,
+    filters: { ...prev.filters, zone: "t" },
+  }));
+  expect(afterZone.filters).toEqual({ ...EMPTY_VIZ_FILTERS, zone: "t" });
+  expect(afterZone.viewId).toBeNull();
+});
+
+test("applyVizUpdate: a plain-object update replaces wholesale", () => {
+  const start = {
+    cut: "serve" as const,
+    chart: "zones" as const,
+    viewId: "abc",
+    filters: { ...EMPTY_VIZ_FILTERS, ball: "first" as const },
+  };
+  const replacement = {
+    cut: null,
+    chart: "scatter" as const,
+    viewId: null,
+    filters: EMPTY_VIZ_FILTERS,
+  };
+  expect(applyVizUpdate(start, replacement)).toEqual(replacement);
 });

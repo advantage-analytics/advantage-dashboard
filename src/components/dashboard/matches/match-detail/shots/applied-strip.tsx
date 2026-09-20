@@ -26,15 +26,15 @@ export function AppliedStrip() {
   }
 
   function removeToken(key: keyof VizFilters) {
-    setState({
-      ...state,
-      filters: { ...state.filters, [key]: EMPTY_VIZ_FILTERS[key] },
+    setState((prev) => ({
+      ...prev,
+      filters: { ...prev.filters, [key]: EMPTY_VIZ_FILTERS[key] },
       viewId: null,
-    });
+    }));
   }
 
   function clearAll() {
-    setState(clearedFilters(state));
+    setState((prev) => clearedFilters(prev));
   }
 
   return (

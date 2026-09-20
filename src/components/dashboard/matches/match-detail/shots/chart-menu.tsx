@@ -22,7 +22,7 @@ export function ChartMenu() {
   const [open, setOpen] = useState(false);
 
   function selectChart(chart: Chart) {
-    setState({ ...state, chart, viewId: null });
+    setState((prev) => ({ ...prev, chart, viewId: null }));
     setOpen(false);
   }
 

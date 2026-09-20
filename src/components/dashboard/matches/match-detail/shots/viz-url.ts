@@ -57,6 +57,21 @@ type OptionKey = keyof typeof OPTIONS;
 /* ── Public API ─────────────────────────────────────────────────────────── */
 
 /**
+ * The composition rule `use-viz-state.ts` builds its `setState` on: given the
+ * latest INTENDED state (not necessarily what's rendered or in the URL yet),
+ * apply either a plain replacement or an updater function and return the
+ * result. Pulled out here, pure, so a spec can exercise the composition
+ * itself without React or `next/navigation` — a plain object always replaces
+ * wholesale; an updater always sees `prev`, never a stale render-time value.
+ */
+export function applyVizUpdate(
+  prev: VizState,
+  update: VizState | ((prev: VizState) => VizState),
+): VizState {
+  return typeof update === "function" ? update(prev) : update;
+}
+
+/**
  * URLSearchParams → VizState. Garbage values read as defaults.
  * `chart=zones` with a non-serve cut parses as `scatter`.
  */

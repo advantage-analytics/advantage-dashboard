@@ -57,19 +57,21 @@ export function FiltersPopover({
   const applied = activeFilterEntries(state).length;
 
   function select<K extends keyof VizFilters>(key: K, value: VizFilters[K]) {
-    const isActive = state.filters[key] === value;
-    setState({
-      ...state,
-      filters: {
-        ...state.filters,
-        [key]: isActive ? EMPTY_VIZ_FILTERS[key] : value,
-      },
-      viewId: null,
+    setState((prev) => {
+      const isActive = prev.filters[key] === value;
+      return {
+        ...prev,
+        filters: {
+          ...prev.filters,
+          [key]: isActive ? EMPTY_VIZ_FILTERS[key] : value,
+        },
+        viewId: null,
+      };
     });
   }
 
   function clearAll() {
-    setState(clearedFilters(state));
+    setState((prev) => clearedFilters(prev));
   }
 
   const resultKeys = (

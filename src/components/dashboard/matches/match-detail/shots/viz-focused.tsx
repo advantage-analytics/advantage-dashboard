@@ -82,16 +82,16 @@ export function VizFocused({
   const showZoneCard = cut === "serve";
 
   function backToWall() {
-    setState({
+    setState(() => ({
       cut: null,
       chart: "scatter",
       filters: EMPTY_VIZ_FILTERS,
       viewId: null,
-    });
+    }));
   }
 
   function clearFilters() {
-    setState({ ...state, filters: EMPTY_VIZ_FILTERS, viewId: null });
+    setState((prev) => ({ ...prev, filters: EMPTY_VIZ_FILTERS, viewId: null }));
   }
 
   return (
@@ -230,7 +230,7 @@ export function VizFocused({
         savedViews={savedViews}
         workspaceKind={workspaceKind}
         workspaceName={workspaceName}
-        onSaved={(view) => setState({ ...state, viewId: view.id })}
+        onSaved={(view) => setState((prev) => ({ ...prev, viewId: view.id }))}
       />
     </div>
   );
