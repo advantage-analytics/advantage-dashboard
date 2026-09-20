@@ -15,7 +15,7 @@ import {
   type VizFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import { parseVizState } from "@/components/dashboard/matches/match-detail/shots/viz-url";
-import type { WorkspaceKind } from "@/lib/workspace/types";
+import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
 
 export const SAVED_VIEW_NAME_MAX = 60;
 
@@ -203,6 +203,40 @@ export function resolveSharedFlag(
   requested: boolean | undefined,
 ): boolean {
   return kind === "personal" ? false : Boolean(requested);
+}
+
+/**
+ * Whether `workspaceRole` may manage (Part B: rename/delete/share/reorder)
+ * this view — the client-side mirror of `saved_views` RLS's UPDATE/DELETE
+ * shape ("mine, or shared + staff"): the creator always may; staff (anyone
+ * but `"player"`) may also manage a view that is `shared`. Read-only for
+ * everyone else. `saved-views-band.tsx` uses this to decide whether "Manage
+ * views" draws at all — the button is withheld outright when nobody viewing
+ * the band could act on anything in it.
+ */
+export function canManageSavedView(
+  view: { mine: boolean; shared: boolean },
+  workspaceRole: ProgramRole,
+): boolean {
+  return view.mine || (view.shared && workspaceRole !== "player");
+}
+
+/**
+ * Whether `name` collides with an existing view, compared case-insensitively
+ * on the trimmed form — the same comparison the database's
+ * `saved_views_private_name_key` / shared unique index make, so this can
+ * never diverge from what `createSavedView`'s `duplicate_name` will actually
+ * reject. `existingNames` must already be scoped to the right pool by the
+ * caller (the workspace's shared names, or the viewer's own private ones —
+ * see `save-view-dialog.tsx`); this function does no scoping of its own.
+ */
+export function hasDuplicateViewName(
+  name: string,
+  existingNames: readonly string[],
+): boolean {
+  const normalized = name.trim().toLowerCase();
+  if (normalized.length === 0) return false;
+  return existingNames.some((n) => n.trim().toLowerCase() === normalized);
 }
 
 /** `sort_order`'s safe range for a re-inserted row — see `restoreSavedView`. */

@@ -20,17 +20,24 @@ import type { SavedViewLite } from "./viz-labels";
 export function VizToolbar({
   savedViews,
   onSaveRequest,
+  cutMenuTriggerRef,
   filtersSlot,
   stripSlot,
 }: {
   savedViews: SavedViewLite[];
   onSaveRequest?: () => void;
+  /** Passed straight through to `CutMenu` — see its own doc comment. */
+  cutMenuTriggerRef?: React.Ref<HTMLButtonElement>;
   filtersSlot?: React.ReactNode;
   stripSlot?: React.ReactNode;
 }) {
   return (
     <div className="flex items-center gap-3">
-      <CutMenu savedViews={savedViews} onSaveRequest={onSaveRequest} />
+      <CutMenu
+        savedViews={savedViews}
+        onSaveRequest={onSaveRequest}
+        triggerRef={cutMenuTriggerRef}
+      />
       <ChartMenu />
       {stripSlot != null && (
         <>

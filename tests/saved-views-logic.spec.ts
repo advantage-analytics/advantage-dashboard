@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
+  canManageSavedView,
   filtersToParams,
+  hasDuplicateViewName,
   normalizeOrderedIds,
   normalizeSavedViewName,
   resolveCopyName,
@@ -266,4 +268,47 @@ test("normalizeOrderedIds accepts exactly 200 ids", () => {
 test("normalizeOrderedIds rejects a non-array input", () => {
   expect(normalizeOrderedIds(null as unknown as string[])).toBeNull();
   expect(normalizeOrderedIds(undefined as unknown as string[])).toBeNull();
+});
+
+/* ── canManageSavedView ────────────────────────────────────────────────── */
+
+test("canManageSavedView: the creator may always manage their own view", () => {
+  expect(canManageSavedView({ mine: true, shared: false }, "player")).toBe(
+    true,
+  );
+  expect(canManageSavedView({ mine: true, shared: true }, "player")).toBe(true);
+});
+
+test("canManageSavedView: staff may manage a shared view they did not create", () => {
+  expect(canManageSavedView({ mine: false, shared: true }, "coach")).toBe(true);
+  expect(canManageSavedView({ mine: false, shared: true }, "owner")).toBe(true);
+  expect(canManageSavedView({ mine: false, shared: true }, "staff")).toBe(true);
+});
+
+test("canManageSavedView: a player may not manage someone else's shared view", () => {
+  expect(canManageSavedView({ mine: false, shared: true }, "player")).toBe(
+    false,
+  );
+});
+
+test("canManageSavedView: nobody may manage someone else's private view", () => {
+  expect(canManageSavedView({ mine: false, shared: false }, "owner")).toBe(
+    false,
+  );
+});
+
+/* ── hasDuplicateViewName ──────────────────────────────────────────────── */
+
+test("hasDuplicateViewName matches case-insensitively on the trimmed form", () => {
+  expect(hasDuplicateViewName("Break Points", ["break points"])).toBe(true);
+  expect(hasDuplicateViewName("  break points  ", ["Break Points"])).toBe(true);
+});
+
+test("hasDuplicateViewName is false for a non-colliding name", () => {
+  expect(hasDuplicateViewName("Deuce side", ["Break points"])).toBe(false);
+});
+
+test("hasDuplicateViewName is false for an empty/whitespace name", () => {
+  expect(hasDuplicateViewName("   ", ["Break points"])).toBe(false);
+  expect(hasDuplicateViewName("", [])).toBe(false);
 });

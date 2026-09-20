@@ -8,7 +8,7 @@ import {
   type ReportView,
 } from "@/components/dashboard/matches/match-detail/report-view";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
-import type { ProgramRole } from "@/lib/workspace/types";
+import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
 
 /**
  * The match report's one context: state, actions and meta (settled Statistics
@@ -61,6 +61,15 @@ export interface MatchReportMeta {
   savedViews: SavedViewRow[];
   /** The active workspace's `Workspace.role` — `canManage(view)`'s other half. */
   workspaceRole: ProgramRole;
+  /**
+   * The active workspace's `Workspace.kind`/`Workspace.name` (Task 9) —
+   * `save-view-dialog.tsx`'s "Share with team" row only exists in a team
+   * workspace and its micro copy names it. `"personal"`/`""` when there is
+   * no active workspace, same fallback `page.tsx` already uses for
+   * `workspaceRole`.
+   */
+  workspaceKind: WorkspaceKind;
+  workspaceName: string;
 }
 
 export interface MatchReportContextValue {
@@ -91,6 +100,8 @@ export function MatchReportProvider({
   statsPublished,
   savedViews,
   workspaceRole,
+  workspaceKind,
+  workspaceName,
   children,
 }: MatchReportProviderProps) {
   const pathname = usePathname();
@@ -136,6 +147,8 @@ export function MatchReportProvider({
       statsPublished,
       savedViews,
       workspaceRole,
+      workspaceKind,
+      workspaceName,
     }),
     [
       matchId,
@@ -145,6 +158,8 @@ export function MatchReportProvider({
       statsPublished,
       savedViews,
       workspaceRole,
+      workspaceKind,
+      workspaceName,
     ],
   );
 

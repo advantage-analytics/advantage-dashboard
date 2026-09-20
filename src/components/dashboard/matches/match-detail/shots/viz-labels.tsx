@@ -28,6 +28,19 @@ export const CHART_LABEL: Record<Chart, string> = {
 };
 
 /**
+ * At most `max` pill labels, with a trailing `"+n"` standing in for the
+ * rest — `saved-views-band.tsx`'s tile pill row, so a view with many active
+ * filters still draws a fixed-height tile rather than growing with the
+ * filter count. Pure and unrelated to `activeFilterEntries` (`viz-url.ts`),
+ * which decides WHICH labels apply; this only decides how many of an
+ * already-resolved list to show.
+ */
+export function truncatePillLabels(labels: string[], max = 3): string[] {
+  if (labels.length <= max) return labels;
+  return [...labels.slice(0, max), `+${labels.length - max}`];
+}
+
+/**
  * A saved view as the menu needs it — just enough to render a row and switch
  * to it. The full saved-view record (with its id's storage/ownership) lives
  * wherever views are persisted; this is the read shape.
@@ -58,6 +71,7 @@ export function VizMenuTrigger({
   open,
   haspopup = "menu",
   className,
+  ref,
   ...buttonProps
 }: {
   icon: LucideIcon;
@@ -65,6 +79,13 @@ export function VizMenuTrigger({
   open: boolean;
   haspopup?: "menu" | "dialog";
   className?: string;
+  /**
+   * React 19 ref-as-prop — `save-view-dialog.tsx` anchors under this exact
+   * button (`cut-menu.tsx` forwards its own `triggerRef` here) rather than
+   * hand-rolling a second position. Unused by `chart-menu.tsx`/
+   * `filters-popover.tsx`, which have nothing anchoring to them.
+   */
+  ref?: React.Ref<HTMLButtonElement>;
 } & Omit<
   React.ButtonHTMLAttributes<HTMLButtonElement>,
   "type" | "aria-expanded" | "aria-haspopup"
@@ -72,6 +93,7 @@ export function VizMenuTrigger({
   const Chevron = open ? ChevronUp : ChevronDown;
   return (
     <button
+      ref={ref}
       type="button"
       {...buttonProps}
       aria-haspopup={haspopup}

@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import type { SavedViewRow } from "@/lib/data/saved-views-server";
+import type { WorkspaceKind } from "@/lib/workspace/types";
 import { CourtArt } from "./court-art";
 import { ZoneCard } from "./zone-card";
 import { VizToolbar } from "./viz-toolbar";
@@ -15,9 +17,10 @@ import {
   type Cut,
 } from "./viz-model";
 import { activeFilterEntries } from "./viz-url";
-import { CUT_LABEL, type SavedViewLite } from "./viz-labels";
+import { CUT_LABEL } from "./viz-labels";
 import { AppliedStrip } from "./applied-strip";
 import { FiltersPopover } from "./filters-popover";
+import { SaveViewDialog } from "./save-view-dialog";
 
 /**
  * The focused court view (Task 5): the toolbar row, then a wide court card
@@ -40,15 +43,25 @@ const LEGEND_CAPTION: Record<Cut, string> = {
 export function VizFocused({
   savedViews,
   savedViewsBand,
-  onSaveRequest,
+  workspaceKind,
+  workspaceName,
 }: {
-  savedViews: SavedViewLite[];
+  savedViews: SavedViewRow[];
   savedViewsBand?: ReactNode;
-  onSaveRequest?: () => void;
+  /** Save-dialog needs (Task 9): "Share with team" only exists in a team
+   * workspace, and its micro copy names the workspace it shares into. */
+  workspaceKind: WorkspaceKind;
+  workspaceName: string;
 }) {
   const { points } = useMatchData();
   const { you, opp } = useMatchSides();
   const { state, setState } = useVizState();
+
+  // Everyone — including players — may save a view, so this is always on;
+  // the ref is what lets the dialog anchor under the SAME button that opens
+  // the cut menu, via `VizToolbar`'s `cutMenuTriggerRef` pass-through.
+  const cutMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
 
   const cut = state.cut;
 
@@ -85,7 +98,8 @@ export function VizFocused({
     <div className="flex flex-col gap-4">
       <VizToolbar
         savedViews={savedViews}
-        onSaveRequest={onSaveRequest}
+        onSaveRequest={() => setSaveDialogOpen(true)}
+        cutMenuTriggerRef={cutMenuTriggerRef}
         filtersSlot={
           <FiltersPopover
             count={result.count}
@@ -197,6 +211,19 @@ export function VizFocused({
       </div>
 
       {savedViewsBand}
+
+      <SaveViewDialog
+        open={saveDialogOpen}
+        onOpenChange={setSaveDialogOpen}
+        anchorRef={cutMenuTriggerRef}
+        cut={cut}
+        chart={state.chart}
+        filters={state.filters}
+        savedViews={savedViews}
+        workspaceKind={workspaceKind}
+        workspaceName={workspaceName}
+        onSaved={(view) => setState({ ...state, viewId: view.id })}
+      />
     </div>
   );
 }

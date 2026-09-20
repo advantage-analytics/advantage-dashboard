@@ -135,6 +135,12 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // feeds `canManage(view)` — an authorization input should never default
   // permissively.
   const workspaceRole = activeWorkspace?.role ?? "player";
+  // Same fallback shape as `workspaceRole` above — the same lost-session
+  // race, and `save-view-dialog.tsx`'s "Share with team" row keys off both:
+  // it only renders in a team workspace, so a "personal" default keeps it
+  // hidden rather than showing a row that names an empty workspace.
+  const workspaceKind = activeWorkspace?.kind ?? "personal";
+  const workspaceName = activeWorkspace?.name ?? "";
 
   const { match, statsResult, insights, kpiHistory } = data;
 
@@ -221,6 +227,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
         // the match even has anything to visualize.
         savedViews={[]}
         workspaceRole={workspaceRole}
+        workspaceKind={workspaceKind}
+        workspaceName={workspaceName}
       >
         <MatchReportFrame>
           <MatchReportRail>
@@ -252,6 +260,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
         statsPublished={statsPublished}
         savedViews={savedViews}
         workspaceRole={workspaceRole}
+        workspaceKind={workspaceKind}
+        workspaceName={workspaceName}
       >
         <MatchReportFrame>
           <MatchReportRail>

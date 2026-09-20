@@ -38,9 +38,16 @@ function filterCountLabel(cut: Cut, chart: Chart, filters: VizFilters): string {
 export function CutMenu({
   savedViews,
   onSaveRequest,
+  triggerRef,
 }: {
   savedViews: SavedViewLite[];
   onSaveRequest?: () => void;
+  /**
+   * Forwarded to the trigger button so `save-view-dialog.tsx` can anchor
+   * under it (React 19 ref-as-prop, `viz-labels.tsx`'s `VizMenuTrigger`).
+   * Unused when nothing anchors to this menu.
+   */
+  triggerRef?: React.Ref<HTMLButtonElement>;
 }) {
   const { state, setState } = useVizState();
   const [open, setOpen] = useState(false);
@@ -79,7 +86,12 @@ export function CutMenu({
       align="start"
       label="View"
       trigger={
-        <VizMenuTrigger icon={triggerIcon} label={triggerLabel} open={open} />
+        <VizMenuTrigger
+          icon={triggerIcon}
+          label={triggerLabel}
+          open={open}
+          ref={triggerRef}
+        />
       }
     >
       {savedViews.length > 0 && (

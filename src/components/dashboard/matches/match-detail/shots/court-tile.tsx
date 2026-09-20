@@ -14,6 +14,7 @@ import type { Cut, VizDot } from "./viz-model";
 export function CourtTile({
   playerName,
   name,
+  nameAdornment,
   pills,
   countLabel,
   cut,
@@ -23,6 +24,8 @@ export function CourtTile({
 }: {
   playerName: string;
   name: string;
+  /** A small glyph beside `name` — the saved-views band's `users` "shared" mark. */
+  nameAdornment?: ReactNode;
   pills: string[];
   countLabel: string;
   cut: Cut;
@@ -46,12 +49,15 @@ export function CourtTile({
         {overlay}
       </div>
       <div className="flex flex-col gap-2 px-4 pt-[14px] pb-[15px]">
-        <p
-          className="truncate text-[16px] leading-tight font-normal"
-          style={{ letterSpacing: "-0.2px", color: "var(--ink-900)" }}
-        >
-          {name}
-        </p>
+        <span className="flex min-w-0 items-center gap-1.5">
+          <p
+            className="truncate text-[16px] leading-tight font-normal"
+            style={{ letterSpacing: "-0.2px", color: "var(--ink-900)" }}
+          >
+            {name}
+          </p>
+          {nameAdornment}
+        </span>
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             {pills.map((pill) => (

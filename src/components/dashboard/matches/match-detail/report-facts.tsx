@@ -6,6 +6,7 @@ import { Calendar, CircleCheck, Swords } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { shortMonthDate } from "@/components/dashboard/matches/match-detail/format-clock";
 import { scopeMeta } from "@/components/dashboard/matches/match-detail/set-scope";
+import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { cn } from "@/lib/utils";
 
 /** 13px lucide glyph at stroke 1.5 in ink-700 — the frame's fact icon. */
@@ -26,11 +27,18 @@ const FACT_ICON = "size-[13px] shrink-0 text-[var(--ink-700)]";
  * The games count is the sum of both players' games, taken from the score
  * through `scopeMeta` (the whole-match scope): a total has no side to get
  * wrong (guardrails §4 governs who a figure belongs to, not a sum of both).
+ *
+ * Task 9 step 4: the same fact also names how many saved views the
+ * Visualizations tab holds — `` ` · ${n} saved views` `` appended when
+ * `n > 0`, nothing when there are none, so a match with no saved views
+ * doesn't advertise a feature it has nothing in.
  */
 export function MatchReportFacts() {
   const { match, points } = useMatchData();
+  const { meta } = useMatchReport();
 
   const { games } = scopeMeta(match.score.sets, points, null);
+  const savedViewCount = meta.savedViews.length;
 
   return (
     <div className="mt-[9px] flex h-[18px] min-w-0 flex-nowrap items-center gap-3.5">
@@ -46,6 +54,7 @@ export function MatchReportFacts() {
           }
         >
           {points.length} points · {games} games
+          {savedViewCount > 0 ? ` · ${savedViewCount} saved views` : ""}
         </Fact>
       ) : null}
 
