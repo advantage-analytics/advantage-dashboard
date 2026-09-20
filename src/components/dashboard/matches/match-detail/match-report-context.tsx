@@ -7,6 +7,8 @@ import {
   reportViewQuery,
   type ReportView,
 } from "@/components/dashboard/matches/match-detail/report-view";
+import type { SavedViewRow } from "@/lib/data/saved-views-server";
+import type { ProgramRole } from "@/lib/workspace/types";
 
 /**
  * The match report's one context: state, actions and meta (settled Statistics
@@ -48,6 +50,17 @@ export interface MatchReportMeta {
   isDerived: boolean;
   /** Both `match_stats` rows present. */
   statsPublished: boolean;
+  /**
+   * Visualizations-tab saved views (Task 8), loaded once in `page.tsx` via
+   * `getSavedViews(activeWorkspace.id)` and threaded down here rather than
+   * prop-drilled through `MatchReportWhen`/`ShotsTab`'s dynamic import — this
+   * is the one place `shots-tab.tsx` already reads other page-level meta
+   * from. Empty on the awaiting-analysis short-circuit, which never renders
+   * `ShotsTab`.
+   */
+  savedViews: SavedViewRow[];
+  /** The active workspace's `Workspace.role` — `canManage(view)`'s other half. */
+  workspaceRole: ProgramRole;
 }
 
 export interface MatchReportContextValue {
@@ -76,6 +89,8 @@ export function MatchReportProvider({
   canCompare,
   isDerived,
   statsPublished,
+  savedViews,
+  workspaceRole,
   children,
 }: MatchReportProviderProps) {
   const pathname = usePathname();
@@ -113,8 +128,24 @@ export function MatchReportProvider({
   );
 
   const meta = useMemo<MatchReportMeta>(
-    () => ({ matchId, summary, canCompare, isDerived, statsPublished }),
-    [matchId, summary, canCompare, isDerived, statsPublished],
+    () => ({
+      matchId,
+      summary,
+      canCompare,
+      isDerived,
+      statsPublished,
+      savedViews,
+      workspaceRole,
+    }),
+    [
+      matchId,
+      summary,
+      canCompare,
+      isDerived,
+      statsPublished,
+      savedViews,
+      workspaceRole,
+    ],
   );
 
   const value = useMemo<MatchReportContextValue>(

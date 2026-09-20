@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 
 import { getMatchDetailData } from "@/lib/data/match-detail-server";
+import { getSavedViews } from "@/lib/data/saved-views-server";
 import { hasComparisonBaseline } from "@/lib/data/match-stats-server";
+import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import {
   isAnalysisFailed,
   isInFlight,
@@ -84,7 +86,10 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // structurally cannot: whether an attachment EXISTS (a null `video` is not
   // the same fact), and which of Add / Replace / Adjust this viewer may take.
   // Both are server decisions — see `match-film-entry-server.ts`.
-  const [data, jobs, video, filmEntry] = await Promise.all([
+  // `getWorkspaceContext()` is `cache()`-wrapped and the layout above this
+  // page already called it once to gate sign-in, so this rides the same
+  // request-scoped result rather than a second query.
+  const [data, jobs, video, filmEntry, workspace] = await Promise.all([
     getMatchDetailData(matchId),
     createClient().then(async (supabase) => {
       // Ask the vendor about jobs that look stuck BEFORE reading, so what the
@@ -114,9 +119,18 @@ export default async function MatchDetailPage({ params }: PageProps) {
     }),
     getMatchVideo(matchId),
     getMatchFilmEntry(matchId),
+    getWorkspaceContext(),
   ]);
 
   if (!data) notFound();
+
+  // The layout above this route already redirects a signed-out visitor to
+  // /login before this page ever renders, so `workspace` is only null here
+  // if the session expired between the two — treated as a personal-workspace
+  // reader with no saved views rather than a 404, since the rest of the page
+  // still has everything it needs from `data`.
+  const activeWorkspace = workspace?.active ?? null;
+  const workspaceRole = activeWorkspace?.role ?? "owner";
 
   const { match, statsResult, insights, kpiHistory } = data;
 
@@ -167,6 +181,14 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const isAwaitingAnalysis =
     isInFlight(analysis.status) || isAnalysisFailed(analysis.status);
 
+  // Fetched only once there's a view switcher to show it in — the
+  // awaiting-analysis branch below never renders `ShotsTab`, so a match still
+  // analysing skips this query entirely.
+  const savedViews =
+    !isAwaitingAnalysis && activeWorkspace
+      ? await getSavedViews(activeWorkspace.id)
+      : [];
+
   // The rail's foot on both variants: the share popover opening upward from
   // its full-width trigger (F1).
   const share = (
@@ -190,6 +212,11 @@ export default async function MatchDetailPage({ params }: PageProps) {
         canCompare={false}
         isDerived={isDerived}
         statsPublished={false}
+        // No view switcher on this branch — ShotsTab never renders — so an
+        // empty list here costs nothing and skips fetching saved views before
+        // the match even has anything to visualize.
+        savedViews={[]}
+        workspaceRole={workspaceRole}
       >
         <MatchReportFrame>
           <MatchReportRail>
@@ -219,6 +246,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
         canCompare={hasComparisonBaseline(kpiHistory)}
         isDerived={isDerived}
         statsPublished={statsPublished}
+        savedViews={savedViews}
+        workspaceRole={workspaceRole}
       >
         <MatchReportFrame>
           <MatchReportRail>

@@ -3,6 +3,7 @@
 import { VizWall } from "@/components/dashboard/matches/match-detail/shots/viz-wall";
 import { VizFocused } from "@/components/dashboard/matches/match-detail/shots/viz-focused";
 import { useVizState } from "@/components/dashboard/matches/match-detail/shots/use-viz-state";
+import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 
 /**
  * The Visualizations tab's panel. `?cut=` absent (or unrecognised) renders
@@ -15,12 +16,23 @@ import { useVizState } from "@/components/dashboard/matches/match-detail/shots/u
  * pass the resolved side's own `isPlayer1` down to `computeViz`. Nothing
  * below this reads player1/player2 off the match.
  *
- * `savedViews` is empty until the saved-views feature lands (out of scope
- * here) — `VizFocused`'s "Save this view…" row stays hidden without
- * `onSaveRequest`, and the "Saved views" group stays hidden without entries.
+ * `savedViews` (Task 8) comes from `useMatchReport().meta` — loaded once in
+ * `page.tsx` via `getSavedViews()` and threaded through `MatchReportProvider`
+ * rather than fetched here. `SavedViewRow` is structurally a `SavedViewLite`
+ * (id/name/cut/chart/filters plus `shared`/`mine`), so it needs no mapping to
+ * reach `VizFocused`'s prop. This task only wires the read side: the "Saved
+ * views" group in the cut menu populates and a saved view loads when picked.
+ * `onSaveRequest` stays unset — the Save dialog and Manage UI (which would
+ * need `mine`/`shared`/`workspaceRole` to decide the ⋯ menu) are the next
+ * task, so "Save this view…" stays hidden for now.
  */
 
 export function ShotsTab() {
   const { state } = useVizState();
-  return state.cut === null ? <VizWall /> : <VizFocused savedViews={[]} />;
+  const { meta } = useMatchReport();
+  return state.cut === null ? (
+    <VizWall />
+  ) : (
+    <VizFocused savedViews={meta.savedViews} />
+  );
 }
