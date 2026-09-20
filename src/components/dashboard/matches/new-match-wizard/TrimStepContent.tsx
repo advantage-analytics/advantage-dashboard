@@ -6,17 +6,30 @@
  * The one screen where the file is the interface. A 16:9 player on ink-900
  * with a row of 28px controls in a bottom gradient — the jumps and frame steps
  * ranged longest-outward around play, then mute — and the playhead time in a
- * mono capsule; beneath it the filmstrip,
- * trimmed-out ends washed in page tone, the kept window one 2px Signal Blue
- * bracket whose ends are the handles; under it the two cut readouts and one
- * line of key chips — I and O move a cut to wherever the video already is;
- * then the two camera questions
+ * mono capsule; beneath it the filmstrip, trimmed-out ends washed in page
+ * tone, the kept window one 2px Signal Blue bracket whose ends are the
+ * handles; under it the two cut readouts and one line of key chips — I and O
+ * move a cut to wherever the video already is; then the two camera questions
  * the vendor refuses a job without. Design: Upload Wizard v5, frame 3c.
  *
  * Everything runs against the LOCAL file through an object URL, so trimming
- * is instant and nothing leaves the browser. Holding a handle zooms the window
- * it spans: these clips are hours long, and at full extent one pixel is
- * several seconds — not a resolution you can place a cut against a serve with.
+ * is instant and nothing leaves the browser.
+ *
+ * ── What the rail does, and what it doesn't ─────────────────────────────────
+ * A press anywhere on it plays from there — the rail is the only place that
+ * says "show me this part of the match", and watching is how you tell whether
+ * the first serve sits inside the window. The bracket is a MARK, not a
+ * control: it cannot be dragged as a whole, so there is no gesture that moves
+ * both cuts at once and no way to shift a placed window by accident. Only the
+ * two handles drag.
+ *
+ * The rail once zoomed ~14x around a handle you held still for 200ms, and
+ * panned when you dragged near an edge. It rescaled the coordinate system
+ * mid-gesture — slow down to be precise and the whole rail jumped, which read
+ * as a bug rather than as help, and the animation ran setState every frame on
+ * top of the drag's own. Precision lives in the keyboard now: a focused handle
+ * arrows one frame at a time (a second with Shift), and I/O put a cut exactly
+ * where the playhead is after you have scrubbed to the frame you want.
  *
  * ── Why a drag is local until you let go ────────────────────────────────────
  * A drag used to write every pointer sample into the wizard's form state and
@@ -85,28 +98,10 @@ export interface TrimStepContentProps {
 
 type Handle = "start" | "end";
 
-/** What a press on the rail grabbed: a cut, or the kept window as a whole. */
-type Grab = Handle | "window";
-
 const HANDLES: readonly Handle[] = ["start", "end"];
 
 /** Rail height in CSS pixels. Also sets the thumbnail size. */
 const RAIL_HEIGHT_PX = 52;
-
-/** How far the rail zooms in when precision engages. */
-const PRECISION_ZOOM = 14;
-
-/** Never zoom tighter than this — below it the strip is all one frame. */
-const MIN_PRECISION_SPAN_SECONDS = 45;
-
-/** Pointer must rest this long before the rail zooms. See onMove. */
-const HOLD_TO_ZOOM_MS = 200;
-
-const ZOOM_ANIM_MS = 260;
-
-/** Drag within this fraction of either edge pans the zoomed window. */
-const AUTOPAN_EDGE = 0.06;
-const AUTOPAN_STEP = 0.04;
 
 /** Floating frame preview. Height follows the video's own aspect ratio. */
 const PREVIEW_WIDTH_PX = 132;
@@ -151,11 +146,6 @@ function JumpButton({
 }
 
 const controlCls = `inline-flex size-7 items-center justify-center rounded-[var(--radius-element)] text-white transition-colors duration-150 hover:bg-white/10 ${focusRingCls}`;
-
-interface ViewWindow {
-  start: number;
-  span: number;
-}
 
 /**
  * One of a pair of title-only check-dot cards, 40px tall. The dot is the
@@ -257,16 +247,21 @@ function TrimStepContentImpl({
   const railRef = useRef<HTMLDivElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [dragging, setDragging] = useState<Grab | null>(null);
+  const [dragging, setDragging] = useState<Handle | null>(null);
   // Where the drag has taken the cuts so far — shown live, committed to the
   // form on release. Null while nothing is being dragged.
   const [live, setLive] = useState<{ start: number; end: number } | null>(null);
-  const [precision, setPrecision] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [railWidth, setRailWidth] = useState(0);
 
   const duration = probe?.durationSeconds ?? 0;
+  // Mirrored for the imperative playhead and the window-level pointer
+  // handlers, which must not re-subscribe when a new file changes the length.
+  const durationRef = useRef(duration);
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
   const committedStart = startSeconds ?? 0;
   const committedEnd = endSeconds ?? duration;
   // What the rail draws: the drag in progress, else the form's cuts.
@@ -277,21 +272,6 @@ function TrimStepContentImpl({
 
   /** One frame, when we know the rate. Falls back to a reasonable nudge. */
   const frameStep = probe?.fps ? 1 / probe.fps : 0.1;
-
-  // The slice of the clip the rail spans, as an override on top of "the whole
-  // video". Null is the resting state rather than a copy of the duration, so a
-  // new file needs no reset — the derived window follows it.
-  const [zoom, setZoom] = useState<ViewWindow | null>(null);
-  const viewRef = useRef<ViewWindow>({ start: 0, span: 0 });
-  const rafRef = useRef<number | null>(null);
-
-  const view = useMemo<ViewWindow>(() => {
-    if (!zoom || duration <= 0) return { start: 0, span: duration };
-    // Clamped rather than trusted: a zoom left over from a previous, longer
-    // file would otherwise scroll the rail off the end of a shorter one.
-    const span = Math.min(zoom.span, duration);
-    return { start: Math.max(0, Math.min(duration - span, zoom.start)), span };
-  }, [zoom, duration]);
 
   const filmstrip = useVideoFilmstrip(videoFile, duration);
 
@@ -306,7 +286,7 @@ function TrimStepContentImpl({
   // Mirrors `dragging` for the imperative playhead and the seek callbacks,
   // which must not re-subscribe on every drag. Declared before the callbacks
   // that read it; written in an effect below, never during render.
-  const draggingRef = useRef<Grab | null>(null);
+  const draggingRef = useRef<Handle | null>(null);
   useEffect(() => {
     draggingRef.current = dragging;
   }, [dragging]);
@@ -338,33 +318,19 @@ function TrimStepContentImpl({
     if (clock) clock.textContent = formatTimecode(playheadRef.current);
     const el = playheadElRef.current;
     if (!el) return;
-    const { start: viewStart, span } = viewRef.current;
-    const pct = span > 0 ? ((playheadRef.current - viewStart) / span) * 100 : 0;
+    const total = durationRef.current;
+    const pct = total > 0 ? (playheadRef.current / total) * 100 : 0;
     el.style.left = `${pct}%`;
-    // Hidden rather than clamped when the playhead falls outside the zoomed
-    // window — pinning it to an edge reads as "the playhead is here", which is
-    // exactly wrong. It stays visible through a drag: the frame on screen is
-    // the one the cut is landing on, and hiding the only marker that says
-    // where the video actually is left the drag looking unanchored.
-    el.style.opacity = pct < 0 || pct > 100 ? "0" : "1";
+    // Hidden while a cut is being dragged: the handle and its frame preview
+    // are the reference then, and a second marker chasing them a decode
+    // behind reads as jitter rather than as information.
+    el.style.opacity = pct < 0 || pct > 100 || draggingRef.current ? "0" : "1";
   }, []);
 
-  // Mirror `view` into a ref for the imperative playhead and the window-level
-  // pointer handlers. Written in an effect, never during render.
-  useEffect(() => {
-    viewRef.current = view;
-    applyPlayhead();
-  }, [view, applyPlayhead]);
-
-  // A new source rewinds the playhead and cancels any zoom still animating.
+  // A new source rewinds the playhead.
   useEffect(() => {
     playheadRef.current = 0;
-    return () => {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-    };
+    return () => {};
   }, [videoFile]);
 
   // Rail width drives how many thumbnails tile across it.
@@ -378,37 +344,6 @@ function TrimStepContentImpl({
     observer.observe(el);
     return () => observer.disconnect();
   }, [videoFile]);
-
-  /**
-   * Ease the rail window to a new span.
-   *
-   * `settleToRest` lands on null rather than on the target numbers, so zooming
-   * back out returns the window to "however long this video is" instead of
-   * pinning a stale copy of the duration.
-   */
-  const animateView = useCallback(
-    (toStart: number, toSpan: number, settleToRest = false) => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-      const from = viewRef.current;
-      const startedAt = performance.now();
-      const tick = (now: number) => {
-        const k = Math.min(1, (now - startedAt) / ZOOM_ANIM_MS);
-        if (k < 1) {
-          const eased = 1 - Math.pow(1 - k, 3);
-          setZoom({
-            start: from.start + (toStart - from.start) * eased,
-            span: from.span + (toSpan - from.span) * eased,
-          });
-          rafRef.current = requestAnimationFrame(tick);
-          return;
-        }
-        setZoom(settleToRest ? null : { start: toStart, span: toSpan });
-        rafRef.current = null;
-      };
-      rafRef.current = requestAnimationFrame(tick);
-    },
-    [],
-  );
 
   const seekTo = useCallback(
     (time: number) => {
@@ -445,8 +380,7 @@ function TrimStepContentImpl({
     if (!rail) return 0;
     const rect = rail.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const { start: viewStart, span } = viewRef.current;
-    return viewStart + ratio * span;
+    return ratio * durationRef.current;
   }, []);
 
   /** Single clamp for both cuts. */
@@ -478,33 +412,17 @@ function TrimStepContentImpl({
   // the rail redraws from it and the video is asked for that frame. Nothing
   // reaches the form until release.
   const liveRef = useRef<{ start: number; end: number } | null>(null);
-  const grabOffsetRef = useRef(0);
   const liveRafRef = useRef<number | null>(null);
   const applyDrag = useCallback(
-    (grab: Grab, time: number) => {
+    (grab: Handle, time: number) => {
       const current = liveRef.current ?? {
         start: committedStart,
         end: committedEnd,
       };
-      let next: { start: number; end: number };
-      if (grab === "window") {
-        // Shift both cuts by the same amount, stopped by the file's ends.
-        const span = current.end - current.start;
-        const wanted = time - grabOffsetRef.current;
-        const nextStart = Math.max(0, Math.min(duration - span, wanted));
-        next = { start: nextStart, end: nextStart + span };
-      } else if (grab === "start") {
-        next = {
-          start: clampCut("start", time, current.end),
-          end: current.end,
-        };
-      } else {
-        next = {
-          start: current.start,
-          end: clampCut("end", time, current.start),
-        };
-      }
-      liveRef.current = next;
+      liveRef.current =
+        grab === "start"
+          ? { start: clampCut("start", time, current.end), end: current.end }
+          : { start: current.start, end: clampCut("end", time, current.start) };
       if (liveRafRef.current === null) {
         liveRafRef.current = requestAnimationFrame(() => {
           liveRafRef.current = null;
@@ -515,40 +433,7 @@ function TrimStepContentImpl({
         });
       }
     },
-    [committedStart, committedEnd, duration, clampCut, seekLatest],
-  );
-
-  /**
-   * Narrow the rail around the held handle, keeping it under the cursor so the
-   * grab point doesn't jump out from under the user's finger.
-   */
-  const engagePrecision = useCallback(
-    (handle: Handle, clientX: number) => {
-      const rail = railRef.current;
-      if (!rail || duration <= 0) return;
-      const span = Math.max(
-        MIN_PRECISION_SPAN_SECONDS,
-        duration / PRECISION_ZOOM,
-      );
-      // Short clip — the whole thing already fits at frame resolution.
-      if (span >= duration) return;
-
-      const rect = rail.getBoundingClientRect();
-      const ratio = Math.max(
-        0,
-        Math.min(1, (clientX - rect.left) / rect.width),
-      );
-      const current = liveRef.current ?? { start, end };
-      const anchor = handle === "start" ? current.start : current.end;
-      const nextStart = Math.max(
-        0,
-        Math.min(duration - span, anchor - ratio * span),
-      );
-
-      setPrecision(true);
-      animateView(nextStart, span);
-    },
-    [duration, start, end, animateView],
+    [committedStart, committedEnd, clampCut, seekLatest],
   );
 
   // Drag inputs go through a ref so the window subscription keys only on
@@ -556,8 +441,6 @@ function TrimStepContentImpl({
   const dragCtx = useRef({
     applyDrag,
     positionFromEvent,
-    engagePrecision,
-    precision,
     duration,
     onTrimChange,
     seekTo,
@@ -566,8 +449,6 @@ function TrimStepContentImpl({
     dragCtx.current = {
       applyDrag,
       positionFromEvent,
-      engagePrecision,
-      precision,
       duration,
       onTrimChange,
       seekTo,
@@ -581,50 +462,14 @@ function TrimStepContentImpl({
     // pointer leaves the 24px handle — otherwise it flickers to an arrow the
     // moment you move faster than the handle can follow.
     const previousCursor = document.body.style.cursor;
-    document.body.style.cursor =
-      dragging === "window" ? "grabbing" : "ew-resize";
-
-    // Hold-to-zoom, re-armed on every move. A quick grab-and-throw across the
-    // rail stays at full extent; rest the pointer for a beat and the window
-    // narrows around it. Only a cut zooms — the window is moved as a whole.
-    let holdTimer: ReturnType<typeof setTimeout> | undefined;
-    const armHold = (clientX: number) => {
-      clearTimeout(holdTimer);
-      if (dragging === "window" || dragCtx.current.precision) return;
-      holdTimer = setTimeout(() => {
-        dragCtx.current.engagePrecision(dragging, clientX);
-      }, HOLD_TO_ZOOM_MS);
-    };
+    document.body.style.cursor = "ew-resize";
 
     const onMove = (e: PointerEvent) => {
       const ctx = dragCtx.current;
       ctx.applyDrag(dragging, ctx.positionFromEvent(e.clientX));
-      armHold(e.clientX);
-
-      // Edge auto-pan, so a zoomed window can still be walked along the clip.
-      const rail = railRef.current;
-      if (!rail || !ctx.precision) return;
-      const rect = rail.getBoundingClientRect();
-      const ratio = (e.clientX - rect.left) / rect.width;
-      if (ratio >= AUTOPAN_EDGE && ratio <= 1 - AUTOPAN_EDGE) return;
-      const direction = ratio < AUTOPAN_EDGE ? -1 : 1;
-      setZoom((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          start: Math.max(
-            0,
-            Math.min(
-              ctx.duration - prev.span,
-              prev.start + direction * prev.span * AUTOPAN_STEP,
-            ),
-          ),
-        };
-      });
     };
 
     const onUp = () => {
-      clearTimeout(holdTimer);
       if (liveRafRef.current !== null) {
         cancelAnimationFrame(liveRafRef.current);
         liveRafRef.current = null;
@@ -640,40 +485,26 @@ function TrimStepContentImpl({
       }
       setLive(null);
       setDragging(null);
-      setPrecision(false);
-      animateView(0, dragCtx.current.duration, true);
     };
 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
     return () => {
-      clearTimeout(holdTimer);
       document.body.style.cursor = previousCursor;
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [dragging, animateView]);
+  }, [dragging]);
 
   const startDrag = useCallback(
-    (grab: Grab, clientX: number) => {
+    (grab: Handle) => {
       liveRef.current = { start: committedStart, end: committedEnd };
-      // Grabbing the window keeps the point you grabbed under the pointer.
-      grabOffsetRef.current =
-        grab === "window" ? positionFromEvent(clientX) - committedStart : 0;
       setLive(liveRef.current);
       setDragging(grab);
-      if (grab === "window") return;
-      // The window handler arms its own hold timer on the first move; this
-      // covers a press with no movement at all.
-      window.setTimeout(() => {
-        if (draggingRef.current === grab && !dragCtx.current.precision) {
-          dragCtx.current.engagePrecision(grab, clientX);
-        }
-      }, HOLD_TO_ZOOM_MS);
     },
-    [committedStart, committedEnd, positionFromEvent],
+    [committedStart, committedEnd],
   );
 
   const nudge = useCallback(
@@ -706,6 +537,23 @@ function TrimStepContentImpl({
     if (el.paused) void el.play().catch(() => undefined);
     else el.pause();
   }, []);
+
+  /**
+   * A press on the rail: go there, and play from there.
+   *
+   * The rail is the only place in the step that says "show me this part of the
+   * match", so a press on it is a request to watch, not just to move a marker.
+   * Playing is what makes a cut checkable — you see whether the first serve is
+   * inside the window or a beat before it.
+   */
+  const seekAndPlay = useCallback(
+    (time: number) => {
+      seekLatest(time);
+      const el = videoRef.current;
+      if (el?.paused) void el.play().catch(() => undefined);
+    },
+    [seekLatest],
+  );
 
   const toggleMute = useCallback(() => {
     const el = videoRef.current;
@@ -854,9 +702,8 @@ function TrimStepContentImpl({
   // ---- Derived geometry ----
 
   const pct = useCallback(
-    (time: number) =>
-      view.span > 0 ? ((time - view.start) / view.span) * 100 : 0,
-    [view],
+    (time: number) => (duration > 0 ? (time / duration) * 100 : 0),
+    [duration],
   );
 
   const startPct = pct(start);
@@ -890,14 +737,14 @@ function TrimStepContentImpl({
     if (count === 0 || frames.length === 0 || duration <= 0) return [];
 
     return Array.from({ length: count }, (_, i) => {
-      const time = view.start + ((i + 0.5) / count) * view.span;
+      const time = ((i + 0.5) / count) * duration;
       const index = Math.round((time / duration) * frames.length - 0.5);
       return {
         key: i,
         src: frames[Math.max(0, Math.min(frames.length - 1, index))],
       };
     });
-  }, [aspect, railWidth, filmstrip.frames, duration, view]);
+  }, [aspect, railWidth, filmstrip.frames, duration]);
 
   const who = subjectFirstName ?? "You";
 
@@ -1071,7 +918,7 @@ function TrimStepContentImpl({
         <div className="relative py-0.5">
           {/* Live frame at the handle being dragged. Sits above the rail on its
               own layer so showing it never reflows the strip. */}
-          {dragging && dragging !== "window" ? (
+          {dragging ? (
             <div
               className="pointer-events-none absolute bottom-[calc(100%+8px)] z-10 overflow-hidden rounded-[var(--radius-element)] border border-[var(--border-hairline)] bg-white shadow-[var(--shadow-dropdown)]"
               style={{
@@ -1094,10 +941,10 @@ function TrimStepContentImpl({
             </div>
           ) : null}
 
-          {/* Rail. Click seeks; handles drag. */}
+          {/* Rail. A press plays from there; only the two handles drag. */}
           <div
             ref={railRef}
-            onPointerDown={(e) => seekLatest(positionFromEvent(e.clientX))}
+            onPointerDown={(e) => seekAndPlay(positionFromEvent(e.clientX))}
             className="relative cursor-pointer touch-none rounded-[var(--radius-element)] bg-[var(--ink-900)] select-none"
             style={{ height: RAIL_HEIGHT_PX }}
           >
@@ -1105,9 +952,7 @@ function TrimStepContentImpl({
               <>
                 {/* Filmstrip */}
                 <div
-                  className={`absolute inset-0 flex overflow-hidden rounded-[var(--radius-element)] transition-opacity duration-200 ${
-                    precision ? "opacity-40" : "opacity-100"
-                  }`}
+                  className={`absolute inset-0 flex overflow-hidden rounded-[var(--radius-element)] transition-opacity duration-200 ${"opacity-100"}`}
                 >
                   {slots.map((slot) => (
                     <div key={slot.key} className="h-full min-w-0 flex-1">
@@ -1141,18 +986,12 @@ function TrimStepContentImpl({
                   style={{ width: `${100 - visibleEndPct}%` }}
                 />
 
-                {/* The kept window: one 2px Signal Blue bracket. Grabbing its
-                    inside moves both cuts together, keeping the length. */}
+                {/* The kept window: one 2px Signal Blue bracket. A mark, not
+                    a control — a press inside it reaches the rail and plays
+                    from there, and only the two handles move a cut. */}
                 <div
                   role="presentation"
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    startDrag("window", e.clientX);
-                  }}
-                  className={`absolute -top-0.5 -bottom-0.5 z-[1] rounded-[4px] border-2 border-[var(--blue)] ${
-                    dragging === "window" ? "cursor-grabbing" : "cursor-grab"
-                  }`}
+                  className="pointer-events-none absolute -top-0.5 -bottom-0.5 z-[1] rounded-[4px] border-2 border-[var(--blue)]"
                   style={{
                     left: `${visibleStartPct}%`,
                     width: `${selectionWidthPct}%`,
@@ -1188,7 +1027,7 @@ function TrimStepContentImpl({
                       onPointerDown={(e) => {
                         e.stopPropagation();
                         e.preventDefault();
-                        startDrag(handle, e.clientX);
+                        startDrag(handle);
                       }}
                       onKeyDown={(e) => {
                         if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") {

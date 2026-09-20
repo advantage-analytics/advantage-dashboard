@@ -164,6 +164,22 @@ function trimEvents(page: Page) {
   );
 }
 
+/** The rail: the ink-900 track the filmstrip and the bracket sit on. */
+function rail(page: Page) {
+  return page.locator("div.relative.cursor-pointer.touch-none").first();
+}
+
+/** Press the rail at a fraction of its width. */
+async function pressRail(page: Page, ratio: number) {
+  const box = await rail(page).boundingBox();
+  if (!box) throw new Error("the rail has no box");
+  await page.mouse.click(box.x + box.width * ratio, box.y + box.height / 2);
+}
+
+function paused(page: Page) {
+  return page.evaluate(() => document.querySelector("video")?.paused ?? true);
+}
+
 /** The step root. `tabIndex={-1}`, and the keys only fire from inside it. */
 function stepRoot(page: Page) {
   return page.locator('div[tabindex="-1"]').first();
@@ -311,6 +327,52 @@ test("the step's keys stay out of a camera question", async ({ page }) => {
   await page.waitForTimeout(250);
 
   expect(await playhead(page)).toBeCloseTo(1, 1);
+  expect(await trimEvents(page)).toEqual([]);
+});
+
+/* -------------------------------------------------------------------------
+ * The rail plays; the bracket does not drag
+ * ---------------------------------------------------------------------- */
+
+test("a press on the rail plays from there", async ({ page }) => {
+  await open(page, { start: 0, end: CLIP_SECONDS });
+  expect(await paused(page)).toBe(true);
+
+  await pressRail(page, 0.5);
+
+  // Halfway along a two-second clip. Playing moves it on, so the assertion is
+  // a floor rather than an equality.
+  await expect.poll(() => playhead(page)).toBeGreaterThan(0.7);
+  await expect.poll(() => paused(page)).toBe(false);
+});
+
+test("a press INSIDE the kept window plays too, and moves neither cut", async ({
+  page,
+}) => {
+  // The window covers the middle of the clip, so the press below lands inside
+  // the bracket — where grabbing it used to drag both cuts together.
+  await open(page, { start: 0.5, end: 1.5 });
+
+  await pressRail(page, 0.5);
+
+  await expect.poll(() => paused(page)).toBe(false);
+  expect(await trimEvents(page)).toEqual([]);
+});
+
+test("dragging across the kept window moves nothing", async ({ page }) => {
+  await open(page, { start: 0.5, end: 1.5 });
+  const box = await rail(page).boundingBox();
+  if (!box) throw new Error("the rail has no box");
+  const y = box.y + box.height / 2;
+
+  // A press in the middle of the bracket, dragged well to the left: the whole
+  // window used to follow the pointer. Nothing but the two handles drags now.
+  await page.mouse.move(box.x + box.width * 0.5, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.2, y, { steps: 10 });
+  await page.mouse.up();
+  await page.waitForTimeout(250);
+
   expect(await trimEvents(page)).toEqual([]);
 });
 
