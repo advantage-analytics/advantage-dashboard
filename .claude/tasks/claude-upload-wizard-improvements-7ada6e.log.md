@@ -108,3 +108,15 @@ is the runner's. Newest entries at the bottom.
 1. IMPORTANT — the hook's `error` string is rendered ONLY on the match-details step (`DetailsStepContent.tsx` ~L1274, fed from `MatchStep` in `UploadWizardSteps.tsx`). On the trim step `setError()` is invisible, so an over-allowance Continue click currently looks like a dead button. T4 renders `providerQuotaRefusal` on step 1 but nothing covers the trim step — needs a task: render `error` on the trim step (a `noteStripCls` strip in `TrimStep`/`TrimStepContent`).
 2. The client figure is refreshed on arriving at the trim step only; a teammate spending the pool before Save is caught by the server 429 (T5), by design.
 3. `processingStrategy` is rebuilt every render, so `refusalForWindow`'s `useCallback` never memoizes — harmless today.
+
+## T4 · Show over-allowance in the footer meter and on the provider card — done
+
+**gate:** mechanical PASS (lint, typecheck, full test suite); completion review `VERDICT: pass` (4/4 criteria met, scope clean). widget-states: loading ✓ / empty ✓ unchanged — `WizardQuotaMeter`'s `null` for an unknown allowance or an import provider is untouched, the unpriced/under-allowance `FooterMeter` markup is byte-identical (asserted), the step-1 strip renders nothing while the allowance is unresolved; error n/a (client components, no server region).
+
+**changed:** `FooterMeter.tsx` — when the trimmed window costs more than is left, the readout reads `Spends {n} h · Over by {x} h`, readout and pending bar are `var(--error)` via inline style, and the `aria-label` states the overage; exact fit is not "over", matching `quotaRefusal()`. `SourceStepContent.tsx` — new optional `quotaRefusal` prop rendered as a `noteStripCls` + `XCircle` strip with `role="alert"` in the Source field's existing `below` slot (step 1 is an `EntitySelect`-style field, not a card grid), after the import and pending-team branches so it cannot show for SwingVision. `UploadWizardSteps.tsx` threads `providerQuotaRefusal`. New `tests/footer-meter-overage.spec.ts` (5 assertions, `renderToStaticMarkup`).
+
+**follow-ups:**
+
+1. STILL OPEN — the trim step has no display for the hook's `error`, so the over-allowance refusal raised on Continue is invisible there (see T3's log entry). Needs its own task.
+2. Step 1 shows one strip at a time: a workspace with an advisory video refusal AND a spent allowance now shows only the quota sentence.
+3. The meter bar clamps at full, so a 3× overage draws the same red bar as a 1-second one; the readout carries the magnitude.

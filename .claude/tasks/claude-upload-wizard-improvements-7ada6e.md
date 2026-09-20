@@ -59,7 +59,7 @@ ready).
 
 ## T4 · Show over-allowance in the footer meter and on the provider card
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** src/components/dashboard/matches/new-match-wizard/FooterMeter.tsx, src/components/dashboard/matches/new-match-wizard/SourceStepContent.tsx (guess — the provider card may need a prop threaded through UploadWizardSteps.tsx)

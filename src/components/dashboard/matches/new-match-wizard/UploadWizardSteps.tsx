@@ -81,7 +81,12 @@ function WizardEligibilityNotice() {
  */
 export function ProviderStep() {
   const {
-    wizard: { selectedProvider, handleProviderSelect, whoPlayed },
+    wizard: {
+      selectedProvider,
+      handleProviderSelect,
+      whoPlayed,
+      providerQuotaRefusal,
+    },
   } = useUploadWizard();
   return (
     <div className="flex flex-col gap-9">
@@ -89,6 +94,9 @@ export function ProviderStep() {
         selectedProvider={selectedProvider}
         onProviderSelect={handleProviderSelect}
         whoPlayed={whoPlayed}
+        /* Null for an import source and while the allowance is still
+           loading — the hook decides both, so this step never has to. */
+        quotaRefusal={providerQuotaRefusal}
       />
       <WizardEligibilityNotice />
     </div>
