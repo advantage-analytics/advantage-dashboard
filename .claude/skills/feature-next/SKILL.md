@@ -36,8 +36,7 @@ whose primary output (named in its CONTEXT.md `## Outputs`) is missing from
   (land), which by contract writes nothing to `output/` at all — so "output
   present" cannot detect it; it is done when the workspace itself is gone from
   the branch. A workspace that no longer exists is a landed pipeline, not an
-  error. (Stage 05 is a different case, below: it _has_ a primary output and
-  deliberately withholds it.)
+  error.
 - Special case, stage 05: its contract deliberately withholds the primary
   output while queue tasks remain. Re-running 05 until the queue drains is
   correct, not a stall.

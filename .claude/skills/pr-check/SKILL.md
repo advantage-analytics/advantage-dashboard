@@ -95,10 +95,9 @@ them, so they cost session-model tokens on the runs where their triggers fire
 and nothing on the runs where they do not. That is why the trigger checks in
 stages 2 and 3 are worth running honestly rather than loading them by reflex.
 
-The two guardrail reviewers pin `model: sonnet` in their own agent files, so
-this skill neither sets nor overrides it: **pass no `model` on their `Agent`
-calls** and let the frontmatter answer. To change what they cost, edit the
-agent file, not this table.
+For the two guardrail reviewers, "its own frontmatter" means **pass no
+`model` on their `Agent` calls** and let it answer. To change what they cost,
+edit the agent file, not this table.
 
 There is deliberately **no cheap mode**. `full` is the only mode axis. A second
 one that makes the merge gate cheaper would get reached for on exactly the
@@ -185,9 +184,9 @@ calls.** Re-derive it in the same command that greps, using the guarded shape
 from "What to review". An empty `$base` collapses `git diff "$base"...HEAD`
 into `git diff ...HEAD`, which exits 0 with no output, so every check below
 reports "no trigger" on a branch that has one — the same false green that
-section exists to prevent. End each `grep -c` with `|| true` as well: it exits
-1 when the count is zero, which is the ordinary case, and will otherwise abort
-a chained run before the later checks execute.
+section exists to prevent. End each `grep -c` with `|| true` as well: it exits 1 when the count is zero,
+which is the ordinary case, and will otherwise abort a chained run before the
+later checks execute.
 The subagent's remit is `simplify` alone, and these greps decide whether a
 _second_, separate skill is owed; folding that decision into the stage 2 agent
 buries it where stage 4 cannot report it.

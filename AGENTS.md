@@ -155,13 +155,12 @@ and commits it. The staged ICM pipeline in `work/<slug>/` (`/feature-new`,
 spec in `docs/superpowers/specs/2026-08-30-icm-feature-pipeline-design.md`. Everything
 else about them lives in each skill's own SKILL.md and in the queue file's header.
 
-**Which one to use.** Three paths, not two. The one most often skipped is the first,
-because nothing prompts you to consider it:
+**Which one to use.** Three paths, not two. The first is the one nothing else here
+documents, which is what makes it easy not to weigh at all:
 
 - **Just do it, in session** — a change you can describe and finish in one sitting,
-  whose diff you are going to read yourself anyway. The queue buys a fresh context per
-  task and an automated gate; neither is worth a commit of ceremony for a one-liner
-  already in front of you.
+  whose diff you are going to read yourself anyway. Not worth a commit of queue
+  ceremony for a one-liner already in front of you.
 - **`/task-add`** when you know what to build and want it gated and off your hands,
   even several tasks. It turns raw intent into sized, routed tasks with `done when:`
   criteria, and `/task-next` runs each on its own model in its own context. The right

@@ -48,8 +48,9 @@ tells the runner the pipeline hasn't started.
 
 This skill is model-invocable, so it can be reached with nobody there — an
 autonomous iteration, a scheduled fire, a subagent. Scaffolding on that
-authority is allowed where `/task-add`'s write is not: it is eight template
-files and a reversible commit, and nothing downstream executes them. But a
+authority is allowed where `/task-add`'s write is not: it is sixteen files of
+templates and placeholders in a reversible commit, and nothing downstream
+executes them. But a
 workspace in `work/` reads as a decision to run all seven stages, so if no
 human asked for this one, say so plainly in the report rather than leaving it
 to be found.

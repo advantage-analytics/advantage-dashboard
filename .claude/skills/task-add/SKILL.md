@@ -1,6 +1,6 @@
 ---
 name: task-add
-description: Plan one intent — or a batch — into right-sized, model-routed tasks and append them to this branch's queue. Use when handing work over to run later rather than doing it now — especially a batch, or anything dictated by voice or from a phone. Not for: a change you are about to make anyway (just make it); reading, running or reordering tasks already queued (that is /task-next and the queue file itself); or an undecided approach that wants a written brief and design first (/feature-new).
+description: Plan one intent — or a batch — into right-sized, model-routed tasks and append them to this branch's queue. Use when handing work over to run later rather than doing it now — especially a batch, or anything dictated by voice or from a phone. Not for: work you'd just do now, running or reordering the existing queue (/task-next), or undecided-approach work wanting a brief first (/feature-new).
 argument-hint: "<one or more one-line descriptions of work>"
 ---
 
@@ -58,9 +58,10 @@ so route the planner to match the work:
   anyway. "Drop the event suffix from the drawer's recent-match rows" is this.
   "Make the roster editable" is not.
 
-Half the adds this queue has seen were a single mechanical intent, where a
-frontier planner shapes work that needs no shaping — the same asymmetry
-`/pr-check` routes around in its stage 2. What makes the cheaper tier safe
+Thirty of the fifty-five adds this queue has seen carried a single task, and
+a good share of those were mechanical enough that a frontier planner had
+nothing to shape — the same asymmetry `/pr-check` routes around in its stage 2. Judge the intent in front of you rather than the ratio: single does not
+imply mechanical, and several of those single adds were not. What makes the cheaper tier safe
 here is step 3: the author reads the draft before anything is written, so a
 thin one costs an amendment in the reply they were already sending. That is
 why this threshold is looser than `task-next`'s, where a wrong-low route costs
