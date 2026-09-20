@@ -603,16 +603,23 @@ function buildSentence(groups: StatGroup[], noun: string): string | null {
   return `${headline} — level with ${tiedOther.row.label}.`;
 }
 
-function serveNoun(ball: BallFilter): string {
-  if (ball === "first") return "first serves";
-  if (ball === "second") return "second serves";
-  return "serves";
+/** Singular when `count === 1` ("1 serve", "1 first serve", "1 second
+ * serve"), plural otherwise — including `count === 0` ("0 serves"). */
+function serveNoun(ball: BallFilter, count: number): string {
+  const serve = count === 1 ? "serve" : "serves";
+  if (ball === "first") return `first ${serve}`;
+  if (ball === "second") return `second ${serve}`;
+  return serve;
 }
 
-function returnNoun(ball: BallFilter): string {
-  if (ball === "first") return "first-serve returns";
-  if (ball === "second") return "second-serve returns";
-  return "returns";
+/** Singular when `count === 1` ("1 return", "1 first-serve return", "1
+ * second-serve return"), plural otherwise — including `count === 0` ("0
+ * returns"). */
+function returnNoun(ball: BallFilter, count: number): string {
+  const ret = count === 1 ? "return" : "returns";
+  if (ball === "first") return `first-serve ${ret}`;
+  if (ball === "second") return `second-serve ${ret}`;
+  return ret;
 }
 
 function serveStatsGroup(
@@ -828,7 +835,7 @@ export function computeVizStats(
   const total = result.count;
 
   if (cut === "serve") {
-    const noun = serveNoun(filters.ball);
+    const noun = serveNoun(filters.ball, total);
     const groups = [serveStatsGroup(result.zoneStats)];
     return {
       title: "Where the serve went",
@@ -840,8 +847,8 @@ export function computeVizStats(
   }
 
   if (cut === "returnPlacement") {
-    const noun = returnNoun(filters.ball);
     const { subtitleCount, groups } = returnPlacementStats(result, points);
+    const noun = returnNoun(filters.ball, subtitleCount);
     return {
       title: "Where the return went",
       subtitle: `Points won by placement · ${subtitleCount} ${noun}`,
@@ -851,7 +858,9 @@ export function computeVizStats(
     };
   }
 
-  const noun = "returns";
+  // A1: the contact-cut subtitle noun follows the ball filter exactly as
+  // returnPlacement's does, instead of hardcoding "returns".
+  const noun = returnNoun(filters.ball, total);
   const groups = returnContactStats(result);
   return {
     title: "Where the return was struck",

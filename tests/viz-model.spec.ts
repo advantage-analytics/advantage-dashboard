@@ -206,7 +206,13 @@ test.describe("computeVizStats — serve", () => {
   });
 
   test("noun follows the ball filter", () => {
-    const pts = [point({ firstShotType: "Second Serve" })];
+    const pts = [
+      point({ firstShotType: "Second Serve" }),
+      point({
+        firstShotType: "Second Serve",
+        firstShotLandingX: ZONE_LX["ad-t"],
+      }),
+    ];
     const stats = computeVizStats(
       pts,
       "serve",
@@ -304,7 +310,7 @@ test.describe("computeVizStats — return placement", () => {
     // total always equals computeViz(...).count (both points are drawable
     // returns), even though only one lands inside the rows' denominator.
     expect(stats.total).toBe(2);
-    expect(stats.subtitle).toBe("Points won by placement · 1 returns");
+    expect(stats.subtitle).toBe("Points won by placement · 1 return");
   });
 });
 
@@ -364,6 +370,22 @@ test.describe("computeVizStats — return contact", () => {
     expect(stroke.rows.find((r) => r.key === "forehand")!.count).toBe(1);
     expect(stroke.rows.find((r) => r.key === "backhand")!.count).toBe(2);
   });
+
+  // A1: the contact subtitle used to hardcode "returns" regardless of the
+  // ball filter, unlike returnPlacement's subtitle. It must route through
+  // the same returnNoun(filters.ball) helper.
+  test("contact subtitle follows the ball filter", () => {
+    const pts = [contactPoint({ secondShotContactY: 30 })];
+    const stats = computeVizStats(
+      pts,
+      "returnContact",
+      { ...EMPTY_VIZ_FILTERS, ball: "first" },
+      true,
+    );
+    expect(stats.subtitle).toBe(
+      `Points won by contact point · 1 first-serve return`,
+    );
+  });
 });
 
 test.describe("computeVizStats — attribution", () => {
@@ -389,6 +411,95 @@ test.describe("computeVizStats — attribution", () => {
     )!;
     expect(oppRow.count).toBe(0); // player 1 never served
   });
+});
+
+/**
+ * A2: the serve-only attribution test above never exercises return rows.
+ * Fixture: every point lands/contacts in the SAME bucket (Direction:
+ * middle, Depth: short for placement; Depth: near, Stroke: forehand for
+ * contact) so a single row's count/won can be read straight off without
+ * summing across rows — the point of this fixture is attribution, not
+ * bucketing.
+ *
+ * The won counts are chosen so a naive `outcome = wonByPlayer1 ? "won" :
+ * "lost"` (comparing the raw column instead of going through
+ * `subjectIsPlayer1`) gives a DIFFERENT number than the correct one for
+ * the player-2 / opponent cases: p2Returns is 2 wins by player 2 (both
+ * `wonByPlayer1: false`) and 1 loss (`wonByPlayer1: true`) — the naive
+ * read scores that as 1 win (only the `true` row), the correct
+ * subject-relative read scores it as 2 wins.
+ */
+test.describe("computeVizStats — return attribution", () => {
+  const RETURN_CONTACT_Y = 23.77; // REAL_COURT_LENGTH — puts depthM at 0 ("near")
+
+  function returnPoint(over: Partial<MatchPoint>): MatchPoint {
+    return point({
+      secondShotLandingX: 0, // direction "middle"
+      secondShotLandingY: 0, // depth "short"
+      secondShotContactX: 0,
+      secondShotContactY: RETURN_CONTACT_Y, // contact depth "near"
+      secondShotType: "Forehand", // stroke "forehand"
+      ...over,
+    });
+  }
+
+  // Player 1 returns (player 2 serves): 2 won, 1 lost, by player 1.
+  const p1Returns = [
+    returnPoint({ serverIsPlayer1: false, wonByPlayer1: true }),
+    returnPoint({ serverIsPlayer1: false, wonByPlayer1: true }),
+    returnPoint({ serverIsPlayer1: false, wonByPlayer1: false }),
+  ];
+  // Player 2 returns (player 1 serves): 2 won, 1 lost, by player 2.
+  const p2Returns = [
+    returnPoint({ serverIsPlayer1: true, wonByPlayer1: false }), // player 2 won
+    returnPoint({ serverIsPlayer1: true, wonByPlayer1: false }), // player 2 won
+    returnPoint({ serverIsPlayer1: true, wonByPlayer1: true }), // player 2 lost
+  ];
+  const pts = [...p1Returns, ...p2Returns];
+
+  function depthRow(stats: ReturnType<typeof computeVizStats>, key: string) {
+    return stats.groups
+      .find((g) => g.key === "depth")!
+      .rows.find((r) => r.key === key)!;
+  }
+
+  const cases: { cut: Cut; rowKey: string }[] = [
+    { cut: "returnPlacement", rowKey: "short" },
+    { cut: "returnContact", rowKey: "near" },
+  ];
+
+  for (const { cut, rowKey } of cases) {
+    test(`${cut}: subject = player 1 gets player 1's returns and wins`, () => {
+      const stats = computeVizStats(pts, cut, EMPTY_VIZ_FILTERS, true);
+      const row = depthRow(stats, rowKey);
+      expect(row.count).toBe(3);
+      expect(row.won).toBe(2);
+    });
+
+    test(`${cut}: subject = player 2 (viewer is player 2) gets player 2's returns and wins`, () => {
+      const stats = computeVizStats(pts, cut, EMPTY_VIZ_FILTERS, false);
+      const row = depthRow(stats, rowKey);
+      expect(row.count).toBe(3);
+      expect(row.won).toBe(2); // would read 1 under the naive (non-subject) comparison
+    });
+
+    test(`${cut}: the opponent subject for a player-1 viewer reads player 2's numbers`, () => {
+      const opponentSubject = subjectFor(
+        { ...EMPTY_VIZ_FILTERS, player: "opponent" },
+        true,
+      );
+      expect(opponentSubject).toBe(false);
+      const stats = computeVizStats(
+        pts,
+        cut,
+        EMPTY_VIZ_FILTERS,
+        opponentSubject,
+      );
+      const row = depthRow(stats, rowKey);
+      expect(row.count).toBe(3);
+      expect(row.won).toBe(2);
+    });
+  }
 });
 
 test.describe("computeVizStats — total", () => {
@@ -533,5 +644,124 @@ test.describe("computeVizStats — empty input", () => {
         }
       }
     }
+  });
+});
+
+/* ── A3: singular nouns in the subtitle ──────────────────────────────────
+ * Subtitles used to read "1 returns" / "1 serves" — the noun helpers must
+ * singularise at n === 1 and stay plural at n === 0 and n === 2. */
+test.describe("computeVizStats — singular nouns", () => {
+  test("serve subtitle: 0 serves / 1 serve / 2 serves", () => {
+    const zero = computeVizStats([], "serve", EMPTY_VIZ_FILTERS, true);
+    expect(zero.subtitle).toBe("Points won by zone · 0 serves");
+
+    const one = computeVizStats(
+      [point({ firstShotLandingX: ZONE_LX["deuce-t"] })],
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(one.subtitle).toBe("Points won by zone · 1 serve");
+
+    const two = computeVizStats(
+      [
+        point({ firstShotLandingX: ZONE_LX["deuce-t"] }),
+        point({ firstShotLandingX: ZONE_LX["ad-t"] }),
+      ],
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(two.subtitle).toBe("Points won by zone · 2 serves");
+  });
+
+  test("serve subtitle with a ball filter singularises the ball-qualified noun", () => {
+    const firstOnly = computeVizStats(
+      [point({ firstShotLandingX: ZONE_LX["deuce-t"] })],
+      "serve",
+      { ...EMPTY_VIZ_FILTERS, ball: "first" },
+      true,
+    );
+    expect(firstOnly.subtitle).toBe("Points won by zone · 1 first serve");
+
+    const secondOnly = computeVizStats(
+      [
+        point({
+          firstShotLandingX: ZONE_LX["deuce-t"],
+          firstShotType: "Second Serve",
+        }),
+      ],
+      "serve",
+      { ...EMPTY_VIZ_FILTERS, ball: "second" },
+      true,
+    );
+    expect(secondOnly.subtitle).toBe("Points won by zone · 1 second serve");
+  });
+
+  test("return placement subtitle: 0 returns / 1 return / 2 returns", () => {
+    const returnPoint = (over: Partial<MatchPoint> = {}) =>
+      point({
+        serverIsPlayer1: false,
+        secondShotLandingX: 0,
+        secondShotLandingY: 0,
+        secondShotType: "Forehand",
+        ...over,
+      });
+
+    const zero = computeVizStats(
+      [],
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(zero.subtitle).toBe("Points won by placement · 0 returns");
+
+    const one = computeVizStats(
+      [returnPoint()],
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(one.subtitle).toBe("Points won by placement · 1 return");
+
+    const two = computeVizStats(
+      [returnPoint(), returnPoint()],
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(two.subtitle).toBe("Points won by placement · 2 returns");
+  });
+
+  test("return contact subtitle: 0 returns / 1 return / 2 returns", () => {
+    const contactPoint = (over: Partial<MatchPoint> = {}) =>
+      point({
+        serverIsPlayer1: false,
+        secondShotLandingX: 0,
+        secondShotLandingY: 0,
+        secondShotContactX: 0,
+        secondShotContactY: 23.77,
+        secondShotType: "Forehand",
+        ...over,
+      });
+
+    const zero = computeVizStats([], "returnContact", EMPTY_VIZ_FILTERS, true);
+    expect(zero.subtitle).toBe("Points won by contact point · 0 returns");
+
+    const one = computeVizStats(
+      [contactPoint()],
+      "returnContact",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(one.subtitle).toBe("Points won by contact point · 1 return");
+
+    const two = computeVizStats(
+      [contactPoint(), contactPoint()],
+      "returnContact",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(two.subtitle).toBe("Points won by contact point · 2 returns");
   });
 });
