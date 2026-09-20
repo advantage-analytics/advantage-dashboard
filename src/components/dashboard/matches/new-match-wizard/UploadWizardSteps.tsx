@@ -239,6 +239,7 @@ export function TrimStep() {
       videoProbe,
       formData,
       minTrimSeconds,
+      error,
       handleTrimChange,
       handleInputChange,
     },
@@ -261,6 +262,7 @@ export function TrimStep() {
       startSeconds={formData.videoStartSeconds}
       endSeconds={formData.videoEndSeconds}
       minTrimSeconds={minTrimSeconds}
+      refusal={error}
       subjectFirstName={subjectFirstName}
       fixedCamera={formData.fixedCamera}
       initialTopPlayerIsPlayer1={formData.initialTopPlayerIsPlayer1}

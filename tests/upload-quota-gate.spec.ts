@@ -13,7 +13,6 @@ import { quotaRefusal } from "@/components/dashboard/matches/new-match-wizard/va
 
 const BASE = {
   neededSeconds: 600,
-  capSeconds: 270000, // 75h
   resetsOn: "Oct 1",
 } as const;
 
@@ -60,7 +59,7 @@ test("a trim that exactly fits the remaining budget is allowed", () => {
   ).toBeNull();
 });
 
-test("a trim over the remaining budget by one second is refused, with hour figures from formatHoursTenths", () => {
+test("a trim over the remaining budget by one second is refused, and the overage is never 'zero'", () => {
   expect(
     quotaRefusal({
       ...BASE,
@@ -68,7 +67,7 @@ test("a trim over the remaining budget by one second is refused, with hour figur
       workspaceKind: "personal",
     }),
   ).toBe(
-    "This trim needs 0.2 h but only 0.2 h is left this month. Shorten the selection to continue.",
+    "This trim is 1 min over the 0.2 h left this month. Shorten the selection to continue.",
   );
 });
 

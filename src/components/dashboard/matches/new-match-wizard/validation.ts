@@ -1,7 +1,7 @@
 import { normalizedPersonName } from "@/lib/data/person-name";
 import type { WorkspaceKind } from "@/lib/workspace/types";
 
-import { formatHoursTenths } from "./utils";
+import { formatHoursTenths, formatOverage } from "./utils";
 import type {
   IdentityConfirmationScope,
   Step,
@@ -174,7 +174,6 @@ export function wizardContinueBlocked(input: {
 export function quotaRefusal(input: {
   remainingSeconds: number | undefined;
   neededSeconds: number;
-  capSeconds: number;
   resetsOn: string;
   workspaceKind: WorkspaceKind;
 }): string | null {
@@ -190,9 +189,11 @@ export function quotaRefusal(input: {
 
   const neededWhole = Math.ceil(neededSeconds);
   if (neededWhole > remainingSeconds) {
-    const needed = formatHoursTenths(neededSeconds);
+    // The overage leads, in minutes when it is small: "needs 1.0 h but only
+    // 1.0 h is left" is what two minutes over reads as in tenths of an hour.
+    const over = formatOverage(neededWhole - remainingSeconds);
     const remaining = formatHoursTenths(remainingSeconds);
-    return `This trim needs ${needed} h but only ${remaining} h is left this month. Shorten the selection to continue.`;
+    return `This trim is ${over} over the ${remaining} h left this month. Shorten the selection to continue.`;
   }
 
   return null;

@@ -278,11 +278,11 @@ export async function handleUploadUrl(
   // (either one) is logged and the upload proceeds, because the spend is still
   // guarded and refusing on a read error would block uploads that fit.
   try {
-    const billable = await deps.loadBillableSeconds(matchId);
-    const peek =
-      billable === null
-        ? null
-        : await deps.remainingQuotaSeconds(billingWorkspace);
+    // Independent reads, so one round trip rather than two.
+    const [billable, peek] = await Promise.all([
+      deps.loadBillableSeconds(matchId),
+      deps.remainingQuotaSeconds(billingWorkspace),
+    ]);
     if (billable === null || peek === null) {
       console.error(`${LOG} allowance not checked — figure unavailable`, {
         matchId,

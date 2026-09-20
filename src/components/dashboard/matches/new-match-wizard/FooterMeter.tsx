@@ -1,6 +1,6 @@
 import { usageFraction } from "@/lib/data/usage-format";
 import { formatPilotEnd } from "@/lib/services/splitstep/config";
-import { formatHoursCap, formatHoursTenths } from "./utils";
+import { formatHoursCap, formatHoursTenths, formatOverage } from "./utils";
 
 /**
  * The monthly allowance, in the footer beside the primary action.
@@ -47,9 +47,7 @@ export function FooterMeter({
   // Strictly over, matching `quotaRefusal()` — a window that exactly consumes
   // what is left is allowed, so it is not drawn as a refusal.
   const over = priced && selectedSeconds > remainingSeconds;
-  const overBy = over
-    ? formatHoursTenths(selectedSeconds - remainingSeconds)
-    : "";
+  const overSeconds = over ? selectedSeconds - remainingSeconds : 0;
 
   return (
     <span className="ml-3 inline-flex items-center gap-2.5 border-l border-[var(--border-medium)] pl-4">
@@ -57,7 +55,7 @@ export function FooterMeter({
         role="img"
         aria-label={
           over
-            ? `${formatHoursTenths(usedSeconds)} of ${cap} hours used, ${formatHoursTenths(selectedSeconds)} pending — over the allowance by ${overBy} hours`
+            ? `${formatHoursTenths(usedSeconds)} of ${cap} hours used, ${formatHoursTenths(selectedSeconds)} pending — over the allowance by ${formatOverage(overSeconds, true)}`
             : priced
               ? `${formatHoursTenths(usedSeconds)} of ${cap} hours used, ${formatHoursTenths(selectedSeconds)} pending`
               : `${formatHoursTenths(usedSeconds)} of ${cap} hours used`
@@ -85,7 +83,7 @@ export function FooterMeter({
         style={over ? { color: "var(--error)" } : undefined}
       >
         {over
-          ? `Spends ${formatHoursTenths(selectedSeconds)} h · Over by ${overBy} h`
+          ? `Spends ${formatHoursTenths(selectedSeconds)} h · Over by ${formatOverage(overSeconds)}`
           : priced
             ? `Spends ${formatHoursTenths(selectedSeconds)} h · ${formatHoursTenths(
                 Math.max(0, remainingSeconds - selectedSeconds),

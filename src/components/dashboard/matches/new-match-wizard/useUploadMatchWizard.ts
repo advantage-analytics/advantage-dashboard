@@ -35,6 +35,7 @@ import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import {
   accountTypeFor,
   monthlyCapSecondsFor,
+  sumUsedSeconds,
 } from "@/lib/services/splitstep/quota";
 import { formatResetDate } from "@/lib/data/usage-format";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
@@ -866,19 +867,64 @@ export function useUploadMatchWizard({
   }, [identityAthleteId, identityAthleteName, resetIdentityAnswer]);
 
   /**
+   * The workspace an EXISTING match belongs to — pinned the moment a preset
+   * or an accepted line first names one (`matchId`), and never re-read from
+   * the live switcher after that.
+   *
+   * The workspace switcher can change `activeWorkspace` on this same mounted
+   * page without navigating away (`setActiveWorkspaceInPlace`), so a coach
+   * who reuses a scored line and then switches programs would otherwise have
+   * that match's roster, approval and attribution re-decided against the
+   * NEWLY selected program — the client repeating the mistake T15/T16 fixed
+   * server-side with `billingWorkspaceFor(match.program_id)`. Cleared the
+   * moment nothing existing is in play (no `matchId`), so a fresh preset or a
+   * detached line still tracks the live workspace like any other new upload.
+   *
+   * Set from an effect, not during render — a ref read/write while
+   * rendering is what `react-hooks/refs` exists to catch, since it can
+   * silently disagree with what actually painted. The one-render lag this
+   * costs is free: on the render where an existing match FIRST appears,
+   * `activeWorkspace` and the eventual pin are the same workspace anyway: no
+   * switch has happened yet.
+   */
+  const activeWorkspaceRef = useRef(activeWorkspace);
+  useEffect(() => {
+    activeWorkspaceRef.current = activeWorkspace;
+  }, [activeWorkspace]);
+  const existingMatchId = (preset ?? attachedLine)?.matchId ?? null;
+  const [pinnedMatchWorkspace, setPinnedMatchWorkspace] =
+    useState<Workspace | null>(null);
+  useEffect(() => {
+    if (existingMatchId) {
+      setPinnedMatchWorkspace((prev) => prev ?? activeWorkspaceRef.current);
+    } else {
+      setPinnedMatchWorkspace((prev) => (prev === null ? prev : null));
+    }
+  }, [existingMatchId]);
+  /**
+   * The workspace eligibility, the roster fetch and the who-played reset all
+   * reason about — the pinned one while an existing match is in play, the
+   * live one otherwise.
+   */
+  const eligibilityWorkspace = pinnedMatchWorkspace ?? activeWorkspace;
+
+  /**
    * The allowance this upload will be billed against.
    *
-   * Keyed by the ACTIVE WORKSPACE, not the signed-in user: `Workspace.id` is
+   * Keyed by the workspace that will be BILLED — `eligibilityWorkspace`, the
+   * pinned one while an existing match is in play, the live one otherwise, the
+   * client's mirror of the server's `billingWorkspaceFor(match.program_id)` —
+   * and not by the signed-in user: `Workspace.id` is
    * `processing_usage.account_id` — the user's id for a personal workspace, the
    * program's for a team one — and the two tiers have different caps. Reading
    * the personal ledger while a coach sits in a program showed 2 hours against
    * a 75-hour budget.
    */
-  const quotaAccountType = accountTypeFor(activeWorkspace);
+  const quotaAccountType = accountTypeFor(eligibilityWorkspace);
   // Cap by tier, not by ledger: a custom org files under the program ledger
   // (`quotaAccountType` above, which the remaining-quota read filters on) but
   // draws the individual figure until a paid plan raises it — quotaTierFor().
-  const quotaCapSeconds = monthlyCapSecondsFor(activeWorkspace);
+  const quotaCapSeconds = monthlyCapSecondsFor(eligibilityWorkspace);
   // "Sep 1". Settings › Usage already answers "when does this come back" from
   // the same billing-month key, so the wizard asks it rather than re-deriving.
   const quotaResetsOn = formatResetDate(currentBillingMonth());
@@ -913,9 +959,9 @@ export function useUploadMatchWizard({
     (async () => {
       let used: number;
 
-      if (activeWorkspace.kind === "team") {
+      if (eligibilityWorkspace.kind === "team") {
         const { data, error } = await supabase.rpc("program_usage_total", {
-          p_program_id: activeWorkspace.id,
+          p_program_id: eligibilityWorkspace.id,
           p_billing_month: currentBillingMonth(),
         });
 
@@ -925,17 +971,14 @@ export function useUploadMatchWizard({
         const { data, error } = await supabase
           .from("processing_usage")
           .select("reserved_seconds, actual_seconds")
-          .eq("account_id", activeWorkspace.id)
+          .eq("account_id", eligibilityWorkspace.id)
           .eq("account_type", quotaAccountType)
           .eq("billing_month", currentBillingMonth())
           .eq("released", false);
 
         if (error || cancelled) return;
 
-        used = (data ?? []).reduce(
-          (n, row) => n + (row.actual_seconds ?? row.reserved_seconds ?? 0),
-          0,
-        );
+        used = sumUsedSeconds(data ?? []);
       }
 
       setRemainingQuotaSeconds(Math.max(0, quotaCapSeconds - used));
@@ -947,8 +990,8 @@ export function useUploadMatchWizard({
   }, [
     isProcessingProvider,
     supabase,
-    activeWorkspace.id,
-    activeWorkspace.kind,
+    eligibilityWorkspace.id,
+    eligibilityWorkspace.kind,
     quotaAccountType,
     quotaCapSeconds,
     isTrimStep,
@@ -977,9 +1020,8 @@ export function useUploadMatchWizard({
     ? quotaRefusal({
         remainingSeconds: remainingQuotaSeconds,
         neededSeconds: 0,
-        capSeconds: quotaCapSeconds,
         resetsOn: quotaResetsOn,
-        workspaceKind: activeWorkspace.kind,
+        workspaceKind: eligibilityWorkspace.kind,
       })
     : null;
 
@@ -1003,17 +1045,15 @@ export function useUploadMatchWizard({
               startSeconds,
               endSeconds,
             ),
-            capSeconds: quotaCapSeconds,
             resetsOn: quotaResetsOn,
-            workspaceKind: activeWorkspace.kind,
+            workspaceKind: eligibilityWorkspace.kind,
           })
         : null,
     [
       processingStrategy,
       remainingQuotaSeconds,
-      quotaCapSeconds,
       quotaResetsOn,
-      activeWorkspace.kind,
+      eligibilityWorkspace.kind,
     ],
   );
 
@@ -1306,48 +1346,6 @@ export function useUploadMatchWizard({
       cancelled = true;
     };
   }, [open, supabase, preset, draft, askWhoPlayed, seededPlayerName]);
-
-  /**
-   * The workspace an EXISTING match belongs to — pinned the moment a preset
-   * or an accepted line first names one (`matchId`), and never re-read from
-   * the live switcher after that.
-   *
-   * The workspace switcher can change `activeWorkspace` on this same mounted
-   * page without navigating away (`setActiveWorkspaceInPlace`), so a coach
-   * who reuses a scored line and then switches programs would otherwise have
-   * that match's roster, approval and attribution re-decided against the
-   * NEWLY selected program — the client repeating the mistake T15/T16 fixed
-   * server-side with `billingWorkspaceFor(match.program_id)`. Cleared the
-   * moment nothing existing is in play (no `matchId`), so a fresh preset or a
-   * detached line still tracks the live workspace like any other new upload.
-   *
-   * Set from an effect, not during render — a ref read/write while
-   * rendering is what `react-hooks/refs` exists to catch, since it can
-   * silently disagree with what actually painted. The one-render lag this
-   * costs is free: on the render where an existing match FIRST appears,
-   * `activeWorkspace` and the eventual pin are the same workspace anyway: no
-   * switch has happened yet.
-   */
-  const activeWorkspaceRef = useRef(activeWorkspace);
-  useEffect(() => {
-    activeWorkspaceRef.current = activeWorkspace;
-  }, [activeWorkspace]);
-  const existingMatchId = (preset ?? attachedLine)?.matchId ?? null;
-  const [pinnedMatchWorkspace, setPinnedMatchWorkspace] =
-    useState<Workspace | null>(null);
-  useEffect(() => {
-    if (existingMatchId) {
-      setPinnedMatchWorkspace((prev) => prev ?? activeWorkspaceRef.current);
-    } else {
-      setPinnedMatchWorkspace((prev) => (prev === null ? prev : null));
-    }
-  }, [existingMatchId]);
-  /**
-   * The workspace eligibility, the roster fetch and the who-played reset all
-   * reason about — the pinned one while an existing match is in play, the
-   * live one otherwise.
-   */
-  const eligibilityWorkspace = pinnedMatchWorkspace ?? activeWorkspace;
 
   /**
    * A fresher `programs.status` than `eligibilityWorkspace` carries — the

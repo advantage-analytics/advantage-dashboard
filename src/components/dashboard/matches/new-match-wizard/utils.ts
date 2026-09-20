@@ -528,6 +528,24 @@ export function formatHoursTenths(seconds: number): string {
 }
 
 /**
+ * How far over the allowance a video is — "2 min", "45 min", "1.3 h".
+ *
+ * Minutes under an hour, because tenths of an hour cannot say a small number:
+ * two minutes over rounds to "0.0 h", and a refusal whose own figure reads as
+ * nothing is a refusal nobody believes. Never less than one minute, for the
+ * same reason. `long` is the spoken form for an `aria-label`.
+ */
+export function formatOverage(seconds: number, long = false): string {
+  if (seconds < 3600) {
+    const minutes = Math.max(1, Math.ceil(seconds / 60));
+    return long
+      ? `${minutes} ${minutes === 1 ? "minute" : "minutes"}`
+      : `${minutes} min`;
+  }
+  return `${formatHoursTenths(seconds)} ${long ? "hours" : "h"}`;
+}
+
+/**
  * The allowance — "8.0", "75.0". One decimal like the remainder beside it,
  * so "69.9 of 75.0" reads as two figures of one kind.
  */

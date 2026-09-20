@@ -255,6 +255,25 @@ export function capRefusalMessage(params: {
   );
 }
 
+/** The two columns of `processing_usage` a month's total is summed from. */
+export interface UsageRow {
+  reserved_seconds: number | null;
+  actual_seconds: number | null;
+}
+
+/**
+ * Seconds a set of unreleased ledger rows count for, the way
+ * `reserve_processing_quota` sums them: the vendor's actual figure where one
+ * has landed, the reservation otherwise. Pure — the wizard's meter sums its
+ * own rows with it too.
+ */
+export function sumUsedSeconds(rows: readonly UsageRow[]): number {
+  return rows.reduce(
+    (total, row) => total + (row.actual_seconds ?? row.reserved_seconds ?? 0),
+    0,
+  );
+}
+
 export interface QuotaPeek {
   usedSeconds: number;
   capSeconds: number;
@@ -299,15 +318,7 @@ export async function peekQuota(
     throw new Error(`Could not read processing usage: ${error.message}`);
   }
 
-  const usedSeconds = (
-    (data ?? []) as Array<{
-      reserved_seconds: number | null;
-      actual_seconds: number | null;
-    }>
-  ).reduce(
-    (total, row) => total + (row.actual_seconds ?? row.reserved_seconds ?? 0),
-    0,
-  );
+  const usedSeconds = sumUsedSeconds((data ?? []) as UsageRow[]);
 
   return {
     usedSeconds,

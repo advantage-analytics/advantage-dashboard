@@ -12,6 +12,7 @@ import { formatPilotEnd } from "@/lib/services/splitstep/config";
 import {
   formatHoursCap,
   formatHoursTenths,
+  formatOverage,
 } from "@/components/dashboard/matches/new-match-wizard/utils";
 
 /**
@@ -66,7 +67,8 @@ const FooterMeter = (() => {
       if (id === "react") return React;
       if (id === "@/lib/data/usage-format") return { usageFraction };
       if (id === "@/lib/services/splitstep/config") return { formatPilotEnd };
-      if (id === "./utils") return { formatHoursCap, formatHoursTenths };
+      if (id === "./utils")
+        return { formatHoursCap, formatHoursTenths, formatOverage };
       throw new Error(`unexpected import in the meter: ${id}`);
     },
   });
@@ -107,7 +109,7 @@ test("over the allowance, the readout names the overage instead of a clamped rem
     selectedSeconds: 3 * HOUR,
   });
   // The real formatter, not a literal: 3.0 spent against 2.0 left.
-  expect(readout(html)).toContain(`Over by ${formatHoursTenths(HOUR)} h`);
+  expect(readout(html)).toContain(`Over by ${formatOverage(HOUR)}`);
   expect(readout(html)).toContain("Over by 1.0 h");
   expect(readout(html)).toContain("Spends 3.0 h");
   // The clamped sentence is what this replaces, so it must be gone.
@@ -165,4 +167,15 @@ test("at or under the allowance, and unpriced, the markup is unchanged", () => {
   const spentButUnpriced = render({ remainingSeconds: 0, selectedSeconds: 0 });
   expect(spentButUnpriced).not.toContain("Over by");
   expect(spentButUnpriced).not.toContain("var(--error)");
+});
+
+test("a small overage is said in minutes, never as 0.0 h", () => {
+  // Two minutes over: tenths of an hour would round this to nothing.
+  const html = render({
+    remainingSeconds: HOUR,
+    selectedSeconds: HOUR + 120,
+  });
+  expect(readout(html)).toContain("Over by 2 min");
+  expect(readout(html)).not.toContain("0.0 h");
+  expect(html).toContain("over the allowance by 2 minutes");
 });

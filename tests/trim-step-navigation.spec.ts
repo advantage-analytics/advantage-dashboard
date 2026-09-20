@@ -19,14 +19,12 @@ import type { TrimHarnessWindow } from "./fixtures/trim-step-window";
  *      which is the assertion, not a compromise: the bug being guarded is a
  *      jump that runs past the media and leaves the player on a frame that
  *      does not exist.
- *   2. **"Set start here" writes the playhead into the form.** The whole point
- *      of the button is that the cut takes the position the video is already
- *      at, with the other cut untouched. `I` and `O` are the same act from the
- *      keyboard and must reach the same call.
- *   3. **The button goes grey on the far side of the other cut.** Its
- *      `disabled` is fed by a throttled mirror of the playhead, so it is
- *      correct only *eventually* — every assertion on it here is an
- *      auto-retrying one, never a sleep.
+ *   2. **`I` and `O` write the playhead into the form.** The cut takes the
+ *      position the video is already at, with the other cut untouched. They
+ *      are keys only — the step names them in a row of `Kbd` chips.
+ *   3. **A key is refused on the far side of the other cut**, rather than
+ *      clamped one frame off it, and refused from inside a camera question,
+ *      whose arrows and letters are its own.
  *
  * The clip is 64x64, 30fps and exactly 2.000s; one frame is a thirtieth of a
  * second. The declared probe duration is the harness's, not the clip's, so the
@@ -171,11 +169,6 @@ function stepRoot(page: Page) {
   return page.locator('div[tabindex="-1"]').first();
 }
 
-const setStart = (page: Page) =>
-  page.getByRole("button", { name: "Set start here" });
-const setEnd = (page: Page) =>
-  page.getByRole("button", { name: "Set end here" });
-
 /* -------------------------------------------------------------------------
  * The jump buttons
  * ---------------------------------------------------------------------- */
@@ -240,24 +233,7 @@ test("the arrow keys jump the same ten seconds, and Shift jumps a minute", async
  * Setting a cut to the playhead
  * ---------------------------------------------------------------------- */
 
-test("Set start here writes the playhead into start and leaves end alone", async ({
-  page,
-}) => {
-  await open(page, { start: 0, end: CLIP_SECONDS });
-
-  await park(page, 1);
-  await expect(setStart(page)).toBeEnabled();
-  await setStart(page).click();
-
-  const events = await trimEvents(page);
-  expect(events).toHaveLength(1);
-  expect(events[0].startSeconds).toBeCloseTo(1, 2);
-  // The other cut is the thing that must NOT move: a button that rewrote both
-  // would silently discard a window the user had already placed.
-  expect(events[0].endSeconds).toBe(CLIP_SECONDS);
-});
-
-test("I and O set start and end to the playhead, the same as the buttons", async ({
+test("I and O set start and end to the playhead, each leaving the other cut alone", async ({
   page,
 }) => {
   await open(page, { start: 0, end: CLIP_SECONDS });
@@ -284,51 +260,58 @@ test("I and O set start and end to the playhead, the same as the buttons", async
  * The far side of the other cut
  * ---------------------------------------------------------------------- */
 
-test("Set start goes dead once the playhead reaches the end handle", async ({
+test("I is refused once the playhead reaches the end handle, and works again inside the window", async ({
   page,
 }) => {
   // An end cut at one second, with a second of clip left beyond it to get the
   // playhead past.
   await open(page, { start: 0, end: 1 });
-
-  await park(page, 0.5);
-  await expect(setStart(page)).toBeEnabled();
+  await stepRoot(page).focus();
 
   // Exactly on the end handle is already too far: a start there would be the
   // same instant as the end, and the step refuses rather than clamping.
   await park(page, 1);
-  await expect(setStart(page)).toBeDisabled();
-
-  // And past it.
+  await page.keyboard.press("i");
   await park(page, 1.5);
-  await expect(setStart(page)).toBeDisabled();
-
-  // The key is held to the same rule as the button — otherwise the keyboard
-  // would be a way around a control the pointer cannot press.
-  await stepRoot(page).focus();
   await page.keyboard.press("i");
   await page.waitForTimeout(250);
   expect(await trimEvents(page)).toEqual([]);
 
-  // Coming back inside the window revives it, so the grey state is a fact
-  // about the playhead and not a latch.
-  await park(page, 1 - 4 * FRAME);
-  await expect(setStart(page)).toBeEnabled();
+  // Back inside the window it writes, so the refusal is a fact about the
+  // playhead and not a latch.
+  await park(page, 0.5);
+  await page.keyboard.press("i");
+  await expect.poll(async () => (await trimEvents(page)).length).toBe(1);
+  expect((await trimEvents(page))[0].startSeconds).toBeCloseTo(0.5, 2);
 });
 
-test("Set end goes dead once the playhead reaches the start handle", async ({
+test("O is refused once the playhead reaches the start handle", async ({
   page,
 }) => {
   await open(page, { start: 1, end: CLIP_SECONDS });
-
-  await park(page, 1.5);
-  await expect(setEnd(page)).toBeEnabled();
+  await stepRoot(page).focus();
 
   await park(page, 1);
-  await expect(setEnd(page)).toBeDisabled();
-
+  await page.keyboard.press("o");
   await park(page, 0.5);
-  await expect(setEnd(page)).toBeDisabled();
+  await page.keyboard.press("o");
+  await page.waitForTimeout(250);
+  expect(await trimEvents(page)).toEqual([]);
+});
+
+test("the step's keys stay out of a camera question", async ({ page }) => {
+  await open(page, { start: 0, end: CLIP_SECONDS });
+  await park(page, 1);
+
+  // A radio card is inside the step root, so its keydown bubbles to the step
+  // handler — which must leave a radiogroup's arrows and letters alone.
+  await page.getByRole("radio").first().focus();
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("i");
+  await page.waitForTimeout(250);
+
+  expect(await playhead(page)).toBeCloseTo(1, 1);
+  expect(await trimEvents(page)).toEqual([]);
 });
 
 /* -------------------------------------------------------------------------

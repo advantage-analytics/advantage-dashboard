@@ -7,6 +7,7 @@ import * as validation from "@/components/dashboard/matches/new-match-wizard/val
 import * as scoreState from "@/components/dashboard/matches/new-match-wizard/score-state";
 import * as subjectEligibility from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
 import * as scoreFormat from "@/lib/ui/score-format";
+import * as quota from "@/lib/services/splitstep/quota";
 import type {
   UseUploadMatchWizardProps,
   UseUploadMatchWizardReturn,
@@ -257,10 +258,13 @@ export function uploadWizardHarness(
         : table === "programs"
           ? programStatusQuery
           : query,
-    rpc: async (fn?: string) => {
-      // The team pool total behind the footer meter — a scalar, and not a
-      // roster read, so it must not move `rosterRpcCallCount`.
+    // By name, so an RPC this harness has never heard of fails loudly
+    // instead of being answered with — and counted as — a roster.
+    rpc: async (fn: string) => {
+      // The team pool total behind the footer meter: a scalar.
       if (fn === "program_usage_total") return { data: 0, error: null };
+      if (fn !== "program_roster_full")
+        throw new Error(`upload-wizard-hook: unstubbed rpc "${fn}"`);
       rosterRpcCallCount++;
       return options.rosterError
         ? { data: null, error: { message: options.rosterError } }
@@ -306,6 +310,8 @@ export function uploadWizardHarness(
     "@/lib/services/splitstep/quota": {
       accountTypeFor: () => "user",
       monthlyCapSecondsFor: () => options.quotaCapSeconds ?? 7200,
+      // Pure, so the real one.
+      sumUsedSeconds: quota.sumUsedSeconds,
     },
     "@/lib/data/usage-format": { formatResetDate: () => "Oct 1" },
     // Pure, and only read to describe the saved match to the success screen.

@@ -8,9 +8,9 @@
  * ranged longest-outward around play, then mute — and the playhead time in a
  * mono capsule; beneath it the filmstrip,
  * trimmed-out ends washed in page tone, the kept window one 2px Signal Blue
- * bracket whose ends are the handles; under it the two cut readouts, each
- * paired with the button that moves that cut to wherever the video already is,
- * and one line naming the keys that do the same; then the two camera questions
+ * bracket whose ends are the handles; under it the two cut readouts and one
+ * line of key chips — I and O move a cut to wherever the video already is;
+ * then the two camera questions
  * the vendor refuses a job without. Design: Upload Wizard v5, frame 3c.
  *
  * Everything runs against the LOCAL file through an object URL, so trimming
@@ -50,10 +50,10 @@ import {
   XCircle,
 } from "lucide-react";
 import { useVideoFilmstrip } from "@/hooks/use-video-filmstrip";
-import { advButton } from "@/lib/ui/adv-button";
 import { JUMP_STEP_SECONDS } from "../match-video-attachment/use-attachment-alignment";
 import type { VideoProbeSummary } from "./types";
 import { focusRingCls, noteStripCls } from "./styles";
+import { Kbd } from "@/components/ui/kbd";
 import { isFormControl } from "./useWizardKeys";
 import { formatClipLength, formatClock, formatTimecode } from "./utils";
 import { FieldCaption } from "./FieldCaption";
@@ -68,6 +68,13 @@ export interface TrimStepContentProps {
   endSeconds: number | undefined;
   /** Provider-supplied floor, so this component never names a vendor. */
   minTrimSeconds: number;
+  /**
+   * What Continue refused with — today, that the window costs more than is
+   * left this month. Raised on the click rather than by disabling Continue, so
+   * it has to be said HERE: the wizard's shared `error` is otherwise rendered
+   * only on the details step, and a refusal nobody can read is a dead button.
+   */
+  refusal?: string | null;
   /** "Marcus" when the match is a roster player's; null when it is the uploader's. */
   subjectFirstName: string | null;
   fixedCamera: boolean | undefined;
@@ -120,17 +127,28 @@ const PLAYER_MAX_HEIGHT = "405px";
  */
 const LONG_JUMP_SECONDS = 60;
 
-/**
- * How often the playhead is republished into React state.
- *
- * The marker and the clock are written imperatively (see `applyPlayhead`) and
- * must not cost a render. But "Set start here" has to be able to go grey when
- * the playhead crosses the other cut, and `disabled` is a rendered attribute —
- * so the value is mirrored into state on a trailing timer: one re-render per
- * interval at most, and always eventually correct because the timer reads the
- * ref at the moment it fires rather than closing over a stale sample.
- */
-const PLAYHEAD_PUBLISH_MS = 150;
+/** A coarse jump in the in-frame control row: a mono caption where the frame
+ *  steps carry an icon, the spoken name on the button. */
+function JumpButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${controlCls} mono tabular text-[10px] font-medium`}
+      aria-label={label}
+    >
+      <span aria-hidden="true">{children}</span>
+    </button>
+  );
+}
 
 const controlCls = `inline-flex size-7 items-center justify-center rounded-[var(--radius-element)] text-white transition-colors duration-150 hover:bg-white/10 ${focusRingCls}`;
 
@@ -228,6 +246,7 @@ function TrimStepContentImpl({
   startSeconds,
   endSeconds,
   minTrimSeconds,
+  refusal = null,
   subjectFirstName,
   fixedCamera,
   initialTopPlayerIsPlayer1,
@@ -284,24 +303,6 @@ function TrimStepContentImpl({
   const playheadRef = useRef(0);
   const playheadElRef = useRef<HTMLDivElement>(null);
   const clockElRef = useRef<HTMLSpanElement>(null);
-  // The same playhead at a cadence React can afford — see PLAYHEAD_PUBLISH_MS.
-  const [playheadTime, setPlayheadTime] = useState(0);
-  const publishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const publishPlayhead = useCallback(() => {
-    if (publishTimerRef.current !== null) return;
-    publishTimerRef.current = setTimeout(() => {
-      publishTimerRef.current = null;
-      setPlayheadTime(playheadRef.current);
-    }, PLAYHEAD_PUBLISH_MS);
-  }, []);
-  useEffect(
-    () => () => {
-      if (publishTimerRef.current !== null) {
-        clearTimeout(publishTimerRef.current);
-      }
-    },
-    [],
-  );
   // Mirrors `dragging` for the imperative playhead and the seek callbacks,
   // which must not re-subscribe on every drag. Declared before the callbacks
   // that read it; written in an effect below, never during render.
@@ -333,7 +334,6 @@ function TrimStepContentImpl({
   }, [videoFile]);
 
   const applyPlayhead = useCallback(() => {
-    publishPlayhead();
     const clock = clockElRef.current;
     if (clock) clock.textContent = formatTimecode(playheadRef.current);
     const el = playheadElRef.current;
@@ -347,7 +347,7 @@ function TrimStepContentImpl({
     // the one the cut is landing on, and hiding the only marker that says
     // where the video actually is left the drag looking unanchored.
     el.style.opacity = pct < 0 || pct > 100 ? "0" : "1";
-  }, [publishPlayhead]);
+  }, []);
 
   // Mirror `view` into a ref for the imperative playhead and the window-level
   // pointer handlers. Written in an effect, never during render.
@@ -359,17 +359,13 @@ function TrimStepContentImpl({
   // A new source rewinds the playhead and cancels any zoom still animating.
   useEffect(() => {
     playheadRef.current = 0;
-    // Through the same trailing timer the rest of the step uses, rather than a
-    // synchronous setState in an effect body — it reads the ref when it fires,
-    // which is now zero either way.
-    publishPlayhead();
     return () => {
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
     };
-  }, [videoFile, publishPlayhead]);
+  }, [videoFile]);
 
   // Rail width drives how many thumbnails tile across it.
   useEffect(() => {
@@ -432,10 +428,14 @@ function TrimStepContentImpl({
     (time: number) => {
       const el = videoRef.current;
       if (!el) return;
-      wantedSeekRef.current = time;
+      // Clamped BEFORE it is parked: `seekBy` and the I/O keys read the parked
+      // value as the truthful position, and a raw overshoot (+1m near the end)
+      // would have the next −10s measured from beyond the file.
+      const clamped = Math.max(0, Math.min(duration, time));
+      wantedSeekRef.current = clamped;
       if (el.seeking) return;
       wantedSeekRef.current = null;
-      el.currentTime = Math.max(0, Math.min(duration, time));
+      el.currentTime = clamped;
     },
     [duration],
   );
@@ -715,8 +715,8 @@ function TrimStepContentImpl({
   }, []);
 
   /**
-   * Put a cut where the video already is — scrub to the first serve, press the
-   * button, and the window starts there. `moveHandle` owns the clamp and the
+   * Put a cut where the video already is — scrub to the first serve, press I,
+   * and the window starts there. `moveHandle` owns the clamp and the
    * write; this only decides *which* time is meant.
    */
   const setHandleToPlayhead = useCallback(
@@ -728,9 +728,8 @@ function TrimStepContentImpl({
       // straight after a jump would otherwise cut at the frame you left.
       const time = wantedSeekRef.current ?? el.currentTime;
       // Refused rather than clamped on the wrong side of the other cut: a
-      // clamp would land one frame off that cut, which reads as the button
-      // having picked a time of its own. The button is `disabled` there too —
-      // this is the same rule against the live value, for the I/O keys.
+      // clamp would land one frame off that cut, which reads as the key
+      // having picked a time of its own.
       if (
         handle === "start" ? time >= end - frameStep : time <= start + frameStep
       ) {
@@ -740,11 +739,6 @@ function TrimStepContentImpl({
     },
     [start, end, frameStep, moveHandle],
   );
-
-  // What the two buttons render. `playheadTime` rather than the ref, because
-  // `disabled` is an attribute and only a render can change it.
-  const canSetStart = playheadTime < end - frameStep;
-  const canSetEnd = playheadTime > start + frameStep;
 
   /**
    * The step's own keyboard, scoped to this subtree.
@@ -760,6 +754,12 @@ function TrimStepContentImpl({
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (isFormControl(e.target)) return;
+      // The camera questions are radio cards, and a radiogroup's arrows belong
+      // to it — seeking the video (or moving a cut on I/O) from inside a
+      // question would be this step answering a key meant for that one.
+      if ((e.target as HTMLElement | null)?.closest?.('[role="radiogroup"]')) {
+        return;
+      }
       switch (e.key) {
         case " ":
         case "Spacebar": {
@@ -960,22 +960,18 @@ function TrimStepContentImpl({
           <div className="pointer-events-auto flex items-center gap-2">
             {/* Coarse jumps flank the frame steps, longest on the outside, so
                 the row reads as one scale from a minute down to a frame. */}
-            <button
-              type="button"
+            <JumpButton
+              label="Back one minute"
               onClick={() => seekBy(-LONG_JUMP_SECONDS)}
-              className={`${controlCls} mono tabular text-[10px] font-medium`}
-              aria-label="Back one minute"
             >
-              <span aria-hidden="true">−1m</span>
-            </button>
-            <button
-              type="button"
+              −1m
+            </JumpButton>
+            <JumpButton
+              label="Back ten seconds"
               onClick={() => seekBy(-JUMP_STEP_SECONDS)}
-              className={`${controlCls} mono tabular text-[10px] font-medium`}
-              aria-label="Back ten seconds"
             >
-              <span aria-hidden="true">−10s</span>
-            </button>
+              −10s
+            </JumpButton>
             <button
               type="button"
               onClick={() => seekBy(-frameStep)}
@@ -1016,22 +1012,18 @@ function TrimStepContentImpl({
                 aria-hidden="true"
               />
             </button>
-            <button
-              type="button"
+            <JumpButton
+              label="Forward ten seconds"
               onClick={() => seekBy(JUMP_STEP_SECONDS)}
-              className={`${controlCls} mono tabular text-[10px] font-medium`}
-              aria-label="Forward ten seconds"
             >
-              <span aria-hidden="true">+10s</span>
-            </button>
-            <button
-              type="button"
+              +10s
+            </JumpButton>
+            <JumpButton
+              label="Forward one minute"
               onClick={() => seekBy(LONG_JUMP_SECONDS)}
-              className={`${controlCls} mono tabular text-[10px] font-medium`}
-              aria-label="Forward one minute"
             >
-              <span aria-hidden="true">+1m</span>
-            </button>
+              +1m
+            </JumpButton>
             <span className="mx-1 h-3 w-px bg-white/35" aria-hidden="true" />
             <button
               type="button"
@@ -1240,65 +1232,65 @@ function TrimStepContentImpl({
             way back to its own cut: after scrubbing away, the number you want
             to check is the thing you click. Seeking only moves the playhead —
             the cut itself is untouched. */}
-        <div className="flex items-center justify-between gap-3 px-0.5 pt-0.5">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => seekLatest(start)}
-              aria-label="Jump to the trim start"
-              className={`inline-flex cursor-pointer items-baseline gap-1.5 rounded-[var(--radius-cell)] ${focusRingCls}`}
-            >
-              <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-                Start
-              </span>
-              <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
-                {formatTimecode(start)}
-              </span>
-            </button>
-            {/* The other direction: the readout seeks to the cut, this moves
-                the cut to where you have already scrubbed. */}
-            <button
-              type="button"
-              onClick={() => setHandleToPlayhead("start")}
-              disabled={!canSetStart}
-              className={`${advButton("ghost", "sm")} ${focusRingCls}`}
-            >
-              Set start here
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setHandleToPlayhead("end")}
-              disabled={!canSetEnd}
-              className={`${advButton("ghost", "sm")} ${focusRingCls}`}
-            >
-              Set end here
-            </button>
-            <button
-              type="button"
-              onClick={() => seekLatest(end)}
-              aria-label="Jump to the trim end"
-              className={`inline-flex cursor-pointer items-baseline gap-1.5 rounded-[var(--radius-cell)] ${focusRingCls}`}
-            >
-              <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-                End
-              </span>
-              <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
-                {formatTimecode(end)}
-              </span>
-            </button>
-          </div>
+        <div className="flex items-baseline justify-between px-0.5 pt-0.5">
+          <button
+            type="button"
+            onClick={() => seekLatest(start)}
+            aria-label="Jump to the trim start"
+            className={`inline-flex cursor-pointer items-baseline gap-1.5 rounded-[var(--radius-cell)] ${focusRingCls}`}
+          >
+            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
+              Start
+            </span>
+            <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
+              {formatTimecode(start)}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => seekLatest(end)}
+            aria-label="Jump to the trim end"
+            className={`inline-flex cursor-pointer items-baseline gap-1.5 rounded-[var(--radius-cell)] ${focusRingCls}`}
+          >
+            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
+              End
+            </span>
+            <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
+              {formatTimecode(end)}
+            </span>
+          </button>
         </div>
 
-        {/* The keys, once, where the hands already are. `mono` sets only the
-            family, but the DS type classes are unlayered and outrank a
-            Tailwind colour utility — so the tone is an inline style. */}
-        <p
-          className="mono tabular text-[10px] leading-[1.6]"
-          style={{ color: "var(--ink-400)" }}
-        >
-          Space play · ← → 10s · Shift ← → 1m · I / O set start / end
+        {/* The keys, once, where the hands already are. `Kbd` is the product's
+            one keyboard chip; `sm` is its inline-hint size, and a combo is
+            adjacent chips, never one chip holding both keys. Lowercase for
+            word-named keys, as the roster's hint and Help write them. */}
+        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] leading-[1.5] text-[var(--ink-600)]">
+          <Kbd size="sm">space</Kbd>
+          <span>play</span>
+          <span aria-hidden="true" className="text-[var(--ink-300)]">
+            ·
+          </span>
+          <Kbd size="sm">←</Kbd>
+          <Kbd size="sm">→</Kbd>
+          <span>10 s</span>
+          <span aria-hidden="true" className="text-[var(--ink-300)]">
+            ·
+          </span>
+          <Kbd size="sm">shift</Kbd>
+          <Kbd size="sm">←</Kbd>
+          <Kbd size="sm">→</Kbd>
+          <span>1 min</span>
+          <span aria-hidden="true" className="text-[var(--ink-300)]">
+            ·
+          </span>
+          <Kbd size="sm">I</Kbd>
+          <span>set start</span>
+          <span aria-hidden="true" className="text-[var(--ink-300)]">
+            ·
+          </span>
+          <Kbd size="sm">O</Kbd>
+          <span>set end</span>
         </p>
 
         {tooShort ? (
@@ -1312,6 +1304,17 @@ function TrimStepContentImpl({
               The window is under {formatClipLength(minTrimSeconds)} — widen it
               to cover the match.
             </span>
+          </div>
+        ) : null}
+
+        {refusal ? (
+          <div className={noteStripCls} role="alert">
+            <XCircle
+              className="mt-0.5 size-[13px] shrink-0 text-[var(--error)]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+            <span>{refusal}</span>
           </div>
         ) : null}
       </div>
