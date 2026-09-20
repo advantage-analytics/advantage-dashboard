@@ -120,3 +120,14 @@ is the runner's. Newest entries at the bottom.
 1. STILL OPEN — the trim step has no display for the hook's `error`, so the over-allowance refusal raised on Continue is invisible there (see T3's log entry). Needs its own task.
 2. Step 1 shows one strip at a time: a workspace with an advisory video refusal AND a spent allowance now shows only the quota sentence.
 3. The meter bar clamps at full, so a 3× overage draws the same red bar as a 1-second one; the readout carries the magnitude.
+
+## T6 · Record the usage gate in the guardrails and pipeline docs — done
+
+**gate:** mechanical PASS (lint, typecheck, full test suite); completion review `VERDICT: pass` (4/4 criteria met; every factual claim checked against the shipped code).
+
+**changed:** `docs/ui-revamp-guardrails.md` — §2's `upload-url/handler.ts` entry now names the read-only allowance peek, with a callout recording the user-approved exception dated 2026-09-19 (position in the ladder, 429 body, fail-open, `reserveQuota()` at `/jobs` still the authority); §5's quota item closed in the doc's struck-through "Done, date" convention, describing the step-1 and trim-Continue gates, the meter's "Over by x h", and — stated as a known gap — that the trim-step refusal is set but not yet displayed. `docs/video-pipeline-overview.md` §8 — `peekQuota()` (read-only, fail-open), the wizard's `quotaRefusal` gate, and the team meter reading `program_usage_total`.
+
+**follow-ups:**
+
+1. `docs/video-pipeline-overview.md` §8's closing paragraph ("Only the `individual` tier is reachable … no membership to read") is stale: `quotaTierFor()` returns `"program"` for a verified collegiate team. Left untouched as the task instructed; wants a one-paragraph correction.
+2. STILL OPEN — render the hook's `error` on the trim step (see T3 and T4 entries); the guardrails doc now records it as a known gap, so close that sentence when it lands.

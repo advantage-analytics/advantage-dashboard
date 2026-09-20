@@ -85,7 +85,7 @@ ready).
 
 ## T6 · Record the usage gate in the guardrails and pipeline docs
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T3, T5
 - **files:** docs/ui-revamp-guardrails.md, docs/video-pipeline-overview.md

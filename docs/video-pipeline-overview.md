@@ -466,7 +466,32 @@ The `processing_usage` ledger existed from the first migration and nothing wrote
 `reserve_processing_quota()` now reserves the trimmed length **before** the vendor is
 called — an allowance only checked afterwards cannot refuse anything. An advisory lock
 per account+month makes the check and the insert atomic. Failures release; completion
-reconciles the estimate against actual billed seconds.
+reconciles the estimate against actual billed seconds. `reserveQuota()` at
+`/api/splitstep/jobs` remains the sole authority — everything below only reads or
+predicts what it will do.
+
+Two things read the ledger without reserving anything, and both fail open rather than
+block an upload on a bad read:
+
+- **`peekQuota()`** (`src/lib/services/splitstep/quota.ts`) is a plain read of
+  `processing_usage` — no insert, no advisory lock — summed the same way
+  `reserve_processing_quota` sums (actual seconds where a job finished, the
+  reservation otherwise, released rows excluded). `/api/splitstep/upload-url`'s
+  handler calls it after `explainVideoRefusal` and before minting the SAS, and
+  refuses with 429 when the match's `billable_seconds` will not fit; a failed or
+  unreadable peek is logged and the upload proceeds, because `reserveQuota()` still
+  guards the actual spend at submit.
+- **The wizard's `quotaRefusal()` gate** (`new-match-wizard/validation.ts`) is the
+  client-side mirror of the same question: `providerQuotaRefusal` refuses Advantage
+  Intelligence at step 1 when the month's allowance is entirely spent, and
+  `handleTrimContinue`/`handleCreateMatch` re-ask it for the trimmed window's real
+  cost (`processingStrategy.billableSeconds()`) on Continue and again before
+  `createProcessingJob`. Advisory only, and the trim-step Continue is never
+  disabled — the refusal is raised on click and cleared the moment the window
+  moves. For a **team** workspace the wizard's remaining-hours read goes through
+  the `program_usage_total` RPC rather than a direct `processing_usage` select,
+  because that table's RLS scopes rows to `created_by = auth.uid()` and a direct
+  read would show one member's usage against the whole team's cap.
 
 Only the `individual` tier is reachable: `public.users` has `plan` and `role` but
 nothing tying a user to a program, so there is no membership to read. Inventing one
