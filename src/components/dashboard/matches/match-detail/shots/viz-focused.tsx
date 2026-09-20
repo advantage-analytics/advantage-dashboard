@@ -9,12 +9,15 @@ import { VizToolbar } from "./viz-toolbar";
 import { useVizState } from "./use-viz-state";
 import {
   EMPTY_VIZ_FILTERS,
+  availableSets,
   computeViz,
   subjectFor,
   type Cut,
 } from "./viz-model";
 import { activeFilterEntries } from "./viz-url";
 import { CUT_LABEL, type SavedViewLite } from "./viz-labels";
+import { AppliedStrip } from "./applied-strip";
+import { FiltersPopover } from "./filters-popover";
 
 /**
  * The focused court view (Task 5): the toolbar row, then a wide court card
@@ -38,14 +41,10 @@ export function VizFocused({
   savedViews,
   savedViewsBand,
   onSaveRequest,
-  filtersSlot,
-  stripSlot,
 }: {
   savedViews: SavedViewLite[];
   savedViewsBand?: ReactNode;
   onSaveRequest?: () => void;
-  filtersSlot?: ReactNode;
-  stripSlot?: ReactNode;
 }) {
   const { points } = useMatchData();
   const { you, opp } = useMatchSides();
@@ -87,8 +86,17 @@ export function VizFocused({
       <VizToolbar
         savedViews={savedViews}
         onSaveRequest={onSaveRequest}
-        filtersSlot={filtersSlot}
-        stripSlot={stripSlot}
+        filtersSlot={
+          <FiltersPopover
+            count={result.count}
+            total={result.total}
+            noun={result.noun}
+            sets={availableSets(points)}
+            youName={you.name}
+            opponentName={opp.name}
+          />
+        }
+        stripSlot={hasFilters ? <AppliedStrip /> : undefined}
       />
 
       <div className="flex items-start gap-4">

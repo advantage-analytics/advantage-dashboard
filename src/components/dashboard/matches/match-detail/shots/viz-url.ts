@@ -22,7 +22,13 @@ export interface VizState {
 
 /* ── Parse & serialize helper ──────────────────────────────────────────── */
 
-const OPTIONS = {
+/**
+ * Every non-default filter option and its label, keyed by `VizFilters` key.
+ * The single source of option labels: `activeFilterEntries` reads it for the
+ * applied-strip tokens, and `filters-popover.tsx` reads it to draw pills, so
+ * a label can never drift between the two surfaces.
+ */
+export const OPTIONS = {
   player: { opponent: "Opponent" },
   game: { serving: "Serving", returning: "Returning" },
   ball: { first: "1st", second: "2nd" },
