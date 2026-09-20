@@ -296,6 +296,51 @@ export const SERVE_HEAT_GRID = { cols: 6, rows: 7 } as const;
 export const RETURN_HEAT_GRID = { cols: 6, rows: 7 } as const;
 export const RALLY_HEAT_GRID = { cols: 10, rows: 12 } as const;
 
+// 5 metres either side of the returner's own baseline, in return-frame units.
+const RETURN_CONTACT_BAND_M = 5;
+
+/**
+ * A cut's heat-binning/drawing bounds, in the SAME projected coordinate
+ * space `binDots` (`viz-model.ts`'s `computeHeatForCut`) bins into and
+ * `court-art.tsx` draws `heatCellRect`s in — the single source both read so
+ * they cannot drift apart (I2).
+ *
+ * `returnPlacement` only ever plots net→baseline (where placement dots
+ * actually land: `projectReturnDot("placement", …)`'s depthM runs 0..~11.885,
+ * i.e. cx 240..440) — using the wider `RETURN_HEAT_BOUNDS` span here left most
+ * of the grid empty. `returnContact` dots cluster tightly around the
+ * returner's own baseline (contact struck a stride either side of it), so its
+ * band is baseline-centred (±5 m ≈ ±84 units) rather than spanning the whole
+ * court depth, clipped at `RETURN_HEAT_DEPTH_MAX` (the frame's own visible
+ * run-off) so the band never reaches past what the clipPath actually shows.
+ * `rallyPosition` keeps the full net→run-off span (`RETURN_HEAT_BOUNDS`
+ * unchanged) since rally shots land anywhere across that depth. Lateral
+ * bounds (`doublesTop`/`doublesBottom`) are identical across every cut.
+ */
+export function heatBoundsFor(
+  cut: "serve" | "returnPlacement" | "returnContact" | "rallyPosition",
+): HeatBounds {
+  if (cut === "serve") return SERVE_HEAT_BOUNDS;
+  if (cut === "returnPlacement") {
+    return {
+      xMin: RETURN_COURT.netX,
+      xMax: RETURN_COURT.nearBaselineX,
+      yMin: RETURN_COURT.doublesTop,
+      yMax: RETURN_COURT.doublesBottom,
+    };
+  }
+  if (cut === "returnContact") {
+    const band = RETURN_CONTACT_BAND_M * UNITS_PER_METER;
+    return {
+      xMin: RETURN_COURT.nearBaselineX - band,
+      xMax: Math.min(RETURN_COURT.nearBaselineX + band, RETURN_HEAT_DEPTH_MAX),
+      yMin: RETURN_COURT.doublesTop,
+      yMax: RETURN_COURT.doublesBottom,
+    };
+  }
+  return RETURN_HEAT_BOUNDS;
+}
+
 /**
  * A heat cell's on-court rect, in the SAME projected (pre-transform)
  * coordinate space `bounds` is expressed in — `court-art.tsx` draws this

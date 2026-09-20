@@ -4,6 +4,8 @@ import {
   RETURN_COURT,
   SERVE_HEAT_BOUNDS,
   RETURN_HEAT_BOUNDS,
+  UNITS_PER_METER,
+  heatBoundsFor,
   projectServeDot,
   projectReturnDot,
   zoneCellX,
@@ -504,5 +506,59 @@ test.describe("RETURN_HEAT_BOUNDS depth run-off", () => {
 
   test("xMin is still the net (unchanged — only the run-off needed settling)", () => {
     expect(RETURN_HEAT_BOUNDS.xMin).toBe(RETURN_COURT.netX);
+  });
+});
+
+/**
+ * I2 — `heatBoundsFor` gives each heat cut its own depth span so binning
+ * (`viz-model.ts`'s `computeHeatForCut`) and drawing (`court-art.tsx`) can
+ * never drift: `returnPlacement` only spans where placement dots land
+ * (net→baseline), `returnContact` is a baseline-centred band matching where
+ * contact dots actually cluster, and `rallyPosition` keeps the full run-off
+ * span. Lateral bounds are identical across every cut.
+ */
+test.describe("heatBoundsFor per cut", () => {
+  test("serve delegates to SERVE_HEAT_BOUNDS", () => {
+    expect(heatBoundsFor("serve")).toEqual(SERVE_HEAT_BOUNDS);
+  });
+
+  test("returnPlacement spans net to baseline, not the full run-off", () => {
+    const b = heatBoundsFor("returnPlacement");
+    expect(b.xMin).toBe(RETURN_COURT.netX);
+    expect(b.xMax).toBe(RETURN_COURT.nearBaselineX);
+  });
+
+  test("returnContact is a 5m-either-side band centred on the baseline", () => {
+    const b = heatBoundsFor("returnContact");
+    const band = 5 * UNITS_PER_METER;
+    expect(b.xMin).toBeCloseTo(RETURN_COURT.nearBaselineX - band, 6);
+    expect(b.xMax).toBeCloseTo(RETURN_COURT.nearBaselineX + band, 6);
+  });
+
+  test("returnContact's far edge clips at RETURN_HEAT_DEPTH_MAX (RETURN_HEAT_BOUNDS.xMax)", () => {
+    const b = heatBoundsFor("returnContact");
+    expect(b.xMax).toBeLessThanOrEqual(RETURN_HEAT_BOUNDS.xMax);
+    // Unclipped, 5m past the baseline (~524) would exceed the visible
+    // run-off (~522.35) — the clip is actually exercised, not a no-op.
+    expect(RETURN_COURT.nearBaselineX + 5 * UNITS_PER_METER).toBeGreaterThan(
+      RETURN_HEAT_BOUNDS.xMax,
+    );
+    expect(b.xMax).toBe(RETURN_HEAT_BOUNDS.xMax);
+  });
+
+  test("rallyPosition keeps the full net-to-run-off span (unchanged)", () => {
+    expect(heatBoundsFor("rallyPosition")).toEqual(RETURN_HEAT_BOUNDS);
+  });
+
+  test("lateral bounds are identical across every return-frame cut", () => {
+    for (const cut of [
+      "returnPlacement",
+      "returnContact",
+      "rallyPosition",
+    ] as const) {
+      const b = heatBoundsFor(cut);
+      expect(b.yMin).toBe(RETURN_COURT.doublesTop);
+      expect(b.yMax).toBe(RETURN_COURT.doublesBottom);
+    }
   });
 });

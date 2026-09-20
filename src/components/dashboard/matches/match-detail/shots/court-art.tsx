@@ -5,8 +5,7 @@ import {
   SERVE_BACKGROUND_PATH,
   RETURN_COURT,
   RETURN_BACKGROUND_PATH,
-  SERVE_HEAT_BOUNDS,
-  RETURN_HEAT_BOUNDS,
+  heatBoundsFor,
   SERVE_HEAT_GRID,
   RETURN_HEAT_GRID,
   RALLY_HEAT_GRID,
@@ -398,7 +397,7 @@ export function CourtArt({
 
           {showHeat &&
             heat &&
-            heatRects(heat, SERVE_HEAT_BOUNDS, SERVE_HEAT_GRID)}
+            heatRects(heat, heatBoundsFor(cut), SERVE_HEAT_GRID)}
 
           {!showHeat &&
             !showZones &&
@@ -579,10 +578,10 @@ export function CourtArt({
                 // clipPath, still in the same logical coordinates the
                 // unblurred cells below use.
                 <g filter={`url(#${rallyBlurId})`}>
-                  {heatRects(heat, RETURN_HEAT_BOUNDS, RALLY_HEAT_GRID)}
+                  {heatRects(heat, heatBoundsFor(cut), RALLY_HEAT_GRID)}
                 </g>
               ) : (
-                heatRects(heat, RETURN_HEAT_BOUNDS, RETURN_HEAT_GRID)
+                heatRects(heat, heatBoundsFor(cut), RETURN_HEAT_GRID)
               ))}
 
             {!showHeat &&

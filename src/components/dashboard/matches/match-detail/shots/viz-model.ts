@@ -20,8 +20,7 @@ import {
 import {
   projectServeDot,
   projectReturnDot,
-  SERVE_HEAT_BOUNDS,
-  RETURN_HEAT_BOUNDS,
+  heatBoundsFor,
   SERVE_HEAT_GRID,
   RETURN_HEAT_GRID,
   RALLY_HEAT_GRID,
@@ -196,7 +195,7 @@ function computeHeatForCut(cut: Cut, dots: VizDot[]): HeatGrid {
       projected.map((p) => ({ x: p.cx, y: p.cy })),
       SERVE_HEAT_GRID.cols,
       SERVE_HEAT_GRID.rows,
-      SERVE_HEAT_BOUNDS,
+      heatBoundsFor(cut),
     );
   }
   const kind = cut === "returnPlacement" ? "placement" : "contact";
@@ -208,7 +207,7 @@ function computeHeatForCut(cut: Cut, dots: VizDot[]): HeatGrid {
     projected.map((p) => ({ x: p.cx, y: p.cy })),
     grid.cols,
     grid.rows,
-    RETURN_HEAT_BOUNDS,
+    heatBoundsFor(cut),
   );
 }
 
