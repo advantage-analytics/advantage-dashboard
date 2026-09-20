@@ -494,6 +494,76 @@ export function countFilmOption(
     .length;
 }
 
+/* ── The Advanced panel's section table ─────────────────────────────────── */
+
+export type FilmSectionId =
+  "score" | "serve" | "return" | "rally" | "result" | "court";
+
+/** Axis keys — every field of `FilmFilters` except the standalone ones. */
+export type FilmAxisKey = Exclude<keyof FilmFilters, "savedOnly">;
+
+/**
+ * Which axis lives in which section of the in-column Advanced panel (handoff
+ * P4). Six sections in the frame's order over the fourteen axes; `savedOnly`
+ * is the standalone pill above them, not a section. Pure data, so the spec
+ * can assert the partition without React.
+ */
+export const FILM_FILTER_SECTIONS: readonly {
+  id: FilmSectionId;
+  name: string;
+  keys: readonly FilmAxisKey[];
+}[] = [
+  { id: "score", name: "Score", keys: ["set", "pressure", "score"] },
+  { id: "serve", name: "Serve", keys: ["server", "ball", "serve"] },
+  { id: "return", name: "Return", keys: ["wing", "returns"] },
+  { id: "rally", name: "Rally", keys: ["rallyMin", "shot"] },
+  { id: "result", name: "Result", keys: ["result", "ended", "outcome"] },
+  { id: "court", name: "Court", keys: ["court"] },
+];
+
+/** Keys that are drawn outside the sections, as their own pill. */
+export const FILM_STANDALONE_KEYS: readonly (keyof FilmFilters)[] = [
+  "savedOnly",
+];
+
+function sameSet(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  const seen = [...b];
+  for (const value of a) {
+    const at = seen.indexOf(value);
+    if (at === -1) return false;
+    seen.splice(at, 1);
+  }
+  return true;
+}
+
+/**
+ * Whether two filter values would give the same cut. The four OR groups are
+ * sets, not sequences — picking "Aces" then "Wide" is the same cut as picking
+ * them the other way round — so they compare order-insensitively. This is what
+ * gates the panel's Apply: a draft equal to what is applied has nothing to
+ * commit.
+ */
+export function filmFiltersEqual(a: FilmFilters, b: FilmFilters): boolean {
+  return (
+    a.pressure === b.pressure &&
+    a.ball === b.ball &&
+    a.wing === b.wing &&
+    a.outcome === b.outcome &&
+    a.server === b.server &&
+    a.savedOnly === b.savedOnly &&
+    a.set === b.set &&
+    a.rallyMin === b.rallyMin &&
+    a.court === b.court &&
+    sameSet(a.score, b.score) &&
+    sameSet(a.serve, b.serve) &&
+    sameSet(a.returns, b.returns) &&
+    sameSet(a.result, b.result) &&
+    sameSet(a.ended, b.ended) &&
+    sameSet(a.shot, b.shot)
+  );
+}
+
 /** Anything with `get`, so `URLSearchParams` and `ReadonlyURLSearchParams` both fit. */
 type ParamsReader = { get(name: string): string | null };
 

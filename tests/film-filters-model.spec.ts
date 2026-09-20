@@ -2,8 +2,11 @@ import { expect, test } from "@playwright/test";
 
 import {
   DEFAULT_FILM_FILTERS,
+  FILM_FILTER_SECTIONS,
+  FILM_STANDALONE_KEYS,
   countFilmOption,
   cutName,
+  filmFiltersEqual,
   parseCut,
   serializeCut,
 } from "@/components/dashboard/matches/match-detail/film/filters/types";
@@ -86,6 +89,37 @@ test("savedOnly wins over break, and bad params give defaults", () => {
   expect(parseCut(new URLSearchParams("cut=zzz&serve=both"))).toEqual(
     DEFAULT_FILM_FILTERS,
   );
+});
+
+test("the section table places every axis exactly once", () => {
+  expect(FILM_FILTER_SECTIONS.map((s) => s.name)).toEqual([
+    "Score",
+    "Serve",
+    "Return",
+    "Rally",
+    "Result",
+    "Court",
+  ]);
+
+  const placed = [
+    ...FILM_FILTER_SECTIONS.flatMap((s) => s.keys),
+    ...FILM_STANDALONE_KEYS,
+  ];
+  expect(new Set(placed).size).toBe(placed.length);
+  expect([...placed].sort()).toEqual(Object.keys(DEFAULT_FILM_FILTERS).sort());
+});
+
+test("filmFiltersEqual ignores OR-group order but not values", () => {
+  const a = {
+    ...DEFAULT_FILM_FILTERS,
+    serve: ["ace" as const, "wide" as const],
+  };
+  const b = {
+    ...DEFAULT_FILM_FILTERS,
+    serve: ["wide" as const, "ace" as const],
+  };
+  expect(filmFiltersEqual(a, b)).toBe(true);
+  expect(filmFiltersEqual(a, { ...a, court: "ad" })).toBe(false);
 });
 
 test("advanced-only filters serialize to neither cut nor serve", () => {

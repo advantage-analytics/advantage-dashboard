@@ -34,3 +34,13 @@ is the runner's. Newest entries at the bottom.
 1. `FilmFiltersPanel` in `film-filters.tsx` is now unreferenced; T5 deletes it.
 2. Until T5 a cut carrying an Advanced axis reads only "Filtered" with no way to adjust it in the shell.
 3. `PointList`'s `filtered` local now only gates the clear button; consider deriving it once T6 lands URL cut state.
+
+## T4 · Build the in-column Advanced filters panel — done
+
+**gate:** mechanical pass; completion review pass
+**changed:** New `film/film-advanced-panel.tsx` exports `FilmAdvancedPanel` (caller-owned `openSections`, no Popover/Dialog/portal; nothing mounts it yet). Every option is an `aria-pressed` pill with a `countFilmOption` count, a zero-count unselected pill is `disabled`, the footer reads `{preview} of {total}`, Apply uses `advButton()`. `filters/types.ts` gains the JSX-free `FILM_FILTER_SECTIONS` (Score, Serve, Return, Rally, Result, Court; `savedOnly` is the standalone pill), `FILM_STANDALONE_KEYS` and `filmFiltersEqual`. Two new specs cover the section partition of `DEFAULT_FILM_FILTERS` and array-order-insensitive equality. Axis-to-section mapping (the spec left it open): Score = set, pressure, score; Serve = server, ball, serve; Return = wing, returns; Rally = rallyMin, shot; Result = result, ended, outcome; Court = court.
+**follow-ups:**
+
+1. T5 mounts the panel and wires `onOpenAdvanced` plus the `openSections` state in `FilmRoom`; `FilmFiltersPanel` and its helpers are then dead.
+2. Result's `result` and `ended` axes overlap (winner/forced/unforced) and read as near-duplicate pill groups; decide whether to merge them.
+3. The title-row count duplicates the footer's preview number.

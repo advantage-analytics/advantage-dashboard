@@ -60,7 +60,7 @@ ready).
 
 ## T4 · Build the in-column Advanced filters panel
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** (guess) film/film-advanced-panel.tsx (new), film/filters/types.ts, tests/film-filters-model.spec.ts
