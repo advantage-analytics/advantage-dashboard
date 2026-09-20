@@ -7,7 +7,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   useTransition,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -41,6 +40,7 @@ import {
 import { CourtTile } from "./court-tile";
 import { ManageableSavedViewTile } from "./manageable-saved-view-tile";
 import { useVizState } from "./use-viz-state";
+import { usePrefersReducedMotion } from "./use-reduced-motion";
 import type { VizState } from "./viz-url";
 import { activeFilterEntries, sameView } from "./viz-url";
 import {
@@ -780,6 +780,12 @@ export function SavedViewsBand({
         dots={data.dots}
         href={data.href}
         current={opts.current}
+        navigateState={{
+          cut: view.cut,
+          chart: view.chart,
+          filters: view.filters,
+          viewId: view.id,
+        }}
       />
     );
   }
@@ -898,7 +904,14 @@ export function SavedViewsBand({
       {variant === "focused" ? (
         <div
           role="list"
-          className={VIZ_TILE_GRID_CLASS}
+          // F5: `viz-vt-views-grid` only on the FOCUSED variant — the wall's
+          // own saved-views grid never carries it, so this name is never
+          // present in both the old and new snapshot of a wall→focused
+          // transition at once (which would pair them as an "update"
+          // instead of letting this grid stagger in as new content). See
+          // `globals.css`'s `::view-transition-new(.viz-vt-views-grid)
+          // :only-child` rule.
+          className={`${VIZ_TILE_GRID_CLASS} viz-vt-views-grid`}
           style={VIZ_TILE_GRID_STYLE}
         >
           {visibleDefaultTiles.map((tile) => {
@@ -918,6 +931,7 @@ export function SavedViewsBand({
                   dots={tile.dots}
                   href={tile.href}
                   current={isCurrent}
+                  navigateState={tile.state}
                 />
               </div>
             );
@@ -1003,35 +1017,5 @@ function NewViewTile({
         New view
       </span>
     </Link>
-  );
-}
-
-const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
-
-function subscribeReducedMotion(onChange: () => void): () => void {
-  const mq = window.matchMedia(REDUCED_MOTION_QUERY);
-  mq.addEventListener("change", onChange);
-  return () => mq.removeEventListener("change", onChange);
-}
-
-function getReducedMotionSnapshot(): boolean {
-  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
-}
-
-function getReducedMotionServerSnapshot(): boolean {
-  return false;
-}
-
-/**
- * `useSyncExternalStore` rather than an effect + `useState` — the same
- * value, but read as React's own recommended way to subscribe to an
- * external source of truth (the browser's media query), which sidesteps
- * `react-hooks/set-state-in-effect` entirely instead of triggering it.
- */
-function usePrefersReducedMotion(): boolean {
-  return useSyncExternalStore(
-    subscribeReducedMotion,
-    getReducedMotionSnapshot,
-    getReducedMotionServerSnapshot,
   );
 }

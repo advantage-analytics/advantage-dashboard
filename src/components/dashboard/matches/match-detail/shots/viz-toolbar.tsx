@@ -3,6 +3,7 @@
 import { CutMenu } from "./cut-menu";
 import { ChartMenu } from "./chart-menu";
 import type { SavedViewLite } from "./viz-labels";
+import { cn } from "@/lib/utils";
 
 /**
  * The Visualizations tab's toolbar row (P1d/P1e): the cut menu, the chart
@@ -23,6 +24,7 @@ export function VizToolbar({
   cutMenuTriggerRef,
   filtersSlot,
   stripSlot,
+  className,
 }: {
   savedViews: SavedViewLite[];
   onSaveRequest?: () => void;
@@ -30,9 +32,13 @@ export function VizToolbar({
   cutMenuTriggerRef?: React.Ref<HTMLButtonElement>;
   filtersSlot?: React.ReactNode;
   stripSlot?: React.ReactNode;
+  /** F5: `viz-focused.tsx` adds `viz-vt-toolbar` — the entrance transition's
+   * hook (`globals.css`) for this block staggering in on a wall→focused
+   * morph. Merged onto the root, not replacing it. */
+  className?: string;
 }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className={cn("flex items-center gap-3", className)}>
       <CutMenu
         savedViews={savedViews}
         onSaveRequest={onSaveRequest}

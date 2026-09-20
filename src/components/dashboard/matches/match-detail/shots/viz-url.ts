@@ -47,6 +47,27 @@ export function sameView(
   return true;
 }
 
+/**
+ * Stable identity of the COURT currently on screen — F5's shared-element
+ * transition (`viz-state-context.tsx`'s `runCourtMorph`) names its morph
+ * target with this, and `viz-focused.tsx`'s scroll-to-top effect keys off
+ * it instead of `cut` alone, so a Filters-popover edit (same court,
+ * different filters) triggers neither the morph nor a scroll, only an
+ * actual court change does.
+ *
+ * Equal across a pure filter edit — `ball`/`zone`/`result`/`set`/… never
+ * enter the key, because none of them change WHICH court is drawn, only
+ * what's plotted on it. Different whenever `cut` changes (a different
+ * court shape), `filters.player` changes (a different subject's court —
+ * "you" vs the opponent), or `viewId` changes (a different saved view,
+ * even one that happens to share cut/player with the view left behind).
+ * `null` on the wall (`cut === null`): there is no single court to name.
+ */
+export function viewIdentityKey(state: VizState): string | null {
+  if (state.cut === null) return null;
+  return `${state.filters.player}:${state.cut}:${state.viewId ?? ""}`;
+}
+
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
 export interface VizState {

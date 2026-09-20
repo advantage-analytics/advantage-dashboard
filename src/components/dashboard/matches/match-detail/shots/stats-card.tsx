@@ -1,4 +1,5 @@
 import type { VizStats, StatRow } from "./viz-model";
+import { cn } from "@/lib/utils";
 
 /**
  * The focused-view's 292px stats card (Task F3): generalises the old
@@ -17,10 +18,21 @@ function rowAccessibleName(label: string, row: StatRow): string {
   return `${label}: ${row.winPct}% of ${row.count} points won`;
 }
 
-export function StatsCard({ stats }: { stats: VizStats }) {
+export function StatsCard({
+  stats,
+  className,
+}: {
+  stats: VizStats;
+  /** F5: `viz-focused.tsx` adds `viz-vt-stats-card` — see
+   * `VizToolbar`'s identical `className` prop for why. */
+  className?: string;
+}) {
   return (
     <div
-      className="flex w-[292px] shrink-0 flex-col rounded-[var(--radius-card)] border p-4"
+      className={cn(
+        "flex w-[292px] shrink-0 flex-col rounded-[var(--radius-card)] border p-4",
+        className,
+      )}
       style={{
         borderColor: "var(--border-hairline)",
         backgroundColor: "var(--surface-card)",

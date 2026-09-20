@@ -9,6 +9,7 @@ import { APRON_FILL, CourtArt } from "./court-art";
 import { StatsCard } from "./stats-card";
 import { VizToolbar } from "./viz-toolbar";
 import { useVizState } from "./use-viz-state";
+import { usePrefersReducedMotion } from "./use-reduced-motion";
 import {
   EMPTY_VIZ_FILTERS,
   availableSets,
@@ -17,11 +18,17 @@ import {
   subjectFor,
   type Cut,
 } from "./viz-model";
-import { activeFilterEntries } from "./viz-url";
+import { activeFilterEntries, viewIdentityKey } from "./viz-url";
 import { CUT_LABEL } from "./viz-labels";
 import { AppliedStrip } from "./applied-strip";
 import { FiltersPopover } from "./filters-popover";
 import { SaveViewDialog } from "./save-view-dialog";
+import {
+  VIZ_COURT_TRANSITION_NAME,
+  VIZ_FOCUSED_COURT_MORPH_TARGET,
+  VIZ_FOCUSED_HEADING_ID,
+  courtTileDomId,
+} from "./viz-court-transition";
 
 /**
  * The focused court view (Task 5): the toolbar row, then a wide court card
@@ -33,6 +40,14 @@ import { SaveViewDialog } from "./save-view-dialog";
  * in this file; `subjectFor(state.filters, you.isPlayer1)` turns the
  * `player` filter into the boolean `computeViz` needs, and nothing below this
  * reads player1/player2 off the match.
+ *
+ * F5: the big court's art box carries this view's `view-transition-name`
+ * whenever it's the morph's destination (`morphTargetKey` matching this
+ * view's own `viewIdentityKey`) — the wall/Views-grid tile that was clicked
+ * grows into it. "Back to wall" runs the reverse through the same
+ * `runCourtMorph`, using this court itself (`courtArtRef`) as the morph's
+ * source. The eyebrow (`VIZ_FOCUSED_HEADING_ID`, `tabIndex={-1}`) is
+ * `runCourtMorph`'s focus-landing target for every morph that arrives here.
  */
 
 const LEGEND_CAPTION: Record<Cut, string> = {
@@ -56,27 +71,57 @@ export function VizFocused({
 }) {
   const { points } = useMatchData();
   const { you, opp } = useMatchSides();
-  const { state, setState } = useVizState();
+  const {
+    state,
+    setState,
+    runCourtMorph,
+    morphTargetKey,
+    externalCourtSwap,
+    clearExternalCourtSwap,
+  } = useVizState();
+  const reducedMotion = usePrefersReducedMotion();
 
   // Everyone — including players — may save a view, so this is always on;
   // the ref is what lets the dialog anchor under the SAME button that opens
   // the cut menu, via `VizToolbar`'s `cutMenuTriggerRef` pass-through.
   const cutMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const courtArtRef = useRef<HTMLDivElement>(null);
 
   const cut = state.cut;
+  const ownKey = viewIdentityKey(state);
 
-  // F4 fix round 2: land on the court, not wherever the viewer scrolled the
-  // "Views" grid to click a tile. Keyed on `cut` alone — a stable string id
-  // of which court is shown, not the full `VizState` — so a Filters-popover
-  // edit (same cut, different filters, `viewId` cleared) never re-triggers
-  // this; only an actual tile click (a different cut) does. `behavior:
-  // "auto"` here; an animated version is a later task's to add.
+  // F4 fix round 2, F5 fix: land on the court, not wherever the viewer
+  // scrolled the "Views" grid to click a tile. Keyed on `viewIdentityKey`
+  // (`cut` + subject + `viewId`, not `cut` alone as the original F4 fix
+  // had it) — a Filters-popover edit (same court, different filters) still
+  // never re-triggers this; but a Views-grid click that changes the
+  // SUBJECT or lands on a different saved view without changing `cut` now
+  // correctly does, closing the gap the original round left (that version
+  // scrolled only on a `cut` change, silently skipping a same-cut
+  // player/view switch). `behavior: "auto"` — the shared-element morph
+  // itself is what visually carries the viewer to the top; this is a
+  // plain safety net for whenever no transition ran (reduced motion,
+  // unsupported browser, or a direct URL/hard navigation).
   useEffect(() => {
     document
       .getElementById("match-report-pane")
       ?.scrollTo({ top: 0, behavior: "auto" });
-  }, [cut]);
+  }, [ownKey]);
+
+  // F5: this court swap arrived from outside `runCourtMorph` (browser
+  // back/forward — see `VizStateContextValue.externalCourtSwap`'s doc
+  // comment for why that path can't run the shared-element morph). Opt
+  // into the plain crossfade fallback for exactly this one render, then
+  // clear the flag so it doesn't replay on a later, unrelated render.
+  const [fallbackFadeIn] = useState(externalCourtSwap);
+  useEffect(() => {
+    if (externalCourtSwap) clearExternalCourtSwap();
+    // Only ever needs to fire once, right after mount, off whatever the
+    // flag was AT mount time (captured above) — `fallbackFadeIn` must not
+    // itself become a dependency, or clearing it would re-run this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const subject = subjectFor(state.filters, you.isPlayer1);
   const result = useMemo(
@@ -98,21 +143,47 @@ export function VizFocused({
   const hasFilters = activeFilterEntries(state).length > 0;
 
   function backToWall() {
-    setState(() => ({
-      cut: null,
-      chart: "scatter",
-      filters: EMPTY_VIZ_FILTERS,
-      viewId: null,
-    }));
+    // F5: the reverse morph. `targetKey` is the WALL TILE's dom id for
+    // THIS view (the one being left) — not `viewIdentityKey` of the wall
+    // state we're going TO (which is always `null`, the wall has no single
+    // court) — so the wall can find and re-mark the one tile that matches
+    // where we came from. `court-tile.tsx` compares by this same id, not by
+    // `viewIdentityKey`, for the reason `VIZ_FOCUSED_COURT_MORPH_TARGET`'s
+    // doc comment explains.
+    runCourtMorph({
+      sourceEl: courtArtRef.current,
+      next: {
+        cut: null,
+        chart: "scatter",
+        filters: EMPTY_VIZ_FILTERS,
+        viewId: null,
+      },
+      targetKey: ownKey !== null ? courtTileDomId(ownKey) : null,
+      reducedMotion,
+    });
   }
 
   function clearFilters() {
     setState((prev) => ({ ...prev, filters: EMPTY_VIZ_FILTERS, viewId: null }));
   }
 
+  // The big court is the ONE legitimate destination for every forward morph
+  // (a wall or Views-grid tile growing into the focused view) — compared
+  // against the sentinel, not `ownKey`, because a Views-grid tile can share
+  // this view's `viewIdentityKey` (the "current" ring) without being the
+  // morph's destination. See `VIZ_FOCUSED_COURT_MORPH_TARGET`'s doc comment.
+  const isMorphTarget = morphTargetKey === VIZ_FOCUSED_COURT_MORPH_TARGET;
+
   return (
-    <div className="flex flex-col gap-4">
+    <div
+      className={
+        fallbackFadeIn
+          ? "viz-crossfade-in flex flex-col gap-4"
+          : "flex flex-col gap-4"
+      }
+    >
       <VizToolbar
+        className="viz-vt-toolbar"
         savedViews={savedViews}
         onSaveRequest={() => setSaveDialogOpen(true)}
         cutMenuTriggerRef={cutMenuTriggerRef}
@@ -140,7 +211,9 @@ export function VizFocused({
         >
           <div className="flex items-center justify-between gap-3 px-4 pt-[14px] pb-3">
             <span
-              className="text-micro truncate"
+              id={VIZ_FOCUSED_HEADING_ID}
+              tabIndex={-1}
+              className="text-micro truncate outline-none"
               style={{ color: "var(--ink-400)" }}
             >
               {subjectName} · {CUT_LABEL[cut]}
@@ -155,8 +228,14 @@ export function VizFocused({
           </div>
 
           <div
+            ref={courtArtRef}
             className="relative w-full"
-            style={{ backgroundColor: APRON_FILL }}
+            style={{
+              backgroundColor: APRON_FILL,
+              viewTransitionName: isMorphTarget
+                ? VIZ_COURT_TRANSITION_NAME
+                : undefined,
+            }}
           >
             <CourtArt
               cut={cut}
@@ -225,7 +304,7 @@ export function VizFocused({
           </div>
         </div>
 
-        <StatsCard stats={stats} />
+        <StatsCard stats={stats} className="viz-vt-stats-card" />
       </div>
 
       {savedViewsBand}

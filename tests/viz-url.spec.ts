@@ -9,6 +9,7 @@ import {
   reconcileVizState,
   sameView,
   vizStateQuery,
+  viewIdentityKey,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 
 test("no cut param is the wall", () => {
@@ -361,4 +362,40 @@ test("sameView: the wall state (cut: null) matches nothing", () => {
       filters: EMPTY_VIZ_FILTERS,
     }),
   ).toBe(false);
+});
+
+/* ── viewIdentityKey (F5) ─────────────────────────────────────────────── */
+
+test("viewIdentityKey: null on the wall", () => {
+  const wall = parseVizState(new URLSearchParams("tab=shots"));
+  expect(viewIdentityKey(wall)).toBeNull();
+});
+
+test("viewIdentityKey: equal across a pure filter edit (cut, player, viewId unchanged)", () => {
+  const a = parseVizState(new URLSearchParams("cut=serve&ball=first"));
+  const b = parseVizState(new URLSearchParams("cut=serve&ball=second&zone=t"));
+  expect(viewIdentityKey(a)).toBe(viewIdentityKey(b));
+  expect(viewIdentityKey(a)).not.toBeNull();
+});
+
+test("viewIdentityKey: different across a cut change", () => {
+  const serve = parseVizState(new URLSearchParams("cut=serve"));
+  const returnPlacement = parseVizState(
+    new URLSearchParams("cut=returnPlacement"),
+  );
+  expect(viewIdentityKey(serve)).not.toBe(viewIdentityKey(returnPlacement));
+});
+
+test("viewIdentityKey: different across a player (subject) change", () => {
+  const you = parseVizState(new URLSearchParams("cut=serve"));
+  const opponent = parseVizState(
+    new URLSearchParams("cut=serve&player=opponent"),
+  );
+  expect(viewIdentityKey(you)).not.toBe(viewIdentityKey(opponent));
+});
+
+test("viewIdentityKey: different across a viewId change, same cut/player/filters otherwise", () => {
+  const noView = parseVizState(new URLSearchParams("cut=serve"));
+  const savedView = parseVizState(new URLSearchParams("cut=serve&view=view-1"));
+  expect(viewIdentityKey(noView)).not.toBe(viewIdentityKey(savedView));
 });

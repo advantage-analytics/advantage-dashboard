@@ -668,3 +668,134 @@
     transform: translateY(-4px);
   }
 }
+
+/* ==========================================================================
+   F5: Visualizations tab, wall <-> focused view transition
+   ==========================================================================
+   The ONE animation that tab defines: the tile the visitor clicked growing
+   into the focused view's big court, and the reverse on "Back to wall".
+   Driven by the browser's native View Transitions API - see
+   src/components/dashboard/matches/match-detail/shots/viz-court-transition.ts
+   for the mechanism decision, viz-state-context.tsx's runCourtMorph for how
+   view-transition-name gets assigned to exactly one element at a time, and
+   .superpowers/sdd/2026-09-19-visualizations-tab-phase-1/f5-report.md for
+   the full record. Motion only (transform/opacity) - no new colour tokens,
+   nothing here participates in check-design-drift.mjs.
+
+   NOTE: this whole block is written in plain ASCII on purpose. An earlier
+   draft used box-drawing dashes (U+2500) and a left-right arrow (U+2194) in
+   its comments, which parsed fine standalone (verified directly against
+   lightningcss and against @tailwindcss/postcss) but made Turbopack's dev
+   CSS pipeline silently drop the ENTIRE block with no build error, warning,
+   or console message - caught only by diffing the served chunk's bytes
+   against the source file. Keep every comment in this block ASCII-only. */
+
+/* The shared court itself: 300ms, the design system's primary ease. */
+::view-transition-group(viz-court-shared),
+::view-transition-old(viz-court-shared),
+::view-transition-new(viz-court-shared) {
+  animation-duration: 300ms;
+  animation-timing-function: var(--ease-primary);
+}
+
+/* Everything else on the page (the rest of the wall fading out, the
+   focused view's card chrome fading in) is the browser's default root
+   crossfade - just brought in under the morph's own 300ms so neither
+   outruns the other. */
+::view-transition-group(root) {
+  animation-duration: 200ms;
+  animation-timing-function: var(--ease-primary);
+}
+
+/* view-transition-names the toolbar/stats-card/Views-grid blocks carry
+   whenever VizFocused is mounted (viz-toolbar.tsx, stats-card.tsx,
+   saved-views-band.tsx's focused-variant grid). Static, not JIT - each
+   name appears in at most one place in the tree at a time, so there's no
+   collision risk the shared court's JIT naming has to guard against. */
+.viz-vt-toolbar {
+  view-transition-name: viz-vt-toolbar;
+}
+.viz-vt-stats-card {
+  view-transition-name: viz-vt-stats-card;
+}
+.viz-vt-views-grid {
+  view-transition-name: viz-vt-views-grid;
+}
+
+@keyframes viz-vt-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* :only-child is what scopes these to a GENUINE entrance: a named
+   view-transition-group with only a "new" image (no "old" to pair with)
+   has exactly one child in its ::view-transition-image-pair, which is what
+   :only-child matches here. On a same-page update (the Views grid's own
+   tile swapping which court is focused, without leaving the focused view)
+   these elements persist in both old and new snapshots, so the pair has
+   two children, :only-child doesn't match, and the browser's default
+   cross-fade plays instead - a quiet update, not a re-staggered entrance,
+   which is the "same idea" the task brief asks for there. Stagger between
+   the three blocks stays under 60ms, 200ms fades each, never coupled to
+   the court's own 300ms morph. */
+::view-transition-new(viz-vt-toolbar):only-child {
+  animation: 200ms var(--ease-primary) both viz-vt-rise-in;
+}
+::view-transition-new(viz-vt-stats-card):only-child {
+  animation: 200ms var(--ease-primary) 30ms both viz-vt-rise-in;
+}
+::view-transition-new(viz-vt-views-grid):only-child {
+  animation: 200ms var(--ease-primary) 60ms both viz-vt-rise-in;
+}
+
+/* Keep the page interactive while a transition plays - the overlay
+   otherwise captures pointer events for its whole duration. */
+::view-transition {
+  pointer-events: none;
+}
+
+/* prefers-reduced-motion: opacity only, no scale/translate/positional
+   move. runCourtMorph (viz-state-context.tsx) already skips
+   document.startViewTransition entirely when this is set, so in practice
+   these rules are a second line of defence - e.g. a same-document
+   transition some other code path starts - rather than the primary
+   guard. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/* The plain 200ms crossfade fallback for a wall/focused swap runCourtMorph
+   could not wrap in a shared-element transition - browser back/forward,
+   where Next's router commits the new DOM with no synchronous hook to
+   snapshot the outgoing one first (VizStateContextValue.externalCourtSwap's
+   doc comment). Also a rise-in (8px), same family as the morph's own
+   entrance, so the fallback reads as a quieter sibling of the real thing
+   rather than a different animation. */
+@keyframes viz-crossfade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.viz-crossfade-in {
+  animation: 200ms var(--ease-primary) both viz-crossfade-in;
+}
+@media (prefers-reduced-motion: reduce) {
+  .viz-crossfade-in {
+    animation: none;
+  }
+}

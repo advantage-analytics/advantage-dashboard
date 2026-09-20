@@ -1,8 +1,19 @@
-import type { ReactNode } from "react";
+"use client";
+
+import type { MouseEvent, ReactNode } from "react";
 import Link from "next/link";
 import { APRON_FILL, CourtArt } from "./court-art";
 import { VIZ_PILL_RADIUS } from "./viz-labels";
 import type { Cut, VizDot } from "./viz-model";
+import type { VizState } from "./viz-url";
+import { viewIdentityKey } from "./viz-url";
+import { useVizState } from "./use-viz-state";
+import { usePrefersReducedMotion } from "./use-reduced-motion";
+import {
+  VIZ_COURT_TRANSITION_NAME,
+  VIZ_FOCUSED_COURT_MORPH_TARGET,
+  courtTileDomId,
+} from "./viz-court-transition";
 
 /**
  * The wall/band card: art on top, a dark player-name chip over it, then a
@@ -23,10 +34,25 @@ import type { Cut, VizDot } from "./viz-model";
  * both true at once. `as="static"` sidesteps the conflict instead of trying
  * to arbitrate it: there is no anchor to accidentally activate, so nothing
  * needs suppressing.
+ *
+ * F5: `navigateState`, when given, is this tile's OWN `VizState` (the same
+ * one `href` was built from) — supplying it upgrades the plain `<Link>`
+ * into the morph's source. A plain left-click intercepts the Link's default
+ * navigation (`e.preventDefault()`; Next's `<Link>` skips its own handling
+ * once the passed `onClick` does this — see `node_modules/next/dist/
+ * client/link.js`) and instead hands `runCourtMorph`
+ * (`viz-state-context.tsx`) this tile's own art box as the transition's
+ * source element. A modified click (⌘/ctrl/shift/alt/middle-button) is left
+ * alone, so opening a tile in a new tab still works exactly like any other
+ * link — the one reason these tiles are real `<Link>`s and not buttons.
  */
 
 const CARD_CLASS =
   "flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)] transition-[border-color,box-shadow] duration-200 ease-[var(--ease-primary)] hover:border-[var(--border-medium)] hover:shadow-[var(--shadow-card-emphasis)] motion-reduce:transition-none";
+
+function isPlainLeftClick(e: MouseEvent): boolean {
+  return e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+}
 
 export function CourtTile({
   playerName,
@@ -42,6 +68,7 @@ export function CourtTile({
   as = "link",
   ariaDescribedBy,
   current = false,
+  navigateState,
 }: {
   playerName: string;
   name: string;
@@ -86,12 +113,64 @@ export function CourtTile({
    * outside that row (the wall has no "current" tile to mark).
    */
   current?: boolean;
+  /**
+   * F5: this tile's OWN `VizState` — the same one `href` was built from.
+   * Supplying it does two things: it makes a plain left-click morph
+   * straight into the focused view (via `runCourtMorph`) instead of a plain
+   * navigation, and it gives the tile a stable `id`
+   * (`courtTileDomId(viewIdentityKey(navigateState))`) and a
+   * `view-transition-name` for whenever it's the RETURN morph's
+   * destination (`runCourtMorph`'s `targetKey` matching this tile's own
+   * key). Omit it for a tile that isn't a real navigation target — Manage
+   * mode's `as="static"` tiles still get the `id`/name (a reverse morph
+   * could land while Manage mode happens to be open) but never the click
+   * interception, since they're a `<div>`, not a `<Link>`, in the first
+   * place.
+   */
+  navigateState?: VizState;
 }) {
+  const { runCourtMorph, morphTargetKey } = useVizState();
+  const reducedMotion = usePrefersReducedMotion();
+
+  const ownKey = navigateState ? viewIdentityKey(navigateState) : null;
+  const domId = ownKey !== null ? courtTileDomId(ownKey) : undefined;
+  // Compared by DOM id, not by `viewIdentityKey` equality — a Views-grid
+  // tile can share its `viewIdentityKey` with the big court currently on
+  // screen (the "current" ring), and matching on that key alone let both
+  // claim `VIZ_COURT_TRANSITION_NAME` at once. See
+  // `VIZ_FOCUSED_COURT_MORPH_TARGET`'s doc comment for the incident this
+  // fixed.
+  const isMorphTarget = domId !== undefined && domId === morphTargetKey;
+
+  function handleClick(e: MouseEvent<HTMLAnchorElement>): void {
+    if (!navigateState || !isPlainLeftClick(e)) return;
+    e.preventDefault();
+    const sourceEl = e.currentTarget.querySelector<HTMLElement>(
+      "[data-viz-court-art]",
+    );
+    runCourtMorph({
+      sourceEl,
+      next: navigateState,
+      // A tile only ever navigates INTO the focused view (never to the
+      // wall), so the destination is always the one big court — see
+      // `VIZ_FOCUSED_COURT_MORPH_TARGET`.
+      targetKey: VIZ_FOCUSED_COURT_MORPH_TARGET,
+      reducedMotion,
+    });
+  }
+
   const body = (
     <>
       <div
+        data-viz-court-art="true"
         className="relative overflow-hidden rounded-t-[var(--radius-card)]"
-        style={{ aspectRatio: "334 / 216", backgroundColor: APRON_FILL }}
+        style={{
+          aspectRatio: "334 / 216",
+          backgroundColor: APRON_FILL,
+          viewTransitionName: isMorphTarget
+            ? VIZ_COURT_TRANSITION_NAME
+            : undefined,
+        }}
       >
         <CourtArt cut={cut} dots={dots} fill className="block h-full w-full" />
         <span
@@ -151,6 +230,7 @@ export function CourtTile({
   if (as === "static") {
     return (
       <div
+        id={domId}
         tabIndex={0}
         role="group"
         aria-label={name}
@@ -167,6 +247,8 @@ export function CourtTile({
   return (
     <Link
       href={href}
+      id={domId}
+      onClick={handleClick}
       className={CARD_CLASS}
       style={ringStyle}
       aria-current={current ? "true" : undefined}

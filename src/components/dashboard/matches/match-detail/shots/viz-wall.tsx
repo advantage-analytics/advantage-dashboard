@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { CourtTile } from "./court-tile";
@@ -26,7 +26,15 @@ import { VIZ_TILE_GRID_CLASS, VIZ_TILE_GRID_STYLE } from "./viz-labels";
 export function VizWall({ savedViewsBand }: { savedViewsBand?: ReactNode }) {
   const { points } = useMatchData();
   const { you, opp } = useMatchSides();
-  const { hrefFor } = useVizState();
+  const { hrefFor, externalCourtSwap, clearExternalCourtSwap } = useVizState();
+
+  // F5: mirrors `viz-focused.tsx`'s identical fallback — see
+  // `VizStateContextValue.externalCourtSwap`'s doc comment.
+  const [fallbackFadeIn] = useState(externalCourtSwap);
+  useEffect(() => {
+    if (externalCourtSwap) clearExternalCourtSwap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Keyed on `points`/`you.isPlayer1`/the names/`hrefFor` — `opp.isPlayer1`
   // is always `you.isPlayer1`'s inverse, so it carries no information the
@@ -51,7 +59,13 @@ export function VizWall({ savedViewsBand }: { savedViewsBand?: ReactNode }) {
   ];
 
   return (
-    <div className="flex flex-col gap-6">
+    <div
+      className={
+        fallbackFadeIn
+          ? "viz-crossfade-in flex flex-col gap-6"
+          : "flex flex-col gap-6"
+      }
+    >
       {rows.map((row) => {
         const rowTiles = tiles.filter((t) => t.subject === row.subject);
         const isEmpty = rowTiles.every((t) => t.total === 0);
@@ -71,6 +85,7 @@ export function VizWall({ savedViewsBand }: { savedViewsBand?: ReactNode }) {
                     cut={tile.cut}
                     dots={tile.dots}
                     href={tile.href}
+                    navigateState={tile.state}
                   />
                 ))}
               </div>
