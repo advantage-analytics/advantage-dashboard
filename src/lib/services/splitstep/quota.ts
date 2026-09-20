@@ -24,6 +24,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { secondsLeft } from "@/lib/data/usage-format";
 import {
   explainVideoRefusal,
   pendingReviewRefusal,
@@ -323,7 +324,7 @@ export async function peekQuota(
   return {
     usedSeconds,
     capSeconds,
-    remainingSeconds: Math.max(0, capSeconds - usedSeconds),
+    remainingSeconds: secondsLeft(usedSeconds, capSeconds),
   };
 }
 

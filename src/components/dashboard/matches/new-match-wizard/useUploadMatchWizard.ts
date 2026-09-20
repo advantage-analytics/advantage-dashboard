@@ -948,8 +948,11 @@ export function useUploadMatchWizard({
     number | undefined
   >(undefined);
 
-  // The trim step is where the cost warning is read, and a teammate may have
-  // spent against the pool since the wizard opened — re-read on arrival.
+  // A teammate may have spent against the pool since the wizard opened, so the
+  // reading is refreshed as the flow crosses the trim step — on the way in for
+  // the cost warning and Continue's refusal, and on the way out for the meter
+  // and the re-check `handleCreateMatch` makes before it writes. Both
+  // crossings are wanted; this is not meant to fire only on arrival.
   const isTrimStep = step === "trim";
 
   useEffect(() => {
@@ -1997,6 +2000,11 @@ export function useUploadMatchWizard({
   const handleBack = useCallback(() => {
     const index = stepOrder.indexOf(step);
     if (index > stepOrder.indexOf(firstStep)) {
+      // `error` is one slot for the whole wizard, and the trim step now RENDERS
+      // it as the reason Continue refused. Left standing, a failed save on the
+      // details step would reappear under the rail as if the window were at
+      // fault. Going back is always a fresh start on the step behind you.
+      setError(null);
       setStep(stepOrder[index - 1]);
     }
   }, [step, stepOrder, firstStep]);

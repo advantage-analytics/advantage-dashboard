@@ -177,7 +177,12 @@ function CutField({
       type="button"
       onClick={onJump}
       aria-label={`Jump to the trim ${isStart ? "start" : "end"}`}
-      className={`inline-flex cursor-pointer items-baseline gap-1.5 px-2.5 py-2 ${
+      // `items-center`, not `items-baseline`: the field is `items-stretch`, so
+      // a baseline-aligned label sits at the TOP of the stretched box while the
+      // glyph beside it centres, and the two read as misaligned. Centring also
+      // suits the pairing — a 9px letter-spaced label against a 12px mono
+      // number looks dropped on a shared baseline.
+      className={`inline-flex cursor-pointer items-center gap-1.5 px-2.5 py-2 ${
         isStart ? "rounded-l-[5px]" : "rounded-r-[5px]"
       } ${focusRingCls}`}
     >
@@ -517,17 +522,23 @@ function TrimStepContentImpl({
   /** A keyboard nudge commits at once — one step, one write. */
   const moveHandle = useCallback(
     (handle: Handle, time: number) => {
+      // `seekLatest`, not `seekTo`: a jump still decoding leaves its target
+      // parked in `wantedSeekRef`, and a bare `currentTime` write here would be
+      // undone the moment that seek lands and `handleSeeked` flushes the stale
+      // value — the cut would be right and the frame on screen would not.
+      // `seekLatest` REPLACES what is parked, so the cut's own position wins.
+      // (The drag path reaches `seekTo` directly, but nulls the ref first.)
       if (handle === "start") {
         const next = clampCut("start", time, end);
         onTrimChange(next, end);
-        seekTo(next);
+        seekLatest(next);
       } else {
         const next = clampCut("end", time, start);
         onTrimChange(start, next);
-        seekTo(next);
+        seekLatest(next);
       }
     },
-    [start, end, clampCut, onTrimChange, seekTo],
+    [start, end, clampCut, onTrimChange, seekLatest],
   );
 
   // The drag itself. The pointer's position lands in a ref; one frame later
@@ -1096,7 +1107,7 @@ function TrimStepContentImpl({
               <>
                 {/* Filmstrip */}
                 <div
-                  className={`absolute inset-0 flex overflow-hidden rounded-[var(--radius-element)] transition-opacity duration-200 ${"opacity-100"}`}
+                  className={`absolute inset-0 flex overflow-hidden rounded-[var(--radius-element)] opacity-100 transition-opacity duration-200`}
                 >
                   {slots.map((slot) => (
                     <div key={slot.key} className="h-full min-w-0 flex-1">
