@@ -21,7 +21,7 @@ export const DEFAULT_CUTS: DefaultCut[] = [
     cut: "serve",
     chart: "scatter",
     name: "First serves, every zone",
-    filters: { ball: "first" },
+    filters: { ball: ["first"] },
     pills: ["1st", "All zones", "Deuce + Ad"],
   },
   {
@@ -35,7 +35,7 @@ export const DEFAULT_CUTS: DefaultCut[] = [
     cut: "returnContact",
     chart: "scatter",
     name: "Return contact",
-    filters: { ball: "first" },
+    filters: { ball: ["first"] },
     pills: ["1st serve", "Deuce + Ad"],
   },
 ];

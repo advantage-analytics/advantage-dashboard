@@ -3,6 +3,8 @@ import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/s
 import {
   activeFilterEntries,
   applyVizUpdate,
+  canonicalOptionValues,
+  canonicalSetValues,
   carryFilters,
   clearedFilters,
   focusTargetAfterViewChange,
@@ -26,7 +28,7 @@ test("round trip keeps tab and drops defaults", () => {
     cut: "serve",
     chart: "zones",
     viewId: null,
-    filters: { ...EMPTY_VIZ_FILTERS, ball: "first", zone: "t", set: 2 },
+    filters: { ...EMPTY_VIZ_FILTERS, ball: ["first"], zone: ["t"], set: [2] },
   });
   const back = new URLSearchParams(q);
   expect(back.get("tab")).toBe("shots");
@@ -35,9 +37,69 @@ test("round trip keeps tab and drops defaults", () => {
     cut: "serve",
     chart: "zones",
     viewId: null,
-    filters: { ...EMPTY_VIZ_FILTERS, ball: "first", zone: "t", set: 2 },
+    filters: { ...EMPTY_VIZ_FILTERS, ball: ["first"], zone: ["t"], set: [2] },
   });
   expect(params.get("cut")).toBeNull(); // input not mutated
+});
+
+/* ── multi-value parsing, canonical order, round trip (G1) ───────────────
+ * Every group but `player` is multi-select: `getAll` reads every repeated
+ * key, values are deduped and sorted into `OPTIONS`' own order (`set` sorts
+ * numerically), and the same rule runs on both the read side (`parseVizState`)
+ * and the write side (`vizStateQuery`, `filters-popover.tsx`'s toggle) so two
+ * callers picking the same set of values always land on the identical array —
+ * and therefore the identical query string. */
+
+test("parseVizState reads every repeated key as one list", () => {
+  const s = parseVizState(
+    new URLSearchParams("cut=serve&ball=first&ball=second&vset=3&vset=1"),
+  );
+  expect(s.filters.ball).toEqual(["first", "second"]);
+  expect(s.filters.set).toEqual([1, 3]);
+});
+
+test("parseVizState dedupes repeats and sorts into canonical (OPTIONS) order regardless of URL order", () => {
+  // OPTIONS.result lists won, lost, ace in that order — the URL below picks
+  // them in the opposite order, with "won" repeated.
+  const s = parseVizState(
+    new URLSearchParams("cut=serve&result=ace&result=won&result=won"),
+  );
+  expect(s.filters.result).toEqual(["won", "ace"]);
+});
+
+test("canonicalOptionValues and canonicalSetValues dedupe and sort independently of input order", () => {
+  expect(canonicalOptionValues("ball", ["second", "first", "second"])).toEqual([
+    "first",
+    "second",
+  ]);
+  expect(canonicalSetValues([3, 1, 1, 2])).toEqual([1, 2, 3]);
+});
+
+test("vizStateQuery serialises a multi-value group as one repeated param per selected value, in the state's own order", () => {
+  // vizStateQuery trusts the state it's given is already canonical (every
+  // producer — parseVizState, the popover's toggle — guarantees that); it
+  // does not re-sort on the way out, it just appends in array order.
+  const q = vizStateQuery(new URLSearchParams(), {
+    cut: "serve",
+    chart: "scatter",
+    viewId: null,
+    filters: { ...EMPTY_VIZ_FILTERS, result: ["won", "ace"] },
+  });
+  const back = new URLSearchParams(q);
+  expect(back.getAll("result")).toEqual(["won", "ace"]);
+});
+
+test("round trip survives repeated keys and lands on the same canonical state either way they were picked", () => {
+  const a = parseVizState(
+    new URLSearchParams("cut=serve&ball=second&ball=first"),
+  );
+  const b = parseVizState(
+    new URLSearchParams("cut=serve&ball=first&ball=second"),
+  );
+  expect(a).toEqual(b);
+  expect(vizStateQuery(new URLSearchParams(), a)).toBe(
+    vizStateQuery(new URLSearchParams(), b),
+  );
 });
 
 /* ── `vset` namespacing (I2) ──────────────────────────────────────────────
@@ -50,7 +112,7 @@ test("vset parses into filters.set; an unrelated set param is ignored", () => {
   const s = parseVizState(
     new URLSearchParams("tab=shots&set=2&cut=serve&vset=1"),
   );
-  expect(s.filters.set).toBe(1);
+  expect(s.filters.set).toEqual([1]);
 });
 
 test("vizStateQuery leaves an unrelated set param untouched", () => {
@@ -59,7 +121,7 @@ test("vizStateQuery leaves an unrelated set param untouched", () => {
     cut: "serve",
     chart: "scatter",
     viewId: null,
-    filters: { ...EMPTY_VIZ_FILTERS, set: 3 },
+    filters: { ...EMPTY_VIZ_FILTERS, set: [3] },
   });
   const back = new URLSearchParams(q);
   expect(back.get("set")).toBe("2");
@@ -86,21 +148,21 @@ test("parseVizState resets serve-only filters when cut is off serve", () => {
   const withAce = parseVizState(
     new URLSearchParams("cut=returnPlacement&result=ace"),
   );
-  expect(withAce.filters.result).toBe("any");
+  expect(withAce.filters.result).toEqual([]);
 
   const withZone = parseVizState(
     new URLSearchParams("cut=returnPlacement&zone=t"),
   );
-  expect(withZone.filters.zone).toBe("any");
+  expect(withZone.filters.zone).toEqual([]);
 });
 
 test("garbage values read as defaults; zones off serve reads as scatter", () => {
   const s = parseVizState(
-    new URLSearchParams("cut=returnContact&chart=zones&ball=third&set=x"),
+    new URLSearchParams("cut=returnContact&chart=zones&ball=third&vset=x"),
   );
   expect(s.chart).toBe("scatter");
-  expect(s.filters.ball).toBe("any");
-  expect(s.filters.set).toBe("any");
+  expect(s.filters.ball).toEqual([]);
+  expect(s.filters.set).toEqual([]);
   expect(parseVizState(new URLSearchParams("cut=nope")).cut).toBeNull();
 });
 
@@ -117,29 +179,72 @@ test("cut = null clears every viz key", () => {
   expect(q).toBe("tab=shots");
 });
 
-test("carryFilters drops serve-only values off serve", () => {
+test("carryFilters drops zone entirely and drops only 'ace' out of result off serve", () => {
   const f = carryFilters(
-    { ...EMPTY_VIZ_FILTERS, zone: "t", result: "ace", ball: "first" },
+    {
+      ...EMPTY_VIZ_FILTERS,
+      zone: ["t"],
+      result: ["ace", "won"],
+      ball: ["first"],
+    },
     "returnPlacement",
   );
-  expect(f.zone).toBe("any");
-  expect(f.result).toBe("any");
-  expect(f.ball).toBe("first");
+  expect(f.zone).toEqual([]);
+  expect(f.result).toEqual(["won"]);
+  expect(f.ball).toEqual(["first"]);
 });
 
-test("activeFilterEntries uses option labels", () => {
+test("carryFilters keeps a result selection with no 'ace' in it untouched", () => {
+  const f = carryFilters(
+    { ...EMPTY_VIZ_FILTERS, result: ["won", "lost"] },
+    "returnContact",
+  );
+  expect(f.result).toEqual(["won", "lost"]);
+});
+
+/* ── activeFilterEntries: one entry per VALUE (G1) ───────────────────────
+ * A group with more than one value selected draws one token per value, not
+ * one per group. */
+
+test("activeFilterEntries uses option labels, one entry per value", () => {
   const e = activeFilterEntries({
     cut: "serve",
     chart: "scatter",
     viewId: null,
     filters: {
       ...EMPTY_VIZ_FILTERS,
-      ball: "first",
-      zone: "t",
+      ball: ["first"],
+      zone: ["t"],
       player: "opponent",
     },
   });
   expect(e.map((x) => x.label)).toEqual(["Opponent", "1st", "T"]);
+});
+
+test("activeFilterEntries draws one token per selected value in a multi-select group", () => {
+  const e = activeFilterEntries({
+    cut: "serve",
+    chart: "scatter",
+    viewId: null,
+    filters: { ...EMPTY_VIZ_FILTERS, ball: ["first", "second"] },
+  });
+  expect(e).toEqual([
+    { key: "ball", value: "first", label: "1st" },
+    { key: "ball", value: "second", label: "2nd" },
+  ]);
+});
+
+test("activeFilterEntries draws one token per selected set number", () => {
+  const e = activeFilterEntries({
+    cut: "serve",
+    chart: "scatter",
+    viewId: null,
+    filters: { ...EMPTY_VIZ_FILTERS, set: [1, 2] },
+  });
+  expect(e).toEqual([
+    { key: "set", value: "1", label: "Set 1" },
+    { key: "set", value: "2", label: "Set 2" },
+  ]);
 });
 
 test("clearedFilters resets every key including player, clears viewId, keeps cut and chart", () => {
@@ -150,9 +255,9 @@ test("clearedFilters resets every key including player, clears viewId, keeps cut
     filters: {
       ...EMPTY_VIZ_FILTERS,
       player: "opponent" as const,
-      ball: "first" as const,
-      zone: "t" as const,
-      set: 2,
+      ball: ["first"] as const,
+      zone: ["t"] as const,
+      set: [2],
     },
   };
   const next = clearedFilters(state);
@@ -166,8 +271,8 @@ test("prototype chain pollution is rejected", () => {
   const s = parseVizState(
     new URLSearchParams("cut=serve&ball=constructor&zone=toString"),
   );
-  expect(s.filters.ball).toBe("any");
-  expect(s.filters.zone).toBe("any");
+  expect(s.filters.ball).toEqual([]);
+  expect(s.filters.zone).toEqual([]);
 });
 
 test("applyVizUpdate: two updaters in sequence both survive (ball then zone)", () => {
@@ -179,14 +284,14 @@ test("applyVizUpdate: two updaters in sequence both survive (ball then zone)", (
   };
   const afterBall = applyVizUpdate(start, (prev) => ({
     ...prev,
-    filters: { ...prev.filters, ball: "first" },
+    filters: { ...prev.filters, ball: ["first"] },
   }));
   const afterZone = applyVizUpdate(afterBall, (prev) => ({
     ...prev,
-    filters: { ...prev.filters, zone: "t" },
+    filters: { ...prev.filters, zone: ["t"] },
   }));
-  expect(afterZone.filters.ball).toBe("first");
-  expect(afterZone.filters.zone).toBe("t");
+  expect(afterZone.filters.ball).toEqual(["first"]);
+  expect(afterZone.filters.zone).toEqual(["t"]);
 });
 
 test("applyVizUpdate: an updater after clearedFilters sees cleared filters", () => {
@@ -197,15 +302,15 @@ test("applyVizUpdate: an updater after clearedFilters sees cleared filters", () 
     filters: {
       ...EMPTY_VIZ_FILTERS,
       player: "opponent" as const,
-      ball: "first" as const,
+      ball: ["first"] as const,
     },
   };
   const cleared = applyVizUpdate(start, (prev) => clearedFilters(prev));
   const afterZone = applyVizUpdate(cleared, (prev) => ({
     ...prev,
-    filters: { ...prev.filters, zone: "t" },
+    filters: { ...prev.filters, zone: ["t"] },
   }));
-  expect(afterZone.filters).toEqual({ ...EMPTY_VIZ_FILTERS, zone: "t" });
+  expect(afterZone.filters).toEqual({ ...EMPTY_VIZ_FILTERS, zone: ["t"] });
   expect(afterZone.viewId).toBeNull();
 });
 
@@ -214,7 +319,7 @@ test("applyVizUpdate: a plain-object update replaces wholesale", () => {
     cut: "serve" as const,
     chart: "zones" as const,
     viewId: "abc",
-    filters: { ...EMPTY_VIZ_FILTERS, ball: "first" as const },
+    filters: { ...EMPTY_VIZ_FILTERS, ball: ["first"] as const },
   };
   const replacement = {
     cut: null,
@@ -290,6 +395,21 @@ test("sameView: a default tile matches its own state", () => {
   ).toBe(true);
 });
 
+test("sameView: matches regardless of list order (canonical vs. hand-built candidate)", () => {
+  const current = parseVizState(
+    new URLSearchParams("cut=serve&result=won&result=ace"),
+  );
+  expect(current.filters.result).toEqual(["won", "ace"]); // canonical order
+  expect(
+    sameView(current, {
+      cut: "serve",
+      chart: "scatter",
+      // Same two values, reversed — must still match.
+      filters: { ...current.filters, result: ["ace", "won"] },
+    }),
+  ).toBe(true);
+});
+
 test("sameView: differs when one filter differs", () => {
   const current = parseVizState(
     new URLSearchParams("cut=serve&ball=first&player=you"),
@@ -298,7 +418,20 @@ test("sameView: differs when one filter differs", () => {
     sameView(current, {
       cut: "serve",
       chart: "scatter",
-      filters: { ...current.filters, ball: "second" },
+      filters: { ...current.filters, ball: ["second"] },
+    }),
+  ).toBe(false);
+});
+
+test("sameView: differs when a candidate is missing one of the current's selected values", () => {
+  const current = parseVizState(
+    new URLSearchParams("cut=serve&ball=first&ball=second"),
+  );
+  expect(
+    sameView(current, {
+      cut: "serve",
+      chart: "scatter",
+      filters: { ...current.filters, ball: ["first"] },
     }),
   ).toBe(false);
 });
@@ -313,7 +446,7 @@ test("sameView: ignores keys not on the cut", () => {
     sameView(current, {
       cut: "returnPlacement",
       chart: "scatter",
-      filters: { ...current.filters, zone: "t" },
+      filters: { ...current.filters, zone: ["t"] },
     }),
   ).toBe(true);
 });
@@ -330,14 +463,14 @@ test("sameView: a saved view matches by id even when its filters differ (e.g. re
     sameView(state, {
       cut: "serve",
       chart: "scatter",
-      filters: { ...current, ball: "second" },
+      filters: { ...current, ball: ["second"] },
       id: "view-1",
     }),
   ).toBe(true);
 });
 
 test("sameView: a saved view also matches by equal cut/chart/filters when no id was carried", () => {
-  const filters = { ...EMPTY_VIZ_FILTERS, ball: "first" as const };
+  const filters = { ...EMPTY_VIZ_FILTERS, ball: ["first"] as const };
   const state = {
     cut: "serve" as const,
     chart: "scatter" as const,

@@ -74,6 +74,14 @@ const KNOWN_FILTER_KEYS = new Set<string>(Object.keys(EMPTY_VIZ_FILTERS));
  * `URLSearchParams` for anything that isn't a plain object (a stale row
  * whose `filters` column was hand-edited to an array or a scalar), which
  * `parseVizState` then reads as every filter at its default.
+ *
+ * Every group but `player` is multi-select now, but a row saved BEFORE that
+ * change stores each group as a bare scalar (`"first"`, `2`, or the sentinel
+ * `"any"` for "no filter"). Both shapes are handled here so an old row keeps
+ * loading exactly as it always has: an array value is spread across
+ * `append` calls one per member; a non-array value becomes a ONE-ELEMENT
+ * list — except the legacy `"any"` sentinel, which contributes nothing (the
+ * same "no filter" it always meant, now spelled as an empty list).
  */
 export function filtersToParams(filters: unknown): URLSearchParams {
   const params = new URLSearchParams();
@@ -89,7 +97,18 @@ export function filtersToParams(filters: unknown): URLSearchParams {
       // has to follow the same mapping or a saved view's set filter would
       // silently fail to round-trip through `parseVizState`.
       const paramKey = key === "set" ? "vset" : key;
-      params.set(paramKey, String(value));
+
+      if (key === "player") {
+        // The one scalar filter, old or new shape alike.
+        params.set(paramKey, String(value));
+        continue;
+      }
+
+      const values = Array.isArray(value) ? value : [value];
+      for (const v of values) {
+        if (v === null || v === undefined || v === "any") continue;
+        params.append(paramKey, String(v));
+      }
     }
   }
   return params;

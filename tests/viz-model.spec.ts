@@ -67,7 +67,7 @@ test.describe("computeViz — serve cut", () => {
     const r = computeViz(
       pts,
       "serve",
-      { ...EMPTY_VIZ_FILTERS, result: "won" },
+      { ...EMPTY_VIZ_FILTERS, result: ["won"] },
       true,
     );
     expect(r.count).toBe(1);
@@ -218,7 +218,7 @@ test.describe("computeVizStats — serve", () => {
     const stats = computeVizStats(
       pts,
       "serve",
-      { ...EMPTY_VIZ_FILTERS, ball: "second" },
+      { ...EMPTY_VIZ_FILTERS, ball: ["second"] },
       true,
     );
     expect(stats.subtitle).toContain("second serves");
@@ -399,7 +399,7 @@ test.describe("computeVizStats — return contact", () => {
     const stats = computeVizStats(
       pts,
       "returnContact",
-      { ...EMPTY_VIZ_FILTERS, ball: "first" },
+      { ...EMPTY_VIZ_FILTERS, ball: ["first"] },
       true,
     );
     expect(stats.subtitle).toBe(
@@ -628,7 +628,7 @@ test.describe("computeVizStats — sentence", () => {
     const stats = computeVizStats(
       pts,
       "serve",
-      { ...EMPTY_VIZ_FILTERS, ball: "first" },
+      { ...EMPTY_VIZ_FILTERS, ball: ["first"] },
       true,
     );
     const rows = stats.groups[0].rows;
@@ -699,7 +699,7 @@ test.describe("computeVizStats — singular nouns", () => {
     const firstOnly = computeVizStats(
       [point({ firstShotLandingX: ZONE_LX["deuce-t"] })],
       "serve",
-      { ...EMPTY_VIZ_FILTERS, ball: "first" },
+      { ...EMPTY_VIZ_FILTERS, ball: ["first"] },
       true,
     );
     expect(firstOnly.subtitle).toBe("Points won by zone · 1 first serve");
@@ -712,7 +712,7 @@ test.describe("computeVizStats — singular nouns", () => {
         }),
       ],
       "serve",
-      { ...EMPTY_VIZ_FILTERS, ball: "second" },
+      { ...EMPTY_VIZ_FILTERS, ball: ["second"] },
       true,
     );
     expect(secondOnly.subtitle).toBe("Points won by zone · 1 second serve");

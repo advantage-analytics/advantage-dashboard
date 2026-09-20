@@ -39,13 +39,26 @@ function dbRow(overrides: Partial<SavedViewDbRow> = {}): SavedViewDbRow {
 /* ── filtersToParams ───────────────────────────────────────────────────── */
 
 test("filtersToParams round-trips a plain filters object", () => {
-  const params = filtersToParams({ ball: "first", set: 2 });
+  const params = filtersToParams({ ball: ["first"], set: [2] });
   expect(params.get("ball")).toBe("first");
   // The `set` FIELD maps to the `vset` PARAM (see `viz-url.ts`'s `VIZ_KEYS`
   // comment) — the bare `set` key belongs to the match report's
   // `set-scope.tsx`, so a stored view's set filter must not collide with it.
   expect(params.get("set")).toBeNull();
   expect(params.get("vset")).toBe("2");
+});
+
+test("filtersToParams appends every array member under the same key", () => {
+  const params = filtersToParams({ ball: ["first", "second"], set: [1, 3] });
+  expect(params.getAll("ball")).toEqual(["first", "second"]);
+  expect(params.getAll("vset")).toEqual(["1", "3"]);
+});
+
+test("filtersToParams reads a legacy scalar as a one-element list, and the legacy 'any' sentinel as no filter", () => {
+  const params = filtersToParams({ ball: "first", set: 2, zone: "any" });
+  expect(params.getAll("ball")).toEqual(["first"]);
+  expect(params.getAll("vset")).toEqual(["2"]);
+  expect(params.has("zone")).toBe(false);
 });
 
 test("filtersToParams drops null/undefined and ignores non-objects", () => {
@@ -72,7 +85,7 @@ test("validateVizInput accepts a valid serve/zones/filters triple", () => {
   expect(result).toEqual({
     cut: "serve",
     chart: "zones",
-    filters: { ...EMPTY_VIZ_FILTERS, pressure: "break" },
+    filters: { ...EMPTY_VIZ_FILTERS, pressure: ["break"] },
   });
 });
 
@@ -85,7 +98,20 @@ test("validateVizInput round-trips a stored set filter through the vset param", 
   expect(result).toEqual({
     cut: "serve",
     chart: "scatter",
-    filters: { ...EMPTY_VIZ_FILTERS, set: 2 },
+    filters: { ...EMPTY_VIZ_FILTERS, set: [2] },
+  });
+});
+
+test("validateVizInput round-trips a NEW-shape multi-value filters object", () => {
+  const result = validateVizInput({
+    cut: "serve",
+    chart: "scatter",
+    filters: { ball: ["first", "second"], set: [1, 2] },
+  });
+  expect(result).toEqual({
+    cut: "serve",
+    chart: "scatter",
+    filters: { ...EMPTY_VIZ_FILTERS, ball: ["first", "second"], set: [1, 2] },
   });
 });
 
@@ -152,7 +178,7 @@ test("rowToSavedView maps a valid row", () => {
     name: "Break points",
     cut: "serve",
     chart: "zones",
-    filters: { ...EMPTY_VIZ_FILTERS, pressure: "break" },
+    filters: { ...EMPTY_VIZ_FILTERS, pressure: ["break"] },
     order: 3,
   });
 });
@@ -556,7 +582,7 @@ test("tileDataKey is identical for two orderings of the same views", () => {
     {
       id: "v1",
       cut: "serve",
-      filters: { ...EMPTY_VIZ_FILTERS, ball: "first" },
+      filters: { ...EMPTY_VIZ_FILTERS, ball: ["first"] },
     },
     { id: "v2", cut: "returnPlacement", filters: EMPTY_VIZ_FILTERS },
   ];
@@ -569,14 +595,14 @@ test("tileDataKey changes when a view's filters change", () => {
     {
       id: "v1",
       cut: "serve",
-      filters: { ...EMPTY_VIZ_FILTERS, ball: "first" },
+      filters: { ...EMPTY_VIZ_FILTERS, ball: ["first"] },
     },
   ];
   const after = [
     {
       id: "v1",
       cut: "serve",
-      filters: { ...EMPTY_VIZ_FILTERS, ball: "second" },
+      filters: { ...EMPTY_VIZ_FILTERS, ball: ["second"] },
     },
   ];
   expect(tileDataKey(before)).not.toBe(tileDataKey(after));
@@ -620,5 +646,18 @@ test("validateVizInput resets result:ace off serve rather than accepting it", ()
     cut: "returnPlacement",
     chart: "scatter",
     filters: EMPTY_VIZ_FILTERS,
+  });
+});
+
+test("validateVizInput keeps a non-ace result value off serve, dropping only ace", () => {
+  const result = validateVizInput({
+    cut: "returnPlacement",
+    chart: "scatter",
+    filters: { result: ["ace", "won"] },
+  });
+  expect(result).toEqual({
+    cut: "returnPlacement",
+    chart: "scatter",
+    filters: { ...EMPTY_VIZ_FILTERS, result: ["won"] },
   });
 });

@@ -8,10 +8,18 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { EMPTY_VIZ_FILTERS, filterKeysFor, type VizFilters } from "./viz-model";
-import { activeFilterEntries, clearedFilters, OPTIONS } from "./viz-url";
+import { filterKeysFor, type PlayerFilter, type VizFilters } from "./viz-model";
+import {
+  activeFilterEntries,
+  canonicalOptionValues,
+  canonicalSetValues,
+  clearedFilters,
+  OPTIONS,
+} from "./viz-url";
 import { useVizState } from "./use-viz-state";
 import { VizMenuTrigger, VIZ_PILL_RADIUS } from "./viz-labels";
+
+type MultiFilterKey = Exclude<keyof VizFilters, "player">;
 
 /**
  * The Filters popover (P1f): every non-default `VizFilters` key as a wrap of
@@ -56,15 +64,39 @@ export function FiltersPopover({
   const showSet = sets.length > 1;
   const applied = activeFilterEntries(state).length;
 
-  function select<K extends keyof VizFilters>(key: K, value: VizFilters[K]) {
+  // Player stays single-select: choosing one always replaces the other,
+  // it never toggles off to "neither subject" — a court always has to
+  // belong to somebody.
+  function selectPlayer(value: PlayerFilter) {
+    setState((prev) => ({
+      ...prev,
+      filters: { ...prev.filters, player: value },
+      viewId: null,
+    }));
+  }
+
+  // Every other group toggles membership: picking an already-selected pill
+  // removes it, picking a new one adds it — the group stays in canonical
+  // (OPTIONS) order so the same set of picks always serialises identically.
+  function toggle<K extends MultiFilterKey>(
+    key: K,
+    value: VizFilters[K][number],
+  ) {
     setState((prev) => {
-      const isActive = prev.filters[key] === value;
+      const current = prev.filters[key] as readonly (typeof value)[];
+      const next = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value];
+      const canonical =
+        key === "set"
+          ? canonicalSetValues(next as readonly number[])
+          : canonicalOptionValues(
+              key as Exclude<MultiFilterKey, "set">,
+              next as readonly string[],
+            );
       return {
         ...prev,
-        filters: {
-          ...prev.filters,
-          [key]: isActive ? EMPTY_VIZ_FILTERS[key] : value,
-        },
+        filters: { ...prev.filters, [key]: canonical },
         viewId: null,
       };
     });
@@ -126,12 +158,12 @@ export function FiltersPopover({
             <FilterPill
               label={youName}
               active={state.filters.player === "you"}
-              onClick={() => select("player", "you")}
+              onClick={() => selectPlayer("you")}
             />
             <FilterPill
               label={opponentName}
               active={state.filters.player === "opponent"}
-              onClick={() => select("player", "opponent")}
+              onClick={() => selectPlayer("opponent")}
             />
           </FilterGroup>
 
@@ -141,8 +173,8 @@ export function FiltersPopover({
                 <FilterPill
                   key={key}
                   label={OPTIONS.ball[key]}
-                  active={state.filters.ball === key}
-                  onClick={() => select("ball", key)}
+                  active={state.filters.ball.includes(key)}
+                  onClick={() => toggle("ball", key)}
                 />
               ),
             )}
@@ -154,8 +186,8 @@ export function FiltersPopover({
                 <FilterPill
                   key={key}
                   label={OPTIONS.court[key]}
-                  active={state.filters.court === key}
-                  onClick={() => select("court", key)}
+                  active={state.filters.court.includes(key)}
+                  onClick={() => toggle("court", key)}
                 />
               ),
             )}
@@ -168,8 +200,8 @@ export function FiltersPopover({
                   <FilterPill
                     key={key}
                     label={OPTIONS.zone[key]}
-                    active={state.filters.zone === key}
-                    onClick={() => select("zone", key)}
+                    active={state.filters.zone.includes(key)}
+                    onClick={() => toggle("zone", key)}
                   />
                 ),
               )}
@@ -181,8 +213,8 @@ export function FiltersPopover({
               <FilterPill
                 key={key}
                 label={OPTIONS.result[key]}
-                active={state.filters.result === key}
-                onClick={() => select("result", key)}
+                active={state.filters.result.includes(key)}
+                onClick={() => toggle("result", key)}
               />
             ))}
           </FilterGroup>
@@ -194,8 +226,8 @@ export function FiltersPopover({
               <FilterPill
                 key={key}
                 label={OPTIONS.pressure[key]}
-                active={state.filters.pressure === key}
-                onClick={() => select("pressure", key)}
+                active={state.filters.pressure.includes(key)}
+                onClick={() => toggle("pressure", key)}
               />
             ))}
           </FilterGroup>
@@ -206,8 +238,8 @@ export function FiltersPopover({
                 <FilterPill
                   key={key}
                   label={OPTIONS.rally[key]}
-                  active={state.filters.rally === key}
-                  onClick={() => select("rally", key)}
+                  active={state.filters.rally.includes(key)}
+                  onClick={() => toggle("rally", key)}
                 />
               ),
             )}
@@ -219,8 +251,8 @@ export function FiltersPopover({
                 <FilterPill
                   key={setNumber}
                   label={`Set ${setNumber}`}
-                  active={state.filters.set === setNumber}
-                  onClick={() => select("set", setNumber)}
+                  active={state.filters.set.includes(setNumber)}
+                  onClick={() => toggle("set", setNumber)}
                 />
               ))}
             </FilterGroup>

@@ -24,14 +24,26 @@ export type Cut = "serve" | "returnPlacement" | "returnContact";
 export type Chart = "scatter" | "zones";
 export type PlayerFilter = "you" | "opponent";
 
-export type SetFilter = "any" | number;
-export type GameFilter = "any" | "serving" | "returning";
-export type BallFilter = "any" | "first" | "second";
-export type CourtSideFilter = "any" | "deuce" | "ad";
-export type ZoneFilter = "any" | "t" | "body" | "wide";
-export type PressureFilter = "any" | "break" | "setMatch";
-export type ResultFilter = "any" | "won" | "lost" | "ace";
-export type RallyFilter = "any" | "short" | "medium" | "long";
+// Every dimension below is multi-select: an empty list means "any" (no
+// narrowing), and a non-empty list is OR'd — a point matches the group when
+// it matches ANY selected value. `player` is the one exception and stays a
+// single scalar (it picks whose court is drawn, not a predicate to OR).
+export type GameValue = "serving" | "returning";
+export type BallValue = "first" | "second";
+export type CourtSideValue = "deuce" | "ad";
+export type ZoneValue = "t" | "body" | "wide";
+export type PressureValue = "break" | "setMatch";
+export type ResultValue = "won" | "lost" | "ace";
+export type RallyValue = "short" | "medium" | "long";
+
+export type SetFilter = readonly number[];
+export type GameFilter = readonly GameValue[];
+export type BallFilter = readonly BallValue[];
+export type CourtSideFilter = readonly CourtSideValue[];
+export type ZoneFilter = readonly ZoneValue[];
+export type PressureFilter = readonly PressureValue[];
+export type ResultFilter = readonly ResultValue[];
+export type RallyFilter = readonly RallyValue[];
 
 export interface ShotFilterState {
   set: SetFilter;
@@ -50,14 +62,14 @@ export interface VizFilters extends ShotFilterState {
 
 export const EMPTY_VIZ_FILTERS: VizFilters = {
   player: "you",
-  set: "any",
-  game: "any",
-  ball: "any",
-  court: "any",
-  zone: "any",
-  pressure: "any",
-  result: "any",
-  rally: "any",
+  set: [],
+  game: [],
+  ball: [],
+  court: [],
+  zone: [],
+  pressure: [],
+  result: [],
+  rally: [],
 };
 
 export type Outcome = "won" | "lost" | "miss";
@@ -278,64 +290,79 @@ export function pointToReturnDots(
   return [landingDot, contactDot];
 }
 
+/**
+ * Every group below is OR'd within itself (an empty list means "any", a
+ * non-empty list matches when the point satisfies AT LEAST ONE selected
+ * value) and the groups are AND'd against each other — a point must clear
+ * every non-empty group to match. `pressure` and `result` aren't a single
+ * derived value compared against the list (unlike `game`/`ball`/`court`/
+ * `zone`/`rally`): each selected value is its own predicate over the point,
+ * and any one of them being true is enough (`break` OR `setMatch`; `won`/
+ * `lost` relative to the subject OR the orthogonal `ace` check).
+ */
 export function pointMatchesFilters(
   p: MatchPoint,
   filters: ShotFilterState,
   frame: "serve" | "return",
   subjectIsPlayer1: boolean,
 ): boolean {
-  if (filters.set !== "any" && p.setNumber !== filters.set) return false;
+  if (filters.set.length && !filters.set.includes(p.setNumber)) return false;
 
-  if (filters.game !== "any") {
+  if (filters.game.length) {
     const subjectServed = p.serverIsPlayer1 === subjectIsPlayer1;
-    if (filters.game === "serving" && !subjectServed) return false;
-    if (filters.game === "returning" && subjectServed) return false;
+    const value: GameValue = subjectServed ? "serving" : "returning";
+    if (!filters.game.includes(value)) return false;
   }
 
-  if (filters.ball !== "any") {
+  if (filters.ball.length) {
     // In serve frame the ball is the serve struck; in return frame it is
     // the serve returned — a faulted first ball means the return happened
     // on the second (see isReturnOnFirstServe).
     const isFirst =
       frame === "serve" ? isFirstServePoint(p) : isReturnOnFirstServe(p);
-    if (filters.ball === "first" && !isFirst) return false;
-    if (filters.ball === "second" && isFirst) return false;
+    const value: BallValue = isFirst ? "first" : "second";
+    if (!filters.ball.includes(value)) return false;
   }
 
-  if (filters.court !== "any") {
+  if (filters.court.length) {
     const side =
       frame === "serve"
         ? (serveLandingSide(p) ?? getPointSide(p.pointScore))
         : getPointSide(p.pointScore);
-    if (side !== filters.court) return false;
+    if (!filters.court.includes(side)) return false;
   }
 
   // Zone is a serve-box concept — the group is hidden in return mode and the
   // state is reset on mode switch, so it never silently narrows returns.
-  if (frame === "serve" && filters.zone !== "any") {
-    if (serveZone(p) !== filters.zone) return false;
+  if (frame === "serve" && filters.zone.length) {
+    const zone = serveZone(p);
+    if (zone === null || !filters.zone.includes(zone)) return false;
   }
 
-  if (filters.pressure === "break" && !p.isBreakPoint) return false;
-  if (filters.pressure === "setMatch" && !p.isSetPoint && !p.isMatchPoint) {
-    return false;
+  if (filters.pressure.length) {
+    const matches = filters.pressure.some((v) =>
+      v === "break" ? p.isBreakPoint : p.isSetPoint || p.isMatchPoint,
+    );
+    if (!matches) return false;
   }
 
-  if (filters.result !== "any") {
-    if (filters.result === "ace") {
-      if (p.resultType !== "Ace") return false;
-    } else {
-      const subjectWon = p.wonByPlayer1 === subjectIsPlayer1;
-      if (filters.result === "won" && !subjectWon) return false;
-      if (filters.result === "lost" && subjectWon) return false;
-    }
+  if (filters.result.length) {
+    const subjectWon = p.wonByPlayer1 === subjectIsPlayer1;
+    const matches = filters.result.some((v) => {
+      if (v === "ace") return p.resultType === "Ace";
+      return v === "won" ? subjectWon : !subjectWon;
+    });
+    if (!matches) return false;
   }
 
-  if (filters.rally !== "any") {
+  if (filters.rally.length) {
     const len = p.rallyLength;
-    if (filters.rally === "short" && !(len >= 1 && len <= 4)) return false;
-    if (filters.rally === "medium" && !(len >= 5 && len <= 8)) return false;
-    if (filters.rally === "long" && len < 9) return false;
+    const matches = filters.rally.some((v) => {
+      if (v === "short") return len >= 1 && len <= 4;
+      if (v === "medium") return len >= 5 && len <= 8;
+      return len >= 9;
+    });
+    if (!matches) return false;
   }
 
   return true;
@@ -634,21 +661,24 @@ function buildSentence(groups: StatGroup[], noun: string): string | null {
 }
 
 /** Singular when `count === 1` ("1 serve", "1 first serve", "1 second
- * serve"), plural otherwise — including `count === 0` ("0 serves"). */
+ * serve"), plural otherwise — including `count === 0` ("0 serves"). The
+ * "first"/"second" wording only applies when the ball filter narrows to
+ * EXACTLY one value; two selected (or none) reads as the plain noun, since
+ * "first and second serves" is just "serves". */
 function serveNoun(ball: BallFilter, count: number): string {
   const serve = count === 1 ? "serve" : "serves";
-  if (ball === "first") return `first ${serve}`;
-  if (ball === "second") return `second ${serve}`;
+  if (ball.length === 1 && ball[0] === "first") return `first ${serve}`;
+  if (ball.length === 1 && ball[0] === "second") return `second ${serve}`;
   return serve;
 }
 
 /** Singular when `count === 1` ("1 return", "1 first-serve return", "1
  * second-serve return"), plural otherwise — including `count === 0` ("0
- * returns"). */
+ * returns"). Same single-value rule as `serveNoun` above. */
 function returnNoun(ball: BallFilter, count: number): string {
   const ret = count === 1 ? "return" : "returns";
-  if (ball === "first") return `first-serve ${ret}`;
-  if (ball === "second") return `second-serve ${ret}`;
+  if (ball.length === 1 && ball[0] === "first") return `first-serve ${ret}`;
+  if (ball.length === 1 && ball[0] === "second") return `second-serve ${ret}`;
   return ret;
 }
 

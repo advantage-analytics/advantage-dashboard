@@ -42,10 +42,28 @@ export function sameView(
   if (current.chart !== candidate.chart) return false;
 
   for (const key of filterKeysFor(candidate.cut)) {
-    if (current.filters[key] !== candidate.filters[key]) return false;
+    if (key === "player") {
+      if (current.filters.player !== candidate.filters.player) return false;
+      continue;
+    }
+    if (!sameValues(current.filters[key], candidate.filters[key])) {
+      return false;
+    }
   }
 
   return true;
+}
+
+/**
+ * Set equality for two filter-group lists — order-independent, so a
+ * candidate whose list wasn't built in canonical order (a hand-built test
+ * fixture, or a caller that assembled it directly) still compares correctly
+ * against the always-canonical `current.filters`.
+ */
+function sameValues(a: readonly unknown[], b: readonly unknown[]): boolean {
+  if (a.length !== b.length) return false;
+  const bSet = new Set(b);
+  return a.every((v) => bSet.has(v));
 }
 
 /**
@@ -152,6 +170,31 @@ const ORDER = [
 const VIZ_KEYS = ["cut", "chart", "view", "vset", ...ORDER];
 
 type OptionKey = keyof typeof OPTIONS;
+type MultiOptionKey = Exclude<OptionKey, "player">;
+
+/**
+ * Canonical form for a multi-select filter group's values: deduped, ordered
+ * the way `OPTIONS[key]` itself lists them — so two callers picking the same
+ * set of values in a different click order still produce the identical
+ * array, and therefore the identical query string (`reconcileVizState`
+ * compares query strings, not parsed state, to decide "own" vs. "external").
+ * `filters-popover.tsx`'s toggle and `parseFilters` below both route
+ * through this rather than each sorting by hand.
+ */
+export function canonicalOptionValues<K extends MultiOptionKey>(
+  key: K,
+  values: readonly string[],
+): (keyof (typeof OPTIONS)[K])[] {
+  const known = Object.keys(OPTIONS[key]);
+  const wanted = new Set(values);
+  return known.filter((v) => wanted.has(v)) as (keyof (typeof OPTIONS)[K])[];
+}
+
+/** Same canonical rule as `canonicalOptionValues`, for `set` — numeric,
+ * ascending, deduped rather than ordered by an `OPTIONS` map. */
+export function canonicalSetValues(values: readonly number[]): number[] {
+  return [...new Set(values)].sort((a, b) => a - b);
+}
 
 /* ── Public API ─────────────────────────────────────────────────────────── */
 
@@ -282,20 +325,25 @@ export function vizStateQuery(
   // Serialize filters: only non-default keys that are in filterKeysFor(cut)
   const allowedKeys = new Set(filterKeysFor(state.cut));
 
-  if (state.filters.set !== "any") {
-    if (allowedKeys.has("set")) {
-      next.set("vset", String(state.filters.set));
+  if (allowedKeys.has("set")) {
+    for (const setNumber of state.filters.set) {
+      next.append("vset", String(setNumber));
     }
   }
 
   for (const key of ORDER) {
     if (!allowedKeys.has(key)) continue;
 
-    const value = state.filters[key as keyof typeof state.filters];
-    const defaultValue = getDefaultFor(key as OptionKey);
+    if (key === "player") {
+      if (state.filters.player !== "you") {
+        next.set("player", state.filters.player);
+      }
+      continue;
+    }
 
-    if (value !== defaultValue) {
-      next.set(key, String(value));
+    const values = state.filters[key] as readonly string[];
+    for (const value of values) {
+      next.append(key, value);
     }
   }
 
@@ -313,8 +361,10 @@ export function clearedFilters(state: VizState): VizState {
 }
 
 /**
- * Reset serve-only filter values when switching off serve.
- * zone and result:"ace" reset to "any" on non-serve cuts.
+ * Reset serve-only filter values when switching off serve: `zone` clears
+ * entirely (it has no meaning off serve), and `"ace"` alone is dropped out
+ * of `result` — any OTHER selected result value (`won`/`lost`) is kept,
+ * since those still mean something off serve.
  */
 export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
   if (nextCut === "serve") {
@@ -323,46 +373,56 @@ export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
 
   // Off serve: reset serve-only values
   const next = { ...filters };
-  if (filters.zone !== "any") {
-    next.zone = "any";
+  if (filters.zone.length) {
+    next.zone = [];
   }
-  if (filters.result === "ace") {
-    next.result = "any";
+  if (filters.result.includes("ace")) {
+    next.result = filters.result.filter((v) => v !== "ace");
   }
   return next;
 }
 
 /**
- * Active filter entries for the UI, ordered per ORDER then set,
- * skipping defaults and keys not in the cut. Returns label strings
- * from OPTIONS.
+ * Active filter entries for the UI, ordered per ORDER then set, one entry
+ * per SELECTED VALUE (not per key) — a group with two values selected draws
+ * two removable tokens. Skips empty groups and keys not in the cut. Returns
+ * label strings from OPTIONS.
  */
 export function activeFilterEntries(
   state: VizState,
-): { key: keyof VizFilters; label: string }[] {
+): { key: keyof VizFilters; value: string; label: string }[] {
   if (state.cut === null) {
     return [];
   }
 
   const allowedKeys = new Set(filterKeysFor(state.cut));
-  const result: { key: keyof VizFilters; label: string }[] = [];
+  const result: { key: keyof VizFilters; value: string; label: string }[] = [];
 
-  // ORDER then set
   for (const key of ORDER) {
     if (!allowedKeys.has(key)) continue;
 
-    const value = state.filters[key as keyof typeof state.filters];
-    const defaultValue = getDefaultFor(key as OptionKey);
+    if (key === "player") {
+      if (state.filters.player !== "you") {
+        result.push({ key: "player", value: "opponent", label: "Opponent" });
+      }
+      continue;
+    }
 
-    if (value !== defaultValue) {
-      const label = getLabel(key as OptionKey, String(value));
-      result.push({ key: key as keyof VizFilters, label });
+    const values = state.filters[key] as readonly string[];
+    for (const value of values) {
+      result.push({ key, value, label: getLabel(key, value) });
     }
   }
 
   // set
-  if (allowedKeys.has("set") && state.filters.set !== "any") {
-    result.push({ key: "set", label: `Set ${state.filters.set}` });
+  if (allowedKeys.has("set")) {
+    for (const setNumber of state.filters.set) {
+      result.push({
+        key: "set",
+        value: String(setNumber),
+        label: `Set ${setNumber}`,
+      });
+    }
   }
 
   return result;
@@ -374,38 +434,39 @@ function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
   // Start with defaults from EMPTY_VIZ_FILTERS
   const filters: VizFilters = { ...EMPTY_VIZ_FILTERS };
 
-  // Parse player
+  // Parse player (single-select — the one scalar filter)
   const playerParam = params.get("player");
   if (playerParam === "opponent") {
     filters.player = "opponent";
   }
 
-  // Parse other ORDER keys
+  // Parse other ORDER keys — every value the param carries, validated
+  // against OPTIONS, deduped and sorted into canonical (OPTIONS) order so
+  // two equal selections always produce the identical array (and therefore
+  // the identical query string — see `canonicalOptionValues`'s doc comment).
   for (const key of ORDER) {
     if (key === "player") continue; // already handled
 
-    const optionKey = key as OptionKey;
-    const param = params.get(key);
-    if (param !== null && Object.hasOwn(OPTIONS[optionKey], param)) {
-      filters[key as keyof typeof filters] = param as never;
-    }
+    const optionKey = key as MultiOptionKey;
+    const raw = params
+      .getAll(key)
+      .filter((v) => Object.hasOwn(OPTIONS[optionKey], v));
+    if (raw.length === 0) continue;
+    filters[key] = canonicalOptionValues(optionKey, raw) as never;
   }
 
-  // Parse set (special: numeric) — namespaced to `vset` (see `VIZ_KEYS`).
-  const setParam = params.get("vset");
-  if (setParam !== null) {
-    const setNum = Number.parseInt(setParam, 10);
-    if (setNum > 0) {
-      filters.set = setNum;
-    }
+  // Parse set (special: numeric, multi-valued) — namespaced to `vset` (see
+  // `VIZ_KEYS`). Also accepts a single legacy scalar param for symmetry with
+  // `filtersToParams`'s "a stored scalar reads as a one-element list" rule.
+  const setValues = params
+    .getAll("vset")
+    .map((v) => Number.parseInt(v, 10))
+    .filter((n) => Number.isInteger(n) && n > 0);
+  if (setValues.length > 0) {
+    filters.set = canonicalSetValues(setValues);
   }
 
   return filters;
-}
-
-function getDefaultFor(key: OptionKey): string {
-  if (key === "player") return "you";
-  return "any";
 }
 
 function getLabel(key: OptionKey, value: string): string {
