@@ -96,6 +96,7 @@ import {
   buildImportIdentityConfirmationKey,
   collectMatchCompletionRequirements,
   evaluateImportedIdentityMatch,
+  quotaRefusal,
 } from "./validation";
 
 export interface ImportIdentityState {
@@ -411,6 +412,13 @@ export interface UseUploadMatchWizardReturn {
   quotaCapSeconds: number;
   /** When the allowance comes back, already formatted — "Sep 1". */
   quotaResetsOn: string;
+  /**
+   * Step 1's refusal sentence when this month's allowance is entirely spent,
+   * for the provider step to render next to Advantage Intelligence. Null for
+   * an import provider, while the reading loads, and whenever anything is
+   * left — the trim window's own overage is raised on Continue instead.
+   */
+  providerQuotaRefusal: string | null;
   /** What the file picker accepts, for whichever provider is selected. */
   acceptString: string;
   requirementChips: readonly string[];
@@ -953,6 +961,61 @@ export function useUploadMatchWizard({
     selectedProvider && isProcessingProvider
       ? (getProviderStrategy(selectedProvider) as IProcessingProviderStrategy)
       : null;
+
+  /**
+   * Step 1's refusal: this month's allowance is gone entirely.
+   *
+   * `neededSeconds: 0` asks only "is there anything left", which is the only
+   * question answerable before a video has been picked — and it is worth
+   * asking here, because the alternative is uploading a recording to find out.
+   * Null for an import provider: a SwingVision export does not bill, so the
+   * allowance never enters its flow. Null too while the reading is still
+   * loading — the server is the authority (`reserve_processing_quota()`), and
+   * an unread advisory number must never refuse on its own.
+   */
+  const providerQuotaRefusal = isProcessingProvider
+    ? quotaRefusal({
+        remainingSeconds: remainingQuotaSeconds,
+        neededSeconds: 0,
+        capSeconds: quotaCapSeconds,
+        resetsOn: quotaResetsOn,
+        workspaceKind: activeWorkspace.kind,
+      })
+    : null;
+
+  /**
+   * The same question asked of a real window, in the provider's own billing
+   * terms rather than `end - start`: `billableSeconds()` is what
+   * `createProcessingJob` is handed, so the sentence and the charge can never
+   * describe different amounts.
+   *
+   * Advisory, like the meter above it. Continue stays clickable and this is
+   * raised ON CLICK — a disabled button with a number next to it reads as a
+   * dead end, where a refusal that names the overage tells you to shorten the
+   * selection.
+   */
+  const refusalForWindow = useCallback(
+    (startSeconds: number, endSeconds: number) =>
+      processingStrategy
+        ? quotaRefusal({
+            remainingSeconds: remainingQuotaSeconds,
+            neededSeconds: processingStrategy.billableSeconds(
+              startSeconds,
+              endSeconds,
+            ),
+            capSeconds: quotaCapSeconds,
+            resetsOn: quotaResetsOn,
+            workspaceKind: activeWorkspace.kind,
+          })
+        : null,
+    [
+      processingStrategy,
+      remainingQuotaSeconds,
+      quotaCapSeconds,
+      quotaResetsOn,
+      activeWorkspace.kind,
+    ],
+  );
 
   // Cached on modal open so handleCreateMatch doesn't pay an auth round-trip
   // at click time. Why: getUser() can take 100–300ms over the network and the
@@ -1668,6 +1731,13 @@ export function useUploadMatchWizard({
       if (!eligibility.retryable) setError(eligibility.message);
       return;
     }
+    // Nothing left in the month at all: a video job cannot be placed whatever
+    // the trim, so it is refused before a file is picked rather than after an
+    // upload. Null on the import path — that flow never reaches the allowance.
+    if (providerQuotaRefusal) {
+      setError(providerQuotaRefusal);
+      return;
+    }
     setError(null);
     // Both kinds drop their file next; the order decides what follows it.
     setProgressKind(providerKind);
@@ -1679,6 +1749,7 @@ export function useUploadMatchWizard({
     preset,
     isProcessingProvider,
     eligibility,
+    providerQuotaRefusal,
   ]);
 
   // Where the file step goes depends on the kind: a video still needs its
@@ -1728,8 +1799,19 @@ export function useUploadMatchWizard({
   ]);
 
   const handleTrimContinue = useCallback(() => {
+    // The window is the bill. Asked here, on the click, because this is the
+    // last screen where shortening the selection is still the obvious fix.
+    const refusal = refusalForWindow(
+      formData.videoStartSeconds ?? 0,
+      formData.videoEndSeconds ?? 0,
+    );
+    if (refusal) {
+      setError(refusal);
+      return;
+    }
+    setError(null);
     setStep("match");
-  }, []);
+  }, [refusalForWindow, formData.videoStartSeconds, formData.videoEndSeconds]);
 
   /**
    * Pick and validate a video, entirely locally.
@@ -1819,6 +1901,10 @@ export function useUploadMatchWizard({
   /** Set the trim window. Values are seconds into the original video. */
   const handleTrimChange = useCallback(
     (startSeconds: number, endSeconds: number) => {
+      // Moving a handle answers the over-allowance refusal Continue raised, so
+      // the sentence goes the moment the window changes rather than waiting for
+      // the next click to re-evaluate it.
+      setError(null);
       setFormData((prev) => ({
         ...prev,
         videoStartSeconds: startSeconds,
@@ -2354,6 +2440,20 @@ export function useUploadMatchWizard({
         );
         return;
       }
+      // The trim step's question, re-asked at the write — the same
+      // `billableSeconds()` figure `createProcessingJob` is about to be handed,
+      // because the allowance can have been spent by a teammate since the trim
+      // step read it. Before `setIsCreating`, so a refusal leaves the dialog
+      // open on this step with its sentence rather than closing behind a row
+      // the server would refuse a moment later.
+      const windowRefusal = refusalForWindow(
+        formData.videoStartSeconds ?? 0,
+        formData.videoEndSeconds ?? 0,
+      );
+      if (windowRefusal) {
+        setError(windowRefusal);
+        return;
+      }
 
       setIsCreating(true);
       setError(null);
@@ -2807,6 +2907,7 @@ export function useUploadMatchWizard({
     eligibilityInput,
     approvalReading,
     refreshApproval,
+    refusalForWindow,
     matchSubject,
     isUploading,
     isProbing,
@@ -2884,6 +2985,7 @@ export function useUploadMatchWizard({
     remainingQuotaSeconds,
     quotaCapSeconds,
     quotaResetsOn,
+    providerQuotaRefusal,
     // Every strategy has one — the file picker on step 2 serves both kinds.
     acceptString: selectedProvider
       ? getProviderStrategy(selectedProvider).getAcceptString()

@@ -96,3 +96,15 @@ is the runner's. Newest entries at the bottom.
 1. The peek counts this match's own unreleased reservation as used, so a re-upload to an already-submitted match errs toward refusing.
 2. `getPersonalUsage` in `src/lib/data/usage-server.ts` repeats the same ledger sum and could share a helper with `peekQuota`.
 3. `tests/match-video-attachment-flow.spec.ts:848` flaked once under full-suite load — not this branch's change.
+
+## T3 · Wire quotaRefusal into the provider, trim and create handlers — done
+
+**gate:** mechanical PASS (lint, typecheck, full test suite); completion review `VERDICT: pass` (5/5 criteria met; fixture + wiring spec judged in scope).
+
+**changed:** `useUploadMatchWizard.ts` — `providerQuotaRefusal` (computed only for a processing provider, exposed on the return object and type) stops `handleProviderContinue` at zero allowance while the import path makes no quota call; `refusalForWindow()` feeds `processingStrategy.billableSeconds()` — the figure `createProcessingJob` is handed — into `quotaRefusal`; `handleTrimContinue` sets the error and stays, or clears it and advances; `handleTrimChange` clears the error; `handleCreateMatch` re-checks with its other pre-flight checks, before the match row is written. No quota term in `wizardContinueBlocked` or `useWizardGates.ts`. `tests/fixtures/upload-wizard-hook.ts` gains `billableSeconds`/`minTrimSeconds` on the stub strategy and a `quotaCapSeconds` option; new `tests/upload-quota-wiring.spec.ts` (4 tests).
+
+**follow-ups:**
+
+1. IMPORTANT — the hook's `error` string is rendered ONLY on the match-details step (`DetailsStepContent.tsx` ~L1274, fed from `MatchStep` in `UploadWizardSteps.tsx`). On the trim step `setError()` is invisible, so an over-allowance Continue click currently looks like a dead button. T4 renders `providerQuotaRefusal` on step 1 but nothing covers the trim step — needs a task: render `error` on the trim step (a `noteStripCls` strip in `TrimStep`/`TrimStepContent`).
+2. The client figure is refreshed on arriving at the trim step only; a teammate spending the pool before Save is caught by the server 429 (T5), by design.
+3. `processingStrategy` is rebuilt every render, so `refusalForWindow`'s `useCallback` never memoizes — harmless today.

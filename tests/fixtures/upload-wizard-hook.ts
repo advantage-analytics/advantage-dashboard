@@ -86,6 +86,12 @@ export function uploadWizardHarness(
      * Defaults to a successful write.
      */
     draftSave?: "saved" | "refused";
+    /**
+     * This month's cap, in seconds, as `monthlyCapSecondsFor()` reports it.
+     * The stubbed usage reads return zero used, so this is also the remaining
+     * allowance — `0` is the spent-month case. Defaults to 2 hours.
+     */
+    quotaCapSeconds?: number;
   } = {},
 ) {
   const slots: any[] = [];
@@ -280,6 +286,12 @@ export function uploadWizardHarness(
         validateFile: (file: File) =>
           checks.get(file.name)?.promise ?? { success: true },
         getAcceptString: () => ".csv",
+        minTrimSeconds: 0,
+        // The real strategy's rule is the same whole-window one; the quota
+        // sentences are checked against this figure, so it must be the
+        // fixture's single source of the billable amount too.
+        billableSeconds: (startSeconds: number, endSeconds: number) =>
+          Math.max(0, endSeconds - startSeconds),
       }),
     },
     "@/lib/services/upload/parsers": {
@@ -293,7 +305,7 @@ export function uploadWizardHarness(
     "@/lib/services/splitstep/config": { currentBillingMonth: () => "2026-09" },
     "@/lib/services/splitstep/quota": {
       accountTypeFor: () => "user",
-      monthlyCapSecondsFor: () => 7200,
+      monthlyCapSecondsFor: () => options.quotaCapSeconds ?? 7200,
     },
     "@/lib/data/usage-format": { formatResetDate: () => "Oct 1" },
     // Pure, and only read to describe the saved match to the success screen.

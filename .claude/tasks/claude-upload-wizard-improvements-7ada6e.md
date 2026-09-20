@@ -45,7 +45,7 @@ ready).
 
 ## T3 · Wire quotaRefusal into the provider, trim and create handlers
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1, T2
 - **files:** src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (guess — handleProviderContinue ~L1631, handleTrimContinue ~L1706, handleTrimChange ~L1796, handleCreateMatch ~L2251)
