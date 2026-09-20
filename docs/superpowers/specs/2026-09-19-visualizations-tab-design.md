@@ -65,6 +65,10 @@ editor, and **Settings › Units** (P1i/P1j) with `formatDistance()`.
 4. **Units moves to Phase 2** — nothing in Phase 1 reads a distance, and a
    setting that visibly does nothing should not ship. This deviates from the
    handoff's phase-1 list on purpose.
+5. **A saved view's subject is viewer-relative.** Views are workspace-scoped, not
+   match-scoped, so `player: "you"` is the only portable spelling: a view shared
+   team-wide draws _each viewer's own_ player (the tile's chip names who that
+   is). This is deliberate — do not "fix" it by storing a player id.
 
 ## Where the handoff and the code disagree
 
