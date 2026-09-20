@@ -2,7 +2,10 @@
 
 import { VizWall } from "@/components/dashboard/matches/match-detail/shots/viz-wall";
 import { VizFocused } from "@/components/dashboard/matches/match-detail/shots/viz-focused";
-import { useVizState } from "@/components/dashboard/matches/match-detail/shots/use-viz-state";
+import {
+  useVizState,
+  VizStateProvider,
+} from "@/components/dashboard/matches/match-detail/shots/viz-state-context";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { SavedViewsBand } from "@/components/dashboard/matches/match-detail/shots/saved-views-band";
 
@@ -32,9 +35,26 @@ import { SavedViewsBand } from "@/components/dashboard/matches/match-detail/shot
  * `VizFocused` no longer takes an `onSaveRequest` opt-in; it owns its own
  * Save dialog and only needs the workspace facts that dialog's "Share with
  * team" row depends on.
+ *
+ * `VizStateProvider` (`viz-state-context.tsx`) is mounted ONCE here, around
+ * the whole wall/focused tree, so every descendant's `useVizState()` reads
+ * the SAME store — a click in the filters popover and a click in the
+ * applied strip a moment later both land, instead of the second racing the
+ * first's still-pending navigation. `ShotsTab` itself needs `state.cut` to
+ * choose wall vs. focused, so it's split into this outer component (mounts
+ * the provider) and `ShotsTabBody` (reads it) — `useVizState()` must run
+ * inside the provider it belongs to, never above it.
  */
 
 export function ShotsTab() {
+  return (
+    <VizStateProvider>
+      <ShotsTabBody />
+    </VizStateProvider>
+  );
+}
+
+function ShotsTabBody() {
   const { state } = useVizState();
   const { meta } = useMatchReport();
 

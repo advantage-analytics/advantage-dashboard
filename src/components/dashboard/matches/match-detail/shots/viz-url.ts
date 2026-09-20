@@ -72,6 +72,47 @@ export function applyVizUpdate(
 }
 
 /**
+ * The reconciliation rule `viz-state-context.tsx`'s `VizStateProvider` runs
+ * every time the URL's query string changes: does this query string match
+ * one the store itself issued (via `setState` → `router.replace`), or did it
+ * arrive from outside (back/forward, a `<Link>` navigation, anything not
+ * requested through this store)?
+ *
+ * - **Own query lands**: `intended` already holds the up-to-date state (it
+ *   was written synchronously when `setState` was called), so it's kept
+ *   as-is. The matched query AND every older query issued before it are
+ *   retired from `ownQueries` — an earlier own request that never itself
+ *   lands (Next aborts a superseded `router.replace`) must not linger
+ *   forever and later be mistaken for "own" if the browser ever revisits
+ *   that exact query string.
+ * - **External query**: nothing in `ownQueries` matches, so this URL was not
+ *   this store's doing. It wins outright — `intended` is replaced with the
+ *   freshly parsed URL state, and `ownQueries` resets to just this query (the
+ *   new baseline for future reconciliation).
+ *
+ * Pure and React-free so it can be tested directly, without mounting the
+ * provider or touching `next/navigation`.
+ */
+export function reconcileVizState({
+  urlQuery,
+  ownQueries,
+  intended,
+}: {
+  urlQuery: string;
+  ownQueries: string[];
+  intended: VizState;
+}): { state: VizState; ownQueries: string[] } {
+  const idx = ownQueries.indexOf(urlQuery);
+  if (idx !== -1) {
+    return { state: intended, ownQueries: ownQueries.slice(idx + 1) };
+  }
+  return {
+    state: parseVizState(new URLSearchParams(urlQuery)),
+    ownQueries: [urlQuery],
+  };
+}
+
+/**
  * URLSearchParams → VizState. Garbage values read as defaults.
  * `chart=zones` with a non-serve cut parses as `scatter`.
  */

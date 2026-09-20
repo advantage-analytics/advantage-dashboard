@@ -6,6 +6,7 @@ import {
   carryFilters,
   clearedFilters,
   parseVizState,
+  reconcileVizState,
   vizStateQuery,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 
@@ -165,4 +166,52 @@ test("applyVizUpdate: a plain-object update replaces wholesale", () => {
     filters: EMPTY_VIZ_FILTERS,
   };
   expect(applyVizUpdate(start, replacement)).toEqual(replacement);
+});
+
+test("reconcileVizState: an own query lands — intended state is kept and the query retired", () => {
+  const intended = parseVizState(new URLSearchParams("cut=serve&ball=first"));
+  const result = reconcileVizState({
+    urlQuery: "cut=serve&ball=first",
+    ownQueries: ["cut=serve&ball=first"],
+    intended,
+  });
+  expect(result.state).toEqual(intended);
+  expect(result.ownQueries).toEqual([]);
+});
+
+test("reconcileVizState: only the later of two own queries lands — the earlier is retired too, not left to be mistaken for own later", () => {
+  const intended = parseVizState(new URLSearchParams("cut=serve&ball=second"));
+  const result = reconcileVizState({
+    urlQuery: "cut=serve&ball=second",
+    ownQueries: ["cut=serve&ball=first", "cut=serve&ball=second"],
+    intended,
+  });
+  expect(result.ownQueries).toEqual([]);
+  expect(result.state).toEqual(intended);
+
+  // The browser later lands back on the earlier own query (e.g. a stale
+  // history entry) — it must now read as external, not "our own", since it
+  // was already retired above.
+  const later = reconcileVizState({
+    urlQuery: "cut=serve&ball=first",
+    ownQueries: result.ownQueries,
+    intended,
+  });
+  expect(later.state).toEqual(
+    parseVizState(new URLSearchParams("cut=serve&ball=first")),
+  );
+  expect(later.ownQueries).toEqual(["cut=serve&ball=first"]);
+});
+
+test("reconcileVizState: an external navigation while an own query is pending wins over the intended state", () => {
+  const intended = parseVizState(new URLSearchParams("cut=serve&ball=first"));
+  const result = reconcileVizState({
+    urlQuery: "cut=returnPlacement",
+    ownQueries: ["cut=serve&ball=first"],
+    intended,
+  });
+  expect(result.state).toEqual(
+    parseVizState(new URLSearchParams("cut=returnPlacement")),
+  );
+  expect(result.ownQueries).toEqual(["cut=returnPlacement"]);
 });
