@@ -4,7 +4,6 @@ import {
   RETURN_COURT,
   SERVE_HEAT_BOUNDS,
   RETURN_HEAT_BOUNDS,
-  UNITS_PER_METER,
   heatBoundsFor,
   projectServeDot,
   projectReturnDot,
@@ -407,10 +406,10 @@ test.describe("heatCellRect", () => {
     }
   });
 
-  test("real SERVE_HEAT_BOUNDS/6x7 grid: cell(0,0) starts at the singles-left/service-line corner", () => {
-    const r = heatCellRect(SERVE_HEAT_BOUNDS, 6, 7, 0, 0);
-    expect(r.x).toBe(SERVE_COURT.singlesLeft);
-    expect(r.y).toBe(SERVE_COURT.serviceLineY);
+  test("real SERVE_HEAT_BOUNDS/10x12 grid: cell(0,0) starts at the bounds' own top-left", () => {
+    const r = heatCellRect(SERVE_HEAT_BOUNDS, 10, 12, 0, 0);
+    expect(r.x).toBe(SERVE_HEAT_BOUNDS.xMin);
+    expect(r.y).toBe(SERVE_HEAT_BOUNDS.yMin);
   });
 });
 
@@ -453,15 +452,15 @@ test.describe("heatCellStyle", () => {
 });
 
 /**
- * G3b — `RETURN_HEAT_BOUNDS.xMax` settles G3a's placeholder run-off with the
- * depth value actually visible inside the return frame's own viewBox before
- * its clipPath (`RETURN_BACKGROUND_PATH`, drawn exactly at the viewBox rect)
- * hides it. Verified here against an INDEPENDENT re-implementation of the
- * same two transform strings (`RETURN_COURT.innerGroupTransform`/
+ * P2j — `RETURN_HEAT_BOUNDS` is now the return frame's WHOLE visible view
+ * (its own `viewBox`), mapped back through both `<g>` transforms into the
+ * pre-transform coordinates `projectReturnDot` outputs — not a per-cut span.
+ * Verified here against an INDEPENDENT re-implementation of the same two
+ * transform strings (`RETURN_COURT.innerGroupTransform`/
  * `outerGroupTransform`), rather than importing `court-geometry.ts`'s own
  * derivation — a real cross-check, not a self-confirming one.
  */
-test.describe("RETURN_HEAT_BOUNDS depth run-off", () => {
+test.describe("RETURN_HEAT_BOUNDS — full visible view", () => {
   function applyReturnFrameTransforms(
     x: number,
     y: number,
@@ -478,13 +477,25 @@ test.describe("RETURN_HEAT_BOUNDS depth run-off", () => {
     return { x: px, y: py };
   }
 
-  test("xMax lands right at the viewBox's own far edge (within rounding)", () => {
+  const viewBoxNearY = RETURN_COURT.viewBox.minY;
+  const viewBoxFarY = RETURN_COURT.viewBox.minY + RETURN_COURT.viewBox.h;
+  const viewBoxLeftX = RETURN_COURT.viewBox.minX;
+  const viewBoxRightX = RETURN_COURT.viewBox.minX + RETURN_COURT.viewBox.w;
+
+  test("xMax (depth) lands right at the viewBox's own far y-edge", () => {
     const { y } = applyReturnFrameTransforms(
       RETURN_HEAT_BOUNDS.xMax,
       RETURN_COURT.centerY,
     );
-    const viewBoxFarEdge = RETURN_COURT.viewBox.minY + RETURN_COURT.viewBox.h;
-    expect(y).toBeCloseTo(viewBoxFarEdge, 6);
+    expect(y).toBeCloseTo(viewBoxFarY, 6);
+  });
+
+  test("xMin (depth) lands right at the viewBox's own near y-edge", () => {
+    const { y } = applyReturnFrameTransforms(
+      RETURN_HEAT_BOUNDS.xMin,
+      RETURN_COURT.centerY,
+    );
+    expect(y).toBeCloseTo(viewBoxNearY, 6);
   });
 
   test("a depth value past xMax would fall outside the viewBox", () => {
@@ -492,79 +503,106 @@ test.describe("RETURN_HEAT_BOUNDS depth run-off", () => {
       RETURN_HEAT_BOUNDS.xMax + 10,
       RETURN_COURT.centerY,
     );
-    const viewBoxFarEdge = RETURN_COURT.viewBox.minY + RETURN_COURT.viewBox.h;
-    expect(y).toBeGreaterThan(viewBoxFarEdge);
+    expect(y).toBeGreaterThan(viewBoxFarY);
   });
 
-  test("xMax is well past nearBaselineX — real run-off, not the old 30% placeholder", () => {
+  test("xMin is no longer the net — the net sits just outside the visible view on that edge", () => {
+    expect(RETURN_HEAT_BOUNDS.xMin).not.toBe(RETURN_COURT.netX);
+    expect(RETURN_HEAT_BOUNDS.xMin).toBeGreaterThan(RETURN_COURT.netX);
+  });
+
+  test("xMax is well past nearBaselineX — real run-off, not a placeholder", () => {
     expect(RETURN_HEAT_BOUNDS.xMax).toBeGreaterThan(RETURN_COURT.nearBaselineX);
-    // The old placeholder (`(nearBaselineX - netX) * 0.3`) landed at 500;
-    // the geometry-derived value is noticeably further out (~522.35).
     expect(RETURN_HEAT_BOUNDS.xMax).toBeGreaterThan(510);
     expect(RETURN_HEAT_BOUNDS.xMax).toBeLessThan(530);
   });
 
-  test("xMin is still the net (unchanged — only the run-off needed settling)", () => {
-    expect(RETURN_HEAT_BOUNDS.xMin).toBe(RETURN_COURT.netX);
+  test("yMax (lateral) lands right at the viewBox's own left x-edge", () => {
+    const { x } = applyReturnFrameTransforms(
+      RETURN_COURT.netX,
+      RETURN_HEAT_BOUNDS.yMax,
+    );
+    expect(x).toBeCloseTo(viewBoxLeftX, 6);
+  });
+
+  test("yMin (lateral) lands right at the viewBox's own right x-edge", () => {
+    const { x } = applyReturnFrameTransforms(
+      RETURN_COURT.netX,
+      RETURN_HEAT_BOUNDS.yMin,
+    );
+    expect(x).toBeCloseTo(viewBoxRightX, 6);
+  });
+
+  test("lateral bounds reach well past the doubles sidelines — the whole view, not the court alone", () => {
+    expect(RETURN_HEAT_BOUNDS.yMin).toBeLessThan(RETURN_COURT.doublesTop);
+    expect(RETURN_HEAT_BOUNDS.yMax).toBeGreaterThan(RETURN_COURT.doublesBottom);
   });
 });
 
 /**
- * I2 — `heatBoundsFor` gives each heat cut its own depth span so binning
- * (`viz-model.ts`'s `computeHeatForCut`) and drawing (`court-art.tsx`) can
- * never drift: `returnPlacement` only spans where placement dots land
- * (net→baseline), `returnContact` is a baseline-centred band matching where
- * contact dots actually cluster, and `rallyPosition` keeps the full run-off
- * span. Lateral bounds are identical across every cut.
+ * P2j — `SERVE_HEAT_BOUNDS` is the serve frame's WHOLE visible view (its own
+ * `viewBox`), mapped back through `SERVE_COURT.groupTransform` into the
+ * pre-transform coordinates `projectServeDot` outputs. Verified against an
+ * INDEPENDENT re-implementation of that transform string.
+ */
+test.describe("SERVE_HEAT_BOUNDS — full visible view", () => {
+  function applyServeFrameTransform(
+    x: number,
+    y: number,
+  ): { x: number; y: number } {
+    // groupTransform: translate(260,117) scale(0.85) translate(-260,-125)
+    const px = (x - 260) * 0.85 + 260;
+    const py = (y - 125) * 0.85 + 117;
+    return { x: px, y: py };
+  }
+
+  test("every corner of SERVE_HEAT_BOUNDS projects onto the corresponding SERVE_COURT.viewBox corner", () => {
+    const { x: left, y: top } = applyServeFrameTransform(
+      SERVE_HEAT_BOUNDS.xMin,
+      SERVE_HEAT_BOUNDS.yMin,
+    );
+    expect(left).toBeCloseTo(SERVE_COURT.viewBox.minX, 6);
+    expect(top).toBeCloseTo(SERVE_COURT.viewBox.minY, 6);
+
+    const { x: right, y: bottom } = applyServeFrameTransform(
+      SERVE_HEAT_BOUNDS.xMax,
+      SERVE_HEAT_BOUNDS.yMax,
+    );
+    expect(right).toBeCloseTo(
+      SERVE_COURT.viewBox.minX + SERVE_COURT.viewBox.w,
+      6,
+    );
+    expect(bottom).toBeCloseTo(
+      SERVE_COURT.viewBox.minY + SERVE_COURT.viewBox.h,
+      6,
+    );
+  });
+
+  test("bounds reach past the singles box — the whole view, not the service boxes alone", () => {
+    expect(SERVE_HEAT_BOUNDS.xMin).toBeLessThan(SERVE_COURT.singlesLeft);
+    expect(SERVE_HEAT_BOUNDS.xMax).toBeGreaterThan(SERVE_COURT.singlesRight);
+    expect(SERVE_HEAT_BOUNDS.yMin).toBeLessThan(SERVE_COURT.serviceLineY);
+    expect(SERVE_HEAT_BOUNDS.yMax).toBeGreaterThan(SERVE_COURT.netY);
+  });
+});
+
+/**
+ * P2j — `heatBoundsFor` now gives every cut its FRAME's whole visible view,
+ * not a per-cut span: `returnPlacement`, `returnContact` and `rallyPosition`
+ * all share one frame, so they all resolve to the identical
+ * `RETURN_HEAT_BOUNDS` object. Only `serve` differs, on its own frame.
  */
 test.describe("heatBoundsFor per cut", () => {
   test("serve delegates to SERVE_HEAT_BOUNDS", () => {
     expect(heatBoundsFor("serve")).toEqual(SERVE_HEAT_BOUNDS);
   });
 
-  test("returnPlacement spans net to baseline, not the full run-off", () => {
-    const b = heatBoundsFor("returnPlacement");
-    expect(b.xMin).toBe(RETURN_COURT.netX);
-    expect(b.xMax).toBe(RETURN_COURT.nearBaselineX);
-  });
-
-  test("returnContact is a 5m-either-side band centred on the baseline", () => {
-    const b = heatBoundsFor("returnContact");
-    const band = 5 * UNITS_PER_METER;
-    expect(b.xMin).toBeCloseTo(RETURN_COURT.nearBaselineX - band, 6);
-    // The unclipped +5m edge (~524.14) is past the frame's own visible
-    // run-off (RETURN_HEAT_DEPTH_MAX ≈ 522.35) — see the clipping test
-    // below, which is what actually bounds xMax here.
-    expect(RETURN_COURT.nearBaselineX + band).toBeGreaterThan(
-      RETURN_HEAT_BOUNDS.xMax,
-    );
-    expect(b.xMax).toBe(RETURN_HEAT_BOUNDS.xMax);
-  });
-
-  test("returnContact's far edge clips at RETURN_HEAT_DEPTH_MAX (RETURN_HEAT_BOUNDS.xMax)", () => {
-    const b = heatBoundsFor("returnContact");
-    expect(b.xMax).toBeLessThanOrEqual(RETURN_HEAT_BOUNDS.xMax);
-    // Unclipped, 5m past the baseline (~524) would exceed the visible
-    // run-off (~522.35) — the clip is actually exercised, not a no-op.
-    expect(RETURN_COURT.nearBaselineX + 5 * UNITS_PER_METER).toBeGreaterThan(
-      RETURN_HEAT_BOUNDS.xMax,
-    );
-    expect(b.xMax).toBe(RETURN_HEAT_BOUNDS.xMax);
-  });
-
-  test("rallyPosition keeps the full net-to-run-off span (unchanged)", () => {
-    expect(heatBoundsFor("rallyPosition")).toEqual(RETURN_HEAT_BOUNDS);
-  });
-
-  test("lateral bounds are identical across every return-frame cut", () => {
-    for (const cut of [
-      "returnPlacement",
-      "returnContact",
-      "rallyPosition",
-    ] as const) {
-      const b = heatBoundsFor(cut);
-      expect(b.yMin).toBe(RETURN_COURT.doublesTop);
-      expect(b.yMax).toBe(RETURN_COURT.doublesBottom);
-    }
+  test("returnPlacement, returnContact and rallyPosition all share the same RETURN_HEAT_BOUNDS", () => {
+    const placement = heatBoundsFor("returnPlacement");
+    const contact = heatBoundsFor("returnContact");
+    const rally = heatBoundsFor("rallyPosition");
+    expect(placement).toEqual(RETURN_HEAT_BOUNDS);
+    expect(contact).toEqual(RETURN_HEAT_BOUNDS);
+    expect(rally).toEqual(RETURN_HEAT_BOUNDS);
   });
 });

@@ -1414,15 +1414,17 @@ test.describe("computeViz — heat population", () => {
     ).toBeNull();
   });
 
-  test("serve heat is a 6x7 grid whose cells sum to the dot count", () => {
+  test("serve heat is a 10x12 grid whose cells sum to the dot count", () => {
     const r = computeViz(servePts, "serve", EMPTY_VIZ_FILTERS, true, "heat");
     expect(r.heat).not.toBeNull();
-    expect(r.heat!.cells).toHaveLength(7);
-    for (const row of r.heat!.cells) expect(row).toHaveLength(6);
+    expect(r.heat!.cells).toHaveLength(12);
+    for (const row of r.heat!.cells) expect(row).toHaveLength(10);
     expect(r.heat!.cells.flat().reduce((a, b) => a + b, 0)).toBe(r.dots.length);
   });
 
-  test("return cuts' heat is a 6x7 grid", () => {
+  // P2j: every cut now shares one 10x12 grid — serve, the two return cuts
+  // and rallyPosition alike (no more 6x7 vs. finer-10x12 split).
+  test("return cuts' heat is a 10x12 grid", () => {
     const ret = point({
       serverIsPlayer1: false,
       secondShotLandingX: 1.0,
@@ -1433,15 +1435,15 @@ test.describe("computeViz — heat population", () => {
     });
     for (const cut of ["returnPlacement", "returnContact"] as const) {
       const r = computeViz([ret], cut, EMPTY_VIZ_FILTERS, true, "heat");
-      expect(r.heat!.cells).toHaveLength(7);
-      for (const row of r.heat!.cells) expect(row).toHaveLength(6);
+      expect(r.heat!.cells).toHaveLength(12);
+      for (const row of r.heat!.cells) expect(row).toHaveLength(10);
       expect(r.heat!.cells.flat().reduce((a, b) => a + b, 0)).toBe(
         r.dots.length,
       );
     }
   });
 
-  test("rallyPosition heat is a finer 10x12 grid", () => {
+  test("rallyPosition heat is the same 10x12 grid as every other cut", () => {
     const pts = [
       point({ shots: [shot({ shotNumber: 3, isPlayer1: true, id: "s" })] }),
     ];

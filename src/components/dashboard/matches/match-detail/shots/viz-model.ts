@@ -22,9 +22,7 @@ import {
   projectServeDot,
   projectReturnDot,
   heatBoundsFor,
-  SERVE_HEAT_GRID,
-  RETURN_HEAT_GRID,
-  RALLY_HEAT_GRID,
+  HEAT_GRID,
   type HeatBounds,
 } from "./court-geometry";
 
@@ -184,30 +182,30 @@ export function binDots(
 }
 
 /** `computeViz`'s heat pass, once its dots are known — projects each dot
- * through the same frame `court-art.tsx` draws it in, then bins. Serve dots
- * carry `x`/`y` (0..1 service-box fractions); return/rally dots carry
- * `lateralM`/`depthM` — `projectServeDot`/`projectReturnDot` read whichever
- * pair the cut populates (see `VizDot`'s own doc comment). rallyPosition
- * always projects through the "contact" kind, same as its scatter dots. */
+ * through the same frame `court-art.tsx` draws it in, then bins into the one
+ * shared `HEAT_GRID` (10×12) every cut now uses. Serve dots carry `x`/`y`
+ * (0..1 service-box fractions); return/rally dots carry `lateralM`/`depthM`
+ * — `projectServeDot`/`projectReturnDot` read whichever pair the cut
+ * populates (see `VizDot`'s own doc comment). rallyPosition always projects
+ * through the "contact" kind, same as its scatter dots. */
 function computeHeatForCut(cut: Cut, dots: VizDot[]): HeatGrid {
   if (cut === "serve") {
     const projected = dots.map((d) => projectServeDot({ x: d.x, y: d.y }));
     return binDots(
       projected.map((p) => ({ x: p.cx, y: p.cy })),
-      SERVE_HEAT_GRID.cols,
-      SERVE_HEAT_GRID.rows,
+      HEAT_GRID.cols,
+      HEAT_GRID.rows,
       heatBoundsFor(cut),
     );
   }
   const kind = cut === "returnPlacement" ? "placement" : "contact";
-  const grid = cut === "rallyPosition" ? RALLY_HEAT_GRID : RETURN_HEAT_GRID;
   const projected = dots.map((d) =>
     projectReturnDot(kind, { lateralM: d.lateralM, depthM: d.depthM }),
   );
   return binDots(
     projected.map((p) => ({ x: p.cx, y: p.cy })),
-    grid.cols,
-    grid.rows,
+    HEAT_GRID.cols,
+    HEAT_GRID.rows,
     heatBoundsFor(cut),
   );
 }

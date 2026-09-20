@@ -199,24 +199,20 @@ export function projectReturnDot(
   return { cx, cy };
 }
 
-/* ── Heat-cell binning bounds (G3a, Data) ──────────────────────────────────
+/* ── Heat-cell binning bounds (G3a, Data; full-view rewrite P2j) ───────────
  *
  * Where `binDots` (`viz-model.ts`) bins a cut's dots, in the SAME projected
  * (pre-transform) coordinates `court-art.tsx` draws them in — `projectServeDot`/
  * `projectReturnDot`'s own output — so the Drawing task can place a heat
  * cell's `<rect>` directly off a bin index without re-deriving where it
- * sits. Grid resolution is fixed per cut (`SERVE_HEAT_GRID`/`RETURN_HEAT_GRID`
- * 6×7, `RALLY_HEAT_GRID` 10×12 — rallyPosition's own scatter spans a wider
- * slice of the court, per the design brief); the bounds below are shared by
- * every chart using that frame.
- *
- * `RETURN_HEAT_BOUNDS` covers returnPlacement, returnContact AND
- * rallyPosition alike (only grid resolution differs) — the visible half
- * (net → that half's own baseline) plus the run-off past the baseline that
- * the frame's OWN clipPath (`RETURN_BACKGROUND_PATH`, drawn exactly at the
- * viewBox rect — see `court-art.tsx`) actually leaves visible, computed
- * (not guessed) below via `depthToViewBoxY` (G3b settles this; G3a's
- * placeholder `RETURN_DEPTH_RUN_OFF` proportion is gone).
+ * sits. Every cut now shares one grid resolution (`HEAT_GRID`, 10×12) and,
+ * per frame, one set of bounds: `heatBoundsFor(cut)` below is each frame's
+ * WHOLE VISIBLE VIEW — its own `viewBox` — mapped back through that frame's
+ * group transform(s) into this pre-transform space, so the heat tint covers
+ * the entire court rather than a sub-region. `returnPlacement`,
+ * `returnContact` and `rallyPosition` all read the SAME `RETURN_HEAT_BOUNDS`
+ * — they share one frame, so only which frame the dots are drawn on matters,
+ * never which cut it is. `serve` gets its own `SERVE_HEAT_BOUNDS`.
  */
 export interface HeatBounds {
   xMin: number;
@@ -225,20 +221,65 @@ export interface HeatBounds {
   yMax: number;
 }
 
+// The serve group transform's own numbers — `translate(260,117) scale(0.85)
+// translate(-260,-125)` — named so the inverse below reads off the same
+// numbers `court-art.tsx` renders with (`SERVE_COURT.groupTransform`)
+// instead of a second, driftable copy. `SERVE_COURT.centerX` (260) already
+// doubles as both the outer translate's x target and the inner translate's
+// x origin, so only the y-axis pair needs new names here.
+const SERVE_GROUP_SCALE = 0.85;
+const SERVE_GROUP_TRANSLATE_Y = 117;
+const SERVE_GROUP_ORIGIN_Y = 125;
+
+/**
+ * Inverts `SERVE_COURT.groupTransform` on the x-axis — maps a point in the
+ * serve `<svg>`'s own viewBox space back to the pre-transform x
+ * `projectServeDot` outputs. Forward:
+ * `X = SERVE_GROUP_SCALE*(x-centerX)+centerX`; algebraic inverse below.
+ * `tests/court-geometry.spec.ts` cross-checks both axes against an
+ * independent re-implementation of the transform string itself.
+ */
+function serveViewBoxToLogicalX(viewBoxX: number): number {
+  return (
+    (viewBoxX - SERVE_COURT.centerX) / SERVE_GROUP_SCALE + SERVE_COURT.centerX
+  );
+}
+
+/**
+ * Inverts `SERVE_COURT.groupTransform` on the y-axis. Forward:
+ * `Y = SERVE_GROUP_SCALE*(y-SERVE_GROUP_ORIGIN_Y)+SERVE_GROUP_TRANSLATE_Y`;
+ * algebraic inverse below.
+ */
+function serveViewBoxToLogicalY(viewBoxY: number): number {
+  return (
+    (viewBoxY - SERVE_GROUP_TRANSLATE_Y) / SERVE_GROUP_SCALE +
+    SERVE_GROUP_ORIGIN_Y
+  );
+}
+
+// The full visible serve-frame view, in pre-transform (logical) coordinates
+// — every corner of `SERVE_COURT.viewBox` mapped back through
+// `groupTransform` via the two inverses above.
 export const SERVE_HEAT_BOUNDS: HeatBounds = {
-  xMin: SERVE_COURT.singlesLeft,
-  xMax: SERVE_COURT.singlesRight,
-  yMin: SERVE_COURT.serviceLineY,
-  yMax: SERVE_COURT.netY,
+  xMin: serveViewBoxToLogicalX(SERVE_COURT.viewBox.minX),
+  xMax: serveViewBoxToLogicalX(
+    SERVE_COURT.viewBox.minX + SERVE_COURT.viewBox.w,
+  ),
+  yMin: serveViewBoxToLogicalY(SERVE_COURT.viewBox.minY),
+  yMax: serveViewBoxToLogicalY(
+    SERVE_COURT.viewBox.minY + SERVE_COURT.viewBox.h,
+  ),
 };
 
-// The two return-frame transform numbers that matter for the depth→viewBox
-// projection below — copied from `RETURN_COURT.innerGroupTransform`'s own
-// `scale(1.02)` and `RETURN_COURT.outerGroupTransform`'s own
-// `translate(-60.6,-125)` y-component, so `depthToViewBoxY`'s algebra reads
-// straight off the same numbers `court-art.tsx` renders with instead of a
-// second, driftable copy.
+// The return-frame transform numbers that matter for the two inverse
+// projections below — copied from `RETURN_COURT.innerGroupTransform`'s own
+// `scale(1.02)` and `translate(240,112)`, and
+// `RETURN_COURT.outerGroupTransform`'s own `translate(-60.6,-125)` — so the
+// algebra reads straight off the same numbers `court-art.tsx` renders with
+// instead of a second, driftable copy.
 const RETURN_INNER_SCALE = 1.02;
+const RETURN_INNER_TRANSLATE_TARGET_Y = 112;
+const RETURN_OUTER_TRANSLATE_X = -60.6;
 const RETURN_OUTER_TRANSLATE_Y = -125;
 
 /**
@@ -270,75 +311,83 @@ function depthToViewBoxY(depthX: number): number {
   );
 }
 
-// The deepest pre-transform depth-x value that still lands inside the
-// viewBox's own far y-edge (`viewBox.minY + viewBox.h`) before
-// `RETURN_BACKGROUND_PATH`'s clipPath hides it — solving `depthToViewBoxY`
-// for depthX at that edge. `RETURN_INNER_SCALE` is linear, so a plain
-// algebraic inverse (no bisection) gives the exact value: ≈522.35, i.e.
-// ≈82.35 units of run-off past `nearBaselineX` (440) — not the 60-unit (30%)
-// placeholder G3a shipped with.
-const RETURN_HEAT_DEPTH_MAX =
-  RETURN_COURT.netX +
-  (RETURN_COURT.viewBox.minY +
-    RETURN_COURT.viewBox.h -
-    RETURN_COURT.centerY -
-    RETURN_OUTER_TRANSLATE_Y) /
-    RETURN_INNER_SCALE;
+/**
+ * The algebraic inverse of `depthToViewBoxY` — the pre-transform depth-x
+ * value that lands at a given return-frame viewBox y. `RETURN_INNER_SCALE`
+ * is linear, so this is an exact inverse, not a bisection search.
+ */
+function viewBoxYToDepthX(viewBoxY: number): number {
+  return (
+    (viewBoxY - RETURN_COURT.centerY - RETURN_OUTER_TRANSLATE_Y) /
+      RETURN_INNER_SCALE +
+    RETURN_COURT.netX
+  );
+}
 
+/**
+ * Maps a pre-transform lateral-y value — the SAME coordinate
+ * `projectReturnDot`'s `cy` uses — to the x it lands on in the return
+ * frame's OWN viewBox, after the same two `<g>` transforms. Symmetric to
+ * `depthToViewBoxY`: because the rotation is an exact 90°, output-x depends
+ * ONLY on input lateral-y (the depth input drops out entirely):
+ *   innerY(lateralY) = RETURN_INNER_SCALE*(lateralY - centerY) + RETURN_INNER_TRANSLATE_TARGET_Y
+ *   rotatedX = netX - (innerY(lateralY) - centerY)
+ *   outputX = rotatedX + RETURN_OUTER_TRANSLATE_X
+ */
+function lateralToViewBoxX(lateralY: number): number {
+  const innerY =
+    RETURN_INNER_SCALE * (lateralY - RETURN_COURT.centerY) +
+    RETURN_INNER_TRANSLATE_TARGET_Y;
+  const rotatedX = RETURN_COURT.netX - (innerY - RETURN_COURT.centerY);
+  return rotatedX + RETURN_OUTER_TRANSLATE_X;
+}
+
+/** The algebraic inverse of `lateralToViewBoxX`. */
+function viewBoxXToLateralY(viewBoxX: number): number {
+  const rotatedX = viewBoxX - RETURN_OUTER_TRANSLATE_X;
+  const innerY = RETURN_COURT.centerY - (rotatedX - RETURN_COURT.netX);
+  return (
+    (innerY - RETURN_INNER_TRANSLATE_TARGET_Y) / RETURN_INNER_SCALE +
+    RETURN_COURT.centerY
+  );
+}
+
+// The full visible return-frame view, in pre-transform (logical) coordinates
+// — every corner of `RETURN_COURT.viewBox` mapped back through both `<g>`
+// transforms via `viewBoxYToDepthX`/`viewBoxXToLateralY` above. Depth: the
+// near viewBox y-edge (`viewBox.minY`) maps to ≈248.8 (NOT `netX`/240 — the
+// net itself sits just outside the visible viewBox on that edge), the far
+// edge (`viewBox.minY + viewBox.h`) to ≈522.35 (this used to be the
+// separately-named `RETURN_HEAT_DEPTH_MAX`; it's now just `xMax` here).
+// Lateral: the mapping is order-reversing on this axis (see
+// `lateralToViewBoxX`'s sign) — the left viewBox x-edge maps to the LARGER
+// lateral-y (≈315.77, `yMax`), the right edge to the SMALLER (≈-106.77,
+// `yMin`).
 export const RETURN_HEAT_BOUNDS: HeatBounds = {
-  xMin: RETURN_COURT.netX,
-  xMax: RETURN_HEAT_DEPTH_MAX,
-  yMin: RETURN_COURT.doublesTop,
-  yMax: RETURN_COURT.doublesBottom,
+  xMin: viewBoxYToDepthX(RETURN_COURT.viewBox.minY),
+  xMax: viewBoxYToDepthX(RETURN_COURT.viewBox.minY + RETURN_COURT.viewBox.h),
+  yMin: viewBoxXToLateralY(RETURN_COURT.viewBox.minX + RETURN_COURT.viewBox.w),
+  yMax: viewBoxXToLateralY(RETURN_COURT.viewBox.minX),
 };
 
-export const SERVE_HEAT_GRID = { cols: 6, rows: 7 } as const;
-export const RETURN_HEAT_GRID = { cols: 6, rows: 7 } as const;
-export const RALLY_HEAT_GRID = { cols: 10, rows: 12 } as const;
-
-// 5 metres either side of the returner's own baseline, in return-frame units.
-const RETURN_CONTACT_BAND_M = 5;
+// One grid resolution for every cut (P2j) — the 10×12 grid rallyPosition
+// used to have exclusively now applies to serve and the two return cuts
+// too; the old 6×7 `SERVE_HEAT_GRID`/`RETURN_HEAT_GRID` variants are gone.
+export const HEAT_GRID = { cols: 10, rows: 12 } as const;
 
 /**
  * A cut's heat-binning/drawing bounds, in the SAME projected coordinate
  * space `binDots` (`viz-model.ts`'s `computeHeatForCut`) bins into and
  * `court-art.tsx` draws `heatCellRect`s in — the single source both read so
- * they cannot drift apart (I2).
- *
- * `returnPlacement` only ever plots net→baseline (where placement dots
- * actually land: `projectReturnDot("placement", …)`'s depthM runs 0..~11.885,
- * i.e. cx 240..440) — using the wider `RETURN_HEAT_BOUNDS` span here left most
- * of the grid empty. `returnContact` dots cluster tightly around the
- * returner's own baseline (contact struck a stride either side of it), so its
- * band is baseline-centred (±5 m ≈ ±84 units) rather than spanning the whole
- * court depth, clipped at `RETURN_HEAT_DEPTH_MAX` (the frame's own visible
- * run-off) so the band never reaches past what the clipPath actually shows.
- * `rallyPosition` keeps the full net→run-off span (`RETURN_HEAT_BOUNDS`
- * unchanged) since rally shots land anywhere across that depth. Lateral
- * bounds (`doublesTop`/`doublesBottom`) are identical across every cut.
+ * they cannot drift apart (I2). Every cut now covers its frame's WHOLE
+ * visible view: `returnPlacement`, `returnContact` and `rallyPosition` share
+ * the same return-frame view (`RETURN_HEAT_BOUNDS`) since they share one
+ * frame — only `serve` differs, on its own frame (`SERVE_HEAT_BOUNDS`).
  */
 export function heatBoundsFor(
   cut: "serve" | "returnPlacement" | "returnContact" | "rallyPosition",
 ): HeatBounds {
-  if (cut === "serve") return SERVE_HEAT_BOUNDS;
-  if (cut === "returnPlacement") {
-    return {
-      xMin: RETURN_COURT.netX,
-      xMax: RETURN_COURT.nearBaselineX,
-      yMin: RETURN_COURT.doublesTop,
-      yMax: RETURN_COURT.doublesBottom,
-    };
-  }
-  if (cut === "returnContact") {
-    const band = RETURN_CONTACT_BAND_M * UNITS_PER_METER;
-    return {
-      xMin: RETURN_COURT.nearBaselineX - band,
-      xMax: Math.min(RETURN_COURT.nearBaselineX + band, RETURN_HEAT_DEPTH_MAX),
-      yMin: RETURN_COURT.doublesTop,
-      yMax: RETURN_COURT.doublesBottom,
-    };
-  }
-  return RETURN_HEAT_BOUNDS;
+  return cut === "serve" ? SERVE_HEAT_BOUNDS : RETURN_HEAT_BOUNDS;
 }
 
 /**

@@ -263,20 +263,38 @@ Shipped ahead of the rest of Phase 2, on `claude/visualizations-tab-design-aefa4
   focused court explaining the shape/colour/star encoding for that cut.
 - **Heat chart, in-shell** (`chart-menu.tsx`'s Heat row, `Chart = "heat"` in
   `viz-model.ts`): a binned grid over the same projected coordinate space
-  `court-art.tsx` already draws dots in. Serve and the two return cuts use a
-  6×7 grid; rallyPosition uses a finer 10×12 grid and draws its cells
-  slightly Gaussian-blurred (`RALLY_HEAT_BLUR_STD_DEVIATION`, filter region
-  padded to -25%/-25%/150%/150% so the blur isn't clipped at each cell's
-  edge) so the heat reads as a smoothed cluster rather than a hard grid. The
-  court desaturates in heat mode (`HEAT_COURT_FILL`/`HEAT_APRON_FILL`) so the
-  colour ramp (`--viz-heatmap-{0..3}`, `heatCellStyle`) reads clearly. Each
-  cut's heat bounds are its own — `heatBoundsFor(cut)` in `court-geometry.ts`
-  is the single source both the binning (`viz-model.ts`'s
-  `computeHeatForCut`) and the drawing (`court-art.tsx`) read, so they cannot
-  drift apart: `returnPlacement` spans net→baseline (where placement dots
-  actually land), `returnContact` is a baseline-centred ±5m band (where
-  contact dots actually cluster), and `rallyPosition` keeps the full
-  net-to-run-off span.
+  `court-art.tsx` already draws dots in. Every cut — serve, both return cuts
+  and rallyPosition alike — now shares one 10×12 grid (`HEAT_GRID`) and draws
+  its cells slightly Gaussian-blurred (`HEAT_BLUR_STD_DEVIATION`, filter
+  region padded to -25%/-25%/150%/150%, one `useId()`-scoped `<filter>` per
+  `CourtArt` instance) so the heat reads as a smoothed cluster rather than a
+  hard grid — the P2j treatment that used to be rallyPosition-only now
+  applies everywhere; the earlier unblurred 6×7 grid is gone. The court
+  desaturates in heat mode (`HEAT_COURT_FILL`/`HEAT_APRON_FILL`) so the
+  colour ramp (`--viz-heatmap-{0..3}`, `heatCellStyle`) reads clearly.
+  `heatBoundsFor(cut)` in `court-geometry.ts` is each frame's WHOLE VISIBLE
+  VIEW — its own `viewBox`, mapped back through that frame's group
+  transform(s) (an exact algebraic inverse, cross-checked in
+  `tests/court-geometry.spec.ts` by projecting the bounds' own corners
+  forward and asserting they land on the viewBox's corners) into the dots'
+  pre-transform coordinate space — the single source both the binning
+  (`viz-model.ts`'s `computeHeatForCut`) and the drawing (`court-art.tsx`)
+  read, so they cannot drift apart. `returnPlacement`, `returnContact` and
+  `rallyPosition` all resolve to the identical `RETURN_HEAT_BOUNDS` (they
+  share one frame — no more per-cut net→baseline/±5m-band/full-run-off
+  spans); `serve` gets its own `SERVE_HEAT_BOUNDS`. Every cell draws now,
+  including a zero-count one — `heatCellStyle(0, max)` already resolves to
+  the floor shade (`--viz-heatmap-0` at 0.1 opacity), so the tint covers the
+  whole view with no hard edge — and the rect layer runs one cell past
+  `bounds` on every side so the blur doesn't fade out before the view's own
+  clip edge. The serve frame gained its own `<clipPath>` (previously only
+  the return frame had one) so that overscan/blur can't bleed past
+  `SERVE_BACKGROUND_PATH`'s rounded corners. Zero dots still draw no heat
+  layer at all — `heat` is a valid all-zero grid even then, but drawing it
+  under the new "every cell, including zero" rule would paint a full
+  floor-tint wash over an empty result, so `CourtArt` gates the rect group on
+  `dots.length > 0` and leaves the existing empty-state overlay to cover that
+  case, same as before.
 - **Rally position cut** (`Cut = "rallyPosition"`): every shot after the
   return the subject struck, across every point, drawn on the same
   near-half return frame `returnContact` uses. Shots are selected by ROLE

@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from "react";
+import { useId, useMemo, type ReactNode } from "react";
 import { ZONES, type ZoneKey, type ZoneStats } from "@/lib/data/serve-zones";
 import {
   SERVE_COURT,
@@ -6,9 +6,7 @@ import {
   RETURN_COURT,
   RETURN_BACKGROUND_PATH,
   heatBoundsFor,
-  SERVE_HEAT_GRID,
-  RETURN_HEAT_GRID,
-  RALLY_HEAT_GRID,
+  HEAT_GRID,
   projectServeDot,
   projectReturnDot,
   zoneCellX,
@@ -57,19 +55,22 @@ const DOT_STROKE_W = 0.4;
 export const HEAT_APRON_FILL = "#9FB3A5";
 const HEAT_COURT_FILL = "#9DB4CE";
 
-// G3b (P2j): the rally-position grid's cells draw slightly blurred so the
-// heat reads as a smoothed cluster rather than a hard 10×12 grid. The
-// return frame's own scale (`RETURN_COURT.innerGroupTransform`'s
-// `scale(1.02)`, no further scale from `outerGroupTransform`) keeps this
-// filter's local user-space close to 1:1 with the coordinates it draws in;
-// on top of that, `preserveAspectRatio="xMidYMid meet"` scales the whole
-// 431-wide viewBox up to fill whatever box the caller gives it — roughly
-// 1.1–1.3× at the focused view's court column (≈480–560px wide, per
-// `viz-focused.tsx`'s 400px-tall cap and its neighbouring 292px stats
-// card), smaller at a wall/saved-view tile. Combined, a local stdDeviation
-// of 5 reads close to a 6px screen blur at the focused size without
-// vanishing at tile scale.
-const RALLY_HEAT_BLUR_STD_DEVIATION = 5;
+// G3b/P2j: every cut's heat cells draw slightly blurred (not just
+// rallyPosition's) so the heat reads as a smoothed cluster rather than a
+// hard 10×12 grid. The return frame's own scale
+// (`RETURN_COURT.innerGroupTransform`'s `scale(1.02)`, no further scale from
+// `outerGroupTransform`) keeps this filter's local user-space close to 1:1
+// with the coordinates it draws in; on top of that,
+// `preserveAspectRatio="xMidYMid meet"` scales the whole viewBox up to fill
+// whatever box the caller gives it — roughly 1.1–1.3× at the focused view's
+// court column (≈480–560px wide, per `viz-focused.tsx`'s 400px-tall cap and
+// its neighbouring 292px stats card), smaller at a wall/saved-view tile.
+// Combined, a local stdDeviation of 5 reads close to a 6px screen blur at
+// the focused size without vanishing at tile scale. Reused as-is for the
+// serve frame (scale 0.85, a different viewBox) rather than a second tuned
+// value — worth an eyeball check if the serve heat ever reads noticeably
+// softer/harder than the return cuts'.
+const HEAT_BLUR_STD_DEVIATION = 5;
 
 // Serve marks are 2.54 radius, return marks 2.4 — the design's own two
 // sizes, not a shared constant (visualizations-tab-phase-1 spec).
@@ -122,11 +123,17 @@ const HEAT_NOUN: Record<Cut, "serves" | "returns" | "shots"> = {
 };
 
 /**
- * One `<rect>` per non-zero cell in `heat`, positioned off `heatCellRect`
- * and coloured off `heatCellStyle` — shared by the serve and return
- * branches below, which differ only in `bounds`/`grid`. Zero cells are
- * skipped rather than drawn at the minimum shade: a cell nobody hit isn't
- * "the emptiest visible shade", it's simply not part of the heat.
+ * One `<rect>` per cell in `heat`, positioned off `heatCellRect` and
+ * coloured off `heatCellStyle` — shared by the serve and return branches
+ * below, which differ only in `bounds`. Every cell draws now, including a
+ * zero-count one: `heatCellStyle(0, heat.max)` already resolves to the
+ * floor shade (`--viz-heatmap-0` at the minimum opacity), which is exactly
+ * what lets the tint cover the WHOLE view with no hard edge around the
+ * actual data. The loop additionally runs one cell past `bounds` on every
+ * side (`row`/`col` from -1 to `rows`/`cols` inclusive — `heatCellRect`
+ * already computes correct coordinates for out-of-range indices, no
+ * clamping needed there) so the blurred layer still reads solid right up to
+ * the view's own clipped edge instead of fading out before it.
  */
 function heatRects(
   heat: HeatGrid,
@@ -134,9 +141,10 @@ function heatRects(
   grid: { cols: number; rows: number },
 ): ReactNode[] {
   const rects: ReactNode[] = [];
-  heat.cells.forEach((rowCells, row) => {
-    rowCells.forEach((count, col) => {
-      if (count <= 0) return;
+  for (let row = -1; row <= grid.rows; row++) {
+    for (let col = -1; col <= grid.cols; col++) {
+      const inGrid = row >= 0 && row < grid.rows && col >= 0 && col < grid.cols;
+      const count = inGrid ? heat.cells[row][col] : 0;
       const { colorIndex, opacity } = heatCellStyle(count, heat.max);
       const r = heatCellRect(bounds, grid.cols, grid.rows, col, row);
       rects.push(
@@ -150,8 +158,8 @@ function heatRects(
           fillOpacity={opacity}
         />,
       );
-    });
-  });
+    }
+  }
   return rects;
 }
 
@@ -223,7 +231,7 @@ export function CourtArt({
   draft?: boolean;
 }) {
   const clipId = useId();
-  const rallyBlurId = useId();
+  const heatBlurId = useId();
   const showHeat = chart === "heat" && heat != null;
   const showZones = !showHeat && cut === "serve" && zones != null;
   const maxZonePct = zones
@@ -238,6 +246,20 @@ export function CourtArt({
       : showZones
         ? "Serve placement by zone: six service-box zones shaded by serve frequency"
         : `${CUT_NOUN[cut]} court, ${dots.length} point${dots.length === 1 ? "" : "s"} shown`;
+  // Zero dots ⇒ `heat` is still a valid (all-zero-cell) grid, but drawing it
+  // now — since every cell (including zero) draws at the floor tint — would
+  // paint a full floor-shade wash over an empty result. The caller's empty
+  // overlay (`result.count === 0`) covers that case instead, so no heat
+  // layer draws at all here — mirrors the old (pre-P2j) behaviour, where an
+  // all-zero grid produced no rects because every cell was skipped.
+  const drawHeat = showHeat && dots.length > 0;
+  // Memoised per instance (a wall/saved-views tile renders its own
+  // `CourtArt`) — ~170 rects (10×12 grid + a one-cell ring on every side) is
+  // cheap, but there's no reason to recompute it on every render either.
+  const heatRectsMemo = useMemo<ReactNode[] | null>(() => {
+    if (!drawHeat || !heat) return null;
+    return heatRects(heat, heatBoundsFor(cut), HEAT_GRID);
+  }, [drawHeat, heat, cut]);
 
   if (cut === "serve") {
     return (
@@ -251,207 +273,221 @@ export function CourtArt({
         className={className}
       >
         <path d={SERVE_BACKGROUND_PATH} fill={apronFill} />
-        <g transform={SERVE_COURT.groupTransform}>
-          <rect
-            x={SERVE_COURT.doublesLeft}
-            y={SERVE_COURT.baselineY}
-            width={SERVE_COURT.doublesRight - SERVE_COURT.doublesLeft}
-            height={SERVE_COURT.netY - SERVE_COURT.baselineY}
-            fill={courtFillColor}
-          />
-          <rect
-            x={SERVE_COURT.singlesLeft}
-            y={SERVE_COURT.baselineY}
-            width={SERVE_COURT.singlesRight - SERVE_COURT.singlesLeft}
-            height={SERVE_COURT.netY - SERVE_COURT.baselineY}
-            fill={courtFillColor}
-          />
+        <clipPath id={clipId}>
+          <path d={SERVE_BACKGROUND_PATH} />
+        </clipPath>
+        {drawHeat && (
+          <filter id={heatBlurId} x="-25%" y="-25%" width="150%" height="150%">
+            <feGaussianBlur stdDeviation={HEAT_BLUR_STD_DEVIATION} />
+          </filter>
+        )}
+        {/* Clipped to the background path — the heat layer's blur and its
+            one-cell overscan ring (`heatRects`) would otherwise bleed past
+            the rounded corners `SERVE_BACKGROUND_PATH` cuts into the frame. */}
+        <g clipPath={`url(#${clipId})`}>
+          <g transform={SERVE_COURT.groupTransform}>
+            <rect
+              x={SERVE_COURT.doublesLeft}
+              y={SERVE_COURT.baselineY}
+              width={SERVE_COURT.doublesRight - SERVE_COURT.doublesLeft}
+              height={SERVE_COURT.netY - SERVE_COURT.baselineY}
+              fill={courtFillColor}
+            />
+            <rect
+              x={SERVE_COURT.singlesLeft}
+              y={SERVE_COURT.baselineY}
+              width={SERVE_COURT.singlesRight - SERVE_COURT.singlesLeft}
+              height={SERVE_COURT.netY - SERVE_COURT.baselineY}
+              fill={courtFillColor}
+            />
 
-          {/* Zone cells span the service line down to the net, same as the
+            {/* Zone cells span the service line down to the net, same as the
               service boxes. White fill/outline (not a blue tint): the cells
               sit on the blue court fill, so a blue-on-blue overlay was
               unreadable — white at 0.06–0.42 opacity, scaled to the busiest
               zone actually drawn, reads at every share. */}
-          {showZones &&
-            zones &&
-            ZONES.map((z, i) => {
-              const zs = zones[z.key];
-              const cell = zoneCellX(i);
-              const cellCx = (cell.x1 + cell.x2) / 2;
-              const cellCy = (SERVE_COURT.zoneTop + SERVE_COURT.zoneBottom) / 2;
-              return (
-                <g key={z.key}>
-                  <rect
-                    x={cell.x1}
-                    y={SERVE_COURT.zoneTop}
-                    width={cell.x2 - cell.x1}
-                    height={SERVE_COURT.zoneBottom - SERVE_COURT.zoneTop}
-                    fill={LINE_COLOR}
-                    fillOpacity={zoneOpacity(zs.pct, maxZonePct)}
-                    stroke={LINE_COLOR}
-                    strokeOpacity={0.5}
-                    strokeWidth={1}
-                  />
-                  {labels && zs.count > 0 && (
-                    <>
-                      <text
-                        x={cellCx}
-                        y={cellCy - 3}
-                        textAnchor="middle"
-                        fill={LINE_COLOR}
-                        fontSize={ZONE_LABEL_COUNT_SIZE}
-                        fontWeight={600}
-                        style={{ fontVariantNumeric: "tabular-nums" }}
-                      >
-                        {zs.count}
-                      </text>
-                      {/* Win rate only, no " won" suffix (review M1) — the
+            {showZones &&
+              zones &&
+              ZONES.map((z, i) => {
+                const zs = zones[z.key];
+                const cell = zoneCellX(i);
+                const cellCx = (cell.x1 + cell.x2) / 2;
+                const cellCy =
+                  (SERVE_COURT.zoneTop + SERVE_COURT.zoneBottom) / 2;
+                return (
+                  <g key={z.key}>
+                    <rect
+                      x={cell.x1}
+                      y={SERVE_COURT.zoneTop}
+                      width={cell.x2 - cell.x1}
+                      height={SERVE_COURT.zoneBottom - SERVE_COURT.zoneTop}
+                      fill={LINE_COLOR}
+                      fillOpacity={zoneOpacity(zs.pct, maxZonePct)}
+                      stroke={LINE_COLOR}
+                      strokeOpacity={0.5}
+                      strokeWidth={1}
+                    />
+                    {labels && zs.count > 0 && (
+                      <>
+                        <text
+                          x={cellCx}
+                          y={cellCy - 3}
+                          textAnchor="middle"
+                          fill={LINE_COLOR}
+                          fontSize={ZONE_LABEL_COUNT_SIZE}
+                          fontWeight={600}
+                          style={{ fontVariantNumeric: "tabular-nums" }}
+                        >
+                          {zs.count}
+                        </text>
+                        {/* Win rate only, no " won" suffix (review M1) — the
                           zone card beside the court already says these are
                           win rates, and the cell can't fit "80% won" beneath
                           "38%" without the two lines' text colliding. */}
-                      <text
-                        x={cellCx}
-                        y={cellCy + 10}
-                        textAnchor="middle"
-                        fill={LINE_COLOR}
-                        fillOpacity={0.8}
-                        fontSize={ZONE_LABEL_PCT_SIZE}
-                        fontWeight={400}
-                        style={{ fontVariantNumeric: "tabular-nums" }}
-                      >
-                        {zs.winPct}%
-                      </text>
-                    </>
-                  )}
-                </g>
-              );
-            })}
+                        <text
+                          x={cellCx}
+                          y={cellCy + 10}
+                          textAnchor="middle"
+                          fill={LINE_COLOR}
+                          fillOpacity={0.8}
+                          fontSize={ZONE_LABEL_PCT_SIZE}
+                          fontWeight={400}
+                          style={{ fontVariantNumeric: "tabular-nums" }}
+                        >
+                          {zs.winPct}%
+                        </text>
+                      </>
+                    )}
+                  </g>
+                );
+              })}
 
-          <line
-            x1={SERVE_COURT.doublesLeft}
-            y1={SERVE_COURT.baselineY}
-            x2={SERVE_COURT.doublesRight}
-            y2={SERVE_COURT.baselineY}
-            stroke={LINE_COLOR}
-            strokeWidth={SERVE_COURT.lineWidth}
-          />
-          <line
-            x1={SERVE_COURT.doublesLeft}
-            y1={SERVE_COURT.baselineY}
-            x2={SERVE_COURT.doublesLeft}
-            y2={SERVE_COURT.netY}
-            stroke={LINE_COLOR}
-            strokeWidth={SERVE_COURT.lineWidth}
-          />
-          <line
-            x1={SERVE_COURT.doublesRight}
-            y1={SERVE_COURT.baselineY}
-            x2={SERVE_COURT.doublesRight}
-            y2={SERVE_COURT.netY}
-            stroke={LINE_COLOR}
-            strokeWidth={SERVE_COURT.lineWidth}
-          />
-          <line
-            x1={SERVE_COURT.singlesLeft}
-            y1={SERVE_COURT.baselineY}
-            x2={SERVE_COURT.singlesLeft}
-            y2={SERVE_COURT.netY}
-            stroke={LINE_COLOR}
-            strokeWidth={SERVE_COURT.lineWidth}
-          />
-          <line
-            x1={SERVE_COURT.singlesRight}
-            y1={SERVE_COURT.baselineY}
-            x2={SERVE_COURT.singlesRight}
-            y2={SERVE_COURT.netY}
-            stroke={LINE_COLOR}
-            strokeWidth={SERVE_COURT.lineWidth}
-          />
-          {/* Service line. */}
-          <line
-            x1={SERVE_COURT.singlesLeft}
-            y1={SERVE_COURT.serviceLineY}
-            x2={SERVE_COURT.singlesRight}
-            y2={SERVE_COURT.serviceLineY}
-            stroke={LINE_COLOR}
-            strokeWidth={SERVE_COURT.lineWidth}
-          />
-          {/* Centre service line — splits the two service boxes, service
+            <line
+              x1={SERVE_COURT.doublesLeft}
+              y1={SERVE_COURT.baselineY}
+              x2={SERVE_COURT.doublesRight}
+              y2={SERVE_COURT.baselineY}
+              stroke={LINE_COLOR}
+              strokeWidth={SERVE_COURT.lineWidth}
+            />
+            <line
+              x1={SERVE_COURT.doublesLeft}
+              y1={SERVE_COURT.baselineY}
+              x2={SERVE_COURT.doublesLeft}
+              y2={SERVE_COURT.netY}
+              stroke={LINE_COLOR}
+              strokeWidth={SERVE_COURT.lineWidth}
+            />
+            <line
+              x1={SERVE_COURT.doublesRight}
+              y1={SERVE_COURT.baselineY}
+              x2={SERVE_COURT.doublesRight}
+              y2={SERVE_COURT.netY}
+              stroke={LINE_COLOR}
+              strokeWidth={SERVE_COURT.lineWidth}
+            />
+            <line
+              x1={SERVE_COURT.singlesLeft}
+              y1={SERVE_COURT.baselineY}
+              x2={SERVE_COURT.singlesLeft}
+              y2={SERVE_COURT.netY}
+              stroke={LINE_COLOR}
+              strokeWidth={SERVE_COURT.lineWidth}
+            />
+            <line
+              x1={SERVE_COURT.singlesRight}
+              y1={SERVE_COURT.baselineY}
+              x2={SERVE_COURT.singlesRight}
+              y2={SERVE_COURT.netY}
+              stroke={LINE_COLOR}
+              strokeWidth={SERVE_COURT.lineWidth}
+            />
+            {/* Service line. */}
+            <line
+              x1={SERVE_COURT.singlesLeft}
+              y1={SERVE_COURT.serviceLineY}
+              x2={SERVE_COURT.singlesRight}
+              y2={SERVE_COURT.serviceLineY}
+              stroke={LINE_COLOR}
+              strokeWidth={SERVE_COURT.lineWidth}
+            />
+            {/* Centre service line — splits the two service boxes, service
               line down to the net. */}
-          <line
-            x1={SERVE_COURT.centerX}
-            y1={SERVE_COURT.serviceLineY}
-            x2={SERVE_COURT.centerX}
-            y2={SERVE_COURT.netY}
-            stroke={LINE_COLOR}
-            strokeWidth={SERVE_COURT.lineWidth}
-          />
-          {/* Centre mark on the baseline. */}
-          <line
-            x1={SERVE_COURT.centerX}
-            y1={SERVE_COURT.centerMarkTopY}
-            x2={SERVE_COURT.centerX}
-            y2={SERVE_COURT.centerMarkBottomY}
-            stroke={LINE_COLOR}
-            strokeWidth={SERVE_COURT.lineWidth}
-          />
-          {/* Net — bottom of the frame, extending past the doubles
+            <line
+              x1={SERVE_COURT.centerX}
+              y1={SERVE_COURT.serviceLineY}
+              x2={SERVE_COURT.centerX}
+              y2={SERVE_COURT.netY}
+              stroke={LINE_COLOR}
+              strokeWidth={SERVE_COURT.lineWidth}
+            />
+            {/* Centre mark on the baseline. */}
+            <line
+              x1={SERVE_COURT.centerX}
+              y1={SERVE_COURT.centerMarkTopY}
+              x2={SERVE_COURT.centerX}
+              y2={SERVE_COURT.centerMarkBottomY}
+              stroke={LINE_COLOR}
+              strokeWidth={SERVE_COURT.lineWidth}
+            />
+            {/* Net — bottom of the frame, extending past the doubles
               sidelines as a physical net does. */}
-          <line
-            x1={SERVE_COURT.netLineLeft}
-            y1={SERVE_COURT.netY}
-            x2={SERVE_COURT.netLineRight}
-            y2={SERVE_COURT.netY}
-            stroke={LINE_COLOR}
-            strokeWidth={SERVE_COURT.netStrokeWidth}
-          />
+            <line
+              x1={SERVE_COURT.netLineLeft}
+              y1={SERVE_COURT.netY}
+              x2={SERVE_COURT.netLineRight}
+              y2={SERVE_COURT.netY}
+              stroke={LINE_COLOR}
+              strokeWidth={SERVE_COURT.netStrokeWidth}
+            />
 
-          {showHeat &&
-            heat &&
-            heatRects(heat, heatBoundsFor(cut), SERVE_HEAT_GRID)}
+            {heatRectsMemo && (
+              <g filter={`url(#${heatBlurId})`}>{heatRectsMemo}</g>
+            )}
 
-          {!showHeat &&
-            !showZones &&
-            dots.map((d) => {
-              const { cx, cy } = projectServeDot(d);
-              // G2b: an ace draws as a star, regardless of outcome colour —
-              // it's always "won" already, but the shape carries the "ace"
-              // read before the colour would.
-              if (d.shape === "star") {
-                return (
+            {!showHeat &&
+              !showZones &&
+              dots.map((d) => {
+                const { cx, cy } = projectServeDot(d);
+                // G2b: an ace draws as a star, regardless of outcome colour —
+                // it's always "won" already, but the shape carries the "ace"
+                // read before the colour would.
+                if (d.shape === "star") {
+                  return (
+                    <polygon
+                      key={d.id}
+                      points={starPoints(cx, cy, ACE_STAR_OUTER_R)}
+                      fill={ACE_STAR_FILL}
+                      stroke={DOT_STROKE}
+                      strokeWidth={DOT_STROKE_W}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  );
+                }
+                const color = colorFor(d.outcome);
+                return d.shape === "triangle" ? (
                   <polygon
                     key={d.id}
-                    points={starPoints(cx, cy, ACE_STAR_OUTER_R)}
-                    fill={ACE_STAR_FILL}
+                    points={trianglePointsFor("serve", cx, cy, SERVE_DOT_R)}
+                    fill={color}
+                    stroke={DOT_STROKE}
+                    strokeWidth={DOT_STROKE_W}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ) : (
+                  <circle
+                    key={d.id}
+                    cx={cx}
+                    cy={cy}
+                    r={SERVE_DOT_R}
+                    fill={color}
                     stroke={DOT_STROKE}
                     strokeWidth={DOT_STROKE_W}
                     vectorEffect="non-scaling-stroke"
                   />
                 );
-              }
-              const color = colorFor(d.outcome);
-              return d.shape === "triangle" ? (
-                <polygon
-                  key={d.id}
-                  points={trianglePointsFor("serve", cx, cy, SERVE_DOT_R)}
-                  fill={color}
-                  stroke={DOT_STROKE}
-                  strokeWidth={DOT_STROKE_W}
-                  vectorEffect="non-scaling-stroke"
-                />
-              ) : (
-                <circle
-                  key={d.id}
-                  cx={cx}
-                  cy={cy}
-                  r={SERVE_DOT_R}
-                  fill={color}
-                  stroke={DOT_STROKE}
-                  strokeWidth={DOT_STROKE_W}
-                  vectorEffect="non-scaling-stroke"
-                />
-              );
-            })}
+              })}
+          </g>
         </g>
       </svg>
     );
@@ -477,9 +513,9 @@ export function CourtArt({
       <clipPath id={clipId}>
         <path d={RETURN_BACKGROUND_PATH} />
       </clipPath>
-      {cut === "rallyPosition" && (
-        <filter id={rallyBlurId} x="-25%" y="-25%" width="150%" height="150%">
-          <feGaussianBlur stdDeviation={RALLY_HEAT_BLUR_STD_DEVIATION} />
+      {drawHeat && (
+        <filter id={heatBlurId} x="-25%" y="-25%" width="150%" height="150%">
+          <feGaussianBlur stdDeviation={HEAT_BLUR_STD_DEVIATION} />
         </filter>
       )}
       <g clipPath={`url(#${clipId})`}>
@@ -581,19 +617,13 @@ export function CourtArt({
               strokeWidth={RETURN_COURT.netStrokeWidth}
             />
 
-            {showHeat &&
-              heat &&
-              (cut === "rallyPosition" ? (
-                // P2j: rally position's cells draw slightly blurred so the
-                // heat reads as a smoothed cluster — still inside the same
-                // clipPath, still in the same logical coordinates the
-                // unblurred cells below use.
-                <g filter={`url(#${rallyBlurId})`}>
-                  {heatRects(heat, heatBoundsFor(cut), RALLY_HEAT_GRID)}
-                </g>
-              ) : (
-                heatRects(heat, heatBoundsFor(cut), RETURN_HEAT_GRID)
-              ))}
+            {/* P2j: every return-frame cut's cells draw slightly blurred so
+                the heat reads as a smoothed cluster — still inside the same
+                clipPath, still in the same logical coordinates the dots
+                below use. */}
+            {heatRectsMemo && (
+              <g filter={`url(#${heatBlurId})`}>{heatRectsMemo}</g>
+            )}
 
             {!showHeat &&
               dots.map((d) => {
