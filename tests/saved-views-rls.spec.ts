@@ -54,6 +54,9 @@ import {
  */
 
 const UNIQUE_VIOLATION = "23505";
+/** Postgres' code for a CHECK constraint violation — `saved_views_cut_check`/
+ *  `saved_views_chart_check` reject a value outside their `in (...)` list. */
+const CHECK_VIOLATION = "23514";
 /** PostgREST's code when a table isn't in its schema cache — including when
  *  it does not exist yet, which is how this spec detects the migration has
  *  not been applied. */
@@ -601,5 +604,60 @@ test.describe("saved_views RLS (live)", () => {
     } else {
       expect(select.data).toHaveLength(0);
     }
+  });
+
+  // ── I3: heat chart + rallyPosition cut (Phase 1.2) ─────────────────────
+  // `20260920120000_saved_views_heat_rally.sql` widens `saved_views_cut_check`
+  // /`saved_views_chart_check` to accept these two values — it is COMMITTED
+  // but NOT yet applied to the live database (a human approves that
+  // separately). Written the same as every other insert test in this file
+  // (asserting the real, post-migration behaviour) rather than skipped or
+  // written defensively: until the migration lands, both are EXPECTED TO
+  // FAIL here with a 23514 check violation — that failure is the point, not
+  // a bug in the test. Placed LAST in this file (this describe runs in
+  // `mode: "serial"`, which skips every remaining test in the block after a
+  // failure) so these two known failures never mask the real RLS coverage
+  // above.
+
+  test("a user can insert a personal view with cut='rallyPosition' (pending migration)", async () => {
+    const insert = await userA.client
+      .from("saved_views")
+      .insert({
+        account_id: userA.userId,
+        name: "Rally Position Draft",
+        cut: "rallyPosition",
+        chart: "scatter",
+      })
+      .select("id")
+      .single();
+    expect(insert.error).toBeNull();
+
+    const select = await userA.client
+      .from("saved_views")
+      .select("id")
+      .eq("id", insert.data!.id as string);
+    expect(select.error).toBeNull();
+    expect(select.data).toHaveLength(1);
+  });
+
+  test("a user can insert a personal view with chart='heat' (pending migration)", async () => {
+    const insert = await userA.client
+      .from("saved_views")
+      .insert({
+        account_id: userA.userId,
+        name: "Heat Chart Draft",
+        cut: "serve",
+        chart: "heat",
+      })
+      .select("id")
+      .single();
+    expect(insert.error).toBeNull();
+
+    const select = await userA.client
+      .from("saved_views")
+      .select("id")
+      .eq("id", insert.data!.id as string);
+    expect(select.error).toBeNull();
+    expect(select.data).toHaveLength(1);
   });
 });

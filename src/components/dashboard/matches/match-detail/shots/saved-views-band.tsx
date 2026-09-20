@@ -471,7 +471,14 @@ export function SavedViewsBand({
     startTransition(async () => {
       const result = await duplicateSavedView(view.id);
       if (!result.ok) {
-        setStatusMessage("Couldn't save that change");
+        setStatusMessage(
+          // I3: the constraint permitting this cut/chart combination is
+          // committed but not yet applied to the live database — no
+          // "Try again", a retry can't succeed either.
+          result.error === "unsupported_cut_chart"
+            ? "This kind of view can't be saved yet."
+            : "Couldn't save that change",
+        );
         return;
       }
       router.refresh();
@@ -576,7 +583,11 @@ export function SavedViewsBand({
       });
       if (!result.ok) {
         setOptimisticViews((prev) => prev.filter((v) => v.id !== view.id));
-        setStatusMessage("Couldn't save that change");
+        setStatusMessage(
+          result.error === "unsupported_cut_chart"
+            ? "This kind of view can't be saved yet."
+            : "Couldn't save that change",
+        );
         return;
       }
       router.refresh();

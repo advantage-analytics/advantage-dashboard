@@ -147,6 +147,11 @@ export function SaveViewDialog({
       if (!result.ok) {
         if (result.error === "duplicate_name") {
           setDuplicate(true);
+        } else if (result.error === "unsupported_cut_chart") {
+          // I3: the constraint that would allow this cut/chart combination
+          // is committed but not yet applied to the live database — a
+          // retry can't succeed, so this doesn't get "Try again." wording.
+          setServerError("This kind of view can't be saved yet.");
         } else {
           setServerError("Couldn't save this view. Try again.");
         }

@@ -56,7 +56,11 @@ export type { SavedView, SavedViewRow };
 
 export type ActionResult<T = void> =
   | { ok: true; data: T }
-  | { ok: false; error: "duplicate_name" | "forbidden" | "invalid" };
+  | {
+      ok: false;
+      error:
+        "duplicate_name" | "forbidden" | "invalid" | "unsupported_cut_chart";
+    };
 
 // Route group `(detail)` doesn't change the URL, but `revalidatePath` keys
 // on the route FILE structure, and the docs' own route-group example
@@ -100,12 +104,22 @@ function isUniqueViolation(error: { code?: string } | null): boolean {
   return error?.code === "23505";
 }
 
+/** The `saved_views_cut_check`/`saved_views_chart_check` constraints reject a
+ * `cut`/`chart` value the live database doesn't accept yet (I3: the Phase 1.2
+ * migration widening them to `rallyPosition`/`heat` is committed but not yet
+ * applied) — distinct from every other write failure, which really is
+ * "forbidden" (RLS/column-privilege). */
+function isCheckViolation(error: { code?: string } | null): boolean {
+  return error?.code === "23514";
+}
+
 /** `{code}` → the `ActionResult` error it maps to — every write shares this. */
 function writeErrorResult(error: { code?: string }): ActionResult<never> {
-  return {
-    ok: false,
-    error: isUniqueViolation(error) ? "duplicate_name" : "forbidden",
-  };
+  if (isUniqueViolation(error)) return { ok: false, error: "duplicate_name" };
+  if (isCheckViolation(error)) {
+    return { ok: false, error: "unsupported_cut_chart" };
+  }
+  return { ok: false, error: "forbidden" };
 }
 
 export async function createSavedView(input: {
