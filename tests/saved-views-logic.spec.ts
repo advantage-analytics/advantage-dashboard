@@ -4,6 +4,9 @@ import {
   canManageSavedView,
   filtersToParams,
   hasDuplicateViewName,
+  manageMenuRows,
+  mergeManageableOrder,
+  moveItem,
   normalizeOrderedIds,
   normalizeSavedViewName,
   resolveCopyName,
@@ -311,4 +314,110 @@ test("hasDuplicateViewName is false for a non-colliding name", () => {
 test("hasDuplicateViewName is false for an empty/whitespace name", () => {
   expect(hasDuplicateViewName("   ", ["Break points"])).toBe(false);
   expect(hasDuplicateViewName("", [])).toBe(false);
+});
+
+/* ── moveItem ───────────────────────────────────────────────────────────── */
+
+test("moveItem moves an item forward", () => {
+  expect(moveItem(["a", "b", "c", "d"], 0, 2)).toEqual(["b", "c", "a", "d"]);
+});
+
+test("moveItem moves an item backward", () => {
+  expect(moveItem(["a", "b", "c", "d"], 3, 1)).toEqual(["a", "d", "b", "c"]);
+});
+
+test("moveItem is a no-op when from equals to", () => {
+  expect(moveItem(["a", "b", "c"], 1, 1)).toEqual(["a", "b", "c"]);
+});
+
+test("moveItem clamps an out-of-range destination to the nearest end", () => {
+  expect(moveItem(["a", "b", "c"], 0, 99)).toEqual(["b", "c", "a"]);
+  expect(moveItem(["a", "b", "c"], 2, -5)).toEqual(["c", "a", "b"]);
+});
+
+test("moveItem returns a shallow copy unchanged when from is out of range", () => {
+  const input = ["a", "b", "c"];
+  const result = moveItem(input, 9, 0);
+  expect(result).toEqual(["a", "b", "c"]);
+  expect(result).not.toBe(input);
+});
+
+/* ── mergeManageableOrder ───────────────────────────────────────────────── */
+
+test("mergeManageableOrder splices a reordered manageable run back into place", () => {
+  // "b" and "d" are manageable; "a" and "c" are teammates' tiles that must
+  // stay exactly where they were.
+  const allIds = ["a", "b", "c", "d"];
+  const manageableIds = ["b", "d"];
+  const newManageableOrder = ["d", "b"]; // swapped
+  expect(
+    mergeManageableOrder(allIds, manageableIds, newManageableOrder),
+  ).toEqual(["a", "d", "c", "b"]);
+});
+
+test("mergeManageableOrder leaves an all-manageable list simply reordered", () => {
+  expect(
+    mergeManageableOrder(["a", "b", "c"], ["a", "b", "c"], ["c", "a", "b"]),
+  ).toEqual(["c", "a", "b"]);
+});
+
+test("mergeManageableOrder is a no-op when nothing is manageable", () => {
+  expect(mergeManageableOrder(["a", "b", "c"], [], [])).toEqual([
+    "a",
+    "b",
+    "c",
+  ]);
+});
+
+test("mergeManageableOrder falls back to the original order on a mismatched replacement", () => {
+  const allIds = ["a", "b", "c"];
+  const manageableIds = ["a", "c"];
+  // Wrong length
+  expect(mergeManageableOrder(allIds, manageableIds, ["a"])).toEqual(allIds);
+  // Contains an id outside the manageable set
+  expect(mergeManageableOrder(allIds, manageableIds, ["a", "b"])).toEqual(
+    allIds,
+  );
+  // Duplicate id
+  expect(mergeManageableOrder(allIds, manageableIds, ["a", "a"])).toEqual(
+    allIds,
+  );
+});
+
+/* ── manageMenuRows ─────────────────────────────────────────────────────── */
+
+test("manageMenuRows: a private view mine to me, in a personal workspace", () => {
+  expect(
+    manageMenuRows(
+      { mine: true, shared: false },
+      { workspaceKind: "personal", role: "owner" },
+    ),
+  ).toEqual(["rename", "duplicate", "delete"]);
+});
+
+test("manageMenuRows: my own private view in a team workspace offers Share", () => {
+  expect(
+    manageMenuRows(
+      { mine: true, shared: false },
+      { workspaceKind: "team", role: "player" },
+    ),
+  ).toEqual(["rename", "duplicate", "share", "delete"]);
+});
+
+test("manageMenuRows: my own shared view in a team workspace offers Make private", () => {
+  expect(
+    manageMenuRows(
+      { mine: true, shared: true },
+      { workspaceKind: "team", role: "player" },
+    ),
+  ).toEqual(["rename", "duplicate", "unshare", "delete"]);
+});
+
+test("manageMenuRows: staff managing a teammate's shared view gets no share/unshare row", () => {
+  expect(
+    manageMenuRows(
+      { mine: false, shared: true },
+      { workspaceKind: "team", role: "staff" },
+    ),
+  ).toEqual(["rename", "duplicate", "delete"]);
 });

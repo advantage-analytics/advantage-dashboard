@@ -21,12 +21,12 @@ import { SavedViewsBand } from "@/components/dashboard/matches/match-detail/shot
  * come from `useMatchReport().meta` — loaded once in `page.tsx` and threaded
  * through `MatchReportProvider` rather than fetched here.
  *
- * `SavedViewsBand` (Task 9 step 1, no Manage mode yet) is built ONCE here
- * and handed to both surfaces through their existing `savedViewsBand` slot
- * — one band, two mount points, so the wall and the focused view can never
- * draw a different list or count. `onManage` is left unset (Part B's no-op
- * seam; the band itself withholds "Manage views" whenever nothing is
- * manageable regardless).
+ * `SavedViewsBand` (Task 9, including Part B's Manage mode) is built ONCE
+ * here and handed to both surfaces through their existing `savedViewsBand`
+ * slot — one band, two mount points, so the wall and the focused view can
+ * never draw a different list, count, or Manage-mode state. Manage mode
+ * itself is entirely the band's own client state (never a prop from here);
+ * it withholds "Manage views" whenever nothing in the list is manageable.
  *
  * Saving is always on — everyone, including players, may save a view — so
  * `VizFocused` no longer takes an `onSaveRequest` opt-in; it owns its own
@@ -42,6 +42,7 @@ export function ShotsTab() {
     <SavedViewsBand
       views={meta.savedViews}
       workspaceRole={meta.workspaceRole}
+      workspaceKind={meta.workspaceKind}
     />
   );
 

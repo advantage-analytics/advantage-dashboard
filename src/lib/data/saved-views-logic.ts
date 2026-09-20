@@ -284,3 +284,102 @@ export function normalizeOrderedIds(ids: string[]): string[] | null {
   }
   return result;
 }
+
+/* ── Manage mode (Task 9 Part B) ───────────────────────────────────────── */
+
+/**
+ * Move the item at `from` to index `to`, clamped into range — the drag/drop
+ * and ⌥←/⌥→ reorder primitive `manage-tile-menu.tsx`'s drag handling and
+ * `saved-views-band.tsx`'s keyboard handler both call. Pure array move, no
+ * knowledge of saved views: `to` beyond either end just lands at that end
+ * rather than throwing, since a keyboard nudge past the first/last slot is a
+ * no-op, not an error. `from` out of range returns a shallow copy unchanged.
+ */
+export function moveItem<T>(
+  items: readonly T[],
+  from: number,
+  to: number,
+): T[] {
+  const copy = items.slice();
+  if (from < 0 || from >= copy.length) return copy;
+  const clampedTo = Math.min(Math.max(to, 0), copy.length - 1);
+  const [item] = copy.splice(from, 1);
+  copy.splice(clampedTo, 0, item);
+  return copy;
+}
+
+/**
+ * Splice a freshly-reordered run of manageable ids back into the full band
+ * order, leaving every non-manageable id in its original slot. Manage mode
+ * only lets a viewer drag tiles they `canManageSavedView` — the others (a
+ * teammate's private view a player can see but not touch) must not jump
+ * around the grid just because the manageable ones did.
+ *
+ * `allIds` is the band's current full order (manageable ids interleaved with
+ * everyone else's); `manageableIds` is which of those ids are draggable, in
+ * their OLD relative order; `newManageableOrder` is that same set in its NEW
+ * order (e.g. from `moveItem` on the manageable-only subsequence). Each
+ * manageable slot in `allIds`, read left to right, takes the next id off
+ * `newManageableOrder` — so a non-manageable tile between two manageable ones
+ * still separates them the same way after the merge.
+ *
+ * Defensive on mismatch: if `newManageableOrder` isn't the same set of ids as
+ * `manageableIds` (wrong length, or any id doesn't belong), returns `allIds`
+ * unchanged rather than dropping or duplicating a row — this is a client-side
+ * derivation feeding `reorderSavedViews`, and a bad merge would relocate a
+ * teammate's view to the wrong slot server-side with nothing on screen
+ * signalling it.
+ */
+export function mergeManageableOrder(
+  allIds: readonly string[],
+  manageableIds: readonly string[],
+  newManageableOrder: readonly string[],
+): string[] {
+  const manageableSet = new Set(manageableIds);
+  const validReplacement =
+    newManageableOrder.length === manageableIds.length &&
+    new Set(newManageableOrder).size === manageableSet.size &&
+    newManageableOrder.every((id) => manageableSet.has(id));
+
+  if (!validReplacement) return allIds.slice();
+
+  let cursor = 0;
+  return allIds.map((id) =>
+    manageableSet.has(id) ? newManageableOrder[cursor++] : id,
+  );
+}
+
+/** One row of the ⋯ tile menu, in the order `manage-tile-menu.tsx` draws them. */
+export type ManageMenuRowKind =
+  "rename" | "duplicate" | "share" | "unshare" | "delete";
+
+/**
+ * Which rows the ⋯ menu draws for `view`, given the workspace it's in and
+ * the viewer's role — the pure decision `manage-tile-menu.tsx` renders from.
+ * Assumes the caller already gated the menu's very existence on
+ * `canManageSavedView`; this only decides what's INSIDE it.
+ *
+ * Rename and Duplicate always show. Share/unshare is scoped to
+ * `view.mine` — not `canManageSavedView` — by a user ruling stricter than
+ * what the database allows: staff may rename or delete a shared view they
+ * don't own, but never un-share one, since the UPDATE policy's `WITH CHECK`
+ * for a staff caller never re-examines the new `shared` value (see
+ * `setSavedViewShared`'s doc comment) and the product rule goes further
+ * still by withholding the "Share with team" row from staff on someone
+ * else's PRIVATE view too — a staff member should not be offered to
+ * publish a teammate's still-private view to the whole roster. A personal
+ * workspace never shows either row: there is no one else to share with.
+ * Delete is always last, after a divider `manage-tile-menu.tsx` draws
+ * itself (this function returns rows only, not the divider).
+ */
+export function manageMenuRows(
+  view: { mine: boolean; shared: boolean },
+  { workspaceKind }: { workspaceKind: WorkspaceKind; role: ProgramRole },
+): ManageMenuRowKind[] {
+  const rows: ManageMenuRowKind[] = ["rename", "duplicate"];
+  if (workspaceKind === "team" && view.mine) {
+    rows.push(view.shared ? "unshare" : "share");
+  }
+  rows.push("delete");
+  return rows;
+}

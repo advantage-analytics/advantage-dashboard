@@ -7,14 +7,19 @@ import type { Cut, VizDot } from "./viz-model";
  * The wall/band card: art on top, a dark player-name chip over it, then a
  * label block (view name, filter pills, mono count). A `<Link>`, not a
  * button — clicking a tile navigates straight into the focused view.
- * `overlay` is the Manage ⋯ affordance a later task (9) draws over the art;
- * unused here.
+ * `overlay` is the Manage ⋯ affordance (Task 9 Part B, `saved-views-band.tsx`)
+ * drawn over the art on a manageable tile in Manage mode; a nested
+ * interactive control inside the `<Link>` on purpose — the band intercepts
+ * the anchor's own click (`onClickCapture`) whenever Manage mode makes the
+ * whole tile a drag target instead of a navigation target, so the button
+ * inside it can still act without triggering a navigation underneath it.
  */
 
 export function CourtTile({
   playerName,
   name,
   nameAdornment,
+  nameSlot,
   pills,
   countLabel,
   cut,
@@ -26,6 +31,14 @@ export function CourtTile({
   name: string;
   /** A small glyph beside `name` — the saved-views band's `users` "shared" mark. */
   nameAdornment?: ReactNode;
+  /**
+   * Replaces the rendered `name` text entirely — Manage mode's in-place
+   * rename field (`saved-views-band.tsx`), so the tile shows an editable
+   * underline input over its own name rather than the static `<p>`. `name`
+   * is still required even when this is set (it stays the accessible name
+   * other callers reason about); only what's PAINTED changes.
+   */
+  nameSlot?: ReactNode;
   pills: string[];
   countLabel: string;
   cut: Cut;
@@ -50,12 +63,14 @@ export function CourtTile({
       </div>
       <div className="flex flex-col gap-2 px-4 pt-[14px] pb-[15px]">
         <span className="flex min-w-0 items-center gap-1.5">
-          <p
-            className="truncate text-[16px] leading-tight font-normal"
-            style={{ letterSpacing: "-0.2px", color: "var(--ink-900)" }}
-          >
-            {name}
-          </p>
+          {nameSlot ?? (
+            <p
+              className="truncate text-[16px] leading-tight font-normal"
+              style={{ letterSpacing: "-0.2px", color: "var(--ink-900)" }}
+            >
+              {name}
+            </p>
+          )}
           {nameAdornment}
         </span>
         <div className="flex items-center justify-between gap-2">
