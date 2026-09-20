@@ -143,3 +143,16 @@ is the runner's. Newest entries at the bottom.
 1. `dragCtx` now exists only so the three gesture callbacks can be `useCallback([])`; they are rebuilt each render anyway, so both could go. Its `duration` field is already dead.
 2. The four handlers are duplicated on each handle purely to `stopPropagation()`. The reviewer notes a captured event still bubbles to the rail, so the rail's own set would likely suffice — worth confirming before simplifying.
 3. `tests/trim-step-navigation.spec.ts` is ~600 lines covering jumps, keys, Set buttons, rail gestures and capture; the pointer half could be its own spec.
+
+## T11 · Clear the top-player answer when the window start moves past a threshold — done
+
+**gate:** mechanical PASS (lint, typecheck, full test suite); completion review `VERDICT: pass` (all criteria met, scope clean) — reviewed strictly, since this is the §4 input that misattributes every statistic when wrong.
+
+**changed:** `useUploadMatchWizard.ts` — exported `TOP_PLAYER_ANSWER_RESET_SECONDS = 30`; `handleTrimChange` is the only seam that clears `initialTopPlayerIsPlayer1`, and only when the start actually moved AND is more than 30 s from `topPlayerAnswerStartRef` — the start recorded when the question was last answered, re-anchored by `handleInputChange` on every answer, so creep accumulates instead of resetting each step. An end-only change never clears; `fixedCamera` is never written; the `duration` write and the window semantics are untouched. A resumed draft with no anchor adopts the committed start rather than clearing. `topPlayerAnswerStale` is exposed and threaded through `UploadWizardSteps.tsx` into `TrimStepContent.tsx`, which swaps only that question's hint to "Your window start moved — answer again for its new first frame". No new Continue gate — the existing "sleeps while `undefined`" rule does the work. New `tests/upload-camera-answer-reset.spec.ts` (5 tests): 29 s keeps, 31 s clears, three 15 s moves clear on the third, a 600 s end-only move keeps, re-answering re-anchors.
+
+**follow-ups:**
+
+1. The reviewer notes `onVideoPick` writes `videoStartSeconds: 0` without touching the baseline refs. Unreachable today because it happens on the Video step before the trim handlers exist, but it relies on step ordering rather than being structurally guaranteed.
+2. `handleRemoveVideo` and a new file pick leave `topPlayerAnswerStale` set. Harmless — the hint is only read on the trim step — but tidier to clear.
+3. `docs/ui-revamp-guardrails.md` §4's "Resolved for cut uploads" paragraph now has a second half worth recording: the answer is re-asked when the start moves past 30 s. Left alone as outside the task's `files:`.
+4. The stale cue is text-only. If the clear proves easy to miss in practice, the `noteStripCls` strip used by `refusal`/`tooShort` is the louder option; not taken, since an emptied radio group plus a sleeping Continue is already the block.

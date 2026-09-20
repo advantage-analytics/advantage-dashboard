@@ -108,6 +108,13 @@ export interface TrimStepContentProps {
   subjectFirstName: string | null;
   fixedCamera: boolean | undefined;
   initialTopPlayerIsPlayer1: boolean | undefined;
+  /**
+   * The top-player answer was dropped because the window start travelled far
+   * enough that it stopped describing the frame it was given for. Only the
+   * question's hint changes — it says why the answer went blank rather than
+   * leaving the player to find an emptied question on their own.
+   */
+  topPlayerAnswerStale?: boolean;
   onTrimChange: (startSeconds: number, endSeconds: number) => void;
   onAnswer: (field: CameraAnswer, value: boolean) => void;
 }
@@ -349,6 +356,7 @@ function TrimStepContentImpl({
   subjectFirstName,
   fixedCamera,
   initialTopPlayerIsPlayer1,
+  topPlayerAnswerStale = false,
   onTrimChange,
   onAnswer,
 }: TrimStepContentProps) {
@@ -1374,7 +1382,14 @@ function TrimStepContentImpl({
         />
         <Question
           label={`${who} at the start`}
-          hint="At the start of your selected window — ends change every odd game"
+          /* The answer is about one frame, so when that frame moves far enough
+             the answer is dropped and the hint says so — an emptied question
+             with its usual hint reads as a bug rather than a request. */
+          hint={
+            topPlayerAnswerStale
+              ? "Your window start moved — answer again for its new first frame"
+              : "At the start of your selected window — ends change every odd game"
+          }
           value={initialTopPlayerIsPlayer1}
           options={[
             { value: true, label: "Top of frame" },

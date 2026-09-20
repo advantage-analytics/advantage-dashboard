@@ -241,6 +241,7 @@ export function TrimStep() {
       minTrimSeconds,
       error,
       handleTrimChange,
+      topPlayerAnswerStale,
       handleInputChange,
     },
     view: { subjectFirstName },
@@ -266,6 +267,7 @@ export function TrimStep() {
       subjectFirstName={subjectFirstName}
       fixedCamera={formData.fixedCamera}
       initialTopPlayerIsPlayer1={formData.initialTopPlayerIsPlayer1}
+      topPlayerAnswerStale={topPlayerAnswerStale}
       onTrimChange={handleTrimChange}
       onAnswer={onCameraAnswer}
     />

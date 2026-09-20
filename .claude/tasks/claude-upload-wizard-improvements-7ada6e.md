@@ -152,7 +152,7 @@ ready).
 
 ## T11 · Clear the top-player answer when the window start moves past a threshold
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (guess — `handleTrimChange` ~L1903, `handleInputChange` ~L2301, return object ~L3001), src/components/dashboard/matches/new-match-wizard/TrimStepContent.tsx (`Question` ~L294, its call site ~L1318), src/components/dashboard/matches/new-match-wizard/UploadWizardSteps.tsx (~L236-272), tests/upload-camera-answer-reset.spec.ts (new, on the `tests/upload-quota-wiring.spec.ts` pattern)
 - **done when:**

@@ -100,6 +100,26 @@ import {
   quotaRefusal,
 } from "./validation";
 
+/**
+ * How far the window start may travel, in seconds, before the top-player
+ * answer stops describing the frame it was given for.
+ *
+ * `initialTopPlayerIsPlayer1` is camera-relative and describes the FIRST FRAME
+ * OF THE SELECTED WINDOW (`docs/ui-revamp-guardrails.md` §4). Move the start
+ * across a changeover and the answer silently inverts, which attributes every
+ * statistic to the wrong player with nothing looking broken on screen — so the
+ * rule fails safe: a false clear costs one click, a false keep costs the match.
+ *
+ * Thirty seconds, because it is longer than every fine-positioning step the
+ * trim step offers (one frame, a 1 s Shift-nudge, a ±10 s jump), so hunting for
+ * the first serve never trips it; and shorter than a change of ends (~90 s) and
+ * the shortest game (~3 min), so the one move that CAN flip the answer —
+ * repositioning across a changeover — cannot slip under it. Clearing on a
+ * one-frame nudge would only train a reflex re-click without a second look at
+ * the frame, which produces the same wrong answer this rule exists to prevent.
+ */
+export const TOP_PLAYER_ANSWER_RESET_SECONDS = 30;
+
 export interface ImportIdentityState {
   /** Original parser perspective, never rewritten by display-name edits. */
   parsedNames: { playerName: string; opponentName: string } | null;
@@ -425,6 +445,14 @@ export interface UseUploadMatchWizardReturn {
   requirementChips: readonly string[];
   onVideoPick: (file: File | null) => void;
   handleTrimChange: (startSeconds: number, endSeconds: number) => void;
+  /**
+   * The top-player answer was dropped because the window start moved past
+   * {@link TOP_PLAYER_ANSWER_RESET_SECONDS} — true until it is answered again.
+   * It changes what the trim step's hint says and nothing else: Continue is
+   * already asleep while the answer is `undefined`, and a second gate on the
+   * same fact could only disagree with the first.
+   */
+  topPlayerAnswerStale: boolean;
   handleRemoveVideo: () => void;
 
   // Step navigation
@@ -714,6 +742,35 @@ export function useUploadMatchWizard({
   const [videoProbe, setVideoProbe] = useState<VideoProbeSummary | null>(null);
   const [videoWarnings, setVideoWarnings] = useState<string[]>([]);
   const [isProbing, setIsProbing] = useState(false);
+  /**
+   * True from the moment a window start moved far enough to drop the
+   * top-player answer until the next answer is given. It is what lets the trim
+   * step say WHY the question went blank again; nothing gates on it.
+   */
+  const [topPlayerAnswerStale, setTopPlayerAnswerStale] = useState(false);
+  /**
+   * The window start as it stood when `initialTopPlayerIsPlayer1` was last
+   * answered — the distance every later trim is measured against, so ten 10 s
+   * jumps add up the way one 100 s drag does. Null when no answer has been
+   * given in this session (including a resumed draft, which restores the
+   * answer but not the moment it was given).
+   */
+  const topPlayerAnswerStartRef = useRef<number | null>(null);
+  /**
+   * What `handleTrimChange` must know about the form without closing over it:
+   * it is handed to the trim rail's gesture handlers, so rebuilding it when
+   * the form changes would swap a callback mid-drag.
+   */
+  const topPlayerAnswerRef = useRef<{
+    start: number | undefined;
+    answered: boolean;
+  }>({ start: undefined, answered: false });
+  useEffect(() => {
+    topPlayerAnswerRef.current = {
+      start: formData.videoStartSeconds,
+      answered: formData.initialTopPlayerIsPlayer1 !== undefined,
+    };
+  }, [formData.videoStartSeconds, formData.initialTopPlayerIsPlayer1]);
   // The picked File itself rides along on `uploadedFile.file`, held in memory
   // only — a File cannot be serialised to localStorage, so a resumed draft
   // requires re-picking the video.
@@ -1906,10 +1963,39 @@ export function useUploadMatchWizard({
       // the sentence goes the moment the window changes rather than waiting for
       // the next click to re-evaluate it.
       setError(null);
+
+      // The top-player answer describes the window's FIRST FRAME, so a start
+      // that has travelled far enough may no longer be describing it. This is
+      // the ONE place that clears it: the handle drag's release, the arrow
+      // nudge, `I` and the start CutField's Set button all arrive here.
+      const { start: previousStart, answered } = topPlayerAnswerRef.current;
+      // A resumed draft restores the answer but not the moment it was given.
+      // Adopt the committed start as the baseline rather than reading "no
+      // baseline" as "clear": creep is then measured from where the player
+      // came back to the step.
+      const baseline = topPlayerAnswerStartRef.current ?? previousStart ?? 0;
+      const startMoved =
+        previousStart !== undefined && startSeconds !== previousStart;
+      const clearAnswer =
+        answered &&
+        startMoved &&
+        Math.abs(startSeconds - baseline) > TOP_PLAYER_ANSWER_RESET_SECONDS;
+      // Measured against the start AT ANSWER TIME, never the previous window,
+      // so ten 10 s jumps clear it exactly as one 100 s drag does.
+      topPlayerAnswerStartRef.current = clearAnswer ? null : baseline;
+      topPlayerAnswerRef.current = {
+        start: startSeconds,
+        answered: answered && !clearAnswer,
+      };
+      if (clearAnswer) setTopPlayerAnswerStale(true);
+
       setFormData((prev) => ({
         ...prev,
         videoStartSeconds: startSeconds,
         videoEndSeconds: endSeconds,
+        // Back to unanswered — never to a default. `fixedCamera` is about the
+        // whole recording and is not touched (`ui-revamp-guardrails.md` §3.1).
+        ...(clearAnswer ? { initialTopPlayerIsPlayer1: undefined } : {}),
         // The window IS the match: it was trimmed to the first serve and the
         // final point, so how long it runs is how long the match took. Typing
         // that a second time only creates a chance to disagree with the
@@ -2303,6 +2389,17 @@ export function useUploadMatchWizard({
       field: keyof MatchFormData,
       value: string | number | boolean | null | undefined,
     ) => {
+      // Answering the top-player question re-anchors the baseline the trim
+      // step's clear is measured from, so the distance is always "how far has
+      // the start moved since you last looked at this frame".
+      if (field === "initialTopPlayerIsPlayer1" && typeof value === "boolean") {
+        topPlayerAnswerStartRef.current = topPlayerAnswerRef.current.start ?? 0;
+        topPlayerAnswerRef.current = {
+          ...topPlayerAnswerRef.current,
+          answered: true,
+        };
+        setTopPlayerAnswerStale(false);
+      }
       setFormData((prev) => {
         const next = { ...prev, [field]: value };
         // When bestOf changes, reset numberOfSets so it uses the new format's default
@@ -2999,6 +3096,7 @@ export function useUploadMatchWizard({
     requirementChips: processingStrategy?.requirementChips ?? [],
     onVideoPick,
     handleTrimChange,
+    topPlayerAnswerStale,
     handleRemoveVideo,
 
     // Form handling
