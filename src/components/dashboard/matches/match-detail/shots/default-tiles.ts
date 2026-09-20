@@ -16,7 +16,9 @@ import {
   EMPTY_VIZ_FILTERS,
   computeViz,
   tileCountLabel,
+  type Chart,
   type Cut,
+  type HeatGrid,
   type PlayerFilter,
   type VizDot,
 } from "./viz-model";
@@ -36,7 +38,13 @@ export interface DefaultTile {
   pills: string[];
   countLabel: string;
   cut: Cut;
+  /** The tile's own chart, so a non-scatter default cut (e.g. a future Heat
+   * default) can't silently fall back to `CourtTile`'s `chart = "scatter"`
+   * default. */
+  chart: Chart;
   dots: VizDot[];
+  /** Populated only when `chart === "heat"` — mirrors `VizResult.heat`. */
+  heat: HeatGrid | null;
   state: VizState;
   href: string;
   /** Drawable points in the cut's pool — `0` for every one of a subject's
@@ -90,7 +98,9 @@ export function buildDefaultTiles(
         pills: cut.pills,
         countLabel: tileCountLabel(result),
         cut: cut.cut,
+        chart: cut.chart,
         dots: result.dots,
+        heat: result.heat,
         state,
         href: hrefFor(state),
         total: result.total,

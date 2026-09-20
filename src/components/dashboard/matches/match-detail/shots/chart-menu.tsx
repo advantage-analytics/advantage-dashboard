@@ -12,10 +12,10 @@ import { useVizState } from "./use-viz-state";
 import { CHART_LABEL, VizMenuTrigger } from "./viz-labels";
 
 /**
- * The "Chart" menu (P1e): Scatter, the disabled Heat placeholder, and Zones
- * — Zones only renders when the current cut is Serve, since it counts and
- * scores service boxes and has no meaning off serve (guardrails: Zones is
- * Serve-only, enforced here rather than trusted to the caller).
+ * The "Chart" menu (P1e): Scatter, Heat, and Zones — Zones only renders when
+ * the current cut is Serve, since it counts and scores service boxes and has
+ * no meaning off serve (guardrails: Zones is Serve-only, enforced here
+ * rather than trusted to the caller).
  */
 export function ChartMenu() {
   const { state, setState } = useVizState();

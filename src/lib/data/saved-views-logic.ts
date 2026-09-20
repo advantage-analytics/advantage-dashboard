@@ -471,20 +471,29 @@ export function manageMenuRows(
 
 /**
  * The cache key `saved-views-band.tsx` memoizes its per-tile `computeViz`
- * results on (review I1) — every view's `id`/`cut`/`filters`, order-
+ * results on (review I1) — every view's `id`/`cut`/`chart`/`filters`, order-
  * independent (each entry is prefixed by its own id, then the whole set of
  * entries is sorted), so a drag/keyboard reorder — which changes array order
- * but not any view's own cut/filters — produces the SAME key and the memo is
- * skipped, while adding, removing, or changing any view's cut/filters (which
- * changes what the key sorts) always produces a different one. `filters` is
- * serialized with `JSON.stringify` rather than compared by reference, since
- * the optimistic list is rebuilt (new object identities) on every reorder.
+ * but not any view's own cut/chart/filters — produces the SAME key and the
+ * memo is skipped, while adding, removing, or changing any view's
+ * cut/chart/filters (which changes what the key sorts) always produces a
+ * different one. `chart` is included (I2 fix round): `computeViz` takes
+ * `chart` too (it decides whether the heat pass runs), so a view whose chart
+ * flips — Scatter to Heat — with cut/filters unchanged must still invalidate
+ * the memo. `filters` is serialized with `JSON.stringify` rather than
+ * compared by reference, since the optimistic list is rebuilt (new object
+ * identities) on every reorder.
  */
 export function tileDataKey(
-  views: readonly { id: string; cut: string; filters: unknown }[],
+  views: readonly {
+    id: string;
+    cut: string;
+    chart: string;
+    filters: unknown;
+  }[],
 ): string {
   return views
-    .map((v) => `${v.id}:${v.cut}:${JSON.stringify(v.filters)}`)
+    .map((v) => `${v.id}:${v.cut}:${v.chart}:${JSON.stringify(v.filters)}`)
     .sort()
     .join("|");
 }

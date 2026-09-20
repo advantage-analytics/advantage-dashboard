@@ -55,8 +55,8 @@ const LEGEND_CAPTION: Record<Cut, string> = {
   serve: "Half court · landing point",
   returnPlacement: "Far half · landing point",
   returnContact: "Near half · contact point",
-  // rallyPosition renders through the returnContact frame (G3's Drawing
-  // task, not yet built) — same caption, since it's the same half.
+  // rallyPosition renders through the returnContact frame — same caption,
+  // since it's the same half.
   rallyPosition: "Near half · contact point",
 };
 
@@ -257,7 +257,7 @@ export function VizFocused({
               className="text-micro truncate outline-none"
               style={{ color: "var(--ink-400)" }}
             >
-              {isDraft ? "New view" : `${subjectName} · ${CUT_LABEL[cut]}`}
+              {isDraft ? "Create view" : `${subjectName} · ${CUT_LABEL[cut]}`}
             </span>
             <button
               type="button"
@@ -288,6 +288,7 @@ export function VizFocused({
               dots={isDraft ? [] : result.dots}
               chart={state.chart}
               heat={isDraft ? null : result.heat}
+              draft={isDraft}
               zones={
                 !isDraft && state.chart === "zones" && cut === "serve"
                   ? (result.zoneStats ?? undefined)

@@ -523,8 +523,7 @@ function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
   }
 
   // Parse set (special: numeric, multi-valued) — namespaced to `vset` (see
-  // `VIZ_KEYS`). Also accepts a single legacy scalar param for symmetry with
-  // `filtersToParams`'s "a stored scalar reads as a one-element list" rule.
+  // `VIZ_KEYS`).
   const setValues = params
     .getAll("vset")
     .map((v) => Number.parseInt(v, 10))

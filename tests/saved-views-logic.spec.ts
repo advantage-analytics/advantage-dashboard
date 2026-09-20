@@ -616,9 +616,15 @@ test("tileDataKey is identical for two orderings of the same views", () => {
     {
       id: "v1",
       cut: "serve",
+      chart: "scatter",
       filters: { ...EMPTY_VIZ_FILTERS, ball: ["first"] },
     },
-    { id: "v2", cut: "returnPlacement", filters: EMPTY_VIZ_FILTERS },
+    {
+      id: "v2",
+      cut: "returnPlacement",
+      chart: "scatter",
+      filters: EMPTY_VIZ_FILTERS,
+    },
   ];
   const b = [a[1], a[0]];
   expect(tileDataKey(a)).toBe(tileDataKey(b));
@@ -629,6 +635,7 @@ test("tileDataKey changes when a view's filters change", () => {
     {
       id: "v1",
       cut: "serve",
+      chart: "scatter",
       filters: { ...EMPTY_VIZ_FILTERS, ball: ["first"] },
     },
   ];
@@ -636,6 +643,7 @@ test("tileDataKey changes when a view's filters change", () => {
     {
       id: "v1",
       cut: "serve",
+      chart: "scatter",
       filters: { ...EMPTY_VIZ_FILTERS, ball: ["second"] },
     },
   ];
@@ -643,9 +651,26 @@ test("tileDataKey changes when a view's filters change", () => {
 });
 
 test("tileDataKey changes when a view's cut changes", () => {
-  const before = [{ id: "v1", cut: "serve", filters: EMPTY_VIZ_FILTERS }];
+  const before = [
+    { id: "v1", cut: "serve", chart: "scatter", filters: EMPTY_VIZ_FILTERS },
+  ];
   const after = [
-    { id: "v1", cut: "returnPlacement", filters: EMPTY_VIZ_FILTERS },
+    {
+      id: "v1",
+      cut: "returnPlacement",
+      chart: "scatter",
+      filters: EMPTY_VIZ_FILTERS,
+    },
+  ];
+  expect(tileDataKey(before)).not.toBe(tileDataKey(after));
+});
+
+test("tileDataKey changes when a view's chart changes (I2 fix round)", () => {
+  const before = [
+    { id: "v1", cut: "serve", chart: "scatter", filters: EMPTY_VIZ_FILTERS },
+  ];
+  const after = [
+    { id: "v1", cut: "serve", chart: "heat", filters: EMPTY_VIZ_FILTERS },
   ];
   expect(tileDataKey(before)).not.toBe(tileDataKey(after));
 });

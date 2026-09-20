@@ -66,7 +66,7 @@ const EMPTY_DEFAULT_TILES: readonly DefaultTile[] = Object.freeze([]);
  * Task 9 (P1a band + Part B Manage mode): every saved view the viewer can
  * see — their own private ones plus the workspace's shared ones, in the
  * given order — as the same 3-col `CourtTile` grid the wall draws, plus a
- * dashed "New view" tile. Mounted by `shots-tab.tsx` on both `VizWall` (via
+ * dashed "Create view" tile. Mounted by `shots-tab.tsx` on both `VizWall` (via
  * its `savedViewsBand` slot) and `VizFocused` (ditto), so it is the SAME
  * band on both surfaces — one component, two mount points.
  *
@@ -241,7 +241,12 @@ export function SavedViewsBand({
   // can't be called conditionally) — hence living up here rather than beside
   // `tileDataFor`'s original call site.
   const viewsKey = tileDataKey(
-    optimisticViews.map((v) => ({ id: v.id, cut: v.cut, filters: v.filters })),
+    optimisticViews.map((v) => ({
+      id: v.id,
+      cut: v.cut,
+      chart: v.chart,
+      filters: v.filters,
+    })),
   );
   const tileDataById = useMemo(() => {
     const map = new Map<string, ReturnType<typeof tileDataFor>>();
@@ -967,6 +972,8 @@ export function SavedViewsBand({
                   countLabel={tile.countLabel}
                   cut={tile.cut}
                   dots={tile.dots}
+                  chart={tile.chart}
+                  heat={tile.heat}
                   href={tile.href}
                   current={isCurrent}
                   navigateState={tile.state}

@@ -175,6 +175,7 @@ export function CourtArt({
   className,
   fill,
   labels,
+  draft = false,
 }: {
   cut: Cut;
   dots: VizDot[];
@@ -212,6 +213,14 @@ export function CourtArt({
    * cells already read fine as a plain shade gradient there.
    */
   labels?: boolean;
+  /**
+   * G4: the "Create view" draft prompt — `dots`/`heat` are already emptied
+   * by the caller (`viz-focused.tsx`), but the default aria-label would
+   * still read "… court, 0 points shown" off that empty `dots` array, which
+   * reads as "no data yet found" rather than "nothing chosen yet". This only
+   * swaps the announced label to reflect the actual state.
+   */
+  draft?: boolean;
 }) {
   const clipId = useId();
   const rallyBlurId = useId();
@@ -222,11 +231,13 @@ export function CourtArt({
     : 0;
   const apronFill = showHeat ? HEAT_APRON_FILL : APRON_FILL;
   const courtFillColor = showHeat ? HEAT_COURT_FILL : COURT_FILL;
-  const ariaLabel = showHeat
-    ? `${HEAT_CUT_LABEL[cut]} heat map, ${dots.length} ${HEAT_NOUN[cut]}`
-    : showZones
-      ? "Serve placement by zone: six service-box zones shaded by serve frequency"
-      : `${CUT_NOUN[cut]} court, ${dots.length} point${dots.length === 1 ? "" : "s"} shown`;
+  const ariaLabel = draft
+    ? "Empty court — pick what to plot"
+    : showHeat
+      ? `${HEAT_CUT_LABEL[cut]} heat map, ${dots.length} ${HEAT_NOUN[cut]}`
+      : showZones
+        ? "Serve placement by zone: six service-box zones shaded by serve frequency"
+        : `${CUT_NOUN[cut]} court, ${dots.length} point${dots.length === 1 ? "" : "s"} shown`;
 
   if (cut === "serve") {
     return (
@@ -467,7 +478,7 @@ export function CourtArt({
         <path d={RETURN_BACKGROUND_PATH} />
       </clipPath>
       {cut === "rallyPosition" && (
-        <filter id={rallyBlurId}>
+        <filter id={rallyBlurId} x="-25%" y="-25%" width="150%" height="150%">
           <feGaussianBlur stdDeviation={RALLY_HEAT_BLUR_STD_DEVIATION} />
         </filter>
       )}

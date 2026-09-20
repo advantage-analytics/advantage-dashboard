@@ -257,6 +257,19 @@ export function FiltersPopover({
               ))}
             </FilterGroup>
           )}
+
+          <FilterGroup label="Game">
+            {(Object.keys(OPTIONS.game) as (keyof typeof OPTIONS.game)[]).map(
+              (key) => (
+                <FilterPill
+                  key={key}
+                  label={OPTIONS.game[key]}
+                  active={state.filters.game.includes(key)}
+                  onClick={() => toggle("game", key)}
+                />
+              ),
+            )}
+          </FilterGroup>
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-[var(--border-hairline)] px-4 py-2.5">

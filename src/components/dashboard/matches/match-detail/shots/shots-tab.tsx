@@ -34,7 +34,7 @@ import { SavedViewsBand } from "@/components/dashboard/matches/match-detail/shot
  * `VizWall`/`VizFocused` mounts per `state.cut`), so `variant` is set here
  * from that same `state.cut` — `"wall"` renders the pre-existing saved-only
  * grid, `"focused"` the Views grid — a wrapping grid reached by scrolling
- * the page, not a scrolling row (defaults, saved, New view).
+ * the page, not a scrolling row (defaults, saved, Create view).
  *
  * Saving is always on — everyone, including players, may save a view — so
  * `VizFocused` no longer takes an `onSaveRequest` opt-in; it owns its own
