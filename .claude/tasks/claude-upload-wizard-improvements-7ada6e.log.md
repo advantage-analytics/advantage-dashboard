@@ -78,3 +78,9 @@ is the runner's. Newest entries at the bottom.
 2. Three browser specs now duplicate ~70 lines of bundle-and-serve plumbing; a shared `tests/fixtures/browser-harness.ts` would collapse them.
 3. A ~30 s fixture clip would let +10 s be asserted as arithmetic and give the hold-to-zoom drag path (needs ≥45 s) any browser coverage at all.
 4. Space play/pause and the Space-on-a-focused-button guard are untested.
+
+## T1 · Read the team pool for the wizard's remaining-hours figure — done
+
+**gate:** mechanical PASS (lint, typecheck, full test suite); completion review `VERDICT: pass` (5/5 criteria met). Unblocked by the author on 2026-09-19: stash `bae6abe7` re-applied plus an authorized fixture fix outside `files:`.
+
+**changed:** `useUploadMatchWizard.ts` — the remaining-quota effect reads `program_usage_total` for a team workspace (the table read is RLS-scoped to the caller's own rows), keeps the four-filter `processing_usage` select for personal, leaves the figure untouched on an RPC error, and re-runs on arriving at the trim step (`isTrimStep` in deps); doc comment rewritten. `tests/fixtures/upload-wizard-hook.ts` — the `rpc()` stub returns a scalar for `program_usage_total` and no longer counts it as a roster fetch, which is what failed `tests/upload-approval.spec.ts:369` the first time.

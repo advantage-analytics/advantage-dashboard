@@ -251,7 +251,10 @@ export function uploadWizardHarness(
         : table === "programs"
           ? programStatusQuery
           : query,
-    rpc: async () => {
+    rpc: async (fn?: string) => {
+      // The team pool total behind the footer meter — a scalar, and not a
+      // roster read, so it must not move `rosterRpcCallCount`.
+      if (fn === "program_usage_total") return { data: 0, error: null };
       rosterRpcCallCount++;
       return options.rosterError
         ? { data: null, error: { message: options.rosterError } }

@@ -880,34 +880,56 @@ export function useUploadMatchWizard({
    * and the footer meter.
    *
    * Advisory only — reserve_processing_quota() is still the authority and
-   * refuses with a 429 at submit time. This mirrors its arithmetic exactly:
-   * unreleased rows for the current month, actual_seconds where a job finished
-   * and the reservation standing in until then. Getting it wrong here shows a
-   * misleading number; it cannot let anything through.
+   * refuses with a 429 at submit time. Getting it wrong here shows a misleading
+   * number; it cannot let anything through.
+   *
+   * A **team** workspace reads the pool through `program_usage_total`, not the
+   * ledger table: RLS scopes `processing_usage` to `created_by = auth.uid()`,
+   * so a direct select returns only the caller's own rows and the meter would
+   * show MY usage against the TEAM cap. The RPC is the same one Settings ›
+   * Usage reads (`getProgramUsage`). A personal workspace keeps the direct
+   * read — there the caller's rows ARE the whole ledger.
    */
   const [remainingQuotaSeconds, setRemainingQuotaSeconds] = useState<
     number | undefined
   >(undefined);
+
+  // The trim step is where the cost warning is read, and a teammate may have
+  // spent against the pool since the wizard opened — re-read on arrival.
+  const isTrimStep = step === "trim";
 
   useEffect(() => {
     if (!isProcessingProvider) return;
     let cancelled = false;
 
     (async () => {
-      const { data, error } = await supabase
-        .from("processing_usage")
-        .select("reserved_seconds, actual_seconds")
-        .eq("account_id", activeWorkspace.id)
-        .eq("account_type", quotaAccountType)
-        .eq("billing_month", currentBillingMonth())
-        .eq("released", false);
+      let used: number;
 
-      if (error || cancelled) return;
+      if (activeWorkspace.kind === "team") {
+        const { data, error } = await supabase.rpc("program_usage_total", {
+          p_program_id: activeWorkspace.id,
+          p_billing_month: currentBillingMonth(),
+        });
 
-      const used = (data ?? []).reduce(
-        (n, row) => n + (row.actual_seconds ?? row.reserved_seconds ?? 0),
-        0,
-      );
+        if (error || cancelled) return;
+        used = Number(data ?? 0);
+      } else {
+        const { data, error } = await supabase
+          .from("processing_usage")
+          .select("reserved_seconds, actual_seconds")
+          .eq("account_id", activeWorkspace.id)
+          .eq("account_type", quotaAccountType)
+          .eq("billing_month", currentBillingMonth())
+          .eq("released", false);
+
+        if (error || cancelled) return;
+
+        used = (data ?? []).reduce(
+          (n, row) => n + (row.actual_seconds ?? row.reserved_seconds ?? 0),
+          0,
+        );
+      }
+
       setRemainingQuotaSeconds(Math.max(0, quotaCapSeconds - used));
     })();
 
@@ -918,8 +940,10 @@ export function useUploadMatchWizard({
     isProcessingProvider,
     supabase,
     activeWorkspace.id,
+    activeWorkspace.kind,
     quotaAccountType,
     quotaCapSeconds,
+    isTrimStep,
   ]);
 
   // Media rules, trim floor and billing all come from the provider rather than

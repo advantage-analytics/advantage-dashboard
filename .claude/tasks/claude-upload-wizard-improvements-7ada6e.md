@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Read the team pool for the wizard's remaining-hours figure
 
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts (guess — the remaining-quota effect at ~L878-922)
 - **done when:**
