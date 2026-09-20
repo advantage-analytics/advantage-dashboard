@@ -14,7 +14,6 @@ import {
   projectServeMetricDot,
   projectReturnDot,
   netGutterFor,
-  netMarkPoints,
   zoneCellX,
   zoneOpacity,
   trianglePointsFor,
@@ -78,14 +77,6 @@ const HEAT_DOT_FILL = "#FFFFFF";
 const SERVE_DOT_R = 2.54;
 const RETURN_DOT_R = 2.4;
 
-// Task 2: the net mark's size, one per frame matching that frame's own dot
-// radius so it reads at the same weight as the outcome-coloured marks
-// beside it. Hollow (no fill), so it needs a visibly thicker stroke than the
-// filled marks' 0.4px hairline to read clearly at that size.
-const SERVE_NET_MARK_R = SERVE_DOT_R;
-const RETURN_NET_MARK_R = RETURN_DOT_R;
-const NET_MARK_STROKE_W = 1.1;
-
 // G2b: the ace star's fill, regardless of outcome colour (an ace is always
 // won, but the star communicates "ace" first — see `ACE_STAR_FILL`'s use
 // below, which skips `colorFor` entirely for star dots). Allowlisted in
@@ -104,6 +95,28 @@ function colorFor(outcome: VizDot["outcome"]): string {
   if (outcome === "won") return "var(--viz-good)";
   if (outcome === "lost") return "var(--viz-bad)";
   return "var(--ink-300)";
+}
+
+/**
+ * Fix round 4A: a dot's `atNet` position fact, resolved into the {cx, cy}
+ * it actually draws at — `netGutterFor(cut)`'s fixed position when true
+ * (falling back to the normal projection on whichever axis the gutter
+ * doesn't fix — `cx` for the return frame, `cy` for serve), the normal
+ * projection unchanged otherwise. Pulled out once so both frames below
+ * resolve position identically rather than each re-deriving the
+ * gutter-vs-projection merge.
+ */
+function atNetPosition(
+  atNet: boolean,
+  cut: Cut,
+  projected: { cx: number; cy: number },
+): { cx: number; cy: number } {
+  if (!atNet) return projected;
+  const gutter = netGutterFor(cut);
+  return {
+    cx: gutter.cx ?? projected.cx,
+    cy: gutter.cy ?? projected.cy,
+  };
 }
 
 const CUT_NOUN: Record<Cut, string> = {
@@ -302,10 +315,12 @@ export function CourtArt({
   // there's no reason to recompute the array on every render either.
   const heatCirclesMemo = useMemo<ReactNode[] | null>(() => {
     if (!drawHeat) return null;
-    // Task 2: a `shape: "net"` dot is pinned to a fixed gutter, not a real
-    // position — it never contributes to the density heatmap (an out dot,
-    // by contrast, IS a real position and stays in).
-    const positioned = dots.filter((d) => d.shape !== "net");
+    // Task 2 (fix round 4A: keyed on `atNet`, the position fact, not
+    // `shape` — a netted ball's shape is now an ordinary circle/triangle):
+    // an `atNet` dot is pinned to a fixed gutter, not a real position — it
+    // never contributes to the density heatmap (an out dot, by contrast,
+    // IS a real position and stays in).
+    const positioned = dots.filter((d) => !d.atNet);
     if (cut === "serve") {
       return positioned.map((d) => {
         const { cx, cy } = projectServeMetricDot({
@@ -512,26 +527,13 @@ export function CourtArt({
                   lateralM: d.lateralM,
                   depthPastNetM: d.depthM,
                 });
-                // Task 2: a net serve is pinned to the net gutter (its
-                // lateral position, the net's own fixed depth), never its
-                // real (hitter's-own-side) landing spot — drawn as a hollow
-                // mark so it can never be misread as a real dot.
-                if (d.shape === "net") {
-                  const gutter = netGutterFor("serve");
-                  const cx = gutter.cx ?? projected.cx;
-                  const cy = gutter.cy ?? projected.cy;
-                  return (
-                    <polygon
-                      key={d.id}
-                      points={netMarkPoints(cx, cy, SERVE_NET_MARK_R)}
-                      fill="none"
-                      stroke={colorFor(d.outcome)}
-                      strokeWidth={NET_MARK_STROKE_W}
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  );
-                }
-                const { cx, cy } = projected;
+                // Fix round 4A: a net serve is pinned to the net gutter
+                // (its lateral position, the net's own fixed depth), never
+                // its real (hitter's-own-side) landing spot — POSITION only
+                // (`atNet`); it draws through the SAME glyph path below
+                // every other dot uses (an ordinary miss-coloured circle —
+                // an ace is always "in", so `d.shape` is never "star" here).
+                const { cx, cy } = atNetPosition(d.atNet, "serve", projected);
                 // G2b: an ace draws as a star, regardless of outcome colour —
                 // it's always "won" already, but the shape carries the "ace"
                 // read before the colour would.
@@ -710,26 +712,13 @@ export function CourtArt({
                   lateralM: d.lateralM ?? 0,
                   depthM: d.depthM ?? 0,
                 });
-                // Task 2: a netted return is pinned to the net gutter (its
-                // lateral position, a fixed depth just inside the frame's
-                // near visible edge), never its real (hitter's-own-side)
-                // landing — only `returnPlacement` dots can take this shape.
-                if (d.shape === "net") {
-                  const gutter = netGutterFor(cut);
-                  const cx = gutter.cx ?? projected.cx;
-                  const cy = gutter.cy ?? projected.cy;
-                  return (
-                    <polygon
-                      key={d.id}
-                      points={netMarkPoints(cx, cy, RETURN_NET_MARK_R)}
-                      fill="none"
-                      stroke={color}
-                      strokeWidth={NET_MARK_STROKE_W}
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  );
-                }
-                const { cx, cy } = projected;
+                // Fix round 4A: a netted return is pinned to the net gutter
+                // (its lateral position, a fixed depth just past the net on
+                // the hitter's side), never its real (hitter's-own-side)
+                // landing — only `returnPlacement` dots ever set `atNet`.
+                // POSITION only: it draws through the same forehand-circle/
+                // backhand-triangle glyph path every other dot uses.
+                const { cx, cy } = atNetPosition(d.atNet, cut, projected);
                 return d.shape === "triangle" ? (
                   <polygon
                     key={d.id}

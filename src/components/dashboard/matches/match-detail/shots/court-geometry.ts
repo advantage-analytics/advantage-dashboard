@@ -102,9 +102,12 @@ export function zoneCellX(index: number): { x1: number; x2: number } {
 
 /* ── Return full court (landscape, pre-rotation) ──────────────────────────
  *
- * viewBox="-43.6 -11.5 431 279". The court is drawn on its side — x is the
- * DEPTH axis (baseline to baseline), y is the LATERAL axis (across the
- * court) — inside two nested groups:
+ * viewBox originally "-43.6 -11.5 431 279" in the design handoff — minY/h
+ * are now DIFFERENT (fix round 4B below is a deliberate, user-requested
+ * deviation from the handoff on this one edge; see the spec's "As built").
+ * The court is drawn on its side — x is the DEPTH axis (baseline to
+ * baseline), y is the LATERAL axis (across the court) — inside two nested
+ * groups:
  *   <g transform="translate(-60.6,-125) rotate(90 240 104.5)">
  *     <g transform="translate(240,112) scale(1.02) translate(-240,-104.5)">
  *       ...rects/lines/dots, in the coordinates below...
@@ -117,8 +120,48 @@ export function zoneCellX(index: number): { x1: number; x2: number } {
  * 400 units = 23.77 m baseline-to-baseline (`UNITS_PER_METER`); 138.8 units
  * = 8.23 m singles width.
  */
+
+// Fix round 4B: the handoff's own viewBox.minY (-11.5) clips the net line
+// off the visible frame entirely — the net's own centreline projects to
+// viewBoxY = -20.5 (`depthToViewBoxY(240)`, defined further below in this
+// file: `1.02*(240-240) + 104.5 - 125`), short of -11.5 by 9 units. Extended
+// so the net line is fully visible AND a net-gutter mark (fix round 4A:
+// where a `atNet` dot draws instead of its real, unusable landing) can sit
+// just beyond it, on the hitter's side, without clipping — the SAME
+// consistent "just past the net" placement the serve frame already uses,
+// rather than an arbitrary inset from the old (net-less) visible edge.
+//
+// Clearance from the net's own centreline: half its rendered stroke width
+// (so the LINE itself isn't clipped) + one mark's nominal radius (2.4, the
+// same RETURN_DOT_R `court-art.tsx` draws every return mark at —
+// duplicated here as a literal since this geometry module doesn't import
+// render-layer constants) + a small margin so the mark's own outer edge
+// doesn't touch the frame's edge either.
+const RETURN_NET_STROKE_WIDTH = 1.74; // = RETURN_COURT.netStrokeWidth, below
+const RETURN_NET_HALF_STROKE = RETURN_NET_STROKE_WIDTH / 2; // 0.87
+const RETURN_MARK_RADIUS = 2.4; // = court-art.tsx's RETURN_DOT_R
+const RETURN_VIEWBOX_MARGIN = 1;
+// A net-gutter mark's centre sits this far past the net's own centreline —
+// just clearing its rendered stroke — on the hitter's side (`netGutterFor`
+// below applies it as a SUBTRACTION from `RETURN_COURT.netX`, since the
+// hitter's side is the smaller-depth-x direction).
+const RETURN_NET_GUTTER_OFFSET = RETURN_NET_HALF_STROKE;
+const RETURN_VIEWBOX_MIN_Y_CLEARANCE =
+  RETURN_NET_HALF_STROKE + RETURN_MARK_RADIUS + RETURN_VIEWBOX_MARGIN; // 4.27
+const RETURN_VIEWBOX_MIN_Y = -20.5 - RETURN_VIEWBOX_MIN_Y_CLEARANCE; // -24.77
+const RETURN_VIEWBOX_MIN_Y_ORIGINAL = -11.5; // the design handoff's own value
+// h grows by exactly how much minY decreased, so the far edge (minY + h)
+// is unchanged.
+const RETURN_VIEWBOX_H_GROWTH =
+  RETURN_VIEWBOX_MIN_Y_ORIGINAL - RETURN_VIEWBOX_MIN_Y; // ≈13.27
+
 export const RETURN_COURT = {
-  viewBox: { minX: -43.6, minY: -11.5, w: 431, h: 279 },
+  viewBox: {
+    minX: -43.6,
+    minY: RETURN_VIEWBOX_MIN_Y,
+    w: 431,
+    h: 279 + RETURN_VIEWBOX_H_GROWTH,
+  },
   outerGroupTransform: "translate(-60.6,-125) rotate(90 240 104.5)",
   innerGroupTransform: "translate(240,112) scale(1.02) translate(-240,-104.5)",
   doublesTop: 12,
@@ -418,14 +461,23 @@ export const RETURN_HEAT_DOT_RADIUS = 0.55 * UNITS_PER_METER;
 // radius' actual SCREEN size is. Both frames render into a box of
 // (approximately) the same aspect ratio: the wall/saved-view tile's art box
 // is CSS-locked to the SERVE frame's own aspect (`court-tile.tsx`'s
-// `aspectRatio: "334 / 216"`), and the return frame's own viewBox aspect
-// (431/279 ≈ 1.5448) differs from that by under 0.1% — so
-// `preserveAspectRatio` scales each viewBox by very nearly
-// `boxWidthPx / viewBox.w` for both, with no meaningful letterboxing. A
-// dot's on-screen radius is therefore (radius in this module's pre-transform
-// units) × (that frame's own group-transform scale) ×
-// (boxWidthPx / viewBox.w). Solving `radius_serve` so the two screen radii
-// match, for the SAME `boxWidthPx`:
+// `aspectRatio: "334 / 216"` ≈ 1.5463). Fix round 4B's `RETURN_COURT.viewBox`
+// extension (net-line visibility, see that section's own comment) moved the
+// return frame's own viewBox aspect from 431/279 ≈ 1.5448 (differed from the
+// box by under 0.1%) to 431/292.27 ≈ 1.4746 (now ≈4.6% off) — `court-tile.tsx`
+// and `viz-focused.tsx`'s fixed-aspect wrappers were checked against this:
+// with `preserveAspectRatio="xMidYMid meet"`, the return frame is now
+// slightly HEIGHT-constrained inside that box (content proportionally
+// taller than the box), leaving ≈2.3% empty margin on each side rather than
+// effectively none — a thin, not "bad", letterbox; visual confirmation is
+// still worth a look before shipping, but no code change follows from this
+// alone. `preserveAspectRatio` scales each viewBox by very nearly
+// `boxWidthPx / viewBox.w` for both regardless, so the radius-matching maths
+// below is still directionally correct even though the two frames' own
+// aspects no longer agree as tightly. A dot's on-screen radius is therefore
+// (radius in this module's pre-transform units) × (that frame's own
+// group-transform scale) × (boxWidthPx / viewBox.w). Solving `radius_serve`
+// so the two screen radii match, for the SAME `boxWidthPx`:
 //   radius_serve = radius_return
 //     × (RETURN's own inner-group scale ÷ SERVE's own group scale)
 //     × (SERVE_COURT.viewBox.w ÷ RETURN_COURT.viewBox.w)
@@ -727,20 +779,21 @@ export function projectServeMetricDot(m: ServeMetricDot): {
   return { cx, cy };
 }
 
-// A net mark sits in a thin band just past the net (serve) / just inside the
-// return frame's own visible near edge (return — the net line itself sits
-// outside that viewBox). Same real-world inset both frames, converted through
-// each frame's own metres-per-unit scale.
-const NET_GUTTER_INSET_M = 0.3;
+// Serve frame's own "just past the net" inset — real-world metres, since
+// (unlike the return frame's mark, fixed as a small offset from its own
+// rendered stroke above) the serve frame's visible apron below the net line
+// leaves generous room to work in real units instead.
+const SERVE_NET_GUTTER_INSET_M = 0.3;
 
 /**
- * The frame coordinate a `shape: "net"` dot's DEPTH axis takes — always the
- * same spot regardless of the ball's own (unusable, hitter's-side) landing.
- * Exactly one of `cx`/`cy` is set (the axis this frame's net sits on); the
- * caller keeps the OTHER axis from that same dot's normal projection
- * (`projectServeMetricDot`/`projectReturnDot`, which already reads the
- * dot's true lateral position correctly) — `court-art.tsx` does exactly
- * that merge.
+ * The frame coordinate an `atNet` dot's (fix round 4A: the POSITION fact,
+ * `VizDot.atNet`/`ReturnDotMetric.atNet` — no longer a distinct `shape`)
+ * DEPTH axis takes — always the same spot regardless of the ball's own
+ * (unusable, hitter's-side) landing. Exactly one of `cx`/`cy` is set (the
+ * axis this frame's net sits on); the caller keeps the OTHER axis from that
+ * same dot's normal projection (`projectServeMetricDot`/`projectReturnDot`,
+ * which already reads the dot's true lateral position correctly) —
+ * `court-art.tsx` does exactly that merge.
  */
 export function netGutterFor(
   cut: "serve" | "returnPlacement" | "returnContact" | "rallyPosition",
@@ -748,23 +801,19 @@ export function netGutterFor(
   if (cut === "serve") {
     return {
       cx: null,
-      cy: SERVE_COURT.netY + NET_GUTTER_INSET_M * SERVE_DEPTH_UNITS_PER_METER,
+      cy:
+        SERVE_COURT.netY +
+        SERVE_NET_GUTTER_INSET_M * SERVE_DEPTH_UNITS_PER_METER,
     };
   }
+  // Fix round 4B: the hitter's side is the SMALLER-depth-x direction from
+  // the net (`projectReturnDot`'s own convention — a negative `depthM`
+  // already means "stayed on the hitter's side"), so this subtracts from
+  // `netX` rather than the OLD arbitrary inset from the frame's (formerly
+  // net-less) visible edge. `RETURN_NET_GUTTER_OFFSET` is the same offset
+  // the viewBox extension above reserved clearance for.
   return {
-    cx: RETURN_HEAT_BOUNDS.xMin + NET_GUTTER_INSET_M * UNITS_PER_METER,
+    cx: RETURN_COURT.netX - RETURN_NET_GUTTER_OFFSET,
     cy: null,
   };
-}
-
-/**
- * A small hollow diamond — the net mark's glyph, alongside
- * `trianglePointsFor`/`starPoints` above in the same "return an SVG points
- * string" style. Drawn with `fill="none"` and a visible stroke (see
- * `court-art.tsx`), so it reads as a distinct, deliberately-not-a-landing
- * mark rather than a filled dot. `size` is the same nominal radius the
- * cut's own circle marks use, so the glyph reads at a comparable weight.
- */
-export function netMarkPoints(cx: number, cy: number, size: number): string {
-  return `${cx},${cy - size} ${cx + size},${cy} ${cx},${cy + size} ${cx - size},${cy}`;
 }

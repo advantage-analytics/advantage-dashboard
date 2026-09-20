@@ -96,19 +96,32 @@ export type Outcome = "won" | "lost" | "miss";
  * that file's own note — they just no longer feed this type.)
  *
  * `shape: "star"` is a serve-only addition (G2b): an ace draws as a star
- * instead of the usual outcome-coloured circle. `shape: "net"` (Task 2) is a
- * serve/returnPlacement addition: the ball hit the net, drawn at a fixed
- * gutter position rather than its (unusable, hitter's-side) landing — see
- * `court-geometry.ts`'s `netGutterFor`. Return-contact and rally dots never
- * take either shape — their circle/triangle already encodes
+ * instead of the usual outcome-coloured circle. Return-contact and rally
+ * dots never take it — their circle/triangle already encodes
  * forehand/backhand, an axis orthogonal to "how did this shot end".
+ *
+ * `atNet` (fix round 4A) is a POSITION fact, not a style one — "this ball
+ * never crossed the net, so its real (hitter's-own-side) coordinates aren't
+ * where it should be drawn; draw it at the net line instead" — deliberately
+ * separate from `shape`/`outcome`. A netted ball draws with the SAME shape
+ * and colour an ordinary miss of that cut already has (a grey circle on
+ * serve; the cut's own forehand-circle/backhand-triangle on the two return
+ * cuts) — the user's explicit call: "Net should be folded into Miss as the
+ * grey circle (triangle as well if it is a return/rally contact/
+ * placement)." `court-geometry.ts`'s `netGutterFor` is the fixed position
+ * `court-art.tsx` substitutes in when this is true; `atNet` dots are also
+ * excluded from the heat density blobs (not a real position). Only
+ * `serve` and `returnPlacement` dots ever set it — `returnContact`/
+ * `rallyPosition` dots are drawn at their own contact point, which has no
+ * "never crossed the net" concept.
  */
 export interface VizDot {
   id: string;
   outcome: Outcome;
-  shape: "circle" | "triangle" | "star" | "net";
+  shape: "circle" | "triangle" | "star";
   lateralM: number;
   depthM: number;
+  atNet: boolean;
 }
 
 export interface VizResult {
@@ -360,7 +373,7 @@ export function returnOutcome(
 export interface ReturnDotMetric {
   id: string;
   variant: "landing" | "contact";
-  shape: "circle" | "triangle" | "net";
+  shape: "circle" | "triangle";
   /** Signed metres from the centre line — positive = the returner's right. */
   lateralM: number;
   /**
@@ -372,6 +385,10 @@ export interface ReturnDotMetric {
    * the same reason.
    */
   depthM: number;
+  /** Fix round 4A: the POSITION fact — see `VizDot.atNet`'s doc comment.
+   * Always `false` on a `"contact"` dot (a contact point has no "never
+   * crossed the net" concept); only a `"landing"` dot ever sets it. */
+  atNet: boolean;
 }
 
 /**
@@ -468,16 +485,20 @@ export function pointToReturnDots(
     // Mirrored world-x (leading minus, the same sign `classifyServePlacement`
     // already applies) so the court reads from BEHIND the returner —
     // positive lateralM is the returner's RIGHT. A netted return (`kind ===
-    // "net"`) draws at the net gutter (`shape: "net"`), never its real
-    // landing — that spot is on the RETURNER's own side and was never a
-    // placement. Routed on `kind`, not the sign of `depthPastNetM` — a
-    // tracker-flagged net ball can carry a positive recorded depth.
+    // "net"`) draws at the net gutter (`atNet`), never its real landing —
+    // that spot is on the RETURNER's own side and was never a placement.
+    // Fix round 4A: folded into Miss — same shape (forehand-circle /
+    // backhand-triangle) an ordinary miss already has, `atNet` carries the
+    // position fact separately. Routed on `kind`, not the sign of
+    // `depthPastNetM` — a tracker-flagged net ball can carry a positive
+    // recorded depth.
     dots.push({
       id: p.id,
       variant: "landing",
-      shape: placement.kind === "net" ? "net" : shape,
+      shape,
       lateralM: placement.lateralM,
       depthM: placement.depthPastNetM,
+      atNet: placement.kind === "net",
     });
   }
 
@@ -489,6 +510,7 @@ export function pointToReturnDots(
       shape,
       lateralM: contact.lateralM,
       depthM: contact.depthM,
+      atNet: false,
     });
   }
 
@@ -687,6 +709,7 @@ function computeRallyViz(
         depthM: metrics.depthM,
         outcome: subjectWon ? "won" : "lost",
         shape: shapeFromShotType(shot.shotType),
+        atNet: false,
       });
     }
   }
@@ -780,14 +803,12 @@ export function computeViz(
             ? serveOutcome(classifyPointResult(serveInput))
             : "miss",
         // G2b: an ace draws as a star (an ace is always "in" — already
-        // gated to the subject's own serves above). Task 2: a net serve
-        // draws with the net glyph instead of the usual circle.
-        shape:
-          metrics.kind === "net"
-            ? "net"
-            : p.resultType === "Ace"
-              ? "star"
-              : "circle",
+        // gated to the subject's own serves above). Fix round 4A: a net
+        // serve folds into Miss's ordinary grey circle — no separate shape
+        // — `atNet` below carries the "drawn at the net, not its real
+        // landing" fact instead.
+        shape: p.resultType === "Ace" ? "star" : "circle",
+        atNet: metrics.kind === "net",
       });
     } else {
       if (p.serverIsPlayer1 === subjectIsPlayer1) continue;
@@ -808,6 +829,7 @@ export function computeViz(
           depthM: d.depthM,
           outcome: o === "outnet" ? "miss" : o,
           shape: d.shape,
+          atNet: d.atNet,
         });
       }
     }

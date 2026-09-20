@@ -49,7 +49,7 @@ export const CHART_LABEL: Record<Chart, string> = {
  */
 export interface LegendItem {
   key: string;
-  glyph: "circle" | "triangle" | "star" | "net" | "ramp";
+  glyph: "circle" | "triangle" | "star" | "ramp";
   color: string;
   label: string;
   outline?: boolean;
@@ -85,17 +85,6 @@ const ACE_ITEM: LegendItem = {
   label: "Ace",
 };
 
-// Task 2: the net mark's legend entry, for the two placement cuts only (a
-// contact cut's dot is where the shot was STRUCK — it can't itself "hit the
-// net"). `--viz-bad` matches the mark's own colour (`court-art.tsx` draws it
-// through `colorFor`, and a net ball is always a miss).
-const NET_ITEM: LegendItem = {
-  key: "net",
-  glyph: "net",
-  color: "var(--viz-bad)",
-  label: "Net",
-};
-
 const FOREHAND_ITEM: LegendItem = {
   key: "forehand",
   glyph: "circle",
@@ -128,10 +117,12 @@ const RAMP_ITEM: LegendItem = {
  * (`court-art.tsx`'s `showZones` branch skips dots entirely), so no
  * dot-shape legend applies regardless of `cut`. Otherwise (scatter) each cut
  * adds the shape(s) its own dots vary on beyond outcome colour: serve adds
- * Ace and Net (Task 2), the two return cuts add Forehand/Backhand (every
- * return dot is one or the other), and `returnPlacement` additionally adds
- * Net — a contact cut's dot is where the shot was struck, so it can never
- * itself be a net mark.
+ * Ace (the only shape a serve dot takes), the two return cuts add
+ * Forehand/Backhand (every return dot is one or the other). Fix round 4A: a
+ * netted ball folds into Miss's own glyph (grey circle on serve, the cut's
+ * own forehand/backhand shape on the two return cuts) — it's a POSITION
+ * fact (`VizDot.atNet`), not a distinct glyph, so it has no legend entry of
+ * its own; Miss already covers it.
  *
  * `cut === "rallyPosition"` has no Miss class — a rally shot's own outcome
  * is just the subject's point result (`computeRallyViz` never emits
@@ -144,10 +135,7 @@ export function legendItemsFor(cut: Cut, chart: Chart): LegendItem[] {
   if (cut === "rallyPosition") {
     return [WON_ITEM, LOST_ITEM, FOREHAND_ITEM, BACKHAND_ITEM];
   }
-  if (cut === "serve") return [...OUTCOME_ITEMS, ACE_ITEM, NET_ITEM];
-  if (cut === "returnPlacement") {
-    return [...OUTCOME_ITEMS, FOREHAND_ITEM, BACKHAND_ITEM, NET_ITEM];
-  }
+  if (cut === "serve") return [...OUTCOME_ITEMS, ACE_ITEM];
   return [...OUTCOME_ITEMS, FOREHAND_ITEM, BACKHAND_ITEM];
 }
 

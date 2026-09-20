@@ -294,12 +294,27 @@ test.describe("computeViz — serve cut, out & net (Task 2)", () => {
 
     const outcomes = r.dots.map((d) => d.outcome).sort();
     expect(outcomes).toEqual(["miss", "miss", "won"]);
-    expect(r.dots.map((d) => d.shape)).toContain("net");
+    // Fix round 4A: net folds into Miss's ordinary grey circle — no
+    // distinct shape — `atNet` carries the position fact instead.
+    expect(r.dots.filter((d) => d.atNet)).toHaveLength(1);
+    expect(r.dots.every((d) => d.shape !== undefined)).toBe(true);
+    for (const d of r.dots) {
+      expect(["circle", "triangle", "star"]).toContain(d.shape);
+    }
 
     // Fix round 3: serveOutOrNetCount counts kind "out"/"net" directly, not
     // zoneStats — the out and net points both contribute (2), the in point
     // does not, regardless of what zoneStats itself happens to keep.
     expect(r.serveOutOrNetCount).toBe(2);
+  });
+
+  test("fix round 4A: a netted serve yields shape 'circle' with atNet set — folded into Miss, no distinct glyph", () => {
+    const netPt = servePointWith(0.5, 4.085, 2, "Net"); // depthPastNetM ~-7.8
+    const r = computeViz([netPt], "serve", EMPTY_VIZ_FILTERS, true);
+    expect(r.dots).toHaveLength(1);
+    expect(r.dots[0].shape).toBe("circle");
+    expect(r.dots[0].atNet).toBe(true);
+    expect(r.dots[0].outcome).toBe("miss");
   });
 
   test("serveOutOrNetCount is undefined off the serve cut", () => {
@@ -397,6 +412,24 @@ test.describe("computeViz — return cuts", () => {
     expect(placement.total).toBe(0); // no landing -> no placement dot
     expect(contact.total).toBe(1); // contact coords alone are enough
     expect(contact.dots).toHaveLength(1);
+  });
+
+  test("fix round 4A: a netted BACKHAND return yields shape 'triangle' with atNet set — the cut's own glyph, folded into Miss", () => {
+    const nettedBackhand = {
+      ...ret,
+      secondShotType: "Backhand Slice",
+      secondShotResult: "Net",
+    } as MatchPoint;
+    const r = computeViz(
+      [nettedBackhand],
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(r.dots).toHaveLength(1);
+    expect(r.dots[0].shape).toBe("triangle");
+    expect(r.dots[0].atNet).toBe(true);
+    expect(r.dots[0].outcome).toBe("miss");
   });
 });
 

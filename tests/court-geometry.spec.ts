@@ -27,7 +27,6 @@ import {
   heatFloorTintRgba,
   projectServeMetricDot,
   netGutterFor,
-  netMarkPoints,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
 
 /**
@@ -585,9 +584,9 @@ test.describe("RETURN_HEAT_BOUNDS — full visible view", () => {
     expect(y).toBeGreaterThan(viewBoxFarY);
   });
 
-  test("xMin is no longer the net — the net sits just outside the visible view on that edge", () => {
+  test("fix round 4B: xMin now clears the net (the viewBox was extended so the net line is visible, not clipped)", () => {
     expect(RETURN_HEAT_BOUNDS.xMin).not.toBe(RETURN_COURT.netX);
-    expect(RETURN_HEAT_BOUNDS.xMin).toBeGreaterThan(RETURN_COURT.netX);
+    expect(RETURN_HEAT_BOUNDS.xMin).toBeLessThan(RETURN_COURT.netX);
   });
 
   test("xMax is well past nearBaselineX — real run-off, not a placeholder", () => {
@@ -749,7 +748,7 @@ test.describe("netGutterFor", () => {
     expect(gutter.cy!).toBeLessThan(SERVE_HEAT_BOUNDS.yMax);
   });
 
-  test("return (placement/contact/rally all share one frame): cx is set, cy is not, and cx sits strictly inside the return frame's visible bounds", () => {
+  test("return (placement/contact/rally all share one frame): cx is set, cy is not, sits on the HITTER's side of the net, and inside the return frame's visible bounds", () => {
     for (const cut of [
       "returnPlacement",
       "returnContact",
@@ -758,16 +757,45 @@ test.describe("netGutterFor", () => {
       const gutter = netGutterFor(cut);
       expect(gutter.cy).toBeNull();
       expect(gutter.cx).not.toBeNull();
+      // Fix round 4B: the hitter's side is depth-x < netX (the ball never
+      // crossed) — NOT an arbitrary inset from the frame's old visible edge.
+      expect(gutter.cx!).toBeLessThan(RETURN_COURT.netX);
       expect(gutter.cx!).toBeGreaterThan(RETURN_HEAT_BOUNDS.xMin);
       expect(gutter.cx!).toBeLessThan(RETURN_HEAT_BOUNDS.xMax);
     }
   });
 });
 
-test("netMarkPoints returns a 4-vertex polygon string centred on (cx, cy)", () => {
-  const points = netMarkPoints(10, 20, 3).split(" ");
-  expect(points).toHaveLength(4);
-  for (const p of points) {
-    expect(p.split(",")).toHaveLength(2);
-  }
+/**
+ * Fix round 4B: the return frame's viewBox was extended (minY decreased,
+ * h grown by the same amount) so the net line — invisible in the design
+ * handoff's own viewBox — is fully drawn, with room for a net-gutter mark
+ * beside it without clipping.
+ */
+test.describe("RETURN_COURT viewBox extension (fix round 4B)", () => {
+  test("the net line's drawn depth-x (RETURN_COURT.netX) lies inside RETURN_HEAT_BOUNDS with margin", () => {
+    expect(RETURN_COURT.netX).toBeGreaterThan(RETURN_HEAT_BOUNDS.xMin);
+    expect(RETURN_COURT.netX).toBeLessThan(RETURN_HEAT_BOUNDS.xMax);
+    // "With margin" — not just barely inside.
+    expect(RETURN_COURT.netX - RETURN_HEAT_BOUNDS.xMin).toBeGreaterThan(1);
+  });
+
+  test("a net-gutter mark's full radius (RETURN_DOT_R = 2.4) lies inside RETURN_HEAT_BOUNDS, not just its centre", () => {
+    const gutter = netGutterFor("returnPlacement");
+    const RETURN_DOT_R = 2.4; // court-art.tsx's own nominal mark radius
+    expect(gutter.cx! - RETURN_DOT_R).toBeGreaterThan(RETURN_HEAT_BOUNDS.xMin);
+    expect(gutter.cx! + RETURN_DOT_R).toBeLessThan(RETURN_HEAT_BOUNDS.xMax);
+  });
+
+  test("the far edge (minY + h) is unchanged from the design handoff — only the near edge moved", () => {
+    expect(RETURN_COURT.viewBox.minY + RETURN_COURT.viewBox.h).toBeCloseTo(
+      -11.5 + 279,
+      6,
+    );
+  });
+
+  test("minX and w are unchanged from the design handoff — only the minY/h edge deviates", () => {
+    expect(RETURN_COURT.viewBox.minX).toBe(-43.6);
+    expect(RETURN_COURT.viewBox.w).toBe(431);
+  });
 });

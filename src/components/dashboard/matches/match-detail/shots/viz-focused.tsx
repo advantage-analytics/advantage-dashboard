@@ -9,7 +9,6 @@ import { APRON_FILL, HEAT_APRON_FILL, CourtArt } from "./court-art";
 import {
   trianglePointsFor,
   starPoints,
-  netMarkPoints,
   heatFloorTintRgba,
 } from "./court-geometry";
 import { StatsCard } from "./stats-card";
@@ -478,7 +477,6 @@ function HeatRampLegend() {
 const LEGEND_GLYPH_R = 3.6;
 const LEGEND_TRIANGLE_SIZE = 2.2;
 const LEGEND_STAR_OUTER_R = 3.6;
-const LEGEND_NET_R = 3.2;
 
 /**
  * One legend key — circle, triangle or star, reusing `court-art.tsx`'s own
@@ -525,14 +523,6 @@ function LegendMark({ item }: { item: LegendItem }) {
             fill={item.color}
             stroke="#000"
             strokeWidth={0.4}
-          />
-        )}
-        {item.glyph === "net" && (
-          <polygon
-            points={netMarkPoints(4, 4, LEGEND_NET_R)}
-            fill="none"
-            stroke={item.color}
-            strokeWidth={1.1}
           />
         )}
       </svg>
