@@ -11,7 +11,7 @@ import {
 import type { Cut, Chart, VizFilters } from "./viz-model";
 import { activeFilterEntries, carryFilters } from "./viz-url";
 import { useVizState } from "./use-viz-state";
-import { CHART_LABEL, CUT_LABEL, VizMenuTrigger } from "./viz-toolbar";
+import { CHART_LABEL, CUT_LABEL, VizMenuTrigger } from "./viz-labels";
 
 /**
  * A saved view as the menu needs it — just enough to render a row and switch
@@ -31,15 +31,6 @@ function filterCountLabel(cut: Cut, chart: Chart, filters: VizFilters): string {
   if (n === 0) return "no filters";
   return n === 1 ? "1 filter" : `${n} filters`;
 }
-
-/**
- * `FloatMenuItem`'s icon slot defaults to `--blue` (it doubles as an action
- * menu's only accent). A plain navigational glyph like the cut rows' isn't an
- * action and reads as `--ink-400`, same as `menu-row-classes.ts`'s
- * `MENU_ROW_ICON` — the class isn't imported directly to avoid coupling this
- * feature to the match-actions menu.
- */
-const CUT_ROW_ICON = "size-[13px] shrink-0 text-[var(--ink-400)]";
 
 /**
  * The "View" menu (P1d): switch cuts, jump to a saved view, or save the
@@ -123,37 +114,19 @@ export function CutMenu({
       <FloatMenuItem
         label="Serve placement"
         description="Where the serve lands, by zone"
-        icon={
-          <Crosshair
-            className={CUT_ROW_ICON}
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-        }
+        chosen={state.cut === "serve"}
         onSelect={() => selectCut("serve")}
       />
       <FloatMenuItem
         label="Return placement"
         description="Where the return lands"
-        icon={
-          <ScatterChart
-            className={CUT_ROW_ICON}
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-        }
+        chosen={state.cut === "returnPlacement"}
         onSelect={() => selectCut("returnPlacement")}
       />
       <FloatMenuItem
         label="Return contact"
         description="Where the return is struck"
-        icon={
-          <ScatterChart
-            className={CUT_ROW_ICON}
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-        }
+        chosen={state.cut === "returnContact"}
         onSelect={() => selectCut("returnContact")}
       />
       <FloatMenuItem

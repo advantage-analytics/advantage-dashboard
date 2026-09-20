@@ -13,21 +13,21 @@ import {
   FULL_SVG_PAD_TOP,
   FULL_SVG_PAD_BOTTOM,
 } from "@/components/dashboard/matches/visuals/half-court-svg";
+import { ZONES, type ZoneKey, type ZoneStats } from "@/lib/data/serve-zones";
 import type { Cut, VizDot } from "./viz-model";
 
 /**
  * The recoloured court SVG for one cut — the wall tile's art and the focused
- * view's court alike (Task 9 reuses this here, not a second copy). Deliberately
- * NOT `HalfCourtSVG`/`FullCourtSVG` from `visuals/half-court-svg.tsx`: this is
- * the redesign's own palette (green apron, blue court), while those keep the
- * legacy pastel court for `LegacyShots` until it is retired.
+ * view's court alike (`viz-focused.tsx` reuses this here, not a second copy).
+ * Deliberately NOT `HalfCourtSVG`/`FullCourtSVG` from `visuals/half-court-svg.tsx`:
+ * this is the redesign's own palette (green apron, blue court), while those
+ * keep the legacy pastel court for other surfaces still on the old model.
  *
  * Geometry only. Return-cut dots arrive from `computeViz` already in this
  * SVG's `FULL_SVG_*` coordinate space. Serve-cut dots do not: `computeViz`
  * passes the underlying `ServeDot`'s x/y straight through, and those are a
  * 0..1 fraction of the service box, not a canvas position — `projectServeDot`
- * below does the same projection `serve-zones-court.tsx` does for the same
- * reason.
+ * below does the same projection the retired zones-court component used to.
  */
 
 const APRON_FILL = "#86AC91";
@@ -59,11 +59,10 @@ function colorFor(outcome: VizDot["outcome"]): string {
 
 // `computeViz`'s serve-cut dots carry the underlying `ServeDot`'s x/y
 // verbatim — a 0..1 fraction of the service box, not a canvas position (see
-// `serve-zones.ts`'s `mapRealCoordsToServeDot`). Every other serve-court
-// reader (`serve-zones-court.tsx`) projects through this same
-// `SINGLES_LEFT/RIGHT` × `SERVICE_Y`/`BASELINE_Y` frame before drawing a
-// dot; the return cuts need no such step because `pointToReturnDots`
-// already returns an absolute `FULL_SVG_*` position.
+// `serve-zones.ts`'s `mapRealCoordsToServeDot`). Every serve-court reader
+// projects through this same `SINGLES_LEFT/RIGHT` × `SERVICE_Y`/`BASELINE_Y`
+// frame before drawing a dot; the return cuts need no such step because
+// `pointToReturnDots` already returns an absolute `FULL_SVG_*` position.
 function projectServeDot(d: VizDot): { x: number; y: number } {
   return {
     x: SINGLES_LEFT + d.x * (SINGLES_RIGHT - SINGLES_LEFT),
@@ -98,17 +97,39 @@ const CUT_NOUN: Record<Cut, string> = {
   returnContact: "return contact",
 };
 
+// Zones overlay opacity: the emptiest drawn zone (pct just above 0) reads at
+// 0.12, the busiest theoretical one (pct 100) at 0.26 — a shade change a
+// reader can see cell to cell without any cell going dark enough to fight the
+// win-pct/count figures a caller may draw on top.
+const ZONE_OPACITY_MIN = 0.12;
+const ZONE_OPACITY_MAX = 0.26;
+
+function zoneOpacity(pct: number): number {
+  return ZONE_OPACITY_MIN + (pct / 100) * (ZONE_OPACITY_MAX - ZONE_OPACITY_MIN);
+}
+
 export function CourtArt({
   cut,
   dots,
+  zones,
   className,
 }: {
   cut: Cut;
   dots: VizDot[];
+  /**
+   * Serve · Zones overlay (Task 5): when present, draws the six service-box
+   * cells shaded by each zone's share of serves and skips the dots — the
+   * cells ARE the chart, per `computeViz`'s `zoneStats`. Ignored off the
+   * serve cut (Zones has no meaning there and the toolbar never offers it).
+   */
+  zones?: Record<ZoneKey, ZoneStats>;
   className?: string;
 }) {
   const box = viewBoxFor(cut);
-  const ariaLabel = `${CUT_NOUN[cut]} court, ${dots.length} point${dots.length === 1 ? "" : "s"} shown`;
+  const showZones = cut === "serve" && zones != null;
+  const ariaLabel = showZones
+    ? "Serve placement by zone: six service-box zones shaded by serve frequency"
+    : `${CUT_NOUN[cut]} court, ${dots.length} point${dots.length === 1 ? "" : "s"} shown`;
 
   return (
     <svg
@@ -136,6 +157,19 @@ export function CourtArt({
             height={BASELINE_Y}
             fill={COURT_FILL}
           />
+          {showZones &&
+            zones &&
+            ZONES.map((z) => (
+              <rect
+                key={z.key}
+                x={z.x1}
+                y={0}
+                width={z.x2 - z.x1}
+                height={SERVICE_Y}
+                fill="var(--viz-you)"
+                fillOpacity={zoneOpacity(zones[z.key].pct)}
+              />
+            ))}
           <line
             x1={DOUBLES_LEFT}
             y1={0}
@@ -306,31 +340,32 @@ export function CourtArt({
         </>
       )}
 
-      {dots.map((d) => {
-        const color = colorFor(d.outcome);
-        const { x, y } = cut === "serve" ? projectServeDot(d) : d;
-        return d.shape === "triangle" ? (
-          <polygon
-            key={d.id}
-            points={trianglePoints(x, y, DOT_R)}
-            fill={color}
-            stroke={DOT_STROKE}
-            strokeWidth={DOT_STROKE_W}
-            vectorEffect="non-scaling-stroke"
-          />
-        ) : (
-          <circle
-            key={d.id}
-            cx={x}
-            cy={y}
-            r={DOT_R}
-            fill={color}
-            stroke={DOT_STROKE}
-            strokeWidth={DOT_STROKE_W}
-            vectorEffect="non-scaling-stroke"
-          />
-        );
-      })}
+      {!showZones &&
+        dots.map((d) => {
+          const color = colorFor(d.outcome);
+          const { x, y } = cut === "serve" ? projectServeDot(d) : d;
+          return d.shape === "triangle" ? (
+            <polygon
+              key={d.id}
+              points={trianglePoints(x, y, DOT_R)}
+              fill={color}
+              stroke={DOT_STROKE}
+              strokeWidth={DOT_STROKE_W}
+              vectorEffect="non-scaling-stroke"
+            />
+          ) : (
+            <circle
+              key={d.id}
+              cx={x}
+              cy={y}
+              r={DOT_R}
+              fill={color}
+              stroke={DOT_STROKE}
+              strokeWidth={DOT_STROKE_W}
+              vectorEffect="non-scaling-stroke"
+            />
+          );
+        })}
     </svg>
   );
 }

@@ -1,0 +1,209 @@
+"use client";
+
+import { useMemo, type ReactNode } from "react";
+import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { CourtArt } from "./court-art";
+import { ZoneCard } from "./zone-card";
+import { VizToolbar } from "./viz-toolbar";
+import { useVizState } from "./use-viz-state";
+import {
+  EMPTY_VIZ_FILTERS,
+  computeViz,
+  subjectFor,
+  type Cut,
+} from "./viz-model";
+import { activeFilterEntries } from "./viz-url";
+import { CUT_LABEL, type SavedViewLite } from "./viz-labels";
+
+/**
+ * The focused court view (Task 5): the toolbar row, then a wide court card
+ * (header, art, legend) beside the 292px zone card. Replaces the pre-redesign
+ * `LegacyShots` body — `shots-tab.tsx` mounts this whenever `state.cut` is
+ * set.
+ *
+ * Attribution (guardrails §4): "you" is resolved once, by `useMatchSides()`
+ * in this file; `subjectFor(state.filters, you.isPlayer1)` turns the
+ * `player` filter into the boolean `computeViz` needs, and nothing below this
+ * reads player1/player2 off the match.
+ */
+
+const LEGEND_CAPTION: Record<Cut, string> = {
+  serve: "Half court · landing point",
+  returnPlacement: "Far half · landing point",
+  returnContact: "Near half · contact point",
+};
+
+export function VizFocused({
+  savedViews,
+  savedViewsBand,
+  onSaveRequest,
+  filtersSlot,
+  stripSlot,
+}: {
+  savedViews: SavedViewLite[];
+  savedViewsBand?: ReactNode;
+  onSaveRequest?: () => void;
+  filtersSlot?: ReactNode;
+  stripSlot?: ReactNode;
+}) {
+  const { points } = useMatchData();
+  const { you, opp } = useMatchSides();
+  const { state, setState } = useVizState();
+
+  const cut = state.cut;
+
+  const subject = subjectFor(state.filters, you.isPlayer1);
+  const result = useMemo(
+    () => (cut ? computeViz(points, cut, state.filters, subject) : null),
+    [points, cut, state.filters, subject],
+  );
+
+  if (cut === null || result === null) {
+    // Guarded by `shots-tab.tsx` (`state.cut === null ? <VizWall/> : <VizFocused/>`);
+    // this only fires on a race between renders, never in steady state.
+    return null;
+  }
+
+  const subjectName = state.filters.player === "you" ? you.name : opp.name;
+  const hasFilters = activeFilterEntries(state).length > 0;
+  const showZoneCard = cut === "serve";
+
+  function backToWall() {
+    setState({
+      cut: null,
+      chart: "scatter",
+      filters: EMPTY_VIZ_FILTERS,
+      viewId: null,
+    });
+  }
+
+  function clearFilters() {
+    setState({ ...state, filters: EMPTY_VIZ_FILTERS, viewId: null });
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <VizToolbar
+        savedViews={savedViews}
+        onSaveRequest={onSaveRequest}
+        filtersSlot={filtersSlot}
+        stripSlot={stripSlot}
+      />
+
+      <div className="flex items-start gap-4">
+        <div
+          className="flex min-w-[360px] flex-1 flex-col overflow-hidden rounded-[var(--radius-card)] border"
+          style={{
+            borderColor: "var(--border-hairline)",
+            backgroundColor: "var(--surface-card)",
+            boxShadow: "var(--shadow-card)",
+          }}
+        >
+          <div className="flex items-center justify-between gap-3 px-4 pt-[14px] pb-3">
+            <span
+              className="text-micro truncate"
+              style={{ color: "var(--ink-400)" }}
+            >
+              {subjectName} · {CUT_LABEL[cut]}
+            </span>
+            <button
+              type="button"
+              onClick={backToWall}
+              className="shrink-0 cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] hover:text-[var(--blue-hover)]"
+            >
+              Back to wall
+            </button>
+          </div>
+
+          <div className="relative flex justify-center px-4">
+            <CourtArt
+              cut={cut}
+              dots={result.dots}
+              zones={
+                state.chart === "zones" && cut === "serve"
+                  ? (result.zoneStats ?? undefined)
+                  : undefined
+              }
+              // The wrapper's max-height (brief: "Art max-height:400px") has
+              // to land on the <svg> itself, not a wrapping div: a div's
+              // max-height caps its OWN box, but this svg has no CSS height
+              // (only the `width="100%"` presentation attribute), so its
+              // rendered height comes from the viewBox aspect ratio alone and
+              // paints past a shorter wrapper instead of shrinking to fit —
+              // it visually overlapped the legend row below. `preserveAspectRatio`
+              // (already `xMidYMid meet`) then letterboxes the 447×350 court
+              // inside whatever box max-h-[400px] leaves it.
+              className="block max-h-[400px] w-full"
+            />
+            {result.count === 0 && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
+                <div
+                  className="pointer-events-auto flex flex-col items-center gap-2 rounded-[var(--radius-card)] border px-5 py-4 text-center"
+                  style={{
+                    borderColor: "var(--border-hairline)",
+                    backgroundColor: "var(--surface-card)",
+                    boxShadow: "var(--shadow-card-emphasis)",
+                  }}
+                >
+                  <p
+                    className="text-[12px]"
+                    style={{ color: "var(--ink-600)" }}
+                  >
+                    {hasFilters
+                      ? `No ${result.noun} match these filters`
+                      : `No ${result.noun} recorded for ${subjectName} yet`}
+                  </p>
+                  {hasFilters && (
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 px-4 pt-[10px] pb-[14px]">
+            <LegendDot color="var(--viz-good)" label="Won" />
+            <LegendDot color="var(--viz-bad)" label="Lost" />
+            <LegendDot color="var(--ink-300)" label="Miss" />
+            <div className="flex-1" />
+            <span className="text-micro" style={{ color: "var(--ink-400)" }}>
+              {LEGEND_CAPTION[cut]}
+            </span>
+          </div>
+        </div>
+
+        {showZoneCard && result.zoneStats && (
+          <ZoneCard
+            zoneStats={result.zoneStats}
+            count={result.count}
+            noun={result.noun}
+          />
+        )}
+      </div>
+
+      {savedViewsBand}
+    </div>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-[6px]">
+      <span
+        aria-hidden="true"
+        className="size-2 shrink-0 rounded-full"
+        style={{ backgroundColor: color }}
+      />
+      <span className="text-micro" style={{ color: "var(--ink-500)" }}>
+        {label}
+      </span>
+    </span>
+  );
+}

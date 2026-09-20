@@ -87,7 +87,7 @@ export interface VizResult {
   zoneStats: Record<ZoneKey, ZoneStats> | null; // serve cut only
 }
 
-/* ── Helpers moved from use-shot-filters.ts ──────────────────────────────── */
+/* ── Helpers moved from the retired shot-filters hook ────────────────────── */
 
 const REAL_HALF_DOUBLES = 5.485;
 const REAL_NET_Y = 11.885;

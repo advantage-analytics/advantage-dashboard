@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/float-menu";
 import type { Chart } from "./viz-model";
 import { useVizState } from "./use-viz-state";
-import { CHART_LABEL, VizMenuTrigger } from "./viz-toolbar";
+import { CHART_LABEL, VizMenuTrigger } from "./viz-labels";
 
 /**
  * The "Chart" menu (P1e): Scatter, the disabled Heat placeholder, and Zones
