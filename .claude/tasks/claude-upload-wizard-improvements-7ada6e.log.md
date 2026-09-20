@@ -65,3 +65,16 @@ is the runner's. Newest entries at the bottom.
 1. Keys fire only when focus is inside the step (click the player or rail first). If that proves too subtle, a window listener that bails on `role="slider"` targets is the alternative.
 2. T9 should assert: focused-handle ArrowRight moves one frame and does not seek; click the video then Space toggles playback.
 3. With Shift+arrow covering ±1 min, the `±1m` buttons could be dropped if the control row gets crowded.
+
+## T9 · Cover trim navigation with a real-browser spec — done
+
+**gate:** mechanical PASS on the second full run — the first run failed one unrelated live-DB test (`tests/rls-workspace-isolation.spec.ts:183`, "program A reads its own match whole"), which passed 6/6 alone and on the full re-run; the task touches no `src/` file. Completion review `VERDICT: pass` (5/5 criteria met; the third fixture file judged in scope).
+
+**changed:** new `tests/trim-step-navigation.spec.ts` (7 tests) with `tests/fixtures/trim-step-harness.tsx` and `tests/fixtures/trim-step-window.ts`, on the alignment spec's webpack bundle-and-serve pattern; `TrimStepContent` mounts directly from props, no provider and no `src/` change. Covers: jump buttons vs frame step, the step's own clamp against a declared 1 s duration, arrow / Shift-arrow keys, "Set start here" → `onTrimChange(≈playhead, end unchanged)`, `I` then `O` round-tripping through the form, Set start disabled at and past the end handle (and re-enabled on return), and the mirror for Set end. Fixture clip is 2.000 s, so +10 s is asserted as a clamp. `--repeat-each=3` → 21/21.
+
+**follow-ups:**
+
+1. `tests/rls-workspace-isolation.spec.ts` flaked once under the full suite (live Supabase, shared sign-in rate limit) — not this branch's change.
+2. Three browser specs now duplicate ~70 lines of bundle-and-serve plumbing; a shared `tests/fixtures/browser-harness.ts` would collapse them.
+3. A ~30 s fixture clip would let +10 s be asserted as arithmetic and give the hold-to-zoom drag path (needs ≥45 s) any browser coverage at all.
+4. Space play/pause and the Space-on-a-focused-button guard are untested.

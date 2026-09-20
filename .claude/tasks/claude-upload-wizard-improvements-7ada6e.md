@@ -125,7 +125,7 @@ ready).
 
 ## T9 · Cover trim navigation with a real-browser spec
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T8
 - **files:** tests/trim-step-navigation.spec.ts (new), tests/fixtures/trim-step-harness.tsx (new) (guess — modelled on tests/match-video-alignment-step.spec.ts and its harness/window fixtures)
