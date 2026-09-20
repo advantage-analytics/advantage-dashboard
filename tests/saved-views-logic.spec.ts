@@ -9,6 +9,7 @@ import {
   manageMenuRows,
   mergeManageableOrder,
   moveItem,
+  nextFocusId,
   normalizeOrderedIds,
   normalizeSavedViewName,
   resolveCopyName,
@@ -40,7 +41,11 @@ function dbRow(overrides: Partial<SavedViewDbRow> = {}): SavedViewDbRow {
 test("filtersToParams round-trips a plain filters object", () => {
   const params = filtersToParams({ ball: "first", set: 2 });
   expect(params.get("ball")).toBe("first");
-  expect(params.get("set")).toBe("2");
+  // The `set` FIELD maps to the `vset` PARAM (see `viz-url.ts`'s `VIZ_KEYS`
+  // comment) — the bare `set` key belongs to the match report's
+  // `set-scope.tsx`, so a stored view's set filter must not collide with it.
+  expect(params.get("set")).toBeNull();
+  expect(params.get("vset")).toBe("2");
 });
 
 test("filtersToParams drops null/undefined and ignores non-objects", () => {
@@ -68,6 +73,19 @@ test("validateVizInput accepts a valid serve/zones/filters triple", () => {
     cut: "serve",
     chart: "zones",
     filters: { ...EMPTY_VIZ_FILTERS, pressure: "break" },
+  });
+});
+
+test("validateVizInput round-trips a stored set filter through the vset param", () => {
+  const result = validateVizInput({
+    cut: "serve",
+    chart: "scatter",
+    filters: { set: 2 },
+  });
+  expect(result).toEqual({
+    cut: "serve",
+    chart: "scatter",
+    filters: { ...EMPTY_VIZ_FILTERS, set: 2 },
   });
 });
 
@@ -570,4 +588,37 @@ test("tileDataKey changes when a view's cut changes", () => {
     { id: "v1", cut: "returnPlacement", filters: EMPTY_VIZ_FILTERS },
   ];
   expect(tileDataKey(before)).not.toBe(tileDataKey(after));
+});
+
+/* ── nextFocusId (M6) ──────────────────────────────────────────────────── */
+
+test("nextFocusId focuses the neighbour at the removed tile's own index", () => {
+  expect(nextFocusId(["a", "b", "c"], "b")).toBe("c");
+});
+
+test("nextFocusId falls back to the new last tile when the removed tile was last", () => {
+  expect(nextFocusId(["a", "b", "c"], "c")).toBe("b");
+});
+
+test("nextFocusId returns null when the removed tile was the only manageable one", () => {
+  expect(nextFocusId(["a"], "a")).toBeNull();
+});
+
+test("nextFocusId returns the sole remaining id when the removed tile was first", () => {
+  expect(nextFocusId(["a", "b"], "a")).toBe("b");
+});
+
+/* ── carryFilters applied on parse (M4) ──────────────────────────────────── */
+
+test("validateVizInput resets result:ace off serve rather than accepting it", () => {
+  const result = validateVizInput({
+    cut: "returnPlacement",
+    chart: "scatter",
+    filters: { result: "ace" },
+  });
+  expect(result).toEqual({
+    cut: "returnPlacement",
+    chart: "scatter",
+    filters: EMPTY_VIZ_FILTERS,
+  });
 });

@@ -50,7 +50,12 @@ const ORDER = [
   "game",
 ] as const;
 
-const VIZ_KEYS = ["cut", "chart", "view", "set", ...ORDER];
+// `set` (bare) is NOT a viz key: the match report already owns it
+// (`set-scope.tsx`'s `SET_PARAM`), dormant today but a silent clobber the day
+// it's re-enabled. The viz filter's set value is namespaced to `vset` in the
+// URL — `VizFilters.set` stays the in-memory field name throughout this file;
+// only the URL-facing key differs.
+const VIZ_KEYS = ["cut", "chart", "view", "vset", ...ORDER];
 
 type OptionKey = keyof typeof OPTIONS;
 
@@ -137,7 +142,13 @@ export function parseVizState(params: URLSearchParams): VizState {
 
   const viewId = params.get("view");
 
-  const filters = parseFilters(params, cut);
+  const rawFilters = parseFilters(params, cut);
+  // Reset serve-only values (zone, result:"ace") once `cut` is resolved, so
+  // e.g. `?cut=returnPlacement&result=ace` or `&zone=t` can never parse,
+  // serialize or be saved — `carryFilters` is otherwise only ever applied
+  // when switching cuts client-side, but garbage/hand-crafted params must be
+  // held to the same rule.
+  const filters = cut === null ? rawFilters : carryFilters(rawFilters, cut);
 
   return { cut, chart, filters, viewId };
 }
@@ -179,7 +190,7 @@ export function vizStateQuery(
 
   if (state.filters.set !== "any") {
     if (allowedKeys.has("set")) {
-      next.set("set", String(state.filters.set));
+      next.set("vset", String(state.filters.set));
     }
   }
 
@@ -286,8 +297,8 @@ function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
     }
   }
 
-  // Parse set (special: numeric)
-  const setParam = params.get("set");
+  // Parse set (special: numeric) — namespaced to `vset` (see `VIZ_KEYS`).
+  const setParam = params.get("vset");
   if (setParam !== null) {
     const setNum = Number.parseInt(setParam, 10);
     if (setNum > 0) {

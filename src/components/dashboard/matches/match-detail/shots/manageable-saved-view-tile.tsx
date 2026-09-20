@@ -54,6 +54,7 @@ import { SharedGlyph } from "./saved-views-band";
 export function ManageableSavedViewTile({
   view,
   data,
+  hintId,
   workspaceKind,
   workspaceRole,
   isDragging,
@@ -85,6 +86,13 @@ export function ManageableSavedViewTile({
     dots: ReturnType<typeof computeViz>["dots"];
     href: string;
   };
+  /**
+   * The Manage-mode hint's own id (`saved-views-band.tsx`'s `manageHintId`)
+   * — review M7: keyboard reorder is otherwise undiscoverable, so every
+   * manageable tile is `aria-describedby` this hint via `CourtTile`'s static
+   * container, not just visually adjacent to it.
+   */
+  hintId: string;
   workspaceKind: WorkspaceKind;
   workspaceRole: ProgramRole;
   isDragging: boolean;
@@ -167,6 +175,7 @@ export function ManageableSavedViewTile({
         dots={data.dots}
         href={data.href}
         as="static"
+        ariaDescribedBy={hintId}
         overlay={
           // No pointerdown stop needed here: `handlePointerDown` above
           // already excludes a press on this button (or anything inside it)

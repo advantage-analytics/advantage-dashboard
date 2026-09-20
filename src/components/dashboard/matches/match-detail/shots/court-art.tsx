@@ -196,26 +196,31 @@ export function CourtArt({
                     <>
                       <text
                         x={cellCx}
-                        y={cellCy - 4}
+                        y={cellCy - 3}
                         textAnchor="middle"
                         fill={LINE_COLOR}
-                        fontSize={12}
+                        fontSize={11}
                         fontWeight={600}
                         style={{ fontVariantNumeric: "tabular-nums" }}
                       >
                         {zs.count}
                       </text>
+                      {/* Win rate only, no " won" suffix (review M1) — the
+                          zone card beside the court already says these are
+                          win rates, and the ~46-unit-wide cell can't fit
+                          "80% won" beneath "38%" without the two lines'
+                          text colliding. */}
                       <text
                         x={cellCx}
-                        y={cellCy + 12}
+                        y={cellCy + 10}
                         textAnchor="middle"
                         fill={LINE_COLOR}
                         fillOpacity={0.8}
-                        fontSize={10}
+                        fontSize={9}
                         fontWeight={400}
                         style={{ fontVariantNumeric: "tabular-nums" }}
                       >
-                        {zs.winPct}% won
+                        {zs.winPct}%
                       </text>
                     </>
                   )}

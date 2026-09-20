@@ -39,6 +39,7 @@ export function CourtTile({
   href,
   overlay,
   as = "link",
+  ariaDescribedBy,
 }: {
   playerName: string;
   name: string;
@@ -69,6 +70,14 @@ export function CourtTile({
    * caller); it is simply unused when `as="static"`.
    */
   as?: "link" | "static";
+  /**
+   * Id of an element that describes this tile — `as="static"`'s only
+   * consumer (`manageable-saved-view-tile.tsx`, review M7): the Manage-mode
+   * keyboard-reorder hint, so screen-reader users landing on a manageable
+   * tile hear how to reorder it via ⌥←/⌥→, not just see the hint text
+   * elsewhere in the header. Unused (and not rendered) on `as="link"`.
+   */
+  ariaDescribedBy?: string;
 }) {
   const body = (
     <>
@@ -126,7 +135,13 @@ export function CourtTile({
 
   if (as === "static") {
     return (
-      <div tabIndex={0} role="group" aria-label={name} className={CARD_CLASS}>
+      <div
+        tabIndex={0}
+        role="group"
+        aria-label={name}
+        aria-describedby={ariaDescribedBy}
+        className={CARD_CLASS}
+      >
         {body}
       </div>
     );

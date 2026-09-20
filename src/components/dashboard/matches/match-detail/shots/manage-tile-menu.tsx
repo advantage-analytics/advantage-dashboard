@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactElement } from "react";
+import { Fragment, type ReactElement } from "react";
 import { Copy, Lock, Pencil, Trash2, Users } from "lucide-react";
 import {
   FloatMenu,
@@ -95,7 +95,7 @@ export function ManageTileMenu({
       label={`Manage "${viewName}"`}
     >
       {rows.map((kind) => (
-        <div key={kind}>
+        <Fragment key={kind}>
           {kind === "delete" && <FloatMenuDivider />}
           <FloatMenuItem
             label={ROW_LABEL[kind]}
@@ -108,7 +108,7 @@ export function ManageTileMenu({
               kind === "delete" ? "[&_span]:text-[var(--error)]" : undefined
             }
           />
-        </div>
+        </Fragment>
       ))}
     </FloatMenu>
   );

@@ -83,7 +83,13 @@ export function filtersToParams(filters: unknown): URLSearchParams {
     )) {
       if (!KNOWN_FILTER_KEYS.has(key)) continue;
       if (value === null || value === undefined) continue;
-      params.set(key, String(value));
+      // `viz-url.ts` namespaces the `set` FIELD to the `vset` URL PARAM (the
+      // bare `set` key belongs to the match report's `set-scope.tsx`) — this
+      // is the one place a stored view's `filters.set` becomes a param, so it
+      // has to follow the same mapping or a saved view's set filter would
+      // silently fail to round-trip through `parseVizState`.
+      const paramKey = key === "set" ? "vset" : key;
+      params.set(paramKey, String(value));
     }
   }
   return params;
@@ -455,6 +461,27 @@ export function tileDataKey(
     .map((v) => `${v.id}:${v.cut}:${JSON.stringify(v.filters)}`)
     .sort()
     .join("|");
+}
+
+/**
+ * Which manageable tile's ⋯ button `saved-views-band.tsx` should focus after
+ * `removedId` is deleted (review M6) — the NEIGHBOUR at the removed tile's
+ * own position, not always the first tile in the band. `manageableIds` is the
+ * full manageable order INCLUDING the id being removed (the caller reads it
+ * before the optimistic delete lands), so this can find that id's index.
+ * Deleting the last tile focuses the new last tile (`Math.min` clamps the
+ * removed index into the shrunken list); deleting the only manageable tile
+ * returns `null`, so the caller falls back to the Done button.
+ */
+export function nextFocusId(
+  manageableIds: readonly string[],
+  removedId: string,
+): string | null {
+  const idx = manageableIds.indexOf(removedId);
+  const remaining = manageableIds.filter((id) => id !== removedId);
+  if (remaining.length === 0) return null;
+  if (idx === -1) return remaining[0];
+  return remaining[Math.min(idx, remaining.length - 1)];
 }
 
 /**

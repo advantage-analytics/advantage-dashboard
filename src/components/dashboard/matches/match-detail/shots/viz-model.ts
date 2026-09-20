@@ -426,6 +426,21 @@ export function computeViz(
   };
 }
 
+/**
+ * The tile-footer count label (review M10) — `"{count} of {total}"` for
+ * every cut. Serve and return tiles used to read differently ("38 of 50" vs.
+ * "12 returns"), which made a return tile look like it had no denominator
+ * when it does (`result.total` is always the cut's drawable pool). Pulled
+ * out once here so `viz-wall.tsx` and `saved-views-band.tsx` build their
+ * count label the same way instead of each spelling out the same ternary.
+ */
+export function tileCountLabel(result: {
+  count: number;
+  total: number;
+}): string {
+  return `${result.count} of ${result.total}`;
+}
+
 export function availableSets(points: MatchPoint[]): number[] {
   const sets = new Set<number>();
   for (const p of points) sets.add(p.setNumber);

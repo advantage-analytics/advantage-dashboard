@@ -12,6 +12,7 @@ import { DEFAULT_CUTS } from "./default-cuts";
 import {
   EMPTY_VIZ_FILTERS,
   computeViz,
+  tileCountLabel,
   type PlayerFilter,
   type VizResult,
 } from "./viz-model";
@@ -71,10 +72,7 @@ export function VizWall({ savedViewsBand }: { savedViewsBand?: ReactNode }) {
               >
                 {DEFAULT_CUTS.map((cut, j) => {
                   const result = results[j];
-                  const countLabel =
-                    cut.cut === "serve"
-                      ? `${result.count} of ${result.total}`
-                      : `${result.count} returns`;
+                  const countLabel = tileCountLabel(result);
                   const href = hrefFor({
                     cut: cut.cut,
                     chart: cut.chart,

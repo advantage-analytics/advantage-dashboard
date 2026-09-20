@@ -280,26 +280,36 @@ export async function deleteSavedView(
 }
 
 /**
- * Re-insert a deleted view under the caller, for Undo.
+ * Re-insert a deleted view under the CALLER, for Undo.
  *
- * Ownership ruling: Undo only restores the CALLER'S OWN deleted views.
- * `restoreSavedView` always re-inserts with the caller as `created_by` (the
- * column's `auth.uid()` default), so restoring someone else's row — a shared
- * view a staff member deleted, say — would silently transfer its ownership
- * to whoever clicks Undo. `view.mine` (from `deleteSavedView`'s
- * `SavedViewRow` return) is checked before any write, refusing with
- * `forbidden` otherwise. The next task's UI is expected to offer the Undo
- * toast/action only when `view.mine` was true at delete time — this is the
- * server-side backstop, not a replacement for that.
+ * Review M8: there is no ownership check to make here, and the previous
+ * `view.mine` gate was never a real one — `view` is client-supplied, so a
+ * caller could always have sent `mine: true` regardless of who actually
+ * created the row. What actually keeps this safe is that a restore is just
+ * another `createSavedView`-shaped insert: it always writes `created_by` as
+ * the CALLER (the column's `auth.uid()` default, same as `createSavedView`),
+ * so there is nothing here for a forged `mine` to escalate INTO — the worst
+ * a caller can do is create a new view under their own account with
+ * somebody else's old name/cut/filters, which they could do anyway by just
+ * building that view themselves. The parameter is narrowed to exactly the
+ * fields a restore needs (no `id`, no `mine`) so this reads as what it is: a
+ * create, not a resurrection of the deleted row.
+ *
+ * The UI-level restriction — Undo is only ever offered for the caller's OWN
+ * just-deleted view — lives entirely in `saved-views-band.tsx` (`deleted.mine`
+ * gates whether the Undo action is even shown), not here.
  */
-export async function restoreSavedView(
-  view: SavedViewRow,
-): Promise<ActionResult> {
+export async function restoreSavedView(view: {
+  name: string;
+  cut: Cut;
+  chart: Chart;
+  filters: VizFilters;
+  shared: boolean;
+  order: number;
+}): Promise<ActionResult> {
   const ctx = await requireContext();
   if (!ctx) return { ok: false, error: "forbidden" };
   const { supabase, workspace } = ctx;
-
-  if (!view.mine) return { ok: false, error: "forbidden" };
 
   const name = normalizeSavedViewName(view.name);
   if (!name) return { ok: false, error: "invalid" };

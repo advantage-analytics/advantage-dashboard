@@ -92,7 +92,7 @@ export function FiltersPopover({
         align="end"
         sideOffset={6}
         role="dialog"
-        aria-label="Filters"
+        aria-labelledby={headingId}
         className="w-[400px] rounded-[12px] border border-[var(--border-hairline)] bg-[var(--surface-card)] p-0 shadow-[var(--shadow-dropdown)]"
       >
         <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2.5">

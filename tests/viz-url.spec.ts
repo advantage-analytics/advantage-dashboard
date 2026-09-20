@@ -18,7 +18,7 @@ test("no cut param is the wall", () => {
 });
 
 test("round trip keeps tab and drops defaults", () => {
-  const params = new URLSearchParams("tab=shots&set=2");
+  const params = new URLSearchParams("tab=shots&vset=2");
   const q = vizStateQuery(params, {
     cut: "serve",
     chart: "zones",
@@ -35,6 +35,60 @@ test("round trip keeps tab and drops defaults", () => {
     filters: { ...EMPTY_VIZ_FILTERS, ball: "first", zone: "t", set: 2 },
   });
   expect(params.get("cut")).toBeNull(); // input not mutated
+});
+
+/* ── `vset` namespacing (I2) ──────────────────────────────────────────────
+ * The match report already owns the bare `set` query key
+ * (`set-scope.tsx`'s `SET_PARAM`), dormant today but a silent clobber the
+ * day it's re-enabled. The viz filter's set value is namespaced to `vset`
+ * in the URL; `VizFilters.set` stays the in-memory field name. */
+
+test("vset parses into filters.set; an unrelated set param is ignored", () => {
+  const s = parseVizState(
+    new URLSearchParams("tab=shots&set=2&cut=serve&vset=1"),
+  );
+  expect(s.filters.set).toBe(1);
+});
+
+test("vizStateQuery leaves an unrelated set param untouched", () => {
+  const params = new URLSearchParams("tab=shots&set=2&cut=serve&vset=1");
+  const q = vizStateQuery(params, {
+    cut: "serve",
+    chart: "scatter",
+    viewId: null,
+    filters: { ...EMPTY_VIZ_FILTERS, set: 3 },
+  });
+  const back = new URLSearchParams(q);
+  expect(back.get("set")).toBe("2");
+  expect(back.get("vset")).toBe("3");
+});
+
+test("vizStateQuery leaves an unrelated set param untouched even going back to the wall", () => {
+  const params = new URLSearchParams("tab=shots&set=2&cut=serve&vset=1");
+  const q = vizStateQuery(params, {
+    cut: null,
+    chart: "scatter",
+    viewId: null,
+    filters: EMPTY_VIZ_FILTERS,
+  });
+  const back = new URLSearchParams(q);
+  expect(back.get("set")).toBe("2");
+  expect(back.get("vset")).toBeNull();
+  expect(back.get("cut")).toBeNull();
+});
+
+/* ── carryFilters applied on parse (M4) ────────────────────────────────── */
+
+test("parseVizState resets serve-only filters when cut is off serve", () => {
+  const withAce = parseVizState(
+    new URLSearchParams("cut=returnPlacement&result=ace"),
+  );
+  expect(withAce.filters.result).toBe("any");
+
+  const withZone = parseVizState(
+    new URLSearchParams("cut=returnPlacement&zone=t"),
+  );
+  expect(withZone.filters.zone).toBe("any");
 });
 
 test("garbage values read as defaults; zones off serve reads as scatter", () => {

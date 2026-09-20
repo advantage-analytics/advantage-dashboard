@@ -73,9 +73,15 @@ export function SaveViewDialog({
 
   // Every open is a clean slate — a dialog reopened for a different (or the
   // same) view never carries the previous attempt's name, checkbox or error
-  // forward.
+  // forward. `open` flipping true is an external signal (the cut menu's
+  // "Save this view…" row was clicked), not a value derivable from
+  // props/state during render, so this is the legitimate case
+  // `react-hooks/set-state-in-effect` warns about generally — same
+  // justification, and same call, as `saved-views-band.tsx`'s identical
+  // suppression on its own "external `views` prop lands" effect.
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- external source (dialog opened by a click outside this component), not a render-derivable value
       setName("");
       setShared(false);
       setDuplicate(false);

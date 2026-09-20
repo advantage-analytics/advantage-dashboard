@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -25,6 +26,7 @@ import {
   hasDuplicateViewName,
   mergeManageableOrder,
   moveItem,
+  nextFocusId,
   tileDataKey,
 } from "@/lib/data/saved-views-logic";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
@@ -41,7 +43,12 @@ import { ManageableSavedViewTile } from "./manageable-saved-view-tile";
 import { useVizState } from "./use-viz-state";
 import type { VizState } from "./viz-url";
 import { activeFilterEntries } from "./viz-url";
-import { computeViz, subjectFor, EMPTY_VIZ_FILTERS } from "./viz-model";
+import {
+  computeViz,
+  subjectFor,
+  tileCountLabel,
+  EMPTY_VIZ_FILTERS,
+} from "./viz-model";
 import { truncatePillLabels } from "./viz-labels";
 
 /**
@@ -81,6 +88,7 @@ export function SavedViewsBand({
   const { hrefFor } = useVizState();
   const [, startTransition] = useTransition();
 
+  const manageHintId = useId();
   const [manageMode, setManageMode] = useState(false);
   const [optimisticViews, setOptimisticViews] = useState(views);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -163,10 +171,7 @@ export function SavedViewsBand({
       viewId: null,
     });
     const pills = truncatePillLabels(entries.map((entry) => entry.label));
-    const countLabel =
-      view.cut === "serve"
-        ? `${result.count} of ${result.total}`
-        : `${result.count} returns`;
+    const countLabel = tileCountLabel(result);
     const href = hrefFor({
       cut: view.cut,
       chart: view.chart,
@@ -291,10 +296,8 @@ export function SavedViewsBand({
   }
 
   function focusAfterRemoval(removedId: string) {
-    const remaining = manageableIds.filter((id) => id !== removedId);
-    const nextEl = remaining[0]
-      ? menuTriggerElsRef.current.get(remaining[0])
-      : undefined;
+    const nextId = nextFocusId(manageableIds, removedId);
+    const nextEl = nextId ? menuTriggerElsRef.current.get(nextId) : undefined;
     (nextEl ?? doneButtonRef.current)?.focus();
   }
 
@@ -466,7 +469,18 @@ export function SavedViewsBand({
       [...prev, view].sort((a, b) => a.order - b.order),
     );
     startTransition(async () => {
-      const result = await restoreSavedView(view);
+      // `restoreSavedView` takes only what a restore needs to create — no
+      // `id`, no `mine` (review M8: that field never authorized anything
+      // server-side; it's a display-time decision, made once already, by
+      // `handleDelete` choosing whether to offer Undo at all).
+      const result = await restoreSavedView({
+        name: view.name,
+        cut: view.cut,
+        chart: view.chart,
+        filters: view.filters,
+        shared: view.shared,
+        order: view.order,
+      });
       if (!result.ok) {
         setOptimisticViews((prev) => prev.filter((v) => v.id !== view.id));
         setStatusMessage("Couldn't save that change");
@@ -667,8 +681,9 @@ export function SavedViewsBand({
         </div>
         {manageMode ? (
           <div className="flex shrink-0 items-center gap-3">
-            <span className="text-micro whitespace-nowrap">
-              Drag a view to reorder · ⋯ to rename or delete
+            <span id={manageHintId} className="text-micro whitespace-nowrap">
+              Drag a view to reorder, or focus it and press ⌥← / ⌥→ · ⋯ to
+              rename or delete
             </span>
             <button
               type="button"
@@ -741,6 +756,7 @@ export function SavedViewsBand({
                   key={view.id}
                   view={view}
                   data={data}
+                  hintId={manageHintId}
                   workspaceKind={workspaceKind}
                   workspaceRole={workspaceRole}
                   isDragging={dragId === view.id}
