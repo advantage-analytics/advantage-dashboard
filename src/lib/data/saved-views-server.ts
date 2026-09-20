@@ -18,15 +18,13 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import {
   rowToSavedViewRow,
+  SAVED_VIEW_COLUMNS,
   type SavedView,
   type SavedViewDbRow,
   type SavedViewRow,
 } from "./saved-views-logic";
 
 export type { SavedView, SavedViewRow };
-
-const SAVED_VIEW_COLUMNS =
-  "id, name, cut, chart, filters, sort_order, shared, created_by, created_at";
 
 /**
  * Every saved view this viewer may see for `accountId` (the active
@@ -39,15 +37,16 @@ export const getSavedViews = cache(
   async (accountId: string): Promise<SavedViewRow[]> => {
     const supabase = await createClient();
 
-    const [{ data: rows, error }, { data: auth }] = await Promise.all([
-      supabase
-        .from("saved_views")
-        .select(SAVED_VIEW_COLUMNS)
-        .eq("account_id", accountId)
-        .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: true }),
-      supabase.auth.getUser(),
-    ]);
+    const [{ data: rows, error }, { data: auth, error: authError }] =
+      await Promise.all([
+        supabase
+          .from("saved_views")
+          .select(SAVED_VIEW_COLUMNS)
+          .eq("account_id", accountId)
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: true }),
+        supabase.auth.getUser(),
+      ]);
 
     if (error) {
       // Never fatal: the Visualizations tab still renders the wall/court
@@ -58,7 +57,19 @@ export const getSavedViews = cache(
       return [];
     }
 
-    const viewerId = auth.user?.id ?? "";
+    // No viewer id means `rowToSavedViewRow` can't answer `mine` for ANY
+    // row — every one would silently read as "not mine", including rows
+    // this viewer actually created. Rather than risk that, treat a failed or
+    // missing user read the same as the query-error path above: no saved
+    // views rather than a wrong `mine`.
+    if (authError || !auth.user) {
+      console.error("[saved-views] could not resolve the viewer", {
+        error: authError?.message,
+      });
+      return [];
+    }
+
+    const viewerId = auth.user.id;
 
     const result: SavedViewRow[] = [];
     for (const row of (rows ?? []) as SavedViewDbRow[]) {

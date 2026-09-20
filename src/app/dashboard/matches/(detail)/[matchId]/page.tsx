@@ -130,7 +130,11 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // reader with no saved views rather than a 404, since the rest of the page
   // still has everything it needs from `data`.
   const activeWorkspace = workspace?.active ?? null;
-  const workspaceRole = activeWorkspace?.role ?? "owner";
+  // The least-privileged role, not "owner": this only falls back on a lost
+  // session between the layout's own check and here, and `workspaceRole`
+  // feeds `canManage(view)` — an authorization input should never default
+  // permissively.
+  const workspaceRole = activeWorkspace?.role ?? "player";
 
   const { match, statsResult, insights, kpiHistory } = data;
 

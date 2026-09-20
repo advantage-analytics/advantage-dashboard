@@ -9,7 +9,10 @@
  * authorization boundary (creator may update/delete own rows; staff —
  * owner/coach/staff — may rename or delete `shared` rows); these actions
  * translate what the database refuses into `ActionResult`'s typed errors
- * rather than re-deriving the policy in TypeScript.
+ * rather than re-deriving the policy in TypeScript. Every mutating query also
+ * carries an explicit `.eq("account_id", workspace.id)` alongside RLS —
+ * belt-and-suspenders so a stray id from another workspace can't even reach
+ * the policy check with a row that happens to satisfy it.
  *
  * One exception: `setSavedViewShared(id, false)` un-sharing someone else's
  * view. Postgres's UPDATE `WITH CHECK` for a staff caller only re-checks
@@ -35,22 +38,25 @@ import type {
   VizFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
+  clampSortOrder,
+  normalizeOrderedIds,
   normalizeSavedViewName,
   resolveCopyName,
+  resolveSharedFlag,
   rowToSavedView,
+  rowToSavedViewRow,
   validateVizInput,
+  SAVED_VIEW_COLUMNS,
   type SavedView,
   type SavedViewDbRow,
+  type SavedViewRow,
 } from "@/lib/data/saved-views-logic";
 
-export type { SavedView };
+export type { SavedView, SavedViewRow };
 
 export type ActionResult<T = void> =
   | { ok: true; data: T }
   | { ok: false; error: "duplicate_name" | "forbidden" | "invalid" };
-
-const SAVED_VIEW_COLUMNS =
-  "id, name, cut, chart, filters, sort_order, shared, created_by, created_at";
 
 // Route group `(detail)` doesn't change the URL, but `revalidatePath` keys
 // on the route FILE structure, and the docs' own route-group example
@@ -94,6 +100,14 @@ function isUniqueViolation(error: { code?: string } | null): boolean {
   return error?.code === "23505";
 }
 
+/** `{code}` → the `ActionResult` error it maps to — every write shares this. */
+function writeErrorResult(error: { code?: string }): ActionResult<never> {
+  return {
+    ok: false,
+    error: isUniqueViolation(error) ? "duplicate_name" : "forbidden",
+  };
+}
+
 export async function createSavedView(input: {
   name: string;
   cut: Cut;
@@ -111,10 +125,7 @@ export async function createSavedView(input: {
   const validated = validateVizInput(input);
   if (!validated) return { ok: false, error: "invalid" };
 
-  // Views are private by default; a personal workspace has no one to share
-  // with, so `shared` is forced false there regardless of what was asked.
-  const shared = workspace.kind === "personal" ? false : Boolean(input.shared);
-
+  const shared = resolveSharedFlag(workspace.kind, input.shared);
   const sortOrder = await nextSortOrder(supabase, workspace.id);
 
   const { data, error } = await supabase
@@ -131,12 +142,7 @@ export async function createSavedView(input: {
     .select(SAVED_VIEW_COLUMNS)
     .single();
 
-  if (error) {
-    return {
-      ok: false,
-      error: isUniqueViolation(error) ? "duplicate_name" : "forbidden",
-    };
-  }
+  if (error) return writeErrorResult(error);
 
   const view = rowToSavedView(data as SavedViewDbRow);
   if (!view) return { ok: false, error: "invalid" };
@@ -151,7 +157,7 @@ export async function renameSavedView(
 ): Promise<ActionResult> {
   const ctx = await requireContext();
   if (!ctx) return { ok: false, error: "forbidden" };
-  const { supabase } = ctx;
+  const { supabase, workspace } = ctx;
 
   const normalized = normalizeSavedViewName(name);
   if (!normalized) return { ok: false, error: "invalid" };
@@ -163,15 +169,11 @@ export async function renameSavedView(
     .from("saved_views")
     .update({ name: normalized })
     .eq("id", id)
+    .eq("account_id", workspace.id)
     .select("id")
     .maybeSingle();
 
-  if (error) {
-    return {
-      ok: false,
-      error: isUniqueViolation(error) ? "duplicate_name" : "forbidden",
-    };
-  }
+  if (error) return writeErrorResult(error);
   if (!data) return { ok: false, error: "forbidden" };
 
   revalidateMatchReport();
@@ -186,11 +188,16 @@ export async function duplicateSavedView(
   const { supabase, workspace, viewerId } = ctx;
 
   // RLS's SELECT policy gates this to what the caller may already see —
-  // their own rows and the workspace's shared ones.
+  // their own rows and the workspace's shared ones. Scoped to the ACTIVE
+  // workspace too: without it, a member of two workspaces could duplicate a
+  // shared view they can see in workspace A while sitting in workspace B,
+  // and the copy would land in B — content crossing workspaces even though
+  // nothing unauthorized was read.
   const { data: source, error: sourceError } = await supabase
     .from("saved_views")
     .select(SAVED_VIEW_COLUMNS)
     .eq("id", id)
+    .eq("account_id", workspace.id)
     .maybeSingle();
   if (sourceError || !source) return { ok: false, error: "forbidden" };
 
@@ -233,12 +240,7 @@ export async function duplicateSavedView(
     .select(SAVED_VIEW_COLUMNS)
     .single();
 
-  if (error) {
-    return {
-      ok: false,
-      error: isUniqueViolation(error) ? "duplicate_name" : "forbidden",
-    };
-  }
+  if (error) return writeErrorResult(error);
 
   const view = rowToSavedView(data as SavedViewDbRow);
   if (!view) return { ok: false, error: "invalid" };
@@ -249,10 +251,10 @@ export async function duplicateSavedView(
 
 export async function deleteSavedView(
   id: string,
-): Promise<ActionResult<SavedView>> {
+): Promise<ActionResult<SavedViewRow>> {
   const ctx = await requireContext();
   if (!ctx) return { ok: false, error: "forbidden" };
-  const { supabase } = ctx;
+  const { supabase, workspace, viewerId } = ctx;
 
   // Same RLS-implements-canManage shape as rename: DELETE's USING clause is
   // "mine, or shared + staff", so an unauthorized delete touches zero rows.
@@ -260,26 +262,44 @@ export async function deleteSavedView(
     .from("saved_views")
     .delete()
     .eq("id", id)
+    .eq("account_id", workspace.id)
     .select(SAVED_VIEW_COLUMNS)
     .maybeSingle();
 
   if (error) return { ok: false, error: "forbidden" };
   if (!data) return { ok: false, error: "forbidden" };
 
-  const view = rowToSavedView(data as SavedViewDbRow);
+  // `SavedViewRow`, not `SavedView`: the caller needs `mine` so Undo
+  // (`restoreSavedView`) can refuse to resurrect a shared view that belonged
+  // to someone else.
+  const view = rowToSavedViewRow(data as SavedViewDbRow, viewerId);
   if (!view) return { ok: false, error: "invalid" };
-  // Carried through for Undo — `restoreSavedView` needs to know whether the
-  // row it re-inserts was shared, which `SavedView` doesn't otherwise carry.
-  view.shared = data.shared;
 
   revalidateMatchReport();
   return { ok: true, data: view };
 }
 
-export async function restoreSavedView(view: SavedView): Promise<ActionResult> {
+/**
+ * Re-insert a deleted view under the caller, for Undo.
+ *
+ * Ownership ruling: Undo only restores the CALLER'S OWN deleted views.
+ * `restoreSavedView` always re-inserts with the caller as `created_by` (the
+ * column's `auth.uid()` default), so restoring someone else's row — a shared
+ * view a staff member deleted, say — would silently transfer its ownership
+ * to whoever clicks Undo. `view.mine` (from `deleteSavedView`'s
+ * `SavedViewRow` return) is checked before any write, refusing with
+ * `forbidden` otherwise. The next task's UI is expected to offer the Undo
+ * toast/action only when `view.mine` was true at delete time — this is the
+ * server-side backstop, not a replacement for that.
+ */
+export async function restoreSavedView(
+  view: SavedViewRow,
+): Promise<ActionResult> {
   const ctx = await requireContext();
   if (!ctx) return { ok: false, error: "forbidden" };
   const { supabase, workspace } = ctx;
+
+  if (!view.mine) return { ok: false, error: "forbidden" };
 
   const name = normalizeSavedViewName(view.name);
   if (!name) return { ok: false, error: "invalid" };
@@ -287,7 +307,7 @@ export async function restoreSavedView(view: SavedView): Promise<ActionResult> {
   const validated = validateVizInput(view);
   if (!validated) return { ok: false, error: "invalid" };
 
-  const shared = workspace.kind === "personal" ? false : Boolean(view.shared);
+  const shared = resolveSharedFlag(workspace.kind, view.shared);
 
   // A fresh id and `created_by` (the caller, via the column's `auth.uid()`
   // default) — Undo re-creates the row rather than resurrecting the old one,
@@ -298,16 +318,11 @@ export async function restoreSavedView(view: SavedView): Promise<ActionResult> {
     cut: validated.cut,
     chart: validated.chart,
     filters: validated.filters,
-    sort_order: view.order,
+    sort_order: clampSortOrder(view.order),
     shared,
   });
 
-  if (error) {
-    return {
-      ok: false,
-      error: isUniqueViolation(error) ? "duplicate_name" : "forbidden",
-    };
-  }
+  if (error) return writeErrorResult(error);
 
   revalidateMatchReport();
   return { ok: true, data: undefined };
@@ -320,17 +335,24 @@ export async function reorderSavedViews(
   if (!ctx) return { ok: false, error: "forbidden" };
   const { supabase, workspace } = ctx;
 
-  // One UPDATE per row — there is no reorder RPC, and this list is short (a
-  // handful of saved views at most). `.eq("account_id", …)` plus RLS means an
-  // id this account may not manage (not mine, not a shared row it may rename)
-  // simply updates zero rows — skipped silently rather than failing the
-  // whole reorder over one id it doesn't own.
-  for (let index = 0; index < orderedIds.length; index++) {
-    await supabase
+  const normalized = normalizeOrderedIds(orderedIds);
+  if (!normalized) return { ok: false, error: "invalid" };
+
+  // One UPDATE per row — there is no reorder RPC, and `normalizeOrderedIds`
+  // has already capped this at 200. `.eq("account_id", …)` plus RLS means an
+  // id this account may not manage (not mine, not a shared row it may
+  // rename) simply updates zero rows — skipped silently, per the same
+  // RLS-implements-canManage shape every other action here uses. A REAL
+  // error (not just zero rows) fails the whole reorder immediately, rather
+  // than silently discarding it the way a bare fire-and-forget update would.
+  for (let index = 0; index < normalized.length; index++) {
+    const { error } = await supabase
       .from("saved_views")
       .update({ sort_order: index })
-      .eq("id", orderedIds[index])
+      .eq("id", normalized[index])
       .eq("account_id", workspace.id);
+
+    if (error) return writeErrorResult(error);
   }
 
   revalidateMatchReport();
@@ -369,6 +391,7 @@ export async function setSavedViewShared(
       .from("saved_views")
       .select("created_by")
       .eq("id", id)
+      .eq("account_id", workspace.id)
       .maybeSingle();
     if (error || !existing || existing.created_by !== viewerId) {
       return { ok: false, error: "forbidden" };
@@ -379,15 +402,11 @@ export async function setSavedViewShared(
     .from("saved_views")
     .update({ shared })
     .eq("id", id)
+    .eq("account_id", workspace.id)
     .select("id")
     .maybeSingle();
 
-  if (error) {
-    return {
-      ok: false,
-      error: isUniqueViolation(error) ? "duplicate_name" : "forbidden",
-    };
-  }
+  if (error) return writeErrorResult(error);
   if (!data) return { ok: false, error: "forbidden" };
 
   revalidateMatchReport();

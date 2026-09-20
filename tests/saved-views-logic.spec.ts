@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
   filtersToParams,
+  normalizeOrderedIds,
   normalizeSavedViewName,
   resolveCopyName,
   rowToSavedView,
@@ -91,6 +92,22 @@ test("validateVizInput drops a filter value outside its enum", () => {
     cut: "serve",
     chart: "scatter",
     filters: { ball: "third" },
+  });
+  expect(result).toEqual({
+    cut: "serve",
+    chart: "scatter",
+    filters: EMPTY_VIZ_FILTERS,
+  });
+});
+
+test("validateVizInput never lets a stray filters.chart/cut/view key override the explicit input", () => {
+  // `filters` is a jsonb blob a caller controls; without this, a payload
+  // could smuggle `chart:"zones"` in through `filters` and have it silently
+  // win over the explicit (and validated) top-level `chart`.
+  const result = validateVizInput({
+    cut: "serve",
+    chart: "scatter",
+    filters: { chart: "zones", cut: "returnPlacement", view: "hijacked" },
   });
   expect(result).toEqual({
     cut: "serve",
@@ -197,4 +214,56 @@ test("resolveCopyName truncation still numbers past a collision within 60 chars"
   expect(second.length).toBeLessThanOrEqual(60);
   expect(second).not.toBe(first);
   expect(second.endsWith(" copy 2")).toBe(true);
+});
+
+/* ── normalizeOrderedIds ───────────────────────────────────────────────── */
+
+const UUID_A = "11111111-1111-1111-1111-111111111111";
+const UUID_B = "22222222-2222-2222-2222-222222222222";
+const UUID_C = "33333333-3333-3333-3333-333333333333";
+
+test("normalizeOrderedIds passes through a valid, already-unique list", () => {
+  expect(normalizeOrderedIds([UUID_A, UUID_B, UUID_C])).toEqual([
+    UUID_A,
+    UUID_B,
+    UUID_C,
+  ]);
+});
+
+test("normalizeOrderedIds de-duplicates, keeping the first occurrence's position", () => {
+  expect(normalizeOrderedIds([UUID_A, UUID_B, UUID_A, UUID_C, UUID_B])).toEqual(
+    [UUID_A, UUID_B, UUID_C],
+  );
+});
+
+test("normalizeOrderedIds rejects a non-UUID-shaped id", () => {
+  expect(normalizeOrderedIds([UUID_A, "not-a-uuid"])).toBeNull();
+  expect(normalizeOrderedIds(["<script>alert(1)</script>"])).toBeNull();
+});
+
+test("normalizeOrderedIds accepts uppercase UUIDs (case-insensitive)", () => {
+  expect(normalizeOrderedIds([UUID_A.toUpperCase()])).toEqual([
+    UUID_A.toUpperCase(),
+  ]);
+});
+
+test("normalizeOrderedIds rejects a list longer than 200 ids", () => {
+  const tooMany = Array.from(
+    { length: 201 },
+    (_, i) => `00000000-0000-0000-0000-${String(i).padStart(12, "0")}`,
+  );
+  expect(normalizeOrderedIds(tooMany)).toBeNull();
+});
+
+test("normalizeOrderedIds accepts exactly 200 ids", () => {
+  const twoHundred = Array.from(
+    { length: 200 },
+    (_, i) => `00000000-0000-0000-0000-${String(i).padStart(12, "0")}`,
+  );
+  expect(normalizeOrderedIds(twoHundred)).toHaveLength(200);
+});
+
+test("normalizeOrderedIds rejects a non-array input", () => {
+  expect(normalizeOrderedIds(null as unknown as string[])).toBeNull();
+  expect(normalizeOrderedIds(undefined as unknown as string[])).toBeNull();
 });

@@ -8,24 +8,22 @@
  * Supabase client).
  */
 
-import type {
-  Cut,
-  Chart,
-  VizFilters,
+import {
+  EMPTY_VIZ_FILTERS,
+  type Cut,
+  type Chart,
+  type VizFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import { parseVizState } from "@/components/dashboard/matches/match-detail/shots/viz-url";
+import type { WorkspaceKind } from "@/lib/workspace/types";
 
 export const SAVED_VIEW_NAME_MAX = 60;
 
-/**
- * The app's saved-view shape (task-8-brief.md's `saved-views-server.ts`
- * interface). `shared` is optional and NOT part of that brief's literal
- * signature — it rides here only so `deleteSavedView` can hand it back to
- * `restoreSavedView` for Undo, which needs to know whether the row it is
- * re-inserting was shared. Every other reader of `SavedView` — the loader's
- * `SavedViewRow`, `SavedViewLite` in `viz-labels.tsx` — is unaffected by an
- * optional extra field.
- */
+/** Columns read from `public.saved_views` — every loader/action selects this set. */
+export const SAVED_VIEW_COLUMNS =
+  "id, name, cut, chart, filters, sort_order, shared, created_by, created_at";
+
+/** The app's saved-view shape (task-8-brief.md's `saved-views-server.ts` interface). */
 export interface SavedView {
   id: string;
   name: string;
@@ -33,13 +31,18 @@ export interface SavedView {
   chart: Chart;
   filters: VizFilters;
   order: number;
-  shared?: boolean;
 }
 
-/** The loader's row: `SavedView` plus what the ⋯ menu needs to decide. */
+/**
+ * The loader's row: `SavedView` plus what the ⋯ menu (and Undo) need to
+ * decide. `deleteSavedView` returns this rather than a bare `SavedView` so
+ * the caller knows `mine` — `restoreSavedView` takes it back for the same
+ * reason: Undo must refuse to restore a view the caller didn't create. See
+ * that function's doc comment.
+ */
 export type SavedViewRow = SavedView & { shared: boolean; mine: boolean };
 
-/** Columns read from `public.saved_views` — every action selects this set. */
+/** Columns read from `public.saved_views`, as `SAVED_VIEW_COLUMNS` selects them. */
 export interface SavedViewDbRow {
   id: string;
   name: string;
@@ -53,12 +56,24 @@ export interface SavedViewDbRow {
 }
 
 /**
- * `filters` jsonb → `URLSearchParams`, skipping null/undefined values and
- * coercing everything else with `String()` — `parseVizState` only ever
- * compares them as strings, so a stored jsonb `2` and `"2"` read identically.
- * Returns an empty `URLSearchParams` for anything that isn't a plain object
- * (a stale row whose `filters` column was hand-edited to an array or a
- * scalar), which `parseVizState` then reads as every filter at its default.
+ * The only keys a `filters` object may contribute to the params
+ * `validateVizInput`/`rowToSavedView` build — `VizFilters`'s own keys, taken
+ * from `EMPTY_VIZ_FILTERS` rather than hand-listed so the two can never drift.
+ * Deliberately excludes `cut`/`chart`/`view`: those are the URL layer's OTHER
+ * top-level keys, and a `filters` jsonb blob is caller-controlled input, so a
+ * stray `filters.chart` must never be able to override the explicit `chart`
+ * `validateVizInput` was called with.
+ */
+const KNOWN_FILTER_KEYS = new Set<string>(Object.keys(EMPTY_VIZ_FILTERS));
+
+/**
+ * `filters` jsonb → `URLSearchParams`, keeping only keys in
+ * `KNOWN_FILTER_KEYS` and skipping null/undefined values, coercing everything
+ * else with `String()` — `parseVizState` only ever compares them as strings,
+ * so a stored jsonb `2` and `"2"` read identically. Returns an empty
+ * `URLSearchParams` for anything that isn't a plain object (a stale row
+ * whose `filters` column was hand-edited to an array or a scalar), which
+ * `parseVizState` then reads as every filter at its default.
  */
 export function filtersToParams(filters: unknown): URLSearchParams {
   const params = new URLSearchParams();
@@ -66,6 +81,7 @@ export function filtersToParams(filters: unknown): URLSearchParams {
     for (const [key, value] of Object.entries(
       filters as Record<string, unknown>,
     )) {
+      if (!KNOWN_FILTER_KEYS.has(key)) continue;
       if (value === null || value === undefined) continue;
       params.set(key, String(value));
     }
@@ -174,4 +190,63 @@ export function resolveCopyName(
     }
     n++;
   }
+}
+
+/**
+ * Views are private by default, and a personal workspace has no one else to
+ * share with — so `shared` is forced false there regardless of what was
+ * asked, and only a team workspace's own request is honored. One spelling so
+ * `createSavedView` and `restoreSavedView` can't drift on the rule.
+ */
+export function resolveSharedFlag(
+  kind: WorkspaceKind,
+  requested: boolean | undefined,
+): boolean {
+  return kind === "personal" ? false : Boolean(requested);
+}
+
+/** `sort_order`'s safe range for a re-inserted row — see `restoreSavedView`. */
+export const SORT_ORDER_MIN = 0;
+export const SORT_ORDER_MAX = 100_000;
+
+/**
+ * An arbitrary number (a deleted row's `order`, replayed back through Undo)
+ * → a safe integer `sort_order` for insert. Clamped rather than rejected: a
+ * value outside the range is not a reason to refuse the whole restore, only
+ * to place it at whichever end of the list it overshot.
+ */
+export function clampSortOrder(order: number): number {
+  const int = Number.isFinite(order) ? Math.trunc(order) : SORT_ORDER_MIN;
+  return Math.min(SORT_ORDER_MAX, Math.max(SORT_ORDER_MIN, int));
+}
+
+/** `reorderSavedViews` refuses a list longer than this outright — see `normalizeOrderedIds`. */
+export const REORDER_MAX_IDS = 200;
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Validate and de-duplicate `reorderSavedViews`' id list before it ever
+ * reaches a query: every entry must be UUID-shaped (rejects `<script>…`,
+ * empty strings, anything that isn't a `saved_views.id`), and the list must
+ * be at most `REORDER_MAX_IDS` long — checked BEFORE de-duplication, so a
+ * caller can't force this to do unbounded work by sending a huge list of
+ * repeats. Returns null on either failure; on success, returns the ids with
+ * duplicates removed, keeping each id's first position (a later repeat would
+ * just overwrite its own `sort_order` a second time for no reason).
+ */
+export function normalizeOrderedIds(ids: string[]): string[] | null {
+  if (!Array.isArray(ids)) return null;
+  if (ids.length > REORDER_MAX_IDS) return null;
+
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const id of ids) {
+    if (typeof id !== "string" || !UUID_RE.test(id)) return null;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    result.push(id);
+  }
+  return result;
 }
