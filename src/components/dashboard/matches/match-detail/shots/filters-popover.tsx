@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { EMPTY_VIZ_FILTERS, filterKeysFor, type VizFilters } from "./viz-model";
 import { activeFilterEntries, clearedFilters, OPTIONS } from "./viz-url";
 import { useVizState } from "./use-viz-state";
-import { VizMenuTrigger } from "./viz-labels";
+import { VizMenuTrigger, VIZ_PILL_RADIUS } from "./viz-labels";
 
 /**
  * The Filters popover (P1f): every non-default `VizFilters` key as a wrap of
@@ -279,7 +279,7 @@ function FilterPill({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "inline-flex h-[26px] shrink-0 cursor-pointer items-center rounded-[6px] px-2.5 text-[11px] transition-colors duration-200",
+        `inline-flex h-[26px] shrink-0 cursor-pointer items-center ${VIZ_PILL_RADIUS} px-2.5 text-[11px] transition-colors duration-200`,
         active ? "font-medium" : "font-normal",
       )}
       style={{

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { APRON_FILL, CourtArt } from "./court-art";
+import { VIZ_PILL_RADIUS } from "./viz-labels";
 import type { Cut, VizDot } from "./viz-model";
 
 /**
@@ -111,7 +112,7 @@ export function CourtTile({
             {pills.map((pill) => (
               <span
                 key={pill}
-                className="inline-flex h-5 items-center rounded-[6px] border px-[7px] text-[10px] font-medium whitespace-nowrap"
+                className={`inline-flex h-5 items-center ${VIZ_PILL_RADIUS} border px-[7px] text-[10px] font-medium whitespace-nowrap`}
                 style={{
                   backgroundColor: "var(--surface-subtle)",
                   borderColor: "var(--border-hairline)",

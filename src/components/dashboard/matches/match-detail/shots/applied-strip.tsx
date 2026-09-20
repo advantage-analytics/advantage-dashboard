@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 import { useVizState } from "./use-viz-state";
 import { activeFilterEntries, clearedFilters } from "./viz-url";
+import { VIZ_PILL_RADIUS } from "./viz-labels";
 import { EMPTY_VIZ_FILTERS, type VizFilters } from "./viz-model";
 
 /**
@@ -46,11 +47,10 @@ export function AppliedStrip() {
       {entries.map((entry) => (
         <span
           key={entry.key}
-          className="inline-flex h-6 shrink-0 items-center gap-1 py-0 pr-1 pl-2 text-[11px]"
+          className={`inline-flex h-6 shrink-0 items-center gap-1 py-0 pr-1 pl-2 text-[11px] ${VIZ_PILL_RADIUS}`}
           style={{
             backgroundColor: "var(--surface-subtle)",
             border: "1px solid var(--border-hairline)",
-            borderRadius: "6px",
             color: "var(--ink-700)",
           }}
         >
@@ -59,7 +59,7 @@ export function AppliedStrip() {
             type="button"
             aria-label={`Remove ${entry.label}`}
             onClick={() => removeToken(entry.key)}
-            className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-[var(--ink-400)] transition-colors duration-200 hover:bg-[var(--surface-muted)] hover:text-[var(--ink-700)]"
+            className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[var(--ink-400)] transition-colors duration-200 hover:bg-[var(--surface-muted)] hover:text-[var(--ink-700)]"
           >
             <X className="size-2.5" strokeWidth={2} aria-hidden="true" />
           </button>

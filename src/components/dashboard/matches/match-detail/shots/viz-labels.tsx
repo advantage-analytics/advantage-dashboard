@@ -28,6 +28,13 @@ export const CHART_LABEL: Record<Chart, string> = {
 };
 
 /**
+ * Design handoff P1a/P1c/P1f: tile filter pills, applied-filter tokens and
+ * Filters-popover pills are full pills (`--radius-pill`). Buttons stay
+ * `rounded-[6px]`.
+ */
+export const VIZ_PILL_RADIUS = "rounded-full";
+
+/**
  * At most `max` pill labels, with a trailing `"+n"` standing in for the
  * rest — `saved-views-band.tsx`'s tile pill row, so a view with many active
  * filters still draws a fixed-height tile rather than growing with the
