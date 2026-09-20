@@ -7,6 +7,8 @@ import * as validation from "@/components/dashboard/matches/new-match-wizard/val
 import * as scoreState from "@/components/dashboard/matches/new-match-wizard/score-state";
 import * as subjectEligibility from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
 import * as scoreFormat from "@/lib/ui/score-format";
+import * as quota from "@/lib/services/splitstep/quota";
+import { secondsLeft } from "@/lib/data/usage-format";
 import type {
   UseUploadMatchWizardProps,
   UseUploadMatchWizardReturn,
@@ -86,6 +88,12 @@ export function uploadWizardHarness(
      * Defaults to a successful write.
      */
     draftSave?: "saved" | "refused";
+    /**
+     * This month's cap, in seconds, as `monthlyCapSecondsFor()` reports it.
+     * The stubbed usage reads return zero used, so this is also the remaining
+     * allowance — `0` is the spent-month case. Defaults to 2 hours.
+     */
+    quotaCapSeconds?: number;
   } = {},
 ) {
   const slots: any[] = [];
@@ -251,7 +259,13 @@ export function uploadWizardHarness(
         : table === "programs"
           ? programStatusQuery
           : query,
-    rpc: async () => {
+    // By name, so an RPC this harness has never heard of fails loudly
+    // instead of being answered with — and counted as — a roster.
+    rpc: async (fn: string) => {
+      // The team pool total behind the footer meter: a scalar.
+      if (fn === "program_usage_total") return { data: 0, error: null };
+      if (fn !== "program_roster_full")
+        throw new Error(`upload-wizard-hook: unstubbed rpc "${fn}"`);
       rosterRpcCallCount++;
       return options.rosterError
         ? { data: null, error: { message: options.rosterError } }
@@ -277,6 +291,12 @@ export function uploadWizardHarness(
         validateFile: (file: File) =>
           checks.get(file.name)?.promise ?? { success: true },
         getAcceptString: () => ".csv",
+        minTrimSeconds: 0,
+        // The real strategy's rule is the same whole-window one; the quota
+        // sentences are checked against this figure, so it must be the
+        // fixture's single source of the billable amount too.
+        billableSeconds: (startSeconds: number, endSeconds: number) =>
+          Math.max(0, endSeconds - startSeconds),
       }),
     },
     "@/lib/services/upload/parsers": {
@@ -290,9 +310,14 @@ export function uploadWizardHarness(
     "@/lib/services/splitstep/config": { currentBillingMonth: () => "2026-09" },
     "@/lib/services/splitstep/quota": {
       accountTypeFor: () => "user",
-      monthlyCapSecondsFor: () => 7200,
+      monthlyCapSecondsFor: () => options.quotaCapSeconds ?? 7200,
+      // Pure, so the real one.
+      sumUsedSeconds: quota.sumUsedSeconds,
     },
-    "@/lib/data/usage-format": { formatResetDate: () => "Oct 1" },
+    // `formatResetDate` is stubbed for a fixed date; `secondsLeft` is pure,
+    // so the real clamp — the meter's remaining figure is what several of
+    // these specs assert on.
+    "@/lib/data/usage-format": { formatResetDate: () => "Oct 1", secondsLeft },
     // Pure, and only read to describe the saved match to the success screen.
     "@/lib/ui/score-format": scoreFormat,
     "@/lib/wizard/actions": {

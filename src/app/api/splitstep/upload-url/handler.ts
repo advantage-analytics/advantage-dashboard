@@ -15,7 +15,7 @@
  * ORDER. Sign-in → body → match (ownership) → the match's workspace →
  * `uploadEligibility()` (T11: may a match be recorded here at all, and is the
  * row's athlete a real one) → `explainVideoRefusal()` (may this workspace's
- * allowance be spent) → mint. The two questions stack in that order by the
+ * allowance be spent) → a read-only allowance peek (will it fit) → mint. The two questions stack in that order by the
  * contract's own header, and both are asked BEFORE the credential exists
  * because the step after it is the expensive one: the browser takes the URL
  * and pushes gigabytes for tens of minutes. A refusal here spends nothing.
@@ -25,6 +25,10 @@ import { NextResponse } from "next/server";
 
 import { athleteOnRow } from "@/lib/services/splitstep/match-athlete";
 import { videoObjectKey } from "@/lib/services/splitstep/object-keys";
+import {
+  capRefusalMessage,
+  type QuotaPeek,
+} from "@/lib/services/splitstep/quota";
 import {
   uploadEligibility,
   type RosterIdentity,
@@ -73,6 +77,18 @@ export interface UploadUrlDeps {
    * which refuses with a retry rather than passing on a list nobody has.
    */
   loadRoster(programId: string): Promise<readonly RosterIdentity[] | null>;
+  /**
+   * `processing_jobs.billable_seconds` for the match — the length the wizard
+   * wrote with the row, already the cut length when the browser remuxed.
+   * `null` when there is no figure to read (no row, or the column is NULL).
+   * May throw; the handler treats a throw as "unknown" and carries on.
+   */
+  loadBillableSeconds(matchId: string): Promise<number | null>;
+  /**
+   * A READ of the month's ledger for the billing workspace — `peekQuota()`.
+   * `null` (or a throw) when the read failed. Reserves nothing.
+   */
+  remainingQuotaSeconds(workspace: Workspace): Promise<QuotaPeek | null>;
   /** The one seam that signs. Tests stub it; nothing else here can sign. */
   mintUploadSas(params: { blobName: string }): {
     uploadUrl: string;
@@ -251,6 +267,57 @@ export async function handleUploadUrl(
     // without that branch the card has no entry to update and reads as if the
     // video had been sent. Either way: words, and no bytes moved.
     return NextResponse.json({ error: refusal }, { status: 403 });
+  }
+
+  // Then the allowance — will this video fit in what is left this month. A
+  // READ, not a reservation: `reserveQuota()` at `/api/splitstep/jobs` remains
+  // the authority and refuses there whatever happens here. Asked now for the
+  // same reason as everything above it — the step after the credential is the
+  // expensive one, and a match that cannot fit should hear so before the
+  // transfer rather than after it. FAILS OPEN: a figure that could not be read
+  // (either one) is logged and the upload proceeds, because the spend is still
+  // guarded and refusing on a read error would block uploads that fit.
+  try {
+    // Independent reads, so one round trip rather than two.
+    const [billable, peek] = await Promise.all([
+      deps.loadBillableSeconds(matchId),
+      deps.remainingQuotaSeconds(billingWorkspace),
+    ]);
+    if (billable === null || peek === null) {
+      console.error(`${LOG} allowance not checked — figure unavailable`, {
+        matchId,
+        workspaceId: billingWorkspace.id,
+        missing: billable === null ? "billable_seconds" : "usage",
+      });
+    } else if (billable > peek.remainingSeconds) {
+      console.log(`${LOG} refused — over allowance`, {
+        matchId,
+        workspaceId: billingWorkspace.id,
+        billable,
+        usedSeconds: peek.usedSeconds,
+        capSeconds: peek.capSeconds,
+      });
+      // 429, as `/api/splitstep/jobs` answers the same refusal. `error` rides
+      // the path described above; the two figures are for whoever reads them.
+      return NextResponse.json(
+        {
+          error: capRefusalMessage({
+            neededSeconds: billable,
+            remainingSeconds: peek.remainingSeconds,
+            capSeconds: peek.capSeconds,
+          }),
+          usedSeconds: peek.usedSeconds,
+          capSeconds: peek.capSeconds,
+        },
+        { status: 429 },
+      );
+    }
+  } catch (err) {
+    console.error(`${LOG} allowance not checked — read threw`, {
+      matchId,
+      workspaceId: billingWorkspace.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   // Throws on any container outside ACCEPTED_VIDEO_EXTENSIONS. The old edge
