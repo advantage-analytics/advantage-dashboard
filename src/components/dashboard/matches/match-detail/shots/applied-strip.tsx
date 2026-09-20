@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import { useVizState } from "./use-viz-state";
-import { activeFilterEntries } from "./viz-url";
+import { activeFilterEntries, clearedFilters } from "./viz-url";
 import { EMPTY_VIZ_FILTERS, type VizFilters } from "./viz-model";
 
 /**
@@ -34,7 +34,7 @@ export function AppliedStrip() {
   }
 
   function clearAll() {
-    setState({ ...state, filters: EMPTY_VIZ_FILTERS, viewId: null });
+    setState(clearedFilters(state));
   }
 
   return (

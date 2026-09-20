@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { EMPTY_VIZ_FILTERS, filterKeysFor, type VizFilters } from "./viz-model";
-import { activeFilterEntries, OPTIONS } from "./viz-url";
+import { activeFilterEntries, clearedFilters, OPTIONS } from "./viz-url";
 import { useVizState } from "./use-viz-state";
 import { VizMenuTrigger } from "./viz-labels";
 
@@ -69,7 +69,7 @@ export function FiltersPopover({
   }
 
   function clearAll() {
-    setState({ ...state, filters: EMPTY_VIZ_FILTERS, viewId: null });
+    setState(clearedFilters(state));
   }
 
   const resultKeys = (
@@ -79,7 +79,12 @@ export function FiltersPopover({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <VizMenuTrigger icon={SlidersHorizontal} label="Filters" open={open} />
+        <VizMenuTrigger
+          icon={SlidersHorizontal}
+          label="Filters"
+          open={open}
+          haspopup="dialog"
+        />
       </PopoverTrigger>
       <PopoverContent
         align="end"

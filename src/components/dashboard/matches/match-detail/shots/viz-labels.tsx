@@ -44,17 +44,26 @@ export interface SavedViewLite {
  * Shared trigger for both menus (P1d step 1): 28px tall, `surface-subtle` at
  * rest, `surface-muted` on hover **and while open**, a 13px leading glyph,
  * 12/500 label and a 12px chevron that flips to `chevron-up` while open.
+ *
+ * `haspopup` defaults to `"menu"` (the `cut-menu`/`chart-menu` shape); pass
+ * `"dialog"` for a trigger that opens a `role="dialog"` panel instead —
+ * `filters-popover.tsx`'s Filters trigger opens a form, not a `role="menu"`
+ * list, and `aria-haspopup` needs to say so. It is applied AFTER
+ * `...buttonProps` (which the prop type excludes it from anyway) so nothing
+ * can shadow it back to the hardcoded default.
  */
 export function VizMenuTrigger({
   icon: Icon,
   label,
   open,
+  haspopup = "menu",
   className,
   ...buttonProps
 }: {
   icon: LucideIcon;
   label: string;
   open: boolean;
+  haspopup?: "menu" | "dialog";
   className?: string;
 } & Omit<
   React.ButtonHTMLAttributes<HTMLButtonElement>,
@@ -64,9 +73,9 @@ export function VizMenuTrigger({
   return (
     <button
       type="button"
-      aria-haspopup="menu"
-      aria-expanded={open}
       {...buttonProps}
+      aria-haspopup={haspopup}
+      aria-expanded={open}
       className={cn(
         "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 px-2 text-[12px] font-medium text-[var(--ink-700)] transition-colors duration-200",
         open ? "bg-[var(--surface-muted)]" : "bg-[var(--surface-subtle)]",

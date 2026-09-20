@@ -3,6 +3,7 @@ import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/s
 import {
   activeFilterEntries,
   carryFilters,
+  clearedFilters,
   parseVizState,
   vizStateQuery,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
@@ -80,6 +81,26 @@ test("activeFilterEntries uses option labels", () => {
     },
   });
   expect(e.map((x) => x.label)).toEqual(["Opponent", "1st", "T"]);
+});
+
+test("clearedFilters resets every key including player, clears viewId, keeps cut and chart", () => {
+  const state = {
+    cut: "serve" as const,
+    chart: "zones" as const,
+    viewId: "abc",
+    filters: {
+      ...EMPTY_VIZ_FILTERS,
+      player: "opponent" as const,
+      ball: "first" as const,
+      zone: "t" as const,
+      set: 2,
+    },
+  };
+  const next = clearedFilters(state);
+  expect(next.filters).toEqual(EMPTY_VIZ_FILTERS);
+  expect(next.viewId).toBeNull();
+  expect(next.cut).toBe("serve");
+  expect(next.chart).toBe("zones");
 });
 
 test("prototype chain pollution is rejected", () => {

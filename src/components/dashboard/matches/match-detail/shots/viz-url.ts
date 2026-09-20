@@ -142,6 +142,16 @@ export function vizStateQuery(
 }
 
 /**
+ * Every filter key back to `EMPTY_VIZ_FILTERS` — `player` included — and
+ * `viewId` cleared, keeping `cut`/`chart` as-is. The one "Clear"/"Clear all"
+ * behavior both `applied-strip.tsx` and `filters-popover.tsx` need, pulled
+ * out here so the two don't carry verbatim copies of the same object spread.
+ */
+export function clearedFilters(state: VizState): VizState {
+  return { ...state, filters: EMPTY_VIZ_FILTERS, viewId: null };
+}
+
+/**
  * Reset serve-only filter values when switching off serve.
  * zone and result:"ace" reset to "any" on non-serve cuts.
  */
