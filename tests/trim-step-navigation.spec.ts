@@ -173,6 +173,9 @@ const setEnd = (page: Page) =>
     name: "Set the trim end to the current position",
   });
 
+const jumpStart = (page: Page) =>
+  page.getByRole("button", { name: "Jump to the trim start" });
+
 /** The rail: the ink-900 track the filmstrip and the bracket sit on. */
 function rail(page: Page) {
   return page.locator("div.relative.cursor-pointer.touch-none").first();
@@ -397,6 +400,21 @@ test("Set start goes dead past the end handle and revives inside the window", as
   // playhead and not a latch.
   await park(page, 0.4);
   await expect(setStart(page)).toBeEnabled();
+  expect(await trimEvents(page)).toEqual([]);
+});
+
+test("the timecode half of a cut field seeks, and moves no cut", async ({
+  page,
+}) => {
+  // The number and the set button now share one bordered field, so the half
+  // that must NOT write is worth pinning: pressing the timecode is the way
+  // back to the cut, never a way to move it.
+  await open(page, { start: 0.5, end: 1.5 });
+
+  await park(page, 1.4);
+  await jumpStart(page).click();
+
+  await expect.poll(() => playhead(page)).toBeCloseTo(0.5, 1);
   expect(await trimEvents(page)).toEqual([]);
 });
 

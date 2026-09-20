@@ -8,10 +8,10 @@
  * ranged longest-outward around play, then mute — and the playhead time in a
  * mono capsule; beneath it the filmstrip, trimmed-out ends washed in page
  * tone, the kept window one 2px Signal Blue bracket whose ends are the
- * handles; under it the two cut readouts, a Set button beneath each carrying
- * its own shortcut as a keycap, and one line of chips for the keys that have
- * no button; then the two camera questions the vendor refuses a job without.
- * Design: Upload Wizard v5, frame 3c.
+ * handles; under it the two cut fields — each the cut's own timecode joined to
+ * the button that moves that cut to the playhead — and one line of key chips;
+ * then the two camera questions the vendor refuses a job without.
+ * Design: Upload Wizard v5, frame 3c; the joined field is canvas variation D.
  *
  * Everything runs against the LOCAL file through an object URL, so trimming
  * is instant and nothing leaves the browser.
@@ -29,9 +29,9 @@
  * mid-gesture — slow down to be precise and the whole rail jumped, which read
  * as a bug rather than as help, and the animation ran setState every frame on
  * top of the drag's own. Precision lives in the keyboard now: a focused handle
- * arrows one frame at a time (a second with Shift), and Set start / Set end —
- * the I and O keys — put a cut exactly where the playhead is after you have
- * scrubbed to the frame you want.
+ * arrows one frame at a time (a second with Shift), and each cut field's button
+ * — the I and O keys — puts that cut exactly where the playhead is after you
+ * have scrubbed to the frame you want.
  *
  * ── Why a drag is local until you let go ────────────────────────────────────
  * A drag used to write every pointer sample into the wizard's form state and
@@ -54,6 +54,8 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeftToLine,
+  ArrowRightToLine,
   Check,
   Info,
   Pause,
@@ -68,7 +70,6 @@ import { useVideoFilmstrip } from "@/hooks/use-video-filmstrip";
 import { JUMP_STEP_SECONDS } from "../match-video-attachment/use-attachment-alignment";
 import type { VideoProbeSummary } from "./types";
 import { focusRingCls, noteStripCls } from "./styles";
-import { advButton } from "@/lib/ui/adv-button";
 import { Kbd } from "@/components/ui/kbd";
 import { isFormControl } from "./useWizardKeys";
 import { formatClipLength, formatClock, formatTimecode } from "./utils";
@@ -138,43 +139,78 @@ const PLAYER_MAX_HEIGHT = "405px";
 const LONG_JUMP_SECONDS = 60;
 
 /**
- * "Set start" / "Set end" — move a cut to wherever the video already is.
+ * A cut, and the two things you do to it, as one control.
  *
- * The shortcut rides INSIDE the button as a keycap rather than being repeated
- * in the hint line below: one place says what the action is, what it is called
- * and which key does it, and the row underneath is left for the keys that have
- * no button. `outline` rather than `ghost` so it reads as a control against the
- * quiet readout above it, `sm` to sit under a 12px timecode without crowding.
+ * The number is the way BACK to the cut (it seeks the playhead there, moving
+ * nothing); the button beside it is the way the cut comes to YOU — scrub to the
+ * first serve, press it, and the window starts there. They were a readout and a
+ * separate button on a row of its own; joining them costs the step a whole tier
+ * and leaves no doubt which cut a press moves.
+ *
+ * The keycap the button used to carry goes back to the hint line: an icon-only
+ * control has nowhere to put it, and a lone glyph cannot teach `I` on its own.
+ *
+ * No `overflow-hidden` on the group, deliberately: `focusRingCls` is a
+ * box-shadow, and clipping it would leave a keyboard user with no visible
+ * focus. The children carry the inner radii instead.
  */
-function SetCutButton({
+function CutField({
+  side,
   label,
-  shortcut,
-  hint,
-  disabled,
-  onClick,
+  time,
+  onJump,
+  onSet,
+  setDisabled,
 }: {
+  side: Handle;
   label: string;
-  shortcut: string;
-  hint: string;
-  disabled: boolean;
-  onClick: () => void;
+  time: number;
+  onJump: () => void;
+  onSet: () => void;
+  setDisabled: boolean;
 }) {
-  return (
+  const isStart = side === "start";
+  const Glyph = isStart ? ArrowLeftToLine : ArrowRightToLine;
+
+  const readout = (
     <button
       type="button"
-      onClick={onClick}
-      disabled={disabled}
-      // The name carries the whole sentence. `aria-label` replaces a button's
-      // contents for the accessible name, so the keycap is already unspoken —
-      // it needs no `aria-hidden`, and `Kbd` would drop one anyway (hyphenated
-      // JSX props are not excess-checked, so passing it would have silently
-      // done nothing).
-      aria-label={hint}
-      className={`${advButton("outline", "sm")} gap-2 ${focusRingCls}`}
+      onClick={onJump}
+      aria-label={`Jump to the trim ${isStart ? "start" : "end"}`}
+      className={`inline-flex cursor-pointer items-baseline gap-1.5 px-2.5 py-2 ${
+        isStart ? "rounded-l-[5px]" : "rounded-r-[5px]"
+      } ${focusRingCls}`}
     >
-      {label}
-      <Kbd size="sm">{shortcut}</Kbd>
+      <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
+        {label}
+      </span>
+      <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
+        {formatTimecode(time)}
+      </span>
     </button>
+  );
+
+  const action = (
+    <button
+      type="button"
+      onClick={onSet}
+      disabled={setDisabled}
+      aria-label={`Set the trim ${isStart ? "start" : "end"} to the current position`}
+      className={`inline-flex w-8 cursor-pointer items-center justify-center text-[var(--ink-700)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] disabled:pointer-events-none disabled:opacity-50 ${
+        isStart
+          ? "rounded-r-[5px] border-l border-[var(--border-field)]"
+          : "rounded-l-[5px] border-r border-[var(--border-field)]"
+      } ${focusRingCls}`}
+    >
+      <Glyph className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+    </button>
+  );
+
+  return (
+    <div className="inline-flex items-stretch rounded-[var(--radius-button)] border border-[var(--border-field)] bg-[var(--surface-card)]">
+      {isStart ? readout : action}
+      {isStart ? action : readout}
+    </div>
   );
 }
 
@@ -1175,57 +1211,26 @@ function TrimStepContentImpl({
           </div>
         </div>
 
-        {/* START / END under the strip's own edges. Each readout is also the
-            way back to its own cut: after scrubbing away, the number you want
-            to check is the thing you click. Seeking only moves the playhead —
-            the cut itself is untouched. */}
-        <div className="flex items-baseline justify-between px-0.5 pt-0.5">
-          <button
-            type="button"
-            onClick={() => seekLatest(start)}
-            aria-label="Jump to the trim start"
-            className={`inline-flex cursor-pointer items-baseline gap-1.5 rounded-[var(--radius-cell)] ${focusRingCls}`}
-          >
-            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-              Start
-            </span>
-            <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
-              {formatTimecode(start)}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => seekLatest(end)}
-            aria-label="Jump to the trim end"
-            className={`inline-flex cursor-pointer items-baseline gap-1.5 rounded-[var(--radius-cell)] ${focusRingCls}`}
-          >
-            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-              End
-            </span>
-            <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
-              {formatTimecode(end)}
-            </span>
-          </button>
-        </div>
-
-        {/* Each under its own readout, so the pair reads as "this cut, and the
-            thing that moves it". Disabled past the other cut: a start on or
-            after the end is not a window, and the step refuses rather than
-            clamping to a frame the user did not choose. */}
-        <div className="flex items-center justify-between gap-3 px-0.5">
-          <SetCutButton
-            label="Set start"
-            shortcut="I"
-            hint="Set the trim start to the current position"
-            disabled={!canSetStart}
-            onClick={() => setHandleToPlayhead("start")}
+        {/* Each cut under its own end of the strip, the number and the thing
+            that moves it in one field. The set half is disabled past the other
+            cut: a start on or after the end is not a window, and the step
+            refuses rather than clamping to a frame nobody chose. */}
+        <div className="flex items-center justify-between gap-3 px-0.5 pt-0.5">
+          <CutField
+            side="start"
+            label="Start"
+            time={start}
+            onJump={() => seekLatest(start)}
+            onSet={() => setHandleToPlayhead("start")}
+            setDisabled={!canSetStart}
           />
-          <SetCutButton
-            label="Set end"
-            shortcut="O"
-            hint="Set the trim end to the current position"
-            disabled={!canSetEnd}
-            onClick={() => setHandleToPlayhead("end")}
+          <CutField
+            side="end"
+            label="End"
+            time={end}
+            onJump={() => seekLatest(end)}
+            onSet={() => setHandleToPlayhead("end")}
+            setDisabled={!canSetEnd}
           />
         </div>
 
@@ -1249,6 +1254,12 @@ function TrimStepContentImpl({
           <Kbd size="sm">←</Kbd>
           <Kbd size="sm">→</Kbd>
           <span>1 min</span>
+          <span aria-hidden="true" className="text-[var(--ink-300)]">
+            ·
+          </span>
+          <Kbd size="sm">I</Kbd>
+          <Kbd size="sm">O</Kbd>
+          <span>set cuts</span>
         </p>
 
         {tooShort ? (
