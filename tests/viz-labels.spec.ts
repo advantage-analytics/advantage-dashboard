@@ -38,16 +38,19 @@ test("truncatePillLabels on an empty list stays empty", () => {
  * only ever needs a new case here.
  */
 test.describe("legendItemsFor", () => {
-  test("serve scatter: won, lost, miss, ace(star)", () => {
+  test("serve scatter: won, lost, miss, ace(star), net (Task 2)", () => {
     const items = legendItemsFor("serve", "scatter");
     expect(items.map((i) => i.label)).toEqual([
       "Point won",
       "Lost",
       "Miss",
       "Ace",
+      "Net",
     ]);
     const ace = items.find((i) => i.label === "Ace")!;
     expect(ace.glyph).toBe("star");
+    const net = items.find((i) => i.label === "Net")!;
+    expect(net.glyph).toBe("net");
   });
 
   test("serve zones: outcome trio only, no ace", () => {
@@ -55,7 +58,7 @@ test.describe("legendItemsFor", () => {
     expect(items.map((i) => i.label)).toEqual(["Point won", "Lost", "Miss"]);
   });
 
-  test("returnPlacement scatter: won, lost, miss, forehand(circle), backhand(triangle)", () => {
+  test("returnPlacement scatter: won, lost, miss, forehand(circle), backhand(triangle), net (Task 2)", () => {
     const items = legendItemsFor("returnPlacement", "scatter");
     expect(items.map((i) => i.label)).toEqual([
       "Point won",
@@ -63,6 +66,7 @@ test.describe("legendItemsFor", () => {
       "Miss",
       "Forehand",
       "Backhand",
+      "Net",
     ]);
     const forehand = items.find((i) => i.label === "Forehand")!;
     const backhand = items.find((i) => i.label === "Backhand")!;
@@ -72,6 +76,8 @@ test.describe("legendItemsFor", () => {
     // won/lost/miss.
     expect(forehand.outline).toBe(true);
     expect(backhand.outline).toBe(true);
+    const net = items.find((i) => i.label === "Net")!;
+    expect(net.glyph).toBe("net");
   });
 
   test("returnContact scatter: same shape legend as returnPlacement", () => {

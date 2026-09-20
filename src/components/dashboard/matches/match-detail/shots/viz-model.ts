@@ -9,8 +9,9 @@
  */
 
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
-import { pickRallyShots } from "@/lib/data/serve-return-shots";
+import { pickRallyShots, pickServeShotBy } from "@/lib/data/serve-return-shots";
 import {
+  classifyPointResult,
   computeZoneStats as computeZoneStatsFromServeZones,
   pointToServeDot as pointToServeDotFromServeZones,
   type ServeDot,
@@ -77,25 +78,32 @@ export const EMPTY_VIZ_FILTERS: VizFilters = {
 export type Outcome = "won" | "lost" | "miss";
 
 /**
- * Serve dots carry a 0..1 service-box fraction (`x`/`y`) — `projectServeDot`
- * in `court-geometry.ts` maps that onto the serve frame. Return dots carry
- * normalised court METRES instead (`lateralM`/`depthM`) — `projectReturnDot`
- * maps those onto the shared return frame, which kind (`returnPlacement` vs
- * `returnContact`) determining how `depthM` is read. `cut` (known by every
- * caller already) says which fields are populated; `x`/`y` are always 0 on a
- * return dot and `lateralM`/`depthM` are always 0 on a serve dot, rather than
- * making every caller narrow a union for two fields it already knows how to
- * read.
+ * Every cut now carries normalised court METRES (`lateralM`/`depthM`) —
+ * `court-geometry.ts`'s `projectServeMetricDot`/`projectReturnDot` map those
+ * onto their frame. Serve dots (Task 2): `depthM` holds
+ * `ServePlacementMetrics.depthPastNetM` — negative for a net ball — and
+ * `lateralM` the same signed metres `normalizeLanding` always produced.
+ * Return dots: `projectReturnDot`'s "placement" vs "contact" kind
+ * (`returnPlacement` vs `returnContact`) determines how `depthM` is read.
+ * `x`/`y` are the legacy 0..1 service-box fraction `mapRealCoordsToServeDot`
+ * produces — no current reader still needs them (both `court-art.tsx` call
+ * sites moved to the metre fields so an out/net serve, which that fraction
+ * can't represent, can plot), so they're always 0 now; kept on the type
+ * rather than removed since `default-tiles.ts`/`court-tile.tsx` type through
+ * `VizDot` and a field removal would ripple further than this task's scope.
  *
  * `shape: "star"` is a serve-only addition (G2b): an ace draws as a star
- * instead of the usual outcome-coloured circle. Return dots never take this
- * shape — their circle/triangle already encodes forehand/backhand, an
- * orthogonal axis from "was this an ace".
+ * instead of the usual outcome-coloured circle. `shape: "net"` (Task 2) is a
+ * serve/returnPlacement addition: the ball hit the net, drawn at a fixed
+ * gutter position rather than its (unusable, hitter's-side) landing — see
+ * `court-geometry.ts`'s `netGutterFor`. Return-contact and rally dots never
+ * take either shape — their circle/triangle already encodes
+ * forehand/backhand, an axis orthogonal to "how did this shot end".
  */
 export interface VizDot {
   id: string;
   outcome: Outcome;
-  shape: "circle" | "triangle" | "star";
+  shape: "circle" | "triangle" | "star" | "net";
   x: number;
   y: number;
   lateralM: number;
@@ -129,12 +137,86 @@ export function chartAllowedOn(cut: Cut, chart: Chart): boolean {
 const REAL_HALF_DOUBLES = 5.485;
 const REAL_NET_Y = 11.885;
 const REAL_COURT_LENGTH = 23.77;
+// Same real-world constants `serve-zones.ts` already exports under these
+// names — duplicated here (not imported) since `pointToServeDot` over there
+// keeps its own gate untouched (Task 2's brief: that file isn't edited) and
+// this module already keeps its own private copy of the other REAL_* consts
+// above for the same reason.
+const REAL_SERVICE_Y = 5.485;
+const SERVE_BOX_DEPTH_M = REAL_NET_Y - REAL_SERVICE_Y; // ≈6.4
+const SERVE_BOX_HALF_WIDTH_M = 4.115;
+const SERVE_LINE_TOL_M = 0.2;
 
 function normalizeLanding(lx: number, ly: number): { lx: number; ly: number } {
   if (ly > REAL_NET_Y) {
     return { lx: -lx, ly: REAL_COURT_LENGTH - ly };
   }
   return { lx, ly };
+}
+
+/* ── Serve placement metrics (Task 2) ─────────────────────────────────────
+ *
+ * `serve-zones.ts`'s `pointToServeDot` drops any serve that isn't flagged
+ * "In" (or a double fault) once its landing falls outside the service box
+ * plus tolerance, and clamps kept "In" serves into the box — so an out
+ * serve never reaches the court and an on-the-line serve can't plot on the
+ * line. `serve-zones.ts` isn't edited (it's shared with Home, the player
+ * profile and the legacy serve-placement widget); `servePlacementMetrics`
+ * below is a second, viz-only measurement used ONLY for the dots this cut
+ * draws — `pointToServeDot` keeps computing the zone-stats population
+ * exactly as before.
+ *
+ * End detection reads the serve's own CONTACT point, never the landing:
+ * every normalisation elsewhere in this file (`normalizeLanding`,
+ * `contactMetricsFromLanding`) flips on the LANDING crossing the net, which
+ * is backwards for a netted ball — it bounces back on the HITTER'S OWN
+ * side, so a landing-based flip mirrors a net ball the wrong way and sends
+ * it to a spot on the opponent's side that was never struck. `contactY`
+ * doesn't have that problem: the server always stands on their own side to
+ * serve, so which side `contactY` falls on reliably says which end the
+ * point is being served from, independent of where the ball ends up.
+ */
+export type ServePlacementKind = "in" | "out" | "net";
+
+export interface ServePlacementMetrics {
+  /** Signed metres from the centre line, mirrored the same way
+   *  `serve-zones.ts`'s `normalizeLanding` mirrors: positive = screen right. */
+  lateralM: number;
+  /** Metres past the net in the direction of travel. Negative = the ball
+   *  came down on the server's own side, i.e. it hit the net. */
+  depthPastNetM: number;
+  kind: ServePlacementKind;
+}
+
+/** The classification core, shared by `servePlacementMetrics`'s real
+ * contact-based end detection and `computeViz`'s own defensive fallback
+ * (a serve point whose `shots` row can't be resolved — no contact point to
+ * read at all — falls back to the landing-based flip every other
+ * normalisation in this file already uses, rather than dropping the point). */
+function classifyServePlacement(
+  farEnd: boolean,
+  landingX: number,
+  landingY: number,
+): ServePlacementMetrics {
+  const depthPastNetM = farEnd ? REAL_NET_Y - landingY : landingY - REAL_NET_Y;
+  const lateralM = farEnd ? -landingX : landingX;
+  const kind: ServePlacementKind =
+    depthPastNetM < 0
+      ? "net"
+      : depthPastNetM <= SERVE_BOX_DEPTH_M + SERVE_LINE_TOL_M &&
+          Math.abs(lateralM) <= SERVE_BOX_HALF_WIDTH_M + SERVE_LINE_TOL_M
+        ? "in"
+        : "out";
+  return { lateralM, depthPastNetM, kind };
+}
+
+export function servePlacementMetrics(
+  contactY: number | null | undefined,
+  landingX: number | null | undefined,
+  landingY: number | null | undefined,
+): ServePlacementMetrics | null {
+  if (contactY == null || landingX == null || landingY == null) return null;
+  return classifyServePlacement(contactY > REAL_NET_Y, landingX, landingY);
 }
 
 const SCORE_MAP: Record<string, number> = {
@@ -229,13 +311,16 @@ export function returnOutcome(
 export interface ReturnDotMetric {
   id: string;
   variant: "landing" | "contact";
-  shape: "circle" | "triangle";
+  shape: "circle" | "triangle" | "net";
   /** Signed metres from the centre line — positive = the returner's right. */
   lateralM: number;
   /**
-   * Landing: metres from the net (`projectReturnDot`'s "placement" depth).
-   * Contact: signed metres behind (+) / inside (−) the returner's own
-   * baseline (`projectReturnDot`'s "contact" depth).
+   * Landing: metres past the net, in the direction of travel — negative
+   * means the return hit the net (Task 2, same convention
+   * `ServePlacementMetrics.depthPastNetM` uses). Contact: signed metres
+   * behind (+) / inside (−) the returner's own baseline (`projectReturnDot`'s
+   * "contact" depth) — unrelated to the net, so this can't go negative for
+   * the same reason.
    */
   depthM: number;
 }
@@ -246,12 +331,12 @@ export interface ReturnDotMetric {
  * turns these into the shared return frame's coordinates, separately for
  * "placement" (landing) and "contact".
  *
- * Same end-change normalisation the legacy pixel version used: SwingVision
- * doesn't tag which end of the court a shot happened at, so a landing whose
- * raw `ly` falls beyond the net (`REAL_NET_Y`) is read as having happened at
- * the FAR end and gets mirrored (`didFlip`) onto the near end before use —
- * both the landing and (when present) the contact point share that one
- * flip decision, since they're the same shot.
+ * End detection (Task 2c/2d) reads each shot's own CONTACT point, never its
+ * landing — the same reasoning `servePlacementMetrics`'s doc comment gives:
+ * a netted ball bounces back on the HITTER'S OWN side, so a landing-based
+ * flip (what this file used before) mirrors a net ball the wrong way. A
+ * shot's contact point doesn't have that problem — the hitter always
+ * struck it from their own side.
  */
 interface ContactMetrics {
   lateralM: number;
@@ -259,46 +344,37 @@ interface ContactMetrics {
 }
 
 /**
- * The contact-dot mirroring `pointToReturnDots` used to compute inline,
- * pulled out so G3's rally dots — any shot with its own contact/landing
- * pair, not just a point's second shot — reuse the IDENTICAL conversion.
- * `landingX`/`landingY` decide which raw half (near/far) the shot happened
- * at (SwingVision doesn't tag ends, so a landing beyond the net reads as
- * the FAR end and gets mirrored onto the near one — `didFlip`); that same
- * decision then carries over to `contactX`/`contactY`, since a shot's
- * contact and its own landing are always the same shot, always the same
- * end. A point doesn't change ends mid-rally, so calling this once per
- * SHOT (rather than once per point, as `pointToReturnDots` effectively
- * does for the second shot) still lands on the same `didFlip` for every
- * shot in that point — it's just derived from data every shot already
- * carries, rather than assumed to match the second shot's.
+ * The contact-dot conversion `pointToReturnDots` and `computeRallyViz` both
+ * need — pulled out once so any shot with its own contact pair (not just a
+ * point's second shot) reuses the IDENTICAL conversion. Requires ONLY the
+ * contact point (Task 2d) — a shot's own landing is irrelevant to where it
+ * was STRUCK, so a missing/unusable landing no longer drops the dot the way
+ * `contactMetricsFromLanding` (the function this replaces) used to.
  *
- * Returns null when either pair is missing (nothing to place), or when the
- * flipped contact doesn't clear the net — a tracking artifact, not a real
- * strike, since the hitter's own baseline sits at `REAL_COURT_LENGTH` in
- * this normalised frame and `ly` at/below the net is nowhere near it.
+ * `farEnd = contactY > REAL_NET_Y` (the shot happened at the far half of the
+ * fixed world frame) needs no separate mirror step the way the old
+ * landing-driven version did — when the hitter is already at the far half
+ * (`farEnd`), their own contact coordinates are already in the canonical
+ * "hitter near `REAL_COURT_LENGTH`" frame this function targets; when they're
+ * at the near half, mirroring `{-contactX, REAL_COURT_LENGTH - contactY}`
+ * lands them there instead. The old `if (contactNorm.ly <= REAL_NET_Y) return
+ * null` guard (kept a mistracked point from reading as "the hitter's contact
+ * is on the wrong side of the net") is now unreachable by construction: a
+ * contact past its own baseline reads correctly either way, so it's deleted
+ * rather than kept as dead code.
  */
-function contactMetricsFromLanding(
+function contactMetrics(
   contactX: number | null | undefined,
   contactY: number | null | undefined,
-  landingX: number | null | undefined,
-  landingY: number | null | undefined,
 ): ContactMetrics | null {
-  if (landingX == null || landingY == null) return null;
   if (contactX == null || contactY == null) return null;
-
-  const didFlip = landingY > REAL_NET_Y;
-  const contactNorm = didFlip
-    ? { lx: -contactX, ly: REAL_COURT_LENGTH - contactY }
-    : { lx: contactX, ly: contactY };
-  if (contactNorm.ly <= REAL_NET_Y) return null;
-
+  const farEnd = contactY > REAL_NET_Y;
   return {
-    lateralM: -contactNorm.lx,
+    lateralM: farEnd ? -contactX : contactX,
     // Positive = behind the baseline (outside the court), negative = inside
     // it — signed distance from `REAL_COURT_LENGTH`, the hitter's own
     // baseline in this normalised frame.
-    depthM: contactNorm.ly - REAL_COURT_LENGTH,
+    depthM: farEnd ? contactY - REAL_COURT_LENGTH : -contactY,
   };
 }
 
@@ -314,28 +390,35 @@ export function pointToReturnDots(
       ? "triangle"
       : "circle";
 
-  const landingRaw = { lx: p.secondShotLandingX, ly: p.secondShotLandingY };
-  const didFlip = landingRaw.ly > REAL_NET_Y;
-  const landing = didFlip
-    ? { lx: -landingRaw.lx, ly: REAL_COURT_LENGTH - landingRaw.ly }
-    : landingRaw;
-
-  // Mirrored world-x (leading minus) so the court reads from BEHIND the
-  // returner — positive lateralM is the returner's RIGHT.
-  const landingDot: ReturnDotMetric = {
-    id: p.id,
-    variant: "landing",
-    shape,
-    lateralM: -landing.lx,
-    depthM: landing.ly, // already 0 (net) .. ~11.885 (that half's baseline)
-  };
-
-  const contact = contactMetricsFromLanding(
-    p.secondShotContactX,
-    p.secondShotContactY,
+  // End detection from the RETURNER's own contact point (Task 2c), same
+  // `farEnd` primitive `servePlacementMetrics` uses — falls back to today's
+  // landing-based flip (negated: `farEnd` and the old `didFlip` are the same
+  // decision read from opposite ends of the shot) only when there's no
+  // contact point to read at all, rather than dropping the dot.
+  const farEnd =
+    p.secondShotContactY != null
+      ? p.secondShotContactY > REAL_NET_Y
+      : !(p.secondShotLandingY > REAL_NET_Y);
+  const placement = classifyServePlacement(
+    farEnd,
     p.secondShotLandingX,
     p.secondShotLandingY,
   );
+
+  // Mirrored world-x (leading minus, the same sign `classifyServePlacement`
+  // already applies) so the court reads from BEHIND the returner — positive
+  // lateralM is the returner's RIGHT. A netted return (`depthPastNetM < 0`)
+  // draws at the net gutter (`shape: "net"`), never its real landing — that
+  // spot is on the RETURNER's own side and was never a placement.
+  const landingDot: ReturnDotMetric = {
+    id: p.id,
+    variant: "landing",
+    shape: placement.depthPastNetM < 0 ? "net" : shape,
+    lateralM: placement.lateralM,
+    depthM: placement.depthPastNetM,
+  };
+
+  const contact = contactMetrics(p.secondShotContactX, p.secondShotContactY);
   if (!contact) {
     return [landingDot];
   }
@@ -529,12 +612,7 @@ function computeRallyViz(
     for (const shot of rallyShots) {
       if (shot.isPlayer1 !== subjectIsPlayer1) continue;
 
-      const metrics = contactMetricsFromLanding(
-        shot.contactX,
-        shot.contactY,
-        shot.landingX,
-        shot.landingY,
-      );
+      const metrics = contactMetrics(shot.contactX, shot.contactY);
       if (!metrics) continue;
 
       total++;
@@ -582,22 +660,59 @@ export function computeViz(
   for (const p of points) {
     if (frame === "serve") {
       if (p.serverIsPlayer1 !== subjectIsPlayer1) continue;
-      const dot = pointToServeDotFromServeZones(toServeInput(p));
-      if (!dot) continue;
+
+      // Resolve the serve actually played by ROLE (never `shot_number` —
+      // guardrails §I1), not by array position, so a faulted first serve
+      // sharing a shot_number with the second serve can't collide.
+      const serveShot = pickServeShotBy(p.shots ?? [], (s) => s.shotType);
+      const landingX = serveShot?.landingX ?? p.firstShotLandingX ?? null;
+      const landingY = serveShot?.landingY ?? p.firstShotLandingY ?? null;
+      // Primary: end detection from the resolved serve shot's own CONTACT
+      // point. Fallback (no `shots` row to read a contact point from at
+      // all — legacy/fixture data): the landing-based test every other
+      // normalisation in this file used before Task 2, negated (`farEnd`
+      // and the old `didFlip` read the same decision from opposite ends of
+      // the shot — see `classifyServePlacement`'s own doc comment).
+      const metrics =
+        servePlacementMetrics(serveShot?.contactY, landingX, landingY) ??
+        (landingX != null && landingY != null
+          ? classifyServePlacement(!(landingY > REAL_NET_Y), landingX, landingY)
+          : null);
+      if (!metrics) continue;
+
       total++;
       if (!pointMatchesFilters(p, filters, "serve", subjectIsPlayer1)) continue;
       count++;
-      serveDots.push(dot);
+
+      // The zone-stats population is UNCHANGED — still exactly what
+      // `pointToServeDot` returns (Task 2's brief: `serve-zones.ts` isn't
+      // touched), independent of whether `metrics` above drew a dot for an
+      // out/net serve that never reached that population before.
+      const serveInput = toServeInput(p);
+      const zoneDot = pointToServeDotFromServeZones(serveInput);
+      if (zoneDot) serveDots.push(zoneDot);
+
       dots.push({
         id: p.id,
-        x: dot.x,
-        y: dot.y,
-        lateralM: 0,
-        depthM: 0,
-        outcome: serveOutcome(dot.result),
-        // G2b: an ace draws as a star — already gated to the subject's own
-        // serves by the `p.serverIsPlayer1 !== subjectIsPlayer1` check above.
-        shape: p.resultType === "Ace" ? "star" : "circle",
+        x: 0,
+        y: 0,
+        lateralM: metrics.lateralM,
+        depthM: metrics.depthPastNetM,
+        // "in" reads the point's own result (won/lost/ace/doubleFault, same
+        // classification `serve-zones.ts` uses); "out"/"net" always miss.
+        outcome:
+          metrics.kind === "in"
+            ? serveOutcome(classifyPointResult(serveInput))
+            : "miss",
+        // G2b: an ace draws as a star (an ace is always "in" — already
+        // gated to the subject's own serves above). Task 2: a net serve
+        // draws with the net glyph instead of the usual circle.
+        shape:
+          metrics.kind === "net"
+            ? "net"
+            : p.resultType === "Ace"
+              ? "star"
+              : "circle",
       });
     } else {
       if (p.serverIsPlayer1 === subjectIsPlayer1) continue;
@@ -1076,9 +1191,22 @@ export function computeVizStats(
   if (cut === "serve") {
     const noun = serveNoun(filters.ball, total);
     const groups = [serveStatsGroup(result.zoneStats)];
+    // Task 2: `total` (== result.count) now includes out/net serves, but the
+    // zone rows' own population is still exactly what `pointToServeDot`
+    // returns (unchanged) — the sum across every zone's own count IS that
+    // "in" population. When it's smaller than `total`, say so the same way
+    // returnPlacement's own subtitle already does, instead of silently
+    // printing a bare count next to a court/header that both show `total`.
+    const inCount = result.zoneStats
+      ? Object.values(result.zoneStats).reduce((sum, zs) => sum + zs.count, 0)
+      : 0;
+    const subtitle =
+      inCount === total
+        ? `Points won by zone · ${total} ${noun}`
+        : `Points won by zone · ${inCount} of ${total} ${noun} landed in`;
     return {
       title: "Where the serve went",
-      subtitle: `Points won by zone · ${total} ${noun}`,
+      subtitle,
       groups,
       sentence: buildSentence(groups, noun),
       total,

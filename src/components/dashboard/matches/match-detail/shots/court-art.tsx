@@ -11,8 +11,10 @@ import {
   HEAT_RAMP_G_TABLE,
   HEAT_RAMP_B_TABLE,
   HEAT_ALPHA_TABLE,
-  projectServeDot,
+  projectServeMetricDot,
   projectReturnDot,
+  netGutterFor,
+  netMarkPoints,
   zoneCellX,
   zoneOpacity,
   trianglePointsFor,
@@ -75,6 +77,14 @@ const HEAT_DOT_FILL = "#FFFFFF";
 // sizes, not a shared constant (visualizations-tab-phase-1 spec).
 const SERVE_DOT_R = 2.54;
 const RETURN_DOT_R = 2.4;
+
+// Task 2: the net mark's size, one per frame matching that frame's own dot
+// radius so it reads at the same weight as the outcome-coloured marks
+// beside it. Hollow (no fill), so it needs a visibly thicker stroke than the
+// filled marks' 0.4px hairline to read clearly at that size.
+const SERVE_NET_MARK_R = SERVE_DOT_R;
+const RETURN_NET_MARK_R = RETURN_DOT_R;
+const NET_MARK_STROKE_W = 1.1;
 
 // G2b: the ace star's fill, regardless of outcome colour (an ace is always
 // won, but the star communicates "ace" first — see `ACE_STAR_FILL`'s use
@@ -292,14 +302,21 @@ export function CourtArt({
   // there's no reason to recompute the array on every render either.
   const heatCirclesMemo = useMemo<ReactNode[] | null>(() => {
     if (!drawHeat) return null;
+    // Task 2: a `shape: "net"` dot is pinned to a fixed gutter, not a real
+    // position — it never contributes to the density heatmap (an out dot,
+    // by contrast, IS a real position and stays in).
+    const positioned = dots.filter((d) => d.shape !== "net");
     if (cut === "serve") {
-      return dots.map((d) => {
-        const { cx, cy } = projectServeDot(d);
+      return positioned.map((d) => {
+        const { cx, cy } = projectServeMetricDot({
+          lateralM: d.lateralM,
+          depthPastNetM: d.depthM,
+        });
         return heatDotCircle(d.id, cx, cy, dotRadius);
       });
     }
     const kind = cut === "returnPlacement" ? "placement" : "contact";
-    return dots.map((d) => {
+    return positioned.map((d) => {
       const { cx, cy } = projectReturnDot(kind, {
         lateralM: d.lateralM ?? 0,
         depthM: d.depthM ?? 0,
@@ -491,7 +508,30 @@ export function CourtArt({
             {!showHeat &&
               !showZones &&
               dots.map((d) => {
-                const { cx, cy } = projectServeDot(d);
+                const projected = projectServeMetricDot({
+                  lateralM: d.lateralM,
+                  depthPastNetM: d.depthM,
+                });
+                // Task 2: a net serve is pinned to the net gutter (its
+                // lateral position, the net's own fixed depth), never its
+                // real (hitter's-own-side) landing spot — drawn as a hollow
+                // mark so it can never be misread as a real dot.
+                if (d.shape === "net") {
+                  const gutter = netGutterFor("serve");
+                  const cx = gutter.cx ?? projected.cx;
+                  const cy = gutter.cy ?? projected.cy;
+                  return (
+                    <polygon
+                      key={d.id}
+                      points={netMarkPoints(cx, cy, SERVE_NET_MARK_R)}
+                      fill="none"
+                      stroke={colorFor(d.outcome)}
+                      strokeWidth={NET_MARK_STROKE_W}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  );
+                }
+                const { cx, cy } = projected;
                 // G2b: an ace draws as a star, regardless of outcome colour —
                 // it's always "won" already, but the shape carries the "ace"
                 // read before the colour would.
@@ -666,10 +706,30 @@ export function CourtArt({
             {!showHeat &&
               dots.map((d) => {
                 const color = colorFor(d.outcome);
-                const { cx, cy } = projectReturnDot(kind, {
+                const projected = projectReturnDot(kind, {
                   lateralM: d.lateralM ?? 0,
                   depthM: d.depthM ?? 0,
                 });
+                // Task 2: a netted return is pinned to the net gutter (its
+                // lateral position, a fixed depth just inside the frame's
+                // near visible edge), never its real (hitter's-own-side)
+                // landing — only `returnPlacement` dots can take this shape.
+                if (d.shape === "net") {
+                  const gutter = netGutterFor(cut);
+                  const cx = gutter.cx ?? projected.cx;
+                  const cy = gutter.cy ?? projected.cy;
+                  return (
+                    <polygon
+                      key={d.id}
+                      points={netMarkPoints(cx, cy, RETURN_NET_MARK_R)}
+                      fill="none"
+                      stroke={color}
+                      strokeWidth={NET_MARK_STROKE_W}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  );
+                }
+                const { cx, cy } = projected;
                 return d.shape === "triangle" ? (
                   <polygon
                     key={d.id}

@@ -25,6 +25,9 @@ import {
   HEAT_WASH_ALPHA,
   heatFilterRegionFor,
   heatFloorTintRgba,
+  projectServeMetricDot,
+  netGutterFor,
+  netMarkPoints,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
 
 /**
@@ -664,4 +667,90 @@ test.describe("heatBoundsFor per cut", () => {
     expect(contact).toEqual(RETURN_HEAT_BOUNDS);
     expect(rally).toEqual(RETURN_HEAT_BOUNDS);
   });
+});
+
+/**
+ * Task 2b: `projectServeMetricDot` projects a serve's real-world measurement
+ * (`servePlacementMetrics`) straight onto the serve frame, independent of
+ * the legacy 0..1 fraction `projectServeDot` reads. Sanity points from the
+ * task brief, each checked against `SERVE_COURT`'s own constants.
+ */
+test.describe("projectServeMetricDot", () => {
+  test("depth 0 (at the net) lands on SERVE_COURT.netY", () => {
+    const { cy } = projectServeMetricDot({ lateralM: 0, depthPastNetM: 0 });
+    expect(cy).toBeCloseTo(SERVE_COURT.netY, 5);
+    expect(cy).toBeCloseTo(236, 5);
+  });
+
+  test("depth 6.4 (the service line) lands on SERVE_COURT.serviceLineY", () => {
+    const { cy } = projectServeMetricDot({ lateralM: 0, depthPastNetM: 6.4 });
+    expect(cy).toBeCloseTo(SERVE_COURT.serviceLineY, 1);
+    expect(cy).toBeCloseTo(116.5, 1);
+  });
+
+  test("depth 11.885 (a full-court depth) lands close to SERVE_COURT.baselineY", () => {
+    const { cy } = projectServeMetricDot({
+      lateralM: 0,
+      depthPastNetM: 11.885,
+    });
+    expect(cy).toBeCloseTo(SERVE_COURT.baselineY, 0);
+    expect(cy).toBeCloseTo(14.1, 0);
+  });
+
+  test("lateral 5.485 (the doubles sideline) lands on SERVE_COURT.doublesLeft when negative", () => {
+    const { cx } = projectServeMetricDot({
+      lateralM: -5.485,
+      depthPastNetM: 6.4,
+    });
+    expect(cx).toBeCloseTo(SERVE_COURT.doublesLeft, 1);
+    expect(cx).toBeCloseTo(135, 1);
+  });
+
+  test("an extreme out serve clamps inside SERVE_HEAT_BOUNDS instead of vanishing off-canvas", () => {
+    const { cx, cy } = projectServeMetricDot({
+      lateralM: 50,
+      depthPastNetM: 50,
+    });
+    expect(cx).toBeLessThanOrEqual(SERVE_HEAT_BOUNDS.xMax);
+    expect(cx).toBeGreaterThanOrEqual(SERVE_HEAT_BOUNDS.xMin);
+    expect(cy).toBeLessThanOrEqual(SERVE_HEAT_BOUNDS.yMax);
+    expect(cy).toBeGreaterThanOrEqual(SERVE_HEAT_BOUNDS.yMin);
+  });
+});
+
+/**
+ * Task 2b: `netGutterFor` gives the fixed DEPTH-axis coordinate a net mark
+ * takes for a cut — always inside that frame's own visible viewBox, so the
+ * glyph never draws outside what the user can actually see.
+ */
+test.describe("netGutterFor", () => {
+  test("serve: cy is set, cx is not, and cy sits strictly inside the serve frame's visible bounds", () => {
+    const gutter = netGutterFor("serve");
+    expect(gutter.cx).toBeNull();
+    expect(gutter.cy).not.toBeNull();
+    expect(gutter.cy!).toBeGreaterThan(SERVE_COURT.netY);
+    expect(gutter.cy!).toBeLessThan(SERVE_HEAT_BOUNDS.yMax);
+  });
+
+  test("return (placement/contact/rally all share one frame): cx is set, cy is not, and cx sits strictly inside the return frame's visible bounds", () => {
+    for (const cut of [
+      "returnPlacement",
+      "returnContact",
+      "rallyPosition",
+    ] as const) {
+      const gutter = netGutterFor(cut);
+      expect(gutter.cy).toBeNull();
+      expect(gutter.cx).not.toBeNull();
+      expect(gutter.cx!).toBeGreaterThan(RETURN_HEAT_BOUNDS.xMin);
+      expect(gutter.cx!).toBeLessThan(RETURN_HEAT_BOUNDS.xMax);
+    }
+  });
+});
+
+test("netMarkPoints returns a 4-vertex polygon string centred on (cx, cy)", () => {
+  const points = netMarkPoints(10, 20, 3).split(" ");
+  expect(points).toHaveLength(4);
+  for (const p of points) {
+    expect(p.split(",")).toHaveLength(2);
+  }
 });

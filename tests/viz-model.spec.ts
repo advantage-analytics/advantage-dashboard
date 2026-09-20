@@ -6,15 +6,24 @@ import {
   computeViz,
   computeVizStats,
   filterKeysFor,
+  servePlacementMetrics,
   statRowAnnouncement,
   statsAreEmpty,
   subjectFor,
   type Cut,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
+import {
+  heatBoundsFor,
+  projectServeMetricDot,
+} from "@/components/dashboard/matches/match-detail/shots/court-geometry";
+import { pointToServeDot } from "@/lib/data/serve-zones";
+
+// Same real-world constant `viz-model.ts` keeps privately under this name.
+const NET_Y = 11.885;
 
 /** Pure and offline — same model as tests/report-view.spec.ts. */
 function point(over: Partial<MatchPoint>): MatchPoint {
-  return {
+  const merged = {
     id: crypto.randomUUID(),
     pointNumber: 1,
     setNumber: 1,
@@ -41,6 +50,38 @@ function point(over: Partial<MatchPoint>): MatchPoint {
     firstShotLandingY: 8.0,
     ...over,
   } as MatchPoint;
+
+  // Task 2's serve cut resolves the serve shot BY ROLE from `shots` (never
+  // `p.firstShotLandingX/Y` alone) to read its own `contactY` for end
+  // detection. Synthesize a default `shots` row so every existing fixture
+  // that only sets the flattened `firstShot*` fields keeps working, with
+  // `contactY` placed on the OPPOSITE half from the landing — the same
+  // relationship a real legal serve always has (the server's own side is
+  // always the opposite half from where the ball lands) — so this default
+  // reproduces exactly the SAME "in" classification the pre-Task-2 landing
+  // -based test gave every one of these fixtures. A test exercising the NEW
+  // out/net behaviour passes its own `shots` override instead.
+  if (merged.shots === undefined) {
+    const landingY = merged.firstShotLandingY ?? 8.0;
+    merged.shots = [
+      {
+        id: crypto.randomUUID(),
+        shotNumber: 1,
+        isPlayer1: merged.serverIsPlayer1,
+        shotType: merged.firstShotType ?? "First Serve",
+        spinType: null,
+        speedMph: null,
+        zone: null,
+        result: merged.firstShotResult ?? "In",
+        videoTime: null,
+        contactX: 0,
+        contactY: landingY <= NET_Y ? 22.0 : 2.0,
+        landingX: merged.firstShotLandingX ?? -1.0,
+        landingY,
+      },
+    ];
+  }
+  return merged;
 }
 
 /** A rally shot (shotNumber >= 3) with real contact/landing coords — same
@@ -101,6 +142,140 @@ test.describe("computeViz — serve cut", () => {
   });
 });
 
+/* ── Task 2a: servePlacementMetrics ───────────────────────────────────── */
+
+test.describe("servePlacementMetrics (Task 2a)", () => {
+  test("null when contactY, landingX or landingY is missing", () => {
+    expect(servePlacementMetrics(null, 1, 2)).toBeNull();
+    expect(servePlacementMetrics(5, null, 2)).toBeNull();
+    expect(servePlacementMetrics(5, 1, null)).toBeNull();
+    expect(servePlacementMetrics(undefined, undefined, undefined)).toBeNull();
+  });
+
+  test("end detection from contactY works in both directions — far-side and near-side contacts for the same real depth agree once mirrored", () => {
+    const far = servePlacementMetrics(20, 1.0, 8.0)!; // contactY far half
+    expect(far.kind).toBe("in");
+    expect(far.lateralM).toBeCloseTo(-1.0, 5);
+    expect(far.depthPastNetM).toBeCloseTo(3.885, 5);
+
+    const near = servePlacementMetrics(2, 1.0, 15.77)!; // contactY near half
+    expect(near.kind).toBe("in");
+    expect(near.lateralM).toBeCloseTo(1.0, 5);
+    expect(near.depthPastNetM).toBeCloseTo(3.885, 5);
+  });
+
+  test("kind: net — a shallow (-0.11m) and a deep (-7.80m) net ball both classify as net, from either end", () => {
+    const shallow = servePlacementMetrics(20, 0.5, 11.995)!; // far-half contact
+    expect(shallow.kind).toBe("net");
+    expect(shallow.depthPastNetM).toBeCloseTo(-0.11, 5);
+
+    const deep = servePlacementMetrics(2, 0.5, 4.085)!; // near-half contact
+    expect(deep.kind).toBe("net");
+    expect(deep.depthPastNetM).toBeCloseTo(-7.8, 5);
+  });
+
+  test("kind: out — a 12.04m serve is out, not silently mirrored into net or in", () => {
+    const m = servePlacementMetrics(20, 0.5, -0.155)!;
+    expect(m.kind).toBe("out");
+    expect(m.depthPastNetM).toBeCloseTo(12.04, 2);
+  });
+
+  test("kind: out — lateral excess beyond the box+tolerance is out even at a normal depth", () => {
+    const m = servePlacementMetrics(20, 5.0, 8.0)!;
+    expect(m.kind).toBe("out");
+    expect(m.lateralM).toBeCloseTo(-5.0, 5);
+  });
+
+  test("tolerance: 0.1m past the service line still reads as in", () => {
+    const m = servePlacementMetrics(20, 0, 5.385)!; // depthPastNetM = 6.5
+    expect(m.depthPastNetM).toBeCloseTo(6.5, 5);
+    expect(m.kind).toBe("in");
+  });
+
+  test("just past the 20cm tolerance reads as out", () => {
+    const m = servePlacementMetrics(20, 0, 5.275)!; // depthPastNetM = 6.61
+    expect(m.kind).toBe("out");
+  });
+});
+
+/* ── Task 2: computeViz — serve cut draws out & net serves ────────────── */
+
+test.describe("computeViz — serve cut, out & net (Task 2)", () => {
+  function servePointWith(
+    landingX: number,
+    landingY: number,
+    contactY: number,
+    result: string,
+  ): MatchPoint {
+    return point({
+      firstShotLandingX: landingX,
+      firstShotLandingY: landingY,
+      firstShotResult: result,
+      shots: [
+        shot({
+          shotNumber: 1,
+          shotType: "First Serve",
+          isPlayer1: true,
+          contactX: 0,
+          contactY,
+          landingX,
+          landingY,
+          result,
+        }),
+      ],
+    });
+  }
+
+  test("total/count include in + out + net; zoneStats keeps exactly pointToServeDot's own population", () => {
+    const inPt = point({}); // default synthesized shots -> a legal "in" serve
+    const outPt = servePointWith(0.5, -0.155, 20, "Out"); // depthPastNetM ~12.04
+    const netPt = servePointWith(0.5, 4.085, 2, "Net"); // depthPastNetM ~-7.8
+    const pts = [inPt, outPt, netPt];
+
+    const r = computeViz(pts, "serve", EMPTY_VIZ_FILTERS, true);
+    expect(r.total).toBe(3);
+    expect(r.count).toBe(3);
+
+    const zoneCount = Object.values(r.zoneStats!).reduce(
+      (s, z) => s + z.count,
+      0,
+    );
+    const expectedZoneCount = pts.filter(
+      (p) =>
+        pointToServeDot({
+          id: p.id,
+          serverIsPlayer1: p.serverIsPlayer1,
+          firstShotLandingX: p.firstShotLandingX ?? null,
+          firstShotLandingY: p.firstShotLandingY ?? null,
+          firstShotResult: p.firstShotResult ?? null,
+          resultType: p.resultType,
+          wonByPlayer1: p.wonByPlayer1,
+        }) != null,
+    ).length;
+    expect(zoneCount).toBe(expectedZoneCount);
+
+    const outcomes = r.dots.map((d) => d.outcome).sort();
+    expect(outcomes).toEqual(["miss", "miss", "won"]);
+    expect(r.dots.map((d) => d.shape)).toContain("net");
+  });
+
+  test('no projected serve dot falls outside heatBoundsFor("serve")', () => {
+    const outPt = servePointWith(6.0, -3.0, 20, "Out"); // way wide and way long
+    const r = computeViz([outPt], "serve", EMPTY_VIZ_FILTERS, true);
+    const bounds = heatBoundsFor("serve");
+    for (const d of r.dots) {
+      const { cx, cy } = projectServeMetricDot({
+        lateralM: d.lateralM,
+        depthPastNetM: d.depthM,
+      });
+      expect(cx).toBeGreaterThanOrEqual(bounds.xMin);
+      expect(cx).toBeLessThanOrEqual(bounds.xMax);
+      expect(cy).toBeGreaterThanOrEqual(bounds.yMin);
+      expect(cy).toBeLessThanOrEqual(bounds.yMax);
+    }
+  });
+});
+
 test.describe("computeViz — return cuts", () => {
   const ret = point({
     serverIsPlayer1: false,
@@ -127,11 +302,11 @@ test.describe("computeViz — return cuts", () => {
 
   test("return dots carry metres, not the legacy pixel frame", () => {
     const place = computeViz([ret], "returnPlacement", EMPTY_VIZ_FILTERS, true);
-    // secondShotLandingX: 1.2, secondShotLandingY: 4.0 — well within the net
-    // (REAL_NET_Y=11.885), so no end-change flip: lateralM is the mirrored
-    // (leading-minus) landing x, depthM is the landing y unchanged.
+    // Task 2: end detection reads secondShotContactY (23.0, far half, so
+    // farEnd=true): lateralM = -landingX = -1.2; depthM = NET(11.885) -
+    // landingY(4.0) = 7.885 — metres PAST THE NET, not the raw landing y.
     expect(place.dots[0].lateralM).toBeCloseTo(-1.2, 5);
-    expect(place.dots[0].depthM).toBeCloseTo(4.0, 5);
+    expect(place.dots[0].depthM).toBeCloseTo(7.885, 5);
   });
 
   test("a return without contact coords counts for placement only", () => {
@@ -481,7 +656,10 @@ test.describe("computeVizStats — return attribution", () => {
   function returnPoint(over: Partial<MatchPoint>): MatchPoint {
     return point({
       secondShotLandingX: 0, // direction "middle"
-      secondShotLandingY: 0, // depth "short"
+      // Task 2: placement depth is now metres PAST THE NET (farEnd=true from
+      // RETURN_CONTACT_Y, so depthM = NET - landingY) — 10.885 is 1m past
+      // the net, depth "short".
+      secondShotLandingY: 10.885,
       secondShotContactX: 0,
       secondShotContactY: RETURN_CONTACT_Y, // contact depth "near"
       secondShotType: "Forehand", // stroke "forehand"
@@ -1099,12 +1277,16 @@ test.describe("computeViz — rallyPosition cut", () => {
     expect(r.dots.map((d) => d.id)).toEqual(["rally"]);
   });
 
-  test("a shot with null contact or landing coords is skipped, not crashed on", () => {
+  test("a shot with null CONTACT coords is skipped, not crashed on", () => {
     const pts = [
       point({
         shots: [
-          shot({ shotNumber: 3, isPlayer1: true, contactX: null }),
-          shot({ shotNumber: 3, isPlayer1: true, landingY: null }),
+          shot({
+            shotNumber: 3,
+            isPlayer1: true,
+            contactX: null,
+            id: "no-contact",
+          }),
           shot({ shotNumber: 3, isPlayer1: true, id: "valid" }),
         ],
       }),
@@ -1112,6 +1294,55 @@ test.describe("computeViz — rallyPosition cut", () => {
     const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true);
     expect(r.dots.map((d) => d.id)).toEqual(["valid"]);
     expect(r.total).toBe(1);
+  });
+
+  /* ── Task 2d: contactMetrics requires only the contact pair — a missing
+   * landing no longer drops the dot (dot counts on returnContact/
+   * rallyPosition must go up, never down). */
+  test("Task 2d: a shot with a null LANDING still draws — only contact is required now", () => {
+    const pts = [
+      point({
+        shots: [
+          shot({ shotNumber: 2, isPlayer1: false, id: "return" }),
+          shot({
+            shotNumber: 3,
+            isPlayer1: true,
+            landingX: null,
+            landingY: null,
+            id: "no-landing",
+          }),
+        ],
+      }),
+    ];
+    const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true);
+    expect(r.dots.map((d) => d.id)).toEqual(["no-landing"]);
+    expect(r.total).toBe(1);
+  });
+
+  test("Task 2d: a contact close to the net on the hitter's own side (never crossed it) still draws — the old 'must clear the net' guard is gone", () => {
+    const pts = [
+      point({
+        shots: [
+          shot({ shotNumber: 2, isPlayer1: false, id: "return" }),
+          shot({
+            shotNumber: 3,
+            isPlayer1: true,
+            id: "close-to-net",
+            contactX: 0.2,
+            contactY: 10, // near half, close to the net — never crossed it
+            landingX: 0.2,
+            landingY: 9, // also near half — old landing-based flip wouldn't
+            // mirror this, and the old guard (`contactNorm.ly<=NET`) would
+            // have dropped it entirely.
+          }),
+        ],
+      }),
+    ];
+    const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true);
+    expect(r.dots.map((d) => d.id)).toEqual(["close-to-net"]);
+    // farEnd = contactY(10) > NET(11.885) = false -> depthM = -contactY = -10
+    // (deep inside the hitter's own court, on their own side).
+    expect(r.dots[0].depthM).toBeCloseTo(-10, 5);
   });
 
   test("pool is every point, not gated on who served — the subject's rally shots in a point the OPPONENT served still count", () => {

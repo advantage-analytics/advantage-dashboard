@@ -27,14 +27,30 @@ export function isFeedShotType(shotType: string | null | undefined): boolean {
   return shotType === "Feed";
 }
 
-/** The serve that was actually played: second serve if present, else first. */
-export function pickServeShot<T extends ShotLike>(shots: T[]): T | undefined {
-  const serveRows = shots.filter((s) => isServeShotType(s.shot_type));
+/**
+ * The serve that was actually played: second serve if present, else first.
+ * Accessor-taking form, the same pattern `pickRallyShots` below uses — the
+ * Visualizations tab's serve cut (`viz-model.ts`, Task 2) needs to resolve a
+ * point's serve shot from `MatchPoint.shots`' camelCase `MatchShot` rows
+ * (`shotType`), not the raw DB row's `shot_type`, to read that shot's own
+ * `contactY`. `pickServeShot` below delegates here with the DB row's own
+ * accessor so every existing snake_case caller is unchanged.
+ */
+export function pickServeShotBy<T>(
+  shots: T[],
+  shotType: (shot: T) => string | null | undefined,
+): T | undefined {
+  const serveRows = shots.filter((s) => isServeShotType(shotType(s)));
   return (
-    serveRows.find((s) => s.shot_type === "Second Serve") ??
-    serveRows.find((s) => s.shot_type === "First Serve") ??
+    serveRows.find((s) => shotType(s) === "Second Serve") ??
+    serveRows.find((s) => shotType(s) === "First Serve") ??
     shots[0]
   );
+}
+
+/** The serve that was actually played: second serve if present, else first. */
+export function pickServeShot<T extends ShotLike>(shots: T[]): T | undefined {
+  return pickServeShotBy(shots, (s) => s.shot_type);
 }
 
 /** The return: the first shot that is neither a serve nor a feed. */

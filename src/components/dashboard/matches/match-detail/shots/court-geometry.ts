@@ -643,3 +643,113 @@ export function starPoints(cx: number, cy: number, outerR: number): string {
   }
   return points.join(" ");
 }
+
+/* ── Serve metric projection + net gutter (Task 2) ────────────────────────
+ *
+ * `viz-model.ts`'s `servePlacementMetrics` measures a serve in real-world
+ * METRES (`lateralM`, `depthPastNetM`) straight off the shot's own contact
+ * and landing coordinates, rather than the legacy 0..1 service-box fraction
+ * `serve-zones.ts`'s `mapRealCoordsToServeDot` produces (which clamps an
+ * "In" serve inside the box and can't represent an out/net serve at all).
+ * `projectServeMetricDot` is that measurement's own projection onto the
+ * serve frame, independent of `projectServeDot`/`ServeDotFraction` above —
+ * the two scales below are derived from `SERVE_COURT`'s own design-unit
+ * constants and the real service-box depth/half-width, not hard-coded
+ * results, so a future frame resize keeps them in sync automatically.
+ */
+
+// Real-world metres, matching `viz-model.ts`'s own (private) constants of
+// the same names — kept as a separate local copy rather than an import
+// since this module stays plain geometry/SVG-adjacent and shouldn't reach
+// back into the model layer for two literals.
+const SERVE_REAL_NET_Y = 11.885;
+const SERVE_REAL_SERVICE_Y = 5.485;
+const SERVE_REAL_BOX_DEPTH_M = SERVE_REAL_NET_Y - SERVE_REAL_SERVICE_Y; // 6.4
+const SERVE_REAL_SINGLES_HALF_M = 4.115;
+
+// Depth: net (0m past net) → `SERVE_COURT.netY`; the service line (6.4m
+// past the net) → `SERVE_COURT.serviceLineY`. Sanity in `court-geometry.spec.ts`:
+// 0 → 236, 6.4 → 116.5, 11.885 (a full-court depth, e.g. the far baseline)
+// → ≈14.1 (`SERVE_COURT.baselineY` is 14).
+export const SERVE_DEPTH_UNITS_PER_METER =
+  (SERVE_COURT.netY - SERVE_COURT.serviceLineY) / SERVE_REAL_BOX_DEPTH_M;
+
+// Lateral: the centre line (0m) → `SERVE_COURT.centerX`; the singles
+// half-width (4.115m) → `SERVE_COURT.singlesRight`. Sanity: the doubles
+// sideline (5.485m) → ≈135 (`SERVE_COURT.doublesLeft`).
+export const SERVE_LATERAL_UNITS_PER_METER =
+  (SERVE_COURT.singlesRight - SERVE_COURT.centerX) / SERVE_REAL_SINGLES_HALF_M;
+
+export interface ServeMetricDot {
+  lateralM: number;
+  depthPastNetM: number;
+}
+
+/**
+ * Projects a serve's real-world measurement (`servePlacementMetrics`) onto
+ * the serve frame's own pre-transform coordinates, clamped to
+ * `SERVE_HEAT_BOUNDS` (the frame's whole visible view) inset by a dot's
+ * radius — a badly-out serve (up to ~12m past the net in the ground-truth
+ * data) lands pinned at the visible edge instead of vanishing off-canvas.
+ */
+export function projectServeMetricDot(m: ServeMetricDot): {
+  cx: number;
+  cy: number;
+} {
+  const rawCx =
+    SERVE_COURT.centerX + m.lateralM * SERVE_LATERAL_UNITS_PER_METER;
+  const rawCy =
+    SERVE_COURT.netY - m.depthPastNetM * SERVE_DEPTH_UNITS_PER_METER;
+  const margin = SERVE_HEAT_DOT_RADIUS;
+  const cx = Math.min(
+    SERVE_HEAT_BOUNDS.xMax - margin,
+    Math.max(SERVE_HEAT_BOUNDS.xMin + margin, rawCx),
+  );
+  const cy = Math.min(
+    SERVE_HEAT_BOUNDS.yMax - margin,
+    Math.max(SERVE_HEAT_BOUNDS.yMin + margin, rawCy),
+  );
+  return { cx, cy };
+}
+
+// A net mark sits in a thin band just past the net (serve) / just inside the
+// return frame's own visible near edge (return — the net line itself sits
+// outside that viewBox). Same real-world inset both frames, converted through
+// each frame's own metres-per-unit scale.
+const NET_GUTTER_INSET_M = 0.3;
+
+/**
+ * The frame coordinate a `shape: "net"` dot's DEPTH axis takes — always the
+ * same spot regardless of the ball's own (unusable, hitter's-side) landing.
+ * Exactly one of `cx`/`cy` is set (the axis this frame's net sits on); the
+ * caller keeps the OTHER axis from that same dot's normal projection
+ * (`projectServeMetricDot`/`projectReturnDot`, which already reads the
+ * dot's true lateral position correctly) — `court-art.tsx` does exactly
+ * that merge.
+ */
+export function netGutterFor(
+  cut: "serve" | "returnPlacement" | "returnContact" | "rallyPosition",
+): { cx: number | null; cy: number | null } {
+  if (cut === "serve") {
+    return {
+      cx: null,
+      cy: SERVE_COURT.netY + NET_GUTTER_INSET_M * SERVE_DEPTH_UNITS_PER_METER,
+    };
+  }
+  return {
+    cx: RETURN_HEAT_BOUNDS.xMin + NET_GUTTER_INSET_M * UNITS_PER_METER,
+    cy: null,
+  };
+}
+
+/**
+ * A small hollow diamond — the net mark's glyph, alongside
+ * `trianglePointsFor`/`starPoints` above in the same "return an SVG points
+ * string" style. Drawn with `fill="none"` and a visible stroke (see
+ * `court-art.tsx`), so it reads as a distinct, deliberately-not-a-landing
+ * mark rather than a filled dot. `size` is the same nominal radius the
+ * cut's own circle marks use, so the glyph reads at a comparable weight.
+ */
+export function netMarkPoints(cx: number, cy: number, size: number): string {
+  return `${cx},${cy - size} ${cx + size},${cy} ${cx},${cy + size} ${cx - size},${cy}`;
+}
