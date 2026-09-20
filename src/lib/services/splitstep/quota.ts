@@ -228,11 +228,91 @@ export async function reserveQuota(params: {
     ok: false,
     usedSeconds: row.used_seconds,
     capSeconds: row.cap_seconds,
-    message:
-      `This match needs ${formatMinutes(seconds)} of analysis but only ` +
-      `${formatMinutes(remaining)} is left in your monthly allowance ` +
-      `(${formatMinutes(row.cap_seconds)}). It resets at the start of next month; ` +
-      `a shorter trim will fit sooner.`,
+    message: capRefusalMessage({
+      neededSeconds: seconds,
+      remainingSeconds: remaining,
+      capSeconds: row.cap_seconds,
+    }),
+  };
+}
+
+/**
+ * The allowance refusal, in one place. `reserveQuota()` says it at the spend;
+ * `/api/splitstep/upload-url` says it before a credential exists, from
+ * `peekQuota()`'s reading — the same words for the same answer.
+ */
+export function capRefusalMessage(params: {
+  neededSeconds: number;
+  remainingSeconds: number;
+  capSeconds: number;
+}): string {
+  const { neededSeconds, remainingSeconds, capSeconds } = params;
+  return (
+    `This match needs ${formatMinutes(neededSeconds)} of analysis but only ` +
+    `${formatMinutes(remainingSeconds)} is left in your monthly allowance ` +
+    `(${formatMinutes(capSeconds)}). It resets at the start of next month; ` +
+    `a shorter trim will fit sooner.`
+  );
+}
+
+export interface QuotaPeek {
+  usedSeconds: number;
+  capSeconds: number;
+  remainingSeconds: number;
+}
+
+/**
+ * READ the month's ledger for a workspace. Reserves nothing.
+ *
+ * For `/api/splitstep/upload-url`, which wants to refuse an upload that cannot
+ * fit BEFORE the browser pushes gigabytes. Not the authority — it is a plain
+ * read, so two uploads racing can both pass it; `reserveQuota()` at
+ * `/api/splitstep/jobs` is atomic and still decides. Keyed exactly as that
+ * reservation is (`accountTypeFor`, `workspace.id`, `currentBillingMonth`) and
+ * summed the way `reserve_processing_quota` sums: the vendor's actual figure
+ * where one has landed, the reservation otherwise, released rows excluded.
+ *
+ * `supabase` must be the service-role client, because `processing_usage` RLS
+ * is per-creator and a program's ledger is everybody's rows. Handed in, like
+ * `reserveQuota()`'s, rather than imported: `useUploadMatchWizard` (a client
+ * hook) imports this module for its pure helpers, and any import of the
+ * service-role factory here — dynamic included — puts it in that module graph
+ * (`tests/client-bundle-boundary.spec.ts`). Throws on a failed read; the
+ * caller decides what a missing answer means.
+ */
+export async function peekQuota(
+  supabase: SupabaseClient,
+  workspace: Workspace,
+  now?: Date,
+): Promise<QuotaPeek> {
+  const capSeconds = monthlyCapSecondsFor(workspace);
+
+  const { data, error } = await supabase
+    .from("processing_usage")
+    .select("reserved_seconds, actual_seconds")
+    .eq("account_id", workspace.id)
+    .eq("account_type", accountTypeFor(workspace))
+    .eq("billing_month", currentBillingMonth(now))
+    .eq("released", false);
+
+  if (error) {
+    throw new Error(`Could not read processing usage: ${error.message}`);
+  }
+
+  const usedSeconds = (
+    (data ?? []) as Array<{
+      reserved_seconds: number | null;
+      actual_seconds: number | null;
+    }>
+  ).reduce(
+    (total, row) => total + (row.actual_seconds ?? row.reserved_seconds ?? 0),
+    0,
+  );
+
+  return {
+    usedSeconds,
+    capSeconds,
+    remainingSeconds: Math.max(0, capSeconds - usedSeconds),
   };
 }
 

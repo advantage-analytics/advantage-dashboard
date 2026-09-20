@@ -84,3 +84,15 @@ is the runner's. Newest entries at the bottom.
 **gate:** mechanical PASS (lint, typecheck, full test suite); completion review `VERDICT: pass` (5/5 criteria met). Unblocked by the author on 2026-09-19: stash `bae6abe7` re-applied plus an authorized fixture fix outside `files:`.
 
 **changed:** `useUploadMatchWizard.ts` — the remaining-quota effect reads `program_usage_total` for a team workspace (the table read is RLS-scoped to the caller's own rows), keeps the four-filter `processing_usage` select for personal, leaves the figure untouched on an RPC error, and re-runs on arriving at the trim step (`isTrimStep` in deps); doc comment rewritten. `tests/fixtures/upload-wizard-hook.ts` — the `rpc()` stub returns a scalar for `program_usage_total` and no longer counts it as a roster fetch, which is what failed `tests/upload-approval.spec.ts:369` the first time.
+
+## T5 · Refuse an over-allowance upload before the SAS is minted — done
+
+**gate:** mechanical PASS on the second full run — the first failed one unrelated timing test (`tests/match-video-attachment-flow.spec.ts:848`, "unmounting mid-upload cancels the attempt"), which passed 60/60 alone with `--repeat-each=3` and on the full re-run. Completion review `VERDICT: pass` (5/5 criteria met, scope clean). Unblocked by the author on 2026-09-19: stash `83fe4fa1` re-applied plus an authorized amendment to criterion 1.
+
+**changed:** `quota.ts` — pure `capRefusalMessage()` (sentence byte-identical, `reserveQuota` now calls it) and read-only `peekQuota(supabase, workspace, now?)`, keyed and summed exactly as `reserve_processing_quota`. Amendment: the client is a PARAMETER, the idiom `reserveQuota`/`releaseQuota`/`reconcileQuota` already use, so `quota.ts` imports no service-role factory and `tests/client-bundle-boundary.spec.ts` passes. `upload-url/handler.ts` — new deps `loadBillableSeconds` and `remainingQuotaSeconds`; after `explainVideoRefusal` and before the mint, `billable > remaining` → 429 `{ error, usedSeconds, capSeconds }`; a null or thrown read is logged and fails open. `route.ts` wires both, handing `peekQuota` its `adminClient()`; billable seconds come from the newest `processing_jobs` row for the match. Three new cases in `tests/upload-url-authorization.spec.ts`. No migration; `reserveQuota()` at `/jobs` remains the authority.
+
+**follow-ups:**
+
+1. The peek counts this match's own unreleased reservation as used, so a re-upload to an already-submitted match errs toward refusing.
+2. `getPersonalUsage` in `src/lib/data/usage-server.ts` repeats the same ledger sum and could share a helper with `peekQuota`.
+3. `tests/match-video-attachment-flow.spec.ts:848` flaked once under full-suite load — not this branch's change.

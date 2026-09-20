@@ -72,7 +72,7 @@ ready).
 
 ## T5 · Refuse an over-allowance upload before the SAS is minted
 
-- **status:** blocked
+- **status:** done
 - **model:** fable
 - **files:** src/app/api/splitstep/upload-url/handler.ts, src/app/api/splitstep/upload-url/route.ts, src/lib/services/splitstep/quota.ts, tests/upload-url-authorization.spec.ts (guess)
 - **done when:**

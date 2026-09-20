@@ -21,6 +21,7 @@ import { type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { loadEligibleRoster } from "@/lib/services/splitstep/eligible-roster";
+import { peekQuota } from "@/lib/services/splitstep/quota";
 import { mintUploadSas } from "@/lib/services/splitstep/video-url";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
@@ -81,6 +82,28 @@ export async function POST(request: NextRequest) {
         userId,
         log: "[splitstep-upload-url]",
       });
+    },
+
+    async loadBillableSeconds(matchId) {
+      // Keyed on match_id like `recordBlobName` below and the wizard's other
+      // writes. A match normally has one row here; if a resubmit has added
+      // more, the newest is the one this upload belongs to.
+      const { data, error } = await adminClient()
+        .from("processing_jobs")
+        .select("billable_seconds")
+        .eq("match_id", matchId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      const seconds = (data as { billable_seconds: number | null } | null)
+        ?.billable_seconds;
+      return typeof seconds === "number" ? seconds : null;
+    },
+
+    async remainingQuotaSeconds(workspace) {
+      // Throws on a failed read; the handler logs it and fails open.
+      return peekQuota(adminClient(), workspace);
     },
 
     mintUploadSas,
