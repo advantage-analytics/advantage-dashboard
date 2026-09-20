@@ -1,0 +1,338 @@
+<!-- A-point-list-P1-P5: extracted 2026-09-20 from Claude Design project afde9116… file `H1 - Handoff - Video tab in-shell.dc.html`. Inline SVG stripped. {{ }} bindings resolve against render-vals.txt. Reference only, never shipped. -->
+<section style="display:flex;flex-direction:column;align-items:flex-start">
+<span class="eyebrow">Phase 1 · A — The point list, every state</span>
+<div class="text-display" style="margin-top:16px;max-width:900px">One header, one menu, one column.</div>
+<div class="text-body" style="margin-top:8px;max-width:960px;text-wrap:pretty">320px, the pane's full height, never collapses. The header states the applied cut and opens the quick menu; Advanced takes over the same column rather than opening a modal, so the film keeps playing behind every filter operation. Sources: <a href="13 Video tab - As built.dc.html#S1">S1</a>, <a href="13 Video tab - As built.dc.html#S2">S2</a>.</div>
+<div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start;margin-top:32px;width:1180px">
+<div id="P1" style="display:flex;flex-direction:column;gap:9px;width:352px">
+<div style="display:flex;align-items:center;gap:8px">
+<a href="#P1" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">P1</a>
+<span style="font:500 12px var(--font-sans);color:var(--ink-900)">Resting — all points</span>
+<span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">320 × 460</span>
+</div>
+<div style="width:352px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<div style="width:320px;height:428px;display:flex;flex-direction:column;padding:10px 8px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card);overflow:hidden">
+<div style="display:flex;align-items:center;gap:8px;margin:0 4px;padding:4px 0 10px;border-bottom:1px solid var(--border-hairline)">
+<div role="button" tabindex="0" style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:var(--radius-element);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<i data-lucide="sliders-horizontal" stroke-width="1.5" style="width:13px;height:13px;color:var(--ink-500)">
+</i>
+<span style="font:500 12px var(--font-sans);letter-spacing:-0.08px;color:var(--ink-900)">All points</span>
+<i data-lucide="chevron-down" stroke-width="1.5" style="width:12px;height:12px;color:var(--ink-400)">
+</i>
+</div>
+<div style="flex:1">
+</div>
+<span class="mono tabular" style="white-space:nowrap;font-size:10px;color:var(--ink-400)">174 <span style="color:var(--ink-300)">/</span> 174</span>
+</div>
+<div style="flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden">
+<div style="display:flex;align-items:center;padding:12px 12px 5px">
+<span class="mono" style="font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink-400)">Set 2 · Game 7</span>
+<div style="flex:1">
+</div>
+<span class="mono tabular" style="font-size:10px;color:var(--ink-400)">3-3 · Reid serves</span>
+</div>
+<sc-for list="{{ listRows }}" as="r" hint-placeholder-count="5">
+<div role="button" tabindex="0" class="h-row" style="position:relative;display:flex;min-height:52px;flex:0 0 auto;align-items:center;gap:12px;padding:6px 12px;border-radius:var(--radius-element);cursor:pointer;background:{{ r.bg }}">
+<span aria-hidden="true" style="display:inline-flex;width:30px;height:30px;flex:0 0 30px;align-items:center;justify-content:center;border-radius:var(--radius-button);font:500 11px var(--font-sans);letter-spacing:0.3px;background:{{ r.markBg }};color:{{ r.markFg }}">{{ r.initials }}</span>
+<span style="display:flex;min-width:0;flex-direction:column;gap:1px">
+<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--ink-900)">{{ r.title }}</span>
+<span class="text-micro" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.detail }}</span>
+</span>
+<div style="flex:1">
+</div>
+<span class="h-score tabular" style="min-width:52px;text-align:right;font-size:13px;color:var(--ink-900)">{{ r.score }}</span>
+<span class="h-save" role="button" aria-label="Save this point" style="align-items:center;justify-content:center;padding:2px;border-radius:var(--radius-cell);cursor:pointer">
+<i data-lucide="bookmark" stroke-width="1.6" style="width:13px;height:13px;color:var(--ink-400)">
+</i>
+</span>
+<span aria-hidden="true" style="position:absolute;left:0;bottom:0;height:2px;width:{{ r.barWidth }};background:var(--blue)">
+</span>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px;width:352px;box-sizing:border-box;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<span class="eyebrow">Handoff notes</span>
+<div style="display:grid;grid-template-columns:62px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Layout</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Card 320px fixed, pane height, <span class="mono" style="font-size:10px">padding:10px 8px</span>. Header 28px trigger + hairline; rows 52px min, 12px side padding, 8px radius. Group caption 9px mono, 1.4px tracking.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Component</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Rebuild <span class="mono" style="font-size:10px">film/point-list.tsx</span>. Header trigger = <span class="mono" style="font-size:10px">FilmQuickFilters</span> lifted out of the fullscreen scope so one component serves both; pass <span class="mono" style="font-size:10px">tone="light" | "dark"</span>. Avatar mark = <span class="mono" style="font-size:10px">Avatar</span> at 30px on 6px radius (a point is an event, not a person — square, not circle).</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Row click seeks the film and selects; playing row carries the 2px blue progress rule at its foot and <span class="mono" style="font-size:10px">surface-subtle</span>. ↑↓ steps points and obeys the applied cut. Hover/focus-within slides the score 26px left and reveals the bookmark — no layout shift, 200ms <span class="mono" style="font-size:10px">--ease-primary</span>. Reduced motion drops the slide, keeps the reveal.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Data</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Points from the existing film point payload; title = <span class="mono" style="font-size:10px">{result} · {player} {stroke}</span>, detail = <span class="mono" style="font-size:10px">Set n · game n · k shots</span> (shot count omitted on an ace or double fault). Score = the score after the point, tabular. Saved flag is per user, not per workspace.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Accept</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Count reads <span class="mono" style="font-size:10px">174 / 174</span> unfiltered · no Saved pill and no applied-filter strip anywhere in the column · the list scrolls, the header does not.</span>
+</div>
+</div>
+</div>
+<div id="P2" style="display:flex;flex-direction:column;gap:9px;width:352px">
+<div style="display:flex;align-items:center;gap:8px">
+<a href="#P2" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">P2</a>
+<span style="font:500 12px var(--font-sans);color:var(--ink-900)">Cut applied</span>
+<span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">source S1</span>
+</div>
+<div style="width:352px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<div style="width:320px;height:428px;display:flex;flex-direction:column;padding:10px 8px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card);overflow:hidden">
+<div style="display:flex;align-items:center;gap:6px;margin:0 4px;padding:4px 0 10px;border-bottom:1px solid var(--border-hairline)">
+<div role="button" tabindex="0" style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:var(--radius-element);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<i data-lucide="sliders-horizontal" stroke-width="1.5" style="width:13px;height:13px;color:var(--blue)">
+</i>
+<span style="font:500 12px var(--font-sans);letter-spacing:-0.08px;color:var(--ink-900)">Break points</span>
+<i data-lucide="chevron-down" stroke-width="1.5" style="width:12px;height:12px;color:var(--ink-400)">
+</i>
+</div>
+<span role="button" tabindex="0" aria-label="Clear the cut" style="display:inline-flex;width:22px;height:22px;align-items:center;justify-content:center;border-radius:var(--radius-cell);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<i data-lucide="x" stroke-width="1.6" style="width:12px;height:12px;color:var(--ink-500)">
+</i>
+</span>
+<div style="flex:1">
+</div>
+<span class="mono tabular" style="white-space:nowrap;font-size:10px;color:var(--ink-400)">14 <span style="color:var(--ink-300)">/</span> 174</span>
+</div>
+<div style="flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden">
+<div style="display:flex;align-items:center;padding:12px 12px 5px">
+<span class="mono" style="font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink-400)">Set 1 · Game 4</span>
+<div style="flex:1">
+</div>
+<span class="mono tabular" style="font-size:10px;color:var(--ink-400)">30-40 · Lee serves</span>
+</div>
+<sc-for list="{{ cutRows }}" as="r" hint-placeholder-count="4">
+<div role="button" tabindex="0" class="h-row" style="position:relative;display:flex;min-height:52px;flex:0 0 auto;align-items:center;gap:12px;padding:6px 12px;border-radius:var(--radius-element);cursor:pointer;background:{{ r.bg }}">
+<span aria-hidden="true" style="display:inline-flex;width:30px;height:30px;flex:0 0 30px;align-items:center;justify-content:center;border-radius:var(--radius-button);font:500 11px var(--font-sans);letter-spacing:0.3px;background:{{ r.markBg }};color:{{ r.markFg }}">{{ r.initials }}</span>
+<span style="display:flex;min-width:0;flex-direction:column;gap:1px">
+<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--ink-900)">{{ r.title }}</span>
+<span class="text-micro" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.detail }}</span>
+</span>
+<div style="flex:1">
+</div>
+<span class="h-score tabular" style="min-width:52px;text-align:right;font-size:13px;color:var(--ink-900)">{{ r.score }}</span>
+<span class="h-save" role="button" aria-label="Save this point" style="align-items:center;justify-content:center;padding:2px;border-radius:var(--radius-cell);cursor:pointer">
+<i data-lucide="bookmark" stroke-width="1.6" style="width:13px;height:13px;color:var(--ink-400)">
+</i>
+</span>
+<span aria-hidden="true" style="position:absolute;left:0;bottom:0;height:2px;width:{{ r.barWidth }};background:var(--blue)">
+</span>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px;width:352px;box-sizing:border-box;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<span class="eyebrow">Handoff notes</span>
+<div style="display:grid;grid-template-columns:62px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Layout</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Applied, the header gains a 22px X between trigger and count; nothing else moves. The glyph turns <span class="mono" style="font-size:10px">--blue</span>, the label becomes the cut's name.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">The header IS the applied-filter strip — no chips row below it. X clears every axis at once, including anything set under Advanced. ↑↓ walk the cut, not the match.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Data</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Count is <span class="mono" style="font-size:10px">matched / total</span>, always both. Cut state in the URL (<span class="mono" style="font-size:10px">?tab=video&amp;cut=break</span>) so a shared link opens on the same cut; Advanced axes are session state, not URL.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Accept</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Applying a cut never pauses or reloads the film · the playing point stays selected even when the cut excludes it, and the count does not lie about it.</span>
+</div>
+</div>
+</div>
+<div id="P3" style="display:flex;flex-direction:column;gap:9px;width:352px">
+<div style="display:flex;align-items:center;gap:8px">
+<a href="#P3" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">P3</a>
+<span style="font:500 12px var(--font-sans);color:var(--ink-900)">Quick menu open</span>
+<span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">source S1</span>
+</div>
+<div style="width:352px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<div style="position:relative;width:320px;height:428px;display:flex;flex-direction:column;padding:10px 8px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<div style="display:flex;align-items:center;gap:8px;margin:0 4px;padding:4px 0 10px;border-bottom:1px solid var(--border-hairline)">
+<div role="button" tabindex="0" aria-expanded="true" style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:var(--radius-element);cursor:pointer;background:var(--surface-subtle)">
+<i data-lucide="sliders-horizontal" stroke-width="1.5" style="width:13px;height:13px;color:var(--ink-500)">
+</i>
+<span style="font:500 12px var(--font-sans);letter-spacing:-0.08px;color:var(--ink-900)">All points</span>
+<i data-lucide="chevron-up" stroke-width="1.5" style="width:12px;height:12px;color:var(--ink-400)">
+</i>
+</div>
+<div style="flex:1">
+</div>
+<span class="mono tabular" style="white-space:nowrap;font-size:10px;color:var(--ink-400)">174 <span style="color:var(--ink-300)">/</span> 174</span>
+</div>
+<div role="menu" style="position:absolute;top:40px;left:4px;width:284px;z-index:5;display:flex;flex-direction:column;padding:5px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:12px;box-shadow:var(--shadow-dropdown)">
+<span style="padding:7px 9px 5px;font-size:11px;color:var(--ink-500)">Show points</span>
+<div role="menuitemradio" aria-checked="true" tabindex="0" style="display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:6px;cursor:pointer;background:var(--surface-subtle)">
+<span style="font-size:12px;color:var(--ink-900)">All points</span>
+<div style="flex:1">
+</div>
+<i data-lucide="check" stroke-width="2" style="width:12px;height:12px;color:var(--blue)">
+</i>
+</div>
+<div role="menuitemradio" tabindex="0" style="display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:6px;cursor:pointer" style-hover="background:var(--surface-subtle)">
+<span style="display:flex;flex-direction:column;gap:1px">
+<span style="font-size:12px;color:var(--ink-900)">Break points</span>
+<span style="font-size:11px;color:var(--ink-500)">Points that could break serve</span>
+</span>
+<div style="flex:1">
+</div>
+<span style="width:12px">
+</span>
+</div>
+<div role="menuitemradio" tabindex="0" style="display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:6px;cursor:pointer" style-hover="background:var(--surface-subtle)">
+<span style="font-size:12px;color:var(--ink-900)">Saved only</span>
+<div style="flex:1">
+</div>
+<span style="width:12px">
+</span>
+</div>
+<div style="height:1px;margin:5px 9px;background:var(--border-hairline)">
+</div>
+<span style="padding:7px 9px 5px;font-size:11px;color:var(--ink-500)">Serve</span>
+<div role="menuitemradio" aria-checked="true" tabindex="0" style="display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:6px;cursor:pointer;background:var(--surface-subtle)">
+<span style="font-size:12px;color:var(--ink-900)">Either</span>
+<div style="flex:1">
+</div>
+<i data-lucide="check" stroke-width="2" style="width:12px;height:12px;color:var(--blue)">
+</i>
+</div>
+<div role="menuitemradio" tabindex="0" style="display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:6px;cursor:pointer" style-hover="background:var(--surface-subtle)">
+<span style="font-size:12px;color:var(--ink-900)">Lee serving</span>
+<div style="flex:1">
+</div>
+<span style="width:12px">
+</span>
+</div>
+<div role="menuitemradio" tabindex="0" style="display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:6px;cursor:pointer" style-hover="background:var(--surface-subtle)">
+<span style="font-size:12px;color:var(--ink-900)">Reid serving</span>
+<div style="flex:1">
+</div>
+<span style="width:12px">
+</span>
+</div>
+<div style="height:1px;margin:5px 9px;background:var(--border-hairline)">
+</div>
+<div role="menuitem" tabindex="0" style="display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:6px;cursor:pointer" style-hover="background:var(--surface-subtle)">
+<span style="font-size:12px;color:var(--ink-900)">Advanced filters…</span>
+<div style="flex:1">
+</div>
+<i data-lucide="chevron-right" stroke-width="1.8" style="width:12px;height:12px;color:var(--ink-400)">
+</i>
+</div>
+<span style="padding:6px 9px 8px;font-size:11px;line-height:1.5;color:var(--ink-500)">Filters apply to ↑↓ as well as the list.</span>
+</div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px;width:352px;box-sizing:border-box;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<span class="eyebrow">Handoff notes</span>
+<div style="display:grid;grid-template-columns:62px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Component</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">One surface: <span class="mono" style="font-size:10px">ui/float-menu.tsx</span> — 284px, 12px radius, 5px inset, hairline border, <span class="mono" style="font-size:10px">--shadow-dropdown</span>, 6px under the trigger, left-aligned. Rows 7/9px, 12px label, 11px ink-500 second line only where the label alone is not enough, 12px blue check.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Two radio groups (Show points · Serve) — picking within a group replaces, across groups composes. "Advanced filters…" swaps the column to <a href="#P4">P4</a>; it is not a nested menu. Esc and click-outside close; trigger holds <span class="mono" style="font-size:10px">aria-expanded</span> and flips to chevron-up.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Accept</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">No uppercase eyebrows in the menu · destructive/none present · the closing note is a <span class="mono" style="font-size:10px">FloatMenuNote</span>, not a menu row.</span>
+</div>
+</div>
+</div>
+<div id="P4" style="display:flex;flex-direction:column;gap:9px;width:352px">
+<div style="display:flex;align-items:center;gap:8px">
+<a href="#P4" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">P4</a>
+<span style="font:500 12px var(--font-sans);color:var(--ink-900)">Advanced, in the column</span>
+<span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">source S2</span>
+</div>
+<div style="width:352px;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<div style="width:320px;height:428px;display:flex;flex-direction:column;padding:10px 8px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card);overflow:hidden">
+<div style="display:flex;align-items:center;gap:7px;flex:0 0 auto;margin:0 6px;padding:2px 0 10px">
+<span style="font:500 12px var(--font-sans);letter-spacing:-0.08px;color:var(--ink-900)">Filters</span>
+<span class="tabular" style="font-size:11px;color:var(--ink-400)">51</span>
+<div style="flex:1">
+</div>
+<span role="button" tabindex="0" aria-label="Close filters" style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;border-radius:var(--radius-element);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<i data-lucide="x" stroke-width="1.6" style="width:13px;height:13px;color:var(--ink-500)">
+</i>
+</span>
+</div>
+<div style="flex:1;min-height:0;display:flex;flex-direction:column;padding:0 6px;overflow:hidden">
+<div style="display:flex;flex-wrap:wrap;gap:6px;padding:2px 4px 14px;border-bottom:1px solid var(--border-hairline)">
+<span role="button" tabindex="0" style="display:inline-flex;height:26px;align-items:center;gap:6px;padding:0 10px;border:1px solid var(--border-field);border-radius:var(--radius-pill);font:400 11px var(--font-sans);color:var(--ink-700);cursor:pointer;white-space:nowrap">Saved only<span class="tabular" style="font-size:10px;color:var(--ink-400)">6</span>
+</span>
+</div>
+<sc-for list="{{ filterSections }}" as="f" hint-placeholder-count="6">
+<div role="button" tabindex="0" style="display:flex;align-items:center;gap:10px;height:42px;flex:0 0 42px;margin:0 -4px;padding:0 8px;border-radius:var(--radius-element);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<span style="font:500 12px var(--font-sans);color:var(--ink-900)">{{ f.name }}</span>
+<div style="flex:1">
+</div>
+<span style="font-size:11px;white-space:nowrap;color:{{ f.color }}">{{ f.summary }}</span>
+<i data-lucide="chevron-down" stroke-width="1.5" style="width:12px;height:12px;color:var(--ink-300)">
+</i>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;align-items:center;gap:10px;flex:0 0 auto;margin:0 6px;padding:11px 0;border-top:1px solid var(--border-hairline)">
+<span style="font-size:12px;color:var(--ink-700)">
+<span class="tabular">51</span> of <span class="tabular">174</span>
+</span>
+<div style="flex:1">
+</div>
+<span role="button" tabindex="0" style="font:500 11px var(--font-sans);color:var(--ink-600);cursor:pointer" style-hover="color:var(--ink-900)">Clear all</span>
+<span role="button" tabindex="0" style="display:inline-flex;height:30px;align-items:center;padding:0 13px;border-radius:var(--radius-button);background:var(--blue);font:500 11px var(--font-sans);color:#FFFFFF;cursor:pointer" style-hover="background:var(--blue-hover)">Apply</span>
+</div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px;width:352px;box-sizing:border-box;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<span class="eyebrow">Handoff notes</span>
+<div style="display:grid;grid-template-columns:62px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Layout</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Takes the list's own column — no modal, no overlay. 40px title row (label + count + 24px X), scrolling section stack with <span class="mono" style="font-size:10px">scrollbar-gutter:stable</span>, 42px section rows, 52px footer over a hairline. Expanded section: 10px group captions, 26px count pills, 6px gaps, 16px bottom pad.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Component</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Six sections — Score · Serve · Return · Rally · Result · Court — over the fifteen axes in <span class="mono" style="font-size:10px">film/filters/types.ts</span>. Every option is a pill carrying its count: segmented controls, native selects and checkboxes are retired here. Summary is blue when the section is set, ink-400 "Any" when not.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">"Any" is nothing selected — there is no Any option to click. Counts are live against the other applied axes and a zero-count pill is disabled, not hidden. Apply commits and returns to <a href="#P2">P2</a>; the film never pauses. Clear all resets every axis and the quick cut together.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Accept</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Apply is dead until a value differs from what is applied · sections remember their open/closed state for the session · nothing here exists as a chip strip outside this panel.</span>
+</div>
+</div>
+</div>
+<div id="P5" style="display:flex;flex-direction:column;gap:9px;width:352px">
+<div style="display:flex;align-items:center;gap:8px">
+<a href="#P5" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--ink-900);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">P5</a>
+<span style="font:500 12px var(--font-sans);color:var(--ink-900)">The four zero states</span>
+<span style="font-size:11px;color:var(--ink-500)">proposed — needs your call</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:14px;width:352px;box-sizing:border-box;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<sc-for list="{{ zeroStates }}" as="z" hint-placeholder-count="4">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">{{ z.when }}</span>
+<div style="width:320px;box-sizing:border-box;display:flex;flex-direction:column;padding:10px 8px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<div style="display:flex;align-items:center;gap:8px;margin:0 4px;padding:4px 0 10px;border-bottom:1px solid var(--border-hairline)">
+<div style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:var(--radius-element)">
+<i data-lucide="sliders-horizontal" stroke-width="1.5" style="width:13px;height:13px;color:{{ z.glyphColor }}">
+</i>
+<span style="font:500 12px var(--font-sans);color:var(--ink-900)">{{ z.header }}</span>
+<i data-lucide="chevron-down" stroke-width="1.5" style="width:12px;height:12px;color:var(--ink-400)">
+</i>
+</div>
+<div style="flex:1">
+</div>
+<span class="mono tabular" style="white-space:nowrap;font-size:10px;color:var(--ink-400)">{{ z.count }}</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:7px;padding:22px 12px 20px">
+<span style="font-size:13px;color:var(--ink-900)">{{ z.title }}</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-500);max-width:40ch">{{ z.body }}</span>
+<span style="margin-top:3px;font:500 11px var(--font-sans);color:{{ z.actionColor }}">{{ z.action }}</span>
+</div>
+</div>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-600)">{{ z.note }}</span>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px;width:352px;box-sizing:border-box;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<span class="eyebrow">Handoff notes</span>
+<div style="display:grid;grid-template-columns:62px minmax(0,1fr);column-gap:14px;row-gap:9px;align-items:baseline">
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Rule</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">Four different conditions, four different answers — never each other's. A cut that matches nothing is a filter result, not an empty state; points still analysing get progress, not emptiness; a match whose film has no point data is a permanent statement.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">The header and its count stay drawn in all four — the frame the page always has is furniture, not a skeleton. No skeleton rows, no sample points. ↑↓ do nothing rather than wrapping to a hidden point.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Open</span>
+<span style="font-size:11px;line-height:1.55;color:var(--ink-700)">The analysing copy must not invent an ETA. Confirm the wording of "Points are still being detected" against whatever <span class="mono" style="font-size:10px">match-analysis-progress.tsx</span> already says, so the tab and the report agree.</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+
