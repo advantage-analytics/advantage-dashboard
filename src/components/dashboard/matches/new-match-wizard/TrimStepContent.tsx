@@ -4,8 +4,9 @@
  * TrimStepContent — step 3: the video check.
  *
  * The one screen where the file is the interface. A 16:9 player on ink-900
- * with four 28px controls in a bottom gradient — frame-step, play, frame-step,
- * mute — and the playhead time in a mono capsule; beneath it the filmstrip,
+ * with a row of 28px controls in a bottom gradient — the jumps and frame steps
+ * ranged longest-outward around play, then mute — and the playhead time in a
+ * mono capsule; beneath it the filmstrip,
  * trimmed-out ends washed in page tone, the kept window one 2px Signal Blue
  * bracket whose ends are the handles; then the two camera questions the vendor
  * refuses a job without. Design: Upload Wizard v5, frame 3c.
@@ -47,6 +48,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useVideoFilmstrip } from "@/hooks/use-video-filmstrip";
+import { JUMP_STEP_SECONDS } from "../match-video-attachment/use-attachment-alignment";
 import type { VideoProbeSummary } from "./types";
 import { focusRingCls, noteStripCls } from "./styles";
 import { formatClipLength, formatClock, formatTimecode } from "./utils";
@@ -106,6 +108,13 @@ const FALLBACK_ASPECT = 16 / 9;
  * read as one instrument. Squarer or portrait clips hit the cap and centre.
  */
 const PLAYER_MAX_HEIGHT = "405px";
+
+/**
+ * The coarse in-frame jump, in seconds. `JUMP_STEP_SECONDS` (10s) is the
+ * shared short hop; a minute is what it takes to cross a game on an
+ * hours-long recording without dragging the rail.
+ */
+const LONG_JUMP_SECONDS = 60;
 
 const controlCls = `inline-flex size-7 items-center justify-center rounded-[var(--radius-element)] text-white transition-colors duration-150 hover:bg-white/10 ${focusRingCls}`;
 
@@ -299,10 +308,10 @@ function TrimStepContentImpl({
     el.style.left = `${pct}%`;
     // Hidden rather than clamped when the playhead falls outside the zoomed
     // window — pinning it to an edge reads as "the playhead is here", which is
-    // exactly wrong. Hidden while a cut is being dragged too: the handle and
-    // its frame preview are the reference then, and a second line chasing
-    // them a frame behind only reads as jitter.
-    el.style.opacity = pct < 0 || pct > 100 || draggingRef.current ? "0" : "1";
+    // exactly wrong. It stays visible through a drag: the frame on screen is
+    // the one the cut is landing on, and hiding the only marker that says
+    // where the video actually is left the drag looking unanchored.
+    el.style.opacity = pct < 0 || pct > 100 ? "0" : "1";
   }, []);
 
   // Mirror `view` into a ref for the imperative playhead and the window-level
@@ -636,13 +645,20 @@ function TrimStepContentImpl({
     [start, end, frameStep, moveHandle],
   );
 
+  /**
+   * Jump relative to where the video is *going*, not where it is.
+   *
+   * `el.currentTime` lags while a seek is in flight, so five quick taps on
+   * +10s all measured from the same stale frame and moved ten seconds in
+   * total. The pending request is the truthful origin when there is one.
+   */
   const seekBy = useCallback(
     (delta: number) => {
       const el = videoRef.current;
       if (!el) return;
-      seekTo(el.currentTime + delta);
+      seekLatest((wantedSeekRef.current ?? el.currentTime) + delta);
     },
-    [seekTo],
+    [seekLatest],
   );
 
   const togglePlay = useCallback(() => {
@@ -670,9 +686,11 @@ function TrimStepContentImpl({
       playheadRef.current = el.currentTime;
       applyPlayhead();
 
-      // A drag asked for a newer frame while this one was decoding.
+      // A drag — or a jump button — asked for a newer frame while this one
+      // was decoding. Flushing it is what makes `seekLatest` a coalescer
+      // rather than a dropper; gating it on a drag stranded the last tap.
       const wanted = wantedSeekRef.current;
-      if (wanted !== null && draggingRef.current) {
+      if (wanted !== null) {
         wantedSeekRef.current = null;
         el.currentTime = Math.max(0, Math.min(el.duration || wanted, wanted));
       }
@@ -810,6 +828,24 @@ function TrimStepContentImpl({
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-gradient-to-t from-black/55 to-transparent pt-8 pb-2.5">
           <div className="pointer-events-auto flex items-center gap-2">
+            {/* Coarse jumps flank the frame steps, longest on the outside, so
+                the row reads as one scale from a minute down to a frame. */}
+            <button
+              type="button"
+              onClick={() => seekBy(-LONG_JUMP_SECONDS)}
+              className={`${controlCls} mono tabular text-[10px] font-medium`}
+              aria-label="Back one minute"
+            >
+              <span aria-hidden="true">−1m</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => seekBy(-JUMP_STEP_SECONDS)}
+              className={`${controlCls} mono tabular text-[10px] font-medium`}
+              aria-label="Back ten seconds"
+            >
+              <span aria-hidden="true">−10s</span>
+            </button>
             <button
               type="button"
               onClick={() => seekBy(-frameStep)}
@@ -849,6 +885,22 @@ function TrimStepContentImpl({
                 strokeWidth={1.5}
                 aria-hidden="true"
               />
+            </button>
+            <button
+              type="button"
+              onClick={() => seekBy(JUMP_STEP_SECONDS)}
+              className={`${controlCls} mono tabular text-[10px] font-medium`}
+              aria-label="Forward ten seconds"
+            >
+              <span aria-hidden="true">+10s</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => seekBy(LONG_JUMP_SECONDS)}
+              className={`${controlCls} mono tabular text-[10px] font-medium`}
+              aria-label="Forward one minute"
+            >
+              <span aria-hidden="true">+1m</span>
             </button>
             <span className="mx-1 h-3 w-px bg-white/35" aria-hidden="true" />
             <button
@@ -923,7 +975,7 @@ function TrimStepContentImpl({
           {/* Rail. Click seeks; handles drag. */}
           <div
             ref={railRef}
-            onPointerDown={(e) => seekTo(positionFromEvent(e.clientX))}
+            onPointerDown={(e) => seekLatest(positionFromEvent(e.clientX))}
             className="relative cursor-pointer touch-none rounded-[var(--radius-element)] bg-[var(--ink-900)] select-none"
             style={{ height: RAIL_HEIGHT_PX }}
           >
@@ -1047,24 +1099,37 @@ function TrimStepContentImpl({
           </div>
         </div>
 
-        {/* START / END under the strip's own edges. */}
+        {/* START / END under the strip's own edges. Each readout is also the
+            way back to its own cut: after scrubbing away, the number you want
+            to check is the thing you click. Seeking only moves the playhead —
+            the cut itself is untouched. */}
         <div className="flex items-baseline justify-between px-0.5 pt-0.5">
-          <span className="inline-flex items-baseline gap-1.5">
+          <button
+            type="button"
+            onClick={() => seekLatest(start)}
+            aria-label="Jump to the trim start"
+            className={`inline-flex cursor-pointer items-baseline gap-1.5 rounded-[var(--radius-cell)] ${focusRingCls}`}
+          >
             <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
               Start
             </span>
             <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
               {formatTimecode(start)}
             </span>
-          </span>
-          <span className="inline-flex items-baseline gap-1.5">
+          </button>
+          <button
+            type="button"
+            onClick={() => seekLatest(end)}
+            aria-label="Jump to the trim end"
+            className={`inline-flex cursor-pointer items-baseline gap-1.5 rounded-[var(--radius-cell)] ${focusRingCls}`}
+          >
             <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
               End
             </span>
             <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
               {formatTimecode(end)}
             </span>
-          </span>
+          </button>
         </div>
 
         {tooShort ? (

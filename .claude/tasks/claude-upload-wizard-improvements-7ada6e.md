@@ -98,7 +98,7 @@ ready).
 
 ## T7 · Add jump buttons, coalesced seeks and jump-to-handle to the trim step
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/new-match-wizard/TrimStepContent.tsx (guess — control row ~L811-875, seekBy ~L639, rail onPointerDown ~L926, readouts ~L1051-1068, applyPlayhead ~L292-306)
 - **done when:**

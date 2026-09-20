@@ -41,3 +41,15 @@ is the runner's. Newest entries at the bottom.
 2. The peek counts this match's own unreleased reservation as used, so a re-upload to an already-submitted match errs toward refusing — consider excluding the match's own job ids.
 3. `loadBillableSeconds` reads the newest `processing_jobs` row for the match (`order created_at desc limit 1`); `recordBlobName` updates every row — no single-row precedent existed.
 4. `getPersonalUsage` in `src/lib/data/usage-server.ts` repeats the same ledger sum and could share a helper.
+
+## T7 · Add jump buttons, coalesced seeks and jump-to-handle to the trim step — done
+
+**gate:** mechanical PASS (lint, typecheck, full test suite); completion review `VERDICT: pass` (5/5 criteria met, scope clean). widget-states: loading ✓ / empty ✓ unchanged by the diff, error n/a (client step, no server region).
+
+**changed:** `TrimStepContent.tsx` — the in-frame control row now reads `−1m · −10s · ‹frame · play · frame› · +10s · +1m` (`JUMP_STEP_SECONDS` from the alignment hook, local `LONG_JUMP_SECONDS = 60`, each with an `aria-label`); `seekBy` and the rail click go through `seekLatest`, with rapid jumps based on `wantedSeekRef.current ?? el.currentTime`; `handleSeeked` now flushes a parked seek outside a drag too (required, or the last tap of a rapid sequence was dropped — reviewer judged it in scope); Start/End readouts are buttons that seek to the handle; the playhead stays visible during a drag. `clampCut`, `moveHandle`, the drag commit path, `tooShort` and every `onTrimChange` call site untouched.
+
+**follow-ups:**
+
+1. The control row is now eight 28px buttons (~260px); a portrait clip's player can be ~228px wide, so the row may overflow the frame — wants a wrap or min-width rule.
+2. `LONG_JUMP_SECONDS` could live beside `JUMP_STEP_SECONDS` in `use-attachment-alignment.ts` if a third surface needs it.
+3. PageUp/PageDown on the trim handles, matching the alignment step's rail.
