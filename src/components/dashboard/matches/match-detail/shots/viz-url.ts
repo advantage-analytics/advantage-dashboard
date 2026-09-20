@@ -158,6 +158,28 @@ export interface VizState {
    * doc comment for why draft never survives a `setState` call).
    */
   draft?: boolean;
+  /**
+   * Phase 2A: the fullscreen court viewer (`viz-fullscreen.tsx`), opened
+   * from a `data-viz-fullscreen-door` control on the focused view. Only
+   * meaningful alongside a `cut` — dropped on the wall exactly like `draft`
+   * (see `vizStateQuery`'s `cut === null` early return and `parseVizState`
+   * below). Optional rather than a required `false` everywhere, matching
+   * `draft`'s own convention: every call site that builds a real `VizState`
+   * literal without opening the viewer simply omits it, and `undefined`
+   * reads exactly like `false` everywhere this is checked (`=== true`,
+   * never a bare truthy test) — including the `toEqual` fixtures in
+   * `tests/viz-url.spec.ts`, which rely on a missing key and `{fullscreen:
+   * undefined}` comparing equal (`{fullscreen: false}` would not).
+   *
+   * Unlike `draft`, `applyVizUpdate` never clears it — a filter/cut/chart
+   * change made while the viewer is open keeps it open (the viewer reads
+   * the same `cut`/`chart`/`filters` the focused court does, so those
+   * changes are meant to apply live underneath it). It is NOT part of
+   * `viewIdentityKey`/`sameView`: opening or closing the viewer is not a
+   * different court or a different view, only a different way of looking
+   * at the same one.
+   */
+  fullscreen?: boolean;
 }
 
 /* ── Parse & serialize helper ──────────────────────────────────────────── */
@@ -195,7 +217,15 @@ const ORDER = [
 // it's re-enabled. The viz filter's set value is namespaced to `vset` in the
 // URL — `VizFilters.set` stays the in-memory field name throughout this file;
 // only the URL-facing key differs.
-const VIZ_KEYS = ["cut", "chart", "view", "vset", "draft", ...ORDER];
+const VIZ_KEYS = [
+  "cut",
+  "chart",
+  "view",
+  "vset",
+  "draft",
+  "fullscreen",
+  ...ORDER,
+];
 
 type OptionKey = keyof typeof OPTIONS;
 type MultiOptionKey = Exclude<OptionKey, "player">;
@@ -348,7 +378,19 @@ export function parseVizState(params: URLSearchParams): VizState {
   // undefined}` compare equal under `toEqual`; `{draft: false}` would not).
   const draft = cut !== null && params.get("draft") === "1";
 
-  return { cut, chart, filters, viewId, ...(draft ? { draft: true } : {}) };
+  // Phase 2A: `fullscreen=1` only means anything alongside a real cut, same
+  // as `draft` — and draft wins when both are somehow present (the blank
+  // "Create view" prompt has no court behind it for the viewer to show).
+  const fullscreen = cut !== null && !draft && params.get("fullscreen") === "1";
+
+  return {
+    cut,
+    chart,
+    filters,
+    viewId,
+    ...(draft ? { draft: true } : {}),
+    ...(fullscreen ? { fullscreen: true } : {}),
+  };
 }
 
 /**
@@ -382,6 +424,14 @@ export function vizStateQuery(
   // early `cut === null` return above) — never on the wall.
   if (state.draft === true) {
     next.set("draft", "1");
+  }
+
+  // Phase 2A: fullscreen only ever serializes alongside a real cut, for the
+  // same reason — the early `cut === null` return above means setting
+  // `cut: null` (Back to wall) drops it, whether or not a caller happened
+  // to carry `fullscreen: true` into that literal.
+  if (state.fullscreen === true) {
+    next.set("fullscreen", "1");
   }
 
   // Serialize viewId if present
