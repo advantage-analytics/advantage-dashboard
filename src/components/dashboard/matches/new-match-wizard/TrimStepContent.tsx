@@ -247,7 +247,11 @@ function TrimStepContentImpl({
   const railRef = useRef<HTMLDivElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [dragging, setDragging] = useState<Handle | null>(null);
+  /**
+   * The gesture in progress: a cut being moved, or the playhead being scrubbed
+   * along the rail. `"scrub"` touches no cut — it only says where to watch.
+   */
+  const [dragging, setDragging] = useState<Handle | "scrub" | null>(null);
   // Where the drag has taken the cuts so far — shown live, committed to the
   // form on release. Null while nothing is being dragged.
   const [live, setLive] = useState<{ start: number; end: number } | null>(null);
@@ -286,7 +290,7 @@ function TrimStepContentImpl({
   // Mirrors `dragging` for the imperative playhead and the seek callbacks,
   // which must not re-subscribe on every drag. Declared before the callbacks
   // that read it; written in an effect below, never during render.
-  const draggingRef = useRef<Handle | null>(null);
+  const draggingRef = useRef<Handle | "scrub" | null>(null);
   useEffect(() => {
     draggingRef.current = dragging;
   }, [dragging]);
@@ -321,10 +325,15 @@ function TrimStepContentImpl({
     const total = durationRef.current;
     const pct = total > 0 ? (playheadRef.current / total) * 100 : 0;
     el.style.left = `${pct}%`;
-    // Hidden while a cut is being dragged: the handle and its frame preview
+    // Hidden while a CUT is being dragged: the handle and its frame preview
     // are the reference then, and a second marker chasing them a decode
-    // behind reads as jitter rather than as information.
-    el.style.opacity = pct < 0 || pct > 100 || draggingRef.current ? "0" : "1";
+    // behind reads as jitter rather than as information. A scrub is the
+    // opposite case — the playhead is the thing the gesture moves.
+    const hidden =
+      pct < 0 ||
+      pct > 100 ||
+      (draggingRef.current !== null && draggingRef.current !== "scrub");
+    el.style.opacity = hidden ? "0" : "1";
   }, []);
 
   // A new source rewinds the playhead.
@@ -436,6 +445,12 @@ function TrimStepContentImpl({
     [committedStart, committedEnd, clampCut, seekLatest],
   );
 
+  /** Play, without the toggle — what letting go of the rail does. */
+  const play = useCallback(() => {
+    const el = videoRef.current;
+    if (el?.paused) void el.play().catch(() => undefined);
+  }, []);
+
   // Drag inputs go through a ref so the window subscription keys only on
   // `dragging`. Written in an effect, not during render.
   const dragCtx = useRef({
@@ -444,6 +459,8 @@ function TrimStepContentImpl({
     duration,
     onTrimChange,
     seekTo,
+    seekLatest,
+    play,
   });
   useEffect(() => {
     dragCtx.current = {
@@ -452,6 +469,8 @@ function TrimStepContentImpl({
       duration,
       onTrimChange,
       seekTo,
+      seekLatest,
+      play,
     };
   });
 
@@ -462,17 +481,31 @@ function TrimStepContentImpl({
     // pointer leaves the 24px handle — otherwise it flickers to an arrow the
     // moment you move faster than the handle can follow.
     const previousCursor = document.body.style.cursor;
-    document.body.style.cursor = "ew-resize";
+    document.body.style.cursor =
+      dragging === "scrub" ? "grabbing" : "ew-resize";
 
     const onMove = (e: PointerEvent) => {
       const ctx = dragCtx.current;
-      ctx.applyDrag(dragging, ctx.positionFromEvent(e.clientX));
+      const time = ctx.positionFromEvent(e.clientX);
+      // A scrub writes nothing: it walks the playhead, and the player is the
+      // output. Seeks coalesce, so a fast sweep across a multi-gigabyte file
+      // decodes the frames it can keep up with rather than queueing all of
+      // them.
+      if (dragging === "scrub") ctx.seekLatest(time);
+      else ctx.applyDrag(dragging, time);
     };
 
     const onUp = () => {
       if (liveRafRef.current !== null) {
         cancelAnimationFrame(liveRafRef.current);
         liveRafRef.current = null;
+      }
+      // Let go of a scrub and it plays from where you landed — the same thing
+      // a press on the rail does, a click being a scrub that never moved.
+      if (dragging === "scrub") {
+        setDragging(null);
+        dragCtx.current.play();
+        return;
       }
       // Release is the one write: the form learns the cuts, and the video is
       // asked for the frame the cut actually landed on.
@@ -537,23 +570,6 @@ function TrimStepContentImpl({
     if (el.paused) void el.play().catch(() => undefined);
     else el.pause();
   }, []);
-
-  /**
-   * A press on the rail: go there, and play from there.
-   *
-   * The rail is the only place in the step that says "show me this part of the
-   * match", so a press on it is a request to watch, not just to move a marker.
-   * Playing is what makes a cut checkable — you see whether the first serve is
-   * inside the window or a beat before it.
-   */
-  const seekAndPlay = useCallback(
-    (time: number) => {
-      seekLatest(time);
-      const el = videoRef.current;
-      if (el?.paused) void el.play().catch(() => undefined);
-    },
-    [seekLatest],
-  );
 
   const toggleMute = useCallback(() => {
     const el = videoRef.current;
@@ -664,7 +680,7 @@ function TrimStepContentImpl({
         el.currentTime = Math.max(0, Math.min(el.duration || wanted, wanted));
       }
 
-      if (!draggingRef.current) return;
+      if (!draggingRef.current || draggingRef.current === "scrub") return;
       const canvas = previewCanvasRef.current;
       const ctx = canvas?.getContext("2d");
       if (!canvas || !ctx) return;
@@ -918,7 +934,7 @@ function TrimStepContentImpl({
         <div className="relative py-0.5">
           {/* Live frame at the handle being dragged. Sits above the rail on its
               own layer so showing it never reflows the strip. */}
-          {dragging ? (
+          {dragging && dragging !== "scrub" ? (
             <div
               className="pointer-events-none absolute bottom-[calc(100%+8px)] z-10 overflow-hidden rounded-[var(--radius-element)] border border-[var(--border-hairline)] bg-white shadow-[var(--shadow-dropdown)]"
               style={{
@@ -941,10 +957,18 @@ function TrimStepContentImpl({
             </div>
           ) : null}
 
-          {/* Rail. A press plays from there; only the two handles drag. */}
+          {/* Rail. Press and sweep to look through the match; let go and it
+              plays from there. Only the two handles move a cut. */}
           <div
             ref={railRef}
-            onPointerDown={(e) => seekAndPlay(positionFromEvent(e.clientX))}
+            onPointerDown={(e) => {
+              // Press, and keep the pointer: the playhead follows it for as
+              // long as you hold, so a sweep along the rail is a look through
+              // the match. Let go and it plays from where you stopped.
+              e.preventDefault();
+              seekLatest(positionFromEvent(e.clientX));
+              setDragging("scrub");
+            }}
             className="relative cursor-pointer touch-none rounded-[var(--radius-element)] bg-[var(--ink-900)] select-none"
             style={{ height: RAIL_HEIGHT_PX }}
           >

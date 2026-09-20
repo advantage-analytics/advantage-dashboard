@@ -334,14 +334,38 @@ test("the step's keys stay out of a camera question", async ({ page }) => {
  * The rail plays; the bracket does not drag
  * ---------------------------------------------------------------------- */
 
+test("dragging along the rail walks the playhead, and releasing plays", async ({
+  page,
+}) => {
+  await open(page, { start: 0, end: CLIP_SECONDS });
+  const box = await rail(page).boundingBox();
+  if (!box) throw new Error("the rail has no box");
+  const y = box.y + box.height / 2;
+
+  // Press near the head and sweep to three-quarters, holding throughout: the
+  // playhead is expected to follow the pointer, not wait for the release.
+  await page.mouse.move(box.x + box.width * 0.1, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.75, y, { steps: 12 });
+  await expect.poll(() => playhead(page)).toBeGreaterThan(1);
+  // Still a look, not a play — and no cut has moved.
+  expect(await paused(page)).toBe(true);
+  expect(await trimEvents(page)).toEqual([]);
+
+  await page.mouse.up();
+  await expect.poll(() => paused(page)).toBe(false);
+  expect(await trimEvents(page)).toEqual([]);
+});
+
 test("a press on the rail plays from there", async ({ page }) => {
   await open(page, { start: 0, end: CLIP_SECONDS });
   expect(await paused(page)).toBe(true);
 
   await pressRail(page, 0.5);
 
-  // Halfway along a two-second clip. Playing moves it on, so the assertion is
-  // a floor rather than an equality.
+  // A click is a scrub of zero distance: it lands there and plays. Halfway
+  // along a two-second clip, and playing moves it on, so the assertion is a
+  // floor rather than an equality.
   await expect.poll(() => playhead(page)).toBeGreaterThan(0.7);
   await expect.poll(() => paused(page)).toBe(false);
 });
