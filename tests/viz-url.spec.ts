@@ -81,3 +81,11 @@ test("activeFilterEntries uses option labels", () => {
   });
   expect(e.map((x) => x.label)).toEqual(["Opponent", "1st", "T"]);
 });
+
+test("prototype chain pollution is rejected", () => {
+  const s = parseVizState(
+    new URLSearchParams("cut=serve&ball=constructor&zone=toString"),
+  );
+  expect(s.filters.ball).toBe("any");
+  expect(s.filters.zone).toBe("any");
+});

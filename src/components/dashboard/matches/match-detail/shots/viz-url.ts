@@ -8,8 +8,8 @@
  * as defaults; serialize omits defaults to keep URLs readable.
  */
 
-import type { Cut, Chart, VizFilters, EMPTY_VIZ_FILTERS } from "./viz-model";
-import { filterKeysFor } from "./viz-model";
+import type { Cut, Chart, VizFilters } from "./viz-model";
+import { EMPTY_VIZ_FILTERS, filterKeysFor } from "./viz-model";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
@@ -194,18 +194,8 @@ export function activeFilterEntries(
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 
 function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
-  // Start with defaults (from viz-model.ts's EMPTY_VIZ_FILTERS shape)
-  const filters: VizFilters = {
-    player: "you",
-    set: "any",
-    game: "any",
-    ball: "any",
-    court: "any",
-    zone: "any",
-    pressure: "any",
-    result: "any",
-    rally: "any",
-  };
+  // Start with defaults from EMPTY_VIZ_FILTERS
+  const filters: VizFilters = { ...EMPTY_VIZ_FILTERS };
 
   // Parse player
   const playerParam = params.get("player");
@@ -219,7 +209,7 @@ function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
 
     const optionKey = key as OptionKey;
     const param = params.get(key);
-    if (param !== null && param in OPTIONS[optionKey]) {
+    if (param !== null && Object.hasOwn(OPTIONS[optionKey], param)) {
       filters[key as keyof typeof filters] = param as never;
     }
   }
