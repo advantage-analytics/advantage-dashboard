@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import {
   EMPTY_VIZ_FILTERS,
-  binDots,
   chartAllowedOn,
   computeViz,
   computeVizStats,
@@ -1350,109 +1349,12 @@ test.describe("computeViz — rallyPosition cut", () => {
   });
 });
 
-/* ── G3a: binDots ──────────────────────────────────────────────────────── */
-
-test.describe("binDots", () => {
-  const bounds = { xMin: 0, xMax: 10, yMin: 0, yMax: 10 };
-
-  test("bins a dot into the cell its position falls in", () => {
-    const { cells, max } = binDots([{ x: 5, y: 5 }], 2, 2, bounds);
-    // x=5,y=5 is exactly on the boundary -> floor(0.5*2)=1 for both axes.
-    expect(cells[1][1]).toBe(1);
-    expect(max).toBe(1);
-  });
-
-  test("sum of cells always equals dots.length", () => {
-    const dots = [
-      { x: 1, y: 1 },
-      { x: 9, y: 9 },
-      { x: 5, y: 1 },
-      { x: 1, y: 9 },
-      { x: 5, y: 5 },
-    ];
-    const { cells } = binDots(dots, 4, 3, bounds);
-    const sum = cells.flat().reduce((a, b) => a + b, 0);
-    expect(sum).toBe(dots.length);
-  });
-
-  test("out-of-bounds dots clamp to the edge cell rather than being dropped", () => {
-    const dots = [
-      { x: -100, y: -100 }, // far below/left of bounds
-      { x: 1000, y: 1000 }, // far above/right of bounds
-    ];
-    const { cells } = binDots(dots, 3, 3, bounds);
-    expect(cells[0][0]).toBe(1); // clamped to the top-left edge cell
-    expect(cells[2][2]).toBe(1); // clamped to the bottom-right edge cell
-    const sum = cells.flat().reduce((a, b) => a + b, 0);
-    expect(sum).toBe(2);
-  });
-
-  test("an empty dot list bins to an all-zero grid with max 0", () => {
-    const { cells, max } = binDots([], 3, 2, bounds);
-    expect(cells).toEqual([
-      [0, 0, 0],
-      [0, 0, 0],
-    ]);
-    expect(max).toBe(0);
-  });
-});
-
-/* ── G3a: VizResult.heat ───────────────────────────────────────────────── */
-
-test.describe("computeViz — heat population", () => {
-  const servePts = [
-    point({ serverIsPlayer1: true, wonByPlayer1: true }),
-    point({ serverIsPlayer1: true, wonByPlayer1: false }),
-  ];
-
-  test("heat is null when the chart isn't 'heat'", () => {
-    expect(
-      computeViz(servePts, "serve", EMPTY_VIZ_FILTERS, true).heat,
-    ).toBeNull();
-    expect(
-      computeViz(servePts, "serve", EMPTY_VIZ_FILTERS, true, "scatter").heat,
-    ).toBeNull();
-  });
-
-  test("serve heat is a 10x12 grid whose cells sum to the dot count", () => {
-    const r = computeViz(servePts, "serve", EMPTY_VIZ_FILTERS, true, "heat");
-    expect(r.heat).not.toBeNull();
-    expect(r.heat!.cells).toHaveLength(12);
-    for (const row of r.heat!.cells) expect(row).toHaveLength(10);
-    expect(r.heat!.cells.flat().reduce((a, b) => a + b, 0)).toBe(r.dots.length);
-  });
-
-  // P2j: every cut now shares one 10x12 grid — serve, the two return cuts
-  // and rallyPosition alike (no more 6x7 vs. finer-10x12 split).
-  test("return cuts' heat is a 10x12 grid", () => {
-    const ret = point({
-      serverIsPlayer1: false,
-      secondShotLandingX: 1.0,
-      secondShotLandingY: 4.0,
-      secondShotContactX: 0.5,
-      secondShotContactY: 22.0,
-      secondShotType: "Forehand",
-    });
-    for (const cut of ["returnPlacement", "returnContact"] as const) {
-      const r = computeViz([ret], cut, EMPTY_VIZ_FILTERS, true, "heat");
-      expect(r.heat!.cells).toHaveLength(12);
-      for (const row of r.heat!.cells) expect(row).toHaveLength(10);
-      expect(r.heat!.cells.flat().reduce((a, b) => a + b, 0)).toBe(
-        r.dots.length,
-      );
-    }
-  });
-
-  test("rallyPosition heat is the same 10x12 grid as every other cut", () => {
-    const pts = [
-      point({ shots: [shot({ shotNumber: 3, isPlayer1: true, id: "s" })] }),
-    ];
-    const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true, "heat");
-    expect(r.heat!.cells).toHaveLength(12);
-    for (const row of r.heat!.cells) expect(row).toHaveLength(10);
-    expect(r.heat!.cells.flat().reduce((a, b) => a + b, 0)).toBe(r.dots.length);
-  });
-});
+/* ── heat-blob rewrite: `VizResult` carries no binned grid any more — the
+ * density heatmap (`court-art.tsx`'s `HeatFilterDef`) draws straight off the
+ * SAME `dots` every other chart uses, so there's nothing cut-specific left
+ * to test at this layer (the per-frame maths that WAS here —
+ * `heatDotRadiusFor`, the ramp tables, the filter region — moved to
+ * `court-geometry.ts` and is covered by `tests/court-geometry.spec.ts`). ── */
 
 /* ── G3a: computeVizStats — rallyPosition cut ─────────────────────────── */
 

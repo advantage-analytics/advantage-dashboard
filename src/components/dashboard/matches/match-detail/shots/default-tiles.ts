@@ -18,7 +18,6 @@ import {
   tileCountLabel,
   type Chart,
   type Cut,
-  type HeatGrid,
   type PlayerFilter,
   type VizDot,
 } from "./viz-model";
@@ -43,8 +42,6 @@ export interface DefaultTile {
    * default. */
   chart: Chart;
   dots: VizDot[];
-  /** Populated only when `chart === "heat"` — mirrors `VizResult.heat`. */
-  heat: HeatGrid | null;
   state: VizState;
   href: string;
   /** Drawable points in the cut's pool — `0` for every one of a subject's
@@ -100,7 +97,6 @@ export function buildDefaultTiles(
         cut: cut.cut,
         chart: cut.chart,
         dots: result.dots,
-        heat: result.heat,
         state,
         href: hrefFor(state),
         total: result.total,

@@ -3,8 +3,9 @@
 import type { MouseEvent, ReactNode } from "react";
 import Link from "next/link";
 import { APRON_FILL, HEAT_APRON_FILL, CourtArt } from "./court-art";
+import { heatFloorTintRgba } from "./court-geometry";
 import { VIZ_PILL_RADIUS } from "./viz-labels";
-import type { Chart, Cut, HeatGrid, VizDot } from "./viz-model";
+import type { Chart, Cut, VizDot } from "./viz-model";
 import type { VizState } from "./viz-url";
 import { viewIdentityKey } from "./viz-url";
 import { useVizState } from "./use-viz-state";
@@ -64,7 +65,6 @@ export function CourtTile({
   cut,
   dots,
   chart = "scatter",
-  heat = null,
   href,
   overlay,
   as = "link",
@@ -91,10 +91,9 @@ export function CourtTile({
   dots: VizDot[];
   /** G3b: forwarded straight to `CourtArt` — a saved-view tile can be a heat
    * chart same as the focused view; the six default tiles never are
-   * (`DEFAULT_CUTS` is scatter-only), so they simply omit both and get the
+   * (`DEFAULT_CUTS` is scatter-only), so they simply omit it and get the
    * ordinary dot court. */
   chart?: Chart;
-  heat?: HeatGrid | null;
   href: string;
   overlay?: ReactNode;
   /**
@@ -171,7 +170,21 @@ export function CourtTile({
   // Defect fix: mirrors `CourtArt`'s own `showHeat` test exactly, so the art
   // box wrapper (the letterbox strips around the svg) desaturates in lockstep
   // with the court it surrounds instead of staying the normal apron green.
-  const showHeat = chart === "heat" && heat != null;
+  const showHeat = chart === "heat";
+  // heat-blob follow-up (I3): with dots, `CourtArt`'s own filter paints the
+  // floor tint over its whole svg — including the sliver of letterbox the
+  // tile's fixed 334/216 aspect can leave against a return-cut svg's own
+  // (very slightly different) aspect ratio. Compositing the SAME tint here
+  // (`heatFloorTintRgba()`, derived from the identical ramp/alpha constants
+  // the svg's filter uses) over `HEAT_APRON_FILL` keeps that sliver, if any,
+  // from reading as a different green. No dots (or not heat mode) ⇒ plain
+  // colour, same as before.
+  const heatHasDots = showHeat && dots.length > 0;
+  const artBoxBackground = showHeat
+    ? heatHasDots
+      ? `linear-gradient(${heatFloorTintRgba()}, ${heatFloorTintRgba()}), ${HEAT_APRON_FILL}`
+      : HEAT_APRON_FILL
+    : APRON_FILL;
 
   const body = (
     <>
@@ -180,7 +193,7 @@ export function CourtTile({
         className="relative overflow-hidden rounded-t-[var(--radius-card)]"
         style={{
           aspectRatio: "334 / 216",
-          backgroundColor: showHeat ? HEAT_APRON_FILL : APRON_FILL,
+          background: artBoxBackground,
           viewTransitionName: isMorphTarget
             ? VIZ_COURT_TRANSITION_NAME
             : undefined,
@@ -190,7 +203,6 @@ export function CourtTile({
           cut={cut}
           dots={dots}
           chart={chart}
-          heat={heat}
           fill
           className="block h-full w-full"
         />

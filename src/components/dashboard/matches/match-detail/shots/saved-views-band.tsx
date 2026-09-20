@@ -224,7 +224,6 @@ export function SavedViewsBand({
       countLabel,
       dots: result.dots,
       chart: view.chart,
-      heat: result.heat,
       href,
     };
   }
@@ -826,7 +825,6 @@ export function SavedViewsBand({
         cut={view.cut}
         dots={data.dots}
         chart={data.chart}
-        heat={data.heat}
         href={data.href}
         current={opts.current}
         navigateState={{
@@ -989,7 +987,6 @@ export function SavedViewsBand({
                   cut={tile.cut}
                   dots={tile.dots}
                   chart={tile.chart}
-                  heat={tile.heat}
                   href={tile.href}
                   current={isCurrent}
                   navigateState={tile.state}

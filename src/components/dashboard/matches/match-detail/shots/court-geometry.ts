@@ -199,17 +199,15 @@ export function projectReturnDot(
   return { cx, cy };
 }
 
-/* ── Heat-cell binning bounds (G3a, Data; full-view rewrite P2j) ───────────
+/* ── Heat filter bounds (G3a, Data; full-view rewrite P2j; density-blob
+ *    rewrite superseding both) ─────────────────────────────────────────────
  *
- * Where `binDots` (`viz-model.ts`) bins a cut's dots, in the SAME projected
- * (pre-transform) coordinates `court-art.tsx` draws them in — `projectServeDot`/
- * `projectReturnDot`'s own output — so the Drawing task can place a heat
- * cell's `<rect>` directly off a bin index without re-deriving where it
- * sits. Every cut now shares one grid resolution (`HEAT_GRID`, 10×12) and,
- * per frame, one set of bounds: `heatBoundsFor(cut)` below is each frame's
- * WHOLE VISIBLE VIEW — its own `viewBox` — mapped back through that frame's
- * group transform(s) into this pre-transform space, so the heat tint covers
- * the entire court rather than a sub-region. `returnPlacement`,
+ * `heatBoundsFor(cut)` below is each frame's WHOLE VISIBLE VIEW — its own
+ * `viewBox` — mapped back through that frame's group transform(s) into the
+ * SAME pre-transform (dots') coordinate space `projectServeDot`/
+ * `projectReturnDot` output, so the density heatmap's `<filter>`
+ * (`court-art.tsx`'s `HeatFilterDef`, region from `heatFilterRegionFor`
+ * below) covers the entire court rather than a sub-region. `returnPlacement`,
  * `returnContact` and `rallyPosition` all read the SAME `RETURN_HEAT_BOUNDS`
  * — they share one frame, so only which frame the dots are drawn on matters,
  * never which cut it is. `serve` gets its own `SERVE_HEAT_BOUNDS`.
@@ -370,19 +368,15 @@ export const RETURN_HEAT_BOUNDS: HeatBounds = {
   yMax: viewBoxXToLateralY(RETURN_COURT.viewBox.minX),
 };
 
-// One grid resolution for every cut (P2j) — the 10×12 grid rallyPosition
-// used to have exclusively now applies to serve and the two return cuts
-// too; the old 6×7 `SERVE_HEAT_GRID`/`RETURN_HEAT_GRID` variants are gone.
-export const HEAT_GRID = { cols: 10, rows: 12 } as const;
-
 /**
- * A cut's heat-binning/drawing bounds, in the SAME projected coordinate
- * space `binDots` (`viz-model.ts`'s `computeHeatForCut`) bins into and
- * `court-art.tsx` draws `heatCellRect`s in — the single source both read so
- * they cannot drift apart (I2). Every cut now covers its frame's WHOLE
- * visible view: `returnPlacement`, `returnContact` and `rallyPosition` share
- * the same return-frame view (`RETURN_HEAT_BOUNDS`) since they share one
- * frame — only `serve` differs, on its own frame (`SERVE_HEAT_BOUNDS`).
+ * A cut's heat FILTER region, in the SAME projected coordinate space the
+ * dots (`court-art.tsx`'s per-dot `<circle>`s, since the density heatmap
+ * rewrite below draws directly from `VizDot`s, not a binned grid) are
+ * projected into. Still the single source `court-art.tsx` reads for the
+ * `<filter>`'s `userSpaceOnUse` region (I2, unchanged by that rewrite):
+ * `returnPlacement`, `returnContact` and `rallyPosition` share the same
+ * return-frame view (`RETURN_HEAT_BOUNDS`) since they share one frame —
+ * only `serve` differs, on its own frame (`SERVE_HEAT_BOUNDS`).
  */
 export function heatBoundsFor(
   cut: "serve" | "returnPlacement" | "returnContact" | "rallyPosition",
@@ -390,60 +384,146 @@ export function heatBoundsFor(
   return cut === "serve" ? SERVE_HEAT_BOUNDS : RETURN_HEAT_BOUNDS;
 }
 
-/**
- * A heat cell's on-court rect, in the SAME projected (pre-transform)
- * coordinate space `bounds` is expressed in — `court-art.tsx` draws this
- * directly, no further conversion. `col`/`row` are 0-indexed and MUST match
- * `binDots`' own indexing (`viz-model.ts`): col grows along `bounds`' x-span,
- * row along its y-span — so a caller iterating `HeatGrid.cells[row][col]`
- * passes `(col, row)` here and lands on the exact cell `binDots` counted
- * into.
+/* ── Density heatmap (blur+colourize) — replaces the P2i/P2j cell grid ────
+ *
+ * User decision: "the heatmap shouldn't be rectangles, just blobs/blurs like
+ * a regular one" — `court-art.tsx` now draws one circle per dot (fill white,
+ * fixed opacity) and colourizes the whole thing with a single SVG filter
+ * (feGaussianBlur → feColorMatrix → feComponentTransfer) instead of binning
+ * into a grid of `<rect>`s. The constants below are the pure, testable
+ * numbers that filter needs: a blob radius per frame (so a blob reads the
+ * same apparent size on both court shapes) and the colour/alpha ramp tables
+ * `feComponentTransfer` walks.
  */
-export interface HeatCellRect {
+
+// The blob radius, in the return frame's own pre-transform units — the
+// user's "sensitivity" pick, expressed as a real-world size (1.1 m) via
+// `UNITS_PER_METER` (the depth axis' own metres→units scale — see that
+// constant's own doc comment). ≈18.51 units.
+export const RETURN_HEAT_DOT_RADIUS = 1.1 * UNITS_PER_METER;
+
+// The serve frame's own design units aren't calibrated to real metres the
+// way the return frame's are (see `UNITS_PER_METER`'s doc comment), so
+// matching "the same 1.1 m" there isn't meaningful — matching the RETURN
+// radius' actual SCREEN size is. Both frames render into a box of
+// (approximately) the same aspect ratio: the wall/saved-view tile's art box
+// is CSS-locked to the SERVE frame's own aspect (`court-tile.tsx`'s
+// `aspectRatio: "334 / 216"`), and the return frame's own viewBox aspect
+// (431/279 ≈ 1.5448) differs from that by under 0.1% — so
+// `preserveAspectRatio` scales each viewBox by very nearly
+// `boxWidthPx / viewBox.w` for both, with no meaningful letterboxing. A
+// dot's on-screen radius is therefore (radius in this module's pre-transform
+// units) × (that frame's own group-transform scale) ×
+// (boxWidthPx / viewBox.w). Solving `radius_serve` so the two screen radii
+// match, for the SAME `boxWidthPx`:
+//   radius_serve = radius_return
+//     × (RETURN's own inner-group scale ÷ SERVE's own group scale)
+//     × (SERVE_COURT.viewBox.w ÷ RETURN_COURT.viewBox.w)
+// `tests/court-geometry.spec.ts` cross-checks this against an independent
+// re-implementation of both scale factors. ≈17.20 units.
+export const SERVE_HEAT_DOT_RADIUS =
+  RETURN_HEAT_DOT_RADIUS *
+  (RETURN_INNER_SCALE / SERVE_GROUP_SCALE) *
+  (SERVE_COURT.viewBox.w / RETURN_COURT.viewBox.w);
+
+/** A cut's blob radius, in the SAME projected coordinate space
+ * `heatBoundsFor(cut)` and `projectServeDot`/`projectReturnDot` share. */
+export function heatDotRadiusFor(
+  cut: "serve" | "returnPlacement" | "returnContact" | "rallyPosition",
+): number {
+  return cut === "serve" ? SERVE_HEAT_DOT_RADIUS : RETURN_HEAT_DOT_RADIUS;
+}
+
+// Margin around `heatBoundsFor(cut)` the `<filter>`'s own `userSpaceOnUse`
+// region pads by, as a multiple of that cut's blob radius — big enough that
+// `feGaussianBlur`'s kernel (effectively ~3×`stdDeviation`, itself half the
+// radius, so ~1.5×radius of real spread) settles well inside the filter
+// region's own edge instead of getting clipped there into a visible hard
+// line right at the boundary.
+const HEAT_FILTER_MARGIN_RATIO = 2;
+
+export interface HeatFilterRegion {
   x: number;
   y: number;
   width: number;
   height: number;
 }
 
-export function heatCellRect(
-  bounds: HeatBounds,
-  cols: number,
-  rows: number,
-  col: number,
-  row: number,
-): HeatCellRect {
-  const width = (bounds.xMax - bounds.xMin) / cols;
-  const height = (bounds.yMax - bounds.yMin) / rows;
+/**
+ * The `<filter>` element's own `x`/`y`/`width`/`height` (with
+ * `filterUnits="userSpaceOnUse"`) for a cut's heat chart — `heatBoundsFor(cut)`
+ * (the frame's whole visible view) padded by `HEAT_FILTER_MARGIN_RATIO` blob
+ * radii on every side. Every pixel inside this rectangle gets painted by
+ * `feComponentTransfer`'s table lookups regardless of whether a dot circle
+ * actually reached it (`court-art.tsx`'s `HeatFilterDef` doc comment has the
+ * mechanism), which is what makes "the filter region" and "the whole tinted
+ * view" the same rectangle — so this needing to fully cover `heatBoundsFor`
+ * is exactly what "the tint fills the entire view" comes down to.
+ */
+export function heatFilterRegionFor(
+  cut: "serve" | "returnPlacement" | "returnContact" | "rallyPosition",
+): HeatFilterRegion {
+  const bounds = heatBoundsFor(cut);
+  const margin = heatDotRadiusFor(cut) * HEAT_FILTER_MARGIN_RATIO;
   return {
-    x: bounds.xMin + col * width,
-    y: bounds.yMin + row * height,
-    width,
-    height,
+    x: bounds.xMin - margin,
+    y: bounds.yMin - margin,
+    width: bounds.xMax - bounds.xMin + margin * 2,
+    height: bounds.yMax - bounds.yMin + margin * 2,
   };
 }
 
+// The heat ramp's four colour stops — `--viz-heatmap-0..3`,
+// `src/styles/design-system/colors.css` (light mode only: an SVG filter
+// primitive's `tableValues` takes literal numbers, not a CSS custom
+// property, so this can't track the dark-mode variant the token also
+// carries there — consistent with DESIGN.md's dark-mode deferral).
+const HEAT_RAMP_HEX = ["#F2F2F2", "#B8D4F9", "#6AABFF", "#3B82F6"] as const;
+
 /**
- * A heat cell's colour-ramp index (`--viz-heatmap-{0..3}`, by quartile of
- * `count/max`) and `fill-opacity` (linear 0.1 → 0.82 across the same ratio)
- * — P2i's rule verbatim. Callers skip drawing a cell whose `count` is 0
- * entirely (a zero cell is never "the emptiest visible shade", it's just
- * absent) rather than calling this with `count <= 0`.
+ * One channel's `feFuncR`/`feFuncG`/`feFuncB` `tableValues` string — each
+ * ramp colour's own byte for that channel, normalised to 0..1 the way SVG
+ * filter primitives expect. Pure and exported so
+ * `tests/court-geometry.spec.ts` can round-trip it back against
+ * `HEAT_RAMP_HEX` without duplicating the parsing.
  */
-export interface HeatCellStyle {
-  colorIndex: 0 | 1 | 2 | 3;
-  opacity: number;
+export function heatRampChannelTable(channel: "r" | "g" | "b"): string {
+  const start = channel === "r" ? 1 : channel === "g" ? 3 : 5;
+  return HEAT_RAMP_HEX.map((hex) => {
+    const byte = parseInt(hex.slice(start, start + 2), 16);
+    return (byte / 255).toFixed(3);
+  }).join(" ");
 }
 
-const HEAT_OPACITY_MIN = 0.1;
-const HEAT_OPACITY_MAX = 0.82;
+export const HEAT_RAMP_R_TABLE = heatRampChannelTable("r");
+export const HEAT_RAMP_G_TABLE = heatRampChannelTable("g");
+export const HEAT_RAMP_B_TABLE = heatRampChannelTable("b");
 
-export function heatCellStyle(count: number, max: number): HeatCellStyle {
-  const ratio = max > 0 ? Math.min(1, Math.max(0, count / max)) : 0;
-  const colorIndex = Math.min(3, Math.floor(ratio * 4)) as 0 | 1 | 2 | 3;
-  const opacity =
-    HEAT_OPACITY_MIN + ratio * (HEAT_OPACITY_MAX - HEAT_OPACITY_MIN);
-  return { colorIndex, opacity };
+// The alpha ramp `feFuncA` walks: starts at the floor tint (0.1, same floor
+// the old cell grid's own P2j opacity ramp used) and climbs STEEPLY — the
+// "make the heatmap more sensitive" feedback — so a single dot's blob is
+// already clearly visible rather than reading as a flat, hard-to-see
+// minimum; a denser cluster still has headroom up to 0.82 (P2i's own
+// ceiling) before it flattens out.
+export const HEAT_ALPHA_TABLE = "0.1 0.45 0.65 0.75 0.82";
+export const HEAT_FLOOR_ALPHA = 0.1;
+
+/**
+ * The exact colour the floor tint paints (`HEAT_RAMP_HEX[0]` at
+ * `HEAT_FLOOR_ALPHA`) as a CSS `rgba()` string, derived from the SAME
+ * constants the filter's own tables use rather than a second hand-picked
+ * literal. Used outside the SVG — `viz-focused.tsx`/`court-tile.tsx`
+ * composite this over `HEAT_APRON_FILL` on the letterbox strips either side
+ * of the court svg, so the strip matches the filter-painted tint inside it
+ * exactly instead of reading as a slightly different green (I3/heat-blob
+ * follow-up).
+ */
+export function heatFloorTintRgba(): string {
+  const hex = HEAT_RAMP_HEX[0];
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${HEAT_FLOOR_ALPHA})`;
 }
 
 /* ── Shared exports ────────────────────────────────────────────────────── */

@@ -105,7 +105,6 @@ export function VizWall({ savedViewsBand }: { savedViewsBand?: ReactNode }) {
                       cut={tile.cut}
                       dots={tile.dots}
                       chart={tile.chart}
-                      heat={tile.heat}
                       href={tile.href}
                       navigateState={tile.state}
                     />

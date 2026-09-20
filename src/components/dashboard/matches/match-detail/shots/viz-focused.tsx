@@ -6,7 +6,11 @@ import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { WorkspaceKind } from "@/lib/workspace/types";
 import { APRON_FILL, HEAT_APRON_FILL, CourtArt } from "./court-art";
-import { trianglePointsFor, starPoints } from "./court-geometry";
+import {
+  trianglePointsFor,
+  starPoints,
+  heatFloorTintRgba,
+} from "./court-geometry";
 import { StatsCard } from "./stats-card";
 import { VizToolbar } from "./viz-toolbar";
 import { useVizState } from "./use-viz-state";
@@ -168,8 +172,20 @@ export function VizFocused({
   // svg) must follow the court's own desaturation — heat mode desaturates,
   // EXCEPT while drafting, where `CourtArt` below is told to draw normal
   // (non-desaturated) colours regardless of `state.chart`.
-  const artBoxFill =
-    state.chart === "heat" && !isDraft ? HEAT_APRON_FILL : APRON_FILL;
+  const showHeat = state.chart === "heat" && !isDraft;
+  // heat-blob follow-up (I3): with dots, `CourtArt`'s own filter paints the
+  // floor tint over the WHOLE svg — including the sliver of letterbox the
+  // court column's own box can leave either side of it. Compositing the SAME
+  // tint here (`heatFloorTintRgba()`, derived from the identical ramp/alpha
+  // constants the svg's filter uses) over `HEAT_APRON_FILL` keeps that
+  // sliver from reading as a slightly different green. No dots ⇒ plain
+  // colour, same as before.
+  const heatHasDots = showHeat && result.dots.length > 0;
+  const artBoxFill = showHeat
+    ? heatHasDots
+      ? `linear-gradient(${heatFloorTintRgba()}, ${heatFloorTintRgba()}), ${HEAT_APRON_FILL}`
+      : HEAT_APRON_FILL
+    : APRON_FILL;
 
   function backToWall() {
     // F5: the reverse morph. `targetKey` is the WALL TILE's dom id for
@@ -272,7 +288,7 @@ export function VizFocused({
             ref={courtArtRef}
             className="relative w-full"
             style={{
-              backgroundColor: artBoxFill,
+              background: artBoxFill,
               viewTransitionName: isMorphTarget
                 ? VIZ_COURT_TRANSITION_NAME
                 : undefined,
@@ -280,14 +296,13 @@ export function VizFocused({
           >
             <CourtArt
               cut={cut}
-              // G4: the draft prompt never plots — no dots, no heat cells,
+              // G4: the draft prompt never plots — no dots, no heat blobs,
               // normal (non-desaturated) court colours. `computeViz` still
               // ran above (its `count`/`total`/`noun` still feed the
               // toolbar's Filters popover), only its DRAWN output is
               // withheld here.
               dots={isDraft ? [] : result.dots}
               chart={state.chart}
-              heat={isDraft ? null : result.heat}
               draft={isDraft}
               zones={
                 !isDraft && state.chart === "zones" && cut === "serve"

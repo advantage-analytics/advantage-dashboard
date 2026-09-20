@@ -4,6 +4,7 @@ import {
   RETURN_COURT,
   SERVE_HEAT_BOUNDS,
   RETURN_HEAT_BOUNDS,
+  UNITS_PER_METER,
   heatBoundsFor,
   projectServeDot,
   projectReturnDot,
@@ -13,9 +14,17 @@ import {
   ZONE_OPACITY_MAX,
   trianglePointsFor,
   starPoints,
-  heatCellRect,
-  heatCellStyle,
-  type HeatBounds,
+  RETURN_HEAT_DOT_RADIUS,
+  SERVE_HEAT_DOT_RADIUS,
+  heatDotRadiusFor,
+  heatRampChannelTable,
+  HEAT_RAMP_R_TABLE,
+  HEAT_RAMP_G_TABLE,
+  HEAT_RAMP_B_TABLE,
+  HEAT_ALPHA_TABLE,
+  HEAT_FLOOR_ALPHA,
+  heatFilterRegionFor,
+  heatFloorTintRgba,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
 
 /**
@@ -367,88 +376,133 @@ function parseTrianglePointsLoose(
 }
 
 /**
- * G3b — heatCellRect: pure cell geometry, in the same projected coordinate
- * space `bounds` is already expressed in (`SERVE_HEAT_BOUNDS`/
- * `RETURN_HEAT_BOUNDS`). No court/cut knowledge — just a rect-per-index
- * calculation `binDots`' own row/col indexing must line up with.
+ * Density heatmap (blur+colourize) — replaces the old P2i/P2j cell grid.
+ * `heatDotRadiusFor`/`heatRampChannelTable`/`heatFilterRegionFor`/
+ * `heatFloorTintRgba` are the pure, testable numbers `court-art.tsx`'s
+ * blur→colourize→ramp filter and the letterbox-strip composite fix both
+ * read straight off.
  */
-test.describe("heatCellRect", () => {
-  const bounds: HeatBounds = { xMin: 0, xMax: 100, yMin: 0, yMax: 50 };
-
-  test("cell (0,0) starts at the bounds' own top-left", () => {
-    const r = heatCellRect(bounds, 10, 5, 0, 0);
-    expect(r.x).toBe(0);
-    expect(r.y).toBe(0);
-    expect(r.width).toBeCloseTo(10, 10);
-    expect(r.height).toBeCloseTo(10, 10);
+test.describe("heatDotRadiusFor", () => {
+  test("RETURN_HEAT_DOT_RADIUS is 1.1 real metres on the return frame's own depth scale", () => {
+    expect(RETURN_HEAT_DOT_RADIUS).toBeCloseTo(1.1 * UNITS_PER_METER, 6);
   });
 
-  test("the last column/row's cell ends exactly at xMax/yMax", () => {
-    const cols = 10;
-    const rows = 5;
-    const r = heatCellRect(bounds, cols, rows, cols - 1, rows - 1);
-    expect(r.x + r.width).toBeCloseTo(bounds.xMax, 10);
-    expect(r.y + r.height).toBeCloseTo(bounds.yMax, 10);
+  test("serve and return radii read as the SAME apparent screen size", () => {
+    // Independent re-derivation of the equivalence court-geometry.ts's own
+    // doc comment claims: a dot's on-screen radius is (radius) × (that
+    // frame's own group-transform scale) ÷ (that frame's own viewBox
+    // width) — for the SAME box width, so cancelling the (unknown) box
+    // width leaves this ratio, which must be equal for both frames.
+    const serveScreenRatio =
+      (SERVE_HEAT_DOT_RADIUS * 0.85) / SERVE_COURT.viewBox.w;
+    const returnScreenRatio =
+      (RETURN_HEAT_DOT_RADIUS * 1.02) / RETURN_COURT.viewBox.w;
+    expect(serveScreenRatio).toBeCloseTo(returnScreenRatio, 6);
   });
 
-  test("cells tile the bounds with no gaps or overlaps (adjacent cells share an edge)", () => {
-    const cols = 6;
-    const rows = 7;
-    for (let col = 0; col < cols - 1; col++) {
-      const a = heatCellRect(bounds, cols, rows, col, 0);
-      const b = heatCellRect(bounds, cols, rows, col + 1, 0);
-      expect(a.x + a.width).toBeCloseTo(b.x, 10);
+  test("heatDotRadiusFor resolves serve vs. every return-frame cut", () => {
+    expect(heatDotRadiusFor("serve")).toBe(SERVE_HEAT_DOT_RADIUS);
+    for (const cut of [
+      "returnPlacement",
+      "returnContact",
+      "rallyPosition",
+    ] as const) {
+      expect(heatDotRadiusFor(cut)).toBe(RETURN_HEAT_DOT_RADIUS);
     }
-    for (let row = 0; row < rows - 1; row++) {
-      const a = heatCellRect(bounds, cols, rows, 0, row);
-      const b = heatCellRect(bounds, cols, rows, 0, row + 1);
-      expect(a.y + a.height).toBeCloseTo(b.y, 10);
-    }
-  });
-
-  test("real SERVE_HEAT_BOUNDS/10x12 grid: cell(0,0) starts at the bounds' own top-left", () => {
-    const r = heatCellRect(SERVE_HEAT_BOUNDS, 10, 12, 0, 0);
-    expect(r.x).toBe(SERVE_HEAT_BOUNDS.xMin);
-    expect(r.y).toBe(SERVE_HEAT_BOUNDS.yMin);
   });
 });
 
 /**
- * G3b — heatCellStyle: the P2i ramp rule — colour index by quartile of
- * count/max, opacity linear 0.1→0.82 across the same ratio.
+ * `heatRampChannelTable` — each `feFuncR`/`feFuncG`/`feFuncB` `tableValues`
+ * string, round-tripped back against the ramp hex colours
+ * (`--viz-heatmap-0..3`) it's derived from.
  */
-test.describe("heatCellStyle", () => {
-  test("the busiest cell (count === max) is colour index 3 at the max opacity", () => {
-    const { colorIndex, opacity } = heatCellStyle(10, 10);
-    expect(colorIndex).toBe(3);
-    expect(opacity).toBeCloseTo(0.82, 10);
+test.describe("heatRampChannelTable", () => {
+  const RAMP_HEX = ["#F2F2F2", "#B8D4F9", "#6AABFF", "#3B82F6"];
+
+  test("each channel's table has one 0..1 value per ramp colour", () => {
+    for (const channel of ["r", "g", "b"] as const) {
+      const values = heatRampChannelTable(channel).split(" ").map(Number);
+      expect(values).toHaveLength(RAMP_HEX.length);
+      for (const v of values) {
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThanOrEqual(1);
+      }
+    }
   });
 
-  test("a cell at 1/max is colour index 0, above the minimum opacity", () => {
-    const { colorIndex, opacity } = heatCellStyle(1, 100);
-    expect(colorIndex).toBe(0);
-    expect(opacity).toBeGreaterThan(0.1);
-    expect(opacity).toBeCloseTo(0.1 + 0.01 * 0.72, 10);
+  test("round-trips back to the ramp's own hex bytes (±1 of 255, for toFixed(3) rounding)", () => {
+    const offsets = { r: 1, g: 3, b: 5 } as const;
+    for (const channel of ["r", "g", "b"] as const) {
+      const values = heatRampChannelTable(channel).split(" ").map(Number);
+      RAMP_HEX.forEach((hex, i) => {
+        const start = offsets[channel];
+        const byte = parseInt(hex.slice(start, start + 2), 16);
+        expect(Math.round(values[i] * 255)).toBeCloseTo(byte, 0);
+      });
+    }
   });
 
-  test("quartile boundaries: ratios just under 0.25/0.5/0.75 stay in the lower bucket", () => {
-    expect(heatCellStyle(24, 100).colorIndex).toBe(0);
-    expect(heatCellStyle(25, 100).colorIndex).toBe(1);
-    expect(heatCellStyle(49, 100).colorIndex).toBe(1);
-    expect(heatCellStyle(50, 100).colorIndex).toBe(2);
-    expect(heatCellStyle(74, 100).colorIndex).toBe(2);
-    expect(heatCellStyle(75, 100).colorIndex).toBe(3);
+  test("matches the exported HEAT_RAMP_*_TABLE constants exactly", () => {
+    expect(heatRampChannelTable("r")).toBe(HEAT_RAMP_R_TABLE);
+    expect(heatRampChannelTable("g")).toBe(HEAT_RAMP_G_TABLE);
+    expect(heatRampChannelTable("b")).toBe(HEAT_RAMP_B_TABLE);
+  });
+});
+
+/**
+ * `HEAT_ALPHA_TABLE` — the "more sensitive" feedback: a steep floor-to-
+ * ceiling climb so a single dot's blob already reads, not a flat minimum.
+ */
+test("HEAT_ALPHA_TABLE starts at the floor and climbs monotonically to the P2i ceiling", () => {
+  const values = HEAT_ALPHA_TABLE.split(" ").map(Number);
+  expect(values[0]).toBeCloseTo(HEAT_FLOOR_ALPHA, 10);
+  expect(values[values.length - 1]).toBeCloseTo(0.82, 10);
+  for (let i = 1; i < values.length; i++) {
+    expect(values[i]).toBeGreaterThan(values[i - 1]);
+  }
+});
+
+/**
+ * `heatFilterRegionFor` — `heatBoundsFor(cut)` padded by
+ * `HEAT_FILTER_MARGIN_RATIO` blob radii on every side, so the blur's own
+ * kernel settles before the filter region's edge.
+ */
+test.describe("heatFilterRegionFor", () => {
+  test("pads SERVE_HEAT_BOUNDS by 2x the serve radius on every side", () => {
+    const region = heatFilterRegionFor("serve");
+    const margin = SERVE_HEAT_DOT_RADIUS * 2;
+    expect(region.x).toBeCloseTo(SERVE_HEAT_BOUNDS.xMin - margin, 6);
+    expect(region.y).toBeCloseTo(SERVE_HEAT_BOUNDS.yMin - margin, 6);
+    expect(region.width).toBeCloseTo(
+      SERVE_HEAT_BOUNDS.xMax - SERVE_HEAT_BOUNDS.xMin + margin * 2,
+      6,
+    );
+    expect(region.height).toBeCloseTo(
+      SERVE_HEAT_BOUNDS.yMax - SERVE_HEAT_BOUNDS.yMin + margin * 2,
+      6,
+    );
   });
 
-  test("opacity is linear across the ratio", () => {
-    expect(heatCellStyle(50, 100).opacity).toBeCloseTo(0.1 + 0.5 * 0.72, 10);
+  test("every return-frame cut shares the same padded region", () => {
+    const placement = heatFilterRegionFor("returnPlacement");
+    const contact = heatFilterRegionFor("returnContact");
+    const rally = heatFilterRegionFor("rallyPosition");
+    expect(placement).toEqual(contact);
+    expect(placement).toEqual(rally);
+    const margin = RETURN_HEAT_DOT_RADIUS * 2;
+    expect(placement.x).toBeCloseTo(RETURN_HEAT_BOUNDS.xMin - margin, 6);
+    expect(placement.y).toBeCloseTo(RETURN_HEAT_BOUNDS.yMin - margin, 6);
   });
+});
 
-  test("max <= 0 never divides by zero — reads as the minimum", () => {
-    const { colorIndex, opacity } = heatCellStyle(0, 0);
-    expect(colorIndex).toBe(0);
-    expect(opacity).toBeCloseTo(0.1, 10);
-  });
+/**
+ * `heatFloorTintRgba` — the letterbox-strip composite fix (I3): the exact
+ * colour the SVG filter's own floor tint paints, as a CSS `rgba()` string,
+ * derived from the SAME ramp/alpha constants rather than a second literal.
+ */
+test("heatFloorTintRgba derives from HEAT_RAMP_HEX[0] and HEAT_FLOOR_ALPHA", () => {
+  expect(heatFloorTintRgba()).toBe(`rgba(242, 242, 242, ${HEAT_FLOOR_ALPHA})`);
 });
 
 /**

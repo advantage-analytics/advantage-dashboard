@@ -86,7 +86,6 @@ export function ManageableSavedViewTile({
     countLabel: string;
     dots: ReturnType<typeof computeViz>["dots"];
     chart: Chart;
-    heat: ReturnType<typeof computeViz>["heat"];
     href: string;
   };
   /**
@@ -182,7 +181,6 @@ export function ManageableSavedViewTile({
         cut={view.cut}
         dots={data.dots}
         chart={data.chart}
-        heat={data.heat}
         href={data.href}
         as="static"
         ariaDescribedBy={hintId}

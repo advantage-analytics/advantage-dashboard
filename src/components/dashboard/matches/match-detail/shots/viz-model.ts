@@ -18,13 +18,6 @@ import {
   type ZoneKey,
   type ZoneStats,
 } from "@/lib/data/serve-zones";
-import {
-  projectServeDot,
-  projectReturnDot,
-  heatBoundsFor,
-  HEAT_GRID,
-  type HeatBounds,
-} from "./court-geometry";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
@@ -109,22 +102,12 @@ export interface VizDot {
   depthM: number;
 }
 
-/** One binned heat grid — `cells[row][col]` counts, `max` the busiest cell
- * (0 when every dot binned, including when there are no dots at all). */
-export interface HeatGrid {
-  cells: number[][];
-  max: number;
-}
-
 export interface VizResult {
   dots: VizDot[];
   count: number; // points matching the filters (rallyPosition: matching SHOTS)
   total: number; // drawable points in the cut's pool (rallyPosition: drawable SHOTS)
   noun: "serves" | "returns" | "shots";
   zoneStats: Record<ZoneKey, ZoneStats> | null; // serve cut only
-  /** Populated only when the caller's chart is "heat" — null otherwise
-   * (including for chart === "zones", where the cells ARE the chart). */
-  heat: HeatGrid | null;
 }
 
 /**
@@ -139,75 +122,6 @@ export interface VizResult {
 export function chartAllowedOn(cut: Cut, chart: Chart): boolean {
   if (chart === "zones") return cut === "serve";
   return true;
-}
-
-/**
- * Bins projected dot positions into a `cols`×`rows` grid over `bounds` (the
- * SAME projected coordinate space `court-art.tsx` draws dots in — see
- * `court-geometry.ts`'s heat-bounds doc comment). A dot outside `bounds`
- * clamps into the nearest edge cell rather than being dropped, so
- * `sum(cells) === dots.length` always holds. Pure — no VizDot/Cut knowledge,
- * so a caller projects first (`projectServeDot`/`projectReturnDot`) and bins
- * second.
- */
-export function binDots(
-  dots: { x: number; y: number }[],
-  cols: number,
-  rows: number,
-  bounds: HeatBounds,
-): HeatGrid {
-  const cells: number[][] = Array.from(
-    { length: rows },
-    () => new Array(cols).fill(0) as number[],
-  );
-  const xSpan = bounds.xMax - bounds.xMin || 1;
-  const ySpan = bounds.yMax - bounds.yMin || 1;
-
-  for (const d of dots) {
-    const colFrac = (d.x - bounds.xMin) / xSpan;
-    const rowFrac = (d.y - bounds.yMin) / ySpan;
-    const col = Math.min(cols - 1, Math.max(0, Math.floor(colFrac * cols)));
-    const row = Math.min(rows - 1, Math.max(0, Math.floor(rowFrac * rows)));
-    cells[row][col]++;
-  }
-
-  let max = 0;
-  for (const row of cells) {
-    for (const v of row) {
-      if (v > max) max = v;
-    }
-  }
-
-  return { cells, max };
-}
-
-/** `computeViz`'s heat pass, once its dots are known — projects each dot
- * through the same frame `court-art.tsx` draws it in, then bins into the one
- * shared `HEAT_GRID` (10×12) every cut now uses. Serve dots carry `x`/`y`
- * (0..1 service-box fractions); return/rally dots carry `lateralM`/`depthM`
- * — `projectServeDot`/`projectReturnDot` read whichever pair the cut
- * populates (see `VizDot`'s own doc comment). rallyPosition always projects
- * through the "contact" kind, same as its scatter dots. */
-function computeHeatForCut(cut: Cut, dots: VizDot[]): HeatGrid {
-  if (cut === "serve") {
-    const projected = dots.map((d) => projectServeDot({ x: d.x, y: d.y }));
-    return binDots(
-      projected.map((p) => ({ x: p.cx, y: p.cy })),
-      HEAT_GRID.cols,
-      HEAT_GRID.rows,
-      heatBoundsFor(cut),
-    );
-  }
-  const kind = cut === "returnPlacement" ? "placement" : "contact";
-  const projected = dots.map((d) =>
-    projectReturnDot(kind, { lateralM: d.lateralM, depthM: d.depthM }),
-  );
-  return binDots(
-    projected.map((p) => ({ x: p.cx, y: p.cy })),
-    HEAT_GRID.cols,
-    HEAT_GRID.rows,
-    heatBoundsFor(cut),
-  );
 }
 
 /* ── Helpers moved from the retired shot-filters hook ────────────────────── */
@@ -645,7 +559,6 @@ function computeRallyViz(
     total,
     noun: "shots",
     zoneStats: null,
-    heat: chart === "heat" ? computeHeatForCut("rallyPosition", dots) : null,
   };
 }
 
@@ -719,7 +632,6 @@ export function computeViz(
     noun: frame === "serve" ? "serves" : "returns",
     zoneStats:
       cut === "serve" ? computeZoneStatsFromServeZones(serveDots) : null,
-    heat: chart === "heat" ? computeHeatForCut(cut, dots) : null,
   };
 }
 

@@ -5,19 +5,20 @@ import {
   SERVE_BACKGROUND_PATH,
   RETURN_COURT,
   RETURN_BACKGROUND_PATH,
-  heatBoundsFor,
-  HEAT_GRID,
+  heatDotRadiusFor,
+  heatFilterRegionFor,
+  HEAT_RAMP_R_TABLE,
+  HEAT_RAMP_G_TABLE,
+  HEAT_RAMP_B_TABLE,
+  HEAT_ALPHA_TABLE,
   projectServeDot,
   projectReturnDot,
   zoneCellX,
   zoneOpacity,
   trianglePointsFor,
   starPoints,
-  heatCellRect,
-  heatCellStyle,
-  type HeatBounds,
 } from "./court-geometry";
-import type { Chart, Cut, HeatGrid, VizDot } from "./viz-model";
+import type { Chart, Cut, VizDot } from "./viz-model";
 
 /**
  * The recoloured court SVG for one cut — the wall tile's art and the focused
@@ -55,22 +56,19 @@ const DOT_STROKE_W = 0.4;
 export const HEAT_APRON_FILL = "#9FB3A5";
 const HEAT_COURT_FILL = "#9DB4CE";
 
-// G3b/P2j: every cut's heat cells draw slightly blurred (not just
-// rallyPosition's) so the heat reads as a smoothed cluster rather than a
-// hard 10×12 grid. The return frame's own scale
-// (`RETURN_COURT.innerGroupTransform`'s `scale(1.02)`, no further scale from
-// `outerGroupTransform`) keeps this filter's local user-space close to 1:1
-// with the coordinates it draws in; on top of that,
-// `preserveAspectRatio="xMidYMid meet"` scales the whole viewBox up to fill
-// whatever box the caller gives it — roughly 1.1–1.3× at the focused view's
-// court column (≈480–560px wide, per `viz-focused.tsx`'s 400px-tall cap and
-// its neighbouring 292px stats card), smaller at a wall/saved-view tile.
-// Combined, a local stdDeviation of 5 reads close to a 6px screen blur at
-// the focused size without vanishing at tile scale. Reused as-is for the
-// serve frame (scale 0.85, a different viewBox) rather than a second tuned
-// value — worth an eyeball check if the serve heat ever reads noticeably
-// softer/harder than the return cuts'.
-const HEAT_BLUR_STD_DEVIATION = 5;
+// User decision (heat-blob rewrite): "just blobs/blurs like a regular
+// [heatmap]" — one white circle per dot, blurred and colourized by a single
+// SVG filter (`heatFilter` below), rather than a binned grid of `<rect>`s.
+// `HEAT_DOT_FILL_OPACITY` is the "sensitivity" knob: how much each
+// individual dot's circle contributes before the filter's own alpha ramp
+// (`HEAT_ALPHA_TABLE`, `court-geometry.ts`) takes over — higher means fewer
+// overlapping dots are needed to read as "hot". `HEAT_BLUR_RADIUS_RATIO`
+// sets the Gaussian blur's `stdDeviation` as a fraction of the dot radius
+// (`heatDotRadiusFor`), so the blur scales with the same per-frame radius
+// that already equalises the two frames' apparent blob size.
+const HEAT_DOT_FILL_OPACITY = 0.4;
+const HEAT_BLUR_RADIUS_RATIO = 0.5;
+const HEAT_DOT_FILL = "#FFFFFF";
 
 // Serve marks are 2.54 radius, return marks 2.4 — the design's own two
 // sizes, not a shared constant (visualizations-tab-phase-1 spec).
@@ -123,44 +121,74 @@ const HEAT_NOUN: Record<Cut, "serves" | "returns" | "shots"> = {
 };
 
 /**
- * One `<rect>` per cell in `heat`, positioned off `heatCellRect` and
- * coloured off `heatCellStyle` — shared by the serve and return branches
- * below, which differ only in `bounds`. Every cell draws now, including a
- * zero-count one: `heatCellStyle(0, heat.max)` already resolves to the
- * floor shade (`--viz-heatmap-0` at the minimum opacity), which is exactly
- * what lets the tint cover the WHOLE view with no hard edge around the
- * actual data. The loop additionally runs one cell past `bounds` on every
- * side (`row`/`col` from -1 to `rows`/`cols` inclusive — `heatCellRect`
- * already computes correct coordinates for out-of-range indices, no
- * clamping needed there) so the blurred layer still reads solid right up to
- * the view's own clipped edge instead of fading out before it.
+ * One `<circle>` per dot — plain white, fixed `HEAT_DOT_FILL_OPACITY` — fed
+ * into `heatFilter`'s blur+colourize chain as `SourceGraphic`. Overlapping
+ * circles accumulate alpha (that's what turns a cluster into a hot spot);
+ * a lone dot's opacity alone is enough to read once the filter's own alpha
+ * ramp (`HEAT_ALPHA_TABLE`) lifts it, per the "more sensitive" feedback.
  */
-function heatRects(
-  heat: HeatGrid,
-  bounds: HeatBounds,
-  grid: { cols: number; rows: number },
-): ReactNode[] {
-  const rects: ReactNode[] = [];
-  for (let row = -1; row <= grid.rows; row++) {
-    for (let col = -1; col <= grid.cols; col++) {
-      const inGrid = row >= 0 && row < grid.rows && col >= 0 && col < grid.cols;
-      const count = inGrid ? heat.cells[row][col] : 0;
-      const { colorIndex, opacity } = heatCellStyle(count, heat.max);
-      const r = heatCellRect(bounds, grid.cols, grid.rows, col, row);
-      rects.push(
-        <rect
-          key={`${row}-${col}`}
-          x={r.x}
-          y={r.y}
-          width={r.width}
-          height={r.height}
-          fill={`var(--viz-heatmap-${colorIndex})`}
-          fillOpacity={opacity}
-        />,
-      );
-    }
-  }
-  return rects;
+function heatDotCircle(
+  key: string,
+  cx: number,
+  cy: number,
+  r: number,
+): ReactNode {
+  return (
+    <circle
+      key={key}
+      cx={cx}
+      cy={cy}
+      r={r}
+      fill={HEAT_DOT_FILL}
+      fillOpacity={HEAT_DOT_FILL_OPACITY}
+    />
+  );
+}
+
+/**
+ * The blur→colourize→ramp filter every heat chart now uses, in place of the
+ * old rect-grid (P2i/P2j). `feGaussianBlur` spreads each dot's alpha into a
+ * blob; `feColorMatrix` copies the resulting alpha into R/G/B so the next
+ * step reads a plain grayscale "how much heat here" signal; `feComponentTransfer`
+ * colourizes that signal through the ramp (`HEAT_RAMP_*_TABLE`) and lifts its
+ * alpha through the floor-to-ceiling curve (`HEAT_ALPHA_TABLE`) — since a
+ * `type="table"` lookup runs over the WHOLE filter region regardless of
+ * whether `SourceGraphic` painted anything there, every pixel in that region
+ * gets at least the floor tint (`HEAT_ALPHA_TABLE`'s own first value), which
+ * is what makes the tint cover the entire view with no hard rectangular edge
+ * — the filter region (`heatFilterRegionFor`, `court-geometry.ts`) IS the
+ * frame's whole visible view (`heatBoundsFor`) padded by margin, so "the
+ * whole filter region" and "the whole visible court" are the same rectangle.
+ * `color-interpolation-filters="sRGB"` keeps the maths in the same colour
+ * space the ramp's own 0..1 numbers were derived in (SVG's filter default,
+ * linearRGB, would shift every colour).
+ */
+function HeatFilterDef({ id, cut }: { id: string; cut: Cut }) {
+  const region = heatFilterRegionFor(cut);
+  const stdDeviation = heatDotRadiusFor(cut) * HEAT_BLUR_RADIUS_RATIO;
+  return (
+    <filter
+      id={id}
+      filterUnits="userSpaceOnUse"
+      x={region.x}
+      y={region.y}
+      width={region.width}
+      height={region.height}
+      colorInterpolationFilters="sRGB"
+    >
+      <feGaussianBlur in="SourceGraphic" stdDeviation={stdDeviation} />
+      <feColorMatrix
+        type="matrix"
+        values="0 0 0 1 0  0 0 0 1 0  0 0 0 1 0  0 0 0 1 0"
+      />
+      <feComponentTransfer>
+        <feFuncR type="table" tableValues={HEAT_RAMP_R_TABLE} />
+        <feFuncG type="table" tableValues={HEAT_RAMP_G_TABLE} />
+        <feFuncB type="table" tableValues={HEAT_RAMP_B_TABLE} />
+        <feFuncA type="table" tableValues={HEAT_ALPHA_TABLE} />
+      </feComponentTransfer>
+    </filter>
+  );
 }
 
 // Re-tuned zone-cell label sizes: the old 447-wide legacy frame's cells were
@@ -179,7 +207,6 @@ export function CourtArt({
   dots,
   zones,
   chart = "scatter",
-  heat = null,
   className,
   fill,
   labels,
@@ -195,16 +222,13 @@ export function CourtArt({
    */
   zones?: Record<ZoneKey, ZoneStats>;
   /**
-   * G3b: `"heat"` draws `heat`'s cells instead of `dots` (no dots at all in
-   * heat mode) and desaturates the court. Every other chart draws `dots` as
-   * before — this prop only ever changes drawing, never `computeViz`'s own
-   * output, so a caller that forgets to pass it just gets the ordinary
-   * scatter court.
+   * `"heat"` draws a density blob per dot (`heatDotCircle`/`HeatFilterDef`)
+   * instead of the usual outcome-coloured marks, and desaturates the court.
+   * Reads straight off the SAME `dots` prop every other chart draws — no
+   * separate binned-grid prop needed (the P2i/P2j cell grid this replaced
+   * did need one; the density rewrite doesn't).
    */
   chart?: Chart;
-  /** Required (non-null) exactly when `chart === "heat"` — the caller's own
-   * `VizResult.heat`. Ignored otherwise. */
-  heat?: HeatGrid | null;
   className?: string;
   /**
    * "Fill the box" sizing — `width:100%; height:100%` with no presentation
@@ -222,17 +246,17 @@ export function CourtArt({
    */
   labels?: boolean;
   /**
-   * G4: the "Create view" draft prompt — `dots`/`heat` are already emptied
-   * by the caller (`viz-focused.tsx`), but the default aria-label would
-   * still read "… court, 0 points shown" off that empty `dots` array, which
-   * reads as "no data yet found" rather than "nothing chosen yet". This only
-   * swaps the announced label to reflect the actual state.
+   * G4: the "Create view" draft prompt — `dots` is already emptied by the
+   * caller (`viz-focused.tsx`), but the default aria-label would still read
+   * "… court, 0 points shown" off that empty array, which reads as "no data
+   * yet found" rather than "nothing chosen yet". This only swaps the
+   * announced label to reflect the actual state.
    */
   draft?: boolean;
 }) {
   const clipId = useId();
-  const heatBlurId = useId();
-  const showHeat = chart === "heat" && heat != null;
+  const heatFilterId = useId();
+  const showHeat = chart === "heat";
   const showZones = !showHeat && cut === "serve" && zones != null;
   const maxZonePct = zones
     ? Math.max(...ZONES.map((z) => zones[z.key].pct))
@@ -246,20 +270,34 @@ export function CourtArt({
       : showZones
         ? "Serve placement by zone: six service-box zones shaded by serve frequency"
         : `${CUT_NOUN[cut]} court, ${dots.length} point${dots.length === 1 ? "" : "s"} shown`;
-  // Zero dots ⇒ `heat` is still a valid (all-zero-cell) grid, but drawing it
-  // now — since every cell (including zero) draws at the floor tint — would
-  // paint a full floor-shade wash over an empty result. The caller's empty
-  // overlay (`result.count === 0`) covers that case instead, so no heat
-  // layer draws at all here — mirrors the old (pre-P2j) behaviour, where an
-  // all-zero grid produced no rects because every cell was skipped.
+  // Zero dots ⇒ drawing the filter would still paint the floor tint over
+  // the whole view (every pixel of the filter region gets touched, dots or
+  // not — see `HeatFilterDef`'s doc comment), which would wash an empty
+  // result in colour instead of leaving it for the caller's own empty-state
+  // overlay (`result.count === 0`) to cover, so no heat layer draws at all
+  // here when there's nothing to plot.
   const drawHeat = showHeat && dots.length > 0;
+  const dotRadius = heatDotRadiusFor(cut);
   // Memoised per instance (a wall/saved-views tile renders its own
-  // `CourtArt`) — ~170 rects (10×12 grid + a one-cell ring on every side) is
-  // cheap, but there's no reason to recompute it on every render either.
-  const heatRectsMemo = useMemo<ReactNode[] | null>(() => {
-    if (!drawHeat || !heat) return null;
-    return heatRects(heat, heatBoundsFor(cut), HEAT_GRID);
-  }, [drawHeat, heat, cut]);
+  // `CourtArt`) — one `<circle>` per dot is cheap even for a busy match, but
+  // there's no reason to recompute the array on every render either.
+  const heatCirclesMemo = useMemo<ReactNode[] | null>(() => {
+    if (!drawHeat) return null;
+    if (cut === "serve") {
+      return dots.map((d) => {
+        const { cx, cy } = projectServeDot(d);
+        return heatDotCircle(d.id, cx, cy, dotRadius);
+      });
+    }
+    const kind = cut === "returnPlacement" ? "placement" : "contact";
+    return dots.map((d) => {
+      const { cx, cy } = projectReturnDot(kind, {
+        lateralM: d.lateralM ?? 0,
+        depthM: d.depthM ?? 0,
+      });
+      return heatDotCircle(d.id, cx, cy, dotRadius);
+    });
+  }, [drawHeat, dots, cut, dotRadius]);
 
   if (cut === "serve") {
     return (
@@ -276,14 +314,10 @@ export function CourtArt({
         <clipPath id={clipId}>
           <path d={SERVE_BACKGROUND_PATH} />
         </clipPath>
-        {drawHeat && (
-          <filter id={heatBlurId} x="-25%" y="-25%" width="150%" height="150%">
-            <feGaussianBlur stdDeviation={HEAT_BLUR_STD_DEVIATION} />
-          </filter>
-        )}
-        {/* Clipped to the background path — the heat layer's blur and its
-            one-cell overscan ring (`heatRects`) would otherwise bleed past
-            the rounded corners `SERVE_BACKGROUND_PATH` cuts into the frame. */}
+        {drawHeat && <HeatFilterDef id={heatFilterId} cut={cut} />}
+        {/* Clipped to the background path — the heat filter's own margin
+            (`heatFilterRegionFor`) would otherwise bleed past the rounded
+            corners `SERVE_BACKGROUND_PATH` cuts into the frame. */}
         <g clipPath={`url(#${clipId})`}>
           <g transform={SERVE_COURT.groupTransform}>
             <rect
@@ -441,8 +475,8 @@ export function CourtArt({
               strokeWidth={SERVE_COURT.netStrokeWidth}
             />
 
-            {heatRectsMemo && (
-              <g filter={`url(#${heatBlurId})`}>{heatRectsMemo}</g>
+            {heatCirclesMemo && (
+              <g filter={`url(#${heatFilterId})`}>{heatCirclesMemo}</g>
             )}
 
             {!showHeat &&
@@ -513,11 +547,7 @@ export function CourtArt({
       <clipPath id={clipId}>
         <path d={RETURN_BACKGROUND_PATH} />
       </clipPath>
-      {drawHeat && (
-        <filter id={heatBlurId} x="-25%" y="-25%" width="150%" height="150%">
-          <feGaussianBlur stdDeviation={HEAT_BLUR_STD_DEVIATION} />
-        </filter>
-      )}
+      {drawHeat && <HeatFilterDef id={heatFilterId} cut={cut} />}
       <g clipPath={`url(#${clipId})`}>
         <g transform={RETURN_COURT.outerGroupTransform}>
           <g transform={RETURN_COURT.innerGroupTransform}>
@@ -617,12 +647,11 @@ export function CourtArt({
               strokeWidth={RETURN_COURT.netStrokeWidth}
             />
 
-            {/* P2j: every return-frame cut's cells draw slightly blurred so
-                the heat reads as a smoothed cluster — still inside the same
-                clipPath, still in the same logical coordinates the dots
-                below use. */}
-            {heatRectsMemo && (
-              <g filter={`url(#${heatBlurId})`}>{heatRectsMemo}</g>
+            {/* Every return-frame cut's blobs draw through the same blur +
+                colourize filter — still inside the same clipPath, still in
+                the same logical coordinates the dots below use. */}
+            {heatCirclesMemo && (
+              <g filter={`url(#${heatFilterId})`}>{heatCirclesMemo}</g>
             )}
 
             {!showHeat &&
