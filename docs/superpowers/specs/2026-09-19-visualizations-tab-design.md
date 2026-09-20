@@ -39,7 +39,10 @@ editor, and **Settings › Units** (P1i/P1j) with `formatDistance()`.
    the P1b state (band absent).
 2. **Won/lost dot colour is relative to the player whose court it is.** On the
    opponent's row green means the opponent won the point.
-3. **Units moves to Phase 2** — nothing in Phase 1 reads a distance, and a
+3. **Players can save views for themselves.** In a team workspace a staff-authored
+   view is shared with the whole team; a player's view is private to that player
+   (`saved_views.shared`). Personal-workspace views are always private.
+4. **Units moves to Phase 2** — nothing in Phase 1 reads a distance, and a
    setting that visibly does nothing should not ship. This deviates from the
    handoff's phase-1 list on purpose.
 

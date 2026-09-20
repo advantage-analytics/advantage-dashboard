@@ -686,33 +686,67 @@ create table public.saved_views (
   chart       text not null check (chart in ('scatter','zones')),
   filters     jsonb not null default '{}'::jsonb,
   sort_order  integer not null default 0,
+  shared      boolean not null default false, -- true = team-wide (staff-authored); false = private to created_by
   created_by  uuid not null default auth.uid() references auth.users(id) on delete cascade,
   created_at  timestamptz not null default now()
 );
 
-create unique index saved_views_account_name_key on public.saved_views (account_id, lower(btrim(name)));
+-- Names are unique within what one person can see as a list: the team's shared
+-- views, and each person's own private views.
+create unique index saved_views_shared_name_key
+  on public.saved_views (account_id, lower(btrim(name))) where shared;
+create unique index saved_views_private_name_key
+  on public.saved_views (account_id, created_by, lower(btrim(name))) where not shared;
 create index saved_views_account_order_idx on public.saved_views (account_id, sort_order);
 
 alter table public.saved_views enable row level security;
 
+-- Read: your personal views; a team's shared views if you are a member; your own private team views.
 create policy saved_views_select on public.saved_views for select to authenticated
-  using (account_id = (select auth.uid()) or public.user_program_role(account_id) is not null);
+  using (
+    account_id = (select auth.uid())
+    or (public.user_program_role(account_id) is not null
+        and (shared or created_by = (select auth.uid())))
+  );
 
+-- Create: personal (private); staff may create shared or private; any member may create private-to-self.
 create policy saved_views_insert on public.saved_views for insert to authenticated
-  with check (account_id = (select auth.uid()) or public.is_program_staff(account_id));
+  with check (
+    created_by = (select auth.uid())
+    and (
+      (account_id = (select auth.uid()) and not shared)
+      or public.is_program_staff(account_id)
+      or (public.user_program_role(account_id) is not null and not shared)
+    )
+  );
 
+-- Edit / delete: your own rows; staff may also manage the team's shared rows.
+-- The WITH CHECK stops a player promoting a private view to shared.
 create policy saved_views_update on public.saved_views for update to authenticated
-  using (account_id = (select auth.uid()) or public.is_program_staff(account_id))
-  with check (account_id = (select auth.uid()) or public.is_program_staff(account_id));
+  using (
+    (created_by = (select auth.uid())
+      and (account_id = (select auth.uid()) or public.user_program_role(account_id) is not null))
+    or (shared and public.is_program_staff(account_id))
+  )
+  with check (
+    (not shared
+      and created_by = (select auth.uid())
+      and (account_id = (select auth.uid()) or public.user_program_role(account_id) is not null))
+    or public.is_program_staff(account_id)
+  );
 
 create policy saved_views_delete on public.saved_views for delete to authenticated
-  using (account_id = (select auth.uid()) or public.is_program_staff(account_id));
+  using (
+    (created_by = (select auth.uid())
+      and (account_id = (select auth.uid()) or public.user_program_role(account_id) is not null))
+    or (shared and public.is_program_staff(account_id))
+  );
 ```
 
 Players in a team workspace read the coach's views but cannot write them. The column is `sort_order`, not `order` (reserved word); the TS type exposes it as `order`.
 
 - [ ] **Step 2: Apply to live** with the Supabase MCP `apply_migration` (name `saved_views`) — **confirm with the user first**; then `get_advisors` (security) must report nothing new for `saved_views`.
-- [ ] **Step 3: RLS spec** — follow the pattern of `tests/admin-conferences-rpcs.spec.ts` (throwaway users via service role, retrying sign-in fixture): user A inserts a personal view; user B selects → 0 rows; B inserts with `account_id = A` → rejected; duplicate name differing only by case → unique violation. Clean up both users.
+- [ ] **Step 3: RLS spec** — follow the pattern of `tests/admin-conferences-rpcs.spec.ts` (throwaway users via service role, retrying sign-in fixture): user A inserts a personal view; user B selects → 0 rows; B inserts with `account_id = A` → rejected; duplicate name differing only by case → unique violation. Team cases against the ZZ Test Program pattern (throwaway program + members created and removed by the spec via service role): a player inserts `shared=false` → ok and invisible to a second player and to staff; a player inserts `shared=true` → rejected; a player updates their row to `shared=true` → rejected; staff inserts `shared=true` → visible to the player; the player cannot update or delete the staff row; two players may each own a private view with the same name. Clean up both users.
 - [ ] **Step 4: `rls-boundary-reviewer` agent** on the migration. Commit — `feat(viz): saved_views table with workspace RLS`.
 
 ### Task 8: loader + server actions
@@ -720,7 +754,7 @@ Players in a team workspace read the coach's views but cannot write them. The co
 **Files:**
 
 - Create: `src/lib/data/saved-views-server.ts`, `src/app/dashboard/matches/[matchId]/saved-views-actions.ts`
-- Modify: `src/app/dashboard/matches/[matchId]/page.tsx` (load + pass down), `match-report.tsx` / the `ShotsTab` call site (thread `savedViews` + `canManageViews`)
+- Modify: `src/app/dashboard/matches/[matchId]/page.tsx` (load + pass down), `match-report.tsx` / the `ShotsTab` call site (thread `savedViews` + `workspaceRole`)
 
 **Interfaces:**
 
@@ -765,7 +799,7 @@ export async function reorderSavedViews(
 
 - [ ] **Step 1:** Loader uses the **server** Supabase client (RLS-scoped, never `admin.ts`). `filters` jsonb is re-validated through `parseVizState`-style narrowing: build a `URLSearchParams` from the object and parse, so a stale row can never inject an unknown value.
 - [ ] **Step 2:** Actions resolve `accountId` from `getWorkspaceContext()` — never from the client. Postgres `23505` → `duplicate_name`; RLS rejection → `forbidden`. New rows get `sort_order = max + 1`. Each action ends with `revalidatePath` for the match page (check the Next 16 docs for the current API).
-- [ ] **Step 3:** `canManageViews = workspace.kind === "personal" || workspace.role !== "player"`.
+- [ ] **Step 3:** Everyone can save. `createSavedView` sets `shared = workspace.kind === "team" && workspace.role !== "player"`. The loader returns `SavedView & { shared: boolean; mine: boolean }`; `canManage(view) = view.mine || (view.shared && workspace.role !== "player")` decides per tile whether the ⋯ menu shows. Reorder only reorders rows the caller may manage.
 - [ ] **Step 4:** Typecheck; `rls-boundary-reviewer` on the diff. Commit — `feat(viz): saved views loader and actions`.
 
 ### Task 9: band, Save dialog, Manage (P1a band / P1h / P2f-on-light)
@@ -775,11 +809,11 @@ export async function reorderSavedViews(
 - Create: `…/shots/saved-views-band.tsx`, `save-view-dialog.tsx`, `manage-tile-menu.tsx`
 - Modify: `shots-tab.tsx`, `viz-wall.tsx`, `viz-focused.tsx`, `cut-menu.tsx` call sites; `report-facts.tsx` call site for the "· n saved views" suffix.
 
-- [ ] **Step 1: `saved-views-band.tsx`.** Returns `null` when `views.length === 0` (**P1b: the absence of the band, never an empty band**). Otherwise: `margin-top:8px; padding-top:24px; border-top:1px solid var(--border-hairline)`; heading 24/300 `-0.3px` "Saved views" + micro count; right: 11px blue "Manage views" (only if `canManageViews`). Same 3-col grid of `CourtTile`s (dots via `computeViz` with the view's filters and `subjectFor`), chip = the subject's name; last cell a dashed "New view" tile (`min-height:220px; 1px dashed var(--border-medium)`, hover border `--blue`) that opens the focused view on the Serve cut with the Save dialog closed. On the focused page a tile click **loads the view into the card above** (`setState` with `viewId`) instead of navigating.
+- [ ] **Step 1: `saved-views-band.tsx`.** Returns `null` when `views.length === 0` (**P1b: the absence of the band, never an empty band**). Otherwise: `margin-top:8px; padding-top:24px; border-top:1px solid var(--border-hairline)`; heading 24/300 `-0.3px` "Saved views" + micro count; right: 11px blue "Manage views" (only if at least one view has `canManage(view)`; in Manage mode only manageable tiles get the ⋯ button and drag). Same 3-col grid of `CourtTile`s (dots via `computeViz` with the view's filters and `subjectFor`), chip = the subject's name; last cell a dashed "New view" tile (`min-height:220px; 1px dashed var(--border-medium)`, hover border `--blue`) that opens the focused view on the Serve cut with the Save dialog closed. On the focused page a tile click **loads the view into the card above** (`setState` with `viewId`) instead of navigating.
 - [ ] **Step 2: `save-view-dialog.tsx`.** Light-surface version of P2f, 332px, anchored under the cut-menu trigger: 13/500 "Save this view"; micro "Name" + 32px boxed field (`1px var(--border-field)` → `--blue` focused); "Saves" well (`surface-subtle`, radius 8): definition line `` `${cutLabel} · ${chartLabel} · ${n} filters` `` in `--ink-700`, exclusion "Depth bands are not part of a view." in `--ink-500`; Cancel (text) · "Save view" (`advButton()`, 32px). Enter saves, Esc cancels. Duplicate name (checked case-insensitively on blur against the loaded list, and again from the action's `duplicate_name`): field border `var(--error)`, `aria-invalid`, `role="alert"` 11px error "A view with this name already exists.", Save at 45% opacity + `aria-disabled`. On success `setState({ …state, viewId: created.id })`.
 - [ ] **Step 3: Manage mode.** Header swaps to micro "Drag a view to reorder · ⋯ to rename or delete" + 11px blue "Done". Each tile gets `overlay`: a 24px `more-horizontal` button top-right (`rgba(13,13,13,.72)`, white glyph). `manage-tile-menu.tsx`: `role="menu"`, 188px: Rename… (`pencil`) · Duplicate (`copy`) · divider · Delete view (`trash-2`, `var(--error)`, last). Rename = in-place underline field over the tile name (Enter commits, Esc reverts, duplicate rule as above). Delete = immediate, optimistic, with a `role="status"` line "View deleted · Undo" for 6s calling `restoreSavedView`; no confirm dialog. Reorder = pointer events (no HTML5 DnD): held tile gets `shadow-card-emphasis` + `2px solid var(--blue)` outline, siblings slide 200ms with no bounce, drop calls `reorderSavedViews`; keyboard alternative: focused tile + ⌥↑/⌥↓ moves it. Reduced motion: no slide.
 - [ ] **Step 4: Title-row count.** Append `` ` · ${n} saved views` `` to the points/games fact when `n > 0`; nothing when 0.
-- [ ] **Step 5: Verify.** Harness vs **P1a** band, **P1h**, and the dialog against **P2f/P2g** geometry. Manual: save → tile on wall and focused; rename / duplicate / delete-undo / reorder persist across reload; a team `player` sees views but no "Manage views" and no "Save this view…". `widget-states`, `pipeline-guardrails-reviewer`, `rls-boundary-reviewer`.
+- [ ] **Step 5: Verify.** Harness vs **P1a** band, **P1h**, and the dialog against **P2f/P2g** geometry. Manual: save → tile on wall and focused; rename / duplicate / delete-undo / reorder persist across reload; a team `player` sees the staff's shared views read-only, can save their own private views, and can manage only those. `widget-states`, `pipeline-guardrails-reviewer`, `rls-boundary-reviewer`.
 - [ ] **Step 6: Commit** — `feat(viz): saved views band, save dialog and manage mode`.
 
 ### Task 10: end-to-end spec + wrap-up
