@@ -161,6 +161,9 @@ export function CutMenu({
             />
           }
           className="[&_span]:text-[var(--blue)]"
+          // G4: nothing to save while the court is still the "Create view"
+          // blank prompt — pick a cut/chart/filter first.
+          disabled={state.draft === true}
           onSelect={() => {
             setOpen(false);
             onSaveRequest();

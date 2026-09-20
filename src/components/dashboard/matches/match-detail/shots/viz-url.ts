@@ -29,6 +29,11 @@ export function sameView(
   candidate: { cut: Cut; chart: Chart; filters: VizFilters; id?: string },
 ): boolean {
   if (current.cut === null) return false;
+  // G4: a "Create view" draft matches no tile — nothing on the wall or in
+  // the Views grid rings while the court is the blank prompt, even one that
+  // happens to share cut/chart/filters (draft always starts at
+  // serve/scatter/empty, same as the default Serve tile).
+  if (current.draft === true) return false;
 
   if (
     current.viewId !== null &&
@@ -81,10 +86,19 @@ function sameValues(a: readonly unknown[], b: readonly unknown[]): boolean {
  * "you" vs the opponent), or `viewId` changes (a different saved view,
  * even one that happens to share cut/player with the view left behind).
  * `null` on the wall (`cut === null`): there is no single court to name.
+ *
+ * G4: a `:draft` suffix when `state.draft === true` — the blank "Create
+ * view" prompt needs its OWN identity, distinct from the real view it's
+ * parked on top of (draft always starts at `serve`/`scatter`/no `viewId`,
+ * the same key the default Serve tile would otherwise produce), so the
+ * wall→focused-view arrival still counts as a court change (focus/scroll
+ * land on the focused view) and leaving draft for that same cut — e.g.
+ * picking Serve placement again — is likewise seen as a change, not a no-op.
  */
 export function viewIdentityKey(state: VizState): string | null {
   if (state.cut === null) return null;
-  return `${state.filters.player}:${state.cut}:${state.viewId ?? ""}`;
+  const draftSuffix = state.draft === true ? ":draft" : "";
+  return `${state.filters.player}:${state.cut}:${state.viewId ?? ""}${draftSuffix}`;
 }
 
 /**
@@ -130,6 +144,20 @@ export interface VizState {
   chart: Chart;
   filters: VizFilters;
   viewId: string | null;
+  /**
+   * G4: "Create view" — the blank-court prompt state entered from
+   * `saved-views-band.tsx`'s `NewViewTile` (`?cut=serve&draft=1`, no
+   * filters). Only meaningful alongside a `cut` (dropped on the wall — see
+   * `vizStateQuery`, which never serializes it when `cut === null`).
+   * Optional rather than a required `false` everywhere: every call site
+   * that builds a REAL (non-draft) `VizState` literal simply omits it, and
+   * `undefined` reads exactly like `false` everywhere this is checked
+   * (`=== true`, never a bare truthy test). The two places that populate it
+   * authoritatively are `parseVizState` (reading `?draft=1` off a fresh
+   * navigation) and `applyVizUpdate` (clearing it — see that function's own
+   * doc comment for why draft never survives a `setState` call).
+   */
+  draft?: boolean;
 }
 
 /* ── Parse & serialize helper ──────────────────────────────────────────── */
@@ -167,7 +195,7 @@ const ORDER = [
 // it's re-enabled. The viz filter's set value is namespaced to `vset` in the
 // URL — `VizFilters.set` stays the in-memory field name throughout this file;
 // only the URL-facing key differs.
-const VIZ_KEYS = ["cut", "chart", "view", "vset", ...ORDER];
+const VIZ_KEYS = ["cut", "chart", "view", "vset", "draft", ...ORDER];
 
 type OptionKey = keyof typeof OPTIONS;
 type MultiOptionKey = Exclude<OptionKey, "player">;
@@ -205,12 +233,29 @@ export function canonicalSetValues(values: readonly number[]): number[] {
  * result. Pulled out here, pure, so a spec can exercise the composition
  * itself without React or `next/navigation` — a plain object always replaces
  * wholesale; an updater always sees `prev`, never a stale render-time value.
+ *
+ * G4: this is also the ONE place a "Create view" draft gets cleared. Every
+ * `setState` call in the tab funnels through here (`viz-state-context.tsx`'s
+ * `setState`), so a single check covers every trigger the spec calls
+ * out — a cut/chart pick, a filter toggle or token removal, and loading a
+ * saved view or tile — without each call site having to remember to drop
+ * `draft` itself. Most updaters `{ ...prev, ... }` their way to `resolved`,
+ * which carries `prev.draft` forward untouched (including when the pick was
+ * a no-op, like choosing Serve placement again while already parked there
+ * in draft form — `resolved.draft` is still `true`, so it still clears);
+ * a caller building a fresh, non-draft `VizState` literal (a wall tile, a
+ * saved view, "Back to wall") never sets `draft` in the first place, so
+ * there's nothing here to do for those. Only touches the object when
+ * `draft` was actually set, so the common (never-drafted) path returns
+ * `resolved` unchanged rather than a new object every call.
  */
 export function applyVizUpdate(
   prev: VizState,
   update: VizState | ((prev: VizState) => VizState),
 ): VizState {
-  return typeof update === "function" ? update(prev) : update;
+  const resolved = typeof update === "function" ? update(prev) : update;
+  if (!resolved.draft) return resolved;
+  return { ...resolved, draft: false };
 }
 
 /**
@@ -294,7 +339,16 @@ export function parseVizState(params: URLSearchParams): VizState {
   // held to the same rule.
   const filters = cut === null ? rawFilters : carryFilters(rawFilters, cut);
 
-  return { cut, chart, filters, viewId };
+  // G4: `draft` only means anything alongside a real cut — on the wall
+  // (`cut === null`) it's dropped, same as every other viz key. Omitted
+  // (not `draft: false`) when not draft, matching this function's own
+  // "garbage/defaults parse away" convention — every existing `toEqual`
+  // fixture in `tests/viz-url.spec.ts` that builds an expected `VizState`
+  // without a `draft` key relies on that (`{}`'s missing key and `{draft:
+  // undefined}` compare equal under `toEqual`; `{draft: false}` would not).
+  const draft = cut !== null && params.get("draft") === "1";
+
+  return { cut, chart, filters, viewId, ...(draft ? { draft: true } : {}) };
 }
 
 /**
@@ -322,6 +376,12 @@ export function vizStateQuery(
   next.set("cut", state.cut);
   if (state.chart !== "scatter") {
     next.set("chart", state.chart);
+  }
+
+  // G4: draft only ever serializes alongside a real cut (guaranteed by the
+  // early `cut === null` return above) — never on the wall.
+  if (state.draft === true) {
+    next.set("draft", "1");
   }
 
   // Serialize viewId if present

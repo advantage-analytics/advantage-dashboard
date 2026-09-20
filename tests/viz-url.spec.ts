@@ -607,6 +607,134 @@ test("focusTargetAfterViewChange: a filter-only change (same key) steals no focu
   expect(focusTargetAfterViewChange("you:serve:", "you:serve:")).toBeNull();
 });
 
+/* ── G4: "Create view" draft state ────────────────────────────────────────
+ * `draft` is the blank-court prompt `saved-views-band.tsx`'s `NewViewTile`
+ * links to (`?cut=serve&draft=1`, no filters). It only means anything
+ * alongside a real cut, and `applyVizUpdate` is the one place it gets
+ * cleared — any state change requested through `setState` leaves it behind,
+ * even a no-op pick like choosing the same cut again while already parked
+ * there in draft form.
+ */
+
+test("parseVizState reads draft=1 alongside a cut", () => {
+  const s = parseVizState(new URLSearchParams("cut=serve&draft=1"));
+  expect(s.draft).toBe(true);
+});
+
+test("parseVizState: draft is falsy without the param, and without a valid draft value", () => {
+  expect(parseVizState(new URLSearchParams("cut=serve")).draft).not.toBe(true);
+  expect(
+    parseVizState(new URLSearchParams("cut=serve&draft=yes")).draft,
+  ).not.toBe(true);
+});
+
+test("parseVizState: draft is dropped on the wall even if the param is present", () => {
+  const s = parseVizState(new URLSearchParams("draft=1"));
+  expect(s.cut).toBeNull();
+  expect(s.draft).not.toBe(true);
+});
+
+test("vizStateQuery round trip: draft=1 survives alongside cut, and is omitted when false", () => {
+  const draftQuery = vizStateQuery(new URLSearchParams(), {
+    cut: "serve",
+    chart: "scatter",
+    viewId: null,
+    filters: EMPTY_VIZ_FILTERS,
+    draft: true,
+  });
+  const back = new URLSearchParams(draftQuery);
+  expect(back.get("draft")).toBe("1");
+  expect(parseVizState(back).draft).toBe(true);
+
+  const plainQuery = vizStateQuery(new URLSearchParams(), {
+    cut: "serve",
+    chart: "scatter",
+    viewId: null,
+    filters: EMPTY_VIZ_FILTERS,
+  });
+  expect(new URLSearchParams(plainQuery).get("draft")).toBeNull();
+});
+
+test("vizStateQuery: draft never serializes on the wall, even if the state somehow carries it", () => {
+  const q = vizStateQuery(new URLSearchParams(), {
+    cut: null,
+    chart: "scatter",
+    viewId: null,
+    filters: EMPTY_VIZ_FILTERS,
+    draft: true,
+  });
+  expect(new URLSearchParams(q).get("draft")).toBeNull();
+});
+
+test("applyVizUpdate: a plain-object update to a fresh (non-draft) VizState leaves draft unset", () => {
+  const draftState = parseVizState(new URLSearchParams("cut=serve&draft=1"));
+  const next = applyVizUpdate(draftState, {
+    cut: "returnPlacement",
+    chart: "scatter",
+    viewId: null,
+    filters: EMPTY_VIZ_FILTERS,
+  });
+  expect(next.draft).not.toBe(true);
+});
+
+test("applyVizUpdate: an updater that spreads prev clears draft even when nothing it changed differs from the draft's own placeholder", () => {
+  // Simulates cut-menu.tsx's selectCut("serve") fired while already parked
+  // on the draft's own Serve/scatter/no-filters placeholder — the values
+  // are identical, but picking it is still a real action that must leave
+  // draft behind.
+  const draftState = parseVizState(new URLSearchParams("cut=serve&draft=1"));
+  const next = applyVizUpdate(draftState, (prev) => ({
+    ...prev,
+    cut: "serve",
+    chart: "scatter",
+    filters: EMPTY_VIZ_FILTERS,
+    viewId: null,
+  }));
+  expect(next.draft).not.toBe(true);
+  expect(next.cut).toBe("serve");
+});
+
+test("applyVizUpdate: an updater that only changes a filter also clears draft", () => {
+  const draftState = parseVizState(new URLSearchParams("cut=serve&draft=1"));
+  const next = applyVizUpdate(draftState, (prev) => ({
+    ...prev,
+    filters: { ...prev.filters, ball: ["first"] },
+    viewId: null,
+  }));
+  expect(next.draft).not.toBe(true);
+  expect(next.filters.ball).toEqual(["first"]);
+});
+
+test("applyVizUpdate: loading a saved view (a fresh literal, not spreading prev) is not draft", () => {
+  const draftState = parseVizState(new URLSearchParams("cut=serve&draft=1"));
+  const next = applyVizUpdate(draftState, () => ({
+    cut: "returnContact",
+    chart: "scatter",
+    filters: EMPTY_VIZ_FILTERS,
+    viewId: "view-1",
+  }));
+  expect(next.draft).not.toBe(true);
+  expect(next.viewId).toBe("view-1");
+});
+
+test("sameView: a draft matches no tile, even one with an identical cut/chart/filters", () => {
+  const draftState = parseVizState(new URLSearchParams("cut=serve&draft=1"));
+  expect(
+    sameView(draftState, {
+      cut: "serve",
+      chart: "scatter",
+      filters: EMPTY_VIZ_FILTERS,
+    }),
+  ).toBe(false);
+});
+
+test("viewIdentityKey: a draft has its own identity, distinct from the equivalent non-draft state", () => {
+  const draftState = parseVizState(new URLSearchParams("cut=serve&draft=1"));
+  const plainState = parseVizState(new URLSearchParams("cut=serve"));
+  expect(viewIdentityKey(draftState)).not.toBe(viewIdentityKey(plainState));
+  expect(viewIdentityKey(draftState)).not.toBeNull();
+});
+
 test("focusTargetAfterViewChange: the wall to itself (both null) steals no focus", () => {
   expect(focusTargetAfterViewChange(null, null)).toBeNull();
 });

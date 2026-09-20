@@ -160,6 +160,10 @@ export function VizFocused({
 
   const subjectName = state.filters.player === "you" ? you.name : opp.name;
   const hasFilters = activeFilterEntries(state).length > 0;
+  // G4: "Create view"'s blank-court prompt. Only meaningful alongside a
+  // real cut (`viz-url.ts`'s `VizState.draft` doc comment) — `cut` is
+  // already known non-null here, past the early-return guard above.
+  const isDraft = state.draft === true;
 
   function backToWall() {
     // F5: the reverse morph. `targetKey` is the WALL TILE's dom id for
@@ -184,6 +188,18 @@ export function VizFocused({
 
   function clearFilters() {
     setState((prev) => ({ ...prev, filters: EMPTY_VIZ_FILTERS, viewId: null }));
+  }
+
+  // G4: the draft overlay's "Choose a view" CTA opens the SAME cut menu the
+  // toolbar's own trigger opens — no second, parallel menu to keep in sync.
+  // `CutMenu` (`cut-menu.tsx`) owns its `open` state locally rather than
+  // taking a controlled prop, so this drives it the way any other click on
+  // the trigger would: a real click on the trigger button itself
+  // (`cutMenuTriggerRef`, already forwarded through `VizToolbar` for
+  // `SaveViewDialog`'s anchor), which Radix's `PopoverTrigger` (wrapped,
+  // `asChild`, inside `FloatMenu`) treats identically to a pointer click.
+  function openCutMenu() {
+    cutMenuTriggerRef.current?.click();
   }
 
   // The big court is the ONE legitimate destination for every forward morph
@@ -235,7 +251,7 @@ export function VizFocused({
               className="text-micro truncate outline-none"
               style={{ color: "var(--ink-400)" }}
             >
-              {subjectName} · {CUT_LABEL[cut]}
+              {isDraft ? "New view" : `${subjectName} · ${CUT_LABEL[cut]}`}
             </span>
             <button
               type="button"
@@ -258,11 +274,16 @@ export function VizFocused({
           >
             <CourtArt
               cut={cut}
-              dots={result.dots}
+              // G4: the draft prompt never plots — no dots, no heat cells,
+              // normal (non-desaturated) court colours. `computeViz` still
+              // ran above (its `count`/`total`/`noun` still feed the
+              // toolbar's Filters popover), only its DRAWN output is
+              // withheld here.
+              dots={isDraft ? [] : result.dots}
               chart={state.chart}
-              heat={result.heat}
+              heat={isDraft ? null : result.heat}
               zones={
-                state.chart === "zones" && cut === "serve"
+                !isDraft && state.chart === "zones" && cut === "serve"
                   ? (result.zoneStats ?? undefined)
                   : undefined
               }
@@ -282,7 +303,7 @@ export function VizFocused({
               // (round 1's regression).
               className="block max-h-[400px] w-full"
             />
-            {result.count === 0 && (
+            {isDraft ? (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
                 <div
                   className="pointer-events-auto flex flex-col items-center gap-2 rounded-[var(--radius-card)] border px-5 py-4 text-center"
@@ -293,43 +314,78 @@ export function VizFocused({
                   }}
                 >
                   <p
-                    className="text-[12px]"
+                    className="text-[13px] font-medium"
+                    style={{ color: "var(--ink-900)" }}
+                  >
+                    Pick what to plot
+                  </p>
+                  <p
+                    className="text-micro max-w-[240px]"
                     style={{ color: "var(--ink-600)" }}
                   >
-                    {hasFilters
-                      ? `No ${result.noun} match these filters`
-                      : `No ${result.noun} recorded for ${subjectName} yet`}
+                    Choose a view, a chart and filters — then save it.
                   </p>
-                  {hasFilters && (
-                    <button
-                      type="button"
-                      onClick={clearFilters}
-                      className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
-                    >
-                      Clear
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={openCutMenu}
+                    className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                  >
+                    Choose a view
+                  </button>
                 </div>
               </div>
+            ) : (
+              result.count === 0 && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
+                  <div
+                    className="pointer-events-auto flex flex-col items-center gap-2 rounded-[var(--radius-card)] border px-5 py-4 text-center"
+                    style={{
+                      borderColor: "var(--border-hairline)",
+                      backgroundColor: "var(--surface-card)",
+                      boxShadow: "var(--shadow-card-emphasis)",
+                    }}
+                  >
+                    <p
+                      className="text-[12px]"
+                      style={{ color: "var(--ink-600)" }}
+                    >
+                      {hasFilters
+                        ? `No ${result.noun} match these filters`
+                        : `No ${result.noun} recorded for ${subjectName} yet`}
+                    </p>
+                    {hasFilters && (
+                      <button
+                        type="button"
+                        onClick={clearFilters}
+                        className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
             )}
           </div>
 
-          <div className="flex items-center gap-3 px-4 pt-[10px] pb-[14px]">
-            {legendItemsFor(cut, state.chart).map((item) =>
-              item.glyph === "ramp" ? (
-                <HeatRampLegend key={item.key} />
-              ) : (
-                <LegendMark key={item.key} item={item} />
-              ),
-            )}
-            <div className="flex-1" />
-            <span className="text-micro" style={{ color: "var(--ink-400)" }}>
-              {LEGEND_CAPTION[cut]}
-            </span>
-          </div>
+          {!isDraft && (
+            <div className="flex items-center gap-3 px-4 pt-[10px] pb-[14px]">
+              {legendItemsFor(cut, state.chart).map((item) =>
+                item.glyph === "ramp" ? (
+                  <HeatRampLegend key={item.key} />
+                ) : (
+                  <LegendMark key={item.key} item={item} />
+                ),
+              )}
+              <div className="flex-1" />
+              <span className="text-micro" style={{ color: "var(--ink-400)" }}>
+                {LEGEND_CAPTION[cut]}
+              </span>
+            </div>
+          )}
         </div>
 
-        <StatsCard stats={stats} className="viz-vt-stats-card" />
+        {!isDraft && <StatsCard stats={stats} className="viz-vt-stats-card" />}
       </div>
 
       {savedViewsBand}

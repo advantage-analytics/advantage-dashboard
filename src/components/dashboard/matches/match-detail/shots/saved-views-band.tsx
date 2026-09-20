@@ -1021,9 +1021,12 @@ export function SharedGlyph() {
 }
 
 /**
- * The band's trailing dashed tile — always the Serve cut, default filters
- * (never carries anything over from the last-focused view), matching the
- * wall's own default entry point.
+ * The band's trailing dashed tile — G4: opens the blank "Create view"
+ * prompt (`draft: true`, Serve cut, no filters — never carries anything
+ * over from the last-focused view) rather than jumping straight to a
+ * plotted Serve court. `viz-focused.tsx` reads `state.draft` to draw the
+ * empty court and its "Pick what to plot" overlay instead of Serve's real
+ * dots.
  */
 function NewViewTile({
   hrefFor,
@@ -1035,6 +1038,7 @@ function NewViewTile({
     chart: "scatter",
     filters: EMPTY_VIZ_FILTERS,
     viewId: null,
+    draft: true,
   });
 
   return (
@@ -1052,7 +1056,7 @@ function NewViewTile({
         className="text-[12px] font-medium"
         style={{ color: "var(--ink-500)" }}
       >
-        New view
+        Create view
       </span>
     </Link>
   );
