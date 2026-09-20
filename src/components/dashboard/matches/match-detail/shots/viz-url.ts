@@ -15,8 +15,9 @@ import { EMPTY_VIZ_FILTERS, filterKeysFor } from "./viz-model";
 
 /**
  * Is `candidate` (a default tile, or a saved view) the same view as
- * `current` (whatever's on screen)? Backs the Views row's "current tile"
- * ring: `cut`/`chart`/every filter key valid for that cut must agree, OR
+ * `current` (whatever's on screen)? Backs the Views grid's "current tile"
+ * ring (a wrapping grid reached by scrolling the page, not a scrolling
+ * row): `cut`/`chart`/every filter key valid for that cut must agree, OR
  * `current.viewId` names `candidate.id` outright (a saved view whose filters
  * were themselves just edited elsewhere still reads as "current" by id).
  * The wall (`current.cut === null`) matches nothing, unconditionally — a

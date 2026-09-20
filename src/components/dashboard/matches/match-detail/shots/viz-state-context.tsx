@@ -357,7 +357,12 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
         })
         .finally(() => {
           sourceEl.style.viewTransitionName = previousName;
-          setMorphTargetKey(null);
+          // M5: a second click can start morph 2 (its own `targetKey`)
+          // before this `.finally()` for morph 1 runs — clearing
+          // unconditionally could land AFTER morph 2 already set its own
+          // key, wiping out a still-in-flight morph's target. Only clear
+          // the key this morph itself set.
+          setMorphTargetKey((k) => (k === targetKey ? null : k));
         });
     },
     [setState],

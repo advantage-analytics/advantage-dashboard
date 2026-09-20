@@ -466,10 +466,12 @@ export function availableSets(points: MatchPoint[]): number[] {
  * `computeViz` for the same render, and starts from `computeViz`'s own
  * output — never a second, independently-filtered pass — so the card's
  * counts can never drift from what the court draws. `VizStats.total` is
- * always `computeViz(...).count`; the subtitle's own count (`n`) can be
- * smaller for `returnPlacement`, where out/net returns are excluded from
- * the Direction/Depth rows (see `isPlacementRow` below) — that exclusion is
- * spelled out in the subtitle text itself, not hidden in a silent total.
+ * always `computeViz(...).count`; the subtitle's own count can be smaller
+ * for `returnPlacement`, where out/net returns are excluded from the
+ * Direction/Depth rows (see `isPlacementRow` below). When that happens the
+ * subtitle spells out the gap ("3 of 4 returns landed in") instead of
+ * quietly printing the smaller number next to a court/header that still
+ * shows the full total.
  */
 
 export interface StatRow {
@@ -492,6 +494,19 @@ export interface VizStats {
   groups: StatGroup[];
   sentence: string | null;
   total: number;
+}
+
+/**
+ * M4: whether the stats card should show its empty state. `stats.total` is
+ * always `computeViz(...).count`, but for `returnPlacement` a nonzero total
+ * can still leave every Direction/Depth row at `count === 0` — every return
+ * landed out/net (see `isPlacementRow`) — which used to render six rows of
+ * "—" instead of the honest empty copy. True when every row in every group
+ * has `count === 0` (vacuously true when there are no rows/groups at all,
+ * same as `total === 0`).
+ */
+export function statsAreEmpty(stats: VizStats): boolean {
+  return stats.groups.every((g) => g.rows.every((r) => r.count === 0));
 }
 
 const ZONE_ROWS: { key: ZoneKey; label: string }[] = [
@@ -824,14 +839,24 @@ function returnContactStats(result: VizResult): StatGroup[] {
  * filtered pool `computeViz` produces for the same arguments, so a card can
  * never show a count the court doesn't back up. See the module doc comment
  * above for the `total` vs. subtitle-count distinction.
+ *
+ * `precomputed` (M2): pass a `VizResult` a caller already computed for the
+ * SAME `points`/`cut`/`filters`/`subjectIsPlayer1` to skip a second,
+ * identical `computeViz` pass — `viz-focused.tsx` needs both the court's
+ * own result and these stats for one render. Omit it and this still runs
+ * `computeViz` itself; behaviour is identical either way, since a caller
+ * that passes it is only avoiding a redundant recompute of the exact same
+ * inputs.
  */
 export function computeVizStats(
   points: MatchPoint[],
   cut: Cut,
   filters: VizFilters,
   subjectIsPlayer1: boolean,
+  precomputed?: VizResult,
 ): VizStats {
-  const result = computeViz(points, cut, filters, subjectIsPlayer1);
+  const result =
+    precomputed ?? computeViz(points, cut, filters, subjectIsPlayer1);
   const total = result.count;
 
   if (cut === "serve") {
@@ -849,9 +874,18 @@ export function computeVizStats(
   if (cut === "returnPlacement") {
     const { subtitleCount, groups } = returnPlacementStats(result, points);
     const noun = returnNoun(filters.ball, subtitleCount);
+    // The rows' denominator (subtitleCount) can be smaller than the total
+    // drawable pool (total) when some returns landed out/net — say so
+    // instead of printing a bare count that looks orphaned next to a court
+    // and Filters header that both show `total`. The noun agrees with
+    // whichever number it sits next to.
+    const subtitle =
+      subtitleCount === total
+        ? `Points won by placement · ${subtitleCount} ${noun}`
+        : `Points won by placement · ${subtitleCount} of ${total} ${returnNoun(filters.ball, total)} landed in`;
     return {
       title: "Where the return went",
-      subtitle: `Points won by placement · ${subtitleCount} ${noun}`,
+      subtitle,
       groups,
       sentence: buildSentence(groups, noun),
       total,

@@ -47,10 +47,14 @@ Phase 1:
   horizontal row (an earlier reading of frame P1d was wrong).
 - One animation only: the clicked court opens into the focused view and
   settles back on "Back to wall", via the browser View Transitions API
-  (React's `<ViewTransition>` is not in this React build); reduced motion =
-  crossfade; focus and scroll-to-top follow the view change itself
-  (`viewIdentityKey`), not the animation, so a skipped transition (hidden tab,
-  unsupported browser) still lands focus on the focused view.
+  (React's `<ViewTransition>` is not in this React build); under
+  `prefers-reduced-motion` there is no animation at all — the state simply
+  flips, with `.viz-crossfade-in` disabled — the 200ms crossfade is the
+  fallback for external navigations (browser back/forward) and unsupported
+  browsers, not for reduced motion; focus and scroll-to-top follow the view
+  change itself (`viewIdentityKey`), not the animation, so a skipped
+  transition (hidden tab, unsupported browser) still lands focus on the
+  focused view.
 - Two review findings deliberately left: return dot radius 2.4 is the frame's
   own value; the return-contact clip path's asymmetric corners in the frame
   are the card's corner rounding, which the tile wrapper already provides.

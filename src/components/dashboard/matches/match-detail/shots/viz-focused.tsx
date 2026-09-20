@@ -115,13 +115,18 @@ export function VizFocused({
   // into the plain crossfade fallback for exactly this one render, then
   // clear the flag so it doesn't replay on a later, unrelated render.
   const [fallbackFadeIn] = useState(externalCourtSwap);
+  // M6: keyed on the flag itself, not `[]`. This component stays mounted
+  // across a focused→focused navigation (only props change), so a
+  // `[]`-deps effect only ever clears whatever the flag was at the FIRST
+  // mount — a later external swap (browser Back over a real `push`) that
+  // sets the flag while still mounted here would never get cleared, and
+  // the stale `true` would play a spurious fade on some later, unrelated
+  // mount. `fallbackFadeIn` is unaffected: it's `useState`'s initial value
+  // and never reacts to later prop/flag changes, so this can't re-trigger
+  // the fade it already applied.
   useEffect(() => {
     if (externalCourtSwap) clearExternalCourtSwap();
-    // Only ever needs to fire once, right after mount, off whatever the
-    // flag was AT mount time (captured above) — `fallbackFadeIn` must not
-    // itself become a dependency, or clearing it would re-run this.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [externalCourtSwap, clearExternalCourtSwap]);
 
   const subject = subjectFor(state.filters, you.isPlayer1);
   const result = useMemo(
@@ -129,8 +134,17 @@ export function VizFocused({
     [points, cut, state.filters, subject],
   );
   const stats = useMemo(
-    () => (cut ? computeVizStats(points, cut, state.filters, subject) : null),
-    [points, cut, state.filters, subject],
+    () =>
+      cut
+        ? computeVizStats(
+            points,
+            cut,
+            state.filters,
+            subject,
+            result ?? undefined,
+          )
+        : null,
+    [points, cut, state.filters, subject, result],
   );
 
   if (cut === null || result === null || stats === null) {

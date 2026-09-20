@@ -1,8 +1,9 @@
 /**
  * F4: the shared builder behind the six default tiles (`DEFAULT_CUTS` × [you,
  * opp]) — extracted out of `viz-wall.tsx` so the wall and the focused view's
- * scrolling Views row draw the identical set of tiles, in the identical
- * order, and can never drift against each other. Pure TypeScript; no React.
+ * Views grid (a wrapping grid reached by scrolling the page, not a scrolling
+ * row) draw the identical set of tiles, in the identical order, and can
+ * never drift against each other. Pure TypeScript; no React.
  *
  * Attribution (guardrails §4): `subjectIsPlayer1` comes only from
  * `sides.you.isPlayer1` / `sides.opp.isPlayer1` — never re-derived here, and

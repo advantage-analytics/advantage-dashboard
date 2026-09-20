@@ -56,6 +56,12 @@ import {
 } from "./viz-labels";
 import { buildDefaultTiles, type DefaultTile } from "./default-tiles";
 
+// M3: `variant="wall"` never renders a default tile (`viz-wall.tsx` builds
+// its own) — a shared, frozen empty array lets the `defaultTiles` memo below
+// skip `buildDefaultTiles`'s six `computeViz` scans entirely on that variant
+// instead of running them for output nothing reads.
+const EMPTY_DEFAULT_TILES: readonly DefaultTile[] = Object.freeze([]);
+
 /**
  * Task 9 (P1a band + Part B Manage mode): every saved view the viewer can
  * see — their own private ones plus the workspace's shared ones, in the
@@ -238,19 +244,24 @@ export function SavedViewsBand({
   // list a different set), keyed the same way `tileDataById` above is so a
   // scroll, a focus move, or a Manage-mode reorder never re-triggers the
   // O(points) scan inside it — only `points`/`you.isPlayer1`/the names/
-  // `hrefFor` changing does.
+  // `hrefFor` changing does. M3: `variant="wall"` never reads this output
+  // (`viz-wall.tsx` already built its own default tiles for that render),
+  // so it's gated to the shared frozen empty array there instead of running
+  // `buildDefaultTiles`'s six scans for nothing.
   const defaultTiles = useMemo(
     () =>
-      buildDefaultTiles(
-        points,
-        {
-          you: { isPlayer1: you.isPlayer1, name: you.name },
-          opp: { isPlayer1: opp.isPlayer1, name: opp.name },
-        },
-        hrefFor,
-      ),
+      variant === "focused"
+        ? buildDefaultTiles(
+            points,
+            {
+              you: { isPlayer1: you.isPlayer1, name: you.name },
+              opp: { isPlayer1: opp.isPlayer1, name: opp.name },
+            },
+            hrefFor,
+          )
+        : EMPTY_DEFAULT_TILES,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `opp.isPlayer1` is always `you.isPlayer1`'s inverse (same rule `viz-wall.tsx`'s own memo relies on), so it carries no information this dependency list doesn't already have
-    [points, you.isPlayer1, you.name, opp.name, hrefFor],
+    [points, you.isPlayer1, you.name, opp.name, hrefFor, variant],
   );
 
   // Mirrors `viz-wall.tsx`'s `EmptySubjectRow` rule: a subject with nothing
@@ -957,11 +968,22 @@ export function SavedViewsBand({
         </div>
       ) : (
         visibility === "full" && (
-          <div className={VIZ_TILE_GRID_CLASS} style={VIZ_TILE_GRID_STYLE}>
+          // M9: matches the focused variant's grid — one list, labelled the
+          // same way the focused Views grid's own tiles are grouped.
+          <div
+            role="list"
+            aria-label="Saved views"
+            className={VIZ_TILE_GRID_CLASS}
+            style={VIZ_TILE_GRID_STYLE}
+          >
             {optimisticViews.map((view) => (
-              <div key={view.id}>{renderSavedTile(view)}</div>
+              <div key={view.id} role="listitem">
+                {renderSavedTile(view)}
+              </div>
             ))}
-            <NewViewTile hrefFor={hrefFor} />
+            <div role="listitem">
+              <NewViewTile hrefFor={hrefFor} />
+            </div>
           </div>
         )
       )}

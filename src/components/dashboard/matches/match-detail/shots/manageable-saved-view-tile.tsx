@@ -117,8 +117,9 @@ export function ManageableSavedViewTile({
   onPointerEndTile: (e: ReactPointerEvent<HTMLDivElement>) => void;
   onKeyDownTile: (e: ReactKeyboardEvent<HTMLDivElement>) => void;
   /** F4: rings the tile Signal Blue — the view currently drawn in the big
-   * court, in the focused view's scrolling Views row. Never set on the
-   * wall's own Manage-mode grid. */
+   * court, in the focused view's Views grid (a wrapping grid reached by
+   * scrolling the page, not a scrolling row). Never set on the wall's own
+   * Manage-mode grid. */
   current?: boolean;
 }) {
   const renameFieldId = useId();

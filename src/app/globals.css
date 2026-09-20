@@ -702,7 +702,9 @@
    focused view's card chrome fading in) is the browser's default root
    crossfade - just brought in under the morph's own 300ms so neither
    outruns the other. */
-::view-transition-group(root) {
+::view-transition-group(root),
+::view-transition-old(root),
+::view-transition-new(root) {
   animation-duration: 200ms;
   animation-timing-function: var(--ease-primary);
 }

@@ -1,4 +1,4 @@
-import type { VizStats, StatRow } from "./viz-model";
+import { statsAreEmpty, type VizStats, type StatRow } from "./viz-model";
 import { cn } from "@/lib/utils";
 
 /**
@@ -9,13 +9,24 @@ import { cn } from "@/lib/utils";
  *
  * Groups render in order, each with an optional micro label; rows are a
  * `<ul>`/`<li>` list so the win rate and count are one accessible name per
- * row, not a scatter of unlabeled spans. `total === 0` swaps the rows for
- * the design system's honest-empty copy rather than six dashes (task spec).
+ * row, not a scatter of unlabeled spans. `statsAreEmpty(stats)` (M4) swaps
+ * the rows for the design system's honest-empty copy rather than six dashes
+ * (task spec) — checking every row's own `count`, not just `stats.total`,
+ * since `returnPlacement` can have a nonzero total (drawable returns) while
+ * every row is out/net and reads 0.
  */
 
-function rowAccessibleName(label: string, row: StatRow): string {
-  if (row.winPct === null) return `${label}: no points recorded`;
-  return `${label}: ${row.winPct}% of ${row.count} points won`;
+/**
+ * M8: the sr-only suffix a row's sr-only text node carries — NOT the row's
+ * label, which stays in the normal (unhidden) visible span so it's read
+ * once, not twice. Read together in DOM order (visible label, then this
+ * hidden suffix) a screen reader announces the same sentence the previous
+ * `aria-label` used to state up front: "Deuce T: 78% of 23 points won" /
+ * "Deuce T: no points".
+ */
+function rowSrOnlySuffix(row: StatRow): string {
+  if (row.winPct === null) return "no points";
+  return `${row.winPct}% of ${row.count} points won`;
 }
 
 export function StatsCard({
@@ -51,7 +62,7 @@ export function StatsCard({
         </p>
       </div>
 
-      {stats.total === 0 ? (
+      {statsAreEmpty(stats) ? (
         <div className="flex flex-col items-center justify-center gap-1 py-10 text-center">
           <p className="text-[12px]" style={{ color: "var(--ink-500)" }}>
             No points match these filters
@@ -75,22 +86,25 @@ export function StatsCard({
                 )}
                 <ul className="flex flex-col gap-2.5">
                   {group.rows.map((row) => (
-                    <li
-                      key={row.key}
-                      className="flex flex-col gap-1"
-                      aria-label={rowAccessibleName(row.label, row)}
-                    >
-                      <div
-                        aria-hidden="true"
-                        className="flex items-baseline justify-between gap-2"
-                      >
+                    <li key={row.key} className="flex flex-col gap-1">
+                      <div className="flex items-baseline justify-between gap-2">
                         <span
                           className="text-[12px]"
                           style={{ color: "var(--ink-700)" }}
                         >
                           {row.label}
                         </span>
-                        <span className="flex items-baseline gap-1.5">
+                        {/* M8: the sr-only suffix, read right after the
+                            visible (unhidden) label above so together they
+                            form one continuous announcement, not a repeat
+                            of one already spoken by an `aria-label`. */}
+                        <span className="sr-only">
+                          : {rowSrOnlySuffix(row)}
+                        </span>
+                        <span
+                          aria-hidden="true"
+                          className="flex items-baseline gap-1.5"
+                        >
                           <span
                             className="tabular text-[16px] font-light"
                             style={{ color: "var(--ink-900)" }}

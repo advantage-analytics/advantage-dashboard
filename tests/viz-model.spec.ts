@@ -5,6 +5,7 @@ import {
   computeViz,
   computeVizStats,
   filterKeysFor,
+  statsAreEmpty,
   subjectFor,
   type Cut,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
@@ -295,22 +296,40 @@ test.describe("computeVizStats — return placement", () => {
     expect(row("deep").count).toBe(2);
   });
 
-  test("out/net landings are excluded from rows but the subtitle count says so", () => {
-    const inCourt = returnPoint({});
+  test("out/net landings are excluded from rows and the subtitle count says so", () => {
+    const inCourt1 = returnPoint({});
+    const inCourt2 = returnPoint({});
+    const inCourt3 = returnPoint({});
     const outWide = returnPoint({
       secondShotLandingX: 5.5, // outside the 4.115m singles half-width
       secondShotResult: "Out",
     });
     const stats = computeVizStats(
-      [inCourt, outWide],
+      [inCourt1, inCourt2, inCourt3, outWide],
       "returnPlacement",
       EMPTY_VIZ_FILTERS,
       true,
     );
-    // total always equals computeViz(...).count (both points are drawable
-    // returns), even though only one lands inside the rows' denominator.
+    // total always equals computeViz(...).count (all four points are
+    // drawable returns), even though only three land inside the rows'
+    // denominator — the subtitle spells out the gap instead of hiding it.
+    expect(stats.total).toBe(4);
+    expect(stats.subtitle).toBe(
+      "Points won by placement · 3 of 4 returns landed in",
+    );
+  });
+
+  test("subtitle is the bare count when every counted return landed in", () => {
+    const inCourt1 = returnPoint({});
+    const inCourt2 = returnPoint({});
+    const stats = computeVizStats(
+      [inCourt1, inCourt2],
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
     expect(stats.total).toBe(2);
-    expect(stats.subtitle).toBe("Points won by placement · 1 return");
+    expect(stats.subtitle).toBe("Points won by placement · 2 returns");
   });
 });
 
@@ -763,5 +782,69 @@ test.describe("computeVizStats — singular nouns", () => {
       true,
     );
     expect(two.subtitle).toBe("Points won by contact point · 2 returns");
+  });
+});
+
+test.describe("statsAreEmpty (M4)", () => {
+  test("total === 0 is empty", () => {
+    const stats = computeVizStats([], "serve", EMPTY_VIZ_FILTERS, true);
+    expect(statsAreEmpty(stats)).toBe(true);
+  });
+
+  test("total > 0 but every row is count 0 (all returns out/net) is still empty", () => {
+    // Every landing is outside the singles half-width, so `total` (drawable
+    // returns) is > 0 while the Direction/Depth rows all read count 0.
+    const outWideReturn = point({
+      serverIsPlayer1: false,
+      secondShotLandingX: 5.5,
+      secondShotLandingY: 4.0,
+      secondShotType: "Forehand",
+      secondShotResult: "Out",
+    });
+    const stats = computeVizStats(
+      [outWideReturn, outWideReturn],
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(stats.total).toBeGreaterThan(0);
+    expect(stats.groups.every((g) => g.rows.every((r) => r.count === 0))).toBe(
+      true,
+    );
+    expect(statsAreEmpty(stats)).toBe(true);
+  });
+
+  test("at least one row with a nonzero count is not empty", () => {
+    const stats = computeVizStats(
+      [point({ firstShotLandingX: ZONE_LX["deuce-wide"] })],
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(statsAreEmpty(stats)).toBe(false);
+  });
+});
+
+test.describe("computeVizStats — precomputed result (M2)", () => {
+  test("passing computeViz's own result produces the same stats as recomputing it", () => {
+    const pts = [
+      point({ firstShotLandingX: ZONE_LX["deuce-wide"], wonByPlayer1: true }),
+      point({ firstShotLandingX: ZONE_LX["ad-t"], wonByPlayer1: false }),
+    ];
+    const withoutPrecomputed = computeVizStats(
+      pts,
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    const precomputed = computeViz(pts, "serve", EMPTY_VIZ_FILTERS, true);
+    const withPrecomputed = computeVizStats(
+      pts,
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      true,
+      precomputed,
+    );
+    expect(withPrecomputed).toEqual(withoutPrecomputed);
   });
 });

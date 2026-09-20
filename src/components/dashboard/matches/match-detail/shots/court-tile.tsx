@@ -109,8 +109,9 @@ export function CourtTile({
   ariaDescribedBy?: string;
   /**
    * F4: rings this tile Signal Blue — the tile for the view currently drawn
-   * in the big court, in the focused view's scrolling Views row. Never set
-   * outside that row (the wall has no "current" tile to mark).
+   * in the big court, in the focused view's Views grid (a wrapping grid
+   * reached by scrolling the page, not a scrolling row). Never set outside
+   * that grid (the wall has no "current" tile to mark).
    */
   current?: boolean;
   /**
@@ -121,10 +122,10 @@ export function CourtTile({
    * (`courtTileDomId(viewIdentityKey(navigateState))`) and a
    * `view-transition-name` for whenever it's the RETURN morph's
    * destination (`runCourtMorph`'s `targetKey` matching this tile's own
-   * key). Omit it for a tile that isn't a real navigation target — Manage
-   * mode's `as="static"` tiles still get the `id`/name (a reverse morph
-   * could land while Manage mode happens to be open) but never the click
-   * interception, since they're a `<div>`, not a `<Link>`, in the first
+   * key). Omit it for a tile that isn't a real navigation target —
+   * `manageable-saved-view-tile.tsx`'s `as="static"` tiles never pass it
+   * at all, so they get neither the `id`/`view-transition-name` nor the
+   * click interception; they're a `<div>`, not a `<Link>`, in the first
    * place.
    */
   navigateState?: VizState;
