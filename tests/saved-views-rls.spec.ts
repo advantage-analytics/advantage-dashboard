@@ -608,18 +608,14 @@ test.describe("saved_views RLS (live)", () => {
 
   // ── I3: heat chart + rallyPosition cut (Phase 1.2) ─────────────────────
   // `20260920120000_saved_views_heat_rally.sql` widens `saved_views_cut_check`
-  // /`saved_views_chart_check` to accept these two values — it is COMMITTED
-  // but NOT yet applied to the live database (a human approves that
-  // separately). Written the same as every other insert test in this file
-  // (asserting the real, post-migration behaviour) rather than skipped or
-  // written defensively: until the migration lands, both are EXPECTED TO
-  // FAIL here with a 23514 check violation — that failure is the point, not
-  // a bug in the test. Placed LAST in this file (this describe runs in
-  // `mode: "serial"`, which skips every remaining test in the block after a
-  // failure) so these two known failures never mask the real RLS coverage
-  // above.
+  // /`saved_views_chart_check` to accept these two values and is now applied
+  // to the live database. Written the same as every other insert test in
+  // this file, asserting the real post-migration behaviour. Placed LAST in
+  // this file (this describe runs in `mode: "serial"`, which skips every
+  // remaining test in the block after a failure) so a regression here never
+  // masks the real RLS coverage above.
 
-  test("a user can insert a personal view with cut='rallyPosition' (pending migration)", async () => {
+  test("a user can insert a personal view with cut='rallyPosition'", async () => {
     const insert = await userA.client
       .from("saved_views")
       .insert({
@@ -640,7 +636,7 @@ test.describe("saved_views RLS (live)", () => {
     expect(select.data).toHaveLength(1);
   });
 
-  test("a user can insert a personal view with chart='heat' (pending migration)", async () => {
+  test("a user can insert a personal view with chart='heat'", async () => {
     const insert = await userA.client
       .from("saved_views")
       .insert({

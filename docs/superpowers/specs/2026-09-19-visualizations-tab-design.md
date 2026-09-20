@@ -158,7 +158,7 @@ All under `src/components/dashboard/matches/match-detail/shots/`.
 | `cut-menu.tsx`, `chart-menu.tsx` | component | `FloatMenu` 300px / 272px, `use-listbox-nav.ts` keyboard. Zones row hidden off serve.                                                                                                                                                                                                                                                                                                                                  |
 | `filters-popover.tsx`            | component | 400px popover on the FloatMenu surface, 2-col groups, 26px pills, live apply, "n applied · x of y". No badge on the trigger.                                                                                                                                                                                                                                                                                           |
 | `applied-strip.tsx`              | component | 24px removable tokens + blue "Clear"; absent with no filters (P1g).                                                                                                                                                                                                                                                                                                                                                    |
-| `saved-views-band.tsx`           | component | Heading + count, "Manage views", tiles, dashed "New view". Absent entirely with zero views (P1b). Manage mode: ⋯ menu (Rename in place · Duplicate · Delete), pointer-drag reorder.                                                                                                                                                                                                                                    |
+| `saved-views-band.tsx`           | component | Heading + count, "Manage views", tiles, dashed "New view". Revised P1b (see "As built — Phase 1.2"): the `"wall"` band is always mounted, even with zero views — a "Save a court you want to come back to" micro line and the dashed tile replace the count and grid at zero. Manage mode: ⋯ menu (Rename in place · Duplicate · Delete), pointer-drag reorder.                                                        |
 | `save-view-dialog.tsx`           | component | Name field, "Saves" well, duplicate-name error (P2g rules on light).                                                                                                                                                                                                                                                                                                                                                   |
 | `shots-tab.tsx`                  | component | Resolves sides once; renders wall or focused from URL state.                                                                                                                                                                                                                                                                                                                                                           |
 
@@ -297,12 +297,13 @@ Shipped ahead of the rest of Phase 2, on `claude/visualizations-tab-design-aefa4
 - **The `saved_views.cut`/`chart` check constraints widen** to accept
   `rallyPosition`/`heat`
   (`supabase/migrations/20260920120000_saved_views_heat_rally.sql`) — this
-  migration is **committed but not yet applied** to the live database (a
-  human approves that step separately); `tests/saved-views-rls.spec.ts` has
-  two insert specs that are expected to fail with a 23514 check violation
-  until it lands, and `saved-views-actions.ts` maps that code to its own
-  `"unsupported_cut_chart"` result so the Save dialog can say "This kind of
-  view can't be saved yet." instead of the generic retry copy.
+  migration is now **applied to the live database**; the two
+  `tests/saved-views-rls.spec.ts` insert specs that previously asserted the
+  23514 check violation while it was pending now assert the real
+  post-migration success path. `saved-views-actions.ts` still maps that
+  error code to its own `"unsupported_cut_chart"` result so the Save dialog
+  can say "This kind of view can't be saved yet." instead of the generic
+  retry copy, as defense against the constraint ever regressing.
 
 Still Phase 2, unchanged by this round: the fullscreen viewer and its corner
 glyph, `FloatMenu`'s dark `tone`, the depth/contact band editor, and

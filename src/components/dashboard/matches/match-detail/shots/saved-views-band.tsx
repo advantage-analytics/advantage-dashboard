@@ -70,13 +70,18 @@ const EMPTY_DEFAULT_TILES: readonly DefaultTile[] = Object.freeze([]);
  * its `savedViewsBand` slot) and `VizFocused` (ditto), so it is the SAME
  * band on both surfaces — one component, two mount points.
  *
- * P1b: renders nothing at all with zero views and nothing pending — never an
- * empty band, a skeleton or sample tiles. The one exception is transient: if
- * deleting the LAST view leaves a status message (the Undo window, or an
- * error) on screen, the band stays mounted status-only (heading + status
- * line, no tiles) until that status clears — see `bandVisibility`. Otherwise
- * the 6-second Undo affordance for the last view would be unreachable, since
- * the whole band carrying it would vanish the instant the delete lands.
+ * Revised P1b: the `"wall"` band is ALWAYS mounted, even with zero saved
+ * views and nothing pending — the dashed "Create view" tile must stay
+ * reachable from the wall. At zero views the heading's count is replaced by
+ * the micro line "Save a court you want to come back to", there is no
+ * "Manage views" link (nothing to manage — `canManageAny` is already false
+ * on an empty list), and the grid holds only the "Create view" tile. The one
+ * exception is transient: if deleting the LAST view leaves a status message
+ * (the Undo window, or an error) on screen, the band renders status-only
+ * (heading + status line, no tiles, no "Create view" tile either) until that
+ * status clears — see `bandVisibility`. That keeps the 6-second Undo
+ * affordance for the last view from being crowded out by the "Create view"
+ * tile appearing in the same instant the delete lands.
  *
  * Manage mode (Part B) is entirely this component's own client state — on/off,
  * which tile's ⋯ menu is open, which tile is mid-rename, drag state, the
@@ -362,13 +367,14 @@ export function SavedViewsBand({
   // rather than a beat later.
   const visibility = bandVisibility(optimisticViews.length, status !== null);
 
-  // The wall band is absent outright with zero saved views and no status to
-  // show — P1b. The focused row is never hidden this way: it always carries
-  // the default tiles and the New-view tile even with zero saved views (the
-  // user decision this task implements).
-  if (variant === "wall" && visibility === "hidden") {
-    return null;
-  }
+  // The wall band is ALWAYS mounted, even with zero saved views (user
+  // decision, superseding the old P1b "absent with zero views" rule): the
+  // dashed "Create view" tile must stay reachable from the wall. The only
+  // state that still withholds tiles is `"status-only"` — the instant a
+  // delete empties the last view, the Undo window takes that slot instead so
+  // the "Create view" tile doesn't jump in underneath it mid-animation. The
+  // focused row was never hidden this way to begin with: it always carries
+  // the default tiles and the New-view tile regardless of saved-view count.
 
   function setStatusMessage(text: string, undo?: () => void, ms = 6000) {
     if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
@@ -880,6 +886,16 @@ export function SavedViewsBand({
                 {optimisticViews.length === 1 ? "" : "s"}
               </span>
             )}
+            {visibility === "hidden" && (
+              // Zero views, nothing pending: the count has nothing to count,
+              // so this invites the first save instead — never "0 saved
+              // views". Absent in `status-only` (mid-delete-of-last-view):
+              // the status line below already carries the Undo affordance,
+              // and this line would just flash between the two.
+              <span className="text-micro">
+                Save a court you want to come back to
+              </span>
+            )}
           </div>
         )}
         {manageMode ? (
@@ -1001,9 +1017,12 @@ export function SavedViewsBand({
           </div>
         </div>
       ) : (
-        visibility === "full" && (
+        visibility !== "status-only" && (
           // M9: matches the focused variant's grid — one list, labelled the
-          // same way the focused Views grid's own tiles are grouped.
+          // same way the focused Views grid's own tiles are grouped. Renders
+          // at `"hidden"` too (zero views, nothing pending) so the "Create
+          // view" tile stays reachable — `optimisticViews` is empty there,
+          // so the map below draws nothing and only the dashed tile shows.
           <div
             role="list"
             aria-label="Saved views"

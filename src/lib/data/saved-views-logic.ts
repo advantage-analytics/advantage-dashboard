@@ -415,14 +415,22 @@ export function mergeManageableOrder(
 }
 
 /**
- * What `saved-views-band.tsx` should render, given the current view count and
- * whether a transient status message (the delete Undo window, or any
- * error/status line) is showing. P1b: with zero views and nothing pending,
- * the whole band is absent — `"hidden"`. But deleting the LAST view sets
- * `viewCount` to 0 the same instant the Undo status appears, and the 6s Undo
- * window must stay reachable, so that combination renders `"status-only"`:
- * the heading and status line stay mounted, with no tiles and no "New view"
- * tile. Any other view count renders the full band regardless of status.
+ * What `saved-views-band.tsx` should render on the `"wall"` variant, given
+ * the current view count and whether a transient status message (the delete
+ * Undo window, or any error/status line) is showing. Revised decision (the
+ * band is now always mounted on the wall, so the dashed "Create view" tile
+ * stays reachable at zero views): with zero views and nothing pending,
+ * `"hidden"` — the band renders its heading, the "Save a court you want to
+ * come back to" micro line in place of a count, and a grid holding only the
+ * "Create view" tile; no "Manage views" link (there is nothing to manage).
+ * But deleting the LAST view sets `viewCount` to 0 the same instant the Undo
+ * status appears, and the 6s Undo window must stay reachable without the
+ * "Create view" tile jumping in underneath it mid-animation, so that
+ * combination renders `"status-only"`: the heading and status line stay
+ * mounted, with no tiles and no "Create view" tile either. Any other view
+ * count renders the full band regardless of status. The `"focused"` variant
+ * never consults this — it always renders defaults + saved views + "Create
+ * view" regardless of count.
  */
 export type BandVisibility = "hidden" | "status-only" | "full";
 
