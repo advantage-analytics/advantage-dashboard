@@ -6,6 +6,7 @@ import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { WorkspaceKind } from "@/lib/workspace/types";
 import { APRON_FILL, CourtArt } from "./court-art";
+import { trianglePointsFor, starPoints } from "./court-geometry";
 import { StatsCard } from "./stats-card";
 import { VizToolbar } from "./viz-toolbar";
 import { useVizState } from "./use-viz-state";
@@ -19,7 +20,7 @@ import {
   type Cut,
 } from "./viz-model";
 import { activeFilterEntries, viewIdentityKey } from "./viz-url";
-import { CUT_LABEL } from "./viz-labels";
+import { CUT_LABEL, legendItemsFor, type LegendItem } from "./viz-labels";
 import { AppliedStrip } from "./applied-strip";
 import { FiltersPopover } from "./filters-popover";
 import { SaveViewDialog } from "./save-view-dialog";
@@ -308,9 +309,9 @@ export function VizFocused({
           </div>
 
           <div className="flex items-center gap-3 px-4 pt-[10px] pb-[14px]">
-            <LegendDot color="var(--viz-good)" label="Point won" />
-            <LegendDot color="var(--viz-bad)" label="Lost" />
-            <LegendDot color="var(--ink-300)" label="Miss" />
+            {legendItemsFor(cut, state.chart).map((item) => (
+              <LegendMark key={item.key} item={item} />
+            ))}
             <div className="flex-1" />
             <span className="text-micro" style={{ color: "var(--ink-400)" }}>
               {LEGEND_CAPTION[cut]}
@@ -339,13 +340,29 @@ export function VizFocused({
   );
 }
 
-function LegendDot({ color, label }: { color: string; label: string }) {
+// Sized to fill the same 8x8 box the old plain circle used, roughly matching
+// its visual weight: r=3.6 for the circle, and outer radii picked so the
+// triangle/star glyphs read at a comparable size (not area-matched to the
+// circle the way `court-art.tsx`'s real marks are — this is just a legend
+// key, not a measurement).
+const LEGEND_GLYPH_R = 3.6;
+const LEGEND_TRIANGLE_SIZE = 2.2;
+const LEGEND_STAR_OUTER_R = 3.6;
+
+/**
+ * One legend key — circle, triangle or star, reusing `court-art.tsx`'s own
+ * point maths (`trianglePointsFor`/`starPoints`) so a glyph here is drawn
+ * exactly the way the court draws it, not a hand-rolled near-miss.
+ * `item.outline` (Forehand/Backhand) skips the fill and draws a neutral ink
+ * stroke instead of the court's 0.4px black hairline — these encode STROKE,
+ * not an outcome colour, so they shouldn't look like a fourth outcome dot.
+ */
+function LegendMark({ item }: { item: LegendItem }) {
+  const fill = item.outline ? "none" : item.color;
+  const stroke = item.outline ? item.color : "#000";
+  const strokeWidth = item.outline ? 1 : 0.4;
   return (
     <span className="inline-flex items-center gap-[6px]">
-      {/* An SVG circle, not a CSS dot: the legend mark carries the same
-          0.4px black stroke as the court's own marks (`court-art.tsx`'s
-          `DOT_STROKE`/`DOT_STROKE_W`), which a plain `background-color` div
-          can't reproduce. */}
       <svg
         aria-hidden="true"
         width={8}
@@ -353,17 +370,35 @@ function LegendDot({ color, label }: { color: string; label: string }) {
         viewBox="0 0 8 8"
         className="shrink-0"
       >
-        <circle
-          cx={4}
-          cy={4}
-          r={3.6}
-          fill={color}
-          stroke="#000"
-          strokeWidth={0.4}
-        />
+        {item.glyph === "circle" && (
+          <circle
+            cx={4}
+            cy={4}
+            r={LEGEND_GLYPH_R}
+            fill={fill}
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+          />
+        )}
+        {item.glyph === "triangle" && (
+          <polygon
+            points={trianglePointsFor("serve", 4, 4, LEGEND_TRIANGLE_SIZE)}
+            fill={fill}
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+          />
+        )}
+        {item.glyph === "star" && (
+          <polygon
+            points={starPoints(4, 4, LEGEND_STAR_OUTER_R)}
+            fill={item.color}
+            stroke="#000"
+            strokeWidth={0.4}
+          />
+        )}
       </svg>
       <span className="text-micro" style={{ color: "var(--ink-500)" }}>
-        {label}
+        {item.label}
       </span>
     </span>
   );

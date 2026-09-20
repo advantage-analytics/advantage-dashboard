@@ -8,6 +8,8 @@ import {
   zoneOpacity,
   ZONE_OPACITY_MIN,
   ZONE_OPACITY_MAX,
+  trianglePointsFor,
+  starPoints,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
 
 /**
@@ -182,3 +184,178 @@ test("zoneOpacity: maxPct=0 reads at the minimum shade (no divide-by-zero)", () 
   expect(zoneOpacity(0, 0)).toBe(ZONE_OPACITY_MIN);
   expect(zoneOpacity(5, 0)).toBe(ZONE_OPACITY_MIN);
 });
+
+/**
+ * G2 — the apex must land screen-UP for every kind `trianglePointsFor`
+ * draws, not just look plausible in local coordinates. `court-art.tsx`
+ * applies these frame transforms on top of whatever this module returns:
+ *   - "serve": no rotation at all (the serve `<svg>` has none) — local −y
+ *     already IS screen-up, so this is the identity case.
+ *   - "contact": the return frame's outer `<g rotate(90 240 104.5)>`, and
+ *     nothing else.
+ *   - "placement": the SAME outer rotate(90), plus the extra CSS
+ *     `transform: rotate(180deg)` `court-art.tsx` sets on that `<svg>`.
+ * A rigid rotation's effect on the RELATIVE position of two points doesn't
+ * depend on the rotation's center (p1' - p2' = R(p1 - p2) for any center),
+ * so these helpers rotate the raw (x, y) pairs `trianglePointsFor` returns
+ * around the origin — matching `court-art.tsx`'s own comment that
+ * `rotate(90)` maps local `(x, y) -> (-y, x)` — and the topmost-vertex
+ * comparison below is exactly as valid as composing the real transform
+ * chain (translate/scale steps in between are uniform and don't rotate, so
+ * they can't change which vertex ends up on top either).
+ */
+function parseTrianglePoints(
+  pointsAttr: string,
+): [
+  { x: number; y: number },
+  { x: number; y: number },
+  { x: number; y: number },
+] {
+  const pts = pointsAttr
+    .trim()
+    .split(/\s+/)
+    .map((pair) => {
+      const [x, y] = pair.split(",").map(Number);
+      return { x, y };
+    });
+  if (pts.length !== 3) throw new Error(`expected 3 points, got ${pts.length}`);
+  return pts as [
+    { x: number; y: number },
+    { x: number; y: number },
+    { x: number; y: number },
+  ];
+}
+
+// SVG rotate(90 …) maps a vector (x, y) -> (-y, x).
+function rotate90({ x, y }: { x: number; y: number }) {
+  return { x: -y, y: x };
+}
+
+// CSS rotate(180deg) negates both axes.
+function rotate180({ x, y }: { x: number; y: number }) {
+  return { x: -x, y: -y };
+}
+
+test.describe("trianglePointsFor — apex points screen-up", () => {
+  test("serve: apex is the topmost vertex with no frame rotation applied", () => {
+    const [apex, baseLeft, baseRight] = parseTrianglePoints(
+      trianglePointsFor("serve", 260, 150, 2.54),
+    );
+    expect(apex.y).toBeLessThan(baseLeft.y);
+    expect(apex.y).toBeLessThan(baseRight.y);
+  });
+
+  test("contact: apex is topmost after composing the outer rotate(90)", () => {
+    const raw = parseTrianglePoints(trianglePointsFor("contact", 300, 90, 2.4));
+    const [apex, baseLeft, baseRight] = raw.map(rotate90);
+    expect(apex.y).toBeLessThan(baseLeft.y);
+    expect(apex.y).toBeLessThan(baseRight.y);
+  });
+
+  test("placement: apex is topmost after composing rotate(90) then the svg's own rotate(180deg)", () => {
+    const raw = parseTrianglePoints(
+      trianglePointsFor("placement", 300, 90, 2.4),
+    );
+    const [apex, baseLeft, baseRight] = raw.map((p) => rotate180(rotate90(p)));
+    expect(apex.y).toBeLessThan(baseLeft.y);
+    expect(apex.y).toBeLessThan(baseRight.y);
+  });
+
+  test("area and centroid match the pre-G2 triangle for a given size", () => {
+    // Same shoelace/centroid maths the original trianglePoints() produced —
+    // orientation changed, size/shape did not.
+    function area(pts: { x: number; y: number }[]): number {
+      let a = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const p1 = pts[i];
+        const p2 = pts[(i + 1) % pts.length];
+        a += p1.x * p2.y - p2.x * p1.y;
+      }
+      return Math.abs(a) / 2;
+    }
+    function centroid(pts: { x: number; y: number }[]): {
+      x: number;
+      y: number;
+    } {
+      return {
+        x: pts.reduce((s, p) => s + p.x, 0) / pts.length,
+        y: pts.reduce((s, p) => s + p.y, 0) / pts.length,
+      };
+    }
+    const servePts = parseTrianglePoints(
+      trianglePointsFor("serve", 50, 50, 2.54),
+    );
+    const contactPts = parseTrianglePoints(
+      trianglePointsFor("contact", 50, 50, 2.54),
+    );
+    const placementPts = parseTrianglePoints(
+      trianglePointsFor("placement", 50, 50, 2.54),
+    );
+    const serveArea = area(servePts);
+    expect(area(contactPts)).toBeCloseTo(serveArea, 5);
+    expect(area(placementPts)).toBeCloseTo(serveArea, 5);
+    // The 1.1883 / 0.5942 apex/base constants (carried over from the
+    // pre-G2 `trianglePoints`) aren't exactly 2:1, so the centroid sits a
+    // hair off center — precision 2 tolerates that rounding, not a real
+    // orientation bug.
+    for (const pts of [servePts, contactPts, placementPts]) {
+      const c = centroid(pts);
+      expect(c.x).toBeCloseTo(50, 2);
+      expect(c.y).toBeCloseTo(50, 2);
+    }
+  });
+});
+
+/**
+ * G2b — the ace star: 10 vertices alternating outer/inner radius, first
+ * vertex straight up on screen (y decreases upward, so the first vertex is
+ * (cx, cy - outerR)).
+ */
+test.describe("starPoints", () => {
+  test("returns 10 vertices", () => {
+    const pts = parseTrianglePointsLoose(starPoints(0, 0, 10));
+    expect(pts).toHaveLength(10);
+  });
+
+  test("first vertex is straight up (cx, cy - outerR)", () => {
+    const pts = parseTrianglePointsLoose(starPoints(4, 4, 3.7));
+    expect(pts[0].x).toBeCloseTo(4, 5);
+    expect(pts[0].y).toBeCloseTo(4 - 3.7, 5);
+  });
+
+  test("vertices alternate outer radius R and inner radius R/2 from the center", () => {
+    const cx = 4;
+    const cy = 4;
+    const outerR = 3.7;
+    const pts = parseTrianglePointsLoose(starPoints(cx, cy, outerR));
+    pts.forEach((p, i) => {
+      const dist = Math.hypot(p.x - cx, p.y - cy);
+      const expected = i % 2 === 0 ? outerR : outerR / 2;
+      expect(dist).toBeCloseTo(expected, 5);
+    });
+  });
+
+  test("outer radius ≈3.7 gives a star area comparable to the r=2.54 dot's circle area", () => {
+    // Regular 10-point star (outer R, inner R/2): area = 5 * R * (R/2) *
+    // sin(36°) = 2.5 * sin(36°) * R² ≈ 1.4695 * R². Circle area = π * 2.54²
+    // ≈ 20.268. Solving for R gives ≈3.714 — 3.7 is the value court-art.tsx
+    // actually draws with, within ~0.7% of an exact area match.
+    const outerR = 3.7;
+    const starArea = 2.5 * Math.sin((36 * Math.PI) / 180) * outerR * outerR;
+    const dotArea = Math.PI * 2.54 * 2.54;
+    expect(starArea).toBeGreaterThan(dotArea * 0.9);
+    expect(starArea).toBeLessThan(dotArea * 1.1);
+  });
+});
+
+function parseTrianglePointsLoose(
+  pointsAttr: string,
+): { x: number; y: number }[] {
+  return pointsAttr
+    .trim()
+    .split(/\s+/)
+    .map((pair) => {
+      const [x, y] = pair.split(",").map(Number);
+      return { x, y };
+    });
+}

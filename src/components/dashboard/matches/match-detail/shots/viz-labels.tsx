@@ -3,6 +3,7 @@
 import type { LucideIcon } from "lucide-react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { Cut, Chart, VizFilters } from "./viz-model";
+import { ACE_STAR_FILL } from "./court-art";
 import { cn } from "@/lib/utils";
 
 /**
@@ -26,6 +27,87 @@ export const CHART_LABEL: Record<Chart, string> = {
   scatter: "Scatter",
   zones: "Zones",
 };
+
+/**
+ * G2b: the focused court's legend, one entry per glyph `court-art.tsx`
+ * actually draws for the given (cut, chart) — built here instead of
+ * hardcoded in `viz-focused.tsx` so the encoding is spelled out once and the
+ * legend can never drift from what's on the court.
+ *
+ * `outline: true` marks a shape-only entry (Forehand/Backhand): those encode
+ * STROKE, an axis orthogonal to outcome, so they draw as a neutral ink
+ * outline rather than a won/lost/miss fill — otherwise a plain circle in
+ * `--ink-500` would read as a fourth outcome next to Miss's `--ink-300`.
+ */
+export interface LegendItem {
+  key: string;
+  glyph: "circle" | "triangle" | "star";
+  color: string;
+  label: string;
+  outline?: boolean;
+}
+
+const WON_ITEM: LegendItem = {
+  key: "won",
+  glyph: "circle",
+  color: "var(--viz-good)",
+  label: "Point won",
+};
+const LOST_ITEM: LegendItem = {
+  key: "lost",
+  glyph: "circle",
+  color: "var(--viz-bad)",
+  label: "Lost",
+};
+const MISS_ITEM: LegendItem = {
+  key: "miss",
+  glyph: "circle",
+  color: "var(--ink-300)",
+  label: "Miss",
+};
+const OUTCOME_ITEMS: LegendItem[] = [WON_ITEM, LOST_ITEM, MISS_ITEM];
+
+// Imports `court-art.tsx`'s own `ACE_STAR_FILL` rather than a second literal
+// — one hex, one allowlist entry, and the legend swatch can never drift from
+// the court's actual fill.
+const ACE_ITEM: LegendItem = {
+  key: "ace",
+  glyph: "star",
+  color: ACE_STAR_FILL,
+  label: "Ace",
+};
+
+const FOREHAND_ITEM: LegendItem = {
+  key: "forehand",
+  glyph: "circle",
+  color: "var(--ink-500)",
+  label: "Forehand",
+  outline: true,
+};
+const BACKHAND_ITEM: LegendItem = {
+  key: "backhand",
+  glyph: "triangle",
+  color: "var(--ink-500)",
+  label: "Backhand",
+  outline: true,
+};
+
+/**
+ * `chart === "zones"` always reads as the outcome trio — the cells ARE the
+ * chart there (`court-art.tsx`'s `showZones` branch skips dots entirely), so
+ * no dot-shape legend applies regardless of `cut`. Otherwise (scatter) each
+ * cut adds the shape its own dots vary on beyond outcome colour: serve adds
+ * Ace (the only shape a serve dot takes), the two return cuts add
+ * Forehand/Backhand (every return dot is one or the other).
+ *
+ * Extend for a later cut/chart (G3's "rallyPosition"/"heat") by adding a
+ * case here — nowhere else needs to change.
+ */
+export function legendItemsFor(cut: Cut, chart: Chart): LegendItem[] {
+  if (chart === "zones") return OUTCOME_ITEMS;
+  if (cut === "serve") return [...OUTCOME_ITEMS, ACE_ITEM];
+  return [...OUTCOME_ITEMS, FOREHAND_ITEM, BACKHAND_ITEM];
+}
 
 /**
  * Design handoff P1a/P1c/P1f: tile filter pills, applied-filter tokens and

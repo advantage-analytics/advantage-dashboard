@@ -9,6 +9,8 @@ import {
   projectReturnDot,
   zoneCellX,
   zoneOpacity,
+  trianglePointsFor,
+  starPoints,
 } from "./court-geometry";
 import type { Cut, VizDot } from "./viz-model";
 
@@ -43,17 +45,19 @@ const DOT_STROKE_W = 0.4;
 const SERVE_DOT_R = 2.54;
 const RETURN_DOT_R = 2.4;
 
-// Area-match a triangle to a circle of the same nominal radius — see
-// `visuals/half-court-svg.tsx`'s `trianglePoints` for the derivation; kept as
-// a local copy since that helper is not exported.
-const TRIANGLE_AREA_SCALE = 1.33;
-
-function trianglePoints(cx: number, cy: number, size: number): string {
-  const s = size * TRIANGLE_AREA_SCALE;
-  const apexY = cy - s * 1.1883;
-  const baseY = cy + s * 0.5942;
-  return `${cx},${apexY} ${cx - s},${baseY} ${cx + s},${baseY}`;
-}
+// G2b: the ace star's fill, regardless of outcome colour (an ace is always
+// won, but the star communicates "ace" first — see `ACE_STAR_FILL`'s use
+// below, which skips `colorFor` entirely for star dots). Allowlisted in
+// `scripts/check-design-drift.mjs` next to this file's other two court
+// literals. Exported so `viz-labels.tsx`'s `legendItemsFor` can match the
+// legend's Ace glyph to the court's own fill exactly, instead of a second
+// `#F8C84F` literal the checker would flag again.
+export const ACE_STAR_FILL = "#F8C84F";
+// Chosen so the star's area is comparable to the SERVE_DOT_R=2.54 circle's:
+// a regular 10-point star with inner radius R/2 has area
+// 2.5·sin(36°)·R² ≈ 1.4695·R²; solving 1.4695·R² = π·2.54² gives R≈3.714 —
+// 3.7 is within ~0.7% of that exact match (see `tests/court-geometry.spec.ts`).
+const ACE_STAR_OUTER_R = 3.7;
 
 function colorFor(outcome: VizDot["outcome"]): string {
   if (outcome === "won") return "var(--viz-good)";
@@ -290,12 +294,27 @@ export function CourtArt({
 
           {!showZones &&
             dots.map((d) => {
-              const color = colorFor(d.outcome);
               const { cx, cy } = projectServeDot(d);
+              // G2b: an ace draws as a star, regardless of outcome colour —
+              // it's always "won" already, but the shape carries the "ace"
+              // read before the colour would.
+              if (d.shape === "star") {
+                return (
+                  <polygon
+                    key={d.id}
+                    points={starPoints(cx, cy, ACE_STAR_OUTER_R)}
+                    fill={ACE_STAR_FILL}
+                    stroke={DOT_STROKE}
+                    strokeWidth={DOT_STROKE_W}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                );
+              }
+              const color = colorFor(d.outcome);
               return d.shape === "triangle" ? (
                 <polygon
                   key={d.id}
-                  points={trianglePoints(cx, cy, SERVE_DOT_R)}
+                  points={trianglePointsFor("serve", cx, cy, SERVE_DOT_R)}
                   fill={color}
                   stroke={DOT_STROKE}
                   strokeWidth={DOT_STROKE_W}
@@ -447,7 +466,7 @@ export function CourtArt({
               return d.shape === "triangle" ? (
                 <polygon
                   key={d.id}
-                  points={trianglePoints(cx, cy, RETURN_DOT_R)}
+                  points={trianglePointsFor(kind, cx, cy, RETURN_DOT_R)}
                   fill={color}
                   stroke={DOT_STROKE}
                   strokeWidth={DOT_STROKE_W}

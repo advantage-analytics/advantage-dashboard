@@ -96,9 +96,14 @@ const ALLOWED_HEX = {
   // Not promoted to colors.css: `CourtArt` is the one call site (Task 9's
   // focused view reuses this component rather than duplicating the SVG), not
   // a role wide enough for a token.
+  // `#F8C84F` (G2b) is the ace star's own fill — added to the same literal
+  // list, not promoted to colors.css: it's an outcome-independent "ace" read
+  // (star shape, not a won/lost/miss colour), one call site, same reasoning
+  // as the court/apron pair above.
   "src/components/dashboard/matches/match-detail/shots/court-art.tsx": [
     "#86AC91",
     "#6092CE",
+    "#F8C84F",
   ],
 };
 

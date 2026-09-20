@@ -84,11 +84,16 @@ export type Outcome = "won" | "lost" | "miss";
  * return dot and `lateralM`/`depthM` are always 0 on a serve dot, rather than
  * making every caller narrow a union for two fields it already knows how to
  * read.
+ *
+ * `shape: "star"` is a serve-only addition (G2b): an ace draws as a star
+ * instead of the usual outcome-coloured circle. Return dots never take this
+ * shape — their circle/triangle already encodes forehand/backhand, an
+ * orthogonal axis from "was this an ace".
  */
 export interface VizDot {
   id: string;
   outcome: Outcome;
-  shape: "circle" | "triangle";
+  shape: "circle" | "triangle" | "star";
   x: number;
   y: number;
   lateralM: number;
@@ -428,7 +433,9 @@ export function computeViz(
         lateralM: 0,
         depthM: 0,
         outcome: serveOutcome(dot.result),
-        shape: "circle",
+        // G2b: an ace draws as a star — already gated to the subject's own
+        // serves by the `p.serverIsPlayer1 !== subjectIsPlayer1` check above.
+        shape: p.resultType === "Ace" ? "star" : "circle",
       });
     } else {
       if (p.serverIsPlayer1 === subjectIsPlayer1) continue;

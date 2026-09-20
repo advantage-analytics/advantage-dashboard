@@ -224,3 +224,82 @@ export function zoneOpacity(pct: number, maxPct: number): number {
   const t = Math.min(1, Math.max(0, pct / maxPct));
   return ZONE_OPACITY_MIN + t * (ZONE_OPACITY_MAX - ZONE_OPACITY_MIN);
 }
+
+/* ── Triangle marks (G2) ───────────────────────────────────────────────────
+ *
+ * Area-match a triangle to a circle of the same nominal radius — moved here
+ * verbatim from `court-art.tsx`'s old `trianglePoints` (visualizations-tab-
+ * phase-1 spec's derivation), the constant kept local since no other module
+ * needs it.
+ */
+const TRIANGLE_AREA_SCALE = 1.33;
+
+export type TriangleKind = "serve" | "contact" | "placement";
+
+/**
+ * A "backhand" triangle mark whose apex lands screen-UP once `court-art.tsx`
+ * applies that court's real transform chain — NOT local −y in every case,
+ * because two of the three frames rotate what this function draws:
+ *
+ * - "serve": the serve `<svg>` carries no rotation at all, so local −y
+ *   already IS screen-up. Unchanged from the old `trianglePoints`.
+ * - "contact": the return frame's shared `<g rotate(90 240 104.5)>` maps a
+ *   local vector `(dx, dy) -> (-dy, dx)`. Solving `(-dy, dx) = (0, -k)` for
+ *   the apex vector gives local `(-k, 0)` — the apex points local −x here so
+ *   that rotate(90) turns it screen-up.
+ * - "placement": same outer rotate(90), PLUS the extra CSS
+ *   `transform: rotate(180deg)` `court-art.tsx` sets on that `<svg>` only
+ *   for this kind, which negates both axes on top of the rotate(90) result:
+ *   `(dy, -dx) = (0, -k)` solves to local `(k, 0)` — the apex points local
+ *   +x.
+ *
+ * Both return cases are 90°-rotations of the SAME triangle "serve" draws
+ * (base corners rotated the same amount as the apex), so area and centroid
+ * are identical across all three kinds for a given `size` — only the
+ * orientation differs. `tests/court-geometry.spec.ts` composes each kind's
+ * real frame rotation(s) and asserts the apex is the topmost of the three
+ * vertices.
+ */
+export function trianglePointsFor(
+  kind: TriangleKind,
+  cx: number,
+  cy: number,
+  size: number,
+): string {
+  const s = size * TRIANGLE_AREA_SCALE;
+  const apexOffset = s * 1.1883;
+  const baseOffset = s * 0.5942;
+  if (kind === "contact") {
+    // Apex points local −x; base corners rotated the same −90°.
+    return `${cx - apexOffset},${cy} ${cx + baseOffset},${cy - s} ${cx + baseOffset},${cy + s}`;
+  }
+  if (kind === "placement") {
+    // Apex points local +x; base corners rotated the same +90°.
+    return `${cx + apexOffset},${cy} ${cx - baseOffset},${cy - s} ${cx - baseOffset},${cy + s}`;
+  }
+  // "serve": unrotated frame, local −y is already screen-up.
+  return `${cx},${cy - apexOffset} ${cx - s},${cy + baseOffset} ${cx + s},${cy + baseOffset}`;
+}
+
+/* ── Ace star (G2b) ────────────────────────────────────────────────────────
+ *
+ * A regular 5-point star (10 vertices, alternating outer radius R and inner
+ * radius R/2), first vertex straight up on screen. The serve frame has no
+ * rotation on its `<svg>` (unlike the return frames), so "straight up" here
+ * needs no frame composition — angle −90° in a y-down coordinate system
+ * (screen) is the top of the circle, matching `trianglePointsFor("serve",…)`'s
+ * own unrotated apex.
+ */
+export function starPoints(cx: number, cy: number, outerR: number): string {
+  const innerR = outerR * 0.5;
+  const points: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const angleDeg = -90 + i * 36;
+    const angleRad = (angleDeg * Math.PI) / 180;
+    const x = cx + r * Math.cos(angleRad);
+    const y = cy + r * Math.sin(angleRad);
+    points.push(`${x},${y}`);
+  }
+  return points.join(" ");
+}
