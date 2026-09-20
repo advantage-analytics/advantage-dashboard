@@ -1,6 +1,6 @@
 ---
 name: task-add
-description: Plan one intent — or a batch — into right-sized, model-routed tasks and append them to this branch's queue. Use when adding work to .claude/tasks/, especially by voice or from a phone. For a one-off change you are about to make anyway, skip the queue and just do it; when the approach is undecided and wants a written brief and design first, use /feature-new instead.
+description: Plan one intent — or a batch — into right-sized, model-routed tasks and append them to this branch's queue. Use when handing work over to run later rather than doing it now — especially a batch, or anything dictated by voice or from a phone. Not for: a change you are about to make anyway (just make it); reading, running or reordering tasks already queued (that is /task-next and the queue file itself); or an undecided approach that wants a written brief and design first (/feature-new).
 argument-hint: "<one or more one-line descriptions of work>"
 ---
 
