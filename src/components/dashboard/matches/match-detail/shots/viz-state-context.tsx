@@ -3,7 +3,9 @@
 import {
   createContext,
   use,
+  useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -132,25 +134,43 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
     // adding `urlState` itself would fire on every render (new object).
   }, [query]);
 
-  function hrefFor(next: VizState): string {
-    const q = vizStateQuery(searchParams, next);
-    return q ? `${pathname}?${q}` : pathname;
-  }
-
-  function setState(next: VizState | ((prev: VizState) => VizState)): void {
-    const resolved = applyVizUpdate(intendedRef.current, next);
-    intendedRef.current = resolved;
-
-    const q = vizStateQuery(searchParams, resolved);
-    ownQueriesRef.current = [...ownQueriesRef.current, q];
-
-    setRenderedState(resolved);
-    router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
-  }
-
-  return (
-    <VizStateContext value={{ state, setState, hrefFor }}>
-      {children}
-    </VizStateContext>
+  // `hrefFor`/`setState` wrapped in `useCallback`, and the context value
+  // itself in `useMemo` (review I1): every reader downstream of
+  // `useVizState()` (the filters popover, applied strip, chart/cut menus, the
+  // focused view, the wall, the saved-views band) sits below this ONE
+  // provider, so a fresh `{ state, setState, hrefFor }` object on every
+  // provider render — regardless of whether `state` itself changed — would
+  // re-render every one of them on every keystroke/click anywhere in the
+  // tree. `hrefFor` only closes over `pathname`/`searchParams`, and
+  // `setState` only closes over refs (stable identity) plus
+  // `pathname`/`searchParams`/`router` — none of which change on every
+  // render — so both are cheap to keep referentially stable.
+  const hrefFor = useCallback(
+    (next: VizState): string => {
+      const q = vizStateQuery(searchParams, next);
+      return q ? `${pathname}?${q}` : pathname;
+    },
+    [pathname, searchParams],
   );
+
+  const setState = useCallback(
+    (next: VizState | ((prev: VizState) => VizState)): void => {
+      const resolved = applyVizUpdate(intendedRef.current, next);
+      intendedRef.current = resolved;
+
+      const q = vizStateQuery(searchParams, resolved);
+      ownQueriesRef.current = [...ownQueriesRef.current, q];
+
+      setRenderedState(resolved);
+      router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  const value = useMemo(
+    () => ({ state, setState, hrefFor }),
+    [state, setState, hrefFor],
+  );
+
+  return <VizStateContext value={value}>{children}</VizStateContext>;
 }

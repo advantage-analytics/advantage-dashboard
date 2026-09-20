@@ -15,6 +15,7 @@ import {
   rowToSavedView,
   rowToSavedViewRow,
   savedViewsCountFact,
+  tileDataKey,
   validateVizInput,
   type SavedViewDbRow,
 } from "@/lib/data/saved-views-logic";
@@ -528,4 +529,45 @@ test("bandVisibility is full with at least one view, status or not", () => {
 // function's shape so a future edit can't reintroduce that coupling here.
 test("bandVisibility takes only viewCount and hasStatus — manage mode is not one of its inputs", () => {
   expect(bandVisibility.length).toBe(2);
+});
+
+/* ── tileDataKey (I1) ──────────────────────────────────────────────────── */
+
+test("tileDataKey is identical for two orderings of the same views", () => {
+  const a = [
+    {
+      id: "v1",
+      cut: "serve",
+      filters: { ...EMPTY_VIZ_FILTERS, ball: "first" },
+    },
+    { id: "v2", cut: "returnPlacement", filters: EMPTY_VIZ_FILTERS },
+  ];
+  const b = [a[1], a[0]];
+  expect(tileDataKey(a)).toBe(tileDataKey(b));
+});
+
+test("tileDataKey changes when a view's filters change", () => {
+  const before = [
+    {
+      id: "v1",
+      cut: "serve",
+      filters: { ...EMPTY_VIZ_FILTERS, ball: "first" },
+    },
+  ];
+  const after = [
+    {
+      id: "v1",
+      cut: "serve",
+      filters: { ...EMPTY_VIZ_FILTERS, ball: "second" },
+    },
+  ];
+  expect(tileDataKey(before)).not.toBe(tileDataKey(after));
+});
+
+test("tileDataKey changes when a view's cut changes", () => {
+  const before = [{ id: "v1", cut: "serve", filters: EMPTY_VIZ_FILTERS }];
+  const after = [
+    { id: "v1", cut: "returnPlacement", filters: EMPTY_VIZ_FILTERS },
+  ];
+  expect(tileDataKey(before)).not.toBe(tileDataKey(after));
 });

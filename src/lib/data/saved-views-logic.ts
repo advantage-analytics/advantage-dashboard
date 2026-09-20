@@ -438,6 +438,26 @@ export function manageMenuRows(
 }
 
 /**
+ * The cache key `saved-views-band.tsx` memoizes its per-tile `computeViz`
+ * results on (review I1) — every view's `id`/`cut`/`filters`, order-
+ * independent (each entry is prefixed by its own id, then the whole set of
+ * entries is sorted), so a drag/keyboard reorder — which changes array order
+ * but not any view's own cut/filters — produces the SAME key and the memo is
+ * skipped, while adding, removing, or changing any view's cut/filters (which
+ * changes what the key sorts) always produces a different one. `filters` is
+ * serialized with `JSON.stringify` rather than compared by reference, since
+ * the optimistic list is rebuilt (new object identities) on every reorder.
+ */
+export function tileDataKey(
+  views: readonly { id: string; cut: string; filters: unknown }[],
+): string {
+  return views
+    .map((v) => `${v.id}:${v.cut}:${JSON.stringify(v.filters)}`)
+    .sort()
+    .join("|");
+}
+
+/**
  * The title-row fact's saved-views suffix (Task 9 step 4) — `""` when there
  * are none (a match with no saved views doesn't advertise a feature it has
  * nothing in), else ` · {n} saved view` singular at exactly one, plural

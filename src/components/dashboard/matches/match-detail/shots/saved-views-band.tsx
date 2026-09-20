@@ -25,6 +25,7 @@ import {
   hasDuplicateViewName,
   mergeManageableOrder,
   moveItem,
+  tileDataKey,
 } from "@/lib/data/saved-views-logic";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
 import {
@@ -151,6 +152,58 @@ export function SavedViewsBand({
   );
   const canManageAny = manageableIds.length > 0;
 
+  function tileDataFor(view: SavedViewRow) {
+    const subjectIsPlayer1 = subjectFor(view.filters, you.isPlayer1);
+    const result = computeViz(points, view.cut, view.filters, subjectIsPlayer1);
+    const subjectName = view.filters.player === "you" ? you.name : opp.name;
+    const entries = activeFilterEntries({
+      cut: view.cut,
+      chart: view.chart,
+      filters: view.filters,
+      viewId: null,
+    });
+    const pills = truncatePillLabels(entries.map((entry) => entry.label));
+    const countLabel =
+      view.cut === "serve"
+        ? `${result.count} of ${result.total}`
+        : `${result.count} returns`;
+    const href = hrefFor({
+      cut: view.cut,
+      chart: view.chart,
+      filters: view.filters,
+      viewId: view.id,
+    });
+    return { subjectName, pills, countLabel, dots: result.dots, href };
+  }
+
+  // Review I1: `tileDataFor` runs `computeViz(points, …)` — an O(points) scan
+  // — for EVERY tile on EVERY render, including a pointer-move mid-drag
+  // (`handleTilePointerMove` calls `setOptimisticViews` on every hit-test
+  // change) and every filter click anywhere in the tab (the whole tree
+  // re-renders off the one shared `VizStateProvider`, see that file's own
+  // I1 fix). None of that ever changes what a tile draws — only a view being
+  // added/removed/edited, `points` itself, or which side is "you" does — so
+  // this key on `tileDataKey(optimisticViews)` (order-independent: a reorder
+  // produces the SAME key) skips the recompute for everything else. Keeping
+  // `optimisticViews` itself OUT of the dependency list is deliberate: the
+  // memo must not itself see a reorder as a reason to recompute, only
+  // `viewsKey` should decide that.
+  //
+  // Must run before the `visibility === "hidden"` early return below (hooks
+  // can't be called conditionally) — hence living up here rather than beside
+  // `tileDataFor`'s original call site.
+  const viewsKey = tileDataKey(
+    optimisticViews.map((v) => ({ id: v.id, cut: v.cut, filters: v.filters })),
+  );
+  const tileDataById = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof tileDataFor>>();
+    for (const view of optimisticViews) {
+      map.set(view.id, tileDataFor(view));
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `viewsKey` already captures every view's id/cut/filters, order-independent; including `optimisticViews`/`tileDataFor` directly would recompute on every reorder, defeating the memo
+  }, [points, you.isPlayer1, you.name, opp.name, hrefFor, viewsKey]);
+
   // FLIP: whenever the rendered order of tiles changes (a drag preview or a
   // keyboard move — never a mount, never under `prefers-reduced-motion`),
   // slide each tracked tile from where it WAS to where it now is over 200ms.
@@ -243,30 +296,6 @@ export function SavedViewsBand({
       ? menuTriggerElsRef.current.get(remaining[0])
       : undefined;
     (nextEl ?? doneButtonRef.current)?.focus();
-  }
-
-  function tileDataFor(view: SavedViewRow) {
-    const subjectIsPlayer1 = subjectFor(view.filters, you.isPlayer1);
-    const result = computeViz(points, view.cut, view.filters, subjectIsPlayer1);
-    const subjectName = view.filters.player === "you" ? you.name : opp.name;
-    const entries = activeFilterEntries({
-      cut: view.cut,
-      chart: view.chart,
-      filters: view.filters,
-      viewId: null,
-    });
-    const pills = truncatePillLabels(entries.map((entry) => entry.label));
-    const countLabel =
-      view.cut === "serve"
-        ? `${result.count} of ${result.total}`
-        : `${result.count} returns`;
-    const href = hrefFor({
-      cut: view.cut,
-      chart: view.chart,
-      filters: view.filters,
-      viewId: view.id,
-    });
-    return { subjectName, pills, countLabel, dots: result.dots, href };
   }
 
   /* ── Rename ─────────────────────────────────────────────────────────── */
@@ -704,7 +733,7 @@ export function SavedViewsBand({
         >
           {optimisticViews.map((view) => {
             const manageable = canManageSavedView(view, workspaceRole);
-            const data = tileDataFor(view);
+            const data = tileDataById.get(view.id) ?? tileDataFor(view);
 
             if (manageMode && manageable) {
               return (
