@@ -11,6 +11,19 @@ Where the shipped code differs from the spec text below:
 - Serve-dot coordinates are 0..1 service-box fractions, projected onto the
   drawn court in `shots/court-geometry.ts` — net at the bottom of the serve
   court.
+- **`RETURN_COURT.viewBox` deviates from the design handoff on its
+  `minY`/`h` edge** (`shots/court-geometry.ts`, Task 2 "out and net balls"
+  fix round 4B, user-requested): the handoff's own `-43.6 -11.5 431 279`
+  clips the return frame's net line off the visible view entirely (its
+  centreline projects to `viewBoxY = -20.5`, short of `-11.5` by 9 units).
+  `minY` is decreased (and `h` grown by the same amount) so the net line is
+  fully visible, with room for a net-gutter mark beside it on the hitter's
+  side without clipping — `minX`/`w` are unchanged. This makes the return
+  frame's own aspect ratio diverge slightly further (≈4.6% vs. the
+  fixed-aspect wrappers' ≈0.1% before) from `court-tile.tsx`'s
+  `aspectRatio: "334 / 216"` and the focused view's `max-h-[400px]` svg —
+  a thin (~2.3%/side) letterbox on those wrappers, checked and judged
+  acceptable, not fixed.
 - Saved views are private by default with opt-in team sharing
   (`saved_views.shared`). Staff moderate a shared view by rename or delete
   only; Undo restores only your own views.
