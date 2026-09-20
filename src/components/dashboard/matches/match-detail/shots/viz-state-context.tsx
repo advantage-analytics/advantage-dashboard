@@ -14,6 +14,7 @@ import { flushSync } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   applyVizUpdate,
+  focusTargetAfterViewChange,
   parseVizState,
   reconcileVizState,
   viewIdentityKey,
@@ -21,6 +22,7 @@ import {
   type VizState,
 } from "./viz-url";
 import {
+  courtTileDomId,
   supportsViewTransitions,
   VIZ_COURT_TRANSITION_NAME,
   VIZ_FOCUSED_HEADING_ID,
@@ -173,6 +175,32 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
   const [morphTargetKey, setMorphTargetKey] = useState<string | null>(null);
   const [externalCourtSwap, setExternalCourtSwap] = useState(false);
 
+  // F5 fix round 1: keyboard focus (and, in `viz-focused.tsx`'s own
+  // scroll-to-top effect, the scroll position) must follow the VIEW change
+  // itself, never a view transition settling — a hidden document, a
+  // browser without the API, and reduced motion all skip or abort the
+  // animation (`document.startViewTransition`'s `ready` rejects with
+  // "Transition was aborted because of invalid state"), but `state` still
+  // changes underneath it, and this plain effect fires on that alone.
+  // Seeded with the INITIAL state's key so the first run always compares
+  // equal to itself (`focusTargetAfterViewChange` returns `null`) — first
+  // mount must never steal focus.
+  const focusTrackedKeyRef = useRef<string | null>(viewIdentityKey(urlState));
+
+  const viewKey = viewIdentityKey(state);
+  useEffect(() => {
+    const prevKey = focusTrackedKeyRef.current;
+    const target = focusTargetAfterViewChange(prevKey, viewKey);
+
+    if (target === "focused-view") {
+      document.getElementById(VIZ_FOCUSED_HEADING_ID)?.focus();
+    } else if (target === "opened-tile" && prevKey !== null) {
+      document.getElementById(courtTileDomId(prevKey))?.focus();
+    }
+
+    focusTrackedKeyRef.current = viewKey;
+  }, [viewKey]);
+
   useEffect(() => {
     // Read BEFORE `reconcileVizState` overwrites `intendedRef` below — an
     // own query still needs this comparison skipped (own navigations get
@@ -248,6 +276,19 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
   // `next.cut === null`, so the destination can't be derived from `next` at
   // all; it's the tile matching the view being LEFT, computed by the
   // caller from `state`, not `next`).
+  //
+  // F5 fix round 1: this function is now PURELY decorative — it drives the
+  // shared-element morph and nothing else. Focus and scroll used to hang
+  // off `transition.ready`/`finished` here, which broke the moment the
+  // transition itself was skipped or aborted rather than merely unsupported
+  // — a hidden document rejects `ready` with "Transition was aborted
+  // because of invalid state" (confirmed live in the signed-in app's
+  // preview pane), and every promise branch that existed to catch that
+  // still depended on the SAME transition object settling at all. Focus/
+  // scroll now live entirely in the provider's own `viewKey`-keyed
+  // `useEffect` above (and `viz-focused.tsx`'s pre-existing scroll-to-top
+  // effect), which fires off `state` itself — reachable no matter how
+  // `state` got there.
   const runCourtMorph = useCallback(
     ({
       sourceEl,
@@ -260,26 +301,8 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
       targetKey: string | null;
       reducedMotion: boolean;
     }): void => {
-      // Accessibility: keyboard focus lands on the focused view's heading
-      // when `next` IS a focused view, or back on the tile that was opened
-      // (if it still exists) when `next` is the wall — regardless of
-      // whether a view transition actually ran, so nothing here depends on
-      // the animation finishing.
-      const focusDestination = (): void => {
-        // `targetKey` is ALREADY a real DOM id for the reverse direction
-        // (the caller built it with `courtTileDomId(...)` itself — see
-        // `viz-focused.tsx`'s `backToWall`) — wrapping it again here used
-        // to double-encode it (`viz-tile-viz-tile-you%253Aserve%253A`),
-        // which `getElementById` never finds, caught live via the
-        // `viz-motion-harness` route (focus silently stayed on `<body>`
-        // after "Back to wall").
-        const id = next.cut !== null ? VIZ_FOCUSED_HEADING_ID : targetKey;
-        id && document.getElementById(id)?.focus();
-      };
-
       if (reducedMotion || !sourceEl || !supportsViewTransitions()) {
-        flushSync(() => setState(next));
-        focusDestination();
+        setState(next);
         return;
       }
 
@@ -319,22 +342,18 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
         sourceEl.style.viewTransitionName = previousName;
       });
 
-      // Move focus as soon as the new DOM exists (`ready`), not after the
-      // animation plays out (`finished`) — a keyboard/screen-reader visitor
-      // shouldn't wait out a 300ms morph before landing somewhere useful.
-      transition.ready.then(focusDestination).catch(() => {
-        // `ready` rejects if the transition is skipped before it starts;
-        // the state change already committed via the `flushSync` above, so
-        // focus still needs to move even with no animation to show for it.
-        focusDestination();
-      });
+      // Nothing awaits `ready` any more (see the doc comment above) — this
+      // `.catch()` exists ONLY to keep a hidden-document/aborted rejection
+      // from surfacing as an unhandled promise rejection in the console.
+      transition.ready.catch(() => {});
 
       transition.finished
         .catch(() => {
           // `finished` rejects if the transition gets skipped (e.g. the
-          // visitor clicks again mid-flight). The state change above
-          // already landed via `flushSync` regardless — only the animation
-          // itself was interrupted, so there's nothing here to retry.
+          // visitor clicks again mid-flight, or the document is hidden).
+          // The state change above already landed regardless — only the
+          // animation itself was interrupted, so there's nothing here to
+          // retry.
         })
         .finally(() => {
           sourceEl.style.viewTransitionName = previousName;

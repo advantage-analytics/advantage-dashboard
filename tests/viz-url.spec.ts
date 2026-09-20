@@ -5,6 +5,7 @@ import {
   applyVizUpdate,
   carryFilters,
   clearedFilters,
+  focusTargetAfterViewChange,
   parseVizState,
   reconcileVizState,
   sameView,
@@ -398,4 +399,38 @@ test("viewIdentityKey: different across a viewId change, same cut/player/filters
   const noView = parseVizState(new URLSearchParams("cut=serve"));
   const savedView = parseVizState(new URLSearchParams("cut=serve&view=view-1"));
   expect(viewIdentityKey(noView)).not.toBe(viewIdentityKey(savedView));
+});
+
+/* ── focusTargetAfterViewChange (F5 fix round 1) ─────────────────────────
+ * Pure decision behind where keyboard focus (and the scroll-to-top) lands
+ * after a state change — driven purely by the before/after `viewIdentityKey`,
+ * never by whether a view transition ran, resolved, or was skipped (a
+ * hidden document, an unsupported browser, or reduced motion all abort or
+ * skip the animation, but the view still changes and focus still must
+ * move). The caller seeds its "previous key" ref with the INITIAL state at
+ * mount, so a same-key result on the very first effect run is what encodes
+ * "do not steal focus on page load" — this function itself only ever
+ * compares two keys, it has no notion of "first mount".
+ */
+
+test("focusTargetAfterViewChange: wall to focused lands on the focused view", () => {
+  expect(focusTargetAfterViewChange(null, "you:serve:")).toBe("focused-view");
+});
+
+test("focusTargetAfterViewChange: focused to a DIFFERENT focused view (Views-grid tile) also lands on the focused view", () => {
+  expect(focusTargetAfterViewChange("you:serve:", "opponent:serve:")).toBe(
+    "focused-view",
+  );
+});
+
+test("focusTargetAfterViewChange: focused to wall (Back to wall) returns focus to the opened tile", () => {
+  expect(focusTargetAfterViewChange("you:serve:", null)).toBe("opened-tile");
+});
+
+test("focusTargetAfterViewChange: a filter-only change (same key) steals no focus", () => {
+  expect(focusTargetAfterViewChange("you:serve:", "you:serve:")).toBeNull();
+});
+
+test("focusTargetAfterViewChange: the wall to itself (both null) steals no focus", () => {
+  expect(focusTargetAfterViewChange(null, null)).toBeNull();
 });

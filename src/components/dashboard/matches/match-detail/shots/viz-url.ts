@@ -68,6 +68,42 @@ export function viewIdentityKey(state: VizState): string | null {
   return `${state.filters.player}:${state.cut}:${state.viewId ?? ""}`;
 }
 
+/**
+ * F5 fix round 1: where keyboard focus (and, alongside it, the
+ * scroll-to-top) should land after a state change — driven ONLY by the
+ * before/after `viewIdentityKey`, never by whether a shared-element view
+ * transition ran, resolved, or was skipped. A hidden document, a browser
+ * without the View Transitions API, and reduced motion all skip or abort
+ * the animation, but the view still changes underneath it, and focus must
+ * still follow — this function is the pure decision the caller (a plain
+ * `useEffect` keyed on `viewIdentityKey(state)` in `viz-state-context.tsx`,
+ * NOT `transition.ready`/`finished`) runs on every render, so the four
+ * paths (transition ran, `ready` rejected, API unsupported, reduced
+ * motion) all resolve through the identical branch.
+ *
+ * - `prevKey === null`, `nextKey !== null` (the wall to a court, whether a
+ *   default tile, a saved view, or a Views-grid tile) → `"focused-view"`.
+ * - `prevKey !== null`, `nextKey !== prevKey`, `nextKey !== null` (a
+ *   Views-grid tile switching to a DIFFERENT court while staying in the
+ *   focused view) → also `"focused-view"` — same destination, the big
+ *   court, regardless of whether the view being left was itself a court
+ *   or the wall.
+ * - `nextKey === null` (Back to wall) → `"opened-tile"`: the caller
+ *   refocuses the WALL tile matching `prevKey`, the view being left.
+ * - `prevKey === nextKey` (a filter-only edit, or — critically — the very
+ *   first render, when the caller seeds its "previous key" ref with the
+ *   INITIAL state so this compares equal to itself) → `null`, steals
+ *   nothing. This function has no concept of "first mount" on its own;
+ *   that guarantee comes entirely from how the caller seeds its ref.
+ */
+export function focusTargetAfterViewChange(
+  prevKey: string | null,
+  nextKey: string | null,
+): "focused-view" | "opened-tile" | null {
+  if (prevKey === nextKey) return null;
+  return nextKey !== null ? "focused-view" : "opened-tile";
+}
+
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
 export interface VizState {
