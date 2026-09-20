@@ -8,6 +8,7 @@ import {
 import { MoreHorizontal } from "lucide-react";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
+import { shouldSuppressTileClick } from "@/lib/data/saved-views-logic";
 import { cn } from "@/lib/utils";
 import { CourtTile } from "./court-tile";
 import { ManageTileMenu } from "./manage-tile-menu";
@@ -20,12 +21,24 @@ import { SharedGlyph } from "./saved-views-band";
  * and the pointer/keyboard reorder handlers on the wrapping div.
  *
  * The wrapper intercepts the inner `<Link>`'s own click in the capture phase
- * — `preventDefault` there cancels the anchor's navigation before it fires,
- * for both a mouse click and an Enter/Space activation, without needing to
- * turn the tile into a non-link element. That is what keeps it "keyboard
- * reachable" (task-9-brief.md's own wording): it is still a real, focusable
- * `<a>`, just one whose default action this wrapper cancels while the tile
- * is a drag target instead of a navigation target.
+ * so the tile can be dragged/arranged instead of navigated — but only for a
+ * click that ISN'T on a tile control. `shouldSuppressTileClick`
+ * (`saved-views-logic.ts`) is the pure decision; `targetIsControl` here is
+ * "is `event.target` inside something marked `data-tile-control`, or inside
+ * a `[role=\"menu\"]`" — the second half matters because `ManageTileMenu`'s
+ * dropdown content is portaled to `document.body`: it is NOT a real DOM
+ * descendant of this wrapper (so `data-tile-control` on the ⋯ button alone
+ * would never match a click on "Rename…"/"Delete view"/etc.), but it IS a
+ * genuine DOM descendant of its own `role="menu"` container, which
+ * `ui/float-menu.tsx` already renders unconditionally.
+ *
+ * Round-2 review fix: the previous version called `preventDefault()`
+ * unconditionally for every click inside the tile, including the ⋯ button's
+ * own click. Radix's Popover trigger composes its toggle with
+ * `checkForDefaultPrevented`, so a `preventDefault()`-ed click never opened
+ * the menu — the ⋯ button did nothing, ever, in Manage mode. Suppressing
+ * navigation now targets ONLY a genuine non-control click (the court art,
+ * the name, empty tile space) rather than every click the tile receives.
  *
  * Split out of `saved-views-band.tsx` (a purely mechanical move — no
  * behaviour change, props unchanged) once that file's own state/handlers
@@ -100,7 +113,15 @@ export function ManageableSavedViewTile({
       onPointerUp={onPointerEndTile}
       onPointerCancel={onPointerEndTile}
       onKeyDown={onKeyDownTile}
-      onClickCapture={(e) => e.preventDefault()}
+      onClickCapture={(e) => {
+        const target = e.target as HTMLElement;
+        const targetIsControl =
+          target.closest("[data-tile-control]") !== null ||
+          target.closest('[role="menu"]') !== null;
+        if (shouldSuppressTileClick(targetIsControl, true, true)) {
+          e.preventDefault();
+        }
+      }}
       className={cn(
         "rounded-[var(--radius-card)]",
         isDragging && "relative z-10",
@@ -138,15 +159,16 @@ export function ManageableSavedViewTile({
         dots={data.dots}
         href={data.href}
         overlay={
-          // Only `onPointerDown` needs to stop here — it keeps a press on the
-          // ⋯ button from also being read as the START of a drag by the tile
-          // wrapper's own (bubble-phase) pointerdown handler. A click does
-          // NOT need stopping: the wrapper's `onClickCapture` above only
-          // calls `preventDefault()` (cancelling the anchor's navigation),
-          // never `stopPropagation()`, so the button's own click — and every
-          // `FloatMenuItem` inside the portaled menu, which React still
-          // treats as a descendant for event purposes — keeps working.
+          // `data-tile-control` is what the wrapper's `onClickCapture` above
+          // checks to skip suppressing this click — this is a real DOM
+          // ancestor of the ⋯ button itself (unlike the menu's own portaled
+          // content, which relies on its `role="menu"` instead, checked the
+          // same way). `onPointerDown` still needs its own stop: it keeps a
+          // press on the ⋯ button from also being read as the START of a
+          // drag by the tile wrapper's own (bubble-phase) pointerdown
+          // handler — a separate concern from click suppression.
           <div
+            data-tile-control="true"
             className="absolute top-[10px] right-[10px]"
             onPointerDown={(e) => e.stopPropagation()}
           >
@@ -213,7 +235,10 @@ function RenameField({
 }) {
   const errorId = `${id}-error`;
   return (
-    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+    <span
+      data-tile-control="true"
+      className="flex min-w-0 flex-1 flex-col gap-0.5"
+    >
       <label htmlFor={id} className="sr-only">
         Rename view
       </label>

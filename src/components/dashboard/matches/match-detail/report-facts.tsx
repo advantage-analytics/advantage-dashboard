@@ -7,6 +7,7 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { shortMonthDate } from "@/components/dashboard/matches/match-detail/format-clock";
 import { scopeMeta } from "@/components/dashboard/matches/match-detail/set-scope";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
+import { savedViewsCountFact } from "@/lib/data/saved-views-logic";
 import { cn } from "@/lib/utils";
 
 /** 13px lucide glyph at stroke 1.5 in ink-700 — the frame's fact icon. */
@@ -29,9 +30,10 @@ const FACT_ICON = "size-[13px] shrink-0 text-[var(--ink-700)]";
  * wrong (guardrails §4 governs who a figure belongs to, not a sum of both).
  *
  * Task 9 step 4: the same fact also names how many saved views the
- * Visualizations tab holds — `` ` · ${n} saved views` `` appended when
- * `n > 0`, nothing when there are none, so a match with no saved views
- * doesn't advertise a feature it has nothing in.
+ * Visualizations tab holds, via `savedViewsCountFact` (`saved-views-logic.ts`)
+ * — `""` when there are none, so a match with no saved views doesn't
+ * advertise a feature it has nothing in; singular at exactly one, plural
+ * otherwise (round-2 review fix: this used to read "1 saved views").
  */
 export function MatchReportFacts() {
   const { match, points } = useMatchData();
@@ -54,7 +56,7 @@ export function MatchReportFacts() {
           }
         >
           {points.length} points · {games} games
-          {savedViewCount > 0 ? ` · ${savedViewCount} saved views` : ""}
+          {savedViewsCountFact(savedViewCount)}
         </Fact>
       ) : null}
 

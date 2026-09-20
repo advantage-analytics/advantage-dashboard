@@ -13,6 +13,8 @@ import {
   resolveCopyName,
   rowToSavedView,
   rowToSavedViewRow,
+  savedViewsCountFact,
+  shouldSuppressTileClick,
   validateVizInput,
   type SavedViewDbRow,
 } from "@/lib/data/saved-views-logic";
@@ -481,4 +483,37 @@ test("applyIdOrder with an empty snapshot keeps every item in its original order
     { id: "b", name: "B" },
   ];
   expect(applyIdOrder(items, [])).toEqual(items);
+});
+
+/* ── shouldSuppressTileClick ──────────────────────────────────────────── */
+
+test("shouldSuppressTileClick never suppresses a click on a tile control (⋯ button, menu row, rename field)", () => {
+  expect(shouldSuppressTileClick(true, true, true)).toBe(false);
+});
+
+test("shouldSuppressTileClick suppresses a non-control click on a manageable tile in Manage mode", () => {
+  expect(shouldSuppressTileClick(false, true, true)).toBe(true);
+});
+
+test("shouldSuppressTileClick does not suppress when Manage mode is off", () => {
+  expect(shouldSuppressTileClick(false, false, true)).toBe(false);
+});
+
+test("shouldSuppressTileClick does not suppress a non-manageable (read-only) tile even in Manage mode", () => {
+  expect(shouldSuppressTileClick(false, true, false)).toBe(false);
+});
+
+/* ── savedViewsCountFact ──────────────────────────────────────────────── */
+
+test("savedViewsCountFact is empty with zero saved views", () => {
+  expect(savedViewsCountFact(0)).toBe("");
+});
+
+test("savedViewsCountFact singularizes exactly one", () => {
+  expect(savedViewsCountFact(1)).toBe(" · 1 saved view");
+});
+
+test("savedViewsCountFact pluralizes more than one", () => {
+  expect(savedViewsCountFact(2)).toBe(" · 2 saved views");
+  expect(savedViewsCountFact(11)).toBe(" · 11 saved views");
 });
