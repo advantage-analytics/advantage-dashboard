@@ -6,13 +6,14 @@ import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { WorkspaceKind } from "@/lib/workspace/types";
 import { APRON_FILL, CourtArt } from "./court-art";
-import { ZoneCard } from "./zone-card";
+import { StatsCard } from "./stats-card";
 import { VizToolbar } from "./viz-toolbar";
 import { useVizState } from "./use-viz-state";
 import {
   EMPTY_VIZ_FILTERS,
   availableSets,
   computeViz,
+  computeVizStats,
   subjectFor,
   type Cut,
 } from "./viz-model";
@@ -70,8 +71,12 @@ export function VizFocused({
     () => (cut ? computeViz(points, cut, state.filters, subject) : null),
     [points, cut, state.filters, subject],
   );
+  const stats = useMemo(
+    () => (cut ? computeVizStats(points, cut, state.filters, subject) : null),
+    [points, cut, state.filters, subject],
+  );
 
-  if (cut === null || result === null) {
+  if (cut === null || result === null || stats === null) {
     // Guarded by `shots-tab.tsx` (`state.cut === null ? <VizWall/> : <VizFocused/>`);
     // this only fires on a race between renders, never in steady state.
     return null;
@@ -79,7 +84,6 @@ export function VizFocused({
 
   const subjectName = state.filters.player === "you" ? you.name : opp.name;
   const hasFilters = activeFilterEntries(state).length > 0;
-  const showZoneCard = cut === "serve";
 
   function backToWall() {
     setState(() => ({
@@ -209,13 +213,7 @@ export function VizFocused({
           </div>
         </div>
 
-        {showZoneCard && result.zoneStats && (
-          <ZoneCard
-            zoneStats={result.zoneStats}
-            count={result.count}
-            noun={result.noun}
-          />
-        )}
+        <StatsCard stats={stats} />
       </div>
 
       {savedViewsBand}

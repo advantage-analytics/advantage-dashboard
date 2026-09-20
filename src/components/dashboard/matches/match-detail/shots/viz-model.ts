@@ -459,3 +459,375 @@ export function availableSets(points: MatchPoint[]): number[] {
   for (const p of points) sets.add(p.setNumber);
   return [...sets].sort((a, b) => a - b);
 }
+
+/* ── Stats card (Task F3) ──────────────────────────────────────────────────
+ * Row builders for the focused-view stats card. Every function below reads
+ * the SAME `points`/`cut`/`filters`/`subjectIsPlayer1` a caller passed to
+ * `computeViz` for the same render, and starts from `computeViz`'s own
+ * output — never a second, independently-filtered pass — so the card's
+ * counts can never drift from what the court draws. `VizStats.total` is
+ * always `computeViz(...).count`; the subtitle's own count (`n`) can be
+ * smaller for `returnPlacement`, where out/net returns are excluded from
+ * the Direction/Depth rows (see `isPlacementRow` below) — that exclusion is
+ * spelled out in the subtitle text itself, not hidden in a silent total.
+ */
+
+export interface StatRow {
+  key: string;
+  label: string;
+  count: number;
+  won: number;
+  winPct: number | null; // null when count === 0
+}
+
+export interface StatGroup {
+  key: string;
+  label: string | null;
+  rows: StatRow[];
+}
+
+export interface VizStats {
+  title: string;
+  subtitle: string;
+  groups: StatGroup[];
+  sentence: string | null;
+  total: number;
+}
+
+const ZONE_ROWS: { key: ZoneKey; label: string }[] = [
+  { key: "deuce-wide", label: "Deuce wide" },
+  { key: "deuce-body", label: "Deuce body" },
+  { key: "deuce-t", label: "Deuce T" },
+  { key: "ad-t", label: "Ad T" },
+  { key: "ad-body", label: "Ad body" },
+  { key: "ad-wide", label: "Ad wide" },
+];
+
+// Singles court is 8.23m wide — 4.115m either side of the center line. Same
+// value `court-geometry.ts`'s `SINGLES_HALF_WIDTH_M` uses for the drawn
+// court; kept as a local constant here rather than imported, since that file
+// is a client-adjacent geometry/SVG module and this one stays plain.
+const REAL_SINGLES_HALF_M = 4.115;
+const LATERAL_THIRD_M = REAL_SINGLES_HALF_M / 3; // ≈1.372m
+const DEPTH_THIRD_M = REAL_NET_Y / 3; // ≈3.962m — thirds of the landing half
+const FIVE_FEET_M = 1.524;
+const IN_COURT_EPS = 1e-6;
+
+function makeRow(
+  key: string,
+  label: string,
+  count: number,
+  won: number,
+): StatRow {
+  return {
+    key,
+    label,
+    count,
+    won,
+    winPct: count === 0 ? null : Math.round((won / count) * 100),
+  };
+}
+
+function rowTieBreak(a: StatRow, b: StatRow): number {
+  if (b.count !== a.count) return b.count - a.count;
+  return a.label.localeCompare(b.label);
+}
+
+/** Rows sorted by win rate, highest first; zero-count (`winPct: null`) rows
+ * sort last; ties by count desc, then label. */
+function sortRows(rows: StatRow[]): StatRow[] {
+  return [...rows].sort((a, b) => {
+    if (a.winPct === null && b.winPct === null) return rowTieBreak(a, b);
+    if (a.winPct === null) return 1;
+    if (b.winPct === null) return -1;
+    if (b.winPct !== a.winPct) return b.winPct - a.winPct;
+    return rowTieBreak(a, b);
+  });
+}
+
+/**
+ * The claim→evidence sentence: the strongest row with `count >= 3`, compared
+ * against the best of every OTHER row in the card (any group, any count) —
+ * so the claim never invents a number and never gets contradicted by a
+ * small-sample row sitting higher. `null` when no row clears the `count >=
+ * 3` bar, or when there is no other row to compare against.
+ */
+function buildSentence(groups: StatGroup[], noun: string): string | null {
+  const flat = groups.flatMap((g) =>
+    g.rows.map((row) => ({ row, groupLabel: g.label })),
+  );
+  const qualifying = flat.filter(
+    (e) => e.row.count >= 3 && e.row.winPct !== null,
+  );
+  if (qualifying.length === 0) return null;
+  const top = qualifying.reduce((best, e) =>
+    (e.row.winPct as number) > (best.row.winPct as number) ? e : best,
+  );
+  const otherPcts = flat
+    .filter((e) => e !== top)
+    .map((e) => e.row.winPct)
+    .filter((p): p is number => p !== null);
+  if (otherPcts.length === 0) return null;
+  const nextBestPct = Math.max(...otherPcts);
+  const rowNoun = top.groupLabel ? top.groupLabel.toLowerCase() : "zone";
+  return `${top.row.label}: ${top.row.winPct}% won on ${top.row.count} ${noun} — every other ${rowNoun} sits at or under ${nextBestPct}%.`;
+}
+
+function serveNoun(ball: BallFilter): string {
+  if (ball === "first") return "first serves";
+  if (ball === "second") return "second serves";
+  return "serves";
+}
+
+function returnNoun(ball: BallFilter): string {
+  if (ball === "first") return "first-serve returns";
+  if (ball === "second") return "second-serve returns";
+  return "returns";
+}
+
+function serveStatsGroup(
+  zoneStats: Record<ZoneKey, ZoneStats> | null,
+): StatGroup {
+  const rows = ZONE_ROWS.map(({ key, label }) => {
+    const zs = zoneStats?.[key];
+    return makeRow(key, label, zs?.count ?? 0, (zs?.won ?? 0) + (zs?.ace ?? 0));
+  });
+  return { key: "serve-zones", label: null, rows: sortRows(rows) };
+}
+
+/**
+ * A return landing counts toward the Direction/Depth rows only when it's a
+ * real in-play landing: not an out/net miss (`outcome !== "miss"`, the same
+ * flag `computeViz` sets from `returnOutcome`'s "outnet" case) and within
+ * the court's real bounds (singles width, net-to-baseline depth) — a wide or
+ * long return's landing coordinates fall outside those bounds by
+ * construction. Excluded returns still count in `VizStats.total` (which
+ * always equals `computeViz(...).count`); they just aren't one of these
+ * rows' denominator, and the subtitle's own count reflects that.
+ */
+function isPlacementRow(d: VizDot): boolean {
+  if (d.outcome === "miss") return false;
+  return (
+    Math.abs(d.lateralM) <= REAL_SINGLES_HALF_M + IN_COURT_EPS &&
+    d.depthM >= -IN_COURT_EPS &&
+    d.depthM <= REAL_NET_Y + IN_COURT_EPS
+  );
+}
+
+/**
+ * Direction (Crosscourt / Middle / Down the line): a return's landing sits
+ * in one of three lateral thirds of the landing half's singles width. Which
+ * outer third counts as "crosscourt" depends on which side the SERVE was
+ * hit from/to (`getPointSide`, "deuce" ⇒ the serve landed with a negative
+ * world-x, "ad" ⇒ positive — `serveLandingSide`'s own convention above).
+ * `lateralM` is mirrored to read from BEHIND the returner
+ * (`pointToReturnDots`'s doc comment), so `-lateralM` recovers that same
+ * world-x sign. A return whose landing half matches the serve's side is
+ * Down the line (it stayed on the side it was served to); the opposite side
+ * is Crosscourt; the middle third is always Middle regardless of serve side.
+ */
+function directionKey(
+  lateralM: number,
+  serveSide: "deuce" | "ad",
+): "crosscourt" | "middle" | "dtl" {
+  const rawLx = -lateralM;
+  const landingHalf: "deuce" | "ad" | "middle" =
+    rawLx < -LATERAL_THIRD_M
+      ? "deuce"
+      : rawLx > LATERAL_THIRD_M
+        ? "ad"
+        : "middle";
+  if (landingHalf === "middle") return "middle";
+  return landingHalf === serveSide ? "dtl" : "crosscourt";
+}
+
+/** Deep / Mid / Short: thirds of the landing half's depth, measured from the
+ * net (`depthM` 0 = net). Deep is the third nearest the baseline. */
+function depthKeyPlacement(depthM: number): "deep" | "mid" | "short" {
+  if (depthM < DEPTH_THIRD_M) return "short";
+  if (depthM < 2 * DEPTH_THIRD_M) return "mid";
+  return "deep";
+}
+
+function returnPlacementStats(
+  result: VizResult,
+  points: MatchPoint[],
+): { subtitleCount: number; groups: StatGroup[] } {
+  const pointById = new Map(points.map((p) => [p.id, p]));
+  const eligible = result.dots.filter(isPlacementRow);
+
+  const direction: Record<
+    "crosscourt" | "middle" | "dtl",
+    { count: number; won: number }
+  > = {
+    crosscourt: { count: 0, won: 0 },
+    middle: { count: 0, won: 0 },
+    dtl: { count: 0, won: 0 },
+  };
+  const depth: Record<
+    "deep" | "mid" | "short",
+    { count: number; won: number }
+  > = {
+    deep: { count: 0, won: 0 },
+    mid: { count: 0, won: 0 },
+    short: { count: 0, won: 0 },
+  };
+
+  for (const d of eligible) {
+    const wonInc = d.outcome === "won" ? 1 : 0;
+    const point = pointById.get(d.id);
+    const serveSide = getPointSide(point?.pointScore);
+    const dKey = directionKey(d.lateralM, serveSide);
+    direction[dKey].count++;
+    direction[dKey].won += wonInc;
+    const pKey = depthKeyPlacement(d.depthM);
+    depth[pKey].count++;
+    depth[pKey].won += wonInc;
+  }
+
+  const directionGroup: StatGroup = {
+    key: "direction",
+    label: "Direction",
+    rows: sortRows([
+      makeRow(
+        "crosscourt",
+        "Crosscourt",
+        direction.crosscourt.count,
+        direction.crosscourt.won,
+      ),
+      makeRow("middle", "Middle", direction.middle.count, direction.middle.won),
+      makeRow("dtl", "Down the line", direction.dtl.count, direction.dtl.won),
+    ]),
+  };
+  const depthGroup: StatGroup = {
+    key: "depth",
+    label: "Depth",
+    rows: sortRows([
+      makeRow("deep", "Deep", depth.deep.count, depth.deep.won),
+      makeRow("mid", "Mid", depth.mid.count, depth.mid.won),
+      makeRow("short", "Short", depth.short.count, depth.short.won),
+    ]),
+  };
+
+  return {
+    subtitleCount: eligible.length,
+    groups: [directionGroup, depthGroup],
+  };
+}
+
+/** Inside the baseline / 0–5 ft behind / 5 ft+ behind — signed distance from
+ * the returner's own baseline (`depthM`: negative = inside the court,
+ * positive = behind it). 5ft = 1.524m; exactly on the baseline (`depthM ===
+ * 0`) counts as 0–5 ft behind, matching the task's "on the line" rule. */
+function contactDepthKey(depthM: number): "inside" | "near" | "far" {
+  if (depthM < 0) return "inside";
+  if (depthM < FIVE_FEET_M) return "near";
+  return "far";
+}
+
+function returnContactStats(result: VizResult): StatGroup[] {
+  const depth = {
+    inside: { count: 0, won: 0 },
+    near: { count: 0, won: 0 },
+    far: { count: 0, won: 0 },
+  };
+  const stroke = {
+    forehand: { count: 0, won: 0 },
+    backhand: { count: 0, won: 0 },
+  };
+
+  for (const d of result.dots) {
+    const wonInc = d.outcome === "won" ? 1 : 0;
+    const dKey = contactDepthKey(d.depthM);
+    depth[dKey].count++;
+    depth[dKey].won += wonInc;
+    const sKey = d.shape === "triangle" ? "backhand" : "forehand";
+    stroke[sKey].count++;
+    stroke[sKey].won += wonInc;
+  }
+
+  const depthGroup: StatGroup = {
+    key: "depth",
+    label: "Depth",
+    rows: sortRows([
+      makeRow(
+        "inside",
+        "Inside the baseline",
+        depth.inside.count,
+        depth.inside.won,
+      ),
+      makeRow("near", "0–5 ft behind", depth.near.count, depth.near.won),
+      makeRow("far", "5 ft+ behind", depth.far.count, depth.far.won),
+    ]),
+  };
+  const strokeGroup: StatGroup = {
+    key: "stroke",
+    label: "Stroke",
+    rows: sortRows([
+      makeRow(
+        "forehand",
+        "Forehand",
+        stroke.forehand.count,
+        stroke.forehand.won,
+      ),
+      makeRow(
+        "backhand",
+        "Backhand",
+        stroke.backhand.count,
+        stroke.backhand.won,
+      ),
+    ]),
+  };
+
+  return [depthGroup, strokeGroup];
+}
+
+/**
+ * The stats card's data, for every cut — pure and built from the exact same
+ * filtered pool `computeViz` produces for the same arguments, so a card can
+ * never show a count the court doesn't back up. See the module doc comment
+ * above for the `total` vs. subtitle-count distinction.
+ */
+export function computeVizStats(
+  points: MatchPoint[],
+  cut: Cut,
+  filters: VizFilters,
+  subjectIsPlayer1: boolean,
+): VizStats {
+  const result = computeViz(points, cut, filters, subjectIsPlayer1);
+  const total = result.count;
+
+  if (cut === "serve") {
+    const noun = serveNoun(filters.ball);
+    const groups = [serveStatsGroup(result.zoneStats)];
+    return {
+      title: "Where the serve went",
+      subtitle: `Points won by zone · ${total} ${noun}`,
+      groups,
+      sentence: buildSentence(groups, noun),
+      total,
+    };
+  }
+
+  if (cut === "returnPlacement") {
+    const noun = returnNoun(filters.ball);
+    const { subtitleCount, groups } = returnPlacementStats(result, points);
+    return {
+      title: "Where the return went",
+      subtitle: `Points won by placement · ${subtitleCount} ${noun}`,
+      groups,
+      sentence: buildSentence(groups, noun),
+      total,
+    };
+  }
+
+  const noun = "returns";
+  const groups = returnContactStats(result);
+  return {
+    title: "Where the return was struck",
+    subtitle: `Points won by contact point · ${total} ${noun}`,
+    groups,
+    sentence: buildSentence(groups, noun),
+    total,
+  };
+}
