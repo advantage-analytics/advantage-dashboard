@@ -26,3 +26,18 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. `capSeconds` is accepted by the signature but unused in any message — available if T3 wants a richer sentence.
+
+## T5 · Refuse an over-allowance upload before the SAS is minted — blocked
+
+**gate:** mechanical FAIL (lint pass, typecheck pass, tests 1 failed / 1984 passed); completion review not run.
+
+**reason:** `tests/client-bundle-boundary.spec.ts:148` — "no client file reaches a server-only module". The task put `peekQuota()` in `src/lib/services/splitstep/quota.ts` as its criteria require, reaching the service-role client through a dynamic `import("@/lib/supabase/admin")`. But `quota.ts` is statically imported by the client hook `useUploadMatchWizard.ts` (for `accountTypeFor` / `monthlyCapSecondsFor`), and the boundary spec follows dynamic imports too: `useUploadMatchWizard.ts -> quota.ts -> src/lib/supabase/admin.ts` (six leak paths reported). A genuine boundary violation, not a harness artefact. Everything else met the brief: `capRefusalMessage()` extracted with the sentence byte-identical, both deps wired, 429 placed after `explainVideoRefusal` and before the mint, fail-open on a failed read, three new spec cases green (90/90 across the three authorization specs); column names verified read-only against the live DB. The criterion "`quota.ts` exports `peekQuota`" cannot be met as written without breaking the boundary — the task needs amending so `peekQuota` lives in a server-only module (e.g. `src/lib/services/splitstep/quota-peek.ts`), or the client-safe helpers move out of `quota.ts` first.
+
+**stash:** 83fe4fa1897f54c2984ff8c05c5b06d595037ac8
+
+**follow-ups:**
+
+1. Re-add T5 with `peekQuota` in a new server-only module that imports the pure helpers from `quota.ts`; `capRefusalMessage()` can stay in `quota.ts` (pure).
+2. The peek counts this match's own unreleased reservation as used, so a re-upload to an already-submitted match errs toward refusing — consider excluding the match's own job ids.
+3. `loadBillableSeconds` reads the newest `processing_jobs` row for the match (`order created_at desc limit 1`); `recordBlobName` updates every row — no single-row precedent existed.
+4. `getPersonalUsage` in `src/lib/data/usage-server.ts` repeats the same ledger sum and could share a helper.
