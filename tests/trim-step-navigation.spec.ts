@@ -164,6 +164,15 @@ function trimEvents(page: Page) {
   );
 }
 
+const setStart = (page: Page) =>
+  page.getByRole("button", {
+    name: "Set the trim start to the current position",
+  });
+const setEnd = (page: Page) =>
+  page.getByRole("button", {
+    name: "Set the trim end to the current position",
+  });
+
 /** The rail: the ink-900 track the filmstrip and the bracket sit on. */
 function rail(page: Page) {
   return page.locator("div.relative.cursor-pointer.touch-none").first();
@@ -328,6 +337,86 @@ test("the step's keys stay out of a camera question", async ({ page }) => {
 
   expect(await playhead(page)).toBeCloseTo(1, 1);
   expect(await trimEvents(page)).toEqual([]);
+});
+
+/* -------------------------------------------------------------------------
+ * The Set buttons
+ * ---------------------------------------------------------------------- */
+
+test("Set start writes the playhead into start and leaves end alone", async ({
+  page,
+}) => {
+  await open(page, { start: 0, end: CLIP_SECONDS });
+
+  await park(page, 1);
+  await expect(setStart(page)).toBeEnabled();
+  await setStart(page).click();
+
+  const events = await trimEvents(page);
+  expect(events).toHaveLength(1);
+  expect(events[0].startSeconds).toBeCloseTo(1, 2);
+  // The other cut is the thing that must NOT move: a button that rewrote both
+  // would silently discard a window the user had already placed.
+  expect(events[0].endSeconds).toBe(CLIP_SECONDS);
+});
+
+test("Set end writes the playhead into end and leaves start alone", async ({
+  page,
+}) => {
+  await open(page, { start: 0.2, end: CLIP_SECONDS });
+
+  await park(page, 1.4);
+  await expect(setEnd(page)).toBeEnabled();
+  await setEnd(page).click();
+
+  const events = await trimEvents(page);
+  expect(events).toHaveLength(1);
+  expect(events[0].startSeconds).toBe(0.2);
+  expect(events[0].endSeconds).toBeCloseTo(1.4, 2);
+});
+
+test("Set start goes dead past the end handle and revives inside the window", async ({
+  page,
+}) => {
+  // An end cut at one second, with a second of clip left beyond it to get the
+  // playhead past.
+  await open(page, { start: 0, end: 1 });
+
+  await park(page, 0.5);
+  await expect(setStart(page)).toBeEnabled();
+
+  // Exactly on the end handle is already too far: a start there would be the
+  // same instant as the end. `disabled` is fed by a ~200ms mirror of the
+  // playhead, so every assertion on it auto-retries rather than sleeping.
+  await park(page, 1);
+  await expect(setStart(page)).toBeDisabled();
+  await park(page, 1.5);
+  await expect(setStart(page)).toBeDisabled();
+
+  // Coming back inside revives it, so the grey state is a fact about the
+  // playhead and not a latch.
+  await park(page, 0.4);
+  await expect(setStart(page)).toBeEnabled();
+  expect(await trimEvents(page)).toEqual([]);
+});
+
+test("the buttons and the keys are the same act", async ({ page }) => {
+  await open(page, { start: 0, end: CLIP_SECONDS });
+
+  await park(page, 0.6);
+  await setStart(page).click();
+  await expect.poll(async () => (await trimEvents(page)).length).toBe(1);
+
+  await stepRoot(page).focus();
+  await park(page, 1.2);
+  await page.keyboard.press("o");
+  await expect.poll(async () => (await trimEvents(page)).length).toBe(2);
+
+  const events = await trimEvents(page);
+  // The O key measured against the start the BUTTON wrote, which is only true
+  // if both went through the same form round trip.
+  expect(events[1].startSeconds).toBeCloseTo(0.6, 2);
+  expect(events[1].endSeconds).toBeCloseTo(1.2, 2);
 });
 
 /* -------------------------------------------------------------------------

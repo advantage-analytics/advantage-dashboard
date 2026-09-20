@@ -8,9 +8,10 @@
  * ranged longest-outward around play, then mute — and the playhead time in a
  * mono capsule; beneath it the filmstrip, trimmed-out ends washed in page
  * tone, the kept window one 2px Signal Blue bracket whose ends are the
- * handles; under it the two cut readouts and one line of key chips — I and O
- * move a cut to wherever the video already is; then the two camera questions
- * the vendor refuses a job without. Design: Upload Wizard v5, frame 3c.
+ * handles; under it the two cut readouts, a Set button beneath each carrying
+ * its own shortcut as a keycap, and one line of chips for the keys that have
+ * no button; then the two camera questions the vendor refuses a job without.
+ * Design: Upload Wizard v5, frame 3c.
  *
  * Everything runs against the LOCAL file through an object URL, so trimming
  * is instant and nothing leaves the browser.
@@ -28,8 +29,9 @@
  * mid-gesture — slow down to be precise and the whole rail jumped, which read
  * as a bug rather than as help, and the animation ran setState every frame on
  * top of the drag's own. Precision lives in the keyboard now: a focused handle
- * arrows one frame at a time (a second with Shift), and I/O put a cut exactly
- * where the playhead is after you have scrubbed to the frame you want.
+ * arrows one frame at a time (a second with Shift), and Set start / Set end —
+ * the I and O keys — put a cut exactly where the playhead is after you have
+ * scrubbed to the frame you want.
  *
  * ── Why a drag is local until you let go ────────────────────────────────────
  * A drag used to write every pointer sample into the wizard's form state and
@@ -66,6 +68,7 @@ import { useVideoFilmstrip } from "@/hooks/use-video-filmstrip";
 import { JUMP_STEP_SECONDS } from "../match-video-attachment/use-attachment-alignment";
 import type { VideoProbeSummary } from "./types";
 import { focusRingCls, noteStripCls } from "./styles";
+import { advButton } from "@/lib/ui/adv-button";
 import { Kbd } from "@/components/ui/kbd";
 import { isFormControl } from "./useWizardKeys";
 import { formatClipLength, formatClock, formatTimecode } from "./utils";
@@ -103,6 +106,18 @@ const HANDLES: readonly Handle[] = ["start", "end"];
 /** Rail height in CSS pixels. Also sets the thumbnail size. */
 const RAIL_HEIGHT_PX = 52;
 
+/**
+ * How often the playhead is mirrored into React state.
+ *
+ * The marker and the clock are written imperatively (see `applyPlayhead`) and
+ * cost no render. The two Set buttons cannot be: `disabled` is a rendered
+ * attribute, so their side of the playhead has to go through state. A trailing
+ * timer at this interval is ~5 renders a second of a small tree — cheap, and
+ * always eventually right because the timer reads the ref when it fires rather
+ * than closing over a stale sample.
+ */
+const PLAYHEAD_PUBLISH_MS = 200;
+
 /** Floating frame preview. Height follows the video's own aspect ratio. */
 const PREVIEW_WIDTH_PX = 132;
 
@@ -121,6 +136,47 @@ const PLAYER_MAX_HEIGHT = "405px";
  * hours-long recording without dragging the rail.
  */
 const LONG_JUMP_SECONDS = 60;
+
+/**
+ * "Set start" / "Set end" — move a cut to wherever the video already is.
+ *
+ * The shortcut rides INSIDE the button as a keycap rather than being repeated
+ * in the hint line below: one place says what the action is, what it is called
+ * and which key does it, and the row underneath is left for the keys that have
+ * no button. `outline` rather than `ghost` so it reads as a control against the
+ * quiet readout above it, `sm` to sit under a 12px timecode without crowding.
+ */
+function SetCutButton({
+  label,
+  shortcut,
+  hint,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  shortcut: string;
+  hint: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      // The name carries the whole sentence. `aria-label` replaces a button's
+      // contents for the accessible name, so the keycap is already unspoken —
+      // it needs no `aria-hidden`, and `Kbd` would drop one anyway (hyphenated
+      // JSX props are not excess-checked, so passing it would have silently
+      // done nothing).
+      aria-label={hint}
+      className={`${advButton("outline", "sm")} gap-2 ${focusRingCls}`}
+    >
+      {label}
+      <Kbd size="sm">{shortcut}</Kbd>
+    </button>
+  );
+}
 
 /** A coarse jump in the in-frame control row: a mono caption where the frame
  *  steps carry an icon, the spoken name on the button. */
@@ -291,6 +347,24 @@ function TrimStepContentImpl({
   // which must not re-subscribe on every drag. Declared before the callbacks
   // that read it; written in an effect below, never during render.
   const draggingRef = useRef<Handle | "scrub" | null>(null);
+  // The same playhead React can read — see PLAYHEAD_PUBLISH_MS.
+  const [playheadTime, setPlayheadTime] = useState(0);
+  const publishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const publishPlayhead = useCallback(() => {
+    if (publishTimerRef.current !== null) return;
+    publishTimerRef.current = setTimeout(() => {
+      publishTimerRef.current = null;
+      setPlayheadTime(playheadRef.current);
+    }, PLAYHEAD_PUBLISH_MS);
+  }, []);
+  useEffect(
+    () => () => {
+      if (publishTimerRef.current !== null) {
+        clearTimeout(publishTimerRef.current);
+      }
+    },
+    [],
+  );
   useEffect(() => {
     draggingRef.current = dragging;
   }, [dragging]);
@@ -334,13 +408,16 @@ function TrimStepContentImpl({
       pct > 100 ||
       (draggingRef.current !== null && draggingRef.current !== "scrub");
     el.style.opacity = hidden ? "0" : "1";
-  }, []);
+    publishPlayhead();
+  }, [publishPlayhead]);
 
-  // A new source rewinds the playhead.
+  // A new source rewinds the playhead. Republished through the same trailing
+  // timer the rest of the step uses, rather than a synchronous setState in an
+  // effect body — it reads the ref when it fires, which is zero either way.
   useEffect(() => {
     playheadRef.current = 0;
-    return () => {};
-  }, [videoFile]);
+    publishPlayhead();
+  }, [videoFile, publishPlayhead]);
 
   // Rail width drives how many thumbnails tile across it.
   useEffect(() => {
@@ -603,6 +680,13 @@ function TrimStepContentImpl({
     },
     [start, end, frameStep, moveHandle],
   );
+
+  // The two Set buttons' `disabled`. `playheadTime` rather than the ref,
+  // because only a render can change an attribute — and the same rule is
+  // re-applied against the LIVE value inside `setHandleToPlayhead`, so the
+  // keys cannot slip through the ~200ms the mirror lags by.
+  const canSetStart = playheadTime < end - frameStep;
+  const canSetEnd = playheadTime > start + frameStep;
 
   /**
    * The step's own keyboard, scoped to this subtree.
@@ -1124,7 +1208,28 @@ function TrimStepContentImpl({
           </button>
         </div>
 
-        {/* The keys, once, where the hands already are. `Kbd` is the product's
+        {/* Each under its own readout, so the pair reads as "this cut, and the
+            thing that moves it". Disabled past the other cut: a start on or
+            after the end is not a window, and the step refuses rather than
+            clamping to a frame the user did not choose. */}
+        <div className="flex items-center justify-between gap-3 px-0.5">
+          <SetCutButton
+            label="Set start"
+            shortcut="I"
+            hint="Set the trim start to the current position"
+            disabled={!canSetStart}
+            onClick={() => setHandleToPlayhead("start")}
+          />
+          <SetCutButton
+            label="Set end"
+            shortcut="O"
+            hint="Set the trim end to the current position"
+            disabled={!canSetEnd}
+            onClick={() => setHandleToPlayhead("end")}
+          />
+        </div>
+
+        {/* The keys with no button of their own. `Kbd` is the product's
             one keyboard chip; `sm` is its inline-hint size, and a combo is
             adjacent chips, never one chip holding both keys. Lowercase for
             word-named keys, as the roster's hint and Help write them. */}
@@ -1144,16 +1249,6 @@ function TrimStepContentImpl({
           <Kbd size="sm">←</Kbd>
           <Kbd size="sm">→</Kbd>
           <span>1 min</span>
-          <span aria-hidden="true" className="text-[var(--ink-300)]">
-            ·
-          </span>
-          <Kbd size="sm">I</Kbd>
-          <span>set start</span>
-          <span aria-hidden="true" className="text-[var(--ink-300)]">
-            ·
-          </span>
-          <Kbd size="sm">O</Kbd>
-          <span>set end</span>
         </p>
 
         {tooShort ? (
