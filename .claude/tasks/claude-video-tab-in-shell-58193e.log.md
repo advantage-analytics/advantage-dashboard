@@ -24,3 +24,13 @@ is the runner's. Newest entries at the bottom.
 1. Row padding in the frame is 7/9px and radius 6px; `FloatMenuItem` keeps its shared 7/10px and 7px.
 2. The `role` override on the `trailing` row is order-dependent; restructure if a reviewer objects.
 3. Nothing renders `FilmQuickFilters` with `tone="light"` yet; T3 does.
+
+## T3 · Rebuild the point list header and zero states — done
+
+**gate:** mechanical pass; completion review pass
+**changed:** `point-list.tsx` loses the Points/Saved tablist, the `Popover` + `FilmFiltersPanel`, the applied-cut strip and the "All N points" button. The header is one row outside the scroller and outside the zero-state branch: light `FilmQuickFilters` without `onOpenAdvanced`, a 22px "Clear the cut" button shown only for an active cut, and a tabular `{matched} / {total}` count. `EmptyList` has exactly three branches with the spec's P5 copy (no points detected, no saved point, no match for this cut), the last built from `describeFilmCut`. `PointList` drops `tab`, `onTabChange` and `filteredCount`; `film-tab.tsx` passes the filter-applied points. `PointRow` untouched.
+**follow-ups:**
+
+1. `FilmFiltersPanel` in `film-filters.tsx` is now unreferenced; T5 deletes it.
+2. Until T5 a cut carrying an Advanced axis reads only "Filtered" with no way to adjust it in the shell.
+3. `PointList`'s `filtered` local now only gates the clear button; consider deriving it once T6 lands URL cut state.

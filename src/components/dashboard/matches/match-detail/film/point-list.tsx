@@ -1,25 +1,21 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, Filter, SlidersHorizontal } from "lucide-react";
+import { memo, useEffect, useMemo, useRef } from "react";
+import { Bookmark, X } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { Workspace } from "@/lib/workspace/types";
+import type { MatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 import { filmProgressWidth } from "./film-clock";
+import { FilmQuickFilters } from "./film-quick-filters";
 import { scoreColumns, youFirstScore } from "./film-score";
 import {
   DEFAULT_FILM_FILTERS,
-  FilmFiltersPanel,
   describeFilmCut,
   hasActiveFilmFilters,
   lastNameOf,
@@ -53,14 +49,10 @@ import {
 interface PointListProps {
   /** Every point on the match — the filter universe and the denominator. */
   allPoints: MatchPoint[];
-  /** The applied cut, tab-scoped: what actually renders. */
+  /** The applied cut: what actually renders, and the count's numerator. */
   visiblePoints: MatchPoint[];
-  /** Size of the applied cut before the Points/Saved split. */
-  filteredCount: number;
   filters: FilmFilters;
   onFiltersChange: (filters: FilmFilters) => void;
-  tab: "points" | "saved";
-  onTabChange: (tab: "points" | "saved") => void;
   /** Point whose window contains the playhead, and how far through it is. */
   activePointId: string | null;
   /** Film-clock window of the playing point; its rule reads `--film-t`. */
@@ -106,11 +98,8 @@ interface GameGroup {
 export const PointList = memo(function PointList({
   allPoints,
   visiblePoints,
-  filteredCount,
   filters,
   onFiltersChange,
-  tab,
-  onTabChange,
   activePointId,
   activeStart,
   activeEnd,
@@ -122,8 +111,6 @@ export const PointList = memo(function PointList({
   // on personal, the program's crest on a team — so a point you decided reads
   // as yours at a glance; the opponent's rows keep their initials.
   const { active: workspace } = useWorkspace();
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<FilmFilters>(filters);
 
   const filtered = hasActiveFilmFilters(filters);
 
@@ -173,10 +160,7 @@ export const PointList = memo(function PointList({
     return out;
   }, [visiblePoints, youIsPlayer1, youName, oppName, showGameScore]);
 
-  const clearAll = () => {
-    setDraft(DEFAULT_FILM_FILTERS);
-    onFiltersChange(DEFAULT_FILM_FILTERS);
-  };
+  const clearAll = () => onFiltersChange(DEFAULT_FILM_FILTERS);
 
   // Keep the playing row in view as the film moves on, without fighting a
   // user who is scrolling the list themselves — the room's rule. Scrolls
@@ -208,119 +192,68 @@ export const PointList = memo(function PointList({
       className="surface-card flex max-h-full min-h-0 flex-col"
       style={{ padding: "10px 8px" }}
     >
-      {/* Points / Saved + the filter trigger. The view switcher is the
-          design system's status-pill row (design canvas "Video A3"): 26px
-          hairline pills, the chosen one on the surface-subtle wash — a fixed
-          two-view switcher, not a filter, so no counts on it. */}
-      <div className="flex items-center gap-5 border-b border-[var(--border-hairline)] px-3 pt-1 pb-2.5">
-        <div
-          role="tablist"
-          aria-label="Point list view"
-          className="flex items-center gap-1.5"
-        >
-          {(["points", "saved"] as const).map((value) => {
-            const active = value === tab;
-            return (
-              <button
-                key={value}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => onTabChange(value)}
-                className={cn(
-                  "inline-flex h-[26px] cursor-pointer items-center rounded-[var(--radius-pill)] border px-[11px] text-[12px] transition-colors duration-200",
-                  active
-                    ? "border-[var(--surface-subtle)] bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
-                    : "border-[var(--border-field)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",
-                )}
-              >
-                {value === "points" ? "Points" : "Saved"}
-              </button>
-            );
-          })}
-        </div>
+      {/* The header IS the applied-filter strip (handoff P1/P2, frame E):
+          one 28px trigger naming the cut, a 22px clear beside it once a cut
+          is on, and `matched / total` on the right. No Saved pill, no chips
+          row, no second strip anywhere in the column — the words and the
+          count are the only report of what is applied.
 
-        <div className="flex-1" />
+          It sits OUTSIDE the scroller and outside the zero-state branch
+          below, so the frame the column always has stays drawn while the
+          rows are empty (P5: furniture, never a skeleton). */}
+      <div className="mx-1 flex items-center gap-1.5 border-b border-[var(--border-hairline)] pt-1 pb-2.5">
+        {/* The quick menu owns the trigger; `tone="light"` is the in-shell
+            set of tokens. No `onOpenAdvanced` yet — the Advanced panel takes
+            this column in the next step, and a row that opened nothing would
+            be worse than no row. */}
+        <FilmQuickFilters
+          filters={filters}
+          onFiltersChange={onFiltersChange}
+          sides={sides}
+          tone="light"
+        />
 
-        <Popover
-          open={open}
-          onOpenChange={(next) => {
-            // Opening seeds the draft from what is applied, so an abandoned
-            // popover leaves nothing behind.
-            if (next) setDraft(filters);
-            setOpen(next);
-          }}
-        >
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-2.5 text-[11px] font-medium text-[var(--ink-900)]"
-            >
-              <SlidersHorizontal
-                className="h-[13px] w-[13px]"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-              Filters
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="end"
-            className="w-[312px] rounded-[var(--radius-dropdown)] border-[var(--border-hairline)] bg-[var(--surface-card)] p-0 shadow-[var(--shadow-dropdown)]"
-          >
-            <FilmFiltersPanel
-              points={allPoints}
-              sides={sides}
-              draft={draft}
-              onDraftChange={setDraft}
-              onApply={() => {
-                onFiltersChange(draft);
-                setOpen(false);
-              }}
-              onClearAll={clearAll}
-            />
-          </PopoverContent>
-        </Popover>
-      </div>
-
-      {/* Applied cut, stated in words — never chips. Drawn only while a
-          filter narrows the list; the unfiltered list needs no strip. */}
-      {filtered && (
-        <div className="mx-3 mt-2.5 mb-1 flex items-center gap-2 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-2.5 py-2">
-          <Filter
-            className="h-[13px] w-[13px] shrink-0 text-[var(--ink-500)]"
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-          <span className="min-w-0 truncate text-[11px] text-[var(--ink-700)]">
-            {describeFilmCut(filters, sides)} ·{" "}
-            <span className="tabular">{filteredCount}</span> of{" "}
-            <span className="tabular">{allPoints.length}</span>
-          </span>
-          <div className="flex-1" />
+        {/* One control clears every axis at once, Advanced included. Drawn
+            only while something is applied, so the resting header is the
+            trigger and the count and nothing else. */}
+        {filtered && (
           <button
             type="button"
             onClick={clearAll}
-            className="cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)]"
+            aria-label="Clear the cut"
+            className="inline-flex h-[22px] w-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-cell)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
           >
-            Clear filter
+            <X
+              className="h-3 w-3 text-[var(--ink-500)]"
+              strokeWidth={1.6}
+              aria-hidden="true"
+            />
           </button>
-        </div>
-      )}
+        )}
+
+        <div className="flex-1" />
+
+        {/* Always both numbers. A count that dropped its denominator once the
+            cut emptied the list would leave the zero states saying nothing
+            about how much film they are hiding. */}
+        <span className="mono tabular pr-2 text-[10px] whitespace-nowrap text-[var(--ink-400)]">
+          {visiblePoints.length}{" "}
+          <span style={{ color: "var(--ink-300)" }}>/</span> {allPoints.length}
+        </span>
+      </div>
 
       {groups.length === 0 ? (
         <EmptyList
-          tab={tab}
-          filtered={filtered}
+          filters={filters}
+          sides={sides}
           hasAnyPoints={allPoints.length > 0}
           hasAnySaved={allPoints.some((p) => p.saved)}
           onClear={clearAll}
-          onGoToPoints={() => onTabChange("points")}
         />
       ) : (
-        // The one scroller in the card: the header, the cut strip and the
-        // tabs stay put while the rows scroll, the way the room's panel
-        // scrolls its list under a fixed tab row.
+        // The one scroller in the card: the header stays put while the rows
+        // scroll, the way the room's panel scrolls its list under a fixed
+        // header.
         <div
           ref={listRef}
           className="flex min-h-0 flex-1 flex-col overflow-y-auto"
@@ -362,19 +295,6 @@ export const PointList = memo(function PointList({
               })}
             </div>
           ))}
-
-          {/* The artboard's trailing "All N points". The list is never
-              paginated — every point in the cut is already above — so the
-              link is only meaningful as a way back out of the cut. */}
-          {filtered && (
-            <button
-              type="button"
-              onClick={clearAll}
-              className="w-fit cursor-pointer px-3 pt-3 pb-1.5 text-[11px] font-medium text-[var(--blue)]"
-            >
-              All {allPoints.length} points
-            </button>
-          )}
         </div>
       )}
     </section>
@@ -538,94 +458,104 @@ export const PointRow = memo(function PointRow({
   );
 });
 
-/* ── Empty states ───────────────────────────────────────────────────────── */
+/* ── Empty states ─────────────────────────────────────────── */
 
+/**
+ * The three zero states of handoff P5, and only three — each a different
+ * condition with a different answer, never each other's:
+ *
+ * - a film with no point data is a permanent statement about the recording;
+ * - "Saved only" with nothing saved is a gesture that has not been used yet,
+ *   so it teaches the gesture rather than reporting a filter result;
+ * - any other cut that matches nothing is a FILTER result, which states the
+ *   cut in words so the body and the header's count agree.
+ *
+ * Left-aligned and top-weighted, matching the frame: no icon circle, no
+ * skeleton rows, no sample point. The header above stays drawn in all three.
+ * "Analysis still running" is deliberately absent — `matches/[matchId]/page.tsx`
+ * short-circuits the whole pane to `MatchAnalysisProgress` while a match is
+ * analysing, so this list can never be in that state.
+ */
 function EmptyList({
-  tab,
-  filtered,
+  filters,
+  sides,
   hasAnyPoints,
   hasAnySaved,
   onClear,
-  onGoToPoints,
 }: {
-  tab: "points" | "saved";
-  filtered: boolean;
+  filters: FilmFilters;
+  sides: MatchSides;
   hasAnyPoints: boolean;
   hasAnySaved: boolean;
   onClear: () => void;
-  onGoToPoints: () => void;
 }) {
-  if (tab === "saved") {
-    // A player with real bookmarks can still land here if the active film
-    // filter happens to exclude every one of them — that reads as "you have
-    // no bookmarks" unless the copy says otherwise and offers the same
-    // recovery the Points tab's filtered-empty state does.
-    const hiddenByFilter = filtered && hasAnySaved;
+  // Nothing was detected in the film at all. No action: there is no
+  // "Recording requirements" destination in the product to send anyone to,
+  // and a button that goes nowhere is worse than a plain statement.
+  if (!hasAnyPoints) {
     return (
-      <div className="flex flex-col items-center gap-1 px-6 py-14 text-center">
-        <span className="mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-[var(--surface-subtle)]">
-          <Bookmark
-            className="h-4 w-4 text-[var(--ink-400)]"
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-        </span>
-        <span className="text-[12px] font-medium text-[var(--ink-700)]">
-          {hiddenByFilter ? "No bookmarks match" : "Nothing bookmarked yet"}
-        </span>
-        <span
-          className="text-micro max-w-[240px]"
-          style={{ color: "var(--ink-500)" }}
-        >
-          {hiddenByFilter
-            ? "The current cut hides every point you bookmarked."
-            : "Hover a point on the Points tab and press the bookmark to keep it here."}
-        </span>
-        <button
-          type="button"
-          onClick={hiddenByFilter ? onClear : onGoToPoints}
-          className="mt-3 cursor-pointer text-[11px] font-medium text-[var(--blue)]"
-        >
-          {hiddenByFilter ? "Clear filter" : "Go to Points"}
-        </button>
-      </div>
+      <EmptyBody
+        title="No points were detected in this film"
+        body="The recording plays, but nothing in it could be broken into points. Camera placement is the usual reason."
+      />
     );
   }
 
-  if (filtered) {
+  // Saved only, and the match has no saved point at all — not a cut that hid
+  // them, which is the branch below. Teaches the gesture once, here.
+  if (filters.savedOnly && !hasAnySaved) {
     return (
-      <div className="flex flex-col items-center gap-1 px-6 py-14 text-center">
-        <span className="text-[12px] font-medium text-[var(--ink-700)]">
-          No points match
-        </span>
-        <span
-          className="text-micro max-w-[240px]"
-          style={{ color: "var(--ink-500)" }}
-        >
-          The current cut is too narrow to leave anything on the film.
-        </span>
-        <button
-          type="button"
-          onClick={onClear}
-          className="mt-3 cursor-pointer text-[11px] font-medium text-[var(--blue)]"
-        >
-          Clear filter
-        </button>
-      </div>
+      <EmptyBody
+        title="You haven’t saved a point yet"
+        body="Hover a point and press the bookmark, or press S while it plays."
+        action="Show all points"
+        onAction={onClear}
+      />
     );
   }
 
+  // Every other applied cut. The body states the cut rather than a generic
+  // sentence, so it can never say "too narrow" about a cut the viewer can
+  // read differently from what is actually applied.
   return (
-    <div className="flex flex-col items-center gap-1 px-6 py-14 text-center">
-      <span className="text-[12px] font-medium text-[var(--ink-700)]">
-        {hasAnyPoints ? "No points to show" : "No point timeline on this match"}
-      </span>
+    <EmptyBody
+      title="No points match this cut"
+      body={`Nothing in this match matched this cut — ${describeFilmCut(filters, sides)}.`}
+      action="Clear the cut"
+      onAction={onClear}
+    />
+  );
+}
+
+function EmptyBody({
+  title,
+  body,
+  action,
+  onAction,
+}: {
+  title: string;
+  body: string;
+  action?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-[7px] px-3 pt-[22px] pb-5">
+      <span className="text-[13px] text-[var(--ink-900)]">{title}</span>
       <span
-        className="text-micro max-w-[260px]"
+        className="max-w-[40ch] text-[11px] leading-[1.55]"
         style={{ color: "var(--ink-500)" }}
       >
-        The film plays, but there is no per-point index to jump through yet.
+        {body}
       </span>
+      {action && onAction && (
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-[3px] w-fit cursor-pointer text-[11px] font-medium text-[var(--blue)]"
+        >
+          {action}
+        </button>
+      )}
     </div>
   );
 }

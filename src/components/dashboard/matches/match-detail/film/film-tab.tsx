@@ -488,12 +488,14 @@ function FilmRoom({
         <div className="flex min-h-0 flex-1 flex-col @min-[720px]:absolute @min-[720px]:inset-0">
           <PointList
             allPoints={points}
-            visiblePoints={visiblePoints}
-            filteredCount={filteredPoints.length}
+            // The in-shell list is no longer split into Points/Saved tabs:
+            // "Saved only" is an axis of the cut itself (`filters.savedOnly`),
+            // so the list renders exactly what the filters admit. The
+            // fullscreen room below still has its own tabs, and still gets
+            // the tab-scoped `visiblePoints`.
+            visiblePoints={filteredPoints}
             filters={filters}
             onFiltersChange={setFilters}
-            tab={tab}
-            onTabChange={setTab}
             activePointId={active?.stop.point.id ?? null}
             activeStart={active?.stop.start ?? 0}
             activeEnd={active?.stop.end ?? 0}

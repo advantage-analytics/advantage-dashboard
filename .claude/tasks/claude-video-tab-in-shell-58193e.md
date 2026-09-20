@@ -46,7 +46,7 @@ ready).
 
 ## T3 · Rebuild the point list header and zero states
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** (guess) film/point-list.tsx, film/film-tab.tsx (PointList call site only)
