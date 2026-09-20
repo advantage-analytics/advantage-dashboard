@@ -19,6 +19,7 @@ import {
   SINGLES_LEFT,
   SINGLES_RIGHT,
   projectServeDot,
+  zoneOpacity,
 } from "./court-geometry";
 import type { Cut, VizDot } from "./viz-model";
 
@@ -93,23 +94,13 @@ const CUT_NOUN: Record<Cut, string> = {
   returnContact: "return contact",
 };
 
-// Zones overlay opacity: the emptiest drawn zone (pct just above 0) reads at
-// 0.12, the busiest theoretical one (pct 100) at 0.26 — a shade change a
-// reader can see cell to cell without any cell going dark enough to fight the
-// win-pct/count figures a caller may draw on top.
-const ZONE_OPACITY_MIN = 0.12;
-const ZONE_OPACITY_MAX = 0.26;
-
-function zoneOpacity(pct: number): number {
-  return ZONE_OPACITY_MIN + (pct / 100) * (ZONE_OPACITY_MAX - ZONE_OPACITY_MIN);
-}
-
 export function CourtArt({
   cut,
   dots,
   zones,
   className,
   fill,
+  labels,
 }: {
   cut: Cut;
   dots: VizDot[];
@@ -129,9 +120,19 @@ export function CourtArt({
    * letterboxes the court inside that box.
    */
   fill?: boolean;
+  /**
+   * Draws each zone cell's count and win% centred inside the cell
+   * (visual-fix round 2, Defect B) — the focused view only. Tiles stay
+   * label-free: at tile scale the figures would be illegibly small and the
+   * cells already read fine as a plain shade gradient there.
+   */
+  labels?: boolean;
 }) {
   const box = viewBoxFor(cut);
   const showZones = cut === "serve" && zones != null;
+  const maxZonePct = zones
+    ? Math.max(...ZONES.map((z) => zones[z.key].pct))
+    : 0;
   const ariaLabel = showZones
     ? "Serve placement by zone: six service-box zones shaded by serve frequency"
     : `${CUT_NOUN[cut]} court, ${dots.length} point${dots.length === 1 ? "" : "s"} shown`;
@@ -168,20 +169,59 @@ export function CourtArt({
           />
           {/* Zone cells span the service line down to the net, same as the
               service boxes below — not the baseline down to the service
-              line. */}
+              line. White fill/outline (not a blue tint): the cells sit on
+              the blue court fill, so a blue-on-blue overlay was unreadable —
+              white at 0.06–0.42 opacity, scaled to the busiest zone actually
+              drawn, reads at every share. */}
           {showZones &&
             zones &&
-            ZONES.map((z) => (
-              <rect
-                key={z.key}
-                x={z.x1}
-                y={SERVE_COURT.zoneTop}
-                width={z.x2 - z.x1}
-                height={SERVE_COURT.zoneBottom - SERVE_COURT.zoneTop}
-                fill="var(--viz-you)"
-                fillOpacity={zoneOpacity(zones[z.key].pct)}
-              />
-            ))}
+            ZONES.map((z) => {
+              const zs = zones[z.key];
+              const cellCx = (z.x1 + z.x2) / 2;
+              const cellCy = (SERVE_COURT.zoneTop + SERVE_COURT.zoneBottom) / 2;
+              return (
+                <g key={z.key}>
+                  <rect
+                    x={z.x1}
+                    y={SERVE_COURT.zoneTop}
+                    width={z.x2 - z.x1}
+                    height={SERVE_COURT.zoneBottom - SERVE_COURT.zoneTop}
+                    fill={LINE_COLOR}
+                    fillOpacity={zoneOpacity(zs.pct, maxZonePct)}
+                    stroke={LINE_COLOR}
+                    strokeOpacity={0.5}
+                    strokeWidth={1}
+                  />
+                  {labels && zs.count > 0 && (
+                    <>
+                      <text
+                        x={cellCx}
+                        y={cellCy - 4}
+                        textAnchor="middle"
+                        fill={LINE_COLOR}
+                        fontSize={12}
+                        fontWeight={600}
+                        style={{ fontVariantNumeric: "tabular-nums" }}
+                      >
+                        {zs.count}
+                      </text>
+                      <text
+                        x={cellCx}
+                        y={cellCy + 12}
+                        textAnchor="middle"
+                        fill={LINE_COLOR}
+                        fillOpacity={0.8}
+                        fontSize={10}
+                        fontWeight={400}
+                        style={{ fontVariantNumeric: "tabular-nums" }}
+                      >
+                        {zs.winPct}% won
+                      </text>
+                    </>
+                  )}
+                </g>
+              );
+            })}
           <line
             x1={DOUBLES_LEFT}
             y1={SERVE_COURT.baselineY}

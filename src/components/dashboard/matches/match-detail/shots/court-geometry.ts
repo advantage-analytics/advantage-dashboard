@@ -69,3 +69,27 @@ export function projectServeDot(d: ServeDotFraction): { x: number; y: number } {
     y: SERVE_COURT.serviceY + d.y * (SERVE_COURT.netY - SERVE_COURT.serviceY),
   };
 }
+
+// Zone cell opacity (visual-fix-round-2, Defect B): the six zone cells sit on
+// top of the blue court fill, so a `var(--viz-you)` blue tint (the original
+// design) was unreadable — near-invisible blue-on-blue. Cells are now white,
+// shaded by each zone's share of serves *relative to the busiest zone drawn*
+// (`maxPct`), not an absolute 0–100 scale: an emptiest-drawn zone (pct=0)
+// reads at 0.06, the busiest zone actually drawn (pct=maxPct) at 0.42 — a
+// spread wide enough to read cell-to-cell against the blue court, without the
+// busiest cell going so opaque it fights the white count/winPct labels drawn
+// on top of it.
+export const ZONE_OPACITY_MIN = 0.06;
+export const ZONE_OPACITY_MAX = 0.42;
+
+/**
+ * `maxPct` is the largest `pct` among the zones actually being drawn (not a
+ * fixed 100) — so the shade spread always uses the full 0.06–0.42 range even
+ * when every zone's share is small. `maxPct <= 0` (no zones drawn, or every
+ * zone tied at 0%) returns the minimum shade rather than dividing by zero.
+ */
+export function zoneOpacity(pct: number, maxPct: number): number {
+  if (maxPct <= 0) return ZONE_OPACITY_MIN;
+  const t = Math.min(1, Math.max(0, pct / maxPct));
+  return ZONE_OPACITY_MIN + t * (ZONE_OPACITY_MAX - ZONE_OPACITY_MIN);
+}

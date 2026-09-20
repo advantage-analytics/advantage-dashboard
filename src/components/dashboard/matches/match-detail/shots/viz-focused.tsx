@@ -139,7 +139,7 @@ export function VizFocused({
           </div>
 
           <div
-            className="relative flex max-h-[400px] w-full items-center justify-center overflow-hidden"
+            className="relative w-full"
             style={{ backgroundColor: APRON_FILL }}
           >
             <CourtArt
@@ -150,16 +150,21 @@ export function VizFocused({
                   ? (result.zoneStats ?? undefined)
                   : undefined
               }
-              // The court area spans the card's full width, capped at
-              // 400px tall, with the apron green painted behind it — so any
-              // letterboxing `preserveAspectRatio` (`xMidYMid meet`) leaves
-              // is green, never the white the card background used to show
-              // through. `fill` sizes the svg to `height:100%` of this box
-              // instead of off its own intrinsic viewBox aspect ratio, so it
-              // actually reaches the 400px cap rather than shrinking to fit
-              // a width-only box.
-              fill
-              className="block h-full w-full"
+              labels
+              // The court area spans the card's full width, capped at 400px
+              // tall, with the apron green painted behind it — so any
+              // letterboxing `preserveAspectRatio` (`xMidYMid meet`) leaves is
+              // green, never the white the card background used to show
+              // through. The cap lives on the SVG itself (`max-h-[400px]
+              // w-full`, no `fill`): `width` is definite (100%) and `height`
+              // is auto, so the replaced-element sizing algorithm derives a
+              // height from the viewBox's intrinsic ratio and only THEN
+              // clamps it to 400px — capping height on the wrapper instead
+              // (an indefinite-height box) resolves the svg's `height:100%`
+              // to `auto`, which lays it out at its full intrinsic height and
+              // lets the wrapper's `overflow-hidden` crop it top and bottom
+              // (round 1's regression).
+              className="block max-h-[400px] w-full"
             />
             {result.count === 0 && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">

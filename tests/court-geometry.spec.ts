@@ -2,6 +2,9 @@ import { expect, test } from "@playwright/test";
 import {
   SERVE_COURT,
   projectServeDot,
+  zoneOpacity,
+  ZONE_OPACITY_MIN,
+  ZONE_OPACITY_MAX,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
 
 /**
@@ -39,4 +42,28 @@ test("a projected dot's cy always lies within [zoneTop, zoneBottom]", () => {
     expect(cy).toBeGreaterThanOrEqual(SERVE_COURT.zoneTop);
     expect(cy).toBeLessThanOrEqual(SERVE_COURT.zoneBottom);
   }
+});
+
+/**
+ * Zone cell opacity (visual-fix round 2, Defect B): cells shade relative to
+ * the busiest zone actually drawn (`maxPct`), not a fixed 0–100 scale.
+ */
+test("zoneOpacity: pct=0 reads at the minimum shade", () => {
+  expect(zoneOpacity(0, 40)).toBe(ZONE_OPACITY_MIN);
+});
+
+test("zoneOpacity: pct=maxPct reads at the maximum shade", () => {
+  expect(zoneOpacity(40, 40)).toBe(ZONE_OPACITY_MAX);
+});
+
+test("zoneOpacity is monotonically increasing in pct", () => {
+  const steps = [0, 5, 10, 20, 30, 40].map((pct) => zoneOpacity(pct, 40));
+  for (let i = 1; i < steps.length; i++) {
+    expect(steps[i]).toBeGreaterThan(steps[i - 1]);
+  }
+});
+
+test("zoneOpacity: maxPct=0 reads at the minimum shade (no divide-by-zero)", () => {
+  expect(zoneOpacity(0, 0)).toBe(ZONE_OPACITY_MIN);
+  expect(zoneOpacity(5, 0)).toBe(ZONE_OPACITY_MIN);
 });
