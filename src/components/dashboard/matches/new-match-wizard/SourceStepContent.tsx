@@ -65,7 +65,7 @@ import {
   type Workspace,
 } from "@/lib/workspace/types";
 import type { MatchSubject, RosterOption } from "./useUploadMatchWizard";
-import { noteStripCls } from "./styles";
+import { noteIconCls, noteStripCls } from "./styles";
 import { PendingTeamNote } from "./PendingTeamNote";
 import { RosterMenuList, rosterMeta, workspaceLabel } from "./RosterMenu";
 import { PersonAvatar } from "@/components/ui/person-avatar";
@@ -452,7 +452,7 @@ function SourceStepContentImpl({
     currentKind === "import" ? (
       <div className={NOTE_CLS}>
         <Info
-          className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-400)]"
+          className={`${noteIconCls} text-[var(--ink-400)]`}
           strokeWidth={1.5}
           aria-hidden="true"
         />
@@ -479,7 +479,7 @@ function SourceStepContentImpl({
       // fact and does not disable the source.
       <div className={NOTE_CLS} role="alert">
         <XCircle
-          className="mt-0.5 size-[13px] shrink-0 text-[var(--error)]"
+          className={`${noteIconCls} text-[var(--error)]`}
           strokeWidth={1.5}
           aria-hidden="true"
         />
@@ -491,7 +491,7 @@ function SourceStepContentImpl({
       // the same sentence the spend would use.
       <div className={NOTE_CLS}>
         <Info
-          className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-400)]"
+          className={`${noteIconCls} text-[var(--ink-400)]`}
           strokeWidth={1.5}
           aria-hidden="true"
         />

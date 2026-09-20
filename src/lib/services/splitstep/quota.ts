@@ -223,7 +223,7 @@ export async function reserveQuota(params: {
     };
   }
 
-  const remaining = Math.max(0, row.cap_seconds - row.used_seconds);
+  const remaining = secondsLeft(row.used_seconds, row.cap_seconds);
 
   return {
     ok: false,
@@ -303,7 +303,6 @@ export interface QuotaPeek {
 export async function peekQuota(
   supabase: SupabaseClient,
   workspace: Workspace,
-  now?: Date,
 ): Promise<QuotaPeek> {
   const capSeconds = monthlyCapSecondsFor(workspace);
 
@@ -312,7 +311,7 @@ export async function peekQuota(
     .select("reserved_seconds, actual_seconds")
     .eq("account_id", workspace.id)
     .eq("account_type", accountTypeFor(workspace))
-    .eq("billing_month", currentBillingMonth(now))
+    .eq("billing_month", currentBillingMonth())
     .eq("released", false);
 
   if (error) {

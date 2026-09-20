@@ -8,6 +8,7 @@ import * as scoreState from "@/components/dashboard/matches/new-match-wizard/sco
 import * as subjectEligibility from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
 import * as scoreFormat from "@/lib/ui/score-format";
 import * as quota from "@/lib/services/splitstep/quota";
+import { secondsLeft } from "@/lib/data/usage-format";
 import type {
   UseUploadMatchWizardProps,
   UseUploadMatchWizardReturn,
@@ -313,7 +314,10 @@ export function uploadWizardHarness(
       // Pure, so the real one.
       sumUsedSeconds: quota.sumUsedSeconds,
     },
-    "@/lib/data/usage-format": { formatResetDate: () => "Oct 1" },
+    // `formatResetDate` is stubbed for a fixed date; `secondsLeft` is pure,
+    // so the real clamp — the meter's remaining figure is what several of
+    // these specs assert on.
+    "@/lib/data/usage-format": { formatResetDate: () => "Oct 1", secondsLeft },
     // Pure, and only read to describe the saved match to the success screen.
     "@/lib/ui/score-format": scoreFormat,
     "@/lib/wizard/actions": {

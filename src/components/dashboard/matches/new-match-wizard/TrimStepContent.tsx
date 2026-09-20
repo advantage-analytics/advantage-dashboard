@@ -81,7 +81,7 @@ import {
 import { useVideoFilmstrip } from "@/hooks/use-video-filmstrip";
 import { JUMP_STEP_SECONDS } from "../match-video-attachment/use-attachment-alignment";
 import type { VideoProbeSummary } from "./types";
-import { focusRingCls, noteStripCls } from "./styles";
+import { focusRingCls, noteIconCls, noteStripCls } from "./styles";
 import { Kbd } from "@/components/ui/kbd";
 import { isFormControl } from "./useWizardKeys";
 import { formatClipLength, formatClock, formatTimecode } from "./utils";
@@ -131,10 +131,11 @@ const RAIL_HEIGHT_PX = 52;
  *
  * The marker and the clock are written imperatively (see `applyPlayhead`) and
  * cost no render. The two Set buttons cannot be: `disabled` is a rendered
- * attribute, so their side of the playhead has to go through state. A trailing
- * timer at this interval is ~5 renders a second of a small tree — cheap, and
- * always eventually right because the timer reads the ref when it fires rather
- * than closing over a stale sample.
+ * attribute, so their side of the playhead has to go through state. The timer
+ * reads the ref when it fires rather than closing over a stale sample, and
+ * republishes ONLY when the new time would flip one of those two buttons — a
+ * playing video otherwise re-rendered the whole step five times a second to
+ * move a number that nothing reads.
  */
 const PLAYHEAD_PUBLISH_MS = 200;
 
@@ -238,6 +239,8 @@ function CutField({
   );
 }
 
+const controlCls = `inline-flex size-7 items-center justify-center rounded-[var(--radius-element)] text-white transition-colors duration-150 hover:bg-white/10 ${focusRingCls}`;
+
 /** A coarse jump in the in-frame control row: a mono caption where the frame
  *  steps carry an icon, the spoken name on the button. */
 function JumpButton({
@@ -260,8 +263,6 @@ function JumpButton({
     </button>
   );
 }
-
-const controlCls = `inline-flex size-7 items-center justify-center rounded-[var(--radius-element)] text-white transition-colors duration-150 hover:bg-white/10 ${focusRingCls}`;
 
 /**
  * One of a pair of title-only check-dot cards, 40px tall. The dot is the
@@ -393,6 +394,14 @@ function TrimStepContentImpl({
 
   /** One frame, when we know the rate. Falls back to a reasonable nudge. */
   const frameStep = probe?.fps ? 1 / probe.fps : 0.1;
+  // The cuts as the playhead publisher sees them, so the trailing timer can
+  // ask "would this flip a Set button?" without closing over a render's
+  // values. Mirrored, never read for paint — `start`/`end`/`frameStep`
+  // themselves are what the buttons render from.
+  const gateRef = useRef({ start, end, frameStep });
+  useEffect(() => {
+    gateRef.current = { start, end, frameStep };
+  }, [start, end, frameStep]);
 
   const filmstrip = useVideoFilmstrip(videoFile, duration);
 
@@ -419,7 +428,19 @@ function TrimStepContentImpl({
     if (publishTimerRef.current !== null) return;
     publishTimerRef.current = setTimeout(() => {
       publishTimerRef.current = null;
-      setPlayheadTime(playheadRef.current);
+      setPlayheadTime((prev) => {
+        const next = playheadRef.current;
+        const { start, end, frameStep } = gateRef.current;
+        // Same answer to both buttons means the render would be identical:
+        // return `prev` and React bails out. `gateRef` may lag the cuts by a
+        // render, which can only ever DELAY a flip to the next tick — and a
+        // cut moving is itself a render that recomputes both booleans from
+        // the live values below.
+        const unchanged =
+          prev < end - frameStep === next < end - frameStep &&
+          prev > start + frameStep === next > start + frameStep;
+        return unchanged ? prev : next;
+      });
     }, PLAYHEAD_PUBLISH_MS);
   }, []);
   useEffect(
@@ -522,13 +543,29 @@ function TrimStepContentImpl({
     [duration],
   );
 
-  const positionFromEvent = useCallback((clientX: number): number => {
-    const rail = railRef.current;
-    if (!rail) return 0;
-    const rect = rail.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    return ratio * durationRef.current;
-  }, []);
+  const getRailRect = useCallback(
+    () => railRef.current?.getBoundingClientRect() ?? null,
+    [],
+  );
+
+  // The rail's box, measured once per gesture. `getBoundingClientRect()` forces
+  // layout, and the whole rail is now a pointer surface — a trackpad sweep
+  // asks 120+ times a second while the page is decoding a multi-gigabyte
+  // video. The rail cannot move or resize mid-gesture (a resize re-renders and
+  // the gesture is over by then), so one measurement at the press is enough.
+  const gestureRectRef = useRef<DOMRect | null>(null);
+  const positionFromEvent = useCallback(
+    (clientX: number): number => {
+      const rect = gestureRectRef.current ?? getRailRect();
+      if (!rect) return 0;
+      const ratio = Math.max(
+        0,
+        Math.min(1, (clientX - rect.left) / rect.width),
+      );
+      return ratio * durationRef.current;
+    },
+    [getRailRect],
+  );
 
   /** Single clamp for both cuts. */
   const clampCut = useCallback(
@@ -601,7 +638,6 @@ function TrimStepContentImpl({
   const dragCtx = useRef({
     applyDrag,
     positionFromEvent,
-    duration,
     onTrimChange,
     seekTo,
     seekLatest,
@@ -611,7 +647,6 @@ function TrimStepContentImpl({
     dragCtx.current = {
       applyDrag,
       positionFromEvent,
-      duration,
       onTrimChange,
       seekTo,
       seekLatest,
@@ -634,6 +669,7 @@ function TrimStepContentImpl({
   const beginGesture = useCallback(
     (grab: Handle | "scrub", e: ReactPointerEvent<HTMLElement>) => {
       draggingRef.current = grab;
+      gestureRectRef.current = getRailRect();
       // The cursor stays the gesture's own for its whole length, even when the
       // pointer leaves the 24px handle — otherwise it flickers to an arrow the
       // moment you move faster than the handle can follow.
@@ -648,7 +684,7 @@ function TrimStepContentImpl({
       }
       setDragging(grab);
     },
-    [],
+    [getRailRect],
   );
 
   const onGesturePointerMove = useCallback((e: ReactPointerEvent) => {
@@ -672,6 +708,7 @@ function TrimStepContentImpl({
     const grab = draggingRef.current;
     if (!grab) return;
     draggingRef.current = null;
+    gestureRectRef.current = null;
     document.body.style.cursor = previousCursorRef.current;
     if (liveRafRef.current !== null) {
       cancelAnimationFrame(liveRafRef.current);
@@ -696,6 +733,27 @@ function TrimStepContentImpl({
     setLive(null);
     setDragging(null);
   }, []);
+
+  // The handle's own copies. A handle captures the pointer, so these fire for
+  // the whole drag wherever it goes — and they stop AT the handle, because the
+  // rail below carries the same events and a captured event still bubbles to
+  // it. One pair rather than a handler per event: the stop-propagation half of
+  // the contract is then stated once, and a fourth way for a gesture to end
+  // cannot forget it.
+  const endGestureOnHandle = useCallback(
+    (e: ReactPointerEvent) => {
+      e.stopPropagation();
+      endGesture();
+    },
+    [endGesture],
+  );
+  const moveGestureOnHandle = useCallback(
+    (e: ReactPointerEvent) => {
+      e.stopPropagation();
+      onGesturePointerMove(e);
+    },
+    [onGesturePointerMove],
+  );
 
   const startDrag = useCallback(
     (grab: Handle, e: ReactPointerEvent<HTMLElement>) => {
@@ -773,7 +831,9 @@ function TrimStepContentImpl({
   // The two Set buttons' `disabled`. `playheadTime` rather than the ref,
   // because only a render can change an attribute — and the same rule is
   // re-applied against the LIVE value inside `setHandleToPlayhead`, so the
-  // keys cannot slip through the ~200ms the mirror lags by.
+  // keys cannot slip through the ~200ms the mirror lags by. The mirror is
+  // only republished when one of these two answers changes; it is a gate
+  // sample, not a clock (the clock is written imperatively).
   const canSetStart = playheadTime < end - frameStep;
   const canSetEnd = playheadTime > start + frameStep;
 
@@ -944,7 +1004,7 @@ function TrimStepContentImpl({
     return (
       <div className={noteStripCls}>
         <Info
-          className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-400)]"
+          className={`${noteIconCls} text-[var(--ink-400)]`}
           strokeWidth={1.5}
           aria-hidden="true"
         />
@@ -1153,9 +1213,7 @@ function TrimStepContentImpl({
             {duration > 0 ? (
               <>
                 {/* Filmstrip */}
-                <div
-                  className={`absolute inset-0 flex overflow-hidden rounded-[var(--radius-element)] opacity-100 transition-opacity duration-200`}
-                >
+                <div className="absolute inset-0 flex overflow-hidden rounded-[var(--radius-element)]">
                   {slots.map((slot) => (
                     <div key={slot.key} className="h-full min-w-0 flex-1">
                       {slot.src ? (
@@ -1231,26 +1289,10 @@ function TrimStepContentImpl({
                         e.preventDefault();
                         startDrag(handle, e);
                       }}
-                      // The handle captures the pointer, so these fire for the
-                      // whole drag wherever it goes. They stop at the handle:
-                      // the rail below carries the same three, and a captured
-                      // event still bubbles to it.
-                      onPointerMove={(e) => {
-                        e.stopPropagation();
-                        onGesturePointerMove(e);
-                      }}
-                      onPointerUp={(e) => {
-                        e.stopPropagation();
-                        endGesture();
-                      }}
-                      onPointerCancel={(e) => {
-                        e.stopPropagation();
-                        endGesture();
-                      }}
-                      onLostPointerCapture={(e) => {
-                        e.stopPropagation();
-                        endGesture();
-                      }}
+                      onPointerMove={moveGestureOnHandle}
+                      onPointerUp={endGestureOnHandle}
+                      onPointerCancel={endGestureOnHandle}
+                      onLostPointerCapture={endGestureOnHandle}
                       onKeyDown={(e) => {
                         if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") {
                           return;
@@ -1343,7 +1385,7 @@ function TrimStepContentImpl({
         {tooShort ? (
           <div className={noteStripCls}>
             <XCircle
-              className="mt-0.5 size-[13px] shrink-0 text-[var(--error)]"
+              className={`${noteIconCls} text-[var(--error)]`}
               strokeWidth={1.5}
               aria-hidden="true"
             />
@@ -1357,7 +1399,7 @@ function TrimStepContentImpl({
         {refusal ? (
           <div className={noteStripCls} role="alert">
             <XCircle
-              className="mt-0.5 size-[13px] shrink-0 text-[var(--error)]"
+              className={`${noteIconCls} text-[var(--error)]`}
               strokeWidth={1.5}
               aria-hidden="true"
             />
