@@ -974,7 +974,7 @@ test.describe("chartAllowedOn", () => {
 /* ── G3a: computeViz — rallyPosition cut ──────────────────────────────── */
 
 test.describe("computeViz — rallyPosition cut", () => {
-  test("only shots numbered 3+ struck by the subject count", () => {
+  test("only shots after the return, struck by the subject, count", () => {
     const pts = [
       point({
         shots: [
@@ -992,6 +992,112 @@ test.describe("computeViz — rallyPosition cut", () => {
     expect(r.count).toBe(2);
     expect(r.noun).toBe("shots");
     expect(r.zoneStats).toBeNull();
+  });
+
+  /* ── I1: shots are selected by ROLE, not by shot_number ───────────────
+   * shot_number is unreliable — a faulted first serve and the second
+   * serve actually played can share a number (and the return can collide
+   * with it too), and SwingVision emits a `Feed` row at shot_number=0.
+   * `pickRallyShots` (serve-return-shots.ts) drops Feed/serve rows, then
+   * drops the first remaining row (the return), keeping the rest. */
+
+  test("I1: colliding shotNumbers — the rally shot IS drawn, the return is NOT", () => {
+    const pts = [
+      point({
+        shots: [
+          shot({
+            shotType: "First Serve",
+            shotNumber: 1,
+            isPlayer1: true,
+            id: "serve1",
+          }),
+          shot({
+            shotType: "Second Serve",
+            shotNumber: 1,
+            isPlayer1: true,
+            id: "serve2",
+          }),
+          shot({
+            shotType: "Forehand",
+            shotNumber: 2,
+            isPlayer1: true,
+            id: "return",
+          }),
+          shot({
+            shotType: "Forehand",
+            shotNumber: 2,
+            isPlayer1: true,
+            id: "rally",
+          }),
+        ],
+      }),
+    ];
+    const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true);
+    expect(r.dots.map((d) => d.id)).toEqual(["rally"]);
+  });
+
+  test("I1: a return sitting at shotNumber 3 is not drawn as a rally shot", () => {
+    const pts = [
+      point({
+        shots: [
+          shot({
+            shotType: "First Serve",
+            shotNumber: 1,
+            isPlayer1: true,
+            id: "serve",
+          }),
+          shot({
+            shotType: "Forehand",
+            shotNumber: 3,
+            isPlayer1: true,
+            id: "return-at-3",
+          }),
+          shot({
+            shotType: "Forehand",
+            shotNumber: 4,
+            isPlayer1: true,
+            id: "rally-at-4",
+          }),
+        ],
+      }),
+    ];
+    const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true);
+    expect(r.dots.map((d) => d.id)).toEqual(["rally-at-4"]);
+  });
+
+  test("I1: a Feed row at shot_number 0 is dropped, not treated as the return", () => {
+    const pts = [
+      point({
+        shots: [
+          shot({
+            shotType: "Feed",
+            shotNumber: 0,
+            isPlayer1: true,
+            id: "feed",
+          }),
+          shot({
+            shotType: "First Serve",
+            shotNumber: 1,
+            isPlayer1: true,
+            id: "serve",
+          }),
+          shot({
+            shotType: "Forehand",
+            shotNumber: 2,
+            isPlayer1: true,
+            id: "return",
+          }),
+          shot({
+            shotType: "Forehand",
+            shotNumber: 3,
+            isPlayer1: true,
+            id: "rally",
+          }),
+        ],
+      }),
+    ];
+    const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true);
+    expect(r.dots.map((d) => d.id)).toEqual(["rally"]);
   });
 
   test("a shot with null contact or landing coords is skipped, not crashed on", () => {
@@ -1013,7 +1119,10 @@ test.describe("computeViz — rallyPosition cut", () => {
     const pts = [
       point({
         serverIsPlayer1: false,
-        shots: [shot({ shotNumber: 3, isPlayer1: true, id: "returner-rally" })],
+        shots: [
+          shot({ shotNumber: 2, isPlayer1: false, id: "return" }),
+          shot({ shotNumber: 3, isPlayer1: true, id: "returner-rally" }),
+        ],
       }),
     ];
     const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true);
@@ -1024,11 +1133,17 @@ test.describe("computeViz — rallyPosition cut", () => {
     const pts = [
       point({
         wonByPlayer1: true,
-        shots: [shot({ shotNumber: 3, isPlayer1: true, id: "won-shot" })],
+        shots: [
+          shot({ shotNumber: 2, isPlayer1: false, id: "return" }),
+          shot({ shotNumber: 3, isPlayer1: true, id: "won-shot" }),
+        ],
       }),
       point({
         wonByPlayer1: false,
-        shots: [shot({ shotNumber: 3, isPlayer1: true, id: "lost-shot" })],
+        shots: [
+          shot({ shotNumber: 2, isPlayer1: false, id: "return" }),
+          shot({ shotNumber: 3, isPlayer1: true, id: "lost-shot" }),
+        ],
       }),
     ];
     const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true);
@@ -1043,7 +1158,10 @@ test.describe("computeViz — rallyPosition cut", () => {
     const pts = [
       point({
         wonByPlayer1: true, // player 1 won -> player 2 (the subject) lost
-        shots: [shot({ shotNumber: 3, isPlayer1: false, id: "p2-shot" })],
+        shots: [
+          shot({ shotNumber: 2, isPlayer1: true, id: "return" }),
+          shot({ shotNumber: 3, isPlayer1: false, id: "p2-shot" }),
+        ],
       }),
     ];
     const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, false);
@@ -1054,7 +1172,10 @@ test.describe("computeViz — rallyPosition cut", () => {
     const pts = [
       point({
         wonByPlayer1: true,
-        shots: [shot({ shotNumber: 3, isPlayer1: false, id: "opp-shot" })],
+        shots: [
+          shot({ shotNumber: 2, isPlayer1: true, id: "return" }),
+          shot({ shotNumber: 3, isPlayer1: false, id: "opp-shot" }),
+        ],
       }),
     ];
     const opponentSubject = subjectFor(
@@ -1076,7 +1197,12 @@ test.describe("computeViz — rallyPosition cut", () => {
     // contactX=0.5, contactY=22.0, landingY=4.0 (< net, no flip):
     // lateralM = -0.5, depthM = 22.0 - 23.77 = -1.77 (inside the court).
     const pts = [
-      point({ shots: [shot({ shotNumber: 3, isPlayer1: true, id: "s" })] }),
+      point({
+        shots: [
+          shot({ shotNumber: 2, isPlayer1: false, id: "return" }),
+          shot({ shotNumber: 3, isPlayer1: true, id: "s" }),
+        ],
+      }),
     ];
     const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true);
     expect(r.dots[0].lateralM).toBeCloseTo(-0.5, 5);
@@ -1087,6 +1213,7 @@ test.describe("computeViz — rallyPosition cut", () => {
     const pts = [
       point({
         shots: [
+          shot({ shotNumber: 2, isPlayer1: false, id: "return" }),
           shot({
             shotNumber: 3,
             isPlayer1: true,
@@ -1114,11 +1241,17 @@ test.describe("computeViz — rallyPosition cut", () => {
     const pts = [
       point({
         isBreakPoint: true,
-        shots: [shot({ shotNumber: 3, isPlayer1: true, id: "bp-shot" })],
+        shots: [
+          shot({ shotNumber: 2, isPlayer1: false, id: "return" }),
+          shot({ shotNumber: 3, isPlayer1: true, id: "bp-shot" }),
+        ],
       }),
       point({
         isBreakPoint: false,
-        shots: [shot({ shotNumber: 3, isPlayer1: true, id: "regular-shot" })],
+        shots: [
+          shot({ shotNumber: 2, isPlayer1: false, id: "return" }),
+          shot({ shotNumber: 3, isPlayer1: true, id: "regular-shot" }),
+        ],
       }),
     ];
     const r = computeViz(
@@ -1135,11 +1268,17 @@ test.describe("computeViz — rallyPosition cut", () => {
   test("the ball filter reads the serve-frame meaning (first/second serve point)", () => {
     const firstServePoint = point({
       firstShotType: "First Serve",
-      shots: [shot({ shotNumber: 3, isPlayer1: true, id: "on-first" })],
+      shots: [
+        shot({ shotNumber: 2, isPlayer1: false, id: "return" }),
+        shot({ shotNumber: 3, isPlayer1: true, id: "on-first" }),
+      ],
     });
     const secondServePoint = point({
       firstShotType: "Second Serve",
-      shots: [shot({ shotNumber: 3, isPlayer1: true, id: "on-second" })],
+      shots: [
+        shot({ shotNumber: 2, isPlayer1: false, id: "return" }),
+        shot({ shotNumber: 3, isPlayer1: true, id: "on-second" }),
+      ],
     });
     const r = computeViz(
       [firstServePoint, secondServePoint],
@@ -1165,7 +1304,10 @@ test.describe("computeViz — rallyPosition cut", () => {
     const pts = [
       point({
         pointScore: "15-0",
-        shots: [shot({ shotNumber: 3, isPlayer1: true, id: "ad-side" })],
+        shots: [
+          shot({ shotNumber: 2, isPlayer1: false, id: "return" }),
+          shot({ shotNumber: 3, isPlayer1: true, id: "ad-side" }),
+        ],
       }),
     ];
     const r = computeViz(
@@ -1188,6 +1330,7 @@ test.describe("computeViz — rallyPosition cut", () => {
     const pts = [
       point({
         shots: [
+          shot({ shotNumber: 2, isPlayer1: false, id: "return" }),
           shot({
             shotNumber: 3,
             isPlayer1: true,
@@ -1317,6 +1460,7 @@ test.describe("computeVizStats — rallyPosition cut", () => {
       point({
         wonByPlayer1: true,
         shots: [
+          shot({ shotNumber: 2, isPlayer1: false, id: "return" }),
           shot({
             shotNumber: 3,
             isPlayer1: true,

@@ -532,7 +532,13 @@ test.describe("heatBoundsFor per cut", () => {
     const b = heatBoundsFor("returnContact");
     const band = 5 * UNITS_PER_METER;
     expect(b.xMin).toBeCloseTo(RETURN_COURT.nearBaselineX - band, 6);
-    expect(b.xMax).toBeCloseTo(RETURN_COURT.nearBaselineX + band, 6);
+    // The unclipped +5m edge (~524.14) is past the frame's own visible
+    // run-off (RETURN_HEAT_DEPTH_MAX ≈ 522.35) — see the clipping test
+    // below, which is what actually bounds xMax here.
+    expect(RETURN_COURT.nearBaselineX + band).toBeGreaterThan(
+      RETURN_HEAT_BOUNDS.xMax,
+    );
+    expect(b.xMax).toBe(RETURN_HEAT_BOUNDS.xMax);
   });
 
   test("returnContact's far edge clips at RETURN_HEAT_DEPTH_MAX (RETURN_HEAT_BOUNDS.xMax)", () => {

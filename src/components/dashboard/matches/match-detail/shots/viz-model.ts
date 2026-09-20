@@ -9,6 +9,7 @@
  */
 
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
+import { pickRallyShots } from "@/lib/data/serve-return-shots";
 import {
   computeZoneStats as computeZoneStatsFromServeZones,
   pointToServeDot as pointToServeDotFromServeZones,
@@ -571,10 +572,14 @@ function shapeFromShotType(
 }
 
 /**
- * Rally position (G3a): every shot AFTER the return (`shotNumber >= 3`) the
- * SUBJECT struck, across every point — not gated on who served, unlike the
- * serve/return arms above, since a rally shot can come from either the
- * server or the returner. `count`/`total`/`noun` are shot-counted rather
+ * Rally position (G3a): every shot AFTER the return the SUBJECT struck,
+ * across every point — not gated on who served, unlike the serve/return arms
+ * above, since a rally shot can come from either the server or the returner.
+ * Rally shots are picked by ROLE (`pickRallyShots`, I1), not by
+ * `shotNumber >= 3`: shot_number is unreliable (a faulted first serve and
+ * the second serve actually played can share shot_number=1, colliding the
+ * return with it too), the same reason `serve-return-shots.ts` exists.
+ * `count`/`total`/`noun` are shot-counted rather
  * than point-counted (a single point can contribute several dots): `total`
  * is every qualifying rally shot regardless of filters (the drawable pool,
  * same "before filtering" meaning `total` carries for every other cut, just
@@ -608,8 +613,8 @@ function computeRallyViz(
     );
     const subjectWon = p.wonByPlayer1 === subjectIsPlayer1;
 
-    for (const shot of p.shots ?? []) {
-      if (shot.shotNumber < 3) continue;
+    const rallyShots = pickRallyShots(p.shots ?? [], (s) => s.shotType);
+    for (const shot of rallyShots) {
       if (shot.isPlayer1 !== subjectIsPlayer1) continue;
 
       const metrics = contactMetricsFromLanding(
