@@ -506,7 +506,9 @@ test("the capability is resolved on the server and handed down", () => {
   expect(PAGE).toContain("getMatchFilmEntry(matchId)");
   expect(PAGE).toContain("<FilmTab video={video} entry={filmEntry} />");
   // In the same wave as the rest of the page's reads, not in front of them.
+  // `workspace` joined this wave in Task 6 (saved views need the active
+  // workspace's id), riding the layout's already-`cache()`-wrapped call.
   expect(PAGE).toMatch(
-    /const \[data, jobs, video, filmEntry\] = await Promise\.all\(\[/,
+    /const \[data, jobs, video, filmEntry, workspace\] = await Promise\.all\(\[/,
   );
 });

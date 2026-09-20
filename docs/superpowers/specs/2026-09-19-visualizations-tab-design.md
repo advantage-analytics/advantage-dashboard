@@ -1,7 +1,26 @@
 # Visualizations tab — Phase 1 (in-shell) design
 
-**Status:** draft for review · 2026-09-19
+**Status:** Phase 1 implemented on `claude/visualizations-tab-design-aefa43` · 2026-09-19/20
 **Branch:** `claude/visualizations-tab-design-aefa43` → `splitstep-integration`
+
+## As built
+
+Where the shipped code differs from the spec text below:
+
+- Serve-dot coordinates are 0..1 service-box fractions, projected onto the
+  drawn court in `shots/court-geometry.ts` — net at the bottom of the serve
+  court.
+- Saved views are private by default with opt-in team sharing
+  (`saved_views.shared`). Staff moderate a shared view by rename or delete
+  only; Undo restores only your own views.
+- The Zones chart uses white cells with count/win% labels.
+- `use-viz-state.ts` holds an optimistic intended state so rapid URL-state
+  updates compose instead of clobbering each other.
+- Units moved to Phase 2, as decided in "Decisions made with the user" below.
+- No browser end-to-end spec: the repo has no harness for a logged-in browser
+  against the real app; flows were verified by hand on 2026-09-19/20 and are
+  covered by pure specs (`viz-model`, `viz-url`, `court-geometry`,
+  `saved-views-logic`, `viz-labels`, `saved-views-rls`).
 
 ## Source
 
