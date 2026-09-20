@@ -5,7 +5,7 @@ import {
   useState,
   useSyncExternalStore,
   type ComponentProps,
-  type ReactElement,
+  type ComponentType,
 } from "react";
 import { ArrowUpRight, Check, Copy, Mail, Share2 } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
@@ -20,13 +20,32 @@ import type { Match } from "@/lib/data/types";
 
 type PopoverContentProps = ComponentProps<typeof PopoverContent>;
 
+/** What a trigger must accept: the props Radix hands it, and no children. */
+export type ShareTriggerProps = Omit<ComponentProps<"button">, "children">;
+
 interface ShareMatchButtonProps {
   /**
-   * The trigger, rendered through `PopoverTrigger asChild`: one element that
-   * spreads the props it is handed — `ref` included, which the popover
-   * positions from — onto its `<button>`. `ShareRailTrigger` is the rail's.
+   * The trigger COMPONENT — not an element. It is rendered through
+   * `PopoverTrigger asChild`, so it must spread the props it is handed —
+   * `ref` included, which the popover positions from — onto one `<button>`.
+   * `ShareRailTrigger` is the rail's.
+   *
+   * A component rather than `children` on purpose, and it is load-bearing.
+   * Every caller of this is a Server Component, so `children` would arrive
+   * over the RSC boundary as a client reference that React resolves lazily.
+   * Radix's `Slot` (`@radix-ui/react-slot`, `SlotClone`) asks
+   * `React.isValidElement(children)` and returns `null` when the answer is
+   * no — and an unresolved client reference answers no. The trigger then
+   * vanishes from the server HTML with no error, no Suspense marker and a
+   * 200, and the browser mounts the whole `<button>` fresh at hydration:
+   * "server rendered HTML didn't match", every line a `+`.
+   *
+   * Taking the component instead means the ELEMENT is created here, inside
+   * the client module, where it is always a real element. A reference React
+   * still has to resolve is then the element's TYPE, which React suspends on
+   * and renders — never something `Slot` can silently drop.
    */
-  children: ReactElement;
+  trigger: ComponentType<ShareTriggerProps>;
   side?: PopoverContentProps["side"];
   align?: PopoverContentProps["align"];
 }
@@ -35,16 +54,14 @@ interface ShareMatchButtonProps {
  * The share popover for the match on the page, around whatever trigger the
  * surface draws:
  *
- *   <ShareMatchButton side="top" align="start">
- *     <ShareRailTrigger />
- *   </ShareMatchButton>
+ *   <ShareMatchButton trigger={ShareRailTrigger} side="top" align="start" />
  *
  * It owns the popover, its panel and the ⌘⇧L / Ctrl+Shift+L shortcut; the
  * trigger owns only how it looks. The match comes from `MatchDataProvider`, so
  * this must render under the match detail layout.
  */
 export function ShareMatchButton({
-  children,
+  trigger: Trigger,
   side = "bottom",
   align = "end",
 }: ShareMatchButtonProps): React.JSX.Element {
@@ -69,7 +86,9 @@ export function ShareMatchButton({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>{children}</PopoverTrigger>
+      <PopoverTrigger asChild>
+        <Trigger />
+      </PopoverTrigger>
 
       <PopoverContent
         side={side}
@@ -132,15 +151,17 @@ function useIsMac(): boolean | null {
 
 /**
  * The rail footer's Share button (design 04 F1): full width, the DS primary at
- * 36px, `Share2` and "Share". Pass it as `ShareMatchButton`'s child — Radix
- * hands it `onClick`, the popover ARIA and a `ref`, and it spreads all of them
- * onto the `<button>` (React 19 passes `ref` as a plain prop; no
- * `forwardRef`). Focus is `advButton()`'s own ring, so none is written here.
+ * 36px, `Share2` and "Share". Pass it as `ShareMatchButton`'s `trigger` — the
+ * component itself, never `<ShareRailTrigger />`; see that prop's note for
+ * what rendering it across the RSC boundary costs. Radix hands it `onClick`,
+ * the popover ARIA and a `ref`, and it spreads all of them onto the `<button>`
+ * (React 19 passes `ref` as a plain prop; no `forwardRef`). Focus is
+ * `advButton()`'s own ring, so none is written here.
  */
 export function ShareRailTrigger({
   className,
   ...props
-}: Omit<ComponentProps<"button">, "children">): React.JSX.Element {
+}: ShareTriggerProps): React.JSX.Element {
   const isMac = useIsMac();
 
   return (
