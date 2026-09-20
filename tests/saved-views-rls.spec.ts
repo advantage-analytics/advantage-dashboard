@@ -479,12 +479,17 @@ test.describe("saved_views RLS (live)", () => {
     expect(unchanged.data?.account_id).toBe(programId);
   });
 
-  test("staff can unshare a view; the creator still sees it", async () => {
+  // Postgres re-checks the SELECT policy against the UPDATE's NEW row too
+  // (not just OLD via `using`): flipping `shared` to `false` produces a NEW
+  // row staff can no longer see, so the update is denied — a safe deny, and
+  // the intended behaviour: staff moderate a shared view by renaming or
+  // deleting it, but only its creator can make it private again.
+  test("staff cannot unshare someone else's shared view (only its creator can)", async () => {
     const insert = await player1.client
       .from("saved_views")
       .insert({
         account_id: programId,
-        name: "Staff Unshares This",
+        name: "Staff Cannot Unshare This",
         cut: "serve",
         chart: "scatter",
         shared: true,
@@ -499,21 +504,91 @@ test.describe("saved_views RLS (live)", () => {
       .update({ shared: false })
       .eq("id", rowId)
       .select("id");
+    if (update.error) {
+      expect(update.error.code).toBe(INSUFFICIENT_PRIVILEGE);
+    } else {
+      expect(update.data).toHaveLength(0);
+    }
+
+    const stillShared = await admin
+      .from("saved_views")
+      .select("shared")
+      .eq("id", rowId)
+      .single();
+    expect(stillShared.data?.shared).toBe(true);
+  });
+
+  test("staff can rename a shared view (moderation)", async () => {
+    const insert = await player1.client
+      .from("saved_views")
+      .insert({
+        account_id: programId,
+        name: "Before Staff Rename",
+        cut: "serve",
+        chart: "scatter",
+        shared: true,
+      })
+      .select("id")
+      .single();
+    expect(insert.error).toBeNull();
+    const rowId = insert.data!.id as string;
+
+    const update = await staff.client
+      .from("saved_views")
+      .update({ name: "After Staff Rename" })
+      .eq("id", rowId)
+      .select("id");
     expect(update.error).toBeNull();
     expect(update.data).toHaveLength(1);
+
+    const byCreator = await player1.client
+      .from("saved_views")
+      .select("name")
+      .eq("id", rowId)
+      .single();
+    expect(byCreator.data?.name).toBe("After Staff Rename");
+  });
+
+  test("the creator can unshare their own view; it disappears for teammates and staff", async () => {
+    const insert = await player1.client
+      .from("saved_views")
+      .insert({
+        account_id: programId,
+        name: "Creator Unshares This",
+        cut: "serve",
+        chart: "scatter",
+        shared: true,
+      })
+      .select("id")
+      .single();
+    expect(insert.error).toBeNull();
+    const rowId = insert.data!.id as string;
+
+    const update = await player1.client
+      .from("saved_views")
+      .update({ shared: false })
+      .eq("id", rowId)
+      .select("id");
+    expect(update.error).toBeNull();
+    expect(update.data).toHaveLength(1);
+
+    const byPlayer2 = await player2.client
+      .from("saved_views")
+      .select("id")
+      .eq("id", rowId);
+    expect(byPlayer2.data).toHaveLength(0);
+
+    const byStaff = await staff.client
+      .from("saved_views")
+      .select("id")
+      .eq("id", rowId);
+    expect(byStaff.data).toHaveLength(0);
 
     const byCreator = await player1.client
       .from("saved_views")
       .select("id")
       .eq("id", rowId);
     expect(byCreator.data).toHaveLength(1);
-
-    // No longer shared, and player2 never owned it — invisible again.
-    const byPlayer2 = await player2.client
-      .from("saved_views")
-      .select("id")
-      .eq("id", rowId);
-    expect(byPlayer2.data).toHaveLength(0);
   });
 
   test("an anonymous client cannot read saved_views", async () => {
