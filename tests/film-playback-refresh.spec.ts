@@ -211,6 +211,10 @@ test.beforeAll(async () => {
             "next/dynamic": resolve(
               "tests/fixtures/next-dynamic-browser-mock.tsx",
             ),
+            // No router in a bare createRoot; `useSearchParams` answers null.
+            "next/navigation": resolve(
+              "tests/fixtures/next-navigation-browser-mock.ts",
+            ),
             // Two `NEXT_PUBLIC_` reads a plain bundle never substitutes.
             [resolve("src/lib/supabase/client.ts")]: resolve(
               "tests/fixtures/supabase-client-browser-mock.ts",

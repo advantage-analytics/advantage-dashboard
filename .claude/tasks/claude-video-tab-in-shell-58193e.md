@@ -87,7 +87,7 @@ ready).
 
 ## T6 · Mirror the quick cut into the URL
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1
 - **files:** (guess) film/film-tab.tsx

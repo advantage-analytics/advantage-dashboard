@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
@@ -20,7 +21,7 @@ import { FilmEntryActions } from "./film-entry-actions";
 import { FilmUnavailableState } from "./film-unavailable-state";
 import { FilmPlayer, type FilmPlayerHandle } from "./film-player";
 import { PointList } from "./point-list";
-import type { FilmSectionId } from "./filters/types";
+import { parseCut, serializeCut, type FilmSectionId } from "./filters/types";
 import { scoreColumns } from "./film-score";
 import {
   activeShotAt,
@@ -119,7 +120,33 @@ function FilmRoom({
   // even when somebody clicks two bookmarks in the same tick.
   const pointsRef = useRef<MatchPoint[]>(serverPoints);
 
-  const [filters, setFilters] = useState<FilmFilters>(DEFAULT_FILM_FILTERS);
+  // `useSearchParams()` can be null outside a Next router (the playback
+  // harness mounts this with a bare createRoot); parseCut tolerates that.
+  const searchParams = useSearchParams();
+  const [filters, setFilters] = useState<FilmFilters>(() => ({
+    ...DEFAULT_FILM_FILTERS,
+    ...parseCut(searchParams),
+  }));
+  // Mirror the quick cut into the URL so a reload or a shared link reopens the
+  // same cut. Native history, no router call: Next keeps `useSearchParams` in
+  // sync with `replaceState` and nothing refetches, so the film neither pauses
+  // nor reloads. Pattern from
+  // node_modules/next/dist/docs/01-app/02-guides/single-page-applications.md
+  // ("Using the native History API"). `serializeCut` is the only writer, so
+  // Advanced axes never reach the URL and `tab=film` etc. are carried through.
+  // Reads `window.location.search` (not the hook) so it never races a stale
+  // snapshot, skips when already equal, and has no cleanup so unmount leaves
+  // the query string alone.
+  useEffect(() => {
+    const current = window.location.search.replace(/^\?/, "");
+    const next = serializeCut(filters, current);
+    if (next === current) return;
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`,
+    );
+  }, [filters]);
   // Advanced lives in the list column and its section state outlives the
   // panel, so a reopen finds the sections as they were left.
   const [advancedOpen, setAdvancedOpen] = useState(false);

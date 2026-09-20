@@ -54,3 +54,13 @@ is the runner's. Newest entries at the bottom.
 1. The header comment left in `film-filters.tsx` still describes the old Apply-not-live behaviour and segmented rows.
 2. Esc to close the panel is not wired; T8 owns window key handling.
 3. Not exercised in a browser: open, apply, reopen.
+
+## T6 · Mirror the quick cut into the URL — done
+
+**gate:** mechanical pass (after two re-runs: `film-playback-refresh.spec.ts` "a paused viewer is in the same place on the new credential" failed once in the full run and passed alone, then `teams-management.spec.ts` (live DB) failed once and passed alone; the third full run was clean); completion review pass
+**changed:** `FilmRoom`'s `filters` state now initialises from `{ ...DEFAULT_FILM_FILTERS, ...parseCut(searchParams) }` (null tolerated), and an effect keyed on `filters` mirrors the quick cut into the URL with `window.history.replaceState` through `serializeCut`, skipping the write when the query is already equal. No router calls or `pushState`; Advanced axes never reach the URL, and `tab=film` and other params carry through. The comment at the effect names `node_modules/next/dist/docs/01-app/02-guides/single-page-applications.md`. Outside `files:`: `tests/film-playback-refresh.spec.ts` and `tests/fixtures/next-navigation-browser-mock.ts` gain a `next/navigation` alias and a null-returning `useSearchParams()`, because the webpack-bundled harness otherwise pulled in Next's real runtime and never hydrated.
+**follow-ups:**
+
+1. Back/forward does not re-read the URL into `filters`; replace-only history has no entries to step through.
+2. The film-playback spec failed once in a loaded full run; if it recurs, check whether the new effect adds enough render work to tip its timing.
+3. Not exercised in a real browser.
