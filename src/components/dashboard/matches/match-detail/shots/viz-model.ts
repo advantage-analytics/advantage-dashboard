@@ -453,6 +453,17 @@ export function pointMatchesFilters(
   filters: ShotFilterState,
   frame: "serve" | "return",
   subjectIsPlayer1: boolean,
+  /**
+   * The frame the `court` filter reads, independent of `frame` (which only
+   * governs `ball`'s first/second-serve meaning). Defaults to `frame`, which
+   * is correct for the serve and return cuts (their `court` and `ball`
+   * agree). `computeRallyViz` is the one caller that diverges: it passes
+   * `frame: "serve"` purely for `ball`'s meaning (which serve started the
+   * point) while the rally shot itself has no serve-box landing side of its
+   * own, so `court` must stay score-based — pass `courtFrame: "return"`
+   * there, same as the other non-serve cuts.
+   */
+  courtFrame: "serve" | "return" = frame,
 ): boolean {
   if (filters.set.length && !filters.set.includes(p.setNumber)) return false;
 
@@ -474,7 +485,7 @@ export function pointMatchesFilters(
 
   if (filters.court.length) {
     const side =
-      frame === "serve"
+      courtFrame === "serve"
         ? (serveLandingSide(p) ?? getPointSide(p.pointScore))
         : getPointSide(p.pointScore);
     if (!filters.court.includes(side)) return false;
@@ -586,8 +597,16 @@ function computeRallyViz(
   for (const p of points) {
     // "ball" reads as the serve-frame meaning here (first/second serve
     // point) — the rally itself has no "first/second" concept of its own,
-    // it's whichever serve started the point that's being asked about.
-    const passes = pointMatchesFilters(p, filters, "serve", subjectIsPlayer1);
+    // it's whichever serve started the point that's being asked about. But
+    // "court" must stay score-based (courtFrame: "return") — a rally shot
+    // has no serve-box landing side of its own, unlike the actual serve cut.
+    const passes = pointMatchesFilters(
+      p,
+      filters,
+      "serve",
+      subjectIsPlayer1,
+      "return",
+    );
     const subjectWon = p.wonByPlayer1 === subjectIsPlayer1;
 
     for (const shot of p.shots ?? []) {

@@ -1153,6 +1153,58 @@ test.describe("computeViz — rallyPosition cut", () => {
   test("filterKeysFor(rallyPosition) has no zone key (serve-only concept)", () => {
     expect(filterKeysFor("rallyPosition")).not.toContain("zone");
   });
+
+  test("the court filter reads the score-based side, not the serve's landing side", () => {
+    // pointScore "15-0" -> SCORE_MAP sums to 1 (odd) -> score-based side is
+    // "ad". firstShotLandingX stays at the point() default (-1.0), which
+    // reads as serve-frame side "deuce". Before the fix, computeRallyViz
+    // passed a single "serve" frame into pointMatchesFilters for BOTH ball
+    // and court, so `court: ["ad"]` incorrectly fell back to the serve's
+    // landing side ("deuce") and dropped this point. It must match on the
+    // score-based side instead, same as the return cuts.
+    const pts = [
+      point({
+        pointScore: "15-0",
+        shots: [shot({ shotNumber: 3, isPlayer1: true, id: "ad-side" })],
+      }),
+    ];
+    const r = computeViz(
+      pts,
+      "rallyPosition",
+      { ...EMPTY_VIZ_FILTERS, court: ["ad"] },
+      true,
+    );
+    expect(r.dots.map((d) => d.id)).toEqual(["ad-side"]);
+    expect(r.count).toBe(1);
+  });
+
+  test("a rally shot landing at the far end mirrors through contactMetricsFromLanding's didFlip branch", () => {
+    // landingY (19.77) > REAL_NET_Y (11.885) -> didFlip. contactY (1.77) is
+    // chosen so the flipped contactNorm.ly (23.77 - 1.77 = 22.0) and the
+    // flipped contactNorm.lx (-0.5) land exactly where the no-flip fixture
+    // above (`contactX=0.5, contactY=22.0, landingY=4.0`) does, but with the
+    // lateral sign mirrored — proving the flip, not just a coincidence of
+    // depth math that ignores it.
+    const pts = [
+      point({
+        shots: [
+          shot({
+            shotNumber: 3,
+            isPlayer1: true,
+            id: "far-end",
+            contactX: 0.5,
+            contactY: 1.77,
+            landingX: -0.5,
+            landingY: 19.77,
+          }),
+        ],
+      }),
+    ];
+    const r = computeViz(pts, "rallyPosition", EMPTY_VIZ_FILTERS, true);
+    expect(r.dots).toHaveLength(1);
+    expect(r.dots[0].lateralM).toBeCloseTo(0.5, 5);
+    expect(r.dots[0].depthM).toBeCloseTo(-1.77, 5);
+  });
 });
 
 /* ── G3a: binDots ──────────────────────────────────────────────────────── */
