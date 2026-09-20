@@ -122,6 +122,7 @@ export function FloatMenuItem({
   disabled = false,
   onSelect,
   icon,
+  trailing,
   className,
 }: {
   label: string;
@@ -132,6 +133,8 @@ export function FloatMenuItem({
   onSelect: () => void;
   /** A 12px leading glyph for action menus, which have no chosen row. */
   icon?: React.ReactNode;
+  /** A trailing glyph for a row that opens something (a chevron); no chosen state. */
+  trailing?: React.ReactNode;
   className?: string;
 }) {
   return (
@@ -139,6 +142,8 @@ export function FloatMenuItem({
       type="button"
       role={icon ? "menuitem" : "menuitemradio"}
       aria-checked={icon ? undefined : chosen}
+      // A row that opens something (`trailing`) is an action, not a choice.
+      {...(trailing ? { role: "menuitem", "aria-checked": undefined } : null)}
       aria-disabled={disabled || undefined}
       onClick={disabled ? undefined : onSelect}
       className={cn(
@@ -169,7 +174,13 @@ export function FloatMenuItem({
         ) : null}
       </span>
       {/* Pinned to the label's line, not centred on a two-line row. */}
-      {!icon && <ChosenCheck chosen={chosen} className="mt-[2px]" />}
+      {trailing ? (
+        <span aria-hidden="true" className="mt-[3px] flex w-3 shrink-0">
+          {trailing}
+        </span>
+      ) : (
+        <>{!icon && <ChosenCheck chosen={chosen} className="mt-[2px]" />}</>
+      )}
     </button>
   );
 }
@@ -186,4 +197,16 @@ export function FloatMenuNote({ children }: { children: React.ReactNode }) {
 /** A hairline between groups of items. */
 export function FloatMenuDivider() {
   return <div className="mx-2 my-1 h-px bg-[var(--border-hairline)]" />;
+}
+
+/**
+ * The caption over a group of rows in a menu with more than one (Show points /
+ * Serve). Sentence case, not an eyebrow — 11px `--ink-500`.
+ */
+export function FloatMenuCaption({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="px-[9px] pt-[7px] pb-[5px] text-[11px] text-[var(--ink-500)]">
+      {children}
+    </span>
+  );
 }

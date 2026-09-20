@@ -1,9 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  SlidersHorizontal,
+} from "lucide-react";
 
 import type { MatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import {
+  FloatMenu,
+  FloatMenuCaption,
+  FloatMenuDivider,
+  FloatMenuItem,
+  FloatMenuNote,
+} from "@/components/ui/float-menu";
 import { cn } from "@/lib/utils";
 
 import {
@@ -13,7 +25,12 @@ import {
   FilmDarkMenuLabel,
   FilmDarkMenuNote,
 } from "./film-dark-menu";
-import { lastNameOf, type FilmFilters } from "./film-filters";
+import {
+  cutName,
+  hasActiveFilmFilters,
+  lastNameOf,
+  type FilmFilters,
+} from "./film-filters";
 
 /**
  * The three filters you reach for mid-rally (handoff F4), anchored to the
@@ -27,11 +44,15 @@ export function FilmQuickFilters({
   onFiltersChange,
   sides,
   onOpenAdvanced,
+  tone,
 }: {
   filters: FilmFilters;
   onFiltersChange: (next: FilmFilters) => void;
   sides: MatchSides;
-  onOpenAdvanced: () => void;
+  /** Absent = no "Advanced filters…" row. */
+  onOpenAdvanced?: () => void;
+  /** "dark" is the fullscreen film's menu; "light" is the in-shell list's. */
+  tone: "light" | "dark";
 }) {
   const [open, setOpen] = useState(false);
 
@@ -45,6 +66,109 @@ export function FilmQuickFilters({
     onFiltersChange({ ...filters, ...next });
     setOpen(false);
   };
+
+  if (tone === "light") {
+    return (
+      <FloatMenu
+        open={open}
+        onOpenChange={setOpen}
+        label="Point filters"
+        width={284}
+        align="start"
+        sideOffset={6}
+        className="rounded-[12px] [box-shadow:var(--shadow-dropdown)]!"
+        trigger={
+          <button
+            type="button"
+            aria-expanded={open}
+            className={cn(
+              "inline-flex h-7 cursor-pointer items-center gap-2 rounded-[var(--radius-element)] px-2 text-[12px] font-medium text-[var(--ink-900)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+              open && "bg-[var(--surface-subtle)]",
+            )}
+          >
+            <SlidersHorizontal
+              className="h-[13px] w-[13px]"
+              style={{
+                color: hasActiveFilmFilters(filters)
+                  ? "var(--blue)"
+                  : "var(--ink-500)",
+              }}
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+            {cutName(filters, sides)}
+            {open ? (
+              <ChevronUp
+                className="h-3 w-3 text-[var(--ink-400)]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+            ) : (
+              <ChevronDown
+                className="h-3 w-3 text-[var(--ink-400)]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+            )}
+          </button>
+        }
+      >
+        <FloatMenuCaption>Show points</FloatMenuCaption>
+        <FloatMenuItem
+          label="All points"
+          chosen={show === "all"}
+          onSelect={() => pick({ pressure: "any", savedOnly: false })}
+        />
+        <FloatMenuItem
+          label="Break points"
+          description="Points that could break serve"
+          chosen={show === "break"}
+          onSelect={() => pick({ pressure: "break", savedOnly: false })}
+        />
+        <FloatMenuItem
+          label="Saved only"
+          chosen={show === "saved"}
+          onSelect={() => pick({ pressure: "any", savedOnly: true })}
+        />
+        <FloatMenuDivider />
+        <FloatMenuCaption>Serve</FloatMenuCaption>
+        <FloatMenuItem
+          label="Either"
+          chosen={filters.server === "any"}
+          onSelect={() => pick({ server: "any" })}
+        />
+        <FloatMenuItem
+          label={`${lastNameOf(sides.you.name)} serving`}
+          chosen={filters.server === "you"}
+          onSelect={() => pick({ server: "you" })}
+        />
+        <FloatMenuItem
+          label={`${lastNameOf(sides.opp.name)} serving`}
+          chosen={filters.server === "opp"}
+          onSelect={() => pick({ server: "opp" })}
+        />
+        {onOpenAdvanced ? (
+          <>
+            <FloatMenuDivider />
+            <FloatMenuItem
+              label="Advanced filters…"
+              trailing={
+                <ChevronRight
+                  className="h-3 w-3 text-[var(--ink-400)]"
+                  strokeWidth={1.8}
+                />
+              }
+              onSelect={() => {
+                setOpen(false);
+                onOpenAdvanced();
+              }}
+            />
+          </>
+        ) : null}
+        <FloatMenuNote>Filters apply to ↑↓ as well as the list.</FloatMenuNote>
+      </FloatMenu>
+    );
+  }
 
   return (
     <FilmDarkMenu
@@ -103,21 +227,25 @@ export function FilmQuickFilters({
         chosen={filters.server === "opp"}
         onSelect={() => pick({ server: "opp" })}
       />
-      <FilmDarkMenuDivider />
-      <FilmDarkMenuItem
-        label="Advanced filters…"
-        trailing={
-          <ChevronRight
-            className="h-3 w-3 text-white/50"
-            strokeWidth={1.8}
-            aria-hidden="true"
+      {onOpenAdvanced ? (
+        <>
+          <FilmDarkMenuDivider />
+          <FilmDarkMenuItem
+            label="Advanced filters…"
+            trailing={
+              <ChevronRight
+                className="h-3 w-3 text-white/50"
+                strokeWidth={1.8}
+                aria-hidden="true"
+              />
+            }
+            onSelect={() => {
+              setOpen(false);
+              onOpenAdvanced();
+            }}
           />
-        }
-        onSelect={() => {
-          setOpen(false);
-          onOpenAdvanced();
-        }}
-      />
+        </>
+      ) : null}
       <FilmDarkMenuNote>
         Filters apply to ↑↓ as well as the list.
       </FilmDarkMenuNote>

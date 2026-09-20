@@ -252,6 +252,7 @@ export function FilmPointPanel({
           onFiltersChange={onFiltersChange}
           sides={sides}
           onOpenAdvanced={() => setAdvancedOpen(true)}
+          tone="dark"
         />
         <button
           type="button"

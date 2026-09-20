@@ -14,3 +14,13 @@ is the runner's. Newest entries at the bottom.
 **reason:** `tests/float-menu-selected-option.spec.ts` (2 tests) reads `ui/float-menu.tsx` as source and pins the strings `role={icon ? "menuitem" : "menuitemradio"}`, `aria-checked={icon ? undefined : chosen}` and `{!icon && <ChosenCheck chosen={chosen} className="mt-[2px]" />}`. The subagent's `trailing` prop rewrote those lines (`isAction`), so both fail. Everything else passed, including typecheck and lint.
 **stash:** 3a320a211973c7f514c194fd6f62e540ad4b250d
 **fix hint:** keep those three lines byte-identical and add the trailing slot beside them (for example a separate branch for `trailing`), or update the spec deliberately. The rest of the T2 work is believed complete.
+
+## T2 · Give FilmQuickFilters a light tone through FloatMenu — done
+
+**gate:** mechanical pass (after one re-run: `program-owner-name-live.spec.ts` failed once under the shared live-DB auth limit and passed alone); completion review pass
+**changed:** Re-run of the blocked attempt, with the float-menu fix applied by hand at the author's request. `FilmQuickFilters` takes `tone`, with a light branch built on `FloatMenu` (width 284, 12px radius and `--shadow-dropdown` through `className`) and `onOpenAdvanced` optional. `float-menu.tsx` gains a `FloatMenuCaption` export and an optional `trailing` slot on `FloatMenuItem`, with the three source lines `float-menu-selected-option.spec.ts` pins left byte-identical (the trailing row's role is a spread override after them).
+**follow-ups:**
+
+1. Row padding in the frame is 7/9px and radius 6px; `FloatMenuItem` keeps its shared 7/10px and 7px.
+2. The `role` override on the `trailing` row is order-dependent; restructure if a reviewer objects.
+3. Nothing renders `FilmQuickFilters` with `tone="light"` yet; T3 does.

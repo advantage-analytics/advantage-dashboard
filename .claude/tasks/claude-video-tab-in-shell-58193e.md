@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Give FilmQuickFilters a light tone through FloatMenu
 
-- **status:** blocked
+- **status:** done
 - **model:** sonnet
 - **needs:** T1
 - **files:** (guess) film/film-quick-filters.tsx, src/components/ui/float-menu.tsx, film/film-point-panel.tsx
