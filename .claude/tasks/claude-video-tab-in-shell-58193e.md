@@ -74,7 +74,7 @@ ready).
 
 ## T5 · Swap the Advanced panel into the list column; delete FilmFiltersPanel
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T3, T4
 - **files:** (guess) film/point-list.tsx, film/film-tab.tsx, film/film-filters.tsx

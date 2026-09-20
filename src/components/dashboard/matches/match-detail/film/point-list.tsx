@@ -12,7 +12,9 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { cn } from "@/lib/utils";
 
 import { filmProgressWidth } from "./film-clock";
+import { FilmAdvancedPanel } from "./film-advanced-panel";
 import { FilmQuickFilters } from "./film-quick-filters";
+import type { FilmSectionId } from "./filters/types";
 import { scoreColumns, youFirstScore } from "./film-score";
 import {
   DEFAULT_FILM_FILTERS,
@@ -53,6 +55,12 @@ interface PointListProps {
   visiblePoints: MatchPoint[];
   filters: FilmFilters;
   onFiltersChange: (filters: FilmFilters) => void;
+  /** Advanced takes this column; the state is the film tab's, so it and the
+   *  open sections survive the list re-rendering. */
+  advancedOpen: boolean;
+  onAdvancedOpenChange: (open: boolean) => void;
+  openSections: FilmSectionId[];
+  onOpenSectionsChange: (next: FilmSectionId[]) => void;
   /** Point whose window contains the playhead, and how far through it is. */
   activePointId: string | null;
   /** Film-clock window of the playing point; its rule reads `--film-t`. */
@@ -100,6 +108,10 @@ export const PointList = memo(function PointList({
   visiblePoints,
   filters,
   onFiltersChange,
+  advancedOpen,
+  onAdvancedOpenChange,
+  openSections,
+  onOpenSectionsChange,
   activePointId,
   activeStart,
   activeEnd,
@@ -192,7 +204,25 @@ export const PointList = memo(function PointList({
       className="surface-card flex max-h-full min-h-0 flex-col"
       style={{ padding: "10px 8px" }}
     >
-      {/* The header IS the applied-filter strip (handoff P1/P2, frame E):
+      {advancedOpen ? (
+        // Advanced takes the list's own column, inside this same card: Apply
+        // commits the draft and returns to the list, Close returns without
+        // touching the cut. No popover, no overlay.
+        <FilmAdvancedPanel
+          points={allPoints}
+          sides={sides}
+          filters={filters}
+          onApply={(next) => {
+            onFiltersChange(next);
+            onAdvancedOpenChange(false);
+          }}
+          onClose={() => onAdvancedOpenChange(false)}
+          openSections={openSections}
+          onOpenSectionsChange={onOpenSectionsChange}
+        />
+      ) : (
+        <>
+          {/* The header IS the applied-filter strip (handoff P1/P2, frame E):
           one 28px trigger naming the cut, a 22px clear beside it once a cut
           is on, and `matched / total` on the right. No Saved pill, no chips
           row, no second strip anywhere in the column — the words and the
@@ -201,101 +231,108 @@ export const PointList = memo(function PointList({
           It sits OUTSIDE the scroller and outside the zero-state branch
           below, so the frame the column always has stays drawn while the
           rows are empty (P5: furniture, never a skeleton). */}
-      <div className="mx-1 flex items-center gap-1.5 border-b border-[var(--border-hairline)] pt-1 pb-2.5">
-        {/* The quick menu owns the trigger; `tone="light"` is the in-shell
-            set of tokens. No `onOpenAdvanced` yet — the Advanced panel takes
-            this column in the next step, and a row that opened nothing would
-            be worse than no row. */}
-        <FilmQuickFilters
-          filters={filters}
-          onFiltersChange={onFiltersChange}
-          sides={sides}
-          tone="light"
-        />
+          <div className="mx-1 flex items-center gap-1.5 border-b border-[var(--border-hairline)] pt-1 pb-2.5">
+            {/* The quick menu owns the trigger; `tone="light"` is the in-shell
+            set of tokens, and its Advanced row swaps the panel into this
+            column. */}
+            <FilmQuickFilters
+              filters={filters}
+              onFiltersChange={onFiltersChange}
+              sides={sides}
+              tone="light"
+              onOpenAdvanced={() => onAdvancedOpenChange(true)}
+            />
 
-        {/* One control clears every axis at once, Advanced included. Drawn
+            {/* One control clears every axis at once, Advanced included. Drawn
             only while something is applied, so the resting header is the
             trigger and the count and nothing else. */}
-        {filtered && (
-          <button
-            type="button"
-            onClick={clearAll}
-            aria-label="Clear the cut"
-            className="inline-flex h-[22px] w-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-cell)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-          >
-            <X
-              className="h-3 w-3 text-[var(--ink-500)]"
-              strokeWidth={1.6}
-              aria-hidden="true"
-            />
-          </button>
-        )}
+            {filtered && (
+              <button
+                type="button"
+                onClick={clearAll}
+                aria-label="Clear the cut"
+                className="inline-flex h-[22px] w-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-cell)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+              >
+                <X
+                  className="h-3 w-3 text-[var(--ink-500)]"
+                  strokeWidth={1.6}
+                  aria-hidden="true"
+                />
+              </button>
+            )}
 
-        <div className="flex-1" />
+            <div className="flex-1" />
 
-        {/* Always both numbers. A count that dropped its denominator once the
+            {/* Always both numbers. A count that dropped its denominator once the
             cut emptied the list would leave the zero states saying nothing
             about how much film they are hiding. */}
-        <span className="mono tabular pr-2 text-[10px] whitespace-nowrap text-[var(--ink-400)]">
-          {visiblePoints.length}{" "}
-          <span style={{ color: "var(--ink-300)" }}>/</span> {allPoints.length}
-        </span>
-      </div>
+            <span className="mono tabular pr-2 text-[10px] whitespace-nowrap text-[var(--ink-400)]">
+              {visiblePoints.length}{" "}
+              <span style={{ color: "var(--ink-300)" }}>/</span>{" "}
+              {allPoints.length}
+            </span>
+          </div>
 
-      {groups.length === 0 ? (
-        <EmptyList
-          filters={filters}
-          sides={sides}
-          hasAnyPoints={allPoints.length > 0}
-          hasAnySaved={allPoints.some((p) => p.saved)}
-          onClear={clearAll}
-        />
-      ) : (
-        // The one scroller in the card: the header stays put while the rows
-        // scroll, the way the room's panel scrolls its list under a fixed
-        // header.
-        <div
-          ref={listRef}
-          className="flex min-h-0 flex-1 flex-col overflow-y-auto"
-        >
-          {groups.map((group) => (
-            <div key={group.key} className="flex flex-col">
-              {/* The room's game header (film-point-panel.tsx), in the light
+          {groups.length === 0 ? (
+            <EmptyList
+              filters={filters}
+              sides={sides}
+              hasAnyPoints={allPoints.length > 0}
+              hasAnySaved={allPoints.some((p) => p.saved)}
+              onClear={clearAll}
+            />
+          ) : (
+            // The one scroller in the card: the header stays put while the rows
+            // scroll, the way the room's panel scrolls its list under a fixed
+            // header.
+            <div
+              ref={listRef}
+              className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+            >
+              {groups.map((group) => (
+                <div key={group.key} className="flex flex-col">
+                  {/* The room's game header (film-point-panel.tsx), in the light
                   treatment: "SET 1 · GAME 3" in tracked mono on the left, the
                   you-first game score and the server on the right. No rule
                   under it — the rows' own spacing separates the games. */}
-              <div className="flex items-center px-3 pt-3 pb-[5px]">
-                <span className="mono text-[9px] tracking-[1.4px] text-[var(--ink-400)] uppercase">
-                  Set {group.setNumber} · Game {group.gameNumber}
-                </span>
-                <div className="flex-1" />
-                <span className="mono tabular text-[10px] text-[var(--ink-400)]">
-                  {group.gameScore ? `${group.gameScore} · ` : ""}
-                  {group.serverName} serves
-                </span>
-              </div>
+                  <div className="flex items-center px-3 pt-3 pb-[5px]">
+                    <span className="mono text-[9px] tracking-[1.4px] text-[var(--ink-400)] uppercase">
+                      Set {group.setNumber} · Game {group.gameNumber}
+                    </span>
+                    <div className="flex-1" />
+                    <span className="mono tabular text-[10px] text-[var(--ink-400)]">
+                      {group.gameScore ? `${group.gameScore} · ` : ""}
+                      {group.serverName} serves
+                    </span>
+                  </div>
 
-              {group.points.map((point) => {
-                const isYou = (point.player === "player1") === youIsPlayer1;
-                return (
-                  <PointRow
-                    key={point.id}
-                    point={point}
-                    isYou={isYou}
-                    initials={isYou ? sides.you.initials : sides.opp.initials}
-                    workspace={workspace}
-                    showPointScore={showPointScore}
-                    isActive={point.id === activePointId}
-                    activeStart={point.id === activePointId ? activeStart : 0}
-                    activeEnd={point.id === activePointId ? activeEnd : 0}
-                    onSelect={onSelect}
-                    onToggleSaved={onToggleSaved}
-                  />
-                );
-              })}
+                  {group.points.map((point) => {
+                    const isYou = (point.player === "player1") === youIsPlayer1;
+                    return (
+                      <PointRow
+                        key={point.id}
+                        point={point}
+                        isYou={isYou}
+                        initials={
+                          isYou ? sides.you.initials : sides.opp.initials
+                        }
+                        workspace={workspace}
+                        showPointScore={showPointScore}
+                        isActive={point.id === activePointId}
+                        activeStart={
+                          point.id === activePointId ? activeStart : 0
+                        }
+                        activeEnd={point.id === activePointId ? activeEnd : 0}
+                        onSelect={onSelect}
+                        onToggleSaved={onToggleSaved}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </section>
   );

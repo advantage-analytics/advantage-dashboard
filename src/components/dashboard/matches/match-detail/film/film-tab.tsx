@@ -20,6 +20,7 @@ import { FilmEntryActions } from "./film-entry-actions";
 import { FilmUnavailableState } from "./film-unavailable-state";
 import { FilmPlayer, type FilmPlayerHandle } from "./film-player";
 import { PointList } from "./point-list";
+import type { FilmSectionId } from "./filters/types";
 import { scoreColumns } from "./film-score";
 import {
   activeShotAt,
@@ -119,6 +120,10 @@ function FilmRoom({
   const pointsRef = useRef<MatchPoint[]>(serverPoints);
 
   const [filters, setFilters] = useState<FilmFilters>(DEFAULT_FILM_FILTERS);
+  // Advanced lives in the list column and its section state outlives the
+  // panel, so a reopen finds the sections as they were left.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [openSections, setOpenSections] = useState<FilmSectionId[]>([]);
   const [tab, setTab] = useState<"points" | "saved">("points");
   const [currentTime, setCurrentTime] = useState(0);
   const [room, setRoom] = useState<{ time: number; playing: boolean } | null>(
@@ -496,6 +501,10 @@ function FilmRoom({
             visiblePoints={filteredPoints}
             filters={filters}
             onFiltersChange={setFilters}
+            advancedOpen={advancedOpen}
+            onAdvancedOpenChange={setAdvancedOpen}
+            openSections={openSections}
+            onOpenSectionsChange={setOpenSections}
             activePointId={active?.stop.point.id ?? null}
             activeStart={active?.stop.start ?? 0}
             activeEnd={active?.stop.end ?? 0}

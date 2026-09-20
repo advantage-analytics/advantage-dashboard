@@ -44,3 +44,13 @@ is the runner's. Newest entries at the bottom.
 1. T5 mounts the panel and wires `onOpenAdvanced` plus the `openSections` state in `FilmRoom`; `FilmFiltersPanel` and its helpers are then dead.
 2. Result's `result` and `ended` axes overlap (winner/forced/unforced) and read as near-duplicate pill groups; decide whether to merge them.
 3. The title-row count duplicates the footer's preview number.
+
+## T5 · Swap the Advanced panel into the list column; delete FilmFiltersPanel — done
+
+**gate:** mechanical pass (after one re-run: `match-video-attachments-db.spec.ts` "two concurrent sweeps never share a row" failed once against the shared live DB and passed alone); completion review pass
+**changed:** `FilmRoom` owns `advancedOpen` and `openSections` state and passes both through `PointList`. `PointList` gives the light `FilmQuickFilters` an `onOpenAdvanced` and, while Advanced is open, renders `FilmAdvancedPanel` in place of the header and list inside the same `surface-card` section. Apply commits the draft and closes; close leaves filters alone. `FilmFiltersPanel` and its `Segmented`, `CheckRow` and `Section` helpers are deleted from `film-filters.tsx`, with every re-export kept.
+**follow-ups:**
+
+1. The header comment left in `film-filters.tsx` still describes the old Apply-not-live behaviour and segmented rows.
+2. Esc to close the panel is not wired; T8 owns window key handling.
+3. Not exercised in a browser: open, apply, reopen.
