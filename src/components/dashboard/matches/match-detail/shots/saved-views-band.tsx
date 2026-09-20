@@ -15,7 +15,7 @@ import {
 } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Plus, Users } from "lucide-react";
+import { Plus, Users } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
@@ -49,7 +49,11 @@ import {
   tileCountLabel,
   EMPTY_VIZ_FILTERS,
 } from "./viz-model";
-import { truncatePillLabels } from "./viz-labels";
+import {
+  truncatePillLabels,
+  VIZ_TILE_GRID_CLASS,
+  VIZ_TILE_GRID_STYLE,
+} from "./viz-labels";
 import { buildDefaultTiles, type DefaultTile } from "./default-tiles";
 
 /**
@@ -85,10 +89,17 @@ export function SavedViewsBand({
   workspaceKind: WorkspaceKind;
   /**
    * F4: `"wall"` (default) is the pre-existing grid — saved views only,
-   * absent with zero of them. `"focused"` is the focused view's single
-   * horizontally scrolling Views row — the six default tiles first, then
-   * saved views, then the dashed New-view tile — ALWAYS mounted, even with
-   * zero saved views. Both variants share every piece of Manage-mode state
+   * absent with zero of them. `"focused"` is the focused view's "Views"
+   * grid — the SAME 3-column wrapping grid the wall draws
+   * (`VIZ_TILE_GRID_CLASS`/`VIZ_TILE_GRID_STYLE`, `viz-labels.tsx`), never a
+   * horizontally scrolling row (that shape shipped once in this file's
+   * history and was corrected: the design frame's "5 views" with three
+   * tiles visible meant a second grid ROW below the fold, not a scroll
+   * axis) — the six default tiles first, then saved views, then the dashed
+   * New-view tile — ALWAYS mounted, even with zero saved views. The
+   * container the grid lives in scrolls the page vertically, same as the
+   * wall; nothing in this variant scrolls horizontally. Both variants share
+   * every piece of Manage-mode state
    * and every mutation handler in this file; only what gets rendered, and
    * how, differs below.
    */
@@ -125,16 +136,6 @@ export function SavedViewsBand({
   const dragStartOrderRef = useRef<string[]>([]);
   const dragLastNearestIdRef = useRef<string | null>(null);
   const prevRectsRef = useRef<Map<string, DOMRect>>(new Map());
-
-  // F4 (`variant="focused"` only): the scrolling row itself, each row item's
-  // wrapper (keyed by a default tile's own `key` or a saved view's `id`, plus
-  // the fixed `"new-view"` id for the trailing tile) for scroll-into-view,
-  // and whether the row can currently scroll further each direction (drives
-  // the prev/next buttons' visibility).
-  const rowRef = useRef<HTMLDivElement>(null);
-  const rowItemElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  const [canScrollPrev, setCanScrollPrev] = useState(false);
-  const [canScrollNext, setCanScrollNext] = useState(false);
 
   const reducedMotion = usePrefersReducedMotion();
 
@@ -323,76 +324,6 @@ export function SavedViewsBand({
     );
     prevRectsRef.current = rects;
   }, [manageMode]);
-
-  // F4 (`variant="focused"` only): which row item — a default tile's own
-  // `key`, or a saved view's `id` — is the one currently drawn in the big
-  // court, by `sameView` (`viz-url.ts`). Computed unconditionally since
-  // hooks can't run conditionally; harmless on the wall, where `state.cut`
-  // is always `null` (the wall only mounts while `state.cut === null`), so
-  // `sameView` never matches anything there.
-  const currentRowKey = useMemo(() => {
-    const dt = visibleDefaultTiles.find((tile) =>
-      sameView(state, {
-        cut: tile.cut,
-        chart: tile.state.chart,
-        filters: tile.state.filters,
-      }),
-    );
-    if (dt) return dt.key;
-    const sv = optimisticViews.find((view) =>
-      sameView(state, {
-        cut: view.cut,
-        chart: view.chart,
-        filters: view.filters,
-        id: view.id,
-      }),
-    );
-    return sv ? sv.id : null;
-  }, [state, visibleDefaultTiles, optimisticViews]);
-
-  // Scrolls the current tile into view WITHIN THE ROW ITSELF, never the
-  // page — `row.scrollLeft` only, never `scrollIntoView` (which can also
-  // scroll an ancestor vertically to bring the row's own bounding box into
-  // view). Runs on mount and whenever which tile is current changes.
-  useEffect(() => {
-    if (variant !== "focused" || currentRowKey === null) return;
-    const row = rowRef.current;
-    const el = rowItemElsRef.current.get(currentRowKey);
-    if (!row || !el) return;
-    const rowRect = row.getBoundingClientRect();
-    const elRect = el.getBoundingClientRect();
-    if (elRect.left < rowRect.left) {
-      row.scrollLeft -= rowRect.left - elRect.left;
-    } else if (elRect.right > rowRect.right) {
-      row.scrollLeft += elRect.right - rowRect.right;
-    }
-  }, [variant, currentRowKey]);
-
-  // Prev/next buttons: visible only while the row can actually scroll
-  // further that way. A scroll listener plus a `ResizeObserver` on the row
-  // itself, re-subscribed whenever the row's own content could have changed
-  // width — tile count, or entering/leaving Manage mode (the rename field
-  // and the ⋯ overlay don't resize a tile, but the tile count driving
-  // `scrollWidth` can change independently of a `ResizeObserver` firing on
-  // the row's own, unchanged, border box).
-  useEffect(() => {
-    if (variant !== "focused") return;
-    const row = rowRef.current;
-    if (!row) return;
-    function update() {
-      if (!row) return;
-      setCanScrollPrev(row.scrollLeft > 1);
-      setCanScrollNext(row.scrollLeft + row.clientWidth < row.scrollWidth - 1);
-    }
-    update();
-    row.addEventListener("scroll", update, { passive: true });
-    const ro = new ResizeObserver(update);
-    ro.observe(row);
-    return () => {
-      row.removeEventListener("scroll", update);
-      ro.disconnect();
-    };
-  }, [variant, visibleDefaultTiles.length, optimisticViews.length, manageMode]);
 
   // `optimisticViews.length`, not the `views` prop: the prop only catches up
   // once `router.refresh()` resolves, but the band must already know it's
@@ -788,82 +719,12 @@ export function SavedViewsBand({
     }
   }
 
-  /* ── F4: the focused view's scrolling Views row ───────────────────────── */
-
-  function registerRowItemEl(key: string, el: HTMLDivElement | null) {
-    if (el) rowItemElsRef.current.set(key, el);
-    else rowItemElsRef.current.delete(key);
-  }
-
-  function scrollRow(dir: 1 | -1) {
-    const row = rowRef.current;
-    if (!row) return;
-    row.scrollBy({
-      left: dir * row.clientWidth,
-      behavior: reducedMotion ? "auto" : "smooth",
-    });
-  }
-
-  /**
-   * Every row item's own focusable element, in DOM order — the anchor for a
-   * plain tile, or the `role="group"` static container for a manageable one
-   * in Manage mode. Read fresh on every arrow/Home/End press rather than
-   * cached, since Manage mode toggling or a reorder changes which nodes
-   * exist without necessarily changing `rowItemElsRef`'s keys.
-   */
-  function getRowFocusables(): HTMLElement[] {
-    const row = rowRef.current;
-    if (!row) return [];
-    return Array.from(
-      row.querySelectorAll<HTMLElement>(
-        '[role="listitem"] a[href], [role="listitem"] [role="group"]',
-      ),
-    );
-  }
-
-  /**
-   * ←/→ moves focus between row tiles; Home/End jump to the ends. Ignored
-   * while a rename field or the ⋯ menu has focus (so typing or navigating a
-   * menu is never hijacked), and only for a bare arrow — Manage mode's own
-   * ⌥←/⌥→ reorder (`handleTileKeyDown`, on each manageable tile's own
-   * wrapper) checks `e.altKey` and handles that case itself before this
-   * bubbles up; this handler only acts when `!e.altKey`.
-   */
-  function handleRowKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
-    if (e.altKey || e.metaKey || e.ctrlKey) return;
-    const target = e.target as HTMLElement;
-    if (target.closest('input, [role="menu"]')) return;
-
-    const focusables = getRowFocusables();
-    const active = document.activeElement as HTMLElement | null;
-    const idx = active ? focusables.indexOf(active) : -1;
-
-    if (e.key === "Home") {
-      e.preventDefault();
-      focusables[0]?.focus();
-      return;
-    }
-    if (e.key === "End") {
-      e.preventDefault();
-      focusables[focusables.length - 1]?.focus();
-      return;
-    }
-    if (idx === -1) return;
-    let dir = 0;
-    if (e.key === "ArrowLeft") dir = -1;
-    else if (e.key === "ArrowRight") dir = 1;
-    else return;
-    e.preventDefault();
-    const nextIdx = Math.min(Math.max(idx + dir, 0), focusables.length - 1);
-    focusables[nextIdx]?.focus();
-  }
-
   /**
    * One saved-view tile — the Manage-mode/plain branch shared by the wall's
-   * grid and the focused row, so the two can never draw it differently.
-   * `current` rings the tile Signal Blue (F4) — omitted (defaults to
-   * `false`) by the wall's own call, which never has a "current" tile to
-   * mark.
+   * grid and the focused view's grid, so the two can never draw it
+   * differently. `current` rings the tile Signal Blue (F4) — omitted
+   * (defaults to `false`) by the wall's own call, which never has a
+   * "current" tile to mark.
    */
   function renderSavedTile(
     view: SavedViewRow,
@@ -1035,137 +896,54 @@ export function SavedViewsBand({
       )}
 
       {variant === "focused" ? (
-        <div className="relative">
-          {canScrollPrev && (
-            <button
-              type="button"
-              aria-label="Previous views"
-              onClick={() => scrollRow(-1)}
-              className="absolute top-1/2 z-10 flex -translate-y-1/2 cursor-pointer items-center justify-center"
-              style={{
-                left: -14,
-                width: 28,
-                height: 28,
-                borderRadius: "var(--radius-element)",
-                backgroundColor: "var(--surface-card)",
-                borderWidth: 1,
-                borderStyle: "solid",
-                borderColor: "var(--border-hairline)",
-                boxShadow: "var(--shadow-card)",
-              }}
-            >
-              <ChevronLeft
-                className="size-3.5"
-                strokeWidth={1.5}
-                style={{ color: "var(--ink-700)" }}
-                aria-hidden="true"
-              />
-            </button>
-          )}
+        <div
+          role="list"
+          className={VIZ_TILE_GRID_CLASS}
+          style={VIZ_TILE_GRID_STYLE}
+        >
+          {visibleDefaultTiles.map((tile) => {
+            const isCurrent = sameView(state, {
+              cut: tile.cut,
+              chart: tile.state.chart,
+              filters: tile.state.filters,
+            });
+            return (
+              <div key={tile.key} role="listitem">
+                <CourtTile
+                  playerName={tile.playerName}
+                  name={tile.name}
+                  pills={tile.pills}
+                  countLabel={tile.countLabel}
+                  cut={tile.cut}
+                  dots={tile.dots}
+                  href={tile.href}
+                  current={isCurrent}
+                />
+              </div>
+            );
+          })}
 
-          <div
-            ref={rowRef}
-            role="list"
-            onKeyDown={handleRowKeyDown}
-            className="flex gap-4 overflow-x-auto"
-            style={{
-              scrollSnapType: "x mandatory",
-              scrollPaddingInline: 0,
-              overscrollBehaviorX: "contain",
-              scrollbarWidth: "none",
-            }}
-          >
-            {visibleDefaultTiles.map((tile) => {
-              const isCurrent = sameView(state, {
-                cut: tile.cut,
-                chart: tile.state.chart,
-                filters: tile.state.filters,
-              });
-              return (
-                <div
-                  key={tile.key}
-                  role="listitem"
-                  ref={(el) => registerRowItemEl(tile.key, el)}
-                  className="shrink-0"
-                  style={ROW_ITEM_STYLE}
-                >
-                  <CourtTile
-                    playerName={tile.playerName}
-                    name={tile.name}
-                    pills={tile.pills}
-                    countLabel={tile.countLabel}
-                    cut={tile.cut}
-                    dots={tile.dots}
-                    href={tile.href}
-                    current={isCurrent}
-                  />
-                </div>
-              );
-            })}
+          {optimisticViews.map((view) => {
+            const isCurrent = sameView(state, {
+              cut: view.cut,
+              chart: view.chart,
+              filters: view.filters,
+              id: view.id,
+            });
+            return (
+              <div key={view.id} role="listitem">
+                {renderSavedTile(view, { current: isCurrent })}
+              </div>
+            );
+          })}
 
-            {optimisticViews.map((view) => {
-              const isCurrent = sameView(state, {
-                cut: view.cut,
-                chart: view.chart,
-                filters: view.filters,
-                id: view.id,
-              });
-              return (
-                <div
-                  key={view.id}
-                  role="listitem"
-                  ref={(el) => registerRowItemEl(view.id, el)}
-                  className="shrink-0"
-                  style={ROW_ITEM_STYLE}
-                >
-                  {renderSavedTile(view, { current: isCurrent })}
-                </div>
-              );
-            })}
-
-            <div
-              role="listitem"
-              ref={(el) => registerRowItemEl("new-view", el)}
-              className="shrink-0"
-              style={ROW_ITEM_STYLE}
-            >
-              <NewViewTile hrefFor={hrefFor} />
-            </div>
+          <div role="listitem">
+            <NewViewTile hrefFor={hrefFor} />
           </div>
-
-          {canScrollNext && (
-            <button
-              type="button"
-              aria-label="Next views"
-              onClick={() => scrollRow(1)}
-              className="absolute top-1/2 z-10 flex -translate-y-1/2 cursor-pointer items-center justify-center"
-              style={{
-                right: -14,
-                width: 28,
-                height: 28,
-                borderRadius: "var(--radius-element)",
-                backgroundColor: "var(--surface-card)",
-                borderWidth: 1,
-                borderStyle: "solid",
-                borderColor: "var(--border-hairline)",
-                boxShadow: "var(--shadow-card)",
-              }}
-            >
-              <ChevronRight
-                className="size-3.5"
-                strokeWidth={1.5}
-                style={{ color: "var(--ink-700)" }}
-                aria-hidden="true"
-              />
-            </button>
-          )}
         </div>
       ) : (
         visibility === "full" && (
-          <div
-            className="grid gap-4"
-            style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}
-          >
+          <div className={VIZ_TILE_GRID_CLASS} style={VIZ_TILE_GRID_STYLE}>
             {optimisticViews.map((view) => (
               <div key={view.id}>{renderSavedTile(view)}</div>
             ))}
@@ -1176,17 +954,6 @@ export function SavedViewsBand({
     </div>
   );
 }
-
-/**
- * F4: the row's tile width — exactly the wall's own 3-up grid width at
- * desktop (`repeat(3, minmax(0, 1fr))` inside a `gap-4` grid), so a tile
- * reads identically whether it's on the wall or in the focused row.
- */
-const ROW_ITEM_STYLE = {
-  flex: "0 0 calc((100% - 32px) / 3)",
-  minWidth: 240,
-  scrollSnapAlign: "start",
-} as const;
 
 /** Exported for `manageable-saved-view-tile.tsx`, the other tile it's used from. */
 export function SharedGlyph() {

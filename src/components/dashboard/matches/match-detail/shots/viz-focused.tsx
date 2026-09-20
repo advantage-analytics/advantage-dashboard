@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
@@ -65,6 +65,18 @@ export function VizFocused({
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
 
   const cut = state.cut;
+
+  // F4 fix round 2: land on the court, not wherever the viewer scrolled the
+  // "Views" grid to click a tile. Keyed on `cut` alone — a stable string id
+  // of which court is shown, not the full `VizState` — so a Filters-popover
+  // edit (same cut, different filters, `viewId` cleared) never re-triggers
+  // this; only an actual tile click (a different cut) does. `behavior:
+  // "auto"` here; an animated version is a later task's to add.
+  useEffect(() => {
+    document
+      .getElementById("match-report-pane")
+      ?.scrollTo({ top: 0, behavior: "auto" });
+  }, [cut]);
 
   const subject = subjectFor(state.filters, you.isPlayer1);
   const result = useMemo(

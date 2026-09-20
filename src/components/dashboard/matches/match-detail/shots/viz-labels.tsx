@@ -35,6 +35,23 @@ export const CHART_LABEL: Record<Chart, string> = {
 export const VIZ_PILL_RADIUS = "rounded-full";
 
 /**
+ * F4 fix round 2: the one 3-column tile grid — the wall's default-cuts rows,
+ * the wall-variant `SavedViewsBand`'s saved-views grid, and the focused
+ * view's "Views" grid (which replaced an earlier horizontally-scrolling row
+ * design, corrected after live review: the frame's "5 views" with three
+ * tiles visible meant a second GRID ROW below the fold, not a scroll axis).
+ * Pulled out here, once, so the three call sites (`viz-wall.tsx`,
+ * `saved-views-band.tsx` twice) can never draw a different column count or
+ * gap — `className` for the grid + gap, `style` for the column template
+ * (Tailwind has no arbitrary-value shorthand for `repeat(3, minmax(0,1fr))`
+ * that stays this readable).
+ */
+export const VIZ_TILE_GRID_CLASS = "grid gap-4";
+export const VIZ_TILE_GRID_STYLE = {
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+} as const;
+
+/**
  * At most `max` pill labels, with a trailing `"+n"` standing in for the
  * rest — `saved-views-band.tsx`'s tile pill row, so a view with many active
  * filters still draws a fixed-height tile rather than growing with the

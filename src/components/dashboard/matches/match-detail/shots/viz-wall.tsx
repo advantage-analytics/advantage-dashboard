@@ -6,6 +6,7 @@ import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import { CourtTile } from "./court-tile";
 import { useVizState } from "./use-viz-state";
 import { buildDefaultTiles } from "./default-tiles";
+import { VIZ_TILE_GRID_CLASS, VIZ_TILE_GRID_STYLE } from "./viz-labels";
 
 /**
  * P1a/P1b: the wall of default cuts, one row per subject (you first, then
@@ -59,10 +60,7 @@ export function VizWall({ savedViewsBand }: { savedViewsBand?: ReactNode }) {
             {isEmpty ? (
               <EmptySubjectRow name={row.name} />
             ) : (
-              <div
-                className="grid gap-4"
-                style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}
-              >
+              <div className={VIZ_TILE_GRID_CLASS} style={VIZ_TILE_GRID_STYLE}>
                 {rowTiles.map((tile) => (
                   <CourtTile
                     key={tile.key}

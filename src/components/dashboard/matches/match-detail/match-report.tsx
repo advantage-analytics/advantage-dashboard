@@ -78,10 +78,23 @@ export function MatchReportRailFooter({ children }: { children: ReactNode }) {
  * the pane's own content width, which the sidebar and the rail both take from,
  * not to the window. It is the only unnamed container inside the pane; name it
  * (`@container/report`) if a nested one ever appears.
+ *
+ * `id="match-report-pane"` (F4 fix round 2): this is the ONE scrollable
+ * ancestor for every report view, including the Visualizations tab's
+ * focused court — `viz-focused.tsx` reaches it by this id to reset scroll
+ * to the top when the shown view changes (a click on a "Views" grid tile
+ * far down the page must land on the big court, not leave the viewer
+ * scrolled to where they clicked). A `ref` can't cross this boundary
+ * cleanly since `ShotsTab` mounts several DOM levels below this div with no
+ * shared context carrying a ref down; the id is the simplest correct
+ * handle, matching this codebase's existing `document.getElementById(...)`
+ * pattern for cross-tree DOM reach (e.g. `matches-page-content.tsx`,
+ * `static-schedule.tsx`).
  */
 export function MatchReportPane({ children }: { children: ReactNode }) {
   return (
     <div
+      id="match-report-pane"
       className="@container flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto"
       // White, per design-system principle 6 ("the dashboard is white" — the
       // report and its rail are `--surface-card`, and the cards separate by
