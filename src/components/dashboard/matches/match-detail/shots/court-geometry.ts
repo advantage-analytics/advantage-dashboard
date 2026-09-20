@@ -11,6 +11,15 @@
  * off these constants so the two can never drift apart.
  */
 
+import type { Cut, VizDot } from "./viz-model";
+import {
+  clampPan,
+  ZOOM_MIN,
+  ZOOM_MAX,
+  type PanZoom,
+  type Size,
+} from "./pan-zoom";
+
 /* ── Serve half court ──────────────────────────────────────────────────── */
 //
 // viewBox="93 9 334 216". The court itself is drawn inside
@@ -836,4 +845,209 @@ export function netGutterFor(
     cx: RETURN_COURT.netX - RETURN_NET_GUTTER_OFFSET,
     cy: null,
   };
+}
+
+/* ── Fullscreen viewer court frame (Phase 2A, Task 2) ─────────────────────
+ *
+ * The wall/focused views draw a SERVE half-court or a RETURN full-court
+ * (rotated on its side) — two different frames because a dot only ever
+ * needs ONE of them at a time. The fullscreen viewer draws every cut on one
+ * shared, upright, full-length court instead (so pan/zoom has a single
+ * stable frame to operate on across a cut change): the FAR half is exactly
+ * `SERVE_COURT`'s own box (far baseline at the top, net at the bottom,
+ * `farBaselineY`/`farServiceY`/`netY`/`centreX`/`netX1`/`netX2` are its
+ * `baselineY`/`serviceLineY`/`netY`/`centerX`/`netLineLeft`/`netLineRight`,
+ * unchanged), and the NEAR half is that FAR half reflected across the net
+ * line (`nearBaselineY = netY + (netY - farBaselineY)`, `nearServiceY = netY
+ * + (netY - farServiceY)`) — a hitter's-side apron the serve frame never
+ * needed to draw. `viewBox.minY` (-30) and the bottom edge (`minY + h` =
+ * 502) both extend past the two baselines so a dot struck/landed outside
+ * the lines (an out serve's real depth, a contact well behind the baseline)
+ * still has room to draw before `projectViewerDot`'s clamp kicks in.
+ */
+export const VIEWER_COURT = {
+  viewBox: { minX: 93, minY: -30, w: 334, h: 532 },
+  artPx: { w: 595, h: 948 },
+  doubles: { x: 135, y: 14, w: 250, h: 444 },
+  singlesLeft: 166.25,
+  singlesRight: 353.75,
+  farBaselineY: 14,
+  nearBaselineY: 458,
+  farServiceY: 116.5,
+  nearServiceY: 355.5,
+  centreX: 260,
+  netY: 236,
+  netX1: 122,
+  netX2: 398,
+  lineWidth: 1.6,
+  netWidth: 3,
+  markRadius: 2.2,
+  markStroke: 0.5,
+} as const;
+
+function clampNum(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * Projects a `VizDot`'s normalised court metres (`lateralM`/`depthM`, the
+ * SAME fields `projectServeMetricDot`/`projectReturnDot` already read — see
+ * `VizDot`'s own doc comment in `viz-model.ts`) onto `VIEWER_COURT`, sharing
+ * the serve frame's scale (`SERVE_LATERAL_UNITS_PER_METER`/
+ * `SERVE_DEPTH_UNITS_PER_METER`) rather than a third, independently-derived
+ * pair — `VIEWER_COURT`'s far half IS `SERVE_COURT`'s box, unchanged.
+ *
+ * Per cut (this is the ONE place that has to agree with every other
+ * frame's own convention — see each source function's doc comment):
+ *
+ * - `"serve"` / `"returnPlacement"` (landings, `servePlacementMetrics`/
+ *   `pointToReturnDots`'s `"landing"` dot): `depthM` is metres PAST THE NET
+ *   in the direction of travel (0 = net, negative = came down on the
+ *   hitter's own side — a net ball) — the exact meaning
+ *   `projectServeMetricDot`'s `depthPastNetM` already has. The dot draws in
+ *   the FAR half: `y = netY − depthM · SERVE_DEPTH_UNITS_PER_METER`, the
+ *   same formula `projectServeMetricDot` uses for `cy`.
+ * - `"returnContact"` / `"rallyPosition"` (the hitter's own contact,
+ *   `contactMetrics`): `depthM` is metres signed from the hitter's OWN
+ *   baseline — positive BEHIND it (an out-of-court contact), negative
+ *   INSIDE it (toward the net) — `projectReturnDot`'s `"contact"` `depthM`
+ *   convention, unrelated to the net. The dot draws in the NEAR half:
+ *   `y = nearBaselineY + depthM · SERVE_DEPTH_UNITS_PER_METER` (the mirror
+ *   of the landing formula above, since the near half is the far half
+ *   reflected across the net).
+ *
+ * Lateral sign is the SAME formula for all four cuts — deliberately, unlike
+ * `projectReturnDot`, which needs two opposite-signed branches
+ * (`"contact"` vs `"placement"`) ONLY because the in-shell return frame
+ * composes an outer `rotate(90 240 104.5)` with an EXTRA CSS
+ * `transform: rotate(180deg)` on `"placement"`'s own `<svg>` alone — two
+ * branches that (per that function's own doc comment) still converge on the
+ * SAME final on-screen sense: `lateralM > 0` (serve: screen-right by
+ * construction; return: "the returner's right") always ends up
+ * screen-right once every transform is composed, for BOTH branches. This
+ * frame has no such rotation at all (`VIEWER_COURT` is drawn upright, one
+ * frame, no per-cut `<svg>` transform) — so reproducing the in-shell
+ * calculation's mismatched intermediate signs here would be reproducing an
+ * artifact of a transform chain this frame doesn't have. One formula,
+ * `x = centreX + lateralM · SERVE_LATERAL_UNITS_PER_METER`, already lands
+ * `lateralM > 0` screen-right for every cut — the SAME final sense the two
+ * in-shell branches (after their different intermediate signs) both
+ * converge on. `tests/court-geometry.spec.ts` pins this against the
+ * existing `projectServeMetricDot`/`projectReturnDot` fixtures (same inputs,
+ * same left/right-of-centre verdict).
+ *
+ * `atNet` (`VizDot.atNet` — only `"serve"`/`"returnPlacement"` ever set it)
+ * overrides the depth axis to draw exactly on the net line (`y = netY`) at
+ * the dot's true lateral, per the task brief — simpler than the in-shell
+ * frames' small net-gutter inset (`netGutterFor`), since this frame's net
+ * line sits comfortably inside the viewBox on both sides already.
+ *
+ * Every result is clamped inside `VIEWER_COURT.viewBox`, inset by
+ * `markRadius`, so a dot's full glyph (never just its centre) stays
+ * on-canvas — the same "badly-out serve pins at the visible edge instead of
+ * vanishing" behaviour `projectServeMetricDot` already has.
+ */
+export function projectViewerDot(
+  cut: Cut,
+  dot: Pick<VizDot, "lateralM" | "depthM" | "atNet">,
+): { x: number; y: number } {
+  const rawX =
+    VIEWER_COURT.centreX + dot.lateralM * SERVE_LATERAL_UNITS_PER_METER;
+  const isLanding = cut === "serve" || cut === "returnPlacement";
+  const rawY = dot.atNet
+    ? VIEWER_COURT.netY
+    : isLanding
+      ? VIEWER_COURT.netY - dot.depthM * SERVE_DEPTH_UNITS_PER_METER
+      : VIEWER_COURT.nearBaselineY + dot.depthM * SERVE_DEPTH_UNITS_PER_METER;
+
+  const r = VIEWER_COURT.markRadius;
+  const xMin = VIEWER_COURT.viewBox.minX + r;
+  const xMax = VIEWER_COURT.viewBox.minX + VIEWER_COURT.viewBox.w - r;
+  const yMin = VIEWER_COURT.viewBox.minY + r;
+  const yMax = VIEWER_COURT.viewBox.minY + VIEWER_COURT.viewBox.h - r;
+
+  return {
+    x: clampNum(rawX, xMin, xMax),
+    y: clampNum(rawY, yMin, yMax),
+  };
+}
+
+// Maps a point in `VIEWER_COURT.viewBox` coordinates to the `artPx` canvas
+// `viewerInitialTransform` positions — the SVG `viewBox` → element-size
+// mapping `court-art.tsx`'s fullscreen `<svg>` performs in the browser,
+// reproduced here in TS so the initial transform can target a specific
+// on-screen spot (the near baseline) before anything has actually rendered.
+function viewerArtPoint(
+  viewBoxX: number,
+  viewBoxY: number,
+): {
+  x: number;
+  y: number;
+} {
+  return {
+    x:
+      ((viewBoxX - VIEWER_COURT.viewBox.minX) / VIEWER_COURT.viewBox.w) *
+      VIEWER_COURT.artPx.w,
+    y:
+      ((viewBoxY - VIEWER_COURT.viewBox.minY) / VIEWER_COURT.viewBox.h) *
+      VIEWER_COURT.artPx.h,
+  };
+}
+
+// Contact/rally cuts zoom in relative to the plain "fit the whole court"
+// scale landing cuts use — the task brief's own multiplier: close enough to
+// read individual contact points without the far (unused) half of the court
+// eating half the stage.
+const VIEWER_CONTACT_ZOOM_MULTIPLIER = 1.6;
+
+// Contact/rally cuts pin the near baseline at this fraction of the stage's
+// OWN height (not the art's) — the task brief's own target spot, leaving
+// headroom above for the near apron and enough below for the on-screen
+// controls docked at the bottom of the fullscreen viewer.
+const VIEWER_CONTACT_BASELINE_STAGE_FRACTION = 500 / 950;
+
+/**
+ * The fullscreen viewer's starting pan/zoom for `cut`, given the current
+ * `stage` (viewport) size — `use-pan-zoom.ts` seeds its reducer with this on
+ * mount and on every cut change, then `zoomAbout`/`panBy` (Task 1,
+ * `pan-zoom.ts`) take over from user input.
+ *
+ * `"serve"`/`"returnPlacement"` (landing cuts): fit the whole
+ * `VIEWER_COURT.artPx` (595×948) inside `stage`, centred on both axes — the
+ * same "see the whole court" starting point `viz-focused.tsx`'s existing
+ * tiles already give those two cuts.
+ *
+ * `"returnContact"`/`"rallyPosition"` (contact/rally cuts): the useful
+ * content is only the NEAR half, so start zoomed in
+ * (`VIEWER_CONTACT_ZOOM_MULTIPLIER` × the fit scale above) with the near
+ * baseline placed at `VIEWER_CONTACT_BASELINE_STAGE_FRACTION` of the
+ * stage's height and the court horizontally centred — solving
+ * `stagePoint = px + artPoint · z` for `px`/`py` with that target
+ * `stagePoint` and the near-baseline/centre-line `artPoint`s held fixed.
+ *
+ * Both branches clamp `z` to `[ZOOM_MIN, ZOOM_MAX]` (Task 1's own range)
+ * before solving `px`/`py`, then clamp the whole result with Task 1's
+ * `clampPan` so a degenerate (very small/large) `stage` can never seed a
+ * transform that immediately violates `clampPan`'s own invariant.
+ */
+export function viewerInitialTransform(cut: Cut, stage: Size): PanZoom {
+  const art = VIEWER_COURT.artPx;
+  const fitZ = Math.min(stage.w / art.w, stage.h / art.h);
+  const isLanding = cut === "serve" || cut === "returnPlacement";
+  const rawZ = isLanding ? fitZ : fitZ * VIEWER_CONTACT_ZOOM_MULTIPLIER;
+  const z = clampNum(rawZ, ZOOM_MIN, ZOOM_MAX);
+
+  let px: number;
+  let py: number;
+  if (isLanding) {
+    px = (stage.w - art.w * z) / 2;
+    py = (stage.h - art.h * z) / 2;
+  } else {
+    const centre = viewerArtPoint(VIEWER_COURT.centreX, 0);
+    const nearBaseline = viewerArtPoint(0, VIEWER_COURT.nearBaselineY);
+    px = stage.w / 2 - centre.x * z;
+    py = stage.h * VIEWER_CONTACT_BASELINE_STAGE_FRACTION - nearBaseline.y * z;
+  }
+
+  return clampPan({ z, px, py }, art, stage);
 }

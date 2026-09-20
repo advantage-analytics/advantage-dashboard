@@ -30,7 +30,14 @@ import {
   depthToViewBoxY,
   RETURN_DOT_R,
   RETURN_VIEWBOX_MIN_Y_CLEARANCE,
+  VIEWER_COURT,
+  projectViewerDot,
+  viewerInitialTransform,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
+import {
+  ZOOM_MIN,
+  ZOOM_MAX,
+} from "@/components/dashboard/matches/match-detail/shots/pan-zoom";
 
 /**
  * Pure and offline — no browser needed. Coverage for the design's own two
@@ -819,5 +826,296 @@ test.describe("RETURN_COURT viewBox extension (fix round 4B)", () => {
       netCenterlineY - RETURN_VIEWBOX_MIN_Y_CLEARANCE,
       10,
     );
+  });
+});
+
+/**
+ * Task 2 (Phase 2A): the fullscreen viewer's own shared court frame. The FAR
+ * half is `SERVE_COURT`'s own box, unchanged; the NEAR half is that box
+ * reflected across the net line.
+ */
+test.describe("VIEWER_COURT", () => {
+  test("far half matches SERVE_COURT exactly", () => {
+    expect(VIEWER_COURT.farBaselineY).toBe(SERVE_COURT.baselineY);
+    expect(VIEWER_COURT.netY).toBe(SERVE_COURT.netY);
+    expect(VIEWER_COURT.farServiceY).toBe(SERVE_COURT.serviceLineY);
+    expect(VIEWER_COURT.centreX).toBe(SERVE_COURT.centerX);
+    expect(VIEWER_COURT.netX1).toBe(SERVE_COURT.netLineLeft);
+    expect(VIEWER_COURT.netX2).toBe(SERVE_COURT.netLineRight);
+  });
+
+  test("near half is the far half reflected across the net line", () => {
+    expect(VIEWER_COURT.nearBaselineY).toBe(
+      VIEWER_COURT.netY + (VIEWER_COURT.netY - VIEWER_COURT.farBaselineY),
+    );
+    expect(VIEWER_COURT.nearBaselineY).toBe(458);
+    expect(VIEWER_COURT.nearServiceY).toBe(
+      VIEWER_COURT.netY + (VIEWER_COURT.netY - VIEWER_COURT.farServiceY),
+    );
+    expect(VIEWER_COURT.nearServiceY).toBe(355.5);
+  });
+});
+
+/**
+ * Task 2: `projectViewerDot` — the viewer's shared projection for all four
+ * cuts. Depth fixtures below reuse the exact metre values
+ * `projectServeMetricDot`'s/`projectReturnDot`'s own tests already use, so a
+ * drift between the two projections' scales fails here too.
+ */
+test.describe("projectViewerDot — serve / returnPlacement (landing, far half)", () => {
+  for (const cut of ["serve", "returnPlacement"] as const) {
+    test(`${cut}: depth 0 (at the net) lands on VIEWER_COURT.netY`, () => {
+      const { y } = projectViewerDot(cut, {
+        lateralM: 0,
+        depthM: 0,
+        atNet: false,
+      });
+      expect(y).toBeCloseTo(VIEWER_COURT.netY, 5);
+    });
+
+    test(`${cut}: depth 6.4 (the service line) lands on VIEWER_COURT.farServiceY`, () => {
+      const { y } = projectViewerDot(cut, {
+        lateralM: 0,
+        depthM: 6.4,
+        atNet: false,
+      });
+      expect(y).toBeCloseTo(VIEWER_COURT.farServiceY, 1);
+    });
+
+    test(`${cut}: depth 11.885 (a full-court depth) lands close to VIEWER_COURT.farBaselineY`, () => {
+      const { y } = projectViewerDot(cut, {
+        lateralM: 0,
+        depthM: 11.885,
+        atNet: false,
+      });
+      expect(y).toBeCloseTo(VIEWER_COURT.farBaselineY, 0);
+    });
+
+    test(`${cut}: lateral -5.485 (the doubles sideline) lands left of centre, matching projectServeMetricDot`, () => {
+      const { x } = projectViewerDot(cut, {
+        lateralM: -5.485,
+        depthM: 6.4,
+        atNet: false,
+      });
+      const shell = projectServeMetricDot({
+        lateralM: -5.485,
+        depthPastNetM: 6.4,
+      });
+      expect(x).toBeLessThan(VIEWER_COURT.centreX);
+      expect(shell.cx).toBeLessThan(SERVE_COURT.centerX);
+    });
+
+    test(`${cut}: atNet draws exactly on the net line regardless of depthM`, () => {
+      const { y } = projectViewerDot(cut, {
+        lateralM: 1,
+        depthM: -3,
+        atNet: true,
+      });
+      expect(y).toBe(VIEWER_COURT.netY);
+    });
+  }
+});
+
+test.describe("projectViewerDot — returnContact / rallyPosition (contact, near half)", () => {
+  for (const cut of ["returnContact", "rallyPosition"] as const) {
+    test(`${cut}: contact at the baseline (depthM=0) lands on VIEWER_COURT.nearBaselineY`, () => {
+      const { y } = projectViewerDot(cut, {
+        lateralM: 0,
+        depthM: 0,
+        atNet: false,
+      });
+      expect(y).toBeCloseTo(VIEWER_COURT.nearBaselineY, 5);
+    });
+
+    test(`${cut}: contact 1.524 m behind the baseline lands deeper into the apron (larger y)`, () => {
+      const { y } = projectViewerDot(cut, {
+        lateralM: 0,
+        depthM: 1.524,
+        atNet: false,
+      });
+      expect(y).toBeGreaterThan(VIEWER_COURT.nearBaselineY);
+    });
+
+    test(`${cut}: contact 1 m inside the baseline lands toward the net (smaller y)`, () => {
+      const { y } = projectViewerDot(cut, {
+        lateralM: 0,
+        depthM: -1,
+        atNet: false,
+      });
+      expect(y).toBeLessThan(VIEWER_COURT.nearBaselineY);
+    });
+
+    test(`${cut}: lateral +4.115 (the returner's right) lands right of centre, matching projectReturnDot's final on-screen sense for both "contact" and "placement"`, () => {
+      const { x } = projectViewerDot(cut, {
+        lateralM: 4.115,
+        depthM: 0,
+        atNet: false,
+      });
+      expect(x).toBeGreaterThan(VIEWER_COURT.centreX);
+    });
+  }
+});
+
+/**
+ * Mirror invariant (task brief): a dot the in-shell frame draws left/right
+ * of its own centre must draw on the SAME side in the viewer. `"contact"`
+ * and `"placement"` reach that on-screen sense through DIFFERENT
+ * intermediate `cy` signs (`projectReturnDot`'s own doc comment — the extra
+ * CSS `rotate(180deg)` on `"placement"` alone), but both converge on
+ * "lateralM > 0 ends up screen-right" — so the viewer's ONE formula agrees
+ * with both without needing a per-cut flip of its own.
+ */
+test.describe("projectViewerDot mirror invariant vs the in-shell frames", () => {
+  test("returnContact and returnPlacement agree on which side +lateralM draws, despite projectReturnDot's opposite-signed cy branches", () => {
+    const contactShell = projectReturnDot("contact", {
+      lateralM: 4.115,
+      depthM: 0,
+    });
+    const placementShell = projectReturnDot("placement", {
+      lateralM: 4.115,
+      depthM: 0,
+    });
+    // The in-shell frames disagree on the SIGN of cy relative to centerY —
+    // that's the documented, intentional opposite-branch behaviour.
+    expect(contactShell.cy).toBeLessThan(RETURN_COURT.centerY);
+    expect(placementShell.cy).toBeGreaterThan(RETURN_COURT.centerY);
+
+    // The viewer's own projection, which has no such split, agrees with
+    // both on the FINAL on-screen sense (screen-right for +lateralM).
+    const viewerContact = projectViewerDot("returnContact", {
+      lateralM: 4.115,
+      depthM: 0,
+      atNet: false,
+    });
+    const viewerPlacement = projectViewerDot("returnPlacement", {
+      lateralM: 4.115,
+      depthM: 6.4,
+      atNet: false,
+    });
+    expect(viewerContact.x).toBeGreaterThan(VIEWER_COURT.centreX);
+    expect(viewerPlacement.x).toBeGreaterThan(VIEWER_COURT.centreX);
+  });
+
+  test("serve's own sign (no rotation at all in-shell) matches the viewer directly", () => {
+    const shell = projectServeMetricDot({
+      lateralM: 5.485,
+      depthPastNetM: 6.4,
+    });
+    const viewer = projectViewerDot("serve", {
+      lateralM: 5.485,
+      depthM: 6.4,
+      atNet: false,
+    });
+    expect(shell.cx).toBeGreaterThan(SERVE_COURT.centerX);
+    expect(viewer.x).toBeGreaterThan(VIEWER_COURT.centreX);
+  });
+});
+
+test.describe("projectViewerDot clamping", () => {
+  test("an extreme far-half landing clamps inside the viewBox, inset by markRadius", () => {
+    const { x, y } = projectViewerDot("serve", {
+      lateralM: 50,
+      depthM: 50,
+      atNet: false,
+    });
+    const r = VIEWER_COURT.markRadius;
+    expect(x).toBeGreaterThanOrEqual(VIEWER_COURT.viewBox.minX + r);
+    expect(x).toBeLessThanOrEqual(
+      VIEWER_COURT.viewBox.minX + VIEWER_COURT.viewBox.w - r,
+    );
+    expect(y).toBeGreaterThanOrEqual(VIEWER_COURT.viewBox.minY + r);
+    expect(y).toBeLessThanOrEqual(
+      VIEWER_COURT.viewBox.minY + VIEWER_COURT.viewBox.h - r,
+    );
+  });
+
+  test("an extreme near-half contact clamps inside the viewBox, inset by markRadius", () => {
+    const { x, y } = projectViewerDot("returnContact", {
+      lateralM: -50,
+      depthM: 50,
+      atNet: false,
+    });
+    const r = VIEWER_COURT.markRadius;
+    expect(x).toBeGreaterThanOrEqual(VIEWER_COURT.viewBox.minX + r);
+    expect(x).toBeLessThanOrEqual(
+      VIEWER_COURT.viewBox.minX + VIEWER_COURT.viewBox.w - r,
+    );
+    expect(y).toBeGreaterThanOrEqual(VIEWER_COURT.viewBox.minY + r);
+    expect(y).toBeLessThanOrEqual(
+      VIEWER_COURT.viewBox.minY + VIEWER_COURT.viewBox.h - r,
+    );
+  });
+});
+
+/**
+ * Task 2: `viewerInitialTransform` — the fullscreen viewer's seeded pan/zoom
+ * per cut. `art` below is `VIEWER_COURT.artPx` (595×948).
+ */
+test.describe("viewerInitialTransform", () => {
+  const stage = { w: 700, h: 900 };
+  const art = VIEWER_COURT.artPx;
+  const fitZ = Math.min(stage.w / art.w, stage.h / art.h);
+
+  test("serve/returnPlacement (landing cuts): fits the whole art, centred on both axes", () => {
+    for (const cut of ["serve", "returnPlacement"] as const) {
+      const t = viewerInitialTransform(cut, stage);
+      expect(t.z).toBeCloseTo(fitZ, 6);
+      // The art's own centre point lands on the stage's own centre.
+      expect(t.px + (art.w / 2) * t.z).toBeCloseTo(stage.w / 2, 5);
+      expect(t.py + (art.h / 2) * t.z).toBeCloseTo(stage.h / 2, 5);
+    }
+  });
+
+  test("returnContact/rallyPosition (contact cuts): zooms to 1.6x fit, near baseline at 500/950 of stage height, horizontally centred", () => {
+    for (const cut of ["returnContact", "rallyPosition"] as const) {
+      const t = viewerInitialTransform(cut, stage);
+      expect(t.z).toBeCloseTo(fitZ * 1.6, 6);
+
+      const centreArtX =
+        ((VIEWER_COURT.centreX - VIEWER_COURT.viewBox.minX) /
+          VIEWER_COURT.viewBox.w) *
+        art.w;
+      const nearBaselineArtY =
+        ((VIEWER_COURT.nearBaselineY - VIEWER_COURT.viewBox.minY) /
+          VIEWER_COURT.viewBox.h) *
+        art.h;
+
+      expect(t.px + centreArtX * t.z).toBeCloseTo(stage.w / 2, 4);
+      expect(t.py + nearBaselineArtY * t.z).toBeCloseTo(
+        stage.h * (500 / 950),
+        3,
+      );
+    }
+  });
+
+  test("z is always clamped inside [ZOOM_MIN, ZOOM_MAX], even for a degenerate stage", () => {
+    for (const s of [
+      { w: 20, h: 20 },
+      { w: 20000, h: 20000 },
+    ]) {
+      for (const cut of [
+        "serve",
+        "returnPlacement",
+        "returnContact",
+        "rallyPosition",
+      ] as const) {
+        const t = viewerInitialTransform(cut, s);
+        expect(t.z).toBeGreaterThanOrEqual(ZOOM_MIN);
+        expect(t.z).toBeLessThanOrEqual(ZOOM_MAX);
+      }
+    }
+  });
+
+  test("a tiny stage clamps z to ZOOM_MIN", () => {
+    const t = viewerInitialTransform("serve", { w: 20, h: 20 });
+    expect(t.z).toBe(ZOOM_MIN);
+  });
+
+  test("a huge stage clamps z to ZOOM_MAX", () => {
+    const t = viewerInitialTransform("rallyPosition", {
+      w: 20000,
+      h: 20000,
+    });
+    expect(t.z).toBe(ZOOM_MAX);
   });
 });

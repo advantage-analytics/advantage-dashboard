@@ -1772,3 +1772,210 @@ test.describe("computeVizStats — rallyPosition cut", () => {
     expect(forehandRow.won).toBe(1);
   });
 });
+
+/* ── Task 2 (Phase 2A): VizDot.meta — the fullscreen hover readout ──────── */
+
+test.describe("VizDot.meta — serve cut", () => {
+  test("carries the point's own score/set fields and the resolved serve shot's type/result/speed", () => {
+    const p = point({
+      id: "pt-1",
+      setNumber: 2,
+      pointScore: "30-15",
+      gameScore: "2-1",
+      serverIsPlayer1: true,
+      wonByPlayer1: true,
+      shots: [
+        {
+          id: "serve-shot",
+          shotNumber: 1,
+          isPlayer1: true,
+          shotType: "First Serve",
+          spinType: null,
+          speedMph: 118,
+          zone: null,
+          result: "In",
+          videoTime: null,
+          contactX: 0,
+          contactY: 20.0,
+          landingX: -1.0,
+          landingY: 8.0,
+        },
+      ],
+    });
+    const r = computeViz([p], "serve", EMPTY_VIZ_FILTERS, true);
+    expect(r.dots).toHaveLength(1);
+    const meta = r.dots[0].meta!;
+    expect(meta).toBeDefined();
+    expect(meta.pointId).toBe("pt-1");
+    expect(meta.setNumber).toBe(2);
+    expect(meta.pointScore).toBe("30-15");
+    expect(meta.gameScore).toBe("2-1");
+    expect(meta.wonBySubject).toBe(true);
+    expect(meta.shotType).toBe("First Serve");
+    expect(meta.result).toBe("In");
+    expect(meta.speedMph).toBe(118);
+  });
+
+  test("wonBySubject flips for a player-2 viewer (guardrails §4: never a literal 'player1' check)", () => {
+    const p = point({ serverIsPlayer1: true, wonByPlayer1: true });
+    const asServer = computeViz([p], "serve", EMPTY_VIZ_FILTERS, true);
+    const asOpponent = computeViz([p], "serve", EMPTY_VIZ_FILTERS, false);
+    // Only the server's own serves draw on "serve" — flip who served too,
+    // so both subjects actually get a dot to compare.
+    const p2 = point({ serverIsPlayer1: false, wonByPlayer1: false });
+    const opponentServes = computeViz([p2], "serve", EMPTY_VIZ_FILTERS, false);
+    expect(asServer.dots[0].meta!.wonBySubject).toBe(true);
+    expect(opponentServes.dots[0].meta!.wonBySubject).toBe(true);
+    expect(asOpponent.dots).toHaveLength(0); // player 2 didn't serve this point
+  });
+
+  test("speedMph is null, never fabricated, when the shot row carries no speed", () => {
+    const p = point({ serverIsPlayer1: true, wonByPlayer1: true });
+    const r = computeViz([p], "serve", EMPTY_VIZ_FILTERS, true);
+    expect(r.dots[0].meta!.speedMph).toBeNull();
+  });
+});
+
+test.describe("VizDot.meta — return cuts", () => {
+  const withReturnShot = point({
+    id: "pt-return",
+    setNumber: 1,
+    pointScore: "0-0",
+    gameScore: "1-0",
+    serverIsPlayer1: false,
+    wonByPlayer1: true,
+    secondShotLandingX: 1.2,
+    secondShotLandingY: 4.0,
+    secondShotContactX: 0.5,
+    secondShotContactY: 23.0,
+    secondShotType: "Forehand",
+    secondShotResult: "In",
+    shots: [
+      {
+        id: "serve-row",
+        shotNumber: 1,
+        isPlayer1: false,
+        shotType: "First Serve",
+        spinType: null,
+        speedMph: null,
+        zone: null,
+        result: "In",
+        videoTime: null,
+        contactX: 0,
+        contactY: 2.0,
+        landingX: 1.0,
+        landingY: 15.0,
+      },
+      {
+        id: "return-row",
+        shotNumber: 2,
+        isPlayer1: true,
+        shotType: "Forehand",
+        spinType: null,
+        speedMph: 72,
+        zone: null,
+        result: "In",
+        videoTime: null,
+        contactX: 0.5,
+        contactY: 23.0,
+        landingX: 1.2,
+        landingY: 4.0,
+      },
+    ],
+  });
+
+  test("returnPlacement meta resolves the return shot's own type/result/speed by role", () => {
+    const r = computeViz(
+      [withReturnShot],
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    const meta = r.dots[0].meta!;
+    expect(meta.pointId).toBe("pt-return");
+    expect(meta.setNumber).toBe(1);
+    expect(meta.pointScore).toBe("0-0");
+    expect(meta.gameScore).toBe("1-0");
+    expect(meta.wonBySubject).toBe(true);
+    expect(meta.shotType).toBe("Forehand");
+    expect(meta.result).toBe("In");
+    expect(meta.speedMph).toBe(72);
+  });
+
+  test("returnContact meta reads the SAME resolved return shot as returnPlacement", () => {
+    const r = computeViz(
+      [withReturnShot],
+      "returnContact",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    const meta = r.dots[0].meta!;
+    expect(meta.shotType).toBe("Forehand");
+    expect(meta.speedMph).toBe(72);
+  });
+
+  test("falls back to the flattened secondShotType/secondShotResult when the point has no resolvable return `shots` row, with speedMph null (no flattened speed field exists to read)", () => {
+    const noShotsRow = point({
+      serverIsPlayer1: false,
+      wonByPlayer1: true,
+      secondShotLandingX: 1.2,
+      secondShotLandingY: 4.0,
+      secondShotContactX: 0.5,
+      secondShotContactY: 23.0,
+      secondShotType: "Backhand Slice",
+      secondShotResult: "In",
+    });
+    const r = computeViz(
+      [noShotsRow],
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    const meta = r.dots[0].meta!;
+    expect(meta.shotType).toBe("Backhand Slice");
+    expect(meta.result).toBe("In");
+    expect(meta.speedMph).toBeNull();
+  });
+});
+
+test.describe("VizDot.meta — rallyPosition cut", () => {
+  test("carries the point's fields and the struck shot's own type/result/speed", () => {
+    const p = point({
+      id: "pt-rally",
+      setNumber: 3,
+      pointScore: "40-30",
+      gameScore: "3-2",
+      wonByPlayer1: false,
+      shots: [
+        shot({ shotNumber: 2, isPlayer1: false, id: "return" }),
+        shot({
+          shotNumber: 3,
+          isPlayer1: true,
+          id: "s1",
+          shotType: "Backhand",
+          result: "Winner",
+          speedMph: 61,
+        }),
+      ],
+    });
+    // subjectIsPlayer1=false, wonByPlayer1=false -> subject won.
+    const r = computeViz([p], "rallyPosition", EMPTY_VIZ_FILTERS, false);
+    expect(r.dots).toHaveLength(0); // the subject (player2) struck no rally shot here
+    const rSubjectHit = computeViz(
+      [p],
+      "rallyPosition",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(rSubjectHit.dots).toHaveLength(1);
+    const meta = rSubjectHit.dots[0].meta!;
+    expect(meta.pointId).toBe("pt-rally");
+    expect(meta.setNumber).toBe(3);
+    expect(meta.pointScore).toBe("40-30");
+    expect(meta.gameScore).toBe("3-2");
+    expect(meta.wonBySubject).toBe(false); // subject=player1, wonByPlayer1=false -> lost
+    expect(meta.shotType).toBe("Backhand");
+    expect(meta.result).toBe("Winner");
+    expect(meta.speedMph).toBe(61);
+  });
+});

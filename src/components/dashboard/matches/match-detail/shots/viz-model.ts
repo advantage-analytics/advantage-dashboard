@@ -9,7 +9,12 @@
  */
 
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
-import { pickRallyShots, pickServeShotBy } from "@/lib/data/serve-return-shots";
+import {
+  isFeedShotType,
+  isServeShotType,
+  pickRallyShots,
+  pickServeShotBy,
+} from "@/lib/data/serve-return-shots";
 import {
   classifyPointResult,
   computeZoneStats as computeZoneStatsFromServeZones,
@@ -115,6 +120,34 @@ export type Outcome = "won" | "lost" | "miss";
  * `rallyPosition` dots are drawn at their own contact point, which has no
  * "never crossed the net" concept.
  */
+/**
+ * Per-dot readout for the fullscreen viewer's hover card (Phase 2A, Task 2)
+ * — every field is either already on the `MatchPoint`/`MatchShot` this dot
+ * came from, or trivially derived from it; nothing here is fetched
+ * separately, so the hover card can never show a value `computeViz` itself
+ * didn't already have in hand.
+ *
+ * `wonBySubject` derives from `subjectIsPlayer1` (guardrails §4: "you" is
+ * resolved once, everything below takes the resolved boolean), never from a
+ * literal `"player1"` check — a player-2 viewer must see their OWN
+ * won/lost, not the raw server-side winner.
+ *
+ * `speedMph` is `null` whenever the shot's own `MatchShot.speedMph` is
+ * null (never fabricated — Global Constraints: "no fabricated serve
+ * speed") — it does NOT reach back to a heavier per-shot query the way, say,
+ * video alignment does; if a shot row has no speed, this dot has no speed.
+ */
+export interface VizDotMeta {
+  pointId: string;
+  setNumber: number;
+  pointScore: string | null;
+  gameScore: string | null;
+  wonBySubject: boolean;
+  shotType: string | null;
+  result: string | null;
+  speedMph: number | null;
+}
+
 export interface VizDot {
   id: string;
   outcome: Outcome;
@@ -122,6 +155,11 @@ export interface VizDot {
   lateralM: number;
   depthM: number;
   atNet: boolean;
+  /** Optional (fix round: every existing fixture that hand-builds a `VizDot`
+   *  without it stays valid) — `computeViz`/`computeRallyViz` always set it
+   *  for a real point/shot; only absent for a caller-constructed test dot
+   *  that doesn't need the hover readout. */
+  meta?: VizDotMeta;
 }
 
 export interface VizResult {
@@ -710,6 +748,7 @@ function computeRallyViz(
         outcome: subjectWon ? "won" : "lost",
         shape: shapeFromShotType(shot.shotType),
         atNet: false,
+        meta: pointDotMeta(p, subjectIsPlayer1, shot),
       });
     }
   }
@@ -721,6 +760,54 @@ function computeRallyViz(
     noun: "shots",
     zoneStats: null,
   };
+}
+
+/**
+ * `VizDotMeta` common to every dot drawn for point `p`, plus the one shot
+ * (`shotType`/`result`/`speedMph`) the specific dot came from — `serve`
+ * reads the resolved serve shot, `returnPlacement`/`returnContact` the
+ * resolved return shot, `rallyPosition` builds its own inline (a rally dot
+ * already has its own `MatchShot` in hand from `pickRallyShots`, no
+ * resolution needed).
+ */
+function pointDotMeta(
+  p: MatchPoint,
+  subjectIsPlayer1: boolean,
+  shot:
+    | {
+        shotType?: string | null;
+        result?: string | null;
+        speedMph?: number | null;
+      }
+    | null
+    | undefined,
+): VizDotMeta {
+  return {
+    pointId: p.id,
+    setNumber: p.setNumber,
+    pointScore: p.pointScore ?? null,
+    gameScore: p.gameScore ?? null,
+    wonBySubject: p.wonByPlayer1 === subjectIsPlayer1,
+    shotType: shot?.shotType ?? null,
+    result: shot?.result ?? null,
+    speedMph: shot?.speedMph ?? null,
+  };
+}
+
+/**
+ * The return shot actually played — the same role classification
+ * `pickReturnShot` (`serve-return-shots.ts`) uses (first shot that's
+ * neither a serve nor the `Feed` row), reimplemented against `MatchShot`'s
+ * camelCase `shotType` here rather than imported: `pickReturnShot` is typed
+ * against the raw DB row's snake_case `ShotLike` (`shot_type`), the same
+ * reason `pickServeShotBy` exists as `pickServeShot`'s accessor-taking
+ * sibling — this file has no reason to add a third exported picker to
+ * `serve-return-shots.ts` for a single internal call site.
+ */
+function pointReturnShot(p: MatchPoint): MatchShot | undefined {
+  return p.shots?.find(
+    (s) => !isServeShotType(s.shotType) && !isFeedShotType(s.shotType),
+  );
 }
 
 export function computeViz(
@@ -809,6 +896,7 @@ export function computeViz(
         // landing" fact instead.
         shape: p.resultType === "Ace" ? "star" : "circle",
         atNet: metrics.kind === "net",
+        meta: pointDotMeta(p, subjectIsPlayer1, serveShot),
       });
     } else {
       if (p.serverIsPlayer1 === subjectIsPlayer1) continue;
@@ -822,6 +910,17 @@ export function computeViz(
         continue;
       count++;
       const o = returnOutcome(p, subjectIsPlayer1);
+      // `pointReturnShot` reads `p.shots` by role — but plenty of fixtures
+      // (and legacy/imported points) only ever populate the flattened
+      // `secondShotType`/`secondShotResult` fields, not a full `shots` row
+      // for the return. Fall back to those the same way the serve branch's
+      // `landingX`/`landingY` already fall back to `p.firstShotLanding*`.
+      const returnShot = pointReturnShot(p);
+      const returnMetaShot = {
+        shotType: returnShot?.shotType ?? p.secondShotType ?? null,
+        result: returnShot?.result ?? p.secondShotResult ?? null,
+        speedMph: returnShot?.speedMph ?? null,
+      };
       for (const d of mine) {
         dots.push({
           id: d.id,
@@ -830,6 +929,7 @@ export function computeViz(
           outcome: o === "outnet" ? "miss" : o,
           shape: d.shape,
           atNet: d.atNet,
+          meta: pointDotMeta(p, subjectIsPlayer1, returnMetaShot),
         });
       }
     }
