@@ -5,7 +5,7 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { WorkspaceKind } from "@/lib/workspace/types";
-import { APRON_FILL, CourtArt } from "./court-art";
+import { APRON_FILL, HEAT_APRON_FILL, CourtArt } from "./court-art";
 import { trianglePointsFor, starPoints } from "./court-geometry";
 import { StatsCard } from "./stats-card";
 import { VizToolbar } from "./viz-toolbar";
@@ -164,6 +164,12 @@ export function VizFocused({
   // real cut (`viz-url.ts`'s `VizState.draft` doc comment) — `cut` is
   // already known non-null here, past the early-return guard above.
   const isDraft = state.draft === true;
+  // Defect fix: the art box wrapper (the letterbox strips either side of the
+  // svg) must follow the court's own desaturation — heat mode desaturates,
+  // EXCEPT while drafting, where `CourtArt` below is told to draw normal
+  // (non-desaturated) colours regardless of `state.chart`.
+  const artBoxFill =
+    state.chart === "heat" && !isDraft ? HEAT_APRON_FILL : APRON_FILL;
 
   function backToWall() {
     // F5: the reverse morph. `targetKey` is the WALL TILE's dom id for
@@ -266,7 +272,7 @@ export function VizFocused({
             ref={courtArtRef}
             className="relative w-full"
             style={{
-              backgroundColor: APRON_FILL,
+              backgroundColor: artBoxFill,
               viewTransitionName: isMorphTarget
                 ? VIZ_COURT_TRANSITION_NAME
                 : undefined,

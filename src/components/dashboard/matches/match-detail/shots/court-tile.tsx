@@ -2,7 +2,7 @@
 
 import type { MouseEvent, ReactNode } from "react";
 import Link from "next/link";
-import { APRON_FILL, CourtArt } from "./court-art";
+import { APRON_FILL, HEAT_APRON_FILL, CourtArt } from "./court-art";
 import { VIZ_PILL_RADIUS } from "./viz-labels";
 import type { Chart, Cut, HeatGrid, VizDot } from "./viz-model";
 import type { VizState } from "./viz-url";
@@ -168,6 +168,11 @@ export function CourtTile({
     });
   }
 
+  // Defect fix: mirrors `CourtArt`'s own `showHeat` test exactly, so the art
+  // box wrapper (the letterbox strips around the svg) desaturates in lockstep
+  // with the court it surrounds instead of staying the normal apron green.
+  const showHeat = chart === "heat" && heat != null;
+
   const body = (
     <>
       <div
@@ -175,7 +180,7 @@ export function CourtTile({
         className="relative overflow-hidden rounded-t-[var(--radius-card)]"
         style={{
           aspectRatio: "334 / 216",
-          backgroundColor: APRON_FILL,
+          backgroundColor: showHeat ? HEAT_APRON_FILL : APRON_FILL,
           viewTransitionName: isMorphTarget
             ? VIZ_COURT_TRANSITION_NAME
             : undefined,

@@ -51,7 +51,11 @@ const DOT_STROKE_W = 0.4;
 // G3b (P2i): while a heat chart is showing, the court desaturates — the
 // design's own two literals, allowlisted alongside this file's other three
 // (`scripts/check-design-drift.mjs`). Lines stay white regardless.
-const HEAT_APRON_FILL = "#9FB3A5";
+// Exported so `viz-focused.tsx` can give the art box wrapper the same
+// desaturated colour as the court itself under `chart === "heat"` (the
+// letterbox-strip defect fix), rather than a second `#9FB3A5` literal the
+// design-drift checker doesn't allowlist there.
+export const HEAT_APRON_FILL = "#9FB3A5";
 const HEAT_COURT_FILL = "#9DB4CE";
 
 // G3b (P2j): the rally-position grid's cells draw slightly blurred so the
