@@ -3,6 +3,7 @@
 import {
   useEffect,
   useState,
+  useSyncExternalStore,
   type ComponentProps,
   type ReactElement,
 } from "react";
@@ -86,30 +87,47 @@ export function ShareMatchButton({
   );
 }
 
-/**
- * Whether to name the shortcut with ⌘ rather than Ctrl. `useState`'s lazy
- * initialiser, so it runs once per mount, during render, with no effect and
- * no second render.
- *
- * The `typeof navigator` guard is the only one, on purpose. Node 21+ has a
- * `navigator` global whose `platform` names the SERVER's OS ("MacIntel",
- * "Linux x86_64"), so this runs on both sides of hydration and they agree
- * whenever server and browser share an OS family — as they do when `next dev`
- * and the browser run on one machine, the only place a mismatch logs.
- * Guarding on `typeof window` as well would make the server always say "no"
- * and every Mac hydration disagree. Where they genuinely differ — a Linux server rendering
- * for a Mac browser — React 19 keeps the server's attribute (it never patches
- * attribute mismatches, and production does not compare them), so the button
- * announces Control+Shift+L; the listener above accepts Ctrl as well as ⌘ on
- * every platform, so that is still a shortcut that works, never a false one.
- * An environment with no `navigator` at all lands on the same Ctrl spelling.
- */
-function detectIsMac(): boolean {
-  if (typeof navigator === "undefined") return false;
+/** Whether THIS BROWSER is a Mac. Only ever called on the client. */
+function isMacBrowser(): boolean {
   const platform =
     (navigator as Navigator & { userAgentData?: { platform: string } })
       .userAgentData?.platform ?? navigator.platform;
   return /mac/i.test(platform);
+}
+
+/** The platform never changes under us, so there is nothing to subscribe to. */
+const NEVER_CHANGES = () => () => {};
+
+/**
+ * Whether to name the shortcut with ⌘ rather than Ctrl — `null` until the
+ * browser has answered.
+ *
+ * `useSyncExternalStore` is the API for exactly this: a value the server
+ * cannot know. Its server snapshot is `null`, and React uses that snapshot
+ * for the server render AND for the hydrating render, then re-renders with
+ * the browser's own answer. Server HTML and first client render therefore
+ * agree by construction — neither writes `aria-keyshortcuts` at all.
+ *
+ * Reading `navigator` during render is what this replaces. Node 21+ has a
+ * `navigator` global whose `platform` names the SERVER's OS, so the two sides
+ * agreed only when server and browser happened to share an OS family — true
+ * when `next dev` and the browser run on one machine, false on Vercel, where
+ * a Linux server renders `Control+Shift+L` into HTML that a Mac browser then
+ * hydrates as `Meta+Shift+L`. React 19 does not patch attribute mismatches,
+ * so that shipped every Mac visitor an announcement naming the wrong
+ * modifier, on top of the hydration error it logs.
+ *
+ * `aria-keyshortcuts` is read from the live DOM by assistive tech, not from
+ * the server's HTML, so arriving one render late costs the announcement
+ * nothing. The listener in `ShareMatchButton` accepts Ctrl as well as ⌘ on
+ * every platform either way.
+ */
+function useIsMac(): boolean | null {
+  return useSyncExternalStore<boolean | null>(
+    NEVER_CHANGES,
+    isMacBrowser,
+    () => null,
+  );
 }
 
 /**
@@ -123,12 +141,15 @@ export function ShareRailTrigger({
   className,
   ...props
 }: Omit<ComponentProps<"button">, "children">): React.JSX.Element {
-  const [isMac] = useState(detectIsMac);
+  const isMac = useIsMac();
 
   return (
     <button
       type="button"
-      aria-keyshortcuts={isMac ? "Meta+Shift+L" : "Control+Shift+L"}
+      // Omitted until the platform is known — see `useIsMac`.
+      aria-keyshortcuts={
+        isMac === null ? undefined : isMac ? "Meta+Shift+L" : "Control+Shift+L"
+      }
       {...props}
       className={cn(advButton("primary", "md"), "w-full gap-[7px]", className)}
     >
