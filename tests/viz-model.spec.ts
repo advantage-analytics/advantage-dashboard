@@ -297,7 +297,6 @@ test.describe("computeViz — serve cut, out & net (Task 2)", () => {
     // Fix round 4A: net folds into Miss's ordinary grey circle — no
     // distinct shape — `atNet` carries the position fact instead.
     expect(r.dots.filter((d) => d.atNet)).toHaveLength(1);
-    expect(r.dots.every((d) => d.shape !== undefined)).toBe(true);
     for (const d of r.dots) {
       expect(["circle", "triangle", "star"]).toContain(d.shape);
     }

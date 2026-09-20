@@ -131,23 +131,41 @@ export function zoneCellX(index: number): { x1: number; x2: number } {
 // consistent "just past the net" placement the serve frame already uses,
 // rather than an arbitrary inset from the old (net-less) visible edge.
 //
+// Fix round 5 (robustness, no behaviour change): the `-20.5` below is
+// `depthToViewBoxY(RETURN_COURT.netX)`'s own result, hard-coded rather than
+// computed — `depthToViewBoxY` genuinely can't be called here, since it
+// reads `RETURN_COURT.netX`/`.centerY`, and `RETURN_COURT` isn't
+// constructed yet at this point in the module (the circular dependency is
+// real). `tests/court-geometry.spec.ts` pins this identity instead, calling
+// the real (exported) `depthToViewBoxY(RETURN_COURT.netX)` once the module
+// has fully loaded and asserting it equals `RETURN_VIEWBOX_MIN_Y +
+// RETURN_VIEWBOX_MIN_Y_CLEARANCE` — so a drift in `netX`, `centerY`,
+// `RETURN_INNER_SCALE` or `RETURN_OUTER_TRANSLATE_Y` fails a test instead of
+// silently clipping the net line again.
+//
 // Clearance from the net's own centreline: half its rendered stroke width
-// (so the LINE itself isn't clipped) + one mark's nominal radius (2.4, the
-// same RETURN_DOT_R `court-art.tsx` draws every return mark at —
-// duplicated here as a literal since this geometry module doesn't import
-// render-layer constants) + a small margin so the mark's own outer edge
-// doesn't touch the frame's edge either.
+// (so the LINE itself isn't clipped) + one mark's nominal radius
+// (`RETURN_DOT_R`, below — court-art.tsx imports it from here rather than
+// keeping its own second copy) + a small margin so the mark's own outer
+// edge doesn't touch the frame's edge either.
 const RETURN_NET_STROKE_WIDTH = 1.74; // = RETURN_COURT.netStrokeWidth, below
 const RETURN_NET_HALF_STROKE = RETURN_NET_STROKE_WIDTH / 2; // 0.87
-const RETURN_MARK_RADIUS = 2.4; // = court-art.tsx's RETURN_DOT_R
+// The nominal radius every return-frame mark draws at (fix round 5: the
+// ONE source — `court-art.tsx` imports this rather than keeping its own
+// `RETURN_DOT_R` literal, and the viewBox clearance below and
+// `netGutterFor`'s clearance read the SAME export, so a radius change can't
+// silently stop being covered by either).
+export const RETURN_DOT_R = 2.4;
 const RETURN_VIEWBOX_MARGIN = 1;
 // A net-gutter mark's centre sits this far past the net's own centreline —
 // just clearing its rendered stroke — on the hitter's side (`netGutterFor`
 // below applies it as a SUBTRACTION from `RETURN_COURT.netX`, since the
 // hitter's side is the smaller-depth-x direction).
 const RETURN_NET_GUTTER_OFFSET = RETURN_NET_HALF_STROKE;
-const RETURN_VIEWBOX_MIN_Y_CLEARANCE =
-  RETURN_NET_HALF_STROKE + RETURN_MARK_RADIUS + RETURN_VIEWBOX_MARGIN; // 4.27
+// Exported so `tests/court-geometry.spec.ts` can pin the `-20.5` identity
+// above without duplicating this arithmetic a second time.
+export const RETURN_VIEWBOX_MIN_Y_CLEARANCE =
+  RETURN_NET_HALF_STROKE + RETURN_DOT_R + RETURN_VIEWBOX_MARGIN; // 4.27
 const RETURN_VIEWBOX_MIN_Y = -20.5 - RETURN_VIEWBOX_MIN_Y_CLEARANCE; // -24.77
 const RETURN_VIEWBOX_MIN_Y_ORIGINAL = -11.5; // the design handoff's own value
 // h grows by exactly how much minY decreased, so the far edge (minY + h)
@@ -350,9 +368,11 @@ const RETURN_OUTER_TRANSLATE_Y = -125;
  *            = RETURN_INNER_SCALE*(depthX - netX) + centerY
  *   outputY = rotatedY + RETURN_OUTER_TRANSLATE_Y
  * `tests/court-geometry.spec.ts` cross-checks this against an independent
- * re-implementation of the same two transform strings.
+ * re-implementation of the same two transform strings, and (fix round 5)
+ * pins `RETURN_COURT.viewBox.minY`'s own derivation against a live call to
+ * this function — see that constant's own doc comment above.
  */
-function depthToViewBoxY(depthX: number): number {
+export function depthToViewBoxY(depthX: number): number {
   return (
     RETURN_INNER_SCALE * (depthX - RETURN_COURT.netX) +
     RETURN_COURT.centerY +

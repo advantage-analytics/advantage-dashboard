@@ -5,6 +5,7 @@ import {
   SERVE_BACKGROUND_PATH,
   RETURN_COURT,
   RETURN_BACKGROUND_PATH,
+  RETURN_DOT_R,
   heatDotRadiusFor,
   heatFilterRegionFor,
   HEAT_RAMP_R_TABLE,
@@ -72,10 +73,12 @@ const HEAT_DOT_FILL_OPACITY = 0.55;
 const HEAT_BLUR_RADIUS_RATIO = 0.4;
 const HEAT_DOT_FILL = "#FFFFFF";
 
-// Serve marks are 2.54 radius, return marks 2.4 — the design's own two
-// sizes, not a shared constant (visualizations-tab-phase-1 spec).
+// Serve marks are 2.54 radius, return marks 2.4 (`RETURN_DOT_R`, imported
+// from `court-geometry.ts` — fix round 5: that module's own `RETURN_COURT`
+// viewBox clearance and `netGutterFor` need the SAME radius a net-gutter
+// mark actually draws at, so it's the one source now rather than a second
+// copy here that could silently drift from it).
 const SERVE_DOT_R = 2.54;
-const RETURN_DOT_R = 2.4;
 
 // G2b: the ace star's fill, regardless of outcome colour (an ace is always
 // won, but the star communicates "ace" first — see `ACE_STAR_FILL`'s use

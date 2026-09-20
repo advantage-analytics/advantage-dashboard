@@ -27,6 +27,9 @@ import {
   heatFloorTintRgba,
   projectServeMetricDot,
   netGutterFor,
+  depthToViewBoxY,
+  RETURN_DOT_R,
+  RETURN_VIEWBOX_MIN_Y_CLEARANCE,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
 
 /**
@@ -780,9 +783,8 @@ test.describe("RETURN_COURT viewBox extension (fix round 4B)", () => {
     expect(RETURN_COURT.netX - RETURN_HEAT_BOUNDS.xMin).toBeGreaterThan(1);
   });
 
-  test("a net-gutter mark's full radius (RETURN_DOT_R = 2.4) lies inside RETURN_HEAT_BOUNDS, not just its centre", () => {
+  test("a net-gutter mark's full radius (RETURN_DOT_R, the one source court-art.tsx also reads) lies inside RETURN_HEAT_BOUNDS, not just its centre", () => {
     const gutter = netGutterFor("returnPlacement");
-    const RETURN_DOT_R = 2.4; // court-art.tsx's own nominal mark radius
     expect(gutter.cx! - RETURN_DOT_R).toBeGreaterThan(RETURN_HEAT_BOUNDS.xMin);
     expect(gutter.cx! + RETURN_DOT_R).toBeLessThan(RETURN_HEAT_BOUNDS.xMax);
   });
@@ -797,5 +799,25 @@ test.describe("RETURN_COURT viewBox extension (fix round 4B)", () => {
   test("minX and w are unchanged from the design handoff — only the minY/h edge deviates", () => {
     expect(RETURN_COURT.viewBox.minX).toBe(-43.6);
     expect(RETURN_COURT.viewBox.w).toBe(431);
+  });
+
+  /**
+   * Fix round 5 (robustness): `RETURN_COURT.viewBox.minY` hard-codes
+   * `depthToViewBoxY(RETURN_COURT.netX)`'s own result (`-20.5`) minus the
+   * clearance, because the source module genuinely can't call that function
+   * at the point it needs the number (the circular dependency through
+   * `RETURN_COURT` itself is real). Pin the identity here instead, with a
+   * LIVE call now that the module is fully loaded — a drift in `netX`,
+   * `centerY`, `RETURN_INNER_SCALE` or `RETURN_OUTER_TRANSLATE_Y` would
+   * silently clip the net line out of the frame again with every other
+   * assertion above still green (their margins are generous enough not to
+   * notice a few units of drift); this one specifically would not be.
+   */
+  test("RETURN_COURT.viewBox.minY is pinned to depthToViewBoxY(netX) minus the clearance — not just close, exact", () => {
+    const netCenterlineY = depthToViewBoxY(RETURN_COURT.netX);
+    expect(RETURN_COURT.viewBox.minY).toBeCloseTo(
+      netCenterlineY - RETURN_VIEWBOX_MIN_Y_CLEARANCE,
+      10,
+    );
   });
 });
