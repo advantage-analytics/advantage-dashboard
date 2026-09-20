@@ -88,6 +88,18 @@ const ALLOWED_HEX = {
   ],
   // Third-party provider brand pills — each is that vendor's own colour.
   "src/lib/providers.ts": ["#2D8B4E", "#002B5C", "#5DADE2"],
+  // Visualizations tab redesign (P1a/P1b): the wall tile's court art draws
+  // its own two-tone court — green apron, blue court — instead of the legacy
+  // pastel `HalfCourtSVG` palette. Named explicitly as the only new literals
+  // the task may introduce (visualizations-tab-phase-1 global-constraints.md:
+  // "The only literals allowed: court #86AC91 (out), #6092CE (court) …").
+  // Not promoted to colors.css: `CourtArt` is the one call site (Task 9's
+  // focused view reuses this component rather than duplicating the SVG), not
+  // a role wide enough for a token.
+  "src/components/dashboard/matches/match-detail/shots/court-art.tsx": [
+    "#86AC91",
+    "#6092CE",
+  ],
 };
 
 // Mail clients do not support CSS custom properties, so shell.ts must carry
