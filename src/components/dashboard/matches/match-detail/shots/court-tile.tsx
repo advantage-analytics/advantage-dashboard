@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { CourtArt } from "./court-art";
+import { APRON_FILL, CourtArt } from "./court-art";
 import type { Cut, VizDot } from "./viz-model";
 
 /**
@@ -51,8 +51,11 @@ export function CourtTile({
       href={href}
       className="flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)] transition-[border-color,box-shadow] duration-200 ease-[var(--ease-primary)] hover:border-[var(--border-medium)] hover:shadow-[var(--shadow-card-emphasis)] motion-reduce:transition-none"
     >
-      <div className="relative overflow-hidden rounded-t-[var(--radius-card)]">
-        <CourtArt cut={cut} dots={dots} className="block" />
+      <div
+        className="relative overflow-hidden rounded-t-[var(--radius-card)]"
+        style={{ aspectRatio: "334 / 216", backgroundColor: APRON_FILL }}
+      >
+        <CourtArt cut={cut} dots={dots} fill className="block h-full w-full" />
         <span
           className="absolute top-[10px] left-[10px] inline-flex h-5 items-center rounded-full px-[7px] text-[10px] font-medium text-white"
           style={{ backgroundColor: "rgba(13,13,13,.72)" }}

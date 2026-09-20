@@ -1,10 +1,4 @@
 import {
-  COURT_W,
-  COURT_H,
-  DOUBLES_LEFT,
-  DOUBLES_RIGHT,
-  SINGLES_LEFT,
-  SINGLES_RIGHT,
   SERVICE_Y,
   BASELINE_Y,
   CENTER_X,
@@ -14,6 +8,18 @@ import {
   FULL_SVG_PAD_BOTTOM,
 } from "@/components/dashboard/matches/visuals/half-court-svg";
 import { ZONES, type ZoneKey, type ZoneStats } from "@/lib/data/serve-zones";
+import {
+  SERVE_COURT,
+  NET_LEFT,
+  NET_RIGHT,
+  COURT_W,
+  COURT_H,
+  DOUBLES_LEFT,
+  DOUBLES_RIGHT,
+  SINGLES_LEFT,
+  SINGLES_RIGHT,
+  projectServeDot,
+} from "./court-geometry";
 import type { Cut, VizDot } from "./viz-model";
 
 /**
@@ -30,7 +36,10 @@ import type { Cut, VizDot } from "./viz-model";
  * below does the same projection the retired zones-court component used to.
  */
 
-const APRON_FILL = "#86AC91";
+// Exported so `court-tile.tsx` can give the art box the same apron colour
+// as its background (Defect 2 fix), rather than introducing a second
+// `#86AC91` literal in a file the design-drift checker doesn't allowlist.
+export const APRON_FILL = "#86AC91";
 const COURT_FILL = "#6092CE";
 const LINE_COLOR = "#FFFFFF";
 const LINE_W = 1.5;
@@ -55,19 +64,6 @@ function colorFor(outcome: VizDot["outcome"]): string {
   if (outcome === "won") return "var(--viz-good)";
   if (outcome === "lost") return "var(--viz-bad)";
   return "var(--ink-300)";
-}
-
-// `computeViz`'s serve-cut dots carry the underlying `ServeDot`'s x/y
-// verbatim — a 0..1 fraction of the service box, not a canvas position (see
-// `serve-zones.ts`'s `mapRealCoordsToServeDot`). Every serve-court reader
-// projects through this same `SINGLES_LEFT/RIGHT` × `SERVICE_Y`/`BASELINE_Y`
-// frame before drawing a dot; the return cuts need no such step because
-// `pointToReturnDots` already returns an absolute `FULL_SVG_*` position.
-function projectServeDot(d: VizDot): { x: number; y: number } {
-  return {
-    x: SINGLES_LEFT + d.x * (SINGLES_RIGHT - SINGLES_LEFT),
-    y: SERVICE_Y + d.y * (BASELINE_Y - SERVICE_Y),
-  };
 }
 
 interface ViewBox {
@@ -113,6 +109,7 @@ export function CourtArt({
   dots,
   zones,
   className,
+  fill,
 }: {
   cut: Cut;
   dots: VizDot[];
@@ -124,6 +121,14 @@ export function CourtArt({
    */
   zones?: Record<ZoneKey, ZoneStats>;
   className?: string;
+  /**
+   * "Fill the box" sizing — `width:100%; height:100%` with no presentation
+   * `width` attribute, so the svg fills whatever fixed-aspect-ratio box a
+   * caller gives it (the wall tile's uniform art box) instead of sizing off
+   * its own intrinsic viewBox aspect ratio. `preserveAspectRatio` still
+   * letterboxes the court inside that box.
+   */
+  fill?: boolean;
 }) {
   const box = viewBoxFor(cut);
   const showZones = cut === "serve" && zones != null;
@@ -134,6 +139,7 @@ export function CourtArt({
   return (
     <svg
       viewBox={`0 ${box.minY} ${COURT_W} ${box.h}`}
+      {...(fill ? { height: "100%" } : {})}
       width="100%"
       preserveAspectRatio="xMidYMid meet"
       role="img"
@@ -150,87 +156,99 @@ export function CourtArt({
 
       {cut === "serve" ? (
         <>
+          {/* Court fill: far baseline (top, y=0) down to the net (bottom,
+              y=`netY`) — the far half-court, matching the legacy court this
+              redesign replaced. */}
           <rect
             x={DOUBLES_LEFT}
-            y={0}
+            y={SERVE_COURT.baselineY}
             width={DOUBLES_RIGHT - DOUBLES_LEFT}
-            height={BASELINE_Y}
+            height={SERVE_COURT.netY - SERVE_COURT.baselineY}
             fill={COURT_FILL}
           />
+          {/* Zone cells span the service line down to the net, same as the
+              service boxes below — not the baseline down to the service
+              line. */}
           {showZones &&
             zones &&
             ZONES.map((z) => (
               <rect
                 key={z.key}
                 x={z.x1}
-                y={0}
+                y={SERVE_COURT.zoneTop}
                 width={z.x2 - z.x1}
-                height={SERVICE_Y}
+                height={SERVE_COURT.zoneBottom - SERVE_COURT.zoneTop}
                 fill="var(--viz-you)"
                 fillOpacity={zoneOpacity(zones[z.key].pct)}
               />
             ))}
           <line
             x1={DOUBLES_LEFT}
-            y1={0}
+            y1={SERVE_COURT.baselineY}
             x2={DOUBLES_LEFT}
-            y2={BASELINE_Y}
+            y2={SERVE_COURT.netY}
             stroke={LINE_COLOR}
             strokeWidth={LINE_W}
           />
           <line
             x1={DOUBLES_RIGHT}
-            y1={0}
+            y1={SERVE_COURT.baselineY}
             x2={DOUBLES_RIGHT}
-            y2={BASELINE_Y}
+            y2={SERVE_COURT.netY}
             stroke={LINE_COLOR}
             strokeWidth={LINE_W}
           />
           <line
             x1={SINGLES_LEFT}
-            y1={0}
+            y1={SERVE_COURT.baselineY}
             x2={SINGLES_LEFT}
-            y2={BASELINE_Y}
+            y2={SERVE_COURT.netY}
             stroke={LINE_COLOR}
             strokeWidth={LINE_W}
           />
           <line
             x1={SINGLES_RIGHT}
-            y1={0}
+            y1={SERVE_COURT.baselineY}
             x2={SINGLES_RIGHT}
-            y2={BASELINE_Y}
+            y2={SERVE_COURT.netY}
             stroke={LINE_COLOR}
             strokeWidth={LINE_W}
           />
+          {/* Baseline — far court boundary, top of the frame. */}
           <line
             x1={DOUBLES_LEFT}
-            y1={BASELINE_Y}
+            y1={SERVE_COURT.baselineY}
             x2={DOUBLES_RIGHT}
-            y2={BASELINE_Y}
+            y2={SERVE_COURT.baselineY}
             stroke={LINE_COLOR}
             strokeWidth={LINE_W}
           />
+          {/* Service line. */}
           <line
             x1={SINGLES_LEFT}
-            y1={SERVICE_Y}
+            y1={SERVE_COURT.serviceY}
             x2={SINGLES_RIGHT}
-            y2={SERVICE_Y}
+            y2={SERVE_COURT.serviceY}
             stroke={LINE_COLOR}
             strokeWidth={LINE_W}
           />
+          {/* Centre service line — splits the two service boxes, service
+              line down to the net. */}
           <line
             x1={CENTER_X}
-            y1={0}
+            y1={SERVE_COURT.serviceY}
             x2={CENTER_X}
-            y2={SERVICE_Y}
+            y2={SERVE_COURT.netY}
             stroke={LINE_COLOR}
             strokeWidth={LINE_W}
           />
+          {/* Net — bottom of the frame, extending slightly past the doubles
+              sidelines as a physical net does. */}
           <line
-            x1={0}
-            y1={0}
-            x2={COURT_W}
-            y2={0}
+            x1={NET_LEFT}
+            y1={SERVE_COURT.netY}
+            x2={NET_RIGHT}
+            y2={SERVE_COURT.netY}
             stroke={LINE_COLOR}
             strokeWidth={NET_W}
           />

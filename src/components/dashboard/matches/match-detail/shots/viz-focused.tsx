@@ -5,7 +5,7 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { WorkspaceKind } from "@/lib/workspace/types";
-import { CourtArt } from "./court-art";
+import { APRON_FILL, CourtArt } from "./court-art";
 import { ZoneCard } from "./zone-card";
 import { VizToolbar } from "./viz-toolbar";
 import { useVizState } from "./use-viz-state";
@@ -138,7 +138,10 @@ export function VizFocused({
             </button>
           </div>
 
-          <div className="relative flex justify-center px-4">
+          <div
+            className="relative flex max-h-[400px] w-full items-center justify-center overflow-hidden"
+            style={{ backgroundColor: APRON_FILL }}
+          >
             <CourtArt
               cut={cut}
               dots={result.dots}
@@ -147,16 +150,16 @@ export function VizFocused({
                   ? (result.zoneStats ?? undefined)
                   : undefined
               }
-              // The wrapper's max-height (brief: "Art max-height:400px") has
-              // to land on the <svg> itself, not a wrapping div: a div's
-              // max-height caps its OWN box, but this svg has no CSS height
-              // (only the `width="100%"` presentation attribute), so its
-              // rendered height comes from the viewBox aspect ratio alone and
-              // paints past a shorter wrapper instead of shrinking to fit —
-              // it visually overlapped the legend row below. `preserveAspectRatio`
-              // (already `xMidYMid meet`) then letterboxes the 447×350 court
-              // inside whatever box max-h-[400px] leaves it.
-              className="block max-h-[400px] w-full"
+              // The court area spans the card's full width, capped at
+              // 400px tall, with the apron green painted behind it — so any
+              // letterboxing `preserveAspectRatio` (`xMidYMid meet`) leaves
+              // is green, never the white the card background used to show
+              // through. `fill` sizes the svg to `height:100%` of this box
+              // instead of off its own intrinsic viewBox aspect ratio, so it
+              // actually reaches the 400px cap rather than shrinking to fit
+              // a width-only box.
+              fill
+              className="block h-full w-full"
             />
             {result.count === 0 && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
