@@ -7,6 +7,7 @@ import {
   clearedFilters,
   parseVizState,
   reconcileVizState,
+  sameView,
   vizStateQuery,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 
@@ -268,4 +269,96 @@ test("reconcileVizState: an external navigation while an own query is pending wi
     parseVizState(new URLSearchParams("cut=returnPlacement")),
   );
   expect(result.ownQueries).toEqual(["cut=returnPlacement"]);
+});
+
+/* ── `sameView` (F4) ────────────────────────────────────────────────────
+ * The Views row's "current tile" test: is `current` (the state on screen)
+ * the same view as this candidate tile (a default cut, or a saved view)? */
+
+test("sameView: a default tile matches its own state", () => {
+  const current = parseVizState(
+    new URLSearchParams("cut=serve&ball=first&player=you"),
+  );
+  expect(
+    sameView(current, {
+      cut: "serve",
+      chart: "scatter",
+      filters: current.filters,
+    }),
+  ).toBe(true);
+});
+
+test("sameView: differs when one filter differs", () => {
+  const current = parseVizState(
+    new URLSearchParams("cut=serve&ball=first&player=you"),
+  );
+  expect(
+    sameView(current, {
+      cut: "serve",
+      chart: "scatter",
+      filters: { ...current.filters, ball: "second" },
+    }),
+  ).toBe(false);
+});
+
+test("sameView: ignores keys not on the cut", () => {
+  // `zone` is a serve-only key; comparing a returnPlacement candidate must
+  // never look at it even if the two filter objects disagree there.
+  const current = parseVizState(
+    new URLSearchParams("cut=returnPlacement&player=you"),
+  );
+  expect(
+    sameView(current, {
+      cut: "returnPlacement",
+      chart: "scatter",
+      filters: { ...current.filters, zone: "t" },
+    }),
+  ).toBe(true);
+});
+
+test("sameView: a saved view matches by id even when its filters differ (e.g. renamed/edited elsewhere)", () => {
+  const current = { ...EMPTY_VIZ_FILTERS };
+  const state = {
+    cut: "serve" as const,
+    chart: "scatter" as const,
+    filters: current,
+    viewId: "view-1",
+  };
+  expect(
+    sameView(state, {
+      cut: "serve",
+      chart: "scatter",
+      filters: { ...current, ball: "second" },
+      id: "view-1",
+    }),
+  ).toBe(true);
+});
+
+test("sameView: a saved view also matches by equal cut/chart/filters when no id was carried", () => {
+  const filters = { ...EMPTY_VIZ_FILTERS, ball: "first" as const };
+  const state = {
+    cut: "serve" as const,
+    chart: "scatter" as const,
+    filters,
+    viewId: null,
+  };
+  expect(
+    sameView(state, {
+      cut: "serve",
+      chart: "scatter",
+      filters,
+      id: "view-1",
+    }),
+  ).toBe(true);
+});
+
+test("sameView: the wall state (cut: null) matches nothing", () => {
+  const wall = parseVizState(new URLSearchParams("tab=shots"));
+  expect(
+    sameView(wall, {
+      cut: "serve",
+      chart: "scatter",
+      filters: EMPTY_VIZ_FILTERS,
+    }),
+  ).toBe(false);
 });

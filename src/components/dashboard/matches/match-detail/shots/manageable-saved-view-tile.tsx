@@ -77,6 +77,7 @@ export function ManageableSavedViewTile({
   onPointerMoveTile,
   onPointerEndTile,
   onKeyDownTile,
+  current,
 }: {
   view: SavedViewRow;
   data: {
@@ -115,6 +116,10 @@ export function ManageableSavedViewTile({
   onPointerMoveTile: (e: ReactPointerEvent<HTMLDivElement>) => void;
   onPointerEndTile: (e: ReactPointerEvent<HTMLDivElement>) => void;
   onKeyDownTile: (e: ReactKeyboardEvent<HTMLDivElement>) => void;
+  /** F4: rings the tile Signal Blue — the view currently drawn in the big
+   * court, in the focused view's scrolling Views row. Never set on the
+   * wall's own Manage-mode grid. */
+  current?: boolean;
 }) {
   const renameFieldId = useId();
 
@@ -176,6 +181,7 @@ export function ManageableSavedViewTile({
         href={data.href}
         as="static"
         ariaDescribedBy={hintId}
+        current={current}
         overlay={
           // No pointerdown stop needed here: `handlePointerDown` above
           // already excludes a press on this button (or anything inside it)

@@ -2,20 +2,10 @@
 
 import { useMemo, type ReactNode } from "react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
-import {
-  useMatchSides,
-  type MatchSide,
-} from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { CourtTile } from "./court-tile";
 import { useVizState } from "./use-viz-state";
-import { DEFAULT_CUTS } from "./default-cuts";
-import {
-  EMPTY_VIZ_FILTERS,
-  computeViz,
-  tileCountLabel,
-  type PlayerFilter,
-  type VizResult,
-} from "./viz-model";
+import { buildDefaultTiles } from "./default-tiles";
 
 /**
  * P1a/P1b: the wall of default cuts, one row per subject (you first, then
@@ -23,9 +13,13 @@ import {
  *
  * Attribution (guardrails §4): `useMatchSides()` is the only place "you" is
  * resolved here; each row's subject is read straight off the side
- * (`side.isPlayer1`) and passed to `computeViz`, never re-derived. Won/lost
- * stays relative to the row's own subject — on the opponent's row green
- * means the opponent won.
+ * (`side.isPlayer1`) and passed to `computeViz` (inside `buildDefaultTiles`),
+ * never re-derived. Won/lost stays relative to the row's own subject — on
+ * the opponent's row green means the opponent won.
+ *
+ * F4: the six tiles themselves come from `buildDefaultTiles` (`default-tiles.ts`)
+ * — the same builder the focused view's scrolling Views row uses — so the
+ * wall and that row can never draw a different set of tiles.
  */
 
 export function VizWall({ savedViewsBand }: { savedViewsBand?: ReactNode }) {
@@ -33,69 +27,54 @@ export function VizWall({ savedViewsBand }: { savedViewsBand?: ReactNode }) {
   const { you, opp } = useMatchSides();
   const { hrefFor } = useVizState();
 
-  const rows: { filterPlayer: PlayerFilter; side: MatchSide }[] = [
-    { filterPlayer: "you", side: you },
-    { filterPlayer: "opponent", side: opp },
-  ];
-
-  // Keyed on `points` and `you.isPlayer1` alone — `opp.isPlayer1` is always
-  // its inverse, so it carries no information the memo doesn't already have.
-  const resultsBySubject: VizResult[][] = useMemo(
+  // Keyed on `points`/`you.isPlayer1`/the names/`hrefFor` — `opp.isPlayer1`
+  // is always `you.isPlayer1`'s inverse, so it carries no information the
+  // memo doesn't already have.
+  const tiles = useMemo(
     () =>
-      rows.map((row) =>
-        DEFAULT_CUTS.map((c) =>
-          computeViz(
-            points,
-            c.cut,
-            { ...EMPTY_VIZ_FILTERS, ...c.filters },
-            row.side.isPlayer1,
-          ),
-        ),
+      buildDefaultTiles(
+        points,
+        {
+          you: { isPlayer1: you.isPlayer1, name: you.name },
+          opp: { isPlayer1: opp.isPlayer1, name: opp.name },
+        },
+        hrefFor,
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see comment above
-    [points, you.isPlayer1],
+    [points, you.isPlayer1, you.name, opp.name, hrefFor],
   );
+
+  const rows: { subject: "you" | "opponent"; name: string }[] = [
+    { subject: "you", name: you.name },
+    { subject: "opponent", name: opp.name },
+  ];
 
   return (
     <div className="flex flex-col gap-6">
-      {rows.map((row, i) => {
-        const results = resultsBySubject[i];
-        const isEmpty = results.every((r) => r.total === 0);
+      {rows.map((row) => {
+        const rowTiles = tiles.filter((t) => t.subject === row.subject);
+        const isEmpty = rowTiles.every((t) => t.total === 0);
         return (
-          <div key={row.filterPlayer}>
+          <div key={row.subject}>
             {isEmpty ? (
-              <EmptySubjectRow name={row.side.name} />
+              <EmptySubjectRow name={row.name} />
             ) : (
               <div
                 className="grid gap-4"
                 style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}
               >
-                {DEFAULT_CUTS.map((cut, j) => {
-                  const result = results[j];
-                  const countLabel = tileCountLabel(result);
-                  const href = hrefFor({
-                    cut: cut.cut,
-                    chart: cut.chart,
-                    viewId: null,
-                    filters: {
-                      ...EMPTY_VIZ_FILTERS,
-                      ...cut.filters,
-                      player: row.filterPlayer,
-                    },
-                  });
-                  return (
-                    <CourtTile
-                      key={cut.cut}
-                      playerName={row.side.name}
-                      name={cut.name}
-                      pills={cut.pills}
-                      countLabel={countLabel}
-                      cut={cut.cut}
-                      dots={result.dots}
-                      href={href}
-                    />
-                  );
-                })}
+                {rowTiles.map((tile) => (
+                  <CourtTile
+                    key={tile.key}
+                    playerName={tile.playerName}
+                    name={tile.name}
+                    pills={tile.pills}
+                    countLabel={tile.countLabel}
+                    cut={tile.cut}
+                    dots={tile.dots}
+                    href={tile.href}
+                  />
+                ))}
               </div>
             )}
           </div>

@@ -11,6 +11,42 @@
 import type { Cut, Chart, VizFilters } from "./viz-model";
 import { EMPTY_VIZ_FILTERS, filterKeysFor } from "./viz-model";
 
+/* ── sameView (F4) ─────────────────────────────────────────────────────── */
+
+/**
+ * Is `candidate` (a default tile, or a saved view) the same view as
+ * `current` (whatever's on screen)? Backs the Views row's "current tile"
+ * ring: `cut`/`chart`/every filter key valid for that cut must agree, OR
+ * `current.viewId` names `candidate.id` outright (a saved view whose filters
+ * were themselves just edited elsewhere still reads as "current" by id).
+ * The wall (`current.cut === null`) matches nothing, unconditionally — a
+ * stray `viewId` carried onto the wall state is not a reason to ring a tile
+ * that isn't shown in any court.
+ */
+export function sameView(
+  current: VizState,
+  candidate: { cut: Cut; chart: Chart; filters: VizFilters; id?: string },
+): boolean {
+  if (current.cut === null) return false;
+
+  if (
+    current.viewId !== null &&
+    candidate.id !== undefined &&
+    current.viewId === candidate.id
+  ) {
+    return true;
+  }
+
+  if (current.cut !== candidate.cut) return false;
+  if (current.chart !== candidate.chart) return false;
+
+  for (const key of filterKeysFor(candidate.cut)) {
+    if (current.filters[key] !== candidate.filters[key]) return false;
+  }
+
+  return true;
+}
+
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
 export interface VizState {

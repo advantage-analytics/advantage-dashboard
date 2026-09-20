@@ -30,6 +30,10 @@ import { SavedViewsBand } from "@/components/dashboard/matches/match-detail/shot
  * never draw a different list, count, or Manage-mode state. Manage mode
  * itself is entirely the band's own client state (never a prop from here);
  * it withholds "Manage views" whenever nothing in the list is manageable.
+ * F4: only one of the two ever actually renders it at a time (only one of
+ * `VizWall`/`VizFocused` mounts per `state.cut`), so `variant` is set here
+ * from that same `state.cut` — `"wall"` renders the pre-existing saved-only
+ * grid, `"focused"` the scrolling Views row (defaults, saved, New view).
  *
  * Saving is always on — everyone, including players, may save a view — so
  * `VizFocused` no longer takes an `onSaveRequest` opt-in; it owns its own
@@ -63,6 +67,7 @@ function ShotsTabBody() {
       views={meta.savedViews}
       workspaceRole={meta.workspaceRole}
       workspaceKind={meta.workspaceKind}
+      variant={state.cut === null ? "wall" : "focused"}
     />
   );
 

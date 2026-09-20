@@ -41,6 +41,7 @@ export function CourtTile({
   overlay,
   as = "link",
   ariaDescribedBy,
+  current = false,
 }: {
   playerName: string;
   name: string;
@@ -79,6 +80,12 @@ export function CourtTile({
    * elsewhere in the header. Unused (and not rendered) on `as="link"`.
    */
   ariaDescribedBy?: string;
+  /**
+   * F4: rings this tile Signal Blue — the tile for the view currently drawn
+   * in the big court, in the focused view's scrolling Views row. Never set
+   * outside that row (the wall has no "current" tile to mark).
+   */
+  current?: boolean;
 }) {
   const body = (
     <>
@@ -134,6 +141,13 @@ export function CourtTile({
     </>
   );
 
+  const ringStyle = current
+    ? {
+        outline: "1px solid var(--blue)",
+        boxShadow: "0 0 0 2px var(--blue-ring-30)",
+      }
+    : undefined;
+
   if (as === "static") {
     return (
       <div
@@ -141,7 +155,9 @@ export function CourtTile({
         role="group"
         aria-label={name}
         aria-describedby={ariaDescribedBy}
+        aria-current={current ? "true" : undefined}
         className={CARD_CLASS}
+        style={ringStyle}
       >
         {body}
       </div>
@@ -149,7 +165,12 @@ export function CourtTile({
   }
 
   return (
-    <Link href={href} className={CARD_CLASS}>
+    <Link
+      href={href}
+      className={CARD_CLASS}
+      style={ringStyle}
+      aria-current={current ? "true" : undefined}
+    >
       {body}
     </Link>
   );
