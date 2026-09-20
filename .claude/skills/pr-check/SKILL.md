@@ -80,15 +80,15 @@ is deployed and is not the merge target until the whole branch lands.
 Which model each stage costs you, because the answer is not in one place and
 nobody should have to read three agent definitions to find it:
 
-| Stage                              | Runs on           | Set where                |
-| ---------------------------------- | ----------------- | ------------------------ |
-| 1 — lint / tsc / test              | nothing — bash    | —                        |
-| 2 — `simplify`                     | `sonnet` subagent | this file, stage 2       |
-| 2 — `vercel-react-best-practices`  | the session model | only when triggered      |
-| 3 — `code-review medium`           | the session model | deliberate — see stage 3 |
-| 3 — `pipeline-guardrails-reviewer` | `sonnet`          | its own frontmatter      |
-| 3 — `rls-boundary-reviewer`        | `sonnet`          | its own frontmatter      |
-| 3 — `supabase:` postgres skill     | the session model | only when triggered      |
+| Stage                                           | Runs on           | Set where                |
+| ----------------------------------------------- | ----------------- | ------------------------ |
+| 1 — lint / tsc / test                           | nothing — bash    | —                        |
+| 2 — `simplify`                                  | `sonnet` subagent | this file, stage 2       |
+| 2 — `vercel-react-best-practices`               | the session model | only when triggered      |
+| 3 — `code-review medium`                        | the session model | deliberate — see stage 3 |
+| 3 — `pipeline-guardrails-reviewer`              | `sonnet`          | its own frontmatter      |
+| 3 — `rls-boundary-reviewer`                     | `sonnet`          | its own frontmatter      |
+| 3 — `supabase:supabase-postgres-best-practices` | the session model | only when triggered      |
 
 The two `only when triggered` rows are skills, not agents: they load into whatever session invokes
 them, so they cost session-model tokens on the runs where their triggers fire
@@ -161,10 +161,11 @@ Dispatch this as a subagent on **`sonnet`** — `Agent` with
 `subagent_type: "general-purpose"` and `model: "sonnet"` — rather than running
 it in this session. The agent type matters as much as the model here: this
 stage edits files, so a read-only type such as `Explore` or `Plan` would
-report findings it cannot apply and the stage would silently do nothing. Reviewing a known
-file list against fixed rules is the tier `task-add` routes to sonnet
-([queue-format](../task-add/reference/queue-format.md)), and keeping the whole diff plus its reasoning
-out of the main context is most of the saving. Tell the subagent to:
+report findings it cannot apply and the stage would silently do nothing.
+Reviewing a known file list against fixed rules is the tier `task-add` routes
+to sonnet ([queue-format](../task-add/reference/queue-format.md)). Keeping the
+whole diff plus its reasoning out of the main context is most of the saving.
+Tell the subagent to:
 
 - invoke the `simplify` skill, scoped to the files the range lists,
 - apply the fixes itself, and
@@ -178,9 +179,15 @@ not hunt for bugs — that is stage 3, and a subagent that wanders into
 correctness is duplicating the stage behind it.
 
 **Run the next check yourself, in this session — not inside that subagent.**
-Order does not matter: dispatch the subagent first and grep while it works, or
-grep first — these greps read the committed range, which the subagent does not
-change.
+Order does not matter — these greps read the committed range, which the
+subagent does not change — but **the shell does not carry `base` between tool
+calls.** Re-derive it in the same command that greps, using the guarded shape
+from "What to review". An empty `$base` collapses `git diff "$base"...HEAD`
+into `git diff ...HEAD`, which exits 0 with no output, so every check below
+reports "no trigger" on a branch that has one — the same false green that
+section exists to prevent. End each `grep -c` with `|| true` as well: it exits
+1 when the count is zero, which is the ordinary case, and will otherwise abort
+a chained run before the later checks execute.
 The subagent's remit is `simplify` alone, and these greps decide whether a
 _second_, separate skill is owed; folding that decision into the stage 2 agent
 buries it where stage 4 cannot report it.
