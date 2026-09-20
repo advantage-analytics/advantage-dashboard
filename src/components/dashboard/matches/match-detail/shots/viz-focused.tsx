@@ -395,7 +395,7 @@ export function VizFocused({
           </div>
 
           {!isDraft && (
-            <div className="flex items-center gap-3 px-4 pt-[10px] pb-[14px]">
+            <div className="flex items-center gap-3 px-4 pt-[14px] pb-4">
               {legendItemsFor(cut, state.chart).map((item) =>
                 item.glyph === "ramp" ? (
                   <HeatRampLegend key={item.key} />
