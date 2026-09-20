@@ -418,40 +418,6 @@ export function manageMenuRows(
 }
 
 /**
- * Whether a click inside a manageable tile in Manage mode should have its
- * `<Link>`'s navigation suppressed — the pure decision
- * `manageable-saved-view-tile.tsx`'s capture-phase click handler calls, given
- * whether the click's real target lands inside a marked tile control
- * (`[data-tile-control]` — the ⋯ button and the rename field — or a
- * `[role="menu"]`, since a `FloatMenu`'s portaled content is a genuine DOM
- * descendant of ITSELF even though it renders outside the tile).
- *
- * `manageMode`/`manageable` are threaded through explicitly (rather than
- * assumed, even though today's one call site only ever renders this
- * component when both are already true — `saved-views-band.tsx` only mounts
- * `ManageableSavedViewTile` for a manageable tile in Manage mode) so the
- * rule stays correct and independently testable if that assumption ever
- * changes: a control click is NEVER suppressed regardless, and a
- * non-control click is only suppressed when the tile is actually being
- * arranged — never on a read-only tile, and never outside Manage mode.
- *
- * Fixes a real bug (round 2 review): the earlier version unconditionally
- * called `preventDefault()` on every click inside the tile, including the ⋯
- * button's own click and every row inside its portaled menu. Radix's
- * Popover trigger composes its own toggle with `checkForDefaultPrevented`,
- * so a `preventDefault()`-ed click never opened the menu at all — the ⋯
- * button did nothing, ever, in Manage mode.
- */
-export function shouldSuppressTileClick(
-  targetIsControl: boolean,
-  manageMode: boolean,
-  manageable: boolean,
-): boolean {
-  if (targetIsControl) return false;
-  return manageMode && manageable;
-}
-
-/**
  * The title-row fact's saved-views suffix (Task 9 step 4) — `""` when there
  * are none (a match with no saved views doesn't advertise a feature it has
  * nothing in), else ` · {n} saved view` singular at exactly one, plural

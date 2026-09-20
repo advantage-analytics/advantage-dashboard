@@ -5,15 +5,27 @@ import type { Cut, VizDot } from "./viz-model";
 
 /**
  * The wall/band card: art on top, a dark player-name chip over it, then a
- * label block (view name, filter pills, mono count). A `<Link>`, not a
- * button — clicking a tile navigates straight into the focused view.
- * `overlay` is the Manage ⋯ affordance (Task 9 Part B, `saved-views-band.tsx`)
- * drawn over the art on a manageable tile in Manage mode; a nested
- * interactive control inside the `<Link>` on purpose — the band intercepts
- * the anchor's own click (`onClickCapture`) whenever Manage mode makes the
- * whole tile a drag target instead of a navigation target, so the button
- * inside it can still act without triggering a navigation underneath it.
+ * label block (view name, filter pills, mono count). A `<Link>` by default
+ * — clicking a tile navigates straight into the focused view. `overlay` is
+ * the Manage ⋯ affordance (Task 9 Part B, `manageable-saved-view-tile.tsx`)
+ * drawn over the art on a manageable tile in Manage mode.
+ *
+ * `as="static"` (round-3 review fix) renders the identical markup as a
+ * `<div role="group">` instead of a `<Link>`, for exactly that manageable
+ * tile in Manage mode. A nested interactive control (a `<button>`) inside a
+ * real `<a href>` cannot be selectively click-suppressed: Radix's own
+ * Popover trigger ignores a `preventDefault()`-ed click (so the ⋯ menu never
+ * opens), and NOT preventing default lets the anchor's OWN click handler
+ * navigate on the very same click a moment later (React 19 does not let one
+ * handler cancel another's default via a boolean return, only via the
+ * shared event object) — there is no `preventDefault()` policy that makes
+ * both true at once. `as="static"` sidesteps the conflict instead of trying
+ * to arbitrate it: there is no anchor to accidentally activate, so nothing
+ * needs suppressing.
  */
+
+const CARD_CLASS =
+  "flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)] transition-[border-color,box-shadow] duration-200 ease-[var(--ease-primary)] hover:border-[var(--border-medium)] hover:shadow-[var(--shadow-card-emphasis)] motion-reduce:transition-none";
 
 export function CourtTile({
   playerName,
@@ -26,6 +38,7 @@ export function CourtTile({
   dots,
   href,
   overlay,
+  as = "link",
 }: {
   playerName: string;
   name: string;
@@ -33,10 +46,11 @@ export function CourtTile({
   nameAdornment?: ReactNode;
   /**
    * Replaces the rendered `name` text entirely — Manage mode's in-place
-   * rename field (`saved-views-band.tsx`), so the tile shows an editable
-   * underline input over its own name rather than the static `<p>`. `name`
-   * is still required even when this is set (it stays the accessible name
-   * other callers reason about); only what's PAINTED changes.
+   * rename field (`manageable-saved-view-tile.tsx`), so the tile shows an
+   * editable underline input over its own name rather than the static
+   * `<p>`. `name` is still required even when this is set (it stays the
+   * accessible name other callers reason about); only what's PAINTED
+   * changes.
    */
   nameSlot?: ReactNode;
   pills: string[];
@@ -45,12 +59,19 @@ export function CourtTile({
   dots: VizDot[];
   href: string;
   overlay?: ReactNode;
+  /**
+   * `"link"` (default): a real `<Link href>` — every tile outside Manage
+   * mode, and every tile inside it that this viewer cannot manage. `"static"`:
+   * the same markup as a non-anchor `<div>` (`tabIndex={0}`, `role="group"`,
+   * `aria-label={name}`) — a manageable tile while Manage mode is on, so it
+   * can be dragged/arranged without also being a navigation target. `href`
+   * is still required either way (the type stays simple for every existing
+   * caller); it is simply unused when `as="static"`.
+   */
+  as?: "link" | "static";
 }) {
-  return (
-    <Link
-      href={href}
-      className="flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)] transition-[border-color,box-shadow] duration-200 ease-[var(--ease-primary)] hover:border-[var(--border-medium)] hover:shadow-[var(--shadow-card-emphasis)] motion-reduce:transition-none"
-    >
+  const body = (
+    <>
       <div
         className="relative overflow-hidden rounded-t-[var(--radius-card)]"
         style={{ aspectRatio: "334 / 216", backgroundColor: APRON_FILL }}
@@ -100,6 +121,20 @@ export function CourtTile({
           </span>
         </div>
       </div>
+    </>
+  );
+
+  if (as === "static") {
+    return (
+      <div tabIndex={0} role="group" aria-label={name} className={CARD_CLASS}>
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <Link href={href} className={CARD_CLASS}>
+      {body}
     </Link>
   );
 }
