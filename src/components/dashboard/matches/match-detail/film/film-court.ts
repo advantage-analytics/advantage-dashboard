@@ -45,7 +45,11 @@ import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
  *
  * ── Orientation ─────────────────────────────────────────────────────────────
  *
- * The court is drawn with YOU AT THE BOTTOM. Which end you are on is not
+ * Point mode of an Advantage Intelligence match is drawn in the CAMERA view
+ * (`CourtView`): unrotated, far baseline at the top, so a mark sits where the
+ * ball is in the film. Everything else below describes the other view.
+ *
+ * There the court is drawn with YOU AT THE BOTTOM. Which end you are on is not
  * stored and the frame does not follow end changes, so it is decided per point
  * from the shots themselves (see `youAreAtLowEnd`). When you are at the high-y
  * end the whole point is rotated 180° (`x → -x`, `y → 23.77 - y`) — both axes,
@@ -245,8 +249,9 @@ function marksForShot(
   youLow: boolean,
   youIsPlayer1: boolean,
   opacity: number,
-  age: number,
+  live: boolean,
   withContact: boolean,
+  withBounce: boolean,
   /** 1-based place in the rally, and the rally's length. */
   order: number,
   rallyShots: number,
@@ -270,7 +275,7 @@ function marksForShot(
       ...detail,
     });
   }
-  const bounce = bouncePosition(shot, youLow, youIsPlayer1);
+  const bounce = withBounce ? bouncePosition(shot, youLow, youIsPlayer1) : null;
   if (bounce) {
     out.push({
       shotId: shot.id,
@@ -278,7 +283,7 @@ function marksForShot(
       ...toCourtPercent(bounce.x, bounce.y, youLow),
       opacity,
       role,
-      live: age === 0,
+      live,
       ...detail,
     });
   }
@@ -286,20 +291,54 @@ function marksForShot(
 }
 
 /**
+ * How the court is turned.
+ *
+ *   "camera"      The stored frame as the film shows it: y = 23.77 (the far
+ *                 baseline, the top of the picture) at the top, +x to the
+ *                 right. Only true for Advantage Intelligence matches, whose
+ *                 frame is the vendor's camera frame plus one offset
+ *                 (`metersToCourtFrame`) — so a mark sits where the ball is on
+ *                 screen, and the players swap halves when they change ends,
+ *                 exactly as they do in the film.
+ *   "you-bottom"  You at the bottom whatever end you are on (`youAreAtLowEnd`).
+ *                 For sources whose frame is not tied to the camera, and for
+ *                 match mode, where shots from both ends are laid over each
+ *                 other and have to share one orientation to mean anything.
+ */
+export type CourtView = "camera" | "you-bottom";
+
+/**
  * Point mode: the rally as it happens. `shots` is one point's shots in rally
  * order and `activeShot` is the 1-based position in that array of the shot
  * playing now (0 = none, so no marks). Shots aged 0–2 behind it are drawn,
  * oldest first, each as a contact mark then a bounce mark.
+ *
+ * `activeBounceShown: false` holds the playing shot's bounce back: the ball has
+ * been struck but has not landed yet, and a dot at the landing spot would be
+ * the court telling the future. The ring then stays on the last ball that DID
+ * bounce — the one the player has just hit.
  */
 export function pointMarks(
   shots: readonly MatchShot[],
-  opts: { youIsPlayer1: boolean; activeShot: number },
+  opts: {
+    youIsPlayer1: boolean;
+    activeShot: number;
+    view?: CourtView;
+    activeBounceShown?: boolean;
+  },
 ): CourtMark[] {
   const { youIsPlayer1, activeShot } = opts;
+  const activeBounceShown = opts.activeBounceShown ?? true;
   if (activeShot <= 0) return [];
-  // Orientation reads the WHOLE point so it cannot change mid-rally.
-  const youLow = youAreAtLowEnd(shots, youIsPlayer1);
+  // Orientation reads the WHOLE point so it cannot change mid-rally. The
+  // camera view never rotates: `toCourtPercent`'s unrotated mapping already
+  // puts the far baseline at the top.
+  const youLow =
+    opts.view === "camera" ? true : youAreAtLowEnd(shots, youIsPlayer1);
   if (youLow === null) return [];
+
+  // The ring marks the most recent bounce on show.
+  const liveAge = activeBounceShown ? 0 : 1;
 
   const out: CourtMark[] = [];
   shots.forEach((shot, i) => {
@@ -311,14 +350,38 @@ export function pointMarks(
         youLow,
         youIsPlayer1,
         TRAIL[age],
-        age,
+        age === liveAge,
         true,
+        age > 0 || activeBounceShown,
         i + 1,
         shots.length,
       ),
     );
   });
   return out;
+}
+
+/**
+ * When the playing shot's bounce may be drawn, as a share of the way from its
+ * contact to the next one. Measured on a real match's per-frame ball
+ * trajectories (414 consecutive strokes): the bounce falls at 0.42 / 0.62 /
+ * 0.85 of that gap (p10 / p50 / p90).
+ */
+export const BOUNCE_REVEAL_SHARE = 0.6;
+/** The same for a rally's last shot, which has no next contact: median flight. */
+export const BOUNCE_REVEAL_SECONDS = 0.75;
+
+/** True once the film has reached the moment the playing shot's ball lands. */
+export function bounceRevealed(
+  filmTime: number,
+  contactTime: number,
+  nextContactTime: number | null,
+): boolean {
+  const at =
+    nextContactTime !== null && nextContactTime > contactTime
+      ? contactTime + (nextContactTime - contactTime) * BOUNCE_REVEAL_SHARE
+      : contactTime + BOUNCE_REVEAL_SECONDS;
+  return filmTime >= at;
 }
 
 /**
@@ -341,8 +404,9 @@ export function matchMarks(
         youLow,
         opts.youIsPlayer1,
         1,
-        -1,
         false,
+        false,
+        true,
         i + 1,
         shots.length,
       )) {

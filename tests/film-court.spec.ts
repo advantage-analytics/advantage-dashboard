@@ -5,6 +5,7 @@ import {
   OUT,
   TRAIL,
   YOU,
+  bounceRevealed,
   matchMarks,
   pointMarks,
   readoutPlacement,
@@ -331,4 +332,59 @@ test("the readout hangs opposite the mark and stays in frame", () => {
   // …and is clamped at both ends so three lines always fit on the card.
   expect(readoutPlacement(17, 3).top).toBe(0);
   expect(readoutPlacement(83, 97).top).toBe(70);
+});
+
+test("the camera view draws the frame as the film shows it, whoever is at which end", () => {
+  // You are player 1 and you are at the FAR end (high y) — the top of the film.
+  const farEnd = mirrored(RALLY);
+  const camera = pointMarks(farEnd, {
+    youIsPlayer1: true,
+    activeShot: 2,
+    view: "camera",
+  });
+  const yourContact = camera.find(
+    (m) => m.shotId === "s2" && m.kind === "contact",
+  )!;
+  // Struck behind the far baseline: drawn at the top, not rotated to the bottom.
+  expect(yourContact.y).toBeLessThan(10);
+  expect(yourContact).toMatchObject(toCourtPercent(2.6, LENGTH + 0.8, true));
+  // …and its ball lands in the near half, at the bottom.
+  const yourBounce = camera.find(
+    (m) => m.shotId === "s2" && m.kind === "bounce",
+  )!;
+  expect(yourBounce.y).toBeGreaterThan(50);
+
+  // The other view still turns the same point so you are at the bottom.
+  const turned = pointMarks(farEnd, { youIsPlayer1: true, activeShot: 2 });
+  expect(
+    turned.find((m) => m.shotId === "s2" && m.kind === "contact")!.y,
+  ).toBeGreaterThan(90);
+});
+
+test("the playing shot's bounce waits until the ball has landed", () => {
+  const held = pointMarks(RALLY, {
+    youIsPlayer1: true,
+    activeShot: 3,
+    activeBounceShown: false,
+  });
+  // Struck, not yet landed: a contact and no bounce for the playing shot.
+  expect(held.filter((m) => m.shotId === "s3").map((m) => m.kind)).toEqual([
+    "contact",
+  ]);
+  // The ring stays on the last ball that did bounce — the one just hit.
+  expect(held.filter((m) => m.live).map((m) => [m.shotId, m.kind])).toEqual([
+    ["s2", "bounce"],
+  ]);
+
+  const landed = pointMarks(RALLY, { youIsPlayer1: true, activeShot: 3 });
+  expect(landed.filter((m) => m.live).map((m) => [m.shotId, m.kind])).toEqual([
+    ["s3", "bounce"],
+  ]);
+});
+
+test("a bounce is revealed 0.6 of the way to the next contact, or 0.75s after the last", () => {
+  expect(bounceRevealed(10.5, 10, 11)).toBe(false);
+  expect(bounceRevealed(10.6, 10, 11)).toBe(true);
+  expect(bounceRevealed(10.7, 10, null)).toBe(false);
+  expect(bounceRevealed(10.75, 10, null)).toBe(true);
 });

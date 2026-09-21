@@ -31,7 +31,12 @@ import {
   type BoardAnchor,
   type BoardSize,
 } from "./board-position";
-import { matchMarks, pointMarks } from "./film-court";
+import {
+  bounceRevealed,
+  matchMarks,
+  pointMarks,
+  type CourtView,
+} from "./film-court";
 import {
   FILM_COURT_SIZE,
   FilmCourt,
@@ -409,6 +414,20 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     return pointShotStops.findIndex((s) => s.shot.id === id) + 1;
   }, [activeShot, pointShotStops]);
 
+  // Point mode is drawn the way the film shows the court, so a mark sits where
+  // the ball is on screen. Only an Advantage Intelligence match's stored frame
+  // IS the camera's (`CourtView`); anything else keeps you at the bottom.
+  const courtView: CourtView =
+    match.sourceProvider === "splitstep" ? "camera" : "you-bottom";
+  // The playing shot's bounce waits for the ball to land. A boolean, so the
+  // marks are rebuilt when it flips and not on every tick of the playhead.
+  const activeBounceShown = useMemo(() => {
+    const at = pointShotStops[activeShotOrder - 1];
+    if (!at) return true;
+    const next = pointShotStops[activeShotOrder];
+    return bounceRevealed(currentTime, at.start, next ? next.start : null);
+  }, [pointShotStops, activeShotOrder, currentTime]);
+
   // With no point playing, point mode has nothing to draw and says so in
   // words ("Next point" / "Not started") rather than vanishing. Match mode is
   // about the whole cut and not about the playhead, so it keeps its marks
@@ -423,9 +442,16 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
       return matchMarks(p.visiblePoints, { youIsPlayer1: sides.you.isPlayer1 });
     return pointMarks(
       pointShotStops.map((s) => s.shot),
-      { youIsPlayer1: sides.you.isPlayer1, activeShot: activeShotOrder },
+      {
+        youIsPlayer1: sides.you.isPlayer1,
+        activeShot: activeShotOrder,
+        view: courtView,
+        activeBounceShown,
+      },
     );
   }, [
+    courtView,
+    activeBounceShown,
     courtOn,
     courtMode,
     p.visiblePoints,
