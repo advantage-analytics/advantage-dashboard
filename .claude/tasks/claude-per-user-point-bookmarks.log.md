@@ -13,3 +13,8 @@ is the runner's. Newest entries at the bottom.
 
 1. A later migration can drop `points.saved` once no reader references it.
 2. Worth a note in `tests/fixtures/live-db.ts`: DDL adding an FK to `auth.users` deadlocks against a concurrent sign-in burst and should just be retried.
+
+## T2 · Derive MatchPoint.saved from the viewer's bookmarks in the points loader — done
+
+**gate:** mechanical pass (after one re-run: `match-video-attachments-db.spec.ts` "two concurrent sweeps never share a row" failed once against the shared live DB and passed alone — the same spec flaked on the video-tab branch); completion review pass
+**changed:** `match-points-server.ts` no longer selects `saved` off `points` and drops it from `DbPoint`. After the points fetch it queries `point_bookmarks` with `.select("point_id").in("point_id", pointIds)` on the same cookie-scoped server client — RLS narrows that to the viewer's own rows, so no `user_id` filter is applied client-side and the admin client is not involved. `MatchPoint.saved` is now `bookmarkedIds.has(point.id)`. An empty `pointIds` skips the query, and a failed one is logged and treated as "no bookmarks" rather than failing the loader, so points and shots still render.

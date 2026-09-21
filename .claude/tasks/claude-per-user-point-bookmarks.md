@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Derive MatchPoint.saved from the viewer's bookmarks in the points loader
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1
 - **files:** `src/lib/data/match-points-server.ts` (lines 161 and 258 today)

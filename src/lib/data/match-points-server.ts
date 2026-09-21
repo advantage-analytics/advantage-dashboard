@@ -76,7 +76,6 @@ interface DbPoint {
   rally_length: number | null;
   duration: number | null;
   video_time: number | null;
-  saved: boolean;
 }
 
 interface DbShot {
@@ -158,7 +157,7 @@ export async function getMatchPointsFromSupabase(
   const { data: pointsData, error: pointsError } = await supabase
     .from("points")
     .select(
-      "id, point_number, set_number, game_number, set_score, game_score, point_score, result_type, won_by_player1, server_is_player1, is_break_point, is_set_point, is_match_point, rally_length, duration, video_time, saved",
+      "id, point_number, set_number, game_number, set_score, game_score, point_score, result_type, won_by_player1, server_is_player1, is_break_point, is_set_point, is_match_point, rally_length, duration, video_time",
     )
     .eq("match_id", matchId)
     .order("point_number", { ascending: true });
@@ -199,6 +198,26 @@ export async function getMatchPointsFromSupabase(
     }
     shots.push(...((page ?? []) as DbShot[]));
     if (!page || page.length < SHOT_PAGE) break;
+  }
+
+  // Fetch the viewer's own bookmarked points. RLS on point_bookmarks already
+  // narrows this to auth.uid()'s rows within visible_match_ids(), so no
+  // user_id filter is added here and no admin client is used. A failed query
+  // degrades to "no bookmarks" rather than failing the whole loader.
+  const bookmarkedIds = new Set<string>();
+  if (pointIds.length > 0) {
+    const { data: bookmarksData, error: bookmarksError } = await supabase
+      .from("point_bookmarks")
+      .select("point_id")
+      .in("point_id", pointIds);
+
+    if (bookmarksError) {
+      console.error("Failed to fetch point bookmarks:", bookmarksError.message);
+    } else {
+      for (const row of bookmarksData ?? []) {
+        bookmarkedIds.add(row.point_id);
+      }
+    }
   }
 
   // Group shots by point_id
@@ -255,7 +274,7 @@ export async function getMatchPointsFromSupabase(
       rallyLength: point.rally_length ?? 0,
       duration: point.duration,
       videoTime: point.video_time,
-      saved: point.saved,
+      saved: bookmarkedIds.has(point.id),
       shots: pointShots.map((shot) => ({
         id: shot.id,
         shotNumber: shot.shot_number,
