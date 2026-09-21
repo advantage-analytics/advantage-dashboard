@@ -33,10 +33,12 @@ import {
   VIEWER_COURT,
   projectViewerDot,
   viewerInitialTransform,
+  lateralToViewBoxX,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
 import {
   ZOOM_MIN,
   ZOOM_MAX,
+  clampPan,
 } from "@/components/dashboard/matches/match-detail/shots/pan-zoom";
 
 /**
@@ -1011,6 +1013,59 @@ test.describe("projectViewerDot mirror invariant vs the in-shell frames", () => 
   });
 });
 
+/**
+ * Fix round 1: the invariant above only compares `cy` SIGNS in the return
+ * frame's pre-transform (logical) space — it never actually composes the
+ * real transform chain, so it can't catch a mistake in exactly which
+ * transform cancels which. This block composes it for real:
+ * `lateralToViewBoxX` applies the frame's own `<g rotate(90 240 104.5)>` +
+ * translate chain (the same one `court-art.tsx` renders with) to
+ * `projectReturnDot`'s `cy`, landing on the return frame's OWN viewBox x —
+ * `"placement"`'s extra CSS `rotate(180deg)` (applied to the WHOLE `<svg>`,
+ * so it mirrors around the viewBox's own centre, not the rotate(90)'s
+ * centre) is then composed on top ONLY for that kind, by mirroring about
+ * `RETURN_COURT.viewBox.minX + RETURN_COURT.viewBox.w / 2`. The final
+ * composed x's side of that centre must agree with `projectViewerDot`'s own
+ * side of `VIEWER_COURT.centreX`, for both cuts and both lateral signs.
+ */
+function composedReturnScreenX(
+  kind: "contact" | "placement",
+  cy: number,
+): number {
+  const rotated = lateralToViewBoxX(cy);
+  if (kind !== "placement") return rotated;
+  const svgCentreX = RETURN_COURT.viewBox.minX + RETURN_COURT.viewBox.w / 2;
+  return 2 * svgCentreX - rotated;
+}
+
+test.describe("projectViewerDot composed mirror invariant (full transform chain, fix round 1)", () => {
+  const cases = [
+    { kind: "contact" as const, cut: "returnContact" as const },
+    { kind: "placement" as const, cut: "returnPlacement" as const },
+  ];
+
+  for (const { kind, cut } of cases) {
+    for (const lateralM of [4.115, -4.115]) {
+      test(`${cut}: lateralM=${lateralM} — the FULLY COMPOSED in-shell screen-x agrees with projectViewerDot's side of centre`, () => {
+        const shell = projectReturnDot(kind, { lateralM, depthM: 0 });
+        const composedX = composedReturnScreenX(kind, shell.cy);
+        const svgCentreX =
+          RETURN_COURT.viewBox.minX + RETURN_COURT.viewBox.w / 2;
+
+        const viewer = projectViewerDot(cut, {
+          lateralM,
+          depthM: cut === "returnPlacement" ? 6.4 : 0,
+          atNet: false,
+        });
+
+        const shellIsRight = composedX > svgCentreX;
+        const viewerIsRight = viewer.x > VIEWER_COURT.centreX;
+        expect(shellIsRight).toBe(viewerIsRight);
+      });
+    }
+  }
+});
+
 test.describe("projectViewerDot clamping", () => {
   test("an extreme far-half landing clamps inside the viewBox, inset by markRadius", () => {
     const { x, y } = projectViewerDot("serve", {
@@ -1117,5 +1172,29 @@ test.describe("viewerInitialTransform", () => {
       h: 20000,
     });
     expect(t.z).toBe(ZOOM_MAX);
+  });
+
+  /**
+   * Fix round 1: every case above uses a stage close to the art's own
+   * aspect, so both axes land in the SAME `clampPan` regime (scaled art
+   * fits, or overflows, on both x and y together) — `clampPan`'s "half" that
+   * only fires when the two axes DISAGREE was never actually exercised. A
+   * wide-short stage forces exactly that split for a contact cut (height-
+   * constrained fit scale, then zoomed 1.6x): the result fits horizontally
+   * (stage.w is huge) but overflows vertically. `viewerInitialTransform`
+   * already runs its own result through `clampPan` — re-applying it here
+   * must be a no-op (a fixed point), or the seeded transform wasn't
+   * actually valid per `clampPan`'s own rule.
+   */
+  test("returnContact: a wide-short stage splits the two clampPan regimes (x fits, y overflows) — the seeded transform is a fixed point of clampPan", () => {
+    const wideShortStage = { w: 2000, h: 600 };
+    const t = viewerInitialTransform("returnContact", wideShortStage);
+
+    // Confirm the split actually happened before trusting the fixed-point
+    // assertion below to mean anything.
+    expect(art.w * t.z).toBeLessThanOrEqual(wideShortStage.w);
+    expect(art.h * t.z).toBeGreaterThan(wideShortStage.h);
+
+    expect(clampPan(t, art, wideShortStage)).toEqual(t);
   });
 });

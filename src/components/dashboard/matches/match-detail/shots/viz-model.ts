@@ -83,6 +83,34 @@ export const EMPTY_VIZ_FILTERS: VizFilters = {
 export type Outcome = "won" | "lost" | "miss";
 
 /**
+ * Per-dot readout for the fullscreen viewer's hover card (Phase 2A, Task 2)
+ * — every field is either already on the `MatchPoint`/`MatchShot` this dot
+ * came from, or trivially derived from it; nothing here is fetched
+ * separately, so the hover card can never show a value `computeViz` itself
+ * didn't already have in hand.
+ *
+ * `wonBySubject` derives from `subjectIsPlayer1` (guardrails §4: "you" is
+ * resolved once, everything below takes the resolved boolean), never from a
+ * literal `"player1"` check — a player-2 viewer must see their OWN
+ * won/lost, not the raw server-side winner.
+ *
+ * `speedMph` is `null` whenever the shot's own `MatchShot.speedMph` is
+ * null (never fabricated — Global Constraints: "no fabricated serve
+ * speed") — it does NOT reach back to a heavier per-shot query the way, say,
+ * video alignment does; if a shot row has no speed, this dot has no speed.
+ */
+export interface VizDotMeta {
+  pointId: string;
+  setNumber: number;
+  pointScore: string | null;
+  gameScore: string | null;
+  wonBySubject: boolean;
+  shotType: string | null;
+  result: string | null;
+  speedMph: number | null;
+}
+
+/**
  * Every cut carries normalised court METRES (`lateralM`/`depthM`) —
  * `court-geometry.ts`'s `projectServeMetricDot`/`projectReturnDot` map those
  * onto their frame. Serve dots (Task 2): `depthM` holds
@@ -120,34 +148,6 @@ export type Outcome = "won" | "lost" | "miss";
  * `rallyPosition` dots are drawn at their own contact point, which has no
  * "never crossed the net" concept.
  */
-/**
- * Per-dot readout for the fullscreen viewer's hover card (Phase 2A, Task 2)
- * — every field is either already on the `MatchPoint`/`MatchShot` this dot
- * came from, or trivially derived from it; nothing here is fetched
- * separately, so the hover card can never show a value `computeViz` itself
- * didn't already have in hand.
- *
- * `wonBySubject` derives from `subjectIsPlayer1` (guardrails §4: "you" is
- * resolved once, everything below takes the resolved boolean), never from a
- * literal `"player1"` check — a player-2 viewer must see their OWN
- * won/lost, not the raw server-side winner.
- *
- * `speedMph` is `null` whenever the shot's own `MatchShot.speedMph` is
- * null (never fabricated — Global Constraints: "no fabricated serve
- * speed") — it does NOT reach back to a heavier per-shot query the way, say,
- * video alignment does; if a shot row has no speed, this dot has no speed.
- */
-export interface VizDotMeta {
-  pointId: string;
-  setNumber: number;
-  pointScore: string | null;
-  gameScore: string | null;
-  wonBySubject: boolean;
-  shotType: string | null;
-  result: string | null;
-  speedMph: number | null;
-}
-
 export interface VizDot {
   id: string;
   outcome: Outcome;
@@ -879,6 +879,20 @@ export function computeViz(
       const zoneDot = pointToServeDotFromServeZones(serveInput);
       if (zoneDot) serveDots.push(zoneDot);
 
+      // Fix round 1: mirror the return branch's flattened-field fallback —
+      // `serveShot` can be `undefined` (a point whose `shots` row wasn't
+      // resolvable at all; the dot still draws off `p.firstShotLandingX/Y`/
+      // `p.firstShotResult` above via `classifyServePlacement`'s fallback
+      // path), and without this fallback its `meta` silently went blank
+      // even though the point's own flattened fields had the answer.
+      // `speedMph` has no flattened equivalent, so it stays `serveShot?.
+      // speedMph ?? null` — never fabricated.
+      const serveMetaShot = {
+        shotType: serveShot?.shotType ?? p.firstShotType ?? null,
+        result: serveShot?.result ?? p.firstShotResult ?? null,
+        speedMph: serveShot?.speedMph ?? null,
+      };
+
       dots.push({
         id: p.id,
         lateralM: metrics.lateralM,
@@ -896,7 +910,7 @@ export function computeViz(
         // landing" fact instead.
         shape: p.resultType === "Ace" ? "star" : "circle",
         atNet: metrics.kind === "net",
-        meta: pointDotMeta(p, subjectIsPlayer1, serveShot),
+        meta: pointDotMeta(p, subjectIsPlayer1, serveMetaShot),
       });
     } else {
       if (p.serverIsPlayer1 === subjectIsPlayer1) continue;

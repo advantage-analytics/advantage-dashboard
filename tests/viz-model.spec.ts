@@ -1834,6 +1834,31 @@ test.describe("VizDot.meta — serve cut", () => {
     const r = computeViz([p], "serve", EMPTY_VIZ_FILTERS, true);
     expect(r.dots[0].meta!.speedMph).toBeNull();
   });
+
+  /**
+   * Fix round 1: `serveShot` (`pickServeShotBy`'s result) is `undefined`
+   * whenever the point has no `shots` row at all — the dot still draws off
+   * `p.firstShotLandingX/Y`/`p.firstShotResult` via `classifyServePlacement`'s
+   * own fallback path, but `meta` used to go blank instead of falling back
+   * the same way the return branch already did.
+   */
+  test("falls back to the flattened firstShotType/firstShotResult when the point has no shots row at all", () => {
+    const p = point({
+      serverIsPlayer1: true,
+      wonByPlayer1: true,
+      firstShotType: "First Serve",
+      firstShotResult: "In",
+      firstShotLandingX: -1.0,
+      firstShotLandingY: 8.0,
+      shots: [], // no shots row to resolve a serve shot from
+    });
+    const r = computeViz([p], "serve", EMPTY_VIZ_FILTERS, true);
+    expect(r.dots).toHaveLength(1);
+    const meta = r.dots[0].meta!;
+    expect(meta.shotType).toBe("First Serve");
+    expect(meta.result).toBe("In");
+    expect(meta.speedMph).toBeNull();
+  });
 });
 
 test.describe("VizDot.meta — return cuts", () => {

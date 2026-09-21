@@ -412,7 +412,7 @@ function viewBoxYToDepthX(viewBoxY: number): number {
  *   rotatedX = netX - (innerY(lateralY) - centerY)
  *   outputX = rotatedX + RETURN_OUTER_TRANSLATE_X
  */
-function lateralToViewBoxX(lateralY: number): number {
+export function lateralToViewBoxX(lateralY: number): number {
   const innerY =
     RETURN_INNER_SCALE * (lateralY - RETURN_COURT.centerY) +
     RETURN_INNER_TRANSLATE_TARGET_Y;
@@ -755,9 +755,14 @@ export function starPoints(cx: number, cy: number, outerR: number): string {
  */
 
 // Real-world metres, matching `viz-model.ts`'s own (private) constants of
-// the same names — kept as a separate local copy rather than an import
+// the same names — kept as a separate local copy rather than a VALUE import
 // since this module stays plain geometry/SVG-adjacent and shouldn't reach
-// back into the model layer for two literals.
+// back into the model layer for two literals. (Fix round 1: this file DOES
+// now carry a TYPE-only import of `Cut`/`VizDot` from `./viz-model`, for
+// `projectViewerDot`/`viewerInitialTransform`'s own signatures — that's
+// erased at compile time and creates no runtime dependency either way, so
+// the "no reaching into the model layer" reasoning here still holds for
+// actual VALUES like these two constants.)
 const SERVE_REAL_NET_Y = 11.885;
 const SERVE_REAL_SERVICE_Y = 5.485;
 const SERVE_REAL_BOX_DEPTH_M = SERVE_REAL_NET_Y - SERVE_REAL_SERVICE_Y; // 6.4
