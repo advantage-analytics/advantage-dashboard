@@ -47,3 +47,15 @@ is the runner's. Newest entries at the bottom.
 1. The landing ghost still uses `--radius-element` while the slab is `--radius-dropdown` — a one-line fix.
 2. `board.pointLine` is no longer read by the room; only the report rail uses it.
 3. The board clock re-renders at `timeupdate` cadence; it could read `--film-t` in CSS if that ever matters.
+
+## T5 · Bring FilmTransport to C3: court toggle, keyed tooltips, nothing disabled — done
+
+**gate:** mechanical pass on re-run — the full suite had one failure, `tests/match-video-attachment-flow.spec.ts:868` ("a tab closing mid-upload still retires the attempt"), in upload code this diff does not touch; the file re-run alone passed 20/20, so it was recorded as a timing flake under parallel load · completion `VERDICT: pass`
+
+**changed:** `FilmTransport` gains `courtOn` / `onToggleCourt` and a `Grid2x2` court control between sound and exit (white on, 45% off, `aria-pressed`, label carries the state). Every control's dark tooltip carries its key; the two title-row chevrons gain tooltips; speed reads `Playback speed, {rate}×`. All `disabled` attributes are gone — step and save guard inside their handlers — and "More" is the only `aria-disabled` control, with no handler. The time slot reads "—" before the duration is known. `FilmTrack`'s slider handles ←/→ (5s), Home and End and carries `data-film-own-keys`. The room holds a placeholder `useState(true)` for the court until T12.
+
+**follow-ups:**
+
+1. `data-film-own-keys` on the seek lane also swallows Space, S and Esc while it has focus. T15 should narrow the guard or have the lane pass them on.
+2. Speed's tooltip carries no key; the H2 table gives it `⇧.` / `⇧,`.
+3. The bar now mixes two conventions: slashed off-state glyphs (kept by decision) beside the court glyph that only dims.

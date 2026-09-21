@@ -189,6 +189,9 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   const [skipDead, setSkipDead] = useState(false);
   const [failed, setFailed] = useState(false);
   const [chrome, setChrome] = useState(true);
+  // Placeholder for the court toggle so the transport's control is live now.
+  // T12 replaces it with the persisted preference and the court itself.
+  const [courtOn, setCourtOn] = useState(true);
   const [panel, setPanel] = useState<PanelState>("closed");
   const panelOpen = panel === "open";
   const [videoReady, setVideoReady] = useState(false);
@@ -908,6 +911,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 skippingDeadTime={skipDead}
                 saved={activePoint ? activePoint.saved : null}
                 canStep={p.walkStops.length > 0}
+                courtOn={courtOn}
                 onSeek={seek}
                 onTogglePlay={togglePlay}
                 onStep={step}
@@ -916,6 +920,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 onCycleRate={cycleRate}
                 onToggleLoop={() => setLooping((v) => !v)}
                 onToggleMute={toggleMute}
+                onToggleCourt={() => setCourtOn((v) => !v)}
                 onExit={exit}
               />
             </div>

@@ -73,7 +73,7 @@ ready).
 
 ## T5 · Bring FilmTransport to C3: court toggle, keyed tooltips, nothing disabled
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) film/film-transport.tsx, film/film-track.tsx, film/film-fullscreen.tsx (FilmTransport call site only)
 - **done when:**
