@@ -772,3 +772,61 @@ test("a focused point row keeps the arrow keys", async ({ page }) => {
   const after = await state(page, REPORT);
   expect(after?.time).toBeCloseTo(0.25, 1);
 });
+
+/* -------------------------------------------------------------------------
+ * Bookmark toggle (T7) — "already in the desired state" counts as landed.
+ * ---------------------------------------------------------------------- */
+
+test("a save that hits the PK conflict (23505) stays saved", async ({
+  page,
+}) => {
+  const matchId = "bookmark-conflict";
+  await open(page, matchId, { bookmarkOutcome: "conflict" });
+
+  // Point b starts unsaved.
+  const button = page.locator(
+    '[data-point-id="b"] button[aria-label="Bookmark this point"]',
+  );
+  await button.click();
+
+  await expect(
+    page.locator('[data-point-id="b"] button[aria-label="Remove bookmark"]'),
+  ).toBeVisible();
+});
+
+test("an unsave that matches zero rows stays unsaved", async ({ page }) => {
+  const matchId = "bookmark-zero-rows";
+  await open(page, matchId);
+
+  // Point a starts saved.
+  const button = page.locator(
+    '[data-point-id="a"] button[aria-label="Remove bookmark"]',
+  );
+  await button.click();
+
+  await expect(
+    page.locator(
+      '[data-point-id="a"] button[aria-label="Bookmark this point"]',
+    ),
+  ).toBeVisible();
+});
+
+test("a save refused for a reason other than 23505 reverts", async ({
+  page,
+}) => {
+  const matchId = "bookmark-refused";
+  await open(page, matchId, { bookmarkOutcome: "refused" });
+
+  // Point b starts unsaved.
+  const button = page.locator(
+    '[data-point-id="b"] button[aria-label="Bookmark this point"]',
+  );
+  await button.click();
+
+  // The RLS refusal is not `23505`, so the optimistic save reverts.
+  await expect(
+    page.locator(
+      '[data-point-id="b"] button[aria-label="Bookmark this point"]',
+    ),
+  ).toBeVisible();
+});

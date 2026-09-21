@@ -314,12 +314,24 @@ function FilmRoom({
    * Bookmark a point, optimistically, and put it back if the write did not
    * land.
    *
-   * Saving is workspace-wide: anyone who can SEE a match may bookmark its
-   * points. RLS on `points` still lets only `matches.created_by` UPDATE a row,
-   * so the write goes through `set_point_saved`, which checks visibility and
-   * touches `saved` alone. It returns the stored value, or null when the point
-   * was not the caller's to see — echoing it is what makes "it persisted"
-   * checkable rather than assumed.
+   * A bookmark is a `point_bookmarks` row, shared per match: anyone who can
+   * SEE the match reads every row on its points and may remove any of them;
+   * INSERT is own-row, so `user_id` is never sent — the column default
+   * supplies the caller. Saving inserts one row. Unsaving deletes every row
+   * on the point, not just the caller's, because one surviving teammate row
+   * would keep the point saved.
+   *
+   * The toggle asks for a desired state, not proof of a fresh row, so "the
+   * database already agrees with you" counts as landed rather than as a
+   * failure: an unsave whose DELETE matches zero rows (a teammate already
+   * removed the last one) is landed, and a save whose INSERT hits the PK
+   * conflict `23505` (a double-click, or a teammate saved it first) is
+   * landed too — both leave the point in the state the caller asked for.
+   * Only a save that fails with a different error (e.g. RLS refusing the
+   * insert) reverts. This gives up UI-level detection of an RLS-refused
+   * DELETE, which is fine: the loader only renders points from matches the
+   * viewer can see, and T4's DELETE policy admits anyone who can see the
+   * match.
    */
   const handleToggleSaved = useCallback(
     async (pointId: string) => {
@@ -333,12 +345,14 @@ function FilmRoom({
       pointsRef.current = optimistic;
       setPoints(optimistic);
 
-      const { data, error } = await supabase.rpc("set_point_saved", {
-        p_point_id: pointId,
-        p_saved: nextSaved,
-      });
+      const { error } = nextSaved
+        ? await supabase.from("point_bookmarks").insert({ point_id: pointId })
+        : await supabase
+            .from("point_bookmarks")
+            .delete()
+            .eq("point_id", pointId);
 
-      const stored = !error && data === nextSaved;
+      const stored = nextSaved ? !error || error.code === "23505" : !error;
       if (stored) return;
 
       const reverted = pointsRef.current.map((p) =>
