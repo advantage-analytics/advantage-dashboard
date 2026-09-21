@@ -14,7 +14,10 @@ import { PanelRight } from "lucide-react";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { isFormControl } from "@/components/dashboard/matches/new-match-wizard/useWizardKeys";
-import { shortMonthDate } from "@/components/dashboard/matches/match-detail/format-clock";
+import {
+  formatClock,
+  shortMonthDate,
+} from "@/components/dashboard/matches/match-detail/format-clock";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { advButton } from "@/lib/ui/adv-button";
@@ -835,7 +838,16 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
             <FilmScoreboard
               board={board}
               pointName={activePoint ? activePoint.resultType || "Point" : null}
-              collapsed={!chrome}
+              playing={playing}
+              elapsed={formatClock(currentTime)}
+              saved={activePoint?.saved ?? false}
+              // You/opponent is `useMatchSides()`'s call, never player order.
+              wonByYou={
+                activePoint
+                  ? activePoint.wonByPlayer1 === sides.you.isPlayer1
+                  : null
+              }
+              dim={!chrome}
             />
 
             <button

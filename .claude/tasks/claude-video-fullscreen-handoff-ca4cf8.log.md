@@ -35,3 +35,15 @@ is the runner's. Newest entries at the bottom.
 
 1. `[data-film-own-keys]` makes the room ignore every key from the focused board, so Escape on a focused-but-not-held board cannot close the drawer or the room. Consider forwarding an unhandled Escape.
 2. A keyboard nudge moves instantly; a short glide might read better, but the spec gives no motion for it.
+
+## T4 · Restyle the scoreboard to the C1 FilmBoard slab — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** The scoreboard is the C1 slab: 236px, `14px 15px 12px`, `--radius-dropdown`, `rgba(13,13,13,0.74)` with an 8px blur and no surface shadow. Head carries "Playing"/"Paused" and a mono clock; rows use one set track per column toned by the new pure `setTrackTone`; the foot is a hairline, a 22px winner pill and a truncating line from the new pure `footLine` (point name, "· saved", or the game state). `Board` gains `gameNumber`. `dim` sets 82% opacity and the room passes `!chrome`. The slab is an inner element so the drag root T3 built stays byte-identical and no empty box paints before the first point resolves. The winner pill is omitted between points, with a comment.
+
+**follow-ups:**
+
+1. The landing ghost still uses `--radius-element` while the slab is `--radius-dropdown` — a one-line fix.
+2. `board.pointLine` is no longer read by the room; only the report rail uses it.
+3. The board clock re-renders at `timeupdate` cadence; it could read `--film-t` in CSS if that ever matters.

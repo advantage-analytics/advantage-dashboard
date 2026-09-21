@@ -59,7 +59,7 @@ ready).
 
 ## T4 · Restyle the scoreboard to the C1 FilmBoard slab
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** (guess) film/film-scoreboard.tsx, film/film-score.ts, tests/film-score.spec.ts, film/film-fullscreen.tsx (FilmScoreboard call site only)

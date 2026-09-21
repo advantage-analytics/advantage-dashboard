@@ -24,17 +24,24 @@ import {
   type BoardPosition,
   type BoardSize,
 } from "./board-position";
-import type { Board } from "./film-score";
+import {
+  footLine,
+  setTrackTone,
+  type Board,
+  type SetTrackTone,
+} from "./film-score";
 
 /**
- * The board and the point line (handoff F1/F2).
+ * The board: one 236px slab (handoff C1).
  *
- * Two 32px rows on rgba(13,13,13,.8): a 184px name panel on a 5% wash with
- * a 5px serve dot, the set columns in 12px mono on 24px centred cells (45%
- * white when settled, 85% in play), and the live game score in a 40px cell
- * behind a 1px inset rule. The point line sits under it, indented 12px so
- * its mono score lands under the names. Both survive the chrome collapse —
- * they are what the screen IS, not a control.
+ * Head is a micro "Playing" / "Paused" against a mono clock. Under it two
+ * rows 11px apart — name (you 13/500 white, the opponent 13/400 at 72%), a
+ * 6px blue serve dot, then a right-aligned mono group of one 11px set track
+ * per set column and a 22px game cell. A 14% hairline closes it off above a
+ * foot that pairs the 22px winner pill with the point's name. Every number
+ * still comes from `boardAt()` (`film-score.ts`), the same one the report
+ * rail reads. It survives the chrome collapse at 82% (`dim`) — it is what
+ * the screen IS, not a control.
  *
  * ── Movable, with four resting corners ──────────────────────────────────────
  * Wherever it sits it covers some of the court, so it can be moved. It moves
@@ -61,6 +68,25 @@ const ANCHOR_LABEL: Record<BoardAnchor, string> = {
   "bottom-right": "bottom right",
 };
 
+/** The two tones a set track is drawn in. */
+const SET_TRACK_COLOR: Record<SetTrackTone, string> = {
+  won: "#FFFFFF",
+  lost: "rgba(255,255,255,0.42)",
+};
+
+/** "G. Revelli" → "GR". The winner pill is 22px, so two letters at most. */
+function initials(name: string): string {
+  const letters: string[] = [];
+  for (const part of name.split(/\s+/)) {
+    const letter = part.match(/\p{L}/u)?.[0];
+    if (letter) letters.push(letter.toUpperCase());
+  }
+  if (letters.length === 0) return "";
+  return letters.length === 1
+    ? letters[0]
+    : letters[0] + letters[letters.length - 1];
+}
+
 function arrowKey(key: string): BoardArrowKey | null {
   return key === "ArrowLeft" ||
     key === "ArrowRight" ||
@@ -73,13 +99,31 @@ function arrowKey(key: string): BoardArrowKey | null {
 export function FilmScoreboard({
   board,
   pointName,
-  collapsed,
+  playing,
+  elapsed,
+  saved,
+  wonByYou,
+  dim,
   onRest,
 }: {
   board: Board | null;
   /** The analysis's own string for the current point, or null between points. */
   pointName: string | null;
-  collapsed: boolean;
+  /** Drives the head's micro status: "Playing" or "Paused". */
+  playing: boolean;
+  /** The film clock, already formatted ("41:12"). */
+  elapsed: string;
+  /** Whether the point in play is bookmarked — the foot's "· saved". */
+  saved: boolean;
+  /**
+   * Who took the point, resolved against `useMatchSides()` by the room
+   * (`wonByPlayer1 === sides.you.isPlayer1`), never from player1/player2
+   * order. Null between points: the frame does not say whether the pill shows
+   * there, so it is omitted rather than guessed at.
+   */
+  wonByYou: boolean | null;
+  /** The chrome is collapsed (R2); the slab stays, at 82%. */
+  dim: boolean;
   /**
    * Fires with the resting corner and the measured board size whenever either
    * changes — what the court needs to keep the board's column beneath it.
@@ -335,7 +379,9 @@ export function FilmScoreboard({
           else setHeld(false);
         }}
         className={cn(
-          "absolute flex touch-none flex-col items-start gap-2 rounded-[var(--radius-element)] select-none",
+          // A bare shell around the slab: it shrink-wraps it, so the measured
+          // size the corners are figured from is the slab's own.
+          "absolute flex touch-none rounded-[var(--radius-dropdown)] select-none",
           free ? "cursor-grabbing" : cn("cursor-grab", placed && SETTLE_CLASS),
           // Held is the focus outline at full weight (R6).
           held && "shadow-[var(--focus-ring)]",
@@ -356,83 +402,134 @@ export function FilmScoreboard({
         </span>
         {board && (
           <div
-            role="table"
-            aria-label="Score"
-            className="inline-flex flex-col overflow-hidden rounded-[var(--radius-element)] bg-[rgba(13,13,13,0.8)] shadow-[var(--shadow-dropdown)]"
+            className="box-border flex flex-col"
+            style={{
+              width: 236,
+              gap: 14,
+              padding: "14px 15px 12px",
+              borderRadius: "var(--radius-dropdown)",
+              background: "rgba(13,13,13,0.74)",
+              backdropFilter: "blur(8px)",
+              fontFamily: "var(--font-sans)",
+              opacity: dim ? 0.82 : 1,
+            }}
           >
-            {board.rows.map((row, r) => (
-              <div key={row.name} role="row" className="contents">
-                {r === 1 && (
-                  <div aria-hidden="true" className="h-px bg-white/10" />
-                )}
-                <div className="flex h-8 items-stretch">
-                  <div
-                    role="rowheader"
-                    className="flex w-[184px] items-center gap-2 bg-white/5 px-3"
+            <div className="flex items-baseline gap-2">
+              {/* `.text-micro` is unlayered and would beat a Tailwind colour
+                  utility, so the dark-scope alpha is set inline. */}
+              <span
+                className="text-micro"
+                style={{ color: "rgba(255,255,255,0.55)" }}
+              >
+                {playing ? "Playing" : "Paused"}
+              </span>
+              <span
+                className="mono tabular ml-auto"
+                style={{ fontSize: 10, color: "rgba(255,255,255,0.45)" }}
+              >
+                {elapsed}
+              </span>
+            </div>
+
+            <div
+              role="table"
+              aria-label="Score"
+              className="flex flex-col gap-[11px]"
+            >
+              {board.rows.map((row, r) => {
+                const you = r === 0;
+                const other = board.rows[you ? 1 : 0];
+                return (
+                  <span
+                    key={row.name}
+                    role="row"
+                    className="flex min-w-0 items-center gap-[7px]"
                   >
                     <span
-                      aria-hidden="true"
-                      className={cn(
-                        "h-[5px] w-[5px] shrink-0 rounded-[var(--radius-pill)]",
-                        row.serving ? "bg-white" : "bg-transparent",
-                      )}
-                    />
-                    <span className="truncate text-[12px] font-medium text-white">
+                      role="rowheader"
+                      className="min-w-0 truncate"
+                      style={{
+                        fontSize: 13,
+                        fontWeight: you ? 500 : 400,
+                        color: you ? "#FFFFFF" : "rgba(255,255,255,0.72)",
+                      }}
+                    >
                       {row.name}
                     </span>
+                    <span
+                      aria-hidden="true"
+                      className="h-[6px] w-[6px] shrink-0 rounded-[var(--radius-pill)]"
+                      style={{
+                        background: row.serving ? "var(--blue)" : "transparent",
+                      }}
+                    />
                     {row.serving && <span className="sr-only">, serving</span>}
-                  </div>
-                  <div className="flex items-center px-1">
-                    {row.sets.map((games, i) => (
+                    <span
+                      role="cell"
+                      className="mono tabular ml-auto inline-flex shrink-0 items-center gap-2 text-[13px] whitespace-nowrap"
+                    >
+                      {row.sets.map((games, i) => (
+                        <span
+                          key={i}
+                          className="w-[11px] text-right"
+                          style={{
+                            color:
+                              SET_TRACK_COLOR[
+                                setTrackTone(games, other.sets[i] ?? null)
+                              ],
+                          }}
+                        >
+                          {games ?? ""}
+                        </span>
+                      ))}
                       <span
-                        key={i}
-                        role="cell"
-                        className="mono tabular w-6 text-center text-[12px]"
-                        style={{
-                          color:
-                            i === board.liveSet
-                              ? "rgba(255,255,255,0.85)"
-                              : "rgba(255,255,255,0.45)",
-                        }}
+                        className="w-[22px] text-right"
+                        style={{ color: "#FFFFFF" }}
                       >
-                        {games ?? ""}
+                        {row.game ?? ""}
                       </span>
-                    ))}
-                  </div>
-                  <div
-                    role="cell"
-                    className="flex w-10 items-center justify-center shadow-[inset_1px_0_0_rgba(255,255,255,0.14)]"
-                  >
-                    <span className="mono tabular text-[12px] text-white">
-                      {row.game ?? ""}
                     </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+                  </span>
+                );
+              })}
+            </div>
 
-        {(board?.pointLine || pointName) && (
-          <div
-            className="flex items-baseline gap-[9px] pl-3"
-            style={{ textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}
-          >
-            {board?.pointLine && (
-              <span className="mono tabular text-[10px] text-white/55">
-                {board.pointLine}
-              </span>
-            )}
-            {pointName && (
+            <div
+              className="flex items-center gap-[9px] pt-[9px]"
+              style={{ borderTop: "1px solid rgba(255,255,255,0.14)" }}
+            >
+              {/* Between points nobody has won anything yet. The frame does
+                  not draw that case, so the pill is omitted rather than
+                  invented, and the foot keeps the full width. */}
+              {wonByYou !== null && (
+                <span
+                  aria-label={`${board.rows[wonByYou ? 0 : 1].name} won the point`}
+                  className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[var(--radius-pill)]"
+                  style={{
+                    background: wonByYou
+                      ? "var(--blue)"
+                      : "rgba(255,255,255,0.14)",
+                    fontSize: 10,
+                    fontWeight: 500,
+                    color: "#FFFFFF",
+                  }}
+                >
+                  {initials(board.rows[wonByYou ? 0 : 1].name)}
+                </span>
+              )}
               <span
-                className="text-[11px] font-medium whitespace-nowrap"
-                style={{
-                  color: collapsed ? "rgba(255,255,255,0.9)" : "#FFFFFF",
-                }}
+                className="min-w-0 truncate"
+                style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}
               >
-                {pointName}
+                {footLine(pointName, saved, {
+                  set: board.liveSet + 1,
+                  game: board.gameNumber,
+                  serverName: (
+                    board.rows.find((row) => row.serving) ?? board.rows[0]
+                  ).name,
+                })}
               </span>
-            )}
+            </div>
           </div>
         )}
       </div>

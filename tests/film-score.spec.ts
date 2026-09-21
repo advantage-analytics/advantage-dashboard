@@ -3,7 +3,9 @@ import { expect, test } from "@playwright/test";
 import {
   absolutize,
   boardAt,
+  footLine,
   initialSurname,
+  setTrackTone,
 } from "@/components/dashboard/matches/match-detail/film/film-score";
 
 import { pt } from "./fixtures/film-point";
@@ -83,5 +85,46 @@ test.describe("boardAt", () => {
     expect(board.rows[0].game).toBeNull();
     expect(board.rows[0].serving).toBe(true);
     expect(board.pointLine).toBeNull();
+  });
+
+  test("carries the game number the foot line names between points", () => {
+    const point = pt({ id: "p", setNumber: 2, gameNumber: 7 });
+    const board = boardAt(point, sides, {
+      hasGameScore: true,
+      hasPointScore: true,
+    });
+    expect(board.liveSet + 1).toBe(2);
+    expect(board.gameNumber).toBe(7);
+  });
+});
+
+test.describe("setTrackTone", () => {
+  test("won only where the column is strictly ahead", () => {
+    expect(setTrackTone(6, 4)).toBe("won");
+    expect(setTrackTone(4, 6)).toBe("lost");
+    // A tie is not a win, and neither is a blank column or the set in play.
+    expect(setTrackTone(5, 5)).toBe("lost");
+    expect(setTrackTone(null, null)).toBe("lost");
+    expect(setTrackTone(null, 3)).toBe("lost");
+    expect(setTrackTone(3, null)).toBe("won");
+  });
+});
+
+test.describe("footLine", () => {
+  const state = { set: 2, game: 7, serverName: "Reid" };
+
+  test("the point's name, gaining · saved when it is bookmarked", () => {
+    expect(footLine("Forehand Winner", false, state)).toBe("Forehand Winner");
+    expect(footLine("Forehand Winner", true, state)).toBe(
+      "Forehand Winner · saved",
+    );
+  });
+
+  test("falls back to the game state, never to an empty string", () => {
+    const fallback = "Set 2 · game 7 · Reid serving";
+    expect(footLine(null, false, state)).toBe(fallback);
+    expect(footLine("   ", false, state)).toBe(fallback);
+    // Saved is about a point; with no point there is nothing to append to.
+    expect(footLine(null, true, state)).toBe(fallback);
   });
 });

@@ -72,6 +72,8 @@ export interface Board {
   rows: [BoardRow, BoardRow];
   /** Index into `sets` of the column currently in play. */
   liveSet: number;
+  /** The game the board is showing, 1-based — what the foot names between points. */
+  gameNumber: number;
   /** "30–40", SERVER-first like tennis calls it, for the point line; null when unknown. */
   pointLine: string | null;
 }
@@ -176,8 +178,55 @@ export function boardAt(
       },
     ],
     liveSet,
+    gameNumber: point.gameNumber,
     pointLine: pts ? serverFirstScore(point.pointScore) : null,
   };
+}
+
+/** Whether a set column reads as won or lost (`C1-FilmBoard.html`, `renderVals`). */
+export type SetTrackTone = "won" | "lost";
+
+/**
+ * A set column's tone on the board: full white where the column is ahead, 42%
+ * white everywhere else. The frame's comparison is a strict greater-than, so a
+ * tie, a blank column and the set still in play all read "lost" — nothing but
+ * being ahead is drawn as won.
+ */
+export function setTrackTone(
+  mine: number | null,
+  theirs: number | null,
+): SetTrackTone {
+  return Number(mine) > Number(theirs) ? "won" : "lost";
+}
+
+/** The state the board is showing, for a foot with no point to name. */
+export interface BoardGameState {
+  /** 1-based set. */
+  set: number;
+  /** 1-based game within that set. */
+  game: number;
+  /** Whoever is serving, named the way the board's rows name them. */
+  serverName: string;
+}
+
+/**
+ * The board's foot line.
+ *
+ * A named point wins, gaining "· saved" when the workspace has bookmarked it.
+ * Between points (R7) it falls back to the game the board is showing rather
+ * than to a placeholder sentence, so the foot is never empty and the pill
+ * never sits over dead space.
+ */
+export function footLine(
+  pointName: string | null,
+  saved: boolean,
+  state: BoardGameState,
+): string {
+  const named = pointName?.trim();
+  if (!named) {
+    return `Set ${state.set} · game ${state.game} · ${state.serverName} serving`;
+  }
+  return saved ? `${named} · saved` : named;
 }
 
 /**
