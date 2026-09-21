@@ -72,6 +72,7 @@ import {
   setSegments,
   deadTimeJump,
   nextStop,
+  playingStopAt,
   prevStop,
   REACHED_EPSILON_SECONDS,
   type FilmClock,
@@ -111,9 +112,12 @@ import type {
  * every change as an opacity fade and drops the travel.
  *
  * ── Chrome ──────────────────────────────────────────────────────────────────
- * 3s of stillness collapses everything operable; the board and the point
- * name stay. Any pointer, key or focus is activity, and a focused control
- * holds the chrome up, so it never fades under someone's keyboard.
+ * 3s of stillness **while the film is playing** collapses everything operable
+ * — the transport, the "Points" trigger, the court's header glyphs, the
+ * bottom scrim and the cursor. The board and the court keep their boxes. Any
+ * pointer, key or focus is activity, a focused control holds the chrome up,
+ * and a pause puts it back: someone who stopped the film to look at something
+ * is not idle.
  */
 
 export interface FilmFullscreenProps {
@@ -162,6 +166,20 @@ export interface FilmFullscreenProps {
 }
 
 const IDLE_MS = 3000;
+
+/**
+ * The film's own darkening, in two layers because they have different lives.
+ *
+ * The top wash keeps the "Points" trigger and a bright first frame apart; it
+ * is not operable and stays through the collapse. The bottom is the
+ * transport's ground (C3: the bar "draws no surface of its own"), so it goes
+ * with the transport and comes back with it — one 200ms opacity fade, not a
+ * gradient crossfading into another gradient.
+ */
+const TOP_SCRIM =
+  "linear-gradient(to bottom, rgba(0,0,0,0.42) 0%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0) 62%)";
+const BOTTOM_SCRIM =
+  "linear-gradient(to bottom, rgba(0,0,0,0) 58%, rgba(13,13,13,0.78) 100%)";
 
 /**
  * A heading per terminal reason. Same four as `film-player.tsx`, because one
@@ -303,12 +321,25 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
 
   /* ── Derived ─────────────────────────────────────────────────────────── */
 
+  // Two readings of one playhead, and they differ between points (R7).
+  //
+  // `active` is the last point REACHED and never goes back to null, which is
+  // what holds the score on the board through a changeover. `playingStop` is
+  // the point the film is actually inside, and is null in the dead time —
+  // everything that NAMES a point reads that one, so the point line, the
+  // position counter, the drawer's lit row and the court's point mode all go
+  // quiet together instead of the room insisting on a point nobody is on.
   const active = useMemo(
     () => activeStopAt(p.stops, currentTime),
     [p.stops, currentTime],
   );
-  // Before the first serve the board shows what the first point starts from.
-  const boardStop = active?.stop ?? p.stops[0] ?? null;
+  const playingStop = useMemo(
+    () => playingStopAt(p.stops, currentTime),
+    [p.stops, currentTime],
+  );
+  // No fallback to the first point: until the playhead has reached one there
+  // is no board at all (R11), rather than a board for a point nobody is on.
+  const boardStop = active?.stop ?? null;
   const board = useMemo(
     () =>
       boardStop
@@ -332,7 +363,17 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
       p.columns,
     ],
   );
-  const activePoint = active?.stop.point ?? null;
+  const activePoint = playingStop?.point ?? null;
+
+  /**
+   * The board and the court appear together, or not at all (R11).
+   *
+   * "No board for a point nobody is on": until the film has a length and the
+   * playhead has reached the first point, neither object has anything true to
+   * say, and half-populating them is worse than the black frame with its
+   * chrome — which IS the loading state here. No spinner, no skeleton.
+   */
+  const firstPointReached = duration > 0 && active !== null;
 
   // The drawer and the court both read the shot feed — the court needs the
   // playing shot with the drawer shut — and a three-set match is a few
@@ -807,18 +848,41 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     schedule();
   }, []);
 
+  // Read inside `wake`, which has to stay stable: it is the window key
+  // handler's dependency, and re-subscribing that on every play/pause is a
+  // cost for nothing.
+  const playingRef = useRef(false);
+
   const wake = useCallback(() => {
     setChrome(true);
-    arm();
+    // R2: the collapse only runs while the film is playing. A wake while
+    // paused puts the chrome up and leaves it up — there is nothing to re-arm.
+    if (playingRef.current) arm();
   }, [arm]);
 
-  // Chrome starts up; the mount only starts the clock on it.
+  /**
+   * The collapse clock runs off playback, not off the mount (R2).
+   *
+   * "After 3s of stillness **while playing**" — a viewer who paused to look at
+   * something is not idle, and the room used to fade the transport out from
+   * under them three seconds after they stopped the film. So: playing arms it,
+   * and a pause clears it (the element's own `pause` handler is what puts the
+   * chrome back, because that is an event and not a synchronization). The
+   * holds inside `arm` — focus in the room, an open menu — are unchanged and
+   * still re-arm rather than collapse.
+   */
   useEffect(() => {
+    playingRef.current = playing;
+    if (!playing) {
+      if (idleRef.current) window.clearTimeout(idleRef.current);
+      idleRef.current = null;
+      return;
+    }
     arm();
     return () => {
       if (idleRef.current) window.clearTimeout(idleRef.current);
     };
-  }, [arm]);
+  }, [playing, arm]);
 
   /* ── Keyboard ────────────────────────────────────────────────────────── */
 
@@ -880,10 +944,6 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
 
   /* ── Render ──────────────────────────────────────────────────────────── */
 
-  const scrim = chrome
-    ? "linear-gradient(to bottom, rgba(0,0,0,0.42) 0%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0) 58%, rgba(13,13,13,0.78) 100%)"
-    : "linear-gradient(to bottom, rgba(0,0,0,0.42) 0%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0) 62%, rgba(0,0,0,0) 100%)";
-
   const fade = cn(
     "transition-opacity duration-200",
     chrome ? "opacity-100" : "pointer-events-none opacity-0",
@@ -899,7 +959,13 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
         onPointerMove={wake}
         onPointerDown={wake}
         onFocus={wake}
-        className="fixed inset-0 z-50 overflow-clip bg-black outline-none"
+        className={cn(
+          "fixed inset-0 z-50 overflow-clip bg-black outline-none",
+          // R2 counts the cursor among the operable things that go: it is the
+          // one piece of chrome the viewer's own hand draws. The first pointer
+          // move brings it back, which `wake` is already listening for.
+          !chrome && "cursor-none",
+        )}
       >
         {p.problem ? (
           // The hook's terminal state, in the room's own palette. "Back to the
@@ -989,12 +1055,17 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               onClick={togglePlay}
               onPlay={() => {
                 setPlaying(true);
+                playingRef.current = true;
                 landingRef.current.playing = true;
                 p.onPlaybackPlaying(true);
               }}
               onPause={() => {
                 setPlaying(false);
+                playingRef.current = false;
                 landingRef.current.playing = false;
+                // A pause is the end of the collapse's only reason to run, so
+                // the chrome comes back with it and stays up (R2).
+                setChrome(true);
                 p.onPlaybackPlaying(false);
               }}
               // `landingRef` is seeded from the report player's hand-off, so
@@ -1019,52 +1090,73 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
 
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute inset-0 transition-[background] duration-200"
-              style={{ background: scrim }}
+              className="pointer-events-none absolute inset-0"
+              style={{ background: TOP_SCRIM }}
+            />
+            <span
+              aria-hidden="true"
+              data-film-chrome
+              // Never takes the pointer, chrome up or down: it lies over the
+              // whole film, and a click on the film is play/pause.
+              className={cn("pointer-events-none absolute inset-0", fade)}
+              style={{ background: BOTTOM_SCRIM }}
             />
 
-            <FilmScoreboard
-              board={board}
-              pointName={activePoint ? activePoint.resultType || "Point" : null}
-              playing={playing}
-              elapsed={formatClock(currentTime)}
-              saved={activePoint?.saved ?? false}
-              // You/opponent is `useMatchSides()`'s call, never player order.
-              wonByYou={
-                activePoint
-                  ? activePoint.wonByPlayer1 === sides.you.isPlayer1
-                  : null
-              }
-              dim={!chrome}
-              onRest={onBoardRest}
-            />
-
-            {courtOn && courtAt && (
-              // The court sits in the board's own column and never moves for
-              // the drawer (R6's court rule); turning it off gives that column
-              // back to the film and leaves the board where it is (R9). It
-              // travels on the board's curve, so the two land together.
-              <div
-                data-film-chrome
-                className="absolute transition-[left,top] duration-[360ms] ease-[var(--ease-out-expo)] motion-reduce:transition-none"
-                style={{ left: courtAt.left, top: courtAt.top }}
-              >
-                <FilmCourt
-                  mode={courtCardMode}
-                  title={courtTitle}
-                  caption={courtCaption}
-                  marks={courtMarks}
-                  // Who is who is `useMatchSides()`'s call, never player order.
-                  youName={lastNameOf(sides.you.name)}
-                  opponentName={lastNameOf(sides.opp.name)}
-                  controls={chrome}
-                  onSwapMode={swapCourtMode}
-                  // The header x and the transport's control are one toggle.
-                  onHide={toggleCourt}
-                  onSelectMark={selectMark}
-                  seekKey={seekKey}
+            {/* R11: one condition, so the board and the court arrive together
+                the moment the first point resolves — never one without the
+                other, and never a board for a point nobody is on. */}
+            {firstPointReached && (
+              <>
+                <FilmScoreboard
+                  board={board}
+                  // Between points the board says nothing about a point; T4's
+                  // foot falls back to the game state on a null name (R7).
+                  pointName={
+                    activePoint ? activePoint.resultType || "Point" : null
+                  }
+                  playing={playing}
+                  elapsed={formatClock(currentTime)}
+                  saved={activePoint?.saved ?? false}
+                  // You/opponent is `useMatchSides()`'s call, never player order.
+                  wonByYou={
+                    activePoint
+                      ? activePoint.wonByPlayer1 === sides.you.isPlayer1
+                      : null
+                  }
+                  dim={!chrome}
+                  onRest={onBoardRest}
                 />
-              </div>
+
+                {courtOn && courtAt && (
+                  // The court sits in the board's own column and never moves
+                  // for the drawer (R6's court rule); turning it off gives that
+                  // column back to the film and leaves the board where it is
+                  // (R9). It travels on the board's curve, so the two land
+                  // together. Between points it stays mounted and keeps its
+                  // lines — `mode` goes quiet, the card does not (R7).
+                  <div
+                    data-film-chrome
+                    className="absolute transition-[left,top] duration-[360ms] ease-[var(--ease-out-expo)] motion-reduce:transition-none"
+                    style={{ left: courtAt.left, top: courtAt.top }}
+                  >
+                    <FilmCourt
+                      mode={courtCardMode}
+                      title={courtTitle}
+                      caption={courtCaption}
+                      marks={courtMarks}
+                      // Who is who is `useMatchSides()`'s call, never player order.
+                      youName={lastNameOf(sides.you.name)}
+                      opponentName={lastNameOf(sides.opp.name)}
+                      controls={chrome}
+                      onSwapMode={swapCourtMode}
+                      // The header x and the transport's control are one toggle.
+                      onHide={toggleCourt}
+                      onSelectMark={selectMark}
+                      seekKey={seekKey}
+                    />
+                  </div>
+                )}
+              </>
             )}
 
             <button
@@ -1077,10 +1169,13 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               className={cn(
                 "absolute top-[18px] right-6 inline-flex h-7 cursor-pointer items-center gap-[7px] rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium text-white transition-[opacity,transform,background-color] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
                 // Back as soon as the drawer starts leaving, so a quick re-open
-                // can catch the sheet mid-slide and turn it around.
+                // can catch the sheet mid-slide and turn it around. The slide
+                // belongs to the drawer: the chrome collapse is opacity alone,
+                // because R2 is explicit that nothing reflows or travels.
                 chrome && !panelOpen
                   ? "opacity-100"
-                  : "pointer-events-none opacity-0 motion-safe:translate-x-2",
+                  : "pointer-events-none opacity-0",
+                panelOpen && "motion-safe:translate-x-2",
               )}
             >
               <PanelRight
@@ -1100,18 +1195,21 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               data-film-chrome
               className={cn(
                 "pointer-events-none absolute inset-y-0 left-0",
-                fade,
                 // The drawer's edge and the transport's edge travel together:
                 // same curve and length in, the drawer's quicker curve out.
+                // The collapse fade sits on the bar itself rather than here,
+                // so R2's 200ms opacity is not overridden by this longer
+                // travel — the two changes are unrelated and read as such.
                 panelOpen
-                  ? "right-[320px] transition-[right,opacity] duration-[420ms] ease-[var(--ease-out-expo)]"
-                  : "right-0 transition-[right,opacity] duration-[240ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+                  ? "right-[320px] transition-[right] duration-[420ms] ease-[var(--ease-out-expo)]"
+                  : "right-0 transition-[right] duration-[240ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
               )}
             >
               <FilmTransport
-                className={
-                  chrome ? "pointer-events-auto" : "pointer-events-none"
-                }
+                className={cn(
+                  fade,
+                  chrome ? "pointer-events-auto" : "pointer-events-none",
+                )}
                 title={`${sides.you.name} v ${sides.opp.name}`}
                 subtitle={subtitle || null}
                 position={position}
@@ -1148,9 +1246,12 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 visiblePoints={p.visiblePoints}
                 filters={p.filters}
                 onFiltersChange={p.onFiltersChange}
+                // Between points no row is lit, and the progress rule belongs
+                // to the row that is (R7) — so both read the playing point,
+                // never the last one reached.
                 activePointId={activePoint?.id ?? null}
-                activeStart={active?.stop.start ?? 0}
-                activeEnd={active?.stop.end ?? 0}
+                activeStart={playingStop?.start ?? 0}
+                activeEnd={playingStop?.end ?? 0}
                 onSelect={selectPoint}
                 onToggleSaved={p.onToggleSaved}
                 shotStops={shotStops}

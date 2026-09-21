@@ -135,3 +135,15 @@ is the runner's. Newest entries at the bottom.
 
 1. The card's height is a constant; if the legend row grows, `FILM_COURT_SIZE.height` must move with it.
 2. Match mode renders every filtered point's bounce as a DOM button — a few thousand on a full three-set match. Check on real data; cap or canvas-draw if it drags.
+
+## T13 · Room states R2, R7 and R11: collapse only while playing, between points, opening — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** New pure `playingStopAt` in `film-timeline.ts` reports containment only — null before the first point and in the gap after a stop's `end` — with four spec cases; `activeStopAt` is unchanged and still feeds Loop and dead-time skipping. In the room, the playing point now comes from `playingStopAt`, so between points the transport gets a null position, the drawer no selected row, the court `none` in point mode, and the board no point name while its score still reads the last reached stop. Board and court sit under one `firstPointReached` condition and the `stops[0]` fallback is gone. The 3s collapse is armed only while playing; pause clears it and brings the chrome up; `wake` re-arms only while playing. The root hides the cursor with the chrome. The bottom scrim is its own faded span, the Points trigger's translate fires only for the drawer, and the transport's opacity fade sits on the transport itself, so the collapse path adds no transform.
+
+**follow-ups:**
+
+1. The shell (`film-tab.tsx`) still lights its playing row from `activeStopAt`, so the report list keeps a row lit through dead time while the room does not.
+2. The court's "Next point" / "Not started" copy is now reachable between every pair of points, not only before the first — worth an eyeball in the running app.
+3. The chrome returns at the end of the film through `onPause`; a browser that fires `ended` without `pause` would need the same two lines on `onEnded`.

@@ -180,7 +180,7 @@ ready).
 
 ## T13 · Room states R2, R7 and R11: collapse only while playing, between points, opening
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T12
 - **files:** (guess) film/film-timeline.ts, tests/film-timeline.spec.ts, film/film-fullscreen.tsx
