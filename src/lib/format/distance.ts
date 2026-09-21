@@ -1,0 +1,68 @@
+/**
+ * Distance formatting shared by the Visualizations tab's depth/contact bands
+ * (Phase 2B). Pure — no React, no Supabase.
+ *
+ * `FT_PER_M` is the EXACT conversion (`1 / 0.3048`), not the rounded
+ * `3.28084` a first pass might reach for — the plan's ruling is explicit
+ * that this must hold: `5 ft === 1.524 m` exactly, which only the exact
+ * conversion guarantees (`1.524 / (1 / 0.3048) === 1.524 * 0.3048 === 5`,
+ * bit-for-bit; `1.524 * 3.28084` lands a hair off 5).
+ */
+
+export type DistanceUnit = "ft" | "m";
+
+export const FT_PER_M = 1 / 0.3048;
+
+/** Round to the nearest tenth and drop a trailing ".0" — "12", "2.5", "3.5". */
+function trimmed(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  const normalized = rounded === 0 ? 0 : rounded; // collapse -0 to 0
+  return Number.isInteger(normalized)
+    ? String(normalized)
+    : normalized.toFixed(1);
+}
+
+function toUnit(unit: DistanceUnit, ft: number): number {
+  return unit === "ft" ? ft : ft / FT_PER_M;
+}
+
+/** "12 ft" | "2.5 ft" | "3.5 m" — never a trailing ".0". */
+export function formatDistance(unit: DistanceUnit, ft: number): string {
+  return `${trimmed(toUnit(unit, ft))} ${unit}`;
+}
+
+/** "0–12 ft" (en dash, the unit written once, at the end). */
+export function formatRange(
+  unit: DistanceUnit,
+  fromFt: number,
+  toFt: number,
+): string {
+  const from = trimmed(toUnit(unit, fromFt));
+  const to = trimmed(toUnit(unit, toFt));
+  return `${from}–${to} ${unit}`;
+}
+
+/**
+ * The number only, no unit suffix — for composing a sentence around it
+ * ("{x} ft inside or deeper"). Reuses `formatDistance`'s rounding so a
+ * composed label and a plain `formatDistance` call never disagree on the
+ * displayed digits.
+ */
+export function formatDistanceValue(unit: DistanceUnit, ft: number): string {
+  return trimmed(toUnit(unit, ft));
+}
+
+/**
+ * Snap to the nearest half-foot, or — in metres — the nearest half-metre
+ * expressed back in feet (so a metric drag still lands on a "clean" metric
+ * value once converted for display, rather than a half-foot that reads as an
+ * odd metric fraction).
+ */
+export function snapFt(unit: DistanceUnit, ft: number): number {
+  if (unit === "ft") {
+    return Math.round(ft * 2) / 2;
+  }
+  const m = ft / FT_PER_M;
+  const snappedM = Math.round(m * 2) / 2;
+  return snappedM * FT_PER_M;
+}
