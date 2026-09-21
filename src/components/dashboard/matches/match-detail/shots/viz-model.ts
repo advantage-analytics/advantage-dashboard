@@ -26,14 +26,14 @@ import {
 } from "@/lib/data/serve-zones";
 import {
   DEFAULT_BANDS,
-  bandIndex,
+  contactBandIndexFromBaselineM,
   contactBandRows,
+  depthBandIndexFromNetM,
   depthBandRows,
-  resolveDepthDividersFt,
   type BandRow,
   type BandSettings,
 } from "@/lib/data/viz-bands";
-import { FT_PER_M, type DistanceUnit } from "@/lib/format/distance";
+import type { DistanceUnit } from "@/lib/format/distance";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
@@ -1254,46 +1254,6 @@ function directionKey(
   return landingHalf === serveSide ? "dtl" : "crosscourt";
 }
 
-/**
- * Depth-placement row index into `depthBandRows(bands, unit)` for a dot's
- * NET-origin `depthM` (0 = net, `REAL_NET_Y` = baseline — the same origin
- * `isPlacementRow`/`directionKey` read). `resolveDepthDividersFt`'s dividers
- * are BASELINE-origin feet (see viz-bands.ts's module doc comment for the
- * full mirror explanation): this mirrors each one into a NET-origin metres
- * divider (`REAL_NET_Y − d / FT_PER_M`) — the same axis `depthM` already
- * lives on — then buckets `depthM` against them directly with `bandIndex`
- * and flips the index, since `bandIndex`'s band 0 (below the lowest
- * NET-origin divider, i.e. nearest the net) is `depthBandRows`' LAST row
- * ("Short"), not its first ("Deep").
- *
- * Converting the (few, fixed) dividers rather than the (many, arbitrary)
- * `depthM` values keeps `DEFAULT_BANDS`'s thirds boundaries bit-identical to
- * the pre-Phase-2B `DEPTH_THIRD_M` comparisons this replaces — pinned by the
- * boundary fixtures in `tests/viz-model.spec.ts`. Converting `depthM` itself
- * instead would round through a different path and could move a boundary by
- * float epsilon.
- */
-function depthPlacementRowIndex(depthM: number, bands: BandSettings): number {
-  const dividersFt = resolveDepthDividersFt(bands);
-  const netOrderedM = dividersFt
-    .map((d) => REAL_NET_Y - d / FT_PER_M)
-    .sort((a, b) => a - b);
-  return dividersFt.length - bandIndex(depthM, netOrderedM);
-}
-
-/**
- * Contact-depth row index into `contactBandRows(bands, unit)`. Both `depthM`
- * (signed from the returner's own baseline — negative = inside the court,
- * positive = behind it) and `contactDividersFt` are already BASELINE-origin
- * in the same direction, so converting feet to metres and calling
- * `bandIndex` directly agrees with `contactBandRows`'s own row order — no
- * mirror/flip needed (see viz-bands.ts's module doc comment).
- */
-function contactRowIndex(depthM: number, bands: BandSettings): number {
-  const dividersM = bands.contactDividersFt.map((d) => d / FT_PER_M);
-  return bandIndex(depthM, dividersM);
-}
-
 /** Zero-initialized `{count, won}` per row `key`, built fresh from `rows` so
  *  no scheme's accumulator carries a stale key from a previous render. */
 function bandRowAccumulator(
@@ -1334,7 +1294,7 @@ function returnPlacementStats(
     direction[dKey].count++;
     direction[dKey].won += wonInc;
     if (depthRows.length > 0) {
-      const pKey = depthRows[depthPlacementRowIndex(d.depthM, bands)].key;
+      const pKey = depthRows[depthBandIndexFromNetM(d.depthM, bands)].key;
       depth[pKey].count++;
       depth[pKey].won += wonInc;
     }
@@ -1394,7 +1354,8 @@ function returnContactStats(
 
   for (const d of result.dots) {
     const wonInc = d.outcome === "won" ? 1 : 0;
-    const dKey = contactRows[contactRowIndex(d.depthM, bands)].key;
+    const dKey =
+      contactRows[contactBandIndexFromBaselineM(d.depthM, bands)].key;
     depth[dKey].count++;
     depth[dKey].won += wonInc;
     const sKey = d.shape === "triangle" ? "backhand" : "forehand";

@@ -9,7 +9,7 @@ import { getBandSettings } from "@/lib/data/viz-bands-server";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import { hasComparisonBaseline } from "@/lib/data/match-stats-server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { isProgramStaff } from "@/lib/workspace/types";
+import { canEditBandsFor } from "@/lib/workspace/types";
 import {
   isAnalysisFailed,
   isInFlight,
@@ -144,15 +144,15 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // hidden rather than showing a row that names an empty workspace.
   const workspaceKind = activeWorkspace?.kind ?? "personal";
   const workspaceName = activeWorkspace?.name ?? "";
-  // Personal workspaces have exactly one member (the owner), always able to
-  // edit their own bands; a team workspace follows the same staff rule every
-  // other team-write surface uses. The lost-session fallback above defaults
-  // `workspaceKind` to `"personal"`, so this falls back permissive here —
-  // unlike `workspaceRole`'s own player-only default — matching how the rest
-  // of a personal workspace already behaves for its sole owner.
-  const canEditBands =
-    workspaceKind === "personal" ||
-    isProgramStaff({ kind: workspaceKind, role: workspaceRole });
+  // Fix round 1: fed from `activeWorkspace?.kind` directly, NOT the
+  // already-defaulted `workspaceKind` above — that default exists so
+  // OTHER UI (the "Share with team" row) reads as a quiet personal
+  // workspace on a lost session, but feeding it here would make a lost
+  // session look like a personal owner and show an ENABLED bands editor
+  // whose Save then always fails RLS. `canEditBandsFor` itself reads a
+  // missing/unrecognised `kind` as "cannot edit" — restrictive, the same
+  // direction `workspaceRole`'s own `?? "player"` fallback already takes.
+  const canEditBands = canEditBandsFor(activeWorkspace?.kind, workspaceRole);
 
   const { match, statsResult, insights, kpiHistory } = data;
 

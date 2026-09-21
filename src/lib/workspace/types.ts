@@ -334,6 +334,32 @@ export function isProgramStaff(
   return workspace.kind === "team" && workspace.role !== "player";
 }
 
+/**
+ * May this viewer change the active workspace's Visualizations-tab
+ * depth/contact bands (Phase 2B)? Personal workspaces have exactly one
+ * member — their sole owner — always able to edit; a team workspace follows
+ * `isProgramStaff` (owner/coach/staff may write, a player may only read).
+ *
+ * `kind`/`role` are nullable so a caller can pass them straight through a
+ * lost-session fallback WITHOUT choosing a permissive default itself: unlike
+ * `workspaceRole`'s existing `?? "player"` fallback (deliberately the
+ * least-privileged real role), `kind` has no such value to fall back to
+ * here, and a `null`/`undefined`/unrecognised `kind` reads as "cannot edit"
+ * — the restrictive direction, matching `workspaceRole`'s own fallback
+ * rather than defaulting an authorization input permissively. A save this
+ * wrongly allowed in the UI would still be refused by `viz_band_settings`'s
+ * own RLS, but showing an enabled editor whose Save always fails is its own
+ * bug — never show it in the first place.
+ */
+export function canEditBandsFor(
+  kind: WorkspaceKind | null | undefined,
+  role: ProgramRole | null | undefined,
+): boolean {
+  if (kind === "personal") return true;
+  if (kind === "team") return isProgramStaff({ kind, role: role ?? "player" });
+  return false;
+}
+
 /** The Schedule actions exposed to a viewer in the active workspace. */
 export interface ScheduleCapabilities {
   canView: boolean;
