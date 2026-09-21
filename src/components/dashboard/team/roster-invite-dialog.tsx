@@ -23,6 +23,7 @@ import {
 } from "@/components/dashboard/settings/team-actions";
 import {
   DialogInfoRow,
+  SeatNote,
   DialogProblem,
   RosterDialog,
 } from "@/components/dashboard/team/dialog-shell";
@@ -64,8 +65,8 @@ import type { SeatUsage } from "@/lib/data/team-roster-server";
  * ── What a linked invitation does ───────────────────────────────────────────
  * It binds a login to a roster row that already exists. Her matches, video and
  * stats stay exactly where they are — `accept_program_invite` sets
- * `claimed_by_user_id` and writes no match rows at all — and a seat starts
- * counting only when she accepts.
+ * `claimed_by_user_id` and writes no match rows at all — and no seat moves:
+ * the row has held one since it was added (a seat is a player on the roster).
  *
  * ── The pasted list is a fifth frame, not a second dialog ───────────────────
  * A coach in August has the squad's addresses in a spreadsheet, not in their
@@ -119,7 +120,7 @@ export function RosterInviteDialog({
    * not going to anybody this dialog can bind to.
    *
    * An invitation and a coach-managed profile are different things — email and
-   * a login and a seat, against a row that exists now with none of the three —
+   * a login, against a row that exists now with neither (both hold a seat) —
    * and a coach who wanted the second one should not have to send the first and
    * wait. It is an OFFER beside the existing path, never a redirect: "Someone
    * new" plus Send still sends the invitation, unchanged.
@@ -796,12 +797,14 @@ export function RosterInviteDialog({
           <DialogProblem message={error} />
 
           {linked ? (
-            <DialogInfoRow
+            <SeatNote
               icon={
                 <Link2 className="size-3.5" strokeWidth={1.5} aria-hidden />
               }
+              lead="No new seat."
+              seats={seats}
             >
-              No new profile.{" "}
+              {target.name.split(" ")[0]} already holds one.{" "}
               {target.matchesPlayed > 0 ? (
                 <>
                   Their <span className="tabular">{target.matchesPlayed}</span>{" "}
@@ -811,36 +814,37 @@ export function RosterInviteDialog({
               ) : (
                 <>This row stays exactly as it is</>
               )}{" "}
-              — the login binds to it when they accept. A seat starts counting
-              then.
-            </DialogInfoRow>
-          ) : (
+              — the login binds to it when they accept.
+            </SeatNote>
+          ) : role === "staff" ? (
+            /* Staff hold no seat: seats count players on the roster. */
             <DialogInfoRow
               icon={
                 <Users className="size-3.5" strokeWidth={1.5} aria-hidden />
               }
             >
-              {addresses.length > 1 ? (
-                <>
-                  Uses <span className="tabular">{addresses.length}</span> team
-                  seats when they accept
-                </>
-              ) : (
-                "Uses a team seat when they accept"
-              )}{" "}
-              ·{" "}
-              <span className="tabular">
-                {seats.used} of {seats.seats}
-              </span>{" "}
-              used
-              {seats.pending > 0 && (
-                <>
-                  , <span className="tabular">{seats.pending}</span> reserved by
-                  open invitations
-                </>
-              )}
-              {remaining === 0 && " — none free"}
+              <strong className="font-medium text-[var(--ink-900)]">
+                No seat used.
+              </strong>{" "}
+              Seats count players on the roster; staff don&rsquo;t take one.
             </DialogInfoRow>
+          ) : (
+            <SeatNote
+              icon={
+                <Users className="size-3.5" strokeWidth={1.5} aria-hidden />
+              }
+              lead={
+                addresses.length > 1
+                  ? `Uses ${addresses.length} seats now.`
+                  : "Uses a seat now."
+              }
+              seats={seats}
+              adding={Math.max(1, addresses.length)}
+            >
+              {addresses.length > 1 ? "They are" : "It is"} held while the
+              invitation is open and freed if you revoke it.
+              {remaining === 0 && " None are free."}
+            </SeatNote>
           )}
         </>
       )}

@@ -5,6 +5,7 @@ import { advButton } from "@/lib/ui/adv-button";
 import { AddPlayerDialog, type AddPlayerInitial } from "./add-player-dialog";
 import { RosterInviteDialog } from "./roster-invite-dialog";
 import type { ManagedPlayer } from "./invite-target-picker";
+import { useClaimInvite } from "./roster-claim-invite";
 import type {
   FormerPlayer,
   RosterMember,
@@ -102,11 +103,11 @@ export function RosterHeaderButtons({
     setAddingPlayer(true);
   }
 
-  const remaining = Math.max(0, seats.seats - seats.used - seats.pending);
-  const seatNote =
-    remaining === 0
-      ? `all ${seats.seats} seats are taken or reserved`
-      : `${remaining} of ${seats.seats} seats free`;
+  // The drawer's "Invite to claim →". Resolved against the rows this component
+  // already holds, so an id that is no longer coach-managed names nobody.
+  const claim = useClaimInvite();
+  const claimTarget =
+    managedPlayers.find((p) => p.profileId === claim.profileId) ?? null;
 
   return (
     <>
@@ -131,8 +132,16 @@ export function RosterHeaderButtons({
       </div>
 
       <RosterInviteDialog
-        open={inviting}
-        onOpenChange={setInviting}
+        /* Keyed on the target: the dialog seeds its state from
+           `initialTarget` once, so a request from the drawer has to mount a
+           fresh one rather than reopen whatever the last session left. */
+        key={claimTarget?.profileId ?? "plain"}
+        open={inviting || claimTarget !== null}
+        onOpenChange={(next) => {
+          setInviting(next);
+          if (!next) claim.clear();
+        }}
+        initialTarget={claimTarget}
         managedPlayers={managedPlayers}
         seats={seats}
         playersCanUpload={playersCanUpload}
@@ -159,7 +168,7 @@ export function RosterHeaderButtons({
           setAddingPlayer(next);
           if (!next) setAddInitial(undefined);
         }}
-        seatNote={seatNote}
+        seats={seats}
         roster={roster}
         former={former}
         initial={addInitial}
