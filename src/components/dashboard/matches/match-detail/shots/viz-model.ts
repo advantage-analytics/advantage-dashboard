@@ -1303,31 +1303,6 @@ function returnPlacementStats(
     }
   }
 
-  // Fix round 2 (#7 — RULING): under `depthScheme: "inside"` ONLY, the
-  // "Beyond the baseline" row could otherwise never populate — every
-  // ordinary in-court landing reads as "Inside the baseline" (see
-  // `viz-bands.ts`'s "inside is a single divider at 0" spec), and
-  // `isPlacementRow` excludes every miss outright, including a genuinely
-  // LONG one that landed past the far baseline. So under "inside" ONLY, a
-  // miss that is (a) not netted (`!d.atNet`) and (b) buckets to index 0
-  // (`depthFromNetM >= COURT_HALF_M`, i.e. AT OR PAST the far baseline —
-  // "long", not "wide") still counts in that one row. Every other scheme,
-  // and every other miss under "inside" itself (a wide-but-not-long out
-  // call, or a net ball), stays excluded exactly as today — Direction is
-  // never touched, `subtitleCount` below is built from `eligible` alone
-  // (unchanged), and DEFAULT_BANDS's thirds regression spec is untouched
-  // since this block only ever runs for `depthScheme === "inside"`.
-  if (bands.depthScheme === "inside" && depthRows.length > 0) {
-    for (const d of result.dots) {
-      if (d.outcome !== "miss" || d.atNet) continue;
-      const idx = depthBucket(d.depthM);
-      if (idx !== 0) continue; // wide-but-not-long stays excluded
-      const pKey = depthRows[idx].key;
-      depth[pKey].count++;
-      // A miss is never "won" — nothing to add to `depth[pKey].won`.
-    }
-  }
-
   const directionGroup: StatGroup = {
     key: "direction",
     label: "Direction",

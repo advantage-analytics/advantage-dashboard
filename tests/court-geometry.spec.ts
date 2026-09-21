@@ -1317,10 +1317,8 @@ test.describe("viewerBandY", () => {
  * the half the overlay is allowed to cover, not a divider.
  *
  * Depth: the first band starts at the FAR BASELINE (P2k: "DEEP starts at the
- * FAR baseline"), unless a divider sits at or before the baseline itself
- * (the "Inside the baseline" preset, whose first band is genuinely OUTSIDE
- * the court) — then it opens up into the far apron so that band has somewhere
- * to draw. The last band always ends on the net line.
+ * FAR baseline") and the last ends on the net line; a divider outside that
+ * span is clamped to it.
  *
  * Contact: the "inside" band is capped at the NEAR SERVICE LINE rather than
  * running up to the net (it would otherwise flood the whole half), and the
@@ -1350,14 +1348,6 @@ test.describe("viewerBandEdges", () => {
     expect(edges[2]).toBeCloseTo(viewerBandY("depth", 24), 6);
   });
 
-  test("inside: the divider AT the baseline opens the first band into the far apron", () => {
-    const edges = viewerBandEdges("depth", [0]);
-    expect(edges).toHaveLength(3);
-    expect(edges[0]).toBeCloseTo(VIEWER_COURT.viewBox.minY, 6);
-    expect(edges[1]).toBeCloseTo(VIEWER_COURT.farBaselineY, 6);
-    expect(edges[2]).toBeCloseTo(VIEWER_COURT.netY, 6);
-  });
-
   test("contact: capped at the near service line, open to the bottom of the frame", () => {
     const edges = viewerBandEdges("contact", [0, 5]);
     expect(edges).toHaveLength(4);
@@ -1379,7 +1369,6 @@ test.describe("viewerBandEdges", () => {
   test("edges are always non-decreasing, so no band ever draws inside-out", () => {
     const cases: ["depth" | "contact", number[]][] = [
       ["depth", []],
-      ["depth", [0]],
       ["depth", [13, 26]],
       ["depth", [38.9, 38.95]],
       ["contact", [0, 5]],

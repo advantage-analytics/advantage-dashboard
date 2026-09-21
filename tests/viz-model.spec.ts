@@ -1172,64 +1172,22 @@ test.describe("computeVizStats — bands (Phase 2B Task 2)", () => {
     expect(stats.total).toBe(5);
   });
 
-  test('depthScheme: "inside" gives two Depth rows, "Inside the baseline" / "Beyond the baseline"', () => {
-    const bands: BandSettings = {
-      ...DEFAULT_BANDS,
-      depthScheme: "inside",
-    };
-    const pts = [
-      returnPoint({ secondShotLandingX: 0, secondShotLandingY: 6.0 }), // any in-court landing — resolveDepthDividersFt("inside") = [0]
-    ];
-    const stats = computeVizStats(
-      pts,
-      "returnPlacement",
-      EMPTY_VIZ_FILTERS,
-      true,
-      undefined,
-      bands,
-      "ft",
-    );
-    const depth = stats.groups.find((g) => g.key === "depth")!;
-    expect(depth.rows.map((r) => r.label).sort()).toEqual([
-      "Beyond the baseline",
-      "Inside the baseline",
-    ]);
-    // Fix round 1 (#4): `depthBandRows`'s "inside" rows are now IN INDEX
-    // ORDER against `depthBandIndexFromNetM` — index 0 is the rare edge
-    // case (a landing AT OR PAST the far baseline itself, `depthFromNetM >=
-    // COURT_HALF_M`) labeled "Beyond the baseline", and index 1 is every
-    // ordinary in-court landing, labeled "Inside the baseline". A landing
-    // well inside the court (this fixture) is "Inside the baseline", not
-    // "Beyond" — recorded here rather than assumed, since a caller reading
-    // only the row LABELS could otherwise expect a 50/50 split.
-    const row = (label: string) => depth.rows.find((r) => r.label === label)!;
-    expect(row("Inside the baseline").count).toBe(1);
-    expect(row("Beyond the baseline").count).toBe(0);
-  });
-
   /**
-   * Fix round 2 (#7 — RULING): `isPlacementRow` excludes every miss, which
-   * left "Beyond the baseline" permanently empty for the "inside" scheme —
-   * the only depth row that could ever be reached is the one every ordinary
-   * landing falls into. Under "inside" ONLY, a genuinely LONG miss (past the
-   * far baseline, not netted) now counts in "Beyond the baseline"; a WIDE
-   * miss that is not also long stays excluded everywhere, exactly as
-   * before, and neither miss ever appears in another scheme's Depth rows.
+   * User decision, 2026-09-21: the "Inside the baseline" scheme is gone, and
+   * with it the one place a MISS was counted into a Depth row. The tracker's
+   * verdict is only In / Out / Net, so a long miss cannot be told from a
+   * wide one — neither now reaches a Depth row under any scheme, and the
+   * Depth rows add up to the returns that landed in.
    */
-  test('depthScheme: "inside" — a long miss counts in "Beyond the baseline"; a wide (not long) miss stays excluded, under "inside" and every other scheme', () => {
+  test("a miss never reaches a Depth row, long or wide", () => {
     const longMiss = returnPoint({
       secondShotLandingX: 0,
-      // 1m past the far baseline: depthM = REAL_NET_Y - (-1) = 12.885,
-      // clearing the "inside" scheme's single net-origin divider at
-      // REAL_NET_Y (11.885) — genuinely LONG, not wide.
+      // 1m past the far baseline — the landing that used to be counted.
       secondShotLandingY: -1,
       secondShotResult: "Out",
     });
     const wideMiss = returnPoint({
-      // Outside the 4.115m singles half-width...
       secondShotLandingX: 6.0,
-      // ...but an ORDINARY depth (depthM = REAL_NET_Y - 4 = 7.885, well
-      // short of the far baseline) — wide, not long.
       secondShotLandingY: 4.0,
       secondShotResult: "Out",
     });
@@ -1239,53 +1197,32 @@ test.describe("computeVizStats — bands (Phase 2B Task 2)", () => {
     });
     const pts = [longMiss, wideMiss, inCourt];
 
-    const insideBands: BandSettings = {
-      ...DEFAULT_BANDS,
-      depthScheme: "inside",
-    };
-    const insideStats = computeVizStats(
-      pts,
-      "returnPlacement",
-      EMPTY_VIZ_FILTERS,
-      true,
-      undefined,
-      insideBands,
-      "ft",
-    );
-    const insideDepth = insideStats.groups.find((g) => g.key === "depth")!;
-    const insideRow = (label: string) =>
-      insideDepth.rows.find((r) => r.label === label)!;
-    // The long miss, and ONLY it, lands in "Beyond the baseline".
-    expect(insideRow("Beyond the baseline").count).toBe(1);
-    // The wide (not long) miss never appears anywhere — same as today.
-    expect(insideRow("Inside the baseline").count).toBe(1); // inCourt only
-
-    // The subtitle/total stay truthful about IN-COURT returns: the long
-    // miss shows in a Depth row but is never counted as "landed in".
-    expect(insideStats.total).toBe(3);
-    expect(insideStats.subtitle).toBe(
-      "Points won by placement · 1 of 3 returns landed in",
-    );
-
-    // Every OTHER scheme's population is untouched — neither miss ever
-    // reaches a Depth row outside "inside" (DEFAULT_BANDS's own regression
-    // spec above already pins this for the thirds scheme independently;
-    // this asserts it directly for these two miss fixtures).
-    const thirdsStats = computeVizStats(
-      pts,
-      "returnPlacement",
-      EMPTY_VIZ_FILTERS,
-      true,
-      undefined,
+    for (const bands of [
       DEFAULT_BANDS,
-      "ft",
-    );
-    const thirdsDepth = thirdsStats.groups.find((g) => g.key === "depth")!;
-    const thirdsDepthTotal = thirdsDepth.rows.reduce(
-      (sum, r) => sum + r.count,
-      0,
-    );
-    expect(thirdsDepthTotal).toBe(1); // the in-court landing, and only it
+      { ...DEFAULT_BANDS, depthScheme: "deepMidShort" } as BandSettings,
+      {
+        depthScheme: "custom",
+        depthDividersFt: [6, 20],
+        contactDividersFt: [0, 5],
+      } as BandSettings,
+    ]) {
+      const stats = computeVizStats(
+        pts,
+        "returnPlacement",
+        EMPTY_VIZ_FILTERS,
+        true,
+        undefined,
+        bands,
+        "ft",
+      );
+      const depth = stats.groups.find((g) => g.key === "depth")!;
+      const counted = depth.rows.reduce((sum, r) => sum + r.count, 0);
+      expect(counted).toBe(1); // the in-court landing, and only it
+      expect(stats.total).toBe(3);
+      expect(stats.subtitle).toBe(
+        "Points won by placement · 1 of 3 returns landed in",
+      );
+    }
   });
 
   test("returnContact/rallyPosition follow custom contact dividers too", () => {

@@ -66,10 +66,9 @@ const BAND_RATE_X = 423;
 const BAND_LABEL_INSET = 9.6;
 const BAND_LABEL_MIN_H = 18;
 
-/** Bands thinner than this never draw: a preset whose divider sits exactly
- *  on its half's own edge (the "Inside the baseline" scheme's out-of-court
- *  band on a frame with no apron to spare) would otherwise leave a hairline
- *  of wash with a label stacked on top of the next band's. */
+/** Bands thinner than this never draw: a divider sitting all but exactly on
+ *  its half's own edge would otherwise leave a hairline of wash with a label
+ *  stacked on top of the next band's. */
 const BAND_MIN_H = 1.5;
 
 /** P2k: .11 / .04 / .11 — the odd bands are the quiet ones. */

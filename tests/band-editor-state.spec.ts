@@ -63,8 +63,8 @@ test.describe("initBandEditor", () => {
     expect(s.draft).toEqual([10, 24]);
   });
 
-  test("depth, none and inside: start from thirds", () => {
-    for (const depthScheme of ["none", "inside"] as const) {
+  test("depth, none: starts from thirds", () => {
+    for (const depthScheme of ["none"] as const) {
       const s = initBandEditor("depth", { ...DEFAULT_BANDS, depthScheme });
       expect(s.draft).toEqual(resetPairFor("depth"));
     }
@@ -76,12 +76,7 @@ test.describe("initBandEditor", () => {
   });
 
   test("a fresh editor is never dirty, for every scheme", () => {
-    for (const depthScheme of [
-      "none",
-      "thirds",
-      "deepMidShort",
-      "inside",
-    ] as const) {
+    for (const depthScheme of ["none", "thirds", "deepMidShort"] as const) {
       const saved = { ...DEFAULT_BANDS, depthScheme };
       expect(bandEditorDirty(initBandEditor("depth", saved))).toBe(false);
       expect(bandEditorDirty(initBandEditor("contact", saved))).toBe(false);
@@ -360,7 +355,7 @@ test.describe("bandEditorDraftScheme", () => {
     expect(bandEditorDraftScheme(initBandEditor("depth", DEFAULT_BANDS))).toBe(
       "thirds",
     );
-    for (const depthScheme of ["none", "inside"] as const) {
+    for (const depthScheme of ["none"] as const) {
       expect(
         bandEditorDraftScheme(
           initBandEditor("depth", { ...DEFAULT_BANDS, depthScheme }),

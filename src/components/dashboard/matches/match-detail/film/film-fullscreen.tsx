@@ -25,6 +25,7 @@ import type { FilmFilters } from "./film-filters";
 import { FilmPointPanel } from "./film-point-panel";
 import { boardAt, type BoardColumns } from "./film-score";
 import { FilmScoreboard } from "./film-scoreboard";
+import type { DistanceUnit } from "@/lib/format/distance";
 import { useFilmClockVars } from "./film-clock";
 import {
   OPEN_ROOM_FRAME,
@@ -87,6 +88,9 @@ import type {
  */
 
 export interface FilmFullscreenProps {
+  /** The viewer's Units preference, threaded from the match page through
+   *  `FilmTab` — the room's shot rows print speeds. */
+  unit: DistanceUnit;
   /**
    * The credential to play — the refresh hook's current URL, shared with the
    * report player, so the two surfaces can never hold two different ones.
@@ -893,6 +897,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
 
             {panel !== "closed" && (
               <FilmPointPanel
+                unit={p.unit}
                 state={panel}
                 onExited={() => setPanel("closed")}
                 allPoints={p.allPoints}

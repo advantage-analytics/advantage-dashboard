@@ -8,6 +8,7 @@ import type { Workspace } from "@/lib/workspace/types";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { formatSpeed, type DistanceUnit } from "@/lib/format/distance";
 import { cn } from "@/lib/utils";
 
 import { FilmAdvancedFiltersDialog } from "./film-advanced-filters-dialog";
@@ -52,6 +53,10 @@ export interface FilmPointPanelProps {
   onExited: () => void;
   position: { index: number; total: number } | null;
   columns: { hasGameScore: boolean; hasPointScore: boolean };
+  /** The viewer's Units preference, threaded from the match page (the film
+   *  subtree deliberately depends on no report context). Shot speeds are the
+   *  one film value it changes. */
+  unit: DistanceUnit;
   onSelect: (point: MatchPoint) => void;
   onToggleSaved: (pointId: string) => void;
   onClose: () => void;
@@ -85,6 +90,7 @@ export function FilmPointPanel({
   onExited,
   position,
   columns,
+  unit,
   onSelect,
   onToggleSaved,
   onClose,
@@ -312,6 +318,7 @@ export function FilmPointPanel({
                           : oppName,
                       )}
                       isActive={stop.shot.id === activeShotId}
+                      unit={unit}
                       onSelect={onSelectShot}
                     />
                   ))}
@@ -575,6 +582,7 @@ const ShotRow = memo(function ShotRow({
   order,
   playerName,
   isActive,
+  unit,
   onSelect,
 }: {
   stop: ShotStop;
@@ -585,6 +593,10 @@ const ShotRow = memo(function ShotRow({
   order: number;
   playerName: string;
   isActive: boolean;
+  /** The workspace's Units preference — a speed is the one film value it
+   *  changes ("118 mph" / "190 km/h"). Passed down rather than read here so
+   *  this row stays a pure function of its props. */
+  unit: DistanceUnit;
   onSelect: (stop: ShotStop) => void;
 }) {
   const { shot } = stop;
@@ -631,7 +643,7 @@ const ShotRow = memo(function ShotRow({
             isActive ? "text-white" : "text-white/60",
           )}
         >
-          {Math.round(shot.speedMph)} mph
+          {formatSpeed(unit, shot.speedMph)}
         </span>
       )}
       {isActive && (

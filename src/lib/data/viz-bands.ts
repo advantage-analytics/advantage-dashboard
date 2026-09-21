@@ -31,8 +31,24 @@ import {
   type DistanceUnit,
 } from "@/lib/format/distance";
 
-export type DepthScheme =
-  "none" | "thirds" | "deepMidShort" | "inside" | "custom";
+/**
+ * The depth schemes a workspace can hold — and the only ones ever WRITTEN.
+ *
+ * There used to be a fifth, `"inside"` ("Inside the baseline"), dropped by
+ * user decision 2026-09-21: the tracker's verdict is only In / Out / Net, so
+ * a long return can't be told from a wide one and the preset had nothing
+ * honest to say about placement. The live table's CHECK still admits
+ * `'inside'` (no DDL), so a stored row may carry it: that is a READ-side
+ * concern only — `rowToBandSettings` maps it to `"thirds"` — and it is not
+ * part of this type, so nothing downstream can branch on it and the write
+ * validator (`validateBandInput`) refuses it.
+ */
+export type DepthScheme = "none" | "thirds" | "deepMidShort" | "custom";
+
+/** Stored scheme values that are no longer written, and what they READ as. */
+const LEGACY_DEPTH_SCHEMES: Readonly<Record<string, DepthScheme>> = {
+  inside: "thirds",
+};
 
 export interface BandSettings {
   depthScheme: DepthScheme;
@@ -72,6 +88,30 @@ export const DEFAULT_BANDS: BandSettings = {
 const DEEP_MID_SHORT_DIVIDERS: [number, number] = [10, 24];
 
 /**
+ * The Depth bands menu's presets (below "No bands"), in order. Pure data so
+ * the menu's contents are spec'd without rendering it. There is deliberately
+ * no "Inside the baseline" row — see `DepthScheme`.
+ */
+export function depthPresets(unit: DistanceUnit): {
+  scheme: Exclude<DepthScheme, "none" | "custom">;
+  label: string;
+  description: string;
+}[] {
+  return [
+    {
+      scheme: "thirds",
+      label: "Thirds",
+      description: "Equal thirds of the court, baseline to net",
+    },
+    {
+      scheme: "deepMidShort",
+      label: "Deep · mid · short",
+      description: deepMidShortDescription(unit),
+    },
+  ];
+}
+
+/**
  * The Deep · mid · short preset's menu description, in the viewer's unit:
  * the Deep band's depth, then the Mid band's — "10 ft, 14 ft", or in metres
  * "3 m, 4.3 m" — read off the preset's own dividers, never retyped.
@@ -92,8 +132,6 @@ export function resolveDepthDividersFt(b: BandSettings): number[] {
       return [COURT_HALF_FT / 3, (2 * COURT_HALF_FT) / 3];
     case "deepMidShort":
       return [...DEEP_MID_SHORT_DIVIDERS];
-    case "inside":
-      return [0];
     case "custom":
       return b.depthDividersFt ? [...b.depthDividersFt] : [];
   }
@@ -239,46 +277,9 @@ const DEPTH_3_LABELS = ["Deep", "Mid", "Short"];
  * nearest-net last (Short) — matching `band 0 = deepest` from
  * `resolveDepthDividersFt`. `"none"` → `[]` (the group is omitted entirely,
  * never rendered with zero rows).
- *
- * `"inside"` → two rows, IN INDEX ORDER against `depthBandIndexFromNetM`:
- * its single divider sits at the baseline (`resolveDepthDividersFt`
- * returns `[0]`), so index 0 is a landing AT OR PAST the far baseline
- * (`depthFromNetM >= COURT_HALF_M`) — "Beyond the baseline", and index 1 is
- * everything actually inside the court (`depthFromNetM < COURT_HALF_M`,
- * i.e. virtually every eligible landing) — "Inside the baseline", `0–39
- * ft`.
- *
- * BOTH rows are in the SAME baseline-origin feet space `resolveDepthDividersFt`
- * and every other row here use (0 = the baseline, `COURT_HALF_FT` = the
- * net): "Beyond the baseline" is `fromFt: null, toFt: 0`
- * (open below 0, i.e. PAST the baseline in baseline-origin feet — negative
- * or zero), never `fromFt: COURT_HALF_FT` (that value is the NET, not the
- * baseline, and describing "beyond the baseline" as starting at the net was
- * simply wrong). "Inside the baseline" is `fromFt: 0, toFt: COURT_HALF_FT`,
- * unchanged. Never `[0, 0]` for either row — "Beyond" carries no `fromFt`
- * (open past the baseline) rather than degenerately spanning `[0, 0]`.
  */
 export function depthBandRows(b: BandSettings, unit: DistanceUnit): BandRow[] {
   if (b.depthScheme === "none") return [];
-
-  if (b.depthScheme === "inside") {
-    return [
-      {
-        key: "beyond-baseline",
-        label: "Beyond the baseline",
-        rangeLabel: "past the line",
-        fromFt: null,
-        toFt: 0,
-      },
-      rangeRow(
-        "inside-baseline",
-        "Inside the baseline",
-        0,
-        COURT_HALF_FT,
-        unit,
-      ),
-    ];
-  }
 
   // A 3-band scheme (today only "custom") can resolve
   // FEWER than 2 dividers — `depthDividersFt: null` with `depthScheme:
@@ -383,8 +384,6 @@ export function schemeLabel(s: DepthScheme): string {
       return "THIRDS";
     case "deepMidShort":
       return "DEEP·MID·SHORT";
-    case "inside":
-      return "INSIDE";
     case "custom":
       return "CUSTOM";
   }
@@ -447,11 +446,11 @@ export function bandsEqual(a: BandSettings, b: BandSettings): boolean {
   );
 }
 
+/** What `validateBandInput` accepts — the WRITE side. No legacy values. */
 const VALID_DEPTH_SCHEMES: readonly DepthScheme[] = [
   "none",
   "thirds",
   "deepMidShort",
-  "inside",
   "custom",
 ];
 
@@ -501,6 +500,11 @@ function roundPair(pair: [number, number]): [number, number] {
  *
  * `null` on anything that doesn't validate — this never defaults a bad shape
  * to `DEFAULT_BANDS` itself; that's `rowToBandSettings`'s job.
+ *
+ * This is the WRITE validator (the save action runs every input through
+ * it), so it accepts current schemes only: a legacy `"inside"` is refused
+ * here, even though the table's CHECK would still store it. Reading a stored
+ * legacy value is `rowToBandSettings`'s job, which maps it first.
  */
 export function validateBandInput(x: unknown): BandSettings | null {
   if (typeof x !== "object" || x === null) return null;
@@ -539,11 +543,13 @@ export function validateBandInput(x: unknown): BandSettings | null {
 
 /** A DB row (or `null`, meaning no record exists yet) → `BandSettings`,
  *  falling back to `DEFAULT_BANDS` for a missing or invalid row rather than
- *  ever surfacing a malformed value to a caller. */
+ *  ever surfacing a malformed value to a caller. The READ side: a legacy
+ *  stored scheme (`"inside"`) is mapped to what it now reads as (`"thirds"`)
+ *  BEFORE the write validator sees it. */
 export function rowToBandSettings(row: BandSettingsDbRow | null): BandSettings {
   if (!row) return DEFAULT_BANDS;
   const validated = validateBandInput({
-    depthScheme: row.depth_scheme,
+    depthScheme: LEGACY_DEPTH_SCHEMES[row.depth_scheme] ?? row.depth_scheme,
     depthDividersFt: row.depth_dividers_ft,
     contactDividersFt: row.contact_dividers_ft,
   });

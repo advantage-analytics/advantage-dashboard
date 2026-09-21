@@ -946,13 +946,10 @@ export function viewerBandY(kind: "depth" | "contact", ft: number): number {
  * The two OUTER edges are not dividers — they are how far the overlay is
  * allowed to cover its half:
  *
- * - `"depth"` ends on the net line, and starts at the FAR BASELINE (P2k:
- *   "DEEP starts at the FAR baseline"). The one exception is a divider at or
- *   before the baseline itself — the "Inside the baseline" preset, whose
- *   first band is everything that landed PAST the far baseline and is
- *   therefore genuinely outside the court. There the first edge opens up into
- *   the far apron (`viewBox.minY`) so that band has somewhere to draw instead
- *   of collapsing to nothing.
+ * - `"depth"` starts at the FAR BASELINE (P2k: "DEEP starts at the FAR
+ *   baseline") and ends on the net line. Every depth divider is inside that
+ *   span: the editor's own bounds start half a foot past the baseline, and
+ *   no preset puts one on or outside it.
  * - `"contact"` runs down to the bottom of the viewBox (a contact struck well
  *   behind the baseline), but its inside edge is CAPPED at the near service
  *   line: the innermost band is open-ended toward the net, and left uncapped
@@ -971,14 +968,7 @@ export function viewerBandEdges(
   const inner = dividersFt.map((ft) =>
     clampNum(viewerBandY(kind, ft), innerCap, outerCap),
   );
-  // The far apron only opens up for a depth scheme whose first band really
-  // does sit outside the court (a divider at or before the baseline).
-  const first =
-    kind === "depth" && dividersFt.length > 0 && dividersFt[0] <= 0
-      ? vb.minY
-      : innerCap;
-
-  const edges = [first, ...inner, outerCap];
+  const edges = [innerCap, ...inner, outerCap];
   for (let i = 1; i < edges.length; i++) {
     edges[i] = Math.max(edges[i], edges[i - 1]);
   }

@@ -51,7 +51,7 @@ const PROGRAM_NAME = `ZZ RLS viz_band_settings ${MARK}`;
 function writeScheme(
   client: SupabaseClient,
   accountId: string,
-  depthScheme: "none" | "thirds" | "deepMidShort" | "inside",
+  depthScheme: "none" | "thirds" | "deepMidShort",
 ) {
   return updateThenInsert(client, accountId, {
     depth_scheme: depthScheme,
@@ -257,12 +257,12 @@ test.describe("viz_band_settings RLS (live)", () => {
 
     const byCoach = await teamCoach.client
       .from("viz_band_settings")
-      .update({ depth_scheme: "inside" })
+      .update({ depth_scheme: "none" })
       .eq("account_id", programId)
       .select("depth_scheme")
       .single();
     expect(byCoach.error).toBeNull();
-    expect(byCoach.data?.depth_scheme).toBe("inside");
+    expect(byCoach.data?.depth_scheme).toBe("none");
 
     const byStaff = await teamStaff.client
       .from("viz_band_settings")
@@ -366,10 +366,10 @@ test.describe("viz_band_settings RLS (live)", () => {
       "none",
     );
 
-    const second = await writeScheme(teamCoach.client, programId!, "inside");
+    const second = await writeScheme(teamCoach.client, programId!, "thirds");
     expect(second.error).toBeNull();
     expect((second.data as { depth_scheme: string } | null)?.depth_scheme).toBe(
-      "inside",
+      "thirds",
     );
   });
 
@@ -385,7 +385,7 @@ test.describe("viz_band_settings RLS (live)", () => {
       .select("depth_scheme")
       .eq("account_id", programId!)
       .single();
-    expect(unchanged.data?.depth_scheme).toBe("inside"); // set by the coach test above
+    expect(unchanged.data?.depth_scheme).toBe("thirds"); // set by the coach test above
   });
 
   test("a stranger to the team sees nothing and cannot write it", async () => {

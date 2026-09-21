@@ -155,7 +155,7 @@ test.describe("applyBands request sequencing", () => {
  */
 test.describe("settleOverride — no resurrection", () => {
   const A: BandSettings = { ...DEFAULT_BANDS, depthScheme: "deepMidShort" };
-  const B: BandSettings = { ...DEFAULT_BANDS, depthScheme: "inside" };
+  const B: BandSettings = { ...DEFAULT_BANDS, depthScheme: "none" };
 
   function render(override: BandSettings | null, saved: BandSettings) {
     const settled = settleOverride(override, saved);

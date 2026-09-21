@@ -10,6 +10,7 @@ import {
   contactReadout,
   DEFAULT_BANDS,
   deepMidShortDescription,
+  depthPresets,
   depthBandIndexFromNetM,
   depthBandRows,
   makeContactBucketer,
@@ -75,12 +76,6 @@ test.describe("resolveDepthDividersFt", () => {
     expect(
       resolveDepthDividersFt({ ...DEFAULT_BANDS, depthScheme: "deepMidShort" }),
     ).toEqual([10, 24]);
-  });
-
-  test("inside is a single divider at 0", () => {
-    expect(
-      resolveDepthDividersFt({ ...DEFAULT_BANDS, depthScheme: "inside" }),
-    ).toEqual([0]);
   });
 
   test("custom returns its own pair", () => {
@@ -211,7 +206,6 @@ test.describe("makeDepthBucketer / makeContactBucketer", () => {
     const schemes: BandSettings[] = [
       DEFAULT_BANDS,
       { ...DEFAULT_BANDS, depthScheme: "deepMidShort" },
-      { ...DEFAULT_BANDS, depthScheme: "inside" },
       { ...DEFAULT_BANDS, depthScheme: "none" },
       {
         depthScheme: "custom",
@@ -279,44 +273,6 @@ test.describe("depthBandRows", () => {
     expect(m.map((r) => [r.fromFt, r.toFt])).toEqual(
       ft.map((r) => [r.fromFt, r.toFt]),
     );
-  });
-
-  test("inside gives two rows IN INDEX ORDER against depthBandIndexFromNetM", () => {
-    const bands: BandSettings = { ...DEFAULT_BANDS, depthScheme: "inside" };
-    const rows = depthBandRows(bands, "ft");
-    expect(rows.map((r) => r.label)).toEqual([
-      "Beyond the baseline",
-      "Inside the baseline",
-    ]);
-    // No degenerate "0-0 ft" — "Beyond" carries no LOWER bound (it's open
-    // past the baseline, i.e. every baseline-origin ft value <= 0).
-    expect(rows[0].fromFt).toBeNull();
-    expect(rows[1].rangeLabel).toBe("0–39 ft");
-
-    // A landing essentially anywhere inside the court indexes to row 1
-    // ("Inside the baseline"); only a landing at/past the far baseline
-    // itself indexes to row 0 ("Beyond the baseline") — proving the row
-    // array's order actually matches the index the bucketing function hands
-    // back, not just a plausible-looking order.
-    expect(depthBandIndexFromNetM(6, bands)).toBe(1);
-    expect(depthBandIndexFromNetM(COURT_HALF_M, bands)).toBe(0);
-  });
-
-  // Fix round 2 (#1): both rows share the SAME baseline-origin feet space
-  // (0 = the baseline, `COURT_HALF_FT` = the net) — "Beyond the baseline"
-  // is everything AT OR PAST the baseline itself in that space (<= 0, open
-  // below), never anchored at `COURT_HALF_FT` (the net, not the baseline —
-  // the bug this fix corrects). "Inside the baseline" is the ordinary
-  // `[0, COURT_HALF_FT]` range every other row here already uses.
-  test("inside: fromFt/toFt are in baseline-origin feet, not net-origin", () => {
-    const bands: BandSettings = { ...DEFAULT_BANDS, depthScheme: "inside" };
-    const rows = depthBandRows(bands, "ft");
-    const beyond = rows.find((r) => r.key === "beyond-baseline")!;
-    const inside = rows.find((r) => r.key === "inside-baseline")!;
-    expect(beyond.fromFt).toBeNull();
-    expect(beyond.toFt).toBe(0);
-    expect(inside.fromFt).toBe(0);
-    expect(inside.toFt).toBe(COURT_HALF_FT);
   });
 
   test("a 3-band scheme resolving fewer than 2 dividers returns [] rather than NaN rows (fix round 2 #6)", () => {
@@ -445,7 +401,6 @@ test.describe("schemeLabel", () => {
     expect(schemeLabel("none")).toBe("OFF");
     expect(schemeLabel("thirds")).toBe("THIRDS");
     expect(schemeLabel("deepMidShort")).toBe("DEEP·MID·SHORT");
-    expect(schemeLabel("inside")).toBe("INSIDE");
     expect(schemeLabel("custom")).toBe("CUSTOM");
   });
 });
@@ -708,5 +663,67 @@ test.describe("deepMidShortDescription", () => {
     expect(deepMidShortDescription("m")).toBe(
       "Coach default — 3 m, 4.3 m, then the rest",
     );
+  });
+});
+
+/**
+ * User decision, 2026-09-21: the "Inside the baseline" preset is gone — the
+ * tracker's verdict is only In / Out / Net, so a long return cannot be told
+ * from a wide one and the preset had nothing honest to say. The stored value
+ * is still readable (the table's CHECK is unchanged), never writable.
+ */
+test.describe("the dropped inside scheme", () => {
+  test("a stored 'inside' row reads as thirds", () => {
+    const bands = rowToBandSettings({
+      depth_scheme: "inside",
+      depth_dividers_ft: null,
+      contact_dividers_ft: [0, 5],
+    });
+    expect(bands.depthScheme).toBe("thirds");
+    expect(resolveDepthDividersFt(bands)).toEqual(
+      resolveDepthDividersFt(DEFAULT_BANDS),
+    );
+    // Its rows are the ordinary three — no "Beyond the baseline".
+    expect(depthBandRows(bands, "ft").map((r) => r.label)).toEqual([
+      "Deep",
+      "Mid",
+      "Short",
+    ]);
+  });
+
+  test("a stored 'inside' row keeps the rest of its record", () => {
+    const bands = rowToBandSettings({
+      depth_scheme: "inside",
+      depth_dividers_ft: null,
+      contact_dividers_ft: [-2, 4],
+    });
+    expect(bands.contactDividersFt).toEqual([-2, 4]);
+  });
+
+  test("saving 'inside' is refused", () => {
+    expect(
+      validateBandInput({
+        depthScheme: "inside",
+        depthDividersFt: null,
+        contactDividersFt: [0, 5],
+      }),
+    ).toBeNull();
+    // …while every scheme that survived still validates.
+    for (const depthScheme of ["none", "thirds", "deepMidShort"] as const) {
+      expect(
+        validateBandInput({
+          depthScheme,
+          depthDividersFt: null,
+          contactDividersFt: [0, 5],
+        }),
+      ).not.toBeNull();
+    }
+  });
+
+  test("the Depth bands menu has no Inside row", () => {
+    const schemes = depthPresets("ft").map((p) => p.scheme);
+    expect(schemes).toEqual(["thirds", "deepMidShort"]);
+    const labels = depthPresets("ft").map((p) => p.label);
+    expect(labels).not.toContain("Inside the baseline");
   });
 });

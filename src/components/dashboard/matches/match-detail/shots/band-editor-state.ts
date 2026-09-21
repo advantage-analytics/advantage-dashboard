@@ -220,8 +220,8 @@ function fitPair(
 
 /**
  * The pair an editor opens on. A custom record opens on its own pair and a
- * two-divider preset on the pair it resolves to; "none" and "inside" have no
- * pair of their own, so they open on thirds.
+ * two-divider preset on the pair it resolves to; "none" has no pair of its
+ * own, so it opens on thirds.
  */
 function rawInitialPair(
   kind: BandEditorKind,
@@ -396,8 +396,8 @@ export function bandEditorPreview(state: BandEditorState): BandSettings {
  * The depth scheme the editor's slab names beside "Depth bands" — what the
  * DRAFT on screen is, not what the record was: the thirds pair reads THIRDS,
  * an untouched Deep · mid · short or custom record keeps its own name, and
- * anything else (including three bands being drawn over a "none" or
- * "inside" record) is CUSTOM.
+ * anything else (including three bands being drawn over a "none" record) is
+ * CUSTOM.
  */
 export function bandEditorDraftScheme(state: BandEditorState): DepthScheme {
   if (pairEqual(state.draft, THIRDS_PAIR)) return "thirds";

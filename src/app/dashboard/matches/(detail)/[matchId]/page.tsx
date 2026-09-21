@@ -325,7 +325,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                   is — genuinely none, or a storage problem over a match that
                   has one — and which actions this viewer may take. Points
                   come from `MatchDataProvider`. */}
-              <FilmTab video={video} entry={filmEntry} />
+              <FilmTab video={video} entry={filmEntry} unit={unit} />
             </MatchReportWhen>
           </MatchReportPane>
         </MatchReportFrame>
