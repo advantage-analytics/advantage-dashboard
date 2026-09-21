@@ -17,6 +17,7 @@ import {
   projectServeMetricDot,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
 import { pointToServeDot } from "@/lib/data/serve-zones";
+import { DEFAULT_BANDS, type BandSettings } from "@/lib/data/viz-bands";
 
 // Same real-world constant `viz-model.ts` keeps privately under this name.
 const NET_Y = 11.885;
@@ -758,6 +759,390 @@ test.describe("computeVizStats — return contact", () => {
     expect(stats.subtitle).toBe(
       `Points won by contact point · 1 first-serve return`,
     );
+  });
+});
+
+/**
+ * Phase 2B Task 2 — `computeVizStats` follows the workspace's depth/contact
+ * bands (`viz-bands.ts`). THE NON-NEGOTIABLE: with `DEFAULT_BANDS` (the
+ * implicit default when a caller omits `bands` entirely, exactly like every
+ * pre-Phase-2B call site above) every label and every number
+ * `computeVizStats` returns for `returnPlacement`/`returnContact` must be
+ * byte-identical to what it returned before bands existed — this block pins
+ * that with a full `toEqual` snapshot, INCLUDING fixtures placed exactly on
+ * the old `DEPTH_THIRD_M`/`2×DEPTH_THIRD_M`/`FIVE_FEET_M` boundaries, so a
+ * bucketing rewrite that moves a boundary by even one row fails loudly here
+ * rather than only in a count-only assertion elsewhere in this file.
+ */
+test.describe("computeVizStats — bands (Phase 2B Task 2)", () => {
+  function returnPoint(over: Partial<MatchPoint>): MatchPoint {
+    return point({
+      serverIsPlayer1: false,
+      wonByPlayer1: true,
+      secondShotLandingX: 2.5,
+      secondShotLandingY: 4.0,
+      secondShotType: "Forehand",
+      ...over,
+    });
+  }
+
+  function contactPoint(over: Partial<MatchPoint>): MatchPoint {
+    return point({
+      serverIsPlayer1: false,
+      wonByPlayer1: true,
+      secondShotLandingX: 0,
+      secondShotLandingY: 4.0,
+      secondShotContactX: 0,
+      secondShotType: "Forehand",
+      ...over,
+    });
+  }
+
+  const REAL_COURT_LENGTH = 23.77;
+
+  // One at each old bucket, PLUS a fixture sitting exactly on each of the
+  // two depth-placement boundaries this replaces.
+  const placementPts = [
+    returnPoint({
+      pointScore: "0-0",
+      secondShotLandingX: 0,
+      secondShotLandingY: 0,
+    }), // short
+    returnPoint({
+      pointScore: "15-0",
+      secondShotLandingX: 0,
+      secondShotLandingY: DEPTH_THIRD_M,
+    }), // boundary — mid (inclusive)
+    returnPoint({
+      pointScore: "0-0",
+      secondShotLandingX: 0,
+      secondShotLandingY: 2 * DEPTH_THIRD_M,
+    }), // boundary — deep (inclusive)
+    returnPoint({
+      pointScore: "15-0",
+      secondShotLandingX: -2.5,
+      secondShotLandingY: NET_TO_BASELINE_M,
+      wonByPlayer1: false,
+    }), // deep
+    returnPoint({ secondShotLandingX: 5.5, secondShotResult: "Out" }), // excluded (out)
+  ];
+
+  // One at each old bucket, PLUS fixtures exactly on the two contact
+  // boundaries (0 = the baseline itself, FIVE_FEET_M).
+  const contactPts = [
+    contactPoint({ secondShotContactY: REAL_COURT_LENGTH - 0.5 }), // inside
+    contactPoint({ secondShotContactY: REAL_COURT_LENGTH }), // boundary — near (0)
+    contactPoint({
+      secondShotContactY: REAL_COURT_LENGTH + FIVE_FEET_M,
+      secondShotType: "Backhand Slice",
+      wonByPlayer1: false,
+    }), // boundary — far
+    contactPoint({ secondShotContactY: REAL_COURT_LENGTH + 3.0 }), // far
+  ];
+
+  const EXPECTED_PLACEMENT = {
+    title: "Where the return went",
+    subtitle: "Points won by placement · 4 of 5 returns landed in",
+    groups: [
+      {
+        key: "direction",
+        label: "Direction",
+        rows: [
+          { key: "middle", label: "Middle", count: 3, won: 3, winPct: 100 },
+          {
+            key: "crosscourt",
+            label: "Crosscourt",
+            count: 1,
+            won: 0,
+            winPct: 0,
+          },
+          {
+            key: "dtl",
+            label: "Down the line",
+            count: 0,
+            won: 0,
+            winPct: null,
+          },
+        ],
+      },
+      {
+        key: "depth",
+        label: "Depth",
+        rows: [
+          { key: "deep", label: "Deep", count: 2, won: 2, winPct: 100 },
+          { key: "mid", label: "Mid", count: 1, won: 1, winPct: 100 },
+          { key: "short", label: "Short", count: 1, won: 0, winPct: 0 },
+        ],
+      },
+    ],
+    sentence: "Middle: 100% won on 3 returns.",
+    total: 5,
+  };
+
+  const EXPECTED_CONTACT = {
+    title: "Where the return was struck",
+    subtitle: "Points won by contact point · 4 returns",
+    groups: [
+      {
+        key: "depth",
+        label: "Depth",
+        rows: [
+          {
+            key: "inside",
+            label: "Inside the baseline",
+            count: 1,
+            won: 1,
+            winPct: 100,
+          },
+          {
+            key: "near",
+            label: "0–5 ft behind",
+            count: 1,
+            won: 1,
+            winPct: 100,
+          },
+          {
+            key: "far",
+            label: "5 ft+ behind",
+            count: 2,
+            won: 1,
+            winPct: 50,
+          },
+        ],
+      },
+      {
+        key: "stroke",
+        label: "Stroke",
+        rows: [
+          {
+            key: "forehand",
+            label: "Forehand",
+            count: 3,
+            won: 3,
+            winPct: 100,
+          },
+          {
+            key: "backhand",
+            label: "Backhand",
+            count: 1,
+            won: 0,
+            winPct: 0,
+          },
+        ],
+      },
+    ],
+    sentence: "Forehand: 100% won on 3 returns.",
+    total: 4,
+  };
+
+  // Row order within a group is `sortRows`' own (by win rate) — sort both
+  // the actual and expected groups' rows by `key` before comparing so this
+  // spec pins the SET of labels/counts/rates per row, not an incidental
+  // ordering `sortRows` already has its own dedicated tests for.
+  function byRowKey(a: { key: string }, b: { key: string }) {
+    return a.key.localeCompare(b.key);
+  }
+  function normalized(stats: ReturnType<typeof computeVizStats>) {
+    return {
+      ...stats,
+      groups: stats.groups.map((g) => ({
+        ...g,
+        rows: [...g.rows].sort(byRowKey),
+      })),
+    };
+  }
+  function normalizedExpected(expected: typeof EXPECTED_PLACEMENT) {
+    return {
+      ...expected,
+      groups: expected.groups.map((g) => ({
+        ...g,
+        rows: [...g.rows].sort(byRowKey),
+      })),
+    };
+  }
+
+  test("regression: returnPlacement with the implicit default (no bands argument) is byte-identical to the pre-Phase-2B shape", () => {
+    const stats = computeVizStats(
+      placementPts,
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(normalized(stats)).toEqual(normalizedExpected(EXPECTED_PLACEMENT));
+  });
+
+  test("regression: returnPlacement with DEFAULT_BANDS explicitly passed matches the implicit-default output", () => {
+    const implicit = computeVizStats(
+      placementPts,
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    const explicit = computeVizStats(
+      placementPts,
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+    );
+    expect(explicit).toEqual(implicit);
+  });
+
+  test("regression: returnContact with the implicit default (no bands argument) is byte-identical to the pre-Phase-2B shape", () => {
+    const stats = computeVizStats(
+      contactPts,
+      "returnContact",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(normalized(stats)).toEqual(normalizedExpected(EXPECTED_CONTACT));
+  });
+
+  test("regression: returnContact with DEFAULT_BANDS explicitly passed matches the implicit-default output", () => {
+    const implicit = computeVizStats(
+      contactPts,
+      "returnContact",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    const explicit = computeVizStats(
+      contactPts,
+      "returnContact",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+    );
+    expect(explicit).toEqual(implicit);
+  });
+
+  test("custom depth scheme buckets by its own dividers and labels the rows with formatDistance ranges", () => {
+    const bands: BandSettings = {
+      depthScheme: "custom",
+      depthDividersFt: [6, 20],
+      contactDividersFt: [0, 5],
+    };
+    // `depthM` (NET-origin metres) = `REAL_NET_Y − secondShotLandingY` for a
+    // far-half landing (see `computeViz`'s farEnd flip) — a SMALL landingY
+    // is DEEP (near the baseline) and a LARGE landingY is SHORT (near the
+    // net), the opposite of landingY's own direction. Custom dividers [6,
+    // 20] baseline-ft convert to net-origin metres dividers of ≈[5.79,
+    // 10.06] (`REAL_NET_Y − ft/FT_PER_M`), so: landingY 1.0 -> depthM 10.885
+    // (>= 10.06 -> Deep); landingY 4.0 -> depthM 7.885 (between -> Mid);
+    // landingY 11.0 -> depthM 0.885 (< 5.79 -> Short).
+    const pts = [
+      returnPoint({ secondShotLandingX: 0, secondShotLandingY: 1.0 }), // Deep
+      returnPoint({ secondShotLandingX: 0, secondShotLandingY: 4.0 }), // Mid
+      returnPoint({ secondShotLandingX: 0, secondShotLandingY: 11.0 }), // Short
+    ];
+    const stats = computeVizStats(
+      pts,
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      bands,
+      "ft",
+    );
+    const depth = stats.groups.find((g) => g.key === "depth")!;
+    expect(depth.rows.map((r) => r.key).sort()).toEqual([
+      "deep",
+      "mid",
+      "short",
+    ]);
+    const row = (key: string) => depth.rows.find((r) => r.key === key)!;
+    expect(row("deep").count).toBe(1);
+    expect(row("mid").count).toBe(1);
+    expect(row("short").count).toBe(1);
+    expect(row("deep").label).toBe("Deep");
+    expect(row("mid").label).toBe("Mid");
+    expect(row("short").label).toBe("Short");
+  });
+
+  test('depthScheme: "none" omits the Depth group entirely rather than rendering zero rows', () => {
+    const bands: BandSettings = {
+      ...DEFAULT_BANDS,
+      depthScheme: "none",
+    };
+    const stats = computeVizStats(
+      placementPts,
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      bands,
+      "ft",
+    );
+    expect(stats.groups.map((g) => g.key)).toEqual(["direction"]);
+    expect(stats.groups.find((g) => g.key === "depth")).toBeUndefined();
+    // The Direction group and the subtitle/total are unaffected — only the
+    // Depth group disappears.
+    expect(stats.total).toBe(5);
+  });
+
+  test('depthScheme: "inside" gives two Depth rows, "Inside the baseline" / "Beyond the baseline"', () => {
+    const bands: BandSettings = {
+      ...DEFAULT_BANDS,
+      depthScheme: "inside",
+    };
+    const pts = [
+      returnPoint({ secondShotLandingX: 0, secondShotLandingY: 6.0 }), // any in-court landing — resolveDepthDividersFt("inside") = [0]
+    ];
+    const stats = computeVizStats(
+      pts,
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      bands,
+      "ft",
+    );
+    const depth = stats.groups.find((g) => g.key === "depth")!;
+    expect(depth.rows.map((r) => r.label).sort()).toEqual([
+      "Beyond the baseline",
+      "Inside the baseline",
+    ]);
+    // resolveDepthDividersFt("inside") is a single divider AT the baseline
+    // (0 baseline-ft), so every in-court landing (baseline-ft > 0) falls in
+    // "Beyond the baseline" — see viz-bands.ts's own "inside is a single
+    // divider at 0" spec. Recorded here rather than assumed, since a caller
+    // reading only the row LABELS could otherwise expect a 50/50 split.
+    const row = (label: string) => depth.rows.find((r) => r.label === label)!;
+    expect(row("Beyond the baseline").count).toBe(1);
+    expect(row("Inside the baseline").count).toBe(0);
+  });
+
+  test("returnContact/rallyPosition follow custom contact dividers too", () => {
+    const bands: BandSettings = {
+      ...DEFAULT_BANDS,
+      contactDividersFt: [2, 8],
+    };
+    // `depthM` here is metres (SwingVision's coordinate unit), not feet —
+    // `contactDividersFt` [2, 8] converts to metres dividers of ≈[0.61,
+    // 2.44] (`ft / FT_PER_M`). Pick metre offsets that land clearly inside
+    // each band rather than the feet numbers themselves.
+    const pts = [
+      contactPoint({ secondShotContactY: REAL_COURT_LENGTH - 0.5 }), // depthM -0.5 -> inside
+      contactPoint({ secondShotContactY: REAL_COURT_LENGTH + 1.5 }), // depthM 1.5 -> between 0.61 and 2.44
+      contactPoint({ secondShotContactY: REAL_COURT_LENGTH + 3.0 }), // depthM 3.0 -> >= 2.44
+    ];
+    const stats = computeVizStats(
+      pts,
+      "returnContact",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      bands,
+      "ft",
+    );
+    const depth = stats.groups.find((g) => g.key === "depth")!;
+    const row = (key: string) => depth.rows.find((r) => r.key === key)!;
+    expect(row("inside").count).toBe(1);
+    expect(row("near").count).toBe(1);
+    expect(row("far").count).toBe(1);
   });
 });
 

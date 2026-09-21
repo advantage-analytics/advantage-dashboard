@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
   useMatchSides,
   type MatchSide,
@@ -32,6 +33,11 @@ import { activeFilterEntries } from "./viz-url";
  * filter into the boolean `computeViz` needs, and nothing downstream reads
  * player1/player2 off the match.
  *
+ * Bands (Phase 2B): `stats` is built with `useMatchReport().meta.bandSettings`
+ * — the workspace's depth/contact bands, loaded once in `page.tsx` — so both
+ * the focused court's stats card and the fullscreen viewer follow the same
+ * workspace bands without either reading them separately.
+ *
  * `cut === null` (the wall) returns `result`/`stats` as `null` — both callers
  * are mounted only alongside a real cut and guard on it, but a render race
  * between a URL commit and an unmount must not throw.
@@ -59,6 +65,7 @@ export function useVizView(): VizView {
   const { points } = useMatchData();
   const { you, opp } = useMatchSides();
   const { state } = useVizState();
+  const { meta } = useMatchReport();
 
   const cut = state.cut;
   const subjectIsPlayer1 = subjectFor(state.filters, you.isPlayer1);
@@ -79,9 +86,10 @@ export function useVizView(): VizView {
             state.filters,
             subjectIsPlayer1,
             result ?? undefined,
+            meta.bandSettings,
           )
         : null,
-    [points, cut, state.filters, subjectIsPlayer1, result],
+    [points, cut, state.filters, subjectIsPlayer1, result, meta.bandSettings],
   );
 
   return {

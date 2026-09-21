@@ -5,8 +5,11 @@ import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 
 import { getMatchDetailData } from "@/lib/data/match-detail-server";
 import { getSavedViews } from "@/lib/data/saved-views-server";
+import { getBandSettings } from "@/lib/data/viz-bands-server";
+import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import { hasComparisonBaseline } from "@/lib/data/match-stats-server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { isProgramStaff } from "@/lib/workspace/types";
 import {
   isAnalysisFailed,
   isInFlight,
@@ -141,6 +144,15 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // hidden rather than showing a row that names an empty workspace.
   const workspaceKind = activeWorkspace?.kind ?? "personal";
   const workspaceName = activeWorkspace?.name ?? "";
+  // Personal workspaces have exactly one member (the owner), always able to
+  // edit their own bands; a team workspace follows the same staff rule every
+  // other team-write surface uses. The lost-session fallback above defaults
+  // `workspaceKind` to `"personal"`, so this falls back permissive here —
+  // unlike `workspaceRole`'s own player-only default — matching how the rest
+  // of a personal workspace already behaves for its sole owner.
+  const canEditBands =
+    workspaceKind === "personal" ||
+    isProgramStaff({ kind: workspaceKind, role: workspaceRole });
 
   const { match, statsResult, insights, kpiHistory } = data;
 
@@ -193,11 +205,15 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   // Fetched only once there's a view switcher to show it in — the
   // awaiting-analysis branch below never renders `ShotsTab`, so a match still
-  // analysing skips this query entirely.
-  const savedViews =
+  // analysing skips both queries entirely. Run together: neither depends on
+  // the other's result.
+  const [savedViews, bandSettings] =
     !isAwaitingAnalysis && activeWorkspace
-      ? await getSavedViews(activeWorkspace.id)
-      : [];
+      ? await Promise.all([
+          getSavedViews(activeWorkspace.id),
+          getBandSettings(activeWorkspace.id),
+        ])
+      : [[], DEFAULT_BANDS];
 
   // The rail's foot on both variants: the share popover opening upward from
   // its full-width trigger (F1).
@@ -229,6 +245,10 @@ export default async function MatchDetailPage({ params }: PageProps) {
         workspaceRole={workspaceRole}
         workspaceKind={workspaceKind}
         workspaceName={workspaceName}
+        // Same reasoning as `savedViews` above — `ShotsTab` never renders on
+        // this branch, so the default is enough and skips the query.
+        bandSettings={DEFAULT_BANDS}
+        canEditBands={canEditBands}
       >
         <MatchReportFrame>
           <MatchReportRail>
@@ -262,6 +282,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
         workspaceRole={workspaceRole}
         workspaceKind={workspaceKind}
         workspaceName={workspaceName}
+        bandSettings={bandSettings}
+        canEditBands={canEditBands}
       >
         <MatchReportFrame>
           <MatchReportRail>

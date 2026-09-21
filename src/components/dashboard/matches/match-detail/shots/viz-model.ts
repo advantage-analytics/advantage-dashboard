@@ -24,6 +24,16 @@ import {
   type ZoneKey,
   type ZoneStats,
 } from "@/lib/data/serve-zones";
+import {
+  DEFAULT_BANDS,
+  bandIndex,
+  contactBandRows,
+  depthBandRows,
+  resolveDepthDividersFt,
+  type BandRow,
+  type BandSettings,
+} from "@/lib/data/viz-bands";
+import { FT_PER_M, type DistanceUnit } from "@/lib/format/distance";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
@@ -1074,8 +1084,6 @@ const ZONE_ROWS: { key: ZoneKey; label: string }[] = [
 // is a client-adjacent geometry/SVG module and this one stays plain.
 const REAL_SINGLES_HALF_M = 4.115;
 const LATERAL_THIRD_M = REAL_SINGLES_HALF_M / 3; // ≈1.372m
-const DEPTH_THIRD_M = REAL_NET_Y / 3; // ≈3.962m — thirds of the landing half
-const FIVE_FEET_M = 1.524;
 const IN_COURT_EPS = 1e-6;
 
 function makeRow(
@@ -1246,17 +1254,61 @@ function directionKey(
   return landingHalf === serveSide ? "dtl" : "crosscourt";
 }
 
-/** Deep / Mid / Short: thirds of the landing half's depth, measured from the
- * net (`depthM` 0 = net). Deep is the third nearest the baseline. */
-function depthKeyPlacement(depthM: number): "deep" | "mid" | "short" {
-  if (depthM < DEPTH_THIRD_M) return "short";
-  if (depthM < 2 * DEPTH_THIRD_M) return "mid";
-  return "deep";
+/**
+ * Depth-placement row index into `depthBandRows(bands, unit)` for a dot's
+ * NET-origin `depthM` (0 = net, `REAL_NET_Y` = baseline — the same origin
+ * `isPlacementRow`/`directionKey` read). `resolveDepthDividersFt`'s dividers
+ * are BASELINE-origin feet (see viz-bands.ts's module doc comment for the
+ * full mirror explanation): this mirrors each one into a NET-origin metres
+ * divider (`REAL_NET_Y − d / FT_PER_M`) — the same axis `depthM` already
+ * lives on — then buckets `depthM` against them directly with `bandIndex`
+ * and flips the index, since `bandIndex`'s band 0 (below the lowest
+ * NET-origin divider, i.e. nearest the net) is `depthBandRows`' LAST row
+ * ("Short"), not its first ("Deep").
+ *
+ * Converting the (few, fixed) dividers rather than the (many, arbitrary)
+ * `depthM` values keeps `DEFAULT_BANDS`'s thirds boundaries bit-identical to
+ * the pre-Phase-2B `DEPTH_THIRD_M` comparisons this replaces — pinned by the
+ * boundary fixtures in `tests/viz-model.spec.ts`. Converting `depthM` itself
+ * instead would round through a different path and could move a boundary by
+ * float epsilon.
+ */
+function depthPlacementRowIndex(depthM: number, bands: BandSettings): number {
+  const dividersFt = resolveDepthDividersFt(bands);
+  const netOrderedM = dividersFt
+    .map((d) => REAL_NET_Y - d / FT_PER_M)
+    .sort((a, b) => a - b);
+  return dividersFt.length - bandIndex(depthM, netOrderedM);
+}
+
+/**
+ * Contact-depth row index into `contactBandRows(bands, unit)`. Both `depthM`
+ * (signed from the returner's own baseline — negative = inside the court,
+ * positive = behind it) and `contactDividersFt` are already BASELINE-origin
+ * in the same direction, so converting feet to metres and calling
+ * `bandIndex` directly agrees with `contactBandRows`'s own row order — no
+ * mirror/flip needed (see viz-bands.ts's module doc comment).
+ */
+function contactRowIndex(depthM: number, bands: BandSettings): number {
+  const dividersM = bands.contactDividersFt.map((d) => d / FT_PER_M);
+  return bandIndex(depthM, dividersM);
+}
+
+/** Zero-initialized `{count, won}` per row `key`, built fresh from `rows` so
+ *  no scheme's accumulator carries a stale key from a previous render. */
+function bandRowAccumulator(
+  rows: BandRow[],
+): Record<string, { count: number; won: number }> {
+  const acc: Record<string, { count: number; won: number }> = {};
+  for (const row of rows) acc[row.key] = { count: 0, won: 0 };
+  return acc;
 }
 
 function returnPlacementStats(
   result: VizResult,
   points: MatchPoint[],
+  bands: BandSettings,
+  unit: DistanceUnit,
 ): { subtitleCount: number; groups: StatGroup[] } {
   const pointById = new Map(points.map((p) => [p.id, p]));
   const eligible = result.dots.filter(isPlacementRow);
@@ -1269,14 +1321,10 @@ function returnPlacementStats(
     middle: { count: 0, won: 0 },
     dtl: { count: 0, won: 0 },
   };
-  const depth: Record<
-    "deep" | "mid" | "short",
-    { count: number; won: number }
-  > = {
-    deep: { count: 0, won: 0 },
-    mid: { count: 0, won: 0 },
-    short: { count: 0, won: 0 },
-  };
+  // `"none"` → `depthBandRows` returns `[]`: the Depth group is omitted below
+  // rather than rendered with zero rows.
+  const depthRows = depthBandRows(bands, unit);
+  const depth = bandRowAccumulator(depthRows);
 
   for (const d of eligible) {
     const wonInc = d.outcome === "won" ? 1 : 0;
@@ -1285,9 +1333,11 @@ function returnPlacementStats(
     const dKey = directionKey(d.lateralM, serveSide);
     direction[dKey].count++;
     direction[dKey].won += wonInc;
-    const pKey = depthKeyPlacement(d.depthM);
-    depth[pKey].count++;
-    depth[pKey].won += wonInc;
+    if (depthRows.length > 0) {
+      const pKey = depthRows[depthPlacementRowIndex(d.depthM, bands)].key;
+      depth[pKey].count++;
+      depth[pKey].won += wonInc;
+    }
   }
 
   const directionGroup: StatGroup = {
@@ -1304,38 +1354,39 @@ function returnPlacementStats(
       makeRow("dtl", "Down the line", direction.dtl.count, direction.dtl.won),
     ]),
   };
-  const depthGroup: StatGroup = {
-    key: "depth",
-    label: "Depth",
-    rows: sortRows([
-      makeRow("deep", "Deep", depth.deep.count, depth.deep.won),
-      makeRow("mid", "Mid", depth.mid.count, depth.mid.won),
-      makeRow("short", "Short", depth.short.count, depth.short.won),
-    ]),
-  };
+
+  const groups: StatGroup[] = [directionGroup];
+  if (depthRows.length > 0) {
+    groups.push({
+      key: "depth",
+      label: "Depth",
+      rows: sortRows(
+        depthRows.map((row) =>
+          makeRow(row.key, row.label, depth[row.key].count, depth[row.key].won),
+        ),
+      ),
+    });
+  }
 
   return {
     subtitleCount: eligible.length,
-    groups: [directionGroup, depthGroup],
+    groups,
   };
 }
 
-/** Inside the baseline / 0–5 ft behind / 5 ft+ behind — signed distance from
- * the returner's own baseline (`depthM`: negative = inside the court,
- * positive = behind it). 5ft = 1.524m; exactly on the baseline (`depthM ===
- * 0`) counts as 0–5 ft behind, matching the task's "on the line" rule. */
-function contactDepthKey(depthM: number): "inside" | "near" | "far" {
-  if (depthM < 0) return "inside";
-  if (depthM < FIVE_FEET_M) return "near";
-  return "far";
-}
-
-function returnContactStats(result: VizResult): StatGroup[] {
-  const depth = {
-    inside: { count: 0, won: 0 },
-    near: { count: 0, won: 0 },
-    far: { count: 0, won: 0 },
-  };
+/** Depth (bands) + Forehand/Backhand rows for a contact/rally cut, following
+ *  `bands.contactDividersFt` — with `DEFAULT_BANDS` this is EXACTLY "Inside
+ *  the baseline" / "0–5 ft behind" / "5 ft+ behind", today's rows unchanged
+ *  (pinned by `tests/viz-model.spec.ts`'s regression spec). */
+function returnContactStats(
+  result: VizResult,
+  bands: BandSettings,
+  unit: DistanceUnit,
+): StatGroup[] {
+  // Always exactly three rows (two dividers) — `contactBandRows` never
+  // returns `[]`, unlike `depthBandRows`'s `"none"` case.
+  const contactRows = contactBandRows(bands, unit);
+  const depth = bandRowAccumulator(contactRows);
   const stroke = {
     forehand: { count: 0, won: 0 },
     backhand: { count: 0, won: 0 },
@@ -1343,7 +1394,7 @@ function returnContactStats(result: VizResult): StatGroup[] {
 
   for (const d of result.dots) {
     const wonInc = d.outcome === "won" ? 1 : 0;
-    const dKey = contactDepthKey(d.depthM);
+    const dKey = contactRows[contactRowIndex(d.depthM, bands)].key;
     depth[dKey].count++;
     depth[dKey].won += wonInc;
     const sKey = d.shape === "triangle" ? "backhand" : "forehand";
@@ -1354,16 +1405,11 @@ function returnContactStats(result: VizResult): StatGroup[] {
   const depthGroup: StatGroup = {
     key: "depth",
     label: "Depth",
-    rows: sortRows([
-      makeRow(
-        "inside",
-        "Inside the baseline",
-        depth.inside.count,
-        depth.inside.won,
+    rows: sortRows(
+      contactRows.map((row) =>
+        makeRow(row.key, row.label, depth[row.key].count, depth[row.key].won),
       ),
-      makeRow("near", "0–5 ft behind", depth.near.count, depth.near.won),
-      makeRow("far", "5 ft+ behind", depth.far.count, depth.far.won),
-    ]),
+    ),
   };
   const strokeGroup: StatGroup = {
     key: "stroke",
@@ -1400,6 +1446,12 @@ function returnContactStats(result: VizResult): StatGroup[] {
  * `computeViz` itself; behaviour is identical either way, since a caller
  * that passes it is only avoiding a redundant recompute of the exact same
  * inputs.
+ *
+ * `bands`/`unit` (Phase 2B): the workspace's depth/contact band settings
+ * (`viz-bands.ts`) and the unit to render their labels in. Default to
+ * `DEFAULT_BANDS`/`"ft"` — the pre-Phase-2B behaviour — so every existing
+ * caller that hasn't been threaded through to a workspace's `bandSettings`
+ * yet keeps working unchanged.
  */
 export function computeVizStats(
   points: MatchPoint[],
@@ -1407,6 +1459,8 @@ export function computeVizStats(
   filters: VizFilters,
   subjectIsPlayer1: boolean,
   precomputed?: VizResult,
+  bands: BandSettings = DEFAULT_BANDS,
+  unit: DistanceUnit = "ft",
 ): VizStats {
   const result =
     precomputed ?? computeViz(points, cut, filters, subjectIsPlayer1);
@@ -1440,7 +1494,12 @@ export function computeVizStats(
   }
 
   if (cut === "returnPlacement") {
-    const { subtitleCount, groups } = returnPlacementStats(result, points);
+    const { subtitleCount, groups } = returnPlacementStats(
+      result,
+      points,
+      bands,
+      unit,
+    );
     const noun = returnNoun(filters.ball, subtitleCount);
     // The rows' denominator (subtitleCount) can be smaller than the total
     // drawable pool (total) when some returns landed out/net — say so
@@ -1466,7 +1525,7 @@ export function computeVizStats(
     // rally dots carry in the identical shape, so nothing rally-specific is
     // needed here beyond the noun and copy.
     const noun = total === 1 ? "shot" : "shots";
-    const groups = returnContactStats(result);
+    const groups = returnContactStats(result, bands, unit);
     return {
       title: "Where rally shots were struck",
       subtitle: `Points won by contact point · ${total} ${noun}`,
@@ -1479,7 +1538,7 @@ export function computeVizStats(
   // A1: the contact-cut subtitle noun follows the ball filter exactly as
   // returnPlacement's does, instead of hardcoding "returns".
   const noun = returnNoun(filters.ball, total);
-  const groups = returnContactStats(result);
+  const groups = returnContactStats(result, bands, unit);
   return {
     title: "Where the return was struck",
     subtitle: `Points won by contact point · ${total} ${noun}`,

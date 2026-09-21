@@ -8,6 +8,7 @@ import {
   type ReportView,
 } from "@/components/dashboard/matches/match-detail/report-view";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
+import type { BandSettings } from "@/lib/data/viz-bands-server";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
 
 /**
@@ -70,6 +71,24 @@ export interface MatchReportMeta {
    */
   workspaceKind: WorkspaceKind;
   workspaceName: string;
+  /**
+   * The active workspace's Visualizations-tab depth/contact bands (Phase 2B)
+   * — one record per workspace, loaded once in `page.tsx` via
+   * `getBandSettings(activeWorkspace.id)` beside `getSavedViews`, and
+   * threaded down here for the same reason `savedViews` is: `use-viz-view.ts`
+   * is the one data path behind both the focused court and the fullscreen
+   * viewer, so reading it there is enough for `computeVizStats` to follow
+   * the workspace's bands everywhere. `DEFAULT_BANDS` on the
+   * awaiting-analysis short-circuit, which never renders `ShotsTab`.
+   */
+  bandSettings: BandSettings;
+  /**
+   * May this viewer change the workspace's bands? Personal workspaces are
+   * always editable by their sole owner; a team workspace follows
+   * `isProgramStaff` (owner/coach/staff) — a player sees the bands but can't
+   * edit them, matching `viz_band_settings`'s own RLS write policy.
+   */
+  canEditBands: boolean;
 }
 
 export interface MatchReportContextValue {
@@ -102,6 +121,8 @@ export function MatchReportProvider({
   workspaceRole,
   workspaceKind,
   workspaceName,
+  bandSettings,
+  canEditBands,
   children,
 }: MatchReportProviderProps) {
   const pathname = usePathname();
@@ -149,6 +170,8 @@ export function MatchReportProvider({
       workspaceRole,
       workspaceKind,
       workspaceName,
+      bandSettings,
+      canEditBands,
     }),
     [
       matchId,
@@ -160,6 +183,8 @@ export function MatchReportProvider({
       workspaceRole,
       workspaceKind,
       workspaceName,
+      bandSettings,
+      canEditBands,
     ],
   );
 
