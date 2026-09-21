@@ -55,8 +55,14 @@ interface Option {
   /** Unique within its group. */
   id: string;
   label: string;
-  /** The filters the group takes when this pill turns on. */
+  /** What a click does to the group: the pill goes on, or comes back off. */
   patch: Partial<FilmFilters>;
+  /**
+   * The group holding this option alone — what its count is measured with.
+   * Never `patch`: on a selected pill that is the toggle-OFF, and the pill
+   * would report the cut without itself.
+   */
+  alone: Partial<FilmFilters>;
   selected: boolean;
 }
 
@@ -91,6 +97,7 @@ function orGroup<K extends ArrayAxis>(
             ? current.filter((v) => v !== option.value)
             : [...current, option.value],
         } as Partial<FilmFilters>,
+        alone: { [key]: [option.value] } as Partial<FilmFilters>,
       };
     }),
   };
@@ -116,6 +123,7 @@ function oneGroup<K extends FilmAxisKey>(
         patch: {
           [key]: selected ? cleared : option.value,
         } as Partial<FilmFilters>,
+        alone: { [key]: option.value } as Partial<FilmFilters>,
       };
     }),
   };
@@ -130,10 +138,11 @@ function oneGroup<K extends FilmAxisKey>(
 function groupsFor(
   section: FilmSectionId,
   draft: FilmFilters,
-  sides: MatchSides,
+  /** The opponent's name off `useMatchSides()`, already resolved. */
+  oppName: string,
   sets: number[],
 ): Group[] {
-  const opp = lastNameOf(sides.opp.name);
+  const opp = lastNameOf(oppName);
 
   switch (section) {
     case "score":
@@ -299,7 +308,10 @@ export function FilmAdvancedPanel({
   openSections,
   onOpenSectionsChange,
 }: FilmAdvancedPanelProps) {
+  // `useMatchSides()` hands back a fresh object each render, so the memos key
+  // off the two primitives read from it rather than its identity.
   const youIsPlayer1 = sides.you.isPlayer1;
+  const oppName = sides.opp.name;
   const [draft, setDraft] = useState<FilmFilters>(filters);
 
   const sets = useMemo(
@@ -316,7 +328,17 @@ export function FilmAdvancedPanel({
   const sections = useMemo(
     () =>
       FILM_FILTER_SECTIONS.map((section) => {
-        const groups = groupsFor(section.id, draft, sides, sets);
+        // Each pill's count rides along here, so it is worked out once per
+        // draft rather than once per pill per render.
+        const groups = groupsFor(section.id, draft, oppName, sets).map(
+          (group) => ({
+            ...group,
+            options: group.options.map((option) => ({
+              ...option,
+              count: countFilmOption(points, draft, youIsPlayer1, option.alone),
+            })),
+          }),
+        );
         // The summary names what is on, so a collapsed section still reports
         // itself; ink-400 "Any" when the section holds nothing.
         const chosen = groups.flatMap((group) =>
@@ -324,11 +346,8 @@ export function FilmAdvancedPanel({
         );
         return { ...section, groups, summary: chosen.join(", ") };
       }),
-    [draft, sides, sets],
+    [points, draft, youIsPlayer1, oppName, sets],
   );
-
-  const count = (patch: Partial<FilmFilters>) =>
-    countFilmOption(points, draft, youIsPlayer1, patch);
 
   const toggleSection = (id: FilmSectionId) =>
     onOpenSectionsChange(
@@ -337,7 +356,10 @@ export function FilmAdvancedPanel({
         : [...openSections, id],
     );
 
-  const savedCount = count({ savedOnly: true });
+  const savedCount = useMemo(
+    () => countFilmOption(points, draft, youIsPlayer1, { savedOnly: true }),
+    [points, draft, youIsPlayer1],
+  );
 
   return (
     <section
@@ -428,7 +450,7 @@ export function FilmAdvancedPanel({
                           <CountPill
                             key={option.id}
                             label={option.label}
-                            count={count(option.patch)}
+                            count={option.count}
                             selected={option.selected}
                             onToggle={() =>
                               setDraft({ ...draft, ...option.patch })

@@ -9,10 +9,15 @@
 --
 -- Returns the stored value, or NULL when the point is not visible to the
 -- caller (or does not exist) — the client treats NULL as "did not land".
+--
+-- STRICT: a NULL argument returns NULL without running. Unguarded, a NULL
+-- `p_saved` trips `points.saved NOT NULL` only on a row the caller can see, so
+-- the error itself would say "this point exists and is yours to see".
 create or replace function public.set_point_saved(p_point_id uuid, p_saved boolean)
 returns boolean
 language sql
 volatile
+strict
 security definer
 set search_path to ''
 as $$

@@ -67,6 +67,45 @@ export function FilmQuickFilters({
     setOpen(false);
   };
 
+  // Row content shared between the light (FloatMenuItem) and dark
+  // (FilmDarkMenuItem) renderings below — same label/chosen/onSelect, a
+  // different item component per tone.
+  const showPointsRows = [
+    {
+      label: "All points",
+      chosen: show === "all",
+      onSelect: () => pick({ pressure: "any", savedOnly: false }),
+    },
+    {
+      label: "Break points",
+      description: "Points that could break serve",
+      chosen: show === "break",
+      onSelect: () => pick({ pressure: "break", savedOnly: false }),
+    },
+    {
+      label: "Saved only",
+      chosen: show === "saved",
+      onSelect: () => pick({ pressure: "any", savedOnly: true }),
+    },
+  ];
+  const serveRows = [
+    {
+      label: "Either",
+      chosen: filters.server === "any",
+      onSelect: () => pick({ server: "any" }),
+    },
+    {
+      label: `${lastNameOf(sides.you.name)} serving`,
+      chosen: filters.server === "you",
+      onSelect: () => pick({ server: "you" }),
+    },
+    {
+      label: `${lastNameOf(sides.opp.name)} serving`,
+      chosen: filters.server === "opp",
+      onSelect: () => pick({ server: "opp" }),
+    },
+  ];
+
   if (tone === "light") {
     return (
       <FloatMenu
@@ -114,39 +153,14 @@ export function FilmQuickFilters({
         }
       >
         <FloatMenuCaption>Show points</FloatMenuCaption>
-        <FloatMenuItem
-          label="All points"
-          chosen={show === "all"}
-          onSelect={() => pick({ pressure: "any", savedOnly: false })}
-        />
-        <FloatMenuItem
-          label="Break points"
-          description="Points that could break serve"
-          chosen={show === "break"}
-          onSelect={() => pick({ pressure: "break", savedOnly: false })}
-        />
-        <FloatMenuItem
-          label="Saved only"
-          chosen={show === "saved"}
-          onSelect={() => pick({ pressure: "any", savedOnly: true })}
-        />
+        {showPointsRows.map((row, i) => (
+          <FloatMenuItem key={i} {...row} />
+        ))}
         <FloatMenuDivider />
         <FloatMenuCaption>Serve</FloatMenuCaption>
-        <FloatMenuItem
-          label="Either"
-          chosen={filters.server === "any"}
-          onSelect={() => pick({ server: "any" })}
-        />
-        <FloatMenuItem
-          label={`${lastNameOf(sides.you.name)} serving`}
-          chosen={filters.server === "you"}
-          onSelect={() => pick({ server: "you" })}
-        />
-        <FloatMenuItem
-          label={`${lastNameOf(sides.opp.name)} serving`}
-          chosen={filters.server === "opp"}
-          onSelect={() => pick({ server: "opp" })}
-        />
+        {serveRows.map((row, i) => (
+          <FloatMenuItem key={i} {...row} />
+        ))}
         {onOpenAdvanced ? (
           <>
             <FloatMenuDivider />
@@ -194,39 +208,14 @@ export function FilmQuickFilters({
       }
     >
       <FilmDarkMenuLabel>Show points</FilmDarkMenuLabel>
-      <FilmDarkMenuItem
-        label="All points"
-        chosen={show === "all"}
-        onSelect={() => pick({ pressure: "any", savedOnly: false })}
-      />
-      <FilmDarkMenuItem
-        label="Break points"
-        description="Points that could break serve"
-        chosen={show === "break"}
-        onSelect={() => pick({ pressure: "break", savedOnly: false })}
-      />
-      <FilmDarkMenuItem
-        label="Saved only"
-        chosen={show === "saved"}
-        onSelect={() => pick({ pressure: "any", savedOnly: true })}
-      />
+      {showPointsRows.map((row, i) => (
+        <FilmDarkMenuItem key={i} {...row} />
+      ))}
       <FilmDarkMenuDivider />
       <FilmDarkMenuLabel>Serve</FilmDarkMenuLabel>
-      <FilmDarkMenuItem
-        label="Either"
-        chosen={filters.server === "any"}
-        onSelect={() => pick({ server: "any" })}
-      />
-      <FilmDarkMenuItem
-        label={`${lastNameOf(sides.you.name)} serving`}
-        chosen={filters.server === "you"}
-        onSelect={() => pick({ server: "you" })}
-      />
-      <FilmDarkMenuItem
-        label={`${lastNameOf(sides.opp.name)} serving`}
-        chosen={filters.server === "opp"}
-        onSelect={() => pick({ server: "opp" })}
-      />
+      {serveRows.map((row, i) => (
+        <FilmDarkMenuItem key={i} {...row} />
+      ))}
       {onOpenAdvanced ? (
         <>
           <FilmDarkMenuDivider />
