@@ -25,6 +25,7 @@ import {
   viewerArtPoint,
   viewerHeatFilterRegion,
   zoneCellX,
+  zoneOpacity,
 } from "./court-geometry";
 import type { PanZoom, Size } from "./pan-zoom";
 import {
@@ -227,6 +228,17 @@ export function VizFullscreenCourt({
   const z = transform.z;
 
   const highlighted = cut === "serve" ? highlightedZoneKeys(filters) : null;
+  // The Zones chart IS its six cells — the same white wash, scaled to the
+  // busiest zone, that `court-art.tsx` draws in-shell (`zoneOpacity`). The
+  // viewer had only ever hidden the marks for this chart, which left a bare
+  // court: the chart existed in the menu and drew nothing.
+  const zoneCells =
+    chart === "zones" && cut === "serve" && zoneStats !== null
+      ? zoneStats
+      : null;
+  const maxZonePct = zoneCells
+    ? Math.max(...ZONES.map((z) => zoneCells[z.key].pct))
+    : 0;
 
   const active =
     panning || editing ? null : (dots.find((d) => d.id === activeId) ?? null);
@@ -300,7 +312,28 @@ export function VizFullscreenCourt({
           fill={court}
         />
 
+        {zoneCells !== null &&
+          ZONES.map((zone, index) => {
+            const cell = zoneCellX(index);
+            return (
+              <rect
+                key={`cell-${zone.key}`}
+                x={cell.x1}
+                y={VIEWER_COURT.farServiceY}
+                width={cell.x2 - cell.x1}
+                height={VIEWER_COURT.netY - VIEWER_COURT.farServiceY}
+                fill={LINE_COLOR}
+                fillOpacity={zoneOpacity(zoneCells[zone.key].pct, maxZonePct)}
+                stroke={LINE_COLOR}
+                strokeOpacity={0.5}
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+              />
+            );
+          })}
+
         {highlighted !== null &&
+          zoneCells === null &&
           ZONES.map((zone, index) => {
             if (!highlighted.has(zone.key)) return null;
             const cell = zoneCellX(index);
