@@ -59,3 +59,13 @@ is the runner's. Newest entries at the bottom.
 1. `data-film-own-keys` on the seek lane also swallows Space, S and Esc while it has focus. T15 should narrow the guard or have the lane pass them on.
 2. Speed's tooltip carries no key; the H2 table gives it `⇧.` / `⇧,`.
 3. The bar now mixes two conventions: slashed off-state glyphs (kept by decision) beside the court glyph that only dims.
+
+## T6 · Give PointList and PointRow a tone prop — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** `PointList` and `PointRow` take `tone` (default light). Three module-level lookups — list, row, zero state — hold the shipped light strings verbatim beside the frame's dark literals; no dark branch reads an ink, surface or hairline token. Tone is threaded to `FilmQuickFilters`, every row and the zero states, whose copy is unchanged. Dark text on elements with a DS type class is set inline. An optional `onCollapse` adds a 26px "Collapse point list" button. Hooks, the blue progress rule and the 52px / 30px geometry are shared by both tones. One file in the diff.
+
+**follow-ups:**
+
+1. The dark header's spacing compensates for a `mb-[7px]` baked into `FilmQuickFilters`' dark trigger; moving that margin onto the hosts would be sturdier.

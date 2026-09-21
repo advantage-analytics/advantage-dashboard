@@ -86,7 +86,7 @@ ready).
 
 ## T6 · Give PointList and PointRow a tone prop
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) film/point-list.tsx
 - **done when:**
