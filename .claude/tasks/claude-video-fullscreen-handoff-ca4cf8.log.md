@@ -217,3 +217,15 @@ is the runner's. Newest entries at the bottom.
 1. `purge-match-storage.ts` removes only `results_object_key` from the results bucket. A deleted match's `.players.json` and `.trajectories.json` already stayed behind, and the new `.ball-paths.json` will too. Purge by the match's key prefix, or add the three keys.
 2. T20 must build its key with the same `former-member` fallback, or it will miss files for jobs with no creator.
 3. `"former-member"` is now a literal in two modules; share a constant.
+
+## T20 · Serve ball paths: GET /api/matches/[matchId]/ball-paths behind the match-visibility check — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** New decision module `ball-paths-access.ts`: `handleGetBallPaths` runs `authorizeMatchVisibility` first and returns its refusal unchanged, so the loader — and the lazily built service-role client behind it — is never reached by a caller who cannot see the match. For a visible match the production loader takes the most recently completed job (`completed_at` descending, nulls last, then `created_at`), downloads its ball-paths object from `RESULTS_BUCKET`, and answers 200 with the stored text verbatim, or `{"version":1,"strokes":[]}` when there is no job or no object; both carry `private, no-store`. A loader that throws answers 500 rather than a false empty. New wiring-only route exporting `GET`. By runner instruction (T19's follow-up) the `former-member` user-segment fallback moved into a shared `ballPathsUserSegment()` used by both the store and this loader. `MAP.md`'s api row names the route; `npm run map` leaves it unchanged.
+
+**follow-ups:**
+
+1. `delivery-storage-keys.ts` still has its own `"former-member"` literal.
+2. The response is `no-store`, so a few hundred KB re-download each time the room opens; `private, max-age` or an ETag on the job id would avoid it.
+3. The production loader has not run against real storage yet; confirm a missing object answers empty without a warning.

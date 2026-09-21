@@ -276,7 +276,7 @@ ready).
 
 ## T20 · Serve ball paths: GET /api/matches/[matchId]/ball-paths behind the match-visibility check
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T19
 - **files:** (guess) src/lib/services/splitstep/ball-paths-access.ts (new), src/app/api/matches/[matchId]/ball-paths/route.ts (new), tests/splitstep-ball-paths-access.spec.ts (new), MAP.md

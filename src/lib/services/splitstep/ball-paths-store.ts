@@ -24,7 +24,7 @@
 
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { RESULTS_BUCKET } from "./config";
-import { ballPathsObjectKey } from "./object-keys";
+import { ballPathsObjectKey, ballPathsUserSegment } from "./object-keys";
 import { deriveBallPaths } from "./derivation/ball-paths";
 import { parseStrokes } from "./derivation/parse";
 
@@ -108,11 +108,10 @@ export async function deriveAndStoreBallPaths(params: {
     );
     const body = JSON.stringify(file);
 
-    // `former-member` mirrors delivery-storage-keys.ts: a retained team match
-    // whose uploader deleted their account keeps its match id and loses
-    // `created_by`, and its vendor files already sit under that segment.
+    // A null `created_by` (the uploader left) still has a segment — see
+    // ballPathsUserSegment, which the reader shares.
     const objectKey = ballPathsObjectKey({
-      userId: job.created_by ?? "former-member",
+      userId: ballPathsUserSegment(job.created_by),
       matchId: job.match_id,
       jobId,
     });
