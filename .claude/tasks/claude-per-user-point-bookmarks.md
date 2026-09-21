@@ -47,7 +47,7 @@ ready).
 
 ## T3 · Toggle a point_bookmarks row instead of points.saved in the film tab
 
-- **status:** todo
+- **status:** later
 - **model:** sonnet
 - **needs:** T1
 - **files:** `src/components/dashboard/matches/match-detail/film/film-tab.tsx` (`handleToggleSaved`, ~line 291), `tests/fixtures/supabase-client-browser-mock.ts` (its `update` chain exists only for this bookmark write), plus whichever film spec drives the toggle through that mock (`tests/film-filters-fullscreen.spec.ts` / `tests/film-timeline.spec.ts` — guess)
