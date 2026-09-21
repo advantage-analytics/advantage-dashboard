@@ -38,6 +38,12 @@ import {
  *     checks the file on disk carries it), and its semantics are replayed on
  *     the fixture rows — a `saved` point becomes a bookmark for the match's
  *     creator, and the replay is idempotent.
+ *  5. Cut-over (T6, `20260921040000_drop_set_point_saved.sql`): the RPC is
+ *     gone (`set_point_saved` errors as an unknown function), the migration
+ *     on disk re-runs the backfill verbatim and drops the function without
+ *     touching the column, and the film tab's exact unsave shape — an
+ *     unfiltered `delete().eq("point_id").select("point_id")` — echoes every
+ *     row on the point.
  *
  * Every fixture row is marked: the program's key and the match's tournament
  * name start with the run mark, so no real row is ever touched.
@@ -50,6 +56,13 @@ const MIGRATION = "supabase/migrations/20260921004305_point_bookmarks.sql";
 /** T4 — widens SELECT and DELETE; must leave the flag and the RPC alone. */
 const SHARED_MIGRATION =
   "supabase/migrations/20260921034815_point_bookmarks_shared.sql";
+/** T6 — final backfill, drops the RPC, marks the flag legacy. */
+const DROP_MIGRATION =
+  "supabase/migrations/20260921040000_drop_set_point_saved.sql";
+
+/** PostgREST's "no such function" — `PGRST202` from its schema cache, or
+ *  Postgres's own `42883` if the cache is stale and the call reaches it. */
+const FUNCTION_GONE = ["PGRST202", "42883"];
 
 /**
  * The migration's backfill, character for character. The live project has no
@@ -442,5 +455,73 @@ test.describe("point_bookmarks table + RLS boundary (live)", () => {
       .eq("id", savedPointId)
       .single();
     expect(flag.data?.saved).toBe(true);
+  });
+
+  // ── 5. Cut-over: the RPC is gone; the client's shapes hold ───────────────
+
+  test("set_point_saved no longer exists", async () => {
+    const called = await creator.client.rpc("set_point_saved", {
+      p_point_id: pointId,
+      p_saved: true,
+    });
+    expect(called.error).not.toBeNull();
+    expect(FUNCTION_GONE).toContain(called.error?.code);
+
+    // And it wrote nothing: no bookmark appeared for the point.
+    const rows = await admin
+      .from(TABLE)
+      .select("point_id")
+      .eq("point_id", pointId);
+    expect(rows.data).toEqual([]);
+  });
+
+  test("the drop migration on disk re-runs the backfill verbatim, drops the function and leaves the column", () => {
+    const sql = readFileSync(
+      path.resolve(__dirname, "..", DROP_MIGRATION),
+      "utf8",
+    );
+    expect(sql).toContain(BACKFILL_SQL);
+    expect(sql).toMatch(
+      /drop\s+function\s+if\s+exists\s+public\.set_point_saved\s*\(\s*uuid\s*,\s*boolean\s*\)/i,
+    );
+    expect(sql).not.toMatch(/drop\s+column\s+saved|alter\s+column\s+saved/i);
+    // Order: backfill, then drop, then comment.
+    const backfillAt = sql.indexOf(BACKFILL_SQL);
+    const dropAt = sql.search(/drop\s+function/i);
+    const commentAt = sql.search(
+      /comment\s+on\s+column\s+public\.points\.saved/i,
+    );
+    expect(backfillAt).toBeGreaterThan(-1);
+    expect(dropAt).toBeGreaterThan(backfillAt);
+    expect(commentAt).toBeGreaterThan(dropAt);
+  });
+
+  test("the film tab's unsave shape — an unfiltered delete by a mate — echoes both rows and leaves nothing", async () => {
+    // Both members save, exactly as the client does: no user_id sent.
+    for (const s of [creator, mate]) {
+      const saved = await s.client
+        .from(TABLE)
+        .insert({ point_id: pointId })
+        .select("point_id");
+      expect(saved.error).toBeNull();
+      expect(saved.data).toEqual([{ point_id: pointId }]);
+    }
+
+    const unsaved = await mate.client
+      .from(TABLE)
+      .delete()
+      .eq("point_id", pointId)
+      .select("point_id");
+    expect(unsaved.error).toBeNull();
+    expect(unsaved.data).toEqual([
+      { point_id: pointId },
+      { point_id: pointId },
+    ]);
+
+    const remaining = await admin
+      .from(TABLE)
+      .select("point_id")
+      .eq("point_id", pointId);
+    expect(remaining.data).toEqual([]);
   });
 });

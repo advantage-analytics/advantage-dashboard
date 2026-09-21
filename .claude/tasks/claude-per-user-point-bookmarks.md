@@ -89,7 +89,7 @@ ready).
 
 ## T6 · Cut the film tab over to insert/delete, re-backfill, drop set_point_saved in one commit
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T4, T5
 - **files:** `src/components/dashboard/matches/match-detail/film/film-tab.tsx` (`handleToggleSaved`, lines 313–351), `tests/fixtures/supabase-client-browser-mock.ts`, `supabase/migrations/<timestamp>_drop_set_point_saved.sql` (new), `tests/point-bookmarks-db.spec.ts` (new section 5) — guesses

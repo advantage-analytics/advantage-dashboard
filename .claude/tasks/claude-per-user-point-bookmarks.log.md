@@ -40,3 +40,15 @@ is the runner's. Newest entries at the bottom.
 
 1. After an optimistic toggle the client has no name for the row it just added; `savedBy` fills in on the next server fetch. The badge design needs to decide what to show in that gap.
 2. A personal match shared into a program falls back to `null` names; worth confirming when the badge is designed.
+
+## T6 · Cut the film tab over to insert/delete, re-backfill, drop set_point_saved in one commit — done
+
+**gate:** mechanical pass (after one re-run: `match-video-attachments-db.spec.ts` "two concurrent sweeps" and `pending-invites.spec.ts` "exactly the ten columns" each failed once against the shared live DB and passed on their own — both are known flakes in this session's log); completion review pass; `rls-boundary-reviewer` ran per the task notes with no findings
+**changed:** `handleToggleSaved` no longer calls `supabase.rpc`. Saving inserts `{ point_id }` into `point_bookmarks` (no `user_id` — the column default supplies it, so the row records who saved); unsaving deletes by `point_id` with NO `user_id` filter, so every member's row goes, which is what the owner's "anyone can unsave" decision requires — one surviving teammate row would otherwise keep the point saved. The echo check is now `data.length >= 1 && data.every(...)`, so an unsave matching zero rows still reverts. New `supabase/migrations/20260921040000_drop_set_point_saved.sql`, applied live under that version: backfill → drop → comment, in that order deliberately, since any other order can lose a save. The mock swaps `update` for `insert`/`delete` chains and exposes no `rpc`, so a regression to the RPC throws in the harness.
+**verified live after the fact:** `set_point_saved` has 0 signatures; `point_bookmarks` went 1 → 2 rows; and the reconciliation query — saved points whose creator has no bookmark row — returns **0**, so the cutover lost nothing. The `points.saved` column comment is in place and the column itself is untouched.
+**notes:** The migration and the client change land in one commit on purpose. Dropping the RPC first would break the Save button; cutting the client over first would let `points.saved` take writes that the backfill had already passed. This closes the window PR #238 opened, where saves went to a flag nothing read.
+**follow-ups:**
+
+1. Dropping the `points.saved` column is its own later migration.
+2. `20260920120000_set_point_saved.sql` still carries a version the live ledger never had (live recorded 20260921010409 and 20260921011421). Left as history per the task notes; the author may want the same rename this branch applied to the bookmarks file.
+3. Nothing on this branch has been exercised in a real browser.

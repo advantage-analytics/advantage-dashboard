@@ -314,12 +314,16 @@ function FilmRoom({
    * Bookmark a point, optimistically, and put it back if the write did not
    * land.
    *
-   * Saving is workspace-wide: anyone who can SEE a match may bookmark its
-   * points. RLS on `points` still lets only `matches.created_by` UPDATE a row,
-   * so the write goes through `set_point_saved`, which checks visibility and
-   * touches `saved` alone. It returns the stored value, or null when the point
-   * was not the caller's to see — echoing it is what makes "it persisted"
-   * checkable rather than assumed.
+   * A bookmark is a `point_bookmarks` row, shared per match: anyone who can
+   * SEE the match reads every row on its points and may remove any of them;
+   * INSERT is own-row, so `user_id` is never sent — the column default
+   * supplies the caller. Saving inserts one row. Unsaving deletes every row
+   * on the point, not just the caller's, because one surviving teammate row
+   * would keep the point saved. Both branches `.select("point_id")` and are
+   * held to have landed only when at least one row echoes back for this
+   * point — an insert RLS refused, or an unsave that matched nothing, reverts.
+   * Two inserts racing (a double-click) hit the PK, `23505`, and revert; the
+   * next toggle repairs it.
    */
   const handleToggleSaved = useCallback(
     async (pointId: string) => {
@@ -333,12 +337,19 @@ function FilmRoom({
       pointsRef.current = optimistic;
       setPoints(optimistic);
 
-      const { data, error } = await supabase.rpc("set_point_saved", {
-        p_point_id: pointId,
-        p_saved: nextSaved,
-      });
+      const { data, error } = nextSaved
+        ? await supabase
+            .from("point_bookmarks")
+            .insert({ point_id: pointId })
+            .select("point_id")
+        : await supabase
+            .from("point_bookmarks")
+            .delete()
+            .eq("point_id", pointId)
+            .select("point_id");
 
-      const stored = !error && data === nextSaved;
+      const stored =
+        !error && data.length >= 1 && data.every((r) => r.point_id === pointId);
       if (stored) return;
 
       const reverted = pointsRef.current.map((p) =>
