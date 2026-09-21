@@ -502,6 +502,10 @@ function contactMetrics(
 export function pointToReturnDots(
   p: MatchPoint,
   subjectIsPlayer1: boolean,
+  /** Compute only this variant's dot — the caller that reads a single cut
+   *  (`returnPlacement` XOR `returnContact`) never needs the other one's
+   *  geometry. Omit to compute both, as every other caller still does. */
+  want?: "landing" | "contact",
 ): ReturnDotMetric[] {
   const typeLower = (p.secondShotType ?? "").toLowerCase();
   const shape: "circle" | "triangle" =
@@ -516,7 +520,11 @@ export function pointToReturnDots(
   // missing landing must gate ONLY this dot, not the whole function (fix
   // round 1, F2 — the earlier single `if (...) return []` guard at the top
   // dropped the contact dot too whenever a return's landing was missing).
-  if (p.secondShotLandingX != null && p.secondShotLandingY != null) {
+  if (
+    want !== "contact" &&
+    p.secondShotLandingX != null &&
+    p.secondShotLandingY != null
+  ) {
     // End detection from the RETURNER's own contact point (Task 2c), same
     // `farEnd` primitive `servePlacementMetrics` uses — falls back to
     // today's landing-based flip (negated: `farEnd` and the old `didFlip`
@@ -557,7 +565,10 @@ export function pointToReturnDots(
     });
   }
 
-  const contact = contactMetrics(p.secondShotContactX, p.secondShotContactY);
+  const contact =
+    want !== "landing"
+      ? contactMetrics(p.secondShotContactX, p.secondShotContactY)
+      : null;
   if (contact) {
     dots.push({
       id: `${p.id}:contact`,
@@ -939,9 +950,7 @@ export function computeViz(
     } else {
       if (p.serverIsPlayer1 === subjectIsPlayer1) continue;
       const want = cut === "returnPlacement" ? "landing" : "contact";
-      const mine = pointToReturnDots(p, subjectIsPlayer1).filter(
-        (d) => d.variant === want,
-      );
+      const mine = pointToReturnDots(p, subjectIsPlayer1, want);
       if (mine.length === 0) continue;
       total++;
       if (!pointMatchesFilters(p, filters, "return", subjectIsPlayer1))

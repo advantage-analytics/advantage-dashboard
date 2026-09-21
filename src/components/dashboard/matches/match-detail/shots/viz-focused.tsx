@@ -15,7 +15,7 @@ import {
 } from "./court-geometry";
 import { StatsCard } from "./stats-card";
 import { VizToolbar } from "./viz-toolbar";
-import { useVizState } from "./use-viz-state";
+import { useVizState, useExternalSwapFadeIn } from "./use-viz-state";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useVizView } from "./use-viz-view";
 import { EMPTY_VIZ_FILTERS, availableSets, type Cut } from "./viz-model";
@@ -84,14 +84,7 @@ export function VizFocused({
   // different mark count for the same URL.
   const { result, stats, subjectName, you, opp, points, hasFilters, isDraft } =
     useVizView();
-  const {
-    state,
-    setState,
-    runCourtMorph,
-    morphTargetKey,
-    externalCourtSwap,
-    clearExternalCourtSwap,
-  } = useVizState();
+  const { state, setState, runCourtMorph, morphTargetKey } = useVizState();
   const reducedMotion = usePrefersReducedMotion();
 
   // Everyone — including players — may save a view, so this is always on;
@@ -123,23 +116,10 @@ export function VizFocused({
   }, [ownKey]);
 
   // F5: this court swap arrived from outside `runCourtMorph` (browser
-  // back/forward — see `VizStateContextValue.externalCourtSwap`'s doc
-  // comment for why that path can't run the shared-element morph). Opt
-  // into the plain crossfade fallback for exactly this one render, then
-  // clear the flag so it doesn't replay on a later, unrelated render.
-  const [fallbackFadeIn] = useState(externalCourtSwap);
-  // M6: keyed on the flag itself, not `[]`. This component stays mounted
-  // across a focused→focused navigation (only props change), so a
-  // `[]`-deps effect only ever clears whatever the flag was at the FIRST
-  // mount — a later external swap (browser Back over a real `push`) that
-  // sets the flag while still mounted here would never get cleared, and
-  // the stale `true` would play a spurious fade on some later, unrelated
-  // mount. `fallbackFadeIn` is unaffected: it's `useState`'s initial value
-  // and never reacts to later prop/flag changes, so this can't re-trigger
-  // the fade it already applied.
-  useEffect(() => {
-    if (externalCourtSwap) clearExternalCourtSwap();
-  }, [externalCourtSwap, clearExternalCourtSwap]);
+  // back/forward — see `useExternalSwapFadeIn`'s doc comment for why that
+  // path can't run the shared-element morph). Opt into the plain crossfade
+  // fallback for exactly this one render.
+  const fallbackFadeIn = useExternalSwapFadeIn();
 
   // Task 5: the door. Never `runCourtMorph` — a fullscreen open is neither a
   // wall→focused nor a focused→wall transition (the focused view stays

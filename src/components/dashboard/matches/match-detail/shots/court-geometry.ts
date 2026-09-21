@@ -13,6 +13,7 @@
 
 import type { Cut, VizDot } from "./viz-model";
 import {
+  clamp as clampNum,
   clampPan,
   ZOOM_MIN,
   ZOOM_MAX,
@@ -899,10 +900,6 @@ export const VIEWER_COURT = {
   markRadius: 2.2,
   markStroke: 0.5,
 } as const;
-
-function clampNum(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
 
 /* ── Depth/contact bands in the viewer (Phase 2B, Task 3) ─────────────────
  *

@@ -476,7 +476,7 @@ function isFiniteNumberPair(x: unknown): x is [number, number] {
  * literals, could round the "wrong" way at true machine precision) — not a
  * concern at the 2dp/±39 range this table's columns live in.
  */
-function roundHalfUp2dp(x: number): number {
+export function roundHalfUp2dp(x: number): number {
   return Math.round(x * 100) / 100;
 }
 
@@ -523,7 +523,6 @@ export function validateBandInput(x: unknown): BandSettings | null {
   if (rawDepthDividers !== null && rawDepthDividers !== undefined) {
     if (!isFiniteNumberPair(rawDepthDividers)) return null;
     const [d0, d1] = roundPair(rawDepthDividers);
-    if (!Number.isFinite(d0) || !Number.isFinite(d1)) return null;
     if (!(d0 > 0 && d1 < 39 && d0 < d1)) return null;
     depthDividersFt = [d0, d1];
   }
@@ -531,7 +530,6 @@ export function validateBandInput(x: unknown): BandSettings | null {
 
   if (!isFiniteNumberPair(obj.contactDividersFt)) return null;
   const [c0, c1] = roundPair(obj.contactDividersFt);
-  if (!Number.isFinite(c0) || !Number.isFinite(c1)) return null;
   if (!(c0 >= -39 && c1 <= 30 && c0 < c1)) return null;
 
   return {

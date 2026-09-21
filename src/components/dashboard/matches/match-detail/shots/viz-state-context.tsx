@@ -113,6 +113,34 @@ export function useVizState(): VizStateContextValue {
 }
 
 /**
+ * F5: shared by `VizWall` and `VizFocused` — the one-shot "opt into a plain
+ * crossfade for this mount" flag, read from `externalCourtSwap`. See
+ * `VizStateContextValue.externalCourtSwap`'s doc comment for why this fallback
+ * exists (browser back/forward can't run `runCourtMorph`'s shared-element
+ * approach).
+ *
+ * Returns `useState`'s initial snapshot of `externalCourtSwap` — `true` for
+ * exactly the first render after an external court-identity change, even
+ * though both call sites stay mounted across ordinary within-store
+ * navigation. The effect clears the flag on every render where it still
+ * reads `true` (keyed on the flag itself, not `[]`): a `[]`-deps effect would
+ * only ever clear whatever the flag was at this hook's OWN first mount, so a
+ * later external swap arriving while the component stays mounted (e.g.
+ * another Back navigation) would never get cleared, and the stale `true`
+ * would replay the fade on some unrelated later mount. `fallbackFadeIn`
+ * itself can't be re-triggered by that clearing — it's the `useState`
+ * initializer's captured value and never reacts to later prop/flag changes.
+ */
+export function useExternalSwapFadeIn(): boolean {
+  const { externalCourtSwap, clearExternalCourtSwap } = useVizState();
+  const [fallbackFadeIn] = useState(externalCourtSwap);
+  useEffect(() => {
+    if (externalCourtSwap) clearExternalCourtSwap();
+  }, [externalCourtSwap, clearExternalCourtSwap]);
+  return fallbackFadeIn;
+}
+
+/**
  * Owns the ONE store `useVizState()` reads: the intended-state ref, the
  * optimistic mirror, the own-queries bookkeeping and the URL re-sync effect,
  * plus `router.replace`. Mount exactly once, around the tab's tree
@@ -163,10 +191,16 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const query = searchParams.toString();
-  const urlState = parseVizState(searchParams);
 
-  const [state, setRenderedState] = useState<VizState>(urlState);
-  const intendedRef = useRef<VizState>(urlState);
+  // Lazy initializer: `parseVizState` only needs to run once, on mount — on
+  // every later render `state` already holds what it would recompute to (or,
+  // after an external navigation, the freshly reconciled value the effect
+  // below sets), so calling it unconditionally here would re-parse the query
+  // string on every render for no reason.
+  const [state, setRenderedState] = useState<VizState>(() =>
+    parseVizState(searchParams),
+  );
+  const intendedRef = useRef<VizState>(state);
   const ownQueriesRef = useRef<string[]>([query]);
 
   // F5: the morph's destination key (`null` outside a transition) and the
@@ -185,7 +219,7 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
   // Seeded with the INITIAL state's key so the first run always compares
   // equal to itself (`focusTargetAfterViewChange` returns `null`) — first
   // mount must never steal focus.
-  const focusTrackedKeyRef = useRef<string | null>(viewIdentityKey(urlState));
+  const focusTrackedKeyRef = useRef<string | null>(viewIdentityKey(state));
 
   const viewKey = viewIdentityKey(state);
   useEffect(() => {
@@ -233,9 +267,8 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
     intendedRef.current = reconciled.state;
     ownQueriesRef.current = reconciled.ownQueries;
     setRenderedState(reconciled.state);
-    // `urlState` is derived from `query` within the same render that
-    // produced it, so re-running only when `query` changes is correct —
-    // adding `urlState` itself would fire on every render (new object).
+    // `reconciled.state` is derived from `query`, so re-running only when
+    // `query` changes is correct.
 
     if (!wasOwnQuery && prevKey !== viewIdentityKey(reconciled.state)) {
       setExternalCourtSwap(true);

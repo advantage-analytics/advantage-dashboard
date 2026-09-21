@@ -7,4 +7,4 @@
  * from here so every existing `import { useVizState } from "./use-viz-state"`
  * across the tab's call sites keeps working unchanged.
  */
-export { useVizState } from "./viz-state-context";
+export { useVizState, useExternalSwapFadeIn } from "./viz-state-context";

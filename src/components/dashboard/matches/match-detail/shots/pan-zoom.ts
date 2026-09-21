@@ -32,7 +32,7 @@ export const WHEEL_STEP = 1.12;
 export const BUTTON_STEP = 1.2;
 export const KEY_PAN_PX = 40;
 
-function clamp(value: number, min: number, max: number): number {
+export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 

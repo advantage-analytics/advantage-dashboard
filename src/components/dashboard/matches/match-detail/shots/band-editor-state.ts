@@ -69,6 +69,7 @@ import {
   clampDividers,
   DEFAULT_BANDS,
   resolveDepthDividersFt,
+  roundHalfUp2dp,
   type BandSettings,
   type DepthScheme,
 } from "@/lib/data/viz-bands";
@@ -167,10 +168,6 @@ export function resetPairFor(kind: BandEditorKind): [number, number] {
 
 function pairEqual(a: [number, number], b: [number, number]): boolean {
   return a[0] === b[0] && a[1] === b[1];
-}
-
-function round2(x: number): number {
-  return Math.round(x * 100) / 100;
 }
 
 /**
@@ -354,7 +351,7 @@ export function bandEditorPayload(
   if (kind === "contact") {
     return {
       ...current,
-      contactDividersFt: [round2(draft[0]), round2(draft[1])],
+      contactDividersFt: [roundHalfUp2dp(draft[0]), roundHalfUp2dp(draft[1])],
     };
   }
   if (pairEqual(draft, THIRDS_PAIR)) {
@@ -363,7 +360,7 @@ export function bandEditorPayload(
   return {
     ...current,
     depthScheme: "custom",
-    depthDividersFt: [round2(draft[0]), round2(draft[1])],
+    depthDividersFt: [roundHalfUp2dp(draft[0]), roundHalfUp2dp(draft[1])],
   };
 }
 

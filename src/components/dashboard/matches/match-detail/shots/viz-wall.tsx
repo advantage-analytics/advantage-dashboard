@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { CourtTile, TileFullscreenGlyph } from "./court-tile";
-import { useVizState } from "./use-viz-state";
+import { useVizState, useExternalSwapFadeIn } from "./use-viz-state";
 import { buildDefaultTiles } from "./default-tiles";
 import { VIZ_TILE_GRID_CLASS, VIZ_TILE_GRID_STYLE } from "./viz-labels";
 
@@ -27,25 +27,11 @@ import { VIZ_TILE_GRID_CLASS, VIZ_TILE_GRID_STYLE } from "./viz-labels";
 export function VizWall({ savedViewsBand }: { savedViewsBand?: ReactNode }) {
   const { points } = useMatchData();
   const { you, opp } = useMatchSides();
-  const { hrefFor, externalCourtSwap, clearExternalCourtSwap } = useVizState();
+  const { hrefFor } = useVizState();
 
   // F5: mirrors `viz-focused.tsx`'s identical fallback — see
-  // `VizStateContextValue.externalCourtSwap`'s doc comment.
-  const [fallbackFadeIn] = useState(externalCourtSwap);
-  // M6: keyed on the flag itself, not `[]` — this component doesn't
-  // remount on every court change (props just change), so a `[]`-deps
-  // effect only ever clears whatever the flag was AT THE FIRST mount. A
-  // later external swap (e.g. browser Back) that sets the flag while this
-  // component stays mounted would otherwise never get cleared, and the
-  // stale `true` would trigger a spurious fade on some unrelated later
-  // mount. Clearing on every render where the flag reads `true` — right
-  // after `fallbackFadeIn` has already captured it once for this mount —
-  // fixes that without ever re-triggering the fade itself, since
-  // `fallbackFadeIn` is `useState`'s initial value and never reacts to
-  // later prop changes.
-  useEffect(() => {
-    if (externalCourtSwap) clearExternalCourtSwap();
-  }, [externalCourtSwap, clearExternalCourtSwap]);
+  // `useExternalSwapFadeIn`'s doc comment.
+  const fallbackFadeIn = useExternalSwapFadeIn();
 
   // Keyed on `points`/`you.isPlayer1`/the names/`hrefFor` — `opp.isPlayer1`
   // is always `you.isPlayer1`'s inverse, so it carries no information the
