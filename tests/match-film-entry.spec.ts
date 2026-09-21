@@ -445,8 +445,14 @@ test("the actions row is absent, never disabled, for a viewer with none", () => 
   expect(actions).not.toContain('"add"');
 });
 
+const REFUSAL_COPY = readFileSync(
+  "src/components/dashboard/matches/match-detail/film/film-refusal-copy.ts",
+  "utf8",
+);
+
 test("the unavailable state never offers to add a video", () => {
   const unavailable = code(UNAVAILABLE);
+  const copy = code(REFUSAL_COPY);
   expect(unavailable).not.toContain("Add video");
   expect(unavailable).not.toContain("matchVideoWizardHref");
   expect(unavailable).not.toContain("addVideoHref");
@@ -455,13 +461,10 @@ test("the unavailable state never offers to add a video", () => {
   // the store could not be asked, or the saved state itself is unknown. The
   // last must not claim a video exists — that would be a guess — and must not
   // claim none does, which is the guess that ends in a duplicate upload.
-  expect(unavailable).toContain("no longer in storage");
-  expect(unavailable).toContain(
-    "A video is attached to this match and storage",
-  );
-  expect(unavailable).toContain(
-    "could not read whether this match has a video",
-  );
+  expect(unavailable).toContain("FILM_REFUSAL_COPY");
+  expect(copy).toContain("The recording was removed from this match.");
+  expect(copy).toContain("the recording is still attached to this match");
+  expect(copy).toContain("could not read whether this match has a video");
   expect(unavailable).toContain('entry.attachment === "present"');
 });
 

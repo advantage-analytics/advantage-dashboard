@@ -125,7 +125,7 @@ ready).
 
 ## T9 · Restyle the no-film refusals from one copy table
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) film/film-refusal-copy.ts (new), film/film-unavailable-state.tsx, film/film-player.tsx, tests/match-film-entry.spec.ts
 - **done when:**

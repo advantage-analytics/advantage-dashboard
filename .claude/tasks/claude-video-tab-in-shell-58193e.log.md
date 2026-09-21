@@ -85,3 +85,14 @@ is the runner's. Newest entries at the bottom.
 
 1. No spec asserts the new arrow/J/L mapping; the existing ones only cover the bail-out.
 2. No tooltip or keyboard-help text stated the old ↑↓ = 5 seconds mapping.
+
+## T9 · Restyle the no-film refusals from one copy table — done
+
+**gate:** mechanical pass (after one re-run: `admin-conferences-rpcs.spec.ts` (live DB) failed once in the full run and passed alone; the second full run was clean); completion review pass
+**changed:** New JSX-free `film/film-refusal-copy.ts` exports `FILM_REFUSAL_COPY` (rows for `stale`, `unavailable`, `unknown` and `loadFailure`, plus the button labels), verbatim from the spec's section C table; the unknown-attachment sentence is its own row. `film-unavailable-state.tsx` drops the icon and divider for a left-aligned, top-weighted block with the body capped at `56ch`, keeping `role="alert"`, `data-testid`, `data-film-state` and `FilmEntryActions`. A ghost "Back to the report" button (calls `selectView("statistics")`) shows for both states and a primary "Try again" (`router.refresh()`) only for `unavailable`. `film-player.tsx` reads the in-player load-failure heading, body and retry label from the table; the `failed` Reload panel is untouched. `tests/match-film-entry.spec.ts` "never offers to add a video" now asserts the new strings and still asserts the unknown sentence, `role="alert"` and no "Add video".
+**follow-ups:**
+
+1. `FilmEntryActions` still right-aligns under the now left-aligned block; it is outside `files:`.
+2. The `failed` panel still holds the literal "The film stopped loading" heading; it could read `FILM_REFUSAL_COPY.loadFailure.heading`.
+3. Phase 2's fullscreen refusal (FS10) should import `FILM_REFUSAL_COPY` instead of restating the strings.
+4. Not rendered in a browser.

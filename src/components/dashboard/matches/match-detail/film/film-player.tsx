@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { useFilmClockVars } from "./film-clock";
 import { RepeatOff } from "./film-glyphs";
 import type { Rect } from "./film-motion";
+import { FILM_REFUSAL_COPY } from "./film-refusal-copy";
 import { FilmTrack } from "./film-track";
 import {
   REACHED_EPSILON_SECONDS,
@@ -195,7 +196,7 @@ const PROBLEM_TITLES: Record<AttachmentPlaybackProblem["reason"], string> = {
   removed: "This video is no longer attached",
   denied: "You can no longer watch this video",
   unreachable: "The video could not be reached",
-  unplayable: "The film stopped loading",
+  unplayable: FILM_REFUSAL_COPY.loadFailure.heading,
 };
 
 const GLYPH =
@@ -558,7 +559,9 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             className="text-body-sm max-w-[380px] [text-wrap:pretty]"
             style={{ color: "var(--ink-600)" }}
           >
-            {problem.message}
+            {problem.reason === "unplayable"
+              ? FILM_REFUSAL_COPY.loadFailure.body
+              : problem.message}
           </span>
           {problem.canRetry && (
             <button
@@ -566,7 +569,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
               onClick={onRetry}
               className={advButton("primary", "md")}
             >
-              Try again
+              {FILM_REFUSAL_COPY.buttons.retry}
             </button>
           )}
         </div>
