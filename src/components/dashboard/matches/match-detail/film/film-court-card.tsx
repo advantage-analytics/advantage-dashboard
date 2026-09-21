@@ -78,7 +78,11 @@ export interface FilmCourtProps {
   seekKey: number | string;
 }
 
-/** The frame's own easing on the trail fade. */
+/**
+ * The frame's own easing on the fade. `markOpacity` steps a mark's opacity in
+ * 0.05s as the film time passes; this smooths those steps into the continuous
+ * 2 s hold / 3 s fade the court is meant to read as.
+ */
 const TRAIL_TRANSITION = "opacity 300ms cubic-bezier(.25,.46,.45,.94)";
 /** The live bounce's ring. */
 const RING = "0 0 0 1px rgba(255,255,255,0.85)";

@@ -31,12 +31,7 @@ import {
   type BoardAnchor,
   type BoardSize,
 } from "./board-position";
-import {
-  bounceRevealed,
-  matchMarks,
-  pointMarks,
-  type CourtView,
-} from "./film-court";
+import { matchMarks, pointMarks, type CourtView } from "./film-court";
 import {
   FILM_COURT_SIZE,
   FilmCourt,
@@ -400,33 +395,19 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   );
 
   // The playing point's shots in RALLY ORDER — the order `buildShotStops` put
-  // them in, which is the order `pointMarks` counts the active shot against.
-  // An untimed shot has no place on the film and so is in neither.
+  // them in, which is the order `pointMarks` reads them. An untimed shot has no
+  // place on the film and so is in neither.
   const pointShotStops = useMemo(
     () =>
       activePoint ? shotStops.filter((s) => s.point.id === activePoint.id) : [],
     [shotStops, activePoint],
   );
-  /** 1-based within that array; 0 (no marks) when no shot of it is playing. */
-  const activeShotOrder = useMemo(() => {
-    const id = activeShot?.stop.shot.id;
-    if (!id) return 0;
-    return pointShotStops.findIndex((s) => s.shot.id === id) + 1;
-  }, [activeShot, pointShotStops]);
 
   // Point mode is drawn the way the film shows the court, so a mark sits where
   // the ball is on screen. Only an Advantage Intelligence match's stored frame
   // IS the camera's (`CourtView`); anything else keeps you at the bottom.
   const courtView: CourtView =
     match.sourceProvider === "splitstep" ? "camera" : "you-bottom";
-  // The playing shot's bounce waits for the ball to land. A boolean, so the
-  // marks are rebuilt when it flips and not on every tick of the playhead.
-  const activeBounceShown = useMemo(() => {
-    const at = pointShotStops[activeShotOrder - 1];
-    if (!at) return true;
-    const next = pointShotStops[activeShotOrder];
-    return bounceRevealed(currentTime, at.start, next ? next.start : null);
-  }, [pointShotStops, activeShotOrder, currentTime]);
 
   // With no point playing, point mode has nothing to draw and says so in
   // words ("Next point" / "Not started") rather than vanishing. Match mode is
@@ -440,23 +421,23 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     if (!courtOn) return [];
     if (courtMode === "match")
       return matchMarks(p.visiblePoints, { youIsPlayer1: sides.you.isPlayer1 });
+    // `ShotStop.start` is already film time, the same clock `currentTime` is
+    // on, so a mark's opacity is a pure function of the two (`markOpacity`).
     return pointMarks(
-      pointShotStops.map((s) => s.shot),
+      pointShotStops.map((s) => ({ shot: s.shot, contactTime: s.start })),
       {
         youIsPlayer1: sides.you.isPlayer1,
-        activeShot: activeShotOrder,
+        filmTime: currentTime,
         view: courtView,
-        activeBounceShown,
       },
     );
   }, [
     courtView,
-    activeBounceShown,
     courtOn,
     courtMode,
+    currentTime,
     p.visiblePoints,
     pointShotStops,
-    activeShotOrder,
     sides.you.isPlayer1,
   ]);
   const courtTitle =

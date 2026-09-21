@@ -1,5 +1,7 @@
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 
+import { REACHED_EPSILON_SECONDS } from "./film-timeline";
+
 /**
  * FilmCourt's geometry — pure, no React. Turns the shots of a point (or of a
  * whole match) into marks positioned as PERCENTAGES of the court box, so one
@@ -71,8 +73,41 @@ export const OPP = "#94A3B8";
 // the dark scope's --danger, the loss colour the same handoff names for dark.
 export const OUT = "#FF6478";
 
-/** Opacity by age: 0 = the shot playing now. Nothing survives three shots. */
-export const TRAIL = [1, 0.5, 0.22] as const;
+/**
+ * ── How long a mark stays on the court (author decision, 2026-09-21) ─────────
+ *
+ * A mark appears at full opacity at its own moment, holds {@link
+ * MARK_HOLD_SECONDS}, fades linearly over {@link MARK_FADE_SECONDS} and is gone
+ * five seconds after it happened. Opacity is a PURE FUNCTION of film time, not
+ * of how many shots have been struck since: pausing freezes the court, and
+ * seeking backwards un-draws what has not happened yet.
+ */
+export const MARK_HOLD_SECONDS = 2;
+export const MARK_FADE_SECONDS = 3;
+/**
+ * Opacity is quantised to this step, so the four-times-a-second playhead does
+ * not hand React a new number on every tick.
+ */
+export const MARK_OPACITY_STEP = 0.05;
+
+const OPACITY_STEPS = Math.round(1 / MARK_OPACITY_STEP);
+
+/**
+ * A mark's opacity at `filmTime`, given the film time of the moment it draws.
+ *
+ * 0 before the event — except that the event is admitted {@link
+ * REACHED_EPSILON_SECONDS} early, the same slack a seek gets. Without it,
+ * clicking a shot lands the playhead a hair before its contact and the court
+ * draws nothing for the shot the click asked for.
+ */
+export function markOpacity(filmTime: number, eventTime: number): number {
+  if (filmTime < eventTime - REACHED_EPSILON_SECONDS) return 0;
+  const age = Math.max(0, filmTime - eventTime);
+  if (age <= MARK_HOLD_SECONDS) return 1;
+  const raw = 1 - (age - MARK_HOLD_SECONDS) / MARK_FADE_SECONDS;
+  if (raw <= 0) return 0;
+  return Math.round(raw * OPACITY_STEPS) / OPACITY_STEPS;
+}
 
 /** Court dimensions in the database frame, metres. */
 export const COURT_LENGTH_M = 23.77;
@@ -131,10 +166,13 @@ export interface CourtMark {
   /** Percent of the court box, clamped to 0–100. */
   x: number;
   y: number;
-  /** From {@link TRAIL}; always 1 in match mode. */
+  /**
+   * From {@link markOpacity}, a multiple of {@link MARK_OPACITY_STEP} and never
+   * 0 (a faded-out mark is omitted). Always 1 in match mode, which never fades.
+   */
   opacity: number;
   role: CourtMarkRole;
-  /** True only on the bounce of the shot playing now — it carries the ring. */
+  /** True only on the most recent bounce still on show — it carries the ring. */
   live: boolean;
   /**
    * The shot this mark came from. `FilmCourt`'s readout prints its stroke,
@@ -244,50 +282,58 @@ function bouncePosition(
   return { x: shot.landingX, y };
 }
 
-function marksForShot(
+/** What every mark of one shot carries besides its own position. */
+function detailOf(
   shot: MatchShot,
-  youLow: boolean,
   youIsPlayer1: boolean,
-  opacity: number,
-  live: boolean,
-  withContact: boolean,
-  withBounce: boolean,
   /** 1-based place in the rally, and the rally's length. */
   order: number,
   rallyShots: number,
-): CourtMark[] {
-  const role = roleOf(shot, youIsPlayer1);
-  const detail = {
+) {
+  return {
     shot,
     order,
     rallyShots,
     hitter: hitterOf(shot, youIsPlayer1),
+    role: roleOf(shot, youIsPlayer1),
+    shotId: shot.id,
   };
-  const out: CourtMark[] = [];
-  if (withContact && shot.contactX != null && shot.contactY != null) {
-    out.push({
-      shotId: shot.id,
-      kind: "contact",
-      ...toCourtPercent(shot.contactX, shot.contactY, youLow),
-      opacity,
-      role,
-      live: false,
-      ...detail,
-    });
-  }
-  const bounce = withBounce ? bouncePosition(shot, youLow, youIsPlayer1) : null;
-  if (bounce) {
-    out.push({
-      shotId: shot.id,
-      kind: "bounce",
-      ...toCourtPercent(bounce.x, bounce.y, youLow),
-      opacity,
-      role,
-      live,
-      ...detail,
-    });
-  }
-  return out;
+}
+
+type MarkDetail = ReturnType<typeof detailOf>;
+
+function contactMark(
+  shot: MatchShot,
+  youLow: boolean,
+  opacity: number,
+  detail: MarkDetail,
+): CourtMark | null {
+  if (shot.contactX == null || shot.contactY == null) return null;
+  return {
+    kind: "contact",
+    ...toCourtPercent(shot.contactX, shot.contactY, youLow),
+    opacity,
+    live: false,
+    ...detail,
+  };
+}
+
+function bounceMark(
+  shot: MatchShot,
+  youLow: boolean,
+  youIsPlayer1: boolean,
+  opacity: number,
+  detail: MarkDetail,
+): CourtMark | null {
+  const at = bouncePosition(shot, youLow, youIsPlayer1);
+  if (!at) return null;
+  return {
+    kind: "bounce",
+    ...toCourtPercent(at.x, at.y, youLow),
+    opacity,
+    live: false,
+    ...detail,
+  };
 }
 
 /**
@@ -308,84 +354,118 @@ function marksForShot(
 export type CourtView = "camera" | "you-bottom";
 
 /**
- * Point mode: the rally as it happens. `shots` is one point's shots in rally
- * order and `activeShot` is the 1-based position in that array of the shot
- * playing now (0 = none, so no marks). Shots aged 0–2 behind it are drawn,
- * oldest first, each as a contact mark then a bounce mark.
- *
- * `activeBounceShown: false` holds the playing shot's bounce back: the ball has
- * been struck but has not landed yet, and a dot at the landing spot would be
- * the court telling the future. The ring then stays on the last ball that DID
- * bounce — the one the player has just hit.
- */
-export function pointMarks(
-  shots: readonly MatchShot[],
-  opts: {
-    youIsPlayer1: boolean;
-    activeShot: number;
-    view?: CourtView;
-    activeBounceShown?: boolean;
-  },
-): CourtMark[] {
-  const { youIsPlayer1, activeShot } = opts;
-  const activeBounceShown = opts.activeBounceShown ?? true;
-  if (activeShot <= 0) return [];
-  // Orientation reads the WHOLE point so it cannot change mid-rally. The
-  // camera view never rotates: `toCourtPercent`'s unrotated mapping already
-  // puts the far baseline at the top.
-  const youLow =
-    opts.view === "camera" ? true : youAreAtLowEnd(shots, youIsPlayer1);
-  if (youLow === null) return [];
-
-  // The ring marks the most recent bounce on show.
-  const liveAge = activeBounceShown ? 0 : 1;
-
-  const out: CourtMark[] = [];
-  shots.forEach((shot, i) => {
-    const age = activeShot - (i + 1);
-    if (age < 0 || age >= TRAIL.length) return;
-    out.push(
-      ...marksForShot(
-        shot,
-        youLow,
-        youIsPlayer1,
-        TRAIL[age],
-        age === liveAge,
-        true,
-        age > 0 || activeBounceShown,
-        i + 1,
-        shots.length,
-      ),
-    );
-  });
-  return out;
-}
-
-/**
- * When the playing shot's bounce may be drawn, as a share of the way from its
- * contact to the next one. Measured on a real match's per-frame ball
- * trajectories (414 consecutive strokes): the bounce falls at 0.42 / 0.62 /
- * 0.85 of that gap (p10 / p50 / p90).
+ * When the ball of a shot lands, as a share of the way from its contact to the
+ * next one. Measured on a real match's per-frame ball trajectories (414
+ * consecutive strokes): the bounce falls at 0.42 / 0.62 / 0.85 of that gap
+ * (p10 / p50 / p90). This is the fallback for every match whose rows carry no
+ * measured landing time, which today is all of them.
  */
 export const BOUNCE_REVEAL_SHARE = 0.6;
 /** The same for a rally's last shot, which has no next contact: median flight. */
 export const BOUNCE_REVEAL_SECONDS = 0.75;
 
-/** True once the film has reached the moment the playing shot's ball lands. */
-export function bounceRevealed(
-  filmTime: number,
+/** The film time a shot's ball lands, when nothing measured it. */
+export function estimatedBounceTime(
   contactTime: number,
   nextContactTime: number | null,
-): boolean {
-  const at =
-    nextContactTime !== null && nextContactTime > contactTime
-      ? contactTime + (nextContactTime - contactTime) * BOUNCE_REVEAL_SHARE
-      : contactTime + BOUNCE_REVEAL_SECONDS;
-  return filmTime >= at;
+): number {
+  return nextContactTime !== null && nextContactTime > contactTime
+    ? contactTime + (nextContactTime - contactTime) * BOUNCE_REVEAL_SHARE
+    : contactTime + BOUNCE_REVEAL_SECONDS;
+}
+
+/** One shot of a rally, placed on the film's own clock. */
+export interface TimedShot {
+  shot: MatchShot;
+  /** Film time of the strike, seconds. */
+  contactTime: number;
+  /**
+   * Film time of the landing when something measured it. Ignored when it is not
+   * finite or falls before the contact; {@link estimatedBounceTime} is then used
+   * instead.
+   */
+  bounceTime?: number | null;
+}
+
+function bounceEventTime(
+  timed: TimedShot,
+  nextContactTime: number | null,
+): number {
+  const at = timed.bounceTime;
+  if (at != null && Number.isFinite(at) && at >= timed.contactTime) return at;
+  return estimatedBounceTime(timed.contactTime, nextContactTime);
 }
 
 /**
- * Match mode: bounces only, no trail, nothing live. Pass the points of the
+ * Point mode: the rally as it happens. `shots` is one point's timed shots in
+ * rally order, and every mark's opacity is {@link markOpacity} of `filmTime`
+ * against the moment it draws — the contact against its own contact time, the
+ * bounce against the moment the ball landed. A mark that has faded out is
+ * omitted rather than returned at 0.
+ *
+ * The court therefore tells no futures: a bounce appears when the ball lands,
+ * not when it was struck, and seeking back takes it away again.
+ *
+ * The ring (`live`) is on the most recent bounce still on show, so it follows
+ * the ball rather than the playhead.
+ */
+export function pointMarks(
+  shots: readonly TimedShot[],
+  opts: {
+    youIsPlayer1: boolean;
+    filmTime: number;
+    view?: CourtView;
+  },
+): CourtMark[] {
+  const { youIsPlayer1, filmTime } = opts;
+  // Orientation reads the WHOLE point so it cannot change mid-rally. The
+  // camera view never rotates: `toCourtPercent`'s unrotated mapping already
+  // puts the far baseline at the top.
+  const plain = shots.map((s) => s.shot);
+  const youLow =
+    opts.view === "camera" ? true : youAreAtLowEnd(plain, youIsPlayer1);
+  if (youLow === null) return [];
+
+  const out: CourtMark[] = [];
+  let liveIndex = -1;
+  let liveAt = -Infinity;
+
+  shots.forEach((timed, i) => {
+    const detail = detailOf(timed.shot, youIsPlayer1, i + 1, shots.length);
+
+    const contactOpacity = markOpacity(filmTime, timed.contactTime);
+    if (contactOpacity > 0) {
+      const mark = contactMark(timed.shot, youLow, contactOpacity, detail);
+      if (mark) out.push(mark);
+    }
+
+    const next = shots[i + 1];
+    const at = bounceEventTime(timed, next ? next.contactTime : null);
+    const bounceOpacity = markOpacity(filmTime, at);
+    if (bounceOpacity > 0) {
+      const mark = bounceMark(
+        timed.shot,
+        youLow,
+        youIsPlayer1,
+        bounceOpacity,
+        detail,
+      );
+      if (mark) {
+        out.push(mark);
+        if (at >= liveAt) {
+          liveAt = at;
+          liveIndex = out.length - 1;
+        }
+      }
+    }
+  });
+
+  if (liveIndex >= 0) out[liveIndex] = { ...out[liveIndex], live: true };
+  return out;
+}
+
+/**
+ * Match mode: bounces only, no fade, nothing live. Pass the points of the
  * applied cut — the court follows it. Each point is oriented on its own, so
  * end changes never put your shots at the top.
  */
@@ -399,19 +479,14 @@ export function matchMarks(
     const youLow = youAreAtLowEnd(shots, opts.youIsPlayer1);
     if (youLow === null) continue;
     shots.forEach((shot, i) => {
-      for (const mark of marksForShot(
+      const mark = bounceMark(
         shot,
         youLow,
         opts.youIsPlayer1,
         1,
-        false,
-        false,
-        true,
-        i + 1,
-        shots.length,
-      )) {
-        out.push({ ...mark, pointId: point.id });
-      }
+        detailOf(shot, opts.youIsPlayer1, i + 1, shots.length),
+      );
+      if (mark) out.push({ ...mark, pointId: point.id });
     });
   }
   return out;

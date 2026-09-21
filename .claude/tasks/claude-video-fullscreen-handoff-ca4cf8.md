@@ -236,7 +236,7 @@ ready).
 
 ## T17 · Time-based court marks: appear, hold 2s, fade 3s as a pure function of film time
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) film/film-court.ts, film/film-fullscreen.tsx (imports ~33–40 and the court block ~397–460 only), film/film-court-card.tsx (doc comments only), tests/film-court.spec.ts, docs/superpowers/specs/2026-09-21-video-fullscreen-h2-design.md
 - **done when:**

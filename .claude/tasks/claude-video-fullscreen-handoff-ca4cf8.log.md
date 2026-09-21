@@ -183,3 +183,14 @@ is the runner's. Newest entries at the bottom.
 1. Neither door has an end-to-end case; the playback harness could ⇧-click a row and assert the room and the param.
 2. The ⇧-click door is undiscoverable — no hint in the row's label, no tooltip. A design call.
 3. Keyboard users have no equivalent door; ⇧+Enter on a focused row is the obvious mapping.
+
+## T17 · Time-based court marks: appear, hold 2s, fade 3s as a pure function of film time — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** `film-court.ts` gains `markOpacity` (0 before the event bar a 0.1 s early admit, 1 through a 2 s hold, a linear 3 s fade, quantised to 0.05), `TimedShot` and `estimatedBounceTime`. `pointMarks` takes timed shots plus `filmTime`: a contact fades from its contact time, a bounce from its measured time when one is given and sane, otherwise from the estimate; zero-opacity marks are omitted; the ring sits on the returned bounce with the latest event time. `TRAIL`, `bounceRevealed` and the shot-age options are deleted. The room passes `currentTime` and each shot stop's start. The spec is rewritten onto contacts at 10–14 with the named time cases; geometry, end-change, verdict, net-ball, camera-view and readout cases kept and re-timed. One assertion changed by rule: on a point whose playing shot has no usable landing, the only bounce on show now carries the ring. The design doc's C2 paragraph records the new rule.
+
+**follow-ups:**
+
+1. `TRAIL_TRANSITION` in `film-court-card.tsx` is now a misnomer.
+2. The marks memo re-runs on every `currentTime` tick (~4 Hz); quantise the time for it if it ever shows in a profile.

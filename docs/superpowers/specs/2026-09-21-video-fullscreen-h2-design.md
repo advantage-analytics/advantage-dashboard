@@ -143,8 +143,12 @@ Full court, both halves, net across the middle. Lines `rgba(255,255,255,.24)`, o
 `.6`, surface `rgba(214,228,249,.07)`.
 
 - **Point mode** is the rally as it happens: a donut where the ball was struck, a filled dot where
-  it landed, both at opacity `1 → 0.5 → 0.22` by age and gone two shots later, so the court never
-  accumulates into a chart. The live bounce carries a `0 0 0 1px rgba(255,255,255,.85)` ring.
+  it landed. Each mark appears at its own moment, holds 2 s at full opacity, fades linearly over
+  3 s and is gone 5 s later, so the court never accumulates into a chart (author decision,
+  2026-09-21, replacing the handoff's `1 → 0.5 → 0.22` by shot age). Opacity is a pure function of
+  film time: pausing freezes the court and seeking back un-draws what has not happened yet. The
+  bounce appears when the ball lands, not when it was struck. The most recent bounce still on show
+  carries a `0 0 0 1px rgba(255,255,255,.85)` ring.
 - **Match mode** plots bounces only, no trail, legend keys become the two player names, and it
   **follows the applied cut** — 14 points under a cut, not 174. Title takes the cut's name,
   caption its matched count.
