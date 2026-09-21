@@ -124,7 +124,9 @@ export function TeamTitlePending({ action }: { action?: ReactNode }) {
 export function DualPending() {
   return (
     <section aria-label="Dual" className="surface-card p-5">
-      <span className="eyebrow">Dual</span>
+      <div className="flex items-center gap-3">
+        <span className="eyebrow">Dual</span>
+      </div>
       <PendingRegion label="dual">
         <PendingBar className="mt-4 h-6 w-48" />
         <PendingBar className="mt-3 w-32" />
