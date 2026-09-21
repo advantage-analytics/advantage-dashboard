@@ -72,6 +72,14 @@ export interface FilmCourtProps {
   onHide: () => void;
   onSelectMark: (mark: FilmCourtMark) => void;
   /**
+   * Anything that draws inside the court box on top of the lines and the
+   * marks, under the readout — today only `FilmCourtBall`. The card knows
+   * nothing about it: the slot takes an element already built, so this file
+   * gains no clock, no paths and no second geometry. Absent, the box's markup
+   * is exactly what it was.
+   */
+  overlay?: React.ReactNode;
+  /**
    * Anything that changes whenever the film seeks. An open readout describes a
    * moment, so it closes the instant the film moves to another one.
    */
@@ -208,6 +216,7 @@ export function FilmCourt({
   onSwapMode,
   onHide,
   onSelectMark,
+  overlay,
   seekKey,
 }: FilmCourtProps) {
   // One readout at a time — and the open one remembers the seek it belongs
@@ -392,6 +401,8 @@ export function FilmCourt({
             />
           );
         })}
+
+        {overlay}
 
         {open && openLines && openAt ? (
           <div

@@ -304,7 +304,7 @@ ready).
 
 ## T22 · The moving ball: pure ballAt and a self-driving ball layer on the court
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T21
 - **files:** (guess) film/film-ball.ts, film/film-court-ball.tsx (new), film/film-court-card.tsx (one optional slot prop), film/film-fullscreen.tsx (the `<FilmCourt` JSX ~1300–1330 only), tests/film-ball.spec.ts

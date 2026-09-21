@@ -241,3 +241,15 @@ is the runner's. Newest entries at the bottom.
 1. The hook never retries for the life of the room, so a file that lands after the room opened is not picked up until a remount.
 2. `ballAt` will scan the whole match's strokes per frame; a time-sorted index or binary search belongs in T22.
 3. A formatter hook in this worktree strips `// eslint-disable-next-line` comments from source files on write.
+
+## T22 · The moving ball: pure ballAt and a self-driving ball layer on the court — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`. The task's criteria contradicted each other on one pinned example (a tail reading at 10.95 on a path whose last sample is 10.9, against "null outside every path"). The runner was told not to edit tasks in this loop, so the text stood; the implementer built the null rule, proved the tail-window arithmetic on a path that really spans 10.95, separately pinned that 10.95 past a 10.9 last sample is null, and wrote the conflict into the spec. The reviewer was asked to judge exactly that and ruled it an honest satisfaction.
+
+**changed:** `film-ball.ts` gains `BALL_TAIL_SECONDS = 0.4` and pure `ballAt`: a binary search for the containing path (later-starting wins an overlap), a second one for the bracketing samples, linear interpolation, null outside the path's own span, and a tail of that path's samples from the last 0.4 s, never another path's. New `film/film-court-ball.tsx` runs one animation-frame loop while playing that reads the video's `currentTime` and writes position to refs — no React state per frame — cancels on cleanup, draws once when paused and again on `seeked`, and hides both elements when there is no position. The dot is 5px white, round, inert to the pointer; the tail is six fading SVG segments and is not rendered under reduced motion. `FilmCourt` takes one optional `overlay` slot between the marks and the readout. The room passes the ball only in point mode, in the camera view, with paths present, reusing T21's fetch.
+
+**follow-ups:**
+
+1. Ball height (`z`) is carried and still undrawn; a shadow or size ramp would make the bounce readable.
+2. The tail's segment count and alpha ramp are unpinned — check by eye on Caden Ace v Matt Goodman.
+3. `film-fullscreen.tsx`'s `prefersReducedMotion()` and this file's `usePrefersReducedMotion()` could be one shared hook.
