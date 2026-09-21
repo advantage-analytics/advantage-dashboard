@@ -894,6 +894,100 @@ function clampNum(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/* ── Depth/contact bands in the viewer (Phase 2B, Task 3) ─────────────────
+ *
+ * `viz-bands.ts` stores every divider in FEET FROM THE BASELINE — the one
+ * space the band UI reads, writes and prints ("0 ft" is always "at the
+ * baseline"). These two functions are the ONLY place that space is turned
+ * into `VIEWER_COURT` viewBox units, so the band overlay and the dots it
+ * sits behind can never be drawn to two different scales: the metres→units
+ * factor is `SERVE_DEPTH_UNITS_PER_METER`, exactly what `projectViewerDot`
+ * already uses for both halves.
+ */
+
+/** Metres in one foot, exactly. The same literal `viz-bands.ts`'s own
+ *  metre-native bucketing uses (`5 * 0.3048 === 1.524` bit-for-bit), rather
+ *  than dividing by the reciprocal `FT_PER_M`. */
+const BAND_METRES_PER_FOOT = 0.3048;
+
+/**
+ * A band divider in feet-from-the-baseline → its `VIEWER_COURT.viewBox` y.
+ *
+ * - `"depth"` (return LANDINGS, the FAR half): `0` is `farBaselineY` (14) and
+ *   increasing feet move DOWN the frame toward the net, so `COURT_HALF_FT`
+ *   (≈38.993 ft = 11.885 m, the baseline→net distance) lands on `netY` (236).
+ * - `"contact"` (return/rally CONTACT, the NEAR half): `0` is
+ *   `nearBaselineY` (458); positive feet are BEHIND the baseline (a larger
+ *   y, out past the court) and negative feet are INSIDE it (a smaller y,
+ *   toward the net) — the same signing `contactDividersFt` itself carries.
+ *
+ * The result is clamped into `VIEWER_COURT.viewBox`, so an extreme divider
+ * pins at the visible edge rather than drawing a rect off-canvas — the same
+ * behaviour `projectViewerDot` gives a badly-out dot.
+ */
+export function viewerBandY(kind: "depth" | "contact", ft: number): number {
+  const origin =
+    kind === "depth" ? VIEWER_COURT.farBaselineY : VIEWER_COURT.nearBaselineY;
+  const raw = origin + ft * BAND_METRES_PER_FOOT * SERVE_DEPTH_UNITS_PER_METER;
+  return clampNum(
+    raw,
+    VIEWER_COURT.viewBox.minY,
+    VIEWER_COURT.viewBox.minY + VIEWER_COURT.viewBox.h,
+  );
+}
+
+/**
+ * The n+1 horizontal edges of the n+1 bands `dividersFt` (ascending,
+ * feet-from-the-baseline) cuts its half into — `[outerEdge, ...dividers,
+ * outerEdge]`. Band `i` is the rect between `edges[i]` and `edges[i + 1]`,
+ * in the SAME order `depthBandRows`/`contactBandRows` list their rows, so a
+ * row and its rect are matched by index.
+ *
+ * The two OUTER edges are not dividers — they are how far the overlay is
+ * allowed to cover its half:
+ *
+ * - `"depth"` ends on the net line, and starts at the FAR BASELINE (P2k:
+ *   "DEEP starts at the FAR baseline"). The one exception is a divider at or
+ *   before the baseline itself — the "Inside the baseline" preset, whose
+ *   first band is everything that landed PAST the far baseline and is
+ *   therefore genuinely outside the court. There the first edge opens up into
+ *   the far apron (`viewBox.minY`) so that band has somewhere to draw instead
+ *   of collapsing to nothing.
+ * - `"contact"` runs down to the bottom of the viewBox (a contact struck well
+ *   behind the baseline), but its inside edge is CAPPED at the near service
+ *   line: the innermost band is open-ended toward the net, and left uncapped
+ *   it would wash the entire near half rather than reading as a band.
+ *
+ * Edges are always non-decreasing — a divider outside its half's own span is
+ * clamped to the nearest edge, so a band can be empty but never inside-out.
+ */
+export function viewerBandEdges(
+  kind: "depth" | "contact",
+  dividersFt: number[],
+): number[] {
+  const vb = VIEWER_COURT.viewBox;
+  const [innerCap, outerCap] =
+    kind === "depth"
+      ? [VIEWER_COURT.farBaselineY, VIEWER_COURT.netY]
+      : [VIEWER_COURT.nearServiceY, vb.minY + vb.h];
+
+  const inner = dividersFt.map((ft) =>
+    clampNum(viewerBandY(kind, ft), innerCap, outerCap),
+  );
+  // The far apron only opens up for a depth scheme whose first band really
+  // does sit outside the court (a divider at or before the baseline).
+  const first =
+    kind === "depth" && dividersFt.length > 0 && dividersFt[0] <= 0
+      ? vb.minY
+      : innerCap;
+
+  const edges = [first, ...inner, outerCap];
+  for (let i = 1; i < edges.length; i++) {
+    edges[i] = Math.max(edges[i], edges[i - 1]);
+  }
+  return edges;
+}
+
 /**
  * The heat blob radius in `VIEWER_COURT`'s own units (Phase 2A, Task 4).
  *

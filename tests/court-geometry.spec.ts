@@ -34,7 +34,10 @@ import {
   projectViewerDot,
   viewerInitialTransform,
   lateralToViewBoxX,
+  viewerBandY,
+  viewerBandEdges,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
+import { COURT_HALF_FT, resolveDepthDividersFt } from "@/lib/data/viz-bands";
 import {
   ZOOM_MIN,
   ZOOM_MAX,
@@ -1215,5 +1218,174 @@ test.describe("viewerInitialTransform", () => {
     expect(art.h * t.z).toBeGreaterThan(wideShortStage.h);
 
     expect(clampPan(t, art, wideShortStage)).toEqual(t);
+  });
+});
+
+/* ── Phase 2B: depth/contact band geometry ───────────────────────────────── */
+
+/**
+ * `viewerBandY` maps a band divider — always expressed in FEET FROM THE
+ * BASELINE, the one space `viz-bands.ts` stores and the UI reads — onto the
+ * fullscreen viewer's own `VIEWER_COURT` frame. Two halves, two origins:
+ * `"depth"` measures the FAR half (return landings) from `farBaselineY`
+ * toward the net, `"contact"` measures the NEAR half (contact/rally) from
+ * `nearBaselineY`, with positive = BEHIND the baseline (larger y) and
+ * negative = inside the court (smaller y).
+ *
+ * The scale is `SERVE_DEPTH_UNITS_PER_METER` — the SAME one
+ * `projectViewerDot` uses for the dots it must line up with, never a second
+ * derivation. The cases below pin the two anchors (0 ft = each half's own
+ * baseline, 39 ft ≈ the net line) and both directions.
+ */
+test.describe("viewerBandY", () => {
+  test("depth: 0 ft is the far baseline", () => {
+    expect(viewerBandY("depth", 0)).toBeCloseTo(VIEWER_COURT.farBaselineY, 6);
+  });
+
+  test("depth: COURT_HALF_FT (baseline → net) lands on the net line", () => {
+    // Within a tenth of a viewBox unit — `COURT_HALF_FT` is 11.885 m
+    // converted through `FT_PER_M` and back through 0.3048, which lands a
+    // hundredth of a foot short of the true half-court; on a 334-unit frame
+    // that is well under a rendered pixel.
+    expect(viewerBandY("depth", COURT_HALF_FT)).toBeCloseTo(
+      VIEWER_COURT.netY,
+      0,
+    );
+    expect(
+      Math.abs(viewerBandY("depth", COURT_HALF_FT) - VIEWER_COURT.netY),
+    ).toBeLessThan(0.1);
+  });
+
+  test("depth: the round 39 ft the UI prints also reads as the net line", () => {
+    expect(viewerBandY("depth", 39)).toBeCloseTo(VIEWER_COURT.netY, 0);
+  });
+
+  test("depth: more feet from the baseline moves DOWN the frame, toward the net", () => {
+    expect(viewerBandY("depth", 26)).toBeGreaterThan(viewerBandY("depth", 13));
+    expect(viewerBandY("depth", 13)).toBeGreaterThan(VIEWER_COURT.farBaselineY);
+    expect(viewerBandY("depth", 26)).toBeLessThan(VIEWER_COURT.netY);
+  });
+
+  test("contact: 0 ft is the near baseline", () => {
+    expect(viewerBandY("contact", 0)).toBeCloseTo(
+      VIEWER_COURT.nearBaselineY,
+      6,
+    );
+  });
+
+  test("contact: behind the baseline (positive ft) is a LARGER y", () => {
+    expect(viewerBandY("contact", 5)).toBeGreaterThan(
+      VIEWER_COURT.nearBaselineY,
+    );
+  });
+
+  test("contact: inside the court (negative ft) is a SMALLER y", () => {
+    expect(viewerBandY("contact", -6)).toBeLessThan(VIEWER_COURT.nearBaselineY);
+  });
+
+  test("the two halves are mirrored: the same |ft| is the same distance from each baseline", () => {
+    // 5 ft: far enough to be a real distance, close enough that the CONTACT
+    // side (which only has ~44 units of apron below the near baseline before
+    // the viewBox ends) is not clamped.
+    const depth = viewerBandY("depth", 5) - VIEWER_COURT.farBaselineY;
+    const contact = viewerBandY("contact", 5) - VIEWER_COURT.nearBaselineY;
+    expect(contact).toBeCloseTo(depth, 6);
+  });
+
+  test("every result is clamped inside VIEWER_COURT.viewBox", () => {
+    const top = VIEWER_COURT.viewBox.minY;
+    const bottom = VIEWER_COURT.viewBox.minY + VIEWER_COURT.viewBox.h;
+    for (const ft of [-500, -39, 0, 39, 120, 5000]) {
+      for (const kind of ["depth", "contact"] as const) {
+        const y = viewerBandY(kind, ft);
+        expect(y).toBeGreaterThanOrEqual(top);
+        expect(y).toBeLessThanOrEqual(bottom);
+      }
+    }
+  });
+});
+
+/**
+ * `viewerBandEdges` turns a band scheme's dividers into the n+1 horizontal
+ * edges the overlay's n rects sit between — the outer two being the edge of
+ * the half the overlay is allowed to cover, not a divider.
+ *
+ * Depth: the first band starts at the FAR BASELINE (P2k: "DEEP starts at the
+ * FAR baseline"), unless a divider sits at or before the baseline itself
+ * (the "Inside the baseline" preset, whose first band is genuinely OUTSIDE
+ * the court) — then it opens up into the far apron so that band has somewhere
+ * to draw. The last band always ends on the net line.
+ *
+ * Contact: the "inside" band is capped at the NEAR SERVICE LINE rather than
+ * running up to the net (it would otherwise flood the whole half), and the
+ * "behind" band runs to the bottom of the viewBox.
+ */
+test.describe("viewerBandEdges", () => {
+  test("thirds: three bands from the far baseline to the net", () => {
+    const edges = viewerBandEdges(
+      "depth",
+      resolveDepthDividersFt({
+        depthScheme: "thirds",
+        depthDividersFt: null,
+        contactDividersFt: [0, 5],
+      }),
+    );
+    expect(edges).toHaveLength(4);
+    expect(edges[0]).toBeCloseTo(VIEWER_COURT.farBaselineY, 6);
+    expect(edges[3]).toBeCloseTo(VIEWER_COURT.netY, 6);
+    expect(edges[1]).toBeGreaterThan(edges[0]);
+    expect(edges[2]).toBeGreaterThan(edges[1]);
+    expect(edges[3]).toBeGreaterThan(edges[2]);
+  });
+
+  test("deepMidShort: the coach default's own 10 / 24 ft dividers", () => {
+    const edges = viewerBandEdges("depth", [10, 24]);
+    expect(edges[1]).toBeCloseTo(viewerBandY("depth", 10), 6);
+    expect(edges[2]).toBeCloseTo(viewerBandY("depth", 24), 6);
+  });
+
+  test("inside: the divider AT the baseline opens the first band into the far apron", () => {
+    const edges = viewerBandEdges("depth", [0]);
+    expect(edges).toHaveLength(3);
+    expect(edges[0]).toBeCloseTo(VIEWER_COURT.viewBox.minY, 6);
+    expect(edges[1]).toBeCloseTo(VIEWER_COURT.farBaselineY, 6);
+    expect(edges[2]).toBeCloseTo(VIEWER_COURT.netY, 6);
+  });
+
+  test("contact: capped at the near service line, open to the bottom of the frame", () => {
+    const edges = viewerBandEdges("contact", [0, 5]);
+    expect(edges).toHaveLength(4);
+    expect(edges[0]).toBeCloseTo(VIEWER_COURT.nearServiceY, 6);
+    expect(edges[1]).toBeCloseTo(VIEWER_COURT.nearBaselineY, 6);
+    expect(edges[2]).toBeCloseTo(viewerBandY("contact", 5), 6);
+    expect(edges[3]).toBeCloseTo(
+      VIEWER_COURT.viewBox.minY + VIEWER_COURT.viewBox.h,
+      6,
+    );
+  });
+
+  test("contact: a divider deep inside the court is capped, never drawn above the service line", () => {
+    const edges = viewerBandEdges("contact", [-39, 5]);
+    expect(edges[1]).toBeCloseTo(VIEWER_COURT.nearServiceY, 6);
+    expect(edges[1]).toBeGreaterThanOrEqual(edges[0]);
+  });
+
+  test("edges are always non-decreasing, so no band ever draws inside-out", () => {
+    const cases: ["depth" | "contact", number[]][] = [
+      ["depth", []],
+      ["depth", [0]],
+      ["depth", [13, 26]],
+      ["depth", [38.9, 38.95]],
+      ["contact", [0, 5]],
+      ["contact", [-39, 30]],
+      ["contact", [29, 30]],
+    ];
+    for (const [kind, dividers] of cases) {
+      const edges = viewerBandEdges(kind, dividers);
+      expect(edges).toHaveLength(dividers.length + 2);
+      for (let i = 1; i < edges.length; i++) {
+        expect(edges[i]).toBeGreaterThanOrEqual(edges[i - 1]);
+      }
+    }
   });
 });

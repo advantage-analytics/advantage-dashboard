@@ -1,8 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Maximize, Minus, Plus, SlidersHorizontal, X } from "lucide-react";
+import {
+  Maximize,
+  Minus,
+  MoveVertical,
+  Plus,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
@@ -17,6 +24,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  contactBandRows,
+  depthBandRows,
+  resolveDepthDividersFt,
+} from "@/lib/data/viz-bands";
 import { formatScoreboardStatus } from "@/lib/data/match-utils";
 import { playedSets } from "@/lib/ui/score-format";
 import { overlayIsOpen } from "@/lib/ui/overlay-is-open";
@@ -34,6 +46,9 @@ import { usePanZoom } from "./use-pan-zoom";
 import { isMarkRovingKey } from "./viz-mark-roving";
 import { useVizState } from "./use-viz-state";
 import { useVizView } from "./use-viz-view";
+import { useVizBands } from "./viz-bands-context";
+import { bandKindFor, VizBandsMenu } from "./viz-bands-menu";
+import type { VizBandsOverlayProps } from "./viz-bands-overlay";
 import { VizFullscreenCourt } from "./viz-fullscreen-court";
 import {
   CUT_LABEL,
@@ -77,8 +92,19 @@ const ZOOM_READOUT_W = 38;
 export function VizFullscreen() {
   const { state, setState } = useVizState();
   const { meta } = useMatchReport();
-  const { cut, result, subjectName, you, opp, points, hasFilters } =
-    useVizView();
+  const {
+    cut,
+    result,
+    stats,
+    subjectName,
+    you,
+    opp,
+    points,
+    hasFilters,
+    bands,
+    unit,
+  } = useVizView();
+  const { contactHidden, receipt } = useVizBands();
 
   const rootRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -114,6 +140,44 @@ export function VizFullscreen() {
   // one, and the guard below covers the render race. Hooks can't sit behind
   // that guard, so the fallback keeps the hook order stable.
   const pz = usePanZoom(cut ?? "serve", stageRef, dropActiveMark);
+
+  /* ── Bands (Phase 2B) ─────────────────────────────────────────────────── */
+
+  /**
+   * The band overlay's data, assembled ONCE per real change rather than per
+   * pan frame — `VizBandsOverlay` is `memo`'d, and a fresh props object on
+   * every frame would undo that.
+   *
+   * `statRows` is the Depth group out of the SAME `computeVizStats` the
+   * focused court's stats card renders (`useVizView`), bucketed by these
+   * exact bands: the overlay prints that group's rate and count, it never
+   * counts anything itself. Serve has no bands; a depth scheme of `"none"`
+   * and the contact cuts' session-only "No bands" toggle each drop the
+   * overlay entirely (and with it, `MarkLayer` draws over bare court).
+   */
+  const bandOverlay = useMemo<VizBandsOverlayProps | null>(() => {
+    const kind = cut === null ? null : bandKindFor(cut);
+    if (kind === null) return null;
+    if (kind === "depth" && bands.depthScheme === "none") return null;
+    if (kind === "contact" && contactHidden) return null;
+
+    const rows =
+      kind === "depth"
+        ? depthBandRows(bands, unit)
+        : contactBandRows(bands, unit);
+    if (rows.length === 0) return null;
+    const dividersFt =
+      kind === "depth"
+        ? resolveDepthDividersFt(bands)
+        : [...bands.contactDividersFt];
+
+    return {
+      kind,
+      dividersFt,
+      rows,
+      statRows: stats?.groups.find((g) => g.key === "depth")?.rows ?? null,
+    };
+  }, [cut, bands, unit, contactHidden, stats]);
 
   /* ── Exit ─────────────────────────────────────────────────────────────── */
 
@@ -278,6 +342,7 @@ export function VizFullscreen() {
             zoneStats={result.zoneStats}
             filters={state.filters}
             subjectName={subjectName}
+            bands={bandOverlay}
             transform={pz.t}
             stage={pz.stage}
             panning={pz.panning}
@@ -329,51 +394,60 @@ export function VizFullscreen() {
               noun={result.noun}
             />
             <div className="flex-1" />
-            <FiltersPopover
-              count={result.count}
-              total={result.total}
-              noun={result.noun}
-              sets={availableSets(points)}
-              youName={you.name}
-              opponentName={opp.name}
-              tone="dark"
-              side="bottom"
-              trigger={(open) => (
-                <button
-                  type="button"
-                  aria-haspopup="dialog"
-                  aria-expanded={open}
-                  className="inline-flex h-[26px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium text-white backdrop-blur-[6px] transition-colors duration-200"
-                  style={{
-                    background: open
-                      ? "rgba(13,13,13,0.92)"
-                      : "rgba(13,13,13,0.72)",
-                  }}
-                >
-                  <SlidersHorizontal
-                    className="size-3 shrink-0 text-white/70"
-                    strokeWidth={1.6}
-                    aria-hidden="true"
-                  />
-                  <span className="truncate">{pillLabel}</span>
-                  <span className="mono tabular">·</span>
-                  <span className="mono tabular">{result.count}</span>
-                  {open ? (
-                    <ChevronUp
+            {/* P2n: the bands receipt TAKES the filter pill's slot for four
+                seconds — no toast, no green tick. The pill is the one piece
+                of chrome a coach is already looking at when they pick a
+                preset, and the sentence has to name the workspace, not this
+                match. It returns on its own; nothing here dismisses it. */}
+            {receipt !== null ? (
+              <BandsReceipt message={receipt.message} />
+            ) : (
+              <FiltersPopover
+                count={result.count}
+                total={result.total}
+                noun={result.noun}
+                sets={availableSets(points)}
+                youName={you.name}
+                opponentName={opp.name}
+                tone="dark"
+                side="bottom"
+                trigger={(open) => (
+                  <button
+                    type="button"
+                    aria-haspopup="dialog"
+                    aria-expanded={open}
+                    className="inline-flex h-[26px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium text-white backdrop-blur-[6px] transition-colors duration-200"
+                    style={{
+                      background: open
+                        ? "rgba(13,13,13,0.92)"
+                        : "rgba(13,13,13,0.72)",
+                    }}
+                  >
+                    <SlidersHorizontal
                       className="size-3 shrink-0 text-white/70"
                       strokeWidth={1.6}
                       aria-hidden="true"
                     />
-                  ) : (
-                    <ChevronDown
-                      className="size-3 shrink-0 text-white/70"
-                      strokeWidth={1.6}
-                      aria-hidden="true"
-                    />
-                  )}
-                </button>
-              )}
-            />
+                    <span className="truncate">{pillLabel}</span>
+                    <span className="mono tabular">·</span>
+                    <span className="mono tabular">{result.count}</span>
+                    {open ? (
+                      <ChevronUp
+                        className="size-3 shrink-0 text-white/70"
+                        strokeWidth={1.6}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <ChevronDown
+                        className="size-3 shrink-0 text-white/70"
+                        strokeWidth={1.6}
+                        aria-hidden="true"
+                      />
+                    )}
+                  </button>
+                )}
+              />
+            )}
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
@@ -422,8 +496,19 @@ export function VizFullscreen() {
                 </div>
               </>
             )}
-            {/* Scope guard: the depth/contact bands control (2B) lands here,
-                between the tokens and the spacer. Nothing renders yet. */}
+            {/* P2k: the bands control, between the tokens and the spacer.
+                Only the three return cuts have bands — `VizBandsMenu`
+                returns nothing on Serve, so the slab simply doesn't grow a
+                control there. Task 4's drag editor is what `onEdit` will
+                open; it is deliberately unwired until then, and the menu's
+                own "Edit bands…" row already renders disabled for a viewer
+                who cannot change this workspace's bands. */}
+            {bandKindFor(cut) !== null && (
+              <>
+                <SlabDivider />
+                <VizBandsMenu cut={cut} />
+              </>
+            )}
             <div className="flex-1" />
             {/* The legend is the first thing to go on a narrow viewport: the
                 court's own colours still read, and every other control is
@@ -475,6 +560,34 @@ export function VizFullscreen() {
 }
 
 /* ── Pieces ─────────────────────────────────────────────────────────────── */
+
+/**
+ * P2n: the bands receipt, in the filter pill's own slot and shaped like it —
+ * a `move-vertical` glyph and one sentence, `role="status"` so a screen
+ * reader hears it without focus moving. No tick and no colour: a save that
+ * worked is not an event, it is a fact, and the sentence ("every return
+ * chart in {workspace}") is the part that matters — bands are workspace-wide,
+ * not this match's.
+ *
+ * A failure takes the same slot with the reason in it, rather than a toast
+ * somewhere else on the screen: the thing that did not change is right here.
+ */
+function BandsReceipt({ message }: { message: string }) {
+  return (
+    <div
+      role="status"
+      className="inline-flex h-[26px] shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium text-white backdrop-blur-[6px]"
+      style={{ background: "rgba(13,13,13,0.72)" }}
+    >
+      <MoveVertical
+        className="size-3 shrink-0 text-white/70"
+        strokeWidth={1.6}
+        aria-hidden="true"
+      />
+      <span className="truncate">{message}</span>
+    </div>
+  );
+}
 
 function SlabDivider() {
   return (

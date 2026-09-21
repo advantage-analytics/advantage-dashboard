@@ -27,6 +27,10 @@ import {
   zoneCellX,
 } from "./court-geometry";
 import type { PanZoom, Size } from "./pan-zoom";
+import {
+  VizBandsOverlay,
+  type VizBandsOverlayProps,
+} from "./viz-bands-overlay";
 import { buildReadout } from "./viz-readout";
 import { nextMarkIndex } from "./viz-mark-roving";
 import type { Chart, Cut, VizDot, VizFilters } from "./viz-model";
@@ -146,6 +150,7 @@ export function VizFullscreenCourt({
   zoneStats,
   filters,
   subjectName,
+  bands,
   transform,
   stage,
   panning,
@@ -162,6 +167,14 @@ export function VizFullscreenCourt({
   zoneStats: Record<ZoneKey, ZoneStats> | null;
   filters: VizFilters;
   subjectName: string;
+  /**
+   * The depth/contact band overlay's data (Phase 2B), or `null` on a cut
+   * with no bands (Serve) or with the shading turned off. Passed as ONE
+   * already-memoised object from the shell rather than assembled here: the
+   * overlay is `memo`'d away from the pan, and rebuilding its props on every
+   * pan frame would defeat that.
+   */
+  bands: VizBandsOverlayProps | null;
   transform: PanZoom;
   /** The stage the art is panned within — the readout flips inside it. */
   stage: Size;
@@ -279,6 +292,12 @@ export function VizFullscreenCourt({
               />
             );
           })}
+
+        {/* Under the court lines and the marks: the bands are the ground
+            the landings sit on, and a wash drawn over a hairline would
+            make the baseline itself look dimmed. Outside `MarkLayer` and
+            memo'd on its own props, so a pan frame never re-renders it. */}
+        {bands !== null && <VizBandsOverlay {...bands} />}
 
         <CourtLines />
 

@@ -10,6 +10,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/shots/viz-state-context";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { SavedViewsBand } from "@/components/dashboard/matches/match-detail/shots/saved-views-band";
+import { VizBandsProvider } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
 
 /**
  * The Visualizations tab's panel. `?cut=` absent (or unrecognised) renders
@@ -81,8 +82,17 @@ const VizFullscreen = dynamic(
 
 export function ShotsTab() {
   return (
+    // `VizBandsProvider` (Phase 2B) sits INSIDE the state provider and
+    // around both surfaces: the optimistic band override has to be visible
+    // to the focused court's stats card and to the fullscreen viewer's
+    // overlay at once, since a preset pick must move the band rects and the
+    // percentages printed on them in the same frame. Mounted here rather
+    // than in the viewer because the viewer unmounts on Esc and the override
+    // (and its pending save) must outlive that.
     <VizStateProvider>
-      <ShotsTabBody />
+      <VizBandsProvider>
+        <ShotsTabBody />
+      </VizBandsProvider>
     </VizStateProvider>
   );
 }

@@ -2,13 +2,15 @@
 
 import { useMemo } from "react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
-import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
   useMatchSides,
   type MatchSide,
 } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import type { MatchPoint } from "@/lib/data/match-points-server";
+import type { BandSettings } from "@/lib/data/viz-bands";
+import type { DistanceUnit } from "@/lib/format/distance";
 import { useVizState } from "./use-viz-state";
+import { useVizBands } from "./viz-bands-context";
 import {
   computeViz,
   computeVizStats,
@@ -33,10 +35,14 @@ import { activeFilterEntries } from "./viz-url";
  * filter into the boolean `computeViz` needs, and nothing downstream reads
  * player1/player2 off the match.
  *
- * Bands (Phase 2B): `stats` is built with `useMatchReport().meta.bandSettings`
- * — the workspace's depth/contact bands, loaded once in `page.tsx` — so both
- * the focused court's stats card and the fullscreen viewer follow the same
- * workspace bands without either reading them separately.
+ * Bands (Phase 2B): `stats` is built with `useVizBands().bands` — the
+ * workspace's depth/contact bands, loaded once in `page.tsx`, with any
+ * OPTIMISTIC override a just-picked preset put in front of them
+ * (`viz-bands-context.tsx`). Reading them here is what makes "every return
+ * chart follows the bands" true by construction: the focused court's stats
+ * card and the fullscreen viewer's overlay are both downstream of this one
+ * `computeVizStats` call, so a preset pick moves the band rects and the
+ * `% · n` printed on them in the same frame.
  *
  * `cut === null` (the wall) returns `result`/`stats` as `null` — both callers
  * are mounted only alongside a real cut and guard on it, but a render race
@@ -59,13 +65,18 @@ export interface VizView {
   hasFilters: boolean;
   /** G4's "Create view" blank-court prompt is showing. */
   isDraft: boolean;
+  /** The bands `stats` was bucketed with — the overlay draws these exact
+   *  dividers, never a second read of `meta.bandSettings`. */
+  bands: BandSettings;
+  /** The unit every band label in `stats` is written in. */
+  unit: DistanceUnit;
 }
 
 export function useVizView(): VizView {
   const { points } = useMatchData();
   const { you, opp } = useMatchSides();
   const { state } = useVizState();
-  const { meta } = useMatchReport();
+  const { bands, unit } = useVizBands();
 
   const cut = state.cut;
   const subjectIsPlayer1 = subjectFor(state.filters, you.isPlayer1);
@@ -86,10 +97,11 @@ export function useVizView(): VizView {
             state.filters,
             subjectIsPlayer1,
             result ?? undefined,
-            meta.bandSettings,
+            bands,
+            unit,
           )
         : null,
-    [points, cut, state.filters, subjectIsPlayer1, result, meta.bandSettings],
+    [points, cut, state.filters, subjectIsPlayer1, result, bands, unit],
   );
 
   return {
@@ -103,5 +115,7 @@ export function useVizView(): VizView {
     points,
     hasFilters: activeFilterEntries(state).length > 0,
     isDraft: state.draft === true,
+    bands,
+    unit,
   };
 }
