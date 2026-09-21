@@ -18,3 +18,14 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical pass (after one re-run: `match-video-attachments-db.spec.ts` "two concurrent sweeps never share a row" failed once against the shared live DB and passed alone — the same spec flaked on the video-tab branch); completion review pass
 **changed:** `match-points-server.ts` no longer selects `saved` off `points` and drops it from `DbPoint`. After the points fetch it queries `point_bookmarks` with `.select("point_id").in("point_id", pointIds)` on the same cookie-scoped server client — RLS narrows that to the viewer's own rows, so no `user_id` filter is applied client-side and the admin client is not involved. `MatchPoint.saved` is now `bookmarkedIds.has(point.id)`. An empty `pointIds` skips the query, and a failed one is logged and treated as "no bookmarks" rather than failing the loader, so points and shots still render.
+
+## T4 · Widen point_bookmarks SELECT and DELETE to workspace-wide, proven live — done
+
+**gate:** mechanical pass; completion review pass (the reviewer re-read the live ledger and `pg_policies`); `rls-boundary-reviewer` also ran on the diff per the task notes and found nothing
+**changed:** New `supabase/migrations/20260921034815_point_bookmarks_shared.sql`, applied to live under that same version — the file and the ledger agree this time, which is the mistake T1 made and had to be fixed by rename. It drops and recreates the SELECT and DELETE policies under honest names ("…on matches they can see"), each `using` reduced to the bare `visible_match_ids()` exists-clause with no `user_id` term. INSERT is untouched and stays own-row, so rows still record who saved. No UPDATE policy, no grant changes, no `anon` path; `points.saved` and `set_point_saved` are not touched and no backfill runs here. `tests/point-bookmarks-db.spec.ts` inverts the old privacy tests: a program-mate now reads the creator's row, and an unfiltered delete by the mate removes BOTH rows and echoes both user ids. The outsider and forged-`user_id` refusals are unchanged.
+**verified live after the fact:** SELECT and DELETE carry no `user_id` term; INSERT still does.
+**notes:** Deliberately ships alone and first — widening reads is backward-compatible with the client still writing through `set_point_saved`, so saving keeps working. The re-backfill and the RPC drop wait for T6, because a backfill run now would let `points.saved` drift again before cutover.
+**follow-ups:**
+
+1. T1's table comment said "Own rows only" and is now superseded live; no code reads it, but docs quoting it should follow.
+2. The spec reorders section 3 before the shared-delete test so refusals run while both rows exist — T6's spec edits should preserve that ordering.

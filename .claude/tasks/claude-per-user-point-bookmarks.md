@@ -62,7 +62,7 @@ ready).
 
 ## T4 · Widen point_bookmarks SELECT and DELETE to workspace-wide, proven live
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** `supabase/migrations/<timestamp>_point_bookmarks_shared.sql` (new), `tests/point-bookmarks-db.spec.ts` (rewrite of sections 2–3; its header comment and the `MIGRATION` constant list both files) — guesses
 - **done when:**

@@ -18,22 +18,26 @@ import {
 } from "./fixtures/live-db";
 
 /**
- * `20260921004305_point_bookmarks.sql`, proven against the live database
- * rather than the migration's own claims (T1 of per-user point bookmarks).
+ * `20260921004305_point_bookmarks.sql` (T1: the table and backfill) and
+ * `20260921034815_point_bookmarks_shared.sql` (T4: SELECT and DELETE widened
+ * to everyone who can see the match), proven against the live database rather
+ * than the migrations' own claims.
  *
  *  1. Privilege boundary: an anonymous client is refused SELECT, INSERT and
  *     DELETE with `42501` — the table has no `anon` grant.
- *  2. Own rows on visible matches: the match creator inserts, reads back and
- *     deletes their own bookmark; a program-mate who can see the match (the
- *     membership route of `visible_match_ids()`) bookmarks the same point
- *     independently, and neither ever sees the other's row.
- *  3. Refusals: a user who cannot see the match reads zero rows and is
- *     refused on insert; an insert that names another user's `user_id` is
- *     refused even on a visible match.
- *  4. Backfill contract: the statement below is the migration's, verbatim
- *     (the spec checks the file on disk carries it), and its semantics are
- *     replayed on the fixture rows — a `saved` point becomes a bookmark for
- *     the match's creator, and the replay is idempotent.
+ *  2. Shared per match: the match creator inserts and reads back; a
+ *     program-mate who can see the match (the membership route of
+ *     `visible_match_ids()`) reads the creator's row, bookmarks the same
+ *     point under their own `user_id`, and an unfiltered delete by the mate
+ *     removes both rows — the same one-shared-flag behaviour `points.saved`
+ *     had.
+ *  3. Refusals: a user who cannot see the match reads zero rows, is refused
+ *     on insert and deletes nothing; an insert that names another user's
+ *     `user_id` is refused even on a visible match.
+ *  4. Backfill contract: the statement below is T1's, verbatim (the spec
+ *     checks the file on disk carries it), and its semantics are replayed on
+ *     the fixture rows — a `saved` point becomes a bookmark for the match's
+ *     creator, and the replay is idempotent.
  *
  * Every fixture row is marked: the program's key and the match's tournament
  * name start with the run mark, so no real row is ever touched.
@@ -41,7 +45,11 @@ import {
  * Run on demand:  npx playwright test tests/point-bookmarks-db.spec.ts
  */
 
+/** T1 — carries the backfill statement. */
 const MIGRATION = "supabase/migrations/20260921004305_point_bookmarks.sql";
+/** T4 — widens SELECT and DELETE; must leave the flag and the RPC alone. */
+const SHARED_MIGRATION =
+  "supabase/migrations/20260921034815_point_bookmarks_shared.sql";
 
 /**
  * The migration's backfill, character for character. The live project has no
@@ -218,7 +226,7 @@ test.describe("point_bookmarks table + RLS boundary (live)", () => {
     expect(rows.data).toEqual([]);
   });
 
-  // ── 2. Own rows on visible matches ────────────────────────────────────────
+  // ── 2. Shared per match ───────────────────────────────────────────────────
 
   test("the match creator inserts (user_id defaults to auth.uid()) and reads back", async () => {
     const inserted = await creator.client
@@ -237,55 +245,42 @@ test.describe("point_bookmarks table + RLS boundary (live)", () => {
     expect(read.data).toEqual([{ user_id: creator.userId, point_id: pointId }]);
   });
 
-  test("a program-mate bookmarks the same point independently; neither sees the other's row", async () => {
+  test("a program-mate reads the creator's bookmark (shared per match)", async () => {
+    // Before the mate has saved anything: the row is the creator's, and the
+    // mate sees it because they can see the match. This is the inverse of
+    // T1's "neither sees the other's row".
+    const byMate = await rowsFor(mate);
+    expect(byMate.error).toBeNull();
+    expect(byMate.data).toEqual([
+      { user_id: creator.userId, point_id: pointId },
+    ]);
+  });
+
+  test("a program-mate bookmarks the same point under their own user_id; both members read both rows", async () => {
     const inserted = await mate.client
       .from(TABLE)
       .insert({ user_id: mate.userId, point_id: pointId });
     expect(inserted.error).toBeNull();
 
-    const byMate = await rowsFor(mate);
-    expect(byMate.error).toBeNull();
-    expect(byMate.data).toEqual([{ user_id: mate.userId, point_id: pointId }]);
-
-    const byCreator = await rowsFor(creator);
-    expect(byCreator.error).toBeNull();
-    expect(byCreator.data).toEqual([
-      { user_id: creator.userId, point_id: pointId },
-    ]);
+    const both = [creator.userId, mate.userId].sort();
+    for (const s of [creator, mate]) {
+      const seen = await rowsFor(s);
+      expect(seen.error).toBeNull();
+      expect(seen.data?.map((r) => r.user_id).sort()).toEqual(both);
+    }
 
     // Ground truth: two rows exist.
     const all = await admin
       .from(TABLE)
       .select("user_id")
       .eq("point_id", pointId);
-    expect(all.data?.map((r) => r.user_id).sort()).toEqual(
-      [creator.userId, mate.userId].sort(),
-    );
-  });
-
-  test("a delete only reaches the caller's own row", async () => {
-    // The creator's delete is unfiltered by user: RLS must scope it.
-    const deleted = await creator.client
-      .from(TABLE)
-      .delete()
-      .eq("point_id", pointId)
-      .select("user_id");
-    expect(deleted.error).toBeNull();
-    expect(deleted.data).toEqual([{ user_id: creator.userId }]);
-
-    const remaining = await admin
-      .from(TABLE)
-      .select("user_id")
-      .eq("point_id", pointId);
-    expect(remaining.data).toEqual([{ user_id: mate.userId }]);
-
-    const gone = await rowsFor(creator);
-    expect(gone.data).toEqual([]);
+    expect(all.data?.map((r) => r.user_id).sort()).toEqual(both);
   });
 
   // ── 3. Refusals ───────────────────────────────────────────────────────────
+  // Run while both rows exist, so a refused delete has something to miss.
 
-  test("a user who cannot see the match reads zero rows and is refused on insert", async () => {
+  test("a user who cannot see the match reads zero rows, is refused on insert, and deletes nothing", async () => {
     const read = await rowsFor(outsider);
     expect(read.error).toBeNull();
     expect(read.data).toEqual([]);
@@ -295,7 +290,7 @@ test.describe("point_bookmarks table + RLS boundary (live)", () => {
       .insert({ point_id: pointId });
     expect(inserted.error?.code).toBe(INSUFFICIENT_PRIVILEGE);
 
-    // And the outsider's delete removes nothing of the mate's.
+    // The outsider's unfiltered delete reaches neither member's row.
     const deleted = await outsider.client
       .from(TABLE)
       .delete()
@@ -307,7 +302,9 @@ test.describe("point_bookmarks table + RLS boundary (live)", () => {
       .from(TABLE)
       .select("user_id")
       .eq("point_id", pointId);
-    expect(still.data).toEqual([{ user_id: mate.userId }]);
+    expect(still.data?.map((r) => r.user_id).sort()).toEqual(
+      [creator.userId, mate.userId].sort(),
+    );
   });
 
   test("an insert that names another user's user_id is refused", async () => {
@@ -325,6 +322,29 @@ test.describe("point_bookmarks table + RLS boundary (live)", () => {
     expect(rows.data).toEqual([]);
   });
 
+  test("a program-mate's unfiltered delete removes every row on the point, the creator's included", async () => {
+    // Anyone who can see the match can unsave — the one-shared-flag
+    // behaviour, now on the table. RLS scopes by match, not by user.
+    const deleted = await mate.client
+      .from(TABLE)
+      .delete()
+      .eq("point_id", pointId)
+      .select("user_id");
+    expect(deleted.error).toBeNull();
+    expect(deleted.data?.map((r) => r.user_id).sort()).toEqual(
+      [creator.userId, mate.userId].sort(),
+    );
+
+    const remaining = await admin
+      .from(TABLE)
+      .select("user_id")
+      .eq("point_id", pointId);
+    expect(remaining.data).toEqual([]);
+
+    const gone = await rowsFor(creator);
+    expect(gone.data).toEqual([]);
+  });
+
   // ── 4. Backfill contract ──────────────────────────────────────────────────
 
   test("the migration on disk carries the backfill statement verbatim", () => {
@@ -332,6 +352,29 @@ test.describe("point_bookmarks table + RLS boundary (live)", () => {
     expect(sql).toContain(BACKFILL_SQL);
     // The legacy flag is left alone: nothing drops or alters it.
     expect(sql).not.toMatch(/drop\s+column\s+saved|alter\s+column\s+saved/i);
+  });
+
+  test("the widening migration leaves the flag, the RPC and the backfill to T6", () => {
+    const sql = readFileSync(
+      path.resolve(__dirname, "..", SHARED_MIGRATION),
+      "utf8",
+    );
+    // Policy statements only: the file names both widened policies and
+    // touches neither the INSERT policy, the flag, the RPC nor the backfill.
+    expect(sql).toContain("for select to authenticated");
+    expect(sql).toContain("for delete to authenticated");
+    expect(sql).not.toContain("for insert");
+    expect(sql).not.toMatch(/drop\s+column\s+saved|alter\s+column\s+saved/i);
+    expect(sql).not.toMatch(/(create|drop|alter)\s+function/i);
+    expect(sql).not.toMatch(/^\s*insert\s+into/im);
+    expect(sql).not.toMatch(/^\s*grant\b|^\s*revoke\b/im);
+    // Neither widened policy carries a user_id term (comments aside — the
+    // header describes the INSERT policy it leaves alone).
+    const code = sql
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("--"))
+      .join("\n");
+    expect(code).not.toMatch(/user_id\s*=/);
   });
 
   test("replaying the backfill on the fixture gives the saved point a creator bookmark, idempotently", async () => {
