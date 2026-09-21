@@ -29,3 +29,14 @@ is the runner's. Newest entries at the bottom.
 
 1. T1's table comment said "Own rows only" and is now superseded live; no code reads it, but docs quoting it should follow.
 2. The spec reorders section 3 before the shared-delete test so refusals run while both rows exist — T6's spec edits should preserve that ordering.
+
+## T5 · Loader returns saved (any row) plus savedBy from the visible bookmark rows — done
+
+**gate:** mechanical pass (full suite); completion review pass
+**changed:** `MatchPoint` gains `savedBy: { userId, name }[]`, and `saved` is now `savedBy.length > 0` — so a point a TEAMMATE bookmarked reads as saved, which is the whole point of the reversal. The `point_bookmarks` query selects `point_id, user_id` on the same cookie-scoped server client with no `user_id` filter and no admin client; the stale "narrows this to the viewer's own rows" comment now describes the workspace-wide T4 policy. Names come from the SECURITY DEFINER RPC `program_roster_full(p_program_id)` matched on `user_id`, never from `public.users`. Fixtures in `film-point.ts` and `film-playback-refresh-harness.tsx` gain the field.
+**verified against live:** `public.users` has exactly one policy, `cmd=ALL`, `qual = (select auth.uid()) = id` — own row only, so a teammate's name genuinely is unreadable there and the roster RPC is not a workaround but the only route. `program_roster_full(p_program_id uuid)` is SECURITY DEFINER and does return `user_id` and `display_name`.
+**notes:** Both the `program_id` lookup and the roster RPC are skipped entirely when a match has no bookmark rows, so an unbookmarked match costs no extra round trips. A bookmark, program or roster failure each logs and degrades to `savedBy: []` rather than failing the loader. Nothing visible changes yet — the UI still reads `saved`, and the client still writes through `set_point_saved` until T6.
+**follow-ups:**
+
+1. After an optimistic toggle the client has no name for the row it just added; `savedBy` fills in on the next server fetch. The badge design needs to decide what to show in that gap.
+2. A personal match shared into a program falls back to `null` names; worth confirming when the badge is designed.

@@ -36,7 +36,10 @@ export interface MatchPoint {
   rallyLength: number;
   duration: number | null;
   videoTime: number | null;
+  /** True when anyone in the workspace bookmarked it — `savedBy.length > 0`. */
   saved: boolean;
+  /** Every workspace member who bookmarked this point; empty when none. */
+  savedBy: { userId: string; name: string | null }[];
   /** Every shot in rally order. Optional so fixtures and imports without shots stay valid. */
   shots?: MatchShot[];
   // Shot metadata used for Video filters
@@ -200,22 +203,71 @@ export async function getMatchPointsFromSupabase(
     if (!page || page.length < SHOT_PAGE) break;
   }
 
-  // Fetch the viewer's own bookmarked points. RLS on point_bookmarks already
-  // narrows this to auth.uid()'s rows within visible_match_ids(), so no
-  // user_id filter is added here and no admin client is used. A failed query
-  // degrades to "no bookmarks" rather than failing the whole loader.
-  const bookmarkedIds = new Set<string>();
+  // Fetch the bookmarks on these points. Saving a point is a WORKSPACE-wide
+  // act: under the T4 policy, SELECT on point_bookmarks returns every row on a
+  // match the viewer can see, not just auth.uid()'s own — so there is no
+  // user_id filter here and no admin client, just the cookie-scoped client.
+  // INSERT stays own-row, so each row still records who saved it. A failed
+  // query degrades to "no bookmarks" rather than failing the whole loader.
+  const savedByPointId = new Map<
+    string,
+    { userId: string; name: string | null }[]
+  >();
   if (pointIds.length > 0) {
     const { data: bookmarksData, error: bookmarksError } = await supabase
       .from("point_bookmarks")
-      .select("point_id")
+      .select("point_id, user_id")
       .in("point_id", pointIds);
 
     if (bookmarksError) {
       console.error("Failed to fetch point bookmarks:", bookmarksError.message);
-    } else {
-      for (const row of bookmarksData ?? []) {
-        bookmarkedIds.add(row.point_id);
+    } else if (bookmarksData?.length) {
+      // Names cannot come from `public.users`: its only policy is
+      // `auth.uid() = id`, so a teammate's row is invisible through RLS and a
+      // join would silently yield null for everyone but the viewer. For a team
+      // match the roster RPC (SECURITY DEFINER) is the readable source; for a
+      // personal match, or a user the roster does not list, `name` stays null.
+      // The badge that will render these names is out of scope here (T5 only
+      // adds the data) — existing readers keep using `saved`.
+      const nameByUserId = new Map<string, string | null>();
+      const { data: matchRow, error: matchError } = await supabase
+        .from("matches")
+        .select("program_id")
+        .eq("id", matchId)
+        .maybeSingle();
+
+      if (matchError) {
+        console.error("Failed to fetch match program:", matchError.message);
+      } else if (matchRow?.program_id) {
+        const { data: roster, error: rosterError } = await supabase.rpc(
+          "program_roster_full",
+          { p_program_id: matchRow.program_id },
+        );
+        if (rosterError) {
+          console.error("Failed to fetch program roster:", rosterError.message);
+        } else {
+          for (const member of (roster ?? []) as {
+            user_id: string | null;
+            display_name: string | null;
+          }[]) {
+            if (member.user_id) {
+              nameByUserId.set(member.user_id, member.display_name ?? null);
+            }
+          }
+        }
+      }
+
+      for (const row of bookmarksData as {
+        point_id: string;
+        user_id: string;
+      }[]) {
+        const entry = {
+          userId: row.user_id,
+          name: nameByUserId.get(row.user_id) ?? null,
+        };
+        const existing = savedByPointId.get(row.point_id);
+        if (existing) existing.push(entry);
+        else savedByPointId.set(row.point_id, [entry]);
       }
     }
   }
@@ -243,6 +295,7 @@ export async function getMatchPointsFromSupabase(
     const lastShot =
       pointShots.length > 0 ? pointShots[pointShots.length - 1] : undefined;
     const resultType = point.result_type ?? "";
+    const savedBy = savedByPointId.get(point.id) ?? [];
 
     // Expose raw world-frame coordinates. Downstream renderers normalize them
     // (so end-changes between games don't require an extra server-side flip
@@ -274,7 +327,8 @@ export async function getMatchPointsFromSupabase(
       rallyLength: point.rally_length ?? 0,
       duration: point.duration,
       videoTime: point.video_time,
-      saved: bookmarkedIds.has(point.id),
+      saved: savedBy.length > 0,
+      savedBy,
       shots: pointShots.map((shot) => ({
         id: shot.id,
         shotNumber: shot.shot_number,

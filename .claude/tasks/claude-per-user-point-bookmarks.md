@@ -75,7 +75,7 @@ ready).
 
 ## T5 · Loader returns saved (any row) plus savedBy from the visible bookmark rows
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4
 - **files:** `src/lib/data/match-points-server.ts` (the `point_bookmarks` block at lines 203–221, the `MatchPoint` type at line 39, the map at line 277); `tests/fixtures/film-point.ts` if `MatchPoint` fixtures must gain the new field — guess

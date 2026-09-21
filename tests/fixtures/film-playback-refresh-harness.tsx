@@ -76,6 +76,7 @@ function point(
     duration: null,
     videoTime,
     saved: false,
+    savedBy: [],
     ...overrides,
   };
 }
