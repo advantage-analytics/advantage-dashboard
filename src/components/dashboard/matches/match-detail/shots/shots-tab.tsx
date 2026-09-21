@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useMounted } from "@/lib/ui/use-mounted";
 import { VizWall } from "@/components/dashboard/matches/match-detail/shots/viz-wall";
 import { VizFocused } from "@/components/dashboard/matches/match-detail/shots/viz-focused";
 import {
@@ -58,6 +59,17 @@ import { SavedViewsBand } from "@/components/dashboard/matches/match-detail/shot
  * can place the court, so there is nothing meaningful for the server to
  * render, and keeping it out of the initial bundle keeps the tab's own
  * first paint unchanged for everyone who never opens it.
+ *
+ * Fix round 2 — this must NEVER be rendered during SSR or the hydration
+ * render, which is what `useMounted()` below is for. `next/dynamic(...,
+ * {ssr:false})` expands to `<Suspense fallback={null}><BailoutToCSR>
+ * <Lazy/></BailoutToCSR></Suspense>`, and `BailoutToCSR` THROWS on the server
+ * (`node_modules/next/dist/shared/lib/lazy-dynamic/dynamic-bailout-to-csr.js`).
+ * The throw is caught by its own Suspense boundary, so the server HTML ends up
+ * carrying a bailed-out boundary — `<!--$?-->` plus a `<template>` — that the
+ * client tree does not reproduce at that position. A hard load of
+ * `?tab=shots&cut=…&fullscreen=1` therefore hydrated with a mismatch and React
+ * re-rendered the whole match report on the client.
  */
 const VizFullscreen = dynamic(
   () =>
@@ -78,6 +90,17 @@ export function ShotsTab() {
 function ShotsTabBody() {
   const { state } = useVizState();
   const { meta } = useMatchReport();
+  const mounted = useMounted();
+
+  // ONE gated value. Anything that ever needs to know "is the viewer up" while
+  // RENDERING — an `inert`/`aria-hidden`/class toggle on the court behind it,
+  // say — must read this and not `state.fullscreen`, or it reintroduces the
+  // same server/client divergence one attribute at a time.
+  const viewerOpen =
+    mounted &&
+    state.fullscreen === true &&
+    state.cut !== null &&
+    state.draft !== true;
 
   const savedViewsBand = (
     <SavedViewsBand
@@ -111,9 +134,7 @@ function ShotsTabBody() {
           full one at once. The door itself is hidden in draft mode, but
           `&fullscreen=1` can arrive straight off a pasted URL, so the guard
           belongs here rather than only on the button. */}
-      {state.fullscreen === true &&
-        state.cut !== null &&
-        state.draft !== true && <VizFullscreen />}
+      {viewerOpen && <VizFullscreen />}
     </>
   );
 }
