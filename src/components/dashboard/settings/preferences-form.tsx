@@ -18,6 +18,7 @@ import type {
   Preferences,
   ReportEntryPoint,
 } from "@/lib/data/preferences-server";
+import type { DistanceUnit } from "@/lib/format/distance";
 
 const WORKSPACE_OPTIONS: readonly { value: DefaultWorkspace; label: string }[] =
   [
@@ -30,6 +31,23 @@ const REPORT_OPTIONS: readonly { value: ReportEntryPoint; label: string }[] = [
   { value: "story", label: "The story" },
   { value: "stats", label: "Statistics" },
   { value: "video", label: "Video" },
+];
+
+const UNIT_OPTIONS: readonly {
+  value: DistanceUnit;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "ft",
+    label: "Feet",
+    description: "Distances read 12 ft, speeds in mph",
+  },
+  {
+    value: "m",
+    label: "Metres",
+    description: "Distances read 3.5 m, speeds in km/h",
+  },
 ];
 
 /**
@@ -176,6 +194,20 @@ export function PreferencesForm({
               value={preferences.matchReportOpensAt}
               options={REPORT_OPTIONS}
               onChange={(value) => update({ matchReportOpensAt: value })}
+            />
+          }
+        />
+        <SettingsCardRow
+          label="Units"
+          description="Court distances, ball speed and contact depth"
+          control={
+            <MenuSelect
+              label="Units"
+              value={preferences.unit}
+              options={UNIT_OPTIONS}
+              onChange={(value) => update({ unit: value })}
+              note="Applies to every chart and readout in your workspaces. Scores and set counts never change."
+              width={208}
             />
           }
         />

@@ -33,6 +33,10 @@ export async function savePreferences(
 
   if (!user) return { ok: false, error: "Not signed in. Please log back in." };
 
+  if (next.unit !== "ft" && next.unit !== "m") {
+    return { ok: false, error: "Invalid unit preference." };
+  }
+
   const { error } = await supabase.from("user_preferences").upsert(
     {
       user_id: user.id,
@@ -44,6 +48,7 @@ export async function savePreferences(
       default_workspace: next.defaultWorkspace,
       match_report_opens_at: next.matchReportOpensAt,
       stat_definitions_on_hover: next.statDefinitionsOnHover,
+      unit: next.unit,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id" },

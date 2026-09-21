@@ -52,6 +52,15 @@ export function formatDistanceValue(unit: DistanceUnit, ft: number): string {
   return trimmed(toUnit(unit, ft));
 }
 
+const KMH_PER_MPH = 1.609344;
+
+/** "118 mph" | "190 km/h" — rounded to the nearest integer. */
+export function formatSpeed(unit: DistanceUnit, mph: number): string {
+  return unit === "ft"
+    ? `${Math.round(mph)} mph`
+    : `${Math.round(mph * KMH_PER_MPH)} km/h`;
+}
+
 /**
  * Snap to the nearest half-foot, or — in metres — the nearest half-metre
  * expressed back in feet (so a metric drag still lands on a "clean" metric

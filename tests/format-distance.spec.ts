@@ -3,6 +3,7 @@ import {
   FT_PER_M,
   formatDistance,
   formatRange,
+  formatSpeed,
   snapFt,
 } from "@/lib/format/distance";
 
@@ -48,6 +49,17 @@ test.describe("formatRange", () => {
 
   test("metric range", () => {
     expect(formatRange("m", 0, 5)).toBe("0–1.5 m");
+  });
+});
+
+test.describe("formatSpeed", () => {
+  test("mph rounds to the nearest integer", () => {
+    expect(formatSpeed("ft", 118)).toBe("118 mph");
+    expect(formatSpeed("ft", 117.6)).toBe("118 mph");
+  });
+
+  test("converts to km/h", () => {
+    expect(formatSpeed("m", 118)).toBe("190 km/h");
   });
 });
 
