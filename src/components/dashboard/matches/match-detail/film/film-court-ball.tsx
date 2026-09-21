@@ -10,6 +10,7 @@ import {
 
 import { ballAt, type BallPoint, type FilmBallPath } from "./film-ball";
 import { toCourtPercent } from "./film-court";
+import { reducedMotionNow } from "./film-motion";
 
 /**
  * The ball itself, moving over `FilmCourt`'s court box (T22).
@@ -68,11 +69,6 @@ function subscribeToReducedMotion(onChange: () => void): () => void {
   query.addEventListener("change", onChange);
   return () => query.removeEventListener("change", onChange);
 }
-
-const reducedMotionNow = (): boolean =>
-  typeof window !== "undefined" &&
-  typeof window.matchMedia === "function" &&
-  window.matchMedia(REDUCED_MOTION_QUERY).matches;
 
 /** The server has no media queries, and animation is the default answer. */
 const reducedMotionOnServer = (): boolean => false;

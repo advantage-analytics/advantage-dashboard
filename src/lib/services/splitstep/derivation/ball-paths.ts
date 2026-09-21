@@ -27,6 +27,7 @@
  */
 
 import { isPlausibleCourtPosition, metersToCourtFrame } from "./court";
+import { num } from "./parse";
 import type { SplitStepStroke } from "./types";
 
 export const BALL_PATHS_VERSION = 1;
@@ -44,8 +45,6 @@ export type BallPathStroke = {
 
 export type BallPathsFile = { version: 1; strokes: BallPathStroke[] };
 
-/** The vendor's "no integer" sentinel — see the parse.ts header. */
-const NUMERIC_SENTINEL = -9999;
 /** Minimum gap between kept samples: about 10 Hz. */
 const MIN_SAMPLE_GAP_S = 0.1;
 /** Absorbs float error when comparing 2 dp times against the gap. */
@@ -58,13 +57,6 @@ interface TrajectoryRow {
   ball_x_m?: unknown;
   ball_y_m?: unknown;
   ball_z_m?: unknown;
-}
-
-/** A finite number that is not the sentinel, or null. */
-function num(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  if (Math.abs(value - NUMERIC_SENTINEL) < 1) return null;
-  return value;
 }
 
 /** Round to 2 dp, never returning -0. */

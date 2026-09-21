@@ -58,14 +58,20 @@ export function useBallPaths({
 
     const controller = new AbortController();
     let live = true;
+    /** True once the request has answered, whatever it answered. */
+    let settled = false;
 
     void (async () => {
       try {
         const response = await fetch(`/api/matches/${matchId}/ball-paths`, {
           signal: controller.signal,
         });
-        if (!response.ok) return;
+        if (!response.ok) {
+          settled = true;
+          return;
+        }
         const file = parseBallPathsFile(await response.json());
+        settled = true;
         // `live` is checked after the awaits, so nothing is set on an unmounted
         // component even though the abort usually gets there first.
         if (!file || !live) return;
@@ -78,6 +84,11 @@ export function useBallPaths({
     return () => {
       live = false;
       controller.abort();
+      // An aborted request answered nothing, so it must not count as asked:
+      // otherwise React's development double-mount — or the viewer toggling
+      // the court before the file arrives — leaves the room without ball
+      // paths for good. A request that already landed keeps its claim.
+      if (!settled) requested.current = null;
     };
   }, [enabled, matchId]);
 

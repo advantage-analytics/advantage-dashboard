@@ -96,16 +96,17 @@ export async function deriveAndStoreBallPaths(params: {
     // Same offset, applied the same way, as buildTranscriptForJob: a path's
     // `contactTime` must equal `shots.video_time`, which carries the trim.
     const startTimeSeconds = Number(job.start_time_seconds ?? 0);
-    const { strokes } = parseStrokes(JSON.parse(await results.data.text()), {
+    const [resultsText, trajectoriesText] = await Promise.all([
+      results.data.text(),
+      trajectories.data.text(),
+    ]);
+    const { strokes } = parseStrokes(JSON.parse(resultsText), {
       startTimeSeconds: Number.isFinite(startTimeSeconds)
         ? startTimeSeconds
         : 0,
     });
 
-    const file = deriveBallPaths(
-      JSON.parse(await trajectories.data.text()),
-      strokes,
-    );
+    const file = deriveBallPaths(JSON.parse(trajectoriesText), strokes);
     const body = JSON.stringify(file);
 
     // A null `created_by` (the uploader left) still has a segment — see

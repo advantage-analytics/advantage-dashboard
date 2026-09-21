@@ -105,12 +105,12 @@ export function ballPathsObjectKey(params: {
 /**
  * The user segment of a job's ball-paths key, from `processing_jobs.created_by`.
  *
- * `former-member` mirrors delivery-storage-keys.ts: a retained team match
- * whose uploader deleted their account keeps its match id and loses
- * `created_by`, and its vendor files already sit under that segment. The
- * writer (ball-paths-store.ts) and the reader (ball-paths-access.ts) both go
- * through this, because the key is recorded nowhere — a reader that built the
- * segment any other way would never find the file.
+ * `former-member` covers a retained team match whose uploader deleted their
+ * account: it keeps its match id and loses `created_by`, and its vendor files
+ * already sit under that segment. delivery-storage-keys.ts, the writer
+ * (ball-paths-store.ts) and the reader (ball-paths-access.ts) all go through
+ * this, because the key is recorded nowhere — building the segment any other
+ * way would never find the file.
  */
 export function ballPathsUserSegment(createdBy: string | null): string {
   return createdBy ?? "former-member";

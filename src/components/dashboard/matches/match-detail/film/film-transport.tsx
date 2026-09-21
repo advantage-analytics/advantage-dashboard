@@ -297,7 +297,10 @@ export function FilmTransport(p: FilmTransportProps) {
           <button
             type="button"
             aria-label={`Playback speed, ${p.rate}×`}
-            onClick={p.onCycleRate}
+            // Called with no argument on purpose: the room's handler takes an
+            // optional direction, and a bare `onClick={p.onCycleRate}` would
+            // hand it the click event.
+            onClick={() => p.onCycleRate()}
             className="mono cursor-pointer rounded-[2px] text-[11px] font-medium text-white/85 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
           >
             {p.rate}×

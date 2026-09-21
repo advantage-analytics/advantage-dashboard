@@ -69,6 +69,7 @@ import {
   ROOM_ENTER_MS,
   ROOM_EXIT_MS,
   collapsedRoomFrame,
+  reducedMotionNow as prefersReducedMotion,
   type Rect,
 } from "./film-motion";
 import { activeShotAt, shotStops as buildShotStops } from "./film-shots";
@@ -201,13 +202,6 @@ const ROOM_PROBLEM_TITLES: Record<AttachmentPlaybackProblem["reason"], string> =
     unreachable: FILM_REFUSAL_COPY.unavailable.heading,
     unplayable: FILM_REFUSAL_COPY.loadFailure.heading,
   };
-
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
-}
 
 type PanelState = "closed" | "open" | "closing";
 

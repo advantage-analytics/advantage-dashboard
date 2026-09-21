@@ -91,7 +91,7 @@ export interface FilmCourtProps {
  * 0.05s as the film time passes; this smooths those steps into the continuous
  * 2 s hold / 3 s fade the court is meant to read as.
  */
-const TRAIL_TRANSITION = "opacity 300ms cubic-bezier(.25,.46,.45,.94)";
+const MARK_FADE_TRANSITION = "opacity 300ms cubic-bezier(.25,.46,.45,.94)";
 /** The live bounce's ring. */
 const RING = "0 0 0 1px rgba(255,255,255,0.85)";
 
@@ -396,7 +396,7 @@ export function FilmCourt({
                 border: !isMatch && contact ? `1px solid ${colour}` : undefined,
                 background: contact && !isMatch ? "transparent" : colour,
                 boxShadow: mark.live && !isMatch ? RING : undefined,
-                transition: TRAIL_TRANSITION,
+                transition: MARK_FADE_TRANSITION,
               }}
             />
           );

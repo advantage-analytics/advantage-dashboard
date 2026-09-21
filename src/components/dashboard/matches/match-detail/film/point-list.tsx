@@ -189,18 +189,6 @@ interface GameGroup {
 }
 
 /**
- * Whether a score column is real on this match.
- *
- * `match-points-server.ts` coerces a null `point_score`/`game_score` to
- * "0-0", and the Advantage Intelligence derivation writes neither: all 114
- * points of the analysed match carry NULL for both, checked against the live
- * table. Printing "0-0" on every row of that match would be a fabricated
- * score in the one column a player reads as fact, so when a column is "0-0"
- * from end to end there is nothing behind it and it does not render. A real
- * match escapes the test on its second game, which is never 0-0 games.
- */
-
-/**
  * Memoized, because the playhead re-renders the tab about four times a second
  * and none of this list's props move at that rate: the point arrays are
  * memoized upstream, the callbacks are stable, and `activePointId` changes
