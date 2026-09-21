@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
-import { CourtTile } from "./court-tile";
+import { CourtTile, TileFullscreenGlyph } from "./court-tile";
 import { useVizState } from "./use-viz-state";
 import { buildDefaultTiles } from "./default-tiles";
 import { VIZ_TILE_GRID_CLASS, VIZ_TILE_GRID_STYLE } from "./viz-labels";
@@ -107,6 +107,12 @@ export function VizWall({ savedViewsBand }: { savedViewsBand?: ReactNode }) {
                       chart={tile.chart}
                       href={tile.href}
                       navigateState={tile.state}
+                      actionSlot={
+                        <TileFullscreenGlyph
+                          name={tile.name}
+                          tileState={tile.state}
+                        />
+                      }
                     />
                   </div>
                 ))}

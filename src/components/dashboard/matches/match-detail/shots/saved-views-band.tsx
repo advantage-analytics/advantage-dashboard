@@ -37,7 +37,7 @@ import {
   restoreSavedView,
   setSavedViewShared,
 } from "@/app/dashboard/matches/(detail)/[matchId]/saved-views-actions";
-import { CourtTile } from "./court-tile";
+import { CourtTile, TileFullscreenGlyph } from "./court-tile";
 import { ManageableSavedViewTile } from "./manageable-saved-view-tile";
 import { useVizState } from "./use-viz-state";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
@@ -833,6 +833,17 @@ export function SavedViewsBand({
           filters: view.filters,
           viewId: view.id,
         }}
+        actionSlot={
+          <TileFullscreenGlyph
+            name={view.name}
+            tileState={{
+              cut: view.cut,
+              chart: view.chart,
+              filters: view.filters,
+              viewId: view.id,
+            }}
+          />
+        }
       />
     );
   }
@@ -990,6 +1001,12 @@ export function SavedViewsBand({
                   href={tile.href}
                   current={isCurrent}
                   navigateState={tile.state}
+                  actionSlot={
+                    <TileFullscreenGlyph
+                      name={tile.name}
+                      tileState={tile.state}
+                    />
+                  }
                 />
               </div>
             );

@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Maximize2 } from "lucide-react";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { WorkspaceKind } from "@/lib/workspace/types";
+import { overlayIsOpen } from "@/lib/ui/overlay-is-open";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import { isFormControl } from "@/components/dashboard/matches/new-match-wizard/useWizardKeys";
 import { APRON_FILL, HEAT_APRON_FILL, CourtArt } from "./court-art";
 import {
   trianglePointsFor,
@@ -17,6 +21,7 @@ import { useVizView } from "./use-viz-view";
 import { EMPTY_VIZ_FILTERS, availableSets, type Cut } from "./viz-model";
 import { viewIdentityKey } from "./viz-url";
 import { CUT_LABEL, legendItemsFor, type LegendItem } from "./viz-labels";
+import { loadedViewLabel } from "./cut-menu";
 import { AppliedStrip } from "./applied-strip";
 import { FiltersPopover } from "./filters-popover";
 import { SaveViewDialog } from "./save-view-dialog";
@@ -132,6 +137,42 @@ export function VizFocused({
     if (externalCourtSwap) clearExternalCourtSwap();
   }, [externalCourtSwap, clearExternalCourtSwap]);
 
+  // Task 5: the door. Never `runCourtMorph` — a fullscreen open is neither a
+  // wall→focused nor a focused→wall transition (the focused view stays
+  // mounted underneath, per `shots-tab.tsx`'s comment), so there is no morph
+  // source/target pair to hand it. Plain `setState`, same as the viewer's own
+  // `exit()` drops the key.
+  function openFullscreen() {
+    setState((prev) => ({ ...prev, fullscreen: true }));
+  }
+
+  // `F` opens the door, mirroring the viewer's own window-level keys
+  // (`viz-fullscreen.tsx`) — same bail-out set (form control, an open
+  // menu/dialog, a modifier held) plus two more specific to this side: draft
+  // mode (the door itself is hidden then) and already-fullscreen (the
+  // viewer's listener owns the window at that point; this one would otherwise
+  // fire a redundant `setState` underneath it on every remount-free re-render
+  // race). Declared above the `cut === null` guard below — every Hook in this
+  // component must run on every render, guard or not.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (isFormControl(e.target)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key.toLowerCase() !== "f") return;
+      if (overlayIsOpen()) return;
+      if (isDraft) return;
+      if (state.fullscreen === true) return;
+      e.preventDefault();
+      openFullscreen();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // `openFullscreen` is a stable closure over `setState` (identity-stable —
+    // see `viz-state-context.tsx`); the only reactive reads inside `onKey`
+    // are `isDraft`/`state.fullscreen`, both already listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDraft, state.fullscreen]);
+
   if (cut === null || result === null || stats === null) {
     // Guarded by `shots-tab.tsx` (`state.cut === null ? <VizWall/> : <VizFocused/>`);
     // this only fires on a race between renders, never in steady state.
@@ -193,6 +234,12 @@ export function VizFocused({
   function openCutMenu() {
     cutMenuTriggerRef.current?.click();
   }
+
+  // `aria-label`/tooltip name the loaded saved view when one is open (its own
+  // name), falling back to the plain cut label otherwise (`CutMenu`'s own
+  // trigger label rule, reused rather than re-derived — see
+  // `loadedViewLabel`'s doc comment).
+  const doorName = loadedViewLabel(state, savedViews).label;
 
   // The big court is the ONE legitimate destination for every forward morph
   // (a wall or Views-grid tile growing into the focused view) — compared
@@ -301,6 +348,28 @@ export function VizFocused({
                 className="pointer-events-none absolute inset-0"
                 style={{ backgroundColor: heatFloorTintRgba() }}
               />
+            )}
+            {/* Task 5: the door. Hidden in draft mode — there's nothing
+                plotted yet to open fullscreen (G4's "Pick what to plot"
+                prompt covers the same ground below). */}
+            {!isDraft && (
+              <div className="absolute top-3 right-3">
+                <ChromeTooltip label="Fullscreen" shortcut="F">
+                  <button
+                    type="button"
+                    data-viz-fullscreen-door
+                    aria-label={`Open ${doorName} fullscreen`}
+                    onClick={openFullscreen}
+                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-[8px] bg-[rgba(13,13,13,0.72)] text-white transition-colors duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.92)]"
+                  >
+                    <Maximize2
+                      className="h-[13px] w-[13px]"
+                      strokeWidth={1.6}
+                      aria-hidden="true"
+                    />
+                  </button>
+                </ChromeTooltip>
+              </div>
             )}
             {isDraft ? (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">

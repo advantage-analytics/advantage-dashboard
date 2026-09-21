@@ -2,6 +2,7 @@
 
 import type { MouseEvent, ReactNode } from "react";
 import Link from "next/link";
+import { Maximize2 } from "lucide-react";
 import { APRON_FILL, HEAT_APRON_FILL, CourtArt } from "./court-art";
 import { heatFloorTintRgba } from "./court-geometry";
 import { VIZ_PILL_RADIUS } from "./viz-labels";
@@ -46,10 +47,55 @@ import {
  * source element. A modified click (⌘/ctrl/shift/alt/middle-button) is left
  * alone, so opening a tile in a new tab still works exactly like any other
  * link — the one reason these tiles are real `<Link>`s and not buttons.
+ *
+ * Task 5: `actionSlot` (the fullscreen-door glyph) renders as a SIBLING of
+ * the `<Link>`/static `<div>`, inside an outer `relative` wrapper this
+ * component owns — never as a child of the anchor. A `<button>` nested
+ * inside a real `<a href>` can't be selectively click-suppressed (the same
+ * problem `as="static"` above exists to sidestep for the Manage ⋯ menu), so
+ * the glyph gets its own element outside the anchor entirely instead of
+ * trying to arbitrate the same conflict again. The card's hover styling
+ * moves from the anchor's own `hover:` to the wrapper's `group`/
+ * `group-hover:` so hovering the glyph (a sibling, not a descendant of the
+ * anchor) still reads as hovering the card.
  */
 
 const CARD_CLASS =
-  "flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)] transition-[border-color,box-shadow] duration-200 ease-[var(--ease-primary)] hover:border-[var(--border-medium)] hover:shadow-[var(--shadow-card-emphasis)] motion-reduce:transition-none";
+  "flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-card)] transition-[border-color,box-shadow] duration-200 ease-[var(--ease-primary)] group-hover:border-[var(--border-medium)] group-hover:shadow-[var(--shadow-card-emphasis)] motion-reduce:transition-none";
+
+/**
+ * Task 5's tile glyph — 24×24, `top-[10px] right-[10px]`, opens the
+ * fullscreen viewer for `tileState` directly, bypassing the wall→focused
+ * morph entirely (a fullscreen open is never a morph source or target).
+ * `aria-label` names the tile so a screen-reader user hears which court is
+ * about to open, since — unlike the tile itself — this control does not
+ * also focus the view first; no tooltip (report P2a: "the tile is the
+ * button", i.e. this is a second, smaller affordance beside it, not the
+ * primary one a hover-delay label would be worth adding for).
+ */
+export function TileFullscreenGlyph({
+  name,
+  tileState,
+}: {
+  name: string;
+  tileState: VizState;
+}) {
+  const { setState } = useVizState();
+  return (
+    <button
+      type="button"
+      aria-label={`Open ${name} fullscreen`}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setState(() => ({ ...tileState, fullscreen: true }));
+      }}
+      className="absolute top-[10px] right-[10px] z-[1] flex h-6 w-6 cursor-pointer items-center justify-center rounded-[8px] bg-[rgba(13,13,13,0.72)] text-white transition-colors duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.92)]"
+    >
+      <Maximize2 className="h-3 w-3" strokeWidth={1.6} aria-hidden="true" />
+    </button>
+  );
+}
 
 function isPlainLeftClick(e: MouseEvent): boolean {
   return e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
@@ -71,6 +117,7 @@ export function CourtTile({
   ariaDescribedBy,
   current = false,
   navigateState,
+  actionSlot,
 }: {
   playerName: string;
   name: string;
@@ -136,6 +183,14 @@ export function CourtTile({
    * place.
    */
   navigateState?: VizState;
+  /**
+   * Task 5's fullscreen-door glyph (`TileFullscreenGlyph`, above) — a
+   * SIBLING of the anchor/static `<div>`, never its child. Omitted in
+   * Manage mode (`manageable-saved-view-tile.tsx` never passes it) and on
+   * the dashed "Create view" tile (`saved-views-band.tsx`'s `NewViewTile`
+   * doesn't render a `CourtTile` at all).
+   */
+  actionSlot?: ReactNode;
 }) {
   const { runCourtMorph, morphTargetKey } = useVizState();
   const reducedMotion = usePrefersReducedMotion();
@@ -264,31 +319,37 @@ export function CourtTile({
 
   if (as === "static") {
     return (
-      <div
-        id={domId}
-        tabIndex={0}
-        role="group"
-        aria-label={name}
-        aria-describedby={ariaDescribedBy}
-        aria-current={current ? "true" : undefined}
-        className={CARD_CLASS}
-        style={ringStyle}
-      >
-        {body}
+      <div className="group relative">
+        <div
+          id={domId}
+          tabIndex={0}
+          role="group"
+          aria-label={name}
+          aria-describedby={ariaDescribedBy}
+          aria-current={current ? "true" : undefined}
+          className={CARD_CLASS}
+          style={ringStyle}
+        >
+          {body}
+        </div>
+        {actionSlot}
       </div>
     );
   }
 
   return (
-    <Link
-      href={href}
-      id={domId}
-      onClick={handleClick}
-      className={CARD_CLASS}
-      style={ringStyle}
-      aria-current={current ? "true" : undefined}
-    >
-      {body}
-    </Link>
+    <div className="group relative">
+      <Link
+        href={href}
+        id={domId}
+        onClick={handleClick}
+        className={CARD_CLASS}
+        style={ringStyle}
+        aria-current={current ? "true" : undefined}
+      >
+        {body}
+      </Link>
+      {actionSlot}
+    </div>
   );
 }
