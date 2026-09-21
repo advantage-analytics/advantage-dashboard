@@ -36,6 +36,14 @@ import { isTextEntry } from "@/lib/ui/is-text-entry";
 import { cn } from "@/lib/utils";
 
 import { AppliedStrip } from "./applied-strip";
+import {
+  bandEditorDirty,
+  bandEditorPayload,
+  bandEditorPreview,
+  initBandEditor,
+  resetBandEditor,
+  type BandEditorState,
+} from "./band-editor-state";
 import { ChartMenu } from "./chart-menu";
 import { APRON_FILL, HEAT_APRON_FILL } from "./court-art";
 import { CutMenu } from "./cut-menu";
@@ -47,6 +55,11 @@ import { isMarkRovingKey } from "./viz-mark-roving";
 import { useVizState } from "./use-viz-state";
 import { useVizView } from "./use-viz-view";
 import { useVizBands } from "./viz-bands-context";
+import {
+  VizBandsEditorBanner,
+  VizBandsEditorHandles,
+  VizBandsEditorSlab,
+} from "./viz-bands-editor";
 import { bandKindFor, VizBandsMenu } from "./viz-bands-menu";
 import type { VizBandsOverlayProps } from "./viz-bands-overlay";
 import { VizFullscreenCourt } from "./viz-fullscreen-court";
@@ -104,7 +117,7 @@ export function VizFullscreen() {
     bands,
     unit,
   } = useVizView();
-  const { contactHidden, receipt } = useVizBands();
+  const { contactHidden, receipt, canEdit, applyBands } = useVizBands();
 
   const rootRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -140,10 +153,81 @@ export function VizFullscreen() {
     setFocusedMarkId(null);
   }, []);
 
+  /* ── Band editor (Phase 2B, Task 4) ───────────────────────────────────── */
+
+  /**
+   * The editor's draft, or `null` outside edit mode. The ONE `editing` flag
+   * below is what every other part of the viewer reads — the pan/zoom lock,
+   * the window key handler, the slab crossfade, the pill, the overlay — so
+   * edit mode cannot be half-on.
+   *
+   * `activeEditor` re-checks the two things that can make an open editor
+   * wrong without anyone closing it: the viewer losing edit rights
+   * (`canEdit`), and the cut no longer having this kind of band. Derived
+   * during render, not reset in an effect.
+   */
+  const [editor, setEditor] = useState<BandEditorState | null>(null);
+  const activeEditor =
+    editor !== null &&
+    canEdit &&
+    cut !== null &&
+    bandKindFor(cut) === editor.kind
+      ? editor
+      : null;
+  const editing = activeEditor !== null;
+
+  /** The bands trigger in the slab — where focus goes back to on exit. */
+  const bandsTriggerRef = useRef<HTMLSpanElement>(null);
+  const returnFocusToBandsRef = useRef(false);
+
+  const updateEditor = useCallback(
+    (fn: (prev: BandEditorState) => BandEditorState) => {
+      setEditor((prev) => (prev === null ? prev : fn(prev)));
+    },
+    [],
+  );
+
+  const exitEdit = useCallback(() => {
+    returnFocusToBandsRef.current = true;
+    setEditor(null);
+  }, []);
+
+  // Leaving edit mode returns focus to the bands trigger. An effect, after
+  // the commit, because the slab's controls are `inert` right up to it and
+  // `focus()` on an inert element is silently a no-op.
+  useEffect(() => {
+    if (editor !== null || !returnFocusToBandsRef.current) return;
+    returnFocusToBandsRef.current = false;
+    bandsTriggerRef.current
+      ?.querySelector<HTMLElement>("button")
+      ?.focus({ preventScroll: true });
+  }, [editor]);
+
   // `usePanZoom` needs a real cut; `shots-tab.tsx` only mounts this alongside
   // one, and the guard below covers the render race. Hooks can't sit behind
-  // that guard, so the fallback keeps the hook order stable.
-  const pz = usePanZoom(cut ?? "serve", stageRef, dropActiveMark);
+  // that guard, so the fallback keeps the hook order stable. `editing` locks
+  // it at the current transform.
+  const pz = usePanZoom(cut ?? "serve", stageRef, dropActiveMark, editing);
+
+  /**
+   * "Edit bands…". Guarded here as well as by the menu's disabled row: a
+   * player can never reach edit mode, whatever calls this.
+   */
+  const enterEdit = useCallback(() => {
+    if (!canEdit || cut === null) return;
+    const kind = bandKindFor(cut);
+    if (kind === null) return;
+    dropActiveMark();
+    setEditor(initBandEditor(kind, bands));
+  }, [canEdit, cut, bands, dropActiveMark]);
+
+  function saveEdit() {
+    if (activeEditor === null || !bandEditorDirty(activeEditor)) return;
+    // The same optimistic, generation-sequenced path a preset pick takes —
+    // the overlay and its `% · n` move on this frame, the receipt follows.
+    applyBands(bandEditorPayload(activeEditor));
+    exitEdit();
+  }
 
   /* ── Bands (Phase 2B) ─────────────────────────────────────────────────── */
 
@@ -160,6 +244,26 @@ export function VizFullscreen() {
    * overlay entirely (and with it, `MarkLayer` draws over bare court).
    */
   const bandOverlay = useMemo<VizBandsOverlayProps | null>(() => {
+    // While editing: the DRAFT, whatever the saved scheme (a "none" record
+    // or hidden contact shading still shows the bands being edited), with no
+    // `% · n` — those were counted against the saved bands.
+    if (activeEditor !== null) {
+      const preview = bandEditorPreview(activeEditor);
+      const kind = activeEditor.kind;
+      return {
+        kind,
+        dividersFt:
+          kind === "depth"
+            ? [activeEditor.draft[0], activeEditor.draft[1]]
+            : [...preview.contactDividersFt],
+        rows:
+          kind === "depth"
+            ? depthBandRows(preview, unit)
+            : contactBandRows(preview, unit),
+        statRows: null,
+        editing: true,
+      };
+    }
     const kind = cut === null ? null : bandKindFor(cut);
     if (kind === null) return null;
     if (kind === "depth" && bands.depthScheme === "none") return null;
@@ -181,7 +285,7 @@ export function VizFullscreen() {
       rows,
       statRows: stats?.groups.find((g) => g.key === "depth")?.rows ?? null,
     };
-  }, [cut, bands, unit, contactHidden, stats]);
+  }, [cut, bands, unit, contactHidden, stats, activeEditor]);
 
   /* ── Exit ─────────────────────────────────────────────────────────────── */
 
@@ -248,6 +352,17 @@ export function VizFullscreen() {
       // A menu or dialog is up: its own keys win, ours stand down.
       if (overlayIsOpen()) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Phase 2B, Task 4: while the band editor is open the viewer's keys
+      // stand down. Esc cancels EDIT MODE (it never exits the viewer from
+      // here), the arrows belong to the focused divider (which stops them
+      // itself) and never pan, and +/-/0 do nothing — the court is locked.
+      if (editing) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          exitEdit();
+        }
+        return;
+      }
       // Final review #3: a mark owns the arrows (and Home/End) while it has
       // focus — they move focus within the mark group, they do not pan the
       // court out from under it. `MarkLayer` also stops propagation, so this
@@ -298,14 +413,17 @@ export function VizFullscreen() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [zoomIn, zoomOut, fit, nudge]);
+  }, [zoomIn, zoomOut, fit, nudge, editing, exitEdit]);
 
   if (cut === null || result === null) {
     // Guarded by `shots-tab.tsx`; only reachable on a render race.
     return null;
   }
 
-  const receiptTakesPillSlot = receipt !== null && !filtersOpen;
+  // While editing the pill slot says so, and nothing else takes it.
+  const showReceipt = receipt !== null && !editing;
+  const receiptTakesPillSlot = showReceipt && !filtersOpen;
+  const pillHidden = editing || receiptTakesPillSlot;
 
   const heat = state.chart === "heat";
   const stageBackground = heat ? HEAT_APRON_FILL : APRON_FILL;
@@ -334,7 +452,10 @@ export function VizFullscreen() {
         <div
           ref={stageRef}
           data-court-stage=""
-          className="absolute inset-0 cursor-grab overflow-clip select-none active:cursor-grabbing"
+          className={cn(
+            "absolute inset-0 overflow-clip select-none",
+            editing ? "cursor-default" : "cursor-grab active:cursor-grabbing",
+          )}
           style={{ touchAction: "none" }}
           onPointerDown={pz.onPointerDown}
           onPointerMove={pz.onPointerMove}
@@ -358,6 +479,17 @@ export function VizFullscreen() {
             onActivate={activateMark}
             onDeactivate={deactivateMark}
             onRove={roveMark}
+            editing={editing}
+            editorLayer={
+              activeEditor !== null ? (
+                <VizBandsEditorHandles
+                  state={activeEditor}
+                  z={pz.t.z}
+                  unit={unit}
+                  update={updateEditor}
+                />
+              ) : null
+            }
           />
 
           {/* Widget states: an honest empty message on the stage, with the
@@ -413,13 +545,15 @@ export function VizFullscreen() {
                 receipt sits BESIDE it instead of over it — the receipt is
                 never withheld, and the filters a coach is in the middle of
                 editing are never yanked away. */}
-            {receipt !== null && <BandsReceipt message={receipt.message} />}
+            {showReceipt && <BandsReceipt message={receipt.message} />}
+            {/* P2m: while editing, the pill reads "Editing bands" — static,
+                not a door into the filters (changing the cut's filters under
+                an open editor would change nothing it edits, and would only
+                muddle what Save means). */}
+            {editing && <EditingBandsPill />}
             <span
-              className={cn(
-                "inline-flex shrink-0",
-                receiptTakesPillSlot && "hidden",
-              )}
-              aria-hidden={receiptTakesPillSlot || undefined}
+              className={cn("inline-flex shrink-0", pillHidden && "hidden")}
+              aria-hidden={pillHidden || undefined}
             >
               <FiltersPopover
                 onOpenChange={setFiltersOpen}
@@ -490,72 +624,100 @@ export function VizFullscreen() {
             </Tooltip>
           </div>
 
+          {activeEditor !== null && (
+            <VizBandsEditorBanner kind={activeEditor.kind} />
+          )}
+
           {/* ── Bottom slab ────────────────────────────────────────────── */}
+          {/* P2m: the slab crossfades to the editor's controls. The viewer's
+              own controls stay MOUNTED underneath (inert, faded out) so the
+              bands trigger is still there to take focus back on exit, and
+              fade back in over 200ms when the editor closes. */}
           <div
             data-chrome=""
-            className="absolute right-5 bottom-4 left-5 flex h-12 min-w-0 items-center gap-2 overflow-hidden rounded-[12px] px-3 backdrop-blur-[8px]"
+            className="absolute right-5 bottom-4 left-5 h-12 min-w-0 overflow-hidden rounded-[12px] backdrop-blur-[8px]"
             style={{ background: "rgba(13,13,13,0.72)" }}
           >
-            <CutMenu
-              savedViews={meta.savedViews}
-              onSaveRequest={() => setSaveDialogOpen(true)}
-              triggerRef={cutMenuTriggerRef}
-              width={312}
-              tone="dark"
-              side="top"
-              showLoadedView
-            />
-            <ChartMenu tone="dark" side="top" />
-            {applied.length > 0 && (
-              <>
-                <SlabDivider />
-                {/* The tokens are the one item allowed to give up width when
+            <div
+              inert={editing}
+              aria-hidden={editing || undefined}
+              className={cn(
+                "flex h-full min-w-0 items-center gap-2 px-3 transition-opacity duration-200 ease-[var(--ease-primary)] motion-reduce:transition-none",
+                editing && "opacity-0",
+              )}
+            >
+              <CutMenu
+                savedViews={meta.savedViews}
+                onSaveRequest={() => setSaveDialogOpen(true)}
+                triggerRef={cutMenuTriggerRef}
+                width={312}
+                tone="dark"
+                side="top"
+                showLoadedView
+              />
+              <ChartMenu tone="dark" side="top" />
+              {applied.length > 0 && (
+                <>
+                  <SlabDivider />
+                  {/* The tokens are the one item allowed to give up width when
                     the slab runs out; everything else is fixed-size chrome. */}
-                <div className="flex min-w-0 shrink overflow-hidden">
-                  <AppliedStrip tone="dark" readOnly={viewIsPristine} />
-                </div>
-              </>
-            )}
-            {/* P2k: the bands control, between the tokens and the spacer.
+                  <div className="flex min-w-0 shrink overflow-hidden">
+                    <AppliedStrip tone="dark" readOnly={viewIsPristine} />
+                  </div>
+                </>
+              )}
+              {/* P2k: the bands control, between the tokens and the spacer.
                 Only the three return cuts have bands — `VizBandsMenu`
                 returns nothing on Serve, so the slab simply doesn't grow a
-                control there. Task 4's drag editor is what `onEdit` will
-                open; it is deliberately unwired until then, and the menu's
-                own "Edit bands…" row already renders disabled for a viewer
-                who cannot change this workspace's bands. */}
-            {bandKindFor(cut) !== null && (
-              <>
-                <SlabDivider />
-                <VizBandsMenu cut={cut} />
-              </>
-            )}
-            <div className="flex-1" />
-            {/* The legend is the first thing to go on a narrow viewport: the
+                control there. `onEdit` opens Task 4's drag editor; the
+                menu's own "Edit bands…" row renders disabled for a viewer
+                who cannot change this workspace's bands, and `enterEdit`
+                refuses them as well. */}
+              {bandKindFor(cut) !== null && (
+                <>
+                  <SlabDivider />
+                  <span ref={bandsTriggerRef} className="contents">
+                    <VizBandsMenu cut={cut} onEdit={enterEdit} />
+                  </span>
+                </>
+              )}
+              <div className="flex-1" />
+              {/* The legend is the first thing to go on a narrow viewport: the
                 court's own colours still read, and every other control is
                 something you cannot operate without. */}
-            <DarkLegend items={legendItemsFor(cut, state.chart)} />
-            <SlabDivider />
-            <ZoomButton
-              label="Zoom out"
-              icon={<Minus className="size-[15px]" strokeWidth={1.7} />}
-              onClick={pz.zoomOut}
-            />
-            <span
-              className="mono tabular text-center text-[11px] text-white/85"
-              style={{ width: ZOOM_READOUT_W }}
-            >
-              {zoomPercentLabel(pz.t.z)}
-            </span>
-            <ZoomButton
-              label="Zoom in"
-              icon={<Plus className="size-[15px]" strokeWidth={1.7} />}
-              onClick={pz.zoomIn}
-            />
-            <ZoomButton
-              label="Fit the court"
-              icon={<Maximize className="size-3.5" strokeWidth={1.6} />}
-              onClick={pz.fit}
-            />
+              <DarkLegend items={legendItemsFor(cut, state.chart)} />
+              <SlabDivider />
+              <ZoomButton
+                label="Zoom out"
+                icon={<Minus className="size-[15px]" strokeWidth={1.7} />}
+                onClick={pz.zoomOut}
+              />
+              <span
+                className="mono tabular text-center text-[11px] text-white/85"
+                style={{ width: ZOOM_READOUT_W }}
+              >
+                {zoomPercentLabel(pz.t.z)}
+              </span>
+              <ZoomButton
+                label="Zoom in"
+                icon={<Plus className="size-[15px]" strokeWidth={1.7} />}
+                onClick={pz.zoomIn}
+              />
+              <ZoomButton
+                label="Fit the court"
+                icon={<Maximize className="size-3.5" strokeWidth={1.6} />}
+                onClick={pz.fit}
+              />
+            </div>
+            {activeEditor !== null && (
+              <VizBandsEditorSlab
+                state={activeEditor}
+                unit={unit}
+                onReset={() => updateEditor(resetBandEditor)}
+                onCancel={exitEdit}
+                onSave={saveEdit}
+              />
+            )}
           </div>
         </div>
 
@@ -606,6 +768,23 @@ function BandsReceipt({ message }: { message: string }) {
       />
       <span className="truncate">{message}</span>
     </div>
+  );
+}
+
+/** P2m: the pill slot while the band editor is open. Not a control. */
+function EditingBandsPill() {
+  return (
+    <span
+      className="inline-flex h-[26px] shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium text-white backdrop-blur-[6px]"
+      style={{ background: "rgba(13,13,13,0.72)" }}
+    >
+      <MoveVertical
+        className="size-3 shrink-0 text-white/70"
+        strokeWidth={1.6}
+        aria-hidden="true"
+      />
+      Editing bands
+    </span>
   );
 }
 

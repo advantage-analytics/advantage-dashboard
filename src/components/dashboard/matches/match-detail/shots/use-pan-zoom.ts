@@ -84,6 +84,16 @@ export function usePanZoom(
    *  back to a mark that is no longer there when the drag ends. Must be
    *  referentially stable. */
   onDragStart?: () => void,
+  /**
+   * Phase 2B, Task 4: the band editor holds the court still. While `true`
+   * the transform is frozen where it is — no pointer pan, no wheel zoom, and
+   * `zoomIn`/`zoomOut`/`fit`/`nudge` are no-ops — so a divider drag can never
+   * move the court out from under the handle, and the editor's px→ft
+   * conversions stay valid for the whole edit. (A stage RESIZE still re-fits:
+   * losing the court off-screen would be worse, and the handles are
+   * positioned from the current zoom on every render, so they follow.)
+   */
+  locked = false,
 ): PanZoomApi {
   const [stage, setStage] = useState<Size>({ w: 0, h: 0 });
   const [t, setT] = useState<PanZoom>({ z: 1, px: 0, py: 0 });
@@ -135,9 +145,9 @@ export function usePanZoom(
   }, [cut, stage]);
 
   const fit = useCallback(() => {
-    if (stage.w === 0 || stage.h === 0) return;
+    if (locked || stage.w === 0 || stage.h === 0) return;
     setT(viewerInitialTransform(cut, stage));
-  }, [cut, stage]);
+  }, [cut, stage, locked]);
 
   /* ── Zoom ──────────────────────────────────────────────────────────────── */
 
@@ -145,11 +155,11 @@ export function usePanZoom(
   // zooms about a cursor.
   const zoomByFactor = useCallback(
     (factor: number) => {
-      if (stage.w === 0 || stage.h === 0) return;
+      if (locked || stage.w === 0 || stage.h === 0) return;
       const centre = { x: stage.w / 2, y: stage.h / 2 };
       setT((prev) => zoomAbout(prev, factor, centre, ART, stage));
     },
-    [stage],
+    [stage, locked],
   );
 
   const zoomIn = useCallback(() => zoomByFactor(BUTTON_STEP), [zoomByFactor]);
@@ -164,6 +174,12 @@ export function usePanZoom(
     if (stage.w === 0 || stage.h === 0) return;
     const onWheel = (e: WheelEvent) => {
       if (isChrome(e.target)) return;
+      if (locked) {
+        // Still swallowed — the page behind the portal must not scroll
+        // either — but the court does not zoom.
+        e.preventDefault();
+        return;
+      }
       // Non-passive, so the page behind the portal never scrolls under the
       // gesture — `{ passive: false }` on the listener is what makes this
       // legal, which is why it isn't React's `onWheel`.
@@ -178,34 +194,37 @@ export function usePanZoom(
     // Re-attached whenever the stage resizes, so the handler always clamps
     // against the CURRENT stage — cheaper than a ref read during render,
     // which the React Compiler rules (rightly) reject.
-  }, [stage, stageRef]);
+  }, [stage, stageRef, locked]);
 
   /* ── Pan ───────────────────────────────────────────────────────────────── */
 
   const nudge = useCallback(
     (dx: number, dy: number) => {
-      if (stage.w === 0 || stage.h === 0) return;
+      if (locked || stage.w === 0 || stage.h === 0) return;
       setT((prev) => panBy(prev, dx, dy, ART, stage));
     },
-    [stage],
+    [stage, locked],
   );
 
   // The press is only RECORDED here. Capture and `panning` wait for the dead
   // zone, below — a press that never moves is a click on whatever is under it.
-  const onPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0 || isChrome(e.target)) return;
-    dragRef.current = {
-      id: e.pointerId,
-      x: e.clientX,
-      y: e.clientY,
-      active: false,
-    };
-  }, []);
+  const onPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (locked || e.button !== 0 || isChrome(e.target)) return;
+      dragRef.current = {
+        id: e.pointerId,
+        x: e.clientX,
+        y: e.clientY,
+        active: false,
+      };
+    },
+    [locked],
+  );
 
   const onPointerMove = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       const drag = dragRef.current;
-      if (drag === null || drag.id !== e.pointerId) return;
+      if (locked || drag === null || drag.id !== e.pointerId) return;
       const dx = e.clientX - drag.x;
       const dy = e.clientY - drag.y;
       if (!drag.active) {
@@ -221,7 +240,7 @@ export function usePanZoom(
       drag.y = e.clientY;
       setT((prev) => panBy(prev, dx, dy, ART, stage));
     },
-    [stage, onDragStart],
+    [stage, onDragStart, locked],
   );
 
   const onPointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {

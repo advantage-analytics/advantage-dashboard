@@ -988,6 +988,60 @@ export function viewerBandEdges(
   return edges;
 }
 
+/* ── The band editor's conversions (Phase 2B, Task 4) ─────────────────────
+ *
+ * The editor's rules are written in SCREEN pixels (a 2 px / 10 px keyboard
+ * nudge, a 26 px minimum gap between dividers) but its reducer works in feet.
+ * These are the only place the two meet, and they share `viewerBandY`'s own
+ * scale so a handle can never drift off the band edge it moves.
+ */
+
+/** ViewBox units in one foot of band depth — `viewerBandY`'s own factor. */
+const BAND_UNITS_PER_FOOT = BAND_METRES_PER_FOOT * SERVE_DEPTH_UNITS_PER_METER;
+
+/**
+ * `viewerBandY`'s inverse: a `VIEWER_COURT.viewBox` y → feet from that
+ * kind's baseline (depth: the FAR baseline, growing toward the net; contact:
+ * the NEAR baseline, positive = behind it). In both halves feet grow DOWN the
+ * frame, so a drag's screen-y delta and its feet delta always share a sign.
+ *
+ * UNCLAMPED, unlike `viewerBandY`: the editor clamps in feet, in its reducer
+ * (`band-editor-state.ts`), where the table's own bounds live.
+ */
+export function viewerBandFtFromY(
+  kind: "depth" | "contact",
+  y: number,
+): number {
+  const origin =
+    kind === "depth" ? VIEWER_COURT.farBaselineY : VIEWER_COURT.nearBaselineY;
+  return (y - origin) / BAND_UNITS_PER_FOOT;
+}
+
+/**
+ * A vertical distance in SCREEN px → feet, at zoom `z`. One viewBox unit is
+ * `(artPx.h * z) / viewBox.h` screen px vertically (the `<svg>` is sized
+ * `artPx * z` with its viewBox held fixed — `viz-fullscreen-court.tsx`), so
+ * the same pixels are fewer feet the further in the viewer is zoomed. Signed.
+ */
+export function viewerScreenPxToFt(px: number, z: number): number {
+  const pxPerUnit = (VIEWER_COURT.artPx.h * z) / VIEWER_COURT.viewBox.h;
+  return px / pxPerUnit / BAND_UNITS_PER_FOOT;
+}
+
+/**
+ * A divider's y inside the court's pan layer (the wrapper the `<svg>` sits
+ * in, `artPx * z` tall), in px — where the editor's HTML handle is drawn.
+ * `viewerArtPoint`'s y, times `z`, so it lands exactly on the overlay's own
+ * band edge (it goes through the same clamped `viewerBandY`).
+ */
+export function viewerBandLayerY(
+  kind: "depth" | "contact",
+  ft: number,
+  z: number,
+): number {
+  return viewerArtPoint(0, viewerBandY(kind, ft)).y * z;
+}
+
 /**
  * The heat blob radius in `VIEWER_COURT`'s own units (Phase 2A, Task 4).
  *

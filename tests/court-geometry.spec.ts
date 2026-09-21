@@ -36,6 +36,10 @@ import {
   lateralToViewBoxX,
   viewerBandY,
   viewerBandEdges,
+  viewerBandFtFromY,
+  viewerBandLayerY,
+  viewerScreenPxToFt,
+  SERVE_DEPTH_UNITS_PER_METER,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
 import { COURT_HALF_FT, resolveDepthDividersFt } from "@/lib/data/viz-bands";
 import {
@@ -1387,5 +1391,100 @@ test.describe("viewerBandEdges", () => {
         expect(edges[i]).toBeGreaterThanOrEqual(edges[i - 1]);
       }
     }
+  });
+});
+
+/**
+ * Phase 2B, Task 4: the band editor's two conversions. `viewerBandFtFromY`
+ * is `viewerBandY`'s inverse (unclamped — the editor clamps in feet, in the
+ * reducer), and `viewerScreenPxToFt` turns the editor's screen-pixel rules
+ * (2 px / 10 px nudges, the 26 px minimum gap) into feet AT THE CURRENT
+ * ZOOM: one viewBox unit is `(artPx.h * z) / viewBox.h` screen px
+ * vertically, and one foot is `0.3048 * SERVE_DEPTH_UNITS_PER_METER` units.
+ */
+test.describe("viewerBandFtFromY", () => {
+  test("round-trips viewerBandY for both kinds inside the viewBox", () => {
+    for (const ft of [-3.5, 0, 0.5, 5, 12.998, 26, 38.5]) {
+      expect(viewerBandFtFromY("depth", viewerBandY("depth", ft))).toBeCloseTo(
+        ft,
+        9,
+      );
+    }
+    for (const ft of [-39, -20, -1.5, 0, 2, 5, 7.5]) {
+      expect(
+        viewerBandFtFromY("contact", viewerBandY("contact", ft)),
+      ).toBeCloseTo(ft, 9);
+    }
+  });
+
+  test("anchors: each half's own baseline is 0 ft", () => {
+    expect(viewerBandFtFromY("depth", VIEWER_COURT.farBaselineY)).toBe(0);
+    expect(viewerBandFtFromY("contact", VIEWER_COURT.nearBaselineY)).toBe(0);
+  });
+
+  test("feet grow DOWN the frame in both halves", () => {
+    expect(viewerBandFtFromY("depth", 100)).toBeGreaterThan(
+      viewerBandFtFromY("depth", 50),
+    );
+    expect(viewerBandFtFromY("contact", 480)).toBeGreaterThan(0);
+    expect(viewerBandFtFromY("contact", 400)).toBeLessThan(0);
+  });
+
+  test("is unclamped (the reducer owns the clamp)", () => {
+    expect(viewerBandFtFromY("depth", -500)).toBeLessThan(-80);
+  });
+});
+
+test.describe("viewerScreenPxToFt", () => {
+  const unitsPerFt = 0.3048 * SERVE_DEPTH_UNITS_PER_METER;
+
+  test("z = 1: px → units → feet", () => {
+    const pxPerUnit = VIEWER_COURT.artPx.h / VIEWER_COURT.viewBox.h;
+    expect(viewerScreenPxToFt(26, 1)).toBeCloseTo(
+      26 / pxPerUnit / unitsPerFt,
+      9,
+    );
+  });
+
+  test("the same pixels are fewer feet when zoomed in", () => {
+    expect(viewerScreenPxToFt(26, 2)).toBeCloseTo(
+      viewerScreenPxToFt(26, 1) / 2,
+      9,
+    );
+    expect(viewerScreenPxToFt(2, 3.2)).toBeLessThan(
+      viewerScreenPxToFt(2, 0.55),
+    );
+  });
+
+  test("sign is preserved (a negative delta is toward the baseline/net)", () => {
+    expect(viewerScreenPxToFt(-10, 1)).toBeCloseTo(
+      -viewerScreenPxToFt(10, 1),
+      12,
+    );
+  });
+
+  test("agrees with viewerBandLayerY: N px apart on screen is N px → ft apart", () => {
+    const z = 1.37;
+    const a = viewerBandLayerY("depth", 10, z);
+    const b = viewerBandLayerY("depth", 10 + viewerScreenPxToFt(40, z), z);
+    expect(b - a).toBeCloseTo(40, 6);
+  });
+});
+
+test.describe("viewerBandLayerY", () => {
+  test("is viewerArtPoint's y for the divider, times z", () => {
+    expect(viewerBandLayerY("depth", 0, 1)).toBeCloseTo(
+      ((VIEWER_COURT.farBaselineY - VIEWER_COURT.viewBox.minY) /
+        VIEWER_COURT.viewBox.h) *
+        VIEWER_COURT.artPx.h,
+      9,
+    );
+    expect(viewerBandLayerY("contact", 0, 2)).toBeCloseTo(
+      2 *
+        ((VIEWER_COURT.nearBaselineY - VIEWER_COURT.viewBox.minY) /
+          VIEWER_COURT.viewBox.h) *
+        VIEWER_COURT.artPx.h,
+      9,
+    );
   });
 });

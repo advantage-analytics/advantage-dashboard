@@ -89,6 +89,17 @@ function bandCaps(row: BandRow): string {
   return `${row.label.toUpperCase()} · ${row.rangeLabel.toUpperCase()}`;
 }
 
+/**
+ * P2m: while the editor is open a band's label reads "DEEP 0–12 ft" — the
+ * caps name, then the range in lower case, so the numbers being dragged read
+ * as numbers rather than as part of a heading. A contact row has no separate
+ * name (its label IS its range), so it prints as written: "0–5 ft behind".
+ */
+function bandEditingLabel(row: BandRow): string {
+  if (row.rangeLabel === row.label) return row.label;
+  return `${row.label.toUpperCase()} ${row.rangeLabel}`;
+}
+
 export interface VizBandsOverlayProps {
   kind: "depth" | "contact";
   /** The scheme's dividers, ascending, feet from the baseline. */
@@ -98,6 +109,14 @@ export interface VizBandsOverlayProps {
   /** The Depth group's rows out of `computeVizStats`, in whatever order it
    *  sorted them into. `null` while there are no stats to print. */
   statRows: StatRow[] | null;
+  /**
+   * Phase 2B, Task 4: the band editor is open and `rows`/`dividersFt` are the
+   * live DRAFT. Labels switch to the editing style, and the `% · n` on the
+   * right is hidden — those numbers were counted against the SAVED bands,
+   * and printing them beside a draft band would claim a rate for a slice of
+   * the court nobody has counted.
+   */
+  editing?: boolean;
 }
 
 export const VizBandsOverlay = memo(function VizBandsOverlay({
@@ -105,6 +124,7 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
   dividersFt,
   rows,
   statRows,
+  editing = false,
 }: VizBandsOverlayProps) {
   const edges = viewerBandEdges(kind, dividersFt);
   // One rect per row, between consecutive edges. A mismatch means a caller
@@ -133,8 +153,9 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
             : (top + bottom) / 2 + 2.2;
 
         const stat = statRows?.find((r) => r.key === row.key) ?? null;
-        const hasRate = stat !== null && stat.count > 0 && stat.winPct !== null;
-        const caps = bandCaps(row);
+        const hasRate =
+          !editing && stat !== null && stat.count > 0 && stat.winPct !== null;
+        const caps = editing ? bandEditingLabel(row) : bandCaps(row);
 
         return (
           <g key={row.key}>

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 import { ZONES, type ZoneKey, type ZoneStats } from "@/lib/data/serve-zones";
 import {
   DARK_READOUT_CLASS,
@@ -92,6 +92,10 @@ const ZONE_COUNT_Y = VIEWER_COURT.netY + 21;
 const DEUCE_LABEL_X = (VIEWER_COURT.singlesLeft + VIEWER_COURT.centreX) / 2;
 const AD_LABEL_X = (VIEWER_COURT.centreX + VIEWER_COURT.singlesRight) / 2;
 
+/** P2m: while the band editor is open the marks (and heat) sit back at 35%
+ *  so the dividers and their labels read first. */
+const EDITING_ART_OPACITY = 0.35;
+
 const HOVER_MARK_R = 2.4;
 const HOVER_HALO_R = 5.6;
 /** The keyboard-only ring, outside the hover halo. */
@@ -160,6 +164,8 @@ export function VizFullscreenCourt({
   onActivate,
   onDeactivate,
   onRove,
+  editing = false,
+  editorLayer = null,
 }: {
   cut: Cut;
   chart: Chart;
@@ -195,6 +201,19 @@ export function VizFullscreenCourt({
   onActivate: (id: string, keyboard: boolean) => void;
   onDeactivate: (id: string) => void;
   onRove: (id: string) => void;
+  /**
+   * Phase 2B, Task 4: the band editor is open. The marks and heat dim to 35%
+   * and stop being interactive (no hover, no focus, no readout) — a hover
+   * card popping up under a divider being dragged would sit on the very line
+   * the coach is placing.
+   */
+  editing?: boolean;
+  /**
+   * The editor's handle layer (`VizBandsEditorHandles`), drawn in THIS
+   * wrapper's px space so it rides the same translate as the art. `null`
+   * outside edit mode.
+   */
+  editorLayer?: ReactNode;
 }) {
   const heat = chart === "heat";
   const showMarks = chart === "scatter";
@@ -205,7 +224,8 @@ export function VizFullscreenCourt({
 
   const highlighted = cut === "serve" ? highlightedZoneKeys(filters) : null;
 
-  const active = panning ? null : (dots.find((d) => d.id === activeId) ?? null);
+  const active =
+    panning || editing ? null : (dots.find((d) => d.id === activeId) ?? null);
   const activeMeta = active?.meta ?? null;
   const readout = activeMeta
     ? buildReadout(activeMeta, { subject: subjectName }, cut)
@@ -305,30 +325,39 @@ export function VizFullscreenCourt({
           <ServeBoxLabels zoneStats={zoneStats} subjectName={subjectName} />
         )}
 
-        {heat && (
-          <HeatLayer
-            cut={cut}
-            dots={dots}
-            project={heatProjectorFor(cut)}
-            radius={VIEWER_HEAT_DOT_RADIUS}
-            region={viewerHeatFilterRegion()}
-          />
-        )}
+        <g
+          opacity={editing ? EDITING_ART_OPACITY : undefined}
+          style={editing ? { pointerEvents: "none" } : undefined}
+          aria-hidden={editing || undefined}
+        >
+          {heat && (
+            <HeatLayer
+              cut={cut}
+              dots={dots}
+              project={heatProjectorFor(cut)}
+              radius={VIEWER_HEAT_DOT_RADIUS}
+              region={viewerHeatFilterRegion()}
+            />
+          )}
 
-        {showMarks && (
-          <MarkLayer
-            cut={cut}
-            dots={dots}
-            subjectName={subjectName}
-            activeId={activeId}
-            focusedId={focusedId}
-            rovingId={rovingId}
-            onActivate={onActivate}
-            onDeactivate={onDeactivate}
-            onRove={onRove}
-          />
-        )}
+          {showMarks && (
+            <MarkLayer
+              cut={cut}
+              dots={dots}
+              subjectName={subjectName}
+              activeId={activeId}
+              focusedId={focusedId}
+              rovingId={rovingId}
+              interactive={!editing}
+              onActivate={onActivate}
+              onDeactivate={onDeactivate}
+              onRove={onRove}
+            />
+          )}
+        </g>
       </svg>
+
+      {editorLayer}
 
       {readout !== null && readoutStyle !== null && (
         <div
@@ -458,6 +487,7 @@ const MarkLayer = memo(function MarkLayer({
   activeId,
   focusedId,
   rovingId,
+  interactive,
   onActivate,
   onDeactivate,
   onRove,
@@ -465,6 +495,9 @@ const MarkLayer = memo(function MarkLayer({
   cut: Cut;
   dots: VizDot[];
   subjectName: string;
+  /** `false` while the band editor is open: no mark is a tab stop, so Tab
+   *  goes from the dividers straight to the slab. */
+  interactive: boolean;
   activeId: string | null;
   focusedId: string | null;
   /** Final review #3: the ONE mark that is a tab stop. `null` means "the
@@ -541,7 +574,7 @@ const MarkLayer = memo(function MarkLayer({
             // Final review #3: a roving tabindex — ONE tab stop for the whole
             // court, not one per mark. On `rallyPosition` that was 150-250
             // Tab presses before a keyboard user reached the View menu.
-            tabIndex={index === rovingIndex ? 0 : -1}
+            tabIndex={interactive && index === rovingIndex ? 0 : -1}
             role="img"
             aria-label={label}
             className="cursor-pointer outline-none"
