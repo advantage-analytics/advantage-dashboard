@@ -871,8 +871,18 @@ export function netGutterFor(
  * still has room to draw before `projectViewerDot`'s clamp kicks in.
  */
 export const VIEWER_COURT = {
-  viewBox: { minX: 93, minY: -30, w: 334, h: 532 },
-  artPx: { w: 595, h: 948 },
+  // The DRAWABLE field: 7 m of apron behind each baseline and 8 m either side
+  // of the centre line. Measured across every tracked shot (2026-09-21):
+  // contacts reach 6.33 m behind the baseline and ±7.18 m laterally, and the
+  // handoff frame's 44-unit apron (≈2.35 m / 7.7 ft) clamped ~9% of all
+  // contact points onto its bottom edge. Landings have wild outliers (tens of
+  // metres long) — those still clamp to this frame.
+  viewBox: { minX: 77, minY: -117, w: 366, h: 706 },
+  // Same 595/334 px-per-unit as the handoff frame, so 100% zoom is unchanged.
+  artPx: { w: 652, h: 1258 },
+  // The handoff frame (P2b): what "Fit the court" frames. The apron beyond it
+  // is reached by panning or zooming out.
+  courtFrame: { minX: 93, minY: -30, w: 334, h: 532 },
   doubles: { x: 135, y: 14, w: 250, h: 444 },
   singlesLeft: 166.25,
   singlesRight: 353.75,
@@ -1235,7 +1245,14 @@ const VIEWER_CONTACT_BASELINE_STAGE_FRACTION = 500 / 950;
  */
 export function viewerInitialTransform(cut: Cut, stage: Size): PanZoom {
   const art = VIEWER_COURT.artPx;
-  const fitZ = Math.min(stage.w / art.w, stage.h / art.h);
+  // Fit the COURT FRAME (the handoff's own view), not the whole drawable
+  // field — the wide apron exists so far-back contacts have somewhere to be,
+  // not to shrink the court at rest.
+  const frame = VIEWER_COURT.courtFrame;
+  const pxPerUnit = art.w / VIEWER_COURT.viewBox.w;
+  const frameW = frame.w * pxPerUnit;
+  const frameH = frame.h * pxPerUnit;
+  const fitZ = Math.min(stage.w / frameW, stage.h / frameH);
   const isLanding = cut === "serve" || cut === "returnPlacement";
   const rawZ = isLanding ? fitZ : fitZ * VIEWER_CONTACT_ZOOM_MULTIPLIER;
   const z = clampNum(rawZ, ZOOM_MIN, ZOOM_MAX);
@@ -1243,8 +1260,12 @@ export function viewerInitialTransform(cut: Cut, stage: Size): PanZoom {
   let px: number;
   let py: number;
   if (isLanding) {
-    px = (stage.w - art.w * z) / 2;
-    py = (stage.h - art.h * z) / 2;
+    const frameCentre = viewerArtPoint(
+      frame.minX + frame.w / 2,
+      frame.minY + frame.h / 2,
+    );
+    px = stage.w / 2 - frameCentre.x * z;
+    py = stage.h / 2 - frameCentre.y * z;
   } else {
     const centre = viewerArtPoint(VIEWER_COURT.centreX, 0);
     const nearBaseline = viewerArtPoint(0, VIEWER_COURT.nearBaselineY);

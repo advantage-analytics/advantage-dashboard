@@ -42,6 +42,7 @@ import {
   viewerBandCaps,
   viewerBandDrawableFt,
   SERVE_DEPTH_UNITS_PER_METER,
+  viewerArtPoint,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
 import { COURT_HALF_FT, resolveDepthDividersFt } from "@/lib/data/viz-bands";
 import {
@@ -987,6 +988,51 @@ test.describe("projectViewerDot — returnContact / rallyPosition (contact, near
 });
 
 /**
+ * The widened apron (2026-09-21): real contact points reach 6.33 m behind
+ * the baseline and ±7.18 m laterally — the old 44-unit apron clamped ~9% of
+ * them onto the bottom edge, drawing them at the same y as much shallower
+ * contacts. `VIEWER_COURT.viewBox` now has 7 m of apron behind each
+ * baseline and 8 m each side, so these no longer collide.
+ */
+test.describe("projectViewerDot — the widened apron draws far-back/far-wide contacts distinctly", () => {
+  test("returnContact: a contact 6.3 m behind the baseline lands strictly inside the viewBox, and strictly deeper (larger y) than one 2.4 m behind it", () => {
+    const vb = VIEWER_COURT.viewBox;
+    const near = projectViewerDot("returnContact", {
+      lateralM: 0,
+      depthM: 2.4,
+      atNet: false,
+    });
+    const far = projectViewerDot("returnContact", {
+      lateralM: 0,
+      depthM: 6.3,
+      atNet: false,
+    });
+    expect(far.y).toBeGreaterThan(vb.minY);
+    expect(far.y).toBeLessThan(vb.minY + vb.h);
+    expect(far.y).toBeGreaterThan(near.y);
+  });
+
+  test("returnContact: laterals ±7.18 m are inside the viewBox horizontally, and land at distinct x from ±7.0 m", () => {
+    const vb = VIEWER_COURT.viewBox;
+    const seven = projectViewerDot("returnContact", {
+      lateralM: 7.0,
+      depthM: 0,
+      atNet: false,
+    });
+    const sevenEighteen = projectViewerDot("returnContact", {
+      lateralM: 7.18,
+      depthM: 0,
+      atNet: false,
+    });
+    for (const { x } of [seven, sevenEighteen]) {
+      expect(x).toBeGreaterThan(vb.minX);
+      expect(x).toBeLessThan(vb.minX + vb.w);
+    }
+    expect(sevenEighteen.x).not.toBe(seven.x);
+  });
+});
+
+/**
  * Mirror invariant (task brief): a dot the in-shell frame draws left/right
  * of its own centre must draw on the SAME side in the viewer. `"contact"`
  * and `"placement"` reach that on-screen sense through DIFFERENT
@@ -1132,24 +1178,39 @@ test.describe("projectViewerDot clamping", () => {
 
 /**
  * Task 2: `viewerInitialTransform` — the fullscreen viewer's seeded pan/zoom
- * per cut. `art` below is `VIEWER_COURT.artPx` (595×948).
+ * per cut. `art` below is `VIEWER_COURT.artPx` (652×1258).
+ *
+ * 2026-09-21: the drawable field (`viewBox`) widened to give far-back
+ * contacts room to draw, but "Fit the court" still lands on
+ * `VIEWER_COURT.courtFrame` — the old, narrower handoff view — not the whole
+ * widened art. `fitZ` below is the frame's own fit scale, computed the same
+ * way `viewerInitialTransform` computes it (frame units × px-per-unit).
  */
 test.describe("viewerInitialTransform", () => {
   const stage = { w: 700, h: 900 };
   const art = VIEWER_COURT.artPx;
-  const fitZ = Math.min(stage.w / art.w, stage.h / art.h);
+  const frame = VIEWER_COURT.courtFrame;
+  const pxPerUnit = art.w / VIEWER_COURT.viewBox.w;
+  const frameWpx = frame.w * pxPerUnit;
+  const frameHpx = frame.h * pxPerUnit;
+  const fitZ = Math.min(stage.w / frameWpx, stage.h / frameHpx);
 
-  test("serve/returnPlacement (landing cuts): fits the whole art, centred on both axes", () => {
+  test("serve/returnPlacement (landing cuts): fits the court FRAME (not the widened art), centred on both axes", () => {
     for (const cut of ["serve", "returnPlacement"] as const) {
       const t = viewerInitialTransform(cut, stage);
       expect(t.z).toBeCloseTo(fitZ, 6);
-      // The art's own centre point lands on the stage's own centre.
-      expect(t.px + (art.w / 2) * t.z).toBeCloseTo(stage.w / 2, 5);
-      expect(t.py + (art.h / 2) * t.z).toBeCloseTo(stage.h / 2, 5);
+      // The frame's own centre point (not the art's) lands on the stage's
+      // own centre.
+      const frameCentre = viewerArtPoint(
+        frame.minX + frame.w / 2,
+        frame.minY + frame.h / 2,
+      );
+      expect(t.px + frameCentre.x * t.z).toBeCloseTo(stage.w / 2, 5);
+      expect(t.py + frameCentre.y * t.z).toBeCloseTo(stage.h / 2, 5);
     }
   });
 
-  test("returnContact/rallyPosition (contact cuts): zooms to 1.6x fit, near baseline at 500/950 of stage height, horizontally centred", () => {
+  test("returnContact/rallyPosition (contact cuts): zooms to 1.6x the FRAME's fit, near baseline at 500/950 of stage height, horizontally centred", () => {
     for (const cut of ["returnContact", "rallyPosition"] as const) {
       const t = viewerInitialTransform(cut, stage);
       expect(t.z).toBeCloseTo(fitZ * 1.6, 6);
@@ -1481,10 +1542,16 @@ test.describe("viewerBandLayerY", () => {
 });
 
 test.describe("viewerBandDrawableFt / capped viewerBandLayerY (fix round 1)", () => {
-  test("contact: the near service line to the bottom of the viewBox", () => {
+  test("contact: the near service line to the bottom of the widened viewBox", () => {
     const [lo, hi] = viewerBandDrawableFt("contact");
     expect(lo).toBeCloseTo(-18.01, 1);
-    expect(hi).toBeCloseTo(7.73, 1);
+    // 2026-09-21: the apron widened from ≈44 units (≈7.7 ft) to reach the
+    // bottom of the new viewBox — the bound must land between 22 and 23.5 ft
+    // and sit on the half-foot grid once the editor rounds it inward
+    // (`bandEditorBounds`, pinned separately in band-editor-state.spec.ts).
+    expect(hi).toBeGreaterThan(22);
+    expect(hi).toBeLessThan(23.5);
+    expect(hi).toBeCloseTo(23.02, 1);
     expect(viewerBandY("contact", lo)).toBeCloseTo(
       VIEWER_COURT.nearServiceY,
       9,
@@ -1506,7 +1573,10 @@ test.describe("viewerBandDrawableFt / capped viewerBandLayerY (fix round 1)", ()
       ((outerCap - VIEWER_COURT.viewBox.minY) / VIEWER_COURT.viewBox.h) *
       VIEWER_COURT.artPx.h;
     expect(viewerBandLayerY("contact", -30, 1)).toBeCloseTo(top, 9);
-    expect(viewerBandLayerY("contact", 20, 1)).toBeCloseTo(bottom, 9);
+    // 2026-09-21: 20 ft used to be past the (≈7.7 ft) outer bound; the
+    // widened apron pushed that bound out to ≈23 ft, so the capping value
+    // has to move past it too — 30 ft is still well past the new bound.
+    expect(viewerBandLayerY("contact", 30, 1)).toBeCloseTo(bottom, 9);
     // …and agrees with the overlay's own edge for an in-range divider.
     const edges = viewerBandEdges("contact", [-5, 3]);
     expect(viewerBandLayerY("contact", -5, 1)).toBeCloseTo(

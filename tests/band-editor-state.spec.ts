@@ -161,16 +161,18 @@ test.describe("clamps", () => {
   test("contact: clamped to the DRAWN range, inside the table's −39…30", () => {
     const s = initBandEditor("contact", CUSTOM);
     expect(setDivider(s, 0, -80, FT).draft[0]).toBe(-18);
-    expect(setDivider(s, 1, 80, FT).draft[1]).toBe(7.5);
+    expect(setDivider(s, 1, 80, FT).draft[1]).toBe(23);
     expect(CONTACT_DATA_BOUNDS_FT).toEqual([-39, 30]);
-    expect(bandEditorBounds("contact")).toEqual([-18, 7.5]);
-    expect(bandEditorBounds("contact", "ft")).toEqual([-18, 7.5]);
+    expect(bandEditorBounds("contact")).toEqual([-18, 23]);
+    expect(bandEditorBounds("contact", "ft")).toEqual([-18, 23]);
   });
 
   test("contact bounds in metres are half-metre grid points, rounded inward", () => {
     const [lo, hi] = bandEditorBounds("contact", "m");
     expect(lo).toBeCloseTo(-5 * FT_PER_M, 9); // −18.01 ft = −5.49 m → −5 m
-    expect(hi).toBeCloseTo(2 * FT_PER_M, 9); // 7.73 ft = 2.36 m → 2 m
+    // 2026-09-21: the widened apron pushed the drawn upper bound from ≈7.73
+    // ft (≈2.36 m → 2 m) out to ≈23.02 ft (≈7.02 m → 7 m).
+    expect(hi).toBeCloseTo(7 * FT_PER_M, 9); // 23.02 ft = 7.02 m → 7 m
   });
 
   test("whatever the drag, the payload always validates", () => {
@@ -378,44 +380,48 @@ test.describe("bandEditorDraftScheme", () => {
 });
 
 test.describe("fix round 1: the drawn contact range", () => {
-  test("a drag past 7.7 ft stops at 7.5, and the 26 px gap still holds", () => {
+  // 2026-09-21: the widened apron pushed the drawn upper bound from 7.5 ft
+  // out to 23 ft (`bandEditorBounds("contact", "ft")`, above) — every
+  // scenario below still exercises the SAME "stops at the drawn bound"
+  // property, just with fixtures far enough past 23 ft to still clamp there.
+  test("a drag far past the bound stops at 23, and the 26 px gap still holds", () => {
     const ctx: BandEditorContext = { unit: "ft", minGapFt: 2.6 };
     const s = initBandEditor("contact", DEFAULT_BANDS, ctx); // [0, 5]
-    const pastLower = setDivider(s, 0, 9, ctx);
-    expect(pastLower.draft).toEqual([4.5, 7.5]);
+    const pastLower = setDivider(s, 0, 100, ctx);
+    expect(pastLower.draft).toEqual([20, 23]);
     expect(pastLower.draft[1] - pastLower.draft[0]).toBeGreaterThanOrEqual(2.6);
-    const pastUpper = setDivider(s, 1, 12, ctx);
-    expect(pastUpper.draft).toEqual([0, 7.5]);
+    const pastUpper = setDivider(s, 1, 100, ctx);
+    expect(pastUpper.draft).toEqual([0, 23]);
   });
 
   test("↓ held at the bound stays put (and never walks past it)", () => {
     const ctx: BandEditorContext = { unit: "ft", minGapFt: 2.6 };
     let s = initBandEditor("contact", DEFAULT_BANDS, ctx);
-    for (let i = 0; i < 40; i++) s = nudgeDivider(s, 1, 0.2, ctx);
-    expect(s.draft[1]).toBe(7.5);
+    for (let i = 0; i < 90; i++) s = nudgeDivider(s, 1, 0.2, ctx);
+    expect(s.draft[1]).toBe(23);
     const held = nudgeDivider(s, 1, 0.2, ctx);
     expect(held).toBe(s);
     // The lower divider pushed down into it stops a gap short, on the grid.
-    for (let i = 0; i < 80; i++) s = nudgeDivider(s, 0, 1, ctx);
-    expect(s.draft).toEqual([4.5, 7.5]);
+    for (let i = 0; i < 160; i++) s = nudgeDivider(s, 0, 1, ctx);
+    expect(s.draft).toEqual([20, 23]);
   });
 
-  test("a saved [−25, 20] contact pair opens clamped, and is clean until moved", () => {
+  test("a saved [−25, 29] contact pair opens clamped, and is clean until moved", () => {
     const saved: BandSettings = {
       ...DEFAULT_BANDS,
-      contactDividersFt: [-25, 20],
+      contactDividersFt: [-25, 29],
     };
     const ctx: BandEditorContext = { unit: "ft", minGapFt: 2.6 };
     const s = initBandEditor("contact", saved, ctx);
-    expect(s.initial).toEqual([-18, 7.5]);
-    expect(s.draft).toEqual([-18, 7.5]);
+    expect(s.initial).toEqual([-18, 23]);
+    expect(s.draft).toEqual([-18, 23]);
     // Opening on it is not a change: Save stays dead, nothing is written.
     expect(bandEditorDirty(s)).toBe(false);
     expect(bandEditorPayload(s)).toBe(saved);
     // A real move writes the drawn (clamped) pair — valid for the table.
     const moved = setDivider(s, 0, -10, ctx);
     expect(bandEditorDirty(moved)).toBe(true);
-    expect(bandEditorPayload(moved).contactDividersFt).toEqual([-10, 7.5]);
+    expect(bandEditorPayload(moved).contactDividersFt).toEqual([-10, 23]);
     // Dragging back to the clamped start is clean again.
     expect(bandEditorDirty(setDivider(moved, 0, -18, ctx))).toBe(false);
   });
@@ -423,10 +429,10 @@ test.describe("fix round 1: the drawn contact range", () => {
   test("a saved pair entirely past the drawn range opens as two distinct lines", () => {
     const saved: BandSettings = {
       ...DEFAULT_BANDS,
-      contactDividersFt: [20, 25],
+      contactDividersFt: [25, 29],
     };
     const s = initBandEditor("contact", saved, { unit: "ft", minGapFt: 2.6 });
-    expect(s.draft[1]).toBe(7.5);
+    expect(s.draft[1]).toBe(23);
     expect(s.draft[1] - s.draft[0]).toBeGreaterThanOrEqual(2.6);
     expect(bandEditorDirty(s)).toBe(false);
   });
@@ -509,8 +515,9 @@ test.describe("final review: metric bounds are grid positions", () => {
     expect(s.draft[0] / FT_PER_M).toBeCloseTo(0.5, 9);
   });
 
-  test("feet bounds are unchanged", () => {
+  test("feet bounds: depth is unchanged; contact's upper bound moved with the widened apron", () => {
     expect(bandEditorBounds("depth", "ft")).toEqual([0.5, 38.5]);
-    expect(bandEditorBounds("contact", "ft")).toEqual([-18, 7.5]);
+    // 2026-09-21: was [-18, 7.5] before the apron widened.
+    expect(bandEditorBounds("contact", "ft")).toEqual([-18, 23]);
   });
 });
