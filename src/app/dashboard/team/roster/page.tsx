@@ -224,6 +224,7 @@ async function RosterContent({
           buttons={{
             managedPlayers,
             seats: roster.seats,
+            openInviteEmails: [],
             roster: players,
             playersCanUpload: roster.playersCanUpload,
             former,
@@ -323,6 +324,7 @@ async function RosterContent({
     <RosterHeaderButtons
       managedPlayers={managedPlayers}
       seats={roster.seats}
+      openInviteEmails={roster.invites.map((invite) => invite.email)}
       roster={players}
       playersCanUpload={roster.playersCanUpload}
       former={former}

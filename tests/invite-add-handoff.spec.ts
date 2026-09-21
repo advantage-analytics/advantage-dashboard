@@ -147,9 +147,14 @@ test('the invitation path is untouched — "Someone new" still sends', () => {
   expect(INVITE).toMatch(
     /const result = await inviteMember\(\{\s*email: address,\s*role,\s*playerId: target\?\.profileId \?\? null,\s*\}\);/,
   );
-  // Readiness is still "there is an address and nothing in flight" — the offer
-  // added no condition to it.
-  expect(INVITE).toContain("const ready = addresses.length > 0 && !pending;");
+  // Readiness is "there is an address, nothing in flight, and the list fits
+  // the free seats" — the offer added no condition to it. The seat clause came
+  // with the seat rule (2026-09-21): a pasted list larger than what is free
+  // used to send its first address and refuse the rest one by one.
+  expect(INVITE).toContain(
+    "const ready = addresses.length > 0 && !pending && !overCap;",
+  );
+  expect(INVITE).toContain("const overCap = newSeats > remaining;");
   expect(INVITE).toContain('"Send invite"');
 });
 

@@ -44,6 +44,7 @@ export function RosterHeaderButtonsPending() {
 export function RosterHeaderButtons({
   managedPlayers,
   seats,
+  openInviteEmails,
   roster,
   playersCanUpload,
   former,
@@ -51,6 +52,8 @@ export function RosterHeaderButtons({
   /** Coach-managed rows, so an invitation can target one instead of duplicating it. */
   managedPlayers: ManagedPlayer[];
   seats: SeatUsage;
+  /** Open invitations' addresses, so the dialog can tell a resend from a new seat. */
+  openInviteEmails: readonly string[];
   /**
    * The program's upload permission — the rule the invitations arrive under,
    * which the invite dialog both states and lets a coach change on the spot.
@@ -144,6 +147,7 @@ export function RosterHeaderButtons({
         initialTarget={claimTarget}
         managedPlayers={managedPlayers}
         seats={seats}
+        openInviteEmails={openInviteEmails}
         playersCanUpload={playersCanUpload}
         onHandOffToAddPlayer={handOffToAddPlayer}
       />

@@ -27,6 +27,9 @@ import { hashToken, generateToken } from "@/lib/services/programs/tokens";
  * The program is created with TWO seats so the cap is reachable in three
  * writes. Everything is named with a per-run marker and deleted in `afterAll`.
  *
+ * `20260921060000_seats_count_contributed_players.sql` rides along: rows another
+ * program contributed count too.
+ *
  * Run on demand:  npx playwright test tests/seats-count-players.spec.ts
  */
 
@@ -46,6 +49,8 @@ test.describe("seats count roster players (live DB)", () => {
   let claimant: Session;
   let claimantEmail: string;
   let programId: string;
+  /** A second program, only so a row can name a contributor that is not itself. */
+  let contributorId: string;
   let firstPlayer: string;
 
   const authUserIds: string[] = [];
@@ -96,6 +101,24 @@ test.describe("seats count roster players (live DB)", () => {
     if (program.error) throw new Error(`program: ${program.error.message}`);
     programId = program.data.id;
 
+    // `program_players_contributor_check`: a row cannot be contributed by the
+    // program it belongs to, so the contributed-row test needs a second one.
+    const contributor = await admin
+      .from("programs")
+      .insert({
+        program_key: `${MARK}-opp`,
+        school_group: `${MARK}-opp`,
+        school_name: `Seat Rule Opponent ${MARK}`,
+        team: "mens",
+        seats: 25,
+      })
+      .select("id")
+      .single();
+    if (contributor.error) {
+      throw new Error(`contributor: ${contributor.error.message}`);
+    }
+    contributorId = contributor.data.id;
+
     const member = await admin.from("program_members").insert({
       program_id: programId,
       user_id: owner.userId,
@@ -117,6 +140,9 @@ test.describe("seats count roster players (live DB)", () => {
       await admin.from("program_players").delete().eq("program_id", programId);
       await admin.from("program_members").delete().eq("program_id", programId);
       await admin.from("programs").delete().eq("id", programId);
+    }
+    if (contributorId) {
+      await admin.from("programs").delete().eq("id", contributorId);
     }
     await deleteAuthUsers(admin, authUserIds);
   });
@@ -213,6 +239,23 @@ test.describe("seats count roster players (live DB)", () => {
       p_player_id: firstPlayer,
     });
     expect(restored.error?.code).toBe(PROGRAM_LIMIT);
+  });
+
+  test("a row another program contributed holds a seat like any other", async () => {
+    // Locks `20260921060000`: contributed rows show on the roster and can be
+    // claimed, so they count. Inserted as service role — the RPC that mints
+    // them refuses a program with members, which this one has. The program is
+    // full here (Seat Two + the open invitation), so the count goes OVER the
+    // cap rather than being refused: inheriting a roster is not an add.
+    const contributed = await admin.from("program_players").insert({
+      program_id: programId,
+      first_name: "Seat",
+      last_name: "Contributed",
+      contributed_by_program_id: contributorId,
+    });
+    expect(contributed.error).toBeNull();
+
+    expect(await usage()).toEqual({ seats: 2, used: 2, pending: 1 });
   });
 
   test("the counting helper is not callable through the API", async () => {

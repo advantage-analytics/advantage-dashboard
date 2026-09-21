@@ -339,9 +339,10 @@ async function readMembers(
  * The seat ledger, reproducing `program_seat_usage` exactly:
  *   seats   — `programs.seats` (the live seat-count column; there is no
  *             separate entitlements table)
- *   used    — live `program_players` rows: not archived, not merged, not
- *             contributed by another program. A seat is a player on the
- *             roster, login or not (2026-09-20); staff hold none.
+ *   used    — live `program_players` rows: not archived, not merged —
+ *             contributed rows included, since they show on the roster and
+ *             can be claimed. A seat is a player on the roster, login or not
+ *             (2026-09-20); staff hold none.
  *   pending — `program_invites` with `accepted_at is null` AND
  *             `expires_at > now()`, to somebody NEW as a player
  *             (`role = 'player'`, `player_id is null`) — a claim invitation's
@@ -364,8 +365,7 @@ async function readSeatUsage(
       .select("id", { count: "exact", head: true })
       .eq("program_id", programId)
       .is("archived_at", null)
-      .is("merged_into_id", null)
-      .is("contributed_by_program_id", null),
+      .is("merged_into_id", null),
     admin
       .from("program_invites")
       .select("id", { count: "exact", head: true })

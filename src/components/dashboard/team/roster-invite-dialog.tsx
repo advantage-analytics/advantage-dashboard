@@ -98,6 +98,7 @@ export function RosterInviteDialog({
   onOpenChange,
   managedPlayers,
   seats,
+  openInviteEmails = [],
   playersCanUpload,
   /** Preselect a row, e.g. from a roster row's "invite to claim" affordance. */
   initialTarget = null,
@@ -134,6 +135,13 @@ export function RosterInviteDialog({
   onOpenChange: (open: boolean) => void;
   managedPlayers: ManagedPlayer[];
   seats: SeatUsage;
+  /**
+   * Addresses with an open invitation already. Sending to one again is a
+   * RESEND — `create_program_invite` excludes it from the pending count — so
+   * it must not be counted as a new seat here either, or the over-cap block
+   * below would refuse a resend the database accepts.
+   */
+  openInviteEmails?: readonly string[];
   /**
    * The program's current upload permission. The dialog states the rule at the
    * moment it becomes true for somebody, so the switch beside that sentence has
@@ -416,7 +424,19 @@ export function RosterInviteDialog({
   }
 
   const remaining = Math.max(0, seats.seats - seats.used - seats.pending);
-  const ready = addresses.length > 0 && !pending;
+  // Seats this send would newly take: only somebody NEW invited as a player
+  // reserves one (a claim's row already holds its seat, staff hold none), and
+  // a resend to an address already holding a reservation takes nothing more.
+  const held = new Set(openInviteEmails.map((e) => e.toLowerCase()));
+  const newSeats =
+    linked || role === "staff"
+      ? 0
+      : addresses.filter((a) => !held.has(a.toLowerCase())).length;
+  // A pasted list larger than what is free used to read "24 → 27 / 25" with no
+  // warning, send the first address and refuse the rest one by one. Refused
+  // here instead, before anything is sent — the database still re-checks.
+  const overCap = newSeats > remaining;
+  const ready = addresses.length > 0 && !pending && !overCap;
 
   return (
     <RosterDialog
@@ -834,16 +854,43 @@ export function RosterInviteDialog({
                 <Users className="size-3.5" strokeWidth={1.5} aria-hidden />
               }
               lead={
-                addresses.length > 1
-                  ? `Uses ${addresses.length} seats now.`
-                  : "Uses a seat now."
+                overCap
+                  ? remaining === 0
+                    ? "No seats free."
+                    : `Only ${remaining} ${remaining === 1 ? "seat is" : "seats are"} free.`
+                  : newSeats === 0 && addresses.length > 0
+                    ? "No new seat."
+                    : newSeats > 1
+                      ? `Uses ${newSeats} seats now.`
+                      : "Uses a seat now."
               }
               seats={seats}
-              adding={Math.max(1, addresses.length)}
+              // Never draw more than fit: the boxes stop at the cap, and the
+              // sentence carries the overflow.
+              adding={
+                overCap
+                  ? 0
+                  : newSeats === 0 && addresses.length > 0
+                    ? 0
+                    : Math.max(1, newSeats)
+              }
             >
-              {addresses.length > 1 ? "They are" : "It is"} held while the
-              invitation is open and freed if you revoke it.
-              {remaining === 0 && " None are free."}
+              {overCap ? (
+                <>
+                  This would invite <span className="tabular">{newSeats}</span>{" "}
+                  new {newSeats === 1 ? "player" : "players"}. Remove{" "}
+                  <span className="tabular">{newSeats - remaining}</span> from
+                  the list, or free a seat by removing a player or revoking an
+                  invitation.
+                </>
+              ) : newSeats === 0 && addresses.length > 0 ? (
+                "This address already holds one — sending again is a resend."
+              ) : (
+                <>
+                  {newSeats > 1 ? "They are" : "It is"} held while the
+                  invitation is open and freed if you revoke it.
+                </>
+              )}
             </SeatNote>
           )}
         </>

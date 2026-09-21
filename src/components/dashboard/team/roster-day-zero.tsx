@@ -83,6 +83,8 @@ function GhostRow({ opacity }: { opacity: number }) {
 export interface RosterDayZeroButtons {
   managedPlayers: ManagedPlayer[];
   seats: SeatUsage;
+  /** Day zero has no invitations by definition; the page passes `[]`. */
+  openInviteEmails: readonly string[];
   roster: RosterMember[];
   playersCanUpload: boolean;
   /** Forwarded to `RosterHeaderButtons` — see its own doc comment. */
