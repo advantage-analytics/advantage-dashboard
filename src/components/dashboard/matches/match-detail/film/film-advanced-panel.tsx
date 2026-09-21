@@ -26,8 +26,9 @@ import {
  *
  * Not a dialog and not a popover: the caller swaps this in where the list was,
  * so the film keeps playing behind every filter operation and there is nothing
- * to trap focus in. `film-advanced-filters-dialog.tsx` is the fullscreen room's
- * modal and is untouched by this file.
+ * to trap focus in. That holds in the fullscreen room too (frame R4) — it
+ * opens in the drawer's own column through the same branch, never as a modal
+ * over the film — which is why the room's old dialog is gone.
  *
  * ── Why a pill for every option ─────────────────────────────────────────────
  * Fourteen axes in a 320px column cannot afford one row per option, and the

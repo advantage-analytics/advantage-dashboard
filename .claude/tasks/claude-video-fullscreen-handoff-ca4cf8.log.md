@@ -112,3 +112,15 @@ is the runner's. Newest entries at the bottom.
 **gate:** mechanical pass on re-run — the full suite's one failure was again the intermittent live-database `tests/match-video-attachments-db.spec.ts:3225`; this task is two new files nothing imports, and the test passed when re-run alone · completion `VERDICT: pass`
 
 **changed:** New import-free `film/film-room-prefs.ts`: three `film-room:` storage keys (court on, court mode, drawer open), pure parsers that fall back to `true` / `"point"` / `false` on anything unrecognised, read/write helpers that wrap every `localStorage` access in try/catch, and `roomParam(params, open)`, which sets or deletes `fullscreen` on a fresh copy of the query string and tolerates null. Booleans are stored as `"1"` / `"0"`. `tests/film-room-prefs.spec.ts` covers defaults, one accepted and one rejected value per parser, and a round trip that keeps `tab=film&cut=break` intact.
+
+## T9 · Swap the room's drawer to PointList tone="dark" and delete the duplicates — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** New `film/film-room-drawer.tsx` holds the 320px `<aside>` shell moved out of the old panel — surface, hairline, shadow, the translate slide with its reduced-motion fade, `data-state`, `data-film-chrome`, `onTransitionEnd` → `onExited` — and renders only `PointList tone="dark"` with the collapse button and the shots well. Advanced opens in the drawer's own column; its open flag and section state live in the drawer. `film-point-panel.tsx` and `film-advanced-filters-dialog.tsx` are deleted (about 1,000 lines), and no reference to either survives under `src/` or `tests/`, comments included. `FilmFullscreenProps` drops `tab` / `onTabChange`; `film-tab.tsx` drops its tab state and hands the room the same filtered points the shell list gets. The drawer's open state initialises from `readDrawerOpen()` and is written on open and collapse; neither handler touches playback.
+
+**follow-ups:**
+
+1. A persisted-open drawer now slides in while the room is still growing; worth a look once the court shares that screen.
+2. The `aside` ("Points") and the `PointList` section inside it ("Point list") are two nested landmarks with near-identical names.
+3. `FilmFullscreenProps.visiblePoints` is now always the same array as the filtered points; it could collapse into one prop.

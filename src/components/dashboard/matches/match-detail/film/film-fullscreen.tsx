@@ -24,7 +24,8 @@ import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
 import type { FilmFilters } from "./film-filters";
-import { FilmPointPanel } from "./film-point-panel";
+import { FilmRoomDrawer } from "./film-room-drawer";
+import { readDrawerOpen, writeDrawerOpen } from "./film-room-prefs";
 import { boardAt, type BoardColumns } from "./film-score";
 import { FilmScoreboard } from "./film-scoreboard";
 import { useFilmClockVars } from "./film-clock";
@@ -125,8 +126,6 @@ export interface FilmFullscreenProps {
   visiblePoints: MatchPoint[];
   filters: FilmFilters;
   onFiltersChange: (filters: FilmFilters) => void;
-  tab: "points" | "saved";
-  onTabChange: (tab: "points" | "saved") => void;
   onToggleSaved: (pointId: string) => void;
   onExit: (state: { time: number; playing: boolean }) => void;
   /** The report player's frame on screen — where the room grows from and returns to. */
@@ -192,7 +191,12 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   // Placeholder for the court toggle so the transport's control is live now.
   // T12 replaces it with the persisted preference and the court itself.
   const [courtOn, setCourtOn] = useState(true);
-  const [panel, setPanel] = useState<PanelState>("closed");
+  // Open or closed is a viewer preference (spec: Persistence is localStorage),
+  // read once in a lazy initializer so a blocked-storage throw costs nothing
+  // per render. A drawer that was left open opens with the room.
+  const [panel, setPanel] = useState<PanelState>(() =>
+    readDrawerOpen() ? "open" : "closed",
+  );
   const panelOpen = panel === "open";
   const [videoReady, setVideoReady] = useState(false);
 
@@ -208,6 +212,18 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     );
     return () => window.clearTimeout(timer);
   }, [panel]);
+
+  // Opening and collapsing the drawer touch the drawer and the preference and
+  // nothing else — no `pause()`, no `load()`, no seek. The film keeps playing
+  // through the slide (spec: "Rules that apply to every task").
+  const openPanel = useCallback(() => {
+    setPanel("open");
+    writeDrawerOpen(true);
+  }, []);
+  const collapsePanel = useCallback(() => {
+    setPanel("closing");
+    writeDrawerOpen(false);
+  }, []);
   // Set while the room is shrinking back into the report; everything that
   // would start a second exit or a new interaction checks it.
   const leavingRef = useRef(false);
@@ -856,7 +872,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
             <button
               data-film-chrome
               type="button"
-              onClick={() => setPanel("open")}
+              onClick={openPanel}
               aria-expanded={panelOpen}
               aria-hidden={panelOpen ? true : undefined}
               tabIndex={panelOpen ? -1 : undefined}
@@ -926,23 +942,19 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
             </div>
 
             {panel !== "closed" && (
-              <FilmPointPanel
+              <FilmRoomDrawer
                 state={panel}
                 onExited={() => setPanel("closed")}
+                onCollapse={collapsePanel}
                 allPoints={p.allPoints}
                 visiblePoints={p.visiblePoints}
                 filters={p.filters}
                 onFiltersChange={p.onFiltersChange}
-                tab={p.tab}
-                onTabChange={p.onTabChange}
                 activePointId={activePoint?.id ?? null}
                 activeStart={active?.stop.start ?? 0}
                 activeEnd={active?.stop.end ?? 0}
-                position={position}
-                columns={p.columns}
                 onSelect={selectPoint}
                 onToggleSaved={p.onToggleSaved}
-                onClose={() => setPanel("closing")}
                 shotStops={shotStops}
                 activeShotId={activeShot?.stop.shot.id ?? null}
                 onSelectShot={selectShot}

@@ -28,8 +28,8 @@ import {
 /**
  * The Film room's point list (artboard 46c, lines 845–1131).
  *
- * Rows are grouped by GAME and headed the way the fullscreen room's panel
- * heads them (`film-point-panel.tsx`): "SET 3 · GAME 7" on the left, the
+ * Rows are grouped by GAME and headed the way the fullscreen room's drawer
+ * heads them: "SET 3 · GAME 7" on the left, the
  * you-first game score and "Reid serves" on the right. Two things about that
  * header are load-bearing:
  *
@@ -303,8 +303,8 @@ export const PointList = memo(function PointList({
   // Moves this scroller's own `scrollTop` and nothing else. The DOM's
   // scroll-an-element-into-view method walks every ancestor instead, and while
   // the room's drawer is still off-canvas mid-slide that dragged the whole
-  // room — video included — sideways toward the row (`film-point-panel.tsx`
-  // hit exactly that).
+  // room — video included — sideways toward the row. The room's retired dark
+  // list hit exactly that, which is why the rule is written down here.
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const list = listRef.current;
@@ -646,7 +646,7 @@ export const PointRow = memo(function PointRow({
 
       {showPointScore && (
         <span
-          // The room's row (film-point-panel.tsx `PanelRow`): the score slides
+          // The room's row hover (handoff F3): the score slides
           // 26px left on hover to make room for the bookmark fading in over
           // the row's right edge — same distance, same 200ms, every row.
           className={cn(

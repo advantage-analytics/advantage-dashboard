@@ -50,8 +50,8 @@ const FilmFullscreen = dynamic(loadFilmFullscreen, { ssr: false });
  * fullscreen room it opens into.
  *
  * This component owns the state the player, the list and the fullscreen have
- * to agree on: the points and their saved flags, the applied filter, the tab,
- * and the report player's playhead. The children stay dumb about each other —
+ * to agree on: the points and their saved flags, the applied filter, and the
+ * report player's playhead. The children stay dumb about each other —
  * the list asks for a seek, the player reports where it got to, and the
  * mapping from a playhead position to "which row is playing" happens once,
  * over the whole timeline, in `film-timeline.ts`.
@@ -152,7 +152,6 @@ function FilmRoom({
   // panel, so a reopen finds the sections as they were left.
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [openSections, setOpenSections] = useState<FilmSectionId[]>([]);
-  const [tab, setTab] = useState<"points" | "saved">("points");
   const [currentTime, setCurrentTime] = useState(0);
   const [room, setRoom] = useState<{ time: number; playing: boolean } | null>(
     null,
@@ -241,12 +240,6 @@ function FilmRoom({
   const filteredPoints = useMemo(
     () => applyFilmFilters(points, filters, youIsPlayer1),
     [points, filters, youIsPlayer1],
-  );
-
-  const visiblePoints = useMemo(
-    () =>
-      tab === "saved" ? filteredPoints.filter((p) => p.saved) : filteredPoints,
-    [filteredPoints, tab],
   );
 
   const walkStops = useMemo(() => {
@@ -544,11 +537,10 @@ function FilmRoom({
         <div className="flex min-h-0 flex-1 flex-col @min-[720px]:absolute @min-[720px]:inset-0">
           <PointList
             allPoints={points}
-            // The in-shell list is no longer split into Points/Saved tabs:
-            // "Saved only" is an axis of the cut itself (`filters.savedOnly`),
-            // so the list renders exactly what the filters admit. The
-            // fullscreen room below still has its own tabs, and still gets
-            // the tab-scoped `visiblePoints`.
+            // Neither list is split into Points/Saved tabs any more: "Saved
+            // only" is an axis of the cut itself (`filters.savedOnly`), so
+            // both render exactly what the filters admit — this column and
+            // the room's drawer off the very same array.
             visiblePoints={filteredPoints}
             filters={filters}
             onFiltersChange={setFilters}
@@ -583,11 +575,12 @@ function FilmRoom({
           walkStops={walkStops}
           columns={columns}
           allPoints={points}
-          visiblePoints={visiblePoints}
+          // One cut, one array: the room's drawer is the same list this
+          // column draws (`PointList tone="dark"`), so it is handed the same
+          // filter-applied points rather than a tab-scoped slice of its own.
+          visiblePoints={filteredPoints}
           filters={filters}
           onFiltersChange={setFilters}
-          tab={tab}
-          onTabChange={setTab}
           onToggleSaved={handleToggleSaved}
           onExit={exitRoom}
           onHandoff={handoff}

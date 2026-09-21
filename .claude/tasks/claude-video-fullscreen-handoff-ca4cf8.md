@@ -126,7 +126,7 @@ ready).
 
 ## T9 · Swap the room's drawer to PointList tone="dark" and delete the duplicates
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T7, T8, T11
 - **files:** (guess) film/film-room-drawer.tsx (new), film/film-fullscreen.tsx (drawer mount + props only), film/film-tab.tsx (FilmFullscreen call site + `tab` state), film/film-point-panel.tsx (delete), film/film-advanced-filters-dialog.tsx (delete)
