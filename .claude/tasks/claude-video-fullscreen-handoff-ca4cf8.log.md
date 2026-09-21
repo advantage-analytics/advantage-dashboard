@@ -266,3 +266,13 @@ is the runner's. Newest entries at the bottom.
 2. `ball-paths-access.ts` has the same uploader-left drift: it recomputes the key from the current `created_by`, so a retained team match whose uploader left reads empty. The sibling-of-results rule would fix it.
 3. `rollbackCreatedMatch` in the upload wizard deletes a match row from the browser without purging; probably before any delivery, unverified. `resubmit-job.ts` may strand a previous delivery's files.
 4. A recorded `ball_paths_object_key` column would retire the two-candidate guess.
+
+## T24 · Pin the orphan sweeper's coverage of every results-bucket file type — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** The sweeper already attributed players, trajectories and ball-paths files — `attributeKey` judges a key by segment count, prefix and the match-id segment, never the file name — so this was pinning, not a behaviour change. `RESULTS_LAYOUTS` in `scripts/orphan-attribution.ts` now derives one layout from each of the four real key builders, so a drifted builder fails loudly; the three new layouts have the same shape as the old one and cannot newly attribute anything. New spec cases pin `.ball-paths.json`, all four file types under the `former-member` segment, a five-segment key returning null, and the three `orphaned/…` fallback keys returning null — asserted through `selectDeliveryStorageKeys`, with the reason documented beside the layouts. `scripts/cleanup-orphan-storage.ts` has no diff and was not run.
+
+**follow-ups:**
+
+1. `orphaned/…` keys have no safe orphan rule: a delivery not yet adopted looks exactly like a dead one, and nothing in the repo bounds how long adoption may take. A retention rule needs a number from the author.

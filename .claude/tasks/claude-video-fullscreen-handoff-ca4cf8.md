@@ -331,7 +331,7 @@ ready).
 
 ## T24 · Pin the orphan sweeper's coverage of every results-bucket file type
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) `scripts/orphan-attribution.ts`, `tests/cleanup-orphan-attribution.spec.ts`; comment-only in `scripts/cleanup-orphan-storage.ts`
 - **done when:**

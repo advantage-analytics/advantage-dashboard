@@ -6,6 +6,11 @@ import {
   RESULTS_LAYOUTS,
   VIDEO_LAYOUTS,
 } from "../scripts/orphan-attribution";
+import { selectDeliveryStorageKeys } from "../src/lib/services/splitstep/delivery-storage-keys";
+import {
+  ballPathsObjectKey,
+  ballPathsUserSegment,
+} from "../src/lib/services/splitstep/object-keys";
 
 /**
  * `cleanup-orphan-storage.ts --apply` deletes what it cannot attribute to a
@@ -50,6 +55,33 @@ test.describe("layouts each store writes are attributed to their match", () => {
         RESULTS_LAYOUTS,
       ),
     ).toBe(MATCH);
+    expect(
+      attributeKey(
+        `results/${USER}/${MATCH}/${JOB}.ball-paths.json`,
+        RESULTS_LAYOUTS,
+      ),
+    ).toBe(MATCH);
+  });
+
+  test("all four result file types still attribute when the uploader has left", () => {
+    const former = selectDeliveryStorageKeys({
+      jobId: JOB,
+      createdBy: null,
+      matchId: MATCH,
+      externalJobId: "vendor-job",
+      deliveryId: "delivery-id",
+    });
+
+    expect(attributeKey(former.resultsKey, RESULTS_LAYOUTS)).toBe(MATCH);
+    expect(attributeKey(former.playersKey, RESULTS_LAYOUTS)).toBe(MATCH);
+    expect(attributeKey(former.trajectoriesKey, RESULTS_LAYOUTS)).toBe(MATCH);
+
+    const formerBallPathsKey = ballPathsObjectKey({
+      userId: ballPathsUserSegment(null),
+      matchId: MATCH,
+      jobId: JOB,
+    });
+    expect(attributeKey(formerBallPathsKey, RESULTS_LAYOUTS)).toBe(MATCH);
   });
 
   test("the match-data bucket, which leads with the user rather than a prefix", () => {
@@ -97,6 +129,29 @@ test.describe("anything unexplained is left alone", () => {
       attributeKey(
         `exports/swing-vision/${MATCH}/match.xlsx`,
         MATCH_DATA_LAYOUTS,
+      ),
+    ).toBeNull();
+  });
+
+  test("a delivery with no matched job is never attributed", () => {
+    const orphaned = selectDeliveryStorageKeys({
+      jobId: null,
+      createdBy: null,
+      matchId: null,
+      externalJobId: "vendor-job",
+      deliveryId: "delivery-id",
+    });
+
+    expect(attributeKey(orphaned.resultsKey, RESULTS_LAYOUTS)).toBeNull();
+    expect(attributeKey(orphaned.playersKey, RESULTS_LAYOUTS)).toBeNull();
+    expect(attributeKey(orphaned.trajectoriesKey, RESULTS_LAYOUTS)).toBeNull();
+  });
+
+  test("a results-shaped key with a fifth segment is not attributed", () => {
+    expect(
+      attributeKey(
+        `results/${USER}/${MATCH}/${JOB}/extra.json`,
+        RESULTS_LAYOUTS,
       ),
     ).toBeNull();
   });
