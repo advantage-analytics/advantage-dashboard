@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Rework board-position.ts to four corners and add nudge and court-slot helpers
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) film/board-position.ts, tests/film-board-position.spec.ts
 - **done when:**

@@ -1,15 +1,15 @@
 /**
  * Where the fullscreen scoreboard rests. Pure, so the geometry is testable.
  *
- * The board is dragged freely, then snaps to the nearest of six resting
- * spots when it is let go: the four corners and the middle of the top and
- * bottom edges. A resting spot is stored as a name, not as pixels, so a board
- * parked top-right stays top-right on any screen size, and moves out of the
- * way when the points drawer opens over that side.
+ * The board is dragged freely, then snaps to the nearest of four resting
+ * spots when it is let go: the corners. A resting spot is stored as a name,
+ * not as pixels, so a board parked top-right stays top-right on any screen
+ * size.
  *
  * Each spot keeps clear of the room's own chrome through `BoardInsets`: the
- * Points trigger along the top, the transport along the bottom, and the
- * drawer (when open) on the right.
+ * transport along the bottom everywhere, and the room's edge margin on the
+ * sides. The top-right corner additionally clears the "Points" trigger,
+ * which only that corner overlaps — see `POINTS_TRIGGER_CLEARANCE`.
  */
 
 export interface BoardPosition {
@@ -24,14 +24,15 @@ export interface BoardSize {
 
 export const BOARD_ANCHORS = [
   "top-left",
-  "top-center",
   "top-right",
   "bottom-left",
-  "bottom-center",
   "bottom-right",
 ] as const;
 
 export type BoardAnchor = (typeof BOARD_ANCHORS)[number];
+
+export type BoardArrowKey =
+  "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown";
 
 export const DEFAULT_BOARD_ANCHOR: BoardAnchor = "top-left";
 
@@ -43,17 +44,22 @@ export interface BoardInsets {
   left: number;
 }
 
-/**
- * Top clears the Points trigger (18px + 28px tall); bottom clears the
- * transport block (title, track and control row). Lower than the handoff's
- * 24/18 at the top, by request: clear of the top of the frame.
- */
+/** Bottom clears the transport block (title, track and control row). */
 export const BASE_BOARD_INSETS: BoardInsets = {
-  top: 56,
+  top: 24,
   right: 24,
   bottom: 144,
   left: 24,
 };
+
+/**
+ * The top-right corner's extra clearance, on top of `BASE_BOARD_INSETS.top`.
+ * The "Points" trigger sits inset 24/18, 28px tall (R1), so its bottom edge
+ * lands at 46px; the board keeps a further 12px past that. No other corner
+ * overlaps the trigger, so this applies only there (R6: "each inset 24px …
+ * overrides the prose for that corner only").
+ */
+const POINTS_TRIGGER_CLEARANCE = 58;
 
 /** Never closer than this to an edge, whatever the insets ask for. */
 export const BOARD_EDGE_MARGIN = 8;
@@ -87,7 +93,7 @@ export function clampBoardPosition(
   };
 }
 
-/** The pixel position of a resting spot for this board in this room. */
+/** The pixel position of a resting corner for this board in this room. */
 export function anchorPosition(
   anchor: BoardAnchor,
   board: BoardSize,
@@ -96,21 +102,20 @@ export function anchorPosition(
 ): BoardPosition {
   const [row, column] = anchor.split("-") as [
     "top" | "bottom",
-    "left" | "center" | "right",
+    "left" | "right",
   ];
   const left =
-    column === "left"
-      ? insets.left
-      : column === "right"
-        ? room.width - insets.right - board.width
-        : insets.left +
-          (room.width - insets.left - insets.right - board.width) / 2;
+    column === "left" ? insets.left : room.width - insets.right - board.width;
   const top =
-    row === "top" ? insets.top : room.height - insets.bottom - board.height;
+    row === "top"
+      ? anchor === "top-right"
+        ? POINTS_TRIGGER_CLEARANCE
+        : insets.top
+      : room.height - insets.bottom - board.height;
   return clampBoardPosition({ left, top }, board, room);
 }
 
-/** The resting spot whose position is closest to where the board was let go. */
+/** The resting corner whose position is closest to where the board was let go. */
 export function nearestAnchor(
   position: BoardPosition,
   board: BoardSize,
@@ -133,21 +138,19 @@ export function nearestAnchor(
   return best;
 }
 
-/** Arrow keys walk the spots: left/right along an edge, up/down across. */
+/** Arrow keys walk the corners: left/right across, up/down along a side. */
 export function neighbourAnchor(
   anchor: BoardAnchor,
-  key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
+  key: BoardArrowKey,
 ): BoardAnchor {
-  const [row, column] = anchor.split("-");
-  const columns = ["left", "center", "right"];
-  const index = columns.indexOf(column);
+  const [row, column] = anchor.split("-") as [
+    "top" | "bottom",
+    "left" | "right",
+  ];
   if (key === "ArrowUp") return `top-${column}` as BoardAnchor;
   if (key === "ArrowDown") return `bottom-${column}` as BoardAnchor;
-  const next =
-    key === "ArrowLeft"
-      ? Math.max(0, index - 1)
-      : Math.min(columns.length - 1, index + 1);
-  return `${row}-${columns[next]}` as BoardAnchor;
+  const nextColumn = key === "ArrowLeft" ? "left" : "right";
+  return `${row}-${nextColumn}` as BoardAnchor;
 }
 
 /** A stored value, or null when it is missing or not a resting spot. */
@@ -155,4 +158,59 @@ export function parseBoardAnchor(raw: string | null): BoardAnchor | null {
   return raw && (BOARD_ANCHORS as readonly string[]).includes(raw)
     ? (raw as BoardAnchor)
     : null;
+}
+
+/** 8px per arrow press, 40px held with shift, kept inside the room. */
+const NUDGE_STEP = 8;
+const NUDGE_STEP_SHIFT = 40;
+
+/** A free (not-yet-settled) move by keyboard, one arrow press at a time. */
+export function nudgeBoard(
+  position: BoardPosition,
+  key: BoardArrowKey,
+  shift: boolean,
+  board: BoardSize,
+  room: BoardSize,
+): BoardPosition {
+  const step = shift ? NUDGE_STEP_SHIFT : NUDGE_STEP;
+  const dx = key === "ArrowLeft" ? -step : key === "ArrowRight" ? step : 0;
+  const dy = key === "ArrowUp" ? -step : key === "ArrowDown" ? step : 0;
+  return clampBoardPosition(
+    { left: position.left + dx, top: position.top + dy },
+    board,
+    room,
+  );
+}
+
+/** The gap kept between the board and the court that shares its column. */
+const COURT_BOARD_GAP = 28;
+
+/**
+ * Where the court sits, sharing the board's column.
+ *
+ * For a top corner the court sits beneath the board (R1: board `top:24`,
+ * court `top:198` — a 28px gap for a 146px board). The handoff never draws
+ * a bottom-corner board with a court; the rule for that case — same
+ * column, same 28px gap, but above the board — is this document's
+ * inference, not the designer's (spec: "R6's court rule").
+ */
+export function courtSlot(
+  anchor: BoardAnchor,
+  boardPosition: BoardPosition,
+  boardSize: BoardSize,
+  courtSize: BoardSize,
+): BoardPosition {
+  const [row, column] = anchor.split("-") as [
+    "top" | "bottom",
+    "left" | "right",
+  ];
+  const left =
+    column === "left"
+      ? boardPosition.left
+      : boardPosition.left + boardSize.width - courtSize.width;
+  const top =
+    row === "top"
+      ? boardPosition.top + boardSize.height + COURT_BOARD_GAP
+      : boardPosition.top - COURT_BOARD_GAP - courtSize.height;
+  return { left, top };
 }

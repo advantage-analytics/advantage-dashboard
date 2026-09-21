@@ -14,3 +14,13 @@ is the runner's. Newest entries at the bottom.
 1. A Net ball keeps the hitter's colour — only "Out" maps to the out role. Decide in the FilmCourt UI whether netted balls also read red.
 2. Advantage Intelligence leaves about 17% of landings null, so point mode will sometimes show a contact donut with no bounce. Treat as normal.
 3. About 3% of Advantage Intelligence "In" shots land on the hitter's own side of the net (vendor noise); plotted as recorded.
+
+## T2 · Rework board-position.ts to four corners and add nudge and court-slot helpers — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** `BOARD_ANCHORS` is the four corners; a stored six-spot value parses to null and falls back to the default. Top inset drops to 24, with `top-right` held at 58 to clear the "Points" trigger; the bottom corners keep the 144px transport clearance. New pure `nudgeBoard` (8px, 40px shifted, clamped) and `courtSlot` (28px gap, beneath a top-corner board, above a bottom-corner one — commented as the spec document's inference). `neighbourAnchor` keeps its signature so `film-scoreboard.tsx` stays out of the diff. Spec rewritten for a 236×146 board in a 1280×720 room.
+
+**follow-ups:**
+
+1. In T12, confirm `onRest` reports the measured board size, not a static 236×146 — the slab's height changes once T4 restyles it.
