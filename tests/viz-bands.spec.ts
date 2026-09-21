@@ -12,6 +12,8 @@ import {
   depthBandIndexFromNetM,
   depthBandRows,
   depthFromBaselineFt,
+  makeContactBucketer,
+  makeDepthBucketer,
   resolveDepthDividersFt,
   rowToBandSettings,
   schemeLabel,
@@ -207,6 +209,55 @@ test.describe("boundary equivalence — return contact (already baseline-origin,
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Fix round 2 (#3): `makeDepthBucketer`/`makeContactBucketer` hoist the
+ * divider resolution out of a caller's loop; `depthBandIndexFromNetM`/
+ * `contactBandIndexFromBaselineM` become thin one-off wrappers over them.
+ * Both paths must agree bit-for-bit for every case the regression suites
+ * above already cover — a bucketer built once and called many times must
+ * never answer differently than building fresh per call.
+ */
+test.describe("makeDepthBucketer / makeContactBucketer", () => {
+  test("makeDepthBucketer agrees with depthBandIndexFromNetM across every depth scheme and boundary case", () => {
+    const schemes: BandSettings[] = [
+      DEFAULT_BANDS,
+      { ...DEFAULT_BANDS, depthScheme: "deepMidShort" },
+      { ...DEFAULT_BANDS, depthScheme: "inside" },
+      { ...DEFAULT_BANDS, depthScheme: "none" },
+      {
+        depthScheme: "custom",
+        depthDividersFt: [6, 20],
+        contactDividersFt: [0, 5],
+      },
+    ];
+    const probes = [0, 1, DEPTH_THIRD_M, 2 * DEPTH_THIRD_M, 5, 10, REAL_NET_Y];
+    for (const bands of schemes) {
+      const bucket = makeDepthBucketer(bands);
+      for (const depthM of probes) {
+        expect(bucket(depthM)).toBe(depthBandIndexFromNetM(depthM, bands));
+      }
+    }
+  });
+
+  test("makeContactBucketer agrees with contactBandIndexFromBaselineM across every boundary case", () => {
+    const schemes: BandSettings[] = [
+      DEFAULT_BANDS,
+      { ...DEFAULT_BANDS, contactDividersFt: [2, 8] },
+    ];
+    const probes = [-3, -0.5, 0, 1, FIVE_FEET_M, 3, 10];
+    for (const bands of schemes) {
+      const bucket = makeContactBucketer(bands);
+      for (const depthM of probes) {
+        expect(bucket(depthM)).toBe(
+          contactBandIndexFromBaselineM(depthM, bands),
+        );
+      }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+
 test.describe("depthBandRows", () => {
   test("none is an empty array (the group is omitted, never zero rows rendered)", () => {
     expect(
@@ -229,8 +280,9 @@ test.describe("depthBandRows", () => {
       "Beyond the baseline",
       "Inside the baseline",
     ]);
-    // No degenerate "0-0 ft" — "Beyond" carries no upper bound.
-    expect(rows[0].toFt).toBeNull();
+    // No degenerate "0-0 ft" — "Beyond" carries no LOWER bound (it's open
+    // past the baseline, i.e. every baseline-origin ft value <= 0).
+    expect(rows[0].fromFt).toBeNull();
     expect(rows[1].rangeLabel).toBe("0–39 ft");
 
     // A landing essentially anywhere inside the court indexes to row 1
@@ -240,6 +292,32 @@ test.describe("depthBandRows", () => {
     // back, not just a plausible-looking order.
     expect(depthBandIndexFromNetM(6, bands)).toBe(1);
     expect(depthBandIndexFromNetM(COURT_HALF_M, bands)).toBe(0);
+  });
+
+  // Fix round 2 (#1): both rows share the SAME baseline-origin feet space
+  // (0 = the baseline, `COURT_HALF_FT` = the net) — "Beyond the baseline"
+  // is everything AT OR PAST the baseline itself in that space (<= 0, open
+  // below), never anchored at `COURT_HALF_FT` (the net, not the baseline —
+  // the bug this fix corrects). "Inside the baseline" is the ordinary
+  // `[0, COURT_HALF_FT]` range every other row here already uses.
+  test("inside: fromFt/toFt are in baseline-origin feet, not net-origin", () => {
+    const bands: BandSettings = { ...DEFAULT_BANDS, depthScheme: "inside" };
+    const rows = depthBandRows(bands, "ft");
+    const beyond = rows.find((r) => r.key === "beyond-baseline")!;
+    const inside = rows.find((r) => r.key === "inside-baseline")!;
+    expect(beyond.fromFt).toBeNull();
+    expect(beyond.toFt).toBe(0);
+    expect(inside.fromFt).toBe(0);
+    expect(inside.toFt).toBe(COURT_HALF_FT);
+  });
+
+  test("a 3-band scheme resolving fewer than 2 dividers returns [] rather than NaN rows (fix round 2 #6)", () => {
+    const malformed: BandSettings = {
+      depthScheme: "custom",
+      depthDividersFt: null,
+      contactDividersFt: [0, 5],
+    };
+    expect(depthBandRows(malformed, "ft")).toEqual([]);
   });
 });
 

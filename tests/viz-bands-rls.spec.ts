@@ -202,6 +202,41 @@ test.describe("viz_band_settings RLS (live)", () => {
     expect(update.data?.depth_scheme).toBe("deepMidShort");
   });
 
+  // Fix round 2 (#8): the migration's column grant is `update (depth_scheme,
+  // depth_dividers_ft, contact_dividers_ft)` — every other write test above
+  // and below only ever sets `depth_scheme` alone, so none of them actually
+  // exercises whether the other two granted columns are truly writable by
+  // `authenticated` (a narrower grant, e.g. `depth_scheme` only, would still
+  // pass every one of those). One write setting all three at once, read back
+  // whole, proves the full grant list rather than one column of it.
+  test("a single authenticated write sets ALL THREE granted columns (depth_scheme, depth_dividers_ft, contact_dividers_ft)", async () => {
+    const update = await personalOwner.client
+      .from("viz_band_settings")
+      .update({
+        depth_scheme: "custom",
+        depth_dividers_ft: [6, 20],
+        contact_dividers_ft: [3, 10],
+      })
+      .eq("account_id", personalOwner.userId)
+      .select("depth_scheme, depth_dividers_ft, contact_dividers_ft")
+      .single();
+    expect(update.error).toBeNull();
+    expect(update.data?.depth_scheme).toBe("custom");
+    expect(update.data?.depth_dividers_ft).toEqual([6, 20]);
+    expect(update.data?.contact_dividers_ft).toEqual([3, 10]);
+
+    // Read back through the service role too, independent of what the
+    // authenticated client's own `.select()` echoed back.
+    const stored = await admin
+      .from("viz_band_settings")
+      .select("depth_scheme, depth_dividers_ft, contact_dividers_ft")
+      .eq("account_id", personalOwner.userId)
+      .single();
+    expect(stored.data?.depth_scheme).toBe("custom");
+    expect(stored.data?.depth_dividers_ft).toEqual([6, 20]);
+    expect(stored.data?.contact_dividers_ft).toEqual([3, 10]);
+  });
+
   test("a stranger sees no rows for another personal account and cannot write it", async () => {
     const select = await stranger.client
       .from("viz_band_settings")

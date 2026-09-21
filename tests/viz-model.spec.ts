@@ -769,7 +769,9 @@ test.describe("computeVizStats — return contact", () => {
  * pre-Phase-2B call site above) every label and every number
  * `computeVizStats` returns for `returnPlacement`/`returnContact` must be
  * byte-identical to what it returned before bands existed — this block pins
- * that with a full `toEqual` snapshot, INCLUDING fixtures placed exactly on
+ * that with a full `toEqual` snapshot, INCLUDING fixtures placed at (contact)
+ * or immediately adjacent to, within one ulp (depth placement — see the
+ * fixture comments below for why exact placement isn't achievable there)
  * the old `DEPTH_THIRD_M`/`2×DEPTH_THIRD_M`/`FIVE_FEET_M` boundaries, so a
  * bucketing rewrite that moves a boundary by even one row fails loudly here
  * rather than only in a count-only assertion elsewhere in this file.
@@ -800,30 +802,41 @@ test.describe("computeVizStats — bands (Phase 2B Task 2)", () => {
 
   const REAL_COURT_LENGTH = 23.77;
 
-  // One at each old bucket, PLUS a fixture sitting exactly on each of the
-  // two depth-placement boundaries this replaces.
+  // Fix round 2 (#5): these four in-bounds landings exercise every depth
+  // bucket, but NONE of them sit exactly on the module's internal thirds
+  // dividers — `depthM = REAL_NET_Y − secondShotLandingY` for a far-half
+  // landing, so a SMALL landingY is DEEP (near the baseline, high depthM)
+  // and a LARGE landingY is SHORT (near the net, low depthM), the OPPOSITE
+  // of landingY's own direction. The prior comments here had this backwards
+  // (labeling landingY=0 "short" and landingY=NET_TO_BASELINE_M "deep") and
+  // also claimed exact-boundary placement the values don't actually have —
+  // `REAL_NET_Y − DEPTH_THIRD_M` (subtraction) lands ONE ULP away from the
+  // module's own `2 * (COURT_HALF_M / 3)` divider (multiplication), not
+  // bit-identical to it, so these two fixtures land cleanly on one side of
+  // their nearby divider rather than exactly astride it. Verified per-point
+  // below; the actual buckets are Deep, Deep, Mid, Short (in fixture order).
   const placementPts = [
     returnPoint({
       pointScore: "0-0",
       secondShotLandingX: 0,
       secondShotLandingY: 0,
-    }), // short
+    }), // deep — depthM = REAL_NET_Y (at the far baseline)
     returnPoint({
       pointScore: "15-0",
       secondShotLandingX: 0,
       secondShotLandingY: DEPTH_THIRD_M,
-    }), // boundary — mid (inclusive)
+    }), // deep — depthM lands one ulp ABOVE the mid/deep divider, not on it
     returnPoint({
       pointScore: "0-0",
       secondShotLandingX: 0,
       secondShotLandingY: 2 * DEPTH_THIRD_M,
-    }), // boundary — deep (inclusive)
+    }), // mid — depthM lands one ulp BELOW the short/mid divider, not on it
     returnPoint({
       pointScore: "15-0",
       secondShotLandingX: -2.5,
       secondShotLandingY: NET_TO_BASELINE_M,
       wonByPlayer1: false,
-    }), // deep
+    }), // short — depthM = 0 (at the net)
     returnPoint({ secondShotLandingX: 5.5, secondShotResult: "Out" }), // excluded (out)
   ];
 
@@ -1116,6 +1129,84 @@ test.describe("computeVizStats — bands (Phase 2B Task 2)", () => {
     const row = (label: string) => depth.rows.find((r) => r.label === label)!;
     expect(row("Inside the baseline").count).toBe(1);
     expect(row("Beyond the baseline").count).toBe(0);
+  });
+
+  /**
+   * Fix round 2 (#7 — RULING): `isPlacementRow` excludes every miss, which
+   * left "Beyond the baseline" permanently empty for the "inside" scheme —
+   * the only depth row that could ever be reached is the one every ordinary
+   * landing falls into. Under "inside" ONLY, a genuinely LONG miss (past the
+   * far baseline, not netted) now counts in "Beyond the baseline"; a WIDE
+   * miss that is not also long stays excluded everywhere, exactly as
+   * before, and neither miss ever appears in another scheme's Depth rows.
+   */
+  test('depthScheme: "inside" — a long miss counts in "Beyond the baseline"; a wide (not long) miss stays excluded, under "inside" and every other scheme', () => {
+    const longMiss = returnPoint({
+      secondShotLandingX: 0,
+      // 1m past the far baseline: depthM = REAL_NET_Y - (-1) = 12.885,
+      // clearing the "inside" scheme's single net-origin divider at
+      // REAL_NET_Y (11.885) — genuinely LONG, not wide.
+      secondShotLandingY: -1,
+      secondShotResult: "Out",
+    });
+    const wideMiss = returnPoint({
+      // Outside the 4.115m singles half-width...
+      secondShotLandingX: 6.0,
+      // ...but an ORDINARY depth (depthM = REAL_NET_Y - 4 = 7.885, well
+      // short of the far baseline) — wide, not long.
+      secondShotLandingY: 4.0,
+      secondShotResult: "Out",
+    });
+    const inCourt = returnPoint({
+      secondShotLandingX: 0,
+      secondShotLandingY: 6.0,
+    });
+    const pts = [longMiss, wideMiss, inCourt];
+
+    const insideBands: BandSettings = {
+      ...DEFAULT_BANDS,
+      depthScheme: "inside",
+    };
+    const insideStats = computeVizStats(
+      pts,
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      insideBands,
+      "ft",
+    );
+    const insideDepth = insideStats.groups.find((g) => g.key === "depth")!;
+    const insideRow = (label: string) =>
+      insideDepth.rows.find((r) => r.label === label)!;
+    // The long miss, and ONLY it, lands in "Beyond the baseline".
+    expect(insideRow("Beyond the baseline").count).toBe(1);
+    // The wide (not long) miss never appears anywhere — same as today.
+    expect(insideRow("Inside the baseline").count).toBe(1); // inCourt only
+
+    // The subtitle/total stay truthful about IN-COURT returns: the long
+    // miss shows in a Depth row but is never counted as "landed in".
+    expect(insideStats.total).toBe(3);
+    expect(insideStats.subtitle).toBe(
+      "Points won by placement · 1 of 3 returns landed in",
+    );
+
+    // Every OTHER scheme's population is untouched — neither miss ever
+    // reaches a Depth row outside "inside" (DEFAULT_BANDS's own regression
+    // spec above already pins this for the thirds scheme independently;
+    // this asserts it directly for these two miss fixtures).
+    const thirdsStats = computeVizStats(
+      pts,
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    const thirdsDepth = thirdsStats.groups.find((g) => g.key === "depth")!;
+    const thirdsDepthTotal = thirdsDepth.rows.reduce(
+      (sum, r) => sum + r.count,
+      0,
+    );
+    expect(thirdsDepthTotal).toBe(1); // the in-court landing, and only it
   });
 
   test("returnContact/rallyPosition follow custom contact dividers too", () => {

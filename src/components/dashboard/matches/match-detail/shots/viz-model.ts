@@ -26,10 +26,10 @@ import {
 } from "@/lib/data/serve-zones";
 import {
   DEFAULT_BANDS,
-  contactBandIndexFromBaselineM,
   contactBandRows,
-  depthBandIndexFromNetM,
   depthBandRows,
+  makeContactBucketer,
+  makeDepthBucketer,
   type BandRow,
   type BandSettings,
 } from "@/lib/data/viz-bands";
@@ -1285,6 +1285,9 @@ function returnPlacementStats(
   // rather than rendered with zero rows.
   const depthRows = depthBandRows(bands, unit);
   const depth = bandRowAccumulator(depthRows);
+  // Fix round 2 (#3): hoisted once per call rather than resolved fresh per
+  // dot inside the loop below.
+  const depthBucket = makeDepthBucketer(bands);
 
   for (const d of eligible) {
     const wonInc = d.outcome === "won" ? 1 : 0;
@@ -1294,9 +1297,34 @@ function returnPlacementStats(
     direction[dKey].count++;
     direction[dKey].won += wonInc;
     if (depthRows.length > 0) {
-      const pKey = depthRows[depthBandIndexFromNetM(d.depthM, bands)].key;
+      const pKey = depthRows[depthBucket(d.depthM)].key;
       depth[pKey].count++;
       depth[pKey].won += wonInc;
+    }
+  }
+
+  // Fix round 2 (#7 — RULING): under `depthScheme: "inside"` ONLY, the
+  // "Beyond the baseline" row could otherwise never populate — every
+  // ordinary in-court landing reads as "Inside the baseline" (see
+  // `viz-bands.ts`'s "inside is a single divider at 0" spec), and
+  // `isPlacementRow` excludes every miss outright, including a genuinely
+  // LONG one that landed past the far baseline. So under "inside" ONLY, a
+  // miss that is (a) not netted (`!d.atNet`) and (b) buckets to index 0
+  // (`depthFromNetM >= COURT_HALF_M`, i.e. AT OR PAST the far baseline —
+  // "long", not "wide") still counts in that one row. Every other scheme,
+  // and every other miss under "inside" itself (a wide-but-not-long out
+  // call, or a net ball), stays excluded exactly as today — Direction is
+  // never touched, `subtitleCount` below is built from `eligible` alone
+  // (unchanged), and DEFAULT_BANDS's thirds regression spec is untouched
+  // since this block only ever runs for `depthScheme === "inside"`.
+  if (bands.depthScheme === "inside" && depthRows.length > 0) {
+    for (const d of result.dots) {
+      if (d.outcome !== "miss" || d.atNet) continue;
+      const idx = depthBucket(d.depthM);
+      if (idx !== 0) continue; // wide-but-not-long stays excluded
+      const pKey = depthRows[idx].key;
+      depth[pKey].count++;
+      // A miss is never "won" — nothing to add to `depth[pKey].won`.
     }
   }
 
@@ -1351,11 +1379,13 @@ function returnContactStats(
     forehand: { count: 0, won: 0 },
     backhand: { count: 0, won: 0 },
   };
+  // Fix round 2 (#3): hoisted once per call rather than resolved fresh per
+  // dot inside the loop below.
+  const contactBucket = makeContactBucketer(bands);
 
   for (const d of result.dots) {
     const wonInc = d.outcome === "won" ? 1 : 0;
-    const dKey =
-      contactRows[contactBandIndexFromBaselineM(d.depthM, bands)].key;
+    const dKey = contactRows[contactBucket(d.depthM)].key;
     depth[dKey].count++;
     depth[dKey].won += wonInc;
     const sKey = d.shape === "triangle" ? "backhand" : "forehand";

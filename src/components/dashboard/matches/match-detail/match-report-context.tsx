@@ -8,7 +8,7 @@ import {
   type ReportView,
 } from "@/components/dashboard/matches/match-detail/report-view";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
-import type { BandSettings } from "@/lib/data/viz-bands-server";
+import type { BandSettings } from "@/lib/data/viz-bands";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
 
 /**

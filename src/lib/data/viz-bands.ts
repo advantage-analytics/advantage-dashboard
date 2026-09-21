@@ -34,14 +34,22 @@
  * `bandIndex` with the baseline-oriented `contactDividersFt` agrees with it
  * directly — no mirror needed. Only DEPTH placement needs the flip.
  *
- * The flip itself belongs to whichever caller buckets a live `depthM` value
- * (Phase 2B Task 2's `viz-model.ts` rewiring) — this module only builds and
- * proves the pieces `bandIndex`/`depthFromBaselineFt`/`resolveDepthDividersFt`
- * a correct caller composes. The general pattern, mirroring around the
- * dividers' own axis: bucket the NET-origin value directly against
- * NET-oriented dividers (`COURT_HALF_FT − d` for each baseline divider `d`,
- * re-sorted ascending), then flip the resulting index:
- * `numBands - 1 - bandIndex(depthM * FT_PER_M, netOrientedDividers)`.
+ * A caller bucketing a LIVE `depthM` value must never re-derive this flip
+ * itself. Call `depthBandIndexFromNetM(depthM, bands)` for DEPTH placement
+ * and `contactBandIndexFromBaselineM(depthM, bands)` for CONTACT — both
+ * below, both metre-native and bit-for-bit with the pre-Phase-2B
+ * inequalities they replace (proven in `tests/viz-bands.spec.ts`). Bucketing
+ * many dots in a loop: hoist `makeDepthBucketer(bands)` /
+ * `makeContactBucketer(bands)` ONCE outside the loop and call the returned
+ * function per dot, rather than re-resolving the dividers on every
+ * iteration — the two `*IndexFrom*` functions above are thin wrappers over
+ * these for a single one-off lookup.
+ *
+ * Composing `bandIndex` with `depthFromBaselineFt` yourself (fix round 1)
+ * reproduces exactly the boundary bug this module's own regression spec
+ * exists to catch — `depthFromBaselineFt` exists for display/editing
+ * conversions (band-row labels, the drag editor), never for bucketing a
+ * live dot.
  */
 
 import {
@@ -170,32 +178,49 @@ function depthDividersNetOriginM(b: BandSettings): number[] {
 }
 
 /**
+ * Fix round 2 (#3): builds the NET-origin dividers and the flip ONCE, and
+ * returns a plain function a caller can call per dot without re-resolving
+ * `resolveDepthDividersFt`/sorting on every iteration — the shape
+ * `returnPlacementStats`'s loop over every dot in a match needs.
+ * `depthBandIndexFromNetM` below is this, called once for a single lookup.
+ *
  * Depth-placement band index for a NET-origin `depthM` (0 = net,
  * `COURT_HALF_M` = baseline — the same origin `viz-model.ts`'s
- * `isPlacementRow`/`depthKeyPlacement` read), bucketed against `b`'s
- * dividers. Index 0 is the band `depthBandRows` lists FIRST (`"Deep"`,
- * nearest the baseline) so the index agrees with row order.
+ * `isPlacementRow` reads). Index 0 is the band `depthBandRows` lists FIRST
+ * (`"Deep"`, nearest the baseline) so the index agrees with row order.
  *
- * With `DEFAULT_BANDS` this reproduces `depthKeyPlacement`'s own
- * inequalities (`depthM < third → Short`, `< 2·third → Mid`, else `Deep`)
- * bit-for-bit, including at `depthM === third`, `=== 2·third`, and one ulp
- * either side of each — proven in `tests/viz-bands.spec.ts`.
+ * With `DEFAULT_BANDS` this reproduces the pre-Phase-2B `depthKeyPlacement`'s
+ * own inequalities (`depthM < third → Short`, `< 2·third → Mid`, else
+ * `Deep`) bit-for-bit, including at `depthM === third`, `=== 2·third`, and
+ * one ulp either side of each — proven in `tests/viz-bands.spec.ts`.
  */
+export function makeDepthBucketer(
+  b: BandSettings,
+): (depthFromNetM: number) => number {
+  const netDividers = depthDividersNetOriginM(b);
+  if (netDividers.length === 0) return () => 0;
+  const numBands = netDividers.length;
+  return (depthFromNetM: number) =>
+    numBands - bandIndex(depthFromNetM, netDividers);
+}
+
 export function depthBandIndexFromNetM(
   depthFromNetM: number,
   b: BandSettings,
 ): number {
-  const netDividers = depthDividersNetOriginM(b);
-  if (netDividers.length === 0) return 0;
-  const netIdx = bandIndex(depthFromNetM, netDividers);
-  return netDividers.length - netIdx;
+  return makeDepthBucketer(b)(depthFromNetM);
 }
 
 /**
+ * Fix round 2 (#3): builds the metre dividers ONCE, same reasoning as
+ * `makeDepthBucketer` above. `contactBandIndexFromBaselineM` below is this,
+ * called once for a single lookup.
+ *
  * Contact band index for a BASELINE-origin `depthM` (negative = inside the
- * court, positive = behind it — the same signing `contactDepthKey` and
- * `contactDividersFt` already share, so no mirror is needed here). Index 0
- * is the band `contactBandRows` lists first (`"Inside the baseline"`).
+ * court, positive = behind it — the same signing the pre-Phase-2B
+ * `contactDepthKey` and `contactDividersFt` already share, so no mirror is
+ * needed here). Index 0 is the band `contactBandRows` lists first
+ * (`"Inside the baseline"`).
  *
  * With `DEFAULT_BANDS.contactDividersFt` (`[0, 5]`) this reproduces
  * `contactDepthKey`'s own inequalities (`depthM < 0 → inside`, `< 1.524 →
@@ -203,12 +228,18 @@ export function depthBandIndexFromNetM(
  * double (unlike `5 * FT_PER_M`, which is a hair off) — proven in
  * `tests/viz-bands.spec.ts`.
  */
+export function makeContactBucketer(
+  b: BandSettings,
+): (depthM: number) => number {
+  const dividersM = b.contactDividersFt.map((ft) => ft * 0.3048);
+  return (depthM: number) => bandIndex(depthM, dividersM);
+}
+
 export function contactBandIndexFromBaselineM(
   depthM: number,
   b: BandSettings,
 ): number {
-  const dividersM = b.contactDividersFt.map((ft) => ft * 0.3048);
-  return bandIndex(depthM, dividersM);
+  return makeContactBucketer(b)(depthM);
 }
 
 export interface BandRow {
@@ -247,12 +278,20 @@ const DEPTH_3_LABELS = ["Deep", "Mid", "Short"];
  * `"inside"` → two rows, IN INDEX ORDER against `depthBandIndexFromNetM`:
  * its single divider sits at the baseline (`resolveDepthDividersFt`
  * returns `[0]`), so index 0 is a landing AT OR PAST the far baseline
- * (`depthFromNetM >= COURT_HALF_M`) — "Beyond the baseline", an edge case
- * with no real range, and index 1 is everything actually inside the court
- * (`depthFromNetM < COURT_HALF_M`, i.e. virtually every eligible landing) —
- * "Inside the baseline", `0–39 ft`. Never `[0, 0]`: "Beyond" carries no
- * `toFt` (open past the baseline) rather than degenerately spanning `[0,
- * 0]`.
+ * (`depthFromNetM >= COURT_HALF_M`) — "Beyond the baseline", and index 1 is
+ * everything actually inside the court (`depthFromNetM < COURT_HALF_M`,
+ * i.e. virtually every eligible landing) — "Inside the baseline", `0–39
+ * ft`.
+ *
+ * BOTH rows are in the SAME baseline-origin feet space `resolveDepthDividersFt`
+ * and every other row here use (0 = the baseline, `COURT_HALF_FT` = the
+ * net) — fix round 2 (#1): "Beyond the baseline" is `fromFt: null, toFt: 0`
+ * (open below 0, i.e. PAST the baseline in baseline-origin feet — negative
+ * or zero), never `fromFt: COURT_HALF_FT` (that value is the NET, not the
+ * baseline, and describing "beyond the baseline" as starting at the net was
+ * simply wrong). "Inside the baseline" is `fromFt: 0, toFt: COURT_HALF_FT`,
+ * unchanged. Never `[0, 0]` for either row — "Beyond" carries no `fromFt`
+ * (open past the baseline) rather than degenerately spanning `[0, 0]`.
  */
 export function depthBandRows(b: BandSettings, unit: DistanceUnit): BandRow[] {
   if (b.depthScheme === "none") return [];
@@ -263,8 +302,8 @@ export function depthBandRows(b: BandSettings, unit: DistanceUnit): BandRow[] {
         key: "beyond-baseline",
         label: "Beyond the baseline",
         rangeLabel: "past the line",
-        fromFt: COURT_HALF_FT,
-        toFt: null,
+        fromFt: null,
+        toFt: 0,
       },
       rangeRow(
         "inside-baseline",
@@ -276,7 +315,15 @@ export function depthBandRows(b: BandSettings, unit: DistanceUnit): BandRow[] {
     ];
   }
 
-  const [d0, d1] = resolveDepthDividersFt(b);
+  // Fix round 2 (#6): a 3-band scheme (today only "custom") can resolve
+  // FEWER than 2 dividers — `depthDividersFt: null` with `depthScheme:
+  // "custom"` is invalid `BandSettings` (`validateBandInput` refuses it),
+  // but this function must still be safe against a caller constructing one
+  // directly (as a test fixture, or before validation runs) rather than
+  // destructuring `undefined` into `NaN` bounds and printing "NaN ft" rows.
+  const dividers = resolveDepthDividersFt(b);
+  if (dividers.length < 2) return [];
+  const [d0, d1] = dividers;
   const bounds: [number, number][] = [
     [0, d0],
     [d0, d1],
