@@ -64,3 +64,15 @@ is the runner's. Newest entries at the bottom.
 1. Back/forward does not re-read the URL into `filters`; replace-only history has no entries to step through.
 2. The film-playback spec failed once in a loaded full run; if it recurs, check whether the new effect adds enough render work to tip its timing.
 3. Not exercised in a real browser.
+
+## T7 · Rewrite film-this-point as the Current point widget — done
+
+**gate:** mechanical pass; completion review pass
+**changed:** `film-this-point.tsx` is now the "Current point" widget: the "Open in the room" button, the prose line, the embedded `PointRow` and any "Edit this point" text are gone. The head carries a `{index} / {total}` stepper whose buttons call `onStep`, which `film-tab.tsx` wires to `playerRef.current?.step` (the transport's own step, so it walks the applied cut). `film-shots.ts` gains a pure `shotRowCells` (Serve on row 1, derived Type, "—" for unmeasured values, a measured 0 mph kept) with three new specs. Shot rows use CSS grid in the order # · Player · Stroke · Placement · Result, with Spin, Type and Mph added at `@min-[880px]` against the report pane's `@container` (796px with the sidebar expanded, 964px collapsed at 1440; comment in the file). Footer reads `{n} shots · {s}s · {resultType}`. Call site in `film-tab.tsx` drops the props that fed the removed parts; dead `activeIsYou` removed.
+**follow-ups:**
+
+1. The Result cell is coloured by measured/unmeasured, not by who lost the point as the frame draws it; `MatchPoint.wonByPlayer1` could drive it.
+2. The per-shot blue progress rule was dropped with the old row; the playing shot is now only the `surface-subtle` wash. Worth a look on a real match.
+3. `film-point-panel.tsx` (fullscreen Shots tab) still draws the old two-line row; phase 2 could adopt `shotRowCells`.
+4. The 880px breakpoint is measured against the pane, but the widget sits in the left column (about 336px narrower); the fixed tracks still fit.
+5. Not exercised in a browser.

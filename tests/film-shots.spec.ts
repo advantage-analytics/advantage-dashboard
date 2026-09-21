@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   activeShotAt,
   shotLabel,
+  shotRowCells,
   shotStops,
 } from "@/components/dashboard/matches/match-detail/film/film-shots";
 import { filmStops } from "@/components/dashboard/matches/match-detail/film/film-timeline";
@@ -94,4 +95,65 @@ test("labels", () => {
   expect(shotLabel(shot("b", 1, { shotType: null, spinType: null }))).toBe(
     "Shot",
   );
+});
+
+test("the serve row: row 1 is the Serve whatever the stroke says", () => {
+  const serve = shot("a", 1, {
+    shotType: "Second Serve",
+    spinType: "flat",
+    speedMph: 111.6,
+    zone: "Body, deuce court",
+    result: "In",
+  });
+  expect(shotRowCells(serve, 1, "Reid")).toEqual({
+    order: "1",
+    player: "Reid",
+    spin: "Flat",
+    stroke: "Serve",
+    type: "2nd serve",
+    placement: "Body, deuce court",
+    mph: "112",
+    result: "In",
+  });
+});
+
+test("a rally row: return on 2, rally after", () => {
+  const rally = shot("b", 1, {
+    shotType: "FOREHAND",
+    spinType: "topspin",
+    speedMph: 74,
+    zone: "Inside-out, deep",
+    result: "Out",
+  });
+  expect(shotRowCells(rally, 2, "Lee")).toMatchObject({
+    order: "2",
+    stroke: "Forehand",
+    type: "Return",
+    placement: "Inside-out, deep",
+    mph: "74",
+    result: "Out",
+  });
+  expect(shotRowCells(rally, 3, "Lee").type).toBe("Rally");
+});
+
+test("nothing unmeasured is ever rendered as a zero", () => {
+  const blank = shot("c", 1, {
+    shotType: null,
+    spinType: null,
+    speedMph: null,
+    zone: null,
+    result: null,
+  });
+  expect(shotRowCells(blank, 4, "Lee")).toEqual({
+    order: "4",
+    player: "Lee",
+    spin: "—",
+    stroke: "—",
+    type: "Rally",
+    placement: "—",
+    mph: "—",
+    result: "—",
+  });
+  // A measured zero still reads as zero — the dash means "not measured".
+  expect(shotRowCells({ ...blank, speedMph: 0 }, 4, "Lee").mph).toBe("0");
 });

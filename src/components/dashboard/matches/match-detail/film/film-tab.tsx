@@ -260,7 +260,7 @@ function FilmRoom({
     [stops, currentTime],
   );
 
-  // "This point": the point under the playhead, its shots on the film clock
+  // "Current point": the point under the playhead, its shots on the film clock
   // and the stroke being played. Shots are built from ALL points, like the
   // stops, so the card follows the film whether or not the cut admits it.
   //
@@ -278,9 +278,6 @@ function FilmRoom({
     [allShotStops, currentTime],
   );
   const activePoint = active?.stop.point ?? null;
-  const activeIsYou = activePoint
-    ? (activePoint.player === "player1") === youIsPlayer1
-    : true;
   const pointShots = useMemo(
     () =>
       activePoint
@@ -291,6 +288,11 @@ function FilmRoom({
 
   const handleSelectShot = useCallback((stop: ShotStop) => {
     playerRef.current?.seekTo(stop.start);
+  }, []);
+
+  /** The transport's own step, handed to anything else that walks points. */
+  const handleStep = useCallback((direction: -1 | 1) => {
+    playerRef.current?.step(direction);
   }, []);
 
   // "Point n / N" over the applied cut — the sequence prev/next walk.
@@ -453,7 +455,7 @@ function FilmRoom({
   );
 
   return (
-    // Design canvas "Video B4": the player on the left with "This point"
+    // Design canvas "Video B4": the player on the left with "Current point"
     // under it, the point list beside them in a fixed 320px column (the
     // room's own panel width) running the pane's full height, so finding a
     // point, watching it and reading its shots happen side by side. The view
@@ -499,18 +501,13 @@ function FilmRoom({
         />
         <FilmThisPoint
           point={activePoint}
-          isYou={activeIsYou}
-          initials={activeIsYou ? sides.you.initials : sides.opp.initials}
-          showPointScore={columns.hasPointScore}
-          activeStart={active?.stop.start ?? 0}
-          activeEnd={active?.stop.end ?? 0}
           shots={pointShots}
           position={position}
           activeShotId={activeShot?.stop.shot.id ?? null}
-          onSelectPoint={handleSelect}
-          onToggleSaved={handleToggleSaved}
           onSelectShot={handleSelectShot}
-          onOpenRoom={enterRoom}
+          // The same step the transport takes, so the widget's stepper walks
+          // the applied cut rather than opening a second stepping path.
+          onStep={handleStep}
         />
       </div>
 

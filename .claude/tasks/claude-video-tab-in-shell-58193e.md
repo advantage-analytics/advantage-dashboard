@@ -100,7 +100,7 @@ ready).
 
 ## T7 · Rewrite film-this-point as the Current point widget
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) film/film-this-point.tsx, film/film-shots.ts, tests/film-shots.spec.ts, film/film-tab.tsx (FilmThisPoint call site)
 - **done when:**
