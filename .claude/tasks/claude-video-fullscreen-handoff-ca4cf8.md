@@ -249,7 +249,7 @@ ready).
 
 ## T18 · Pure ball-paths.ts derivation: trajectory rows + strokes → per-stroke paths
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) src/lib/services/splitstep/derivation/ball-paths.ts (new), tests/splitstep-ball-paths.spec.ts (new), src/lib/services/splitstep/derivation/index.ts (re-export)
 - **done when:**

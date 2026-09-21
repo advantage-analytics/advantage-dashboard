@@ -194,3 +194,14 @@ is the runner's. Newest entries at the bottom.
 
 1. `TRAIL_TRANSITION` in `film-court-card.tsx` is now a misnomer.
 2. The marks memo re-runs on every `currentTime` tick (~4 Hz); quantise the time for it if it ever shows in a profile.
+
+## T18 · Pure ball-paths.ts derivation: trajectory rows + strokes → per-stroke paths — done
+
+**gate:** mechanical pass on re-run — the full suite's one failure was the known intermittent live-database `tests/match-video-attachments-db.spec.ts:3225`; this task is a pure module nothing imports yet, and the test passed when re-run alone · completion `VERDICT: pass`
+
+**changed:** New pure `derivation/ball-paths.ts` (imports only `./court` and `./types`): `deriveBallPaths` fits frames to seconds by least squares over the strokes' frame/time pairs, groups trajectory rows by `stroke_frame`, joins each group to its stroke, drops non-finite and implausible rows in the vendor frame, converts with `metersToCourtFrame`, rounds to 2 dp and downsamples to about 10 Hz while always keeping the first, bounce and last rows. `contactTime` is the stroke's own `videoTime`, so it equals `shots.video_time`; `bounceTime` is the fitted time of `bounce_frame`, null on the `-9999` sentinel. Re-exported from the derivation index. Node spec pins every value, including 17 samples from a 47-row stroke.
+
+**follow-ups:**
+
+1. A residual check on the frame→time fit would catch a variable-framerate re-encode.
+2. The 0.1 s spacing can drop the row just before a bounce; whoever draws height may want it kept.
