@@ -113,7 +113,7 @@ ready).
 
 ## T8 · Remap film keys: arrows step points, J/L seek 5s
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) film/film-tab.tsx, film/film-fullscreen.tsx
 - **done when:**

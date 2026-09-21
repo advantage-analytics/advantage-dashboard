@@ -649,19 +649,25 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
           e.preventDefault();
           togglePlay();
           break;
+        case "ArrowDown":
         case "ArrowRight":
           e.preventDefault();
           step(1);
           break;
+        case "ArrowUp":
         case "ArrowLeft":
           e.preventDefault();
           step(-1);
           break;
-        case "ArrowDown":
+        case "l":
+        case "L":
+          if (e.metaKey || e.ctrlKey || e.altKey) return;
           e.preventDefault();
           seek((videoRef.current?.currentTime ?? 0) + 5);
           break;
-        case "ArrowUp":
+        case "j":
+        case "J":
+          if (e.metaKey || e.ctrlKey || e.altKey) return;
           e.preventDefault();
           seek((videoRef.current?.currentTime ?? 0) - 5);
           break;

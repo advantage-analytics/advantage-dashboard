@@ -76,3 +76,12 @@ is the runner's. Newest entries at the bottom.
 3. `film-point-panel.tsx` (fullscreen Shots tab) still draws the old two-line row; phase 2 could adopt `shotRowCells`.
 4. The 880px breakpoint is measured against the pane, but the widget sits in the left column (about 336px narrower); the fixed tracks still fit.
 5. Not exercised in a browser.
+
+## T8 · Remap film keys: arrows step points, J/L seek 5s — done
+
+**gate:** mechanical pass; completion review pass
+**changed:** In `film-tab.tsx` and `film-fullscreen.tsx`, ArrowUp/ArrowLeft step to the previous point, ArrowDown/ArrowRight to the next, and J/L seek −5 / +5 seconds (both through the existing clamping seek helpers). All existing guards are untouched. The doc comment above the `film-tab.tsx` handler describes the new mapping. Outside `files:`: one comment in `film-track.tsx` that quoted the old mapping. `film-fullscreen.tsx` has no shared modifier check, so the `j` and `l` cases carry an inline one (as the `s` case already does), so Cmd+L and Ctrl+J are not swallowed.
+**follow-ups:**
+
+1. No spec asserts the new arrow/J/L mapping; the existing ones only cover the bail-out.
+2. No tooltip or keyboard-help text stated the old ↑↓ = 5 seconds mapping.

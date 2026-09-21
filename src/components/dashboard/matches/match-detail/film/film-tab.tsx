@@ -359,8 +359,9 @@ function FilmRoom({
   }, [activePointId, handleToggleSaved]);
 
   /**
-   * The room's keys, on the page while this view is open: ← → step points,
-   * ↑ ↓ move 5 seconds, space plays and pauses, S saves the point on screen.
+   * The room's keys, on the page while this view is open: ← ↑ step to the
+   * previous point, → ↓ to the next, J / L move 5 seconds back / forward,
+   * space plays and pauses, S saves the point on screen.
    * Off while the room is open (it has its own), while something is typing
    * (an input, a textarea, anything editable), while a dialog or popover is
    * open (the filters panel wants its own arrows), whenever focus is on a
@@ -407,19 +408,23 @@ function FilmRoom({
           e.preventDefault();
           playerRef.current?.togglePlay();
           break;
+        case "ArrowDown":
         case "ArrowRight":
           e.preventDefault();
           playerRef.current?.step(1);
           break;
+        case "ArrowUp":
         case "ArrowLeft":
           e.preventDefault();
           playerRef.current?.step(-1);
           break;
-        case "ArrowDown":
+        case "l":
+        case "L":
           e.preventDefault();
           playerRef.current?.seekBy(5);
           break;
-        case "ArrowUp":
+        case "j":
+        case "J":
           e.preventDefault();
           playerRef.current?.seekBy(-5);
           break;
