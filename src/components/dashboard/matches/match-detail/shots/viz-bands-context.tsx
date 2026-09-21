@@ -73,9 +73,8 @@ export interface VizBandsValue {
   bands: BandSettings;
   /** `meta.canEditBands` — personal owner, or team owner/coach/staff. */
   canEdit: boolean;
-  /** The unit every band label is rendered in. Hard-wired to `"ft"` until
-   *  Stage 2C adds the preference; every consumer already takes it as a
-   *  value so that stage is a one-line change here. */
+  /** The unit every band label is rendered in — the viewer's Units
+   *  preference (`meta.unit`, Stage 2C), never a per-chart toggle. */
   unit: DistanceUnit;
   /** Session-only: the contact cuts' overlay is hidden. */
   contactHidden: boolean;
@@ -136,13 +135,13 @@ export function useVizBands(): VizBandsValue {
     () => ({
       bands: meta.bandSettings,
       canEdit: meta.canEditBands,
-      unit: "ft",
+      unit: meta.unit,
       contactHidden: false,
       toggleContactHidden: noop,
       applyBands: refuseBands,
       receipt: null,
     }),
-    [meta.bandSettings, meta.canEditBands],
+    [meta.bandSettings, meta.canEditBands, meta.unit],
   );
   return ctx ?? fallback;
 }
@@ -258,7 +257,7 @@ export function VizBandsProvider({ children }: { children: ReactNode }) {
     () => ({
       bands: effectiveBands,
       canEdit: meta.canEditBands,
-      unit: "ft",
+      unit: meta.unit,
       contactHidden,
       toggleContactHidden,
       applyBands,
@@ -267,6 +266,7 @@ export function VizBandsProvider({ children }: { children: ReactNode }) {
     [
       effectiveBands,
       meta.canEditBands,
+      meta.unit,
       contactHidden,
       toggleContactHidden,
       applyBands,

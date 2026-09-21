@@ -10,6 +10,7 @@ import {
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { BandSettings } from "@/lib/data/viz-bands";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
+import type { DistanceUnit } from "@/lib/format/distance";
 
 /**
  * The match report's one context: state, actions and meta (settled Statistics
@@ -89,6 +90,15 @@ export interface MatchReportMeta {
    * edit them, matching `viz_band_settings`'s own RLS write policy.
    */
   canEditBands: boolean;
+  /**
+   * The viewer's Units preference (Settings › Preferences, Stage 2C) —
+   * loaded once in `page.tsx` via `getPreferences()` beside `getSavedViews`/
+   * `getBandSettings`, and threaded down here for the same reason: every
+   * distance-aware piece of the Visualizations tab reads it from here
+   * instead of a prop drilled through `ShotsTab`. Never a per-chart toggle.
+   * Band STORAGE stays feet regardless — this only affects display.
+   */
+  unit: DistanceUnit;
 }
 
 export interface MatchReportContextValue {
@@ -123,6 +133,7 @@ export function MatchReportProvider({
   workspaceName,
   bandSettings,
   canEditBands,
+  unit,
   children,
 }: MatchReportProviderProps) {
   const pathname = usePathname();
@@ -172,6 +183,7 @@ export function MatchReportProvider({
       workspaceName,
       bandSettings,
       canEditBands,
+      unit,
     }),
     [
       matchId,
@@ -185,6 +197,7 @@ export function MatchReportProvider({
       workspaceName,
       bandSettings,
       canEditBands,
+      unit,
     ],
   );
 

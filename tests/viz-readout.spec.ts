@@ -145,6 +145,24 @@ test("speed 0 is unmeasured, not a reading — never '0 mph'", () => {
   expect(r.lines[r.monoLine]).toBe("Set 3 · 40-15");
 });
 
+/* ── Stage 2C: the fact line's speed follows the Units preference ───────── */
+
+test("unit defaults to 'ft' when the caller omits it (no callers left that do, but the fallback must not read '0 km/h')", () => {
+  const r = buildReadout(meta(), NAMES, "serve");
+  expect(r.lines[r.monoLine]).toBe("Set 3 · 40-15 · 118 mph");
+});
+
+test("metres preference: the speed line reads km/h, not mph", () => {
+  const r = buildReadout(meta(), NAMES, "serve", "m");
+  // formatSpeed("m", 118) = round(118 * 1.609344) = 190
+  expect(r.lines[r.monoLine]).toBe("Set 3 · 40-15 · 190 km/h");
+});
+
+test("metres preference, speed 0 is still unmeasured — never '0 km/h'", () => {
+  const r = buildReadout(meta({ speedMph: 0 }), NAMES, "serve", "m");
+  expect(r.lines[r.monoLine]).toBe("Set 3 · 40-15");
+});
+
 test("no point score omits that part, keeping the rest", () => {
   const r = buildReadout(meta({ pointScore: null }), NAMES, "serve");
   expect(r.lines[r.monoLine]).toBe("Set 3 · 118 mph");

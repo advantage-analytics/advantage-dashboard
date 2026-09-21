@@ -1,4 +1,5 @@
 import type { Cut, VizDotMeta } from "./viz-model";
+import { formatSpeed, type DistanceUnit } from "@/lib/format/distance";
 
 /**
  * The fullscreen viewer's hover/focus readout, as a PURE function of one
@@ -95,6 +96,7 @@ export function buildReadout(
   meta: VizDotMeta,
   names: ReadoutNames,
   cut: Cut,
+  unit: DistanceUnit = "ft",
 ): Readout {
   const title = `${names.subject} ${meta.wonBySubject ? "won" : "lost"} the point`;
 
@@ -119,13 +121,13 @@ export function buildReadout(
   const score = (meta.pointScore ?? "").trim();
   if (score !== "") facts.push(score);
   // Unmeasured speed arrives as `null` from `computeViz`, but a stored 0 is
-  // equally "not a reading" — never "0 mph".
+  // equally "not a reading" — never "0 mph"/"0 km/h".
   if (
     meta.speedMph !== null &&
     Number.isFinite(meta.speedMph) &&
     meta.speedMph > 0
   ) {
-    facts.push(`${Math.round(meta.speedMph)} mph`);
+    facts.push(formatSpeed(unit, meta.speedMph));
   }
 
   const lines: string[] = [];

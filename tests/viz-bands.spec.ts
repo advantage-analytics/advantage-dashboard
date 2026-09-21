@@ -20,6 +20,7 @@ import {
   validateBandInput,
   type BandSettings,
 } from "@/lib/data/viz-bands";
+import { FT_PER_M } from "@/lib/format/distance";
 
 // ---------------------------------------------------------------------------
 // Regression fixtures: today's `viz-model.ts` bucketing, copied verbatim so
@@ -273,6 +274,25 @@ test.describe("depthBandRows", () => {
     expect(rows[0].fromFt).toBe(0);
   });
 
+  // Stage 2C: switching the workspace's unit to metres must never move which
+  // bucket a landing falls into (`fromFt`/`toFt` — what `makeDepthBucketer`
+  // reads — stay in feet regardless of `unit`) — only the DISPLAYED range
+  // follows the preference. Labels stay "Deep"/"Mid"/"Short"; only
+  // `rangeLabel` picks up the unit, one decimal, trailing ".0" dropped
+  // (13 ft → 3.9624 m → "4 m", not "3.96 m" or "4.0 m").
+  test("thirds in metres: same buckets, ranges follow the preference", () => {
+    const ft = depthBandRows(DEFAULT_BANDS, "ft");
+    const m = depthBandRows(DEFAULT_BANDS, "m");
+    expect(m.map((r) => r.label)).toEqual(["Deep", "Mid", "Short"]);
+    expect(m[0].rangeLabel).toBe("0–4 m");
+    expect(m[1].rangeLabel).toBe("4–7.9 m");
+    expect(m[2].rangeLabel).toBe("7.9–11.9 m");
+    // The stored/bucketing bounds (feet) never change with `unit`.
+    expect(m.map((r) => [r.fromFt, r.toFt])).toEqual(
+      ft.map((r) => [r.fromFt, r.toFt]),
+    );
+  });
+
   test("inside gives two rows IN INDEX ORDER against depthBandIndexFromNetM", () => {
     const bands: BandSettings = { ...DEFAULT_BANDS, depthScheme: "inside" };
     const rows = depthBandRows(bands, "ft");
@@ -328,6 +348,18 @@ test.describe("contactBandRows", () => {
       "Inside the baseline",
       "0–5 ft behind",
       "5 ft+ behind",
+    ]);
+  });
+
+  // Stage 2C: the design's own worked example — DEFAULT_BANDS in metres.
+  // 5 ft is EXACTLY 1.524 m (`FT_PER_M` is the exact conversion), which
+  // rounds to one decimal as "1.5 m" — never "1.524 m".
+  test("defaults in metres: '1.5 m', never '1.524 m'", () => {
+    const rows = contactBandRows(DEFAULT_BANDS, "m");
+    expect(rows.map((r) => r.label)).toEqual([
+      "Inside the baseline",
+      "0–1.5 m behind",
+      "1.5 m+ behind",
     ]);
   });
 
@@ -410,6 +442,14 @@ test.describe("contactReadout", () => {
   test("at the line", () =>
     expect(contactReadout("ft", 0)).toBe("at the line"));
   test("behind", () => expect(contactReadout("ft", 3)).toBe("3 ft behind"));
+
+  // Stage 2C.
+  test("inside, metres", () =>
+    expect(contactReadout("m", -5)).toBe("1.5 m inside"));
+  test("at the line, metres", () =>
+    expect(contactReadout("m", 0)).toBe("at the line"));
+  test("behind, metres", () =>
+    expect(contactReadout("m", 3 * FT_PER_M)).toBe("3 m behind"));
 });
 
 test.describe("schemeLabel", () => {

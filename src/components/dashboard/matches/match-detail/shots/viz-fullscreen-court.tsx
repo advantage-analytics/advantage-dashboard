@@ -34,6 +34,7 @@ import {
 import { buildReadout } from "./viz-readout";
 import { nextMarkIndex } from "./viz-mark-roving";
 import type { Chart, Cut, VizDot, VizFilters } from "./viz-model";
+import type { DistanceUnit } from "@/lib/format/distance";
 
 /**
  * The fullscreen viewer's court (Phase 2A, Task 4; f4b-report P2b/P2c) — one
@@ -154,6 +155,7 @@ export function VizFullscreenCourt({
   zoneStats,
   filters,
   subjectName,
+  unit,
   bands,
   transform,
   stage,
@@ -173,6 +175,8 @@ export function VizFullscreenCourt({
   zoneStats: Record<ZoneKey, ZoneStats> | null;
   filters: VizFilters;
   subjectName: string;
+  /** The viewer's Units preference — the readout's speed line follows it. */
+  unit: DistanceUnit;
   /**
    * The depth/contact band overlay's data (Phase 2B), or `null` on a cut
    * with no bands (Serve) or with the shading turned off. Passed as ONE
@@ -228,7 +232,7 @@ export function VizFullscreenCourt({
     panning || editing ? null : (dots.find((d) => d.id === activeId) ?? null);
   const activeMeta = active?.meta ?? null;
   const readout = activeMeta
-    ? buildReadout(activeMeta, { subject: subjectName }, cut)
+    ? buildReadout(activeMeta, { subject: subjectName }, cut, unit)
     : null;
 
   let readoutStyle: React.CSSProperties | null = null;
@@ -345,6 +349,7 @@ export function VizFullscreenCourt({
               cut={cut}
               dots={dots}
               subjectName={subjectName}
+              unit={unit}
               activeId={activeId}
               focusedId={focusedId}
               rovingId={rovingId}
@@ -484,6 +489,7 @@ const MarkLayer = memo(function MarkLayer({
   cut,
   dots,
   subjectName,
+  unit,
   activeId,
   focusedId,
   rovingId,
@@ -495,6 +501,9 @@ const MarkLayer = memo(function MarkLayer({
   cut: Cut;
   dots: VizDot[];
   subjectName: string;
+  /** The viewer's Units preference — the announced label's speed follows it,
+   *  same as the visible readout. */
+  unit: DistanceUnit;
   /** `false` while the band editor is open: no mark is a tab stop, so Tab
    *  goes from the dividers straight to the slab. */
   interactive: boolean;
@@ -513,7 +522,12 @@ const MarkLayer = memo(function MarkLayer({
         const { x, y } = projectViewerDot(cut, dot);
         const label = dot.meta
           ? (() => {
-              const r = buildReadout(dot.meta, { subject: subjectName }, cut);
+              const r = buildReadout(
+                dot.meta,
+                { subject: subjectName },
+                cut,
+                unit,
+              );
               return [r.title, ...r.lines].join(" — ");
             })()
           : `${subjectName} — mark`;

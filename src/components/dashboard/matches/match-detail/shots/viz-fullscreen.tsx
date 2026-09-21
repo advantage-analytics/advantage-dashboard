@@ -513,6 +513,7 @@ export function VizFullscreen() {
             zoneStats={result.zoneStats}
             filters={state.filters}
             subjectName={subjectName}
+            unit={unit}
             bands={bandOverlay}
             transform={pz.t}
             stage={pz.stage}

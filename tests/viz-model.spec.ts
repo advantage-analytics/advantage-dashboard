@@ -651,6 +651,51 @@ test.describe("computeVizStats — return placement", () => {
     expect(row("deep").count).toBe(2);
   });
 
+  // Stage 2C, the design's non-negotiable: "a unit switch must never move a
+  // ball between bands". Same fixtures, unit "m" — counts must be identical
+  // to the "ft" run above, and the Depth group's own labels ("Deep"/"Mid"/
+  // "Short") are static text, not numbers, so they read the same in either
+  // unit — only a band's `rangeLabel` (drawn on the overlay/editor, not
+  // this stat card) follows the preference.
+  test("depth thirds in metres: identical counts to feet — a unit switch never moves a ball between bands", () => {
+    const pts = [
+      returnPoint({ secondShotLandingX: 0, secondShotLandingY: 0 }), // short
+      returnPoint({ secondShotLandingX: 0, secondShotLandingY: DEPTH_THIRD_M }), // mid (boundary, inclusive)
+      returnPoint({
+        secondShotLandingX: 0,
+        secondShotLandingY: 2 * DEPTH_THIRD_M,
+      }), // deep (boundary, inclusive)
+      returnPoint({
+        secondShotLandingX: 0,
+        secondShotLandingY: NET_TO_BASELINE_M,
+      }), // deep
+    ];
+    const statsFt = computeVizStats(
+      pts,
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+    );
+    const statsM = computeVizStats(
+      pts,
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "m",
+    );
+    const depthM = statsM.groups.find((g) => g.key === "depth")!;
+    const depthFt = statsFt.groups.find((g) => g.key === "depth")!;
+    expect(depthM.rows.map((r) => ({ key: r.key, count: r.count }))).toEqual(
+      depthFt.rows.map((r) => ({ key: r.key, count: r.count })),
+    );
+    expect(depthM.rows.map((r) => r.label)).toEqual(["Deep", "Mid", "Short"]);
+  });
+
   test("out/net landings are excluded from rows and the subtitle count says so", () => {
     const inCourt1 = returnPoint({});
     const inCourt2 = returnPoint({});
@@ -723,6 +768,40 @@ test.describe("computeVizStats — return contact", () => {
     expect(row("inside").count).toBe(1);
     expect(row("near").count).toBe(2);
     expect(row("far").count).toBe(2);
+  });
+
+  // Stage 2C: same fixtures in metres — identical buckets AND the rows'
+  // labels (unlike Depth's thirds group, a contact row's label IS the
+  // number — `contactRow` in viz-bands.ts) read as the design's worked
+  // example: "Inside the baseline" / "0–1.5 m behind" / "1.5 m+ behind".
+  test("contact depth bands in metres: same buckets, labels read '0–1.5 m behind' / '1.5 m+ behind'", () => {
+    const REAL_COURT_LENGTH = 23.77;
+    const atDepth = (depthM: number) =>
+      contactPoint({ secondShotContactY: REAL_COURT_LENGTH + depthM });
+    const pts = [
+      atDepth(-0.5), // inside the baseline
+      atDepth(0), // 0-5ft behind (on the line)
+      atDepth(1.0), // 0-5ft behind
+      atDepth(FIVE_FEET_M), // 5ft+ behind (boundary, inclusive)
+      atDepth(3.0), // 5ft+ behind
+    ];
+    const stats = computeVizStats(
+      pts,
+      "returnContact",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "m",
+    );
+    const depth = stats.groups.find((g) => g.key === "depth")!;
+    const row = (key: string) => depth.rows.find((r) => r.key === key)!;
+    expect(row("inside").count).toBe(1);
+    expect(row("near").count).toBe(2);
+    expect(row("far").count).toBe(2);
+    expect(row("inside").label).toBe("Inside the baseline");
+    expect(row("near").label).toBe("0–1.5 m behind");
+    expect(row("far").label).toBe("1.5 m+ behind");
   });
 
   test("stroke rows split forehand and backhand the same way the triangle mark does", () => {

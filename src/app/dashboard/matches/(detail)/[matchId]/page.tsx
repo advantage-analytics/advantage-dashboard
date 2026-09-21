@@ -6,6 +6,7 @@ import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 import { getMatchDetailData } from "@/lib/data/match-detail-server";
 import { getSavedViews } from "@/lib/data/saved-views-server";
 import { getBandSettings } from "@/lib/data/viz-bands-server";
+import { getPreferences } from "@/lib/data/preferences-server";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import { hasComparisonBaseline } from "@/lib/data/match-stats-server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
@@ -92,38 +93,41 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // `getWorkspaceContext()` is `cache()`-wrapped and the layout above this
   // page already called it once to gate sign-in, so this rides the same
   // request-scoped result rather than a second query.
-  const [data, jobs, video, filmEntry, workspace] = await Promise.all([
-    getMatchDetailData(matchId),
-    createClient().then(async (supabase) => {
-      // Ask the vendor about jobs that look stuck BEFORE reading, so what the
-      // poll learns is what this page renders. Never fatal — and not inside
-      // loadMatchAnalysis, which client components import and the
-      // reconciler's admin/Azure dependencies must never reach.
-      //
-      // Gated on an RLS-scoped existence check first. reconcileBeforePageRead
-      // runs on the ADMIN client, which enforces no ownership of its own —
-      // without this check, this branch races getMatchDetailData's own RLS
-      // read rather than waiting for it, so a signed-in user who merely
-      // knows or guesses a matchId belonging to another account could force
-      // a vendor poll, a status write, and even an auto-resubmission —
-      // spending someone else's quota — before the page's 404 ever fires.
-      // This SELECT uses the same request-scoped, cookie-authenticated
-      // client as everything else here, so it answers exactly what the
-      // viewer's own RLS policy would: nothing, if they cannot see this row.
-      const { data: accessible } = await supabase
-        .from("matches")
-        .select("id")
-        .eq("id", matchId)
-        .maybeSingle();
-      if (accessible) {
-        await reconcileBeforePageRead([matchId], "match-detail");
-      }
-      return loadMatchAnalysis(supabase, [matchId], { reap: true });
-    }),
-    getMatchVideo(matchId),
-    getMatchFilmEntry(matchId),
-    getWorkspaceContext(),
-  ]);
+  const [data, jobs, video, filmEntry, workspace, preferences] =
+    await Promise.all([
+      getMatchDetailData(matchId),
+      createClient().then(async (supabase) => {
+        // Ask the vendor about jobs that look stuck BEFORE reading, so what the
+        // poll learns is what this page renders. Never fatal — and not inside
+        // loadMatchAnalysis, which client components import and the
+        // reconciler's admin/Azure dependencies must never reach.
+        //
+        // Gated on an RLS-scoped existence check first. reconcileBeforePageRead
+        // runs on the ADMIN client, which enforces no ownership of its own —
+        // without this check, this branch races getMatchDetailData's own RLS
+        // read rather than waiting for it, so a signed-in user who merely
+        // knows or guesses a matchId belonging to another account could force
+        // a vendor poll, a status write, and even an auto-resubmission —
+        // spending someone else's quota — before the page's 404 ever fires.
+        // This SELECT uses the same request-scoped, cookie-authenticated
+        // client as everything else here, so it answers exactly what the
+        // viewer's own RLS policy would: nothing, if they cannot see this row.
+        const { data: accessible } = await supabase
+          .from("matches")
+          .select("id")
+          .eq("id", matchId)
+          .maybeSingle();
+        if (accessible) {
+          await reconcileBeforePageRead([matchId], "match-detail");
+        }
+        return loadMatchAnalysis(supabase, [matchId], { reap: true });
+      }),
+      getMatchVideo(matchId),
+      getMatchFilmEntry(matchId),
+      getWorkspaceContext(),
+      getPreferences(),
+    ]);
+  const unit = preferences.unit;
 
   if (!data) notFound();
 
@@ -249,6 +253,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
         // this branch, so the default is enough and skips the query.
         bandSettings={DEFAULT_BANDS}
         canEditBands={canEditBands}
+        unit={unit}
       >
         <MatchReportFrame>
           <MatchReportRail>
@@ -284,6 +289,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
         workspaceName={workspaceName}
         bandSettings={bandSettings}
         canEditBands={canEditBands}
+        unit={unit}
       >
         <MatchReportFrame>
           <MatchReportRail>
