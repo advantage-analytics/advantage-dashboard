@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Create point_bookmarks table, RLS and backfill, proven by a live spec
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** `supabase/migrations/<timestamp>_point_bookmarks.sql` (new), `tests/point-bookmarks-db.spec.ts` (new, modelled on `tests/match-video-attachments-db.spec.ts` and `tests/fixtures/live-db.ts`) — guesses
 - **done when:**
