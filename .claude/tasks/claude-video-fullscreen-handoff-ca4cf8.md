@@ -113,7 +113,7 @@ ready).
 
 ## T8 · Give FilmAdvancedPanel a dark tone
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6
 - **files:** (guess) film/film-advanced-panel.tsx, film/point-list.tsx (the FilmAdvancedPanel call site only)

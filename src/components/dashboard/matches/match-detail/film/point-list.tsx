@@ -327,7 +327,8 @@ export const PointList = memo(function PointList({
   return (
     <section aria-label="Point list" className={t.root} style={t.rootStyle}>
       {advancedOpen ? (
-        // Advanced takes the list's own column, inside this same card: Apply
+        // Advanced takes the list's own column, in this same section and on
+        // this same tone (frame R4: never a modal over the film): Apply
         // commits the draft and returns to the list, Close returns without
         // touching the cut. No popover, no overlay.
         <FilmAdvancedPanel
@@ -341,6 +342,7 @@ export const PointList = memo(function PointList({
           onClose={() => onAdvancedOpenChange(false)}
           openSections={openSections}
           onOpenSectionsChange={onOpenSectionsChange}
+          tone={tone}
         />
       ) : (
         <>

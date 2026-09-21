@@ -81,3 +81,16 @@ is the runner's. Newest entries at the bottom.
 1. `match-video-attachments-db.spec.ts:3225` has now failed in three gate runs on this branch (T3, T7) and once when run alone, while passing on the next attempt each time. It claims from a cleanup queue on the shared live database, so another session's sweep can take its rows. Worth isolating by marker or serialising.
 2. The R3 frame draws each shot's player as a 20px initials chip; the well prints the last name because the criterion required `shotRowCells` strings. Decide whether the chip is wanted.
 3. The well's slicing and one-lit rule have no spec of their own.
+
+## T8 · Give FilmAdvancedPanel a dark tone — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** `FilmAdvancedPanel` takes `tone` (default light) and `PointList` passes its own through. Two module-level lookups, panel and pill, hold the shipped light strings verbatim beside R3/R4's dark literals; `var(--blue)` is the only colour token in a dark branch. On dark the selected pill's wash is 7% white rather than the blue tint, which is invisible over film — the blue border and label carry the state. Geometry, the section table, live counts, the Apply gate and `advButton()` are unchanged; `filters/types.ts` is not in the diff.
+
+**correction to the T7 entry above:** the intermittent `match-video-attachments-db.spec.ts:3225` failure had occurred in two gate runs (T3 and T7) plus one solo re-run, not three gate runs.
+
+**follow-ups:**
+
+1. This panel's docstring still names `film-advanced-filters-dialog.tsx`; T9 deletes that file and forbids the filename anywhere under `src/`, comments included.
+2. Dark zero-count pills (30% white on a 4% wash) are the lowest-contrast thing in the column.
