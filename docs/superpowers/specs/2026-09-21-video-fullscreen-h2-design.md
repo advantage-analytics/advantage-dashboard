@@ -134,7 +134,10 @@ cancels back to where it started; each landing announced politely. Focused board
 `--focus-ring` on plain `:focus`; held is the same outline at full weight. Position persists.
 Survives the chrome collapse at 82% opacity (`dim`).
 
-### C2 · FilmCourt (new `film-court.tsx` + pure `film-court.ts`)
+### C2 · FilmCourt (new `film-court-card.tsx` + pure `film-court.ts`)
+
+The component file is `film-court-card.tsx`, export `FilmCourt`. A `film-court.tsx` beside
+`film-court.ts` would be resolved differently by TypeScript (`.ts` first) and Next (`.tsx` first).
 
 Full court, both halves, net across the middle. Lines `rgba(255,255,255,.24)`, outer `.34`, net
 `.6`, surface `rgba(214,228,249,.07)`.

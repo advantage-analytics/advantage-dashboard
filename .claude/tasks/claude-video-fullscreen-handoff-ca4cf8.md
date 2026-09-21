@@ -140,12 +140,12 @@ ready).
 
 ## T10 · Build the FilmCourt presentational component
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** (guess) film/film-court.tsx (new), film/film-court.ts, tests/film-court.spec.ts
 - **done when:**
-  - [ ] `film/film-court.tsx` exports `FilmCourt`. Its props are `mode: "point" | "match" | "none"`, `title`, `caption`, `marks`, the two player names, `controls`, `onSwapMode`, `onHide`, `onSelectMark`, and a key that changes on every seek. It calls no data loader and no `useMatchSides()`, and nothing mounts it yet. The root is `<section aria-label="Shot placement">` at 168px with 8px padding, a 20px header and a 152×227 court box. Lines are `rgba(255,255,255,0.24)`, the outer line `0.34`, the net `0.6` and the surface `rgba(214,228,249,0.07)`
+  - [ ] `film/film-court-card.tsx` exports `FilmCourt` (not `film-court.tsx`: that basename collides with `film-court.ts`, which TypeScript and Next resolve in opposite orders — author decision 2026-09-21). Its props are `mode: "point" | "match" | "none"`, `title`, `caption`, `marks`, the two player names, `controls`, `onSwapMode`, `onHide`, `onSelectMark`, and a key that changes on every seek. It calls no data loader and no `useMatchSides()`, and nothing mounts it yet. The root is `<section aria-label="Shot placement">` at 168px with 8px padding, a 20px header and a 152×227 court box. Lines are `rgba(255,255,255,0.24)`, the outer line `0.34`, the net `0.6` and the surface `rgba(214,228,249,0.07)`
   - [ ] Marks render in the order given as `<button>`s with an `aria-label` and `data-shot-id`. A contact is a 7px donut (1px border, transparent fill) and a bounce is a 7px filled dot. The live bounce carries `0 0 0 1px rgba(255,255,255,0.85)`. Opacity comes from the mark with a 300ms opacity transition. Match-mode marks are 4.5px with no border and no ring. Colours are the `YOU` / `OPP` / `OUT` constants imported from `film-court.ts`
   - [ ] One readout at a time. It opens on pointer enter and on focus, and closes on leave, on blur and when the seek key changes. It uses `DARK_READOUT_CLASS` / `DARK_READOUT_STYLE` from `chart-tooltip.tsx` at 168px, `padding:10px 12px`, `role="tooltip"`, with a 12/500 white title then 11px lines at 64% white. Which side it hangs on comes from an exported pure `readoutPlacement(x, y)` in `film-court.ts`, with a spec case for a mark on the left and one on the right. Click calls `onSelectMark`
   - [ ] The header holds two 20px buttons. The `layers` button is labelled by destination ("Show the whole match" / "Show this point only") and the `x` button reads "Hide the court". With `controls === false` both get opacity 0, `tabIndex={-1}` and `aria-hidden`, and the card keeps its box. The legend reads "Contact" / "Bounce" in point mode and the two player names in match mode. `mode="none"` renders no marks, keeps every line and shows title "Next point", caption "Not started"

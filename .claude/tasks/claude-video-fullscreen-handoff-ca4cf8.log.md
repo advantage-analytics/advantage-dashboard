@@ -94,3 +94,15 @@ is the runner's. Newest entries at the bottom.
 
 1. This panel's docstring still names `film-advanced-filters-dialog.tsx`; T9 deletes that file and forbids the filename anywhere under `src/`, comments included.
 2. Dark zero-count pills (30% white on a 4% wash) are the lowest-contrast thing in the column.
+
+## T10 · Build the FilmCourt presentational component — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`. The component file is `film-court-card.tsx`, not the `film-court.tsx` the task first named: that basename collides with `film-court.ts`, which TypeScript resolves `.ts`-first and Next `.tsx`-first. The author's delegate amended the criterion and the design doc to the new name before the review.
+
+**changed:** New `film/film-court-card.tsx` exporting `FilmCourt`: a 168px card with a 152×227 court at the frame's line alphas, marks as buttons in the order given (7px donut for a contact, 7px dot for a bounce, the ring on the live bounce, 4.5px flat in match mode, 300ms opacity fade), one dark readout at a time that closes when the seek key changes, a destination-labelled `layers` button and a "Hide the court" button that go inert under `controls={false}`, and a designed `none` state. No loader, no `useMatchSides()`, nothing mounts it yet. `film-court.ts` gains pure `readoutPlacement` and four fields on `CourtMark` so a mark can describe itself; `pointMarks` / `matchMarks` signatures are unchanged. The end-change assertions compare through a projection that reduces the carried shot to its id.
+
+**follow-ups:**
+
+1. T12 must import from `./film-court-card`; its notes still say `film-court.tsx`.
+2. `pointMarks` wants the point's shots in rally order, the same array `activeShotAt` indexed into.
+3. The readout flips by which half of the court the mark is in; with the board in a right-hand corner it may need to flip by available room instead.

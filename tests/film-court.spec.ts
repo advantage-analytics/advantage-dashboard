@@ -7,8 +7,10 @@ import {
   YOU,
   matchMarks,
   pointMarks,
+  readoutPlacement,
   toCourtPercent,
   youAreAtLowEnd,
+  type CourtMark,
 } from "@/components/dashboard/matches/match-detail/film/film-court";
 import type { MatchShot } from "@/lib/data/match-points-server";
 
@@ -60,6 +62,18 @@ const RALLY: MatchShot[] = [
   shot("s4", true, [3.3, -1.1], [-2.8, 20.4]),
   shot("s5", true, [-3.0, 0.6], [0.3, 24.2], "Out"),
 ];
+
+/**
+ * Everything a mark DRAWS, with the shot it carries reduced to its id.
+ *
+ * A mark also hands `FilmCourt` the shot itself, so the readout can print its
+ * stroke, speed, placement and result — and an end change rewrites that shot's
+ * coordinates, which the readout never prints. Comparing the drawn mark plus
+ * the shot's identity is therefore the whole claim: same dots, same colours,
+ * same trail, same shots behind them, whichever end you were standing at.
+ */
+const drawn = (marks: readonly CourtMark[]) =>
+  marks.map(({ shot, ...rest }) => ({ ...rest, shot: shot.id }));
 
 const bounceOf = (marks: ReturnType<typeof pointMarks>, id: string) =>
   marks.find((m) => m.shotId === id && m.kind === "bounce");
@@ -148,12 +162,14 @@ test("you are drawn at the bottom", () => {
 test("an end change flips the coordinates, not the picture", () => {
   for (let active = 0; active <= RALLY.length; active += 1) {
     const opts = { youIsPlayer1: true, activeShot: active };
-    expect(pointMarks(mirrored(RALLY), opts)).toEqual(pointMarks(RALLY, opts));
+    expect(drawn(pointMarks(mirrored(RALLY), opts))).toEqual(
+      drawn(pointMarks(RALLY, opts)),
+    );
   }
   const before = pt({ id: "p1", shots: RALLY });
   const after = pt({ id: "p1", shots: mirrored(RALLY) });
-  expect(matchMarks([after], { youIsPlayer1: true })).toEqual(
-    matchMarks([before], { youIsPlayer1: true }),
+  expect(drawn(matchMarks([after], { youIsPlayer1: true }))).toEqual(
+    drawn(matchMarks([before], { youIsPlayer1: true })),
   );
 });
 
@@ -247,8 +263,8 @@ test("a net ball sits on the hitter's side, decided by contactY", () => {
 
   // Same answers after an end change.
   expect(
-    pointMarks(mirrored(yours), { youIsPlayer1: true, activeShot: 1 }),
-  ).toEqual(pointMarks(yours, { youIsPlayer1: true, activeShot: 1 }));
+    drawn(pointMarks(mirrored(yours), { youIsPlayer1: true, activeShot: 1 })),
+  ).toEqual(drawn(pointMarks(yours, { youIsPlayer1: true, activeShot: 1 })));
 });
 
 test("match mode plots bounces only, with no trail", () => {
@@ -283,4 +299,36 @@ test("match mode plots bounces only, with no trail", () => {
   expect(marks.filter((m) => m.role === "you").every((m) => m.y < 50)).toBe(
     true,
   );
+});
+
+test("a mark carries the shot its readout describes", () => {
+  const marks = pointMarks(RALLY, { youIsPlayer1: true, activeShot: 4 });
+  const live = bounceOf(marks, "s4")!;
+  expect(live.shot).toBe(RALLY[3]);
+  expect(live.order).toBe(4);
+  expect(live.rallyShots).toBe(RALLY.length);
+  // The verdict can read "out" for either player, so the hitter is its own
+  // field: the readout still has to name whoever struck it.
+  expect(live.hitter).toBe("you");
+  const outMark = bounceOf(
+    pointMarks(RALLY, { youIsPlayer1: true, activeShot: 5 }),
+    "s5",
+  )!;
+  expect([outMark.role, outMark.hitter]).toEqual(["out", "you"]);
+  expect(
+    matchMarks([pt({ id: "p1", shots: RALLY })], { youIsPlayer1: true })[0],
+  ).toMatchObject({ order: 1, rallyShots: 5, hitter: "opp" });
+});
+
+test("the readout hangs opposite the mark and stays in frame", () => {
+  // A mark on the left is read on the right, and one on the right on the left.
+  expect(readoutPlacement(17, 50).side).toBe("right");
+  expect(readoutPlacement(83, 50).side).toBe("left");
+  // The centre line reads right, so a serve down the T does not flip sides.
+  expect(readoutPlacement(50, 50).side).toBe("right");
+  // It rides a little above the mark…
+  expect(readoutPlacement(17, 50).top).toBe(38);
+  // …and is clamped at both ends so three lines always fit on the card.
+  expect(readoutPlacement(17, 3).top).toBe(0);
+  expect(readoutPlacement(83, 97).top).toBe(70);
 });

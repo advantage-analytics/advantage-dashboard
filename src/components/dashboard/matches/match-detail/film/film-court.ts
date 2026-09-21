@@ -90,6 +90,37 @@ const NET_INSET_M = 0.3;
 
 export type CourtMarkRole = "you" | "opp" | "out";
 
+/** Where a mark's readout hangs, so it never covers the mark it explains. */
+export interface ReadoutPlacement {
+  /** Which side of the court box the readout sits beside. */
+  side: "left" | "right";
+  /** Its top edge, percent of the court box's height. */
+  top: number;
+}
+
+/**
+ * How far above the mark the readout's top edge sits, and the lowest top that
+ * still leaves its three lines inside the card — percentages of the court box
+ * (227px tall against a readout of roughly 68px).
+ */
+const READOUT_LIFT_PCT = 12;
+const READOUT_MAX_TOP_PCT = 70;
+
+/**
+ * Which side of the court a mark at (`x`, `y`) — percentages of the court box
+ * — is read on. A mark in the left half is read on the right and vice versa,
+ * so the readout never lands on top of the marks around it, and the top is
+ * clamped so the box stays inside the frame.
+ */
+export function readoutPlacement(x: number, y: number): ReadoutPlacement {
+  return {
+    side: x > 50 ? "left" : "right",
+    top: round(
+      Math.min(READOUT_MAX_TOP_PCT, Math.max(0, y - READOUT_LIFT_PCT)),
+    ),
+  };
+}
+
 export interface CourtMark {
   shotId: string;
   kind: "contact" | "bounce";
@@ -101,6 +132,22 @@ export interface CourtMark {
   role: CourtMarkRole;
   /** True only on the bounce of the shot playing now — it carries the ring. */
   live: boolean;
+  /**
+   * The shot this mark came from. `FilmCourt`'s readout prints its stroke,
+   * spin, speed, placement and result — never its coordinates, which is why an
+   * end change leaves everything the card DRAWS identical (see the spec's
+   * end-change case, which projects the shot out before comparing).
+   */
+  shot: MatchShot;
+  /** 1-based place in its point's rally, and the rally's shot count. */
+  order: number;
+  rallyShots: number;
+  /**
+   * Who struck it. Separate from {@link CourtMarkRole} because the role is the
+   * verdict: an out ball reads "out" whichever player hit it, and the readout
+   * still has to name them.
+   */
+  hitter: "you" | "opp";
 }
 
 export interface MatchCourtMark extends CourtMark {
@@ -163,9 +210,13 @@ export function youAreAtLowEnd(
   return votes === 0 ? null : votes > 0;
 }
 
+function hitterOf(shot: MatchShot, youIsPlayer1: boolean): "you" | "opp" {
+  return shot.isPlayer1 === youIsPlayer1 ? "you" : "opp";
+}
+
 function roleOf(shot: MatchShot, youIsPlayer1: boolean): CourtMarkRole {
   if (isResult(shot, "out")) return "out";
-  return shot.isPlayer1 === youIsPlayer1 ? "you" : "opp";
+  return hitterOf(shot, youIsPlayer1);
 }
 
 /** Where the bounce is drawn, in the database frame; null = no bounce mark. */
@@ -196,8 +247,17 @@ function marksForShot(
   opacity: number,
   age: number,
   withContact: boolean,
+  /** 1-based place in the rally, and the rally's length. */
+  order: number,
+  rallyShots: number,
 ): CourtMark[] {
   const role = roleOf(shot, youIsPlayer1);
+  const detail = {
+    shot,
+    order,
+    rallyShots,
+    hitter: hitterOf(shot, youIsPlayer1),
+  };
   const out: CourtMark[] = [];
   if (withContact && shot.contactX != null && shot.contactY != null) {
     out.push({
@@ -207,6 +267,7 @@ function marksForShot(
       opacity,
       role,
       live: false,
+      ...detail,
     });
   }
   const bounce = bouncePosition(shot, youLow, youIsPlayer1);
@@ -218,6 +279,7 @@ function marksForShot(
       opacity,
       role,
       live: age === 0,
+      ...detail,
     });
   }
   return out;
@@ -244,7 +306,16 @@ export function pointMarks(
     const age = activeShot - (i + 1);
     if (age < 0 || age >= TRAIL.length) return;
     out.push(
-      ...marksForShot(shot, youLow, youIsPlayer1, TRAIL[age], age, true),
+      ...marksForShot(
+        shot,
+        youLow,
+        youIsPlayer1,
+        TRAIL[age],
+        age,
+        true,
+        i + 1,
+        shots.length,
+      ),
     );
   });
   return out;
@@ -264,7 +335,7 @@ export function matchMarks(
     const shots = point.shots ?? [];
     const youLow = youAreAtLowEnd(shots, opts.youIsPlayer1);
     if (youLow === null) continue;
-    for (const shot of shots) {
+    shots.forEach((shot, i) => {
       for (const mark of marksForShot(
         shot,
         youLow,
@@ -272,10 +343,12 @@ export function matchMarks(
         1,
         -1,
         false,
+        i + 1,
+        shots.length,
       )) {
         out.push({ ...mark, pointId: point.id });
       }
-    }
+    });
   }
   return out;
 }
