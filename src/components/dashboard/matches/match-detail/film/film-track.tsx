@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import type { TrackSegment } from "./film-timeline";
 
 /**
- * The fullscreen scrub track (handoff F1): 3px runs split at breaks of serve
+ * The fullscreen scrub track (handoff F1): 3px runs split by set
  * with 5px gaps, Signal Blue behind the playhead, 22% white ahead of it, an
  * 11px white playhead. The 16px hit area is the whole row; the runs are
  * decoration inside it. Blue here is one of the three places the fullscreen

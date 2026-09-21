@@ -70,11 +70,24 @@ test.describe("court conversion", () => {
     expect(serveZone(metersToCourtFrame(3.5, 5.0).x)).toBe("Wide");
   });
 
-  test("return direction matches how the stats function classifies it", () => {
+  test("direction is decided by crossing the centre line, hitter to bounce", () => {
     expect(directionZone(0.5, -3.0)).toBe("Middle");
     expect(directionZone(3.0, -3.0)).toBe("Crosscourt");
     expect(directionZone(-3.0, -3.0)).toBe("Down the Line");
     expect(directionZone(null, -3.0)).toBeNull();
+    expect(directionZone(3.0, null)).toBeNull();
+    expect(directionZone(3.0, 0)).toBeNull();
+  });
+
+  test("the far player's direction reads the same as the near player's", () => {
+    // The frame never flips by end: a far-end hitter at x = +3 driving the
+    // ball to x = -3 has crossed the centre line exactly as a near-end one has.
+    const farContact = metersToCourtFrame(3.0, 11.0);
+    const nearContact = metersToCourtFrame(3.0, -11.0);
+    expect(directionZone(-3.0, farContact.x)).toBe("Crosscourt");
+    expect(directionZone(-3.0, nearContact.x)).toBe("Crosscourt");
+    expect(directionZone(3.2, farContact.x)).toBe("Down the Line");
+    expect(directionZone(3.2, nearContact.x)).toBe("Down the Line");
   });
 
   test("converts km/h to mph", () => {

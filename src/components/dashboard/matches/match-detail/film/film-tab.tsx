@@ -30,6 +30,7 @@ import {
 } from "./film-shots";
 import { FilmThisPoint } from "./film-this-point";
 import { activeStopAt } from "./film-timeline";
+import { usePublishFilmHead } from "@/components/dashboard/matches/match-detail/film-head-context";
 import { useAttachmentPlayback } from "./use-attachment-playback";
 import {
   DEFAULT_FILM_FILTERS,
@@ -278,6 +279,16 @@ function FilmRoom({
     [allShotStops, currentTime],
   );
   const activePoint = active?.stop.point ?? null;
+
+  // The rail scoreboard's live state reads the point under the head from here
+  // — the same `activeStopAt` the list and This point read — so scrubbing
+  // rewrites all three from one answer.
+  const filmHead = useMemo(
+    () =>
+      activePoint ? { point: activePoint, time: currentTime, columns } : null,
+    [activePoint, currentTime, columns],
+  );
+  usePublishFilmHead(filmHead);
   const pointShots = useMemo(
     () =>
       activePoint

@@ -64,3 +64,23 @@ export function viewerSide(
   }
   return null;
 }
+
+/**
+ * Which seat the match page calls "you" — the row the scoreboard prints first
+ * and the side the workspace crest marks.
+ *
+ * The viewer's own seat wins. Failing that, a seat held by a player on the
+ * match's program roster: a coach reading an athlete's match is in neither
+ * seat, and orienting from seat two there put the OPPONENT on top with the
+ * team's crest beside their name. Only a row that names neither falls back to
+ * seat two, which is what the page has always drawn for legacy rows.
+ */
+export function youSeat(
+  match: { player1_id: string | null; player2_id?: string | null },
+  myPlayerIds: readonly string[],
+  rosterIds: readonly string[],
+): "player1" | "player2" {
+  return (
+    playerSeat(match, myPlayerIds) ?? playerSeat(match, rosterIds) ?? "player2"
+  );
+}
