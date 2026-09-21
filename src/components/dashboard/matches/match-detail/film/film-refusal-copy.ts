@@ -6,6 +6,12 @@
  * spec's table does not carry: the saved state could not be read at all, so the
  * page cannot say the recording is attached (a guess) or that it is not (the
  * guess that ends in a duplicate upload).
+ *
+ * `denied` is a heading and nothing else. The playback hook already writes the
+ * sentence under it — it knows which credential was refused and why — and a
+ * second sentence here would either contradict it or repeat it. Every host
+ * renders `problem.message` under this heading (H2 R10: one copy table, two
+ * hosts, and the hook still owns the body).
  */
 export const FILM_REFUSAL_COPY = {
   stale: {
@@ -15,6 +21,9 @@ export const FILM_REFUSAL_COPY = {
   unavailable: {
     heading: "The video could not be reached",
     body: "Storage did not answer. Nothing has been lost — the recording is still attached to this match.",
+  },
+  denied: {
+    heading: "You can no longer watch this video",
   },
   unknown: {
     heading: "This match's video could not be checked",

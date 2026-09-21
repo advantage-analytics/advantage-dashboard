@@ -194,7 +194,7 @@ ready).
 
 ## T14 · R10 from one copy table, plus aria-modal, focus trap and double-click exit
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T13
 - **files:** (guess) film/film-refusal-copy.ts, film/film-fullscreen.tsx, film/film-player.tsx (PROBLEM_TITLES only), film/film-focus-trap.ts (new), tests/film-focus-trap.spec.ts (new)

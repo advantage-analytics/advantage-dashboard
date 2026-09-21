@@ -43,6 +43,8 @@ import {
   lastNameOf,
   type FilmFilters,
 } from "./film-filters";
+import { FOCUSABLE_SELECTOR, nextFocusTarget } from "./film-focus-trap";
+import { FILM_REFUSAL_COPY } from "./film-refusal-copy";
 import { FilmRoomDrawer } from "./film-room-drawer";
 import {
   readCourtMode,
@@ -184,14 +186,16 @@ const BOTTOM_SCRIM =
 /**
  * A heading per terminal reason. Same four as `film-player.tsx`, because one
  * hook state must not read as two different events depending on which surface
- * the viewer happened to be on.
+ * the viewer happened to be on — which is why every one of them resolves from
+ * `FILM_REFUSAL_COPY` rather than being typed out again here (H2 R10: one copy
+ * table, two hosts). The body stays the hook's `problem.message`.
  */
 const ROOM_PROBLEM_TITLES: Record<AttachmentPlaybackProblem["reason"], string> =
   {
-    removed: "This video is no longer attached",
-    denied: "You can no longer watch this video",
-    unreachable: "The video could not be reached",
-    unplayable: "The film stopped loading",
+    removed: FILM_REFUSAL_COPY.stale.heading,
+    denied: FILM_REFUSAL_COPY.denied.heading,
+    unreachable: FILM_REFUSAL_COPY.unavailable.heading,
+    unplayable: FILM_REFUSAL_COPY.loadFailure.heading,
   };
 
 function prefersReducedMotion(): boolean {
@@ -773,10 +777,20 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
 
   useEffect(() => {
     const previous = document.body.style.overflow;
+    // Whatever opened the room — the player's maximize control, or a
+    // ⇧-clicked point row — gets focus back when the room comes off (R1: the
+    // room is modal). Without this, focus falls to `body` and a keyboard
+    // viewer restarts their tab walk at the top of the page.
+    const opener =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     document.body.style.overflow = "hidden";
     rootRef.current?.focus({ preventScroll: true });
     return () => {
       document.body.style.overflow = previous;
+      // A detached opener (the row's list re-rendered) simply no-ops.
+      opener?.focus({ preventScroll: true });
     };
   }, []);
 
@@ -942,6 +956,54 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [wake, togglePlay, seek, step, toggleSavedActive, exit]);
 
+  /* ── Focus trap ──────────────────────────────────────────────────────── */
+
+  /**
+   * Tab is trapped inside the room (R1), on its own effect.
+   *
+   * Separate from the shortcut handler above on purpose: that one is about
+   * what the film does, this one is about where focus goes, and the two have
+   * different stand-down rules. The ring is read at the moment Tab is pressed
+   * rather than held in state — the chrome collapses, the drawer opens, the
+   * court's header glyphs drop out of the tab order, so any cached list would
+   * be describing a room that is no longer on screen.
+   *
+   * It stands down entirely while a menu or dialog is open: Radix portals its
+   * surfaces to `body`, outside this root, and they run their own trap. Two
+   * traps fighting over one Tab is how focus ends up somewhere neither of them
+   * meant.
+   */
+  useEffect(() => {
+    const onTab = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      if (overlayIsOpen()) return;
+      const root = rootRef.current;
+      if (!root) return;
+
+      const focusables = Array.from(
+        root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      ).filter(
+        (el) =>
+          // Taken out of the tab order, or not drawn at all: a collapsed
+          // chrome's glyphs are still in the DOM and must not be tab stops.
+          el.tabIndex >= 0 &&
+          el.getClientRects().length > 0 &&
+          el.closest('[aria-hidden="true"]') === null,
+      );
+      const active =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+      const next = nextFocusTarget(focusables, active, e.shiftKey);
+      // Nothing to move to — leave Tab to the browser rather than swallow it.
+      if (!next) return;
+      e.preventDefault();
+      next.focus();
+    };
+    window.addEventListener("keydown", onTab);
+    return () => window.removeEventListener("keydown", onTab);
+  }, []);
+
   /* ── Render ──────────────────────────────────────────────────────────── */
 
   const fade = cn(
@@ -953,7 +1015,13 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     <TooltipProvider>
       <div
         ref={rootRef}
-        role="region"
+        // The room covers the page, locks its scroll and traps Tab, so it is a
+        // modal dialog and says so (R1). It must NEVER gain `data-state`:
+        // `overlayIsOpen()` above matches `[role="dialog"][data-state="open"]`
+        // to stand the room's own keys and idle timer down for a menu, and a
+        // room that matched that selector would freeze both against itself.
+        role="dialog"
+        aria-modal="true"
         aria-label="Film room"
         tabIndex={-1}
         onPointerMove={wake}
@@ -990,7 +1058,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 onClick={exit}
                 className={advButton("outline", "md")}
               >
-                Back to the report
+                {FILM_REFUSAL_COPY.buttons.back}
               </button>
               {p.problem.canRetry && (
                 <button
@@ -998,7 +1066,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                   onClick={p.onRetry}
                   className={advButton("primary", "md")}
                 >
-                  Try again
+                  {FILM_REFUSAL_COPY.buttons.retry}
                 </button>
               )}
             </div>
@@ -1012,8 +1080,11 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
             className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center"
           >
             <span className="text-[16px] text-white">
-              The film stopped loading
+              {FILM_REFUSAL_COPY.loadFailure.heading}
             </span>
+            {/* The body is this panel's own: the table's sentence is about a
+                stream that broke, and this one is about a credential that
+                expired, which has a different repair. */}
             <span className="max-w-[380px] text-[12px] text-white/60">
               Playback links are signed for a short window and this one has run
               out. Reloading the page signs a fresh one.
@@ -1024,7 +1095,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 onClick={exit}
                 className={advButton("outline", "md")}
               >
-                Back to the report
+                {FILM_REFUSAL_COPY.buttons.back}
               </button>
               <button
                 type="button"
@@ -1053,6 +1124,14 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               )}
               onLoadedData={() => setVideoReady(true)}
               onClick={togglePlay}
+              // R1: click the film plays/pauses, double-click exits. It sits
+              // on the element itself rather than the root so the board, the
+              // court and the drawer — siblings, not children — never carry
+              // the gesture: dragging the board with a quick second press
+              // must not throw the viewer out of the room. The two clicks a
+              // double-click also fires cancel each other out, so the film is
+              // left in the state it was in when the room closes.
+              onDoubleClick={exit}
               onPlay={() => {
                 setPlaying(true);
                 playingRef.current = true;

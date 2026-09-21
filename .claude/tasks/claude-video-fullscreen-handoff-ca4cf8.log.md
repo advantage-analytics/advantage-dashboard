@@ -147,3 +147,15 @@ is the runner's. Newest entries at the bottom.
 1. The shell (`film-tab.tsx`) still lights its playing row from `activeStopAt`, so the report list keeps a row lit through dead time while the room does not.
 2. The court's "Next point" / "Not started" copy is now reachable between every pair of points, not only before the first — worth an eyeball in the running app.
 3. The chrome returns at the end of the film through `onPause`; a browser that fires `ended` without `pause` would need the same two lines on `onEnded`.
+
+## T14 · R10 from one copy table, plus aria-modal, focus trap and double-click exit — done
+
+**gate:** mechanical pass on re-run — the full suite's one failure was `tests/match-video-attachment-flow.spec.ts:848` ("unmounting mid-upload cancels the attempt"), in upload code this diff does not touch and that imports nothing it changed; the file re-run alone passed 20/20, the same file that flaked under load in T5 · completion `VERDICT: pass`
+
+**changed:** `FILM_REFUSAL_COPY` gains a `denied` heading row (no body — the hook's message stays the sentence). `ROOM_PROBLEM_TITLES` in the room and `PROBLEM_TITLES` in the shell player now hold no string literal; all four reasons, the room's button labels and the reload panel's heading resolve from the table. The room root is `role="dialog"` with `aria-modal` and `aria-label="Film room"`, and deliberately carries no `data-state`, so `overlayIsOpen()` never matches the room against itself. New pure `film/film-focus-trap.ts` (`nextFocusTarget`, wrapping both ends, null on an empty ring) with a five-case spec; the room handles Tab in its own effect, stands down while an overlay is open, and on unmount returns focus to whatever had it when the room opened. The `<video>` gains `onDoubleClick={exit}`; it is the only double-click handler under `film/`. The letter and arrow key switch is untouched.
+
+**follow-ups:**
+
+1. If the focused control unmounts when the chrome collapses, focus falls to `body` and the next Tab re-enters at the top of the ring. Re-focusing the root when focus leaves it would keep the viewer's place.
+2. The browser harness has no case for double-click exit or Tab wrapping in the live room.
+3. `match-video-attachment-flow.spec.ts` has now flaked twice under full-suite load on this branch (T5, T14) on two different mid-upload cases; both pass alone.
