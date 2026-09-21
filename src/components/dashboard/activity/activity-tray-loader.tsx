@@ -1,8 +1,15 @@
 import { Activity } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { getActivityFeed, getElsewhereWork } from "@/lib/data/activity-server";
-import { getPendingInvites } from "@/lib/data/pending-invites-server";
+import {
+  getActivityFeed,
+  getElsewhereWork,
+  getRecentJoins,
+} from "@/lib/data/activity-server";
+import {
+  getApprovedInviteIds,
+  getPendingInvites,
+} from "@/lib/data/pending-invites-server";
 import { ActivityTray } from "./activity-tray";
 
 /**
@@ -29,19 +36,36 @@ import { ActivityTray } from "./activity-tray";
  * to the active workspace on purpose; this is what lets the tray say "1 upload
  * running in Personal" from inside a program instead of showing nothing at
  * all. See `getElsewhereWork` for the cost.
+ *
+ * The fourth is who joined the program lately — staff of a team workspace
+ * only, empty for everyone else without a query. Approval notices follow the
+ * invitations, since they only mean anything on an invitation's row.
  */
 export async function ActivityTrayLoader() {
   const workspace = await getWorkspaceContext();
   if (!workspace) return <ActivityTrayFallback />;
 
   const supabase = await createClient();
-  const [feed, invites, elsewhere] = await Promise.all([
+  const [feed, invites, elsewhere, joins] = await Promise.all([
     getActivityFeed(supabase, workspace.active),
     getPendingInvites(supabase),
     getElsewhereWork(supabase, workspace.active, workspace.available),
+    getRecentJoins(supabase, workspace.active),
   ]);
+  const approvedInviteIds = await getApprovedInviteIds(
+    supabase,
+    invites.map((invite) => invite.id),
+  );
 
-  return <ActivityTray feed={feed} invites={invites} elsewhere={elsewhere} />;
+  return (
+    <ActivityTray
+      feed={feed}
+      invites={invites}
+      approvedInviteIds={approvedInviteIds}
+      elsewhere={elsewhere}
+      joins={joins}
+    />
+  );
 }
 
 /**

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { WorkspaceSync } from "@/components/dashboard/workspace-sync";
 
 /**
  * Team routes belong to a team workspace.
@@ -23,5 +24,12 @@ export default async function TeamLayout({
   if (!workspace) redirect("/login");
   if (workspace.active.kind !== "team") redirect("/dashboard");
 
-  return <>{children}</>;
+  // The guard settles which workspace this page is for; the sync makes the
+  // chrome agree when the client is still holding a layout drawn for another.
+  return (
+    <>
+      <WorkspaceSync activeId={workspace.active.id} />
+      {children}
+    </>
+  );
 }

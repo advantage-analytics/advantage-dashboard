@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import HomeContent from "./home-content";
 import { HomeDayZeroPage } from "./home-day-zero-page";
 import { PresenceReport } from "@/components/dashboard/presence-provider";
+import { WorkspaceSync } from "@/components/dashboard/workspace-sync";
 import RecentActivity from "./recent-activity";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
@@ -58,11 +59,14 @@ export default async function Home() {
       matches={matches.length > 0}
     />
   );
+  // Personal Home inside chrome still drawn for a team — see `WorkspaceSync`.
+  const sync = <WorkspaceSync activeId={workspace.active.id} />;
   // Day zero reads nothing further — see `HomeDayZeroPage`, which the route's
   // loading fallback also draws.
   if (matches.length === 0) {
     return (
       <>
+        {sync}
         {report}
         <HomeDayZeroPage userId={userId} />
       </>
@@ -72,6 +76,7 @@ export default async function Home() {
   const resources = startHomeResources(supabase, userId, matches, billingMonth);
   return (
     <div className="flex w-full flex-1 flex-col bg-white">
+      {sync}
       {report}
       <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-14 pt-5 pb-8">
         <HomeContent
