@@ -106,3 +106,9 @@ is the runner's. Newest entries at the bottom.
 1. T12 must import from `./film-court-card`; its notes still say `film-court.tsx`.
 2. `pointMarks` wants the point's shots in rally order, the same array `activeShotAt` indexed into.
 3. The readout flips by which half of the court the mark is in; with the board in a right-hand corner it may need to flip by available room instead.
+
+## T11 · Add film-room-prefs.ts: localStorage preferences and the fullscreen param helper — done
+
+**gate:** mechanical pass on re-run — the full suite's one failure was again the intermittent live-database `tests/match-video-attachments-db.spec.ts:3225`; this task is two new files nothing imports, and the test passed when re-run alone · completion `VERDICT: pass`
+
+**changed:** New import-free `film/film-room-prefs.ts`: three `film-room:` storage keys (court on, court mode, drawer open), pure parsers that fall back to `true` / `"point"` / `false` on anything unrecognised, read/write helpers that wrap every `localStorage` access in try/catch, and `roomParam(params, open)`, which sets or deletes `fullscreen` on a fresh copy of the query string and tolerates null. Booleans are stored as `"1"` / `"0"`. `tests/film-room-prefs.spec.ts` covers defaults, one accepted and one rejected value per parser, and a round trip that keeps `tab=film&cut=break` intact.

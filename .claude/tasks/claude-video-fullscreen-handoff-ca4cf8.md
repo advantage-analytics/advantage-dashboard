@@ -154,7 +154,7 @@ ready).
 
 ## T11 · Add film-room-prefs.ts: localStorage preferences and the fullscreen param helper
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) film/film-room-prefs.ts (new), tests/film-room-prefs.spec.ts (new)
 - **done when:**
