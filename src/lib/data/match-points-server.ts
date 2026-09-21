@@ -151,6 +151,85 @@ function determinePlayer(
   return point.won_by_player1 ? "player1" : "player2";
 }
 
+/**
+ * Who bookmarked which point, workspace-wide. Saving a point is a
+ * WORKSPACE-wide act: under the T4 policy, SELECT on point_bookmarks returns
+ * every row on a match the viewer can see, not just auth.uid()'s own — so
+ * there is no user_id filter here and no admin client, just the cookie-scoped
+ * client. INSERT stays own-row, so each row still records who saved it. A
+ * failed query degrades to "no bookmarks" rather than failing the whole
+ * loader.
+ */
+async function fetchSavedByPointId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  matchId: string,
+  pointIds: string[],
+): Promise<Map<string, { userId: string; name: string | null }[]>> {
+  const savedByPointId = new Map<
+    string,
+    { userId: string; name: string | null }[]
+  >();
+  if (pointIds.length === 0) return savedByPointId;
+
+  const { data: bookmarksData, error: bookmarksError } = await supabase
+    .from("point_bookmarks")
+    .select("point_id, user_id")
+    .in("point_id", pointIds);
+
+  if (bookmarksError) {
+    console.error("Failed to fetch point bookmarks:", bookmarksError.message);
+    return savedByPointId;
+  }
+  if (!bookmarksData?.length) return savedByPointId;
+
+  // Names cannot come from `public.users`: its only policy is
+  // `auth.uid() = id`, so a teammate's row is invisible through RLS and a
+  // join would silently yield null for everyone but the viewer. For a team
+  // match the roster RPC (SECURITY DEFINER) is the readable source; for a
+  // personal match, or a user the roster does not list, `name` stays null.
+  // The badge that will render these names is out of scope here (T5 only
+  // adds the data) — existing readers keep using `saved`.
+  const nameByUserId = new Map<string, string | null>();
+  const { data: matchRow, error: matchError } = await supabase
+    .from("matches")
+    .select("program_id")
+    .eq("id", matchId)
+    .maybeSingle();
+
+  if (matchError) {
+    console.error("Failed to fetch match program:", matchError.message);
+  } else if (matchRow?.program_id) {
+    const { data: roster, error: rosterError } = await supabase.rpc(
+      "program_roster_full",
+      { p_program_id: matchRow.program_id },
+    );
+    if (rosterError) {
+      console.error("Failed to fetch program roster:", rosterError.message);
+    } else {
+      for (const member of (roster ?? []) as {
+        user_id: string | null;
+        display_name: string | null;
+      }[]) {
+        if (member.user_id) {
+          nameByUserId.set(member.user_id, member.display_name ?? null);
+        }
+      }
+    }
+  }
+
+  for (const row of bookmarksData as { point_id: string; user_id: string }[]) {
+    const entry = {
+      userId: row.user_id,
+      name: nameByUserId.get(row.user_id) ?? null,
+    };
+    const existing = savedByPointId.get(row.point_id);
+    if (existing) existing.push(entry);
+    else savedByPointId.set(row.point_id, [entry]);
+  }
+
+  return savedByPointId;
+}
+
 export async function getMatchPointsFromSupabase(
   matchId: string,
 ): Promise<MatchPoint[]> {
@@ -203,74 +282,8 @@ export async function getMatchPointsFromSupabase(
     if (!page || page.length < SHOT_PAGE) break;
   }
 
-  // Fetch the bookmarks on these points. Saving a point is a WORKSPACE-wide
-  // act: under the T4 policy, SELECT on point_bookmarks returns every row on a
-  // match the viewer can see, not just auth.uid()'s own — so there is no
-  // user_id filter here and no admin client, just the cookie-scoped client.
-  // INSERT stays own-row, so each row still records who saved it. A failed
-  // query degrades to "no bookmarks" rather than failing the whole loader.
-  const savedByPointId = new Map<
-    string,
-    { userId: string; name: string | null }[]
-  >();
-  if (pointIds.length > 0) {
-    const { data: bookmarksData, error: bookmarksError } = await supabase
-      .from("point_bookmarks")
-      .select("point_id, user_id")
-      .in("point_id", pointIds);
-
-    if (bookmarksError) {
-      console.error("Failed to fetch point bookmarks:", bookmarksError.message);
-    } else if (bookmarksData?.length) {
-      // Names cannot come from `public.users`: its only policy is
-      // `auth.uid() = id`, so a teammate's row is invisible through RLS and a
-      // join would silently yield null for everyone but the viewer. For a team
-      // match the roster RPC (SECURITY DEFINER) is the readable source; for a
-      // personal match, or a user the roster does not list, `name` stays null.
-      // The badge that will render these names is out of scope here (T5 only
-      // adds the data) — existing readers keep using `saved`.
-      const nameByUserId = new Map<string, string | null>();
-      const { data: matchRow, error: matchError } = await supabase
-        .from("matches")
-        .select("program_id")
-        .eq("id", matchId)
-        .maybeSingle();
-
-      if (matchError) {
-        console.error("Failed to fetch match program:", matchError.message);
-      } else if (matchRow?.program_id) {
-        const { data: roster, error: rosterError } = await supabase.rpc(
-          "program_roster_full",
-          { p_program_id: matchRow.program_id },
-        );
-        if (rosterError) {
-          console.error("Failed to fetch program roster:", rosterError.message);
-        } else {
-          for (const member of (roster ?? []) as {
-            user_id: string | null;
-            display_name: string | null;
-          }[]) {
-            if (member.user_id) {
-              nameByUserId.set(member.user_id, member.display_name ?? null);
-            }
-          }
-        }
-      }
-
-      for (const row of bookmarksData as {
-        point_id: string;
-        user_id: string;
-      }[]) {
-        const entry = {
-          userId: row.user_id,
-          name: nameByUserId.get(row.user_id) ?? null,
-        };
-        const existing = savedByPointId.get(row.point_id);
-        if (existing) existing.push(entry);
-        else savedByPointId.set(row.point_id, [entry]);
-      }
-    }
-  }
+  // Who bookmarked each point, workspace-wide (see fetchSavedByPointId).
+  const savedByPointId = await fetchSavedByPointId(supabase, matchId, pointIds);
 
   // Group shots by point_id
   const shotsByPointId = new Map<string, DbShot[]>();
