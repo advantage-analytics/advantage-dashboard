@@ -32,7 +32,7 @@ import type {
 } from "./types";
 
 /** Numeric sentinel the vendor uses for "not measured". */
-const NUMERIC_SENTINEL = -9999;
+export const NUMERIC_SENTINEL = -9999;
 /** String sentinel the vendor uses for "not provided". */
 const STRING_SENTINEL = "None";
 
@@ -40,7 +40,7 @@ const STROKE_TYPES: readonly string[] = ["serve", "groundstroke", "volley"];
 const STROKE_SIDES: readonly string[] = ["forehand", "backhand", "overhead"];
 
 /** A numeric field, or null if it carries the sentinel or isn't finite. */
-function num(value: unknown): number | null {
+export function num(value: unknown): number | null {
   if (typeof value !== "number") return null;
   if (!Number.isFinite(value)) return null;
   // Compare with a tolerance: the sentinel appears as both -9999 and -9999.0,

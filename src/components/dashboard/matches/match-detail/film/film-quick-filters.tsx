@@ -236,7 +236,7 @@ export function FilmQuickFilters({
         </>
       ) : null}
       <FilmDarkMenuNote>
-        Filters apply to ↑↓ as well as the list.
+        Filters apply to ← → as well as the list.
       </FilmDarkMenuNote>
     </FilmDarkMenu>
   );

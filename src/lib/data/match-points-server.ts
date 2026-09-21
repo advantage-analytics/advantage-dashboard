@@ -13,6 +13,17 @@ export interface MatchShot {
   result: string | null;
   /** Same clock as `MatchPoint.videoTime`; null when the source never timed it. */
   videoTime: number | null;
+  /**
+   * Where the ball was struck and where it landed, in the database's court
+   * frame: metres, x about the centre line, y 0 → 23.77 baseline to baseline.
+   * The frame is fixed for the match and does NOT follow end changes — map it
+   * through `film/film-court.ts`, never straight to the screen. Null when the
+   * source did not measure it.
+   */
+  contactX: number | null;
+  contactY: number | null;
+  landingX: number | null;
+  landingY: number | null;
 }
 
 export interface MatchPoint {
@@ -352,6 +363,10 @@ export async function getMatchPointsFromSupabase(
         zone: shot.zone,
         result: shot.result,
         videoTime: shot.video_time,
+        contactX: shot.contact_x,
+        contactY: shot.contact_y,
+        landingX: shot.landing_x,
+        landingY: shot.landing_y,
       })),
       firstShotType: firstShot?.shot_type ?? null,
       firstShotSpin: firstShot?.spin_type ?? null,

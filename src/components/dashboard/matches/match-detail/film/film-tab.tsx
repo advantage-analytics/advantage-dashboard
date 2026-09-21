@@ -22,6 +22,7 @@ import { FilmUnavailableState } from "./film-unavailable-state";
 import { FilmPlayer, type FilmPlayerHandle } from "./film-player";
 import { PointList } from "./point-list";
 import { parseCut, serializeCut, type FilmSectionId } from "./filters/types";
+import { roomParam } from "./film-room-prefs";
 import { scoreColumns } from "./film-score";
 import {
   activeShotAt,
@@ -50,8 +51,8 @@ const FilmFullscreen = dynamic(loadFilmFullscreen, { ssr: false });
  * fullscreen room it opens into.
  *
  * This component owns the state the player, the list and the fullscreen have
- * to agree on: the points and their saved flags, the applied filter, the tab,
- * and the report player's playhead. The children stay dumb about each other —
+ * to agree on: the points and their saved flags, the applied filter, and the
+ * report player's playhead. The children stay dumb about each other —
  * the list asks for a seek, the player reports where it got to, and the
  * mapping from a playhead position to "which row is playing" happens once,
  * over the whole timeline, in `film-timeline.ts`.
@@ -152,7 +153,6 @@ function FilmRoom({
   // panel, so a reopen finds the sections as they were left.
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [openSections, setOpenSections] = useState<FilmSectionId[]>([]);
-  const [tab, setTab] = useState<"points" | "saved">("points");
   const [currentTime, setCurrentTime] = useState(0);
   const [room, setRoom] = useState<{ time: number; playing: boolean } | null>(
     null,
@@ -241,12 +241,6 @@ function FilmRoom({
   const filteredPoints = useMemo(
     () => applyFilmFilters(points, filters, youIsPlayer1),
     [points, filters, youIsPlayer1],
-  );
-
-  const visiblePoints = useMemo(
-    () =>
-      tab === "saved" ? filteredPoints.filter((p) => p.saved) : filteredPoints,
-    [filteredPoints, tab],
   );
 
   const walkStops = useMemo(() => {
@@ -461,6 +455,39 @@ function FilmRoom({
     return () => window.removeEventListener("keydown", onKey);
   }, [roomOpen, toggleSavedActive]);
 
+  /**
+   * `fullscreen=1` in the query string while the room is up, gone when it is
+   * not (spec: "Settled mismatches" § URL).
+   *
+   * Same native-history pattern as the cut effect above, and for the same
+   * reason: going through the router would re-render the route, and the film
+   * would pause or reload mid-watch — the one thing the room must not do.
+   * `roomParam` is the only writer, so the cut and `tab=film` are carried
+   * through; the current query comes from `window.location.search` rather
+   * than the hook (which is null in the playback harness, and a render behind
+   * a `replaceState` everywhere else), and an already-correct URL is left
+   * alone so the history entry is not rewritten for nothing.
+   */
+  const writeRoomParam = useCallback((open: boolean) => {
+    const current = window.location.search.replace(/^\?/, "");
+    const next = roomParam(current, open);
+    if (next === current) return;
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`,
+    );
+  }, []);
+
+  // The param is never honoured on load: a refresh lands back in the shell, on
+  // the point the film is on, and a link someone copied out of the room opens
+  // the tab rather than a screen-covering overlay the recipient did not ask
+  // for. So the only thing a `fullscreen` found on mount gets is stripped.
+  useEffect(() => {
+    writeRoomParam(false);
+  }, [writeRoomParam]);
+
+  /** Door one: the report player's maximize control, from wherever it is. */
   const enterRoom = useCallback(() => {
     const snapshot = playerRef.current?.snapshot() ?? {
       time: currentTime,
@@ -468,14 +495,41 @@ function FilmRoom({
     };
     playerRef.current?.pause();
     setRoom(snapshot);
-  }, [currentTime]);
+    writeRoomParam(true);
+  }, [currentTime, writeRoomParam]);
+
+  /**
+   * Door two: ⇧-click on a row of the shell's point list, which opens the room
+   * on that point and plays it (spec § Doors) rather than seeking the report
+   * player behind an overlay nobody is looking at.
+   *
+   * A point with no stop has nowhere to open to — an import predating video
+   * timing — so it falls back to the ordinary select, which is itself a no-op
+   * for exactly the same reason, and the room stays closed.
+   */
+  const openPointInRoom = useCallback(
+    (point: MatchPoint) => {
+      const stop = stops.find((s) => s.point.id === point.id);
+      if (!stop) {
+        handleSelect(point);
+        return;
+      }
+      playerRef.current?.pause();
+      setRoom({ time: stop.start, playing: true });
+      writeRoomParam(true);
+    },
+    [stops, handleSelect, writeRoomParam],
+  );
 
   // The room hands the playhead back as its exit starts (so the report frame
   // is already on the right picture under the shrinking room), then unmounts.
   const handoff = useCallback((time: number) => {
     playerRef.current?.seekTo(time);
   }, []);
-  const exitRoom = useCallback(() => setRoom(null), []);
+  const exitRoom = useCallback(() => {
+    setRoom(null);
+    writeRoomParam(false);
+  }, [writeRoomParam]);
   const originRect = useCallback(
     () => playerRef.current?.frameRect() ?? null,
     [],
@@ -544,11 +598,10 @@ function FilmRoom({
         <div className="flex min-h-0 flex-1 flex-col @min-[720px]:absolute @min-[720px]:inset-0">
           <PointList
             allPoints={points}
-            // The in-shell list is no longer split into Points/Saved tabs:
-            // "Saved only" is an axis of the cut itself (`filters.savedOnly`),
-            // so the list renders exactly what the filters admit. The
-            // fullscreen room below still has its own tabs, and still gets
-            // the tab-scoped `visiblePoints`.
+            // Neither list is split into Points/Saved tabs any more: "Saved
+            // only" is an axis of the cut itself (`filters.savedOnly`), so
+            // both render exactly what the filters admit — this column and
+            // the room's drawer off the very same array.
             visiblePoints={filteredPoints}
             filters={filters}
             onFiltersChange={setFilters}
@@ -561,6 +614,9 @@ function FilmRoom({
             activeEnd={active?.stop.end ?? 0}
             onSelect={handleSelect}
             onToggleSaved={handleToggleSaved}
+            // Only this column gets the door; the room's own drawer renders
+            // the same component without it.
+            onOpenInRoom={openPointInRoom}
           />
         </div>
       </div>
@@ -583,11 +639,12 @@ function FilmRoom({
           walkStops={walkStops}
           columns={columns}
           allPoints={points}
-          visiblePoints={visiblePoints}
+          // One cut, one array: the room's drawer is the same list this
+          // column draws (`PointList tone="dark"`), so it is handed the same
+          // filter-applied points rather than a tab-scoped slice of its own.
+          visiblePoints={filteredPoints}
           filters={filters}
           onFiltersChange={setFilters}
-          tab={tab}
-          onTabChange={setTab}
           onToggleSaved={handleToggleSaved}
           onExit={exitRoom}
           onHandoff={handoff}

@@ -220,6 +220,42 @@ export function activeStopAt(
   };
 }
 
+/**
+ * The point the film is INSIDE, or null in the dead time between points.
+ *
+ * {@link activeStopAt} answers a different question and deliberately never
+ * returns to null once the first point has started: it holds the last stop
+ * reached, with progress clamped at 1, so the board keeps the score through a
+ * changeover. That makes "between points" a state it cannot express — which is
+ * why this second walk exists rather than a flag on the first.
+ *
+ * Containment only: the stop whose padded window covers the time, null before
+ * the first window opens and null again once the time has run past a window's
+ * `end` without reaching the next one's `start`. Everything that NAMES a point
+ * reads this — the board's point line, the position counter, the drawer's lit
+ * row, the court's point mode — so all of them go quiet together (R7).
+ *
+ * The lead-in is admitted with the same {@link REACHED_EPSILON_SECONDS} a seek
+ * needs, for the same reason: a `<video>` lands on a decodable frame that can
+ * sit a few milliseconds before the second asked for.
+ *
+ * Where two windows touch — `filmStops` clamps a window's `end` to the next
+ * one's `start` — the earlier stop is tested first and the later one picks the
+ * boundary second up, so a run of points with no gap between them never reads
+ * as between points for a frame.
+ */
+export function playingStopAt(
+  stops: FilmStop[],
+  filmTime: number,
+): FilmStop | null {
+  for (const stop of stops) {
+    // Sorted by start, so nothing after this one can have opened either.
+    if (stop.start - REACHED_EPSILON_SECONDS > filmTime) break;
+    if (filmTime < stop.end) return stop;
+  }
+  return null;
+}
+
 /** The next stop after the playhead, with the cushion. */
 export function nextStop(stops: FilmStop[], filmTime: number): FilmStop | null {
   return stops.find((s) => s.start > filmTime + STEP_CUSHION_SECONDS) ?? null;

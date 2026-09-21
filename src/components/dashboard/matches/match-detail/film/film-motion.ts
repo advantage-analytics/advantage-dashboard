@@ -61,3 +61,11 @@ function round(n: number, places = 2): number {
   const f = 10 ** places;
   return Math.round(n * f) / f;
 }
+
+/** `prefers-reduced-motion: reduce`, read once (no subscription). */
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+export const reducedMotionNow = (): boolean =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia(REDUCED_MOTION_QUERY).matches;

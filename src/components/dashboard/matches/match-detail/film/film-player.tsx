@@ -191,11 +191,16 @@ interface FilmPlayerProps {
  * A heading per terminal reason. The hook owns the sentence; the title is a
  * player's job, and "The film stopped loading" is not what a viewer who has
  * lost access needs to read.
+ *
+ * Every heading resolves from `FILM_REFUSAL_COPY` — one copy table, two hosts
+ * (H2 R10). The room's `ROOM_PROBLEM_TITLES` maps the same four reasons onto
+ * the same four rows, so a hook state cannot read as two different events
+ * depending on which surface the viewer happened to be on.
  */
 const PROBLEM_TITLES: Record<AttachmentPlaybackProblem["reason"], string> = {
-  removed: "This video is no longer attached",
-  denied: "You can no longer watch this video",
-  unreachable: "The video could not be reached",
+  removed: FILM_REFUSAL_COPY.stale.heading,
+  denied: FILM_REFUSAL_COPY.denied.heading,
+  unreachable: FILM_REFUSAL_COPY.unavailable.heading,
   unplayable: FILM_REFUSAL_COPY.loadFailure.heading,
 };
 
