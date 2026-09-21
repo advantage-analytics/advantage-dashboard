@@ -211,6 +211,10 @@ test.beforeAll(async () => {
             "next/dynamic": resolve(
               "tests/fixtures/next-dynamic-browser-mock.tsx",
             ),
+            // No router in a bare createRoot; `useSearchParams` answers null.
+            "next/navigation": resolve(
+              "tests/fixtures/next-navigation-browser-mock.ts",
+            ),
             // Two `NEXT_PUBLIC_` reads a plain bundle never substitutes.
             [resolve("src/lib/supabase/client.ts")]: resolve(
               "tests/fixtures/supabase-client-browser-mock.ts",
@@ -389,6 +393,12 @@ async function state(page: Page, selector: string) {
 }
 
 /** The point row the list is lighting, if any. */
+/**
+ * Always read through `expect.poll`. `seekTo` waits for the ELEMENT's clock,
+ * but the playing row is React state fed by `timeupdate`, a render behind it —
+ * a one-shot read straight after a seek passes on a fast machine and reads
+ * `null` on a loaded CI runner.
+ */
 async function playingRow(page: Page): Promise<string | null> {
   return page.evaluate(() => {
     const row = document.querySelector('[data-point-id][data-playing="true"]');
@@ -407,7 +417,7 @@ test("a paused viewer is in the same place on the new credential", async ({
   await open(page, matchId);
 
   await seekTo(page, REPORT, 0.3);
-  expect(await playingRow(page)).toBe("b");
+  await expect.poll(() => playingRow(page)).toBe("b");
 
   await release(page, matchId);
   await awaitCredential(page, REPORT, 1);
@@ -416,7 +426,7 @@ test("a paused viewer is in the same place on the new credential", async ({
   expect(after?.paused).toBe(true);
   expect(after?.time).toBeCloseTo(0.3, 1);
   // Same alignment, so the row never moved either.
-  expect(await playingRow(page)).toBe("b");
+  await expect.poll(() => playingRow(page)).toBe("b");
 });
 
 test("a playing viewer keeps playing across the swap", async ({ page }) => {
@@ -456,7 +466,7 @@ test("a correction in another tab moves the playhead AND the selection", async (
 
   // Before the first point's window opens (0.05): nothing is playing yet.
   await seekTo(page, REPORT, 0.02);
-  expect(await playingRow(page)).toBeNull();
+  await expect.poll(() => playingRow(page)).toBeNull();
 
   await release(page, matchId);
   await awaitCredential(page, REPORT, 1);
@@ -472,7 +482,7 @@ test("a correction in another tab moves the playhead AND the selection", async (
     REPORT,
     { timeout: 5000 },
   );
-  expect(await playingRow(page)).toBe("a");
+  await expect.poll(() => playingRow(page)).toBe("a");
 });
 
 test("a replacement lands on a stop rather than on the old second", async ({
@@ -483,7 +493,7 @@ test("a replacement lands on a stop rather than on the old second", async ({
 
   // Inside the third point's window (0.45 on the rendered alignment).
   await seekTo(page, REPORT, 0.46);
-  expect(await playingRow(page)).toBe("c");
+  await expect.poll(() => playingRow(page)).toBe("c");
 
   await release(page, matchId);
   await awaitCredential(page, REPORT, 1);
@@ -498,7 +508,7 @@ test("a replacement lands on a stop rather than on the old second", async ({
     REPORT,
     { timeout: 5000 },
   );
-  expect(await playingRow(page)).toBe("c");
+  await expect.poll(() => playingRow(page)).toBe("c");
 });
 
 /* -------------------------------------------------------------------------
@@ -731,7 +741,7 @@ test("Loop never undoes a jump to another point", async ({ page }) => {
 
   // Inside point a, so Loop adopts it as the point being repeated.
   await seekTo(page, REPORT, 0.25);
-  expect(await playingRow(page)).toBe("a");
+  await expect.poll(() => playingRow(page)).toBe("a");
 
   await page.getByRole("button", { name: "Loop this point — off" }).click();
 

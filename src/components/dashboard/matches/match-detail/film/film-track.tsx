@@ -79,7 +79,7 @@ export function FilmTrack({
         seekFromPointer(e.clientX);
       }}
       // No keys of its own: the view that holds the track — the room, or the
-      // Video tab — answers the arrows page-wide (← → step points, ↑ ↓ move
+      // Video tab — answers the arrows page-wide (← ↑ / → ↓ step points, J / L move
       // 5 seconds), and a second handler here made a focused track seek
       // twice.
       className={cn(

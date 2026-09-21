@@ -1,0 +1,32 @@
+<!-- intro: extracted 2026-09-20 from Claude Design project afde9116… file `H1 - Handoff - Video tab in-shell.dc.html`. Inline SVG stripped. {{ }} bindings resolve against render-vals.txt. Reference only, never shipped. -->
+<section style="display:flex;flex-direction:column;align-items:flex-start">
+<span class="eyebrow">Handoff · Video tab — phase 1 of 2</span>
+<div class="text-display" style="margin-top:16px;max-width:900px">Everything in the shell, and what it does in every state.</div>
+<div class="text-body" style="margin-top:8px;max-width:960px;text-wrap:pretty">The <a href="13 Video tab - As built.dc.html">Video tab canvas</a> holds two products: the route inside the report frame, and the fullscreen room that opens out of it. This is the <b style="font-weight:500;color:var(--ink-900)">in-shell half</b> — the point list, its filter surfaces, the This point feed, and the screens a match with no playable film gets. Each frame below carries a handoff notes card: layout, component, behavior, data, acceptance. The fullscreen half (<span class="mono" style="font-size:12px;color:var(--ink-700)">FS1–FS11</span> and the three Film components) is phase 2 and is listed here only so the split is on the record.</div>
+<div style="display:flex;flex-direction:column;gap:12px;margin-top:38px;width:1180px">
+<span class="eyebrow">The split</span>
+<div style="border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card);background:var(--surface-card);padding:2px 24px 8px">
+<div style="display:grid;grid-template-columns:78px 1.25fr 1.5fr 96px 96px;gap:16px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-hairline)">
+<span class="eyebrow-sm">Frame</span>
+<span class="eyebrow-sm">What it is</span>
+<span class="eyebrow-sm">Scope</span>
+<span class="eyebrow-sm">Phase</span>
+<span class="eyebrow-sm">Status</span>
+</div>
+<sc-for list="{{ splitRows }}" as="s" hint-placeholder-count="12">
+<div style="display:grid;grid-template-columns:78px 1.25fr 1.5fr 96px 96px;gap:16px;align-items:center;min-height:46px;border-bottom:1px solid var(--border-hairline)">
+<span class="mono" style="font-size:11px;color:{{ s.idColor }}">{{ s.id }}</span>
+<span style="font-size:12px;font-weight:500;color:var(--ink-900)">{{ s.what }}</span>
+<span style="font-size:12px;color:var(--ink-600)">{{ s.scope }}</span>
+<span style="font-size:11px;color:{{ s.phaseColor }}">{{ s.phase }}</span>
+<span style="font-size:11px;padding:3px 8px;border-radius:var(--radius-pill);background:{{ s.stateBg }};color:{{ s.stateFg }};justify-self:start">{{ s.state }}</span>
+</div>
+</sc-for>
+<div style="display:flex;align-items:baseline;gap:10px;padding:12px 0 6px">
+<span style="font-size:12px;color:var(--ink-600);max-width:88ch;text-wrap:pretty">Route for every phase-1 frame: <span class="mono" style="font-size:11px;color:var(--ink-700)">/dashboard/matches/[matchId]?tab=video</span>. Implementation target: <span class="mono" style="font-size:11px;color:var(--ink-700)">components/dashboard/matches/match-detail/film/*</span>, entry <span class="mono" style="font-size:11px;color:var(--ink-700)">film-tab.tsx</span>. <span class="mono" style="font-size:11px;color:var(--ink-700)">report-view.ts</span> and the view switcher are unchanged.</span>
+</div>
+</div>
+</div>
+</section>
+
+

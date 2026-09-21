@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
@@ -20,6 +21,7 @@ import { FilmEntryActions } from "./film-entry-actions";
 import { FilmUnavailableState } from "./film-unavailable-state";
 import { FilmPlayer, type FilmPlayerHandle } from "./film-player";
 import { PointList } from "./point-list";
+import { parseCut, serializeCut, type FilmSectionId } from "./filters/types";
 import { scoreColumns } from "./film-score";
 import {
   activeShotAt,
@@ -118,7 +120,37 @@ function FilmRoom({
   // even when somebody clicks two bookmarks in the same tick.
   const pointsRef = useRef<MatchPoint[]>(serverPoints);
 
-  const [filters, setFilters] = useState<FilmFilters>(DEFAULT_FILM_FILTERS);
+  // `useSearchParams()` can be null outside a Next router (the playback
+  // harness mounts this with a bare createRoot); parseCut tolerates that.
+  const searchParams = useSearchParams();
+  const [filters, setFilters] = useState<FilmFilters>(() => ({
+    ...DEFAULT_FILM_FILTERS,
+    ...parseCut(searchParams),
+  }));
+  // Mirror the quick cut into the URL so a reload or a shared link reopens the
+  // same cut. Native history, no router call: Next keeps `useSearchParams` in
+  // sync with `replaceState` and nothing refetches, so the film neither pauses
+  // nor reloads. Pattern from
+  // node_modules/next/dist/docs/01-app/02-guides/single-page-applications.md
+  // ("Using the native History API"). `serializeCut` is the only writer, so
+  // Advanced axes never reach the URL and `tab=film` etc. are carried through.
+  // Reads `window.location.search` (not the hook) so it never races a stale
+  // snapshot, skips when already equal, and has no cleanup so unmount leaves
+  // the query string alone.
+  useEffect(() => {
+    const current = window.location.search.replace(/^\?/, "");
+    const next = serializeCut(filters, current);
+    if (next === current) return;
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`,
+    );
+  }, [filters]);
+  // Advanced lives in the list column and its section state outlives the
+  // panel, so a reopen finds the sections as they were left.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [openSections, setOpenSections] = useState<FilmSectionId[]>([]);
   const [tab, setTab] = useState<"points" | "saved">("points");
   const [currentTime, setCurrentTime] = useState(0);
   const [room, setRoom] = useState<{ time: number; playing: boolean } | null>(
@@ -228,7 +260,7 @@ function FilmRoom({
     [stops, currentTime],
   );
 
-  // "This point": the point under the playhead, its shots on the film clock
+  // "Current point": the point under the playhead, its shots on the film clock
   // and the stroke being played. Shots are built from ALL points, like the
   // stops, so the card follows the film whether or not the cut admits it.
   //
@@ -246,9 +278,6 @@ function FilmRoom({
     [allShotStops, currentTime],
   );
   const activePoint = active?.stop.point ?? null;
-  const activeIsYou = activePoint
-    ? (activePoint.player === "player1") === youIsPlayer1
-    : true;
   const pointShots = useMemo(
     () =>
       activePoint
@@ -259,6 +288,11 @@ function FilmRoom({
 
   const handleSelectShot = useCallback((stop: ShotStop) => {
     playerRef.current?.seekTo(stop.start);
+  }, []);
+
+  /** The transport's own step, handed to anything else that walks points. */
+  const handleStep = useCallback((direction: -1 | 1) => {
+    playerRef.current?.step(direction);
   }, []);
 
   // "Point n / N" over the applied cut — the sequence prev/next walk.
@@ -280,13 +314,12 @@ function FilmRoom({
    * Bookmark a point, optimistically, and put it back if the write did not
    * land.
    *
-   * `.select()` on the update is the part that matters. RLS lets anyone who
-   * can SEE a match read its points, but only `matches.created_by` may UPDATE
-   * them — and an update filtered out by RLS is not an error, it is a
-   * successful statement that touched zero rows. Without asking for the row
-   * back, a coach viewing a teammate's match would watch the bookmark fill in
-   * and then find it gone on reload. Echoing the stored value is also what
-   * makes "it persisted" checkable rather than assumed.
+   * Saving is workspace-wide: anyone who can SEE a match may bookmark its
+   * points. RLS on `points` still lets only `matches.created_by` UPDATE a row,
+   * so the write goes through `set_point_saved`, which checks visibility and
+   * touches `saved` alone. It returns the stored value, or null when the point
+   * was not the caller's to see — echoing it is what makes "it persisted"
+   * checkable rather than assumed.
    */
   const handleToggleSaved = useCallback(
     async (pointId: string) => {
@@ -300,14 +333,12 @@ function FilmRoom({
       pointsRef.current = optimistic;
       setPoints(optimistic);
 
-      const { data, error } = await supabase
-        .from("points")
-        .update({ saved: nextSaved })
-        .eq("id", pointId)
-        .select("id, saved");
+      const { data, error } = await supabase.rpc("set_point_saved", {
+        p_point_id: pointId,
+        p_saved: nextSaved,
+      });
 
-      const stored =
-        !error && data?.length === 1 && data[0].saved === nextSaved;
+      const stored = !error && data === nextSaved;
       if (stored) return;
 
       const reverted = pointsRef.current.map((p) =>
@@ -325,8 +356,9 @@ function FilmRoom({
   }, [activePointId, handleToggleSaved]);
 
   /**
-   * The room's keys, on the page while this view is open: ← → step points,
-   * ↑ ↓ move 5 seconds, space plays and pauses, S saves the point on screen.
+   * The room's keys, on the page while this view is open: ← ↑ step to the
+   * previous point, → ↓ to the next, J / L move 5 seconds back / forward,
+   * space plays and pauses, S saves the point on screen.
    * Off while the room is open (it has its own), while something is typing
    * (an input, a textarea, anything editable), while a dialog or popover is
    * open (the filters panel wants its own arrows), whenever focus is on a
@@ -373,19 +405,23 @@ function FilmRoom({
           e.preventDefault();
           playerRef.current?.togglePlay();
           break;
+        case "ArrowDown":
         case "ArrowRight":
           e.preventDefault();
           playerRef.current?.step(1);
           break;
+        case "ArrowUp":
         case "ArrowLeft":
           e.preventDefault();
           playerRef.current?.step(-1);
           break;
-        case "ArrowDown":
+        case "l":
+        case "L":
           e.preventDefault();
           playerRef.current?.seekBy(5);
           break;
-        case "ArrowUp":
+        case "j":
+        case "J":
           e.preventDefault();
           playerRef.current?.seekBy(-5);
           break;
@@ -421,7 +457,7 @@ function FilmRoom({
   );
 
   return (
-    // Design canvas "Video B4": the player on the left with "This point"
+    // Design canvas "Video B4": the player on the left with "Current point"
     // under it, the point list beside them in a fixed 320px column (the
     // room's own panel width) running the pane's full height, so finding a
     // point, watching it and reading its shots happen side by side. The view
@@ -467,18 +503,13 @@ function FilmRoom({
         />
         <FilmThisPoint
           point={activePoint}
-          isYou={activeIsYou}
-          initials={activeIsYou ? sides.you.initials : sides.opp.initials}
-          showPointScore={columns.hasPointScore}
-          activeStart={active?.stop.start ?? 0}
-          activeEnd={active?.stop.end ?? 0}
           shots={pointShots}
           position={position}
           activeShotId={activeShot?.stop.shot.id ?? null}
-          onSelectPoint={handleSelect}
-          onToggleSaved={handleToggleSaved}
           onSelectShot={handleSelectShot}
-          onOpenRoom={enterRoom}
+          // The same step the transport takes, so the widget's stepper walks
+          // the applied cut rather than opening a second stepping path.
+          onStep={handleStep}
         />
       </div>
 
@@ -488,12 +519,18 @@ function FilmRoom({
         <div className="flex min-h-0 flex-1 flex-col @min-[720px]:absolute @min-[720px]:inset-0">
           <PointList
             allPoints={points}
-            visiblePoints={visiblePoints}
-            filteredCount={filteredPoints.length}
+            // The in-shell list is no longer split into Points/Saved tabs:
+            // "Saved only" is an axis of the cut itself (`filters.savedOnly`),
+            // so the list renders exactly what the filters admit. The
+            // fullscreen room below still has its own tabs, and still gets
+            // the tab-scoped `visiblePoints`.
+            visiblePoints={filteredPoints}
             filters={filters}
             onFiltersChange={setFilters}
-            tab={tab}
-            onTabChange={setTab}
+            advancedOpen={advancedOpen}
+            onAdvancedOpenChange={setAdvancedOpen}
+            openSections={openSections}
+            onOpenSectionsChange={setOpenSections}
             activePointId={active?.stop.point.id ?? null}
             activeStart={active?.stop.start ?? 0}
             activeEnd={active?.stop.end ?? 0}

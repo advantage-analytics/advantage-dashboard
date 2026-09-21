@@ -17,3 +17,8 @@ export function useRouter() {
     },
   };
 }
+
+/** No Next router in these harnesses; consumers must tolerate null. */
+export function useSearchParams() {
+  return null;
+}

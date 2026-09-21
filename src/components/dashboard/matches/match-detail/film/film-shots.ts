@@ -87,3 +87,63 @@ export function shotLabel(shot: MatchShot): string {
     : "Shot";
   return shot.spinType ? `${type} · ${shot.spinType.toLowerCase()}` : type;
 }
+
+/** The em dash the Current point widget draws for anything unmeasured. */
+export const UNMEASURED = "—";
+
+function sentenceCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
+
+/** One shot's row in the "Current point" widget, one string per column. */
+export interface ShotRowCells {
+  order: string;
+  player: string;
+  spin: string;
+  stroke: string;
+  type: string;
+  placement: string;
+  mph: string;
+  result: string;
+}
+
+/**
+ * A shot's eight cells (handoff H1 §B, frame `E-route-P1-P2.html`).
+ *
+ * `MatchShot` carries only `shotType`, `spinType`, `speedMph`, `zone` and
+ * `result`, so two columns are derived rather than read: the first shot of a
+ * rally is the serve whatever its `shotType` says, and "Type" is the shot's
+ * job in the rally (serve → return → rally) rather than a stored field.
+ *
+ * Nothing unmeasured is ever rendered as `0` or as an empty cell — a null
+ * speed, spin, placement, stroke or result is {@link UNMEASURED}, because a
+ * missing reading and a reading of zero are different claims about the match.
+ * `playerName` is passed in: attribution comes from `useMatchSides()`
+ * upstream (guardrails §4), never from player1/player2 order down here.
+ */
+export function shotRowCells(
+  shot: MatchShot,
+  /** 1-based place in the rally. */
+  order: number,
+  playerName: string,
+): ShotRowCells {
+  const shotType = shot.shotType?.trim() ?? "";
+  const isServe = order === 1 || /serve/i.test(shotType);
+
+  return {
+    order: String(order),
+    player: playerName || UNMEASURED,
+    spin: shot.spinType ? sentenceCase(shot.spinType) : UNMEASURED,
+    stroke: isServe ? "Serve" : shotType ? sentenceCase(shotType) : UNMEASURED,
+    type: isServe
+      ? /second|2nd/i.test(shotType)
+        ? "2nd serve"
+        : "1st serve"
+      : order === 2
+        ? "Return"
+        : "Rally",
+    placement: shot.zone ? shot.zone : UNMEASURED,
+    mph: shot.speedMph == null ? UNMEASURED : String(Math.round(shot.speedMph)),
+    result: shot.result ? shot.result : UNMEASURED,
+  };
+}

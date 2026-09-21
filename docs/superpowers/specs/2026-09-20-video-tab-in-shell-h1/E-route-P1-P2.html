@@ -1,0 +1,651 @@
+<!-- E-route-P1-P2: extracted 2026-09-20 from Claude Design project afde9116… file `H1 - Handoff - Video tab in-shell.dc.html`. Inline SVG stripped. {{ }} bindings resolve against render-vals.txt. Reference only, never shipped. -->
+<section style="display:flex;flex-direction:column;align-items:flex-start">
+<span class="eyebrow">Phase 1 · E — The route, whole</span>
+<div class="text-display" style="margin-top:16px;max-width:900px">Both rail states, at 1440.</div>
+<div class="text-body" style="margin-top:8px;max-width:960px;text-wrap:pretty">The finalized page — chrome, report rail, player, the settled <b style="font-weight:500;color:var(--ink-900)">Current point</b> widget and the 320px point list — in the two states the shell can be in. Everything specced above is drawn here in place; where a fragment and a frame disagree, <b style="font-weight:500;color:var(--ink-900)">the frame is the build target</b>.</div>
+<div style="display:flex;flex-direction:column;gap:48px;align-items:flex-start;margin-top:32px">
+<div id="P1" data-screen-label="Route — rail open (P1)" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:10px;width:1440px">
+<a href="#P1" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">P1</a>
+<span style="font:500 12px var(--font-sans);color:var(--ink-900)">Route — rail open</span>
+<span style="font-size:11px;color:var(--ink-500)">the rail at 232px; the feed runs five columns — # · Player · Stroke · Placement · Result</span>
+<span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">1440 × 820</span>
+</div>
+<div style="width:1440px;height:820px;display:flex;align-items:stretch;background:var(--surface-card);border:1px solid var(--border-medium);border-radius:var(--radius-card);overflow:hidden;box-shadow:var(--shadow-card)">
+<dc-import name="Sidebar" active="matches" ws="Jordan Lee" user="Jordan Lee" hint-size="232px,820px" style="flex:0 0 232px;align-self:stretch">
+</dc-import>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+<div style="height:44px;flex:0 0 44px;display:flex;align-items:center;gap:6px;padding:0 24px;border-bottom:1px solid var(--border-hairline)">
+<nav aria-label="Breadcrumb" style="display:flex;min-width:0;align-items:center;gap:2px">
+<a href="#P1" style="font-size:11px;color:var(--ink-500);text-decoration:none" style-hover="color:var(--ink-900)">Matches</a>
+</nav>
+<div style="flex:1">
+</div>
+<x-import component-from-global-scope="AdvantageDesignSystemV3_abcb65.Tooltip" label="Search" detail="Matches, players, help" shortcut="⌘K" side="bottom" hint-size="auto,28px">
+<div style="display:flex;align-items:center;gap:7px;height:28px;padding:0 8px;border-radius:var(--radius-element);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<i data-lucide="search" stroke-width="1.5" style="width:14px;height:14px;color:var(--nav-fg)">
+</i>
+<span style="font-size:12px;color:var(--nav-fg)">Search</span>
+</div>
+</x-import>
+<x-import component-from-global-scope="AdvantageDesignSystemV3_abcb65.ActivityTray" items="{{ trayItems }}" hint-size="28px,28px">
+</x-import>
+<span style="width:1px;height:14px;background:var(--border-medium);margin:0 2px">
+</span>
+<x-import component-from-global-scope="AdvantageDesignSystemV3_abcb65.Tooltip" label="Account" side="bottom" hint-size="auto,28px">
+<div style="display:flex;align-items:center;gap:5px;padding:3px 6px 3px 3px;border-radius:var(--radius-pill);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<span style="width:22px;height:22px;border-radius:var(--radius-pill);background:var(--ink-900);color:#FFFFFF;display:inline-flex;align-items:center;justify-content:center;font:500 10px var(--font-sans)">JL</span>
+<i data-lucide="chevron-down" stroke-width="1.5" style="width:12px;height:12px;color:var(--ink-400)">
+</i>
+</div>
+</x-import>
+</div>
+<div style="flex:1;min-height:0;display:flex;align-items:stretch">
+<aside aria-label="Match summary" style="flex:0 0 300px;box-sizing:border-box;display:flex;flex-direction:column;border-right:1px solid var(--border-hairline);background:var(--surface-card)">
+<div style="padding:0 12px">
+<div style="display:flex;flex-direction:column;gap:14px;padding:18px 13px 20px;border-bottom:1px solid var(--border-hairline)">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span class="text-micro">Playing</span>
+<div style="flex:1">
+</div>
+<span class="mono tabular" style="font-size:10px;font-weight:500;color:var(--blue)">41:12</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:11px">
+<div style="display:flex;min-width:0;align-items:center;gap:7px">
+<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500;color:var(--ink-900)">Jordan Lee</span>
+<span style="width:6px;height:6px;flex:0 0 6px;border-radius:var(--radius-pill);background:var(--blue)">
+</span>
+<div style="flex:1">
+</div>
+<span class="mono tabular" style="display:inline-flex;align-items:center;gap:8px;font-size:13px;white-space:nowrap">
+<span style="width:11px;text-align:right;color:var(--ink-900)">6</span>
+<span style="width:11px;text-align:right;color:var(--ink-900)">3</span>
+<span style="width:1px;height:12px;background:var(--border-hairline);margin:0 2px">
+</span>
+<span style="width:22px;text-align:right;font-weight:500;color:var(--ink-900)">30</span>
+</span>
+</div>
+<div style="display:flex;min-width:0;align-items:center;gap:7px">
+<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500;color:var(--ink-900)">Marcus Reid</span>
+<div style="flex:1">
+</div>
+<span class="mono tabular" style="display:inline-flex;align-items:center;gap:8px;font-size:13px;white-space:nowrap">
+<span style="width:11px;text-align:right;color:var(--ink-900)">4</span>
+<span style="width:11px;text-align:right;color:var(--ink-900)">3</span>
+<span style="width:1px;height:12px;background:var(--border-hairline);margin:0 2px">
+</span>
+<span style="width:22px;text-align:right;font-weight:500;color:var(--ink-900)">30</span>
+</span>
+</div>
+</div>
+<span class="text-micro tabular">Set 2 · game 7 · Reid serving</span>
+</div>
+</div>
+<div role="tablist" aria-orientation="vertical" aria-label="Match report views" style="display:flex;flex-direction:column;gap:2px;padding:10px 12px 0">
+<button type="button" role="tab" aria-selected="false" style="display:flex;align-items:center;height:40px;border:0;background:transparent;border-radius:var(--radius-element);font:400 13px var(--font-sans);color:var(--nav-fg);cursor:pointer;text-align:left" style-hover="background:var(--surface-subtle);color:var(--ink-900)">
+<span style="display:flex;width:40px;height:40px;flex:0 0 40px;align-items:center;justify-content:center">
+<i data-lucide="table-2" stroke-width="1.5" style="width:16px;height:16px">
+</i>
+</span>
+<span style="flex:1;min-width:0">Statistics</span>
+</button>
+<button type="button" role="tab" aria-selected="false" style="display:flex;align-items:center;height:40px;border:0;background:transparent;border-radius:var(--radius-element);font:400 13px var(--font-sans);color:var(--nav-fg);cursor:pointer;text-align:left" style-hover="background:var(--surface-subtle);color:var(--ink-900)">
+<span style="display:flex;width:40px;height:40px;flex:0 0 40px;align-items:center;justify-content:center">
+<i data-lucide="scatter-chart" stroke-width="1.5" style="width:16px;height:16px">
+</i>
+</span>
+<span style="flex:1;min-width:0">Visualizations</span>
+</button>
+<button type="button" role="tab" aria-selected="true" style="display:flex;align-items:center;height:40px;border:0;background:var(--surface-subtle);border-radius:var(--radius-element);font:500 13px var(--font-sans);color:var(--ink-900);cursor:pointer;text-align:left">
+<span style="display:flex;width:40px;height:40px;flex:0 0 40px;align-items:center;justify-content:center">
+<i data-lucide="video" stroke-width="1.5" style="width:16px;height:16px">
+</i>
+</span>
+<span style="flex:1;min-width:0">Video</span>
+</button>
+</div>
+<div style="flex:1;min-height:16px">
+</div>
+<div style="padding:12px">
+<button type="button" style="display:inline-flex;width:100%;align-items:center;justify-content:center;gap:7px;height:36px;padding:0 16px;border:1px solid transparent;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 13px var(--font-sans);box-shadow:var(--shadow-cta-glow);cursor:pointer" style-hover="background:var(--blue-hover)">
+<i data-lucide="share-2" stroke-width="1.7" style="width:15px;height:15px">
+</i>Share</button>
+</div>
+</aside>
+<div style="flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;gap:16px;padding:20px 56px 24px;background:var(--surface-card)">
+<div style="display:flex;align-items:flex-end;gap:10px">
+<div style="min-width:0">
+<h1 style="margin:0;font:300 24px/30px var(--font-sans);letter-spacing:-0.3px;color:var(--ink-900);white-space:nowrap">Video</h1>
+<div style="margin-top:7px;height:18px;display:flex;flex-wrap:nowrap;align-items:center;gap:14px;min-width:0">
+<span style="display:inline-flex;align-items:center;gap:6px;flex:0 0 auto">
+<i data-lucide="swords" stroke-width="1.5" style="width:13px;height:13px;flex:0 0 13px;color:var(--ink-700)">
+</i>
+<span class="text-micro tabular" style="color:var(--ink-700);white-space:nowrap">174 points · 31 games</span>
+</span>
+<span style="display:inline-flex;align-items:center;gap:6px;flex:0 0 auto">
+<i data-lucide="calendar" stroke-width="1.5" style="width:13px;height:13px;flex:0 0 13px;color:var(--ink-700)">
+</i>
+<span class="text-micro tabular" style="color:var(--ink-700);white-space:nowrap">Sep 14, 2026</span>
+</span>
+<span style="display:inline-flex;align-items:center;gap:6px;min-width:0">
+<img src="assets/tournament-icon.svg" alt="" style="width:13px;height:13px;flex:0 0 13px">
+<span class="text-micro" style="color:var(--ink-700);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Coastal Collegiate Invitational</span>
+</span>
+<span style="display:inline-flex;align-items:center;gap:6px;flex:0 0 auto">
+<img src="assets/tennis-court-icon.svg" alt="" style="width:13px;height:13px;flex:0 0 13px">
+<span class="text-micro" style="color:var(--ink-700);white-space:nowrap">Hard</span>
+</span>
+<span style="display:inline-flex;align-items:center;gap:6px;flex:0 0 auto">
+<i data-lucide="circle-check" stroke-width="1.5" style="width:13px;height:13px;flex:0 0 13px;color:var(--ink-700)">
+</i>
+<span class="text-micro" style="color:var(--ink-700);white-space:nowrap">Verified result</span>
+</span>
+</div>
+</div>
+<div style="flex:1">
+</div>
+<div style="display:flex;flex:0 0 auto;align-items:center;gap:8px">
+<div style="position:relative">
+<button type="button" aria-label="More" aria-expanded="false" style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:0;background:transparent;border-radius:var(--radius-element);color:var(--nav-fg);cursor:pointer" style-hover="background:var(--surface-subtle);color:var(--ink-900)">
+<i data-lucide="ellipsis" stroke-width="1.5" style="width:15px;height:15px">
+</i>
+</button>
+</div>
+</div>
+</div>
+<div style="flex:1;min-height:0;display:flex;align-items:stretch;gap:16px">
+<div style="flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;gap:16px">
+<div style="position:relative;width:100%;aspect-ratio:16/9;flex:0 0 auto;border-radius:var(--radius-card);overflow:hidden;background:#1A1A1C">
+<img src="assets/match-video-still.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block">
+<sc-if value="{{ paused }}" hint-placeholder-val="{{ true }}">
+<button type="button" aria-label="Play" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border:0;background:transparent;cursor:pointer">
+<span style="display:flex;width:40px;height:40px;align-items:center;justify-content:center;border-radius:var(--radius-pill);background:rgba(255,255,255,0.14)">
+<i data-lucide="play" stroke-width="0" fill="#FFFFFF" style="width:15px;height:15px;margin-left:2px;color:#FFFFFF">
+</i>
+</span>
+</button>
+</sc-if>
+<div style="position:absolute;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:flex-end;gap:6px;padding:28px 16px 8px;background:linear-gradient(to top,rgba(13,13,13,0.68) 0%,rgba(13,13,13,0) 100%)">
+<div role="slider" aria-label="Seek" tabindex="0" style="position:relative;display:flex;height:16px;align-items:center;cursor:pointer">
+<span style="position:absolute;left:0;width:calc(22% - 2.5px);height:3px;border-radius:var(--radius-pill);background:var(--blue)">
+</span>
+<span style="position:absolute;left:calc(22% + 2.5px);width:calc(19% - 5px);height:3px;border-radius:var(--radius-pill);background:linear-gradient(to right,var(--blue) 0 92%,rgba(255,255,255,0.22) 92% 100%)">
+</span>
+<span style="position:absolute;left:calc(41% + 2.5px);width:calc(24% - 5px);height:3px;border-radius:var(--radius-pill);background:rgba(255,255,255,0.22)">
+</span>
+<span style="position:absolute;left:calc(65% + 2.5px);width:calc(35% - 2.5px);height:3px;border-radius:var(--radius-pill);background:rgba(255,255,255,0.22)">
+</span>
+<span style="position:absolute;left:40%;top:50%;width:11px;height:11px;transform:translate(-50%,-50%);border-radius:var(--radius-pill);background:#FFFFFF">
+</span>
+</div>
+<div style="display:flex;height:32px;align-items:center;gap:14px">
+<span class="vt-glyph" role="button" aria-label="Play" style="display:block;width:13px;height:13px;color:rgba(255,255,255,0.85);cursor:pointer">
+<i data-lucide="play" stroke-width="1.6" fill="currentColor" style="width:13px;height:13px">
+</i>
+</span>
+<span class="vt-glyph" role="button" aria-label="Previous point" style="display:block;width:13px;height:13px;color:rgba(255,255,255,0.85);cursor:pointer">
+<i data-lucide="skip-back" stroke-width="1.6" fill="currentColor" style="width:13px;height:13px">
+</i>
+</span>
+<span class="vt-glyph" role="button" aria-label="Next point" style="display:block;width:13px;height:13px;color:rgba(255,255,255,0.85);cursor:pointer">
+<i data-lucide="skip-forward" stroke-width="1.6" fill="currentColor" style="width:13px;height:13px">
+</i>
+</span>
+<span class="mono tabular" style="font-size:10px;color:rgba(255,255,255,0.75)">41:12 / 1:42:18</span>
+<div style="flex:1">
+</div>
+<span class="vt-glyph" role="button" aria-label="Save point" style="display:block;width:13px;height:13px;color:rgba(255,255,255,0.85);cursor:pointer">
+<i data-lucide="bookmark" stroke-width="1.6" style="width:13px;height:13px">
+</i>
+</span>
+<span class="vt-glyph" role="button" aria-label="Skip dead time — off" style="display:block;width:13px;height:13px;color:rgba(255,255,255,0.85);cursor:pointer">
+<i data-lucide="timer-off" stroke-width="1.6" style="width:13px;height:13px">
+</i>
+</span>
+<span class="vt-glyph mono" role="button" aria-label="Playback speed, 1×" style="font-size:10px;font-weight:500;color:rgba(255,255,255,0.85);cursor:pointer">1×</span>
+<span class="vt-glyph" role="button" aria-label="Loop this point — off" style="display:block;width:13px;height:13px;color:rgba(255,255,255,0.85);cursor:pointer">
+<i data-lucide="repeat" stroke-width="1.6" style="width:13px;height:13px">
+</i>
+</span>
+<span class="vt-glyph" role="button" aria-label="Sound — on" style="display:block;width:13px;height:13px;color:#FFFFFF;cursor:pointer">
+<i data-lucide="volume-2" stroke-width="1.6" style="width:13px;height:13px">
+</i>
+</span>
+<span class="vt-glyph" role="button" aria-label="Open the film room fullscreen" style="display:block;width:13px;height:13px;color:rgba(255,255,255,0.85);cursor:pointer">
+<i data-lucide="maximize" stroke-width="1.6" style="width:13px;height:13px">
+</i>
+</span>
+</div>
+</div>
+</div>
+<section aria-label="This point" style="flex:1;min-height:0;display:flex;flex-direction:column;padding:10px 8px 8px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)" >
+<div style="display:flex;flex:0 0 auto;align-items:center;gap:10px;padding:2px 5px 10px 12px">
+<span class="eyebrow">Current point</span>
+<div style="flex:1">
+</div>
+<div style="display:inline-flex;flex:0 0 auto;align-items:center;gap:2px">
+<span role="button" aria-label="Previous point" style="display:inline-flex;width:28px;height:28px;flex:0 0 28px;align-items:center;justify-content:center;border-radius:var(--radius-element);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<i data-lucide="chevron-left" stroke-width="1.5" style="width:14px;height:14px;color:var(--nav-fg)">
+</i>
+</span>
+<span class="mono tabular" style="min-width:56px;text-align:center;font-size:11px;color:var(--ink-500);white-space:nowrap">96 / 174</span>
+<span role="button" aria-label="Next point" style="display:inline-flex;width:28px;height:28px;flex:0 0 28px;align-items:center;justify-content:center;border-radius:var(--radius-element);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<i data-lucide="chevron-right" stroke-width="1.5" style="width:14px;height:14px;color:var(--nav-fg)">
+</i>
+</span>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:16px 58px 88px minmax(0,1fr) 48px;column-gap:16px;align-items:center;padding:0 12px 10px;margin-bottom:6px;border-bottom:1px solid var(--border-hairline)">
+<span style="font-size:10px;color:var(--ink-400)">#</span>
+<span style="font-size:10px;color:var(--ink-400)">Player</span>
+<span style="font-size:10px;color:var(--ink-400)">Stroke</span>
+<span style="font-size:10px;color:var(--ink-400)">Placement</span>
+<span style="font-size:10px;color:var(--ink-400)">Result</span>
+</div>
+<div style="flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto">
+<sc-for list="{{ pageShots }}" as="s" hint-placeholder-count="5">
+<div role="button" tabindex="0" class="vt-shot" style="display:grid;grid-template-columns:16px 58px 88px minmax(0,1fr) 48px;column-gap:16px;align-items:center;flex:0 0 auto;height:40px;padding:0 12px;border-radius:var(--radius-element);cursor:pointer;background:{{ s.rowBg }}">
+<span class="mono tabular" style="font-size:10px;color:var(--ink-400)">{{ s.n }}</span>
+<span style="font-size:12px;color:var(--ink-900);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.last }}</span>
+<span style="font-size:12px;color:var(--ink-700);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.strokeCell }}</span>
+<span style="font-size:12px;color:{{ s.placeColor }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.placeText }}</span>
+<span style="font-size:12px;color:{{ s.resultColor }}">{{ s.result }}</span>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;align-items:center;gap:10px;flex:0 0 auto;margin:10px 12px 0;padding:12px 0 4px;border-top:1px solid var(--border-hairline)">
+<span class="text-micro tabular">5 shots · 14s</span>
+<span style="font-size:11px;color:var(--ink-300)">·</span>
+<span style="font-size:11px;color:var(--ink-600)">Unforced error</span>
+<div style="flex:1">
+</div>
+<span style="font-size:11px;color:var(--ink-500);white-space:nowrap">Doesn't look right?</span>
+<a href="#P1" style="font:500 11px var(--font-sans);white-space:nowrap;color:var(--blue);text-decoration:none" style-hover="color:var(--blue-hover)">Edit this point</a>
+</div>
+</section>
+</div>
+<div style="position:relative;flex:0 0 320px;width:320px;align-self:stretch;display:flex;flex-direction:column">
+<section aria-label="Point list" style="position:absolute;inset:0;display:flex;max-height:100%;min-height:0;flex-direction:column;padding:10px 8px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<div style="display:flex;align-items:center;gap:20px;margin:0 4px;padding:4px 0 10px;border-bottom:1px solid var(--border-hairline)">
+<div role="button" tabindex="0" style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:var(--radius-element);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<i data-lucide="sliders-horizontal" stroke-width="1.5" style="width:13px;height:13px;flex:0 0 13px;color:var(--ink-600)">
+</i>
+<span style="font:500 12px var(--font-sans);letter-spacing:-0.08px;color:var(--ink-900)">All points</span>
+<i data-lucide="chevron-down" stroke-width="1.5" style="width:12px;height:12px;flex:0 0 12px;color:var(--ink-400)">
+</i>
+</div>
+<div style="flex:1">
+</div>
+<span class="mono tabular" style="padding-right:8px;font-size:10px;color:var(--ink-400)">174 <span style="color:var(--ink-300)">/</span> 174</span>
+</div>
+<div style="flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto">
+<sc-for list="{{ pageGroups }}" as="g" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column">
+<div style="display:flex;align-items:center;padding:12px 12px 5px">
+<span class="mono" style="font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink-400)">{{ g.head }}</span>
+<div style="flex:1">
+</div>
+<span class="mono tabular" style="font-size:10px;color:var(--ink-400)">{{ g.meta }}</span>
+</div>
+<sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+<div role="button" tabindex="0" class="vt-row" style="position:relative;display:flex;min-height:52px;flex:0 0 auto;align-items:center;gap:12px;padding:6px 12px;border-radius:var(--radius-element);cursor:pointer">
+<span style="display:inline-flex;flex:0 0 34px;align-items:center;justify-content:center">{{ r.mark }}</span>
+<span style="display:flex;min-width:0;flex-direction:column;gap:1px">
+<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--ink-900)">{{ r.title }}</span>
+<span class="text-micro" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.detail }}</span>
+</span>
+<div style="flex:1">
+</div>
+<span class="vt-score tabular" style="min-width:52px;text-align:right;font-size:13px;color:var(--ink-900)">{{ r.score }}</span>
+<span class="vt-save" role="button" aria-label="Bookmark this point" style="align-items:center;justify-content:center;padding:2px;border-radius:var(--radius-cell);cursor:pointer">
+<i data-lucide="bookmark" stroke-width="1.6" style="width:13px;height:13px;color:var(--ink-400)">
+</i>
+</span>
+</div>
+</sc-for>
+</div>
+</sc-for>
+</div>
+</section>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div id="P2" data-screen-label="Route — rail collapsed (P2)" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:10px;width:1440px">
+<a href="#P2" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">P2</a>
+<span style="font:500 12px var(--font-sans);color:var(--ink-900)">Nav collapsed — the wide feed</span>
+<span style="font-size:11px;color:var(--ink-500)">the icon rail gives back 168px, and the feed spends it on Placement and Mph</span>
+<span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">1440 × 820</span>
+</div>
+<div style="width:1440px;height:820px;display:flex;align-items:stretch;background:var(--surface-card);border:1px solid var(--border-medium);border-radius:var(--radius-card);overflow:hidden;box-shadow:var(--shadow-card)">
+<dc-import name="Sidebar" active="matches" ws="Jordan Lee" user="Jordan Lee" collapsed="{{ yes }}" hint-size="64px,820px" style="flex:0 0 64px;align-self:stretch">
+</dc-import>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+<div style="height:44px;flex:0 0 44px;display:flex;align-items:center;gap:6px;padding:0 24px;border-bottom:1px solid var(--border-hairline)">
+<nav aria-label="Breadcrumb" style="display:flex;min-width:0;align-items:center;gap:2px">
+<a href="#P2" style="font-size:11px;color:var(--ink-500);text-decoration:none" style-hover="color:var(--ink-900)">Matches</a>
+</nav>
+<div style="flex:1">
+</div>
+<x-import component-from-global-scope="AdvantageDesignSystemV3_abcb65.Tooltip" label="Search" detail="Matches, players, help" shortcut="⌘K" side="bottom" hint-size="auto,28px">
+<div style="display:flex;align-items:center;gap:7px;height:28px;padding:0 8px;border-radius:var(--radius-element);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<i data-lucide="search" stroke-width="1.5" style="width:14px;height:14px;color:var(--nav-fg)">
+</i>
+<span style="font-size:12px;color:var(--nav-fg)">Search</span>
+</div>
+</x-import>
+<x-import component-from-global-scope="AdvantageDesignSystemV3_abcb65.ActivityTray" items="{{ trayItems }}" hint-size="28px,28px">
+</x-import>
+<span style="width:1px;height:14px;background:var(--border-medium);margin:0 2px">
+</span>
+<x-import component-from-global-scope="AdvantageDesignSystemV3_abcb65.Tooltip" label="Account" side="bottom" hint-size="auto,28px">
+<div style="display:flex;align-items:center;gap:5px;padding:3px 6px 3px 3px;border-radius:var(--radius-pill);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<span style="width:22px;height:22px;border-radius:var(--radius-pill);background:var(--ink-900);color:#FFFFFF;display:inline-flex;align-items:center;justify-content:center;font:500 10px var(--font-sans)">JL</span>
+<i data-lucide="chevron-down" stroke-width="1.5" style="width:12px;height:12px;color:var(--ink-400)">
+</i>
+</div>
+</x-import>
+</div>
+<div style="flex:1;min-height:0;display:flex;align-items:stretch">
+<aside aria-label="Match summary" style="flex:0 0 300px;box-sizing:border-box;display:flex;flex-direction:column;border-right:1px solid var(--border-hairline);background:var(--surface-card)">
+<div style="padding:0 12px">
+<div style="display:flex;flex-direction:column;gap:14px;padding:18px 13px 20px;border-bottom:1px solid var(--border-hairline)">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span class="text-micro">Playing</span>
+<div style="flex:1">
+</div>
+<span class="mono tabular" style="font-size:10px;font-weight:500;color:var(--blue)">41:12</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:11px">
+<div style="display:flex;min-width:0;align-items:center;gap:7px">
+<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500;color:var(--ink-900)">Jordan Lee</span>
+<span style="width:6px;height:6px;flex:0 0 6px;border-radius:var(--radius-pill);background:var(--blue)">
+</span>
+<div style="flex:1">
+</div>
+<span class="mono tabular" style="display:inline-flex;align-items:center;gap:8px;font-size:13px;white-space:nowrap">
+<span style="width:11px;text-align:right;color:var(--ink-900)">6</span>
+<span style="width:11px;text-align:right;color:var(--ink-900)">3</span>
+<span style="width:1px;height:12px;background:var(--border-hairline);margin:0 2px">
+</span>
+<span style="width:22px;text-align:right;font-weight:500;color:var(--ink-900)">30</span>
+</span>
+</div>
+<div style="display:flex;min-width:0;align-items:center;gap:7px">
+<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500;color:var(--ink-900)">Marcus Reid</span>
+<div style="flex:1">
+</div>
+<span class="mono tabular" style="display:inline-flex;align-items:center;gap:8px;font-size:13px;white-space:nowrap">
+<span style="width:11px;text-align:right;color:var(--ink-900)">4</span>
+<span style="width:11px;text-align:right;color:var(--ink-900)">3</span>
+<span style="width:1px;height:12px;background:var(--border-hairline);margin:0 2px">
+</span>
+<span style="width:22px;text-align:right;font-weight:500;color:var(--ink-900)">30</span>
+</span>
+</div>
+</div>
+<span class="text-micro tabular">Set 2 · game 7 · Reid serving</span>
+</div>
+</div>
+<div role="tablist" aria-orientation="vertical" aria-label="Match report views" style="display:flex;flex-direction:column;gap:2px;padding:10px 12px 0">
+<button type="button" role="tab" aria-selected="false" style="display:flex;align-items:center;height:40px;border:0;background:transparent;border-radius:var(--radius-element);font:400 13px var(--font-sans);color:var(--nav-fg);cursor:pointer;text-align:left" style-hover="background:var(--surface-subtle);color:var(--ink-900)">
+<span style="display:flex;width:40px;height:40px;flex:0 0 40px;align-items:center;justify-content:center">
+<i data-lucide="table-2" stroke-width="1.5" style="width:16px;height:16px">
+</i>
+</span>
+<span style="flex:1;min-width:0">Statistics</span>
+</button>
+<button type="button" role="tab" aria-selected="false" style="display:flex;align-items:center;height:40px;border:0;background:transparent;border-radius:var(--radius-element);font:400 13px var(--font-sans);color:var(--nav-fg);cursor:pointer;text-align:left" style-hover="background:var(--surface-subtle);color:var(--ink-900)">
+<span style="display:flex;width:40px;height:40px;flex:0 0 40px;align-items:center;justify-content:center">
+<i data-lucide="scatter-chart" stroke-width="1.5" style="width:16px;height:16px">
+</i>
+</span>
+<span style="flex:1;min-width:0">Visualizations</span>
+</button>
+<button type="button" role="tab" aria-selected="true" style="display:flex;align-items:center;height:40px;border:0;background:var(--surface-subtle);border-radius:var(--radius-element);font:500 13px var(--font-sans);color:var(--ink-900);cursor:pointer;text-align:left">
+<span style="display:flex;width:40px;height:40px;flex:0 0 40px;align-items:center;justify-content:center">
+<i data-lucide="video" stroke-width="1.5" style="width:16px;height:16px">
+</i>
+</span>
+<span style="flex:1;min-width:0">Video</span>
+</button>
+</div>
+<div style="flex:1;min-height:16px">
+</div>
+<div style="padding:12px">
+<button type="button" style="display:inline-flex;width:100%;align-items:center;justify-content:center;gap:7px;height:36px;padding:0 16px;border:1px solid transparent;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 13px var(--font-sans);box-shadow:var(--shadow-cta-glow);cursor:pointer" style-hover="background:var(--blue-hover)">
+<i data-lucide="share-2" stroke-width="1.7" style="width:15px;height:15px">
+</i>Share</button>
+</div>
+</aside>
+<div style="flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;gap:16px;padding:20px 56px 24px;background:var(--surface-card)">
+<div style="display:flex;align-items:flex-end;gap:10px">
+<div style="min-width:0">
+<h1 style="margin:0;font:300 24px/30px var(--font-sans);letter-spacing:-0.3px;color:var(--ink-900);white-space:nowrap">Video</h1>
+<div style="margin-top:7px;height:18px;display:flex;flex-wrap:nowrap;align-items:center;gap:14px;min-width:0">
+<span style="display:inline-flex;align-items:center;gap:6px;flex:0 0 auto">
+<i data-lucide="swords" stroke-width="1.5" style="width:13px;height:13px;flex:0 0 13px;color:var(--ink-700)">
+</i>
+<span class="text-micro tabular" style="color:var(--ink-700);white-space:nowrap">174 points · 31 games</span>
+</span>
+<span style="display:inline-flex;align-items:center;gap:6px;flex:0 0 auto">
+<i data-lucide="calendar" stroke-width="1.5" style="width:13px;height:13px;flex:0 0 13px;color:var(--ink-700)">
+</i>
+<span class="text-micro tabular" style="color:var(--ink-700);white-space:nowrap">Sep 14, 2026</span>
+</span>
+<span style="display:inline-flex;align-items:center;gap:6px;min-width:0">
+<img src="assets/tournament-icon.svg" alt="" style="width:13px;height:13px;flex:0 0 13px">
+<span class="text-micro" style="color:var(--ink-700);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Coastal Collegiate Invitational</span>
+</span>
+<span style="display:inline-flex;align-items:center;gap:6px;flex:0 0 auto">
+<img src="assets/tennis-court-icon.svg" alt="" style="width:13px;height:13px;flex:0 0 13px">
+<span class="text-micro" style="color:var(--ink-700);white-space:nowrap">Hard</span>
+</span>
+<span style="display:inline-flex;align-items:center;gap:6px;flex:0 0 auto">
+<i data-lucide="circle-check" stroke-width="1.5" style="width:13px;height:13px;flex:0 0 13px;color:var(--ink-700)">
+</i>
+<span class="text-micro" style="color:var(--ink-700);white-space:nowrap">Verified result</span>
+</span>
+</div>
+</div>
+<div style="flex:1">
+</div>
+<div style="display:flex;flex:0 0 auto;align-items:center;gap:8px">
+<div style="position:relative">
+<button type="button" aria-label="More" aria-expanded="false" style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:0;background:transparent;border-radius:var(--radius-element);color:var(--nav-fg);cursor:pointer" style-hover="background:var(--surface-subtle);color:var(--ink-900)">
+<i data-lucide="ellipsis" stroke-width="1.5" style="width:15px;height:15px">
+</i>
+</button>
+</div>
+</div>
+</div>
+<div style="flex:1;min-height:0;display:flex;align-items:stretch;gap:16px">
+<div style="flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;gap:16px">
+<div style="position:relative;width:100%;aspect-ratio:16/9;flex:0 0 auto;border-radius:var(--radius-card);overflow:hidden;background:#1A1A1C">
+<img src="assets/match-video-still.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block">
+<sc-if value="{{ paused }}" hint-placeholder-val="{{ true }}">
+<button type="button" aria-label="Play" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border:0;background:transparent;cursor:pointer">
+<span style="display:flex;width:40px;height:40px;align-items:center;justify-content:center;border-radius:var(--radius-pill);background:rgba(255,255,255,0.14)">
+<i data-lucide="play" stroke-width="0" fill="#FFFFFF" style="width:15px;height:15px;margin-left:2px;color:#FFFFFF">
+</i>
+</span>
+</button>
+</sc-if>
+<div style="position:absolute;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:flex-end;gap:6px;padding:28px 16px 8px;background:linear-gradient(to top,rgba(13,13,13,0.68) 0%,rgba(13,13,13,0) 100%)">
+<div role="slider" aria-label="Seek" tabindex="0" style="position:relative;display:flex;height:16px;align-items:center;cursor:pointer">
+<span style="position:absolute;left:0;width:calc(22% - 2.5px);height:3px;border-radius:var(--radius-pill);background:var(--blue)">
+</span>
+<span style="position:absolute;left:calc(22% + 2.5px);width:calc(19% - 5px);height:3px;border-radius:var(--radius-pill);background:linear-gradient(to right,var(--blue) 0 92%,rgba(255,255,255,0.22) 92% 100%)">
+</span>
+<span style="position:absolute;left:calc(41% + 2.5px);width:calc(24% - 5px);height:3px;border-radius:var(--radius-pill);background:rgba(255,255,255,0.22)">
+</span>
+<span style="position:absolute;left:calc(65% + 2.5px);width:calc(35% - 2.5px);height:3px;border-radius:var(--radius-pill);background:rgba(255,255,255,0.22)">
+</span>
+<span style="position:absolute;left:40%;top:50%;width:11px;height:11px;transform:translate(-50%,-50%);border-radius:var(--radius-pill);background:#FFFFFF">
+</span>
+</div>
+<div style="display:flex;height:32px;align-items:center;gap:14px">
+<span class="vt-glyph" role="button" aria-label="Play" style="display:block;width:13px;height:13px;color:rgba(255,255,255,0.85);cursor:pointer">
+<i data-lucide="play" stroke-width="1.6" fill="currentColor" style="width:13px;height:13px">
+</i>
+</span>
+<span class="vt-glyph" role="button" aria-label="Previous point" style="display:block;width:13px;height:13px;color:rgba(255,255,255,0.85);cursor:pointer">
+<i data-lucide="skip-back" stroke-width="1.6" fill="currentColor" style="width:13px;height:13px">
+</i>
+</span>
+<span class="vt-glyph" role="button" aria-label="Next point" style="display:block;width:13px;height:13px;color:rgba(255,255,255,0.85);cursor:pointer">
+<i data-lucide="skip-forward" stroke-width="1.6" fill="currentColor" style="width:13px;height:13px">
+</i>
+</span>
+<span class="mono tabular" style="font-size:10px;color:rgba(255,255,255,0.75)">41:12 / 1:42:18</span>
+<div style="flex:1">
+</div>
+<span class="vt-glyph" role="button" aria-label="Save point" style="display:block;width:13px;height:13px;color:rgba(255,255,255,0.85);cursor:pointer">
+<i data-lucide="bookmark" stroke-width="1.6" style="width:13px;height:13px">
+</i>
+</span>
+<span class="vt-glyph" role="button" aria-label="Skip dead time — off" style="display:block;width:13px;height:13px;color:rgba(255,255,255,0.85);cursor:pointer">
+<i data-lucide="timer-off" stroke-width="1.6" style="width:13px;height:13px">
+</i>
+</span>
+<span class="vt-glyph mono" role="button" aria-label="Playback speed, 1×" style="font-size:10px;font-weight:500;color:rgba(255,255,255,0.85);cursor:pointer">1×</span>
+<span class="vt-glyph" role="button" aria-label="Loop this point — off" style="display:block;width:13px;height:13px;color:rgba(255,255,255,0.85);cursor:pointer">
+<i data-lucide="repeat" stroke-width="1.6" style="width:13px;height:13px">
+</i>
+</span>
+<span class="vt-glyph" role="button" aria-label="Sound — on" style="display:block;width:13px;height:13px;color:#FFFFFF;cursor:pointer">
+<i data-lucide="volume-2" stroke-width="1.6" style="width:13px;height:13px">
+</i>
+</span>
+<span class="vt-glyph" role="button" aria-label="Open the film room fullscreen" style="display:block;width:13px;height:13px;color:rgba(255,255,255,0.85);cursor:pointer">
+<i data-lucide="maximize" stroke-width="1.6" style="width:13px;height:13px">
+</i>
+</span>
+</div>
+</div>
+</div>
+<section aria-label="This point" style="flex:1;min-height:0;display:flex;flex-direction:column;padding:10px 8px 8px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)" >
+<div style="display:flex;flex:0 0 auto;align-items:center;gap:10px;padding:2px 5px 10px 12px">
+<span class="eyebrow">Current point</span>
+<div style="flex:1">
+</div>
+<div style="display:inline-flex;flex:0 0 auto;align-items:center;gap:2px">
+<span role="button" aria-label="Previous point" style="display:inline-flex;width:28px;height:28px;flex:0 0 28px;align-items:center;justify-content:center;border-radius:var(--radius-element);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<i data-lucide="chevron-left" stroke-width="1.5" style="width:14px;height:14px;color:var(--nav-fg)">
+</i>
+</span>
+<span class="mono tabular" style="min-width:56px;text-align:center;font-size:11px;color:var(--ink-500);white-space:nowrap">96 / 174</span>
+<span role="button" aria-label="Next point" style="display:inline-flex;width:28px;height:28px;flex:0 0 28px;align-items:center;justify-content:center;border-radius:var(--radius-element);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<i data-lucide="chevron-right" stroke-width="1.5" style="width:14px;height:14px;color:var(--nav-fg)">
+</i>
+</span>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:16px 54px 60px 76px 74px minmax(0,1fr) 44px 48px;column-gap:16px;align-items:center;padding:0 12px 10px;margin-bottom:6px;border-bottom:1px solid var(--border-hairline)">
+<span style="font-size:10px;color:var(--ink-400)">#</span>
+<span style="font-size:10px;color:var(--ink-400)">Player</span>
+<span style="font-size:10px;color:var(--ink-400)">Spin</span>
+<span style="font-size:10px;color:var(--ink-400)">Stroke</span>
+<span style="font-size:10px;color:var(--ink-400)">Type</span>
+<span style="font-size:10px;color:var(--ink-400)">Placement</span>
+<span style="font-size:10px;color:var(--ink-400);text-align:right">Mph</span>
+<span style="font-size:10px;color:var(--ink-400)">Result</span>
+</div>
+<div style="flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto">
+<sc-for list="{{ pageShots }}" as="s" hint-placeholder-count="5">
+<div role="button" tabindex="0" class="vt-shot" style="display:grid;grid-template-columns:16px 54px 60px 76px 74px minmax(0,1fr) 44px 48px;column-gap:16px;align-items:center;flex:0 0 auto;height:40px;padding:0 12px;border-radius:var(--radius-element);cursor:pointer;background:{{ s.rowBg }}">
+<span class="mono tabular" style="font-size:10px;color:var(--ink-400)">{{ s.n }}</span>
+<span style="font-size:12px;color:var(--ink-900);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.last }}</span>
+<span style="font-size:12px;color:var(--ink-600)">{{ s.spin }}</span>
+<span style="font-size:12px;color:{{ s.strokeCellColor }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.strokeText }}</span>
+<span style="font-size:12px;color:var(--ink-700)">{{ s.type }}</span>
+<span style="font-size:12px;color:{{ s.placeColor }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.placeText }}</span>
+<span class="tabular" style="font-size:12px;color:var(--ink-700);text-align:right">{{ s.mphText }}</span>
+<span style="font-size:12px;color:{{ s.resultColor }}">{{ s.result }}</span>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;align-items:center;gap:10px;flex:0 0 auto;margin:10px 12px 0;padding:12px 0 4px;border-top:1px solid var(--border-hairline)">
+<span class="text-micro tabular">5 shots · 14s</span>
+<span style="font-size:11px;color:var(--ink-300)">·</span>
+<span style="font-size:11px;color:var(--ink-600)">Unforced error</span>
+<div style="flex:1">
+</div>
+<span style="font-size:11px;color:var(--ink-500);white-space:nowrap">Doesn't look right?</span>
+<a href="#P2" style="font:500 11px var(--font-sans);white-space:nowrap;color:var(--blue);text-decoration:none" style-hover="color:var(--blue-hover)">Edit this point</a>
+</div>
+</section>
+</div>
+<div style="position:relative;flex:0 0 320px;width:320px;align-self:stretch;display:flex;flex-direction:column">
+<section aria-label="Point list" style="position:absolute;inset:0;display:flex;max-height:100%;min-height:0;flex-direction:column;padding:10px 8px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<div style="display:flex;align-items:center;gap:20px;margin:0 4px;padding:4px 0 10px;border-bottom:1px solid var(--border-hairline)">
+<div role="button" tabindex="0" style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:var(--radius-element);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<i data-lucide="sliders-horizontal" stroke-width="1.5" style="width:13px;height:13px;flex:0 0 13px;color:var(--ink-600)">
+</i>
+<span style="font:500 12px var(--font-sans);letter-spacing:-0.08px;color:var(--ink-900)">All points</span>
+<i data-lucide="chevron-down" stroke-width="1.5" style="width:12px;height:12px;flex:0 0 12px;color:var(--ink-400)">
+</i>
+</div>
+<div style="flex:1">
+</div>
+<span class="mono tabular" style="padding-right:8px;font-size:10px;color:var(--ink-400)">174 <span style="color:var(--ink-300)">/</span> 174</span>
+</div>
+<div style="flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto">
+<sc-for list="{{ pageGroups }}" as="g" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column">
+<div style="display:flex;align-items:center;padding:12px 12px 5px">
+<span class="mono" style="font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink-400)">{{ g.head }}</span>
+<div style="flex:1">
+</div>
+<span class="mono tabular" style="font-size:10px;color:var(--ink-400)">{{ g.meta }}</span>
+</div>
+<sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+<div role="button" tabindex="0" class="vt-row" style="position:relative;display:flex;min-height:52px;flex:0 0 auto;align-items:center;gap:12px;padding:6px 12px;border-radius:var(--radius-element);cursor:pointer">
+<span style="display:inline-flex;flex:0 0 34px;align-items:center;justify-content:center">{{ r.mark }}</span>
+<span style="display:flex;min-width:0;flex-direction:column;gap:1px">
+<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--ink-900)">{{ r.title }}</span>
+<span class="text-micro" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.detail }}</span>
+</span>
+<div style="flex:1">
+</div>
+<span class="vt-score tabular" style="min-width:52px;text-align:right;font-size:13px;color:var(--ink-900)">{{ r.score }}</span>
+<span class="vt-save" role="button" aria-label="Bookmark this point" style="align-items:center;justify-content:center;padding:2px;border-radius:var(--radius-cell);cursor:pointer">
+<i data-lucide="bookmark" stroke-width="1.6" style="width:13px;height:13px;color:var(--ink-400)">
+</i>
+</span>
+</div>
+</sc-for>
+</div>
+</sc-for>
+</div>
+</section>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:14px;box-sizing:border-box;width:1440px;padding:20px 24px;background:var(--surface-page);border-radius:var(--radius-card)">
+<span class="eyebrow">The feed answers the rail</span>
+<span style="font-size:13px;line-height:1.6;color:var(--ink-700);max-width:92ch;text-wrap:pretty">Collapsing the icon rail (⌘\) returns 168px to the content column, and the shot feed is the only thing that spends it. The point list never collapses — it is how you move through the match, and 320px is what a two-line row costs.</span>
+<div style="display:grid;grid-template-columns:132px minmax(0,1fr);column-gap:24px;row-gap:12px;align-items:baseline">
+<span class="mono" style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Rail open</span>
+<span style="font-size:12px;line-height:1.6;color:var(--ink-700);max-width:80ch">
+<b style="font-weight:500;color:var(--ink-900)"># · Player · Stroke · Placement · Result.</b> Type and Spin drop — Type restates the row's position, and Spin is a qualifier nobody scans a column for. Stroke names itself: <span class="mono" style="font-size:11px">Serve</span> on row 1, then the bare stroke. Placement stays, because it is the tactical payload and the reason to read the feed at all.</span>
+<span class="mono" style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Rail collapsed</span>
+<span style="font-size:12px;line-height:1.6;color:var(--ink-700);max-width:80ch">
+<b style="font-weight:500;color:var(--ink-900)"># · Player · Spin · Stroke · Type · Placement · Mph · Result.</b> The added columns sit in the order a player says them — <span style="color:var(--ink-900)">"slice backhand return, cross court, out"</span> — so the row reads as a sentence rather than a schema.</span>
+<span class="mono" style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Rules</span>
+<span style="font-size:12px;line-height:1.6;color:var(--ink-700);max-width:80ch">Columns are added and removed, never re-sorted: #, Player, Stroke, Placement and Result hold the same x in both states, so nothing a coach has learned to find moves. Placement takes the one fluid track either way. Mph is tabular, right, and absent — <span class="mono" style="font-size:11px">—</span>, never <span class="mono" style="font-size:11px">0</span> — where nothing was measured.</span>
+<span class="mono" style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Discovery</span>
+<span style="font-size:12px;line-height:1.6;color:var(--ink-700);max-width:80ch">This is a reward, not a feature to advertise: the rail toggle keeps its own label and tooltip and says nothing about columns. Nothing in the product is reachable only through the wide feed — every value here is also in the point's own record.</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+

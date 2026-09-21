@@ -1,8 +1,11 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { FilmEntryActions } from "./film-entry-actions";
+import { FILM_REFUSAL_COPY } from "./film-refusal-copy";
+import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
+import { advButton } from "@/lib/ui/adv-button";
 import type { MatchFilmEntry } from "@/lib/match-video/film-entry";
 
 /**
@@ -43,49 +46,58 @@ export function FilmUnavailableState({
   entry: MatchFilmEntry;
   state: "unavailable" | "stale";
 }) {
+  const router = useRouter();
+  const { actions } = useMatchReport();
   const stale = state === "stale";
   // Whether the page actually established that a video is attached. It is the
   // difference between "your video would not open" and "we could not find
   // out", and only one of those is true when the attachment read is what failed.
   const known = entry.attachment === "present";
+  const copy = stale
+    ? FILM_REFUSAL_COPY.stale
+    : known
+      ? FILM_REFUSAL_COPY.unavailable
+      : FILM_REFUSAL_COPY.unknown;
 
   return (
     <div
-      className="flex flex-1 flex-col items-center justify-center gap-4 py-16 pb-[72px] text-center"
+      className="flex flex-1 flex-col items-start gap-3 py-8"
       role="alert"
       data-testid="film-unavailable"
       data-film-state={state}
     >
-      <AlertTriangle
-        className="h-7 w-7 text-[var(--ink-300)]"
-        strokeWidth={1.5}
-        aria-hidden="true"
-      />
-      <div className="h-px w-6 bg-[var(--border-medium)]" aria-hidden="true" />
-
-      <div className="flex max-w-[420px] flex-col items-center gap-2">
+      <div className="flex max-w-[56ch] flex-col gap-2">
         <h2 className="text-title" style={{ fontSize: "16px" }}>
-          {stale
-            ? "This video is missing"
-            : known
-              ? "The video could not be opened"
-              : "This match's video could not be checked"}
+          {copy.heading}
         </h2>
         <p
           className="text-body-sm [text-wrap:pretty]"
           style={{ color: "var(--ink-600)" }}
         >
-          {stale
-            ? "A video is attached to this match, but its file is no longer in storage. Replacing it is what puts the match back together."
-            : known
-              ? "A video is attached to this match and storage could not be reached just now. Reload in a moment — nothing has been lost."
-              : "We could not read whether this match has a video. Reload in a moment — nothing has been lost."}
+          {copy.body}
         </p>
       </div>
 
-      <div className="pt-1">
-        <FilmEntryActions matchId={matchId} entry={entry} />
+      <div className="flex items-center gap-3 pt-1">
+        <button
+          type="button"
+          className={advButton("ghost", "sm")}
+          onClick={() => actions.selectView("statistics")}
+        >
+          {FILM_REFUSAL_COPY.buttons.back}
+        </button>
+        {!stale && (
+          <button
+            type="button"
+            className={advButton("primary", "sm")}
+            onClick={() => router.refresh()}
+          >
+            {FILM_REFUSAL_COPY.buttons.retry}
+          </button>
+        )}
       </div>
+
+      <FilmEntryActions matchId={matchId} entry={entry} />
     </div>
   );
 }
