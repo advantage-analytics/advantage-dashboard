@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
-import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { WorkspaceKind } from "@/lib/workspace/types";
 import { APRON_FILL, HEAT_APRON_FILL, CourtArt } from "./court-art";
@@ -15,15 +13,9 @@ import { StatsCard } from "./stats-card";
 import { VizToolbar } from "./viz-toolbar";
 import { useVizState } from "./use-viz-state";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
-import {
-  EMPTY_VIZ_FILTERS,
-  availableSets,
-  computeViz,
-  computeVizStats,
-  subjectFor,
-  type Cut,
-} from "./viz-model";
-import { activeFilterEntries, viewIdentityKey } from "./viz-url";
+import { useVizView } from "./use-viz-view";
+import { EMPTY_VIZ_FILTERS, availableSets, type Cut } from "./viz-model";
+import { viewIdentityKey } from "./viz-url";
 import { CUT_LABEL, legendItemsFor, type LegendItem } from "./viz-labels";
 import { AppliedStrip } from "./applied-strip";
 import { FiltersPopover } from "./filters-popover";
@@ -77,8 +69,12 @@ export function VizFocused({
   workspaceKind: WorkspaceKind;
   workspaceName: string;
 }) {
-  const { points } = useMatchData();
-  const { you, opp } = useMatchSides();
+  // The ONE data path, shared with the fullscreen viewer (`use-viz-view.ts`)
+  // — including where "you" is resolved (guardrails §4). Extracted from here
+  // rather than copied into the viewer, so the two courts can never draw a
+  // different mark count for the same URL.
+  const { result, stats, subjectName, you, opp, points, hasFilters, isDraft } =
+    useVizView();
   const {
     state,
     setState,
@@ -136,38 +132,15 @@ export function VizFocused({
     if (externalCourtSwap) clearExternalCourtSwap();
   }, [externalCourtSwap, clearExternalCourtSwap]);
 
-  const subject = subjectFor(state.filters, you.isPlayer1);
-  const result = useMemo(
-    () =>
-      cut ? computeViz(points, cut, state.filters, subject, state.chart) : null,
-    [points, cut, state.filters, subject, state.chart],
-  );
-  const stats = useMemo(
-    () =>
-      cut
-        ? computeVizStats(
-            points,
-            cut,
-            state.filters,
-            subject,
-            result ?? undefined,
-          )
-        : null,
-    [points, cut, state.filters, subject, result],
-  );
-
   if (cut === null || result === null || stats === null) {
     // Guarded by `shots-tab.tsx` (`state.cut === null ? <VizWall/> : <VizFocused/>`);
     // this only fires on a race between renders, never in steady state.
     return null;
   }
 
-  const subjectName = state.filters.player === "you" ? you.name : opp.name;
-  const hasFilters = activeFilterEntries(state).length > 0;
-  // G4: "Create view"'s blank-court prompt. Only meaningful alongside a
-  // real cut (`viz-url.ts`'s `VizState.draft` doc comment) — `cut` is
-  // already known non-null here, past the early-return guard above.
-  const isDraft = state.draft === true;
+  // `subjectName`/`hasFilters`/`isDraft` (G4's "Create view" blank-court
+  // prompt) all come from `useVizView()` above now — the viewer needs the
+  // same three, derived the same way.
   // Defect fix: the art box wrapper (the letterbox strips either side of the
   // svg) must follow the court's own desaturation — heat mode desaturates,
   // EXCEPT while drafting, where `CourtArt` below is told to draw normal

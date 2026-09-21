@@ -8,6 +8,7 @@ import {
   RETURN_DOT_R,
   heatDotRadiusFor,
   heatFilterRegionFor,
+  type HeatFilterRegion,
   HEAT_RAMP_R_TABLE,
   HEAT_RAMP_G_TABLE,
   HEAT_RAMP_B_TABLE,
@@ -43,10 +44,23 @@ import type { Chart, Cut, VizDot } from "./viz-model";
 // as its background (Defect 2 fix), rather than introducing a second
 // `#86AC91` literal in a file the design-drift checker doesn't allowlist.
 export const APRON_FILL = "#86AC91";
-const COURT_FILL = "#6092CE";
-const LINE_COLOR = "#FFFFFF";
+// Exported for the fullscreen viewer's court (`viz-fullscreen-court.tsx`),
+// which draws the SAME two-tone court in `VIEWER_COURT`'s own frame — sharing
+// the constants rather than repeating the literals in a second file the
+// design-drift checker would have to allowlist separately.
+export const COURT_FILL = "#6092CE";
+export const LINE_COLOR = "#FFFFFF";
 const DOT_STROKE = "#000";
 const DOT_STROKE_W = 0.4;
+
+/**
+ * The viewer's own "miss" fill (f4b-report P2b: "`--pt-miss` in the VIEWER is
+ * the literal `#C9CBCE`, not `--ink-300` as in-shell") — a grey picked to sit
+ * on the viewer's darker, unlit stage rather than on a white card. Declared
+ * here, beside the other court literals, so `scripts/check-design-drift.mjs`
+ * keeps ONE allowlisted file for the court palette.
+ */
+export const VIEWER_MISS_FILL = "#C9CBCE";
 
 // G3b (P2i): while a heat chart is showing, the court desaturates — the
 // design's own two literals, allowlisted alongside this file's other three
@@ -56,7 +70,7 @@ const DOT_STROKE_W = 0.4;
 // letterbox-strip defect fix), rather than a second `#9FB3A5` literal the
 // design-drift checker doesn't allowlist there.
 export const HEAT_APRON_FILL = "#9FB3A5";
-const HEAT_COURT_FILL = "#9DB4CE";
+export const HEAT_COURT_FILL = "#9DB4CE";
 
 // User decision (heat-blob rewrite): "just blobs/blurs like a regular
 // [heatmap]" — one white circle per dot, blurred and colourized by a single
@@ -198,9 +212,15 @@ function heatDotCircle(
  * the whole art box (`heatFloorTintRgba()`), so there is only ever one tint
  * to be consistent with.
  */
-function HeatFilterDef({ id, cut }: { id: string; cut: Cut }) {
-  const region = heatFilterRegionFor(cut);
-  const stdDeviation = heatDotRadiusFor(cut) * HEAT_BLUR_RADIUS_RATIO;
+function HeatFilterDef({
+  id,
+  stdDeviation,
+  region,
+}: {
+  id: string;
+  stdDeviation: number;
+  region: HeatFilterRegion;
+}) {
   return (
     <filter
       id={id}
@@ -223,6 +243,97 @@ function HeatFilterDef({ id, cut }: { id: string; cut: Cut }) {
         <feFuncA type="table" tableValues={HEAT_ALPHA_TABLE} />
       </feComponentTransfer>
     </filter>
+  );
+}
+
+/**
+ * The three frame-specific dot projections the heat layer feeds on, as
+ * module-level functions rather than closures built during render — so
+ * `HeatLayer`'s own `useMemo` over its circle array has a stable `project`
+ * identity to key on.
+ */
+const projectServeHeatDot = (d: VizDot) =>
+  projectServeMetricDot({ lateralM: d.lateralM, depthPastNetM: d.depthM });
+const projectReturnPlacementHeatDot = (d: VizDot) =>
+  projectReturnDot("placement", {
+    lateralM: d.lateralM ?? 0,
+    depthM: d.depthM ?? 0,
+  });
+const projectReturnContactHeatDot = (d: VizDot) =>
+  projectReturnDot("contact", {
+    lateralM: d.lateralM ?? 0,
+    depthM: d.depthM ?? 0,
+  });
+
+/**
+ * The whole heat-blob pipeline for one frame — the `<filter>` definition and
+ * the `<g filter=…>` of blurred white circles it colourizes — as ONE element
+ * both courts mount (Phase 2A, Task 4): the in-shell `CourtArt` below and the
+ * fullscreen viewer's own court (`viz-fullscreen-court.tsx`), which draws the
+ * same dots in `VIEWER_COURT`'s coordinates. Extracted rather than forked so
+ * the two can never drift on the blur ratio, the ramp, the alpha table, or
+ * the exclusion rule.
+ *
+ * Invariants preserved verbatim from the in-shell version this replaces:
+ *
+ * - the filter id comes from `useId()`, one per mounted instance (a wall of
+ *   tiles each renders its own `CourtArt`, so a shared id would have them all
+ *   reference the first one's filter);
+ * - `atNet` dots are EXCLUDED — a netted ball is pinned to a fixed gutter,
+ *   not a real position, so it must not contribute density; an OUT dot is a
+ *   real position and stays in;
+ * - nothing renders at all when there are no dots, so an empty result is left
+ *   for the caller's own empty-state overlay rather than washed in ramp
+ *   colour.
+ *
+ * The `<filter>` element now sits beside the circles instead of earlier in
+ * the document — filters are definitions, never rendered in place, and the
+ * filter's `userSpaceOnUse` region resolves against the REFERENCING element's
+ * user space (unchanged), so the drawn output is identical.
+ */
+export function HeatLayer({
+  cut,
+  dots,
+  project,
+  radius,
+  region,
+}: {
+  cut: Cut;
+  dots: VizDot[];
+  /** Where one dot sits in the caller's own frame. Must be referentially
+   *  stable (a module-level function, or `useCallback`'d). */
+  project: (dot: VizDot) => { cx: number; cy: number };
+  /** Blob radius in that frame's units. Defaults to the in-shell
+   *  `heatDotRadiusFor(cut)`. */
+  radius?: number;
+  /** The `<filter>`'s `userSpaceOnUse` box. Defaults to the in-shell
+   *  `heatFilterRegionFor(cut)`. */
+  region?: HeatFilterRegion;
+}) {
+  const filterId = useId();
+  const dotRadius = radius ?? heatDotRadiusFor(cut);
+  const filterRegion = region ?? heatFilterRegionFor(cut);
+  const empty = dots.length === 0;
+  const circles = useMemo<ReactNode[]>(() => {
+    if (empty) return [];
+    return dots
+      .filter((d) => !d.atNet)
+      .map((d) => {
+        const { cx, cy } = project(d);
+        return heatDotCircle(d.id, cx, cy, dotRadius);
+      });
+  }, [empty, dots, project, dotRadius]);
+
+  if (empty) return null;
+  return (
+    <>
+      <HeatFilterDef
+        id={filterId}
+        stdDeviation={dotRadius * HEAT_BLUR_RADIUS_RATIO}
+        region={filterRegion}
+      />
+      <g filter={`url(#${filterId})`}>{circles}</g>
+    </>
   );
 }
 
@@ -290,7 +401,6 @@ export function CourtArt({
   draft?: boolean;
 }) {
   const clipId = useId();
-  const heatFilterId = useId();
   const showHeat = chart === "heat";
   const showZones = !showHeat && cut === "serve" && zones != null;
   const maxZonePct = zones
@@ -312,36 +422,16 @@ export function CourtArt({
   // overlay (`result.count === 0`) to cover, so no heat layer draws at all
   // here when there's nothing to plot.
   const drawHeat = showHeat && dots.length > 0;
-  const dotRadius = heatDotRadiusFor(cut);
-  // Memoised per instance (a wall/saved-views tile renders its own
-  // `CourtArt`) — one `<circle>` per dot is cheap even for a busy match, but
-  // there's no reason to recompute the array on every render either.
-  const heatCirclesMemo = useMemo<ReactNode[] | null>(() => {
-    if (!drawHeat) return null;
-    // Task 2 (fix round 4A: keyed on `atNet`, the position fact, not
-    // `shape` — a netted ball's shape is now an ordinary circle/triangle):
-    // an `atNet` dot is pinned to a fixed gutter, not a real position — it
-    // never contributes to the density heatmap (an out dot, by contrast,
-    // IS a real position and stays in).
-    const positioned = dots.filter((d) => !d.atNet);
-    if (cut === "serve") {
-      return positioned.map((d) => {
-        const { cx, cy } = projectServeMetricDot({
-          lateralM: d.lateralM,
-          depthPastNetM: d.depthM,
-        });
-        return heatDotCircle(d.id, cx, cy, dotRadius);
-      });
-    }
-    const kind = cut === "returnPlacement" ? "placement" : "contact";
-    return positioned.map((d) => {
-      const { cx, cy } = projectReturnDot(kind, {
-        lateralM: d.lateralM ?? 0,
-        depthM: d.depthM ?? 0,
-      });
-      return heatDotCircle(d.id, cx, cy, dotRadius);
-    });
-  }, [drawHeat, dots, cut, dotRadius]);
+  // This frame's own dot projection, handed to the shared `HeatLayer` above
+  // (which owns the filter id, the memoised circle array and the `atNet`
+  // exclusion). Module-level functions, so the identity is stable across
+  // renders and `HeatLayer`'s `useMemo` keys on it correctly.
+  const heatProject =
+    cut === "serve"
+      ? projectServeHeatDot
+      : cut === "returnPlacement"
+        ? projectReturnPlacementHeatDot
+        : projectReturnContactHeatDot;
 
   if (cut === "serve") {
     return (
@@ -358,7 +448,6 @@ export function CourtArt({
         <clipPath id={clipId}>
           <path d={SERVE_BACKGROUND_PATH} />
         </clipPath>
-        {drawHeat && <HeatFilterDef id={heatFilterId} cut={cut} />}
         {/* Clipped to the background path — the heat filter's own margin
             (`heatFilterRegionFor`) would otherwise bleed past the rounded
             corners `SERVE_BACKGROUND_PATH` cuts into the frame. */}
@@ -519,8 +608,8 @@ export function CourtArt({
               strokeWidth={SERVE_COURT.netStrokeWidth}
             />
 
-            {heatCirclesMemo && (
-              <g filter={`url(#${heatFilterId})`}>{heatCirclesMemo}</g>
+            {drawHeat && (
+              <HeatLayer cut={cut} dots={dots} project={heatProject} />
             )}
 
             {!showHeat &&
@@ -601,7 +690,6 @@ export function CourtArt({
       <clipPath id={clipId}>
         <path d={RETURN_BACKGROUND_PATH} />
       </clipPath>
-      {drawHeat && <HeatFilterDef id={heatFilterId} cut={cut} />}
       <g clipPath={`url(#${clipId})`}>
         <g transform={RETURN_COURT.outerGroupTransform}>
           <g transform={RETURN_COURT.innerGroupTransform}>
@@ -704,8 +792,8 @@ export function CourtArt({
             {/* Every return-frame cut's blobs draw through the same blur +
                 colourize filter — still inside the same clipPath, still in
                 the same logical coordinates the dots below use. */}
-            {heatCirclesMemo && (
-              <g filter={`url(#${heatFilterId})`}>{heatCirclesMemo}</g>
+            {drawHeat && (
+              <HeatLayer cut={cut} dots={dots} project={heatProject} />
             )}
 
             {!showHeat &&

@@ -895,6 +895,60 @@ function clampNum(value: number, min: number, max: number): number {
 }
 
 /**
+ * The heat blob radius in `VIEWER_COURT`'s own units (Phase 2A, Task 4).
+ *
+ * `SERVE_HEAT_DOT_RADIUS` is expressed in the serve frame's PRE-group-transform
+ * units, so on screen it draws at `SERVE_GROUP_SCALE` × that. `VIEWER_COURT`
+ * has no group transform at all and its far half IS the serve frame's box at
+ * scale 1 in the same 334-wide viewBox — so multiplying the serve radius by
+ * that same group scale gives a blob covering the identical patch of COURT
+ * here that it covers in-shell. No second hand-picked number.
+ */
+export const VIEWER_HEAT_DOT_RADIUS = SERVE_HEAT_DOT_RADIUS * SERVE_GROUP_SCALE;
+
+/**
+ * The viewer heat `<filter>`'s `userSpaceOnUse` box: the whole
+ * `VIEWER_COURT.viewBox`, padded by the same `HEAT_FILTER_MARGIN_RATIO` blob
+ * radii `heatFilterRegionFor` uses, so a blob near the edge has room for its
+ * blur kernel to settle instead of being clipped into a hard line.
+ */
+export function viewerHeatFilterRegion(): HeatFilterRegion {
+  const margin = VIEWER_HEAT_DOT_RADIUS * HEAT_FILTER_MARGIN_RATIO;
+  return {
+    x: VIEWER_COURT.viewBox.minX - margin,
+    y: VIEWER_COURT.viewBox.minY - margin,
+    width: VIEWER_COURT.viewBox.w + margin * 2,
+    height: VIEWER_COURT.viewBox.h + margin * 2,
+  };
+}
+
+/**
+ * A point in `VIEWER_COURT.viewBox` coordinates → the `artPx` (595×948) pan
+ * layer the viewer positions its transform against: the SVG `viewBox` →
+ * element-size mapping the viewer's `<svg>` performs in the browser,
+ * reproduced in TS so `viewerInitialTransform` can target a specific
+ * on-screen spot before anything has rendered, and so the viewer's hover
+ * readout can be positioned at a mark inside that same pan layer.
+ *
+ * The two aspect ratios agree to within 0.03% (334/532 vs 595/948), so the
+ * letterboxing `preserveAspectRatio="xMidYMid meet"` leaves is a fraction of
+ * a pixel and is deliberately ignored here.
+ */
+export function viewerArtPoint(
+  viewBoxX: number,
+  viewBoxY: number,
+): { x: number; y: number } {
+  return {
+    x:
+      ((viewBoxX - VIEWER_COURT.viewBox.minX) / VIEWER_COURT.viewBox.w) *
+      VIEWER_COURT.artPx.w,
+    y:
+      ((viewBoxY - VIEWER_COURT.viewBox.minY) / VIEWER_COURT.viewBox.h) *
+      VIEWER_COURT.artPx.h,
+  };
+}
+
+/**
  * Projects a `VizDot`'s normalised court metres (`lateralM`/`depthM`, the
  * SAME fields `projectServeMetricDot`/`projectReturnDot` already read — see
  * `VizDot`'s own doc comment in `viz-model.ts`) onto `VIEWER_COURT`, sharing
@@ -974,28 +1028,6 @@ export function projectViewerDot(
   return {
     x: clampNum(rawX, xMin, xMax),
     y: clampNum(rawY, yMin, yMax),
-  };
-}
-
-// Maps a point in `VIEWER_COURT.viewBox` coordinates to the `artPx` canvas
-// `viewerInitialTransform` positions — the SVG `viewBox` → element-size
-// mapping `court-art.tsx`'s fullscreen `<svg>` performs in the browser,
-// reproduced here in TS so the initial transform can target a specific
-// on-screen spot (the near baseline) before anything has actually rendered.
-function viewerArtPoint(
-  viewBoxX: number,
-  viewBoxY: number,
-): {
-  x: number;
-  y: number;
-} {
-  return {
-    x:
-      ((viewBoxX - VIEWER_COURT.viewBox.minX) / VIEWER_COURT.viewBox.w) *
-      VIEWER_COURT.artPx.w,
-    y:
-      ((viewBoxY - VIEWER_COURT.viewBox.minY) / VIEWER_COURT.viewBox.h) *
-      VIEWER_COURT.artPx.h,
   };
 }
 

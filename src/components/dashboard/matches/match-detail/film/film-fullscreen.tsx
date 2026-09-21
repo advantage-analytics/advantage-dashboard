@@ -18,6 +18,7 @@ import { shortMonthDate } from "@/components/dashboard/matches/match-detail/form
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { advButton } from "@/lib/ui/adv-button";
+import { overlayIsOpen } from "@/lib/ui/overlay-is-open";
 import { cn } from "@/lib/utils";
 
 import type { FilmFilters } from "./film-filters";
@@ -155,19 +156,6 @@ function prefersReducedMotion(): boolean {
 }
 
 type PanelState = "closed" | "open" | "closing";
-
-/**
- * True when a menu or dialog is up — the room's keys stand down.
- *
- * Radix gives both its Dialog content and its Popover content (the float
- * menus) `role="dialog"` with `data-state`, and a tooltip `role="tooltip"`,
- * so this one selector catches the two surfaces that take keys and ignores
- * the one that must never eat the space bar. `data-state="open"` matters: a
- * closing menu stays in the DOM through its exit animation.
- */
-function overlayIsOpen(): boolean {
-  return document.querySelector('[role="dialog"][data-state="open"]') !== null;
-}
 
 export function FilmFullscreen(p: FilmFullscreenProps) {
   const { match } = useMatchData();

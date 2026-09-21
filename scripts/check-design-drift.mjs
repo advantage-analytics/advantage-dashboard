@@ -103,12 +103,18 @@ const ALLOWED_HEX = {
   // `#9FB3A5`/`#9DB4CE` (G3b) are the desaturated apron/court the design
   // switches to while a heat chart shows (P2i) — same one-call-site
   // reasoning, not promoted to colors.css.
+  // `#C9CBCE` (Phase 2A, P2b) is the fullscreen VIEWER's own "miss" grey —
+  // the handoff calls it out explicitly as the literal there rather than
+  // `--ink-300`, because the viewer's stage is not a white card. Declared in
+  // this file (`VIEWER_MISS_FILL`) and imported by the viewer's court, so the
+  // court palette stays one allowlisted file rather than two.
   "src/components/dashboard/matches/match-detail/shots/court-art.tsx": [
     "#86AC91",
     "#6092CE",
     "#F8C84F",
     "#9FB3A5",
     "#9DB4CE",
+    "#C9CBCE",
   ],
 };
 

@@ -1,0 +1,99 @@
+"use client";
+
+import { useMemo } from "react";
+import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import {
+  useMatchSides,
+  type MatchSide,
+} from "@/components/dashboard/matches/match-detail/use-match-sides";
+import type { MatchPoint } from "@/lib/data/match-points-server";
+import { useVizState } from "./use-viz-state";
+import {
+  computeViz,
+  computeVizStats,
+  subjectFor,
+  type Cut,
+  type VizResult,
+  type VizStats,
+} from "./viz-model";
+import { activeFilterEntries } from "./viz-url";
+
+/**
+ * The ONE data path behind both courts (Phase 2A, Task 4): the focused view
+ * (`viz-focused.tsx`) and the fullscreen viewer (`viz-fullscreen.tsx`) read
+ * the same points, resolve the same subject and call the same `computeViz`
+ * with the same arguments — so for one URL the viewer's mark count, its
+ * count/noun and its empty-state copy are necessarily identical to the
+ * focused court's. This used to be inline in `viz-focused.tsx`; the viewer
+ * duplicating it was exactly how the two would have drifted.
+ *
+ * Attribution (guardrails §4): "you" is resolved HERE, once, by
+ * `useMatchSides()`; `subjectFor(filters, you.isPlayer1)` turns the `player`
+ * filter into the boolean `computeViz` needs, and nothing downstream reads
+ * player1/player2 off the match.
+ *
+ * `cut === null` (the wall) returns `result`/`stats` as `null` — both callers
+ * are mounted only alongside a real cut and guard on it, but a render race
+ * between a URL commit and an unmount must not throw.
+ */
+export interface VizView {
+  cut: Cut | null;
+  /** `computeViz(points, cut, filters, subjectIsPlayer1, chart)`. */
+  result: VizResult | null;
+  stats: VizStats | null;
+  /** The resolved `subjectIsPlayer1` — pass this down, never re-derive it. */
+  subjectIsPlayer1: boolean;
+  /** The subject's display name (the `player` filter applied to you/opp). */
+  subjectName: string;
+  you: MatchSide;
+  opp: MatchSide;
+  /** Every point in the match — for `availableSets(points)` and nothing else. */
+  points: MatchPoint[];
+  /** At least one filter beyond the defaults is applied. */
+  hasFilters: boolean;
+  /** G4's "Create view" blank-court prompt is showing. */
+  isDraft: boolean;
+}
+
+export function useVizView(): VizView {
+  const { points } = useMatchData();
+  const { you, opp } = useMatchSides();
+  const { state } = useVizState();
+
+  const cut = state.cut;
+  const subjectIsPlayer1 = subjectFor(state.filters, you.isPlayer1);
+
+  const result = useMemo(
+    () =>
+      cut
+        ? computeViz(points, cut, state.filters, subjectIsPlayer1, state.chart)
+        : null,
+    [points, cut, state.filters, subjectIsPlayer1, state.chart],
+  );
+  const stats = useMemo(
+    () =>
+      cut
+        ? computeVizStats(
+            points,
+            cut,
+            state.filters,
+            subjectIsPlayer1,
+            result ?? undefined,
+          )
+        : null,
+    [points, cut, state.filters, subjectIsPlayer1, result],
+  );
+
+  return {
+    cut,
+    result,
+    stats,
+    subjectIsPlayer1,
+    subjectName: state.filters.player === "you" ? you.name : opp.name,
+    you,
+    opp,
+    points,
+    hasFilters: activeFilterEntries(state).length > 0,
+    isDraft: state.draft === true,
+  };
+}
