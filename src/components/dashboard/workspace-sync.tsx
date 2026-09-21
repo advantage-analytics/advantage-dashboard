@@ -1,50 +1,62 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import {
+  readWorkspaceCookie,
+  staleChromeTarget,
+} from "@/lib/workspace/workspace-cookie";
 
 /**
- * Re-renders the dashboard chrome when a page was drawn for a different
- * workspace than the one the chrome is showing.
+ * Re-renders the dashboard chrome when the workspace cookie has moved on
+ * without it.
  *
- * The page and the chrome resolve the workspace from the same cookie, but not
- * in the same render. A soft navigation re-renders the page and keeps the
- * layout the client already holds, so a cookie changed anywhere this tab's
- * router did not see — the switcher in a second tab, an invite accepted
- * elsewhere — leaves the old chrome standing. Click Home in that tab and
- * `/dashboard` redirects to the team, and Team Home paints beside the personal
- * sidebar and header.
+ * The sidebar and header come from the dashboard layout, and a soft
+ * navigation re-renders only the segments that changed — never that layout.
+ * So a cookie changed anywhere this tab's router did not see (the switcher in
+ * a second tab, an invite accepted elsewhere) leaves the old chrome standing,
+ * and the next page drawn under the new cookie lands beside it: Team Home
+ * beside a personal sidebar, or one team's schedule under another team's
+ * name.
  *
- * The page's answer is the fresh one: it was resolved on this request. So when
- * the two disagree the chrome is the side that is stale, and one refresh
- * re-runs the layout under the same cookie. Once per disagreement — a refresh
- * that somehow lands on the same mismatch must not loop.
+ * Mounted once in the shell and re-checked on every pathname change, because
+ * the disagreement can only surface on a navigation — which is also why it
+ * could not live in a nested layout or template: those are reused across the
+ * navigations inside them. The cookie is compared rather than a page prop so
+ * every route is covered without each page opting in.
  *
  * It never fires on a page that is just sitting there: another tab writing
- * the cookie does not re-render this one, and a disagreement only exists
- * after a navigation drew a page under a newer cookie than its chrome. That
- * matters most on the team upload page, whose wizard reads the workspace from
- * the chrome's context (`useWorkspace`) — left stale, it would attribute an
- * upload to the workspace the chrome names rather than the one the page was
- * built for. The wizard dropping its file selection when the refresh lands is
- * the intended outcome there, not collateral: that selection was made against
- * the wrong workspace.
+ * the cookie does not re-render this one. That matters most on the upload
+ * wizard, which reads the workspace from this chrome's context
+ * (`useWorkspace`) — left stale after a navigation, it would attribute an
+ * upload to the workspace the chrome names rather than the one the cookie
+ * (and so the server) now does. The wizard dropping its file selection when
+ * the refresh lands is the intended outcome there, not collateral.
+ *
+ * Once per cookie value: a cookie the server refuses (a program the viewer has
+ * left) falls back on the server, the chrome stays where it was, and the
+ * guard keeps that one disagreement from refreshing on every navigation.
  */
-export function WorkspaceSync({ activeId }: { activeId: string }) {
+export function WorkspaceSync() {
+  const pathname = usePathname();
   const router = useRouter();
   const { active } = useWorkspace();
   const refreshedFor = useRef<string | null>(null);
 
   useEffect(() => {
-    if (active.id === activeId) {
+    const target = staleChromeTarget(
+      readWorkspaceCookie(document.cookie),
+      active.id,
+    );
+    if (!target) {
       refreshedFor.current = null;
       return;
     }
-    if (refreshedFor.current === activeId) return;
-    refreshedFor.current = activeId;
+    if (refreshedFor.current === target) return;
+    refreshedFor.current = target;
     router.refresh();
-  }, [active.id, activeId, router]);
+  }, [pathname, active.id, router]);
 
   return null;
 }

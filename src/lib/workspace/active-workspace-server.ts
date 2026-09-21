@@ -1,6 +1,8 @@
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+// Defined in a client-safe module so the shell can read the same cookie.
+import { WORKSPACE_COOKIE } from "./workspace-cookie";
 import { createClient } from "@/lib/supabase/server";
 import { getInitials } from "@/lib/data/match-utils";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
@@ -39,8 +41,6 @@ function publicUrlOrNull(
  * link resolves per-viewer. When sharing becomes a real workflow the upgrade is
  * `/dashboard/w/[workspaceId]/…`, and this function is where it starts.
  */
-
-const WORKSPACE_COOKIE = "advantage_workspace";
 
 /** A cookie naming a workspace the viewer no longer belongs to falls back here. */
 function personalWorkspace(viewer: Viewer): Workspace {

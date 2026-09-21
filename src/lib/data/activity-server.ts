@@ -31,6 +31,7 @@ import { shortName } from "./match-utils";
 import { scopeToWorkspace } from "@/lib/workspace/scope";
 import {
   isProgramStaff,
+  PROGRAM_ROLE_LABEL,
   type ProgramRole,
   type Workspace,
 } from "@/lib/workspace/types";
@@ -296,7 +297,7 @@ interface DbRecentJoinRow {
   via_request: boolean;
 }
 
-const KNOWN_ROLES: readonly string[] = ["owner", "coach", "staff", "player"];
+const KNOWN_ROLES: readonly string[] = Object.keys(PROGRAM_ROLE_LABEL);
 
 /**
  * Recent joins, for staff of a team workspace only.

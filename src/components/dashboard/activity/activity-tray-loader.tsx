@@ -46,16 +46,24 @@ export async function ActivityTrayLoader() {
   if (!workspace) return <ActivityTrayFallback />;
 
   const supabase = await createClient();
-  const [feed, invites, elsewhere, joins] = await Promise.all([
-    getActivityFeed(supabase, workspace.active),
-    getPendingInvites(supabase),
-    getElsewhereWork(supabase, workspace.active, workspace.available),
-    getRecentJoins(supabase, workspace.active),
-  ]);
-  const approvedInviteIds = await getApprovedInviteIds(
-    supabase,
-    invites.map((invite) => invite.id),
+  // Approval ids only depend on `invites`, so its query is chained off that
+  // promise rather than awaited after the whole group settles — it still
+  // overlaps with whichever of the other three takes longest.
+  const invitesPromise = getPendingInvites(supabase);
+  const approvedInviteIdsPromise = invitesPromise.then((invites) =>
+    getApprovedInviteIds(
+      supabase,
+      invites.map((invite) => invite.id),
+    ),
   );
+  const [feed, invites, elsewhere, joins, approvedInviteIds] =
+    await Promise.all([
+      getActivityFeed(supabase, workspace.active),
+      invitesPromise,
+      getElsewhereWork(supabase, workspace.active, workspace.available),
+      getRecentJoins(supabase, workspace.active),
+      approvedInviteIdsPromise,
+    ]);
 
   return (
     <ActivityTray
