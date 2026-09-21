@@ -50,6 +50,7 @@ export function FiltersPopover({
   opponentName,
   tone = "light",
   side = "bottom",
+  trigger,
 }: {
   count: number;
   total: number;
@@ -59,6 +60,15 @@ export function FiltersPopover({
   opponentName: string;
   tone?: FloatMenuTone;
   side?: "top" | "bottom";
+  /**
+   * Phase 2A: the fullscreen viewer has no toolbar — its filter-summary pill
+   * IS this popover's trigger (f4b-report P2h: "The top-right summary pill is
+   * the trigger"). A render prop, not a plain node, because the trigger has
+   * to show its own open state (`chevron-up`, the darker background) and only
+   * this component knows it. Omitted everywhere else, where the shipped
+   * `VizMenuTrigger` "Filters" button is still the trigger, unchanged.
+   */
+  trigger?: (open: boolean) => React.ReactNode;
 }) {
   const { state, setState } = useVizState();
   const [open, setOpen] = useState(false);
@@ -126,13 +136,17 @@ export function FiltersPopover({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <VizMenuTrigger
-          icon={SlidersHorizontal}
-          label="Filters"
-          open={open}
-          haspopup="dialog"
-          tone={tone}
-        />
+        {trigger ? (
+          trigger(open)
+        ) : (
+          <VizMenuTrigger
+            icon={SlidersHorizontal}
+            label="Filters"
+            open={open}
+            haspopup="dialog"
+            tone={tone}
+          />
+        )}
       </PopoverTrigger>
       <PopoverContent
         align="end"

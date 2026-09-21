@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { VizWall } from "@/components/dashboard/matches/match-detail/shots/viz-wall";
 import { VizFocused } from "@/components/dashboard/matches/match-detail/shots/viz-focused";
 import {
@@ -51,6 +52,21 @@ import { SavedViewsBand } from "@/components/dashboard/matches/match-detail/shot
  * inside the provider it belongs to, never above it.
  */
 
+/**
+ * Phase 2A: the fullscreen court viewer. Client-only (`ssr: false`) — it is a
+ * `createPortal` onto `document.body` that measures its own stage before it
+ * can place the court, so there is nothing meaningful for the server to
+ * render, and keeping it out of the initial bundle keeps the tab's own
+ * first paint unchanged for everyone who never opens it.
+ */
+const VizFullscreen = dynamic(
+  () =>
+    import("@/components/dashboard/matches/match-detail/shots/viz-fullscreen").then(
+      (m) => m.VizFullscreen,
+    ),
+  { ssr: false },
+);
+
 export function ShotsTab() {
   return (
     <VizStateProvider>
@@ -72,14 +88,23 @@ function ShotsTabBody() {
     />
   );
 
-  return state.cut === null ? (
-    <VizWall savedViewsBand={savedViewsBand} />
-  ) : (
-    <VizFocused
-      savedViews={meta.savedViews}
-      savedViewsBand={savedViewsBand}
-      workspaceKind={meta.workspaceKind}
-      workspaceName={meta.workspaceName}
-    />
+  return (
+    <>
+      {state.cut === null ? (
+        <VizWall savedViewsBand={savedViewsBand} />
+      ) : (
+        <VizFocused
+          savedViews={meta.savedViews}
+          savedViewsBand={savedViewsBand}
+          workspaceKind={meta.workspaceKind}
+          workspaceName={meta.workspaceName}
+        />
+      )}
+      {/* The focused view stays mounted UNDERNEATH the viewer — leaving is a
+          state change (the `fullscreen` key dropped), not a remount, so the
+          court behind is already exactly where it was. Until Task 5's door
+          lands, `&fullscreen=1` on a focused-view URL is the way in. */}
+      {state.fullscreen === true && state.cut !== null && <VizFullscreen />}
+    </>
   );
 }
