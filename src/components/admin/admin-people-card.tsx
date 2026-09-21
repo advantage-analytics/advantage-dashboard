@@ -150,7 +150,7 @@ export function AdminPeopleCard({
       <SettingsCardTitle
         trailing={
           <span className="text-[11px] text-[var(--ink-500)]">
-            {seats.used} of {total} seats
+            {seats.used} of {total} seats · players
             {seats.pending > 0 && ` · ${seats.pending} held`}
           </span>
         }

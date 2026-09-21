@@ -37,7 +37,7 @@ export function TeamsList({
         const squad = teamLabel(row.team);
         const meta = [
           squad ? `${squad} tennis` : null,
-          `${row.memberCount} ${row.memberCount === 1 ? "member" : "members"}`,
+          `${row.playerCount} ${row.playerCount === 1 ? "player" : "players"}`,
         ]
           .filter(Boolean)
           .join(" · ");

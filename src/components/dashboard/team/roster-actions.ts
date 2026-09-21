@@ -148,8 +148,9 @@ export async function setProgramLineup(
  *
  * The counterpart to inviting. An invite sends email and waits; this creates
  * the row immediately, so a coach can record matches for a freshman who will
- * never open the app. No login, no seat — the seat starts counting only if the
- * profile is later claimed.
+ * never open the app. No login — but a seat, taken now: a seat is a player on
+ * the roster, and `add_program_player` refuses (`54000`, in prose) when none
+ * is free.
  *
  * Every guard lives in `add_program_player`: staff-only, both names required,
  * email shape, and the two duplicate checks that make the tripwire real. The

@@ -1,8 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { GitMerge, Loader2, RotateCcw, Upload, Users } from "lucide-react";
-import type { FormerPlayer, RosterMember } from "@/lib/data/team-roster-server";
+import {
+  AlertTriangle,
+  GitMerge,
+  Loader2,
+  RotateCcw,
+  Users,
+} from "lucide-react";
+import type {
+  FormerPlayer,
+  RosterMember,
+  SeatUsage,
+} from "@/lib/data/team-roster-server";
 import {
   SettingsField,
   SettingsUnderlineInput,
@@ -16,6 +26,8 @@ import {
 import { inviteMember } from "@/components/dashboard/settings/team-actions";
 import {
   DialogInfoRow,
+  SeatBoxes,
+  SeatNote,
   DialogProblem,
   RosterDialog,
 } from "@/components/dashboard/team/dialog-shell";
@@ -35,7 +47,9 @@ import {
  * The counterpart to inviting, and the reason it is the page's blue action:
  * this always works. An invite sends email and waits on somebody else; this
  * creates the row on submit, so a coach can record matches for a freshman who
- * will never open the app. No login, no seat.
+ * will never open the app. No login — but a seat: a seat is a player on the
+ * roster (decided 2026-09-20), so it is taken here and claiming later moves
+ * nothing. When none is free the form says so before anything is typed.
  *
  * ── Why the email is optional, and why it still matters ─────────────────────
  * A coach usually knows a player's address and often does not. Made required,
@@ -196,15 +210,15 @@ export type AddPlayerInitial = {
 export function AddPlayerDialog({
   open,
   onOpenChange,
-  seatNote,
+  seats,
   roster,
   former,
   initial,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** What the program's allowance looks like right now, stated by the caller. */
-  seatNote: string;
+  /** The program's seat ledger — adding a player takes one. */
+  seats: SeatUsage;
   /** Who is on the roster already, so a repeat can say who it would repeat. */
   roster: RosterMember[];
   /**
@@ -405,7 +419,14 @@ export function AddPlayerDialog({
   // one place that decides what "somebody else" means.
   const spotTakenBy = spotHolders(roster, lineupSpot, createdProfileId);
 
+  // Players on the roster plus invitations holding a place for a new one.
+  // `add_program_player` re-checks under a lock; this only keeps a coach from
+  // filling in a form the database is going to refuse.
+  const taken = seats.used + seats.pending;
+  const full = taken >= seats.seats;
+
   const ready =
+    !full &&
     firstName.trim() !== "" &&
     lastName.trim() !== "" &&
     (spotTakenBy.length === 0 || spotAcknowledged);
@@ -757,12 +778,57 @@ export function AddPlayerDialog({
 
       <DialogProblem message={error} />
 
-      <DialogInfoRow
-        icon={<Upload className="size-3.5" strokeWidth={1.5} aria-hidden />}
-      >
-        No seat used until they claim it — {seatNote}. Matches you upload will
-        credit you as the person who added them.
-      </DialogInfoRow>
+      {full ? (
+        /* The one place the unit boxes appear outside Settings: here they ARE
+           the message. Severity rides a glyph and words as well as the colour,
+           and `--danger`, never the loss red — this is not a match outcome. */
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3 py-2.5"
+        >
+          <AlertTriangle
+            className="mt-px size-3.5 shrink-0 text-[var(--danger)]"
+            strokeWidth={1.5}
+            aria-hidden
+          />
+          <span className="flex flex-col gap-2 text-[11px] leading-[1.6] text-[var(--ink-700)]">
+            <span>
+              <strong className="font-medium text-[var(--danger)]">
+                All <span className="tabular">{seats.seats}</span> seats are
+                taken.
+              </strong>{" "}
+              <span className="tabular">{seats.used}</span>{" "}
+              {seats.used === 1 ? "player" : "players"}
+              {seats.pending > 0 && (
+                <>
+                  {" "}
+                  and <span className="tabular">{seats.pending}</span> open{" "}
+                  {seats.pending === 1 ? "invitation" : "invitations"}
+                </>
+              )}
+              . Remove a player or revoke an invitation to free one — their
+              matches stay.
+            </span>
+            <span className="flex items-center gap-2.5">
+              <SeatBoxes seats={seats} full />
+              <span className="font-mono text-[11px] whitespace-nowrap text-[var(--danger)]">
+                {taken} / {seats.seats}
+              </span>
+            </span>
+          </span>
+        </div>
+      ) : (
+        <SeatNote
+          icon={<Users className="size-3.5" strokeWidth={1.5} aria-hidden />}
+          lead="Uses a seat."
+          seats={seats}
+          adding={1}
+          footnote="Matches you upload will credit you as the person who added them."
+        >
+          Every player on the roster holds one, with or without a login.
+          Claiming later changes nothing.
+        </SeatNote>
+      )}
     </RosterDialog>
   );
 }
