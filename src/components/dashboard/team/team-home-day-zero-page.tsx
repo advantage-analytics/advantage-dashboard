@@ -7,7 +7,10 @@ import { DualHistory } from "@/components/dashboard/team/dual-history";
 import { CourtRecord } from "@/components/dashboard/team/court-record";
 import { TeamDayZeroHome } from "@/components/dashboard/team/team-day-zero-home";
 import { FocusCard } from "@/components/dashboard/home/focus-card";
-import { FocusEmpty } from "@/components/dashboard/home/focus-empty";
+import {
+  FocusEmpty,
+  teamInsightBand,
+} from "@/components/dashboard/home/focus-empty";
 import { TeamHomeRegions } from "@/components/dashboard/loading/team-home-skeleton";
 import { courtRecordFrom } from "@/lib/data/team-court-record";
 
@@ -61,11 +64,8 @@ export function TeamHomeDayZeroPage({
               />
             }
             insight={
-              <FocusCard
-                showStatisticsLink={false}
-                footer={{ left: "One thing to work on, after the first dual." }}
-              >
-                <FocusEmpty />
+              <FocusCard showStatisticsLink={false}>
+                <FocusEmpty band={teamInsightBand(0)} />
               </FocusCard>
             }
             court={<CourtRecord record={EMPTY_COURT_RECORD} />}

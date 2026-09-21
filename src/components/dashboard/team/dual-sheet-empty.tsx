@@ -29,7 +29,13 @@ export function DualSheetEmpty({
 }) {
   return (
     <section aria-label="This weekend's dual" className="surface-card p-5">
-      <span className="eyebrow">This weekend</span>
+      {/* The header row every card here draws — the eyebrow inside a flex
+          row, not a bare inline span. Bare, it sat in a line box at the
+          page's 16px line-height and the card's first line rode taller than
+          its neighbours'. */}
+      <div className="flex items-center gap-3">
+        <span className="eyebrow">This weekend</span>
+      </div>
 
       <DayZeroShape
         description="No dual on the schedule yet."

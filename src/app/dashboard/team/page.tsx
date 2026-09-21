@@ -23,7 +23,10 @@ import { TopMovers } from "@/components/dashboard/team/top-movers";
 import { DualHistory } from "@/components/dashboard/team/dual-history";
 import { CourtRecord } from "@/components/dashboard/team/court-record";
 import { FocusCard } from "@/components/dashboard/home/focus-card";
-import { FocusEmpty } from "@/components/dashboard/home/focus-empty";
+import {
+  FocusEmpty,
+  teamInsightBand,
+} from "@/components/dashboard/home/focus-empty";
 import { FocusCardPending } from "@/components/dashboard/loading/home-skeleton";
 import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
 import { TeamSetupLine } from "@/components/dashboard/team/team-setup-line";
@@ -294,16 +297,8 @@ async function Insight({
       </FocusCard>
     );
   return (
-    <FocusCard
-      showStatisticsLink={matchCount > 0}
-      footer={{
-        left:
-          matchCount === 0
-            ? "One thing to work on, after the first dual."
-            : "One thing to work on, once a match is analysed.",
-      }}
-    >
-      <FocusEmpty />
+    <FocusCard showStatisticsLink={matchCount > 0}>
+      <FocusEmpty band={teamInsightBand(matchCount)} />
     </FocusCard>
   );
 }
