@@ -20,6 +20,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/format-clock";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
@@ -674,12 +675,18 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     if (activePoint) p.onToggleSaved(activePoint.id);
   }, [activePoint, p]);
 
-  const cycleRate = useCallback(() => {
-    const i = PLAYBACK_RATES.indexOf(rate as (typeof PLAYBACK_RATES)[number]);
-    const next = PLAYBACK_RATES[(i + 1) % PLAYBACK_RATES.length];
-    if (videoRef.current) videoRef.current.playbackRate = next;
-    setRate(next);
-  }, [rate]);
+  const cycleRate = useCallback(
+    (direction: 1 | -1 = 1) => {
+      const i = PLAYBACK_RATES.indexOf(rate as (typeof PLAYBACK_RATES)[number]);
+      const next =
+        PLAYBACK_RATES[
+          (i + direction + PLAYBACK_RATES.length) % PLAYBACK_RATES.length
+        ];
+      if (videoRef.current) videoRef.current.playbackRate = next;
+      setRate(next);
+    },
+    [rate],
+  );
 
   const toggleMute = useCallback(() => {
     const el = videoRef.current;
@@ -918,27 +925,38 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
           e.preventDefault();
           togglePlay();
           break;
+        // Up/Down are kept as plain aliases for previous/next point — phase 1
+        // taught them and nothing else in the room wants them (author
+        // decision 2026-09-21). Left/Right carry the H2 seek behaviour below.
+        case "ArrowUp":
+          e.preventDefault();
+          step(-1);
+          break;
         case "ArrowDown":
-        case "ArrowRight":
           e.preventDefault();
           step(1);
           break;
-        case "ArrowUp":
         case "ArrowLeft":
           e.preventDefault();
-          step(-1);
+          if (e.shiftKey) {
+            seek((videoRef.current?.currentTime ?? 0) - 5);
+          } else {
+            step(-1);
+          }
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          if (e.shiftKey) {
+            seek((videoRef.current?.currentTime ?? 0) + 5);
+          } else {
+            step(1);
+          }
           break;
         case "l":
         case "L":
           if (e.metaKey || e.ctrlKey || e.altKey) return;
           e.preventDefault();
-          seek((videoRef.current?.currentTime ?? 0) + 5);
-          break;
-        case "j":
-        case "J":
-          if (e.metaKey || e.ctrlKey || e.altKey) return;
-          e.preventDefault();
-          seek((videoRef.current?.currentTime ?? 0) - 5);
+          setLooping((v) => !v);
           break;
         case "s":
         case "S":
@@ -946,15 +964,62 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
           e.preventDefault();
           toggleSavedActive();
           break;
+        case "m":
+        case "M":
+          if (e.metaKey || e.ctrlKey || e.altKey) return;
+          e.preventDefault();
+          toggleMute();
+          break;
+        case "c":
+        case "C":
+          if (e.metaKey || e.ctrlKey || e.altKey) return;
+          e.preventDefault();
+          toggleCourt();
+          break;
+        case "d":
+        case "D":
+          if (e.metaKey || e.ctrlKey || e.altKey) return;
+          e.preventDefault();
+          setSkipDead((v) => !v);
+          break;
+        case "p":
+        case "P":
+          if (e.metaKey || e.ctrlKey || e.altKey) return;
+          e.preventDefault();
+          if (panelOpen) collapsePanel();
+          else openPanel();
+          break;
+        case ">":
+          e.preventDefault();
+          cycleRate(1);
+          break;
+        case "<":
+          e.preventDefault();
+          cycleRate(-1);
+          break;
         case "Escape":
           e.preventDefault();
-          exit();
+          if (panelOpen) collapsePanel();
+          else exit();
           break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [wake, togglePlay, seek, step, toggleSavedActive, exit]);
+  }, [
+    wake,
+    togglePlay,
+    seek,
+    step,
+    toggleSavedActive,
+    toggleMute,
+    toggleCourt,
+    cycleRate,
+    panelOpen,
+    openPanel,
+    collapsePanel,
+    exit,
+  ]);
 
   /* ── Focus trap ──────────────────────────────────────────────────────── */
 
@@ -1238,32 +1303,34 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
               </>
             )}
 
-            <button
-              data-film-chrome
-              type="button"
-              onClick={openPanel}
-              aria-expanded={panelOpen}
-              aria-hidden={panelOpen ? true : undefined}
-              tabIndex={panelOpen ? -1 : undefined}
-              className={cn(
-                "absolute top-[18px] right-6 inline-flex h-7 cursor-pointer items-center gap-[7px] rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium text-white transition-[opacity,transform,background-color] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                // Back as soon as the drawer starts leaving, so a quick re-open
-                // can catch the sheet mid-slide and turn it around. The slide
-                // belongs to the drawer: the chrome collapse is opacity alone,
-                // because R2 is explicit that nothing reflows or travels.
-                chrome && !panelOpen
-                  ? "opacity-100"
-                  : "pointer-events-none opacity-0",
-                panelOpen && "motion-safe:translate-x-2",
-              )}
-            >
-              <PanelRight
-                className="h-[13px] w-[13px]"
-                strokeWidth={1.6}
-                aria-hidden="true"
-              />
-              Points
-            </button>
+            <ChromeTooltip label="Points" shortcut="P" side="bottom">
+              <button
+                data-film-chrome
+                type="button"
+                onClick={openPanel}
+                aria-expanded={panelOpen}
+                aria-hidden={panelOpen ? true : undefined}
+                tabIndex={panelOpen ? -1 : undefined}
+                className={cn(
+                  "absolute top-[18px] right-6 inline-flex h-7 cursor-pointer items-center gap-[7px] rounded-[var(--radius-button)] bg-[rgba(13,13,13,0.72)] px-2.5 text-[11px] font-medium text-white transition-[opacity,transform,background-color] duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.9)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                  // Back as soon as the drawer starts leaving, so a quick re-open
+                  // can catch the sheet mid-slide and turn it around. The slide
+                  // belongs to the drawer: the chrome collapse is opacity alone,
+                  // because R2 is explicit that nothing reflows or travels.
+                  chrome && !panelOpen
+                    ? "opacity-100"
+                    : "pointer-events-none opacity-0",
+                  panelOpen && "motion-safe:translate-x-2",
+                )}
+              >
+                <PanelRight
+                  className="h-[13px] w-[13px]"
+                  strokeWidth={1.6}
+                  aria-hidden="true"
+                />
+                Points
+              </button>
+            </ChromeTooltip>
 
             {/* A full-size positioning layer for the bottom block. It must never
                 take clicks itself: it sits above the video and the Points

@@ -208,7 +208,7 @@ ready).
 
 ## T15 · Remap the room's keys to the H2 table; shell untouched
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T14
 - **files:** (guess) film/film-fullscreen.tsx (the window keydown effect + the Points trigger), film/film-quick-filters.tsx (the dark note string)

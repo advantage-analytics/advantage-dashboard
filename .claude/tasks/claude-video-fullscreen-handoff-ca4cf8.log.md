@@ -159,3 +159,15 @@ is the runner's. Newest entries at the bottom.
 1. If the focused control unmounts when the chrome collapses, focus falls to `body` and the next Tab re-enters at the top of the ring. Re-focusing the root when focus leaves it would keep the viewer's place.
 2. The browser harness has no case for double-click exit or Tab wrapping in the live room.
 3. `match-video-attachment-flow.spec.ts` has now flaked twice under full-suite load on this branch (T5, T14) on two different mid-upload cases; both pass alone.
+
+## T15 · Remap the room's keys to the H2 table; shell untouched — done
+
+**gate:** mechanical pass on re-run — the full suite's one failure was `tests/match-video-attachment-flow.spec.ts:848` ("unmounting mid-upload cancels the attempt"), the same test that failed in T14's gate. Because it repeated, it was checked rather than assumed: repeated six times alone it passed 6/6, it polls for a DELETE on a 5s default timeout inside a 2,100-test parallel run, and its harness mounts no film-room code · completion `VERDICT: pass`
+
+**changed:** The room's keydown switch follows H2: `←`/`→` step points and seek 5s with Shift, `↑`/`↓` stay as aliases by author decision, `L` loops, `S` saves, `M` mutes, `C` toggles the court, `D` toggles dead-time skipping, `P` opens or collapses the drawer, `>` / `<` step the rate through `PLAYBACK_RATES` (`cycleRate` takes a direction), and the `J` seek is gone. Escape collapses an open drawer before it exits the room. Every letter key ignores meta, ctrl and alt; the three guards and the Tab effect are untouched; `film-tab.tsx` is not in the diff. The "Points" trigger sits in the dark tooltip with its key. The dark quick-filter note reads `← →`; the light one still reads `↑↓`.
+
+**follow-ups:**
+
+1. Still open from T5: the seek lane's `data-film-own-keys` swallows Space, S and Esc while it has focus. This task's criteria froze the guards, so it was not narrowed here.
+2. Speed's tooltip still carries no key, though `>` / `<` now work.
+3. `match-video-attachment-flow.spec.ts:848` is load-sensitive in the full suite; a longer poll timeout on its DELETE wait would likely settle it.
