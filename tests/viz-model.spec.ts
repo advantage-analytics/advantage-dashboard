@@ -1105,14 +1105,17 @@ test.describe("computeVizStats — bands (Phase 2B Task 2)", () => {
       "Beyond the baseline",
       "Inside the baseline",
     ]);
-    // resolveDepthDividersFt("inside") is a single divider AT the baseline
-    // (0 baseline-ft), so every in-court landing (baseline-ft > 0) falls in
-    // "Beyond the baseline" — see viz-bands.ts's own "inside is a single
-    // divider at 0" spec. Recorded here rather than assumed, since a caller
-    // reading only the row LABELS could otherwise expect a 50/50 split.
+    // Fix round 1 (#4): `depthBandRows`'s "inside" rows are now IN INDEX
+    // ORDER against `depthBandIndexFromNetM` — index 0 is the rare edge
+    // case (a landing AT OR PAST the far baseline itself, `depthFromNetM >=
+    // COURT_HALF_M`) labeled "Beyond the baseline", and index 1 is every
+    // ordinary in-court landing, labeled "Inside the baseline". A landing
+    // well inside the court (this fixture) is "Inside the baseline", not
+    // "Beyond" — recorded here rather than assumed, since a caller reading
+    // only the row LABELS could otherwise expect a 50/50 split.
     const row = (label: string) => depth.rows.find((r) => r.label === label)!;
-    expect(row("Beyond the baseline").count).toBe(1);
-    expect(row("Inside the baseline").count).toBe(0);
+    expect(row("Inside the baseline").count).toBe(1);
+    expect(row("Beyond the baseline").count).toBe(0);
   });
 
   test("returnContact/rallyPosition follow custom contact dividers too", () => {

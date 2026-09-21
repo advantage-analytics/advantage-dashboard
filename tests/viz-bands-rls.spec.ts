@@ -37,9 +37,50 @@ import {
  */
 
 const CHECK_VIOLATION = "23514";
+const UNIQUE_VIOLATION = "23505";
 
 const { mark: MARK, password: PASSWORD } = runMarker("viz-bands-rls");
 const PROGRAM_NAME = `ZZ RLS viz_band_settings ${MARK}`;
+
+/**
+ * The EXACT write shape `viz-bands-actions.ts`'s `saveBandSettings` uses
+ * (fix round 1, blocking #1): UPDATE first; if RLS/a missing row leaves zero
+ * rows, fall back to INSERT; if that INSERT loses a race to a concurrent
+ * first save, retry the UPDATE once. Replicated here (not imported — this
+ * spec runs against raw `supabase-js` sessions, never the Next.js action
+ * itself) so the RLS proof is of the shape the action actually issues, not
+ * a stand-in `.upsert()` that would hide the exact bug that was found
+ * (`.upsert()`'s `ON CONFLICT DO UPDATE SET account_id = EXCLUDED.account_id`
+ * failing column-privilege on every save after the first).
+ */
+async function updateThenInsert(
+  client: SupabaseClient,
+  accountId: string,
+  depthScheme: string,
+) {
+  const cols = { depth_scheme: depthScheme };
+  const update = await client
+    .from("viz_band_settings")
+    .update(cols)
+    .eq("account_id", accountId)
+    .select("depth_scheme")
+    .maybeSingle();
+  if (update.error || update.data) return update;
+
+  const insert = await client
+    .from("viz_band_settings")
+    .insert({ account_id: accountId, ...cols })
+    .select("depth_scheme")
+    .single();
+  if (!insert.error || insert.error.code !== UNIQUE_VIOLATION) return insert;
+
+  return client
+    .from("viz_band_settings")
+    .update(cols)
+    .eq("account_id", accountId)
+    .select("depth_scheme")
+    .maybeSingle();
+}
 
 test.describe("viz_band_settings RLS (live)", () => {
   test.describe.configure({ mode: "serial", timeout: 60_000 });
@@ -58,6 +99,9 @@ test.describe("viz_band_settings RLS (live)", () => {
   const authUserIds: string[] = [];
   const accountIdsToClean: string[] = []; // personal (auth uid) rows
   let programId: string | null = null;
+  /** The throwaway solo program the player-insert-probe test creates, if it
+   *  gets that far — cleaned up in `afterAll` regardless of pass/fail. */
+  let otherProgramId: string | null = null;
 
   test.beforeAll(async () => {
     test.setTimeout(180_000);
@@ -120,7 +164,15 @@ test.describe("viz_band_settings RLS (live)", () => {
       .in("account_id", [
         ...accountIdsToClean,
         ...(programId ? [programId] : []),
+        ...(otherProgramId ? [otherProgramId] : []),
       ]);
+    if (otherProgramId) {
+      await admin
+        .from("program_members")
+        .delete()
+        .eq("program_id", otherProgramId);
+      await admin.from("programs").delete().eq("id", otherProgramId);
+    }
     if (programId) {
       await admin.from("program_members").delete().eq("program_id", programId);
       await admin.from("programs").delete().eq("id", programId);
@@ -228,7 +280,9 @@ test.describe("viz_band_settings RLS (live)", () => {
 
     // A player attempting the row for the first time (a program with none
     // yet) is refused outright rather than silently no-op'd, since INSERT
-    // has no existing row for RLS to filter down to zero.
+    // has no existing row for RLS to filter down to zero. Cleanup for this
+    // throwaway program happens in `afterAll` (`otherProgramId`), not here,
+    // so a failure inside this test still leaves it findable/cleanable.
     const otherProgram = await admin
       .from("programs")
       .insert({
@@ -241,7 +295,7 @@ test.describe("viz_band_settings RLS (live)", () => {
       .select("id")
       .single();
     expect(otherProgram.error).toBeNull();
-    const otherProgramId = otherProgram.data!.id as string;
+    otherProgramId = otherProgram.data!.id as string;
     await admin.from("program_members").insert({
       program_id: otherProgramId,
       user_id: teamPlayer.userId,
@@ -252,12 +306,85 @@ test.describe("viz_band_settings RLS (live)", () => {
       .from("viz_band_settings")
       .insert({ account_id: otherProgramId, depth_scheme: "thirds" });
     expect(insert.error?.code).toBe(INSUFFICIENT_PRIVILEGE);
+  });
 
-    await admin
-      .from("program_members")
-      .delete()
-      .eq("program_id", otherProgramId);
-    await admin.from("programs").delete().eq("id", otherProgramId);
+  // ── fix round 1, #1: the action's exact write shape, proven live ───────
+
+  test("saveBandSettings' write shape lands on the second save too (personal owner)", async () => {
+    // A fresh personal account, never before written — the first call takes
+    // the plain-INSERT branch (no existing row), the second takes the
+    // UPDATE branch. `.upsert()` failed exactly the second call with 42501
+    // (`account_id = EXCLUDED.account_id` has no column grant); this proves
+    // the replacement doesn't.
+    accountIdsToClean.push(stranger.userId);
+
+    const first = await updateThenInsert(
+      stranger.client,
+      stranger.userId,
+      "thirds",
+    );
+    expect(first.error).toBeNull();
+    expect((first.data as { depth_scheme: string } | null)?.depth_scheme).toBe(
+      "thirds",
+    );
+
+    const second = await updateThenInsert(
+      stranger.client,
+      stranger.userId,
+      "deepMidShort",
+    );
+    expect(second.error).toBeNull();
+    expect((second.data as { depth_scheme: string } | null)?.depth_scheme).toBe(
+      "deepMidShort",
+    );
+
+    const stillThere = await admin
+      .from("viz_band_settings")
+      .select("depth_scheme")
+      .eq("account_id", stranger.userId)
+      .single();
+    expect(stillThere.data?.depth_scheme).toBe("deepMidShort");
+  });
+
+  test("saveBandSettings' write shape lands on the second save too (team coach)", async () => {
+    // The main team's row already exists (created earlier in this file) —
+    // both calls here take the UPDATE branch, proving repeat saves by a
+    // second authorized role work too, not just the create-then-update
+    // sequence the personal-owner case above covers.
+    const first = await updateThenInsert(teamCoach.client, programId!, "none");
+    expect(first.error).toBeNull();
+    expect((first.data as { depth_scheme: string } | null)?.depth_scheme).toBe(
+      "none",
+    );
+
+    const second = await updateThenInsert(
+      teamCoach.client,
+      programId!,
+      "inside",
+    );
+    expect(second.error).toBeNull();
+    expect((second.data as { depth_scheme: string } | null)?.depth_scheme).toBe(
+      "inside",
+    );
+  });
+
+  test("saveBandSettings' write shape is refused end-to-end for a team player (0 rows updated, insert refused)", async () => {
+    const result = await updateThenInsert(
+      teamPlayer.client,
+      programId!,
+      "none",
+    );
+    // The UPDATE branch runs first and touches 0 rows (no error, no data);
+    // `updateThenInsert` then falls through to INSERT, which RLS refuses
+    // outright — the shape's final outcome for an unauthorized writer.
+    expect(result.error?.code).toBe(INSUFFICIENT_PRIVILEGE);
+
+    const unchanged = await admin
+      .from("viz_band_settings")
+      .select("depth_scheme")
+      .eq("account_id", programId!)
+      .single();
+    expect(unchanged.data?.depth_scheme).toBe("inside"); // set by the coach test above
   });
 
   test("a stranger to the team sees nothing and cannot write it", async () => {

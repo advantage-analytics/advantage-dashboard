@@ -3,11 +3,13 @@ import {
   bandIndex,
   bandsEqual,
   clampDividers,
+  contactBandIndexFromBaselineM,
   COURT_HALF_FT,
   COURT_HALF_M,
   contactBandRows,
   contactReadout,
   DEFAULT_BANDS,
+  depthBandIndexFromNetM,
   depthBandRows,
   depthFromBaselineFt,
   resolveDepthDividersFt,
@@ -16,7 +18,6 @@ import {
   validateBandInput,
   type BandSettings,
 } from "@/lib/data/viz-bands";
-import { FT_PER_M } from "@/lib/format/distance";
 
 // ---------------------------------------------------------------------------
 // Regression fixtures: today's `viz-model.ts` bucketing, copied verbatim so
@@ -41,24 +42,16 @@ function oldContactDepthKey(depthM: number): "inside" | "near" | "far" {
   return "far";
 }
 
-/**
- * The correct depth bucketing, composed from this module's pieces per the
- * mirror documented on `bandIndex`/`depthFromBaselineFt`: bucket the
- * NET-origin value directly against NET-oriented dividers (mirrored from the
- * baseline-oriented ones `resolveDepthDividersFt` returns), then flip the
- * resulting index so band 0 is still "deep" (nearest baseline).
- */
-function depthIndexFromNetM(depthM: number, bands: BandSettings): number {
-  const baselineDividers = resolveDepthDividersFt(bands);
-  if (baselineDividers.length === 0) return 0;
-  const netDividers = baselineDividers
-    .map((d) => COURT_HALF_FT - d)
-    .sort((a, b) => a - b);
-  const netIdx = bandIndex(depthM * FT_PER_M, netDividers);
-  return baselineDividers.length - netIdx;
-}
-
 const DEPTH_INDEX_LABEL = ["deep", "mid", "short"] as const;
+const CONTACT_INDEX_LABEL = ["inside", "near", "far"] as const;
+
+/** One ulp above/below `x`, for a "one ulp either side" boundary check. */
+function ulpNeighbors(x: number): [number, number] {
+  return [
+    x - Number.EPSILON * Math.abs(x || 1),
+    x + Number.EPSILON * Math.abs(x || 1),
+  ];
+}
 
 // ---------------------------------------------------------------------------
 
@@ -148,34 +141,34 @@ test.describe("depthFromBaselineFt", () => {
 // ---------------------------------------------------------------------------
 // Boundary equivalence — the core of this task. Proves that, with
 // DEFAULT_BANDS (thirds / contact [0,5]), every value the OLD `<`-based
-// functions bucket is bucketed identically by this module's pieces —
-// including both exact dividers, in both directions, and including the
-// mirrored inequality the from-baseline conversion introduces for DEPTH
-// (but NOT for CONTACT, whose own depthM is already baseline-origin).
+// functions bucket is bucketed IDENTICALLY (bit-for-bit, metres throughout,
+// no rounding crutch) by the exported `depthBandIndexFromNetM` /
+// `contactBandIndexFromBaselineM` — including both exact dividers, in both
+// directions, one ulp either side, and including the mirrored inequality
+// the from-baseline conversion introduces for DEPTH (but NOT for CONTACT,
+// whose own depthM is already baseline-origin).
 // ---------------------------------------------------------------------------
 
 test.describe("boundary equivalence — depth placement (net-origin, mirrored)", () => {
   const cases = [
     0,
     0.5,
-    DEPTH_THIRD_M - 0.01,
+    ...ulpNeighbors(DEPTH_THIRD_M),
     DEPTH_THIRD_M, // exact lower divider
-    DEPTH_THIRD_M + 0.01,
-    2 * DEPTH_THIRD_M - 0.01,
+    ...ulpNeighbors(2 * DEPTH_THIRD_M),
     2 * DEPTH_THIRD_M, // exact upper divider
-    2 * DEPTH_THIRD_M + 0.01,
     REAL_NET_Y,
   ];
 
   for (const depthM of cases) {
-    test(`depthM=${depthM} matches the old bucket`, () => {
+    test(`depthM=${depthM} matches the old bucket bit-for-bit`, () => {
       const oldLabel = oldDepthKeyPlacement(depthM);
-      const newIdx = depthIndexFromNetM(depthM, DEFAULT_BANDS);
+      const newIdx = depthBandIndexFromNetM(depthM, DEFAULT_BANDS);
       expect(DEPTH_INDEX_LABEL[newIdx]).toBe(oldLabel);
     });
   }
 
-  test("naive direct composition (no mirror) gets the exact dividers WRONG — the trap this task exists to catch", () => {
+  test("naive direct composition (no mirror) gets the exact dividers WRONG — kept as documentation of the trap this task exists to catch", () => {
     const baselineDividers = resolveDepthDividersFt(DEFAULT_BANDS); // ascending, baseline-origin
     const naiveIdx = (depthM: number) =>
       bandIndex(depthFromBaselineFt(depthM), baselineDividers);
@@ -193,37 +186,20 @@ test.describe("boundary equivalence — depth placement (net-origin, mirrored)",
 });
 
 test.describe("boundary equivalence — return contact (already baseline-origin, no mirror needed)", () => {
-  const CONTACT_INDEX_LABEL = ["inside", "near", "far"] as const;
-
-  function contactIndexFromBaselineM(depthM: number): number {
-    // depthM here is ALREADY baseline-origin (negative = inside, positive =
-    // behind) — direct ft conversion, no depthFromBaselineFt flip needed.
-    // Rounded to 1e-6 ft: `1.524 * FT_PER_M` (multiplying by the precomputed
-    // constant) lands a sliver under 5 in IEEE double (4.999999999999999)
-    // even though `1.524 / 0.3048` is exactly 5 — the same boundary value
-    // computed two mathematically-equal ways disagrees by float noise. A
-    // real caller converting a live coordinate would round for display
-    // anyway; this proof does the same rather than asserting on raw
-    // multiplication noise that says nothing about the bucketing logic.
-    const ft = Math.round(depthM * FT_PER_M * 1e6) / 1e6;
-    return bandIndex(ft, DEFAULT_BANDS.contactDividersFt);
-  }
-
   const cases = [
     -3,
     -0.01,
     0, // exact lower divider
     0.01,
-    FIVE_FEET_M - 0.01,
-    FIVE_FEET_M, // exact upper divider (5 ft)
-    FIVE_FEET_M + 0.01,
+    ...ulpNeighbors(FIVE_FEET_M),
+    FIVE_FEET_M, // exact upper divider (5 ft = 1.524 m)
     10,
   ];
 
   for (const depthM of cases) {
-    test(`depthM=${depthM} matches the old bucket`, () => {
+    test(`depthM=${depthM} matches the old bucket bit-for-bit`, () => {
       const oldLabel = oldContactDepthKey(depthM);
-      const newIdx = contactIndexFromBaselineM(depthM);
+      const newIdx = contactBandIndexFromBaselineM(depthM, DEFAULT_BANDS);
       expect(CONTACT_INDEX_LABEL[newIdx]).toBe(oldLabel);
     });
   }
@@ -246,20 +222,29 @@ test.describe("depthBandRows", () => {
     expect(rows[0].fromFt).toBe(0);
   });
 
-  test("inside gives Inside/Beyond the baseline", () => {
-    const rows = depthBandRows(
-      { ...DEFAULT_BANDS, depthScheme: "inside" },
-      "ft",
-    );
+  test("inside gives two rows IN INDEX ORDER against depthBandIndexFromNetM", () => {
+    const bands: BandSettings = { ...DEFAULT_BANDS, depthScheme: "inside" };
+    const rows = depthBandRows(bands, "ft");
     expect(rows.map((r) => r.label)).toEqual([
-      "Inside the baseline",
       "Beyond the baseline",
+      "Inside the baseline",
     ]);
+    // No degenerate "0-0 ft" — "Beyond" carries no upper bound.
+    expect(rows[0].toFt).toBeNull();
+    expect(rows[1].rangeLabel).toBe("0–39 ft");
+
+    // A landing essentially anywhere inside the court indexes to row 1
+    // ("Inside the baseline"); only a landing at/past the far baseline
+    // itself indexes to row 0 ("Beyond the baseline") — proving the row
+    // array's order actually matches the index the bucketing function hands
+    // back, not just a plausible-looking order.
+    expect(depthBandIndexFromNetM(6, bands)).toBe(1);
+    expect(depthBandIndexFromNetM(COURT_HALF_M, bands)).toBe(0);
   });
 });
 
 test.describe("contactBandRows", () => {
-  test("defaults render the exact legacy rows", () => {
+  test("defaults render the exact legacy rows (unchanged)", () => {
     const rows = contactBandRows(DEFAULT_BANDS, "ft");
     expect(rows.map((r) => r.label)).toEqual([
       "Inside the baseline",
@@ -268,36 +253,76 @@ test.describe("contactBandRows", () => {
     ]);
   });
 
-  test("a band wholly inside, unbounded", () => {
+  test("[2, 5]: first divider positive -> 'behind or closer', not 'inside'", () => {
     const rows = contactBandRows(
-      { ...DEFAULT_BANDS, contactDividersFt: [-6, -3] },
+      { ...DEFAULT_BANDS, contactDividersFt: [2, 5] },
       "ft",
     );
-    expect(rows[0].label).toBe("6 ft inside or deeper");
+    expect(rows.map((r) => r.label)).toEqual([
+      "2 ft behind or closer",
+      "2–5 ft behind",
+      "5 ft+ behind",
+    ]);
   });
 
-  test("a band wholly inside, bounded", () => {
+  test("[-6, -2]: wholly-inside bounded band is ASCENDING magnitude, and the open last band reads 'or further back'", () => {
     const rows = contactBandRows(
-      { ...DEFAULT_BANDS, contactDividersFt: [-6, -3] },
+      { ...DEFAULT_BANDS, contactDividersFt: [-6, -2] },
       "ft",
     );
-    expect(rows[1].label).toBe("6–3 ft inside");
+    expect(rows.map((r) => r.label)).toEqual([
+      "6 ft inside or deeper",
+      "2–6 ft inside",
+      "2 ft inside or further back",
+    ]);
   });
 
-  test("a band spanning the baseline", () => {
+  test("[-1.5, 2]: spans the baseline, bounded", () => {
     const rows = contactBandRows(
-      { ...DEFAULT_BANDS, contactDividersFt: [-4, 6] },
+      { ...DEFAULT_BANDS, contactDividersFt: [-1.5, 2] },
       "ft",
     );
-    expect(rows[1].label).toBe("4 ft inside → 6 ft behind");
+    expect(rows.map((r) => r.label)).toEqual([
+      "1.5 ft inside or deeper",
+      "1.5 ft inside → 2 ft behind",
+      "2 ft+ behind",
+    ]);
   });
 
-  test("a bounded behind band", () => {
-    const rows = contactBandRows(
-      { ...DEFAULT_BANDS, contactDividersFt: [2, 8] },
-      "ft",
-    );
-    expect(rows[1].label).toBe("2–8 ft behind");
+  test("never prints Infinity, NaN, undefined, or a descending range — grid over valid pairs, both units", () => {
+    const pairs: [number, number][] = [
+      [0, 5],
+      [2, 5],
+      [-6, -2],
+      [-1.5, 2],
+      [-39, 30],
+      [-39, -38],
+      [29, 30],
+      [0, 0.5],
+      [-0.5, 0],
+    ];
+    const badTokens = ["Infinity", "NaN", "undefined"];
+    for (const contactDividersFt of pairs) {
+      for (const unit of ["ft", "m"] as const) {
+        const rows = contactBandRows(
+          { ...DEFAULT_BANDS, contactDividersFt },
+          unit,
+        );
+        for (const row of rows) {
+          for (const token of badTokens) {
+            expect(row.label).not.toContain(token);
+            expect(row.rangeLabel).not.toContain(token);
+          }
+          // A "X-Y" range embedded in the label must read ascending.
+          const rangeMatch = row.label.match(/^([\d.]+)–([\d.]+) /);
+          if (rangeMatch) {
+            expect(Number(rangeMatch[1])).toBeLessThanOrEqual(
+              Number(rangeMatch[2]),
+            );
+          }
+        }
+      }
+    }
   });
 });
 
@@ -320,21 +345,39 @@ test.describe("schemeLabel", () => {
 });
 
 test.describe("clampDividers", () => {
-  test("keeps a minimum gap when the lower divider is dragged up into the upper one", () => {
-    expect(clampDividers([9, 10], 0, [0, 39], 2)).toEqual([8, 10]);
+  test("the moved (lower) divider keeps its dragged position; the other is pushed up to keep the gap", () => {
+    expect(clampDividers([9, 10], 0, [0, 39], 2)).toEqual([9, 11]);
   });
 
   test("leaves the pair alone when the gap is already large enough", () => {
     expect(clampDividers([5, 10], 0, [0, 39], 2)).toEqual([5, 10]);
   });
 
-  test("keeps a minimum gap when the upper divider is moved down", () => {
-    expect(clampDividers([5, 6], 1, [0, 39], 2)).toEqual([5, 7]);
+  test("the moved (upper) divider keeps its dragged position; the other is pushed down to keep the gap", () => {
+    expect(clampDividers([5, 6], 1, [0, 39], 2)).toEqual([4, 6]);
   });
 
   test("clamps to the outer bounds", () => {
     expect(clampDividers([-5, 10], 0, [0, 39], 2)).toEqual([0, 10]);
     expect(clampDividers([5, 50], 1, [0, 39], 2)).toEqual([5, 39]);
+  });
+
+  test("[0, 0.5] moved 0 minGap 2: the moved divider stays; the other is pushed to keep the gap", () => {
+    expect(clampDividers([0, 0.5], 0, [0, 39], 2)).toEqual([0, 2]);
+  });
+
+  test("when the pair cannot fit, the MOVED divider stops (lower edge)", () => {
+    // Dragging the lower divider (a) up to 2.9 inside [0, 3] with a 2 ft gap
+    // would need b >= 4.9, past bounds — b clamps to hi (3), and a gives
+    // ground to the position that still leaves room: hi - minGapFt = 1.
+    expect(clampDividers([2.9, 3], 0, [0, 3], 2)).toEqual([1, 3]);
+  });
+
+  test("when the pair cannot fit, the MOVED divider stops (upper edge)", () => {
+    // Dragging the upper divider (b) down to 0.1 inside [0, 3] with a 2 ft
+    // gap would need a <= -1.9, past bounds — a clamps to lo (0), and b
+    // gives ground to lo + minGapFt = 2.
+    expect(clampDividers([0, 0.1], 1, [0, 3], 2)).toEqual([0, 2]);
   });
 });
 
@@ -453,6 +496,68 @@ test.describe("validateBandInput", () => {
   test("rejects a non-object", () => {
     expect(validateBandInput(null)).toBeNull();
     expect(validateBandInput("nope")).toBeNull();
+  });
+
+  // ── fix round 1, #5: round to 2dp (half-up) BEFORE validating ──────────
+
+  test("38.999 rounds to 39.00 and is THEN rejected (not accepted as 38.999)", () => {
+    expect(
+      validateBandInput({
+        depthScheme: "custom",
+        depthDividersFt: [10, 38.999],
+        contactDividersFt: [0, 5],
+      }),
+    ).toBeNull();
+  });
+
+  test("[1.001, 1.002] both round to 1.00 and collapse into a non-ascending pair", () => {
+    expect(
+      validateBandInput({
+        depthScheme: "custom",
+        depthDividersFt: [1.001, 1.002],
+        contactDividersFt: [0, 5],
+      }),
+    ).toBeNull();
+  });
+
+  test("12.345 rounds half-up to 12.35, and the ROUNDED value is what's returned", () => {
+    const result = validateBandInput({
+      depthScheme: "custom",
+      depthDividersFt: [5, 12.345],
+      contactDividersFt: [0, 5],
+    });
+    expect(result?.depthDividersFt).toEqual([5, 12.35]);
+  });
+
+  test("rejects NaN, Infinity, strings, and the wrong array length", () => {
+    expect(
+      validateBandInput({
+        depthScheme: "thirds",
+        depthDividersFt: null,
+        contactDividersFt: [NaN, 5],
+      }),
+    ).toBeNull();
+    expect(
+      validateBandInput({
+        depthScheme: "thirds",
+        depthDividersFt: null,
+        contactDividersFt: [0, Infinity],
+      }),
+    ).toBeNull();
+    expect(
+      validateBandInput({
+        depthScheme: "thirds",
+        depthDividersFt: null,
+        contactDividersFt: ["0", "5"],
+      }),
+    ).toBeNull();
+    expect(
+      validateBandInput({
+        depthScheme: "thirds",
+        depthDividersFt: null,
+        contactDividersFt: [0, 5, 10],
+      }),
+    ).toBeNull();
   });
 });
 

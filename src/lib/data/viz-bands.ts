@@ -135,6 +135,82 @@ export function bandIndex(valueFt: number, dividers: number[]): number {
   return idx;
 }
 
+// ---------------------------------------------------------------------------
+// Fix round 1: metre-native bucketing.
+//
+// `bandIndex` above works in whatever unit its caller passes — Task 2's own
+// `viz-model.ts` composes it with feet dividers converted through
+// `FT_PER_M`. These two functions are an ADDITIONAL, metre-native path: they
+// take a live `depthM` (as `viz-model.ts`'s dots already carry it) and a
+// `BandSettings`, and bucket it using EXACTLY the inequalities today's
+// (pre-Phase-2B) `depthKeyPlacement`/`contactDepthKey` use, computed in
+// metres throughout — never round-tripping through feet — so the default
+// (`thirds` / `[0, 5]`) boundaries are bit-identical to those functions, not
+// just numerically close. Existing exports (`bandIndex`,
+// `resolveDepthDividersFt`, `depthBandRows`, `contactBandRows`) are
+// untouched; `viz-model.ts` may keep using its own feet-based composition or
+// switch to these — either is a Task 2+ decision, not this module's.
+// ---------------------------------------------------------------------------
+
+/**
+ * `resolveDepthDividersFt`'s dividers (baseline-origin feet) converted to
+ * NET-origin metres, ascending. `"thirds"` is special-cased to the exact
+ * `COURT_HALF_M / 3` / `(2 * COURT_HALF_M) / 3` expressions — the same ones
+ * `depthKeyPlacement`'s replacement must match bit-for-bit — rather than
+ * going baseline-feet → baseline-metres → net-metres, which is mathematically
+ * equal but not guaranteed bit-identical in IEEE double.
+ */
+function depthDividersNetOriginM(b: BandSettings): number[] {
+  if (b.depthScheme === "thirds") {
+    const third = COURT_HALF_M / 3;
+    return [third, 2 * third];
+  }
+  const baselineOriginM = resolveDepthDividersFt(b).map((ft) => ft * 0.3048);
+  return baselineOriginM.map((d) => COURT_HALF_M - d).sort((a, c) => a - c);
+}
+
+/**
+ * Depth-placement band index for a NET-origin `depthM` (0 = net,
+ * `COURT_HALF_M` = baseline — the same origin `viz-model.ts`'s
+ * `isPlacementRow`/`depthKeyPlacement` read), bucketed against `b`'s
+ * dividers. Index 0 is the band `depthBandRows` lists FIRST (`"Deep"`,
+ * nearest the baseline) so the index agrees with row order.
+ *
+ * With `DEFAULT_BANDS` this reproduces `depthKeyPlacement`'s own
+ * inequalities (`depthM < third → Short`, `< 2·third → Mid`, else `Deep`)
+ * bit-for-bit, including at `depthM === third`, `=== 2·third`, and one ulp
+ * either side of each — proven in `tests/viz-bands.spec.ts`.
+ */
+export function depthBandIndexFromNetM(
+  depthFromNetM: number,
+  b: BandSettings,
+): number {
+  const netDividers = depthDividersNetOriginM(b);
+  if (netDividers.length === 0) return 0;
+  const netIdx = bandIndex(depthFromNetM, netDividers);
+  return netDividers.length - netIdx;
+}
+
+/**
+ * Contact band index for a BASELINE-origin `depthM` (negative = inside the
+ * court, positive = behind it — the same signing `contactDepthKey` and
+ * `contactDividersFt` already share, so no mirror is needed here). Index 0
+ * is the band `contactBandRows` lists first (`"Inside the baseline"`).
+ *
+ * With `DEFAULT_BANDS.contactDividersFt` (`[0, 5]`) this reproduces
+ * `contactDepthKey`'s own inequalities (`depthM < 0 → inside`, `< 1.524 →
+ * near`, else `far`) bit-for-bit: `5 * 0.3048 === 1.524` exactly in IEEE
+ * double (unlike `5 * FT_PER_M`, which is a hair off) — proven in
+ * `tests/viz-bands.spec.ts`.
+ */
+export function contactBandIndexFromBaselineM(
+  depthM: number,
+  b: BandSettings,
+): number {
+  const dividersM = b.contactDividersFt.map((ft) => ft * 0.3048);
+  return bandIndex(depthM, dividersM);
+}
+
 export interface BandRow {
   key: string;
   label: string;
@@ -166,21 +242,34 @@ const DEPTH_3_LABELS = ["Deep", "Mid", "Short"];
  * Rows for the Depth group, ordered nearest-baseline first (Deep) to
  * nearest-net last (Short) — matching `band 0 = deepest` from
  * `resolveDepthDividersFt`. `"none"` → `[]` (the group is omitted entirely,
- * never rendered with zero rows — Task 2's concern). `"inside"` → two rows,
- * "Inside the baseline" / "Beyond the baseline", split at its single
- * divider.
+ * never rendered with zero rows — Task 2's concern).
+ *
+ * `"inside"` → two rows, IN INDEX ORDER against `depthBandIndexFromNetM`:
+ * its single divider sits at the baseline (`resolveDepthDividersFt`
+ * returns `[0]`), so index 0 is a landing AT OR PAST the far baseline
+ * (`depthFromNetM >= COURT_HALF_M`) — "Beyond the baseline", an edge case
+ * with no real range, and index 1 is everything actually inside the court
+ * (`depthFromNetM < COURT_HALF_M`, i.e. virtually every eligible landing) —
+ * "Inside the baseline", `0–39 ft`. Never `[0, 0]`: "Beyond" carries no
+ * `toFt` (open past the baseline) rather than degenerately spanning `[0,
+ * 0]`.
  */
 export function depthBandRows(b: BandSettings, unit: DistanceUnit): BandRow[] {
   if (b.depthScheme === "none") return [];
 
   if (b.depthScheme === "inside") {
-    const [divider] = resolveDepthDividersFt(b);
     return [
-      rangeRow("inside-baseline", "Inside the baseline", 0, divider, unit),
+      {
+        key: "beyond-baseline",
+        label: "Beyond the baseline",
+        rangeLabel: "past the line",
+        fromFt: COURT_HALF_FT,
+        toFt: null,
+      },
       rangeRow(
-        "beyond-baseline",
-        "Beyond the baseline",
-        divider,
+        "inside-baseline",
+        "Inside the baseline",
+        0,
         COURT_HALF_FT,
         unit,
       ),
@@ -203,6 +292,14 @@ function n(unit: DistanceUnit, ft: number): string {
   return formatDistanceValue(unit, ft);
 }
 
+/**
+ * One contact band's label, `lo`/`hi` in ft (a bound may be `±Infinity` for
+ * the first/last band). The infinite-bound cases are checked FIRST, before
+ * any finite sign comparison — `hi <= 0` and `lo < 0 && hi > 0` are both
+ * true when `hi === Infinity`/`lo === -Infinity` respectively, so testing
+ * sign before infinity used to fall through into a finite-pair branch and
+ * print the literal "Infinity" (fix round 1, blocking #3).
+ */
 function contactRow(
   unit: DistanceUnit,
   key: string,
@@ -210,24 +307,25 @@ function contactRow(
   hi: number,
 ): BandRow {
   let label: string;
-  if (lo === -Infinity && hi === 0) {
-    label = "Inside the baseline";
+  if (lo === -Infinity) {
+    // Band 0: everything up to `hi`.
+    if (hi === 0) label = "Inside the baseline";
+    else if (hi < 0) label = `${n(unit, -hi)} ${unit} inside or deeper`;
+    else label = `${n(unit, hi)} ${unit} behind or closer`;
+  } else if (hi === Infinity) {
+    // Last band: everything from `lo` on.
+    if (lo < 0) label = `${n(unit, -lo)} ${unit} inside or further back`;
+    else label = `${n(unit, lo)} ${unit}+ behind`;
+  } else if (lo >= 0) {
+    // Wholly behind the baseline, bounded.
+    label = `${n(unit, lo)}–${n(unit, hi)} ${unit} behind`;
   } else if (hi <= 0) {
-    // Wholly inside the court (both bounds at or behind the net side of the
-    // baseline, i.e. negative-or-zero).
-    label =
-      lo === -Infinity
-        ? `${n(unit, -hi)} ${unit} inside or deeper`
-        : `${n(unit, -lo)}–${n(unit, -hi)} ${unit} inside`;
-  } else if (lo < 0 && hi > 0) {
-    // Spans the baseline itself.
-    label = `${n(unit, -lo)} ${unit} inside → ${n(unit, hi)} ${unit} behind`;
+    // Wholly inside the court, bounded — ascending magnitude (the shallower
+    // bound, closer to 0, first): "2–6 ft inside", not "6–2".
+    label = `${n(unit, -hi)}–${n(unit, -lo)} ${unit} inside`;
   } else {
-    // Wholly behind the baseline (both bounds >= 0).
-    label =
-      hi === Infinity
-        ? `${n(unit, lo)} ${unit}+ behind`
-        : `${n(unit, lo)}–${n(unit, hi)} ${unit} behind`;
+    // Spans the baseline itself, bounded.
+    label = `${n(unit, -lo)} ${unit} inside → ${n(unit, hi)} ${unit} behind`;
   }
   return {
     key,
@@ -281,10 +379,19 @@ export function schemeLabel(s: DepthScheme): string {
 }
 
 /**
- * Move divider `moved` (0 = the lower one, 1 = the higher) of `pair` toward
- * `value`'s direction — actually just re-clamps `pair` so it stays within
- * `bounds` and keeps at least `minGapFt` between the two, with the moved
- * divider taking priority over the other when they'd otherwise collide.
+ * Re-clamp `pair` after divider `moved` (0 = the lower one, 1 = the higher)
+ * was dragged to its new position in `pair`. The MOVED divider takes
+ * priority: it is clamped to `bounds` first, then the OTHER divider is
+ * pushed just far enough to keep `minGapFt` between them. Only if pushing
+ * the other divider would itself cross `bounds` does the moved divider give
+ * ground — it stops at the furthest position that still leaves room for the
+ * other one inside `bounds` with the required gap, which is the sense in
+ * which "the moved divider stops" when the pair cannot fit.
+ *
+ * `bounds` is applied inclusively here; a caller that needs strict `0 < a <
+ * b < 39` (depth) rather than `-39 <= a < b <= 30` (contact) passes bounds
+ * already inset by its own epsilon — this function has no opinion on units
+ * or which side is depth vs. contact.
  */
 export function clampDividers(
   pair: [number, number],
@@ -294,14 +401,20 @@ export function clampDividers(
 ): [number, number] {
   const [lo, hi] = bounds;
   let [a, b] = pair;
-  a = Math.max(lo, Math.min(a, hi));
-  b = Math.max(lo, Math.min(b, hi));
   if (moved === 0) {
-    a = Math.min(a, b - minGapFt);
-    a = Math.max(a, lo);
+    a = Math.max(lo, Math.min(a, hi));
+    if (b < a + minGapFt) b = a + minGapFt;
+    if (b > hi) {
+      b = hi;
+      a = Math.max(lo, Math.min(a, b - minGapFt));
+    }
   } else {
-    b = Math.max(b, a + minGapFt);
-    b = Math.min(b, hi);
+    b = Math.max(lo, Math.min(b, hi));
+    if (a > b - minGapFt) a = b - minGapFt;
+    if (a < lo) {
+      a = lo;
+      b = Math.min(hi, Math.max(b, a + minGapFt));
+    }
   }
   return [a, b];
 }
@@ -342,10 +455,38 @@ function isFiniteNumberPair(x: unknown): x is [number, number] {
 }
 
 /**
+ * Round to 2 decimal places, half-up — matching `numeric(5,2)`'s own
+ * rounding for `depth_dividers_ft`/`contact_dividers_ft`. Plain
+ * `Math.round(x * 100) / 100` is "round half away from zero" for the
+ * *represented* double, which is what we want here (`12.345`'s nearest
+ * double is a hair ABOVE 12.345, so it rounds up to `12.35` as intended);
+ * it is not a general decimal half-up rounder (a value whose double
+ * happens to sit a hair BELOW its decimal reading, e.g. some `x.xx5`
+ * literals, could round the "wrong" way at true machine precision) — not a
+ * concern at the 2dp/±39 range this table's columns live in.
+ */
+function roundHalfUp2dp(x: number): number {
+  return Math.round(x * 100) / 100;
+}
+
+function roundPair(pair: [number, number]): [number, number] {
+  return [roundHalfUp2dp(pair[0]), roundHalfUp2dp(pair[1])];
+}
+
+/**
  * Validate arbitrary input into a `BandSettings`, mirroring
  * `viz_band_settings`'s own CHECK constraints exactly (the literal `39`/`30`/
  * `-39` bounds, not `COURT_HALF_FT`) so a value this accepts can never be
  * refused by the table, and a value the table would reject never reaches it.
+ *
+ * Both pairs are rounded to 2dp (half-up) FIRST — matching the column type
+ * `numeric(5,2)` — and the CHECKs are validated against the ROUNDED values,
+ * which are also what's returned: what this function approves is exactly
+ * what a caller should persist, not the un-rounded input that produced it
+ * (a value that rounds to an out-of-range or non-ascending pair, e.g.
+ * `38.999` → `39.00`, is rejected on the value the database would actually
+ * store, not the value that was typed).
+ *
  * `null` on anything that doesn't validate — this never defaults a bad shape
  * to `DEFAULT_BANDS` itself; that's `rowToBandSettings`'s job.
  */
@@ -365,14 +506,16 @@ export function validateBandInput(x: unknown): BandSettings | null {
   const rawDepthDividers = obj.depthDividersFt;
   if (rawDepthDividers !== null && rawDepthDividers !== undefined) {
     if (!isFiniteNumberPair(rawDepthDividers)) return null;
-    const [d0, d1] = rawDepthDividers;
+    const [d0, d1] = roundPair(rawDepthDividers);
+    if (!Number.isFinite(d0) || !Number.isFinite(d1)) return null;
     if (!(d0 > 0 && d1 < 39 && d0 < d1)) return null;
     depthDividersFt = [d0, d1];
   }
   if (depthScheme === "custom" && depthDividersFt === null) return null;
 
   if (!isFiniteNumberPair(obj.contactDividersFt)) return null;
-  const [c0, c1] = obj.contactDividersFt;
+  const [c0, c1] = roundPair(obj.contactDividersFt);
+  if (!Number.isFinite(c0) || !Number.isFinite(c1)) return null;
   if (!(c0 >= -39 && c1 <= 30 && c0 < c1)) return null;
 
   return {

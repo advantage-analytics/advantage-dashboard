@@ -57,6 +57,14 @@ export function formatDistanceValue(unit: DistanceUnit, ft: number): string {
  * expressed back in feet (so a metric drag still lands on a "clean" metric
  * value once converted for display, rather than a half-foot that reads as an
  * odd metric fraction).
+ *
+ * NIT: the `"m"` branch's result, converted back to ft and rounded to 2dp
+ * for storage (`numeric(5,2)`, what `validateBandInput` persists), does not
+ * always round-trip back to the exact half-metre that was snapped to — e.g.
+ * 0.5 m snaps clean, but some half-metre values land on a ft figure whose
+ * 2dp rounding is a hundredth of a foot off the "true" half-metre. Not
+ * corrected here: it's sub-visual (well under the half-foot a "ft" drag
+ * already accepts as its own granularity) and out of this task's scope.
  */
 export function snapFt(unit: DistanceUnit, ft: number): number {
   if (unit === "ft") {
