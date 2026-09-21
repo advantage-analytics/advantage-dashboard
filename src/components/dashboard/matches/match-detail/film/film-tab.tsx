@@ -314,13 +314,12 @@ function FilmRoom({
    * Bookmark a point, optimistically, and put it back if the write did not
    * land.
    *
-   * `.select()` on the update is the part that matters. RLS lets anyone who
-   * can SEE a match read its points, but only `matches.created_by` may UPDATE
-   * them — and an update filtered out by RLS is not an error, it is a
-   * successful statement that touched zero rows. Without asking for the row
-   * back, a coach viewing a teammate's match would watch the bookmark fill in
-   * and then find it gone on reload. Echoing the stored value is also what
-   * makes "it persisted" checkable rather than assumed.
+   * Saving is workspace-wide: anyone who can SEE a match may bookmark its
+   * points. RLS on `points` still lets only `matches.created_by` UPDATE a row,
+   * so the write goes through `set_point_saved`, which checks visibility and
+   * touches `saved` alone. It returns the stored value, or null when the point
+   * was not the caller's to see — echoing it is what makes "it persisted"
+   * checkable rather than assumed.
    */
   const handleToggleSaved = useCallback(
     async (pointId: string) => {
@@ -334,14 +333,12 @@ function FilmRoom({
       pointsRef.current = optimistic;
       setPoints(optimistic);
 
-      const { data, error } = await supabase
-        .from("points")
-        .update({ saved: nextSaved })
-        .eq("id", pointId)
-        .select("id, saved");
+      const { data, error } = await supabase.rpc("set_point_saved", {
+        p_point_id: pointId,
+        p_saved: nextSaved,
+      });
 
-      const stored =
-        !error && data?.length === 1 && data[0].saved === nextSaved;
+      const stored = !error && data === nextSaved;
       if (stored) return;
 
       const reverted = pointsRef.current.map((p) =>
