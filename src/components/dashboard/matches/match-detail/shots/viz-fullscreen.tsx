@@ -244,6 +244,7 @@ export function VizFullscreen() {
     if (kind === null) return;
     dropActiveMark();
     editSessionRef.current += 1;
+    setSaving(false);
     setEditorZ(pz.t.z);
     setEditor(initBandEditor(kind, bands, editorContext(unit, pz.t.z)));
   }, [canEdit, cut, bands, unit, pz.t.z, dropActiveMark]);
@@ -264,10 +265,12 @@ export function VizFullscreen() {
     const session = editSessionRef.current;
     setSaving(true);
     void applyBands(bandEditorPayload(activeEditor, bands)).then((outcome) => {
+      // Only the session that started the save may settle it: a Cancel while
+      // the save is in flight, then a reopen, starts a new session whose
+      // `saving` is already false (enterEdit resets it).
+      if (session !== editSessionRef.current) return;
       setSaving(false);
-      if (outcome === "saved" && session === editSessionRef.current) {
-        exitEdit();
-      }
+      if (outcome === "saved") exitEdit();
     });
   }
 
