@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, MoveVertical } from "lucide-react";
+import { MoveVertical } from "lucide-react";
 
 import {
   FloatMenu,
@@ -12,9 +12,10 @@ import {
 } from "@/components/ui/float-menu";
 import { formatDistanceValue } from "@/lib/format/distance";
 import { schemeLabel, type DepthScheme } from "@/lib/data/viz-bands";
-import { cn } from "@/lib/utils";
+import type { DistanceUnit } from "@/lib/format/distance";
 
 import { useVizBands } from "./viz-bands-context";
+import { VizMenuTrigger } from "./viz-labels";
 import type { Cut } from "./viz-model";
 
 /**
@@ -78,6 +79,29 @@ const OWN_BANDS_NOTE =
   "Bands are yours — they change every return chart in this workspace, not this match.";
 const READ_ONLY_NOTE = "Only coaches and staff can change this team's bands.";
 
+/**
+ * The contact trigger's mono slot — contact has no schemes, so it prints the
+ * two positions the bands are actually cut at.
+ *
+ * A pair that sits entirely at or behind the baseline (the default `[0, 5]`,
+ * and the common case) reads as a plain range with the unit once — "0 · 5
+ * FT" — because "behind" is what the whole near-half axis already means
+ * there. A pair that SPANS the line cannot: "-3 · 5 ft" would make a coach
+ * work out which side of the baseline each number is on, so each divider
+ * says so itself — "3 IN · 5 BEHIND". Zero is always "0": "at the line" is
+ * the one position with no side.
+ */
+function contactDividersLabel(
+  unit: DistanceUnit,
+  [c0, c1]: [number, number],
+): string {
+  const n = (ft: number) => formatDistanceValue(unit, Math.abs(ft));
+  if (c0 >= 0 && c1 >= 0) return `${n(c0)} · ${n(c1)} ${unit}`.toUpperCase();
+  const side = (ft: number) =>
+    ft === 0 ? "0" : ft < 0 ? `${n(ft)} in` : `${n(ft)} behind`;
+  return `${side(c0)} · ${side(c1)}`.toUpperCase();
+}
+
 /** Which half a cut's bands describe — `null` for Serve, which has none. */
 export function bandKindFor(cut: Cut): "depth" | "contact" | null {
   if (cut === "returnPlacement") return "depth";
@@ -113,12 +137,11 @@ export function VizBandsMenu({
   // contact having no schemes — the two dividers it is actually cut at,
   // which is the nearest equivalent fact. "OFF" when the shading is hidden,
   // for both.
-  const [c0, c1] = bands.contactDividersFt;
   const monoLabel = isDepth
     ? schemeLabel(bands.depthScheme)
     : contactHidden
       ? "OFF"
-      : `${formatDistanceValue(unit, c0)} · ${formatDistanceValue(unit, c1)} ${unit}`.toUpperCase();
+      : contactDividersLabel(unit, bands.contactDividersFt);
 
   function pickScheme(scheme: DepthScheme) {
     setOpen(false);
@@ -130,7 +153,10 @@ export function VizBandsMenu({
     onEdit?.();
   }
 
-  const Chevron = open ? ChevronUp : ChevronDown;
+  // Task 4 owns the editor. Until it passes `onEdit`, the row must not look
+  // live — a menu row that highlights on hover and then does nothing is
+  // worse than one that says it is unavailable.
+  const editDisabled = !canEdit || onEdit === undefined;
 
   return (
     <FloatMenu
@@ -143,34 +169,17 @@ export function VizBandsMenu({
       tone="dark"
       label={label}
       trigger={
-        // The dark slab trigger recipe `VizMenuTrigger` carries, plus the
-        // mono scheme slot between the label and the chevron — the one thing
-        // that component's `label: string` cannot express.
-        <button
-          type="button"
-          aria-haspopup="menu"
-          aria-expanded={open}
-          className={cn(
-            "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 px-2 text-[12px] font-medium text-white transition-colors duration-200",
-            open ? "bg-white/[0.18]" : "bg-white/10 hover:bg-white/[0.18]",
-          )}
-          style={{ borderRadius: "var(--radius-element)" }}
-        >
-          <MoveVertical
-            className="size-[13px] shrink-0 text-white/70"
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-          <span className="truncate">{label}</span>
-          <span className="mono tabular shrink-0 text-[10px] text-white/50">
-            {monoLabel}
-          </span>
-          <Chevron
-            className="size-3 shrink-0 text-white/70"
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-        </button>
+        <VizMenuTrigger
+          icon={MoveVertical}
+          label={label}
+          open={open}
+          tone="dark"
+          meta={
+            <span className="mono tabular shrink-0 text-[10px] text-white/50">
+              {monoLabel}
+            </span>
+          }
+        />
       }
     >
       <FloatMenuLabel>{label}</FloatMenuLabel>
@@ -197,8 +206,11 @@ export function VizBandsMenu({
           ))}
         </>
       ) : (
-        // Session-only, so it is live even for a player: see the file's own
-        // doc comment.
+        // `menuitemradio`, deliberately: this is the contact menu's only
+        // option row, and a check is what says whether the shading is
+        // currently off. It is a SESSION toggle — it writes nothing, which
+        // is also why it stays live for a player who cannot edit the
+        // workspace's bands (see the file's own doc comment).
         <FloatMenuItem
           label="No bands"
           description="Just the contact points, no shading"
@@ -213,7 +225,7 @@ export function VizBandsMenu({
       <FloatMenuDivider />
       <FloatMenuItem
         label="Edit bands…"
-        disabled={!canEdit}
+        disabled={editDisabled}
         icon={
           <MoveVertical
             className="size-[13px] shrink-0"

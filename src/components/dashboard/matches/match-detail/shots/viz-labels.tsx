@@ -249,6 +249,12 @@ export function loadedViewLabel(
  * rest, `surface-muted` on hover **and while open**, a 13px leading glyph,
  * 12/500 label and a 12px chevron that flips to `chevron-up` while open.
  *
+ * `meta` (Phase 2B) is an optional node between the label and the chevron —
+ * the bands trigger's mono scheme name ("THIRDS"), which is not part of the
+ * label and must not truncate with it. Absent everywhere else, and the
+ * markup is byte-identical when it is: the light toolbar's triggers are
+ * unchanged.
+ *
  * `haspopup` defaults to `"menu"` (the `cut-menu`/`chart-menu` shape); pass
  * `"dialog"` for a trigger that opens a `role="dialog"` panel instead —
  * `filters-popover.tsx`'s Filters trigger opens a form, not a `role="menu"`
@@ -259,6 +265,7 @@ export function loadedViewLabel(
 export function VizMenuTrigger({
   icon: Icon,
   label,
+  meta,
   open,
   haspopup = "menu",
   tone = "light",
@@ -268,6 +275,9 @@ export function VizMenuTrigger({
 }: {
   icon: LucideIcon;
   label: string;
+  /** An optional node between the label and the chevron — see the doc
+   *  comment. Never truncates; the label gives up width first. */
+  meta?: React.ReactNode;
   open: boolean;
   haspopup?: "menu" | "dialog";
   /**
@@ -320,6 +330,7 @@ export function VizMenuTrigger({
         aria-hidden="true"
       />
       <span className="truncate">{label}</span>
+      {meta}
       <Chevron
         className={cn("size-3 shrink-0", dark && "text-white/70")}
         strokeWidth={1.5}

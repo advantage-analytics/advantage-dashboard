@@ -3,6 +3,7 @@
 import { memo } from "react";
 
 import type { BandRow } from "@/lib/data/viz-bands";
+import { LINE_COLOR } from "./court-art";
 import { VIEWER_COURT, viewerBandEdges } from "./court-geometry";
 import type { StatRow } from "./viz-model";
 
@@ -18,6 +19,13 @@ import type { StatRow } from "./viz-model";
  * at the sideline would have made it look like a zone.
  *
  * ## Where the numbers come from
+ *
+ * It is INERT: `pointer-events: none` and `aria-hidden`. The bands are a
+ * backdrop, and a `<title>` on each one would put a native browser tooltip
+ * in competition with the viewer's own hover readout — two cards for the
+ * same pixel, one of them un-styleable. The numbers are not lost to a
+ * screen-reader user either: the stats card behind the viewer carries every
+ * band row as `statRowAnnouncement`'s own sentence.
  *
  * `% · n` on the right of each band is looked up out of `statRows` — the
  * SAME `computeVizStats` Depth group the stats card prints, handed down by
@@ -108,7 +116,11 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
   const width = VIEWER_COURT.viewBox.w;
 
   return (
-    <g data-viz-bands={kind}>
+    <g
+      data-viz-bands={kind}
+      aria-hidden="true"
+      style={{ pointerEvents: "none" }}
+    >
       {rows.map((row, index) => {
         const top = edges[index];
         const bottom = edges[index + 1];
@@ -126,28 +138,22 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
 
         return (
           <g key={row.key}>
-            <title>
-              {hasRate
-                ? `${row.label} — ${stat.winPct}% of ${stat.count} points won`
-                : `${row.label} — no points`}
-            </title>
             <rect
               x={left}
               y={top}
               width={width}
               height={height}
-              fill="#FFFFFF"
+              fill={LINE_COLOR}
               fillOpacity={bandOpacity(index)}
             />
             <text
               x={BAND_LABEL_X}
               y={labelY}
-              fill="#FFFFFF"
+              fill={LINE_COLOR}
               fillOpacity={0.72}
               fontFamily="var(--font-mono)"
               fontSize={BAND_LABEL_SIZE}
               letterSpacing={0.6}
-              aria-hidden="true"
             >
               {caps}
             </text>
@@ -156,11 +162,10 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
                 x={BAND_RATE_X}
                 y={labelY}
                 textAnchor="end"
-                fill="#FFFFFF"
+                fill={LINE_COLOR}
                 fillOpacity={0.8}
                 fontFamily="var(--font-sans)"
                 fontSize={BAND_RATE_SIZE}
-                aria-hidden="true"
               >
                 {stat.winPct}%
                 <tspan

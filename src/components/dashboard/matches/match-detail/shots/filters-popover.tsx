@@ -51,6 +51,7 @@ export function FiltersPopover({
   tone = "light",
   side = "bottom",
   trigger,
+  onOpenChange,
 }: {
   count: number;
   total: number;
@@ -69,9 +70,22 @@ export function FiltersPopover({
    * `VizMenuTrigger` "Filters" button is still the trigger, unchanged.
    */
   trigger?: (open: boolean) => React.ReactNode;
+  /**
+   * Phase 2B: a caller that needs to know whether this panel is open. The
+   * viewer's bands receipt takes the summary pill's slot, and it must not do
+   * that while the popover anchored to that pill is up — hiding the trigger
+   * of an open Radix popover takes its anchor away and drops focus to
+   * `<body>` mid-interaction. Open state still LIVES here; this only
+   * mirrors it outward.
+   */
+  onOpenChange?: (open: boolean) => void;
 }) {
   const { state, setState } = useVizState();
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(false);
+  const setOpen = (next: boolean) => {
+    setOpenState(next);
+    onOpenChange?.(next);
+  };
   const headingId = useId();
   const dark = tone === "dark";
 

@@ -71,8 +71,6 @@ export interface VizBandsValue {
   toggleContactHidden(): void;
   /** Apply a preset: optimistic locally, then persisted. */
   applyBands(next: BandSettings): void;
-  /** A save is in flight — the menu's rows stand down rather than queueing. */
-  saving: boolean;
   /** What the viewer's filter-pill slot should show instead of the pill. */
   receipt: BandReceipt | null;
 }
@@ -83,6 +81,32 @@ export interface VizBandsValue {
  *  while looking at the court. */
 const RECEIPT_MS = 4000;
 const ERROR_RECEIPT_MS = 6000;
+
+/**
+ * Request sequencing for `applyBands` (fix round 1, blocking #1).
+ *
+ * Every save claims a generation number before it awaits, and checks it
+ * again after. `true` only when this save is still the newest one started —
+ * i.e. when its result is still about the bands the coach is looking at.
+ *
+ * Without it, three things go wrong on two quick picks, and all three are
+ * silent:
+ *
+ * - a SLOW success for pick #1 resolving after pick #2 calls
+ *   `setOverride(result.data)` with #1's row, snapping the overlay back to a
+ *   scheme the coach has moved off;
+ * - because the override is only cleared by AGREEING with the server
+ *   (`effectiveBands`), and the server's value is #2's, that stale override
+ *   never converges — the viewer is wrong until the tab is reloaded;
+ * - a FAILURE of #1 reverting the override, throwing away #2's optimistic
+ *   state and blaming #2 in the receipt for a refusal that was #1's.
+ *
+ * Pure and exported so the ordering can be tested with fake promises
+ * (`tests/viz-bands-sequencing.spec.ts`) rather than only through React.
+ */
+export function shouldApplyResult(seq: number, latest: number): boolean {
+  return seq === latest;
+}
 
 const VizBandsContext = createContext<VizBandsValue | null>(null);
 
@@ -99,7 +123,6 @@ export function useVizBands(): VizBandsValue {
       contactHidden: false,
       toggleContactHidden: noop,
       applyBands: noop,
-      saving: false,
       receipt: null,
     }),
     [meta.bandSettings, meta.canEditBands],
@@ -114,7 +137,13 @@ export function VizBandsProvider({ children }: { children: ReactNode }) {
   const [override, setOverride] = useState<BandSettings | null>(null);
   const [contactHidden, setContactHidden] = useState(false);
   const [receipt, setReceipt] = useState<BandReceipt | null>(null);
-  const [saving, startSaving] = useTransition();
+  const [, startSaving] = useTransition();
+
+  /**
+   * The generation counter behind `shouldApplyResult`. Bumped synchronously
+   * on every `applyBands` call, read again after each `await`.
+   */
+  const seqRef = useRef(0);
 
   // One timer, cleared on every replacement and on unmount — two saves in
   // quick succession must not leave the first one's timeout to wipe the
@@ -151,9 +180,19 @@ export function VizBandsProvider({ children }: { children: ReactNode }) {
   const workspaceName = meta.workspaceName;
   const applyBands = useCallback(
     (next: BandSettings) => {
+      // Claim this generation BEFORE the optimistic write, so the guard
+      // below can tell "my save" from "a save that started after mine".
+      const seq = ++seqRef.current;
       setOverride(next);
       startSaving(async () => {
         const result = await saveBandSettings(next);
+        // A newer pick has already taken over the override; this result is
+        // about a scheme the coach has since moved off. Applying it — even
+        // the success branch — would silently reinstate the older pick, and
+        // an out-of-order resolution would strand the override on it for
+        // good. Reverting on ITS failure would be just as wrong: the state
+        // it would revert is the newer pick's, not this one's.
+        if (!shouldApplyResult(seq, seqRef.current)) return;
         if (result.ok) {
           // Trust the row the database actually stored (rounded to the
           // column's own 2dp), not the value we sent — otherwise the
@@ -192,7 +231,6 @@ export function VizBandsProvider({ children }: { children: ReactNode }) {
       contactHidden,
       toggleContactHidden,
       applyBands,
-      saving,
       receipt,
     }),
     [
@@ -201,7 +239,6 @@ export function VizBandsProvider({ children }: { children: ReactNode }) {
       contactHidden,
       toggleContactHidden,
       applyBands,
-      saving,
       receipt,
     ],
   );

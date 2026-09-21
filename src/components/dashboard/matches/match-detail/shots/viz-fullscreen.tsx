@@ -110,6 +110,10 @@ export function VizFullscreen() {
   const stageRef = useRef<HTMLDivElement>(null);
   const cutMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  // Mirrored out of `FiltersPopover` (which still owns it) so the bands
+  // receipt knows whether it may take the pill's slot — see the receipt's
+  // own comment in the top chrome.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   // The hovered/focused mark lives here, not in the court: a press that turns
   // into a drag has to drop it (fix round 1 #4), and the pan/zoom hook that
   // detects that is mounted here. Both setters are stable, which is what lets
@@ -301,6 +305,8 @@ export function VizFullscreen() {
     return null;
   }
 
+  const receiptTakesPillSlot = receipt !== null && !filtersOpen;
+
   const heat = state.chart === "heat";
   const stageBackground = heat ? HEAT_APRON_FILL : APRON_FILL;
   const applied = activeFilterEntries(state);
@@ -394,15 +400,29 @@ export function VizFullscreen() {
               noun={result.noun}
             />
             <div className="flex-1" />
-            {/* P2n: the bands receipt TAKES the filter pill's slot for four
+            {/* P2n: the bands receipt takes the filter pill's slot for four
                 seconds — no toast, no green tick. The pill is the one piece
                 of chrome a coach is already looking at when they pick a
                 preset, and the sentence has to name the workspace, not this
-                match. It returns on its own; nothing here dismisses it. */}
-            {receipt !== null ? (
-              <BandsReceipt message={receipt.message} />
-            ) : (
+                match. It returns on its own; nothing here dismisses it.
+
+                Fix round 1 (#3): the pill is HIDDEN, never unmounted. It is
+                the anchor of an open Radix popover, and swapping it out
+                while that panel is up destroys the panel mid-interaction and
+                drops focus to `<body>`. So while the popover is open the
+                receipt sits BESIDE it instead of over it — the receipt is
+                never withheld, and the filters a coach is in the middle of
+                editing are never yanked away. */}
+            {receipt !== null && <BandsReceipt message={receipt.message} />}
+            <span
+              className={cn(
+                "inline-flex shrink-0",
+                receiptTakesPillSlot && "hidden",
+              )}
+              aria-hidden={receiptTakesPillSlot || undefined}
+            >
               <FiltersPopover
+                onOpenChange={setFiltersOpen}
                 count={result.count}
                 total={result.total}
                 noun={result.noun}
@@ -447,7 +467,7 @@ export function VizFullscreen() {
                   </button>
                 )}
               />
-            )}
+            </span>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
