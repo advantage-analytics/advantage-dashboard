@@ -22,6 +22,7 @@ import { FilmUnavailableState } from "./film-unavailable-state";
 import { FilmPlayer, type FilmPlayerHandle } from "./film-player";
 import { PointList } from "./point-list";
 import { parseCut, serializeCut, type FilmSectionId } from "./filters/types";
+import { roomParam } from "./film-room-prefs";
 import { scoreColumns } from "./film-score";
 import {
   activeShotAt,
@@ -454,6 +455,39 @@ function FilmRoom({
     return () => window.removeEventListener("keydown", onKey);
   }, [roomOpen, toggleSavedActive]);
 
+  /**
+   * `fullscreen=1` in the query string while the room is up, gone when it is
+   * not (spec: "Settled mismatches" § URL).
+   *
+   * Same native-history pattern as the cut effect above, and for the same
+   * reason: going through the router would re-render the route, and the film
+   * would pause or reload mid-watch — the one thing the room must not do.
+   * `roomParam` is the only writer, so the cut and `tab=film` are carried
+   * through; the current query comes from `window.location.search` rather
+   * than the hook (which is null in the playback harness, and a render behind
+   * a `replaceState` everywhere else), and an already-correct URL is left
+   * alone so the history entry is not rewritten for nothing.
+   */
+  const writeRoomParam = useCallback((open: boolean) => {
+    const current = window.location.search.replace(/^\?/, "");
+    const next = roomParam(current, open);
+    if (next === current) return;
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`,
+    );
+  }, []);
+
+  // The param is never honoured on load: a refresh lands back in the shell, on
+  // the point the film is on, and a link someone copied out of the room opens
+  // the tab rather than a screen-covering overlay the recipient did not ask
+  // for. So the only thing a `fullscreen` found on mount gets is stripped.
+  useEffect(() => {
+    writeRoomParam(false);
+  }, [writeRoomParam]);
+
+  /** Door one: the report player's maximize control, from wherever it is. */
   const enterRoom = useCallback(() => {
     const snapshot = playerRef.current?.snapshot() ?? {
       time: currentTime,
@@ -461,14 +495,41 @@ function FilmRoom({
     };
     playerRef.current?.pause();
     setRoom(snapshot);
-  }, [currentTime]);
+    writeRoomParam(true);
+  }, [currentTime, writeRoomParam]);
+
+  /**
+   * Door two: ⇧-click on a row of the shell's point list, which opens the room
+   * on that point and plays it (spec § Doors) rather than seeking the report
+   * player behind an overlay nobody is looking at.
+   *
+   * A point with no stop has nowhere to open to — an import predating video
+   * timing — so it falls back to the ordinary select, which is itself a no-op
+   * for exactly the same reason, and the room stays closed.
+   */
+  const openPointInRoom = useCallback(
+    (point: MatchPoint) => {
+      const stop = stops.find((s) => s.point.id === point.id);
+      if (!stop) {
+        handleSelect(point);
+        return;
+      }
+      playerRef.current?.pause();
+      setRoom({ time: stop.start, playing: true });
+      writeRoomParam(true);
+    },
+    [stops, handleSelect, writeRoomParam],
+  );
 
   // The room hands the playhead back as its exit starts (so the report frame
   // is already on the right picture under the shrinking room), then unmounts.
   const handoff = useCallback((time: number) => {
     playerRef.current?.seekTo(time);
   }, []);
-  const exitRoom = useCallback(() => setRoom(null), []);
+  const exitRoom = useCallback(() => {
+    setRoom(null);
+    writeRoomParam(false);
+  }, [writeRoomParam]);
   const originRect = useCallback(
     () => playerRef.current?.frameRect() ?? null,
     [],
@@ -553,6 +614,9 @@ function FilmRoom({
             activeEnd={active?.stop.end ?? 0}
             onSelect={handleSelect}
             onToggleSaved={handleToggleSaved}
+            // Only this column gets the door; the room's own drawer renders
+            // the same component without it.
+            onOpenInRoom={openPointInRoom}
           />
         </div>
       </div>

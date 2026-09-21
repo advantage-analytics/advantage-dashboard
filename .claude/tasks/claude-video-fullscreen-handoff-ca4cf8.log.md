@@ -171,3 +171,15 @@ is the runner's. Newest entries at the bottom.
 1. Still open from T5: the seek lane's `data-film-own-keys` swallows Space, S and Esc while it has focus. This task's criteria froze the guards, so it was not narrowed here.
 2. Speed's tooltip still carries no key, though `>` / `<` now work.
 3. `match-video-attachment-flow.spec.ts:848` is load-sensitive in the full suite; a longer poll timeout on its DELETE wait would likely settle it.
+
+## T16 · Doors: ⇧-click a shell point row, and the fullscreen=1 param — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** `PointList` / `PointRow` take an optional `onOpenInRoom`. On a seekable row a Shift-held click calls it instead of the select, a Shift-held `mousedown` prevents the text selection, and a plain click is unchanged; the room's drawer does not pass it. `film-tab.tsx` gains a stable `openPointInRoom` that pauses the report player and opens the room at the point's start, playing — or falls back to the ordinary select when the point has no stop. Both doors write `fullscreen=1` through `roomParam` with `window.history.replaceState`, exit strips it, and a mount effect strips one found on load; nothing reads the param to open the room. No router call was added and the cut effect is unchanged.
+
+**follow-ups:**
+
+1. Neither door has an end-to-end case; the playback harness could ⇧-click a row and assert the room and the param.
+2. The ⇧-click door is undiscoverable — no hint in the row's label, no tooltip. A design call.
+3. Keyboard users have no equivalent door; ⇧+Enter on a focused row is the obvious mapping.

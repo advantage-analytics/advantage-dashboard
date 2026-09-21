@@ -222,7 +222,7 @@ ready).
 
 ## T16 · Doors: ⇧-click a shell point row, and the fullscreen=1 param
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6, T11, T15
 - **files:** (guess) film/point-list.tsx (PointRow click), film/film-tab.tsx (enterRoom / exitRoom + a mount effect)

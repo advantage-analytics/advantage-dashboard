@@ -158,6 +158,14 @@ interface PointListProps {
   /** Stable identity, please — `PointRow` is memoized on it. */
   onSelect: (point: MatchPoint) => void;
   onToggleSaved: (pointId: string) => void;
+  /**
+   * The second door into the fullscreen room (spec § Doors): given only by the
+   * shell's column, a ⇧-click on a seekable row opens that point in the room
+   * instead of seeking the report player. The room's own drawer does not pass
+   * it — there is nowhere further to open into. Stable identity, please, for
+   * the same reason `onSelect` wants one.
+   */
+  onOpenInRoom?: (point: MatchPoint) => void;
   /** Paint only. "dark" is the fullscreen room's drawer (frame R3). */
   tone?: FilmListTone;
   /** Drawn only when given: the drawer's 26px collapse glyph in the header. */
@@ -216,6 +224,7 @@ export const PointList = memo(function PointList({
   activeEnd,
   onSelect,
   onToggleSaved,
+  onOpenInRoom,
   tone = "light",
   onCollapse,
   shotStops,
@@ -473,6 +482,7 @@ export const PointList = memo(function PointList({
                           activeEnd={isActive ? activeEnd : 0}
                           onSelect={onSelect}
                           onToggleSaved={onToggleSaved}
+                          onOpenInRoom={onOpenInRoom}
                           tone={tone}
                         />
                         {isActive && wellOpen && onSelectShot && (
@@ -570,6 +580,7 @@ export const PointRow = memo(function PointRow({
   activeEnd,
   onSelect,
   onToggleSaved,
+  onOpenInRoom,
   tone = "light",
 }: {
   point: MatchPoint;
@@ -583,6 +594,8 @@ export const PointRow = memo(function PointRow({
   activeEnd: number;
   onSelect: (point: MatchPoint) => void;
   onToggleSaved: (pointId: string) => void;
+  /** ⇧-click's door into the room; absent in the room's own drawer. */
+  onOpenInRoom?: (point: MatchPoint) => void;
   /** Paint only. "dark" is the fullscreen room's drawer (frame R3). */
   tone?: FilmListTone;
 }) {
@@ -604,8 +617,20 @@ export const PointRow = memo(function PointRow({
       aria-label={
         seekable ? `${point.resultType} — jump to this point` : undefined
       }
-      onClick={() => {
-        if (seekable) onSelect(point);
+      // A Shift-held press would otherwise extend the document's selection
+      // from wherever the last caret was, so the ⇧-click that opens the room
+      // leaves a band of highlighted rows behind it. Suppressed only while
+      // Shift is down and only where that door exists — a plain press keeps
+      // its default, including the focus it gives the row.
+      onMouseDown={(e) => {
+        if (seekable && onOpenInRoom && e.shiftKey) e.preventDefault();
+      }}
+      onClick={(e) => {
+        if (!seekable) return;
+        // ⇧-click is the second door into the fullscreen room (spec § Doors).
+        // Without the door it is an ordinary click, as it always was.
+        if (e.shiftKey && onOpenInRoom) onOpenInRoom(point);
+        else onSelect(point);
       }}
       onKeyDown={(e) => {
         if (seekable && (e.key === "Enter" || e.key === " ")) {
