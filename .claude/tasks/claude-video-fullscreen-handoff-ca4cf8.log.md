@@ -69,3 +69,15 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The dark header's spacing compensates for a `mb-[7px]` baked into `FilmQuickFilters`' dark trigger; moving that margin onto the hosts would be sturdier.
+
+## T7 · Unfold the playing point's shots in place in PointList — done
+
+**gate:** mechanical pass on re-run — the full suite's one failure was again `tests/match-video-attachments-db.spec.ts:3225` ("two concurrent sweeps never share a row"), a live-database spec this one-file UI diff cannot reach. Re-run alone it failed once and then passed; the test is intermittent against the shared database (see follow-up 1) · completion `VERDICT: pass`
+
+**changed:** `PointList` takes optional `shotStops`, `activeShotId` and `onSelectShot`. When given, the active point's row is followed by a sibling well holding that point's shots only, so stepping refolds the last one; without them the render is unchanged. Well rows are memoised 34px grid buttons (`# · player · stroke · placement · result`) with `data-shot-id` and `aria-current` on the lit one, strings from `shotRowCells`. One shot is lit at 12% white with a white stroke; hover is 5% and only on unlit rows. Keep-in-view follows the lit shot through the list's own `scrollTop`. Names come from `sides` via `lastNameOf`.
+
+**follow-ups:**
+
+1. `match-video-attachments-db.spec.ts:3225` has now failed in three gate runs on this branch (T3, T7) and once when run alone, while passing on the next attempt each time. It claims from a cleanup queue on the shared live database, so another session's sweep can take its rows. Worth isolating by marker or serialising.
+2. The R3 frame draws each shot's player as a 20px initials chip; the well prints the last name because the criterion required `shotRowCells` strings. Decide whether the chip is wanted.
+3. The well's slicing and one-lit rule have no spec of their own.

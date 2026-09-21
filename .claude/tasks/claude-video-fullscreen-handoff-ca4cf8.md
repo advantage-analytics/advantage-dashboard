@@ -99,7 +99,7 @@ ready).
 
 ## T7 · Unfold the playing point's shots in place in PointList
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6
 - **files:** (guess) film/point-list.tsx, film/film-shots.ts
