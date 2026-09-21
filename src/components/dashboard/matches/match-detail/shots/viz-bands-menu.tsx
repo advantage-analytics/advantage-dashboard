@@ -11,7 +11,11 @@ import {
   FloatMenuNote,
 } from "@/components/ui/float-menu";
 import { formatDistanceValue } from "@/lib/format/distance";
-import { schemeLabel, type DepthScheme } from "@/lib/data/viz-bands";
+import {
+  deepMidShortDescription,
+  schemeLabel,
+  type DepthScheme,
+} from "@/lib/data/viz-bands";
 import type { DistanceUnit } from "@/lib/format/distance";
 
 import { useVizBands } from "./viz-bands-context";
@@ -53,25 +57,27 @@ import type { Cut } from "./viz-model";
  * workspace's bands at all, or when no `onEdit` is passed.
  */
 
+/** The depth presets. A description is a function of the unit because the
+ *  Deep · mid · short one names distances. */
 const DEPTH_PRESETS: {
   scheme: Exclude<DepthScheme, "custom">;
   label: string;
-  description: string;
+  description: (unit: DistanceUnit) => string;
 }[] = [
   {
     scheme: "thirds",
     label: "Thirds",
-    description: "Equal thirds of the court, baseline to net",
+    description: () => "Equal thirds of the court, baseline to net",
   },
   {
     scheme: "deepMidShort",
     label: "Deep · mid · short",
-    description: "Coach default — 10 ft, 14 ft, then the rest",
+    description: deepMidShortDescription,
   },
   {
     scheme: "inside",
     label: "Inside the baseline",
-    description: "Two bands, split where the court ends",
+    description: () => "Two bands, split where the court ends",
   },
 ];
 
@@ -198,7 +204,7 @@ export function VizBandsMenu({
             <FloatMenuItem
               key={preset.scheme}
               label={preset.label}
-              description={preset.description}
+              description={preset.description(unit)}
               chosen={bands.depthScheme === preset.scheme}
               disabled={!canEdit}
               onSelect={() => pickScheme(preset.scheme)}

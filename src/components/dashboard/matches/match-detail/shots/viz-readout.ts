@@ -96,7 +96,7 @@ export function buildReadout(
   meta: VizDotMeta,
   names: ReadoutNames,
   cut: Cut,
-  unit: DistanceUnit = "ft",
+  unit: DistanceUnit,
 ): Readout {
   const title = `${names.subject} ${meta.wonBySubject ? "won" : "lost"} the point`;
 

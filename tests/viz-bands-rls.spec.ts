@@ -13,6 +13,7 @@ import {
   deleteAuthUsers,
   runMarker,
 } from "./fixtures/live-db";
+import { updateThenInsert } from "@/lib/data/viz-bands-write";
 
 /**
  * `20260921090000_viz_band_settings.sql`'s RLS policies (Phase 2B Task 1),
@@ -37,49 +38,26 @@ import {
  */
 
 const CHECK_VIOLATION = "23514";
-const UNIQUE_VIOLATION = "23505";
 
 const { mark: MARK, password: PASSWORD } = runMarker("viz-bands-rls");
 const PROGRAM_NAME = `ZZ RLS viz_band_settings ${MARK}`;
 
 /**
- * The EXACT write shape `viz-bands-actions.ts`'s `saveBandSettings` uses
- * (fix round 1, blocking #1): UPDATE first; if RLS/a missing row leaves zero
- * rows, fall back to INSERT; if that INSERT loses a race to a concurrent
- * first save, retry the UPDATE once. Replicated here (not imported — this
- * spec runs against raw `supabase-js` sessions, never the Next.js action
- * itself) so the RLS proof is of the shape the action actually issues, not
- * a stand-in `.upsert()` that would hide the exact bug that was found
- * (`.upsert()`'s `ON CONFLICT DO UPDATE SET account_id = EXCLUDED.account_id`
- * failing column-privilege on every save after the first).
+ * The action's EXACT write path (`@/lib/data/viz-bands-write`, imported —
+ * never a copy that could drift from what the action issues), run as each
+ * raw `supabase-js` session. Only the depth scheme varies between calls; the
+ * other two columns are written as their defaults.
  */
-async function updateThenInsert(
+function writeScheme(
   client: SupabaseClient,
   accountId: string,
-  depthScheme: string,
+  depthScheme: "none" | "thirds" | "deepMidShort" | "inside",
 ) {
-  const cols = { depth_scheme: depthScheme };
-  const update = await client
-    .from("viz_band_settings")
-    .update(cols)
-    .eq("account_id", accountId)
-    .select("depth_scheme")
-    .maybeSingle();
-  if (update.error || update.data) return update;
-
-  const insert = await client
-    .from("viz_band_settings")
-    .insert({ account_id: accountId, ...cols })
-    .select("depth_scheme")
-    .single();
-  if (!insert.error || insert.error.code !== UNIQUE_VIOLATION) return insert;
-
-  return client
-    .from("viz_band_settings")
-    .update(cols)
-    .eq("account_id", accountId)
-    .select("depth_scheme")
-    .maybeSingle();
+  return updateThenInsert(client, accountId, {
+    depth_scheme: depthScheme,
+    depth_dividers_ft: null,
+    contact_dividers_ft: [0, 5],
+  });
 }
 
 test.describe("viz_band_settings RLS (live)", () => {
@@ -353,17 +331,13 @@ test.describe("viz_band_settings RLS (live)", () => {
     // the replacement doesn't.
     accountIdsToClean.push(stranger.userId);
 
-    const first = await updateThenInsert(
-      stranger.client,
-      stranger.userId,
-      "thirds",
-    );
+    const first = await writeScheme(stranger.client, stranger.userId, "thirds");
     expect(first.error).toBeNull();
     expect((first.data as { depth_scheme: string } | null)?.depth_scheme).toBe(
       "thirds",
     );
 
-    const second = await updateThenInsert(
+    const second = await writeScheme(
       stranger.client,
       stranger.userId,
       "deepMidShort",
@@ -386,17 +360,13 @@ test.describe("viz_band_settings RLS (live)", () => {
     // both calls here take the UPDATE branch, proving repeat saves by a
     // second authorized role work too, not just the create-then-update
     // sequence the personal-owner case above covers.
-    const first = await updateThenInsert(teamCoach.client, programId!, "none");
+    const first = await writeScheme(teamCoach.client, programId!, "none");
     expect(first.error).toBeNull();
     expect((first.data as { depth_scheme: string } | null)?.depth_scheme).toBe(
       "none",
     );
 
-    const second = await updateThenInsert(
-      teamCoach.client,
-      programId!,
-      "inside",
-    );
+    const second = await writeScheme(teamCoach.client, programId!, "inside");
     expect(second.error).toBeNull();
     expect((second.data as { depth_scheme: string } | null)?.depth_scheme).toBe(
       "inside",
@@ -404,11 +374,7 @@ test.describe("viz_band_settings RLS (live)", () => {
   });
 
   test("saveBandSettings' write shape is refused end-to-end for a team player (0 rows updated, insert refused)", async () => {
-    const result = await updateThenInsert(
-      teamPlayer.client,
-      programId!,
-      "none",
-    );
+    const result = await writeScheme(teamPlayer.client, programId!, "none");
     // The UPDATE branch runs first and touches 0 rows (no error, no data);
     // `updateThenInsert` then falls through to INSERT, which RLS refuses
     // outright — the shape's final outcome for an unauthorized writer.

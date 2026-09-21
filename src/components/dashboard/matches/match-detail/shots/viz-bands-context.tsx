@@ -119,6 +119,24 @@ export function shouldApplyResult(seq: number, latest: number): boolean {
   return seq === latest;
 }
 
+/**
+ * The optimistic override once the server has caught up: `null` the moment it
+ * equals the saved record, otherwise unchanged.
+ *
+ * It must be DROPPED, not merely ignored while equal. An override kept in
+ * state after converging comes back to life the moment the saved record moves
+ * somewhere else (another coach's save, another tab's, arriving on a
+ * revalidation) — the viewer would show the old pick again, bucketing every
+ * number by bands the database no longer holds. Pure so that sequence is
+ * spec'd (`tests/viz-bands-sequencing.spec.ts`).
+ */
+export function settleOverride(
+  override: BandSettings | null,
+  saved: BandSettings,
+): BandSettings | null {
+  return override !== null && bandsEqual(override, saved) ? null : override;
+}
+
 const VizBandsContext = createContext<VizBandsValue | null>(null);
 
 function noop(): void {}
@@ -165,7 +183,17 @@ export function VizBandsProvider({ children }: { children: ReactNode }) {
   // quick succession must not leave the first one's timeout to wipe the
   // second one's receipt early.
   const receiptTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A save can resolve after the tab has unmounted (closed, or navigated
+  // away); its receipt must not start a timer nothing will ever clear.
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const showReceipt = useCallback((next: BandReceipt) => {
+    if (!mountedRef.current) return;
     if (receiptTimer.current !== null) clearTimeout(receiptTimer.current);
     setReceipt(next);
     receiptTimer.current = setTimeout(
@@ -183,15 +211,12 @@ export function VizBandsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // The server caught up: the override and the record now say the same
-  // thing, so the override has nothing left to say. DERIVED during render
-  // rather than cleared in an effect — an effect would be a second render
-  // pass for a value that is already knowable from the two inputs, and the
-  // stale `override` in state is harmless once it is no longer read (the
-  // next `applyBands` replaces it outright). This also covers the value
-  // changing somewhere else entirely — another tab, another surface — and
-  // arriving on a revalidation.
-  const effectiveBands =
-    override && !bandsEqual(override, saved) ? override : saved;
+  // thing, so the override is DROPPED — a render-phase update of this
+  // provider's own state, not an effect (see `settleOverride` for why keeping
+  // it around, even unread, is wrong).
+  const settled = settleOverride(override, saved);
+  if (settled !== override) setOverride(settled);
+  const effectiveBands = settled ?? saved;
 
   const workspaceName = meta.workspaceName;
   const applyBands = useCallback(

@@ -9,9 +9,9 @@ import {
   contactBandRows,
   contactReadout,
   DEFAULT_BANDS,
+  deepMidShortDescription,
   depthBandIndexFromNetM,
   depthBandRows,
-  depthFromBaselineFt,
   makeContactBucketer,
   makeDepthBucketer,
   resolveDepthDividersFt,
@@ -127,20 +127,6 @@ test.describe("bandIndex", () => {
   });
 });
 
-test.describe("depthFromBaselineFt", () => {
-  test("at the net (depthM = 0) is COURT_HALF_FT from the baseline", () => {
-    expect(depthFromBaselineFt(0)).toBeCloseTo(COURT_HALF_FT, 10);
-  });
-
-  test("at the baseline (depthM = COURT_HALF_M) is 0 ft from the baseline", () => {
-    expect(depthFromBaselineFt(COURT_HALF_M)).toBeCloseTo(0, 10);
-  });
-
-  test("order-reversing: a larger depthM (closer to the baseline) yields a smaller ft value", () => {
-    expect(depthFromBaselineFt(2)).toBeGreaterThan(depthFromBaselineFt(8));
-  });
-});
-
 // ---------------------------------------------------------------------------
 // Boundary equivalence — the core of this task. Proves that, with
 // DEFAULT_BANDS (thirds / contact [0,5]), every value the OLD `<`-based
@@ -173,8 +159,10 @@ test.describe("boundary equivalence — depth placement (net-origin, mirrored)",
 
   test("naive direct composition (no mirror) gets the exact dividers WRONG — kept as documentation of the trap this task exists to catch", () => {
     const baselineDividers = resolveDepthDividersFt(DEFAULT_BANDS); // ascending, baseline-origin
+    // The net-origin → baseline-feet conversion, done inline: it is exactly
+    // the composition this test documents as the trap.
     const naiveIdx = (depthM: number) =>
-      bandIndex(depthFromBaselineFt(depthM), baselineDividers);
+      bandIndex((COURT_HALF_M - depthM) / 0.3048, baselineDividers);
 
     // At depthM === DEPTH_THIRD_M the old code returns "mid" (index 1), but
     // naive composition returns index 2 ("short") — the mirror is real.
@@ -706,5 +694,19 @@ test.describe("rowToBandSettings", () => {
         contact_dividers_ft: [0, 5],
       }),
     ).toEqual(DEFAULT_BANDS);
+  });
+});
+
+test.describe("deepMidShortDescription", () => {
+  test("feet: the menu's own copy, unchanged", () => {
+    expect(deepMidShortDescription("ft")).toBe(
+      "Coach default — 10 ft, 14 ft, then the rest",
+    );
+  });
+
+  test("metres: the same bands, in the viewer's unit", () => {
+    expect(deepMidShortDescription("m")).toBe(
+      "Coach default — 3 m, 4.3 m, then the rest",
+    );
   });
 });

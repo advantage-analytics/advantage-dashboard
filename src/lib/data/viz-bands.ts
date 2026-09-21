@@ -4,56 +4,28 @@
  * no React, no Supabase; the loader (`viz-bands-server.ts`) and the action
  * (`viz-bands-actions.ts`) build on top of this module.
  *
- * ## The from-baseline / from-net mirror
+ * ## Two origins, one bucketing path
  *
- * Today's stats (`viz-model.ts`) bucket return-placement DEPTH from the
- * NET (`depthM`, 0 = net, `REAL_NET_Y` ≈ 11.885 m = the baseline) and
- * return-CONTACT depth from the BASELINE (`depthM`, 0 = baseline, negative =
- * inside the court, positive = behind it) — two different origins for a
- * value that both happen to be called `depthM`.
+ * Every divider here is stored in FEET FROM THE BASELINE, because that is how
+ * the bands are displayed and edited ("0 ft" is "at the baseline" everywhere
+ * in the UI). The live values are metres with two different origins:
+ * return-placement `depthM` is measured from the NET (0 = net, `COURT_HALF_M`
+ * = the baseline), return-contact `depthM` from the BASELINE (negative =
+ * inside the court, positive = behind it).
  *
- * This module's dividers are all expressed from the BASELINE, in feet,
- * because that is how the bands are displayed and edited ("0 ft" reads as
- * "at the baseline" everywhere in the UI). `depthFromBaselineFt` converts a
- * NET-origin metres value into that space: `(COURT_HALF_M − m) * FT_PER_M`.
- *
- * That conversion is ORDER-REVERSING: as `depthM` (from net) increases
- * toward the baseline, `depthFromBaselineFt` DECREASES toward 0. So a
- * boundary rule that reads as "value === divider belongs to the band with
- * the HIGHER depthM" (today's `depthKeyPlacement`, using `<`) becomes, once
- * converted, "value === divider belongs to the band with the LOWER
- * from-baseline value" — the opposite of `bandIndex`'s own documented
- * convention ("value === divider belongs to the band AFTER it", i.e. the
- * higher-index / higher-value band). A caller that naively feeds
- * `depthFromBaselineFt(depthM)` straight into `bandIndex` with ascending
- * baseline-oriented dividers gets today's boundary bucket WRONG at both
- * dividers — proven in `tests/viz-bands.spec.ts`.
- *
- * `contactDepthKey`, by contrast, already measures from the baseline (its
- * own `depthM` is signed from the returner's baseline), so composing
- * `bandIndex` with the baseline-oriented `contactDividersFt` agrees with it
- * directly — no mirror needed. Only DEPTH placement needs the flip.
- *
- * A caller bucketing a LIVE `depthM` value must never re-derive this flip
- * itself. Call `depthBandIndexFromNetM(depthM, bands)` for DEPTH placement
- * and `contactBandIndexFromBaselineM(depthM, bands)` for CONTACT — both
- * below, both metre-native and bit-for-bit with the pre-Phase-2B
- * inequalities they replace (proven in `tests/viz-bands.spec.ts`). Bucketing
- * many dots in a loop: hoist `makeDepthBucketer(bands)` /
- * `makeContactBucketer(bands)` ONCE outside the loop and call the returned
- * function per dot, rather than re-resolving the dividers on every
- * iteration — the two `*IndexFrom*` functions above are thin wrappers over
- * these for a single one-off lookup.
- *
- * Composing `bandIndex` with `depthFromBaselineFt` yourself (fix round 1)
- * reproduces exactly the boundary bug this module's own regression spec
- * exists to catch — `depthFromBaselineFt` exists for display/editing
- * conversions (band-row labels, the drag editor), never for bucketing a
- * live dot.
+ * Converting a net-origin value to baseline feet is ORDER-REVERSING, which
+ * flips `bandIndex`'s "a value on a divider belongs to the band after it"
+ * rule — naively composing the two buckets today's boundary values wrong.
+ * So a live value is only ever bucketed through `makeDepthBucketer` /
+ * `makeContactBucketer` (hoisted once per loop), which work in metres
+ * throughout and reproduce the pre-Phase-2B inequalities bit-for-bit
+ * (`tests/viz-bands.spec.ts`). `depthBandIndexFromNetM` /
+ * `contactBandIndexFromBaselineM` are one-off wrappers over them.
  */
 
 import {
   FT_PER_M,
+  formatDistance,
   formatDistanceValue,
   formatRange,
   type DistanceUnit,
@@ -94,17 +66,20 @@ export const DEFAULT_BANDS: BandSettings = {
   contactDividersFt: [0, 5],
 };
 
-/** A NET-origin depth (metres, 0 = net, `COURT_HALF_M` = baseline) converted
- *  to a BASELINE-origin depth in feet (0 = baseline, `COURT_HALF_FT` = net).
- *  See the module doc comment: this conversion is order-reversing. */
-export function depthFromBaselineFt(depthFromNetM: number): number {
-  return (COURT_HALF_M - depthFromNetM) * FT_PER_M;
-}
-
 /** Coach-default preset: near, roughly 10 ft and 14 ft past that (24 ft from
  *  the baseline), not derived from `COURT_HALF_FT` — a fixed, named preset
  *  rather than a fraction of the court. */
 const DEEP_MID_SHORT_DIVIDERS: [number, number] = [10, 24];
+
+/**
+ * The Deep · mid · short preset's menu description, in the viewer's unit:
+ * the Deep band's depth, then the Mid band's — "10 ft, 14 ft", or in metres
+ * "3 m, 4.3 m" — read off the preset's own dividers, never retyped.
+ */
+export function deepMidShortDescription(unit: DistanceUnit): string {
+  const [d0, d1] = DEEP_MID_SHORT_DIVIDERS;
+  return `Coach default — ${formatDistance(unit, d0)}, ${formatDistance(unit, d1 - d0)}, then the rest`;
+}
 
 /** `resolveDepthDividersFt`'s dividers, ascending, baseline-origin feet.
  *  `bandIndex(valueFt, dividers)` then buckets a baseline-origin ft value
@@ -144,20 +119,11 @@ export function bandIndex(valueFt: number, dividers: number[]): number {
 }
 
 // ---------------------------------------------------------------------------
-// Fix round 1: metre-native bucketing.
-//
-// `bandIndex` above works in whatever unit its caller passes — Task 2's own
-// `viz-model.ts` composes it with feet dividers converted through
-// `FT_PER_M`. These two functions are an ADDITIONAL, metre-native path: they
-// take a live `depthM` (as `viz-model.ts`'s dots already carry it) and a
-// `BandSettings`, and bucket it using EXACTLY the inequalities today's
-// (pre-Phase-2B) `depthKeyPlacement`/`contactDepthKey` use, computed in
-// metres throughout — never round-tripping through feet — so the default
-// (`thirds` / `[0, 5]`) boundaries are bit-identical to those functions, not
-// just numerically close. Existing exports (`bandIndex`,
-// `resolveDepthDividersFt`, `depthBandRows`, `contactBandRows`) are
-// untouched; `viz-model.ts` may keep using its own feet-based composition or
-// switch to these — either is a Task 2+ decision, not this module's.
+// Metre-native bucketing — the only path a live `depthM` is bucketed through
+// (`viz-model.ts` uses it for both kinds). Computed in metres throughout, never
+// round-tripping through feet, so the default (`thirds` / `[0, 5]`)
+// boundaries are bit-identical to the pre-Phase-2B inequalities, not just
+// numerically close.
 // ---------------------------------------------------------------------------
 
 /**
@@ -178,8 +144,7 @@ function depthDividersNetOriginM(b: BandSettings): number[] {
 }
 
 /**
- * Fix round 2 (#3): builds the NET-origin dividers and the flip ONCE, and
- * returns a plain function a caller can call per dot without re-resolving
+ * Builds the NET-origin dividers and the flip ONCE, and returns a plain function a caller can call per dot without re-resolving
  * `resolveDepthDividersFt`/sorting on every iteration — the shape
  * `returnPlacementStats`'s loop over every dot in a match needs.
  * `depthBandIndexFromNetM` below is this, called once for a single lookup.
@@ -212,7 +177,7 @@ export function depthBandIndexFromNetM(
 }
 
 /**
- * Fix round 2 (#3): builds the metre dividers ONCE, same reasoning as
+ * Builds the metre dividers ONCE, same reasoning as
  * `makeDepthBucketer` above. `contactBandIndexFromBaselineM` below is this,
  * called once for a single lookup.
  *
@@ -273,7 +238,7 @@ const DEPTH_3_LABELS = ["Deep", "Mid", "Short"];
  * Rows for the Depth group, ordered nearest-baseline first (Deep) to
  * nearest-net last (Short) — matching `band 0 = deepest` from
  * `resolveDepthDividersFt`. `"none"` → `[]` (the group is omitted entirely,
- * never rendered with zero rows — Task 2's concern).
+ * never rendered with zero rows).
  *
  * `"inside"` → two rows, IN INDEX ORDER against `depthBandIndexFromNetM`:
  * its single divider sits at the baseline (`resolveDepthDividersFt`
@@ -285,7 +250,7 @@ const DEPTH_3_LABELS = ["Deep", "Mid", "Short"];
  *
  * BOTH rows are in the SAME baseline-origin feet space `resolveDepthDividersFt`
  * and every other row here use (0 = the baseline, `COURT_HALF_FT` = the
- * net) — fix round 2 (#1): "Beyond the baseline" is `fromFt: null, toFt: 0`
+ * net): "Beyond the baseline" is `fromFt: null, toFt: 0`
  * (open below 0, i.e. PAST the baseline in baseline-origin feet — negative
  * or zero), never `fromFt: COURT_HALF_FT` (that value is the NET, not the
  * baseline, and describing "beyond the baseline" as starting at the net was
@@ -315,7 +280,7 @@ export function depthBandRows(b: BandSettings, unit: DistanceUnit): BandRow[] {
     ];
   }
 
-  // Fix round 2 (#6): a 3-band scheme (today only "custom") can resolve
+  // A 3-band scheme (today only "custom") can resolve
   // FEWER than 2 dividers — `depthDividersFt: null` with `depthScheme:
   // "custom"` is invalid `BandSettings` (`validateBandInput` refuses it),
   // but this function must still be safe against a caller constructing one
@@ -345,7 +310,7 @@ function n(unit: DistanceUnit, ft: number): string {
  * any finite sign comparison — `hi <= 0` and `lo < 0 && hi > 0` are both
  * true when `hi === Infinity`/`lo === -Infinity` respectively, so testing
  * sign before infinity used to fall through into a finite-pair branch and
- * print the literal "Infinity" (fix round 1, blocking #3).
+ * print the literal "Infinity".
  */
 function contactRow(
   unit: DistanceUnit,

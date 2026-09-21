@@ -20,12 +20,12 @@ function meta(overrides: Partial<VizDotMeta> = {}): VizDotMeta {
 /* ── Title: the SUBJECT's own won/lost, either side ──────────────────────── */
 
 test("title names the subject and reads 'won the point' when they won it", () => {
-  const r = buildReadout(meta({ wonBySubject: true }), NAMES, "serve");
+  const r = buildReadout(meta({ wonBySubject: true }), NAMES, "serve", "ft");
   expect(r.title).toBe("Reid won the point");
 });
 
 test("title reads 'lost the point' when the subject lost it", () => {
-  const r = buildReadout(meta({ wonBySubject: false }), NAMES, "serve");
+  const r = buildReadout(meta({ wonBySubject: false }), NAMES, "serve", "ft");
   expect(r.title).toBe("Reid lost the point");
 });
 
@@ -38,6 +38,7 @@ test("the subject's own name is used, not a fixed player-1 label", () => {
     meta({ wonBySubject: false }),
     { subject: "Okafor" },
     "serve",
+    "ft",
   );
   expect(r.title).toBe("Okafor lost the point");
 });
@@ -49,6 +50,7 @@ test("an ace reads as 'Ace' and does not repeat the serve description", () => {
     meta({ shotType: "First Serve", result: "Ace" }),
     NAMES,
     "serve",
+    "ft",
   );
   expect(r.lines[0]).toBe("Ace");
 });
@@ -61,6 +63,7 @@ test("an ace whose shot result is 'In' still reads 'Ace'", () => {
     meta({ shotType: "First Serve", result: "In", isAce: true }),
     NAMES,
     "serve",
+    "ft",
   );
   expect(r.lines[0]).toBe("Ace");
 });
@@ -70,6 +73,7 @@ test("isAce wins over the shot description, whatever the shot row says", () => {
     meta({ shotType: "Second Serve", result: null, isAce: true }),
     NAMES,
     "serve",
+    "ft",
   );
   expect(r.lines[0]).toBe("Ace");
 });
@@ -79,6 +83,7 @@ test("a non-ace serve called 'In' never reads 'Ace'", () => {
     meta({ shotType: "First Serve", result: "In", isAce: false }),
     NAMES,
     "serve",
+    "ft",
   );
   expect(r.lines[0]).toBe("First serve");
 });
@@ -88,6 +93,7 @@ test("an out serve names the serve and the call", () => {
     meta({ shotType: "Second Serve", result: "Out" }),
     NAMES,
     "serve",
+    "ft",
   );
   expect(r.lines[0]).toBe("Second serve, out");
 });
@@ -97,6 +103,7 @@ test("a netted ball reads 'into the net', never the raw 'Net'", () => {
     meta({ shotType: "Forehand", result: "Net" }),
     NAMES,
     "returnPlacement",
+    "ft",
   );
   expect(r.lines[0]).toBe("Forehand return, into the net");
 });
@@ -106,6 +113,7 @@ test("a return names the stroke and the cut", () => {
     meta({ shotType: "Backhand", result: "In" }),
     NAMES,
     "returnContact",
+    "ft",
   );
   expect(r.lines[0]).toBe("Backhand return");
 });
@@ -115,6 +123,7 @@ test("a rally shot names the stroke alone — the cut is not a return", () => {
     meta({ shotType: "Forehand Volley", result: "In" }),
     NAMES,
     "rallyPosition",
+    "ft",
   );
   expect(r.lines[0]).toBe("Forehand volley");
 });
@@ -124,6 +133,7 @@ test("'In' alone says nothing a serve dot does not already say — no shot line"
     meta({ shotType: null, result: "In", speedMph: null, pointScore: null }),
     NAMES,
     "serve",
+    "ft",
   );
   expect(r.lines).toEqual(["Set 3"]);
 });
@@ -131,24 +141,24 @@ test("'In' alone says nothing a serve dot does not already say — no shot line"
 /* ── Line 2: omitted parts, never invented ones ──────────────────────────── */
 
 test("line 2 joins set, score and speed with the mid dot", () => {
-  const r = buildReadout(meta(), NAMES, "serve");
+  const r = buildReadout(meta(), NAMES, "serve", "ft");
   expect(r.lines[r.monoLine]).toBe("Set 3 · 40-15 · 118 mph");
 });
 
 test("a shot with no measured speed omits the speed part entirely", () => {
-  const r = buildReadout(meta({ speedMph: null }), NAMES, "serve");
+  const r = buildReadout(meta({ speedMph: null }), NAMES, "serve", "ft");
   expect(r.lines[r.monoLine]).toBe("Set 3 · 40-15");
 });
 
 test("speed 0 is unmeasured, not a reading — never '0 mph'", () => {
-  const r = buildReadout(meta({ speedMph: 0 }), NAMES, "serve");
+  const r = buildReadout(meta({ speedMph: 0 }), NAMES, "serve", "ft");
   expect(r.lines[r.monoLine]).toBe("Set 3 · 40-15");
 });
 
 /* ── Stage 2C: the fact line's speed follows the Units preference ───────── */
 
 test("unit defaults to 'ft' when the caller omits it (no callers left that do, but the fallback must not read '0 km/h')", () => {
-  const r = buildReadout(meta(), NAMES, "serve");
+  const r = buildReadout(meta(), NAMES, "serve", "ft");
   expect(r.lines[r.monoLine]).toBe("Set 3 · 40-15 · 118 mph");
 });
 
@@ -164,17 +174,17 @@ test("metres preference, speed 0 is still unmeasured — never '0 km/h'", () => 
 });
 
 test("no point score omits that part, keeping the rest", () => {
-  const r = buildReadout(meta({ pointScore: null }), NAMES, "serve");
+  const r = buildReadout(meta({ pointScore: null }), NAMES, "serve", "ft");
   expect(r.lines[r.monoLine]).toBe("Set 3 · 118 mph");
 });
 
 test("a blank point score string is treated as missing", () => {
-  const r = buildReadout(meta({ pointScore: "   " }), NAMES, "serve");
+  const r = buildReadout(meta({ pointScore: "   " }), NAMES, "serve", "ft");
   expect(r.lines[r.monoLine]).toBe("Set 3 · 118 mph");
 });
 
 test("set 0 (unnumbered) omits the set part", () => {
-  const r = buildReadout(meta({ setNumber: 0 }), NAMES, "serve");
+  const r = buildReadout(meta({ setNumber: 0 }), NAMES, "serve", "ft");
   expect(r.lines[r.monoLine]).toBe("40-15 · 118 mph");
 });
 
@@ -189,6 +199,7 @@ test("nothing measured at all leaves the fact line out and monoLine at -1", () =
     }),
     NAMES,
     "serve",
+    "ft",
   );
   expect(r.lines).toEqual([]);
   expect(r.monoLine).toBe(-1);
@@ -216,7 +227,7 @@ for (const [i, hole] of HOLES.entries()) {
     "rallyPosition",
   ] as const) {
     test(`readout ${i} on ${cut} never prints undefined, null or a 0 reading`, () => {
-      const r = buildReadout(meta(hole), NAMES, cut);
+      const r = buildReadout(meta(hole), NAMES, cut, "ft");
       const text = [r.title, ...r.lines].join(" | ");
       expect(text).not.toContain("undefined");
       expect(text).not.toContain("null");

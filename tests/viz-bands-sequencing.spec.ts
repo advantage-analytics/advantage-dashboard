@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { shouldApplyResult } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
+import {
+  settleOverride,
+  shouldApplyResult,
+} from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
+import { DEFAULT_BANDS, type BandSettings } from "@/lib/data/viz-bands";
 
 /**
  * `applyBands`'s request sequencing (Phase 2B Task 3, fix round 1).
@@ -141,5 +145,38 @@ test.describe("applyBands request sequencing", () => {
     await p;
     expect(h.override).toBe("deepMidShort");
     expect(h.receipt).toBe("Bands saved");
+  });
+});
+
+/**
+ * Final review #1: a converged override is DROPPED, so a later server change
+ * can never resurrect it. Replays the provider's render-phase settle step
+ * (`settleOverride`, then `effective = settled ?? saved`) over the sequence.
+ */
+test.describe("settleOverride — no resurrection", () => {
+  const A: BandSettings = { ...DEFAULT_BANDS, depthScheme: "deepMidShort" };
+  const B: BandSettings = { ...DEFAULT_BANDS, depthScheme: "inside" };
+
+  function render(override: BandSettings | null, saved: BandSettings) {
+    const settled = settleOverride(override, saved);
+    return { override: settled, effective: settled ?? saved };
+  }
+
+  test("override A → saved A → saved becomes B ⇒ effective B", () => {
+    // The pick is in flight: the override is what the coach sees.
+    let r = render(A, DEFAULT_BANDS);
+    expect(r.effective).toBe(A);
+    // The server caught up with A: the override is dropped, not kept.
+    r = render(r.override, A);
+    expect(r.override).toBeNull();
+    expect(r.effective).toBe(A);
+    // Another coach saves B; it arrives on a revalidation.
+    r = render(r.override, B);
+    expect(r.effective).toBe(B);
+  });
+
+  test("an override that has not converged is kept", () => {
+    expect(settleOverride(A, DEFAULT_BANDS)).toBe(A);
+    expect(settleOverride(null, B)).toBeNull();
   });
 });

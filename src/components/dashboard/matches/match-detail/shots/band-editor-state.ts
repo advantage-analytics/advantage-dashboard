@@ -147,9 +147,12 @@ export function bandEditorBounds(
   const [dataLo, dataHi] =
     kind === "depth" ? DEPTH_EDIT_BOUNDS_FT : CONTACT_DATA_BOUNDS_FT;
   const [drawLo, drawHi] = viewerBandDrawableFt(kind);
+  // Intersect first, THEN round inward — so both bounds are grid positions
+  // in either unit (a metric depth bound of 0.5 ft would rest a drag at
+  // "0.2 m", off the half-metre grid).
   return [
-    Math.max(dataLo, gridCeil(unit, drawLo)),
-    Math.min(dataHi, gridFloor(unit, drawHi)),
+    gridCeil(unit, Math.max(dataLo, drawLo)),
+    gridFloor(unit, Math.min(dataHi, drawHi)),
   ];
 }
 

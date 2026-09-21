@@ -211,9 +211,13 @@ export function VizFullscreen() {
   const wasEditingRef = useRef(false);
   useEffect(() => {
     if (wasEditingRef.current && !editing) {
-      bandsTriggerRef.current
-        ?.querySelector<HTMLElement>("button")
-        ?.focus({ preventScroll: true });
+      // The trigger is gone when the cut changed mid-edit (Back to Serve,
+      // which has no bands): fall back to the viewer's own root rather than
+      // letting focus drop to <body>.
+      const trigger =
+        bandsTriggerRef.current?.querySelector<HTMLElement>("button") ??
+        rootRef.current;
+      trigger?.focus({ preventScroll: true });
     }
     wasEditingRef.current = editing;
   }, [editing]);
@@ -496,6 +500,14 @@ export function VizFullscreen() {
         className="fixed inset-0 z-50 overflow-clip outline-none"
         style={{ background: stageBackground }}
       >
+        {/* The receipt's live region, mounted for the viewer's whole life
+            and only ever WRITTEN to. A `role="status"` that mounts together
+            with its text is announced unreliably (VoiceOver above all), and
+            a refused save is exactly what has to be heard. The visible pill
+            is `aria-hidden`; this is what a screen reader reads. */}
+        <div role="status" className="sr-only">
+          {receipt?.message ?? ""}
+        </div>
         <div
           ref={stageRef}
           data-court-stage=""
@@ -801,8 +813,9 @@ export function VizFullscreen() {
 
 /**
  * P2n: the bands receipt, in the filter pill's own slot and shaped like it —
- * a `move-vertical` glyph and one sentence, `role="status"` so a screen
- * reader hears it without focus moving. No tick and no colour: a save that
+ * a `move-vertical` glyph and one sentence. Visual only (`aria-hidden`): the
+ * viewer's always-mounted sr-only status region carries the same sentence to
+ * a screen reader without focus moving. No tick and no colour: a save that
  * worked is not an event, it is a fact, and the sentence ("every return
  * chart in {workspace}") is the part that matters — bands are workspace-wide,
  * not this match's.
@@ -813,7 +826,7 @@ export function VizFullscreen() {
 function BandsReceipt({ message }: { message: string }) {
   return (
     <div
-      role="status"
+      aria-hidden="true"
       className="inline-flex h-[26px] shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium text-white backdrop-blur-[6px]"
       style={{ background: "rgba(13,13,13,0.72)" }}
     >

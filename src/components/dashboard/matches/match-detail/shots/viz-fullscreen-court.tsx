@@ -533,7 +533,7 @@ const MarkLayer = memo(function MarkLayer({
           : `${subjectName} — mark`;
         return { dot, x, y, fill: fillFor(dot), label };
       }),
-    [dots, cut, subjectName],
+    [dots, cut, subjectName, unit],
   );
 
   // The tab stop: whichever mark was last focused, else the first. A

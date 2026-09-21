@@ -500,3 +500,22 @@ test.describe("fix round 1: payload over the CURRENT bands", () => {
     expect(bandEditorDirty(s, current)).toBe(false);
   });
 });
+
+test.describe("final review: metric bounds are grid positions", () => {
+  test("depth in metres: 0.5 m … 11.5 m, never 0.5 ft", () => {
+    const [lo, hi] = bandEditorBounds("depth", "m");
+    expect(lo).toBeCloseTo(0.5 * FT_PER_M, 9);
+    expect(hi).toBeCloseTo(11.5 * FT_PER_M, 9);
+    // A metric drag to the far baseline rests ON the grid.
+    const s = setDivider(initBandEditor("depth", CUSTOM), 0, -5, {
+      unit: "m",
+      minGapFt: 2,
+    });
+    expect(s.draft[0] / FT_PER_M).toBeCloseTo(0.5, 9);
+  });
+
+  test("feet bounds are unchanged", () => {
+    expect(bandEditorBounds("depth", "ft")).toEqual([0.5, 38.5]);
+    expect(bandEditorBounds("contact", "ft")).toEqual([-18, 7.5]);
+  });
+});

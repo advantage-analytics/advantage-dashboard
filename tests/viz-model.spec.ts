@@ -495,7 +495,15 @@ test.describe("computeVizStats — serve", () => {
       }), // 100%
       // ad-wide gets no points at all.
     ];
-    const stats = computeVizStats(pts, "serve", EMPTY_VIZ_FILTERS, true);
+    const stats = computeVizStats(
+      pts,
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+    );
     expect(stats.groups).toHaveLength(1);
     const rows = stats.groups[0].rows;
     expect(rows).toHaveLength(6);
@@ -530,6 +538,9 @@ test.describe("computeVizStats — serve", () => {
       "serve",
       { ...EMPTY_VIZ_FILTERS, ball: ["second"] },
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     expect(stats.subtitle).toContain("second serves");
   });
@@ -563,7 +574,15 @@ test.describe("computeVizStats — serve", () => {
       point({ firstShotLandingX: ZONE_LX["deuce-t"] }), // in
       outServe(),
     ];
-    const stats = computeVizStats(pts, "serve", EMPTY_VIZ_FILTERS, true);
+    const stats = computeVizStats(
+      pts,
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+    );
     expect(stats.subtitle).toBe(
       "Points won by zone · 2 serves · 1 out or into the net",
     );
@@ -574,7 +593,15 @@ test.describe("computeVizStats — serve", () => {
       point({ firstShotLandingX: ZONE_LX["deuce-t"] }),
       point({ firstShotLandingX: ZONE_LX["ad-t"] }),
     ];
-    const stats = computeVizStats(pts, "serve", EMPTY_VIZ_FILTERS, true);
+    const stats = computeVizStats(
+      pts,
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+    );
     expect(stats.subtitle).toBe("Points won by zone · 2 serves");
   });
 });
@@ -600,12 +627,18 @@ test.describe("computeVizStats — return placement", () => {
       "returnPlacement",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     const adStats = computeVizStats(
       [adSide],
       "returnPlacement",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
 
     const directionRow = (
@@ -643,6 +676,9 @@ test.describe("computeVizStats — return placement", () => {
       "returnPlacement",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     const depth = stats.groups.find((g) => g.key === "depth")!;
     const row = (key: string) => depth.rows.find((r) => r.key === key)!;
@@ -709,6 +745,9 @@ test.describe("computeVizStats — return placement", () => {
       "returnPlacement",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     // total always equals computeViz(...).count (all four points are
     // drawable returns), even though only three land inside the rows'
@@ -727,6 +766,9 @@ test.describe("computeVizStats — return placement", () => {
       "returnPlacement",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     expect(stats.total).toBe(2);
     expect(stats.subtitle).toBe("Points won by placement · 2 returns");
@@ -762,6 +804,9 @@ test.describe("computeVizStats — return contact", () => {
       "returnContact",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     const depth = stats.groups.find((g) => g.key === "depth")!;
     const row = (key: string) => depth.rows.find((r) => r.key === key)!;
@@ -818,6 +863,9 @@ test.describe("computeVizStats — return contact", () => {
       "returnContact",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     const stroke = stats.groups.find((g) => g.key === "stroke")!;
     expect(stroke.rows.find((r) => r.key === "forehand")!.count).toBe(1);
@@ -834,6 +882,9 @@ test.describe("computeVizStats — return contact", () => {
       "returnContact",
       { ...EMPTY_VIZ_FILTERS, ball: ["first"] },
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     expect(stats.subtitle).toBe(
       `Points won by contact point · 1 first-serve return`,
@@ -978,17 +1029,19 @@ test.describe("computeVizStats — bands (Phase 2B Task 2)", () => {
       {
         key: "depth",
         label: "Depth",
+        // Order is the pre-Phase-2B `sortRows`' own: win rate, then count,
+        // then label — "0–5 ft behind" sorts before "Inside the baseline".
         rows: [
           {
-            key: "inside",
-            label: "Inside the baseline",
+            key: "near",
+            label: "0–5 ft behind",
             count: 1,
             won: 1,
             winPct: 100,
           },
           {
-            key: "near",
-            label: "0–5 ft behind",
+            key: "inside",
+            label: "Inside the baseline",
             count: 1,
             won: 1,
             winPct: 100,
@@ -1027,50 +1080,8 @@ test.describe("computeVizStats — bands (Phase 2B Task 2)", () => {
     total: 4,
   };
 
-  // Row order within a group is `sortRows`' own (by win rate) — sort both
-  // the actual and expected groups' rows by `key` before comparing so this
-  // spec pins the SET of labels/counts/rates per row, not an incidental
-  // ordering `sortRows` already has its own dedicated tests for.
-  function byRowKey(a: { key: string }, b: { key: string }) {
-    return a.key.localeCompare(b.key);
-  }
-  function normalized(stats: ReturnType<typeof computeVizStats>) {
-    return {
-      ...stats,
-      groups: stats.groups.map((g) => ({
-        ...g,
-        rows: [...g.rows].sort(byRowKey),
-      })),
-    };
-  }
-  function normalizedExpected(expected: typeof EXPECTED_PLACEMENT) {
-    return {
-      ...expected,
-      groups: expected.groups.map((g) => ({
-        ...g,
-        rows: [...g.rows].sort(byRowKey),
-      })),
-    };
-  }
-
-  test("regression: returnPlacement with the implicit default (no bands argument) is byte-identical to the pre-Phase-2B shape", () => {
+  test("regression: returnPlacement with DEFAULT_BANDS is byte-identical to the pre-Phase-2B output, row ORDER included", () => {
     const stats = computeVizStats(
-      placementPts,
-      "returnPlacement",
-      EMPTY_VIZ_FILTERS,
-      true,
-    );
-    expect(normalized(stats)).toEqual(normalizedExpected(EXPECTED_PLACEMENT));
-  });
-
-  test("regression: returnPlacement with DEFAULT_BANDS explicitly passed matches the implicit-default output", () => {
-    const implicit = computeVizStats(
-      placementPts,
-      "returnPlacement",
-      EMPTY_VIZ_FILTERS,
-      true,
-    );
-    const explicit = computeVizStats(
       placementPts,
       "returnPlacement",
       EMPTY_VIZ_FILTERS,
@@ -1079,27 +1090,12 @@ test.describe("computeVizStats — bands (Phase 2B Task 2)", () => {
       DEFAULT_BANDS,
       "ft",
     );
-    expect(explicit).toEqual(implicit);
+    // Compared UNSORTED: the rows' order is part of what must not change.
+    expect(stats).toEqual(EXPECTED_PLACEMENT);
   });
 
-  test("regression: returnContact with the implicit default (no bands argument) is byte-identical to the pre-Phase-2B shape", () => {
+  test("regression: returnContact with DEFAULT_BANDS is byte-identical to the pre-Phase-2B output, row ORDER included", () => {
     const stats = computeVizStats(
-      contactPts,
-      "returnContact",
-      EMPTY_VIZ_FILTERS,
-      true,
-    );
-    expect(normalized(stats)).toEqual(normalizedExpected(EXPECTED_CONTACT));
-  });
-
-  test("regression: returnContact with DEFAULT_BANDS explicitly passed matches the implicit-default output", () => {
-    const implicit = computeVizStats(
-      contactPts,
-      "returnContact",
-      EMPTY_VIZ_FILTERS,
-      true,
-    );
-    const explicit = computeVizStats(
       contactPts,
       "returnContact",
       EMPTY_VIZ_FILTERS,
@@ -1108,7 +1104,8 @@ test.describe("computeVizStats — bands (Phase 2B Task 2)", () => {
       DEFAULT_BANDS,
       "ft",
     );
-    expect(explicit).toEqual(implicit);
+    // Compared UNSORTED: the rows' order is part of what must not change.
+    expect(stats).toEqual(EXPECTED_CONTACT);
   });
 
   test("custom depth scheme buckets by its own dividers and labels the rows with formatDistance ranges", () => {
@@ -1279,6 +1276,9 @@ test.describe("computeVizStats — bands (Phase 2B Task 2)", () => {
       "returnPlacement",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     const thirdsDepth = thirdsStats.groups.find((g) => g.key === "depth")!;
     const thirdsDepthTotal = thirdsDepth.rows.reduce(
@@ -1328,7 +1328,15 @@ test.describe("computeVizStats — attribution", () => {
         firstShotLandingX: ZONE_LX["deuce-wide"],
       }),
     ];
-    const asSubject = computeVizStats(pts, "serve", EMPTY_VIZ_FILTERS, false);
+    const asSubject = computeVizStats(
+      pts,
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      false,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+    );
     const row = asSubject.groups[0].rows.find((r) => r.key === "deuce-wide")!;
     expect(row.count).toBe(1);
     expect(row.won).toBe(1);
@@ -1336,7 +1344,15 @@ test.describe("computeVizStats — attribution", () => {
 
     // The same point, read as if player 1 were the subject: player 1 lost,
     // so the identical point now reads as a loss for the row.
-    const asOpponent = computeVizStats(pts, "serve", EMPTY_VIZ_FILTERS, true);
+    const asOpponent = computeVizStats(
+      pts,
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+    );
     const oppRow = asOpponent.groups[0].rows.find(
       (r) => r.key === "deuce-wide",
     )!;
@@ -1404,14 +1420,30 @@ test.describe("computeVizStats — return attribution", () => {
 
   for (const { cut, rowKey } of cases) {
     test(`${cut}: subject = player 1 gets player 1's returns and wins`, () => {
-      const stats = computeVizStats(pts, cut, EMPTY_VIZ_FILTERS, true);
+      const stats = computeVizStats(
+        pts,
+        cut,
+        EMPTY_VIZ_FILTERS,
+        true,
+        undefined,
+        DEFAULT_BANDS,
+        "ft",
+      );
       const row = depthRow(stats, rowKey);
       expect(row.count).toBe(3);
       expect(row.won).toBe(2);
     });
 
     test(`${cut}: subject = player 2 (viewer is player 2) gets player 2's returns and wins`, () => {
-      const stats = computeVizStats(pts, cut, EMPTY_VIZ_FILTERS, false);
+      const stats = computeVizStats(
+        pts,
+        cut,
+        EMPTY_VIZ_FILTERS,
+        false,
+        undefined,
+        DEFAULT_BANDS,
+        "ft",
+      );
       const row = depthRow(stats, rowKey);
       expect(row.count).toBe(3);
       expect(row.won).toBe(2); // would read 1 under the naive (non-subject) comparison
@@ -1428,6 +1460,9 @@ test.describe("computeVizStats — return attribution", () => {
         cut,
         EMPTY_VIZ_FILTERS,
         opponentSubject,
+        undefined,
+        DEFAULT_BANDS,
+        "ft",
       );
       const row = depthRow(stats, rowKey);
       expect(row.count).toBe(3);
@@ -1453,7 +1488,15 @@ test.describe("computeVizStats — total", () => {
     ];
     const cuts: Cut[] = ["serve", "returnPlacement", "returnContact"];
     for (const cut of cuts) {
-      const stats = computeVizStats(pts, cut, EMPTY_VIZ_FILTERS, true);
+      const stats = computeVizStats(
+        pts,
+        cut,
+        EMPTY_VIZ_FILTERS,
+        true,
+        undefined,
+        DEFAULT_BANDS,
+        "ft",
+      );
       const viz = computeViz(pts, cut, EMPTY_VIZ_FILTERS, true);
       expect(stats.total).toBe(viz.count);
     }
@@ -1480,7 +1523,15 @@ test.describe("computeVizStats — sentence", () => {
       // (round 1 bug: a 2-serve 100% zone inflated "sits at or under").
       point({ firstShotLandingX: ZONE_LX["ad-body"], wonByPlayer1: true }),
     ];
-    const stats = computeVizStats(pts, "serve", EMPTY_VIZ_FILTERS, true);
+    const stats = computeVizStats(
+      pts,
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+    );
     expect(stats.sentence).not.toBeNull();
     const rows = stats.groups[0].rows;
     const deuceWide = rows.find((r) => r.key === "deuce-wide")!;
@@ -1512,7 +1563,15 @@ test.describe("computeVizStats — sentence", () => {
       point({ firstShotLandingX: ZONE_LX["ad-t"], wonByPlayer1: false }),
       point({ firstShotLandingX: ZONE_LX["ad-body"], wonByPlayer1: false }),
     ];
-    const stats = computeVizStats(pts, "serve", EMPTY_VIZ_FILTERS, true);
+    const stats = computeVizStats(
+      pts,
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+    );
     expect(stats.sentence).toBe("Deuce wide: 100% won on 3 serves.");
   });
 
@@ -1544,6 +1603,9 @@ test.describe("computeVizStats — sentence", () => {
       "serve",
       { ...EMPTY_VIZ_FILTERS, ball: ["first"] },
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     const rows = stats.groups[0].rows;
     expect(rows.find((r) => r.key === "deuce-wide")!.winPct).toBe(100);
@@ -1559,7 +1621,15 @@ test.describe("computeVizStats — sentence", () => {
       point({ firstShotLandingX: ZONE_LX["deuce-wide"], wonByPlayer1: true }),
       point({ firstShotLandingX: ZONE_LX["ad-t"], wonByPlayer1: true }),
     ];
-    const stats = computeVizStats(pts, "serve", EMPTY_VIZ_FILTERS, true);
+    const stats = computeVizStats(
+      pts,
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+    );
     expect(stats.sentence).toBeNull();
   });
 });
@@ -1568,7 +1638,15 @@ test.describe("computeVizStats — empty input", () => {
   test("empty points → every row is count 0 / winPct null, sentence is null, total is 0", () => {
     const cuts: Cut[] = ["serve", "returnPlacement", "returnContact"];
     for (const cut of cuts) {
-      const stats = computeVizStats([], cut, EMPTY_VIZ_FILTERS, true);
+      const stats = computeVizStats(
+        [],
+        cut,
+        EMPTY_VIZ_FILTERS,
+        true,
+        undefined,
+        DEFAULT_BANDS,
+        "ft",
+      );
       expect(stats.total).toBe(0);
       expect(stats.sentence).toBeNull();
       for (const group of stats.groups) {
@@ -1586,7 +1664,15 @@ test.describe("computeVizStats — empty input", () => {
  * singularise at n === 1 and stay plural at n === 0 and n === 2. */
 test.describe("computeVizStats — singular nouns", () => {
   test("serve subtitle: 0 serves / 1 serve / 2 serves", () => {
-    const zero = computeVizStats([], "serve", EMPTY_VIZ_FILTERS, true);
+    const zero = computeVizStats(
+      [],
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+    );
     expect(zero.subtitle).toBe("Points won by zone · 0 serves");
 
     const one = computeVizStats(
@@ -1594,6 +1680,9 @@ test.describe("computeVizStats — singular nouns", () => {
       "serve",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     expect(one.subtitle).toBe("Points won by zone · 1 serve");
 
@@ -1605,6 +1694,9 @@ test.describe("computeVizStats — singular nouns", () => {
       "serve",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     expect(two.subtitle).toBe("Points won by zone · 2 serves");
   });
@@ -1615,6 +1707,9 @@ test.describe("computeVizStats — singular nouns", () => {
       "serve",
       { ...EMPTY_VIZ_FILTERS, ball: ["first"] },
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     expect(firstOnly.subtitle).toBe("Points won by zone · 1 first serve");
 
@@ -1628,6 +1723,9 @@ test.describe("computeVizStats — singular nouns", () => {
       "serve",
       { ...EMPTY_VIZ_FILTERS, ball: ["second"] },
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     expect(secondOnly.subtitle).toBe("Points won by zone · 1 second serve");
   });
@@ -1647,6 +1745,9 @@ test.describe("computeVizStats — singular nouns", () => {
       "returnPlacement",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     expect(zero.subtitle).toBe("Points won by placement · 0 returns");
 
@@ -1655,6 +1756,9 @@ test.describe("computeVizStats — singular nouns", () => {
       "returnPlacement",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     expect(one.subtitle).toBe("Points won by placement · 1 return");
 
@@ -1663,6 +1767,9 @@ test.describe("computeVizStats — singular nouns", () => {
       "returnPlacement",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     expect(two.subtitle).toBe("Points won by placement · 2 returns");
   });
@@ -1679,7 +1786,15 @@ test.describe("computeVizStats — singular nouns", () => {
         ...over,
       });
 
-    const zero = computeVizStats([], "returnContact", EMPTY_VIZ_FILTERS, true);
+    const zero = computeVizStats(
+      [],
+      "returnContact",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+    );
     expect(zero.subtitle).toBe("Points won by contact point · 0 returns");
 
     const one = computeVizStats(
@@ -1687,6 +1802,9 @@ test.describe("computeVizStats — singular nouns", () => {
       "returnContact",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     expect(one.subtitle).toBe("Points won by contact point · 1 return");
 
@@ -1695,6 +1813,9 @@ test.describe("computeVizStats — singular nouns", () => {
       "returnContact",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     expect(two.subtitle).toBe("Points won by contact point · 2 returns");
   });
@@ -1702,7 +1823,15 @@ test.describe("computeVizStats — singular nouns", () => {
 
 test.describe("statsAreEmpty (M4)", () => {
   test("total === 0 is empty", () => {
-    const stats = computeVizStats([], "serve", EMPTY_VIZ_FILTERS, true);
+    const stats = computeVizStats(
+      [],
+      "serve",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+    );
     expect(statsAreEmpty(stats)).toBe(true);
   });
 
@@ -1721,6 +1850,9 @@ test.describe("statsAreEmpty (M4)", () => {
       "returnPlacement",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     expect(stats.total).toBeGreaterThan(0);
     expect(stats.groups.every((g) => g.rows.every((r) => r.count === 0))).toBe(
@@ -1735,6 +1867,9 @@ test.describe("statsAreEmpty (M4)", () => {
       "serve",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     expect(statsAreEmpty(stats)).toBe(false);
   });
@@ -1751,6 +1886,9 @@ test.describe("computeVizStats — precomputed result (M2)", () => {
       "serve",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     const precomputed = computeViz(pts, "serve", EMPTY_VIZ_FILTERS, true);
     const withPrecomputed = computeVizStats(
@@ -1759,6 +1897,8 @@ test.describe("computeVizStats — precomputed result (M2)", () => {
       EMPTY_VIZ_FILTERS,
       true,
       precomputed,
+      DEFAULT_BANDS,
+      "ft",
     );
     expect(withPrecomputed).toEqual(withoutPrecomputed);
   });
@@ -1771,6 +1911,9 @@ test.describe("statRowAnnouncement", () => {
       "serve",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     const placementStats = computeVizStats(
       [
@@ -1784,6 +1927,9 @@ test.describe("statRowAnnouncement", () => {
       "returnPlacement",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     const contactStats = computeVizStats(
       [
@@ -1797,6 +1943,9 @@ test.describe("statRowAnnouncement", () => {
       "returnContact",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
 
     for (const stats of [serveStats, placementStats, contactStats]) {
@@ -2319,6 +2468,9 @@ test.describe("computeVizStats — rallyPosition cut", () => {
       "rallyPosition",
       EMPTY_VIZ_FILTERS,
       true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
     );
     expect(stats.title).toBe("Where rally shots were struck");
     expect(stats.total).toBe(1);

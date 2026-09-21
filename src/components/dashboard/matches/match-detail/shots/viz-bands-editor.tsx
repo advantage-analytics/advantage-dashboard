@@ -18,6 +18,7 @@ import {
 import {
   formatDistance,
   formatDistanceValue,
+  FT_PER_M,
   type DistanceUnit,
 } from "@/lib/format/distance";
 import { advButton } from "@/lib/ui/adv-button";
@@ -91,6 +92,12 @@ const DIVIDER_LABELS: Record<BandEditorKind, [string, string]> = {
 /** The chip on a divider and its `aria-valuetext` — the same string. */
 function chipText(kind: BandEditorKind, unit: DistanceUnit, ft: number) {
   return kind === "depth" ? formatDistance(unit, ft) : contactReadout(unit, ft);
+}
+
+/** A slider number (feet) in the display unit, to one decimal. */
+function ariaNumber(unit: DistanceUnit, ft: number): number {
+  const value = unit === "ft" ? ft : ft / FT_PER_M;
+  return Math.round(value * 10) / 10;
 }
 
 export function editorContext(
@@ -219,11 +226,12 @@ export function VizBandsEditorHandles({
             aria-orientation="vertical"
             aria-label={DIVIDER_LABELS[state.kind][index]}
             aria-describedby={EDITOR_HINT_ID}
-            aria-valuemin={lo}
-            aria-valuemax={hi}
-            // valuenow is in screen-up terms (mirrored), so ↑ raises it as
-            // ARIA expects; the chip text is what is actually announced.
-            aria-valuenow={Math.round((lo + hi - ft) * 10) / 10}
+            // In the DISPLAY unit, like the valuetext. valuenow is in
+            // screen-up terms (mirrored), so ↑ raises it as ARIA expects;
+            // the chip text is what is actually announced.
+            aria-valuemin={ariaNumber(unit, lo)}
+            aria-valuemax={ariaNumber(unit, hi)}
+            aria-valuenow={ariaNumber(unit, lo + hi - ft)}
             aria-valuetext={chip}
             className="group pointer-events-auto absolute left-0 cursor-ns-resize outline-none"
             style={{

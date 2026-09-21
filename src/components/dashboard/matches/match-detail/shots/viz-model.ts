@@ -1439,19 +1439,18 @@ function returnContactStats(
  * inputs.
  *
  * `bands`/`unit` (Phase 2B): the workspace's depth/contact band settings
- * (`viz-bands.ts`) and the unit to render their labels in. Default to
- * `DEFAULT_BANDS`/`"ft"` — the pre-Phase-2B behaviour — so every existing
- * caller that hasn't been threaded through to a workspace's `bandSettings`
- * yet keeps working unchanged.
+ * (`viz-bands.ts`) and the unit to render their labels in. REQUIRED, with no
+ * defaults: a caller that forgot to thread them through would otherwise
+ * silently ignore the workspace's bands and the viewer's units.
  */
 export function computeVizStats(
   points: MatchPoint[],
   cut: Cut,
   filters: VizFilters,
   subjectIsPlayer1: boolean,
-  precomputed?: VizResult,
-  bands: BandSettings = DEFAULT_BANDS,
-  unit: DistanceUnit = "ft",
+  precomputed: VizResult | undefined,
+  bands: BandSettings,
+  unit: DistanceUnit,
 ): VizStats {
   const result =
     precomputed ?? computeViz(points, cut, filters, subjectIsPlayer1);
