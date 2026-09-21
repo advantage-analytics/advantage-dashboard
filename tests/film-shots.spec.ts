@@ -20,6 +20,10 @@ const shot = (id: string, videoTime: number | null, extra = {}) => ({
   zone: null,
   result: "In",
   videoTime,
+  contactX: null,
+  contactY: null,
+  landingX: null,
+  landingY: null,
   ...extra,
 });
 

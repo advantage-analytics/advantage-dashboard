@@ -101,7 +101,9 @@ Phase 1's list, plus:
   `film-room-problem` (+ `data-film-problem`), `film-room-reload`, `data-film-chrome`,
   `data-film-own-keys`, `data-point-id`, `data-playing`, `data-shot-id`.
 - Dark-scope alphas are literals, exactly as the frames give them. Everything else is a token.
-  Chart-only literals: you `#60A5FA`, opponent `#94A3B8`, out `#E5484D`; loss text on dark `#FF6478`.
+  Chart-only literals: you `#60A5FA`, opponent `#94A3B8`, out `#FF6478`. The handoff draws out balls in `#E5484D`, which `colors.css` does not own and
+  `scripts/check-design-drift.mjs` rejects; `#FF6478` is the dark scope's `--danger`, which the same
+  handoff names as loss text on dark (author decision 2026-09-21).
 - Motion: 200ms `--ease-primary`; 300ms trail fade on court marks. Reduced motion keeps opacity
   changes and drops transforms — the chrome still fades, nothing slides.
 - Focus rings come from the system (`--focus-ring`); write no focus classes. No native `title`
