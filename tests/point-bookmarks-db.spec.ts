@@ -18,7 +18,7 @@ import {
 } from "./fixtures/live-db";
 
 /**
- * `20260920120000_point_bookmarks.sql`, proven against the live database
+ * `20260921004305_point_bookmarks.sql`, proven against the live database
  * rather than the migration's own claims (T1 of per-user point bookmarks).
  *
  *  1. Privilege boundary: an anonymous client is refused SELECT, INSERT and
@@ -41,7 +41,7 @@ import {
  * Run on demand:  npx playwright test tests/point-bookmarks-db.spec.ts
  */
 
-const MIGRATION = "supabase/migrations/20260920120000_point_bookmarks.sql";
+const MIGRATION = "supabase/migrations/20260921004305_point_bookmarks.sql";
 
 /**
  * The migration's backfill, character for character. The live project has no
