@@ -344,7 +344,7 @@ ready).
 
 ## T25 · Read ball paths beside the recorded results key when the uploader has left
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) `src/lib/services/splitstep/object-keys.ts`, `src/lib/services/splitstep/ball-paths-access.ts`, `src/lib/services/matches/purge-match-storage.ts`, `tests/splitstep-ball-paths-access.spec.ts`, a node spec for the new helper (new file or `tests/purge-match-results-keys.spec.ts`'s neighbour)
 - **done when:**

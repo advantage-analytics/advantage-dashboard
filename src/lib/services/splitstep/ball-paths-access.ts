@@ -41,7 +41,11 @@ import {
 } from "@/lib/services/match-video/http";
 
 import { RESULTS_BUCKET } from "./config";
-import { ballPathsObjectKey, ballPathsUserSegment } from "./object-keys";
+import {
+  ballPathsObjectKey,
+  ballPathsUserSegment,
+  resultsKeyUserSegment,
+} from "./object-keys";
 
 const LOG = "[ball-paths-access]";
 
@@ -112,7 +116,9 @@ export async function handleGetBallPaths(
  *
  * The key's user segment is the JOB's `created_by`, never the caller's id —
  * and goes through `ballPathsUserSegment`, as the writer's does, so a job
- * whose uploader has left the team is still found.
+ * whose uploader has left the team is still found. A file written BEFORE they
+ * left sits under their uuid instead, which `created_by` no longer names; the
+ * recorded `results_object_key` does, through `resultsKeyUserSegment`.
  */
 export function supabaseBallPathsBody(
   admin: SupabaseClient,
@@ -120,13 +126,17 @@ export function supabaseBallPathsBody(
   return async (matchId) => {
     const { data: job, error: jobError } = await admin
       .from("processing_jobs")
-      .select("id, created_by")
+      .select("id, created_by, results_object_key")
       .eq("match_id", matchId)
       .eq("status", "completed")
       .order("completed_at", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
       .limit(1)
-      .maybeSingle<{ id: string; created_by: string | null }>();
+      .maybeSingle<{
+        id: string;
+        created_by: string | null;
+        results_object_key: string | null;
+      }>();
 
     if (jobError) {
       console.error(`${LOG} could not read the match's jobs`, {
@@ -141,35 +151,57 @@ export function supabaseBallPathsBody(
     }
     if (!job) return { ok: true, value: null };
 
-    const objectKey = ballPathsObjectKey({
-      userId: ballPathsUserSegment(job.created_by),
+    // A FIXED, ORDERED candidate list — no bucket listing, no prefix. Every
+    // entry is a return value of `ballPathsObjectKey`, built only from the row
+    // this query returned for the already-authorised match id.
+    //
+    //   1. under `ballPathsUserSegment(created_by)` — where the writer puts a
+    //      file TODAY, so after the uploader left a re-derivation lands under
+    //      the fallback segment and is the fresher file;
+    //   2. the sibling of the recorded results key — the older file, written
+    //      under the uploader's uuid before `created_by` was nulled.
+    //
+    // A Set de-duplicates: an uploader who is still here yields one candidate.
+    const segments = new Set<string>([ballPathsUserSegment(job.created_by)]);
+    const siblingSegment = resultsKeyUserSegment({
+      resultsObjectKey: job.results_object_key,
       matchId,
       jobId: job.id,
     });
+    if (siblingSegment !== null) segments.add(siblingSegment);
 
-    const { data, error } = await admin.storage
-      .from(RESULTS_BUCKET)
-      .download(objectKey);
+    for (const userId of segments) {
+      const objectKey = ballPathsObjectKey({ userId, matchId, jobId: job.id });
 
-    if (error || !data) {
+      const { data, error } = await admin.storage
+        .from(RESULTS_BUCKET)
+        .download(objectKey);
+
+      if (!error && data) return { ok: true, value: await data.text() };
+
       // A download error carries no parsed body, so "not there" and "could
       // not ask" are told apart only by the wrapped response's status — and
-      // storage has answered a missing object with both 400 and 404. Either
-      // way the answer is the empty file: the court falls back to estimated
-      // bounces, which is what it does today. Anything else is logged.
+      // storage has answered a missing object with both 400 and 404. Missing
+      // moves on to the next candidate; all missing is the empty file: the
+      // court falls back to estimated bounces, which is what it does today.
       const status = (error as { originalError?: { status?: number } } | null)
         ?.originalError?.status;
-      if (status !== 400 && status !== 404) {
-        console.warn(`${LOG} ball-paths download failed; answering empty`, {
-          matchId,
-          jobId: job.id,
-          status,
-          message: error?.message,
-        });
-      }
+      if (status === 400 || status === 404) continue;
+
+      // Anything else STOPS the ladder: logged and answered empty, exactly
+      // what a single candidate has always done. It does not fall through to
+      // the next candidate, because "could not ask" about the fresher file is
+      // not "it is absent" — serving the older sibling then would show a
+      // superseded derivation as if it were current.
+      console.warn(`${LOG} ball-paths download failed; answering empty`, {
+        matchId,
+        jobId: job.id,
+        status,
+        message: error?.message,
+      });
       return { ok: true, value: null };
     }
 
-    return { ok: true, value: await data.text() };
+    return { ok: true, value: null };
   };
 }

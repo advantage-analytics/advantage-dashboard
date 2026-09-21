@@ -8,6 +8,7 @@ import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
 import {
   ballPathsObjectKey,
   ballPathsUserSegment,
+  resultsKeyUserSegment,
 } from "@/lib/services/splitstep/object-keys";
 import { deleteVideoBlob } from "@/lib/services/splitstep/video-url";
 import { MATCH_DATA_BUCKET } from "@/lib/services/upload/storage.service";
@@ -58,8 +59,9 @@ function isKeyId(value: unknown): value is string {
  *     results key. The sibling exists because `created_by` is nulled when the
  *     uploader leaves, after which a file written under their uuid cannot be
  *     recomputed — but it always sits beside the results key the webhook wrote
- *     in the same delivery. It is taken only when that key is EXACTLY
- *     `results/{segment}/{match_id}/{id}.json` for this row's own ids.
+ *     in the same delivery. It is taken only when `resultsKeyUserSegment`
+ *     proves that key is EXACTLY `results/{segment}/{match_id}/{id}.json` for
+ *     this row's own ids — the same anchored check the ball-paths reader uses.
  *     Removing a key that does not exist is a no-op, so the extra candidate is
  *     safe.
  *
@@ -98,17 +100,13 @@ function resultsBucketPaths(
       }),
     );
 
-    if (typeof job.results_object_key === "string") {
-      const parts = job.results_object_key.split("/");
-      if (
-        parts.length === 4 &&
-        parts[0] === "results" &&
-        parts[1] !== "" &&
-        parts[2] === matchId &&
-        parts[3] === `${jobId}.json`
-      ) {
-        paths.add(ballPathsObjectKey({ userId: parts[1], matchId, jobId }));
-      }
+    const siblingSegment = resultsKeyUserSegment({
+      resultsObjectKey: job.results_object_key,
+      matchId,
+      jobId,
+    });
+    if (siblingSegment !== null) {
+      paths.add(ballPathsObjectKey({ userId: siblingSegment, matchId, jobId }));
     }
   }
 

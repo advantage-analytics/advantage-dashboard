@@ -276,3 +276,14 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. `orphaned/…` keys have no safe orphan rule: a delivery not yet adopted looks exactly like a dead one, and nothing in the repo bounds how long adoption may take. A retention rule needs a number from the author.
+
+## T25 · Read ball paths beside the recorded results key when the uploader has left — done
+
+**gate:** mechanical pass on re-run — the full suite's one failure was `tests/rls-workspace-isolation.spec.ts:183`, failing at line 102 inside its `beforeAll` fixture, the known parallel-load fixture flake on the live database; this diff touches no RLS or match code, and the file passed 6/6 alone · completion `VERDICT: pass`
+
+**changed:** New pure `resultsKeyUserSegment()` in `object-keys.ts` returns the user segment only for a results key of exactly `results/{segment}/{match_id}/{job_id}.json` for the given ids, and null otherwise; it returns a segment, never a finished key. `purge-match-storage.ts` drops its inline comparison for it with behaviour unchanged — its two specs have no diff and pass. `supabaseBallPathsBody` now also selects `id` and `results_object_key` and tries a fixed, de-duplicated ladder: the key under the job's current `created_by` segment first (the fresher file when both exist), then the sibling of the recorded results key; 400/404 moves on, all-missing answers the empty file with no warning. A non-missing error stops the ladder, logs one warning and answers empty, exactly as the single-candidate code did — it never serves an older copy as current. `handleGetBallPaths` is unchanged: visibility first, loader only for the authorised match id. New node spec for the helper; access spec gains the ladder and near-miss cases.
+
+**follow-ups:**
+
+1. `ball-paths-store.ts` could remove the stale uuid sibling when it re-derives under `former-member`, so two copies never coexist.
+2. A recorded `ball_paths_object_key` column would retire both the recomputation and this ladder.
