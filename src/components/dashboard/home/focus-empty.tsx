@@ -32,7 +32,7 @@ export function FocusEmpty({
 }: {
   /** Team Home's form: dim the shape and say what arrives beneath it. */
   band?: { title: string; description: string };
-} = {}) {
+}) {
   const shape = (
     <>
       {/* One line at the claim's own measure: a 14px claim on the 400px rail
@@ -62,7 +62,10 @@ export function FocusEmpty({
 
   return (
     <>
-      <DayZeroShape description={band.title} className="flex flex-col gap-3">
+      <DayZeroShape
+        description="The finding Advantage Intelligence writes for this program will appear here."
+        className="flex flex-col gap-3"
+      >
         {shape}
       </DayZeroShape>
       <div className="border-t border-[var(--border-hairline)] pt-[22px] pb-1">
@@ -80,13 +83,19 @@ export function FocusEmpty({
   );
 }
 
-/** What Team Home's empty card says, by how far the program has got. */
-export function teamInsightBand(matchCount: number) {
+/**
+ * What Team Home's empty card says, by how far the program has got: no match,
+ * matches but none analysed, or analysed matches with nothing yet worth a
+ * finding.
+ */
+export function teamInsightBand(matchCount: number, analyzedCount = 0) {
   return {
     title:
       matchCount === 0
         ? "Nothing here until a match is analysed"
-        : "Waiting on your first analysed match",
+        : analyzedCount === 0
+          ? "Waiting on your first analysed match"
+          : "No finding worth reporting yet",
     description:
       "Advantage Intelligence reads each analysed match and writes one thing to work on, with the numbers behind it.",
   };

@@ -278,7 +278,7 @@ async function Insight({
   resources: Resources;
   programId: string;
 }) {
-  const { insight, kpiMatchCount, kpiCards, matchCount } =
+  const { insight, kpiMatchCount, kpiCards, matchCount, analyzedCount } =
     await resources.analytics;
   if (insight)
     return (
@@ -298,7 +298,7 @@ async function Insight({
     );
   return (
     <FocusCard showStatisticsLink={matchCount > 0}>
-      <FocusEmpty band={teamInsightBand(matchCount)} />
+      <FocusEmpty band={teamInsightBand(matchCount, analyzedCount)} />
     </FocusCard>
   );
 }
