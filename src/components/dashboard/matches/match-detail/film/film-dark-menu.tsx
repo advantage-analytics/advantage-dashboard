@@ -45,9 +45,11 @@ export function FilmDarkMenu({
       width={width}
       align={align}
       tone="dark"
-      // The film's dark surface predates the P2d spec values (`rgba(20,20,22,.97)`
-      // vs the shared dark tone's `rgba(13,13,13,.88)`) — kept as-is here so this
-      // fold changes row markup, not the film's own established surface colour.
+      // RULING: deliberate deviation from the viz dark tone's surface
+      // (`rgba(13,13,13,.88)` blur 10, f4b-report P2d/P2e/P2f/P2g/P2h) — the
+      // film room keeps its own already-shipped `rgba(20,20,22,.97)`. It was
+      // not restyled as part of this work; only its row markup was folded
+      // into the shared `FloatMenu`/`FloatMenuItem`.
       className="border-white/10 bg-[rgba(20,20,22,0.97)]"
     >
       {children}
@@ -76,12 +78,26 @@ export function FilmDarkMenuItem({
   trailing?: React.ReactNode;
   onSelect: () => void;
 }) {
+  // `chosen`/`trailing` are a discriminated union on `FloatMenuItem` now —
+  // pass exactly one. A caller that omits `chosen` (this file's own
+  // documented "omit for an action row") must still reach `FloatMenuItem`
+  // WITHOUT a `chosen` key at all, not `chosen={false}`, since `FloatMenuItem`
+  // treats `chosen === undefined` as the action-row signal.
+  if (trailing !== undefined) {
+    return (
+      <FloatMenuItem
+        label={label}
+        description={description}
+        trailing={trailing}
+        onSelect={onSelect}
+      />
+    );
+  }
   return (
     <FloatMenuItem
       label={label}
       description={description}
-      chosen={chosen ?? false}
-      trailing={trailing}
+      chosen={chosen}
       onSelect={onSelect}
     />
   );

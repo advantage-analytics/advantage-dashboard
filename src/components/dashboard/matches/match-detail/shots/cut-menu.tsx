@@ -97,6 +97,7 @@ export function CutMenu({
   width = 300,
   tone = "light",
   side = "bottom",
+  showLoadedView = false,
 }: {
   savedViews: SavedViewLite[];
   onSaveRequest?: () => void;
@@ -110,6 +111,13 @@ export function CutMenu({
   width?: number;
   tone?: FloatMenuTone;
   side?: "top" | "bottom";
+  /**
+   * RULING (fix round 1): the loaded-saved-view trigger (name + bookmark
+   * glyph, `loadedViewLabel`) is opt-in, default `false` — the shipped light
+   * toolbar (commit 835e0d40) shows the plain cut label regardless of a
+   * loaded `viewId`, unchanged. Only the fullscreen viewer passes `true`.
+   */
+  showLoadedView?: boolean;
 }) {
   const { state, setState } = useVizState();
   const [open, setOpen] = useState(false);
@@ -139,13 +147,15 @@ export function CutMenu({
     setOpen(false);
   }
 
-  const loaded = loadedViewLabel(state, savedViews);
-  const triggerIcon = loaded.bookmark
-    ? Bookmark
-    : state.cut === "serve"
-      ? Crosshair
-      : ScatterChart;
-  const triggerLabel = loaded.label;
+  const loaded = showLoadedView ? loadedViewLabel(state, savedViews) : null;
+  const triggerIcon =
+    (loaded?.bookmark ?? false)
+      ? Bookmark
+      : state.cut === "serve"
+        ? Crosshair
+        : ScatterChart;
+  const triggerLabel =
+    loaded?.label ?? (state.cut ? CUT_LABEL[state.cut] : "View");
 
   return (
     <FloatMenu

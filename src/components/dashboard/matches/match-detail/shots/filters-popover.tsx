@@ -8,6 +8,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import type { FloatMenuTone } from "@/components/ui/float-menu";
 import { filterKeysFor, type PlayerFilter, type VizFilters } from "./viz-model";
 import {
   activeFilterEntries,
@@ -20,7 +21,6 @@ import { useVizState } from "./use-viz-state";
 import { VizMenuTrigger, VIZ_PILL_RADIUS } from "./viz-labels";
 
 type MultiFilterKey = Exclude<keyof VizFilters, "player">;
-type FiltersPopoverTone = "light" | "dark";
 
 /**
  * The Filters popover (P1f): every non-default `VizFilters` key as a wrap of
@@ -57,7 +57,7 @@ export function FiltersPopover({
   sets: number[];
   youName: string;
   opponentName: string;
-  tone?: FiltersPopoverTone;
+  tone?: FloatMenuTone;
   side?: "top" | "bottom";
 }) {
   const { state, setState } = useVizState();

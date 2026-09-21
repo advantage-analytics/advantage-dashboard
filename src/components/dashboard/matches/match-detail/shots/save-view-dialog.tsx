@@ -14,6 +14,7 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { advButton } from "@/lib/ui/adv-button";
+import type { FloatMenuTone } from "@/components/ui/float-menu";
 import { hasDuplicateViewName } from "@/lib/data/saved-views-logic";
 import { createSavedView } from "@/app/dashboard/matches/(detail)/[matchId]/saved-views-actions";
 import type { SavedView, SavedViewRow } from "@/lib/data/saved-views-server";
@@ -69,7 +70,7 @@ export function SaveViewDialog({
   workspaceKind: WorkspaceKind;
   workspaceName: string;
   onSaved: (view: SavedView) => void;
-  tone?: "light" | "dark";
+  tone?: FloatMenuTone;
   side?: "top" | "bottom";
 }) {
   const router = useRouter();

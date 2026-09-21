@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { floatMenuToneClasses } from "@/components/ui/float-menu";
+
+const source = readFileSync("src/components/ui/float-menu.tsx", "utf8");
 
 /**
  * Task 3: the pure surface-class helper behind `FloatMenu`'s `tone` prop.
@@ -32,4 +35,12 @@ test("floatMenuToneClasses returns the dark f4b-report P2d/P2e surface", () => {
 
 test("light and dark are distinct strings", () => {
   expect(floatMenuToneClasses("light")).not.toBe(floatMenuToneClasses("dark"));
+});
+
+test("a disabled+chosen dark row drops its persistent wash", () => {
+  // Fix round 1, item 3: source-string check (no DOM here) that the fix
+  // exists — `disabled && "bg-transparent"` sits after the dark
+  // chosen/hover branch so tailwind-merge's last-write-wins clears the
+  // persistent `bg-white/[0.08]` chosen wash when the row is also disabled.
+  expect(source).toContain('disabled && "bg-transparent"');
 });

@@ -166,42 +166,55 @@ export function ChosenCheck({
  * unavailable (ARIA APG: disabled menu items may stay focusable); a click,
  * Enter or Space does nothing because `onSelect` is never wired to it.
  */
-export function FloatMenuItem({
-  label,
-  description,
-  chosen = false,
-  disabled = false,
-  onSelect,
-  icon,
-  trailing,
-  className,
-}: {
+type FloatMenuItemBase = {
   label: string;
   description?: string;
-  chosen?: boolean;
   /** Shown, dimmed and inert: `aria-disabled`, no wash, `onSelect` never called. */
   disabled?: boolean;
   onSelect: () => void;
   /** A 12px leading glyph for action menus, which have no chosen row. */
   icon?: React.ReactNode;
-  /**
-   * A trailing glyph for an action row that has no chosen state at all — a
-   * chevron opening a sub-panel (the film's "Advanced filters…" row).
-   * Mutually exclusive with the chosen check in practice: a row passing this
-   * has nothing to mark as selected, so the right-edge slot renders the
-   * glyph instead of `ChosenCheck`. Folded in from `film-dark-menu.tsx`
-   * (Phase 2A) rather than left as that file's own hand-built row.
-   */
-  trailing?: React.ReactNode;
   className?: string;
-}) {
+};
+
+/**
+ * `chosen` and `trailing` are mutually exclusive, as a type: a row is either
+ * a selectable option (optionally `chosen`, right edge is `ChosenCheck`) or
+ * an action row with a trailing glyph (a chevron opening a sub-panel — the
+ * film's "Advanced filters…" row) with nothing to mark as selected. Folded
+ * in from `film-dark-menu.tsx`'s hand-built row (Phase 2A) rather than left
+ * as that file's own copy.
+ */
+type FloatMenuItemProps = FloatMenuItemBase &
+  (
+    | { chosen?: boolean; trailing?: never }
+    | { trailing: React.ReactNode; chosen?: never }
+  );
+
+export function FloatMenuItem({
+  label,
+  description,
+  chosen,
+  disabled = false,
+  onSelect,
+  icon,
+  trailing,
+  className,
+}: FloatMenuItemProps) {
   const dark = useFloatMenuTone() === "dark";
-  const isAction = icon !== undefined || trailing !== undefined;
+  // A row is an action row — no chosen state, `role="menuitem"` — when it
+  // carries a leading icon, a trailing glyph, OR simply never passed
+  // `chosen` at all (the film wrapper's documented contract: "omit `chosen`
+  // for an action row"). A select row always passes `chosen` explicitly
+  // (even `chosen={false}` for an unselected option), so `chosen ===
+  // undefined` is an unambiguous signal here, not a default being elided.
+  const isAction = icon != null || trailing != null || chosen === undefined;
+  const resolvedChosen = chosen ?? false;
   return (
     <button
       type="button"
       role={isAction ? "menuitem" : "menuitemradio"}
-      aria-checked={isAction ? undefined : chosen}
+      aria-checked={isAction ? undefined : resolvedChosen}
       aria-disabled={disabled || undefined}
       onClick={disabled ? undefined : onSelect}
       className={cn(
@@ -214,10 +227,14 @@ export function FloatMenuItem({
         // light never has a persistent chosen wash (the check alone marks
         // it), so this only ever applies on the dark branch.
         dark
-          ? chosen
+          ? resolvedChosen
             ? "bg-white/[0.08]"
             : "hover:bg-white/[0.08]"
-          : !chosen && "hover:bg-[var(--surface-subtle)]",
+          : !resolvedChosen && "hover:bg-[var(--surface-subtle)]",
+        // A disabled + chosen dark row must not keep the persistent chosen
+        // wash above — disabled rows never look "acted upon". Placed after
+        // that branch so tailwind-merge's last-write-wins picks this one.
+        disabled && "bg-transparent",
         // A disabled row takes no wash on hover OR keyboard focus: the wash is
         // what says "this row acts", and `cn`'s tailwind-merge drops the two
         // `--surface-subtle` classes above in favour of these later ones.
@@ -264,7 +281,7 @@ export function FloatMenuItem({
           {trailing}
         </span>
       ) : (
-        !icon && <ChosenCheck chosen={chosen} className="mt-[2px]" />
+        !icon && <ChosenCheck chosen={resolvedChosen} className="mt-[2px]" />
       )}
     </button>
   );

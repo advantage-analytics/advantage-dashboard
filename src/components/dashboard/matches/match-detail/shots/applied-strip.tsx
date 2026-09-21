@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { FloatMenuTone } from "@/components/ui/float-menu";
 import { useVizState } from "./use-viz-state";
 import { activeFilterEntries, clearedFilters } from "./viz-url";
 import { VIZ_PILL_RADIUS } from "./viz-labels";
@@ -32,7 +33,7 @@ export function AppliedStrip({
   tone = "light",
   readOnly = false,
 }: {
-  tone?: "light" | "dark";
+  tone?: FloatMenuTone;
   readOnly?: boolean;
 } = {}) {
   const { state, setState } = useVizState();
