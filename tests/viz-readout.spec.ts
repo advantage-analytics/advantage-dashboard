@@ -6,10 +6,8 @@ const NAMES = { subject: "Reid" };
 
 function meta(overrides: Partial<VizDotMeta> = {}): VizDotMeta {
   return {
-    pointId: "p1",
     setNumber: 3,
     pointScore: "40-15",
-    gameScore: "5-3",
     wonBySubject: true,
     shotType: "First Serve",
     result: "In",
@@ -184,7 +182,7 @@ const HOLES: Partial<VizDotMeta>[] = [
   {},
   { shotType: null, result: null },
   { shotType: "", result: "" },
-  { pointScore: null, gameScore: null },
+  { pointScore: null },
   { speedMph: null },
   { speedMph: 0 },
   { setNumber: 0, pointScore: null, speedMph: null, shotType: null },

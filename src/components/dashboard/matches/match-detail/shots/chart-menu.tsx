@@ -45,7 +45,11 @@ export function ChartMenu({
     <FloatMenu
       open={open}
       onOpenChange={setOpen}
-      width={272}
+      // Final review #9: the frame draws this menu at 280 in the viewer
+      // (f4b-report P2d) and the shipped light toolbar at 272. Keyed on the
+      // tone rather than a new prop — the two surfaces are the only two
+      // widths there are.
+      width={tone === "dark" ? 280 : 272}
       side={side}
       tone={tone}
       sideOffset={6}

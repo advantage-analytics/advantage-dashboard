@@ -190,6 +190,21 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
   const viewKey = viewIdentityKey(state);
   useEffect(() => {
     const prevKey = focusTrackedKeyRef.current;
+
+    // Final review #1: the fullscreen viewer owns focus while it is up, and
+    // it is a portal on `document.body` — so moving focus to the focused
+    // view's eyebrow here would put it BEHIND the overlay, silently (every
+    // window-level key still works, so nothing looks wrong). A tile's
+    // fullscreen glyph changes `cut`/`viewId` AND sets `fullscreen` in one
+    // update, and parent effects flush after child ones, so this effect runs
+    // right after the viewer's own mount-focus and would undo it. The key is
+    // still tracked, so the NEXT change compares against the right baseline
+    // and exiting the viewer restores focus to the door as usual.
+    if (state.fullscreen === true) {
+      focusTrackedKeyRef.current = viewKey;
+      return;
+    }
+
     const target = focusTargetAfterViewChange(prevKey, viewKey);
 
     if (target === "focused-view") {
@@ -199,7 +214,7 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
     }
 
     focusTrackedKeyRef.current = viewKey;
-  }, [viewKey]);
+  }, [viewKey, state.fullscreen]);
 
   useEffect(() => {
     // Read BEFORE `reconcileVizState` overwrites `intendedRef` below — an

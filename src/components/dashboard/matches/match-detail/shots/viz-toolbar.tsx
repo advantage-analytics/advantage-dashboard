@@ -3,7 +3,6 @@
 import { CutMenu } from "./cut-menu";
 import { ChartMenu } from "./chart-menu";
 import type { SavedViewLite } from "./viz-labels";
-import type { FloatMenuTone } from "@/components/ui/float-menu";
 import { cn } from "@/lib/utils";
 
 /**
@@ -17,6 +16,11 @@ import { cn } from "@/lib/utils";
  *
  * `CUT_LABEL`, `CHART_LABEL`, `VizMenuTrigger` and `SavedViewLite` live in
  * `viz-labels.tsx`, not here — see that file's docstring for why.
+ *
+ * Deliberately has no `tone`/`side`: the fullscreen viewer builds its own
+ * bottom slab out of `CutMenu`/`ChartMenu` directly rather than reusing this
+ * row, so the two props this file briefly forwarded were never passed by
+ * anyone (final review #9, dead code).
  */
 
 export function VizToolbar({
@@ -25,8 +29,6 @@ export function VizToolbar({
   cutMenuTriggerRef,
   filtersSlot,
   stripSlot,
-  tone = "light",
-  side = "bottom",
   className,
 }: {
   savedViews: SavedViewLite[];
@@ -35,10 +37,6 @@ export function VizToolbar({
   cutMenuTriggerRef?: React.Ref<HTMLButtonElement>;
   filtersSlot?: React.ReactNode;
   stripSlot?: React.ReactNode;
-  /** Phase 2A: forwarded to `CutMenu`/`ChartMenu` for the fullscreen
-   * viewer's dark bottom slab. Defaults `"light"`; unchanged there. */
-  tone?: FloatMenuTone;
-  side?: "top" | "bottom";
   /** F5: `viz-focused.tsx` adds `viz-vt-toolbar` — the entrance transition's
    * hook (`globals.css`) for this block staggering in on a wall→focused
    * morph. Merged onto the root, not replacing it. */
@@ -50,10 +48,8 @@ export function VizToolbar({
         savedViews={savedViews}
         onSaveRequest={onSaveRequest}
         triggerRef={cutMenuTriggerRef}
-        tone={tone}
-        side={side}
       />
-      <ChartMenu tone={tone} side={side} />
+      <ChartMenu />
       {stripSlot != null && (
         <>
           <div

@@ -113,16 +113,29 @@ function ShotsTabBody() {
 
   return (
     <>
-      {state.cut === null ? (
-        <VizWall savedViewsBand={savedViewsBand} />
-      ) : (
-        <VizFocused
-          savedViews={meta.savedViews}
-          savedViewsBand={savedViewsBand}
-          workspaceKind={meta.workspaceKind}
-          workspaceName={meta.workspaceName}
-        />
-      )}
+      {/* Final review #2: everything behind the viewer goes `inert` while it
+          is up. The portal is a plain `role="region"` with no focus trap, so
+          without this, Tab past the last zoom button walked the toolbar, the
+          court, the stats card and the whole saved-views grid — all covered,
+          all operable — and a screen reader read the entire document. React
+          19 takes `inert` as a boolean prop; `undefined` (not `false`) is
+          what removes the attribute.
+
+          It MUST be `viewerOpen` and not `state.fullscreen`: the gated value
+          is false during SSR and hydration, so the attribute can never be
+          part of the server HTML and absent from the first client render. */}
+      <div inert={viewerOpen || undefined}>
+        {state.cut === null ? (
+          <VizWall savedViewsBand={savedViewsBand} />
+        ) : (
+          <VizFocused
+            savedViews={meta.savedViews}
+            savedViewsBand={savedViewsBand}
+            workspaceKind={meta.workspaceKind}
+            workspaceName={meta.workspaceName}
+          />
+        )}
+      </div>
       {/* The focused view stays mounted UNDERNEATH the viewer — leaving is a
           state change (the `fullscreen` key dropped), not a remount, so the
           court behind is already exactly where it was.

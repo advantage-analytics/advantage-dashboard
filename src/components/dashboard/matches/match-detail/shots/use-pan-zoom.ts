@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -99,7 +100,14 @@ export function usePanZoom(
 
   /* ── Measure the stage ─────────────────────────────────────────────────── */
 
-  useEffect(() => {
+  // Final review #4: a LAYOUT effect, so the stage is measured and the
+  // initial transform is seeded before the browser paints. In a plain
+  // `useEffect` the viewer painted one frame at z=1 pinned to the top-left
+  // and then jumped to the centred fit — a visible sideways pop on every
+  // open, worse on the contact cuts where the seed zoom is 1.6x. Safe here:
+  // this hook only ever runs in a client-only component (`ssr: false`), so
+  // there is no server render to warn about.
+  useLayoutEffect(() => {
     const el = stageRef.current;
     if (!el) return;
     const measure = () => {
@@ -121,7 +129,7 @@ export function usePanZoom(
   // The brief: "Initial + Fit = viewerInitialTransform(cut, stage); re-fit
   // when the cut changes or the stage resizes." A zero-sized stage (the first
   // render, before layout) would seed a degenerate transform, so it waits.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (stage.w === 0 || stage.h === 0) return;
     setT(viewerInitialTransform(cut, stage));
   }, [cut, stage]);

@@ -28,6 +28,7 @@ import {
 } from "./court-geometry";
 import type { PanZoom, Size } from "./pan-zoom";
 import { buildReadout } from "./viz-readout";
+import { nextMarkIndex } from "./viz-mark-roving";
 import type { Chart, Cut, VizDot, VizFilters } from "./viz-model";
 
 /**
@@ -150,8 +151,10 @@ export function VizFullscreenCourt({
   panning,
   activeId,
   focusedId,
+  rovingId,
   onActivate,
   onDeactivate,
+  onRove,
 }: {
   cut: Cut;
   chart: Chart;
@@ -174,8 +177,11 @@ export function VizFullscreenCourt({
    */
   activeId: string | null;
   focusedId: string | null;
+  /** The marks' single tab stop — see `viz-mark-roving.ts`. */
+  rovingId: string | null;
   onActivate: (id: string, keyboard: boolean) => void;
   onDeactivate: (id: string) => void;
+  onRove: (id: string) => void;
 }) {
   const heat = chart === "heat";
   const showMarks = chart === "scatter";
@@ -297,8 +303,10 @@ export function VizFullscreenCourt({
             subjectName={subjectName}
             activeId={activeId}
             focusedId={focusedId}
+            rovingId={rovingId}
             onActivate={onActivate}
             onDeactivate={onDeactivate}
+            onRove={onRove}
           />
         )}
       </svg>
@@ -314,7 +322,7 @@ export function VizFullscreenCourt({
           </span>
           {readout.lines.map((line, index) => (
             <span
-              key={line}
+              key={index}
               className={
                 index === readout.monoLine
                   ? "mono tabular text-[11px]"
@@ -430,16 +438,22 @@ const MarkLayer = memo(function MarkLayer({
   subjectName,
   activeId,
   focusedId,
+  rovingId,
   onActivate,
   onDeactivate,
+  onRove,
 }: {
   cut: Cut;
   dots: VizDot[];
   subjectName: string;
   activeId: string | null;
   focusedId: string | null;
+  /** Final review #3: the ONE mark that is a tab stop. `null` means "the
+   *  first one" — nobody has moved within the group yet. */
+  rovingId: string | null;
   onActivate: (id: string, keyboard: boolean) => void;
   onDeactivate: (id: string) => void;
+  onRove: (id: string) => void;
 }) {
   const placed = useMemo(
     () =>
@@ -456,15 +470,59 @@ const MarkLayer = memo(function MarkLayer({
     [dots, cut, subjectName],
   );
 
+  // The tab stop: whichever mark was last focused, else the first. A
+  // `rovingId` left over from a previous dot set (a filter edit) no longer
+  // matches anything, so it falls back rather than leaving the group with no
+  // entry point at all.
+  const rovingIndex = Math.max(
+    0,
+    placed.findIndex(({ dot }) => dot.id === rovingId),
+  );
+
+  function handleKeyDown(
+    e: React.KeyboardEvent<SVGGElement>,
+    index: number,
+  ): void {
+    const next = nextMarkIndex(index, placed.length, e.key);
+    if (next === null) {
+      // Still swallow an arrow the group owns but cannot act on (the first
+      // or last mark), so it doesn't fall through to the viewer's window
+      // handler and pan the court out from under the focused mark.
+      if (e.key.startsWith("Arrow") || e.key === "Home" || e.key === "End") {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    const target = placed[next].dot.id;
+    onRove(target);
+    // The tab stop moves with focus, so the DOM node for `target` is the one
+    // to focus — found by its own data attribute inside THIS svg, rather than
+    // a ref array that would have to be rebuilt for every dot on every
+    // filter change.
+    const node = e.currentTarget
+      .closest("svg")
+      ?.querySelector(`[data-viz-mark="${CSS.escape(target)}"]`);
+    if (node instanceof SVGElement || node instanceof HTMLElement) {
+      node.focus();
+    }
+  }
+
   return (
     <>
-      {placed.map(({ dot, x, y, fill, label }) => {
+      {placed.map(({ dot, x, y, fill, label }, index) => {
         const isActive = dot.id === activeId;
         const isFocused = dot.id === focusedId;
         return (
           <g
             key={dot.id}
-            tabIndex={0}
+            data-viz-mark={dot.id}
+            // Final review #3: a roving tabindex — ONE tab stop for the whole
+            // court, not one per mark. On `rallyPosition` that was 150-250
+            // Tab presses before a keyboard user reached the View menu.
+            tabIndex={index === rovingIndex ? 0 : -1}
             role="img"
             aria-label={label}
             className="cursor-pointer outline-none"
@@ -474,6 +532,7 @@ const MarkLayer = memo(function MarkLayer({
               onActivate(dot.id, e.currentTarget.matches(":focus-visible"))
             }
             onBlur={() => onDeactivate(dot.id)}
+            onKeyDown={(e) => handleKeyDown(e, index)}
           >
             {isFocused && (
               // Fix round 1 #10: a keyboard-only ring OUTSIDE the hover halo.

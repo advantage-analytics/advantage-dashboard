@@ -1806,10 +1806,8 @@ test.describe("VizDot.meta — serve cut", () => {
     expect(r.dots).toHaveLength(1);
     const meta = r.dots[0].meta!;
     expect(meta).toBeDefined();
-    expect(meta.pointId).toBe("pt-1");
     expect(meta.setNumber).toBe(2);
     expect(meta.pointScore).toBe("30-15");
-    expect(meta.gameScore).toBe("2-1");
     expect(meta.wonBySubject).toBe(true);
     expect(meta.shotType).toBe("First Serve");
     expect(meta.result).toBe("In");
@@ -1949,10 +1947,8 @@ test.describe("VizDot.meta — return cuts", () => {
       true,
     );
     const meta = r.dots[0].meta!;
-    expect(meta.pointId).toBe("pt-return");
     expect(meta.setNumber).toBe(1);
     expect(meta.pointScore).toBe("0-0");
-    expect(meta.gameScore).toBe("1-0");
     expect(meta.wonBySubject).toBe(true);
     expect(meta.shotType).toBe("Forehand");
     expect(meta.result).toBe("In");
@@ -2026,10 +2022,8 @@ test.describe("VizDot.meta — rallyPosition cut", () => {
     );
     expect(rSubjectHit.dots).toHaveLength(1);
     const meta = rSubjectHit.dots[0].meta!;
-    expect(meta.pointId).toBe("pt-rally");
     expect(meta.setNumber).toBe(3);
     expect(meta.pointScore).toBe("40-30");
-    expect(meta.gameScore).toBe("3-2");
     expect(meta.wonBySubject).toBe(false); // subject=player1, wonByPlayer1=false -> lost
     expect(meta.shotType).toBe("Backhand");
     expect(meta.result).toBe("Winner");

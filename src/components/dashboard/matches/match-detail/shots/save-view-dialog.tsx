@@ -46,6 +46,24 @@ import { cn } from "@/lib/utils";
  * dark uses the P2g wording with curly quotes; the validation timing (blur +
  * submit, never per keystroke) is identical for both and unchanged here.
  */
+/**
+ * The viewer's prefilled name (final review #9): the cut, and the first
+ * active filter when there is one — the same two facts the viewer's summary
+ * pill shows, so the field opens agreeing with the screen behind it. No
+ * filters means the cut label alone; nothing is invented and nothing is
+ * forced (the field stays editable, and an empty field still blocks Save the
+ * way it always did).
+ */
+export function suggestedViewName(cut: Cut, filters: VizFilters): string {
+  const first = activeFilterEntries({
+    cut,
+    chart: "scatter",
+    filters,
+    viewId: null,
+  })[0];
+  return first ? `${CUT_LABEL[cut]} · ${first.label}` : CUT_LABEL[cut];
+}
+
 export function SaveViewDialog({
   open,
   onOpenChange,
@@ -92,14 +110,25 @@ export function SaveViewDialog({
   // `react-hooks/set-state-in-effect` warns about generally — same
   // justification, and same call, as `saved-views-band.tsx`'s identical
   // suppression on its own "external `views` prop lands" effect.
+  //
+  // Final review #9: on the DARK tone (the fullscreen viewer) the name starts
+  // prefilled with a suggestion — the cut plus its first active filter, which
+  // is what the viewer's own summary pill already says, so the field opens
+  // agreeing with what is on screen. It is a plain editable default, not a
+  // forced name. Light is untouched: the shipped toolbar dialog still opens
+  // empty.
   useEffect(() => {
     if (open) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- external source (dialog opened by a click outside this component), not a render-derivable value
-      setName("");
+      setName(dark ? suggestedViewName(cut, filters) : "");
       setShared(false);
       setDuplicate(false);
       setServerError(null);
     }
+    // `cut`/`filters`/`dark` are read only to build that default; they are
+    // deliberately not deps, or editing a filter with the dialog open would
+    // overwrite whatever the user had typed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const n = activeFilterEntries({ cut, chart, filters, viewId: null }).length;

@@ -51,6 +51,51 @@ export function setOutcome(set: ScoreLineSet): "you" | "opp" | "level" {
 }
 
 /**
+ * One row's cells — the SHARED derivation behind both scoreboards that draw a
+ * match's two score rows: this file's rail row and the fullscreen court
+ * viewer's slab row (`shots/viz-fullscreen.tsx`). Final review #10: the
+ * viewer had hand-copied the lost-set dimming, the `isYou ? player1 :
+ * player2` indexing and the tiebreak slot, and this is the one widget where
+ * getting that indexing backwards looks entirely fine on screen while
+ * attributing the score to the wrong player (docs/ui-revamp-guardrails.md
+ * §4). One function, two renderers.
+ *
+ * `sets` must already be you-first — the shape `useMatchSides().sets` hands
+ * over. This function never looks at which id is which; it only applies
+ * `side` to an already-oriented set.
+ *
+ * `lostSet` is what dims a digit. A LEVEL set has no loser, so both rows keep
+ * full ink — which is also the closest thing `ScoreLineSet` can express to
+ * "unfinished", since it carries no such flag (see `setOutcome` above).
+ * `tiebreak` is non-null only on the LOSER's row, because `tiebreakOf`
+ * already returns the loser's points and the digit belongs beside their 6.
+ */
+export interface ScoreboardCell {
+  /** The games digit for THIS row. */
+  digit: number;
+  /** This row lost the set — draw it dimmed. */
+  lostSet: boolean;
+  /** The loser's tiebreak points, on the loser's row only. */
+  tiebreak: number | null;
+}
+
+export function scoreboardCells(
+  sets: ScoreLineSet[],
+  side: "you" | "opp",
+): ScoreboardCell[] {
+  const isYou = side === "you";
+  return sets.map((set) => {
+    const outcome = setOutcome(set);
+    const lostSet = outcome !== "level" && outcome !== side;
+    return {
+      digit: isYou ? set.player1 : set.player2,
+      lostSet,
+      tiebreak: lostSet ? tiebreakOf(set) : null,
+    };
+  });
+}
+
+/**
  * `formatScoreboardStatus` spells the old rail's uppercase eyebrow ("FINAL");
  * this scoreboard sets the same word in sentence case ("Final"). Cased here rather
  * than in `match-utils.ts`, so the shared helper keeps its one spelling.
@@ -161,41 +206,37 @@ function ScoreRow({
             <span className="sr-only">No score</span>
           </span>
         ) : null}
-        {sets.map((set, index) => {
-          const outcome = setOutcome(set);
-          // A level set (unfinished at 3-3, say) has no loser, so both rows
-          // keep ink-900.
-          const lostSet = outcome !== "level" && outcome !== side;
-          // `tiebreakOf` already returns the LOSER's points, and the digit
-          // sits on the loser's row, beside their 6.
-          const tiebreak = lostSet ? tiebreakOf(set) : null;
-
-          return (
-            <span
-              key={index}
-              className={cn(
-                "w-[11px] text-right",
-                lostSet ? "text-[var(--ink-400)]" : "text-[var(--ink-900)]",
-              )}
-            >
-              {isYou ? set.player1 : set.player2}
-              {tiebreak !== null ? (
-                // Zero-width, so the games digit stays flush right in its
-                // 11px slot and every set column lines up across both rows;
-                // the raised digit hangs out past the slot into the gap.
-                <span className="inline-block w-0">
-                  {/* `ScoreLine`'s superscript, and its reading: the digit is
+        {/* `scoreboardCells` owns the indexing and the lost-set rule — the
+            same function the fullscreen viewer's slab row uses. */}
+        {scoreboardCells(sets, side).map(
+          ({ digit, lostSet, tiebreak }, index) => {
+            return (
+              <span
+                key={index}
+                className={cn(
+                  "w-[11px] text-right",
+                  lostSet ? "text-[var(--ink-400)]" : "text-[var(--ink-900)]",
+                )}
+              >
+                {digit}
+                {tiebreak !== null ? (
+                  // Zero-width, so the games digit stays flush right in its
+                  // 11px slot and every set column lines up across both rows;
+                  // the raised digit hangs out past the slot into the gap.
+                  <span className="inline-block w-0">
+                    {/* `ScoreLine`'s superscript, and its reading: the digit is
                       hidden from assistive tech and spoken as a phrase, or
                       "6⁵" reads as "sixty-five". */}
-                  <span aria-hidden="true" style={TIEBREAK_STYLE}>
-                    {tiebreak}
+                    <span aria-hidden="true" style={TIEBREAK_STYLE}>
+                      {tiebreak}
+                    </span>
+                    <span className="sr-only"> tiebreak {tiebreak}</span>
                   </span>
-                  <span className="sr-only"> tiebreak {tiebreak}</span>
-                </span>
-              ) : null}
-            </span>
-          );
-        })}
+                ) : null}
+              </span>
+            );
+          },
+        )}
       </span>
     </div>
   );

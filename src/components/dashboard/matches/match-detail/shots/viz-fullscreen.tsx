@@ -9,7 +9,7 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
-import { setOutcome } from "@/components/dashboard/matches/match-detail/report-scoreboard";
+import { scoreboardCells } from "@/components/dashboard/matches/match-detail/report-scoreboard";
 import { TIEBREAK_STYLE } from "@/components/dashboard/score-line";
 import {
   Tooltip,
@@ -18,7 +18,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatScoreboardStatus } from "@/lib/data/match-utils";
-import { playedSets, tiebreakOf } from "@/lib/ui/score-format";
+import { playedSets } from "@/lib/ui/score-format";
 import { overlayIsOpen } from "@/lib/ui/overlay-is-open";
 import { isTextEntry } from "@/lib/ui/is-text-entry";
 import { cn } from "@/lib/utils";
@@ -31,6 +31,7 @@ import { FiltersPopover } from "./filters-popover";
 import { KEY_PAN_PX, zoomPercentLabel } from "./pan-zoom";
 import { SaveViewDialog } from "./save-view-dialog";
 import { usePanZoom } from "./use-pan-zoom";
+import { isMarkRovingKey } from "./viz-mark-roving";
 import { useVizState } from "./use-viz-state";
 import { useVizView } from "./use-viz-view";
 import { VizFullscreenCourt } from "./viz-fullscreen-court";
@@ -89,6 +90,9 @@ export function VizFullscreen() {
   // the court's `MarkLayer` memo survive a pan frame.
   const [activeMarkId, setActiveMarkId] = useState<string | null>(null);
   const [focusedMarkId, setFocusedMarkId] = useState<string | null>(null);
+  // Final review #3: the marks' single tab stop. `null` = "the first mark" —
+  // nobody has moved within the group yet.
+  const [rovingMarkId, setRovingMarkId] = useState<string | null>(null);
 
   const activateMark = useCallback((id: string, keyboard: boolean) => {
     setActiveMarkId(id);
@@ -97,6 +101,9 @@ export function VizFullscreen() {
   const deactivateMark = useCallback((id: string) => {
     setActiveMarkId((prev) => (prev === id ? null : prev));
     setFocusedMarkId((prev) => (prev === id ? null : prev));
+  }, []);
+  const roveMark = useCallback((id: string) => {
+    setRovingMarkId(id);
   }, []);
   const dropActiveMark = useCallback(() => {
     setActiveMarkId(null);
@@ -137,10 +144,19 @@ export function VizFullscreen() {
       // (it is where `runCourtMorph` lands focus). Never nothing: focus
       // falling back to `<body>` strands a keyboard user at the top of the
       // document.
-      const target =
-        document.querySelector("[data-viz-fullscreen-door]") ??
-        document.getElementById(VIZ_FOCUSED_HEADING_ID);
-      if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+      // Deferred by a microtask: this cleanup runs DURING the commit that
+      // removes the portal, and the same commit is what drops `inert` from
+      // the wrapper around the focused view (`shots-tab.tsx`, final review
+      // #2). `focus()` on a still-inert element is silently a no-op, and the
+      // two mutations have no guaranteed order — so wait for the commit to
+      // finish, by which point the attribute is certainly gone.
+      queueMicrotask(() => {
+        const target =
+          document.querySelector("[data-viz-fullscreen-door]") ??
+          document.getElementById(VIZ_FOCUSED_HEADING_ID);
+        if (target instanceof HTMLElement)
+          target.focus({ preventScroll: true });
+      });
     };
   }, []);
 
@@ -164,6 +180,18 @@ export function VizFullscreen() {
       // A menu or dialog is up: its own keys win, ours stand down.
       if (overlayIsOpen()) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Final review #3: a mark owns the arrows (and Home/End) while it has
+      // focus — they move focus within the mark group, they do not pan the
+      // court out from under it. `MarkLayer` also stops propagation, so this
+      // is the belt to that brace: the guard holds even if the synthetic
+      // event never reaches this listener's own path.
+      if (
+        isMarkRovingKey(e.key) &&
+        e.target instanceof Element &&
+        e.target.closest("[data-viz-mark]") !== null
+      ) {
+        return;
+      }
       switch (e.key) {
         case "Escape":
           e.preventDefault();
@@ -255,8 +283,10 @@ export function VizFullscreen() {
             panning={pz.panning}
             activeId={activeMarkId}
             focusedId={focusedMarkId}
+            rovingId={rovingMarkId}
             onActivate={activateMark}
             onDeactivate={deactivateMark}
+            onRove={roveMark}
           />
 
           {/* Widget states: an honest empty message on the stage, with the
@@ -642,17 +672,20 @@ function ViewerScoreRow({
             <span className="sr-only">No score</span>
           </span>
         )}
-        {sets.map((set, index) => {
-          const outcome = setOutcome(set);
-          const lostSet = outcome !== "level" && outcome !== side;
-          const tiebreak = lostSet ? tiebreakOf(set) : null;
-          return (
+        {/* Final review #10: the digit, the dimming and the tiebreak slot all
+            come from `scoreboardCells` — the SAME function the match
+            report's rail scoreboard uses. This is the one widget where a
+            flipped `player1`/`player2` would look entirely correct on screen
+            while naming the wrong player (guardrails §4), so it is not
+            re-derived here. */}
+        {scoreboardCells(sets, side).map(
+          ({ digit, lostSet, tiebreak }, index) => (
             <span
               key={index}
               className="w-[11px] text-right"
               style={{ color: lostSet ? "rgba(255,255,255,0.42)" : "#FFFFFF" }}
             >
-              {isYou ? set.player1 : set.player2}
+              {digit}
               {tiebreak !== null && (
                 <span className="inline-block w-0">
                   <span aria-hidden="true" style={TIEBREAK_STYLE}>
@@ -662,8 +695,8 @@ function ViewerScoreRow({
                 </span>
               )}
             </span>
-          );
-        })}
+          ),
+        )}
       </span>
     </div>
   );

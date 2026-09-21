@@ -159,6 +159,11 @@ export function ChosenCheck({
  * second line — use it when the label alone would not tell a coach what
  * they are choosing ("Staff"), and leave it off when it would ("Clay").
  *
+ * Omit `chosen` ENTIRELY for an action row: `role="menuitem"`, no
+ * `aria-checked`, and no check gutter. `chosen={false}` is a different
+ * thing — an unselected *option*, which keeps the gutter so the check can
+ * appear later without shifting the text.
+ *
  * `disabled` is for a row the menu shows but cannot act on yet — pair it with
  * a `FloatMenuNote` saying so. The row stays a focusable `<button>` with
  * `aria-disabled` (never the `disabled` attribute), so keyboard and
@@ -172,9 +177,19 @@ type FloatMenuItemBase = {
   /** Shown, dimmed and inert: `aria-disabled`, no wash, `onSelect` never called. */
   disabled?: boolean;
   onSelect: () => void;
-  /** A 12px leading glyph for action menus, which have no chosen row. */
+  /** A 12px leading glyph. Does not by itself make the row an action row —
+   *  see `isAction` below. */
   icon?: React.ReactNode;
   className?: string;
+  /**
+   * Merged onto the DESCRIPTION line only. A narrow escape hatch, added for
+   * one caller: `film/film-dark-menu.tsx` restores the film room's own
+   * pre-existing description ink and label gap, which `className` (which
+   * lands on the button) cannot reach. RULING — the film room was never
+   * asked to be restyled; folding its rows into this component must not
+   * change how it looks. Nothing else should need this.
+   */
+  descriptionClassName?: string;
 };
 
 /**
@@ -200,15 +215,26 @@ export function FloatMenuItem({
   icon,
   trailing,
   className,
+  descriptionClassName,
 }: FloatMenuItemProps) {
   const dark = useFloatMenuTone() === "dark";
+  // `Boolean`, not `!= null`: `icon={cond && <X/>}` with a false condition
+  // used to count as an icon and silently turn a select row into an action
+  // one, plus leave an empty 12px leading slot.
+  const hasIcon = Boolean(icon);
   // A row is an action row — no chosen state, `role="menuitem"` — when it
-  // carries a leading icon, a trailing glyph, OR simply never passed
-  // `chosen` at all (the film wrapper's documented contract: "omit `chosen`
-  // for an action row"). A select row always passes `chosen` explicitly
-  // (even `chosen={false}` for an unselected option), so `chosen ===
-  // undefined` is an unambiguous signal here, not a default being elided.
-  const isAction = icon != null || trailing != null || chosen === undefined;
+  // carries a trailing glyph, or simply never passed `chosen` at all (the
+  // film wrapper's documented contract: "omit `chosen` for an action row").
+  // A select row always passes `chosen` explicitly (even `chosen={false}`
+  // for an unselected option), so `chosen === undefined` is an unambiguous
+  // signal here, not a default being elided.
+  //
+  // A leading ICON no longer forces an action row (final review #8): the
+  // chart menu's Heat row carries a flame glyph AND is selectable, and
+  // suppressing its check meant the one chart row that could not show it was
+  // chosen. An icon says what the row IS; the check says whether it is
+  // picked. They are different edges of the row and different questions.
+  const isAction = trailing != null || chosen === undefined;
   const resolvedChosen = chosen ?? false;
   return (
     <button
@@ -247,7 +273,7 @@ export function FloatMenuItem({
         className,
       )}
     >
-      {icon ? (
+      {hasIcon ? (
         <span className="mt-[3px] w-3 shrink-0 text-[var(--blue)]">{icon}</span>
       ) : null}
       <span className="flex min-w-0 flex-1 flex-col">
@@ -264,6 +290,7 @@ export function FloatMenuItem({
             className={cn(
               "mt-0.5 text-[11px] leading-[1.4]",
               dark ? "text-white/50" : "text-[var(--ink-500)]",
+              descriptionClassName,
             )}
           >
             {description}
@@ -281,39 +308,78 @@ export function FloatMenuItem({
           {trailing}
         </span>
       ) : (
-        !icon && <ChosenCheck chosen={resolvedChosen} className="mt-[2px]" />
+        // The gutter renders for every selectable row (so a check appearing
+        // never shifts the text) and for a plain action row with no leading
+        // glyph, which is how it has always drawn. An icon-only action row
+        // still gets nothing.
+        (!isAction || !hasIcon) && (
+          <ChosenCheck chosen={resolvedChosen} className="mt-[2px]" />
+        )
       )}
     </button>
   );
 }
 
-/** The closing sentence — what this menu deliberately cannot do. */
-export function FloatMenuNote({ children }: { children: React.ReactNode }) {
+/**
+ * The closing sentence — what this menu deliberately cannot do.
+ *
+ * `className`/`dividerClassName` exist for `film/film-dark-menu.tsx` alone,
+ * which restores the film room's own pre-existing note ink, padding and
+ * divider alpha (see `descriptionClassName` above for the ruling).
+ */
+export function FloatMenuNote({
+  children,
+  className,
+  dividerClassName,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  dividerClassName?: string;
+}) {
   const dark = useFloatMenuTone() === "dark";
   if (dark) {
     return (
       <>
-        <FloatMenuDivider />
-        <p className="px-[9px] pt-[6px] pb-[7px] text-[11px] leading-[1.5] text-white/45">
+        <FloatMenuDivider className={dividerClassName} />
+        <p
+          className={cn(
+            "px-[9px] pt-[6px] pb-[7px] text-[11px] leading-[1.5] text-white/45",
+            className,
+          )}
+        >
           {children}
         </p>
       </>
     );
   }
   return (
-    <p className="mx-1 mt-1 border-t border-[var(--border-hairline)] px-1.5 pt-2 pb-1 text-[11px] leading-[1.5] text-[var(--ink-400)]">
+    <p
+      className={cn(
+        "mx-1 mt-1 border-t border-[var(--border-hairline)] px-1.5 pt-2 pb-1 text-[11px] leading-[1.5] text-[var(--ink-400)]",
+        className,
+      )}
+    >
       {children}
     </p>
   );
 }
 
 /** A hairline between groups of items. */
-export function FloatMenuDivider() {
+export function FloatMenuDivider({ className }: { className?: string } = {}) {
   const dark = useFloatMenuTone() === "dark";
   if (dark) {
-    return <div aria-hidden="true" className="my-[5px] h-px bg-white/[0.12]" />;
+    return (
+      <div
+        aria-hidden="true"
+        className={cn("my-[5px] h-px bg-white/[0.12]", className)}
+      />
+    );
   }
-  return <div className="mx-2 my-1 h-px bg-[var(--border-hairline)]" />;
+  return (
+    <div
+      className={cn("mx-2 my-1 h-px bg-[var(--border-hairline)]", className)}
+    />
+  );
 }
 
 /**
@@ -325,17 +391,35 @@ export function FloatMenuDivider() {
  * the exact markup those call sites already used — replacing the inline
  * `<p>` with this component is a no-op on screen.
  */
-export function FloatMenuLabel({ children }: { children: React.ReactNode }) {
+export function FloatMenuLabel({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  /** For `film/film-dark-menu.tsx` only — see `FloatMenuItem`'s
+   *  `descriptionClassName`. */
+  className?: string;
+}) {
   const dark = useFloatMenuTone() === "dark";
   if (dark) {
     return (
-      <p className="px-[9px] pt-[7px] pb-[5px] text-[11px] text-white/50">
+      <p
+        className={cn(
+          "px-[9px] pt-[7px] pb-[5px] text-[11px] text-white/50",
+          className,
+        )}
+      >
         {children}
       </p>
     );
   }
   return (
-    <p className="px-2.5 pt-1 pb-1 text-[11px] text-[var(--ink-400)]">
+    <p
+      className={cn(
+        "px-2.5 pt-1 pb-1 text-[11px] text-[var(--ink-400)]",
+        className,
+      )}
+    >
       {children}
     </p>
   );

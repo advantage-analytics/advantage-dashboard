@@ -100,10 +100,8 @@ export type Outcome = "won" | "lost" | "miss";
  * video alignment does; if a shot row has no speed, this dot has no speed.
  */
 export interface VizDotMeta {
-  pointId: string;
   setNumber: number;
   pointScore: string | null;
-  gameScore: string | null;
   wonBySubject: boolean;
   shotType: string | null;
   result: string | null;
@@ -796,10 +794,8 @@ function pointDotMeta(
 ): VizDotMeta {
   return {
     isAce,
-    pointId: p.id,
     setNumber: p.setNumber,
     pointScore: p.pointScore ?? null,
-    gameScore: p.gameScore ?? null,
     wonBySubject: p.wonByPlayer1 === subjectIsPlayer1,
     shotType: shot?.shotType ?? null,
     result: shot?.result ?? null,
