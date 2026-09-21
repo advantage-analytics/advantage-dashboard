@@ -229,3 +229,15 @@ is the runner's. Newest entries at the bottom.
 1. `delivery-storage-keys.ts` still has its own `"former-member"` literal.
 2. The response is `no-store`, so a few hundred KB re-download each time the room opens; `private, max-age` or an ETag on the job id would avoid it.
 3. The production loader has not run against real storage yet; confirm a missing object answers empty without a warning.
+
+## T21 · Real bounce times in the room: fetch hook, contact-time matching, film-clock conversion — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** New pure `film/film-ball.ts`: `parseBallPathsFile`, `filmBallPaths` (moves contact, bounce and every sample from source-video seconds onto the film clock by an UNCLAMPED subtraction of `clock.offset`, with the reason recorded) and `bounceTimesByShot` (nearest path within 0.15 s, a path claimed by at most one shot, the nearer winning, null bounces ignored). New `film/use-ball-paths.ts` fetches `/api/matches/{id}/ball-paths` once per match while enabled, aborts on unmount, and answers an empty list on every failure with no throw, error state or console error. The room enables it for Advantage Intelligence matches with the court on and feeds the measured bounce time into `pointMarks`; with no match the estimate still applies. The pinned `{ id, start }` signature was kept and the room maps its shot stops at the call site. Node spec pins the offset-30 conversion, the 100.1 / 100.2 boundary, nearer-wins and the malformed-file cases.
+
+**follow-ups:**
+
+1. The hook never retries for the life of the room, so a file that lands after the room opened is not picked up until a remount.
+2. `ballAt` will scan the whole match's strokes per frame; a time-sorted index or binary search belongs in T22.
+3. A formatter hook in this worktree strips `// eslint-disable-next-line` comments from source files on write.

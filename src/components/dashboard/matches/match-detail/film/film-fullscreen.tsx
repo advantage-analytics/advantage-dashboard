@@ -31,6 +31,7 @@ import {
   type BoardAnchor,
   type BoardSize,
 } from "./board-position";
+import { bounceTimesByShot } from "./film-ball";
 import { matchMarks, pointMarks, type CourtView } from "./film-court";
 import {
   FILM_COURT_SIZE,
@@ -86,6 +87,7 @@ import type {
   AttachmentPlaybackProblem,
   AttachmentResumeIntent,
 } from "./use-attachment-playback";
+import { useBallPaths } from "./use-ball-paths";
 
 /**
  * The fullscreen film room (Film Room Fullscreen handoff, F1–F5).
@@ -409,6 +411,29 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   const courtView: CourtView =
     match.sourceProvider === "splitstep" ? "camera" : "you-bottom";
 
+  // Measured bounce times, for the one lineage that has any: the paths are
+  // derived from the vendor's per-frame trajectories, so a match from any other
+  // source has no file to fetch and nothing to gain from asking. With the court
+  // off there is nothing to draw them on. Everything below is silent and
+  // optional — with no file, no match for a shot or no bounce in the vendor's
+  // data, `bounceTime` stays undefined and `estimatedBounceTime` places the
+  // bounce exactly as it does today.
+  const ballPaths = useBallPaths({
+    matchId: match.id,
+    enabled: courtOn && match.sourceProvider === "splitstep",
+    clock: p.clock,
+  });
+  // Both sides are film seconds: `ShotStop.start` already is, and the paths
+  // were converted once on the way out of the hook.
+  const bounceTimes = useMemo(
+    () =>
+      bounceTimesByShot(
+        pointShotStops.map((s) => ({ id: s.shot.id, start: s.start })),
+        ballPaths,
+      ),
+    [pointShotStops, ballPaths],
+  );
+
   // With no point playing, point mode has nothing to draw and says so in
   // words ("Next point" / "Not started") rather than vanishing. Match mode is
   // about the whole cut and not about the playhead, so it keeps its marks
@@ -424,7 +449,12 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     // `ShotStop.start` is already film time, the same clock `currentTime` is
     // on, so a mark's opacity is a pure function of the two (`markOpacity`).
     return pointMarks(
-      pointShotStops.map((s) => ({ shot: s.shot, contactTime: s.start })),
+      pointShotStops.map((s) => ({
+        shot: s.shot,
+        contactTime: s.start,
+        // Absent for a shot the paths do not cover, which is the estimate's cue.
+        bounceTime: bounceTimes.get(s.shot.id),
+      })),
       {
         youIsPlayer1: sides.you.isPlayer1,
         filmTime: currentTime,
@@ -432,6 +462,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
       },
     );
   }, [
+    bounceTimes,
     courtView,
     courtOn,
     courtMode,

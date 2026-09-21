@@ -290,7 +290,7 @@ ready).
 
 ## T21 · Real bounce times in the room: fetch hook, contact-time matching, film-clock conversion
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T17, T20
 - **files:** (guess) film/film-ball.ts (new, pure), film/use-ball-paths.ts (new), film/film-fullscreen.tsx (imports and the court block ~397–460 only), tests/film-ball.spec.ts (new)
