@@ -211,6 +211,10 @@ test.beforeAll(async () => {
             "next/dynamic": resolve(
               "tests/fixtures/next-dynamic-browser-mock.tsx",
             ),
+            // No router in a bare createRoot; `useSearchParams` answers null.
+            "next/navigation": resolve(
+              "tests/fixtures/next-navigation-browser-mock.ts",
+            ),
             // Two `NEXT_PUBLIC_` reads a plain bundle never substitutes.
             [resolve("src/lib/supabase/client.ts")]: resolve(
               "tests/fixtures/supabase-client-browser-mock.ts",
@@ -389,6 +393,12 @@ async function state(page: Page, selector: string) {
 }
 
 /** The point row the list is lighting, if any. */
+/**
+ * Always read through `expect.poll`. `seekTo` waits for the ELEMENT's clock,
+ * but the playing row is React state fed by `timeupdate`, a render behind it —
+ * a one-shot read straight after a seek passes on a fast machine and reads
+ * `null` on a loaded CI runner.
+ */
 async function playingRow(page: Page): Promise<string | null> {
   return page.evaluate(() => {
     const row = document.querySelector('[data-point-id][data-playing="true"]');
@@ -407,7 +417,7 @@ test("a paused viewer is in the same place on the new credential", async ({
   await open(page, matchId);
 
   await seekTo(page, REPORT, 0.3);
-  expect(await playingRow(page)).toBe("b");
+  await expect.poll(() => playingRow(page)).toBe("b");
 
   await release(page, matchId);
   await awaitCredential(page, REPORT, 1);
@@ -416,7 +426,7 @@ test("a paused viewer is in the same place on the new credential", async ({
   expect(after?.paused).toBe(true);
   expect(after?.time).toBeCloseTo(0.3, 1);
   // Same alignment, so the row never moved either.
-  expect(await playingRow(page)).toBe("b");
+  await expect.poll(() => playingRow(page)).toBe("b");
 });
 
 test("a playing viewer keeps playing across the swap", async ({ page }) => {
@@ -456,7 +466,7 @@ test("a correction in another tab moves the playhead AND the selection", async (
 
   // Before the first point's window opens (0.05): nothing is playing yet.
   await seekTo(page, REPORT, 0.02);
-  expect(await playingRow(page)).toBeNull();
+  await expect.poll(() => playingRow(page)).toBeNull();
 
   await release(page, matchId);
   await awaitCredential(page, REPORT, 1);
@@ -472,7 +482,7 @@ test("a correction in another tab moves the playhead AND the selection", async (
     REPORT,
     { timeout: 5000 },
   );
-  expect(await playingRow(page)).toBe("a");
+  await expect.poll(() => playingRow(page)).toBe("a");
 });
 
 test("a replacement lands on a stop rather than on the old second", async ({
@@ -483,7 +493,7 @@ test("a replacement lands on a stop rather than on the old second", async ({
 
   // Inside the third point's window (0.45 on the rendered alignment).
   await seekTo(page, REPORT, 0.46);
-  expect(await playingRow(page)).toBe("c");
+  await expect.poll(() => playingRow(page)).toBe("c");
 
   await release(page, matchId);
   await awaitCredential(page, REPORT, 1);
@@ -498,7 +508,7 @@ test("a replacement lands on a stop rather than on the old second", async ({
     REPORT,
     { timeout: 5000 },
   );
-  expect(await playingRow(page)).toBe("c");
+  await expect.poll(() => playingRow(page)).toBe("c");
 });
 
 /* -------------------------------------------------------------------------
@@ -731,7 +741,7 @@ test("Loop never undoes a jump to another point", async ({ page }) => {
 
   // Inside point a, so Loop adopts it as the point being repeated.
   await seekTo(page, REPORT, 0.25);
-  expect(await playingRow(page)).toBe("a");
+  await expect.poll(() => playingRow(page)).toBe("a");
 
   await page.getByRole("button", { name: "Loop this point — off" }).click();
 
@@ -761,4 +771,62 @@ test("a focused point row keeps the arrow keys", async ({ page }) => {
   // Unmoved. Seeking five seconds would clamp to the clip's two.
   const after = await state(page, REPORT);
   expect(after?.time).toBeCloseTo(0.25, 1);
+});
+
+/* -------------------------------------------------------------------------
+ * Bookmark toggle (T7) — "already in the desired state" counts as landed.
+ * ---------------------------------------------------------------------- */
+
+test("a save that hits the PK conflict (23505) stays saved", async ({
+  page,
+}) => {
+  const matchId = "bookmark-conflict";
+  await open(page, matchId, { bookmarkOutcome: "conflict" });
+
+  // Point b starts unsaved.
+  const button = page.locator(
+    '[data-point-id="b"] button[aria-label="Bookmark this point"]',
+  );
+  await button.click();
+
+  await expect(
+    page.locator('[data-point-id="b"] button[aria-label="Remove bookmark"]'),
+  ).toBeVisible();
+});
+
+test("an unsave that matches zero rows stays unsaved", async ({ page }) => {
+  const matchId = "bookmark-zero-rows";
+  await open(page, matchId);
+
+  // Point a starts saved.
+  const button = page.locator(
+    '[data-point-id="a"] button[aria-label="Remove bookmark"]',
+  );
+  await button.click();
+
+  await expect(
+    page.locator(
+      '[data-point-id="a"] button[aria-label="Bookmark this point"]',
+    ),
+  ).toBeVisible();
+});
+
+test("a save refused for a reason other than 23505 reverts", async ({
+  page,
+}) => {
+  const matchId = "bookmark-refused";
+  await open(page, matchId, { bookmarkOutcome: "refused" });
+
+  // Point b starts unsaved.
+  const button = page.locator(
+    '[data-point-id="b"] button[aria-label="Bookmark this point"]',
+  );
+  await button.click();
+
+  // The RLS refusal is not `23505`, so the optimistic save reverts.
+  await expect(
+    page.locator(
+      '[data-point-id="b"] button[aria-label="Bookmark this point"]',
+    ),
+  ).toBeVisible();
 });

@@ -11,6 +11,7 @@ import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { BandSettings } from "@/lib/data/viz-bands";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
 import type { DistanceUnit } from "@/lib/format/distance";
+import { FilmHeadProvider } from "@/components/dashboard/matches/match-detail/film-head-context";
 
 /**
  * The match report's one context: state, actions and meta (settled Statistics
@@ -206,5 +207,11 @@ export function MatchReportProvider({
     [view, insight, actions, meta],
   );
 
-  return <MatchReportContext value={value}>{children}</MatchReportContext>;
+  // The film head rides alongside, in its own context: it moves several times
+  // a second and only the rail scoreboard reads it (`film-head-context.tsx`).
+  return (
+    <MatchReportContext value={value}>
+      <FilmHeadProvider>{children}</FilmHeadProvider>
+    </MatchReportContext>
+  );
 }

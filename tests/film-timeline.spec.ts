@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   activeStopAt,
-  breakSegments,
+  setSegments,
   deadTimeJump,
   filmClock,
   filmStops,
@@ -327,8 +327,30 @@ test.describe("filmClock", () => {
   });
 });
 
-test.describe("breakSegments", () => {
-  test("splits where a game was broken and tiles the whole duration", () => {
+test.describe("setSegments", () => {
+  test("splits at each new set's first serve and tiles the whole duration", () => {
+    const stops = filmStops(
+      [
+        pt({ id: "1", videoTime: 20, setNumber: 1, gameNumber: 1 }),
+        pt({ id: "2", videoTime: 40, setNumber: 1, gameNumber: 2 }),
+        pt({ id: "3", videoTime: 60, setNumber: 2, gameNumber: 1 }),
+        pt({ id: "4", videoTime: 80, setNumber: 2, gameNumber: 2 }),
+        pt({ id: "5", videoTime: 100, setNumber: 3, gameNumber: 1 }),
+      ],
+      LEGACY_ZERO,
+    );
+    const segments = setSegments(stops, 200);
+    expect(segments).toHaveLength(3);
+    expect(segments[0].start).toBe(0);
+    expect(segments[1].start).toBe(stops[2].serve);
+    expect(segments[2].start).toBe(stops[4].serve);
+    expect(segments[2].end).toBe(200);
+    segments.slice(1).forEach((segment, i) => {
+      expect(segment.start).toBe(segments[i].end);
+    });
+  });
+
+  test("a break of serve inside a set is not a cut", () => {
     const stops = filmStops(
       [
         pt({
@@ -336,47 +358,17 @@ test.describe("breakSegments", () => {
           videoTime: 20,
           gameNumber: 1,
           serverIsPlayer1: true,
-          wonByPlayer1: true,
-        }),
-        pt({
-          id: "2",
-          videoTime: 40,
-          gameNumber: 1,
-          serverIsPlayer1: true,
-          wonByPlayer1: true,
-        }),
-        pt({
-          id: "3",
-          videoTime: 60,
-          gameNumber: 2,
-          serverIsPlayer1: false,
           wonByPlayer1: false,
         }),
-        pt({
-          id: "4",
-          videoTime: 80,
-          gameNumber: 2,
-          serverIsPlayer1: false,
-          wonByPlayer1: true,
-        }),
-        pt({
-          id: "5",
-          videoTime: 100,
-          gameNumber: 3,
-          serverIsPlayer1: true,
-          wonByPlayer1: true,
-        }),
+        pt({ id: "2", videoTime: 60, gameNumber: 2, serverIsPlayer1: false }),
       ],
       LEGACY_ZERO,
     );
-    expect(breakSegments(stops, 200)).toEqual([
-      { start: 0, end: 100 },
-      { start: 100, end: 200 },
-    ]);
+    expect(setSegments(stops, 90)).toEqual([{ start: 0, end: 90 }]);
   });
 
-  test("no breaks, no points or no duration", () => {
-    expect(breakSegments([], 90)).toEqual([{ start: 0, end: 90 }]);
-    expect(breakSegments([], 0)).toEqual([]);
+  test("no points or no duration", () => {
+    expect(setSegments([], 90)).toEqual([{ start: 0, end: 90 }]);
+    expect(setSegments([], 0)).toEqual([]);
   });
 });

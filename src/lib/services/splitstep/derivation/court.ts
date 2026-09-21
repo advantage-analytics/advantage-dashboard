@@ -170,20 +170,33 @@ export function serveZone(
 }
 
 /**
- * Direction bucket for a non-serve, relative to the serve that opened the point.
+ * Direction bucket for a non-serve, from where it was struck to where it landed.
  *
- * Mirrors how `calculate_match_stats` classifies returns: a landing within 1.0 m
- * of the centre line is Middle regardless of direction; otherwise the sign of
- * the landing x against the serve's decides crosscourt from down-the-line.
+ * A landing within 1.0 m of the centre line is Middle regardless of direction,
+ * as `calculate_match_stats` reads it. Otherwise the ball is crosscourt when it
+ * crosses the centre line — hitter and bounce on opposite sides of x = 0 — and
+ * down the line when it stays on the hitter's side. Inside-out and inside-in
+ * are the same two answers struck from the backhand corner, so they need no
+ * bucket of their own.
+ *
+ * Both x values are metres about the centre line in the one fixed frame
+ * (`metersToCourtFrame`), which does not flip with the hitter's end, so the
+ * rule reads the same for the near and the far player. It used to compare the
+ * landing against the SERVE's landing instead, which is only right for the
+ * return: from the third shot on, the far player's crosscourt and
+ * down-the-line came out swapped about as often as not.
+ *
+ * Returns null when the hitter stood on the centre line or either position is
+ * missing — "unmeasured", never a guess.
  */
 export function directionZone(
   landingX: number | null,
-  serveLandingX: number | null,
+  contactX: number | null,
 ): "Crosscourt" | "Middle" | "Down the Line" | null {
   if (landingX === null) return null;
   if (Math.abs(landingX) <= 1.0) return "Middle";
-  if (serveLandingX === null) return null;
-  return Math.sign(serveLandingX) !== Math.sign(landingX)
+  if (contactX === null || contactX === 0) return null;
+  return Math.sign(contactX) !== Math.sign(landingX)
     ? "Crosscourt"
     : "Down the Line";
 }

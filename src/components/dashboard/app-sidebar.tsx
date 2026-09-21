@@ -161,7 +161,7 @@ function ViewerFooter({
         href={href}
         aria-label={viewer.name}
         aria-current={isActive ? "page" : undefined}
-        className="flex min-w-0 flex-1 items-center rounded-[8px] transition-opacity duration-150 hover:opacity-80 focus-visible:outline-none"
+        className="flex h-10 min-w-0 flex-1 items-center rounded-[8px] transition-colors duration-200 ease-[var(--ease-primary)] hover:bg-[var(--surface-subtle)] focus-visible:outline-none"
       >
         <span className="flex size-10 shrink-0 items-center justify-center">
           <PersonAvatar

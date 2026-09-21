@@ -67,4 +67,16 @@ test.describe("trayDetail counts invitations and in-flight work", () => {
   test('a failure alone is not "nothing in flight"', () => {
     expect(trayDetail(0, 0, 0, 2)).toBe("2 failed");
   });
+
+  // Joins are news for staff, not work: they trail even the other
+  // workspaces, and a tray holding only them still names them.
+  test("joins trail everything, including other workspaces", () => {
+    expect(trayDetail(1, 1, 1, 0, 2)).toBe(
+      "1 invitation · 1 in flight · 1 elsewhere · 2 joined",
+    );
+  });
+
+  test("joins alone are counted", () => {
+    expect(trayDetail(0, 0, 0, 0, 1)).toBe("1 joined");
+  });
 });

@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
-import { Activity, ChevronRight, CircleX } from "lucide-react";
+import { Activity, ChevronRight, CircleX, Users } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -33,11 +33,13 @@ import type {
   ActivityFeed,
   ActivityItem,
   ElsewhereWork,
+  MemberJoin,
 } from "@/lib/data/activity-server";
 // Type-only, and it has to stay that way: `pending-invites-server.ts` builds a
 // Supabase server client. This file is `"use client"`, so a value import would
 // drag the server module into the browser bundle.
 import type { PendingInvite } from "@/lib/data/pending-invites-server";
+import { PROGRAM_ROLE_LABEL } from "@/lib/workspace/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -51,9 +53,9 @@ import { cn } from "@/lib/utils";
  *
  * ── The leading column carries state, not air ──────────────────────────────
  * 14px, always present, so every row's text starts on the same x. A blue dot
- * on a row that is moving or waiting; the loss-red circle-x on a failure.
- * Nothing else renders as a row here any more, so nothing else needs an
- * empty one.
+ * on a row that is moving or waiting; the loss-red circle-x on a failure;
+ * the Roster's ink-400 `Users` on a staff-only "joined the team" row, which
+ * is news rather than a task. Nothing renders without one.
  *
  * ── Actions are always visible ─────────────────────────────────────────────
  * A popover cannot be hovered on touch, and the rows with an action are the
@@ -185,8 +187,19 @@ function FailedRow({ item }: { item: ActivityItem }) {
  * changes nothing would be teaching people to ignore buttons. Details opens
  * the page, which also says when the invitation expires; this row does not,
  * because a countdown in a 360px popover is pressure without a remedy.
+ *
+ * `approved` is the same invitation answering the viewer's own join request,
+ * and says so: "your request was approved" is news a player asked for, and
+ * "Invitation to" over it read like a coach reaching out cold. Same row, same
+ * actions — only the sentence changes, so it is one notice rather than two.
  */
-function InviteRow({ invite }: { invite: PendingInvite }) {
+function InviteRow({
+  invite,
+  approved,
+}: {
+  invite: PendingInvite;
+  approved: boolean;
+}) {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -219,7 +232,16 @@ function InviteRow({ invite }: { invite: PendingInvite }) {
       <Lead>{DOT}</Lead>
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="min-w-0 text-[12px] [text-wrap:pretty] text-[var(--ink-900)]">
-          Invitation to <b className="font-medium">{invite.programName}</b>
+          {approved ? (
+            <>
+              Your request to join{" "}
+              <b className="font-medium">{invite.programName}</b> was approved
+            </>
+          ) : (
+            <>
+              Invitation to <b className="font-medium">{invite.programName}</b>
+            </>
+          )}
         </span>
         <span className="mt-[3px] text-[11px] text-[var(--ink-500)]">
           Join {inviteSubtitle(invite)}
@@ -281,6 +303,46 @@ function InviteRow({ invite }: { invite: PendingInvite }) {
 }
 
 /**
+ * Someone who joined the active program — staff see this, nobody else.
+ *
+ * News, not a task: the leading glyph is the Roster's own `Users` in ink-400
+ * rather than the blue dot, and these rows never light the trigger. The row
+ * opens the roster, where the new member now is.
+ */
+function JoinRow({ join, onOpen }: { join: MemberJoin; onOpen: () => void }) {
+  const role = join.role ? PROGRAM_ROLE_LABEL[join.role] : null;
+  const detail = [role, join.viaRequest ? "from a join request" : null]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <Link
+      href="/dashboard/team/roster"
+      onClick={onOpen}
+      className={cn(ROW_CLASS, ROW_INTERACTIVE_CLASS)}
+    >
+      <Lead>
+        <Users
+          className="mt-px size-[14px] text-[var(--ink-400)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+      </Lead>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="min-w-0 text-[12px] [text-wrap:pretty] text-[var(--ink-900)]">
+          <b className="font-medium">{join.name}</b> joined the team
+        </span>
+        {detail && (
+          <span className="mt-[3px] text-[11px] text-[var(--ink-500)]">
+            {detail}
+          </span>
+        )}
+      </span>
+    </Link>
+  );
+}
+
+/**
  * The one row that reaches past the active workspace.
  *
  * A hollow ring, not a dot: something is moving, but not here. Clicking it
@@ -327,11 +389,17 @@ function ElsewhereRow({ work }: { work: ElsewhereWork }) {
 export function ActivityTray({
   feed,
   invites,
+  approvedInviteIds,
   elsewhere,
+  joins,
 }: {
   feed: ActivityFeed;
   invites: PendingInvite[];
+  /** Invitations that answered the viewer's own join request. */
+  approvedInviteIds: string[];
   elsewhere: ElsewhereWork[];
+  /** Recent joins to the active program — empty unless the viewer is staff. */
+  joins: MemberJoin[];
 }) {
   const { viewer } = useWorkspace();
   const [isOpen, setIsOpen] = useState(false);
@@ -393,6 +461,11 @@ export function ActivityTray({
     inFlight.length,
     elsewhereCount,
     failed.length,
+    joins.length,
+  );
+  const approved = useMemo(
+    () => new Set(approvedInviteIds),
+    [approvedInviteIds],
   );
 
   return (
@@ -458,16 +531,32 @@ export function ActivityTray({
         </div>
 
         <div className="flex max-h-[420px] flex-col overflow-y-auto p-2">
-          {unread > 0 ? (
+          {unread > 0 || joins.length > 0 ? (
             <>
               {invites.map((invite) => (
-                <InviteRow key={invite.id} invite={invite} />
+                <InviteRow
+                  key={invite.id}
+                  invite={invite}
+                  approved={approved.has(invite.id)}
+                />
               ))}
               {inFlight.map((item) => (
                 <InFlightRow key={item.matchId} item={item} />
               ))}
               {failed.map((item) => (
                 <FailedRow key={item.matchId} item={item} />
+              ))}
+              {/* News after anything waiting on the reader, behind a hairline
+                  when there is something above it to separate from. */}
+              {joins.length > 0 && unread > 0 && (
+                <div className="mx-2.5 my-1.5 h-px bg-[var(--border-hairline)]" />
+              )}
+              {joins.map((join) => (
+                <JoinRow
+                  key={`${join.userId}-${join.at}`}
+                  join={join}
+                  onOpen={() => setIsOpen(false)}
+                />
               ))}
             </>
           ) : (

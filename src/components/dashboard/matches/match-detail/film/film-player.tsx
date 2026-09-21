@@ -32,11 +32,12 @@ import { cn } from "@/lib/utils";
 import { useFilmClockVars } from "./film-clock";
 import { RepeatOff } from "./film-glyphs";
 import type { Rect } from "./film-motion";
+import { FILM_REFUSAL_COPY } from "./film-refusal-copy";
 import { FilmTrack } from "./film-track";
 import {
   REACHED_EPSILON_SECONDS,
   activeStopAt,
-  breakSegments,
+  setSegments,
   deadTimeJump,
   nextStop,
   prevStop,
@@ -53,7 +54,7 @@ import type {
  *
  * The control bar is the fullscreen room's (`film-transport.tsx`) minus what
  * only makes sense over a screenful — the title, the point position, exit:
- * the break-of-serve track, then the control row — play, previous and next
+ * the set-by-set track, then the control row — play, previous and next
  * point, the clock — and on the right Save point (filled once saved), skip
  * dead time, speed, loop, sound and fullscreen, in the room's order. The
  * same glyphs at the tab's scale: 13px on a 32px row 14px apart, where the
@@ -159,7 +160,7 @@ interface FilmPlayerProps {
    * on the film clock, so the buttons walk what the list is showing.
    */
   stops: FilmStop[];
-  /** Every timed point, for the break-of-serve track, loop and dead time. */
+  /** Every timed point, for the set-by-set track, loop and dead time. */
   allStops: FilmStop[];
   /** Whether the playing point is bookmarked; null when no point is playing. */
   saved: boolean | null;
@@ -195,7 +196,7 @@ const PROBLEM_TITLES: Record<AttachmentPlaybackProblem["reason"], string> = {
   removed: "This video is no longer attached",
   denied: "You can no longer watch this video",
   unreachable: "The video could not be reached",
-  unplayable: "The film stopped loading",
+  unplayable: FILM_REFUSAL_COPY.loadFailure.heading,
 };
 
 const GLYPH =
@@ -309,7 +310,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     );
 
     const segments = useMemo(
-      () => breakSegments(allStops, duration),
+      () => setSegments(allStops, duration),
       [allStops, duration],
     );
 
@@ -383,6 +384,12 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       // where it should be, and seeking it would move a viewer who has not
       // asked for anything.
       if (generation > 0) land();
+      // Paint the first frame. With `preload="metadata"` the element knows its
+      // size but has decoded nothing, so the frame sits black until something
+      // seeks it; a hair past zero makes the browser fetch and draw one frame
+      // (the wizard's trim step does the same). Only at zero — a landing or a
+      // deep-linked seek has already put a frame on screen.
+      else if (el.currentTime === 0) el.currentTime = 0.001;
       syncClock();
     }, [generation, land, syncClock]);
 
@@ -558,7 +565,9 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
             className="text-body-sm max-w-[380px] [text-wrap:pretty]"
             style={{ color: "var(--ink-600)" }}
           >
-            {problem.message}
+            {problem.reason === "unplayable"
+              ? FILM_REFUSAL_COPY.loadFailure.body
+              : problem.message}
           </span>
           {problem.canRetry && (
             <button
@@ -566,7 +575,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
               onClick={onRetry}
               className={advButton("primary", "md")}
             >
-              Try again
+              {FILM_REFUSAL_COPY.buttons.retry}
             </button>
           )}
         </div>

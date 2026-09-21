@@ -2,18 +2,21 @@
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
+import { useFilmHead } from "@/components/dashboard/matches/match-detail/film-head-context";
+import { boardAt } from "@/components/dashboard/matches/match-detail/film/film-score";
+import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
-  useMatchSides,
-  type MatchSide,
-} from "@/components/dashboard/matches/match-detail/use-match-sides";
-import { TIEBREAK_STYLE } from "@/components/dashboard/score-line";
+  RailScoreboard,
+  type RailScoreboardPlayer,
+  type RailScoreboardProps,
+} from "@/components/dashboard/matches/match-detail/rail-scoreboard";
+import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { formatScoreboardStatus } from "@/lib/data/match-utils";
 import {
   playedSets,
   tiebreakOf,
   type ScoreLineSet,
 } from "@/lib/ui/score-format";
-import { cn } from "@/lib/utils";
 
 /**
  * Which side a set favours, for the rail scoreboard's ink weight (F8/F1): the
@@ -104,140 +107,125 @@ function sentenceCase(word: string): string {
   return word.charAt(0) + word.slice(1).toLowerCase();
 }
 
-/**
- * The rail scoreboard (design 04 F1's rail, which supersedes F8's bordered
- * card): the match status and its clock over two score rows, the viewer's
- * first.
- *
- * Which row is "you", and which digit belongs to whom, comes from
- * `useMatchSides()` and nothing else (guardrails §4): the names from
- * `sides.you`/`sides.opp`, the digits from `sides.sets`, which are already
- * you-first with the tiebreak slots swapped together with the games. Nothing
- * here reads `match.score` or `player1`/`player2`.
- *
- * Nothing to load and nothing to wait on — the match row is already in
- * `MatchDataProvider` — so the only empty cases are partial data, and each
- * omits rather than invents: no duration → no clock; no played sets → the two
- * names, each beside a dash, never a 0.
- */
-export function MatchReportScoreboard() {
-  const { match } = useMatchData();
-  const sides = useMatchSides();
-
-  const status = sentenceCase(formatScoreboardStatus(match.matchContext));
-  const duration =
-    typeof match.durationSec === "number" && match.durationSec > 0
-      ? formatClock(match.durationSec, { alwaysShowHours: true })
-      : null;
-  // Display-only trim of the phantom trailing 0-0 sets production rows carry
-  // (`playedSets`' doc). Still `sides.sets`, still you-first.
-  const sets = playedSets(sides.sets);
-
-  return (
-    // F1 (settled, 2026-09-16): no card of its own. The scoreboard is the
-    // rail's head, set off from the view switcher by a hairline rule that
-    // stops 12px short of each rail edge.
-    <div className="px-3">
-      <div
-        className="flex flex-col gap-[14px] border-b border-[var(--border-hairline)]"
-        style={{ padding: "18px 13px 20px" }}
-      >
-        <div className="flex items-baseline gap-2">
-          {/* `.text-micro` already paints ink-500, the frame's colour, so no
-              inline override (the class is unlayered and would beat a
-              colour utility anyway). */}
-          <span className="text-micro">{status}</span>
-          <div className="flex-1" />
-          {duration ? (
-            <span className="mono tabular text-[10px] text-[var(--ink-400)]">
-              {duration}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="flex flex-col gap-[11px]">
-          <ScoreRow side="you" player={sides.you} sets={sets} />
-          <ScoreRow side="opp" player={sides.opp} sets={sets} />
-        </div>
-      </div>
-    </div>
-  );
+function surname(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return parts[parts.length - 1] ?? name;
 }
 
-function ScoreRow({
-  side,
-  player,
-  sets,
-}: {
-  side: "you" | "opp";
-  player: MatchSide;
-  /** You-first, from `useMatchSides().sets`. */
-  sets: ScoreLineSet[];
-}) {
-  const isYou = side === "you";
+/**
+ * The rail scoreboard, connected (H1 · B2): decides the state and hands
+ * `RailScoreboard` its rows.
+ *
+ * Which row is on top, and which digit belongs to whom, comes from
+ * `useMatchSides()` and nothing else (guardrails §4): "you" first — the
+ * viewer's own seat, or on a team match the roster player's — with digits
+ * from `sides.sets`, already you-first with the tiebreak slots swapped
+ * together with the games. On the Video tab the live board comes from
+ * `boardAt()`, which orients through the same `youIsPlayer1`. Nothing here
+ * reads `match.score` or `player1`/`player2`.
+ *
+ *   live      Video view, a point under the film head
+ *   untagged  no played sets on the match row
+ *   final     everything else — the match as it ended
+ */
+export function MatchReportScoreboard() {
+  const { match, points } = useMatchData();
+  const sides = useMatchSides();
+  const { state } = useMatchReport();
+  const head = useFilmHead();
 
-  return (
-    <div className="flex min-w-0 items-center gap-[7px]">
-      {/* The frame never wraps a name; a name too long for the 300px rail
-          ends in an ellipsis instead of pushing the digits out of the rail. */}
-      <span
-        className={cn(
-          "min-w-0 overflow-hidden text-[13px] text-ellipsis whitespace-nowrap",
-          isYou ? "font-medium text-[var(--ink-900)]" : "text-[var(--ink-600)]",
-        )}
-      >
-        {player.name}
-      </span>
-      {isYou ? (
-        <span
-          aria-hidden="true"
-          className="size-1.5 shrink-0 rounded-[var(--radius-pill)] bg-[var(--blue)]"
-        />
-      ) : null}
-      <div className="flex-1" />
+  const youId = "you";
+  const oppId = "opp";
+  const format = [match.matchType, match.courtType?.toLowerCase()]
+    .filter(Boolean)
+    .join(" · ");
 
-      <span className="mono tabular inline-flex shrink-0 items-center gap-2 text-[13px] whitespace-nowrap">
-        {/* No played sets (a row stored all 0-0): the score is unmeasured,
-            so one dash where the digits go — never a 0 that reads as a
-            result. */}
-        {sets.length === 0 ? (
-          <span className="w-[11px] text-right text-[var(--ink-400)]">
-            <span aria-hidden="true">—</span>
-            <span className="sr-only">No score</span>
-          </span>
-        ) : null}
-        {/* `scoreboardCells` owns the indexing and the lost-set rule — the
-            same function the fullscreen viewer's slab row uses. */}
-        {scoreboardCells(sets, side).map(
-          ({ digit, lostSet, tiebreak }, index) => {
-            return (
-              <span
-                key={index}
-                className={cn(
-                  "w-[11px] text-right",
-                  lostSet ? "text-[var(--ink-400)]" : "text-[var(--ink-900)]",
-                )}
-              >
-                {digit}
-                {tiebreak !== null ? (
-                  // Zero-width, so the games digit stays flush right in its
-                  // 11px slot and every set column lines up across both rows;
-                  // the raised digit hangs out past the slot into the gap.
-                  <span className="inline-block w-0">
-                    {/* `ScoreLine`'s superscript, and its reading: the digit is
-                      hidden from assistive tech and spoken as a phrase, or
-                      "6⁵" reads as "sixty-five". */}
-                    <span aria-hidden="true" style={TIEBREAK_STYLE}>
-                      {tiebreak}
-                    </span>
-                    <span className="sr-only"> tiebreak {tiebreak}</span>
-                  </span>
-                ) : null}
-              </span>
-            );
-          },
-        )}
-      </span>
-    </div>
-  );
+  let props: RailScoreboardProps;
+
+  if (state.view === "film" && head) {
+    const board = boardAt(
+      head.point,
+      {
+        youIsPlayer1: sides.you.isPlayer1,
+        youName: sides.you.name,
+        oppName: sides.opp.name,
+        sets: sides.sets,
+      },
+      head.columns,
+    );
+    const [you, opp] = board.rows;
+    const server = you.serving ? sides.you.name : sides.opp.name;
+    props = {
+      status: "live",
+      label: "Playing",
+      headTime: formatClock(head.time),
+      caption: `Set ${head.point.setNumber} · game ${head.point.gameNumber} · ${surname(server)} serving`,
+      players: [
+        {
+          id: youId,
+          name: sides.you.name,
+          sets: you.sets,
+          points: you.game,
+          serving: you.serving,
+        },
+        {
+          id: oppId,
+          name: sides.opp.name,
+          sets: opp.sets,
+          points: opp.game,
+          serving: opp.serving,
+        },
+      ],
+    };
+  } else {
+    // Display-only trim of the phantom trailing 0-0 sets production rows
+    // carry (`playedSets`' doc). Still `sides.sets`, still you-first.
+    const sets = playedSets(sides.sets);
+    const status = sentenceCase(formatScoreboardStatus(match.matchContext));
+    const duration =
+      typeof match.durationSec === "number" && match.durationSec > 0
+        ? formatClock(match.durationSec, { alwaysShowHours: true })
+        : null;
+
+    const row = (side: "you" | "opp"): RailScoreboardPlayer => {
+      const isYou = side === "you";
+      const lostSets = sets.map((set) => {
+        const outcome = setOutcome(set);
+        return outcome !== "level" && outcome !== side;
+      });
+      return {
+        id: isYou ? youId : oppId,
+        name: isYou ? sides.you.name : sides.opp.name,
+        sets: sets.map((set) => (isYou ? set.player1 : set.player2)),
+        // `tiebreakOf` returns the LOSER's points; only drawn on a lost set.
+        tiebreaks: sets.map((set) => tiebreakOf(set)),
+        lostSets,
+        won: sets.length > 0 && (isYou ? match.won : !match.won),
+      };
+    };
+
+    if (sets.length === 0) {
+      props = {
+        status: "untagged",
+        label: "Not scored yet",
+        caption: format || "No score entered",
+        players: [row("you"), row("opp")],
+      };
+    } else {
+      const tagged =
+        points.length > 0
+          ? `${points.length} point${points.length === 1 ? "" : "s"} tagged`
+          : null;
+      const lead = status === "Final" ? "Match complete" : status;
+      props = {
+        status: "final",
+        label: status,
+        duration,
+        caption: [lead, tagged ?? format].filter(Boolean).join(" · "),
+        players: [row("you"), row("opp")],
+      };
+    }
+  }
+
+  return <RailScoreboard {...props} />;
 }

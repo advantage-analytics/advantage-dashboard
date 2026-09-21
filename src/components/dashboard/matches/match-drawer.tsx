@@ -265,13 +265,21 @@ export function MatchDrawer({
                         className="brightness-0 invert"
                       />
                     </span>
+                  ) : provider.id === "swing-vision" ? (
+                    // Unoptimized: the optimizer's 16/32px q75 rendition of
+                    // this 200px app icon reads blurry; let the browser
+                    // downsample the source at the screen's own density.
+                    <Image
+                      src="/providers/swingvision-icon.png"
+                      alt=""
+                      width={16}
+                      height={16}
+                      unoptimized
+                      className="size-4 rounded-[3px] object-cover"
+                    />
                   ) : (
                     <Image
-                      src={
-                        provider.id === "swing-vision"
-                          ? "/providers/swingvision-icon.png"
-                          : provider.logo
-                      }
+                      src={provider.logo}
                       alt=""
                       width={16}
                       height={16}

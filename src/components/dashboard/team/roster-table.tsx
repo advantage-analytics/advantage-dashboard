@@ -514,7 +514,13 @@ function MemberRow({
       {lifted && <SpotBadge spot={spot} />}
       <SpotCell spot={spot} draggable={inLineupMode} lifted={lifted} />
 
-      <span className={cn(COL.player, "flex min-w-0 items-center gap-2.5")}>
+      {/* A floor of the header's 230px rather than a fixed width: the name
+          now shares the cell with a "Coach-managed" pill, and at a fixed 230
+          the pill ate the name ("Peyton Cap…") with half the row empty beside
+          it. The slack after this cell absorbs the growth, so the right-packed
+          columns stay under their headers; when the drawer squeezes the table
+          the cell shrinks back to the floor and the name truncates as before. */}
+      <span className="flex max-w-[420px] min-w-[230px] shrink items-center gap-2.5">
         <PlayerMark
           name={member.name}
           viewer={isViewer ? viewer : null}
@@ -541,6 +547,14 @@ function MemberRow({
             </Link>
           )}
           {isViewer && <YouPill className="shrink-0" />}
+          {/* Back after the Tb4 distillation dropped it: which rows have no
+              login decides who can be invited to claim and whose video only
+              staff can send, and a coach scans for it. Staff only — to a
+              teammate it says nothing they can act on. Grey, because `You`
+              and "New" are the only identity pills and neither is this. */}
+          {canManage && member.managedBy === "coach" && (
+            <span className={cn(SUBTLE_PILL, "shrink-0")}>Coach-managed</span>
+          )}
         </span>
       </span>
 

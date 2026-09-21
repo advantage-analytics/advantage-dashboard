@@ -9,6 +9,7 @@ import {
   type MatchKpiHistory,
 } from "@/lib/data/match-stats-server";
 import { getMyPlayerIds, isMe } from "@/lib/data/player-identity-server";
+import { youSeat } from "@/lib/data/viewer-side";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
 import { scoreWinner } from "@/lib/data/match-utils";
 import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
@@ -105,24 +106,42 @@ type PlayerProfile = { hand: string | null; backhand: string | null };
  * claimed it carries the PROFILE's id, and a login-only comparison read all of
  * those as somebody else's.
  *
- * It is the two-state test the page has always rendered from — seat one is
- * the viewer's, or the page is oriented from seat two — and it is kept that
- * way on purpose. A row that names the viewer on neither side (a coach reading
- * an athlete's match, or a legacy row with no ids at all) orients from seat
- * two today, and `getMatchSides` draws exactly that. `viewer-side.ts` is the
- * three-state rule the Home page uses; adopting it here changes what those
- * viewers see, so it is a rendering decision to take deliberately, not a
- * refactor to slip in.
+ * The rule itself is `youSeat` (`viewer-side.ts`): the viewer's seat, else the
+ * seat of a player on the match's program roster, else seat two. The roster
+ * step is what keeps a coach's view of an athlete's match the right way up —
+ * without it the page oriented from seat two and drew the opponent on top,
+ * with the team's crest beside their name.
  */
 function resolveYouSide(
   row: Pick<DbMatch, "player1_id" | "player2_id">,
   myPlayerIds: readonly string[],
+  rosterIds: readonly string[],
 ): { isUserPlayer1: boolean; playerId: string | null } {
-  const isUserPlayer1 = isMe(row.player1_id, myPlayerIds);
+  const isUserPlayer1 = youSeat(row, myPlayerIds, rosterIds) === "player1";
   return {
     isUserPlayer1,
     playerId: isUserPlayer1 ? row.player1_id : row.player2_id,
   };
+}
+
+/**
+ * Which of the row's two seat ids are players on the match's own program
+ * roster. Empty for a personal match, without a round trip.
+ */
+async function resolveRosterSeatIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  row: Pick<DbMatch, "program_id" | "player1_id" | "player2_id">,
+): Promise<string[]> {
+  const seatIds = [row.player1_id, row.player2_id].filter(
+    (id): id is string => id != null,
+  );
+  if (!row.program_id || seatIds.length === 0) return [];
+  const { data } = await supabase
+    .from("program_players")
+    .select("id")
+    .eq("program_id", row.program_id)
+    .in("id", seatIds);
+  return (data ?? []).map((player) => player.id as string);
 }
 
 function transformDbMatchToMatch(
@@ -134,13 +153,15 @@ function transformDbMatchToMatch(
    */
   playerIds: readonly string[],
   profiles: Map<string, PlayerProfile>,
+  /** The row's seat ids that are on its program's roster (`youSeat`). */
+  rosterIds: readonly string[],
 ): Match {
   const sets = buildSets(row);
   // The shared rule (a stored winner, then sets). A level score has always
   // read as player2 here.
   const winner = scoreWinner(row.score) ?? "player2";
   const finalScore = sets.map((s) => `${s.player1}-${s.player2}`).join(", ");
-  const { isUserPlayer1 } = resolveYouSide(row, playerIds);
+  const { isUserPlayer1 } = resolveYouSide(row, playerIds, rosterIds);
   const userWon = isUserPlayer1 ? winner === "player1" : winner === "player2";
 
   const p1Profile = row.player1_id ? profiles.get(row.player1_id) : undefined;
@@ -335,8 +356,9 @@ async function resolveUploadedBy(
 async function resolveKpiHistory(
   row: Pick<DbMatch, "id" | "player1_id" | "player2_id">,
   myPlayerIds: readonly string[],
+  rosterIds: readonly string[],
 ): Promise<MatchKpiHistory | null> {
-  const { playerId } = resolveYouSide(row, myPlayerIds);
+  const { playerId } = resolveYouSide(row, myPlayerIds, rosterIds);
   const viewerIsPlayer = isMe(playerId, myPlayerIds);
   const history = await getMatchKpiHistory(
     viewerIsPlayer ? myPlayerIds : playerId ? [playerId] : [],
@@ -419,6 +441,9 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   const playerIds = [dbRow.player1_id, dbRow.player2_id].filter(
     (id): id is string => id != null,
   );
+  // Started ahead of the batch and awaited inside it, so the history and the
+  // transform below orient from one answer without a serial round trip.
+  const rosterIdsPromise = resolveRosterSeatIds(supabase, dbRow);
   const [
     statsResult,
     points,
@@ -441,7 +466,11 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     // the row is "you" — and so whose baseline this is — is decided from the
     // viewer's ids. Chained for the same reason as the averages.
     (async () =>
-      resolveKpiHistory(dbRow, user?.id ? await getMyPlayerIds() : []))(),
+      resolveKpiHistory(
+        dbRow,
+        user?.id ? await getMyPlayerIds() : [],
+        await rosterIdsPromise,
+      ))(),
     // The entry lookup rides this wave rather than following it: it needs only
     // `dbRow`, which is already in hand, and nothing else here reads its answer.
     // It resolves to null for every match with no line behind it, which is every
@@ -471,7 +500,12 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   // `getMyPlayerIds` is `cache()`d and already resolved inside the batch above,
   // so this is a map lookup rather than a second round trip.
   const myPlayerIds = user?.id ? await getMyPlayerIds() : [];
-  const match = transformDbMatchToMatch(dbRow, myPlayerIds, profiles);
+  const match = transformDbMatchToMatch(
+    dbRow,
+    myPlayerIds,
+    profiles,
+    await rosterIdsPromise,
+  );
   match.eventId = eventId;
   match.uploadedBy = uploadedBy;
   if (!(match.durationSec && match.durationSec > 0) && windowSeconds) {

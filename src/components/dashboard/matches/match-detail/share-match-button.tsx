@@ -3,8 +3,9 @@
 import {
   useEffect,
   useState,
+  useSyncExternalStore,
   type ComponentProps,
-  type ReactElement,
+  type ComponentType,
 } from "react";
 import { ArrowUpRight, Check, Copy, Mail, Share2 } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
@@ -19,13 +20,32 @@ import type { Match } from "@/lib/data/types";
 
 type PopoverContentProps = ComponentProps<typeof PopoverContent>;
 
+/** What a trigger must accept: the props Radix hands it, and no children. */
+export type ShareTriggerProps = Omit<ComponentProps<"button">, "children">;
+
 interface ShareMatchButtonProps {
   /**
-   * The trigger, rendered through `PopoverTrigger asChild`: one element that
-   * spreads the props it is handed — `ref` included, which the popover
-   * positions from — onto its `<button>`. `ShareRailTrigger` is the rail's.
+   * The trigger COMPONENT — not an element. It is rendered through
+   * `PopoverTrigger asChild`, so it must spread the props it is handed —
+   * `ref` included, which the popover positions from — onto one `<button>`.
+   * `ShareRailTrigger` is the rail's.
+   *
+   * A component rather than `children` on purpose, and it is load-bearing.
+   * Every caller of this is a Server Component, so `children` would arrive
+   * over the RSC boundary as a client reference that React resolves lazily.
+   * Radix's `Slot` (`@radix-ui/react-slot`, `SlotClone`) asks
+   * `React.isValidElement(children)` and returns `null` when the answer is
+   * no — and an unresolved client reference answers no. The trigger then
+   * vanishes from the server HTML with no error, no Suspense marker and a
+   * 200, and the browser mounts the whole `<button>` fresh at hydration:
+   * "server rendered HTML didn't match", every line a `+`.
+   *
+   * Taking the component instead means the ELEMENT is created here, inside
+   * the client module, where it is always a real element. A reference React
+   * still has to resolve is then the element's TYPE, which React suspends on
+   * and renders — never something `Slot` can silently drop.
    */
-  children: ReactElement;
+  trigger: ComponentType<ShareTriggerProps>;
   side?: PopoverContentProps["side"];
   align?: PopoverContentProps["align"];
 }
@@ -34,16 +54,14 @@ interface ShareMatchButtonProps {
  * The share popover for the match on the page, around whatever trigger the
  * surface draws:
  *
- *   <ShareMatchButton side="top" align="start">
- *     <ShareRailTrigger />
- *   </ShareMatchButton>
+ *   <ShareMatchButton trigger={ShareRailTrigger} side="top" align="start" />
  *
  * It owns the popover, its panel and the ⌘⇧L / Ctrl+Shift+L shortcut; the
  * trigger owns only how it looks. The match comes from `MatchDataProvider`, so
  * this must render under the match detail layout.
  */
 export function ShareMatchButton({
-  children,
+  trigger: Trigger,
   side = "bottom",
   align = "end",
 }: ShareMatchButtonProps): React.JSX.Element {
@@ -68,7 +86,9 @@ export function ShareMatchButton({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>{children}</PopoverTrigger>
+      <PopoverTrigger asChild>
+        <Trigger />
+      </PopoverTrigger>
 
       <PopoverContent
         side={side}
@@ -86,49 +106,71 @@ export function ShareMatchButton({
   );
 }
 
-/**
- * Whether to name the shortcut with ⌘ rather than Ctrl. `useState`'s lazy
- * initialiser, so it runs once per mount, during render, with no effect and
- * no second render.
- *
- * The `typeof navigator` guard is the only one, on purpose. Node 21+ has a
- * `navigator` global whose `platform` names the SERVER's OS ("MacIntel",
- * "Linux x86_64"), so this runs on both sides of hydration and they agree
- * whenever server and browser share an OS family — as they do when `next dev`
- * and the browser run on one machine, the only place a mismatch logs.
- * Guarding on `typeof window` as well would make the server always say "no"
- * and every Mac hydration disagree. Where they genuinely differ — a Linux server rendering
- * for a Mac browser — React 19 keeps the server's attribute (it never patches
- * attribute mismatches, and production does not compare them), so the button
- * announces Control+Shift+L; the listener above accepts Ctrl as well as ⌘ on
- * every platform, so that is still a shortcut that works, never a false one.
- * An environment with no `navigator` at all lands on the same Ctrl spelling.
- */
-function detectIsMac(): boolean {
-  if (typeof navigator === "undefined") return false;
+/** Whether THIS BROWSER is a Mac. Only ever called on the client. */
+function isMacBrowser(): boolean {
   const platform =
     (navigator as Navigator & { userAgentData?: { platform: string } })
       .userAgentData?.platform ?? navigator.platform;
   return /mac/i.test(platform);
 }
 
+/** The platform never changes under us, so there is nothing to subscribe to. */
+const NEVER_CHANGES = () => () => {};
+
+/**
+ * Whether to name the shortcut with ⌘ rather than Ctrl — `null` until the
+ * browser has answered.
+ *
+ * `useSyncExternalStore` is the API for exactly this: a value the server
+ * cannot know. Its server snapshot is `null`, and React uses that snapshot
+ * for the server render AND for the hydrating render, then re-renders with
+ * the browser's own answer. Server HTML and first client render therefore
+ * agree by construction — neither writes `aria-keyshortcuts` at all.
+ *
+ * Reading `navigator` during render is what this replaces. Node 21+ has a
+ * `navigator` global whose `platform` names the SERVER's OS, so the two sides
+ * agreed only when server and browser happened to share an OS family — true
+ * when `next dev` and the browser run on one machine, false on Vercel, where
+ * a Linux server renders `Control+Shift+L` into HTML that a Mac browser then
+ * hydrates as `Meta+Shift+L`. React 19 does not patch attribute mismatches,
+ * so that shipped every Mac visitor an announcement naming the wrong
+ * modifier, on top of the hydration error it logs.
+ *
+ * `aria-keyshortcuts` is read from the live DOM by assistive tech, not from
+ * the server's HTML, so arriving one render late costs the announcement
+ * nothing. The listener in `ShareMatchButton` accepts Ctrl as well as ⌘ on
+ * every platform either way.
+ */
+function useIsMac(): boolean | null {
+  return useSyncExternalStore<boolean | null>(
+    NEVER_CHANGES,
+    isMacBrowser,
+    () => null,
+  );
+}
+
 /**
  * The rail footer's Share button (design 04 F1): full width, the DS primary at
- * 36px, `Share2` and "Share". Pass it as `ShareMatchButton`'s child — Radix
- * hands it `onClick`, the popover ARIA and a `ref`, and it spreads all of them
- * onto the `<button>` (React 19 passes `ref` as a plain prop; no
- * `forwardRef`). Focus is `advButton()`'s own ring, so none is written here.
+ * 36px, `Share2` and "Share". Pass it as `ShareMatchButton`'s `trigger` — the
+ * component itself, never `<ShareRailTrigger />`; see that prop's note for
+ * what rendering it across the RSC boundary costs. Radix hands it `onClick`,
+ * the popover ARIA and a `ref`, and it spreads all of them onto the `<button>`
+ * (React 19 passes `ref` as a plain prop; no `forwardRef`). Focus is
+ * `advButton()`'s own ring, so none is written here.
  */
 export function ShareRailTrigger({
   className,
   ...props
-}: Omit<ComponentProps<"button">, "children">): React.JSX.Element {
-  const [isMac] = useState(detectIsMac);
+}: ShareTriggerProps): React.JSX.Element {
+  const isMac = useIsMac();
 
   return (
     <button
       type="button"
-      aria-keyshortcuts={isMac ? "Meta+Shift+L" : "Control+Shift+L"}
+      // Omitted until the platform is known — see `useIsMac`.
+      aria-keyshortcuts={
+        isMac === null ? undefined : isMac ? "Meta+Shift+L" : "Control+Shift+L"
+      }
       {...props}
       className={cn(advButton("primary", "md"), "w-full gap-[7px]", className)}
     >

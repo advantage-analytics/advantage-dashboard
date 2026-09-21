@@ -1,5 +1,7 @@
 import { normalizedPersonName } from "@/lib/data/person-name";
+import type { WorkspaceKind } from "@/lib/workspace/types";
 
+import { formatAllowanceSpan } from "./utils";
 import type {
   IdentityConfirmationScope,
   Step,
@@ -159,4 +161,42 @@ export function wizardContinueBlocked(input: {
   if (input.step === "match" && input.missingMatchAnswers) return true;
   if (input.eligibilityBlocked) return true;
   return input.step === "file" && input.importIdentityBlocked;
+}
+
+/**
+ * Refuse a trim against the workspace's remaining monthly analysis budget.
+ *
+ * Pure: no fetch, no React. `remainingSeconds` being `undefined` means the
+ * caller has not resolved a budget yet, so there is nothing to refuse. A trim
+ * that exactly consumes what is left is allowed — only strictly exceeding it,
+ * or having nothing left at all, produces a refusal string.
+ */
+export function quotaRefusal(input: {
+  remainingSeconds: number | undefined;
+  neededSeconds: number;
+  resetsOn: string;
+  workspaceKind: WorkspaceKind;
+}): string | null {
+  const { remainingSeconds, neededSeconds, resetsOn, workspaceKind } = input;
+
+  if (remainingSeconds === undefined) return null;
+
+  if (remainingSeconds <= 0) {
+    return workspaceKind === "team"
+      ? `Your team's analysis hours for this month are used up. They reset on ${resetsOn}.`
+      : `This month's analysis hours are used up. They reset on ${resetsOn}.`;
+  }
+
+  const neededWhole = Math.ceil(neededSeconds);
+  if (neededWhole > remainingSeconds) {
+    // Both figures in minutes when they are small: "needs 1.0 h but only 1.0 h
+    // is left" is what two minutes over reads as in tenths of an hour, and
+    // "5 min over the 0.0 h left" is the same rounding on the other number —
+    // a sentence refusing on the grounds of an allowance it prints as empty.
+    const over = formatAllowanceSpan(neededWhole - remainingSeconds);
+    const remaining = formatAllowanceSpan(remainingSeconds);
+    return `This trim is ${over} over the ${remaining} left this month. Shorten the selection to continue.`;
+  }
+
+  return null;
 }

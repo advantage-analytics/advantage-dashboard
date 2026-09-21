@@ -223,9 +223,11 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // its full-width trigger (F1).
   const share = (
     <MatchReportRailFooter>
-      <ShareMatchButton side="top" align="start">
-        <ShareRailTrigger />
-      </ShareMatchButton>
+      {/* The COMPONENT, not `<ShareRailTrigger />`. This file is a Server
+          Component, and an element handed across the RSC boundary into
+          `PopoverTrigger asChild` is dropped without a word whenever React
+          has not resolved it yet — see `ShareMatchButton`'s `trigger`. */}
+      <ShareMatchButton trigger={ShareRailTrigger} side="top" align="start" />
     </MatchReportRailFooter>
   );
 

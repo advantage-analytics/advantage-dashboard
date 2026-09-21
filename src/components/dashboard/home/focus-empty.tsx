@@ -1,3 +1,5 @@
+import { DayZeroShape } from "@/components/dashboard/home/day-zero-shape";
+
 /**
  * The Focus card before there is anything to focus on.
  *
@@ -14,13 +16,25 @@
  * the tail at that. The demonstration was not worth the card sitting apart
  * from its neighbours.
  *
+ * **Team Home draws it a second way.** Pass `band` and the ghost run is dimmed
+ * and `inert` through `DayZeroShape` — the same 0.32 fade `DualSheetEmpty` and
+ * `TopMovers` use — and a hairline band beneath says what will appear, in
+ * their exact type. The card then stands as its neighbours do instead of as a
+ * lone full-strength ghost over a grey footer line. The footer `FocusCard`
+ * would draw is left out in that form, since the band takes its place.
+ *
  * Nothing here is invented — no sentence, no figure, nothing a screen reader
  * could read out as a finding. The graded tail is `inert`, and the accessible
  * account of what fills this page lives in `DayZeroHome`.
  */
-export function FocusEmpty() {
-  return (
-    <div className="flex flex-col gap-3" aria-hidden="true">
+export function FocusEmpty({
+  band,
+}: {
+  /** Team Home's form: dim the shape and say what arrives beneath it. */
+  band?: { title: string; description: string };
+}) {
+  const shape = (
+    <>
       {/* One line at the claim's own measure: a 14px claim on the 400px rail
           runs to about 30ch and seldom wraps, so one rule is the shape it
           takes. 8px tall — the x-height of 14px type, not its line box. */}
@@ -35,6 +49,54 @@ export function FocusEmpty() {
         <span className="h-1.5 w-[86%] rounded-[2px] bg-[var(--ink-100)]" />
         <span className="h-1.5 w-[44%] rounded-[2px] bg-[var(--ink-100)]" />
       </div>
-    </div>
+    </>
   );
+
+  if (!band) {
+    return (
+      <div className="flex flex-col gap-3" aria-hidden="true">
+        {shape}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <DayZeroShape
+        description="The finding Advantage Intelligence writes for this program will appear here."
+        className="flex flex-col gap-3"
+      >
+        {shape}
+      </DayZeroShape>
+      <div className="border-t border-[var(--border-hairline)] pt-[22px] pb-1">
+        <span className="block text-[13px] leading-[1.4] font-medium text-[var(--ink-900)]">
+          {band.title}
+        </span>
+        <span
+          className="text-body-sm mt-[3px] block"
+          style={{ textWrap: "pretty" }}
+        >
+          {band.description}
+        </span>
+      </div>
+    </>
+  );
+}
+
+/**
+ * What Team Home's empty card says, by how far the program has got: no match,
+ * matches but none analysed, or analysed matches with nothing yet worth a
+ * finding.
+ */
+export function teamInsightBand(matchCount: number, analyzedCount = 0) {
+  return {
+    title:
+      matchCount === 0
+        ? "Nothing here until a match is analysed"
+        : analyzedCount === 0
+          ? "Waiting on your first analysed match"
+          : "No finding worth reporting yet",
+    description:
+      "Advantage Intelligence reads each analysed match and writes one thing to work on, with the numbers behind it.",
+  };
 }

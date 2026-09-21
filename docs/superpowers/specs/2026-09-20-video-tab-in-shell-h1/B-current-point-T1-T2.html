@@ -1,0 +1,142 @@
+<!-- B-current-point-T1-T2: extracted 2026-09-20 from Claude Design project afde9116… file `H1 - Handoff - Video tab in-shell.dc.html`. Inline SVG stripped. {{ }} bindings resolve against render-vals.txt. Reference only, never shipped. -->
+<section style="display:flex;flex-direction:column;align-items:flex-start">
+<span class="eyebrow">Phase 1 · B — This point</span>
+<div class="text-display" style="margin-top:16px;max-width:900px">A head you can drive, and a column set that answers the rail.</div>
+<div class="text-body" style="margin-top:8px;max-width:960px;text-wrap:pretty">The shot feed under the player: the finalized widget head — "Current point" with the stepper on the right — then the table. Columns are <b style="font-weight:500;color:var(--ink-900)">added and removed with the rail, never re-sorted</b>. Sources: the as-built widget head (final), <a href="#P2">P2</a> (column rule).</div>
+<div style="display:flex;flex-direction:column;gap:32px;align-items:flex-start;margin-top:32px">
+<div id="T1" style="display:flex;flex-direction:column;gap:9px;width:860px">
+<div style="display:flex;align-items:center;gap:8px">
+<a href="#T1" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">T1</a>
+<span style="font:500 12px var(--font-sans);color:var(--ink-900)">Rail open — five columns</span>
+<span style="font-size:11px;color:var(--ink-500)"># · Player · Stroke · Placement · Result</span>
+<span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">828 wide</span>
+</div>
+<div style="width:860px;box-sizing:border-box;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<section aria-label="This point" style="display:flex;flex-direction:column;padding:10px 8px 8px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<div style="display:flex;flex:0 0 auto;align-items:center;gap:10px;padding:2px 5px 10px 12px">
+<span class="eyebrow">Current point</span>
+<div style="flex:1">
+</div>
+<div style="display:inline-flex;flex:0 0 auto;align-items:center;gap:2px">
+<span role="button" tabindex="0" aria-label="Previous point" style="display:inline-flex;width:28px;height:28px;flex:0 0 28px;align-items:center;justify-content:center;border-radius:var(--radius-element);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<i data-lucide="chevron-left" stroke-width="1.5" style="width:14px;height:14px;color:var(--nav-fg)">
+</i>
+</span>
+<span class="mono tabular" style="min-width:56px;text-align:center;font-size:11px;color:var(--ink-500);white-space:nowrap">96 / 174</span>
+<span role="button" tabindex="0" aria-label="Next point" style="display:inline-flex;width:28px;height:28px;flex:0 0 28px;align-items:center;justify-content:center;border-radius:var(--radius-element);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<i data-lucide="chevron-right" stroke-width="1.5" style="width:14px;height:14px;color:var(--nav-fg)">
+</i>
+</span>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:16px 104px 92px minmax(0,1fr) 56px;column-gap:20px;align-items:center;padding:0 12px 10px;margin-bottom:6px;border-bottom:1px solid var(--border-hairline)">
+<span style="font-size:10px;color:var(--ink-400)">#</span>
+<span style="font-size:10px;color:var(--ink-400)">Player</span>
+<span style="font-size:10px;color:var(--ink-400)">Stroke</span>
+<span style="font-size:10px;color:var(--ink-400)">Placement</span>
+<span style="font-size:10px;color:var(--ink-400)">Result</span>
+</div>
+<sc-for list="{{ shotRows }}" as="s" hint-placeholder-count="6">
+<div role="button" tabindex="0" class="h-shot" style="display:grid;grid-template-columns:16px 104px 92px minmax(0,1fr) 56px;column-gap:20px;align-items:center;height:40px;padding:0 12px;border-radius:var(--radius-element);cursor:pointer;background:{{ s.rowBg }}">
+<span class="mono tabular" style="font-size:10px;color:var(--ink-400)">{{ s.n }}</span>
+<span style="display:flex;min-width:0;align-items:center;gap:8px">
+<span aria-hidden="true" style="display:inline-flex;width:20px;height:20px;flex:0 0 20px;align-items:center;justify-content:center;border-radius:var(--radius-button);font:500 9px var(--font-sans);letter-spacing:0.3px;background:{{ s.markBg }};color:{{ s.markFg }}">{{ s.initials }}</span>
+<span style="font-size:12px;color:var(--ink-900);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.last }}</span>
+</span>
+<span style="font-size:12px;color:{{ s.strokeColor }}">{{ s.stroke }}</span>
+<span style="font-size:12px;color:var(--ink-700);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.place }}</span>
+<span style="font-size:12px;color:{{ s.resultColor }}">{{ s.result }}</span>
+</div>
+</sc-for>
+<div style="display:flex;align-items:center;gap:10px;flex:0 0 auto;margin:10px 12px 0;padding:12px 0 4px;border-top:1px solid var(--border-hairline)">
+<span class="text-micro tabular">6 shots · 17s</span>
+<span style="font-size:11px;color:var(--ink-300)">·</span>
+<span style="font-size:11px;color:var(--ink-600)">Unforced error</span>
+<div style="flex:1">
+</div>
+<span style="font-size:11px;color:var(--ink-500);white-space:nowrap">Doesn't look right?</span>
+<a href="#P1" style="font:500 11px var(--font-sans);white-space:nowrap">Edit this point</a>
+</div>
+</section>
+</div>
+</div>
+<div id="T2" style="display:flex;flex-direction:column;gap:9px;width:1060px">
+<div style="display:flex;align-items:center;gap:8px">
+<a href="#T2" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-button);background:var(--blue);color:#FFFFFF;font:500 11px var(--font-sans);text-decoration:none">T2</a>
+<span style="font:500 12px var(--font-sans);color:var(--ink-900)">Rail collapsed — eight columns</span>
+<span style="font-size:11px;color:var(--ink-500)">Spin · Type · Mph join; the five never move</span>
+<span class="mono" style="margin-left:auto;font-size:11px;color:var(--ink-400)">996 wide</span>
+</div>
+<div style="width:1060px;box-sizing:border-box;padding:16px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<section aria-label="This point" style="display:flex;flex-direction:column;padding:10px 8px 8px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<div style="display:flex;flex:0 0 auto;align-items:center;gap:10px;padding:2px 5px 10px 12px">
+<span class="eyebrow">Current point</span>
+<div style="flex:1">
+</div>
+<div style="display:inline-flex;flex:0 0 auto;align-items:center;gap:2px">
+<span role="button" tabindex="0" aria-label="Previous point" style="display:inline-flex;width:28px;height:28px;flex:0 0 28px;align-items:center;justify-content:center;border-radius:var(--radius-element);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<i data-lucide="chevron-left" stroke-width="1.5" style="width:14px;height:14px;color:var(--nav-fg)">
+</i>
+</span>
+<span class="mono tabular" style="min-width:56px;text-align:center;font-size:11px;color:var(--ink-500);white-space:nowrap">96 / 174</span>
+<span role="button" tabindex="0" aria-label="Next point" style="display:inline-flex;width:28px;height:28px;flex:0 0 28px;align-items:center;justify-content:center;border-radius:var(--radius-element);cursor:pointer" style-hover="background:var(--surface-subtle)">
+<i data-lucide="chevron-right" stroke-width="1.5" style="width:14px;height:14px;color:var(--nav-fg)">
+</i>
+</span>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:16px 104px 66px 92px 92px minmax(0,1fr) 40px 56px;column-gap:20px;align-items:center;padding:0 12px 10px;margin-bottom:6px;border-bottom:1px solid var(--border-hairline)">
+<span style="font-size:10px;color:var(--ink-400)">#</span>
+<span style="font-size:10px;color:var(--ink-400)">Player</span>
+<span style="font-size:10px;color:var(--ink-400)">Spin</span>
+<span style="font-size:10px;color:var(--ink-400)">Stroke</span>
+<span style="font-size:10px;color:var(--ink-400)">Type</span>
+<span style="font-size:10px;color:var(--ink-400)">Placement</span>
+<span style="font-size:10px;color:var(--ink-400);text-align:right">Mph</span>
+<span style="font-size:10px;color:var(--ink-400)">Result</span>
+</div>
+<sc-for list="{{ shotRows }}" as="s" hint-placeholder-count="6">
+<div role="button" tabindex="0" class="h-shot" style="display:grid;grid-template-columns:16px 104px 66px 92px 92px minmax(0,1fr) 40px 56px;column-gap:20px;align-items:center;height:40px;padding:0 12px;border-radius:var(--radius-element);cursor:pointer;background:{{ s.rowBg }}">
+<span class="mono tabular" style="font-size:10px;color:var(--ink-400)">{{ s.n }}</span>
+<span style="display:flex;min-width:0;align-items:center;gap:8px">
+<span aria-hidden="true" style="display:inline-flex;width:20px;height:20px;flex:0 0 20px;align-items:center;justify-content:center;border-radius:var(--radius-button);font:500 9px var(--font-sans);letter-spacing:0.3px;background:{{ s.markBg }};color:{{ s.markFg }}">{{ s.initials }}</span>
+<span style="font-size:12px;color:var(--ink-900);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.last }}</span>
+</span>
+<span style="font-size:12px;color:var(--ink-600)">{{ s.spin }}</span>
+<span style="font-size:12px;color:{{ s.strokeColor }}">{{ s.stroke }}</span>
+<span style="font-size:12px;color:var(--ink-700)">{{ s.type }}</span>
+<span style="font-size:12px;color:var(--ink-700);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.place }}</span>
+<span class="tabular" style="font-size:12px;color:{{ s.mphColor }};text-align:right">{{ s.mph }}</span>
+<span style="font-size:12px;color:{{ s.resultColor }}">{{ s.result }}</span>
+</div>
+</sc-for>
+<div style="display:flex;align-items:center;gap:10px;flex:0 0 auto;margin:10px 12px 0;padding:12px 0 4px;border-top:1px solid var(--border-hairline)">
+<span class="text-micro tabular">6 shots · 17s</span>
+<span style="font-size:11px;color:var(--ink-300)">·</span>
+<span style="font-size:11px;color:var(--ink-600)">Unforced error</span>
+<div style="flex:1">
+</div>
+<span style="font-size:11px;color:var(--ink-500);white-space:nowrap">Doesn't look right?</span>
+<a href="#P1" style="font:500 11px var(--font-sans);white-space:nowrap">Edit this point</a>
+</div>
+</section>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px;width:1060px;box-sizing:border-box;padding:18px 20px;background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card)">
+<span class="eyebrow">Handoff notes · T1 and T2</span>
+<div style="display:grid;grid-template-columns:62px minmax(0,1fr);column-gap:16px;row-gap:9px;align-items:baseline">
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Layout</span>
+<span style="font-size:12px;line-height:1.6;color:var(--ink-700);max-width:104ch">Card <span class="mono" style="font-size:11px">padding:10px 8px 8px</span> — the finalized widget from the full-page design: header is the "Current point" eyebrow with the 28px point stepper right-aligned, no rule under it; header row of 10px ink-400 labels over a hairline; 40px rows at 8px radius; a hairline footer carrying shot count, how the point ended, and "Edit this point". Column gap 20px throughout. Placement takes the one fluid track in both states; Mph is tabular and right-aligned.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Rule</span>
+<span style="font-size:12px;line-height:1.6;color:var(--ink-700);max-width:104ch">Rail open: <b style="font-weight:500;color:var(--ink-900)"># · Player · Stroke · Placement · Result</b>. Rail collapsed (⌘\, 168px returned): <b style="font-weight:500;color:var(--ink-900)">Spin · Type · Mph</b> join, in the order a player says the shot. The five shared columns hold the same x in both states — columns are added and removed, never re-sorted. This supersedes 2g's own eight-column set at 828px.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Behavior</span>
+<span style="font-size:12px;line-height:1.6;color:var(--ink-700);max-width:104ch">Stepper walks points under the applied cut and keeps the list, the player and the strip in sync — one selected-point store, not three. Row click seeks the film to that shot; the serve row reads "Serve", later rows the bare stroke. Fullscreen is entered from the player’s own maximize control, not from this header — the widget carries no "Open fullscreen" link. No prose sentence above the table — the last row's Result and the footer already say how the point ended.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Data</span>
+<span style="font-size:12px;line-height:1.6;color:var(--ink-700);max-width:104ch">Shots from the point's own record — nothing here is reachable only through the wide feed. Unmeasured speed is an ink-400 em dash, never <span class="mono" style="font-size:11px">0</span>; same for spin and placement. Score pill = the score at the start of the point.</span>
+<span class="mono" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-400)">Accept</span>
+<span style="font-size:12px;line-height:1.6;color:var(--ink-700);max-width:104ch">Toggling the rail adds columns without moving the five · a two-shot point (ace, double fault) draws the same head and one or two rows, never an empty state · the rail toggle's label and tooltip say nothing about columns.</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+

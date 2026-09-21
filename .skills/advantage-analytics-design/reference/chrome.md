@@ -101,7 +101,11 @@ what is waiting on you. Rows: invitations (Accept as a two-step text action,
 plus Details), in-flight work (3px progress track, live sheen only while
 something is actually running, no ETA line — the bar is the estimate),
 failures (loss-red circle-x, bordered "Start over" — `analysisAction`'s
-word; there is no retry). Settled successes are not rows; the footer
+word; there is no retry), and — staff of a team workspace only — "<name>
+joined the team" (ink-400 `Users` glyph, role subline, opens the Roster;
+news, so it trails the waiting rows behind a hairline and never lights the
+dot). An invitation that answers the viewer's own join request reads "Your
+request to join <program> was approved" on the same row. Settled successes are not rows; the footer
 "Everything that finished" opens the matches list. A grey workspace chip in
 the header (`WorkspaceScopeChip`, shared with the search palette) names the
 scope; a tail row per other workspace says "N uploads running in X" behind a

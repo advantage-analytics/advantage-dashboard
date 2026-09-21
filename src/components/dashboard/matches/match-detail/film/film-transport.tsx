@@ -99,7 +99,7 @@ export interface FilmTransportProps {
 
 /**
  * The bottom block of the fullscreen frame (handoff F1): title row, the
- * break-of-serve track, then the control row. Every glyph is 15px at 85%
+ * set-by-set track, then the control row. Every glyph is 15px at 85%
  * white 18px apart; Save point fills once the point is saved, and nothing
  * else is filled. Text shadows are
  * off — the scrim under this block carries the contrast.

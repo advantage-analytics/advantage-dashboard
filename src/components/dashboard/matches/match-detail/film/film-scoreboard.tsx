@@ -23,7 +23,7 @@ import type { Board } from "./film-score";
 /**
  * The board and the point line (handoff F1/F2).
  *
- * Two 32px rows on rgba(13,13,13,.8): a 152px name panel on a 5% wash with
+ * Two 32px rows on rgba(13,13,13,.8): a 184px name panel on a 5% wash with
  * a 5px serve dot, the set columns in 12px mono on 24px centred cells (45%
  * white when settled, 85% in play), and the live game score in a 40px cell
  * behind a 1px inset rule. The point line sits under it, indented 12px so
@@ -284,7 +284,7 @@ export function FilmScoreboard({
                 <div className="flex h-8 items-stretch">
                   <div
                     role="rowheader"
-                    className="flex w-[152px] items-center gap-2 bg-white/5 px-3"
+                    className="flex w-[184px] items-center gap-2 bg-white/5 px-3"
                   >
                     <span
                       aria-hidden="true"

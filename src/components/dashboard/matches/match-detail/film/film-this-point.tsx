@@ -1,130 +1,136 @@
 "use client";
 
 import { memo } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
-import { useWorkspace } from "@/components/dashboard/workspace-provider";
-import { formatSpeed, type DistanceUnit } from "@/lib/format/distance";
+import { formatSpeedValue, type DistanceUnit } from "@/lib/format/distance";
 import { cn } from "@/lib/utils";
 
-import { filmProgressWidth } from "./film-clock";
 import { lastNameOf } from "./film-filters";
-import { serverFirstScore } from "./film-score";
-import { shotLabel, type ShotStop } from "./film-shots";
-import { PointRow } from "./point-list";
+import { shotRowCells, UNMEASURED, type ShotStop } from "./film-shots";
 
 /**
- * "This point" (design canvas "Video B4"): the card under the player that
- * follows the playhead. Its head is the point's own row — the same `PointRow`
- * the list draws, so the mark, the score, the bookmark and the blue rule read
- * identically in both places — and under it the point's shots in rally
- * order, one row per stroke, each a seek to that stroke. The room's Shots
- * tab (`film-point-panel.tsx`), brought into the tab.
+ * "Current point" (handoff H1 §B, frame `E-route-P1-P2.html`): the card under
+ * the player that follows the playhead. Its head is an eyebrow and the point
+ * stepper; under it the point's shots in rally order, one grid row per stroke,
+ * each a seek to that stroke; under those a footer that says how the point
+ * ran and how it ended.
  *
  * Every time here is on the FILM clock: `shots` arrive already placed by
  * `shotStops`, and the point's window by `filmStops`; nothing here converts.
  *
- * Attribution (guardrails §4): `isYou`, the initials and the stroke's player
- * name all come from `useMatchSides()` upstream or here — never from
- * player1/player2 read off the point.
+ * Attribution (guardrails §4): the stroke's player name comes from
+ * `useMatchSides()`, never from player1/player2 read off the shot.
  */
+/**
+ * The two column sets, and the switch between them.
+ *
+ * Breakpoint: **880px of report pane**, queried against the unnamed
+ * `@container` on `MatchReportPane` (`match-report.tsx`). At a 1440 viewport
+ * the pane's content box is 796px with the app sidebar expanded (1440 − 232px
+ * sidebar − 300px match rail − 112px pane padding) and 964px with it collapsed
+ * (the rail returns 168px), so 880px is the midpoint that separates the two
+ * shell states without anything here reading sidebar state.
+ *
+ * Columns are ADDED, never re-sorted: Spin, Type and Mph appear between the
+ * five shared ones, which hold the same order in both states.
+ */
+const NARROW_COLUMNS = "grid-cols-[16px_104px_88px_minmax(0,1fr)_48px]";
+const WIDE_COLUMNS =
+  "@min-[880px]:grid-cols-[16px_104px_60px_76px_74px_minmax(0,1fr)_44px_48px]";
+/** Spin, Type and Mph: drawn only in the wide set. */
+const WIDE_ONLY = "hidden @min-[880px]:block";
+
 export const FilmThisPoint = memo(function FilmThisPoint({
   point,
-  isYou,
-  initials,
-  showPointScore,
-  activeStart,
-  activeEnd,
   shots,
   position,
   activeShotId,
   unit,
-  onSelectPoint,
-  onToggleSaved,
   onSelectShot,
-  onOpenRoom,
+  onStep,
 }: {
   /** The point the playhead is inside, or null before the first serve. */
   point: MatchPoint | null;
-  isYou: boolean;
-  initials: string;
-  showPointScore: boolean;
-  activeStart: number;
-  activeEnd: number;
   /** This point's timed shots, in rally order, on the film clock. */
   shots: ShotStop[];
   /** 1-based place of the point in the applied cut, and the cut's size. */
   position: { index: number; total: number } | null;
   activeShotId: string | null;
-  onSelectPoint: (point: MatchPoint) => void;
-  onToggleSaved: (pointId: string) => void;
   onSelectShot: (stop: ShotStop) => void;
   /** The viewer's Units preference, threaded from the match page (the film
    *  subtree deliberately depends on no report context). Shot speeds are the
    *  one film value it changes. */
   unit: DistanceUnit;
-  onOpenRoom: () => void;
+  /** Walk the applied cut — the same step the transport takes. */
+  onStep: (direction: -1 | 1) => void;
 }) {
   const sides = useMatchSides();
   const youIsPlayer1 = sides.you.isPlayer1;
-  // Read here rather than handed down, exactly as `PointList` reads it for the
-  // rows beside this card — the mark is presentation, and the tab above must
-  // stay free of the workspace so it cannot start deciding who may act with
-  // it (`tests/match-film-entry.spec.ts`, "no component decides for itself").
-  const { active: workspace } = useWorkspace();
 
-  const serverName = point
-    ? lastNameOf(
-        point.serverIsPlayer1 === youIsPlayer1
-          ? sides.you.name
-          : sides.opp.name,
-      )
-    : null;
-  const score =
-    point && showPointScore ? serverFirstScore(point.pointScore) : null;
-  const activeIndex = shots.findIndex((s) => s.shot.id === activeShotId);
+  const seconds = point?.duration != null ? Math.round(point.duration) : null;
+  const ended = point ? point.resultType || "Point" : null;
 
   return (
     <section
-      aria-label="This point"
+      aria-label="Current point"
       className="surface-card flex min-h-0 flex-1 flex-col"
-      style={{ padding: "10px 8px" }}
+      style={{ padding: "10px 8px 8px" }}
     >
-      <div className="flex items-baseline gap-2.5 px-3 pt-1 pb-2">
-        <span className="eyebrow">This point</span>
-        {point ? (
-          <span className="text-micro tabular truncate">
-            Point {point.pointNumber} · Set {point.setNumber}, game{" "}
-            {point.gameNumber}
-            {score ? ` · ${score}` : ""} · {serverName} serving
+      <div className="flex shrink-0 items-center gap-2.5 pt-0.5 pr-[5px] pb-2.5 pl-3">
+        <span className="eyebrow">Current point</span>
+        <div className="flex-1" />
+        <div className="inline-flex shrink-0 items-center gap-0.5">
+          <StepButton
+            direction={-1}
+            label="Previous point"
+            disabled={!position}
+            onStep={onStep}
+          />
+          <span
+            className="mono tabular min-w-[56px] text-center text-[11px] whitespace-nowrap"
+            style={{ color: "var(--ink-500)" }}
+          >
+            {position
+              ? `${position.index} / ${position.total}`
+              : `${UNMEASURED} / ${UNMEASURED}`}
           </span>
-        ) : (
-          <span className="text-micro">
-            Press play, or pick a point — it lands here with every shot.
-          </span>
-        )}
+          <StepButton
+            direction={1}
+            label="Next point"
+            disabled={!position}
+            onStep={onStep}
+          />
+        </div>
       </div>
 
-      {point && (
-        <PointRow
-          point={point}
-          isYou={isYou}
-          initials={initials}
-          workspace={workspace}
-          showPointScore={showPointScore}
-          isActive
-          activeStart={activeStart}
-          activeEnd={activeEnd}
-          onSelect={onSelectPoint}
-          onToggleSaved={onToggleSaved}
-        />
-      )}
+      <div
+        className={cn(
+          "mb-1.5 grid shrink-0 items-center gap-x-4 border-b border-[var(--border-hairline)] px-3 pb-2.5",
+          NARROW_COLUMNS,
+          WIDE_COLUMNS,
+        )}
+      >
+        <HeadCell>#</HeadCell>
+        <HeadCell>Player</HeadCell>
+        <HeadCell className={WIDE_ONLY}>Spin</HeadCell>
+        <HeadCell>Stroke</HeadCell>
+        <HeadCell className={WIDE_ONLY}>Type</HeadCell>
+        <HeadCell>Placement</HeadCell>
+        <HeadCell className={cn(WIDE_ONLY, "text-right")}>
+          {unit === "ft" ? "Mph" : "Km/h"}
+        </HeadCell>
+        <HeadCell>Result</HeadCell>
+      </div>
 
-      <div className="mx-3 mt-1 border-t border-[var(--border-hairline)]" />
-
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-1">
-        {point && shots.length === 0 ? (
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {!point ? (
+          <span className="text-micro px-3 py-3">
+            Press play, or pick a point — it lands here with every shot.
+          </span>
+        ) : shots.length === 0 ? (
           <span className="text-micro px-3 py-3">
             The shots on this point were never timed against the video.
           </span>
@@ -147,31 +153,76 @@ export const FilmThisPoint = memo(function FilmThisPoint({
         )}
       </div>
 
-      <div className="flex items-center gap-2 border-t border-[var(--border-hairline)] px-3 pt-2.5 pb-1">
+      <div className="mx-3 mt-2.5 flex shrink-0 items-center gap-2.5 border-t border-[var(--border-hairline)] pt-3 pb-1">
         <span className="text-micro tabular">
-          {position ? `Point ${position.index} / ${position.total}` : "—"}
-          {" · "}
-          {shots.length > 0
-            ? `Shot ${activeIndex >= 0 ? activeIndex + 1 : "–"} of ${shots.length}`
-            : "No timed shots"}
+          {shots.length} {shots.length === 1 ? "shot" : "shots"}
+          {seconds != null ? ` · ${seconds}s` : ""}
         </span>
-        <div className="flex-1" />
-        <button
-          type="button"
-          onClick={onOpenRoom}
-          className="cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)]"
-        >
-          Open in the room
-        </button>
+        {ended && (
+          <>
+            <span className="text-[11px]" style={{ color: "var(--ink-300)" }}>
+              ·
+            </span>
+            <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
+              {ended}
+            </span>
+          </>
+        )}
       </div>
     </section>
   );
 });
 
+function HeadCell({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn("text-[10px]", className)}
+      style={{ color: "var(--ink-400)" }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function StepButton({
+  direction,
+  label,
+  disabled,
+  onStep,
+}: {
+  direction: -1 | 1;
+  label: string;
+  disabled: boolean;
+  onStep: (direction: -1 | 1) => void;
+}) {
+  const Icon = direction === -1 ? ChevronLeft : ChevronRight;
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onStep(direction)}
+      className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40"
+    >
+      <Icon
+        className="size-3.5"
+        strokeWidth={1.5}
+        style={{ color: "var(--nav-fg)" }}
+      />
+    </button>
+  );
+}
+
 /**
- * One stroke — the room's `ShotRow` in the light treatment. Memoized for the
- * same reason as `PointRow`: `timeupdate` re-renders the card ~4×/s and only
- * the row changing state should draw.
+ * One stroke, as a grid row over the card's own column tracks. Memoized
+ * because `timeupdate` re-renders the card ~4×/s and only the row changing
+ * state should draw.
  */
 const ShotRow = memo(function ShotRow({
   stop,
@@ -182,7 +233,7 @@ const ShotRow = memo(function ShotRow({
   onSelect,
 }: {
   stop: ShotStop;
-  /** Position in the rally, 1-based (a faulted first serve is numbered 0 upstream). */
+  /** Position in the rally, 1-based. */
   order: number;
   playerName: string;
   isActive: boolean;
@@ -192,50 +243,77 @@ const ShotRow = memo(function ShotRow({
   unit: DistanceUnit;
   onSelect: (stop: ShotStop) => void;
 }) {
-  const { shot } = stop;
-  const detail = [
-    playerName,
-    shot.zone,
-    shot.result && shot.result !== "In" ? shot.result : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  const label = shotLabel(shot);
+  const cells = shotRowCells(stop.shot, order, playerName);
 
   return (
     <button
       type="button"
-      data-shot-id={shot.id}
+      data-shot-id={stop.shot.id}
       aria-current={isActive ? "true" : undefined}
-      aria-label={`${label}, ${detail} — jump to this shot`}
+      aria-label={`${cells.order}. ${cells.player} ${cells.stroke}, ${cells.placement}, ${cells.result} — jump to this shot`}
       onClick={() => onSelect(stop)}
       className={cn(
-        "relative flex h-10 w-full cursor-pointer items-center gap-3 rounded-[var(--radius-element)] px-3 text-left transition-colors duration-200 hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        "grid h-10 w-full shrink-0 cursor-pointer items-center gap-x-4 rounded-[var(--radius-element)] px-3 text-left transition-colors duration-200 hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        NARROW_COLUMNS,
+        WIDE_COLUMNS,
         isActive && "bg-[var(--surface-subtle)]",
       )}
     >
-      <span className="mono tabular w-4 shrink-0 text-right text-[10px] text-[var(--ink-400)]">
-        {order}
+      <span
+        className="mono tabular text-[10px]"
+        style={{ color: "var(--ink-400)" }}
+      >
+        {cells.order}
       </span>
-      <span className="flex min-w-0 flex-col">
-        <span className="truncate text-[12px] text-[var(--ink-900)]">
-          {label}
-        </span>
-        <span className="text-micro truncate">{detail}</span>
-      </span>
-      <div className="flex-1" />
-      {shot.speedMph != null && (
-        <span className="mono tabular shrink-0 text-[12px] text-[var(--ink-700)]">
-          {formatSpeed(unit, shot.speedMph)}
-        </span>
-      )}
-      {isActive && (
-        <span
-          aria-hidden="true"
-          className="absolute bottom-0 left-0 h-0.5 bg-[var(--blue)]"
-          style={{ width: filmProgressWidth(stop.start, stop.end) }}
-        />
-      )}
+      <Cell ink="var(--ink-900)">{cells.player}</Cell>
+      <Cell className={WIDE_ONLY} ink="var(--ink-600)">
+        {cells.spin}
+      </Cell>
+      <Cell ink={order === 1 ? "var(--ink-900)" : "var(--ink-700)"}>
+        {cells.stroke}
+      </Cell>
+      <Cell className={WIDE_ONLY} ink="var(--ink-700)">
+        {cells.type}
+      </Cell>
+      <Cell
+        ink={
+          cells.placement === UNMEASURED ? "var(--ink-400)" : "var(--ink-700)"
+        }
+      >
+        {cells.placement}
+      </Cell>
+      <Cell
+        className={cn(WIDE_ONLY, "tabular text-right")}
+        ink={cells.mph === UNMEASURED ? "var(--ink-400)" : "var(--ink-700)"}
+      >
+        {stop.shot.speedMph == null
+          ? UNMEASURED
+          : formatSpeedValue(unit, stop.shot.speedMph)}
+      </Cell>
+      <Cell
+        ink={cells.result === UNMEASURED ? "var(--ink-400)" : "var(--ink-700)"}
+      >
+        {cells.result}
+      </Cell>
     </button>
   );
 });
+
+function Cell({
+  children,
+  ink,
+  className,
+}: {
+  children: React.ReactNode;
+  ink: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn("truncate text-[12px]", className)}
+      style={{ color: ink }}
+    >
+      {children}
+    </span>
+  );
+}

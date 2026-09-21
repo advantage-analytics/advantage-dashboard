@@ -4,16 +4,34 @@
  * TrimStepContent — step 3: the video check.
  *
  * The one screen where the file is the interface. A 16:9 player on ink-900
- * with four 28px controls in a bottom gradient — frame-step, play, frame-step,
- * mute — and the playhead time in a mono capsule; beneath it the filmstrip,
- * trimmed-out ends washed in page tone, the kept window one 2px Signal Blue
- * bracket whose ends are the handles; then the two camera questions the vendor
- * refuses a job without. Design: Upload Wizard v5, frame 3c.
+ * with a row of 28px controls in a bottom gradient — the jumps and frame steps
+ * ranged longest-outward around play, then mute — and the playhead time in a
+ * mono capsule; beneath it the filmstrip, trimmed-out ends washed in page
+ * tone, the kept window one 2px Signal Blue bracket whose ends are the
+ * handles; under it the two cut fields — each the cut's own timecode joined to
+ * the button that moves that cut to the playhead — and one line of key chips;
+ * then the two camera questions the vendor refuses a job without.
+ * Design: Upload Wizard v5, frame 3c; the joined field is canvas variation D.
  *
  * Everything runs against the LOCAL file through an object URL, so trimming
- * is instant and nothing leaves the browser. Holding a handle zooms the window
- * it spans: these clips are hours long, and at full extent one pixel is
- * several seconds — not a resolution you can place a cut against a serve with.
+ * is instant and nothing leaves the browser.
+ *
+ * ── What the rail does, and what it doesn't ─────────────────────────────────
+ * A press anywhere on it plays from there — the rail is the only place that
+ * says "show me this part of the match", and watching is how you tell whether
+ * the first serve sits inside the window. The bracket is a MARK, not a
+ * control: it cannot be dragged as a whole, so there is no gesture that moves
+ * both cuts at once and no way to shift a placed window by accident. Only the
+ * two handles drag.
+ *
+ * The rail once zoomed ~14x around a handle you held still for 200ms, and
+ * panned when you dragged near an edge. It rescaled the coordinate system
+ * mid-gesture — slow down to be precise and the whole rail jumped, which read
+ * as a bug rather than as help, and the animation ran setState every frame on
+ * top of the drag's own. Precision lives in the keyboard now: a focused handle
+ * arrows one frame at a time (a second with Shift), and each cut field's button
+ * — the I and O keys — puts that cut exactly where the playhead is after you
+ * have scrubbed to the frame you want.
  *
  * ── Why a drag is local until you let go ────────────────────────────────────
  * A drag used to write every pointer sample into the wizard's form state and
@@ -22,6 +40,17 @@
  * pointer and the frame arrived late. Now the handle follows the pointer from
  * a ref at frame cadence, the video seeks to the LATEST position only once
  * the previous seek has landed, and the form learns the cut on release.
+ *
+ * ── Why the gesture captures the pointer ────────────────────────────────────
+ * Every gesture — a handle drag, a rail scrub, and the click that is a scrub of
+ * zero distance — runs on handlers bound to the element that was pressed, with
+ * `setPointerCapture` routing the rest of the gesture there. It used to
+ * subscribe window listeners from an effect keyed on the drag state, and React
+ * runs a passive effect AFTER the render that state schedules: a `pointerup`
+ * delivered before that — a click while the thread is decoding a large file —
+ * was never observed, so the step latched in scrub, the video never played and
+ * every later mouse move seeked with no button held. Capture removes the
+ * subscription, and so removes its timing.
  *
  * ── Attribution ─────────────────────────────────────────────────────────────
  * `initialTopPlayerIsPlayer1` is camera-relative and about the START OF THE
@@ -35,7 +64,10 @@
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import {
+  ArrowLeftToLine,
+  ArrowRightToLine,
   Check,
   Info,
   Pause,
@@ -47,8 +79,11 @@ import {
   XCircle,
 } from "lucide-react";
 import { useVideoFilmstrip } from "@/hooks/use-video-filmstrip";
+import { JUMP_STEP_SECONDS } from "../match-video-attachment/use-attachment-alignment";
 import type { VideoProbeSummary } from "./types";
-import { focusRingCls, noteStripCls } from "./styles";
+import { focusRingCls, noteIconCls, noteStripCls } from "./styles";
+import { Kbd } from "@/components/ui/kbd";
+import { isFormControl } from "./useWizardKeys";
 import { formatClipLength, formatClock, formatTimecode } from "./utils";
 import { FieldCaption } from "./FieldCaption";
 
@@ -62,38 +97,47 @@ export interface TrimStepContentProps {
   endSeconds: number | undefined;
   /** Provider-supplied floor, so this component never names a vendor. */
   minTrimSeconds: number;
+  /**
+   * What Continue refused with — today, that the window costs more than is
+   * left this month. Raised on the click rather than by disabling Continue, so
+   * it has to be said HERE: the wizard's shared `error` is otherwise rendered
+   * only on the details step, and a refusal nobody can read is a dead button.
+   */
+  refusal?: string | null;
   /** "Marcus" when the match is a roster player's; null when it is the uploader's. */
   subjectFirstName: string | null;
   fixedCamera: boolean | undefined;
   initialTopPlayerIsPlayer1: boolean | undefined;
+  /**
+   * The top-player answer was dropped because the window start travelled far
+   * enough that it stopped describing the frame it was given for. Only the
+   * question's hint changes — it says why the answer went blank rather than
+   * leaving the player to find an emptied question on their own.
+   */
+  topPlayerAnswerStale?: boolean;
   onTrimChange: (startSeconds: number, endSeconds: number) => void;
   onAnswer: (field: CameraAnswer, value: boolean) => void;
 }
 
 type Handle = "start" | "end";
 
-/** What a press on the rail grabbed: a cut, or the kept window as a whole. */
-type Grab = Handle | "window";
-
 const HANDLES: readonly Handle[] = ["start", "end"];
 
 /** Rail height in CSS pixels. Also sets the thumbnail size. */
 const RAIL_HEIGHT_PX = 52;
 
-/** How far the rail zooms in when precision engages. */
-const PRECISION_ZOOM = 14;
-
-/** Never zoom tighter than this — below it the strip is all one frame. */
-const MIN_PRECISION_SPAN_SECONDS = 45;
-
-/** Pointer must rest this long before the rail zooms. See onMove. */
-const HOLD_TO_ZOOM_MS = 200;
-
-const ZOOM_ANIM_MS = 260;
-
-/** Drag within this fraction of either edge pans the zoomed window. */
-const AUTOPAN_EDGE = 0.06;
-const AUTOPAN_STEP = 0.04;
+/**
+ * How often the playhead is mirrored into React state.
+ *
+ * The marker and the clock are written imperatively (see `applyPlayhead`) and
+ * cost no render. The two Set buttons cannot be: `disabled` is a rendered
+ * attribute, so their side of the playhead has to go through state. The timer
+ * reads the ref when it fires rather than closing over a stale sample, and
+ * republishes ONLY when the new time would flip one of those two buttons — a
+ * playing video otherwise re-rendered the whole step five times a second to
+ * move a number that nothing reads.
+ */
+const PLAYHEAD_PUBLISH_MS = 200;
 
 /** Floating frame preview. Height follows the video's own aspect ratio. */
 const PREVIEW_WIDTH_PX = 132;
@@ -107,11 +151,117 @@ const FALLBACK_ASPECT = 16 / 9;
  */
 const PLAYER_MAX_HEIGHT = "405px";
 
+/**
+ * The coarse in-frame jump, in seconds. `JUMP_STEP_SECONDS` (10s) is the
+ * shared short hop; a minute is what it takes to cross a game on an
+ * hours-long recording without dragging the rail.
+ */
+const LONG_JUMP_SECONDS = 60;
+
+/**
+ * A cut, and the two things you do to it, as one control.
+ *
+ * The number is the way BACK to the cut (it seeks the playhead there, moving
+ * nothing); the button beside it is the way the cut comes to YOU — scrub to the
+ * first serve, press it, and the window starts there. They were a readout and a
+ * separate button on a row of its own; joining them costs the step a whole tier
+ * and leaves no doubt which cut a press moves.
+ *
+ * The keycap the button used to carry goes back to the hint line: an icon-only
+ * control has nowhere to put it, and a lone glyph cannot teach `I` on its own.
+ *
+ * No `overflow-hidden` on the group, deliberately: `focusRingCls` is a
+ * box-shadow, and clipping it would leave a keyboard user with no visible
+ * focus. The children carry the inner radii instead.
+ */
+function CutField({
+  side,
+  label,
+  time,
+  onJump,
+  onSet,
+  setDisabled,
+}: {
+  side: Handle;
+  label: string;
+  time: number;
+  onJump: () => void;
+  onSet: () => void;
+  setDisabled: boolean;
+}) {
+  const isStart = side === "start";
+  const Glyph = isStart ? ArrowLeftToLine : ArrowRightToLine;
+
+  const readout = (
+    <button
+      type="button"
+      onClick={onJump}
+      aria-label={`Jump to the trim ${isStart ? "start" : "end"}`}
+      // `items-center`, not `items-baseline`: the field is `items-stretch`, so
+      // a baseline-aligned label sits at the TOP of the stretched box while the
+      // glyph beside it centres, and the two read as misaligned. Centring also
+      // suits the pairing — a 9px letter-spaced label against a 12px mono
+      // number looks dropped on a shared baseline.
+      className={`inline-flex cursor-pointer items-center gap-1.5 px-2.5 py-2 ${
+        isStart ? "rounded-l-[5px]" : "rounded-r-[5px]"
+      } ${focusRingCls}`}
+    >
+      <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
+        {label}
+      </span>
+      <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
+        {formatTimecode(time)}
+      </span>
+    </button>
+  );
+
+  const action = (
+    <button
+      type="button"
+      onClick={onSet}
+      disabled={setDisabled}
+      aria-label={`Set the trim ${isStart ? "start" : "end"} to the current position`}
+      className={`inline-flex w-8 cursor-pointer items-center justify-center text-[var(--ink-700)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] disabled:pointer-events-none disabled:opacity-50 ${
+        isStart
+          ? "rounded-r-[5px] border-l border-[var(--border-field)]"
+          : "rounded-l-[5px] border-r border-[var(--border-field)]"
+      } ${focusRingCls}`}
+    >
+      <Glyph className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+    </button>
+  );
+
+  return (
+    <div className="inline-flex items-stretch rounded-[var(--radius-button)] border border-[var(--border-field)] bg-[var(--surface-card)]">
+      {isStart ? readout : action}
+      {isStart ? action : readout}
+    </div>
+  );
+}
+
 const controlCls = `inline-flex size-7 items-center justify-center rounded-[var(--radius-element)] text-white transition-colors duration-150 hover:bg-white/10 ${focusRingCls}`;
 
-interface ViewWindow {
-  start: number;
-  span: number;
+/** A coarse jump in the in-frame control row: a mono caption where the frame
+ *  steps carry an icon, the spoken name on the button. */
+function JumpButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${controlCls} mono tabular text-[10px] font-medium`}
+      aria-label={label}
+    >
+      <span aria-hidden="true">{children}</span>
+    </button>
+  );
 }
 
 /**
@@ -203,9 +353,11 @@ function TrimStepContentImpl({
   startSeconds,
   endSeconds,
   minTrimSeconds,
+  refusal = null,
   subjectFirstName,
   fixedCamera,
   initialTopPlayerIsPlayer1,
+  topPlayerAnswerStale = false,
   onTrimChange,
   onAnswer,
 }: TrimStepContentProps) {
@@ -213,16 +365,25 @@ function TrimStepContentImpl({
   const railRef = useRef<HTMLDivElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [dragging, setDragging] = useState<Grab | null>(null);
+  /**
+   * The gesture in progress: a cut being moved, or the playhead being scrubbed
+   * along the rail. `"scrub"` touches no cut — it only says where to watch.
+   */
+  const [dragging, setDragging] = useState<Handle | "scrub" | null>(null);
   // Where the drag has taken the cuts so far — shown live, committed to the
   // form on release. Null while nothing is being dragged.
   const [live, setLive] = useState<{ start: number; end: number } | null>(null);
-  const [precision, setPrecision] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [railWidth, setRailWidth] = useState(0);
 
   const duration = probe?.durationSeconds ?? 0;
+  // Mirrored for the imperative playhead and the pointer handlers, which must
+  // not be rebuilt when a new file changes the length.
+  const durationRef = useRef(duration);
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
   const committedStart = startSeconds ?? 0;
   const committedEnd = endSeconds ?? duration;
   // What the rail draws: the drag in progress, else the form's cuts.
@@ -233,21 +394,14 @@ function TrimStepContentImpl({
 
   /** One frame, when we know the rate. Falls back to a reasonable nudge. */
   const frameStep = probe?.fps ? 1 / probe.fps : 0.1;
-
-  // The slice of the clip the rail spans, as an override on top of "the whole
-  // video". Null is the resting state rather than a copy of the duration, so a
-  // new file needs no reset — the derived window follows it.
-  const [zoom, setZoom] = useState<ViewWindow | null>(null);
-  const viewRef = useRef<ViewWindow>({ start: 0, span: 0 });
-  const rafRef = useRef<number | null>(null);
-
-  const view = useMemo<ViewWindow>(() => {
-    if (!zoom || duration <= 0) return { start: 0, span: duration };
-    // Clamped rather than trusted: a zoom left over from a previous, longer
-    // file would otherwise scroll the rail off the end of a shorter one.
-    const span = Math.min(zoom.span, duration);
-    return { start: Math.max(0, Math.min(duration - span, zoom.start)), span };
-  }, [zoom, duration]);
+  // The cuts as the playhead publisher sees them, so the trailing timer can
+  // ask "would this flip a Set button?" without closing over a render's
+  // values. Mirrored, never read for paint — `start`/`end`/`frameStep`
+  // themselves are what the buttons render from.
+  const gateRef = useRef({ start, end, frameStep });
+  useEffect(() => {
+    gateRef.current = { start, end, frameStep };
+  }, [start, end, frameStep]);
 
   const filmstrip = useVideoFilmstrip(videoFile, duration);
 
@@ -259,14 +413,44 @@ function TrimStepContentImpl({
   const playheadRef = useRef(0);
   const playheadElRef = useRef<HTMLDivElement>(null);
   const clockElRef = useRef<HTMLSpanElement>(null);
-  // Mirrors `dragging` for the imperative playhead and the seek callbacks,
-  // which must not re-subscribe on every drag. Declared before the callbacks
-  // that read it; written in an effect below, never during render.
-  const draggingRef = useRef<Grab | null>(null);
-  useEffect(() => {
-    draggingRef.current = dragging;
-  }, [dragging]);
-
+  // The gesture in progress, written SYNCHRONOUSLY in `onPointerDown` and
+  // cleared synchronously on release. It is the authority, not `dragging`:
+  // a `pointerup` that arrives before React has re-rendered — a click while
+  // the main thread is decoding a large file — must still end the gesture,
+  // so nothing about ending it may wait on a render or an effect. `dragging`
+  // remains for what only paint needs (the handle's pressed tone, the drag
+  // readout). Declared before the callbacks that read it.
+  const draggingRef = useRef<Handle | "scrub" | null>(null);
+  // The same playhead React can read — see PLAYHEAD_PUBLISH_MS.
+  const [playheadTime, setPlayheadTime] = useState(0);
+  const publishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const publishPlayhead = useCallback(() => {
+    if (publishTimerRef.current !== null) return;
+    publishTimerRef.current = setTimeout(() => {
+      publishTimerRef.current = null;
+      setPlayheadTime((prev) => {
+        const next = playheadRef.current;
+        const { start, end, frameStep } = gateRef.current;
+        // Same answer to both buttons means the render would be identical:
+        // return `prev` and React bails out. `gateRef` may lag the cuts by a
+        // render, which can only ever DELAY a flip to the next tick — and a
+        // cut moving is itself a render that recomputes both booleans from
+        // the live values below.
+        const unchanged =
+          prev < end - frameStep === next < end - frameStep &&
+          prev > start + frameStep === next > start + frameStep;
+        return unchanged ? prev : next;
+      });
+    }, PLAYHEAD_PUBLISH_MS);
+  }, []);
+  useEffect(
+    () => () => {
+      if (publishTimerRef.current !== null) {
+        clearTimeout(publishTimerRef.current);
+      }
+    },
+    [],
+  );
   // One object URL per file, created AND revoked inside the effect, and the
   // element's src set from there rather than rendered. Leaking these pins the
   // file handle for the life of the page — but revoking a memoised URL from a
@@ -294,34 +478,28 @@ function TrimStepContentImpl({
     if (clock) clock.textContent = formatTimecode(playheadRef.current);
     const el = playheadElRef.current;
     if (!el) return;
-    const { start: viewStart, span } = viewRef.current;
-    const pct = span > 0 ? ((playheadRef.current - viewStart) / span) * 100 : 0;
+    const total = durationRef.current;
+    const pct = total > 0 ? (playheadRef.current / total) * 100 : 0;
     el.style.left = `${pct}%`;
-    // Hidden rather than clamped when the playhead falls outside the zoomed
-    // window — pinning it to an edge reads as "the playhead is here", which is
-    // exactly wrong. Hidden while a cut is being dragged too: the handle and
-    // its frame preview are the reference then, and a second line chasing
-    // them a frame behind only reads as jitter.
-    el.style.opacity = pct < 0 || pct > 100 || draggingRef.current ? "0" : "1";
-  }, []);
+    // Hidden while a CUT is being dragged: the handle and its frame preview
+    // are the reference then, and a second marker chasing them a decode
+    // behind reads as jitter rather than as information. A scrub is the
+    // opposite case — the playhead is the thing the gesture moves.
+    const hidden =
+      pct < 0 ||
+      pct > 100 ||
+      (draggingRef.current !== null && draggingRef.current !== "scrub");
+    el.style.opacity = hidden ? "0" : "1";
+    publishPlayhead();
+  }, [publishPlayhead]);
 
-  // Mirror `view` into a ref for the imperative playhead and the window-level
-  // pointer handlers. Written in an effect, never during render.
-  useEffect(() => {
-    viewRef.current = view;
-    applyPlayhead();
-  }, [view, applyPlayhead]);
-
-  // A new source rewinds the playhead and cancels any zoom still animating.
+  // A new source rewinds the playhead. Republished through the same trailing
+  // timer the rest of the step uses, rather than a synchronous setState in an
+  // effect body — it reads the ref when it fires, which is zero either way.
   useEffect(() => {
     playheadRef.current = 0;
-    return () => {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-    };
-  }, [videoFile]);
+    publishPlayhead();
+  }, [videoFile, publishPlayhead]);
 
   // Rail width drives how many thumbnails tile across it.
   useEffect(() => {
@@ -334,37 +512,6 @@ function TrimStepContentImpl({
     observer.observe(el);
     return () => observer.disconnect();
   }, [videoFile]);
-
-  /**
-   * Ease the rail window to a new span.
-   *
-   * `settleToRest` lands on null rather than on the target numbers, so zooming
-   * back out returns the window to "however long this video is" instead of
-   * pinning a stale copy of the duration.
-   */
-  const animateView = useCallback(
-    (toStart: number, toSpan: number, settleToRest = false) => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-      const from = viewRef.current;
-      const startedAt = performance.now();
-      const tick = (now: number) => {
-        const k = Math.min(1, (now - startedAt) / ZOOM_ANIM_MS);
-        if (k < 1) {
-          const eased = 1 - Math.pow(1 - k, 3);
-          setZoom({
-            start: from.start + (toStart - from.start) * eased,
-            span: from.span + (toSpan - from.span) * eased,
-          });
-          rafRef.current = requestAnimationFrame(tick);
-          return;
-        }
-        setZoom(settleToRest ? null : { start: toStart, span: toSpan });
-        rafRef.current = null;
-      };
-      rafRef.current = requestAnimationFrame(tick);
-    },
-    [],
-  );
 
   const seekTo = useCallback(
     (time: number) => {
@@ -384,22 +531,41 @@ function TrimStepContentImpl({
     (time: number) => {
       const el = videoRef.current;
       if (!el) return;
-      wantedSeekRef.current = time;
+      // Clamped BEFORE it is parked: `seekBy` and the I/O keys read the parked
+      // value as the truthful position, and a raw overshoot (+1m near the end)
+      // would have the next −10s measured from beyond the file.
+      const clamped = Math.max(0, Math.min(duration, time));
+      wantedSeekRef.current = clamped;
       if (el.seeking) return;
       wantedSeekRef.current = null;
-      el.currentTime = Math.max(0, Math.min(duration, time));
+      el.currentTime = clamped;
     },
     [duration],
   );
 
-  const positionFromEvent = useCallback((clientX: number): number => {
-    const rail = railRef.current;
-    if (!rail) return 0;
-    const rect = rail.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const { start: viewStart, span } = viewRef.current;
-    return viewStart + ratio * span;
-  }, []);
+  const getRailRect = useCallback(
+    () => railRef.current?.getBoundingClientRect() ?? null,
+    [],
+  );
+
+  // The rail's box, measured once per gesture. `getBoundingClientRect()` forces
+  // layout, and the whole rail is now a pointer surface — a trackpad sweep
+  // asks 120+ times a second while the page is decoding a multi-gigabyte
+  // video. The rail cannot move or resize mid-gesture (a resize re-renders and
+  // the gesture is over by then), so one measurement at the press is enough.
+  const gestureRectRef = useRef<DOMRect | null>(null);
+  const positionFromEvent = useCallback(
+    (clientX: number): number => {
+      const rect = gestureRectRef.current ?? getRailRect();
+      if (!rect) return 0;
+      const ratio = Math.max(
+        0,
+        Math.min(1, (clientX - rect.left) / rect.width),
+      );
+      return ratio * durationRef.current;
+    },
+    [getRailRect],
+  );
 
   /** Single clamp for both cuts. */
   const clampCut = useCallback(
@@ -413,50 +579,40 @@ function TrimStepContentImpl({
   /** A keyboard nudge commits at once — one step, one write. */
   const moveHandle = useCallback(
     (handle: Handle, time: number) => {
+      // `seekLatest`, not `seekTo`: a jump still decoding leaves its target
+      // parked in `wantedSeekRef`, and a bare `currentTime` write here would be
+      // undone the moment that seek lands and `handleSeeked` flushes the stale
+      // value — the cut would be right and the frame on screen would not.
+      // `seekLatest` REPLACES what is parked, so the cut's own position wins.
+      // (The drag path reaches `seekTo` directly, but nulls the ref first.)
       if (handle === "start") {
         const next = clampCut("start", time, end);
         onTrimChange(next, end);
-        seekTo(next);
+        seekLatest(next);
       } else {
         const next = clampCut("end", time, start);
         onTrimChange(start, next);
-        seekTo(next);
+        seekLatest(next);
       }
     },
-    [start, end, clampCut, onTrimChange, seekTo],
+    [start, end, clampCut, onTrimChange, seekLatest],
   );
 
   // The drag itself. The pointer's position lands in a ref; one frame later
   // the rail redraws from it and the video is asked for that frame. Nothing
   // reaches the form until release.
   const liveRef = useRef<{ start: number; end: number } | null>(null);
-  const grabOffsetRef = useRef(0);
   const liveRafRef = useRef<number | null>(null);
   const applyDrag = useCallback(
-    (grab: Grab, time: number) => {
+    (grab: Handle, time: number) => {
       const current = liveRef.current ?? {
         start: committedStart,
         end: committedEnd,
       };
-      let next: { start: number; end: number };
-      if (grab === "window") {
-        // Shift both cuts by the same amount, stopped by the file's ends.
-        const span = current.end - current.start;
-        const wanted = time - grabOffsetRef.current;
-        const nextStart = Math.max(0, Math.min(duration - span, wanted));
-        next = { start: nextStart, end: nextStart + span };
-      } else if (grab === "start") {
-        next = {
-          start: clampCut("start", time, current.end),
-          end: current.end,
-        };
-      } else {
-        next = {
-          start: current.start,
-          end: clampCut("end", time, current.start),
-        };
-      }
-      liveRef.current = next;
+      liveRef.current =
+        grab === "start"
+          ? { start: clampCut("start", time, current.end), end: current.end }
+          : { start: current.start, end: clampCut("end", time, current.start) };
       if (liveRafRef.current === null) {
         liveRafRef.current = requestAnimationFrame(() => {
           liveRafRef.current = null;
@@ -467,165 +623,145 @@ function TrimStepContentImpl({
         });
       }
     },
-    [committedStart, committedEnd, duration, clampCut, seekLatest],
+    [committedStart, committedEnd, clampCut, seekLatest],
   );
 
-  /**
-   * Narrow the rail around the held handle, keeping it under the cursor so the
-   * grab point doesn't jump out from under the user's finger.
-   */
-  const engagePrecision = useCallback(
-    (handle: Handle, clientX: number) => {
-      const rail = railRef.current;
-      if (!rail || duration <= 0) return;
-      const span = Math.max(
-        MIN_PRECISION_SPAN_SECONDS,
-        duration / PRECISION_ZOOM,
-      );
-      // Short clip — the whole thing already fits at frame resolution.
-      if (span >= duration) return;
+  /** Play, without the toggle — what letting go of the rail does. */
+  const play = useCallback(() => {
+    const el = videoRef.current;
+    if (el?.paused) void el.play().catch(() => undefined);
+  }, []);
 
-      const rect = rail.getBoundingClientRect();
-      const ratio = Math.max(
-        0,
-        Math.min(1, (clientX - rect.left) / rect.width),
-      );
-      const current = liveRef.current ?? { start, end };
-      const anchor = handle === "start" ? current.start : current.end;
-      const nextStart = Math.max(
-        0,
-        Math.min(duration - span, anchor - ratio * span),
-      );
-
-      setPrecision(true);
-      animateView(nextStart, span);
-    },
-    [duration, start, end, animateView],
-  );
-
-  // Drag inputs go through a ref so the window subscription keys only on
-  // `dragging`. Written in an effect, not during render.
+  // Drag inputs go through a ref so the pointer handlers can be built once and
+  // never depend on a render having happened. Written in an effect, not during
+  // render.
   const dragCtx = useRef({
     applyDrag,
     positionFromEvent,
-    engagePrecision,
-    precision,
-    duration,
     onTrimChange,
     seekTo,
+    seekLatest,
+    play,
   });
   useEffect(() => {
     dragCtx.current = {
       applyDrag,
       positionFromEvent,
-      engagePrecision,
-      precision,
-      duration,
       onTrimChange,
       seekTo,
+      seekLatest,
+      play,
     };
   });
 
-  useEffect(() => {
-    if (!dragging) return;
+  // What `document.body.style.cursor` was before the gesture took it. Set and
+  // restored by the two functions below, never by an effect — a release that
+  // beats the render must be able to hand the cursor back on its own.
+  const previousCursorRef = useRef("");
 
-    // The cursor stays the drag's own for the whole gesture, even when the
-    // pointer leaves the 24px handle — otherwise it flickers to an arrow the
-    // moment you move faster than the handle can follow.
-    const previousCursor = document.body.style.cursor;
-    document.body.style.cursor =
-      dragging === "window" ? "grabbing" : "ew-resize";
-
-    // Hold-to-zoom, re-armed on every move. A quick grab-and-throw across the
-    // rail stays at full extent; rest the pointer for a beat and the window
-    // narrows around it. Only a cut zooms — the window is moved as a whole.
-    let holdTimer: ReturnType<typeof setTimeout> | undefined;
-    const armHold = (clientX: number) => {
-      clearTimeout(holdTimer);
-      if (dragging === "window" || dragCtx.current.precision) return;
-      holdTimer = setTimeout(() => {
-        dragCtx.current.engagePrecision(dragging, clientX);
-      }, HOLD_TO_ZOOM_MS);
-    };
-
-    const onMove = (e: PointerEvent) => {
-      const ctx = dragCtx.current;
-      ctx.applyDrag(dragging, ctx.positionFromEvent(e.clientX));
-      armHold(e.clientX);
-
-      // Edge auto-pan, so a zoomed window can still be walked along the clip.
-      const rail = railRef.current;
-      if (!rail || !ctx.precision) return;
-      const rect = rail.getBoundingClientRect();
-      const ratio = (e.clientX - rect.left) / rect.width;
-      if (ratio >= AUTOPAN_EDGE && ratio <= 1 - AUTOPAN_EDGE) return;
-      const direction = ratio < AUTOPAN_EDGE ? -1 : 1;
-      setZoom((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          start: Math.max(
-            0,
-            Math.min(
-              ctx.duration - prev.span,
-              prev.start + direction * prev.span * AUTOPAN_STEP,
-            ),
-          ),
-        };
-      });
-    };
-
-    const onUp = () => {
-      clearTimeout(holdTimer);
-      if (liveRafRef.current !== null) {
-        cancelAnimationFrame(liveRafRef.current);
-        liveRafRef.current = null;
+  /**
+   * Take the gesture, synchronously.
+   *
+   * The ref, the body cursor and the pointer capture are all in place before
+   * this returns, so every later pointer event for this `pointerId` is routed
+   * to the element that was pressed and is understood the moment it lands.
+   */
+  const beginGesture = useCallback(
+    (grab: Handle | "scrub", e: ReactPointerEvent<HTMLElement>) => {
+      draggingRef.current = grab;
+      gestureRectRef.current = getRailRect();
+      // The cursor stays the gesture's own for its whole length, even when the
+      // pointer leaves the 24px handle — otherwise it flickers to an arrow the
+      // moment you move faster than the handle can follow.
+      previousCursorRef.current = document.body.style.cursor;
+      document.body.style.cursor = grab === "scrub" ? "grabbing" : "ew-resize";
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // A synthetic PointerEvent carries no active pointer id, so this
+        // throws NotFoundError under a test harness. The handlers still sit
+        // on the element the press landed on, so the gesture works without it.
       }
-      // Release is the one write: the form learns the cuts, and the video is
-      // asked for the frame the cut actually landed on.
-      const value = liveRef.current;
-      liveRef.current = null;
-      wantedSeekRef.current = null;
-      if (value) {
-        dragCtx.current.onTrimChange(value.start, value.end);
-        dragCtx.current.seekTo(dragging === "end" ? value.end : value.start);
-      }
-      setLive(null);
+      setDragging(grab);
+    },
+    [getRailRect],
+  );
+
+  const onGesturePointerMove = useCallback((e: ReactPointerEvent) => {
+    const grab = draggingRef.current;
+    // No gesture in progress: a plain hover across the rail moves nothing.
+    if (!grab) return;
+    const ctx = dragCtx.current;
+    const time = ctx.positionFromEvent(e.clientX);
+    // A scrub writes nothing: it walks the playhead, and the player is the
+    // output. Seeks coalesce, so a fast sweep across a multi-gigabyte file
+    // decodes the frames it can keep up with rather than queueing all of them.
+    if (grab === "scrub") ctx.seekLatest(time);
+    else ctx.applyDrag(grab, time);
+  }, []);
+
+  /**
+   * End it. The release, a cancel and a lost capture are the same event here,
+   * and the ref makes the second one a no-op.
+   */
+  const endGesture = useCallback(() => {
+    const grab = draggingRef.current;
+    if (!grab) return;
+    draggingRef.current = null;
+    gestureRectRef.current = null;
+    document.body.style.cursor = previousCursorRef.current;
+    if (liveRafRef.current !== null) {
+      cancelAnimationFrame(liveRafRef.current);
+      liveRafRef.current = null;
+    }
+    // Let go of a scrub and it plays from where you landed — the same thing
+    // a press on the rail does, a click being a scrub that never moved.
+    if (grab === "scrub") {
       setDragging(null);
-      setPrecision(false);
-      animateView(0, dragCtx.current.duration, true);
-    };
+      dragCtx.current.play();
+      return;
+    }
+    // Release is the one write: the form learns the cuts, and the video is
+    // asked for the frame the cut actually landed on.
+    const value = liveRef.current;
+    liveRef.current = null;
+    wantedSeekRef.current = null;
+    if (value) {
+      dragCtx.current.onTrimChange(value.start, value.end);
+      dragCtx.current.seekTo(grab === "end" ? value.end : value.start);
+    }
+    setLive(null);
+    setDragging(null);
+  }, []);
 
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
-    return () => {
-      clearTimeout(holdTimer);
-      document.body.style.cursor = previousCursor;
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
-    };
-  }, [dragging, animateView]);
+  // The handle's own copies. A handle captures the pointer, so these fire for
+  // the whole drag wherever it goes — and they stop AT the handle, because the
+  // rail below carries the same events and a captured event still bubbles to
+  // it. One pair rather than a handler per event: the stop-propagation half of
+  // the contract is then stated once, and a fourth way for a gesture to end
+  // cannot forget it.
+  const endGestureOnHandle = useCallback(
+    (e: ReactPointerEvent) => {
+      e.stopPropagation();
+      endGesture();
+    },
+    [endGesture],
+  );
+  const moveGestureOnHandle = useCallback(
+    (e: ReactPointerEvent) => {
+      e.stopPropagation();
+      onGesturePointerMove(e);
+    },
+    [onGesturePointerMove],
+  );
 
   const startDrag = useCallback(
-    (grab: Grab, clientX: number) => {
+    (grab: Handle, e: ReactPointerEvent<HTMLElement>) => {
       liveRef.current = { start: committedStart, end: committedEnd };
-      // Grabbing the window keeps the point you grabbed under the pointer.
-      grabOffsetRef.current =
-        grab === "window" ? positionFromEvent(clientX) - committedStart : 0;
       setLive(liveRef.current);
-      setDragging(grab);
-      if (grab === "window") return;
-      // The window handler arms its own hold timer on the first move; this
-      // covers a press with no movement at all.
-      window.setTimeout(() => {
-        if (draggingRef.current === grab && !dragCtx.current.precision) {
-          dragCtx.current.engagePrecision(grab, clientX);
-        }
-      }, HOLD_TO_ZOOM_MS);
+      beginGesture(grab, e);
     },
-    [committedStart, committedEnd, positionFromEvent],
+    [committedStart, committedEnd, beginGesture],
   );
 
   const nudge = useCallback(
@@ -636,13 +772,20 @@ function TrimStepContentImpl({
     [start, end, frameStep, moveHandle],
   );
 
+  /**
+   * Jump relative to where the video is *going*, not where it is.
+   *
+   * `el.currentTime` lags while a seek is in flight, so five quick taps on
+   * +10s all measured from the same stale frame and moved ten seconds in
+   * total. The pending request is the truthful origin when there is one.
+   */
   const seekBy = useCallback(
     (delta: number) => {
       const el = videoRef.current;
       if (!el) return;
-      seekTo(el.currentTime + delta);
+      seekLatest((wantedSeekRef.current ?? el.currentTime) + delta);
     },
-    [seekTo],
+    [seekLatest],
   );
 
   const togglePlay = useCallback(() => {
@@ -660,6 +803,97 @@ function TrimStepContentImpl({
   }, []);
 
   /**
+   * Put a cut where the video already is — scrub to the first serve, press I,
+   * and the window starts there. `moveHandle` owns the clamp and the
+   * write; this only decides *which* time is meant.
+   */
+  const setHandleToPlayhead = useCallback(
+    (handle: Handle) => {
+      const el = videoRef.current;
+      if (!el) return;
+      // A pending seek is the truthful position, for the same reason `seekBy`
+      // reads it: `currentTime` lags while one is in flight, so pressing this
+      // straight after a jump would otherwise cut at the frame you left.
+      const time = wantedSeekRef.current ?? el.currentTime;
+      // Refused rather than clamped on the wrong side of the other cut: a
+      // clamp would land one frame off that cut, which reads as the key
+      // having picked a time of its own.
+      if (
+        handle === "start" ? time >= end - frameStep : time <= start + frameStep
+      ) {
+        return;
+      }
+      moveHandle(handle, time);
+    },
+    [start, end, frameStep, moveHandle],
+  );
+
+  // The two Set buttons' `disabled`. `playheadTime` rather than the ref,
+  // because only a render can change an attribute — and the same rule is
+  // re-applied against the LIVE value inside `setHandleToPlayhead`, so the
+  // keys cannot slip through the ~200ms the mirror lags by. The mirror is
+  // only republished when one of these two answers changes; it is a gate
+  // sample, not a clock (the clock is written imperatively).
+  const canSetStart = playheadTime < end - frameStep;
+  const canSetEnd = playheadTime > start + frameStep;
+
+  /**
+   * The step's own keyboard, scoped to this subtree.
+   *
+   * A React handler on the step root rather than a listener on `window`: the
+   * trim handles own their arrows (one frame, or a second with Shift) and stop
+   * the event here, which a native document listener would never see because
+   * React delegates at the root. Everything the wizard itself reads is left
+   * alone — `Enter` is Continue and `Escape` is Back (`useWizardKeys`), and a
+   * ctrl/meta/alt chord is somebody else's shortcut.
+   */
+  const onStepKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (isFormControl(e.target)) return;
+      // The camera questions are radio cards, and a radiogroup's arrows belong
+      // to it — seeking the video (or moving a cut on I/O) from inside a
+      // question would be this step answering a key meant for that one.
+      if ((e.target as HTMLElement | null)?.closest?.('[role="radiogroup"]')) {
+        return;
+      }
+      switch (e.key) {
+        case " ":
+        case "Spacebar": {
+          // Space on a focused <button> is that button's own activation.
+          // Handling it here would toggle playback AND press the button.
+          const node = e.target as HTMLElement | null;
+          if (node?.closest?.("button")) return;
+          e.preventDefault();
+          togglePlay();
+          return;
+        }
+        case "ArrowLeft":
+          e.preventDefault();
+          seekBy(e.shiftKey ? -LONG_JUMP_SECONDS : -JUMP_STEP_SECONDS);
+          return;
+        case "ArrowRight":
+          e.preventDefault();
+          seekBy(e.shiftKey ? LONG_JUMP_SECONDS : JUMP_STEP_SECONDS);
+          return;
+        case "i":
+        case "I":
+          e.preventDefault();
+          setHandleToPlayhead("start");
+          return;
+        case "o":
+        case "O":
+          e.preventDefault();
+          setHandleToPlayhead("end");
+          return;
+        default:
+          return;
+      }
+    },
+    [togglePlay, seekBy, setHandleToPlayhead],
+  );
+
+  /**
    * Keep the playhead marker in step, and paint the floating preview from the
    * main player — the drag already seeks it, so the frame it just landed on
    * costs a canvas blit instead of a whole extra decode.
@@ -670,14 +904,16 @@ function TrimStepContentImpl({
       playheadRef.current = el.currentTime;
       applyPlayhead();
 
-      // A drag asked for a newer frame while this one was decoding.
+      // A drag — or a jump button — asked for a newer frame while this one
+      // was decoding. Flushing it is what makes `seekLatest` a coalescer
+      // rather than a dropper; gating it on a drag stranded the last tap.
       const wanted = wantedSeekRef.current;
-      if (wanted !== null && draggingRef.current) {
+      if (wanted !== null) {
         wantedSeekRef.current = null;
         el.currentTime = Math.max(0, Math.min(el.duration || wanted, wanted));
       }
 
-      if (!draggingRef.current) return;
+      if (!draggingRef.current || draggingRef.current === "scrub") return;
       const canvas = previewCanvasRef.current;
       const ctx = canvas?.getContext("2d");
       if (!canvas || !ctx) return;
@@ -715,9 +951,8 @@ function TrimStepContentImpl({
   // ---- Derived geometry ----
 
   const pct = useCallback(
-    (time: number) =>
-      view.span > 0 ? ((time - view.start) / view.span) * 100 : 0,
-    [view],
+    (time: number) => (duration > 0 ? (time / duration) * 100 : 0),
+    [duration],
   );
 
   const startPct = pct(start);
@@ -751,14 +986,14 @@ function TrimStepContentImpl({
     if (count === 0 || frames.length === 0 || duration <= 0) return [];
 
     return Array.from({ length: count }, (_, i) => {
-      const time = view.start + ((i + 0.5) / count) * view.span;
+      const time = ((i + 0.5) / count) * duration;
       const index = Math.round((time / duration) * frames.length - 0.5);
       return {
         key: i,
         src: frames[Math.max(0, Math.min(frames.length - 1, index))],
       };
     });
-  }, [aspect, railWidth, filmstrip.frames, duration, view]);
+  }, [aspect, railWidth, filmstrip.frames, duration]);
 
   const who = subjectFirstName ?? "You";
 
@@ -769,7 +1004,7 @@ function TrimStepContentImpl({
     return (
       <div className={noteStripCls}>
         <Info
-          className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-400)]"
+          className={`${noteIconCls} text-[var(--ink-400)]`}
           strokeWidth={1.5}
           aria-hidden="true"
         />
@@ -782,7 +1017,16 @@ function TrimStepContentImpl({
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    // `tabIndex={-1}` so a click on the player or the rail — neither of which
+    // is focusable — lands focus on this root instead of the body, and the
+    // keys below work without first tabbing to a control. It stays out of the
+    // tab order, and out of the wizard chord's field walk, which skips
+    // `tabindex="-1"` on purpose.
+    <div
+      tabIndex={-1}
+      onKeyDown={onStepKeyDown}
+      className="flex flex-col gap-5 outline-none"
+    >
       {/* Player — local playback, no network. Native controls are omitted
           because the rail below is the scrub surface; a second timeline inside
           the frame would compete with it. */}
@@ -810,6 +1054,20 @@ function TrimStepContentImpl({
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-gradient-to-t from-black/55 to-transparent pt-8 pb-2.5">
           <div className="pointer-events-auto flex items-center gap-2">
+            {/* Coarse jumps flank the frame steps, longest on the outside, so
+                the row reads as one scale from a minute down to a frame. */}
+            <JumpButton
+              label="Back one minute"
+              onClick={() => seekBy(-LONG_JUMP_SECONDS)}
+            >
+              −1m
+            </JumpButton>
+            <JumpButton
+              label="Back ten seconds"
+              onClick={() => seekBy(-JUMP_STEP_SECONDS)}
+            >
+              −10s
+            </JumpButton>
             <button
               type="button"
               onClick={() => seekBy(-frameStep)}
@@ -850,6 +1108,18 @@ function TrimStepContentImpl({
                 aria-hidden="true"
               />
             </button>
+            <JumpButton
+              label="Forward ten seconds"
+              onClick={() => seekBy(JUMP_STEP_SECONDS)}
+            >
+              +10s
+            </JumpButton>
+            <JumpButton
+              label="Forward one minute"
+              onClick={() => seekBy(LONG_JUMP_SECONDS)}
+            >
+              +1m
+            </JumpButton>
             <span className="mx-1 h-3 w-px bg-white/35" aria-hidden="true" />
             <button
               type="button"
@@ -897,7 +1167,7 @@ function TrimStepContentImpl({
         <div className="relative py-0.5">
           {/* Live frame at the handle being dragged. Sits above the rail on its
               own layer so showing it never reflows the strip. */}
-          {dragging && dragging !== "window" ? (
+          {dragging && dragging !== "scrub" ? (
             <div
               className="pointer-events-none absolute bottom-[calc(100%+8px)] z-10 overflow-hidden rounded-[var(--radius-element)] border border-[var(--border-hairline)] bg-white shadow-[var(--shadow-dropdown)]"
               style={{
@@ -920,21 +1190,30 @@ function TrimStepContentImpl({
             </div>
           ) : null}
 
-          {/* Rail. Click seeks; handles drag. */}
+          {/* Rail. Press and sweep to look through the match; let go and it
+              plays from there. Only the two handles move a cut. */}
           <div
             ref={railRef}
-            onPointerDown={(e) => seekTo(positionFromEvent(e.clientX))}
+            onPointerDown={(e) => {
+              // Press, and keep the pointer: the rail CAPTURES it, so the
+              // playhead follows it for as long as you hold no matter where it
+              // wanders, and a sweep along the rail is a look through the
+              // match. Let go and it plays from where you stopped.
+              e.preventDefault();
+              seekLatest(positionFromEvent(e.clientX));
+              beginGesture("scrub", e);
+            }}
+            onPointerMove={onGesturePointerMove}
+            onPointerUp={endGesture}
+            onPointerCancel={endGesture}
+            onLostPointerCapture={endGesture}
             className="relative cursor-pointer touch-none rounded-[var(--radius-element)] bg-[var(--ink-900)] select-none"
             style={{ height: RAIL_HEIGHT_PX }}
           >
             {duration > 0 ? (
               <>
                 {/* Filmstrip */}
-                <div
-                  className={`absolute inset-0 flex overflow-hidden rounded-[var(--radius-element)] transition-opacity duration-200 ${
-                    precision ? "opacity-40" : "opacity-100"
-                  }`}
-                >
+                <div className="absolute inset-0 flex overflow-hidden rounded-[var(--radius-element)]">
                   {slots.map((slot) => (
                     <div key={slot.key} className="h-full min-w-0 flex-1">
                       {slot.src ? (
@@ -967,18 +1246,12 @@ function TrimStepContentImpl({
                   style={{ width: `${100 - visibleEndPct}%` }}
                 />
 
-                {/* The kept window: one 2px Signal Blue bracket. Grabbing its
-                    inside moves both cuts together, keeping the length. */}
+                {/* The kept window: one 2px Signal Blue bracket. A mark, not
+                    a control — a press inside it reaches the rail and plays
+                    from there, and only the two handles move a cut. */}
                 <div
                   role="presentation"
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    startDrag("window", e.clientX);
-                  }}
-                  className={`absolute -top-0.5 -bottom-0.5 z-[1] rounded-[4px] border-2 border-[var(--blue)] ${
-                    dragging === "window" ? "cursor-grabbing" : "cursor-grab"
-                  }`}
+                  className="pointer-events-none absolute -top-0.5 -bottom-0.5 z-[1] rounded-[4px] border-2 border-[var(--blue)]"
                   style={{
                     left: `${visibleStartPct}%`,
                     width: `${selectionWidthPct}%`,
@@ -1014,16 +1287,27 @@ function TrimStepContentImpl({
                       onPointerDown={(e) => {
                         e.stopPropagation();
                         e.preventDefault();
-                        startDrag(handle, e.clientX);
+                        startDrag(handle, e);
                       }}
+                      onPointerMove={moveGestureOnHandle}
+                      onPointerUp={endGestureOnHandle}
+                      onPointerCancel={endGestureOnHandle}
+                      onLostPointerCapture={endGestureOnHandle}
                       onKeyDown={(e) => {
-                        if (e.key === "ArrowLeft") {
-                          e.preventDefault();
-                          nudge(handle, -1, e.shiftKey);
-                        } else if (e.key === "ArrowRight") {
-                          e.preventDefault();
-                          nudge(handle, 1, e.shiftKey);
+                        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") {
+                          return;
                         }
+                        // A focused handle owns its arrows: one frame, or a
+                        // second with Shift. Stopping here keeps the step's
+                        // ±10s / ±60s seek from firing as well — it is a React
+                        // handler on the step root for exactly this reason.
+                        e.preventDefault();
+                        e.stopPropagation();
+                        nudge(
+                          handle,
+                          e.key === "ArrowLeft" ? -1 : 1,
+                          e.shiftKey,
+                        );
                       }}
                       className={`group/handle absolute -top-0.5 -bottom-0.5 z-[3] w-6 cursor-ew-resize ${focusRingCls}`}
                       style={{ left: `calc(${handlePct}% - 13px)` }}
@@ -1047,30 +1331,61 @@ function TrimStepContentImpl({
           </div>
         </div>
 
-        {/* START / END under the strip's own edges. */}
-        <div className="flex items-baseline justify-between px-0.5 pt-0.5">
-          <span className="inline-flex items-baseline gap-1.5">
-            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-              Start
-            </span>
-            <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
-              {formatTimecode(start)}
-            </span>
-          </span>
-          <span className="inline-flex items-baseline gap-1.5">
-            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-              End
-            </span>
-            <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
-              {formatTimecode(end)}
-            </span>
-          </span>
+        {/* Each cut under its own end of the strip, the number and the thing
+            that moves it in one field. The set half is disabled past the other
+            cut: a start on or after the end is not a window, and the step
+            refuses rather than clamping to a frame nobody chose. */}
+        <div className="flex items-center justify-between gap-3 px-0.5 pt-0.5">
+          <CutField
+            side="start"
+            label="Start"
+            time={start}
+            onJump={() => seekLatest(start)}
+            onSet={() => setHandleToPlayhead("start")}
+            setDisabled={!canSetStart}
+          />
+          <CutField
+            side="end"
+            label="End"
+            time={end}
+            onJump={() => seekLatest(end)}
+            onSet={() => setHandleToPlayhead("end")}
+            setDisabled={!canSetEnd}
+          />
         </div>
+
+        {/* The keys with no button of their own. `Kbd` is the product's
+            one keyboard chip; `sm` is its inline-hint size, and a combo is
+            adjacent chips, never one chip holding both keys. Lowercase for
+            word-named keys, as the roster's hint and Help write them. */}
+        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] leading-[1.5] text-[var(--ink-600)]">
+          <Kbd size="sm">space</Kbd>
+          <span>play</span>
+          <span aria-hidden="true" className="text-[var(--ink-300)]">
+            ·
+          </span>
+          <Kbd size="sm">←</Kbd>
+          <Kbd size="sm">→</Kbd>
+          <span>10 s</span>
+          <span aria-hidden="true" className="text-[var(--ink-300)]">
+            ·
+          </span>
+          <Kbd size="sm">shift</Kbd>
+          <Kbd size="sm">←</Kbd>
+          <Kbd size="sm">→</Kbd>
+          <span>1 min</span>
+          <span aria-hidden="true" className="text-[var(--ink-300)]">
+            ·
+          </span>
+          <Kbd size="sm">I</Kbd>
+          <Kbd size="sm">O</Kbd>
+          <span>set cuts</span>
+        </p>
 
         {tooShort ? (
           <div className={noteStripCls}>
             <XCircle
-              className="mt-0.5 size-[13px] shrink-0 text-[var(--error)]"
+              className={`${noteIconCls} text-[var(--error)]`}
               strokeWidth={1.5}
               aria-hidden="true"
             />
@@ -1078,6 +1393,17 @@ function TrimStepContentImpl({
               The window is under {formatClipLength(minTrimSeconds)} — widen it
               to cover the match.
             </span>
+          </div>
+        ) : null}
+
+        {refusal ? (
+          <div className={noteStripCls} role="alert">
+            <XCircle
+              className={`${noteIconCls} text-[var(--error)]`}
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+            <span>{refusal}</span>
           </div>
         ) : null}
       </div>
@@ -1098,7 +1424,14 @@ function TrimStepContentImpl({
         />
         <Question
           label={`${who} at the start`}
-          hint="At the start of your selected window — ends change every odd game"
+          /* The answer is about one frame, so when that frame moves far enough
+             the answer is dropped and the hint says so — an emptied question
+             with its usual hint reads as a bug rather than a request. */
+          hint={
+            topPlayerAnswerStale
+              ? "Your window start moved — answer again for its new first frame"
+              : "At the start of your selected window — ends change every odd game"
+          }
           value={initialTopPlayerIsPlayer1}
           options={[
             { value: true, label: "Top of frame" },

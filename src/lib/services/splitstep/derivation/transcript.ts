@@ -346,11 +346,6 @@ export function buildTranscript(options: BuildOptions): Transcript {
     if (last?.strokeType === "serve") unreturned += 1;
 
     const shots: DerivedShot[] = [];
-    const serveLanding = rally.serves[rally.serves.length - 1];
-    const serveLandingX =
-      serveLanding && serveLandingUsable(serveLanding)
-        ? serveLanding.bounceX
-        : null;
 
     rally.strokes.forEach((stroke, index) => {
       const isServe = stroke.strokeType === "serve";
@@ -393,7 +388,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
         video_time: stroke.videoTime,
         zone: isServe
           ? serveZone(landing?.x ?? null)
-          : directionZone(landing?.x ?? null, serveLandingX),
+          : directionZone(landing?.x ?? null, contact?.x ?? null),
         flags: flagStroke({ stroke, index, rally, serveIndex }),
         derived: true,
       });

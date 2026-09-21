@@ -17,8 +17,9 @@ import type {
   TeamMember,
 } from "@/lib/data/team-settings-server";
 import type { SeatUsage } from "@/lib/data/teams-server";
+import { SeatBoxes } from "@/components/dashboard/team/dialog-shell";
 import { setActiveWorkspaceThen } from "@/lib/workspace/actions";
-import { capitalize, cn } from "@/lib/utils";
+import { capitalize } from "@/lib/utils";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 
@@ -37,7 +38,9 @@ const ROSTER_PATH = "/dashboard/team/roster";
  * the same row and commits in its own dialog.
  *
  * Seats are countable and few, so they are boxes rather than a bar: filled =
- * taken, outlined = held by an open invite, grey = free. The outlined box and
+ * taken, outlined = held by an open invite, grey = free. A seat is a PLAYER on
+ * the roster, login or not (2026-09-20) — staff listed below hold none, which
+ * is why the caption says "players" and the boxes need not match this list. The outlined box and
  * the outlined `Invited` pill are the same fact drawn twice on purpose.
  */
 export function TeamMembersCard({
@@ -216,32 +219,13 @@ function SeatPips({ seats }: { seats: SeatUsage }) {
   return (
     <div className="flex items-center gap-3 pt-3">
       <span
-        className="flex flex-wrap gap-1"
         role="img"
-        aria-label={`${seats.used} of ${total} seats used, ${held} held by open invites`}
+        aria-label={`${seats.used} of ${total} seats taken by players, ${held} held by open invites`}
       >
-        {Array.from({ length: total }, (_, index) => {
-          const kind =
-            index < seats.used
-              ? "used"
-              : index < seats.used + held
-                ? "held"
-                : "free";
-          return (
-            <span
-              key={index}
-              className={cn(
-                "size-2 rounded-[2px]",
-                kind === "used" && "bg-[var(--blue)]",
-                kind === "held" && "shadow-[inset_0_0_0_1px_var(--blue)]",
-                kind === "free" && "bg-[var(--ink-100)]",
-              )}
-            />
-          );
-        })}
+        <SeatBoxes seats={seats} />
       </span>
       <span className="text-[11px] text-[var(--ink-500)]">
-        {seats.used} of {total} seats
+        {seats.used} of {total} seats · players on the roster
         {held > 0 && ` · ${held} held`}
         {free === 0 && held === 0 && " · full"}
       </span>

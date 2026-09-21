@@ -11,6 +11,7 @@ import { UnsavedChangesProvider } from "@/components/dashboard/settings/unsaved-
 import { LogoutProvider } from "@/components/dashboard/logout-dialog";
 import { HeaderStatusProvider } from "@/components/dashboard/header-status";
 import { HeaderSlotProvider } from "@/components/dashboard/header-slot";
+import { WorkspaceSync } from "@/components/dashboard/workspace-sync";
 import {
   STORAGE_KEYS,
   clearStorageData,
@@ -76,6 +77,9 @@ export function DashboardShell({
             {/* Same reason, other end of the bar: the page publishes a leading
               slot and the header reads it. */}
             <HeaderSlotProvider>
+              {/* Keeps this chrome on the workspace the cookie names — see
+                  WorkspaceSync for why a navigation can leave it behind. */}
+              <WorkspaceSync />
               <div className="flex h-screen w-full overflow-hidden bg-white">
                 <AppSidebar />
                 {/* The gutter is reserved even when nothing overflows: with

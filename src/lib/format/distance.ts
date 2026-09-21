@@ -54,11 +54,20 @@ export function formatDistanceValue(unit: DistanceUnit, ft: number): string {
 
 const KMH_PER_MPH = 1.609344;
 
+/** "118" | "190" — the bare number, for a column whose header names the
+ *  unit (`speedUnitLabel`). Same rounding as `formatSpeed`. */
+export function formatSpeedValue(unit: DistanceUnit, mph: number): string {
+  return String(Math.round(unit === "ft" ? mph : mph * KMH_PER_MPH));
+}
+
+/** "mph" | "km/h". */
+export function speedUnitLabel(unit: DistanceUnit): string {
+  return unit === "ft" ? "mph" : "km/h";
+}
+
 /** "118 mph" | "190 km/h" — rounded to the nearest integer. */
 export function formatSpeed(unit: DistanceUnit, mph: number): string {
-  return unit === "ft"
-    ? `${Math.round(mph)} mph`
-    : `${Math.round(mph * KMH_PER_MPH)} km/h`;
+  return `${formatSpeedValue(unit, mph)} ${speedUnitLabel(unit)}`;
 }
 
 /**

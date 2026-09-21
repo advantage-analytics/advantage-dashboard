@@ -180,6 +180,8 @@ type FloatMenuItemBase = {
   /** A 12px leading glyph. Does not by itself make the row an action row —
    *  see `isAction` below. */
   icon?: React.ReactNode;
+  /** A trailing glyph for a row that opens something (a chevron); no chosen state. */
+  trailing?: React.ReactNode;
   className?: string;
   /**
    * Merged onto the DESCRIPTION line only. A narrow escape hatch, added for
@@ -422,5 +424,17 @@ export function FloatMenuLabel({
     >
       {children}
     </p>
+  );
+}
+
+/**
+ * The caption over a group of rows in a menu with more than one (Show points /
+ * Serve). Sentence case, not an eyebrow — 11px `--ink-500`.
+ */
+export function FloatMenuCaption({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="px-[9px] pt-[7px] pb-[5px] text-[11px] text-[var(--ink-500)]">
+      {children}
+    </span>
   );
 }
