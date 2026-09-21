@@ -262,7 +262,7 @@ ready).
 
 ## T19 · Store the derived ball-paths file: key, one store service, webhook call, backfill script
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T18
 - **files:** (guess) src/lib/services/splitstep/object-keys.ts, src/lib/services/splitstep/ball-paths-store.ts (new), src/app/api/webhooks/splitstep/route.ts (the `after()` block ~407–515 only), scripts/splitstep-ball-paths.ts (new), tests/splitstep-ball-paths-store.spec.ts (new), tests/splitstep-delivery-keys.spec.ts

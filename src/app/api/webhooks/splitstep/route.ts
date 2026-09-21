@@ -57,6 +57,7 @@ import {
 } from "@/lib/services/splitstep/resubmit-job";
 import { gradeResults } from "@/lib/services/splitstep/grade-results";
 import { deriveAndPublish } from "@/lib/services/splitstep/derive-and-publish";
+import { deriveAndStoreBallPaths } from "@/lib/services/splitstep/ball-paths-store";
 import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
 
 export const runtime = "nodejs";
@@ -509,6 +510,37 @@ export async function POST(request: NextRequest) {
             },
           ],
         });
+
+        // Ball paths, after the trajectories file they are derived from is in
+        // the bucket — the store function reads it back out by the key recorded
+        // on the row. It reports rather than throws, and the try/catch is the
+        // second lock: nothing here may reject a callback whose real work is
+        // already done. `skipped` is normal (a null trajectories_url, or the
+        // store above missing), so it logs as information.
+        if (jobId) {
+          try {
+            const ballPaths = await deriveAndStoreBallPaths({
+              supabase,
+              jobId,
+            });
+            if (ballPaths.status === "failed") {
+              console.error(
+                `${LOG} ball paths FAILED — re-run scripts/splitstep-ball-paths.ts --job ${jobId}`,
+                { jobId, error: ballPaths.error },
+              );
+            } else {
+              console.log(`${LOG} ball paths ${ballPaths.status}`, {
+                jobId,
+                ...ballPaths,
+              });
+            }
+          } catch (err) {
+            console.error(`${LOG} ball paths threw`, {
+              jobId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
       });
     }
   }

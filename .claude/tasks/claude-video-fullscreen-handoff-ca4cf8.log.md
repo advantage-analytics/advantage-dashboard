@@ -205,3 +205,15 @@ is the runner's. Newest entries at the bottom.
 
 1. A residual check on the frame→time fit would catch a variable-framerate re-encode.
 2. The 0.1 s spacing can drop the row just before a bounce; whoever draws height may want it kept.
+
+## T19 · Store the derived ball-paths file: key, one store service, webhook call, backfill script — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** `ballPathsObjectKey()` gives `results/{user}/{match}/{job}.ball-paths.json`. New `ball-paths-store.ts` exports `deriveAndStoreBallPaths({ supabase, jobId })`: it reads the job row, downloads the recorded results and trajectories objects from `RESULTS_BUCKET`, runs `parseStrokes` with the trim offset and then `deriveBallPaths`, and upserts the JSON; it returns `stored` / `skipped` (`no_trajectories`, `no_results`) / `failed` and never throws. A null `created_by` keys under `former-member`, as `delivery-storage-keys.ts` does; a null `match_id` is `failed`. The webhook calls it inside the existing `after()` callback after `storeFrameData`, only with a job id, in its own try/catch — no existing line changed. New `scripts/splitstep-ball-paths.ts` backfills every job with a trajectories key, or one `--job <uuid>`, and refuses a missing uuid. No migration, no new column. The backfill was NOT run against the live project.
+
+**follow-ups:**
+
+1. `purge-match-storage.ts` removes only `results_object_key` from the results bucket. A deleted match's `.players.json` and `.trajectories.json` already stayed behind, and the new `.ball-paths.json` will too. Purge by the match's key prefix, or add the three keys.
+2. T20 must build its key with the same `former-member` fallback, or it will miss files for jobs with no creator.
+3. `"former-member"` is now a literal in two modules; share a constant.

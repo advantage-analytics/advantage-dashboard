@@ -86,6 +86,23 @@ export function trajectoriesObjectKey(params: {
 }
 
 /**
+ * `results/{user_id}/{match_id}/{job_id}.ball-paths.json` — OUR derived file,
+ * one compact flight path per stroke (derivation/ball-paths.ts).
+ *
+ * Beside the vendor files it is derived from, for the same reason they sit
+ * together: one job's output, and the match id stays the THIRD segment, which
+ * is how cleanup-orphan-storage.ts attributes it. Deterministic on purpose —
+ * there is no column recording it, so a reader rebuilds this key from the job.
+ */
+export function ballPathsObjectKey(params: {
+  userId: string;
+  matchId: string;
+  jobId: string;
+}): string {
+  return `results/${params.userId}/${params.matchId}/${params.jobId}.ball-paths.json`;
+}
+
+/**
  * `trimmed/{user_id}/{match_id}/{job_id}.mp4` — our copy of the vendor's
  * trimmed, re-encoded video.
  *
