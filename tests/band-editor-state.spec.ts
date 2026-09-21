@@ -5,11 +5,12 @@ import {
   bandEditorDraftScheme,
   bandEditorPayload,
   bandEditorPreview,
-  CONTACT_EDIT_BOUNDS_FT,
+  CONTACT_DATA_BOUNDS_FT,
   DEPTH_EDIT_BOUNDS_FT,
   initBandEditor,
   moveDivider,
   nudgeDivider,
+  refitBandEditor,
   resetBandEditor,
   resetPairFor,
   setDivider,
@@ -162,12 +163,19 @@ test.describe("clamps", () => {
     expect(bandEditorBounds("depth")).toEqual(DEPTH_EDIT_BOUNDS_FT);
   });
 
-  test("contact: clamped to −39…30", () => {
+  test("contact: clamped to the DRAWN range, inside the table's −39…30", () => {
     const s = initBandEditor("contact", CUSTOM);
-    expect(setDivider(s, 0, -80, FT).draft[0]).toBe(-39);
-    expect(setDivider(s, 1, 80, FT).draft[1]).toBe(30);
-    expect(CONTACT_EDIT_BOUNDS_FT).toEqual([-39, 30]);
-    expect(bandEditorBounds("contact")).toEqual(CONTACT_EDIT_BOUNDS_FT);
+    expect(setDivider(s, 0, -80, FT).draft[0]).toBe(-18);
+    expect(setDivider(s, 1, 80, FT).draft[1]).toBe(7.5);
+    expect(CONTACT_DATA_BOUNDS_FT).toEqual([-39, 30]);
+    expect(bandEditorBounds("contact")).toEqual([-18, 7.5]);
+    expect(bandEditorBounds("contact", "ft")).toEqual([-18, 7.5]);
+  });
+
+  test("contact bounds in metres are half-metre grid points, rounded inward", () => {
+    const [lo, hi] = bandEditorBounds("contact", "m");
+    expect(lo).toBeCloseTo(-5 * FT_PER_M, 9); // −18.01 ft = −5.49 m → −5 m
+    expect(hi).toBeCloseTo(2 * FT_PER_M, 9); // 7.73 ft = 2.36 m → 2 m
   });
 
   test("whatever the drag, the payload always validates", () => {
@@ -302,12 +310,26 @@ test.describe("payload", () => {
     });
   });
 
-  test("payload rounds a pushed divider to 2 dp", () => {
+  test("a pushed divider is rounded OUTWARD to the grid (the gap only grows)", () => {
     const s = setDivider(initBandEditor("depth", CUSTOM), 0, 19.5, {
       unit: "ft",
       minGapFt: 2.3456,
     });
-    expect(bandEditorPayload(s).depthDividersFt).toEqual([19.5, 21.85]);
+    expect(s.draft).toEqual([19.5, 22]);
+    const t = setDivider(initBandEditor("depth", CUSTOM), 1, 11, {
+      unit: "ft",
+      minGapFt: 2.3456,
+    });
+    expect(t.draft).toEqual([8.5, 11]);
+  });
+
+  test("a divider the clamp STOPPED is rounded outward too", () => {
+    const s = setDivider(initBandEditor("depth", CUSTOM), 0, 38, {
+      unit: "ft",
+      minGapFt: 2.3456,
+    });
+    // b stops at 38.5; a gives ground to 36.1544 → floored to 36.
+    expect(s.draft).toEqual([36, 38.5]);
   });
 
   test("an untouched editor's payload is the saved record itself", () => {
@@ -357,5 +379,124 @@ test.describe("bandEditorDraftScheme", () => {
     expect(
       bandEditorDraftScheme(resetBandEditor(initBandEditor("depth", CUSTOM))),
     ).toBe("thirds");
+  });
+});
+
+test.describe("fix round 1: the drawn contact range", () => {
+  test("a drag past 7.7 ft stops at 7.5, and the 26 px gap still holds", () => {
+    const ctx: BandEditorContext = { unit: "ft", minGapFt: 2.6 };
+    const s = initBandEditor("contact", DEFAULT_BANDS, ctx); // [0, 5]
+    const pastLower = setDivider(s, 0, 9, ctx);
+    expect(pastLower.draft).toEqual([4.5, 7.5]);
+    expect(pastLower.draft[1] - pastLower.draft[0]).toBeGreaterThanOrEqual(2.6);
+    const pastUpper = setDivider(s, 1, 12, ctx);
+    expect(pastUpper.draft).toEqual([0, 7.5]);
+  });
+
+  test("↓ held at the bound stays put (and never walks past it)", () => {
+    const ctx: BandEditorContext = { unit: "ft", minGapFt: 2.6 };
+    let s = initBandEditor("contact", DEFAULT_BANDS, ctx);
+    for (let i = 0; i < 40; i++) s = nudgeDivider(s, 1, 0.2, ctx);
+    expect(s.draft[1]).toBe(7.5);
+    const held = nudgeDivider(s, 1, 0.2, ctx);
+    expect(held).toBe(s);
+    // The lower divider pushed down into it stops a gap short, on the grid.
+    for (let i = 0; i < 80; i++) s = nudgeDivider(s, 0, 1, ctx);
+    expect(s.draft).toEqual([4.5, 7.5]);
+  });
+
+  test("a saved [−25, 20] contact pair opens clamped, and is clean until moved", () => {
+    const saved: BandSettings = {
+      ...DEFAULT_BANDS,
+      contactDividersFt: [-25, 20],
+    };
+    const ctx: BandEditorContext = { unit: "ft", minGapFt: 2.6 };
+    const s = initBandEditor("contact", saved, ctx);
+    expect(s.initial).toEqual([-18, 7.5]);
+    expect(s.draft).toEqual([-18, 7.5]);
+    // Opening on it is not a change: Save stays dead, nothing is written.
+    expect(bandEditorDirty(s)).toBe(false);
+    expect(bandEditorPayload(s)).toBe(saved);
+    // A real move writes the drawn (clamped) pair — valid for the table.
+    const moved = setDivider(s, 0, -10, ctx);
+    expect(bandEditorDirty(moved)).toBe(true);
+    expect(bandEditorPayload(moved).contactDividersFt).toEqual([-10, 7.5]);
+    // Dragging back to the clamped start is clean again.
+    expect(bandEditorDirty(setDivider(moved, 0, -18, ctx))).toBe(false);
+  });
+
+  test("a saved pair entirely past the drawn range opens as two distinct lines", () => {
+    const saved: BandSettings = {
+      ...DEFAULT_BANDS,
+      contactDividersFt: [20, 25],
+    };
+    const s = initBandEditor("contact", saved, { unit: "ft", minGapFt: 2.6 });
+    expect(s.draft[1]).toBe(7.5);
+    expect(s.draft[1] - s.draft[0]).toBeGreaterThanOrEqual(2.6);
+    expect(bandEditorDirty(s)).toBe(false);
+  });
+
+  test("opening fits the zoom's minimum gap without making the editor dirty", () => {
+    const tight: BandSettings = { ...CUSTOM, depthDividersFt: [10, 11] };
+    const s = initBandEditor("depth", tight, { unit: "ft", minGapFt: 3 });
+    expect(s.draft).toEqual([8, 11]);
+    expect(bandEditorDirty(s)).toBe(false);
+  });
+});
+
+test.describe("fix round 1: refit on a zoom change", () => {
+  test("a larger gap pushes the draft apart; an untouched editor stays clean", () => {
+    const s = initBandEditor("depth", CUSTOM, { unit: "ft", minGapFt: 2 });
+    const refit = refitBandEditor(s, { unit: "ft", minGapFt: 12 });
+    expect(refit.draft[1] - refit.draft[0]).toBeGreaterThanOrEqual(12);
+    expect(bandEditorDirty(refit)).toBe(false);
+  });
+
+  test("nothing to refit returns the same object", () => {
+    const s = initBandEditor("depth", CUSTOM, { unit: "ft", minGapFt: 2 });
+    expect(refitBandEditor(s, { unit: "ft", minGapFt: 3 })).toBe(s);
+  });
+});
+
+test.describe("fix round 1: payload over the CURRENT bands", () => {
+  test("a depth save preserves the other kind's CURRENT values", () => {
+    const s = setDivider(initBandEditor("depth", CUSTOM), 0, 12, FT);
+    // While the editor was open, contact changed somewhere else.
+    const current: BandSettings = { ...CUSTOM, contactDividersFt: [-6, 1] };
+    expect(bandEditorPayload(s, current)).toEqual({
+      depthScheme: "custom",
+      depthDividersFt: [12, 20],
+      contactDividersFt: [-6, 1],
+    });
+  });
+
+  test("a contact save preserves the CURRENT depth scheme and dividers", () => {
+    const s = setDivider(initBandEditor("contact", CUSTOM), 1, 6, FT);
+    const current: BandSettings = {
+      depthScheme: "deepMidShort",
+      depthDividersFt: null,
+      contactDividersFt: [-2, 4],
+    };
+    expect(bandEditorPayload(s, current)).toEqual({
+      depthScheme: "deepMidShort",
+      depthDividersFt: null,
+      contactDividersFt: [-2, 6],
+    });
+  });
+
+  test("dirty is measured against the current bands", () => {
+    const s = setDivider(initBandEditor("depth", CUSTOM), 0, 12, FT);
+    // The optimistic save is in flight: current already IS the payload.
+    const inFlight = bandEditorPayload(s, CUSTOM);
+    expect(bandEditorDirty(s, inFlight)).toBe(false);
+    // …and it failed and reverted: live again.
+    expect(bandEditorDirty(s, CUSTOM)).toBe(true);
+  });
+
+  test("an untouched editor is clean against ANY current record", () => {
+    const s = initBandEditor("contact", CUSTOM);
+    const current: BandSettings = { ...CUSTOM, contactDividersFt: [-1, 3] };
+    expect(bandEditorPayload(s, current)).toBe(current);
+    expect(bandEditorDirty(s, current)).toBe(false);
   });
 });

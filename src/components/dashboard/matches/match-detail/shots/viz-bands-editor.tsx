@@ -13,6 +13,7 @@ import {
   contactReadout,
   COURT_HALF_FT,
   schemeLabel,
+  type BandSettings,
 } from "@/lib/data/viz-bands";
 import {
   formatDistance,
@@ -32,6 +33,7 @@ import {
   type BandEditorKind,
   type BandEditorState,
 } from "./band-editor-state";
+import { LINE_COLOR } from "./court-art";
 import {
   VIEWER_COURT,
   viewerBandLayerY,
@@ -139,7 +141,7 @@ export function VizBandsEditorHandles({
   }, []);
 
   const ctx = editorContext(unit, z);
-  const [lo, hi] = bandEditorBounds(state.kind);
+  const [lo, hi] = bandEditorBounds(state.kind, unit);
   const width = VIEWER_COURT.artPx.w * z;
 
   function onPointerDown(e: ReactPointerEvent<HTMLDivElement>, index: 0 | 1) {
@@ -219,7 +221,9 @@ export function VizBandsEditorHandles({
             aria-describedby={EDITOR_HINT_ID}
             aria-valuemin={lo}
             aria-valuemax={hi}
-            aria-valuenow={Math.round(ft * 10) / 10}
+            // valuenow is in screen-up terms (mirrored), so ↑ raises it as
+            // ARIA expects; the chip text is what is actually announced.
+            aria-valuenow={Math.round((lo + hi - ft) * 10) / 10}
             aria-valuetext={chip}
             className="group pointer-events-auto absolute left-0 cursor-ns-resize outline-none"
             style={{
@@ -250,7 +254,7 @@ export function VizBandsEditorHandles({
             <span
               aria-hidden="true"
               className="mono tabular absolute top-1/2 right-[6px] -translate-y-1/2 rounded-full bg-[var(--blue)] px-1.5 text-[10px] leading-[16px] whitespace-nowrap group-focus-visible:shadow-[var(--focus-ring)]"
-              style={{ color: "#FFFFFF" }}
+              style={{ color: LINE_COLOR }}
             >
               {chip}
             </span>
@@ -311,18 +315,26 @@ function rangeSummary(state: BandEditorState, unit: DistanceUnit): string {
  */
 export function VizBandsEditorSlab({
   state,
+  current,
+  saving,
   unit,
   onReset,
   onCancel,
   onSave,
 }: {
   state: BandEditorState;
+  /** The LIVE effective bands — dirty is measured against them, so an
+   *  in-flight save (whose optimistic override already equals the payload)
+   *  reads as not dirty, and a failed one (reverted) reads as dirty again. */
+  current: BandSettings;
+  /** A save is in flight: Save is dead and busy. */
+  saving: boolean;
   unit: DistanceUnit;
   onReset: () => void;
   onCancel: () => void;
   onSave: () => void;
 }) {
-  const dirty = bandEditorDirty(state);
+  const dirty = !saving && bandEditorDirty(state, current);
   const isDepth = state.kind === "depth";
   const textButton =
     "h-8 shrink-0 cursor-pointer rounded-[6px] px-2 text-[12px] font-medium text-white/85 transition-colors duration-200 hover:bg-white/10 hover:text-white motion-reduce:transition-none";
@@ -366,7 +378,13 @@ export function VizBandsEditorSlab({
       <button
         type="button"
         aria-disabled={!dirty}
-        className={cn(advButton("primary", "sm"), !dirty && "opacity-45")}
+        aria-busy={saving || undefined}
+        className={cn(
+          advButton("primary", "sm"),
+          // Dead: no pointer affordance and no hover change — it only looks
+          // like the button it will become.
+          !dirty && "cursor-default opacity-45 hover:bg-[var(--blue)]",
+        )}
         onClick={() => {
           if (dirty) onSave();
         }}

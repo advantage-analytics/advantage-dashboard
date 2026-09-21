@@ -39,6 +39,8 @@ import {
   viewerBandFtFromY,
   viewerBandLayerY,
   viewerScreenPxToFt,
+  viewerBandCaps,
+  viewerBandDrawableFt,
   SERVE_DEPTH_UNITS_PER_METER,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
 import { COURT_HALF_FT, resolveDepthDividersFt } from "@/lib/data/viz-bands";
@@ -1483,6 +1485,43 @@ test.describe("viewerBandLayerY", () => {
       2 *
         ((VIEWER_COURT.nearBaselineY - VIEWER_COURT.viewBox.minY) /
           VIEWER_COURT.viewBox.h) *
+        VIEWER_COURT.artPx.h,
+      9,
+    );
+  });
+});
+
+test.describe("viewerBandDrawableFt / capped viewerBandLayerY (fix round 1)", () => {
+  test("contact: the near service line to the bottom of the viewBox", () => {
+    const [lo, hi] = viewerBandDrawableFt("contact");
+    expect(lo).toBeCloseTo(-18.01, 1);
+    expect(hi).toBeCloseTo(7.73, 1);
+    expect(viewerBandY("contact", lo)).toBeCloseTo(
+      VIEWER_COURT.nearServiceY,
+      9,
+    );
+  });
+
+  test("depth: the far baseline to the net", () => {
+    const [lo, hi] = viewerBandDrawableFt("depth");
+    expect(lo).toBe(0);
+    expect(hi).toBeCloseTo(39, 1);
+  });
+
+  test("the handle y is capped exactly where the overlay's edges are", () => {
+    const [innerCap, outerCap] = viewerBandCaps("contact");
+    const top =
+      ((innerCap - VIEWER_COURT.viewBox.minY) / VIEWER_COURT.viewBox.h) *
+      VIEWER_COURT.artPx.h;
+    const bottom =
+      ((outerCap - VIEWER_COURT.viewBox.minY) / VIEWER_COURT.viewBox.h) *
+      VIEWER_COURT.artPx.h;
+    expect(viewerBandLayerY("contact", -30, 1)).toBeCloseTo(top, 9);
+    expect(viewerBandLayerY("contact", 20, 1)).toBeCloseTo(bottom, 9);
+    // …and agrees with the overlay's own edge for an in-range divider.
+    const edges = viewerBandEdges("contact", [-5, 3]);
+    expect(viewerBandLayerY("contact", -5, 1)).toBeCloseTo(
+      ((edges[1] - VIEWER_COURT.viewBox.minY) / VIEWER_COURT.viewBox.h) *
         VIEWER_COURT.artPx.h,
       9,
     );

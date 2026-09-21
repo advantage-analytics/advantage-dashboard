@@ -48,9 +48,9 @@ import type { Cut } from "./viz-model";
  * unchanged — picking a depth preset must not silently rewrite where a
  * coach put their contact dividers.
  *
- * "Edit bands…" is Task 4's drag editor. Until it lands, `onEdit` may be
- * absent and the row simply does nothing; it is rendered disabled whenever
- * the viewer cannot edit this workspace's bands at all.
+ * "Edit bands…" opens the drag editor (`viz-bands-editor.tsx`) through
+ * `onEdit`. The row is disabled whenever the viewer cannot edit this
+ * workspace's bands at all, or when no `onEdit` is passed.
  */
 
 const DEPTH_PRESETS: {
@@ -114,7 +114,7 @@ export function VizBandsMenu({
   onEdit,
 }: {
   cut: Cut;
-  /** Task 4's editor. Absent until it exists. */
+  /** Opens the band editor. Without it the "Edit bands…" row is disabled. */
   onEdit?: () => void;
 }) {
   const {
@@ -153,9 +153,9 @@ export function VizBandsMenu({
     onEdit?.();
   }
 
-  // Task 4 owns the editor. Until it passes `onEdit`, the row must not look
-  // live — a menu row that highlights on hover and then does nothing is
-  // worse than one that says it is unavailable.
+  // A row with nothing behind it must not look live — one that highlights on
+  // hover and then does nothing is worse than one that says it is
+  // unavailable.
   const editDisabled = !canEdit || onEdit === undefined;
 
   return (

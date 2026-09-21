@@ -966,10 +966,7 @@ export function viewerBandEdges(
   dividersFt: number[],
 ): number[] {
   const vb = VIEWER_COURT.viewBox;
-  const [innerCap, outerCap] =
-    kind === "depth"
-      ? [VIEWER_COURT.farBaselineY, VIEWER_COURT.netY]
-      : [VIEWER_COURT.nearServiceY, vb.minY + vb.h];
+  const [innerCap, outerCap] = viewerBandCaps(kind);
 
   const inner = dividersFt.map((ft) =>
     clampNum(viewerBandY(kind, ft), innerCap, outerCap),
@@ -986,6 +983,20 @@ export function viewerBandEdges(
     edges[i] = Math.max(edges[i], edges[i - 1]);
   }
   return edges;
+}
+
+/**
+ * The viewBox-y span a kind's band DIVIDERS can be drawn in — the two caps
+ * `viewerBandEdges` clamps every divider into: depth from the far baseline
+ * to the net, contact from the near service line down to the bottom of the
+ * viewBox. One definition, so the overlay's edges, the editor's handles and
+ * the editor's clamp can never disagree about where a divider is.
+ */
+export function viewerBandCaps(kind: "depth" | "contact"): [number, number] {
+  const vb = VIEWER_COURT.viewBox;
+  return kind === "depth"
+    ? [VIEWER_COURT.farBaselineY, VIEWER_COURT.netY]
+    : [VIEWER_COURT.nearServiceY, vb.minY + vb.h];
 }
 
 /* ── The band editor's conversions (Phase 2B, Task 4) ─────────────────────
@@ -1039,7 +1050,24 @@ export function viewerBandLayerY(
   ft: number,
   z: number,
 ): number {
-  return viewerArtPoint(0, viewerBandY(kind, ft)).y * z;
+  const [innerCap, outerCap] = viewerBandCaps(kind);
+  const y = clampNum(viewerBandY(kind, ft), innerCap, outerCap);
+  return viewerArtPoint(0, y).y * z;
+}
+
+/**
+ * Fix round 1: the feet a kind's divider can actually be DRAWN at —
+ * `viewerBandCaps` converted back through `viewerBandFtFromY`. Depth ≈ [0,
+ * 39] (the whole far half); contact ≈ [−18, 7.7] (the near service line to
+ * the bottom of the viewBox), much narrower than the table's −39…30 CHECK.
+ * The editor clamps to the intersection of the two, so a handle can never be
+ * dragged somewhere it cannot be drawn (and pinned, stacked, unreachable).
+ */
+export function viewerBandDrawableFt(
+  kind: "depth" | "contact",
+): [number, number] {
+  const [innerCap, outerCap] = viewerBandCaps(kind);
+  return [viewerBandFtFromY(kind, innerCap), viewerBandFtFromY(kind, outerCap)];
 }
 
 /**

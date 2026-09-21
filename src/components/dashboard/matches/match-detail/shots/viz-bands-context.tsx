@@ -13,7 +13,10 @@ import {
 } from "react";
 
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
-import { saveBandSettings } from "@/app/dashboard/matches/(detail)/[matchId]/viz-bands-actions";
+import {
+  saveBandSettings,
+  type ActionResult,
+} from "@/app/dashboard/matches/(detail)/[matchId]/viz-bands-actions";
 import { bandsEqual, type BandSettings } from "@/lib/data/viz-bands";
 import type { DistanceUnit } from "@/lib/format/distance";
 
@@ -53,6 +56,14 @@ import type { DistanceUnit } from "@/lib/format/distance";
  * throwing — a court that cannot change the bands can still draw them.
  */
 
+/**
+ * How an `applyBands` call ended — for a caller that has to act on it (the
+ * band editor stays open on a failure so the coach can retry; only a
+ * successful save closes it). `"superseded"`: a newer pick took over before
+ * this one resolved, so its result was dropped (see `shouldApplyResult`).
+ */
+export type BandSaveOutcome = "saved" | "failed" | "superseded";
+
 export type BandReceipt =
   { kind: "saved"; message: string } | { kind: "error"; message: string };
 
@@ -69,8 +80,9 @@ export interface VizBandsValue {
   /** Session-only: the contact cuts' overlay is hidden. */
   contactHidden: boolean;
   toggleContactHidden(): void;
-  /** Apply a preset: optimistic locally, then persisted. */
-  applyBands(next: BandSettings): void;
+  /** Apply bands: optimistic locally, then persisted. Resolves with the
+   *  outcome; callers that don't care (a preset pick) can ignore it. */
+  applyBands(next: BandSettings): Promise<BandSaveOutcome>;
   /** What the viewer's filter-pill slot should show instead of the pill. */
   receipt: BandReceipt | null;
 }
@@ -112,6 +124,11 @@ const VizBandsContext = createContext<VizBandsValue | null>(null);
 
 function noop(): void {}
 
+/** Outside the provider nothing can be saved. */
+function refuseBands(): Promise<BandSaveOutcome> {
+  return Promise.resolve("failed");
+}
+
 export function useVizBands(): VizBandsValue {
   const ctx = useContext(VizBandsContext);
   const { meta } = useMatchReport();
@@ -122,7 +139,7 @@ export function useVizBands(): VizBandsValue {
       unit: "ft",
       contactHidden: false,
       toggleContactHidden: noop,
-      applyBands: noop,
+      applyBands: refuseBands,
       receipt: null,
     }),
     [meta.bandSettings, meta.canEditBands],
@@ -179,40 +196,54 @@ export function VizBandsProvider({ children }: { children: ReactNode }) {
 
   const workspaceName = meta.workspaceName;
   const applyBands = useCallback(
-    (next: BandSettings) => {
+    (next: BandSettings): Promise<BandSaveOutcome> => {
       // Claim this generation BEFORE the optimistic write, so the guard
       // below can tell "my save" from "a save that started after mine".
       const seq = ++seqRef.current;
       setOverride(next);
-      startSaving(async () => {
-        const result = await saveBandSettings(next);
-        // A newer pick has already taken over the override; this result is
-        // about a scheme the coach has since moved off. Applying it — even
-        // the success branch — would silently reinstate the older pick, and
-        // an out-of-order resolution would strand the override on it for
-        // good. Reverting on ITS failure would be just as wrong: the state
-        // it would revert is the newer pick's, not this one's.
-        if (!shouldApplyResult(seq, seqRef.current)) return;
-        if (result.ok) {
-          // Trust the row the database actually stored (rounded to the
-          // column's own 2dp), not the value we sent — otherwise the
-          // override could never equal `saved` and would never clear.
-          setOverride(result.data);
+      return new Promise<BandSaveOutcome>((resolve) => {
+        startSaving(async () => {
+          // A thrown action (network drop) is a failed save, not a promise
+          // that never settles — the editor waits on this to leave or stay.
+          let result: ActionResult<BandSettings>;
+          try {
+            result = await saveBandSettings(next);
+          } catch {
+            result = { ok: false, error: "failed" };
+          }
+          // A newer pick has already taken over the override; this result is
+          // about a scheme the coach has since moved off. Applying it — even
+          // the success branch — would silently reinstate the older pick, and
+          // an out-of-order resolution would strand the override on it for
+          // good. Reverting on ITS failure would be just as wrong: the state
+          // it would revert is the newer pick's, not this one's.
+          if (!shouldApplyResult(seq, seqRef.current)) {
+            resolve("superseded");
+            return;
+          }
+          if (result.ok) {
+            // Trust the row the database actually stored (rounded to the
+            // column's own 2dp), not the value we sent — otherwise the
+            // override could never equal `saved` and would never clear.
+            setOverride(result.data);
+            showReceipt({
+              kind: "saved",
+              message: workspaceName
+                ? `Bands saved · every return chart in ${workspaceName}`
+                : "Bands saved · every return chart in this workspace",
+            });
+            resolve("saved");
+            return;
+          }
+          setOverride(null);
           showReceipt({
-            kind: "saved",
-            message: workspaceName
-              ? `Bands saved · every return chart in ${workspaceName}`
-              : "Bands saved · every return chart in this workspace",
+            kind: "error",
+            message:
+              result.error === "forbidden"
+                ? "Bands not saved · only coaches and staff can change this team's bands"
+                : "Bands not saved · something went wrong, try again",
           });
-          return;
-        }
-        setOverride(null);
-        showReceipt({
-          kind: "error",
-          message:
-            result.error === "forbidden"
-              ? "Bands not saved · only coaches and staff can change this team's bands"
-              : "Bands not saved · something went wrong, try again",
+          resolve("failed");
         });
       });
     },

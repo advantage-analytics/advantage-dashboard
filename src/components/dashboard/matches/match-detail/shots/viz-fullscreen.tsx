@@ -41,6 +41,7 @@ import {
   bandEditorPayload,
   bandEditorPreview,
   initBandEditor,
+  refitBandEditor,
   resetBandEditor,
   type BandEditorState,
 } from "./band-editor-state";
@@ -59,6 +60,7 @@ import {
   VizBandsEditorBanner,
   VizBandsEditorHandles,
   VizBandsEditorSlab,
+  editorContext,
 } from "./viz-bands-editor";
 import { bandKindFor, VizBandsMenu } from "./viz-bands-menu";
 import type { VizBandsOverlayProps } from "./viz-bands-overlay";
@@ -175,10 +177,21 @@ export function VizFullscreen() {
       ? editor
       : null;
   const editing = activeEditor !== null;
+  // Fix round 1: an editor that is no longer active is dropped outright, so
+  // it cannot spring back if `canEdit`/the cut flip back. A render-phase
+  // update of this component's own state — no effect, no extra commit.
+  if (editor !== null && activeEditor === null) setEditor(null);
+
+  /** A save is in flight: Save is dead and busy until it resolves. */
+  const [saving, setSaving] = useState(false);
+  /**
+   * Bumped on every entry, so a save that resolves after its editor was
+   * cancelled (and perhaps a new one opened) cannot close the new one.
+   */
+  const editSessionRef = useRef(0);
 
   /** The bands trigger in the slab — where focus goes back to on exit. */
   const bandsTriggerRef = useRef<HTMLSpanElement>(null);
-  const returnFocusToBandsRef = useRef(false);
 
   const updateEditor = useCallback(
     (fn: (prev: BandEditorState) => BandEditorState) => {
@@ -188,26 +201,38 @@ export function VizFullscreen() {
   );
 
   const exitEdit = useCallback(() => {
-    returnFocusToBandsRef.current = true;
     setEditor(null);
   }, []);
 
-  // Leaving edit mode returns focus to the bands trigger. An effect, after
-  // the commit, because the slab's controls are `inert` right up to it and
-  // `focus()` on an inert element is silently a no-op.
+  // Leaving edit mode — Cancel, Esc, a successful Save, or the editor going
+  // stale — returns focus to the bands trigger. Keyed on the `editing` EDGE,
+  // after the commit, because the slab's controls are `inert` right up to it
+  // and `focus()` on an inert element is silently a no-op.
+  const wasEditingRef = useRef(false);
   useEffect(() => {
-    if (editor !== null || !returnFocusToBandsRef.current) return;
-    returnFocusToBandsRef.current = false;
-    bandsTriggerRef.current
-      ?.querySelector<HTMLElement>("button")
-      ?.focus({ preventScroll: true });
-  }, [editor]);
+    if (wasEditingRef.current && !editing) {
+      bandsTriggerRef.current
+        ?.querySelector<HTMLElement>("button")
+        ?.focus({ preventScroll: true });
+    }
+    wasEditingRef.current = editing;
+  }, [editing]);
 
   // `usePanZoom` needs a real cut; `shots-tab.tsx` only mounts this alongside
   // one, and the guard below covers the render race. Hooks can't sit behind
   // that guard, so the fallback keeps the hook order stable. `editing` locks
   // it at the current transform.
   const pz = usePanZoom(cut ?? "serve", stageRef, dropActiveMark, editing);
+
+  // Fix round 1: the lock holds the zoom still, but a window resize still
+  // re-fits the court — and 26 screen px is then a different number of feet.
+  // Re-fit the draft (and its start, together) to the new zoom's gap during
+  // render, the same way a stale editor is dropped above.
+  const [editorZ, setEditorZ] = useState<number | null>(null);
+  if (activeEditor !== null && editorZ !== pz.t.z) {
+    setEditorZ(pz.t.z);
+    setEditor(refitBandEditor(activeEditor, editorContext(unit, pz.t.z)));
+  }
 
   /**
    * "Edit bands…". Guarded here as well as by the menu's disabled row: a
@@ -218,15 +243,32 @@ export function VizFullscreen() {
     const kind = bandKindFor(cut);
     if (kind === null) return;
     dropActiveMark();
-    setEditor(initBandEditor(kind, bands));
-  }, [canEdit, cut, bands, dropActiveMark]);
+    editSessionRef.current += 1;
+    setEditorZ(pz.t.z);
+    setEditor(initBandEditor(kind, bands, editorContext(unit, pz.t.z)));
+  }, [canEdit, cut, bands, unit, pz.t.z, dropActiveMark]);
 
+  /**
+   * Save. The payload is built on the CURRENT effective bands (only this
+   * kind's fields come from the draft), and goes through the same
+   * optimistic, generation-sequenced `applyBands` a preset pick takes.
+   *
+   * Fix round 1 ruling: only a SUCCESSFUL save leaves edit mode. A refusal
+   * keeps the editor open with the draft intact, the reason shows beside the
+   * "Editing bands" pill, and Save is live again (the override reverted, so
+   * the draft is dirty against the current bands once more) for a retry.
+   */
   function saveEdit() {
-    if (activeEditor === null || !bandEditorDirty(activeEditor)) return;
-    // The same optimistic, generation-sequenced path a preset pick takes —
-    // the overlay and its `% · n` move on this frame, the receipt follows.
-    applyBands(bandEditorPayload(activeEditor));
-    exitEdit();
+    if (activeEditor === null || saving) return;
+    if (!bandEditorDirty(activeEditor, bands)) return;
+    const session = editSessionRef.current;
+    setSaving(true);
+    void applyBands(bandEditorPayload(activeEditor, bands)).then((outcome) => {
+      setSaving(false);
+      if (outcome === "saved" && session === editSessionRef.current) {
+        exitEdit();
+      }
+    });
   }
 
   /* ── Bands (Phase 2B) ─────────────────────────────────────────────────── */
@@ -420,9 +462,11 @@ export function VizFullscreen() {
     return null;
   }
 
-  // While editing the pill slot says so, and nothing else takes it.
-  const showReceipt = receipt !== null && !editing;
-  const receiptTakesPillSlot = showReceipt && !filtersOpen;
+  // While editing the pill slot says "Editing bands"; a receipt that arrives
+  // then (a refused save, above all) sits BESIDE it rather than being
+  // swallowed — the same arrangement as an open filters popover.
+  const showReceipt = receipt !== null;
+  const receiptTakesPillSlot = showReceipt && !filtersOpen && !editing;
   const pillHidden = editing || receiptTakesPillSlot;
 
   const heat = state.chart === "heat";
@@ -498,9 +542,15 @@ export function VizFullscreen() {
               already in `MatchDataProvider` before the viewer opened. */}
           {result.count === 0 && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
+              {/* While the band editor is open the card is a caption, not a
+                  control: it must never catch a divider drag passing under
+                  it, and "Clear" would change the filters mid-edit. */}
               <div
                 data-chrome=""
-                className="pointer-events-auto flex flex-col items-center gap-2 rounded-[12px] px-5 py-4 text-center backdrop-blur-[8px]"
+                className={cn(
+                  "flex flex-col items-center gap-2 rounded-[12px] px-5 py-4 text-center backdrop-blur-[8px]",
+                  editing ? "pointer-events-none" : "pointer-events-auto",
+                )}
                 style={{ background: "rgba(13,13,13,0.74)" }}
               >
                 <p className="text-[12px] text-white/80">
@@ -508,7 +558,7 @@ export function VizFullscreen() {
                     ? `No ${result.noun} match these filters`
                     : `No ${result.noun} recorded for ${subjectName} yet`}
                 </p>
-                {hasFilters && (
+                {hasFilters && !editing && (
                   <button
                     type="button"
                     onClick={clearFilters}
@@ -712,6 +762,8 @@ export function VizFullscreen() {
             {activeEditor !== null && (
               <VizBandsEditorSlab
                 state={activeEditor}
+                current={bands}
+                saving={saving}
                 unit={unit}
                 onReset={() => updateEditor(resetBandEditor)}
                 onCancel={exitEdit}
