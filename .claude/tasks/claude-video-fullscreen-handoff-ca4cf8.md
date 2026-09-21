@@ -318,7 +318,7 @@ ready).
 
 ## T23 · Purge every results-bucket file of a deleted match: players, trajectories, ball paths
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) `src/lib/services/matches/purge-match-storage.ts`; new node-style spec `tests/purge-match-results-keys.spec.ts` with a fake caller client modelled on `fakeCaller` in `tests/match-video-purge.spec.ts`; read-only: `src/lib/services/splitstep/object-keys.ts`, `delivery-storage-keys.ts`, `ball-paths-store.ts`
 - **done when:**

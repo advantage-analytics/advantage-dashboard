@@ -253,3 +253,16 @@ is the runner's. Newest entries at the bottom.
 1. Ball height (`z`) is carried and still undrawn; a shadow or size ramp would make the bounce readable.
 2. The tail's segment count and alpha ramp are unpinned — check by eye on Caden Ace v Matt Goodman.
 3. `film-fullscreen.tsx`'s `prefersReducedMotion()` and this file's `usePrefersReducedMotion()` could be one shared hook.
+
+## T23 · Purge every results-bucket file of a deleted match: players, trajectories, ball paths — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** `purgeMatchStorage`'s `processing_jobs` read also selects `id, match_id, created_by, players_object_key, trajectories_object_key`, and its results lane now removes a fixed, de-duplicated set in the same single `remove`: the three recorded keys verbatim, the ball-paths key computed through `ballPathsObjectKey` / `ballPathsUserSegment`, and — when the results key has exactly the shape `results/{segment}/{match_id}/{id}.json` for the row's own ids — the ball-paths sibling under that segment, which is how a file written before its uploader left is still found. Null recorded keys add nothing; a row with a missing, empty or slash-bearing id, or a `match_id` outside the requested set, adds no computed key. The module never lists a bucket and builds no prefix. Errors are still logged and never thrown; the video, `match_files` and attachment lanes and the existing purge spec are untouched. New 22-case spec, including seven near-miss key shapes. Nothing was run against the live bucket; past orphans were not backfilled.
+
+**follow-ups:**
+
+1. Files already orphaned by past deletions need a supervised run of `scripts/cleanup-orphan-storage.ts` (dry run first); confirm it attributes `.ball-paths.json`. Files under `orphaned/…` from an adopted delivery match no layout there.
+2. `ball-paths-access.ts` has the same uploader-left drift: it recomputes the key from the current `created_by`, so a retained team match whose uploader left reads empty. The sibling-of-results rule would fix it.
+3. `rollbackCreatedMatch` in the upload wizard deletes a match row from the browser without purging; probably before any delivery, unverified. `resubmit-job.ts` may strand a previous delivery's files.
+4. A recorded `ball_paths_object_key` column would retire the two-candidate guess.
