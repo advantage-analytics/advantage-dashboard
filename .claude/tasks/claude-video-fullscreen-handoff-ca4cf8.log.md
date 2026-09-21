@@ -24,3 +24,14 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. In T12, confirm `onRest` reports the measured board size, not a static 236×146 — the slab's height changes once T4 restyles it.
+
+## T3 · Move the board by free nudge and lift/drop, and stop the drawer displacing it — done
+
+**gate:** mechanical pass on re-run — the full suite had one failure, `tests/match-video-attachments-db.spec.ts:3225` ("two concurrent sweeps never share a row"), a live-database spec this diff does not touch; re-run alone it passed, and the whole file passed 42/42, so it was recorded as a shared-DB load flake, not waved through unchecked · completion `VERDICT: pass`
+
+**changed:** `FilmScoreboard` loses `rightInset` and the drawer-aware inset block, so the drawer no longer displaces the board; `film-fullscreen.tsx` changes by one deleted line. Arrows nudge through `nudgeBoard` (8px, 40px shifted), Space lifts and drops, Escape while held returns to where the move began without persisting. One `free` position drives the landing ghost for both a pointer drag and a keyboard hold. A polite live region announces each landing by corner. New optional `onRest(anchor, size)`. `neighbourAnchor`, the `0` reset and the double-click reset are deleted with their spec case. The system focus ring shows on plain `:focus`.
+
+**follow-ups:**
+
+1. `[data-film-own-keys]` makes the room ignore every key from the focused board, so Escape on a focused-but-not-held board cannot close the drawer or the room. Consider forwarding an unhandled Escape.
+2. A keyboard nudge moves instantly; a short glide might read better, but the spec gives no motion for it.

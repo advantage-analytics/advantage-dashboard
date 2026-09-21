@@ -7,7 +7,6 @@ import {
   clampBoardPosition,
   courtSlot,
   nearestAnchor,
-  neighbourAnchor,
   nudgeBoard,
   parseBoardAnchor,
 } from "@/components/dashboard/matches/match-detail/film/board-position";
@@ -53,14 +52,6 @@ test("letting go snaps to the closest corner", () => {
   expect(nearestAnchor({ left: 60, top: 480 }, board, room, insets)).toBe(
     "bottom-left",
   );
-});
-
-test("arrow keys walk the four corners", () => {
-  expect(neighbourAnchor("top-left", "ArrowRight")).toBe("top-right");
-  expect(neighbourAnchor("top-right", "ArrowRight")).toBe("top-right");
-  expect(neighbourAnchor("top-left", "ArrowDown")).toBe("bottom-left");
-  expect(neighbourAnchor("bottom-right", "ArrowUp")).toBe("top-right");
-  expect(neighbourAnchor("bottom-left", "ArrowLeft")).toBe("bottom-left");
 });
 
 test("stored values are validated, including a stale six-spot value", () => {

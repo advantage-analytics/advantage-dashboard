@@ -138,21 +138,6 @@ export function nearestAnchor(
   return best;
 }
 
-/** Arrow keys walk the corners: left/right across, up/down along a side. */
-export function neighbourAnchor(
-  anchor: BoardAnchor,
-  key: BoardArrowKey,
-): BoardAnchor {
-  const [row, column] = anchor.split("-") as [
-    "top" | "bottom",
-    "left" | "right",
-  ];
-  if (key === "ArrowUp") return `top-${column}` as BoardAnchor;
-  if (key === "ArrowDown") return `bottom-${column}` as BoardAnchor;
-  const nextColumn = key === "ArrowLeft" ? "left" : "right";
-  return `${row}-${nextColumn}` as BoardAnchor;
-}
-
 /** A stored value, or null when it is missing or not a resting spot. */
 export function parseBoardAnchor(raw: string | null): BoardAnchor | null {
   return raw && (BOARD_ANCHORS as readonly string[]).includes(raw)

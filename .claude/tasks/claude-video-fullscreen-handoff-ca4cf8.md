@@ -45,7 +45,7 @@ ready).
 
 ## T3 · Move the board by free nudge and lift/drop, and stop the drawer displacing it
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** (guess) film/film-scoreboard.tsx, film/board-position.ts, film/film-fullscreen.tsx (FilmScoreboard call site only), tests/film-board-position.spec.ts
