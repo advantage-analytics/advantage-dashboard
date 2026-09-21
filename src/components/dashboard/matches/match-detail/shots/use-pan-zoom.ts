@@ -35,12 +35,22 @@ import type { Cut } from "./viz-model";
 
 const ART: Size = VIEWER_COURT.artPx;
 
+/**
+ * Fix round 1: a pointer has to travel this far (Manhattan distance, in stage
+ * px) before the gesture counts as a drag. Below it the press is a CLICK — no
+ * pointer capture, no `panning`, so a plain click on a mark no longer blinks
+ * its readout off and back on. Above it the drag begins from the press's own
+ * origin, so nothing is lost to the dead zone.
+ */
+const DRAG_DEAD_ZONE_PX = 4;
+
 export interface PanZoomApi {
   /** The current transform — `translate(px, py) scale(z)` on the pan layer. */
   t: PanZoom;
   /** The stage's measured size; `{w:0,h:0}` before the first measurement. */
   stage: Size;
-  /** True between pointer-down and pointer-up on a real drag. */
+  /** True from the moment a press passes `DRAG_DEAD_ZONE_PX` until it ends —
+   *  NOT from pointer-down, so a click is not a drag. */
   panning: boolean;
   zoomIn: () => void;
   zoomOut: () => void;
@@ -68,12 +78,24 @@ function isChrome(target: EventTarget | null): boolean {
 export function usePanZoom(
   cut: Cut,
   stageRef: React.RefObject<HTMLDivElement | null>,
+  /** Fired once, when a press turns into a real drag — the court uses it to
+   *  drop whichever mark was under the cursor, so the readout doesn't snap
+   *  back to a mark that is no longer there when the drag ends. Must be
+   *  referentially stable. */
+  onDragStart?: () => void,
 ): PanZoomApi {
   const [stage, setStage] = useState<Size>({ w: 0, h: 0 });
   const [t, setT] = useState<PanZoom>({ z: 1, px: 0, py: 0 });
   const [panning, setPanning] = useState(false);
 
-  const dragRef = useRef<{ id: number; x: number; y: number } | null>(null);
+  const dragRef = useRef<{
+    id: number;
+    /** Last position a delta was measured from. */
+    x: number;
+    y: number;
+    /** Past the dead zone: this press is a drag. */
+    active: boolean;
+  } | null>(null);
 
   /* ── Measure the stage ─────────────────────────────────────────────────── */
 
@@ -160,11 +182,16 @@ export function usePanZoom(
     [stage],
   );
 
+  // The press is only RECORDED here. Capture and `panning` wait for the dead
+  // zone, below — a press that never moves is a click on whatever is under it.
   const onPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || isChrome(e.target)) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
-    setPanning(true);
+    dragRef.current = {
+      id: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+      active: false,
+    };
   }, []);
 
   const onPointerMove = useCallback(
@@ -173,11 +200,20 @@ export function usePanZoom(
       if (drag === null || drag.id !== e.pointerId) return;
       const dx = e.clientX - drag.x;
       const dy = e.clientY - drag.y;
+      if (!drag.active) {
+        if (Math.abs(dx) + Math.abs(dy) <= DRAG_DEAD_ZONE_PX) return;
+        // Crossed the dead zone: NOW it is a drag. The pan below still starts
+        // from the press's own origin, so the first few pixels aren't dropped.
+        drag.active = true;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setPanning(true);
+        onDragStart?.();
+      }
       drag.x = e.clientX;
       drag.y = e.clientY;
       setT((prev) => panBy(prev, dx, dy, ART, stage));
     },
-    [stage],
+    [stage, onDragStart],
   );
 
   const onPointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
@@ -187,7 +223,7 @@ export function usePanZoom(
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
     dragRef.current = null;
-    setPanning(false);
+    if (drag.active) setPanning(false);
   }, []);
 
   return {

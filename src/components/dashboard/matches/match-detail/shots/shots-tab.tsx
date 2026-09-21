@@ -102,9 +102,18 @@ function ShotsTabBody() {
       )}
       {/* The focused view stays mounted UNDERNEATH the viewer — leaving is a
           state change (the `fullscreen` key dropped), not a remount, so the
-          court behind is already exactly where it was. Until Task 5's door
-          lands, `&fullscreen=1` on a focused-view URL is the way in. */}
-      {state.fullscreen === true && state.cut !== null && <VizFullscreen />}
+          court behind is already exactly where it was.
+
+          RULING (fix round 1): never while drafting. `?draft=1` is G4's
+          "Create view" prompt, where the focused court deliberately draws NO
+          dots until something has been chosen; a viewer opened over it plotted
+          the whole unfiltered cut, so the same URL showed a blank court and a
+          full one at once. The door itself is hidden in draft mode, but
+          `&fullscreen=1` can arrive straight off a pasted URL, so the guard
+          belongs here rather than only on the button. */}
+      {state.fullscreen === true &&
+        state.cut !== null &&
+        state.draft !== true && <VizFullscreen />}
     </>
   );
 }

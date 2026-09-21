@@ -1814,6 +1814,38 @@ test.describe("VizDot.meta — serve cut", () => {
     expect(meta.shotType).toBe("First Serve");
     expect(meta.result).toBe("In");
     expect(meta.speedMph).toBe(118);
+    expect(meta.isAce).toBe(false);
+  });
+
+  // Fix round 1: the ace is a POINT fact, and the readout could never reach it
+  // through the shot's own `result` (an ace's serve row still reads "In").
+  // `meta.isAce` and the star shape come from the same expression, so this
+  // asserts they agree rather than asserting each separately.
+  test("isAce tracks the star shape exactly — both off MatchPoint.resultType", () => {
+    const ace = point({
+      serverIsPlayer1: true,
+      wonByPlayer1: true,
+      resultType: "Ace",
+    });
+    const plain = point({ serverIsPlayer1: true, wonByPlayer1: true });
+
+    const aceResult = computeViz([ace], "serve", EMPTY_VIZ_FILTERS, true);
+    expect(aceResult.dots[0].shape).toBe("star");
+    expect(aceResult.dots[0].meta!.isAce).toBe(true);
+    // The shot row itself never says "Ace" — that is the whole point.
+    expect(aceResult.dots[0].meta!.result).not.toBe("Ace");
+
+    const plainResult = computeViz([plain], "serve", EMPTY_VIZ_FILTERS, true);
+    expect(plainResult.dots[0].shape).not.toBe("star");
+    expect(plainResult.dots[0].meta!.isAce).toBe(false);
+  });
+
+  test("isAce is false on every non-serve cut — no other cut has aces", () => {
+    const p = point({ serverIsPlayer1: false, wonByPlayer1: true });
+    for (const cut of ["returnPlacement", "returnContact"] as const) {
+      const r = computeViz([p], cut, EMPTY_VIZ_FILTERS, true);
+      for (const dot of r.dots) expect(dot.meta!.isAce).toBe(false);
+    }
   });
 
   test("wonBySubject flips for a player-2 viewer (guardrails §4: never a literal 'player1' check)", () => {

@@ -307,6 +307,25 @@ test.describe("trianglePointsFor — apex points screen-up", () => {
     expect(apex.y).toBeLessThan(baseRight.y);
   });
 
+  // Fix round 1, RULING: the fullscreen viewer's frame is drawn upright with
+  // NO group rotation at all, so the only kind whose apex is already screen-up
+  // there is "serve" — `viz-fullscreen-court.tsx` uses that kind for every
+  // cut, unlike the in-shell return frames. Asserted as "the apex is the
+  // minimum y of the three vertices", which is the property the viewer needs,
+  // for every cut's mark size.
+  for (const size of [VIEWER_COURT.markRadius, 2.4, 3.2]) {
+    test(`viewer frame: the "serve" triangle's apex is the minimum y (size ${size})`, () => {
+      const pts = parseTrianglePoints(
+        trianglePointsFor("serve", VIEWER_COURT.centreX, 300, size),
+      );
+      const [apex] = pts;
+      expect(apex.y).toBe(Math.min(...pts.map((p) => p.y)));
+      // …and it is strictly above both base corners, not merely tied.
+      expect(apex.y).toBeLessThan(pts[1].y);
+      expect(apex.y).toBeLessThan(pts[2].y);
+    });
+  }
+
   test("area and centroid match the pre-G2 triangle for a given size", () => {
     // Same shoelace/centroid maths the original trianglePoints() produced —
     // orientation changed, size/shape did not.

@@ -107,6 +107,15 @@ export interface VizDotMeta {
   wonBySubject: boolean;
   shotType: string | null;
   result: string | null;
+  /**
+   * Fix round 1: an ace is a POINT fact (`MatchPoint.resultType === "Ace"`),
+   * not a shot `result` — a shot row for an ace still reads `"In"` — so the
+   * readout could never say "Ace" off `result` alone. Threaded down from the
+   * SAME expression that gives the dot its star shape (`computeViz`'s serve
+   * branch), never re-derived here or downstream, so the star and the word
+   * can't disagree. Always `false` off the serve cut: no other cut has aces.
+   */
+  isAce: boolean;
   speedMph: number | null;
 }
 
@@ -781,8 +790,12 @@ function pointDotMeta(
       }
     | null
     | undefined,
+  /** Passed in by the serve branch from the same expression that picks the
+   *  star shape; every other cut leaves it at its default. */
+  isAce = false,
 ): VizDotMeta {
   return {
+    isAce,
     pointId: p.id,
     setNumber: p.setNumber,
     pointScore: p.pointScore ?? null,
@@ -879,6 +892,11 @@ export function computeViz(
       const zoneDot = pointToServeDotFromServeZones(serveInput);
       if (zoneDot) serveDots.push(zoneDot);
 
+      // Fix round 1: ONE expression for "this serve is an ace", read by both
+      // the dot's star shape and its `meta.isAce`, so the glyph and the
+      // readout's first line can never disagree.
+      const isAce = p.resultType === "Ace";
+
       // Fix round 1: mirror the return branch's flattened-field fallback —
       // `serveShot` can be `undefined` (a point whose `shots` row wasn't
       // resolvable at all; the dot still draws off `p.firstShotLandingX/Y`/
@@ -908,9 +926,9 @@ export function computeViz(
         // serve folds into Miss's ordinary grey circle — no separate shape
         // — `atNet` below carries the "drawn at the net, not its real
         // landing" fact instead.
-        shape: p.resultType === "Ace" ? "star" : "circle",
+        shape: isAce ? "star" : "circle",
         atNet: metrics.kind === "net",
-        meta: pointDotMeta(p, subjectIsPlayer1, serveMetaShot),
+        meta: pointDotMeta(p, subjectIsPlayer1, serveMetaShot, isAce),
       });
     } else {
       if (p.serverIsPlayer1 === subjectIsPlayer1) continue;

@@ -100,10 +100,13 @@ export function buildReadout(
 
   const shot = shotPhrase(meta.shotType, cut);
   const call = resultPhrase(meta.result);
-  // An ace subsumes the serve description — "First serve, ace" says the same
-  // thing twice.
-  const shotLine =
-    call === "Ace"
+  // Fix round 1: `meta.isAce` FIRST. An ace's own shot row reads `result:
+  // "In"` — the ace is a point fact — so a `result`-only test never fired.
+  // An ace also subsumes the serve description: "First serve, ace" says the
+  // same thing twice.
+  const shotLine = meta.isAce
+    ? "Ace"
+    : call === "Ace"
       ? "Ace"
       : shot !== null && call !== null
         ? `${shot}, ${lowerFirst(call)}`

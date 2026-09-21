@@ -13,6 +13,7 @@ function meta(overrides: Partial<VizDotMeta> = {}): VizDotMeta {
     wonBySubject: true,
     shotType: "First Serve",
     result: "In",
+    isAce: false,
     speedMph: 118,
     ...overrides,
   };
@@ -52,6 +53,36 @@ test("an ace reads as 'Ace' and does not repeat the serve description", () => {
     "serve",
   );
   expect(r.lines[0]).toBe("Ace");
+});
+
+// Fix round 1: the case real data actually produces. An ace's own shot row is
+// called "In" — the ace lives on the POINT (`resultType`), which is why
+// `VizDotMeta.isAce` exists and why it is tested first.
+test("an ace whose shot result is 'In' still reads 'Ace'", () => {
+  const r = buildReadout(
+    meta({ shotType: "First Serve", result: "In", isAce: true }),
+    NAMES,
+    "serve",
+  );
+  expect(r.lines[0]).toBe("Ace");
+});
+
+test("isAce wins over the shot description, whatever the shot row says", () => {
+  const r = buildReadout(
+    meta({ shotType: "Second Serve", result: null, isAce: true }),
+    NAMES,
+    "serve",
+  );
+  expect(r.lines[0]).toBe("Ace");
+});
+
+test("a non-ace serve called 'In' never reads 'Ace'", () => {
+  const r = buildReadout(
+    meta({ shotType: "First Serve", result: "In", isAce: false }),
+    NAMES,
+    "serve",
+  );
+  expect(r.lines[0]).toBe("First serve");
 });
 
 test("an out serve names the serve and the call", () => {
@@ -158,6 +189,7 @@ const HOLES: Partial<VizDotMeta>[] = [
   { speedMph: 0 },
   { setNumber: 0, pointScore: null, speedMph: null, shotType: null },
   { wonBySubject: false, result: "Net", shotType: null },
+  { isAce: true, result: "In", shotType: "First Serve" },
 ];
 
 for (const [i, hole] of HOLES.entries()) {

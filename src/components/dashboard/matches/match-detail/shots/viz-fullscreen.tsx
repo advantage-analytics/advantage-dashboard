@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Maximize, Minus, Plus, SlidersHorizontal, X } from "lucide-react";
 import { ChevronDown, ChevronUp } from "lucide-react";
@@ -10,7 +10,6 @@ import { useMatchReport } from "@/components/dashboard/matches/match-detail/matc
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
 import { setOutcome } from "@/components/dashboard/matches/match-detail/report-scoreboard";
-import { isFormControl } from "@/components/dashboard/matches/new-match-wizard/useWizardKeys";
 import { TIEBREAK_STYLE } from "@/components/dashboard/score-line";
 import {
   Tooltip,
@@ -35,8 +34,9 @@ import { useVizState } from "./use-viz-state";
 import { useVizView } from "./use-viz-view";
 import { VizFullscreenCourt } from "./viz-fullscreen-court";
 import { CUT_LABEL, legendItemsFor, type LegendItem } from "./viz-labels";
-import { EMPTY_VIZ_FILTERS, availableSets } from "./viz-model";
-import { activeFilterEntries } from "./viz-url";
+import { availableSets } from "./viz-model";
+import { activeFilterEntries, clearedFilters } from "./viz-url";
+import { VIZ_FOCUSED_HEADING_ID } from "./viz-court-transition";
 
 /**
  * The fullscreen court viewer (Phase 2A, Task 4; spec A5, f4b-report
@@ -63,6 +63,25 @@ import { activeFilterEntries } from "./viz-url";
 /** P2b: the zoom readout is a fixed 38px so the slab never reflows. */
 const ZOOM_READOUT_W = 38;
 
+/**
+ * Fix round 1: the viewer's own "is this a field?" test, deliberately NOT the
+ * wizard's `isFormControl`. That one also treats anything with `aria-haspopup`
+ * as a control, which here is every slab trigger and the filter pill — and
+ * since Radix returns focus to the trigger when a menu closes, Esc (and 0, +,
+ * -, the arrows) was dead exactly where a viewer would press it. An open menu
+ * is still handled, by `overlayIsOpen()`, which is the correct test for it.
+ */
+function isTextEntry(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    target.isContentEditable
+  );
+}
+
 export function VizFullscreen() {
   const { state, setState } = useVizState();
   const { meta } = useMatchReport();
@@ -73,11 +92,30 @@ export function VizFullscreen() {
   const stageRef = useRef<HTMLDivElement>(null);
   const cutMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  // The hovered/focused mark lives here, not in the court: a press that turns
+  // into a drag has to drop it (fix round 1 #4), and the pan/zoom hook that
+  // detects that is mounted here. Both setters are stable, which is what lets
+  // the court's `MarkLayer` memo survive a pan frame.
+  const [activeMarkId, setActiveMarkId] = useState<string | null>(null);
+  const [focusedMarkId, setFocusedMarkId] = useState<string | null>(null);
+
+  const activateMark = useCallback((id: string, keyboard: boolean) => {
+    setActiveMarkId(id);
+    if (keyboard) setFocusedMarkId(id);
+  }, []);
+  const deactivateMark = useCallback((id: string) => {
+    setActiveMarkId((prev) => (prev === id ? null : prev));
+    setFocusedMarkId((prev) => (prev === id ? null : prev));
+  }, []);
+  const dropActiveMark = useCallback(() => {
+    setActiveMarkId(null);
+    setFocusedMarkId(null);
+  }, []);
 
   // `usePanZoom` needs a real cut; `shots-tab.tsx` only mounts this alongside
   // one, and the guard below covers the render race. Hooks can't sit behind
   // that guard, so the fallback keeps the hook order stable.
-  const pz = usePanZoom(cut ?? "serve", stageRef);
+  const pz = usePanZoom(cut ?? "serve", stageRef, dropActiveMark);
 
   /* ── Exit ─────────────────────────────────────────────────────────────── */
 
@@ -90,12 +128,28 @@ export function VizFullscreen() {
     });
   }
 
+  // Fix round 1 #15: the key listener reads the LATEST `exit` through a ref
+  // rather than depending on it. `setState` is `useCallback`'d over
+  // `searchParams`, so its identity changes with the URL, and depending on it
+  // would re-bind the window listener on every navigation for no reason.
+  const exitRef = useRef(exit);
+  useEffect(() => {
+    exitRef.current = exit;
+  });
+
   // Focus returns to whatever opened the viewer (Task 5's door), when it is
   // on the page. Runs on unmount, after the focused view is back.
   useEffect(() => {
     return () => {
-      const door = document.querySelector("[data-viz-fullscreen-door]");
-      if (door instanceof HTMLElement) door.focus({ preventScroll: true });
+      // The door Task 5 added, when it is on the page; otherwise the focused
+      // court's own eyebrow, which is already a `tabIndex={-1}` focus target
+      // (it is where `runCourtMorph` lands focus). Never nothing: focus
+      // falling back to `<body>` strands a keyboard user at the top of the
+      // document.
+      const target =
+        document.querySelector("[data-viz-fullscreen-door]") ??
+        document.getElementById(VIZ_FOCUSED_HEADING_ID);
+      if (target instanceof HTMLElement) target.focus({ preventScroll: true });
     };
   }, []);
 
@@ -115,14 +169,14 @@ export function VizFullscreen() {
   const { zoomIn, zoomOut, fit, nudge } = pz;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isFormControl(e.target)) return;
+      if (isTextEntry(e.target)) return;
       // A menu or dialog is up: its own keys win, ours stand down.
       if (overlayIsOpen()) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       switch (e.key) {
         case "Escape":
           e.preventDefault();
-          exit();
+          exitRef.current();
           break;
         case "+":
         case "=":
@@ -157,10 +211,6 @@ export function VizFullscreen() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // `exit` is a stable closure over `setState`, which the store keeps
-    // identity-stable; re-running this on every render would re-bind the
-    // window listener on every pan frame.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoomIn, zoomOut, fit, nudge]);
 
   if (cut === null || result === null) {
@@ -179,7 +229,7 @@ export function VizFullscreen() {
   const viewIsPristine = loadedViewLabel(state, meta.savedViews).bookmark;
 
   function clearFilters() {
-    setState((prev) => ({ ...prev, filters: EMPTY_VIZ_FILTERS, viewId: null }));
+    setState((prev) => clearedFilters(prev));
   }
 
   return createPortal(
@@ -210,7 +260,12 @@ export function VizFullscreen() {
             filters={state.filters}
             subjectName={subjectName}
             transform={pz.t}
+            stage={pz.stage}
             panning={pz.panning}
+            activeId={activeMarkId}
+            focusedId={focusedMarkId}
+            onActivate={activateMark}
+            onDeactivate={deactivateMark}
           />
 
           {/* Widget states: an honest empty message on the stage, with the
@@ -323,7 +378,7 @@ export function VizFullscreen() {
           {/* ── Bottom slab ────────────────────────────────────────────── */}
           <div
             data-chrome=""
-            className="absolute right-5 bottom-4 left-5 flex h-12 items-center gap-2 rounded-[12px] px-3 backdrop-blur-[8px]"
+            className="absolute right-5 bottom-4 left-5 flex h-12 min-w-0 items-center gap-2 overflow-hidden rounded-[12px] px-3 backdrop-blur-[8px]"
             style={{ background: "rgba(13,13,13,0.72)" }}
           >
             <CutMenu
@@ -339,12 +394,19 @@ export function VizFullscreen() {
             {applied.length > 0 && (
               <>
                 <SlabDivider />
-                <AppliedStrip tone="dark" readOnly={viewIsPristine} />
+                {/* The tokens are the one item allowed to give up width when
+                    the slab runs out; everything else is fixed-size chrome. */}
+                <div className="flex min-w-0 shrink overflow-hidden">
+                  <AppliedStrip tone="dark" readOnly={viewIsPristine} />
+                </div>
               </>
             )}
             {/* Scope guard: the depth/contact bands control (2B) lands here,
                 between the tokens and the spacer. Nothing renders yet. */}
             <div className="flex-1" />
+            {/* The legend is the first thing to go on a narrow viewport: the
+                court's own colours still read, and every other control is
+                something you cannot operate without. */}
             <DarkLegend items={legendItemsFor(cut, state.chart)} />
             <SlabDivider />
             <ZoomButton
@@ -433,9 +495,12 @@ function ZoomButton({
  * outcome keys entirely.
  */
 function DarkLegend({ items }: { items: LegendItem[] }) {
+  // Fix round 1 #8: hidden below `xl`, where the slab's fixed chrome already
+  // fills the row. The court's own colours still carry the encoding, and the
+  // focused view's legend (always visible) is one Esc away.
   if (items.length === 1 && items[0].glyph === "ramp") {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1.5">
+      <span className="hidden shrink-0 items-center gap-1.5 xl:inline-flex">
         <span className="text-[11px] text-white/70">Fewer</span>
         <span
           className="inline-flex shrink-0 overflow-hidden rounded-full"
@@ -457,7 +522,7 @@ function DarkLegend({ items }: { items: LegendItem[] }) {
     );
   }
   return (
-    <div className="flex shrink-0 items-center gap-3 pr-1">
+    <div className="hidden shrink-0 items-center gap-3 pr-1 xl:flex">
       {items.map((item) => (
         <span key={item.key} className="inline-flex items-center gap-1.5">
           <span
