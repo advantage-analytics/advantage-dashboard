@@ -259,42 +259,27 @@ export interface TrackSegment {
 }
 
 /**
- * The track split at breaks of serve.
+ * The track split by set.
  *
- * A game is a break when the player who won its last point is not the player
- * who served it. The split falls where that game ends — the start of the next
- * game — so each segment reads as "serve held from here to here". A match with
- * no breaks (or no games) is one segment; segments always tile
- * `[0, duration]`, which is what lets the playhead percentage map straight
- * onto them.
+ * Each cut falls at the first serve of a new set, so every segment reads as
+ * "set N from here to here". A one-set match (or one with no points) is one
+ * segment; segments always tile `[0, duration]`, which is what lets the
+ * playhead percentage map straight onto them.
  */
-export function breakSegments(
+export function setSegments(
   stops: FilmStop[],
   duration: number,
 ): TrackSegment[] {
   if (!(duration > 0)) return [];
 
-  // Games in film order, each with its first and last stop.
-  const games: { first: FilmStop; last: FilmStop }[] = [];
-  for (const stop of stops) {
-    const current = games[games.length - 1];
-    const sameGame =
-      current &&
-      current.first.point.setNumber === stop.point.setNumber &&
-      current.first.point.gameNumber === stop.point.gameNumber;
-    if (sameGame) current.last = stop;
-    else games.push({ first: stop, last: stop });
-  }
-
   const cuts: number[] = [];
-  games.forEach((game, i) => {
-    const next = games[i + 1];
-    if (!next) return;
-    const broke =
-      game.last.point.wonByPlayer1 !== game.first.point.serverIsPlayer1;
-    // At the next game's serve, not its lead-in: the buffer is playback
-    // comfort, the break is a fact about when the game changed hands.
-    if (broke) cuts.push(next.first.serve);
+  stops.forEach((stop, i) => {
+    const previous = stops[i - 1];
+    // At the new set's first serve, not its lead-in: the buffer is playback
+    // comfort, the set boundary is a fact about when the score changed.
+    if (previous && stop.point.setNumber !== previous.point.setNumber) {
+      cuts.push(stop.serve);
+    }
   });
 
   const segments: TrackSegment[] = [];

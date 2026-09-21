@@ -38,7 +38,7 @@ import {
 import { activeShotAt, shotStops as buildShotStops } from "./film-shots";
 import {
   activeStopAt,
-  breakSegments,
+  setSegments,
   deadTimeJump,
   nextStop,
   prevStop,
@@ -282,7 +282,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   }, [activePoint, p.walkStops]);
 
   const segments = useMemo(
-    () => breakSegments(p.stops, duration),
+    () => setSegments(p.stops, duration),
     [p.stops, duration],
   );
 

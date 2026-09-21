@@ -36,9 +36,9 @@ import { shotRowCells, UNMEASURED, type ShotStop } from "./film-shots";
  * Columns are ADDED, never re-sorted: Spin, Type and Mph appear between the
  * five shared ones, which hold the same order in both states.
  */
-const NARROW_COLUMNS = "grid-cols-[16px_58px_88px_minmax(0,1fr)_48px]";
+const NARROW_COLUMNS = "grid-cols-[16px_104px_88px_minmax(0,1fr)_48px]";
 const WIDE_COLUMNS =
-  "@min-[880px]:grid-cols-[16px_54px_60px_76px_74px_minmax(0,1fr)_44px_48px]";
+  "@min-[880px]:grid-cols-[16px_104px_60px_76px_74px_minmax(0,1fr)_44px_48px]";
 /** Spin, Type and Mph: drawn only in the wide set. */
 const WIDE_ONLY = "hidden @min-[880px]:block";
 
