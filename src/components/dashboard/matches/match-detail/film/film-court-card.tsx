@@ -93,6 +93,16 @@ const READOUT_LINE = "rgba(255,255,255,0.64)";
 
 const COURT_W = 152;
 const COURT_H = 227;
+
+/**
+ * The card's drawn box. `courtSlot` (`board-position.ts`) places the card in
+ * the board's column, and for a bottom corner it needs the card's height
+ * BEFORE the card exists — so the height is pinned on the section below rather
+ * than left to the content, and the room positions from this constant instead
+ * of measuring. 168 is the frame's width; the height is 8 padding + the 20px
+ * header + 7 + the 227px court + 7 + the legend row + 8 padding.
+ */
+export const FILM_COURT_SIZE = { width: 168, height: 296 } as const;
 /** The readout clears the 152px box by 18px on whichever side it hangs. */
 const READOUT_GAP = COURT_W + 18;
 
@@ -227,7 +237,8 @@ export function FilmCourt({
       aria-label="Shot placement"
       className="box-border flex flex-col items-center"
       style={{
-        width: 168,
+        width: FILM_COURT_SIZE.width,
+        height: FILM_COURT_SIZE.height,
         gap: 7,
         padding: 8,
         borderRadius: "var(--radius-element)",
@@ -267,7 +278,13 @@ export function FilmCourt({
         </HeaderButton>
       </div>
 
-      <div className="relative" style={{ width: COURT_W, height: COURT_H }}>
+      {/* `shrink-0`: the card's height is pinned (see FILM_COURT_SIZE), so the
+          court box must never be the thing that gives if the rows around it
+          measure a pixel taller than the constant allows for. */}
+      <div
+        className="relative shrink-0"
+        style={{ width: COURT_W, height: COURT_H }}
+      >
         {/* The doubles court, then the singles tramlines, the two service
             boxes and their centre line, and the net across the middle. */}
         <Line

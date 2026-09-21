@@ -124,3 +124,14 @@ is the runner's. Newest entries at the bottom.
 1. A persisted-open drawer now slides in while the room is still growing; worth a look once the court shares that screen.
 2. The `aside` ("Points") and the `PointList` section inside it ("Point list") are two nested landmarks with near-identical names.
 3. `FilmFullscreenProps.visiblePoints` is now always the same array as the filtered points; it could collapse into one prop.
+
+## T12 · Mount the court in the room with its preferences and cut-driven match mode — done
+
+**gate:** mechanical pass · completion `VERDICT: pass`
+
+**changed:** The room mounts `FilmCourt` (from `film-court-card.tsx`) inside the playing branch only, while the court is on. Court on/off and mode are room state from `readCourtOn` / `readCourtMode`, written through T11's writers; T5's placeholder is gone and the transport and the card's `x` share one toggle, none of which touches playback. The court is placed by `courtSlot` from the corner and measured size the board reports through `onRest`; the drawer appears in neither position. Point mode feeds `pointMarks` from the playing point's timed shots in rally order with the 1-based playing index; with no active point the mode is `none`. Match mode feeds `matchMarks` from the filter-applied points, titled by `cutName` under a cut, captioned by that array's count. A mark click runs the existing `selectShot` and returns to point mode; `seek` bumps the key that closes the readout. The shot feed is built whenever the court is on or the drawer is open. `film-court-card.tsx` exports and pins `FILM_COURT_SIZE` (168×296) so the slot can be computed before the card renders.
+
+**follow-ups:**
+
+1. The card's height is a constant; if the legend row grows, `FILM_COURT_SIZE.height` must move with it.
+2. Match mode renders every filtered point's bounce as a DOM button — a few thousand on a full three-set match. Check on real data; cap or canvas-draw if it drags.

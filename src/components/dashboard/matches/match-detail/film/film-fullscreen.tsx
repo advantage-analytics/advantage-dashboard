@@ -23,9 +23,36 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
-import type { FilmFilters } from "./film-filters";
+import {
+  BASE_BOARD_INSETS,
+  anchorPosition,
+  courtSlot,
+  type BoardAnchor,
+  type BoardSize,
+} from "./board-position";
+import { matchMarks, pointMarks } from "./film-court";
+import {
+  FILM_COURT_SIZE,
+  FilmCourt,
+  type FilmCourtMark,
+  type FilmCourtMode,
+} from "./film-court-card";
+import {
+  cutName,
+  hasActiveFilmFilters,
+  lastNameOf,
+  type FilmFilters,
+} from "./film-filters";
 import { FilmRoomDrawer } from "./film-room-drawer";
-import { readDrawerOpen, writeDrawerOpen } from "./film-room-prefs";
+import {
+  readCourtMode,
+  readCourtOn,
+  readDrawerOpen,
+  writeCourtMode,
+  writeCourtOn,
+  writeDrawerOpen,
+  type CourtMode,
+} from "./film-room-prefs";
 import { boardAt, type BoardColumns } from "./film-score";
 import { FilmScoreboard } from "./film-scoreboard";
 import { useFilmClockVars } from "./film-clock";
@@ -188,9 +215,15 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   const [skipDead, setSkipDead] = useState(false);
   const [failed, setFailed] = useState(false);
   const [chrome, setChrome] = useState(true);
-  // Placeholder for the court toggle so the transport's control is live now.
-  // T12 replaces it with the persisted preference and the court itself.
-  const [courtOn, setCourtOn] = useState(true);
+  // The court and the side it is showing are viewer preferences (spec:
+  // Persistence is localStorage), read once in lazy initializers so a
+  // blocked-storage throw costs nothing per render, and written on every
+  // change. A court left off stays off across exit and re-entry (R9).
+  const [courtOn, setCourtOn] = useState(readCourtOn);
+  const [courtMode, setCourtMode] = useState<CourtMode>(readCourtMode);
+  // Bumped by every seek. The court's readout describes one moment, so it
+  // closes as soon as the film moves to another one.
+  const [seekKey, setSeekKey] = useState(0);
   // Open or closed is a viewer preference (spec: Persistence is localStorage),
   // read once in a lazy initializer so a blocked-storage throw costs nothing
   // per render. A drawer that was left open opens with the room.
@@ -224,6 +257,24 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     setPanel("closing");
     writeDrawerOpen(false);
   }, []);
+
+  // Showing, hiding and swapping the court touch the court and the preference
+  // and nothing else — no `pause()`, no `load()`, no seek. The write sits
+  // beside the state change rather than inside the updater, which React
+  // invokes twice in development.
+  const toggleCourt = useCallback(() => {
+    const next = !courtOn;
+    setCourtOn(next);
+    writeCourtOn(next);
+  }, [courtOn]);
+  const showCourtMode = useCallback((next: CourtMode) => {
+    setCourtMode(next);
+    writeCourtMode(next);
+  }, []);
+  const swapCourtMode = useCallback(
+    () => showCourtMode(courtMode === "match" ? "point" : "match"),
+    [courtMode, showCourtMode],
+  );
   // Set while the room is shrinking back into the report; everything that
   // would start a second exit or a new interaction checks it.
   const leavingRef = useRef(false);
@@ -283,17 +334,115 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   );
   const activePoint = active?.stop.point ?? null;
 
-  // Only the drawer reads the shot feed, and a three-set match is a few
-  // thousand shots to place and then scan on every tick — so it is not built
-  // until the drawer is up.
+  // The drawer and the court both read the shot feed — the court needs the
+  // playing shot with the drawer shut — and a three-set match is a few
+  // thousand shots to place and then scan on every tick, so it is not built
+  // while both of them are away.
   const shotStops = useMemo(
-    () => (panel === "closed" ? [] : buildShotStops(p.stops, p.clock)),
-    [panel, p.stops, p.clock],
+    () =>
+      panel === "closed" && !courtOn ? [] : buildShotStops(p.stops, p.clock),
+    [panel, courtOn, p.stops, p.clock],
   );
   const activeShot = useMemo(
     () => activeShotAt(shotStops, currentTime),
     [shotStops, currentTime],
   );
+
+  // The playing point's shots in RALLY ORDER — the order `buildShotStops` put
+  // them in, which is the order `pointMarks` counts the active shot against.
+  // An untimed shot has no place on the film and so is in neither.
+  const pointShotStops = useMemo(
+    () =>
+      activePoint ? shotStops.filter((s) => s.point.id === activePoint.id) : [],
+    [shotStops, activePoint],
+  );
+  /** 1-based within that array; 0 (no marks) when no shot of it is playing. */
+  const activeShotOrder = useMemo(() => {
+    const id = activeShot?.stop.shot.id;
+    if (!id) return 0;
+    return pointShotStops.findIndex((s) => s.shot.id === id) + 1;
+  }, [activeShot, pointShotStops]);
+
+  // With no point playing, point mode has nothing to draw and says so in
+  // words ("Next point" / "Not started") rather than vanishing. Match mode is
+  // about the whole cut and not about the playhead, so it keeps its marks
+  // through the dead time between points (C2, R8).
+  const courtCardMode: FilmCourtMode =
+    courtMode === "match" ? "match" : activePoint ? "point" : "none";
+  // Match mode follows the applied cut: the points the room was handed are
+  // already filtered, which is the same array the drawer's list shows (R5).
+  const courtMarks = useMemo<readonly FilmCourtMark[]>(() => {
+    if (!courtOn) return [];
+    if (courtMode === "match")
+      return matchMarks(p.visiblePoints, { youIsPlayer1: sides.you.isPlayer1 });
+    return pointMarks(
+      pointShotStops.map((s) => s.shot),
+      { youIsPlayer1: sides.you.isPlayer1, activeShot: activeShotOrder },
+    );
+  }, [
+    courtOn,
+    courtMode,
+    p.visiblePoints,
+    pointShotStops,
+    activeShotOrder,
+    sides.you.isPlayer1,
+  ]);
+  const courtTitle =
+    courtMode === "match"
+      ? hasActiveFilmFilters(p.filters)
+        ? cutName(p.filters, sides)
+        : "Whole match"
+      : "This point";
+  // The point's caption counts the shots the card can draw and number — the
+  // same total the readout's "shot 3 of 7" is out of — so the two can never
+  // disagree about how long the rally was.
+  const courtCaption =
+    courtMode === "match"
+      ? `${p.visiblePoints.length} points`
+      : `${pointShotStops.length} shots`;
+
+  /* ── The board's column ──────────────────────────────────────────────── */
+
+  // The court lives in the board's corner (R6's court rule), so it needs the
+  // corner and the size the board actually measured — which `FilmScoreboard`
+  // reports — plus the room's own box to turn that corner back into pixels.
+  // The drawer is deliberately absent from this: it moves neither object.
+  const [boardRest, setBoardRest] = useState<{
+    anchor: BoardAnchor;
+    size: BoardSize;
+  } | null>(null);
+  const onBoardRest = useCallback(
+    (anchor: BoardAnchor, size: BoardSize) => setBoardRest({ anchor, size }),
+    [],
+  );
+  const [roomSize, setRoomSize] = useState<BoardSize | null>(null);
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    // `clientWidth`/`clientHeight` are layout sizes, so the entrance's scale
+    // never reaches them: the court is placed for the room it settles into.
+    const measure = () =>
+      setRoomSize({ width: el.clientWidth, height: el.clientHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const courtAt = useMemo(() => {
+    if (!boardRest || !roomSize) return null;
+    return courtSlot(
+      boardRest.anchor,
+      anchorPosition(
+        boardRest.anchor,
+        boardRest.size,
+        roomSize,
+        BASE_BOARD_INSETS,
+      ),
+      boardRest.size,
+      FILM_COURT_SIZE,
+    );
+  }, [boardRest, roomSize]);
 
   const position = useMemo(() => {
     if (!activePoint) return null;
@@ -343,6 +492,8 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
       el.currentTime = target;
       mark(target);
       rootRef.current?.style.setProperty("--film-t", String(target));
+      // Whatever the court's readout was explaining is no longer on screen.
+      setSeekKey((k) => k + 1);
     },
     [mark],
   );
@@ -454,6 +605,24 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   const selectShot = useCallback(
     (stop: { start: number }) => seek(stop.start),
     [seek],
+  );
+  // A mark is a seek target: it takes the film to that shot and brings the
+  // court back to the point the shot belongs to (C2). A match-mode mark for a
+  // shot the film has no time for still lands on its point, which is the
+  // moment match mode was pointing at.
+  const selectMark = useCallback(
+    (mark: FilmCourtMark) => {
+      const shot = shotStops.find((s) => s.shot.id === mark.shotId);
+      if (shot) selectShot(shot);
+      else {
+        const point = mark.pointId
+          ? p.stops.find((s) => s.point.id === mark.pointId)
+          : undefined;
+        if (point) seek(point.start);
+      }
+      showCourtMode("point");
+    },
+    [shotStops, selectShot, p.stops, seek, showCourtMode],
   );
 
   const toggleSavedActive = useCallback(() => {
@@ -867,7 +1036,36 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                   : null
               }
               dim={!chrome}
+              onRest={onBoardRest}
             />
+
+            {courtOn && courtAt && (
+              // The court sits in the board's own column and never moves for
+              // the drawer (R6's court rule); turning it off gives that column
+              // back to the film and leaves the board where it is (R9). It
+              // travels on the board's curve, so the two land together.
+              <div
+                data-film-chrome
+                className="absolute transition-[left,top] duration-[360ms] ease-[var(--ease-out-expo)] motion-reduce:transition-none"
+                style={{ left: courtAt.left, top: courtAt.top }}
+              >
+                <FilmCourt
+                  mode={courtCardMode}
+                  title={courtTitle}
+                  caption={courtCaption}
+                  marks={courtMarks}
+                  // Who is who is `useMatchSides()`'s call, never player order.
+                  youName={lastNameOf(sides.you.name)}
+                  opponentName={lastNameOf(sides.opp.name)}
+                  controls={chrome}
+                  onSwapMode={swapCourtMode}
+                  // The header x and the transport's control are one toggle.
+                  onHide={toggleCourt}
+                  onSelectMark={selectMark}
+                  seekKey={seekKey}
+                />
+              </div>
+            )}
 
             <button
               data-film-chrome
@@ -936,7 +1134,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 onCycleRate={cycleRate}
                 onToggleLoop={() => setLooping((v) => !v)}
                 onToggleMute={toggleMute}
-                onToggleCourt={() => setCourtOn((v) => !v)}
+                onToggleCourt={toggleCourt}
                 onExit={exit}
               />
             </div>

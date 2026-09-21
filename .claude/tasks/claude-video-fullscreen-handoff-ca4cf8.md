@@ -166,7 +166,7 @@ ready).
 
 ## T12 · Mount the court in the room with its preferences and cut-driven match mode
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3, T5, T9, T10, T11
 - **files:** (guess) film/film-fullscreen.tsx
