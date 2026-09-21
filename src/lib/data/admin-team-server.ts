@@ -339,9 +339,13 @@ async function readMembers(
  * The seat ledger, reproducing `program_seat_usage` exactly:
  *   seats   — `programs.seats` (the live seat-count column; there is no
  *             separate entitlements table)
- *   used    — every `program_members` row, unfiltered by role
+ *   used    — live `program_players` rows: not archived, not merged, not
+ *             contributed by another program. A seat is a player on the
+ *             roster, login or not (2026-09-20); staff hold none.
  *   pending — `program_invites` with `accepted_at is null` AND
- *             `expires_at > now()`
+ *             `expires_at > now()`, to somebody NEW as a player
+ *             (`role = 'player'`, `player_id is null`) — a claim invitation's
+ *             row is already counted in `used`.
  *
  * Note the asymmetry with `invites` below, which is the same table read
  * without the expiry clause because `getTeamSettings` lists it that way. An
@@ -356,15 +360,20 @@ async function readSeatUsage(
 ): Promise<SeatUsage> {
   const [usedResult, pendingResult] = await Promise.all([
     admin
-      .from("program_members")
+      .from("program_players")
       .select("id", { count: "exact", head: true })
-      .eq("program_id", programId),
+      .eq("program_id", programId)
+      .is("archived_at", null)
+      .is("merged_into_id", null)
+      .is("contributed_by_program_id", null),
     admin
       .from("program_invites")
       .select("id", { count: "exact", head: true })
       .eq("program_id", programId)
       .is("accepted_at", null)
-      .gt("expires_at", new Date().toISOString()),
+      .gt("expires_at", new Date().toISOString())
+      .eq("role", "player")
+      .is("player_id", null),
   ]);
 
   if (usedResult.error || pendingResult.error) {

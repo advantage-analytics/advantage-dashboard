@@ -116,7 +116,7 @@ export function RosterDayZero({
         }
         conditions={
           canManage
-            ? "Add player creates the row now and needs no account. An invitation sends email and spends a seat the moment it is accepted."
+            ? "Add player creates the row now and needs no account. An invitation sends email and lets them sign in. Either way the player takes one seat."
             : "Your coaching staff manage who is on the program and who can send video."
         }
       />

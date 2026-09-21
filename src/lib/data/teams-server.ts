@@ -20,8 +20,8 @@ export interface TeamListRow {
   name: string;
   team: Workspace["team"];
   role: ProgramRole;
-  /** Members holding a seat — `program_seat_usage.used`. */
-  memberCount: number;
+  /** Players on the roster, each holding a seat — `program_seat_usage.used`. */
+  playerCount: number;
   crestPath: string | null;
 }
 
@@ -115,7 +115,7 @@ export async function listTeamsForViewer(
     name: workspace.name,
     team: workspace.team,
     role: workspace.role,
-    memberCount: seatResults[index].used,
+    playerCount: seatResults[index].used,
     crestPath: crests.get(workspace.id) ?? null,
   }));
 }

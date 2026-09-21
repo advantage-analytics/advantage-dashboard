@@ -37,7 +37,9 @@ const ROSTER_PATH = "/dashboard/team/roster";
  * the same row and commits in its own dialog.
  *
  * Seats are countable and few, so they are boxes rather than a bar: filled =
- * taken, outlined = held by an open invite, grey = free. The outlined box and
+ * taken, outlined = held by an open invite, grey = free. A seat is a PLAYER on
+ * the roster, login or not (2026-09-20) — staff listed below hold none, which
+ * is why the caption says "players" and the boxes need not match this list. The outlined box and
  * the outlined `Invited` pill are the same fact drawn twice on purpose.
  */
 export function TeamMembersCard({
@@ -218,7 +220,7 @@ function SeatPips({ seats }: { seats: SeatUsage }) {
       <span
         className="flex flex-wrap gap-1"
         role="img"
-        aria-label={`${seats.used} of ${total} seats used, ${held} held by open invites`}
+        aria-label={`${seats.used} of ${total} seats taken by players, ${held} held by open invites`}
       >
         {Array.from({ length: total }, (_, index) => {
           const kind =
@@ -241,7 +243,7 @@ function SeatPips({ seats }: { seats: SeatUsage }) {
         })}
       </span>
       <span className="text-[11px] text-[var(--ink-500)]">
-        {seats.used} of {total} seats
+        {seats.used} of {total} seats · players on the roster
         {held > 0 && ` · ${held} held`}
         {free === 0 && held === 0 && " · full"}
       </span>
