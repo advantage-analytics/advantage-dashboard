@@ -103,7 +103,7 @@ ready).
 
 ## T7 · Fix handleToggleSaved's echo check to treat "already in desired state" as landed
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** `src/components/dashboard/matches/match-detail/film/film-tab.tsx` (`handleToggleSaved`, ~lines 313–360, and its doc comment ~lines 314–327), `tests/fixtures/supabase-client-browser-mock.ts` (header comment + chains), plus whichever film spec drives the toggle through that mock — guesses
 - **done when:**

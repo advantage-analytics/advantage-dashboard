@@ -52,3 +52,10 @@ is the runner's. Newest entries at the bottom.
 1. Dropping the `points.saved` column is its own later migration.
 2. `20260920120000_set_point_saved.sql` still carries a version the live ledger never had (live recorded 20260921010409 and 20260921011421). Left as history per the task notes; the author may want the same rename this branch applied to the bookmarks file.
 3. Nothing on this branch has been exercised in a real browser.
+
+## T7 · Fix handleToggleSaved's echo check to treat "already in desired state" as landed — done
+
+**gate:** mechanical pass; completion review pass
+**changed:** `stored` is now `nextSaved ? !error || error.code === "23505" : !error`, with no row-count check on either branch — so a save whose insert conflicts on the viewer's own `(user_id, point_id)` row, and an unsave whose delete matches nothing because a teammate got there first, both count as landed. An RLS-refused insert still arrives under its own code and still reverts. `.select("point_id")` is dropped from both calls since `data` is no longer read. The doc comment explains why "the database already agrees with you" is success and no longer claims the 23505 path self-repairs, which was false. The mock documents zero-rows-as-landed and gains a `?bookmarkOutcome=` hook so a revert is still provable; three new specs cover the 23505, zero-row and non-23505 cases.
+**why:** `/pr-check` stage 3 found this: two teammates on the same match, the first unsaves, the second's page still shows saved, and their unsave matched zero rows and reverted — stranding the control as saved with every retry repeating it. That is the headline multi-user path of the shared model this branch exists to build.
+**deliberate inversion:** T6's `done when:` said "an unsave that matched zero rows reverts". That criterion was wrong and the owner approved reversing it. The cost is that a zero-row delete no longer distinguishes "already gone" from "RLS refused"; acceptable because T4's DELETE policy admits anyone who can see the match, the loader only renders points from matches the viewer can see, and `tests/point-bookmarks-db.spec.ts` proves the refusal at the database level.

@@ -319,11 +319,19 @@ function FilmRoom({
    * INSERT is own-row, so `user_id` is never sent — the column default
    * supplies the caller. Saving inserts one row. Unsaving deletes every row
    * on the point, not just the caller's, because one surviving teammate row
-   * would keep the point saved. Both branches `.select("point_id")` and are
-   * held to have landed only when at least one row echoes back for this
-   * point — an insert RLS refused, or an unsave that matched nothing, reverts.
-   * Two inserts racing (a double-click) hit the PK, `23505`, and revert; the
-   * next toggle repairs it.
+   * would keep the point saved.
+   *
+   * The toggle asks for a desired state, not proof of a fresh row, so "the
+   * database already agrees with you" counts as landed rather than as a
+   * failure: an unsave whose DELETE matches zero rows (a teammate already
+   * removed the last one) is landed, and a save whose INSERT hits the PK
+   * conflict `23505` (a double-click, or a teammate saved it first) is
+   * landed too — both leave the point in the state the caller asked for.
+   * Only a save that fails with a different error (e.g. RLS refusing the
+   * insert) reverts. This gives up UI-level detection of an RLS-refused
+   * DELETE, which is fine: the loader only renders points from matches the
+   * viewer can see, and T4's DELETE policy admits anyone who can see the
+   * match.
    */
   const handleToggleSaved = useCallback(
     async (pointId: string) => {
@@ -337,19 +345,14 @@ function FilmRoom({
       pointsRef.current = optimistic;
       setPoints(optimistic);
 
-      const { data, error } = nextSaved
-        ? await supabase
-            .from("point_bookmarks")
-            .insert({ point_id: pointId })
-            .select("point_id")
+      const { error } = nextSaved
+        ? await supabase.from("point_bookmarks").insert({ point_id: pointId })
         : await supabase
             .from("point_bookmarks")
             .delete()
-            .eq("point_id", pointId)
-            .select("point_id");
+            .eq("point_id", pointId);
 
-      const stored =
-        !error && data.length >= 1 && data.every((r) => r.point_id === pointId);
+      const stored = nextSaved ? !error || error.code === "23505" : !error;
       if (stored) return;
 
       const reverted = pointsRef.current.map((p) =>

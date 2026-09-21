@@ -125,7 +125,10 @@ const WORKSPACE: WorkspaceContextValue = {
 };
 
 const POINTS: MatchPoint[] = [
-  point("a", 1.7),
+  // Saved from the start so a spec can drive the unsave path — a delete
+  // that matches zero rows (the mock's default shape) without first having
+  // to land a save through the same mock.
+  point("a", 1.7, { saved: true }),
   point("b", 1.85, { pointNumber: 2, resultType: "Ace" }),
   point("c", 1.95, { pointNumber: 3, resultType: "Backhand Winner" }),
   point("untimed", null, { pointNumber: 4, resultType: "Double Fault" }),
