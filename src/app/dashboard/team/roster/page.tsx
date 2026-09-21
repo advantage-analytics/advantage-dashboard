@@ -287,9 +287,8 @@ async function RosterContent({
                 boxes stay in Settings › Teams. Amber with a glyph once three
                 or fewer are left, so a full roster is never first met inside
                 a dialog — severity rides colour AND a mark, never colour
-                alone. */}
-            {/* No row (the loader's zero fallback) is "unknown", not "full":
-                say nothing rather than an amber "All 0 seats taken". */}
+                alone. No row (the loader's zero fallback) is "unknown", not
+                "full": say nothing rather than an amber "All 0 seats taken". */}
             {roster.seats.seats > 0 && (
               <Fragment key="seats">
                 {" · "}

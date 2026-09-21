@@ -523,11 +523,13 @@ export function PlayerDrawer({
   const canUpload = canUploadForProgram(workspace);
   const claimInvite = useClaimInvite();
   // `profileId` is what an invitation targets; a coach-managed row always has
-  // one, and the guard keeps the cast below honest.
-  const coachManaged =
-    member.role === "player" &&
-    member.managedBy === "coach" &&
-    member.profileId !== null;
+  // one, and holding it here (rather than a boolean plus a cast at the click
+  // site) is what keeps that guarantee honest.
+  const claimProfileId =
+    member.role === "player" && member.managedBy === "coach"
+      ? member.profileId
+      : null;
+  const coachManaged = claimProfileId !== null;
   const panelRef = useRef<HTMLDivElement>(null);
   // Which of the four the chart shows. Held here rather than per member so
   // stepping ↑↓ through the roster compares players on the same figure.
@@ -728,7 +730,9 @@ export function PlayerDrawer({
               </p>
               <button
                 type="button"
-                onClick={() => claimInvite.request(member.profileId as string)}
+                onClick={() =>
+                  claimProfileId && claimInvite.request(claimProfileId)
+                }
                 className="cursor-pointer rounded-[var(--radius-cell)] text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
               >
                 Invite to claim →

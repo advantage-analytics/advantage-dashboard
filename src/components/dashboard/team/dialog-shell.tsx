@@ -8,6 +8,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import type { SeatUsage } from "@/lib/data/team-roster-server";
 
 /**
  * The shell the roster's dialogs share.
@@ -146,7 +147,7 @@ export function SeatBoxes({
   adding = 0,
   full = false,
 }: {
-  seats: { seats: number; used: number; pending: number };
+  seats: SeatUsage;
   /** Boxes the pending action would take, drawn light blue after the held ones. */
   adding?: number;
   full?: boolean;
@@ -201,7 +202,7 @@ export function SeatNote({
   icon: React.ReactNode;
   lead: React.ReactNode;
   children?: React.ReactNode;
-  seats: { seats: number; used: number; pending: number };
+  seats: SeatUsage;
   /** Seats this action takes: 0 for a claim, 1+ for an add or invitation. */
   adding?: number;
   footnote?: React.ReactNode;
