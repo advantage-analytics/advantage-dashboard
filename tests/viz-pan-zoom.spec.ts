@@ -148,3 +148,57 @@ test("zoomPercentLabel: formats as a rounded percent", () => {
   expect(zoomPercentLabel(ZOOM_MIN)).toBe("55%");
   expect(zoomPercentLabel(ZOOM_MAX)).toBe("320%");
 });
+
+// ── Gesture feel: stage-aware zoom floor and continuous pinch ──────────────
+
+test("minZoomFor: a little past 'the whole court fits', never the old 55% island", async () => {
+  const { minZoomFor, ZOOM_OUT_SLACK } =
+    await import("@/components/dashboard/matches/match-detail/shots/pan-zoom");
+  const art = { w: 595, h: 948 };
+  const stage = { w: 1440, h: 900 };
+  const fitZ = Math.min(stage.w / art.w, stage.h / art.h);
+  expect(minZoomFor(art, stage)).toBeCloseTo(fitZ * ZOOM_OUT_SLACK, 9);
+  expect(minZoomFor(art, stage)).toBeGreaterThan(0.55);
+  // Degenerate / tiny stages fall back to the absolute floor.
+  expect(minZoomFor(art, { w: 0, h: 0 })).toBe(ZOOM_MIN);
+  expect(minZoomFor(art, { w: 50, h: 50 })).toBe(ZOOM_MIN);
+});
+
+test("zoomAbout honours a stage floor above ZOOM_MIN and keeps the anchor fixed", async () => {
+  const { zoomAbout } =
+    await import("@/components/dashboard/matches/match-detail/shots/pan-zoom");
+  const art = { w: 595, h: 948 };
+  const stage = { w: 1440, h: 900 };
+  const out = zoomAbout(
+    { z: 1, px: 400, py: 0 },
+    0.01,
+    { x: 720, y: 450 },
+    art,
+    stage,
+    0.8,
+  );
+  expect(out.z).toBeCloseTo(0.8, 9);
+});
+
+test("wheelZoomFactor: continuous, symmetric, gentle, and capped per event", async () => {
+  const { wheelZoomFactor, PINCH_MAX_DELTA } =
+    await import("@/components/dashboard/matches/match-detail/shots/pan-zoom");
+  expect(wheelZoomFactor(0)).toBe(1);
+  // pinch out (negative deltaY) zooms in; pinch in zooms out; exact inverses.
+  expect(wheelZoomFactor(-5)).toBeGreaterThan(1);
+  expect(wheelZoomFactor(5)).toBeLessThan(1);
+  expect(wheelZoomFactor(-5) * wheelZoomFactor(5)).toBeCloseTo(1, 12);
+  // a typical pinch tick is a few percent, well under the old fixed 12%.
+  expect(wheelZoomFactor(-4)).toBeLessThan(1.04);
+  // a mouse wheel notch (100) is capped, not a leap.
+  expect(wheelZoomFactor(-100)).toBe(wheelZoomFactor(-PINCH_MAX_DELTA));
+  expect(wheelZoomFactor(-100)).toBeLessThan(1.3);
+});
+
+test("wheelDeltaPx normalises line and page modes", async () => {
+  const { wheelDeltaPx } =
+    await import("@/components/dashboard/matches/match-detail/shots/pan-zoom");
+  expect(wheelDeltaPx(3, 0)).toBe(3);
+  expect(wheelDeltaPx(3, 1)).toBe(48);
+  expect(wheelDeltaPx(1, 2)).toBe(400);
+});

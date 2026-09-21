@@ -94,8 +94,11 @@ export function zoomAbout(
   anchor: { x: number; y: number },
   art: Size,
   stage: Size,
+  /** The floor for THIS stage — `minZoomFor(stage)`. Defaults to the absolute
+   *  `ZOOM_MIN` so callers without a stage-aware floor behave as before. */
+  minZ: number = ZOOM_MIN,
 ): PanZoom {
-  const z = clamp(t.z * factor, ZOOM_MIN, ZOOM_MAX);
+  const z = clamp(t.z * factor, Math.max(ZOOM_MIN, minZ), ZOOM_MAX);
   const artX = (anchor.x - t.px) / t.z;
   const artY = (anchor.y - t.py) / t.z;
   const px = anchor.x - artX * z;
@@ -115,6 +118,42 @@ export function panBy(
   stage: Size,
 ): PanZoom {
   return clampPan({ z: t.z, px: t.px + dx, py: t.py + dy }, art, stage);
+}
+
+/**
+ * How far out the court may be zoomed on THIS stage: a little past the point
+ * where the whole court fits (`ZOOM_OUT_SLACK`), never below the absolute
+ * `ZOOM_MIN`. The old fixed 55% floor left the court a small island in a
+ * large field on a big screen; zooming out exists to see the whole court, and
+ * nothing is gained past that.
+ */
+export const ZOOM_OUT_SLACK = 0.85;
+export function minZoomFor(art: Size, stage: Size): number {
+  if (stage.w <= 0 || stage.h <= 0) return ZOOM_MIN;
+  const fitZ = Math.min(stage.w / art.w, stage.h / art.h);
+  return clamp(fitZ * ZOOM_OUT_SLACK, ZOOM_MIN, ZOOM_MAX);
+}
+
+/**
+ * A pinch's zoom factor from a wheel event's `deltaY`. Trackpad pinches (and
+ * ctrl/cmd + wheel) arrive as a stream of small deltas, so the factor is
+ * CONTINUOUS — `exp(-deltaY * k)` — instead of the old fixed 12% per event,
+ * which made a gentle pinch lurch. One event is capped (`PINCH_MAX_DELTA`) so
+ * a physical wheel's 100-unit notch is a firm step, not a jump across the
+ * whole range.
+ */
+export const PINCH_SENSITIVITY = 0.006;
+export const PINCH_MAX_DELTA = 40;
+export function wheelZoomFactor(deltaY: number): number {
+  const d = clamp(deltaY, -PINCH_MAX_DELTA, PINCH_MAX_DELTA);
+  return Math.exp(-d * PINCH_SENSITIVITY);
+}
+
+/** A wheel delta in pixels, whatever `deltaMode` the device reports. */
+export function wheelDeltaPx(delta: number, deltaMode: number): number {
+  if (deltaMode === 1) return delta * 16; // lines
+  if (deltaMode === 2) return delta * 400; // pages
+  return delta;
 }
 
 /** `2.2` → `"220%"` — rounded, not truncated. */
