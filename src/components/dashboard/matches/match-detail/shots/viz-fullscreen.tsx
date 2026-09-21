@@ -20,12 +20,13 @@ import {
 import { formatScoreboardStatus } from "@/lib/data/match-utils";
 import { playedSets, tiebreakOf } from "@/lib/ui/score-format";
 import { overlayIsOpen } from "@/lib/ui/overlay-is-open";
+import { isTextEntry } from "@/lib/ui/is-text-entry";
 import { cn } from "@/lib/utils";
 
 import { AppliedStrip } from "./applied-strip";
 import { ChartMenu } from "./chart-menu";
 import { APRON_FILL, HEAT_APRON_FILL } from "./court-art";
-import { CutMenu, loadedViewLabel } from "./cut-menu";
+import { CutMenu } from "./cut-menu";
 import { FiltersPopover } from "./filters-popover";
 import { KEY_PAN_PX, zoomPercentLabel } from "./pan-zoom";
 import { SaveViewDialog } from "./save-view-dialog";
@@ -33,7 +34,12 @@ import { usePanZoom } from "./use-pan-zoom";
 import { useVizState } from "./use-viz-state";
 import { useVizView } from "./use-viz-view";
 import { VizFullscreenCourt } from "./viz-fullscreen-court";
-import { CUT_LABEL, legendItemsFor, type LegendItem } from "./viz-labels";
+import {
+  CUT_LABEL,
+  legendItemsFor,
+  loadedViewLabel,
+  type LegendItem,
+} from "./viz-labels";
 import { availableSets } from "./viz-model";
 import { activeFilterEntries, clearedFilters } from "./viz-url";
 import { VIZ_FOCUSED_HEADING_ID } from "./viz-court-transition";
@@ -63,24 +69,9 @@ import { VIZ_FOCUSED_HEADING_ID } from "./viz-court-transition";
 /** P2b: the zoom readout is a fixed 38px so the slab never reflows. */
 const ZOOM_READOUT_W = 38;
 
-/**
- * Fix round 1: the viewer's own "is this a field?" test, deliberately NOT the
- * wizard's `isFormControl`. That one also treats anything with `aria-haspopup`
- * as a control, which here is every slab trigger and the filter pill — and
- * since Radix returns focus to the trigger when a menu closes, Esc (and 0, +,
- * -, the arrows) was dead exactly where a viewer would press it. An open menu
- * is still handled, by `overlayIsOpen()`, which is the correct test for it.
- */
-function isTextEntry(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const tag = target.tagName;
-  return (
-    tag === "INPUT" ||
-    tag === "TEXTAREA" ||
-    tag === "SELECT" ||
-    target.isContentEditable
-  );
-}
+// `isTextEntry` (fix round 1) moved to `@/lib/ui/is-text-entry` — see its own
+// doc comment for why this viewer deliberately does NOT use the wizard's
+// `isFormControl`.
 
 export function VizFullscreen() {
   const { state, setState } = useVizState();

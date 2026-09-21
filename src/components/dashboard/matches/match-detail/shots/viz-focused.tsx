@@ -5,8 +5,8 @@ import { Maximize2 } from "lucide-react";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { WorkspaceKind } from "@/lib/workspace/types";
 import { overlayIsOpen } from "@/lib/ui/overlay-is-open";
+import { isTextEntry } from "@/lib/ui/is-text-entry";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
-import { isFormControl } from "@/components/dashboard/matches/new-match-wizard/useWizardKeys";
 import { APRON_FILL, HEAT_APRON_FILL, CourtArt } from "./court-art";
 import {
   trianglePointsFor,
@@ -20,8 +20,12 @@ import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useVizView } from "./use-viz-view";
 import { EMPTY_VIZ_FILTERS, availableSets, type Cut } from "./viz-model";
 import { viewIdentityKey } from "./viz-url";
-import { CUT_LABEL, legendItemsFor, type LegendItem } from "./viz-labels";
-import { loadedViewLabel } from "./cut-menu";
+import {
+  CUT_LABEL,
+  legendItemsFor,
+  loadedViewLabel,
+  type LegendItem,
+} from "./viz-labels";
 import { AppliedStrip } from "./applied-strip";
 import { FiltersPopover } from "./filters-popover";
 import { SaveViewDialog } from "./save-view-dialog";
@@ -147,16 +151,23 @@ export function VizFocused({
   }
 
   // `F` opens the door, mirroring the viewer's own window-level keys
-  // (`viz-fullscreen.tsx`) — same bail-out set (form control, an open
+  // (`viz-fullscreen.tsx`) — same bail-out set (text entry, an open
   // menu/dialog, a modifier held) plus two more specific to this side: draft
   // mode (the door itself is hidden then) and already-fullscreen (the
   // viewer's listener owns the window at that point; this one would otherwise
   // fire a redundant `setState` underneath it on every remount-free re-render
   // race). Declared above the `cut === null` guard below — every Hook in this
   // component must run on every render, guard or not.
+  //
+  // `isTextEntry`, not the wizard's `isFormControl` — see
+  // `@/lib/ui/is-text-entry`'s doc comment: `isFormControl` also treats
+  // anything with `aria-haspopup` as a control (every toolbar trigger here),
+  // and Radix returns focus to a trigger when its menu closes, so `F` was
+  // dead right after closing the cut/chart/filters menu — exactly when a
+  // viewer would reach for it.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (isFormControl(e.target)) return;
+      if (isTextEntry(e.target)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key.toLowerCase() !== "f") return;
       if (overlayIsOpen()) return;

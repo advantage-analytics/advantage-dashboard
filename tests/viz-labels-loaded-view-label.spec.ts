@@ -1,15 +1,19 @@
 import { expect, test } from "@playwright/test";
-import { loadedViewLabel } from "@/components/dashboard/matches/match-detail/shots/cut-menu";
+import {
+  loadedViewLabel,
+  type SavedViewLite,
+} from "@/components/dashboard/matches/match-detail/shots/viz-labels";
 import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import type { VizState } from "@/components/dashboard/matches/match-detail/shots/viz-url";
-import type { SavedViewLite } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
 
 /**
  * Task 3: the "View" trigger's pure label logic (f4b-report P2e —
  * "The trigger shows the saved view's name with a bookmark glyph once one is
  * loaded... Editing anything afterwards keeps the name but the trigger drops
  * the bookmark"). Extracted out of `cut-menu.tsx` so it's testable without
- * rendering the menu.
+ * rendering the menu; moved to `viz-labels.tsx` (fix round 1, Task 5) along
+ * with the function itself, since the focused door and the fullscreen viewer
+ * now both depend on it too.
  */
 
 const SAVED_VIEW: SavedViewLite = {

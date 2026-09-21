@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/float-menu";
 import {
   chartAllowedOn,
-  filterKeysFor,
   type Cut,
   type Chart,
   type VizFilters,
@@ -23,6 +22,7 @@ import {
   CHART_LABEL,
   CUT_LABEL,
   VizMenuTrigger,
+  loadedViewLabel,
   type SavedViewLite,
 } from "./viz-labels";
 
@@ -32,52 +32,10 @@ function filterCountLabel(cut: Cut, chart: Chart, filters: VizFilters): string {
   return n === 1 ? "1 filter" : `${n} filters`;
 }
 
-/** Set equality for two filter-group lists — order-independent, mirroring
- * `viz-url.ts`'s own private `sameValues`. */
-function sameValues(a: readonly unknown[], b: readonly unknown[]): boolean {
-  if (a.length !== b.length) return false;
-  const bSet = new Set(b);
-  return a.every((v) => bSet.has(v));
-}
-
-/**
- * Pure — what the "View" trigger should say (F4b P2e: "The trigger shows the
- * saved view's name with a bookmark glyph once one is loaded"). `viewId` set
- * and still resolvable to a `savedViews` entry: show that view's name, with
- * `bookmark: true` only while cut/chart/every filter for that cut is STILL
- * exactly what the view saved — "Editing anything afterwards keeps the name
- * but the trigger drops the bookmark" (P2e). This deliberately does not
- * reuse `viz-url.ts`'s `sameView`: that function's id-shortcut counts a view
- * as "current" by id alone (by design, for the Views-grid ring — see its own
- * doc comment, "a saved view whose filters were themselves just edited
- * elsewhere still reads as 'current' by id"), which is exactly the case the
- * trigger's bookmark must NOT survive. Anything else (no `viewId`, or a
- * `viewId` that no longer resolves — a view deleted out from under the open
- * tab) falls back to the plain cut label, or "View" on the wall.
- */
-export function loadedViewLabel(
-  state: Pick<VizState, "cut" | "chart" | "filters" | "viewId">,
-  savedViews: SavedViewLite[],
-): { label: string; bookmark: boolean } {
-  if (state.viewId !== null) {
-    const view = savedViews.find((v) => v.id === state.viewId);
-    if (view) {
-      const bookmark =
-        state.cut === view.cut &&
-        state.chart === view.chart &&
-        filterKeysFor(view.cut).every((key) =>
-          key === "player"
-            ? state.filters.player === view.filters.player
-            : sameValues(state.filters[key], view.filters[key]),
-        );
-      return { label: view.name, bookmark };
-    }
-  }
-  return {
-    label: state.cut ? CUT_LABEL[state.cut] : "View",
-    bookmark: false,
-  };
-}
+// `loadedViewLabel` moved to `viz-labels.tsx` (fix round 1, Task 5) — both
+// `viz-focused.tsx`'s fullscreen door and `viz-fullscreen.tsx`'s
+// pristine-view check need it, and this file is a menu component, not the
+// shared label module. Imported above, used by the trigger label below.
 
 /**
  * The "View" menu (P1d): switch cuts, jump to a saved view, or save the

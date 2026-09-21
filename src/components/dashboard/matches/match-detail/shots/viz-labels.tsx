@@ -3,6 +3,8 @@
 import type { LucideIcon } from "lucide-react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { Cut, Chart, VizFilters } from "./viz-model";
+import { filterKeysFor } from "./viz-model";
+import type { VizState } from "./viz-url";
 import { ACE_STAR_FILL } from "./court-art";
 import { cn } from "@/lib/utils";
 
@@ -187,6 +189,59 @@ export interface SavedViewLite {
   cut: Cut;
   chart: Chart;
   filters: VizFilters;
+}
+
+/** Set equality for two filter-group lists — order-independent, mirroring
+ * `viz-url.ts`'s own private `sameValues`. */
+function sameValues(a: readonly unknown[], b: readonly unknown[]): boolean {
+  if (a.length !== b.length) return false;
+  const bSet = new Set(b);
+  return a.every((v) => bSet.has(v));
+}
+
+/**
+ * Pure — what the "View" trigger should say (F4b P2e: "The trigger shows the
+ * saved view's name with a bookmark glyph once one is loaded"). `viewId` set
+ * and still resolvable to a `savedViews` entry: show that view's name, with
+ * `bookmark: true` only while cut/chart/every filter for that cut is STILL
+ * exactly what the view saved — "Editing anything afterwards keeps the name
+ * but the trigger drops the bookmark" (P2e). This deliberately does not
+ * reuse `viz-url.ts`'s `sameView`: that function's id-shortcut counts a view
+ * as "current" by id alone (by design, for the Views-grid ring — see its own
+ * doc comment, "a saved view whose filters were themselves just edited
+ * elsewhere still reads as 'current' by id"), which is exactly the case the
+ * trigger's bookmark must NOT survive. Anything else (no `viewId`, or a
+ * `viewId` that no longer resolves — a view deleted out from under the open
+ * tab) falls back to the plain cut label, or "View" on the wall.
+ *
+ * Moved here (fix round 1, Task 5) from `cut-menu.tsx` — both the focused
+ * court's fullscreen door (`viz-focused.tsx`) and the fullscreen viewer's own
+ * pristine-view check (`viz-fullscreen.tsx`) need it, and this label module
+ * (not `cut-menu.tsx`, a menu component) is the shared, dependency-free home
+ * for viz label logic.
+ */
+export function loadedViewLabel(
+  state: Pick<VizState, "cut" | "chart" | "filters" | "viewId">,
+  savedViews: SavedViewLite[],
+): { label: string; bookmark: boolean } {
+  if (state.viewId !== null) {
+    const view = savedViews.find((v) => v.id === state.viewId);
+    if (view) {
+      const bookmark =
+        state.cut === view.cut &&
+        state.chart === view.chart &&
+        filterKeysFor(view.cut).every((key) =>
+          key === "player"
+            ? state.filters.player === view.filters.player
+            : sameValues(state.filters[key], view.filters[key]),
+        );
+      return { label: view.name, bookmark };
+    }
+  }
+  return {
+    label: state.cut ? CUT_LABEL[state.cut] : "View",
+    bookmark: false,
+  };
 }
 
 /**

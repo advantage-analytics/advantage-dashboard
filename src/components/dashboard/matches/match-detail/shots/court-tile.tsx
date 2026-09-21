@@ -88,6 +88,9 @@ export function TileFullscreenGlyph({
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
+        // Updater form ignores `prev` on purpose — the target is this
+        // tile's own full state (`tileState`), not a patch onto whatever
+        // the store currently holds.
         setState(() => ({ ...tileState, fullscreen: true }));
       }}
       className="absolute top-[10px] right-[10px] z-[1] flex h-6 w-6 cursor-pointer items-center justify-center rounded-[8px] bg-[rgba(13,13,13,0.72)] text-white transition-colors duration-200 ease-[var(--ease-primary)] hover:bg-[rgba(13,13,13,0.92)]"
