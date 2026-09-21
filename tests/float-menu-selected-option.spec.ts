@@ -6,8 +6,8 @@ const source = readFileSync("src/components/ui/float-menu.tsx", "utf8");
 
 test.describe("FloatMenuItem selected-option treatment", () => {
   test("marks selection with a blue check without a persistent or pointer-hover wash", () => {
-    expect(source).toContain('role={icon ? "menuitem" : "menuitemradio"}');
-    expect(source).toContain("aria-checked={icon ? undefined : chosen}");
+    expect(source).toContain('role={isAction ? "menuitem" : "menuitemradio"}');
+    expect(source).toContain("aria-checked={isAction ? undefined : chosen}");
     expect(source).toContain(
       '"focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none"',
     );
@@ -21,7 +21,7 @@ test.describe("FloatMenuItem selected-option treatment", () => {
     // row (one with an icon) has no chosen mark.
     expect(source).toContain("export function ChosenCheck");
     expect(source).toContain(
-      '{!icon && <ChosenCheck chosen={chosen} className="mt-[2px]" />}',
+      '!icon && <ChosenCheck chosen={chosen} className="mt-[2px]" />',
     );
     expect(source).toContain("text-[var(--blue)]");
   });

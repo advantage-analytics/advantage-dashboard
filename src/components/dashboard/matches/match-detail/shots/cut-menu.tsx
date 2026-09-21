@@ -1,20 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { BookmarkPlus, Crosshair, ScatterChart } from "lucide-react";
+import { Bookmark, BookmarkPlus, Crosshair, ScatterChart } from "lucide-react";
 import {
   FloatMenu,
   FloatMenuDivider,
   FloatMenuItem,
+  FloatMenuLabel,
   FloatMenuNote,
+  type FloatMenuTone,
 } from "@/components/ui/float-menu";
 import {
   chartAllowedOn,
+  filterKeysFor,
   type Cut,
   type Chart,
   type VizFilters,
 } from "./viz-model";
-import { activeFilterEntries, carryFilters } from "./viz-url";
+import { activeFilterEntries, carryFilters, type VizState } from "./viz-url";
 import { useVizState } from "./use-viz-state";
 import {
   CHART_LABEL,
@@ -27,6 +30,53 @@ function filterCountLabel(cut: Cut, chart: Chart, filters: VizFilters): string {
   const n = activeFilterEntries({ cut, chart, filters, viewId: null }).length;
   if (n === 0) return "no filters";
   return n === 1 ? "1 filter" : `${n} filters`;
+}
+
+/** Set equality for two filter-group lists — order-independent, mirroring
+ * `viz-url.ts`'s own private `sameValues`. */
+function sameValues(a: readonly unknown[], b: readonly unknown[]): boolean {
+  if (a.length !== b.length) return false;
+  const bSet = new Set(b);
+  return a.every((v) => bSet.has(v));
+}
+
+/**
+ * Pure — what the "View" trigger should say (F4b P2e: "The trigger shows the
+ * saved view's name with a bookmark glyph once one is loaded"). `viewId` set
+ * and still resolvable to a `savedViews` entry: show that view's name, with
+ * `bookmark: true` only while cut/chart/every filter for that cut is STILL
+ * exactly what the view saved — "Editing anything afterwards keeps the name
+ * but the trigger drops the bookmark" (P2e). This deliberately does not
+ * reuse `viz-url.ts`'s `sameView`: that function's id-shortcut counts a view
+ * as "current" by id alone (by design, for the Views-grid ring — see its own
+ * doc comment, "a saved view whose filters were themselves just edited
+ * elsewhere still reads as 'current' by id"), which is exactly the case the
+ * trigger's bookmark must NOT survive. Anything else (no `viewId`, or a
+ * `viewId` that no longer resolves — a view deleted out from under the open
+ * tab) falls back to the plain cut label, or "View" on the wall.
+ */
+export function loadedViewLabel(
+  state: Pick<VizState, "cut" | "chart" | "filters" | "viewId">,
+  savedViews: SavedViewLite[],
+): { label: string; bookmark: boolean } {
+  if (state.viewId !== null) {
+    const view = savedViews.find((v) => v.id === state.viewId);
+    if (view) {
+      const bookmark =
+        state.cut === view.cut &&
+        state.chart === view.chart &&
+        filterKeysFor(view.cut).every((key) =>
+          key === "player"
+            ? state.filters.player === view.filters.player
+            : sameValues(state.filters[key], view.filters[key]),
+        );
+      return { label: view.name, bookmark };
+    }
+  }
+  return {
+    label: state.cut ? CUT_LABEL[state.cut] : "View",
+    bookmark: false,
+  };
 }
 
 /**
@@ -44,6 +94,9 @@ export function CutMenu({
   savedViews,
   onSaveRequest,
   triggerRef,
+  width = 300,
+  tone = "light",
+  side = "bottom",
 }: {
   savedViews: SavedViewLite[];
   onSaveRequest?: () => void;
@@ -53,6 +106,10 @@ export function CutMenu({
    * Unused when nothing anchors to this menu.
    */
   triggerRef?: React.Ref<HTMLButtonElement>;
+  /** The fullscreen viewer's bottom slab uses 312 (Phase 2A). */
+  width?: number;
+  tone?: FloatMenuTone;
+  side?: "top" | "bottom";
 }) {
   const { state, setState } = useVizState();
   const [open, setOpen] = useState(false);
@@ -82,14 +139,21 @@ export function CutMenu({
     setOpen(false);
   }
 
-  const triggerIcon = state.cut === "serve" ? Crosshair : ScatterChart;
-  const triggerLabel = state.cut ? CUT_LABEL[state.cut] : "View";
+  const loaded = loadedViewLabel(state, savedViews);
+  const triggerIcon = loaded.bookmark
+    ? Bookmark
+    : state.cut === "serve"
+      ? Crosshair
+      : ScatterChart;
+  const triggerLabel = loaded.label;
 
   return (
     <FloatMenu
       open={open}
       onOpenChange={setOpen}
-      width={300}
+      width={width}
+      side={side}
+      tone={tone}
       sideOffset={6}
       align="start"
       label="View"
@@ -98,15 +162,14 @@ export function CutMenu({
           icon={triggerIcon}
           label={triggerLabel}
           open={open}
+          tone={tone}
           ref={triggerRef}
         />
       }
     >
       {savedViews.length > 0 && (
         <>
-          <p className="px-2.5 pt-1 pb-1 text-[11px] text-[var(--ink-400)]">
-            Saved views
-          </p>
+          <FloatMenuLabel>Saved views</FloatMenuLabel>
           {savedViews.map((view) => (
             <FloatMenuItem
               key={view.id}
@@ -120,9 +183,7 @@ export function CutMenu({
         </>
       )}
 
-      <p className="px-2.5 pt-1 pb-1 text-[11px] text-[var(--ink-400)]">
-        All views
-      </p>
+      <FloatMenuLabel>All views</FloatMenuLabel>
       <FloatMenuItem
         label="Serve placement"
         description="Where the serve lands, by zone"

@@ -37,6 +37,13 @@ import { cn } from "@/lib/utils";
  * personal workspace has nobody to share with, so the row is absent
  * entirely (`resolveSharedFlag` on the server enforces the same rule
  * regardless of what this dialog sends).
+ *
+ * Phase 2A: `tone="dark"` draws the fullscreen viewer's Save dialog
+ * (f4b-report P2f/P2g — `rgba(13,13,13,.9)`, the field's `rgba(255,255,255,
+ * .08)` fill, the "Saves" well already below reused as-is since the light
+ * dialog already has one). The duplicate-name copy differs by tone only —
+ * dark uses the P2g wording with curly quotes; the validation timing (blur +
+ * submit, never per keystroke) is identical for both and unchanged here.
  */
 export function SaveViewDialog({
   open,
@@ -49,6 +56,8 @@ export function SaveViewDialog({
   workspaceKind,
   workspaceName,
   onSaved,
+  tone = "light",
+  side = "bottom",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -60,8 +69,11 @@ export function SaveViewDialog({
   workspaceKind: WorkspaceKind;
   workspaceName: string;
   onSaved: (view: SavedView) => void;
+  tone?: "light" | "dark";
+  side?: "top" | "bottom";
 }) {
   const router = useRouter();
+  const dark = tone === "dark";
   const [name, setName] = useState("");
   const [shared, setShared] = useState(false);
   const [duplicate, setDuplicate] = useState(false);
@@ -183,10 +195,16 @@ export function SaveViewDialog({
       />
       <PopoverContent
         align="start"
+        side={side}
         sideOffset={6}
         role="dialog"
         aria-label="Save this view"
-        className="w-[332px] rounded-[12px] border border-[var(--border-hairline)] bg-[var(--surface-card)] p-4 shadow-[var(--shadow-dropdown)]"
+        className={cn(
+          "w-[332px] rounded-[12px] p-4",
+          dark
+            ? "border border-white/10 bg-[rgba(13,13,13,0.9)] shadow-[var(--shadow-dropdown)] backdrop-blur-[10px]"
+            : "border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)]",
+        )}
         onKeyDown={(e) => {
           if (e.key === "Escape") {
             onOpenChange(false);
@@ -196,13 +214,19 @@ export function SaveViewDialog({
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <p
             className="text-[13px] font-medium"
-            style={{ color: "var(--ink-900)" }}
+            style={{ color: dark ? "rgba(255,255,255,1)" : "var(--ink-900)" }}
           >
             Save this view
           </p>
 
           <div className="flex flex-col gap-1.5">
-            <label htmlFor={nameId} className="text-micro">
+            {/* `text-micro` sets its own colour unlayered, so the dark
+                override is an inline style, not a Tailwind utility. */}
+            <label
+              htmlFor={nameId}
+              className="text-micro"
+              style={dark ? { color: "rgba(255,255,255,0.55)" } : undefined}
+            >
               Name
             </label>
             <input
@@ -215,10 +239,15 @@ export function SaveViewDialog({
               aria-describedby={duplicate ? errorId : undefined}
               placeholder="e.g. Break points, deuce side"
               className={cn(
-                "h-8 w-full rounded-[6px] border bg-[var(--surface-card)] px-2.5 text-[13px] text-[var(--ink-900)] transition-colors duration-200 outline-none placeholder:text-[var(--ink-400)]",
+                "h-8 w-full rounded-[6px] border px-2.5 text-[13px] transition-colors duration-200 outline-none",
+                dark
+                  ? "bg-white/[0.08] text-white placeholder:text-white/40"
+                  : "bg-[var(--surface-card)] text-[var(--ink-900)] placeholder:text-[var(--ink-400)]",
                 duplicate
                   ? "border-[var(--error)]"
-                  : "border-[var(--border-field)] focus:border-[var(--blue)]",
+                  : dark
+                    ? "border-white/10 focus:border-[var(--blue)]"
+                    : "border-[var(--border-field)] focus:border-[var(--blue)]",
               )}
             />
             {duplicate && (
@@ -228,7 +257,9 @@ export function SaveViewDialog({
                 className="text-[11px]"
                 style={{ color: "var(--error)" }}
               >
-                A view with this name already exists.
+                {dark
+                  ? `You already have a view called “${trimmedName}”. Pick another name, or open that one from the menu.`
+                  : "A view with this name already exists."}
               </p>
             )}
           </div>
@@ -236,15 +267,27 @@ export function SaveViewDialog({
           <div
             className="flex flex-col gap-1"
             style={{
-              backgroundColor: "var(--surface-subtle)",
+              backgroundColor: dark
+                ? "rgba(255,255,255,0.06)"
+                : "var(--surface-subtle)",
               borderRadius: 8,
               padding: "10px 12px",
             }}
           >
-            <p className="text-[12px]" style={{ color: "var(--ink-700)" }}>
+            <p
+              className="text-[12px]"
+              style={{
+                color: dark ? "rgba(255,255,255,0.78)" : "var(--ink-700)",
+              }}
+            >
               {definitionLine}
             </p>
-            <p className="text-[11px]" style={{ color: "var(--ink-500)" }}>
+            <p
+              className="text-[11px]"
+              style={{
+                color: dark ? "rgba(255,255,255,0.45)" : "var(--ink-500)",
+              }}
+            >
               Depth bands are not part of a view.
             </p>
           </div>
@@ -261,7 +304,12 @@ export function SaveViewDialog({
                 />
                 <span
                   aria-hidden="true"
-                  className="inline-flex h-[16px] w-[16px] items-center justify-center rounded-[var(--radius-cell)] border border-[var(--border-field)] bg-[var(--surface-card)] transition-[background-color,border-color] duration-200 peer-checked:border-[var(--blue)] peer-checked:bg-[var(--blue)] peer-focus-visible:shadow-[var(--focus-ring)]"
+                  className={cn(
+                    "inline-flex h-[16px] w-[16px] items-center justify-center rounded-[var(--radius-cell)] border transition-[background-color,border-color] duration-200 peer-checked:border-[var(--blue)] peer-checked:bg-[var(--blue)] peer-focus-visible:shadow-[var(--focus-ring)]",
+                    dark
+                      ? "border-white/[0.18] bg-white/[0.08]"
+                      : "border-[var(--border-field)] bg-[var(--surface-card)]",
+                  )}
                 >
                   <svg
                     width="11"
@@ -284,11 +332,16 @@ export function SaveViewDialog({
               <span className="flex flex-col gap-0.5">
                 <span
                   className="text-[13px]"
-                  style={{ color: "var(--ink-900)" }}
+                  style={{
+                    color: dark ? "rgba(255,255,255,1)" : "var(--ink-900)",
+                  }}
                 >
                   Share with team
                 </span>
-                <span className="text-micro">
+                <span
+                  className="text-micro"
+                  style={dark ? { color: "rgba(255,255,255,0.5)" } : undefined}
+                >
                   Everyone in {workspaceName} can open it
                 </span>
               </span>
@@ -309,7 +362,12 @@ export function SaveViewDialog({
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="cursor-pointer text-[12px] font-medium text-[var(--ink-700)] hover:text-[var(--ink-900)]"
+              className={cn(
+                "cursor-pointer text-[12px] font-medium",
+                dark
+                  ? "text-white/85 hover:text-white"
+                  : "text-[var(--ink-700)] hover:text-[var(--ink-900)]",
+              )}
             >
               Cancel
             </button>

@@ -20,6 +20,7 @@ import { useVizState } from "./use-viz-state";
 import { VizMenuTrigger, VIZ_PILL_RADIUS } from "./viz-labels";
 
 type MultiFilterKey = Exclude<keyof VizFilters, "player">;
+type FiltersPopoverTone = "light" | "dark";
 
 /**
  * The Filters popover (P1f): every non-default `VizFilters` key as a wrap of
@@ -32,6 +33,13 @@ type MultiFilterKey = Exclude<keyof VizFilters, "player">;
  * `computeViz` result and `sets` from `availableSets(points)` — this
  * component has no data fetch of its own, just `useVizState` for the current
  * filters and `cut`.
+ *
+ * Phase 2A: `tone="dark"` draws the fullscreen viewer's popover (f4b-report
+ * P2h — `rgba(13,13,13,.9)` blur 10, `rgba(255,255,255,.18)`→`.55` pill
+ * borders). Defaults `"light"`; light output is unchanged. `side` picks
+ * which edge it opens from — the viewer's summary pill is top-right, so its
+ * popover opens `"bottom"` (the default) but callers that anchor from the
+ * floor of the screen pass `"top"`.
  */
 export function FiltersPopover({
   count,
@@ -40,6 +48,8 @@ export function FiltersPopover({
   sets,
   youName,
   opponentName,
+  tone = "light",
+  side = "bottom",
 }: {
   count: number;
   total: number;
@@ -47,10 +57,13 @@ export function FiltersPopover({
   sets: number[];
   youName: string;
   opponentName: string;
+  tone?: FiltersPopoverTone;
+  side?: "top" | "bottom";
 }) {
   const { state, setState } = useVizState();
   const [open, setOpen] = useState(false);
   const headingId = useId();
+  const dark = tone === "dark";
 
   const cut = state.cut;
   if (cut === null) {
@@ -118,25 +131,42 @@ export function FiltersPopover({
           label="Filters"
           open={open}
           haspopup="dialog"
+          tone={tone}
         />
       </PopoverTrigger>
       <PopoverContent
         align="end"
+        side={side}
         sideOffset={6}
         role="dialog"
         aria-labelledby={headingId}
-        className="w-[400px] rounded-[12px] border border-[var(--border-hairline)] bg-[var(--surface-card)] p-0 shadow-[var(--shadow-dropdown)]"
+        className={cn(
+          "w-[400px] rounded-[12px] p-0",
+          dark
+            ? "border border-white/10 bg-[rgba(13,13,13,0.9)] shadow-[var(--shadow-dropdown)] backdrop-blur-[10px]"
+            : "border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)]",
+        )}
       >
         <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2.5">
           <div className="flex min-w-0 flex-col gap-0.5">
             <span
               id={headingId}
               className="text-[13px] font-medium"
-              style={{ color: "var(--ink-900)" }}
+              style={
+                dark
+                  ? { color: "rgba(255,255,255,1)" }
+                  : { color: "var(--ink-900)" }
+              }
             >
               Filters
             </span>
-            <span className="text-micro tabular-nums">
+            {/* `text-micro` is a DS type class and sets its own colour
+                unlayered — it beats a Tailwind colour utility, so the dark
+                override has to be an inline style, not a class. */}
+            <span
+              className="text-micro tabular-nums"
+              style={dark ? { color: "rgba(255,255,255,0.55)" } : undefined}
+            >
               {applied} applied · {count} of {total} {noun}
             </span>
           </div>
@@ -144,7 +174,12 @@ export function FiltersPopover({
             type="button"
             aria-label="Close filters"
             onClick={() => setOpen(false)}
-            className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg text-[#888888] transition-colors duration-200 hover:bg-[var(--surface-subtle)] hover:text-[#0D0D0D]"
+            className={cn(
+              "flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors duration-200",
+              dark
+                ? "text-white/70 hover:bg-white/10 hover:text-white"
+                : "text-[#888888] hover:bg-[var(--surface-subtle)] hover:text-[#0D0D0D]",
+            )}
           >
             <X className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
           </button>
@@ -154,20 +189,22 @@ export function FiltersPopover({
           className="grid px-4 pb-3"
           style={{ gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}
         >
-          <FilterGroup label="Player">
+          <FilterGroup label="Player" dark={dark}>
             <FilterPill
               label={youName}
               active={state.filters.player === "you"}
               onClick={() => selectPlayer("you")}
+              dark={dark}
             />
             <FilterPill
               label={opponentName}
               active={state.filters.player === "opponent"}
               onClick={() => selectPlayer("opponent")}
+              dark={dark}
             />
           </FilterGroup>
 
-          <FilterGroup label="Ball">
+          <FilterGroup label="Ball" dark={dark}>
             {(Object.keys(OPTIONS.ball) as (keyof typeof OPTIONS.ball)[]).map(
               (key) => (
                 <FilterPill
@@ -175,12 +212,13 @@ export function FiltersPopover({
                   label={OPTIONS.ball[key]}
                   active={state.filters.ball.includes(key)}
                   onClick={() => toggle("ball", key)}
+                  dark={dark}
                 />
               ),
             )}
           </FilterGroup>
 
-          <FilterGroup label="Court">
+          <FilterGroup label="Court" dark={dark}>
             {(Object.keys(OPTIONS.court) as (keyof typeof OPTIONS.court)[]).map(
               (key) => (
                 <FilterPill
@@ -188,13 +226,14 @@ export function FiltersPopover({
                   label={OPTIONS.court[key]}
                   active={state.filters.court.includes(key)}
                   onClick={() => toggle("court", key)}
+                  dark={dark}
                 />
               ),
             )}
           </FilterGroup>
 
           {showZone && (
-            <FilterGroup label="Zone">
+            <FilterGroup label="Zone" dark={dark}>
               {(Object.keys(OPTIONS.zone) as (keyof typeof OPTIONS.zone)[]).map(
                 (key) => (
                   <FilterPill
@@ -202,24 +241,26 @@ export function FiltersPopover({
                     label={OPTIONS.zone[key]}
                     active={state.filters.zone.includes(key)}
                     onClick={() => toggle("zone", key)}
+                    dark={dark}
                   />
                 ),
               )}
             </FilterGroup>
           )}
 
-          <FilterGroup label="Result">
+          <FilterGroup label="Result" dark={dark}>
             {resultKeys.map((key) => (
               <FilterPill
                 key={key}
                 label={OPTIONS.result[key]}
                 active={state.filters.result.includes(key)}
                 onClick={() => toggle("result", key)}
+                dark={dark}
               />
             ))}
           </FilterGroup>
 
-          <FilterGroup label="Pressure">
+          <FilterGroup label="Pressure" dark={dark}>
             {(
               Object.keys(OPTIONS.pressure) as (keyof typeof OPTIONS.pressure)[]
             ).map((key) => (
@@ -228,11 +269,12 @@ export function FiltersPopover({
                 label={OPTIONS.pressure[key]}
                 active={state.filters.pressure.includes(key)}
                 onClick={() => toggle("pressure", key)}
+                dark={dark}
               />
             ))}
           </FilterGroup>
 
-          <FilterGroup label="Rally">
+          <FilterGroup label="Rally" dark={dark}>
             {(Object.keys(OPTIONS.rally) as (keyof typeof OPTIONS.rally)[]).map(
               (key) => (
                 <FilterPill
@@ -240,25 +282,27 @@ export function FiltersPopover({
                   label={OPTIONS.rally[key]}
                   active={state.filters.rally.includes(key)}
                   onClick={() => toggle("rally", key)}
+                  dark={dark}
                 />
               ),
             )}
           </FilterGroup>
 
           {showSet && (
-            <FilterGroup label="Set">
+            <FilterGroup label="Set" dark={dark}>
               {sets.map((setNumber) => (
                 <FilterPill
                   key={setNumber}
                   label={`Set ${setNumber}`}
                   active={state.filters.set.includes(setNumber)}
                   onClick={() => toggle("set", setNumber)}
+                  dark={dark}
                 />
               ))}
             </FilterGroup>
           )}
 
-          <FilterGroup label="Game">
+          <FilterGroup label="Game" dark={dark}>
             {(Object.keys(OPTIONS.game) as (keyof typeof OPTIONS.game)[]).map(
               (key) => (
                 <FilterPill
@@ -266,14 +310,25 @@ export function FiltersPopover({
                   label={OPTIONS.game[key]}
                   active={state.filters.game.includes(key)}
                   onClick={() => toggle("game", key)}
+                  dark={dark}
                 />
               ),
             )}
           </FilterGroup>
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-[var(--border-hairline)] px-4 py-2.5">
-          <span className="text-micro">Changes apply as you pick.</span>
+        <div
+          className={cn(
+            "flex items-center justify-between gap-3 border-t px-4 py-2.5",
+            dark ? "border-white/[0.12]" : "border-[var(--border-hairline)]",
+          )}
+        >
+          <span
+            className="text-micro"
+            style={dark ? { color: "rgba(255,255,255,0.55)" } : undefined}
+          >
+            Changes apply as you pick.
+          </span>
           <button
             type="button"
             onClick={clearAll}
@@ -289,9 +344,11 @@ export function FiltersPopover({
 
 function FilterGroup({
   label,
+  dark,
   children,
 }: {
   label: string;
+  dark?: boolean;
   children: React.ReactNode;
 }) {
   const labelId = useId();
@@ -301,7 +358,11 @@ function FilterGroup({
       aria-labelledby={labelId}
       className="flex flex-col gap-1.5"
     >
-      <span id={labelId} className="text-micro">
+      <span
+        id={labelId}
+        className="text-micro"
+        style={dark ? { color: "rgba(255,255,255,0.5)" } : undefined}
+      >
         {label}
       </span>
       <div className="flex flex-wrap gap-1.5">{children}</div>
@@ -313,10 +374,12 @@ function FilterPill({
   label,
   active,
   onClick,
+  dark,
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
+  dark?: boolean;
 }) {
   return (
     <button
@@ -327,11 +390,21 @@ function FilterPill({
         `inline-flex h-[26px] shrink-0 cursor-pointer items-center ${VIZ_PILL_RADIUS} px-2.5 text-[11px] transition-colors duration-200`,
         active ? "font-medium" : "font-normal",
       )}
-      style={{
-        border: `1px solid ${active ? "var(--border-medium)" : "var(--border-hairline)"}`,
-        backgroundColor: active ? "var(--surface-subtle)" : "transparent",
-        color: active ? "var(--ink-900)" : "var(--ink-700)",
-      }}
+      style={
+        dark
+          ? {
+              border: `1px solid rgba(255,255,255,${active ? "0.55" : "0.18"})`,
+              backgroundColor: active
+                ? "rgba(255,255,255,0.14)"
+                : "transparent",
+              color: active ? "rgba(255,255,255,1)" : "rgba(255,255,255,0.8)",
+            }
+          : {
+              border: `1px solid ${active ? "var(--border-medium)" : "var(--border-hairline)"}`,
+              backgroundColor: active ? "var(--surface-subtle)" : "transparent",
+              color: active ? "var(--ink-900)" : "var(--ink-700)",
+            }
+      }
     >
       {label}
     </button>

@@ -1,15 +1,22 @@
 "use client";
 
-import { ChosenCheck, FloatMenu } from "@/components/ui/float-menu";
-import { cn } from "@/lib/utils";
+import {
+  FloatMenu,
+  FloatMenuDivider,
+  FloatMenuItem,
+  FloatMenuLabel,
+  FloatMenuNote,
+} from "@/components/ui/float-menu";
 
 /**
- * The float menu on the film — the product's one dropdown surface drawn on
- * the dark scope (handoff F4): 10px radius, 5px inset, rgba(20,20,22,.97)
- * with a 10%-white hairline. The surface is `FloatMenu` (positioning,
- * dismissal, focus); the rows are hand-built because `FloatMenuItem` carries
- * the light inks and the DS says hand-build when a primitive fights the
- * geometry. `ChosenCheck` is still the one mark that means "chosen".
+ * The film's own names for the product's one dropdown surface
+ * (`ui/float-menu.tsx`) on `tone="dark"` — thin wrappers, kept so the film's
+ * call sites (`film-quick-filters.tsx`, `film-advanced-filters-dialog.tsx`)
+ * don't churn. Phase 2A folded this file's hand-built row markup into
+ * `FloatMenu`/`FloatMenuItem` themselves (the DS's "one implementation, two
+ * surfaces" rule — the fullscreen court viewer needed the exact same dark
+ * menu and a second hand-rolled copy was never on the table); everything
+ * below just forwards to the shared component with `tone="dark"`.
  */
 
 export function FilmDarkMenu({
@@ -37,7 +44,11 @@ export function FilmDarkMenu({
       label={label}
       width={width}
       align={align}
-      className="border border-white/10 bg-[rgba(20,20,22,0.97)]"
+      tone="dark"
+      // The film's dark surface predates the P2d spec values (`rgba(20,20,22,.97)`
+      // vs the shared dark tone's `rgba(13,13,13,.88)`) — kept as-is here so this
+      // fold changes row markup, not the film's own established surface colour.
+      className="border-white/10 bg-[rgba(20,20,22,0.97)]"
     >
       {children}
     </FloatMenu>
@@ -46,11 +57,7 @@ export function FilmDarkMenu({
 
 /** Sentence-case section label, 11px at 45%. */
 export function FilmDarkMenuLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="px-[9px] pt-[7px] pb-[5px] text-[11px] text-white/45">
-      {children}
-    </span>
-  );
+  return <FloatMenuLabel>{children}</FloatMenuLabel>;
 }
 
 export function FilmDarkMenuItem({
@@ -64,45 +71,26 @@ export function FilmDarkMenuItem({
   description?: string;
   /** Omit for an action row (no check slot). */
   chosen?: boolean;
-  /** A trailing glyph for an action row, e.g. a chevron. */
+  /** A trailing glyph for an action row, e.g. a chevron — `FloatMenuItem`'s
+   * own `trailing` slot (folded in from this file's hand-built row). */
   trailing?: React.ReactNode;
   onSelect: () => void;
 }) {
-  const radio = chosen !== undefined;
   return (
-    <button
-      type="button"
-      role={radio ? "menuitemradio" : "menuitem"}
-      aria-checked={radio ? chosen : undefined}
-      onClick={onSelect}
-      className={cn(
-        "flex cursor-pointer items-center gap-2.5 rounded-[6px] px-[9px] py-[7px] text-left transition-colors duration-100",
-        "hover:bg-white/[0.07] focus-visible:bg-white/[0.07] focus-visible:outline-none",
-        chosen && "bg-white/[0.07]",
-      )}
-    >
-      <span className="flex min-w-0 flex-1 flex-col gap-px">
-        <span className="text-[12px] text-white">{label}</span>
-        {description && (
-          <span className="text-[11px] text-white/45">{description}</span>
-        )}
-      </span>
-      {radio ? <ChosenCheck chosen={chosen} /> : trailing}
-    </button>
+    <FloatMenuItem
+      label={label}
+      description={description}
+      chosen={chosen ?? false}
+      trailing={trailing}
+      onSelect={onSelect}
+    />
   );
 }
 
 export function FilmDarkMenuDivider() {
-  return <div aria-hidden="true" className="my-[5px] h-px bg-white/10" />;
+  return <FloatMenuDivider />;
 }
 
 export function FilmDarkMenuNote({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      <FilmDarkMenuDivider />
-      <span className="block px-[9px] pt-[7px] pb-2 text-[11px] text-white/40">
-        {children}
-      </span>
-    </>
-  );
+  return <FloatMenuNote>{children}</FloatMenuNote>;
 }

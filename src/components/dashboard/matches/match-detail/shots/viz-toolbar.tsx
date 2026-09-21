@@ -3,6 +3,7 @@
 import { CutMenu } from "./cut-menu";
 import { ChartMenu } from "./chart-menu";
 import type { SavedViewLite } from "./viz-labels";
+import type { FloatMenuTone } from "@/components/ui/float-menu";
 import { cn } from "@/lib/utils";
 
 /**
@@ -24,6 +25,8 @@ export function VizToolbar({
   cutMenuTriggerRef,
   filtersSlot,
   stripSlot,
+  tone = "light",
+  side = "bottom",
   className,
 }: {
   savedViews: SavedViewLite[];
@@ -32,6 +35,10 @@ export function VizToolbar({
   cutMenuTriggerRef?: React.Ref<HTMLButtonElement>;
   filtersSlot?: React.ReactNode;
   stripSlot?: React.ReactNode;
+  /** Phase 2A: forwarded to `CutMenu`/`ChartMenu` for the fullscreen
+   * viewer's dark bottom slab. Defaults `"light"`; unchanged there. */
+  tone?: FloatMenuTone;
+  side?: "top" | "bottom";
   /** F5: `viz-focused.tsx` adds `viz-vt-toolbar` — the entrance transition's
    * hook (`globals.css`) for this block staggering in on a wall→focused
    * morph. Merged onto the root, not replacing it. */
@@ -43,8 +50,10 @@ export function VizToolbar({
         savedViews={savedViews}
         onSaveRequest={onSaveRequest}
         triggerRef={cutMenuTriggerRef}
+        tone={tone}
+        side={side}
       />
-      <ChartMenu />
+      <ChartMenu tone={tone} side={side} />
       {stripSlot != null && (
         <>
           <div

@@ -187,6 +187,7 @@ const stepModule = (() => {
       exports: floatMenu,
       require: (dep: string) => {
         if (dep === "react/jsx-runtime") return jsx;
+        if (dep === "react") return React;
         if (dep === "lucide-react") return icons;
         if (dep === "@/lib/utils") return { cn };
         if (dep === "@/components/ui/popover") return popover;

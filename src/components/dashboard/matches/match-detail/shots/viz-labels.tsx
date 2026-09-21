@@ -206,6 +206,7 @@ export function VizMenuTrigger({
   label,
   open,
   haspopup = "menu",
+  tone = "light",
   className,
   ref,
   ...buttonProps
@@ -214,6 +215,13 @@ export function VizMenuTrigger({
   label: string;
   open: boolean;
   haspopup?: "menu" | "dialog";
+  /**
+   * Phase 2A: the dark fullscreen-viewer chrome (f4b-report P2d — 28px
+   * `rgba(255,255,255,.1)` → `.18` at rest/hover, `.18` + `chevron-up` while
+   * open, 13px icon at 70% white, 12/500 white label). Defaults `"light"`;
+   * light output is unchanged.
+   */
+  tone?: "light" | "dark";
   className?: string;
   /**
    * React 19 ref-as-prop — `save-view-dialog.tsx` anchors under this exact
@@ -227,6 +235,7 @@ export function VizMenuTrigger({
   "type" | "aria-expanded" | "aria-haspopup"
 >) {
   const Chevron = open ? ChevronUp : ChevronDown;
+  const dark = tone === "dark";
   return (
     <button
       ref={ref}
@@ -235,21 +244,29 @@ export function VizMenuTrigger({
       aria-haspopup={haspopup}
       aria-expanded={open}
       className={cn(
-        "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 px-2 text-[12px] font-medium text-[var(--ink-700)] transition-colors duration-200",
-        open ? "bg-[var(--surface-muted)]" : "bg-[var(--surface-subtle)]",
-        !open && "hover:bg-[var(--surface-muted)]",
+        "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 px-2 text-[12px] font-medium transition-colors duration-200",
+        dark ? "text-white" : "text-[var(--ink-700)]",
+        dark
+          ? open
+            ? "bg-white/[0.18]"
+            : "bg-white/10"
+          : open
+            ? "bg-[var(--surface-muted)]"
+            : "bg-[var(--surface-subtle)]",
+        !open &&
+          (dark ? "hover:bg-white/[0.18]" : "hover:bg-[var(--surface-muted)]"),
         className,
       )}
       style={{ borderRadius: "var(--radius-element)" }}
     >
       <Icon
-        className="size-[13px] shrink-0"
+        className={cn("size-[13px] shrink-0", dark && "text-white/70")}
         strokeWidth={1.5}
         aria-hidden="true"
       />
       <span className="truncate">{label}</span>
       <Chevron
-        className="size-3 shrink-0"
+        className={cn("size-3 shrink-0", dark && "text-white/70")}
         strokeWidth={1.5}
         aria-hidden="true"
       />

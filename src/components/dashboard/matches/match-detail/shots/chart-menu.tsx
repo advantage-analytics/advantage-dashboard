@@ -6,6 +6,7 @@ import {
   FloatMenu,
   FloatMenuItem,
   FloatMenuNote,
+  type FloatMenuTone,
 } from "@/components/ui/float-menu";
 import type { Chart } from "./viz-model";
 import { useVizState } from "./use-viz-state";
@@ -17,7 +18,14 @@ import { CHART_LABEL, VizMenuTrigger } from "./viz-labels";
  * no meaning off serve (guardrails: Zones is Serve-only, enforced here
  * rather than trusted to the caller).
  */
-export function ChartMenu() {
+export function ChartMenu({
+  tone = "light",
+  side = "bottom",
+}: {
+  /** Phase 2A: the fullscreen viewer's dark bottom-slab trigger. */
+  tone?: FloatMenuTone;
+  side?: "top" | "bottom";
+} = {}) {
   const { state, setState } = useVizState();
   const [open, setOpen] = useState(false);
 
@@ -38,6 +46,8 @@ export function ChartMenu() {
       open={open}
       onOpenChange={setOpen}
       width={272}
+      side={side}
+      tone={tone}
       sideOffset={6}
       align="start"
       label="Chart"
@@ -46,6 +56,7 @@ export function ChartMenu() {
           icon={triggerIcon}
           label={CHART_LABEL[state.chart]}
           open={open}
+          tone={tone}
         />
       }
     >
