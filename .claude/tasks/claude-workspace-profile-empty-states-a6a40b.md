@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Shared DayZeroGrade + profile day-zero copy helper
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/home/day-zero-shape.tsx, src/components/dashboard/home/day-zero-home.tsx, src/lib/ui/profile-day-zero-copy.ts (new), tests/profile-day-zero-copy.spec.ts (new) — guess
 - **done when:**
