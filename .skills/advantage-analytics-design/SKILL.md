@@ -59,13 +59,18 @@ that decides which of two conflicting patterns wins.
 > `DESIGN.md` disagree on anything v3 did not touch, `DESIGN.md` is newer.
 > The supersessions so far: nav active is a neutral wash; the Matches column
 > order is Date-first; container rows (events, players) peek in a drawer and
-> carry no chevron; "New" is the one blue-tinted state pill; status pills
+> carry no chevron; status pills
 > carry no counts; the page title is the first thing in the scroll body with
 > no eyebrow above it; the selected-row check is Signal Blue site-wide; what
-> a confirm costs is prose, not a bulleted tub. "New"
-> stays the only blue-tinted pill: `You` is grey and drawn only by `YouPill`,
-> ruled on in [Settings Pages](reference/settings.md); nothing else may take
-> a second blue.
+> a confirm costs is prose, not a bulleted tub. **Every state pill is grey and
+> no pill is blue-tinted**: "New" is not a pill any more but a 5px `--blue` dot
+> in the Matches row's own gutter, ruled on in
+> [Data Table rule 4](reference/tables.md), and `You` is grey and drawn only by
+> `YouPill`, ruled on in [Settings Pages](reference/settings.md).
+> _Supersedes (v3): ""New" is the one blue-tinted state pill."_
+> _Supersedes (v3): ""New" stays the only blue-tinted pill: `You` is grey and
+> drawn only by `YouPill`, ruled on in [Settings Pages](reference/settings.md);
+> nothing else may take a second blue."_
 > Where the shipped code still draws the old pattern, the owning section says
 > so under _Shipped:_ — that is drift to migrate, not a second style.
 >

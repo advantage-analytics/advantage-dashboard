@@ -44,7 +44,7 @@ ready).
 
 ## T3 · Reconcile the "New is the one blue-tinted pill" rule across the design system
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** `.skills/advantage-analytics-design/SKILL.md`, `reference/tables.md`, `reference/settings.md`, `reference/primitives.md`, `reference/empty-and-loading.md` — guess

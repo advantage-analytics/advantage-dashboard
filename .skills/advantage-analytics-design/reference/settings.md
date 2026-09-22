@@ -98,7 +98,11 @@ One shape for every person a card lists — members, invitees, usage lines:
   meaning — do not add one." Blue on a card with nothing to click spent the
   action colour on a label, and the wizard already drew `You` grey while the
   roster wrote a lowercase `you`, so the product was marking the viewer three
-  ways at once._
+  ways at once._ The premise that quote names has since gone as well: "New" is
+  no longer a pill of any colour — an unread match is marked by a 5px `--blue`
+  dot in the row's own gutter (Data Table rule 4, `reference/tables.md`) — so
+  grey `You` is not a carve-out from a blue norm. No pill in the system is
+  blue-tinted.
 
 ### Selects on a settings page are `MenuSelect`
 

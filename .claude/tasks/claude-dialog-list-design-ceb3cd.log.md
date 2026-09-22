@@ -49,3 +49,41 @@ border and shadow only.
 seat box stands for an invitation, which stopped being unambiguous once free
 seats are outlined too. It now says the colour marks the invite, not the
 outline alone. No call site changed.
+
+## T3 · Reconcile the "New is the one blue-tinted pill" rule across the design system — done
+
+**gate:** mechanical `GATE PASS`; completion `VERDICT: pass`.
+
+**changed:** T1 deleted `NewPill`, which made the design system false in seven
+places across five files — all of them asserting that "New" is the one
+sanctioned blue-tinted pill. Reconciled: the exception is gone rather than
+relocated, so the rule simplifies to **every state pill is grey and no pill is
+blue-tinted**, owned by Data Table rule 4 in `reference/tables.md` with
+one-line pointers from `primitives.md` and the SKILL.md roll-call.
+
+Three of the files had justified themselves by _availability_ — "the
+blue-tinted pill is spoken for", "a second blue costs the first its meaning" —
+and that argument evaporates once nothing holds the slot, so each now states
+the reason instead: blue is action and emphasis, and a pill is a label nobody
+can click. Six `_Supersedes (v3): "…"._` notes carry the retired text verbatim;
+the reviewer checked each against `git show HEAD:<path>` rather than trusting
+the quotes.
+
+Two judgement calls worth keeping. `tables.md`'s retired rule read "Unread is
+not a dot and not a column" — only the first half became false, so "and still
+not a column" stays live rule, with the dot's position in the row's own padding
+written in as its justification, so nobody later promotes it into a track.
+And `settings.md`'s `You` ruling contains a long `_The retired rule read "…"_`
+historical quote that names "New"; that was left byte-identical, correctly,
+with a sentence appended noting its premise has since gone too.
+
+**follow-ups:**
+
+1. `scripts/check-design-drift.mjs` check 7 counts `You` drift, but nothing
+   guards against a blue-tinted pill returning. A check failing on
+   `--blue-tint-08`/`-10` used as a pill background would make the reconciled
+   rule enforceable rather than documentary.
+2. The v3 Claude Design project still documents `NewPill`. The repo and the
+   project now disagree here — expected, in the repo's favour — but the change
+   should be pushed back into the project's `CHANGELOG.md` so a future
+   DesignSync round does not reinstate the blue pill.

@@ -102,20 +102,38 @@ master-detail split is retired; its detail is the peek drawer below.
 4. **Row state pills.** Shared / Private / Draft are grey 18px `StatePill`s
    (10/500 ink-700 on surface-subtle) beside the row's primary name — mark
    the exception, not the norm ("Private" under a share-everything policy,
-   "Shared" under private-by-default). **"New" is the one blue-tinted pill**:
-   18px, 10/500, `--blue` text on a 10% blue tint — emphasis, not neutral
-   status; never filled blue (it would compete with the Result badge); gone
-   once the report is opened. **Unread is not a dot and not a column** — the
-   dot column retired from data tables (the 6px blue dot stays the activity
-   tray's mark alone). Max one state pill per row — the viewer's grey `You`
+   "Shared" under private-by-default). **A state pill is grey, always — no
+   pill in the system is blue-tinted, and there is no exception** (2026-09-22).
+   Blue is action and emphasis; a pill is a label, and a label nobody can click
+   has no claim on the action colour. **Unread is a dot — and still not a
+   column**: a 5px `--blue` dot absolutely positioned in the row's own left
+   padding (the `-mx-4 px-4` gutter, outside every grid cell), paired with an
+   `sr-only` "Unread", gone once the report is opened. It adds no track and
+   moves no cell, which is the whole point — a badge sitting in the name cell
+   pushed the opponent's name to a different x depending on whether the row had
+   been read, so finding the new rows meant reading _along_ every row instead
+   of _down_ one column. The dot lives in space the row already owns, so
+   nothing shifts and the eye scans a single column. (The activity tray's 6px
+   dot is a different mark on a different surface and is unchanged.) Max one
+   state pill per row — the viewer's grey `You`
    (`YouPill`) is identity, not state, and does not count; see Settings Pages
    › Person row in a card. A pill never truncates:
    the name span takes `min-width:0; overflow:hidden; text-overflow:ellipsis`
    and the pill `flex-shrink:0` — a clipped pill reads like the banned W/L
-   letter. _Shipped:_ `ui/state-pill.tsx` is the grey register (Draft, Shared,
+   letter.
+   _Supersedes (v3): "**"New" is the one blue-tinted pill**: 18px, 10/500,
+   `--blue` text on a 10% blue tint — emphasis, not neutral status; never
+   filled blue (it would compete with the Result badge); gone once the report
+   is opened. **Unread is not a dot and not a column** — the dot column
+   retired from data tables (the 6px blue dot stays the activity tray's mark
+   alone)."_
+   _Shipped:_ `ui/state-pill.tsx` is the whole register (Draft, Shared,
+   Private) and it is grey throughout; `match-card-list.tsx` draws the unread
+   dot inline in the row's gutter. `ui/new-pill.tsx` has been deleted.
+   _Supersedes (v3): "`ui/state-pill.tsx` is the grey register (Draft, Shared,
    Private) and `ui/new-pill.tsx` is the blue one — 18px, 10/500, `--blue` on a
    10% blue tint mixed from the token so it follows into the dark scope.
-   `match-card-list.tsx` draws "New" through `NewPill`.
+   `match-card-list.tsx` draws "New" through `NewPill`."_
 5. **Row actions on hover:** surface-muted wash on the rounded
    `radius-element` row, inset 8px from the card edge; the lifecycle cell
    swaps for a `⋯` trigger (`MoreHorizontal`, stroke 1.75 — the one
