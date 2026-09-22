@@ -593,7 +593,6 @@ function FilmRoom({
           onEnterFullscreen={enterRoom}
         />
         <FilmThisPoint
-          unit={unit}
           point={activePoint}
           shots={pointShots}
           position={position}

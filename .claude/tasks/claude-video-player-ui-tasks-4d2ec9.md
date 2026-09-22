@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Rename "Current point" to "This point" and drop the speed column
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/film-this-point.tsx; docs/superpowers/specs/2026-09-20-video-tab-in-shell-h1-design.md (section B, prose only)
 - **done when:**
