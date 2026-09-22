@@ -58,7 +58,7 @@ ready).
 
 ## T4 · Room placement marks fire at the stored bounce time
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/film-shots.ts (`ShotStop`), film-fullscreen.tsx (the `courtMarks` memo ~411–439 only), film-court.ts (doc comment on `bounceEventTime` / `BOUNCE_REVEAL_SHARE`), tests/film-shots.spec.ts, tests/film-court.spec.ts

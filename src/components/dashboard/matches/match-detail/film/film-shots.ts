@@ -28,6 +28,27 @@ export interface ShotStop {
   /** Film seconds. */
   start: number;
   end: number;
+  /**
+   * Film seconds of the ball's landing, when the row carries a measured one.
+   *
+   * `shots.bounce_video_time` is written on the SOURCE clock, the same one
+   * `video_time` is on, so it converts through the same {@link FilmClock} here
+   * — the room never sees a second clock. A landing recorded before its own
+   * strike is nonsense rather than a reading, so it is dropped to null and the
+   * court falls back to its estimate.
+   */
+  bounce: number | null;
+}
+
+/** A row's stored landing on the film clock, or null when there is no reading. */
+function bounceFilmTime(
+  bounceVideoTime: number | null,
+  start: number,
+  clock: FilmClock,
+): number | null {
+  if (bounceVideoTime == null || !Number.isFinite(bounceVideoTime)) return null;
+  const at = toFilmTime(bounceVideoTime, clock);
+  return at >= start ? at : null;
 }
 
 export function shotStops(
@@ -49,7 +70,13 @@ export function shotStops(
       const end = next
         ? toFilmTime(next.videoTime, clock)
         : Math.max(stop.end, start);
-      out.push({ shot, point: stop.point, start, end: Math.max(end, start) });
+      out.push({
+        shot,
+        point: stop.point,
+        start,
+        end: Math.max(end, start),
+        bounce: bounceFilmTime(shot.bounceVideoTime, start, clock),
+      });
     });
   }
   return out.sort((a, b) => a.start - b.start);

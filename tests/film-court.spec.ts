@@ -195,6 +195,27 @@ test("the court draws the moment, not the shot count", () => {
   expect(landed.filter((m) => m.live)).toHaveLength(1);
 });
 
+test("a landing time stored on the row fires there, not at the 0.6 estimate", () => {
+  // s3 is struck at 12, so the estimate would land its ball at 12.6. The row
+  // carries a measured landing instead (`ShotStop.bounce`, off
+  // `shots.bounce_video_time`), 0.25s after the strike.
+  const stored = { s3: 12.25 };
+  expect(bounceOf(at(12.25, RALLY, stored), "s3")).toMatchObject({
+    opacity: 1,
+    live: true,
+  });
+  // 0.2s before that the ball is still in the air, so no bounce is drawn…
+  expect(bounceOf(at(12.05, RALLY, stored), "s3")).toBeUndefined();
+  // …and the estimate's own moment passes without an event: it already landed.
+  expect(bounceOf(at(12.6, RALLY, stored), "s3")).toMatchObject({ opacity: 1 });
+
+  // The strike is a separate event and still fires at the contact time.
+  expect(contactOf(at(12.05, RALLY, stored), "s3")).toMatchObject({
+    opacity: 1,
+  });
+  expect(contactOf(at(11.89, RALLY, stored), "s3")).toBeUndefined();
+});
+
 test("a measured landing time beats the estimate, in both directions", () => {
   // s3's ball is known to have landed at 12.2, before the 12.6 estimate.
   const early = at(12.3, RALLY, { s3: 12.2 });

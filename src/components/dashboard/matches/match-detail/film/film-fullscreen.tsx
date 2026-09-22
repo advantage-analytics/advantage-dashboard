@@ -394,7 +394,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   const courtView: CourtView =
     match.sourceProvider === "splitstep" ? "camera" : "you-bottom";
 
-  // Measured bounce times, for the one lineage that has any: the paths are
+  // Ball-paths bounce times, the older of the two measured sources: the paths are
   // derived from the vendor's per-frame trajectories, so a match from any other
   // source has no file to fetch and nothing to gain from asking. With the court
   // off there is nothing to draw them on. Everything below is silent and
@@ -435,8 +435,11 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
       pointShotStops.map((s) => ({
         shot: s.shot,
         contactTime: s.start,
-        // Absent for a shot the paths do not cover, which is the estimate's cue.
-        bounceTime: bounceTimes.get(s.shot.id),
+        // The row's own measured landing first (`ShotStop.bounce`, converted in
+        // `shotStops` off `shots.bounce_video_time`), then the ball-paths match
+        // for a match derived before that column was written. Absent from both
+        // leaves `bounceTime` undefined, which is `estimatedBounceTime`'s cue.
+        bounceTime: s.bounce ?? bounceTimes.get(s.shot.id),
       })),
       {
         youIsPlayer1: sides.you.isPlayer1,

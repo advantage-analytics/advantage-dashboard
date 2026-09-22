@@ -357,8 +357,10 @@ export type CourtView = "camera" | "you-bottom";
  * When the ball of a shot lands, as a share of the way from its contact to the
  * next one. Measured on a real match's per-frame ball trajectories (414
  * consecutive strokes): the bounce falls at 0.42 / 0.62 / 0.85 of that gap
- * (p10 / p50 / p90). This is the fallback for every match whose rows carry no
- * measured landing time, which today is all of them.
+ * (p10 / p50 / p90). This is the fallback for a shot with neither a stored
+ * landing time (`shots.bounce_video_time`, carried in as `ShotStop.bounce`) nor
+ * a ball-paths match — every SwingVision shot, and every Advantage Intelligence
+ * shot derived before that column was written.
  */
 export const BOUNCE_REVEAL_SHARE = 0.6;
 /** The same for a rally's last shot, which has no next contact: median flight. */

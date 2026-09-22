@@ -93,6 +93,31 @@ test("a shot past the last frame sits on it rather than off the end", () => {
   expect(stops[0].end).toBe(300);
 });
 
+test("a stored landing converts through the same clock, nonsense dropped", () => {
+  const bounced = [
+    pt({
+      id: "b",
+      videoTime: 65,
+      duration: 6,
+      shots: [
+        shot("measured", 65, { bounceVideoTime: 65.8 }),
+        shot("missing", 66.2),
+        shot("early", 67.4, { bounceVideoTime: 67.1 }),
+      ],
+    }),
+  ];
+  const stops = shotStops(filmStops(bounced, OFFSET), OFFSET);
+  const of = (id: string) => stops.find((s) => s.shot.id === id)!;
+
+  // Film seconds, not source: 65.8 − 15. The raw 65.8 would be 15s off.
+  expect(of("measured").bounce).toBeCloseTo(50.8, 6);
+  expect(of("measured").bounce!).toBeGreaterThanOrEqual(of("measured").start);
+  // No reading at all: the court falls back to its estimate.
+  expect(of("missing").bounce).toBeNull();
+  // A landing 0.3s BEFORE its own strike is not a reading either.
+  expect(of("early").bounce).toBeNull();
+});
+
 test("labels", () => {
   expect(shotLabel(shot("a", 1, { shotType: "First Serve" }))).toBe(
     "First serve · topspin",

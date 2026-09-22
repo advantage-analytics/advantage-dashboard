@@ -31,3 +31,14 @@ is the runner's. Newest entries at the bottom.
 1. Every already-derived Advantage Intelligence match has `bounce_video_time` NULL until the author re-derives it (`scripts/splitstep-derive.ts --job <uuid> --write`); Caden Ace v Matt Goodman (`d3bff342-b33a-417a-a332-b5a3192f3f4d`) is the one to do first so T4 has something to show.
 2. `ball-paths.ts` still derives its own `bounceTime` from `trajectories.json`; strokes now carry `bounceFrame` too, so the two could be cross-checked as a cheap quality signal.
 3. `.claude/skills/create-migration/check.sh` flags the pre-existing `20260913230000_notification_prefs_team.sql` (RLS on, no policy marker) on every run.
+
+## T4 · Room placement marks fire at the stored bounce time — done
+
+**gate:** mechanical pass (two full runs each tripped a different set of `(live)` specs — `viz-bands-rls` "statement timeout", `program-owner-name-live`, `seats-count-players`, then `match-video-attachments-db` "concurrent identical retries", `program-member-avatars`, `program-owner-name-live` — and every one passed alone on re-run; all six are shared-live-DB specs with no path into the film court, the pattern already recorded in reference_live_db_auth_rate_limits) · completion `VERDICT: pass`
+
+**changed:** `ShotStop.bounce: number | null` — `shotStops()` converts `shot.bounceVideoTime` through the same `toFilmTime(clock)` as `start` and keeps it only when ≥ `start`. `film-fullscreen.tsx`'s `courtMarks` memo builds `bounceTime: s.bounce ?? bounceTimes.get(s.shot.id)` — stored regular-JSON bounce first, ball-paths match second, `estimatedBounceTime` last; no other line in the file changed beyond the comment above `useBallPaths`. `film-court.ts`'s `BOUNCE_REVEAL_SHARE` comment names the two measured sources it falls back from. `tests/film-shots.spec.ts` pins 65.8 → 50.8 at offset 15, null for a missing time, null for a landing before its own contact. `tests/film-court.spec.ts` pins a stored 12.25 on a shot struck at 12: bounce live at 12.25, absent at 12.05, contact unaffected.
+
+**follow-ups:**
+
+1. Inert until a match is re-derived: `npx tsx scripts/splitstep-derive.ts --job d3bff342-b33a-417a-a332-b5a3192f3f4d --write` (Caden Ace v Matt Goodman) is the author's step, then an eyes-on pass in the room — first time the court draws a measured landing.
+2. Once every Advantage Intelligence match is re-derived, `bounceTimesByShot`/the ball-paths fetch in `courtMarks` is redundant (the moving dot in `film-court-ball.tsx` still needs the file).
