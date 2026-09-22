@@ -29,9 +29,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/server";
-import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import type { Workspace } from "@/lib/workspace/types";
+import { requireWorkspaceContext } from "@/lib/data/action-context";
 import type {
   Cut,
   Chart,
@@ -70,19 +68,6 @@ const MATCH_REPORT_PATH_PATTERN = "/dashboard/matches/(detail)/[matchId]";
 
 function revalidateMatchReport() {
   revalidatePath(MATCH_REPORT_PATH_PATTERN, "page");
-}
-
-interface ActionContext {
-  supabase: SupabaseClient;
-  workspace: Workspace;
-  viewerId: string;
-}
-
-async function requireContext(): Promise<ActionContext | null> {
-  const ctx = await getWorkspaceContext();
-  if (!ctx) return null;
-  const supabase = await createClient();
-  return { supabase, workspace: ctx.active, viewerId: ctx.viewer.id };
 }
 
 /** `sort_order` one past the account's current max — 0 for its first row. */
@@ -129,7 +114,7 @@ export async function createSavedView(input: {
   filters: VizFilters;
   shared?: boolean;
 }): Promise<ActionResult<SavedView>> {
-  const ctx = await requireContext();
+  const ctx = await requireWorkspaceContext();
   if (!ctx) return { ok: false, error: "forbidden" };
   const { supabase, workspace } = ctx;
 
@@ -169,7 +154,7 @@ export async function renameSavedView(
   id: string,
   name: string,
 ): Promise<ActionResult> {
-  const ctx = await requireContext();
+  const ctx = await requireWorkspaceContext();
   if (!ctx) return { ok: false, error: "forbidden" };
   const { supabase, workspace } = ctx;
 
@@ -197,7 +182,7 @@ export async function renameSavedView(
 export async function duplicateSavedView(
   id: string,
 ): Promise<ActionResult<SavedView>> {
-  const ctx = await requireContext();
+  const ctx = await requireWorkspaceContext();
   if (!ctx) return { ok: false, error: "forbidden" };
   const { supabase, workspace, viewerId } = ctx;
 
@@ -268,7 +253,7 @@ export async function duplicateSavedView(
 export async function deleteSavedView(
   id: string,
 ): Promise<ActionResult<SavedViewRow>> {
-  const ctx = await requireContext();
+  const ctx = await requireWorkspaceContext();
   if (!ctx) return { ok: false, error: "forbidden" };
   const { supabase, workspace, viewerId } = ctx;
 
@@ -323,7 +308,7 @@ export async function restoreSavedView(view: {
   shared: boolean;
   order: number;
 }): Promise<ActionResult> {
-  const ctx = await requireContext();
+  const ctx = await requireWorkspaceContext();
   if (!ctx) return { ok: false, error: "forbidden" };
   const { supabase, workspace } = ctx;
 
@@ -357,7 +342,7 @@ export async function restoreSavedView(view: {
 export async function reorderSavedViews(
   orderedIds: string[],
 ): Promise<ActionResult> {
-  const ctx = await requireContext();
+  const ctx = await requireWorkspaceContext();
   if (!ctx) return { ok: false, error: "forbidden" };
   const { supabase, workspace } = ctx;
 
@@ -404,7 +389,7 @@ export async function setSavedViewShared(
   id: string,
   shared: boolean,
 ): Promise<ActionResult> {
-  const ctx = await requireContext();
+  const ctx = await requireWorkspaceContext();
   if (!ctx) return { ok: false, error: "forbidden" };
   const { supabase, workspace, viewerId } = ctx;
 

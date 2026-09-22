@@ -108,10 +108,23 @@ export const ACE_STAR_FILL = "#F8C84F";
 // 3.7 is within ~0.7% of that exact match (see `tests/court-geometry.spec.ts`).
 const ACE_STAR_OUTER_R = 3.7;
 
-function colorFor(outcome: VizDot["outcome"]): string {
+/**
+ * The won/lost/neutral colour for a dot's outcome — the one piece this
+ * file's `colorFor` and `viz-fullscreen-court.tsx`'s `fillFor` agree on.
+ * Each caller supplies its own neutral: a light-card token here, a literal
+ * grey in the fullscreen viewer, whose stage is not a white card.
+ */
+export function outcomeColor(
+  outcome: VizDot["outcome"],
+  missFill: string,
+): string {
   if (outcome === "won") return "var(--viz-good)";
   if (outcome === "lost") return "var(--viz-bad)";
-  return "var(--ink-300)";
+  return missFill;
+}
+
+function colorFor(outcome: VizDot["outcome"]): string {
+  return outcomeColor(outcome, "var(--ink-300)");
 }
 
 /**

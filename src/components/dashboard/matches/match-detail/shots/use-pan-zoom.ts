@@ -282,6 +282,11 @@ export function usePanZoom(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       if (locked || e.button !== 0 || isChrome(e.target)) return;
       if (e.pointerType === "touch") {
+        // A third (or later) contact never joins the gesture. Tracking it
+        // anyway would let ITS pointerup take the "a pinch finger lifted"
+        // branch below and end the pinch even though the two fingers doing
+        // the actual pinching never lifted.
+        if (touchesRef.current.size >= 2) return;
         touchesRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
         if (touchesRef.current.size === 2) {
           // The second finger turns the gesture into a pinch: the one-finger
@@ -296,7 +301,6 @@ export function usePanZoom(
           onDragStart?.();
           return;
         }
-        if (touchesRef.current.size > 2) return;
       }
       dragRef.current = {
         id: e.pointerId,

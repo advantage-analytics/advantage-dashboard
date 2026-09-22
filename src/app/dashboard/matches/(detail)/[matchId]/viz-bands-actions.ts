@@ -21,10 +21,7 @@
  */
 
 import { revalidatePath } from "next/cache";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/server";
-import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import type { Workspace } from "@/lib/workspace/types";
+import { requireWorkspaceContext } from "@/lib/data/action-context";
 import {
   rowToBandSettings,
   validateBandInput,
@@ -47,22 +44,12 @@ function revalidateMatchReport() {
   revalidatePath(MATCH_REPORT_PATH_PATTERN, "page");
 }
 
-interface ActionContext {
-  supabase: SupabaseClient;
-  workspace: Workspace;
-}
-
-async function requireContext(): Promise<ActionContext | null> {
-  const ctx = await getWorkspaceContext();
-  if (!ctx) return null;
-  const supabase = await createClient();
-  return { supabase, workspace: ctx.active };
-}
-
 export async function saveBandSettings(
   input: unknown,
 ): Promise<ActionResult<BandSettings>> {
-  const ctx = await requireContext();
+  // viz_band_settings has no per-writer column, so this action doesn't need
+  // requireWorkspaceContext()'s viewerId — saved-views-actions.ts's actions do.
+  const ctx = await requireWorkspaceContext();
   if (!ctx) return { ok: false, error: "forbidden" };
   const { supabase, workspace } = ctx;
 

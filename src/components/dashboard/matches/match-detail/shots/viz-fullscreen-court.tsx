@@ -14,6 +14,7 @@ import {
   HEAT_COURT_FILL,
   HeatLayer,
   LINE_COLOR,
+  outcomeColor,
   VIEWER_MISS_FILL,
 } from "./court-art";
 import {
@@ -120,11 +121,9 @@ const READOUT_MAX_H = 84;
 
 function fillFor(dot: VizDot): string {
   if (dot.shape === "star") return ACE_STAR_FILL;
-  if (dot.outcome === "won") return "var(--viz-good)";
-  if (dot.outcome === "lost") return "var(--viz-bad)";
   // P2b: the viewer's miss grey is the literal, not `--ink-300` — its stage is
   // not a white card.
-  return VIEWER_MISS_FILL;
+  return outcomeColor(dot.outcome, VIEWER_MISS_FILL);
 }
 
 /**
