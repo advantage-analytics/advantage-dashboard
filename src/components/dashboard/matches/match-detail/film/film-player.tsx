@@ -34,7 +34,7 @@ import { RepeatOff } from "./film-glyphs";
 import type { Rect } from "./film-motion";
 import { FILM_REFUSAL_COPY } from "./film-refusal-copy";
 import { FilmTrack } from "./film-track";
-import { createFilmTrace, readTraceFlag, type FilmTrace } from "./film-trace";
+import { useFilmTrace } from "./use-film-trace";
 import {
   REACHED_EPSILON_SECONDS,
   activeStopAt,
@@ -286,10 +286,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     // T16: dim the held frame while a seek the chrome already made is still
     // landing. Display only — `seekTo` / `pushTime` are untouched.
     const settling = useSeekSettling({ graceMs: 120, generation });
-    // T14: the seek trace is opt-in (`localStorage["film-room:trace"]`), read
-    // once. Off, the ref stays null — no listener, no `performance` call.
-    const [traceOn] = useState(readTraceFlag);
-    const traceRef = useRef<FilmTrace | null>(null);
+    const traceRef = useFilmTrace(videoRef, generation, "report");
 
     const syncClock = useFilmClockVars(
       videoRef,
@@ -354,7 +351,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
         loopStopRef.current = activeStopAt(allStops, target)?.stop ?? null;
         pushTime(target);
       },
-      [allStops, pushTime],
+      [allStops, pushTime, traceRef],
     );
 
     /**
@@ -434,17 +431,6 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       el.addEventListener("loadedmetadata", onReady);
       return () => el.removeEventListener("loadedmetadata", onReady);
     }, [generation, settle]);
-
-    // T14: follow each element this player mounts. Keyed on `generation` so a
-    // remount mid-seek is recorded on that seek; the trace itself outlives it.
-    useEffect(() => {
-      if (!traceOn) return;
-      const el = videoRef.current;
-      if (!el) return;
-      traceRef.current ??= createFilmTrace("report");
-      return traceRef.current.attach(el, generation);
-    }, [traceOn, generation]);
-    useEffect(() => () => traceRef.current?.dispose(), []);
 
     // Note 1 of T25's handoff: the intent has to be consumed, and the parent
     // is what consumes it — in its own effect, which React runs after this

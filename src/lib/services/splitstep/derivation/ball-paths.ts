@@ -28,7 +28,7 @@
  */
 
 import { isPlausibleCourtPosition, metersToCourtFrame } from "./court";
-import { fitFrameToTime } from "./frame-clock";
+import { fitFrameToTime, orderedBounceFrame } from "./frame-clock";
 import { num } from "./parse";
 import type { SplitStepStroke } from "./types";
 
@@ -113,7 +113,7 @@ export function deriveBallPaths(
         break;
       }
     }
-    if (bounceFrame !== null && bounceFrame < strokeFrame) bounceFrame = null;
+    bounceFrame = orderedBounceFrame(bounceFrame, strokeFrame);
 
     const samples: { frame: number; sample: BallPathSample }[] = [];
     for (const row of rows) {

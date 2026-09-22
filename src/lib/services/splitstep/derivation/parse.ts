@@ -24,6 +24,7 @@ import {
   MAX_PLAUSIBLE_X_M,
   MAX_PLAUSIBLE_Y_M,
 } from "./court";
+import { orderedBounceFrame } from "./frame-clock";
 import type {
   RawSplitStepStroke,
   SplitStepStroke,
@@ -51,15 +52,13 @@ export function num(value: unknown): number | null {
 
 /**
  * The bounce frame, or null when it is missing, non-finite, the sentinel, or
- * earlier than the contact frame — the same ordering rule the trajectories
- * file gets in ball-paths.ts. A bounce with no contact frame to anchor it is
- * nulled too: nothing can order it, and the fit in frame-clock.ts would skip
- * that stroke's pair anyway.
+ * earlier than the contact frame — `orderedBounceFrame` in frame-clock.ts,
+ * the same rule the trajectories file applies in ball-paths.ts. A bounce with
+ * no contact frame to anchor it is nulled too: nothing can order it, and the
+ * fit in frame-clock.ts would skip that stroke's pair anyway.
  */
 function bounceFrame(value: unknown, frame: number | null): number | null {
-  const candidate = num(value);
-  if (candidate === null || frame === null) return null;
-  return candidate < frame ? null : candidate;
+  return orderedBounceFrame(num(value), frame);
 }
 
 /** A string field, or null if it carries the sentinel or is blank. */

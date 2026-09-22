@@ -49,6 +49,21 @@ export function fitFrameToTime(
 }
 
 /**
+ * A bounce before its contact frame is not a bounce — the vendor's frame
+ * numbers are trustworthy relative to each other even when the sentinel
+ * handling upstream is not, and a bounce that supposedly preceded the stroke
+ * that produced it is nulled rather than kept. `null` in either argument (no
+ * candidate, or no contact frame to order it against) also nulls the result.
+ */
+export function orderedBounceFrame(
+  candidate: number | null,
+  contactFrame: number | null,
+): number | null {
+  if (candidate === null || contactFrame === null) return null;
+  return candidate < contactFrame ? null : candidate;
+}
+
+/**
  * Per stroke, in input order: the fitted seconds of its `bounceFrame` on the
  * same clock as `videoTime` (trim offset included), or null when the stroke
  * has no bounce frame or the match has too few distinct frames to fit a

@@ -8,7 +8,12 @@ import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import { cn } from "@/lib/utils";
 
 import { lastNameOf } from "./film-filters";
-import { shotRowCells, UNMEASURED, type ShotStop } from "./film-shots";
+import {
+  shotRowCells,
+  shotRowRevealDelay,
+  UNMEASURED,
+  type ShotStop,
+} from "./film-shots";
 
 /**
  * "This point" (handoff H1 §B, frame `E-route-P1-P2.html`): the card under
@@ -241,9 +246,8 @@ const ShotRow = memo(function ShotRow({
       // row height. Mount-driven — rows are keyed by `shot.id`, so the card
       // swapping points mounts a fresh set and replays this, while the
       // four-times-a-second `timeupdate` re-render bails out of the memo
-      // above. 25ms a step, capped at eight. `film-shot-row-in`, its cap and
-      // its reduced-motion opt-out are in globals.css.
-      style={{ animationDelay: `${Math.min(order - 1, 8) * 25}ms` }}
+      // above.
+      style={{ animationDelay: `${shotRowRevealDelay(order)}ms` }}
       className={cn(
         "film-shot-row-in grid h-10 w-full shrink-0 cursor-pointer items-center gap-x-4 rounded-[var(--radius-element)] px-3 text-left transition-colors duration-200 hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
         NARROW_COLUMNS,

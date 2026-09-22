@@ -65,8 +65,8 @@ import {
 } from "./film-room-prefs";
 import { boardAt, type BoardColumns } from "./film-score";
 import { FilmScoreboard } from "./film-scoreboard";
-import { createFilmTrace, readTraceFlag, type FilmTrace } from "./film-trace";
 import { useFilmClockVars } from "./film-clock";
+import { useFilmTrace } from "./use-film-trace";
 import {
   OPEN_ROOM_FRAME,
   PANEL_EXIT_MS,
@@ -361,10 +361,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   // T16: the frame admits it is still catching up with a seek the chrome has
   // already made. Display only — `seek` is untouched and still marks on click.
   const settling = useSeekSettling({ graceMs: 120, generation: p.generation });
-  // T14: the seek trace is opt-in (`localStorage["film-room:trace"]`), read
-  // once. Off, the ref stays null — no listener, no `performance` call.
-  const [traceOn] = useState(readTraceFlag);
-  const traceRef = useRef<FilmTrace | null>(null);
+  const traceRef = useFilmTrace(videoRef, p.generation, "room");
 
   // The drawer unmounts when its slide-out ends. The end event is only the
   // fast path: a page that stops painting (a hidden or throttled tab) never
@@ -712,7 +709,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
       // Whatever the court's readout was explaining is no longer on screen.
       setSeekKey((k) => k + 1);
     },
-    [mark],
+    [mark, traceRef],
   );
 
   /**
@@ -774,17 +771,6 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     el.addEventListener("loadedmetadata", onReady);
     return () => el.removeEventListener("loadedmetadata", onReady);
   }, [p.generation, settle]);
-
-  // T14: follow each element the room mounts. Keyed on `generation` so a
-  // remount mid-seek is recorded on that seek; the trace itself outlives it.
-  useEffect(() => {
-    if (!traceOn) return;
-    const el = videoRef.current;
-    if (!el) return;
-    traceRef.current ??= createFilmTrace("room");
-    return traceRef.current.attach(el, p.generation);
-  }, [traceOn, p.generation]);
-  useEffect(() => () => traceRef.current?.dispose(), []);
 
   // The room moves its own selection on a realign, not just its playhead:
   // `mark` inside `land` sets `currentTime`, which is what the board, the
@@ -851,6 +837,43 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
       showCourtMode("point");
     },
     [shotStops, selectShot, p.stops, seek, showCourtMode],
+  );
+
+  // The literal `<FilmCourtLayer court={{ … }}>` reads below would otherwise
+  // rebuild every render; every field here is already stable (a primitive,
+  // or itself a `useMemo`/`useCallback`), so memoizing the object costs
+  // nothing.
+  const court = useMemo<
+    Omit<FilmCourtProps, "dock" | "handleProps" | "grabbing">
+  >(
+    () => ({
+      mode: courtCardMode,
+      title: courtTitle,
+      caption: courtCaption,
+      marks: courtMarks,
+      // Who is who is `useMatchSides()`'s call, never player order.
+      youName: lastNameOf(sides.you.name),
+      opponentName: lastNameOf(sides.opp.name),
+      controls: chrome,
+      onSwapMode: swapCourtMode,
+      // The header x and the transport's control are one toggle.
+      onHide: toggleCourt,
+      onSelectMark: selectMark,
+      seekKey,
+    }),
+    [
+      courtCardMode,
+      courtTitle,
+      courtCaption,
+      courtMarks,
+      sides.you.name,
+      sides.opp.name,
+      chrome,
+      swapCourtMode,
+      toggleCourt,
+      selectMark,
+      seekKey,
+    ],
   );
 
   const toggleSavedActive = useCallback(() => {
@@ -1474,21 +1497,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                   <FilmCourtLayer
                     board={boardColumn}
                     room={roomSize}
-                    court={{
-                      mode: courtCardMode,
-                      title: courtTitle,
-                      caption: courtCaption,
-                      marks: courtMarks,
-                      // Who is who is `useMatchSides()`'s call, never player order.
-                      youName: lastNameOf(sides.you.name),
-                      opponentName: lastNameOf(sides.opp.name),
-                      controls: chrome,
-                      onSwapMode: swapCourtMode,
-                      // The header x and the transport's control are one toggle.
-                      onHide: toggleCourt,
-                      onSelectMark: selectMark,
-                      seekKey,
-                    }}
+                    court={court}
                   />
                 )}
               </>

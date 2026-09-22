@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { filmProgressWidth } from "./film-clock";
 import { FilmAdvancedPanel } from "./film-advanced-panel";
 import { FilmQuickFilters } from "./film-quick-filters";
-import { shotRowCells, type ShotStop } from "./film-shots";
+import { shotRowCells, shotRowRevealDelay, type ShotStop } from "./film-shots";
 import type { FilmSectionId } from "./filters/types";
 import { scoreColumns, youFirstScore } from "./film-score";
 import {
@@ -829,10 +829,8 @@ const ShotWellRow = memo(function ShotWellRow({
       // T9: the rally reveals itself as a rally. Mount-driven — the rows are
       // keyed by `shot.id`, so stepping to another point mounts a fresh set
       // and replays this, while a `timeupdate` tick bails out of the memo
-      // above and replays nothing. 25ms a step, capped at eight, so a long
-      // rally finishes arriving inside 400ms. `film-shot-row-in`, its cap and
-      // its reduced-motion opt-out are in globals.css.
-      style={{ animationDelay: `${Math.min(order - 1, 8) * 25}ms` }}
+      // above and replays nothing.
+      style={{ animationDelay: `${shotRowRevealDelay(order)}ms` }}
       className={cn(
         "film-shot-row-in grid h-[34px] w-full shrink-0 cursor-pointer items-center gap-x-2 px-[14px] text-left transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
         SHOT_COLUMNS,

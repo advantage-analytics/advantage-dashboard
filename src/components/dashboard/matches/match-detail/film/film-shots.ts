@@ -174,3 +174,11 @@ export function shotRowCells(
     result: shot.result ? shot.result : UNMEASURED,
   };
 }
+
+// T9: row 1 arrives with no delay, each row after it 25ms later, capped at
+// row 9 — so a long rally still finishes arriving inside 200ms. Used as the
+// mount-driven `animationDelay` for `film-shot-row-in` (`film-this-point.tsx`,
+// `point-list.tsx`); its cap and reduced-motion opt-out live in globals.css.
+export function shotRowRevealDelay(order: number): number {
+  return Math.min(order - 1, 8) * 25;
+}

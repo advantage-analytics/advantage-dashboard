@@ -169,13 +169,7 @@ export function readoutPlacement(
   dock?: "left" | "right",
 ): ReadoutPlacement {
   return {
-    side: dock
-      ? dock === "right"
-        ? "left"
-        : "right"
-      : x > 50
-        ? "left"
-        : "right",
+    side: (dock ? dock === "right" : x > 50) ? "left" : "right",
     top: round(
       Math.min(READOUT_MAX_TOP_PCT, Math.max(0, y - READOUT_LIFT_PCT)),
     ),

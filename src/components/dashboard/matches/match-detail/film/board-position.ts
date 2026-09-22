@@ -145,9 +145,6 @@ export function parseBoardAnchor(raw: string | null): BoardAnchor | null {
     : null;
 }
 
-/** The court has no separate corner list — it rests on the same four. */
-export const parseCourtAnchor = parseBoardAnchor;
-
 /** 8px per arrow press, 40px held with shift, kept inside the room. */
 const NUDGE_STEP = 8;
 const NUDGE_STEP_SHIFT = 40;
