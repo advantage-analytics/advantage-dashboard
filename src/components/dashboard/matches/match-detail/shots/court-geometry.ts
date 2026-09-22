@@ -969,7 +969,6 @@ export function viewerBandEdges(
   kind: "depth" | "contact",
   dividersFt: number[],
 ): number[] {
-  const vb = VIEWER_COURT.viewBox;
   const [innerCap, outerCap] = viewerBandCaps(kind);
 
   const inner = dividersFt.map((ft) =>

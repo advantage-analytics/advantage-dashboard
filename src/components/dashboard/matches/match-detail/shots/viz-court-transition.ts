@@ -1,9 +1,8 @@
 /**
- * F5's ONE animation: the clicked court (a wall tile, or a tile in the
- * focused view's own "Views" grid) growing into the focused view's big
- * court, and the reverse on "Back to wall". Nothing else in the
- * Visualizations tab animates — see the task brief this file was written
- * against.
+ * The Visualizations tab's ONE animation: the clicked court (a wall tile, or
+ * a tile in the focused view's own "Views" grid) growing into the focused
+ * view's big court, and the reverse on "Back to wall". Nothing else in the
+ * tab animates.
  *
  * ── Mechanism decision ──────────────────────────────────────────────────
  * React's `<ViewTransition>` component (option A in the brief) is NOT
@@ -28,8 +27,7 @@
  * Safari 18+, Firefox 144+) supports the API, so a hand-rolled FLIP
  * fallback (option C) would exist only for browsers this product doesn't
  * otherwise support, at the cost of a second, harder-to-verify animation
- * engine. That trade is recorded in
- * .superpowers/sdd/2026-09-19-visualizations-tab-phase-1/f5-report.md.
+ * engine.
  */
 
 /** The ONE `view-transition-name` this tab ever assigns — see
@@ -67,13 +65,11 @@ export const VIZ_FOCUSED_HEADING_ID = "viz-focused-heading";
  * court just took on. Matching by that key alone (what an earlier version
  * of this file did) made BOTH elements claim `VIZ_COURT_TRANSITION_NAME` in
  * one snapshot — the API's "two elements, one name" case, which aborts the
- * transition outright (`Unexpected duplicate view-transition-name`, caught
- * live in the `viz-motion-harness` route this file's sibling report
- * documents). This sentinel is compared by IDENTITY, not by which view it
- * names, so only `viz-focused.tsx`'s one big court ever matches it — a
- * same-key Views-grid tile compares its own `courtTileDomId(...)` against
- * `morphTargetKey` instead (see `court-tile.tsx`), which this sentinel
- * cannot equal.
+ * transition outright (`Unexpected duplicate view-transition-name`). This
+ * sentinel is compared by IDENTITY, not by which view it names, so only
+ * `viz-focused.tsx`'s one big court ever matches it — a same-key Views-grid
+ * tile compares its own `courtTileDomId(...)` against `morphTargetKey`
+ * instead (see `court-tile.tsx`), which this sentinel cannot equal.
  */
 export const VIZ_FOCUSED_COURT_MORPH_TARGET = "viz-focused-court-morph-target";
 

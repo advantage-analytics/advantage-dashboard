@@ -65,6 +65,7 @@ import {
 import { bandKindFor, VizBandsMenu } from "./viz-bands-menu";
 import type { VizBandsOverlayProps } from "./viz-bands-overlay";
 import { VizFullscreenCourt } from "./viz-fullscreen-court";
+import { HeatRampSwatches } from "./viz-focused";
 import {
   CUT_LABEL,
   legendItemsFor,
@@ -120,6 +121,11 @@ export function VizFullscreen() {
     unit,
   } = useVizView();
   const { contactHidden, receipt, canEdit, applyBands } = useVizBands();
+  // `availableSets` is an O(points) scan; this viewer re-renders on every
+  // pan/zoom frame (see the `VizBandsOverlay`/`MarkLayer` memoization below),
+  // so it's memoized on `points` alone rather than re-scanning on every one
+  // of those.
+  const sets = useMemo(() => availableSets(points), [points]);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -626,7 +632,7 @@ export function VizFullscreen() {
                 count={result.count}
                 total={result.total}
                 noun={result.noun}
-                sets={availableSets(points)}
+                sets={sets}
                 youName={you.name}
                 opponentName={opp.name}
                 tone="dark"
@@ -908,16 +914,7 @@ function DarkLegend({ items }: { items: LegendItem[] }) {
           className="inline-flex shrink-0 overflow-hidden rounded-full"
           aria-hidden="true"
         >
-          {[0, 1, 2, 3].map((i) => (
-            <span
-              key={i}
-              style={{
-                width: 22,
-                height: 8,
-                backgroundColor: `var(--viz-heatmap-${i})`,
-              }}
-            />
-          ))}
+          <HeatRampSwatches />
         </span>
         <span className="text-[11px] text-white/70">More</span>
       </span>

@@ -22,7 +22,7 @@ import {
 import { activeFilterEntries } from "./viz-url";
 
 /**
- * The ONE data path behind both courts (Phase 2A, Task 4): the focused view
+ * The ONE data path behind both courts: the focused view
  * (`viz-focused.tsx`) and the fullscreen viewer (`viz-fullscreen.tsx`) read
  * the same points, resolve the same subject and call the same `computeViz`
  * with the same arguments — so for one URL the viewer's mark count, its
@@ -35,7 +35,7 @@ import { activeFilterEntries } from "./viz-url";
  * filter into the boolean `computeViz` needs, and nothing downstream reads
  * player1/player2 off the match.
  *
- * Bands (Phase 2B): `stats` is built with `useVizBands().bands` — the
+ * Bands: `stats` is built with `useVizBands().bands` — the
  * workspace's depth/contact bands, loaded once in `page.tsx`, with any
  * OPTIMISTIC override a just-picked preset put in front of them
  * (`viz-bands-context.tsx`). Reading them here is what makes "every return
@@ -63,7 +63,7 @@ export interface VizView {
   points: MatchPoint[];
   /** At least one filter beyond the defaults is applied. */
   hasFilters: boolean;
-  /** G4's "Create view" blank-court prompt is showing. */
+  /** The "Create view" blank-court prompt is showing. */
   isDraft: boolean;
   /** The bands `stats` was bucketed with — the overlay draws these exact
    *  dividers, never a second read of `meta.bandSettings`. */

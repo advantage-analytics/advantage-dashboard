@@ -22,7 +22,7 @@ import {
 import type { Cut } from "./viz-model";
 
 /**
- * React around Task 1's pure reducer (`pan-zoom.ts`) for the fullscreen court
+ * React around the pure reducer (`pan-zoom.ts`) for the fullscreen court
  * viewer: measures the stage, seeds the transform from
  * `viewerInitialTransform(cut, stage)`, and turns pointer drags, the wheel and
  * the slab's buttons into `panBy`/`zoomAbout` calls.
@@ -39,10 +39,10 @@ import type { Cut } from "./viz-model";
 const ART: Size = VIEWER_COURT.artPx;
 
 /**
- * Fix round 1: a pointer has to travel this far (Manhattan distance, in stage
- * px) before the gesture counts as a drag. Below it the press is a CLICK — no
- * pointer capture, no `panning`, so a plain click on a mark no longer blinks
- * its readout off and back on. Above it the drag begins from the press's own
+ * A pointer has to travel this far (Manhattan distance, in stage px) before
+ * the gesture counts as a drag. Below it the press is a CLICK — no pointer
+ * capture, no `panning`, so a plain click on a mark no longer blinks its
+ * readout off and back on. Above it the drag begins from the press's own
  * origin, so nothing is lost to the dead zone.
  */
 const DRAG_DEAD_ZONE_PX = 4;
@@ -87,8 +87,8 @@ export function usePanZoom(
    *  referentially stable. */
   onDragStart?: () => void,
   /**
-   * Phase 2B, Task 4: the band editor holds the court still. While `true`
-   * the transform is frozen where it is — no pointer pan, no wheel zoom, and
+   * The band editor holds the court still. While `true` the transform is
+   * frozen where it is — no pointer pan, no wheel zoom, and
    * `zoomIn`/`zoomOut`/`fit`/`nudge` are no-ops — so a divider drag can never
    * move the court out from under the handle, and the editor's px→ft
    * conversions stay valid for the whole edit. (A stage RESIZE still re-fits:
@@ -112,13 +112,13 @@ export function usePanZoom(
 
   /* ── Measure the stage ─────────────────────────────────────────────────── */
 
-  // Final review #4: a LAYOUT effect, so the stage is measured and the
-  // initial transform is seeded before the browser paints. In a plain
-  // `useEffect` the viewer painted one frame at z=1 pinned to the top-left
-  // and then jumped to the centred fit — a visible sideways pop on every
-  // open, worse on the contact cuts where the seed zoom is 1.6x. Safe here:
-  // this hook only ever runs in a client-only component (`ssr: false`), so
-  // there is no server render to warn about.
+  // A LAYOUT effect, so the stage is measured and the initial transform is
+  // seeded before the browser paints. In a plain `useEffect` the viewer
+  // painted one frame at z=1 pinned to the top-left and then jumped to the
+  // centred fit — a visible sideways pop on every open, worse on the contact
+  // cuts where the seed zoom is 1.6x. Safe here: this hook only ever runs in
+  // a client-only component (`ssr: false`), so there is no server render to
+  // warn about.
   useLayoutEffect(() => {
     const el = stageRef.current;
     if (!el) return;

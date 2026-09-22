@@ -33,7 +33,7 @@ interface VizStateContextValue {
   setState: (next: VizState | ((prev: VizState) => VizState)) => void;
   hrefFor: (next: VizState) => string;
   /**
-   * F5: the `viewIdentityKey` (`viz-url.ts`) of the court a morph currently
+   * The `viewIdentityKey` (`viz-url.ts`) of the court a morph currently
    * in flight is landing ON — `null` outside a morph. The wall's tiles, the
    * focused view's own "Views" grid tiles, and `viz-focused.tsx`'s big court
    * each compare THEIR OWN `viewIdentityKey` against this to decide whether
@@ -43,7 +43,7 @@ interface VizStateContextValue {
    */
   morphTargetKey: string | null;
   /**
-   * F5's ONE animation: run `setState(next)` as a native View Transition
+   * The ONE animation: run `setState(next)` as a native View Transition
    * that shared-element-morphs `sourceEl` (the DOM node the visitor
    * clicked, or the court they're leaving) into the destination that
    * matches `targetKey`. Falls straight through to a plain `setState(next)`
@@ -64,8 +64,8 @@ interface VizStateContextValue {
    * browser back/forward being the case that matters, since Next's
    * navigation there gives no synchronous hook to snapshot the outgoing DOM
    * before the router commits the new one, so `runCourtMorph`'s
-   * shared-element approach isn't reachable for it (see F5's task brief:
-   * "If a clean reverse is not achievable, a plain 200ms crossfade").
+   * shared-element approach isn't reachable for it — the fallback here is a
+   * plain 200ms crossfade for the case a clean reverse isn't achievable.
    * `VizWall`/`VizFocused` read this once on mount to opt into that plain
    * crossfade, then call `clearExternalCourtSwap()` so it doesn't replay on
    * an unrelated later render.
@@ -113,7 +113,7 @@ export function useVizState(): VizStateContextValue {
 }
 
 /**
- * F5: shared by `VizWall` and `VizFocused` — the one-shot "opt into a plain
+ * Shared by `VizWall` and `VizFocused` — the one-shot "opt into a plain
  * crossfade for this mount" flag, read from `externalCourtSwap`. See
  * `VizStateContextValue.externalCourtSwap`'s doc comment for why this fallback
  * exists (browser back/forward can't run `runCourtMorph`'s shared-element
@@ -203,13 +203,13 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
   const intendedRef = useRef<VizState>(state);
   const ownQueriesRef = useRef<string[]>([query]);
 
-  // F5: the morph's destination key (`null` outside a transition) and the
+  // The morph's destination key (`null` outside a transition) and the
   // one-shot "this court swap arrived from outside the store" flag — see
   // the doc comments on `VizStateContextValue`.
   const [morphTargetKey, setMorphTargetKey] = useState<string | null>(null);
   const [externalCourtSwap, setExternalCourtSwap] = useState(false);
 
-  // F5 fix round 1: keyboard focus (and, in `viz-focused.tsx`'s own
+  // Keyboard focus (and, in `viz-focused.tsx`'s own
   // scroll-to-top effect, the scroll position) must follow the VIEW change
   // itself, never a view transition settling — a hidden document, a
   // browser without the API, and reduced motion all skip or abort the
@@ -225,7 +225,7 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const prevKey = focusTrackedKeyRef.current;
 
-    // Final review #1: the fullscreen viewer owns focus while it is up, and
+    // The fullscreen viewer owns focus while it is up, and
     // it is a portal on `document.body` — so moving focus to the focused
     // view's eyebrow here would put it BEHIND the overlay, silently (every
     // window-level key still works, so nothing looks wrong). A tile's
@@ -234,17 +234,14 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
     // right after the viewer's own mount-focus and would undo it. The key is
     // still tracked, so the NEXT change compares against the right baseline
     // and exiting the viewer restores focus to the door as usual.
-    if (state.fullscreen === true) {
-      focusTrackedKeyRef.current = viewKey;
-      return;
-    }
+    if (state.fullscreen !== true) {
+      const target = focusTargetAfterViewChange(prevKey, viewKey);
 
-    const target = focusTargetAfterViewChange(prevKey, viewKey);
-
-    if (target === "focused-view") {
-      document.getElementById(VIZ_FOCUSED_HEADING_ID)?.focus();
-    } else if (target === "opened-tile" && prevKey !== null) {
-      document.getElementById(courtTileDomId(prevKey))?.focus();
+      if (target === "focused-view") {
+        document.getElementById(VIZ_FOCUSED_HEADING_ID)?.focus();
+      } else if (target === "opened-tile" && prevKey !== null) {
+        document.getElementById(courtTileDomId(prevKey))?.focus();
+      }
     }
 
     focusTrackedKeyRef.current = viewKey;
@@ -276,7 +273,7 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
   }, [query]);
 
   // `hrefFor`/`setState` wrapped in `useCallback`, and the context value
-  // itself in `useMemo` (review I1): every reader downstream of
+  // itself in `useMemo`: every reader downstream of
   // `useVizState()` (the filters popover, applied strip, chart/cut menus, the
   // focused view, the wall, the saved-views band) sits below this ONE
   // provider, so a fresh `{ state, setState, hrefFor }` object on every
@@ -308,7 +305,7 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
     [pathname, router, searchParams],
   );
 
-  // F5's ONE animation. `sourceEl` is the real DOM node the visitor just
+  // The ONE animation. `sourceEl` is the real DOM node the visitor just
   // interacted with (the tile they clicked, or the court they're leaving)
   // — callers find it imperatively (a ref or a `querySelector` off the
   // click event's `currentTarget`), never from React state, because it has
@@ -325,7 +322,7 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
   // all; it's the tile matching the view being LEFT, computed by the
   // caller from `state`, not `next`).
   //
-  // F5 fix round 1: this function is now PURELY decorative — it drives the
+  // This function is now PURELY decorative — it drives the
   // shared-element morph and nothing else. Focus and scroll used to hang
   // off `transition.ready`/`finished` here, which broke the moment the
   // transition itself was skipped or aborted rather than merely unsupported
@@ -405,7 +402,7 @@ export function VizStateProvider({ children }: { children: ReactNode }) {
         })
         .finally(() => {
           sourceEl.style.viewTransitionName = previousName;
-          // M5: a second click can start morph 2 (its own `targetKey`)
+          // A second click can start morph 2 (its own `targetKey`)
           // before this `.finally()` for morph 1 runs — clearing
           // unconditionally could land AFTER morph 2 already set its own
           // key, wiping out a still-in-flight morph's target. Only clear

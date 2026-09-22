@@ -206,7 +206,7 @@ test.describe("servePlacementMetrics (Task 2a)", () => {
 
   /* ── Fix round 2: `result` is the authority, geometry is the fallback ── */
 
-  test("Fix round 2: an 'Out' serve recorded 6.41m past the net (inside the geometric tolerance) is still 'out' — the tracker's call wins over geometry", () => {
+  test("an 'Out' serve recorded 6.41m past the net (inside the geometric tolerance) is still 'out' — the tracker's call wins over geometry", () => {
     // 6.41m is within SERVE_BOX_DEPTH_M(6.4)+tol(0.2)=6.6 and 0.96m is
     // within 4.115+0.2 — geometry alone would call this "in" (an imputed,
     // at-the-line landing). The real corpus case this models.
@@ -214,7 +214,7 @@ test.describe("servePlacementMetrics (Task 2a)", () => {
     expect(m.kind).toBe("out");
   });
 
-  test("Fix round 2: a 'Net' serve recorded with a POSITIVE depth (+6.23m) still reads as net", () => {
+  test("a 'Net' serve recorded with a POSITIVE depth (+6.23m) still reads as net", () => {
     // Geometry alone (positive depth, in-box) would call this "in"; the
     // tracker's own "Net" call must win.
     const m = servePlacementMetrics(20, 0, 11.885 - 6.23, "Net")!;
@@ -222,7 +222,7 @@ test.describe("servePlacementMetrics (Task 2a)", () => {
     expect(m.kind).toBe("net");
   });
 
-  test("Fix round 2: a null result still falls back to geometry and produces today's answer", () => {
+  test("a null result still falls back to geometry and produces today's answer", () => {
     const withResult = servePlacementMetrics(20, 1.0, 8.0, "In")!;
     const withNull = servePlacementMetrics(20, 1.0, 8.0, null)!;
     expect(withNull.kind).toBe("in");
@@ -231,7 +231,7 @@ test.describe("servePlacementMetrics (Task 2a)", () => {
     expect(withNull.depthPastNetM).toBeCloseTo(withResult.depthPastNetM, 5);
   });
 
-  test("Fix round 2: an unrecognised result string also falls back to geometry", () => {
+  test("an unrecognised result string also falls back to geometry", () => {
     const m = servePlacementMetrics(20, 1.0, 8.0, "Winner")!;
     expect(m.kind).toBe("in");
   });
@@ -308,7 +308,7 @@ test.describe("computeViz — serve cut, out & net (Task 2)", () => {
     expect(r.serveOutOrNetCount).toBe(2);
   });
 
-  test("fix round 4A: a netted serve yields shape 'circle' with atNet set — folded into Miss, no distinct glyph", () => {
+  test("a netted serve yields shape 'circle' with atNet set — folded into Miss, no distinct glyph", () => {
     const netPt = servePointWith(0.5, 4.085, 2, "Net"); // depthPastNetM ~-7.8
     const r = computeViz([netPt], "serve", EMPTY_VIZ_FILTERS, true);
     expect(r.dots).toHaveLength(1);
@@ -391,7 +391,7 @@ test.describe("computeViz — return cuts", () => {
     ).toBe(0);
   });
 
-  test("Task 2d fix round 1 (F2): a return with contact coords but NO landing still counts for returnContact — only the placement dot needs a landing", () => {
+  test("a return with contact coords but NO landing still counts for returnContact — only the placement dot needs a landing", () => {
     const noLanding = {
       ...ret,
       secondShotLandingX: null,
@@ -414,7 +414,7 @@ test.describe("computeViz — return cuts", () => {
     expect(contact.dots).toHaveLength(1);
   });
 
-  test("fix round 4A: a netted BACKHAND return yields shape 'triangle' with atNet set — the cut's own glyph, folded into Miss", () => {
+  test("a netted BACKHAND return yields shape 'triangle' with atNet set — the cut's own glyph, folded into Miss", () => {
     const nettedBackhand = {
       ...ret,
       secondShotType: "Backhand Slice",
@@ -2095,7 +2095,7 @@ test.describe("computeViz — rallyPosition cut", () => {
   /* ── Task 2d: contactMetrics requires only the contact pair — a missing
    * landing no longer drops the dot (dot counts on returnContact/
    * rallyPosition must go up, never down). */
-  test("Task 2d: a shot with a null LANDING still draws — only contact is required now", () => {
+  test("a shot with a null LANDING still draws — only contact is required now", () => {
     const pts = [
       point({
         shots: [
@@ -2115,7 +2115,7 @@ test.describe("computeViz — rallyPosition cut", () => {
     expect(r.total).toBe(1);
   });
 
-  test("Task 2d: a contact close to the net on the hitter's own side (never crossed it) still draws — the old 'must clear the net' guard is gone", () => {
+  test("a contact close to the net on the hitter's own side (never crossed it) still draws — the old 'must clear the net' guard is gone", () => {
     const pts = [
       point({
         shots: [

@@ -21,6 +21,10 @@ import { useVizState } from "./use-viz-state";
 import { VizMenuTrigger, VIZ_PILL_RADIUS } from "./viz-labels";
 
 type MultiFilterKey = Exclude<keyof VizFilters, "player">;
+/** The `MultiFilterKey`s that are also `OPTIONS` groups — everything except
+ *  `set`, whose pills come from the match's own set numbers, not a fixed
+ *  label map. */
+type OptionFilterKey = Exclude<MultiFilterKey, "set">;
 
 /**
  * The Filters popover (P1f): every non-default `VizFilters` key as a wrap of
@@ -232,89 +236,56 @@ export function FiltersPopover({
             />
           </FilterGroup>
 
-          <FilterGroup label="Ball" dark={dark}>
-            {(Object.keys(OPTIONS.ball) as (keyof typeof OPTIONS.ball)[]).map(
-              (key) => (
-                <FilterPill
-                  key={key}
-                  label={OPTIONS.ball[key]}
-                  active={state.filters.ball.includes(key)}
-                  onClick={() => toggle("ball", key)}
-                  dark={dark}
-                />
-              ),
-            )}
-          </FilterGroup>
+          <OptionsGroup
+            filterKey="ball"
+            label="Ball"
+            dark={dark}
+            active={state.filters.ball}
+            onToggle={(value) => toggle("ball", value)}
+          />
 
-          <FilterGroup label="Court" dark={dark}>
-            {(Object.keys(OPTIONS.court) as (keyof typeof OPTIONS.court)[]).map(
-              (key) => (
-                <FilterPill
-                  key={key}
-                  label={OPTIONS.court[key]}
-                  active={state.filters.court.includes(key)}
-                  onClick={() => toggle("court", key)}
-                  dark={dark}
-                />
-              ),
-            )}
-          </FilterGroup>
+          <OptionsGroup
+            filterKey="court"
+            label="Court"
+            dark={dark}
+            active={state.filters.court}
+            onToggle={(value) => toggle("court", value)}
+          />
 
           {showZone && (
-            <FilterGroup label="Zone" dark={dark}>
-              {(Object.keys(OPTIONS.zone) as (keyof typeof OPTIONS.zone)[]).map(
-                (key) => (
-                  <FilterPill
-                    key={key}
-                    label={OPTIONS.zone[key]}
-                    active={state.filters.zone.includes(key)}
-                    onClick={() => toggle("zone", key)}
-                    dark={dark}
-                  />
-                ),
-              )}
-            </FilterGroup>
+            <OptionsGroup
+              filterKey="zone"
+              label="Zone"
+              dark={dark}
+              active={state.filters.zone}
+              onToggle={(value) => toggle("zone", value)}
+            />
           )}
 
-          <FilterGroup label="Result" dark={dark}>
-            {resultKeys.map((key) => (
-              <FilterPill
-                key={key}
-                label={OPTIONS.result[key]}
-                active={state.filters.result.includes(key)}
-                onClick={() => toggle("result", key)}
-                dark={dark}
-              />
-            ))}
-          </FilterGroup>
+          <OptionsGroup
+            filterKey="result"
+            label="Result"
+            dark={dark}
+            active={state.filters.result}
+            keys={resultKeys}
+            onToggle={(value) => toggle("result", value)}
+          />
 
-          <FilterGroup label="Pressure" dark={dark}>
-            {(
-              Object.keys(OPTIONS.pressure) as (keyof typeof OPTIONS.pressure)[]
-            ).map((key) => (
-              <FilterPill
-                key={key}
-                label={OPTIONS.pressure[key]}
-                active={state.filters.pressure.includes(key)}
-                onClick={() => toggle("pressure", key)}
-                dark={dark}
-              />
-            ))}
-          </FilterGroup>
+          <OptionsGroup
+            filterKey="pressure"
+            label="Pressure"
+            dark={dark}
+            active={state.filters.pressure}
+            onToggle={(value) => toggle("pressure", value)}
+          />
 
-          <FilterGroup label="Rally" dark={dark}>
-            {(Object.keys(OPTIONS.rally) as (keyof typeof OPTIONS.rally)[]).map(
-              (key) => (
-                <FilterPill
-                  key={key}
-                  label={OPTIONS.rally[key]}
-                  active={state.filters.rally.includes(key)}
-                  onClick={() => toggle("rally", key)}
-                  dark={dark}
-                />
-              ),
-            )}
-          </FilterGroup>
+          <OptionsGroup
+            filterKey="rally"
+            label="Rally"
+            dark={dark}
+            active={state.filters.rally}
+            onToggle={(value) => toggle("rally", value)}
+          />
 
           {showSet && (
             <FilterGroup label="Set" dark={dark}>
@@ -330,19 +301,13 @@ export function FiltersPopover({
             </FilterGroup>
           )}
 
-          <FilterGroup label="Game" dark={dark}>
-            {(Object.keys(OPTIONS.game) as (keyof typeof OPTIONS.game)[]).map(
-              (key) => (
-                <FilterPill
-                  key={key}
-                  label={OPTIONS.game[key]}
-                  active={state.filters.game.includes(key)}
-                  onClick={() => toggle("game", key)}
-                  dark={dark}
-                />
-              ),
-            )}
-          </FilterGroup>
+          <OptionsGroup
+            filterKey="game"
+            label="Game"
+            dark={dark}
+            active={state.filters.game}
+            onToggle={(value) => toggle("game", value)}
+          />
         </div>
 
         <div
@@ -367,6 +332,60 @@ export function FiltersPopover({
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/**
+ * One `OPTIONS`-backed group — Ball, Court, Zone, Result, Pressure, Rally,
+ * Game were seven copies of the same `Object.keys(OPTIONS.x).map(...)` block
+ * (Player stays hand-written above: it's single-select, not an `OPTIONS`
+ * group; Set stays hand-written too: its pills come from the match's own set
+ * numbers via `sets`, not a fixed label map). `keys` overrides the default
+ * "every key in this OPTIONS group" order — `resultKeys` uses it to drop
+ * "ace" off serve.
+ */
+function OptionsGroup<K extends OptionFilterKey>({
+  filterKey,
+  label,
+  dark,
+  active,
+  keys,
+  onToggle,
+}: {
+  filterKey: K;
+  label: string;
+  dark: boolean;
+  active: VizFilters[K];
+  keys?: readonly (keyof (typeof OPTIONS)[K])[];
+  /** Already closed over `filterKey` at the call site (`toggle(filterKey,
+   *  value)`) — kept to one argument here so TS doesn't have to unify a
+   *  second `K`-typed parameter position against a caller-supplied generic
+   *  function. */
+  onToggle: (value: VizFilters[K][number]) => void;
+}) {
+  const options = OPTIONS[filterKey] as Record<string, string>;
+  // `K` is generic here, so a plain `VizFilters[K][number]` collapses to
+  // `never` under `.includes`/the callback — TS can't distribute an indexed
+  // access over a generic key this way (a known limitation, not a real type
+  // hole: `entries`' runtime values are always `keyof OPTIONS[filterKey]`,
+  // which is the same set as `VizFilters[filterKey][number]` for every
+  // `OptionFilterKey` — that correspondence is `OPTIONS`' whole reason to
+  // exist, also leaned on by `canonicalOptionValues` above). One local
+  // `unknown` cast per generic call site restates that rather than asserting
+  // past a real mismatch.
+  const entries = (keys ?? Object.keys(options)) as readonly unknown[];
+  return (
+    <FilterGroup label={label} dark={dark}>
+      {entries.map((key) => (
+        <FilterPill
+          key={String(key)}
+          label={options[key as string]}
+          active={(active as readonly unknown[]).includes(key)}
+          onClick={() => onToggle(key as VizFilters[K][number])}
+          dark={dark}
+        />
+      ))}
+    </FilterGroup>
   );
 }
 

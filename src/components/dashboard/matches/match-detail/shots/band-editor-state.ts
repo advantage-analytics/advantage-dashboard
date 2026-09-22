@@ -119,7 +119,7 @@ export function snapStepFt(unit: DistanceUnit): number {
 /** Grid position `k` (in half-units), in feet — computed the same way
  *  `snapFt` computes it, so a bound and a snapped drag compare equal. */
 function gridFt(unit: DistanceUnit, k: number): number {
-  return unit === "ft" ? k / 2 : (k / 2) * FT_PER_M;
+  return k * snapStepFt(unit);
 }
 
 function gridIndex(unit: DistanceUnit, ft: number): number {

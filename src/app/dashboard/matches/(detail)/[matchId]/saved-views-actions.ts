@@ -224,21 +224,23 @@ export async function duplicateSavedView(
 
   // Collisions resolve against the CALLER's own private names — a copy is
   // always private and owned by the caller, so the duplicate never needs to
-  // avoid another member's names, only its own.
-  const { data: mineRows, error: mineError } = await supabase
-    .from("saved_views")
-    .select("name")
-    .eq("account_id", workspace.id)
-    .eq("created_by", viewerId)
-    .eq("shared", false);
+  // avoid another member's names, only its own. Run alongside `nextSortOrder`
+  // below — neither read depends on the other's result.
+  const [{ data: mineRows, error: mineError }, sortOrder] = await Promise.all([
+    supabase
+      .from("saved_views")
+      .select("name")
+      .eq("account_id", workspace.id)
+      .eq("created_by", viewerId)
+      .eq("shared", false),
+    nextSortOrder(supabase, workspace.id),
+  ]);
   if (mineError) return { ok: false, error: "forbidden" };
 
   const existingNames = new Set(
     (mineRows ?? []).map((row) => row.name.trim().toLowerCase()),
   );
   const name = resolveCopyName(source.name, existingNames);
-
-  const sortOrder = await nextSortOrder(supabase, workspace.id);
 
   const { data, error } = await supabase
     .from("saved_views")

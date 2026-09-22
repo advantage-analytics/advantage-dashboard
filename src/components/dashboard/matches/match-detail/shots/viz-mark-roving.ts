@@ -1,5 +1,5 @@
 /**
- * The fullscreen viewer's marks are ONE tab stop, not N (final review #3).
+ * The fullscreen viewer's marks are ONE tab stop, not N.
  *
  * Every mark used to carry `tabIndex={0}`, and the stage precedes the chrome
  * slabs in DOM order — so on `rallyPosition` a keyboard user pressed Tab once

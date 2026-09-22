@@ -625,7 +625,7 @@ test.describe("RETURN_HEAT_BOUNDS — full visible view", () => {
     expect(y).toBeGreaterThan(viewBoxFarY);
   });
 
-  test("fix round 4B: xMin now clears the net (the viewBox was extended so the net line is visible, not clipped)", () => {
+  test("xMin clears the net (the viewBox was extended so the net line is visible, not clipped)", () => {
     expect(RETURN_HEAT_BOUNDS.xMin).not.toBe(RETURN_COURT.netX);
     expect(RETURN_HEAT_BOUNDS.xMin).toBeLessThan(RETURN_COURT.netX);
   });

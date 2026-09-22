@@ -18,10 +18,9 @@ import {
   type BandSettings,
   type BandSettingsDbRow,
 } from "./viz-bands";
+import { BAND_COLUMNS } from "./viz-bands-write";
 
 export type { BandSettings };
-
-const BAND_COLUMNS = "depth_scheme, depth_dividers_ft, contact_dividers_ft";
 
 /**
  * The band settings the active workspace (`accountId` = `Workspace.id`)

@@ -25,11 +25,11 @@ function getReducedMotionServerSnapshot(): boolean {
  * `react-hooks/set-state-in-effect` entirely instead of triggering it.
  *
  * Originally lived inline in `saved-views-band.tsx` (its reorder
- * animation's own reduced-motion check); pulled out here, unchanged, so F5's
+ * animation's own reduced-motion check); pulled out here, unchanged, so the
  * wall ↔ focused transition (`viz-state-context.tsx`'s `runCourtMorph`,
  * `court-tile.tsx`, `viz-focused.tsx`) reads the SAME preference instead of
  * standing up a second `useSyncExternalStore` that could drift from the
- * first — the task brief for F5 calls this out by name: "reuse that hook."
+ * first.
  */
 export function usePrefersReducedMotion(): boolean {
   return useSyncExternalStore(

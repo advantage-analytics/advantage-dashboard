@@ -25,7 +25,6 @@ import {
   type ZoneStats,
 } from "@/lib/data/serve-zones";
 import {
-  DEFAULT_BANDS,
   contactBandRows,
   depthBandRows,
   makeContactBucketer,
@@ -93,8 +92,8 @@ export const EMPTY_VIZ_FILTERS: VizFilters = {
 export type Outcome = "won" | "lost" | "miss";
 
 /**
- * Per-dot readout for the fullscreen viewer's hover card (Phase 2A, Task 2)
- * — every field is either already on the `MatchPoint`/`MatchShot` this dot
+ * Per-dot readout for the fullscreen viewer's hover card — every field is
+ * either already on the `MatchPoint`/`MatchShot` this dot
  * came from, or trivially derived from it; nothing here is fetched
  * separately, so the hover card can never show a value `computeViz` itself
  * didn't already have in hand.
@@ -116,7 +115,7 @@ export interface VizDotMeta {
   shotType: string | null;
   result: string | null;
   /**
-   * Fix round 1: an ace is a POINT fact (`MatchPoint.resultType === "Ace"`),
+   * An ace is a POINT fact (`MatchPoint.resultType === "Ace"`),
    * not a shot `result` — a shot row for an ace still reads `"In"` — so the
    * readout could never say "Ace" off `result` alone. Threaded down from the
    * SAME expression that gives the dot its star shape (`computeViz`'s serve
@@ -130,14 +129,14 @@ export interface VizDotMeta {
 /**
  * Every cut carries normalised court METRES (`lateralM`/`depthM`) —
  * `court-geometry.ts`'s `projectServeMetricDot`/`projectReturnDot` map those
- * onto their frame. Serve dots (Task 2): `depthM` holds
+ * onto their frame. Serve dots: `depthM` holds
  * `ServePlacementMetrics.depthPastNetM` — negative for a net ball — and
  * `lateralM` the same signed metres `normalizeLanding` always produced.
  * Return dots: `projectReturnDot`'s "placement" vs "contact" kind
  * (`returnPlacement` vs `returnContact`) determines how `depthM` is read.
  *
- * (Fix round 1, F3: this type used to also carry `x`/`y`, the legacy 0..1
- * service-box fraction `mapRealCoordsToServeDot` produces — Task 2 moved
+ * (This type used to also carry `x`/`y`, the legacy 0..1
+ * service-box fraction `mapRealCoordsToServeDot` produces — moved
  * both `court-art.tsx` serve call sites onto the metre fields above (an
  * out/net serve can't be represented as an in-box fraction), which left
  * `x`/`y` hardcoded to 0 and read by nothing. Removed rather than left
@@ -145,12 +144,12 @@ export interface VizDotMeta {
  * still exist as a plain, independently-tested projection function — see
  * that file's own note — they just no longer feed this type.)
  *
- * `shape: "star"` is a serve-only addition (G2b): an ace draws as a star
+ * `shape: "star"` is a serve-only addition: an ace draws as a star
  * instead of the usual outcome-coloured circle. Return-contact and rally
  * dots never take it — their circle/triangle already encodes
  * forehand/backhand, an axis orthogonal to "how did this shot end".
  *
- * `atNet` (fix round 4A) is a POSITION fact, not a style one — "this ball
+ * `atNet` is a POSITION fact, not a style one — "this ball
  * never crossed the net, so its real (hitter's-own-side) coordinates aren't
  * where it should be drawn; draw it at the net line instead" — deliberately
  * separate from `shape`/`outcome`. A netted ball draws with the SAME shape
@@ -172,7 +171,7 @@ export interface VizDot {
   lateralM: number;
   depthM: number;
   atNet: boolean;
-  /** Optional (fix round: every existing fixture that hand-builds a `VizDot`
+  /** Optional (every existing fixture that hand-builds a `VizDot`
    *  without it stays valid) — `computeViz`/`computeRallyViz` always set it
    *  for a real point/shot; only absent for a caller-constructed test dot
    *  that doesn't need the hover readout. */
@@ -188,7 +187,7 @@ export interface VizResult {
   /**
    * Serve cut only (undefined on every other cut) — how many of the drawn
    * serves (`dots`, matching `count`) have `kind === "out" || kind ===
-   * "net"` (Task 2's `servePlacementMetrics`). Fix round 3: `zoneStats`'s
+   * "net"` (`servePlacementMetrics`'s own classification). `zoneStats`'s
    * own population (`pointToServeDot`'s) is NOT an "in" count — it keeps
    * double faults and faults whose landing the tracker imputed at the
    * service line — so the stats-card subtitle needs this separate, honest
@@ -213,12 +212,11 @@ export function chartAllowedOn(cut: Cut, chart: Chart): boolean {
 
 /* ── Helpers moved from the retired shot-filters hook ────────────────────── */
 
-const REAL_HALF_DOUBLES = 5.485;
 const REAL_NET_Y = 11.885;
 const REAL_COURT_LENGTH = 23.77;
 // Same real-world constants `serve-zones.ts` already exports under these
 // names — duplicated here (not imported) since `pointToServeDot` over there
-// keeps its own gate untouched (Task 2's brief: that file isn't edited) and
+// keeps its own gate untouched (that file isn't edited here) and
 // this module already keeps its own private copy of the other REAL_* consts
 // above for the same reason.
 const REAL_SERVICE_Y = 5.485;
@@ -233,7 +231,7 @@ function normalizeLanding(lx: number, ly: number): { lx: number; ly: number } {
   return { lx, ly };
 }
 
-/* ── Serve placement metrics (Task 2) ─────────────────────────────────────
+/* ── Serve placement metrics ───────────────────────────────────────────────
  *
  * `serve-zones.ts`'s `pointToServeDot` drops any serve that isn't flagged
  * "In" (or a double fault) once its landing falls outside the service box
@@ -255,7 +253,7 @@ function normalizeLanding(lx: number, ly: number): { lx: number; ly: number } {
  * serve, so which side `contactY` falls on reliably says which end the
  * point is being served from, independent of where the ball ends up.
  *
- * (Fix round 2.) The in/out/net VERDICT, though, comes from the tracker's
+ * The in/out/net VERDICT, though, comes from the tracker's
  * own `result` string ("In" | "Out" | "Net"), not from geometry — SwingVision
  * does not measure a faulted serve's actual landing, it IMPUTES one at the
  * service line, so a real fault's landing coordinates read as "0.04m past
@@ -287,7 +285,7 @@ export interface ServePlacementMetrics {
  * normalisation in this file already uses, rather than dropping the point).
  *
  * `result` is the shot's own tracked call ("In" | "Out" | "Net" | null) —
- * the AUTHORITY for `kind` (fix round 2), checked before geometry:
+ * the AUTHORITY for `kind`, checked before geometry:
  * - `"net"` when `result === "Net"` OR `depthPastNetM < 0` — a negative
  *   depth is physically a net ball no matter what the string says (a few
  *   corpus rows carry a positive recorded depth for a genuinely netted
@@ -296,7 +294,7 @@ export interface ServePlacementMetrics {
  *   `result === "In"` — trust the tracker's call over the (possibly
  *   imputed) coordinates.
  * - otherwise (no usable `result`) the geometric box+tolerance rule below,
- *   unchanged from round 1 — the only path a null/unrecognised `result`
+ *   unchanged from before — the only path a null/unrecognised `result`
  *   still has.
  */
 function classifyServePlacement(
@@ -433,14 +431,14 @@ export interface ReturnDotMetric {
   lateralM: number;
   /**
    * Landing: metres past the net, in the direction of travel — negative
-   * means the return hit the net (Task 2, same convention
+   * means the return hit the net (same convention
    * `ServePlacementMetrics.depthPastNetM` uses). Contact: signed metres
    * behind (+) / inside (−) the returner's own baseline (`projectReturnDot`'s
    * "contact" depth) — unrelated to the net, so this can't go negative for
    * the same reason.
    */
   depthM: number;
-  /** Fix round 4A: the POSITION fact — see `VizDot.atNet`'s doc comment.
+  /** The POSITION fact — see `VizDot.atNet`'s doc comment.
    * Always `false` on a `"contact"` dot (a contact point has no "never
    * crossed the net" concept); only a `"landing"` dot ever sets it. */
   atNet: boolean;
@@ -452,7 +450,7 @@ export interface ReturnDotMetric {
  * turns these into the shared return frame's coordinates, separately for
  * "placement" (landing) and "contact".
  *
- * End detection (Task 2c/2d) reads each shot's own CONTACT point, never its
+ * End detection reads each shot's own CONTACT point, never its
  * landing — the same reasoning `servePlacementMetrics`'s doc comment gives:
  * a netted ball bounces back on the HITTER'S OWN side, so a landing-based
  * flip (what this file used before) mirrors a net ball the wrong way. A
@@ -468,7 +466,7 @@ interface ContactMetrics {
  * The contact-dot conversion `pointToReturnDots` and `computeRallyViz` both
  * need — pulled out once so any shot with its own contact pair (not just a
  * point's second shot) reuses the IDENTICAL conversion. Requires ONLY the
- * contact point (Task 2d) — a shot's own landing is irrelevant to where it
+ * contact point — a shot's own landing is irrelevant to where it
  * was STRUCK, so a missing/unusable landing no longer drops the dot the way
  * `contactMetricsFromLanding` (the function this replaces) used to.
  *
@@ -516,16 +514,16 @@ export function pointToReturnDots(
   const dots: ReturnDotMetric[] = [];
 
   // The landing/placement dot needs a landing — the contact dot (below)
-  // does not (Task 2d: `contactMetrics` only needs the contact pair), so a
-  // missing landing must gate ONLY this dot, not the whole function (fix
-  // round 1, F2 — the earlier single `if (...) return []` guard at the top
-  // dropped the contact dot too whenever a return's landing was missing).
+  // does not (`contactMetrics` only needs the contact pair), so a
+  // missing landing must gate ONLY this dot, not the whole function (the
+  // earlier single `if (...) return []` guard at the top dropped the
+  // contact dot too whenever a return's landing was missing).
   if (
     want !== "contact" &&
     p.secondShotLandingX != null &&
     p.secondShotLandingY != null
   ) {
-    // End detection from the RETURNER's own contact point (Task 2c), same
+    // End detection from the RETURNER's own contact point, same
     // `farEnd` primitive `servePlacementMetrics` uses — falls back to
     // today's landing-based flip (negated: `farEnd` and the old `didFlip`
     // are the same decision read from opposite ends of the shot) only when
@@ -534,7 +532,7 @@ export function pointToReturnDots(
       p.secondShotContactY != null
         ? p.secondShotContactY > REAL_NET_Y
         : !(p.secondShotLandingY > REAL_NET_Y);
-    // `result` (fix round 2): the tracker's own call is the authority over
+    // `result`: the tracker's own call is the authority over
     // geometry, same reasoning `servePlacementMetrics`'s doc comment gives
     // — a netted return can carry a positive recorded depth, which
     // `classifyServePlacement`'s `result === "Net"` check still catches.
@@ -550,7 +548,7 @@ export function pointToReturnDots(
     // positive lateralM is the returner's RIGHT. A netted return (`kind ===
     // "net"`) draws at the net gutter (`atNet`), never its real landing —
     // that spot is on the RETURNER's own side and was never a placement.
-    // Fix round 4A: folded into Miss — same shape (forehand-circle /
+    // Folded into Miss — same shape (forehand-circle /
     // backhand-triangle) an ordinary miss already has, `atNet` carries the
     // position fact separately. Routed on `kind`, not the sign of
     // `depthPastNetM` — a tracker-flagged net ball can carry a positive
@@ -717,10 +715,10 @@ function shapeFromShotType(
 }
 
 /**
- * Rally position (G3a): every shot AFTER the return the SUBJECT struck,
+ * Rally position: every shot AFTER the return the SUBJECT struck,
  * across every point — not gated on who served, unlike the serve/return arms
  * above, since a rally shot can come from either the server or the returner.
- * Rally shots are picked by ROLE (`pickRallyShots`, I1), not by
+ * Rally shots are picked by ROLE (`pickRallyShots`), not by
  * `shotNumber >= 3`: shot_number is unreliable (a faulted first serve and
  * the second serve actually played can share shot_number=1, colliding the
  * return with it too), the same reason `serve-return-shots.ts` exists.
@@ -737,7 +735,6 @@ function computeRallyViz(
   points: MatchPoint[],
   filters: VizFilters,
   subjectIsPlayer1: boolean,
-  chart: Chart,
 ): VizResult {
   let total = 0;
   let count = 0;
@@ -848,7 +845,7 @@ export function computeViz(
   chart: Chart = "scatter",
 ): VizResult {
   if (cut === "rallyPosition") {
-    return computeRallyViz(points, filters, subjectIsPlayer1, chart);
+    return computeRallyViz(points, filters, subjectIsPlayer1);
   }
 
   const frame = cutFrame(cut);
@@ -862,19 +859,19 @@ export function computeViz(
     if (frame === "serve") {
       if (p.serverIsPlayer1 !== subjectIsPlayer1) continue;
 
-      // Resolve the serve actually played by ROLE (never `shot_number` —
-      // guardrails §I1), not by array position, so a faulted first serve
-      // sharing a shot_number with the second serve can't collide.
+      // Resolve the serve actually played by ROLE (never `shot_number`, never
+      // by array position), so a faulted first serve sharing a shot_number
+      // with the second serve can't collide.
       const serveShot = pickServeShotBy(p.shots ?? [], (s) => s.shotType);
       const landingX = serveShot?.landingX ?? p.firstShotLandingX ?? null;
       const landingY = serveShot?.landingY ?? p.firstShotLandingY ?? null;
       // Primary: end detection from the resolved serve shot's own CONTACT
       // point. Fallback (no `shots` row to read a contact point from at
       // all — legacy/fixture data): the landing-based test every other
-      // normalisation in this file used before Task 2, negated (`farEnd`
+      // normalisation in this file already uses, negated (`farEnd`
       // and the old `didFlip` read the same decision from opposite ends of
       // the shot — see `classifyServePlacement`'s own doc comment).
-      // `result` (fix round 2): the resolved shot's own tracked call on the
+      // `result`: the resolved shot's own tracked call on the
       // primary path, the point's flattened `firstShotResult` on the
       // fallback path — both are the AUTHORITY over the geometric rule.
       const metrics =
@@ -902,19 +899,19 @@ export function computeViz(
       }
 
       // The zone-stats population is UNCHANGED — still exactly what
-      // `pointToServeDot` returns (Task 2's brief: `serve-zones.ts` isn't
+      // `pointToServeDot` returns (`serve-zones.ts` isn't
       // touched), independent of whether `metrics` above drew a dot for an
       // out/net serve that never reached that population before.
       const serveInput = toServeInput(p);
       const zoneDot = pointToServeDotFromServeZones(serveInput);
       if (zoneDot) serveDots.push(zoneDot);
 
-      // Fix round 1: ONE expression for "this serve is an ace", read by both
+      // ONE expression for "this serve is an ace", read by both
       // the dot's star shape and its `meta.isAce`, so the glyph and the
       // readout's first line can never disagree.
       const isAce = p.resultType === "Ace";
 
-      // Fix round 1: mirror the return branch's flattened-field fallback —
+      // Mirrors the return branch's flattened-field fallback —
       // `serveShot` can be `undefined` (a point whose `shots` row wasn't
       // resolvable at all; the dot still draws off `p.firstShotLandingX/Y`/
       // `p.firstShotResult` above via `classifyServePlacement`'s fallback
@@ -938,8 +935,8 @@ export function computeViz(
           metrics.kind === "in"
             ? serveOutcome(classifyPointResult(serveInput))
             : "miss",
-        // G2b: an ace draws as a star (an ace is always "in" — already
-        // gated to the subject's own serves above). Fix round 4A: a net
+        // An ace draws as a star (an ace is always "in" — already
+        // gated to the subject's own serves above). A net
         // serve folds into Miss's ordinary grey circle — no separate shape
         // — `atNet` below carries the "drawn at the net, not its real
         // landing" fact instead.
@@ -994,7 +991,7 @@ export function computeViz(
 }
 
 /**
- * The tile-footer count label (review M10) — `"{count} of {total}"` for
+ * The tile-footer count label — `"{count} of {total}"` for
  * every cut. Serve and return tiles used to read differently ("38 of 50" vs.
  * "12 returns"), which made a return tile look like it had no denominator
  * when it does (`result.total` is always the cut's drawable pool). Pulled
@@ -1014,7 +1011,7 @@ export function availableSets(points: MatchPoint[]): number[] {
   return [...sets].sort((a, b) => a - b);
 }
 
-/* ── Stats card (Task F3) ──────────────────────────────────────────────────
+/* ── Stats card ────────────────────────────────────────────────────────────
  * Row builders for the focused-view stats card. Every function below reads
  * the SAME `points`/`cut`/`filters`/`subjectIsPlayer1` a caller passed to
  * `computeViz` for the same render, and starts from `computeViz`'s own
@@ -1066,7 +1063,7 @@ export interface VizStats {
 }
 
 /**
- * M4: whether the stats card should show its empty state. `stats.total` is
+ * Whether the stats card should show its empty state. `stats.total` is
  * always `computeViz(...).count`, but for `returnPlacement` a nonzero total
  * can still leave every Direction/Depth row at `count === 0` — every return
  * landed out/net (see `isPlacementRow`) — which used to render six rows of
@@ -1131,7 +1128,7 @@ function sortRows(rows: StatRow[]): StatRow[] {
  * The claim→evidence sentence. Only rows with `count >= 3` ("qualifying")
  * take part — as the headline AND as the comparison set — so the clause
  * never gets its ceiling from a small-sample row a reader has no reason to
- * trust (review F3 round 1: a 2-serve 100% zone was inflating the "every
+ * trust (a 2-serve 100% zone was inflating the "every
  * other zone" ceiling above the headline's own win rate, reading as
  * nonsense: "75% won — every other zone sits at or under 100%.").
  *
@@ -1294,7 +1291,7 @@ function returnPlacementStats(
   // rather than rendered with zero rows.
   const depthRows = depthBandRows(bands, unit);
   const depth = bandRowAccumulator(depthRows);
-  // Fix round 2 (#3): hoisted once per call rather than resolved fresh per
+  // Hoisted once per call rather than resolved fresh per
   // dot inside the loop below.
   const depthBucket = makeDepthBucketer(bands);
 
@@ -1363,7 +1360,7 @@ function returnContactStats(
     forehand: { count: 0, won: 0 },
     backhand: { count: 0, won: 0 },
   };
-  // Fix round 2 (#3): hoisted once per call rather than resolved fresh per
+  // Hoisted once per call rather than resolved fresh per
   // dot inside the loop below.
   const contactBucket = makeContactBucketer(bands);
 
@@ -1414,7 +1411,7 @@ function returnContactStats(
  * never show a count the court doesn't back up. See the module doc comment
  * above for the `total` vs. subtitle-count distinction.
  *
- * `precomputed` (M2): pass a `VizResult` a caller already computed for the
+ * `precomputed`: pass a `VizResult` a caller already computed for the
  * SAME `points`/`cut`/`filters`/`subjectIsPlayer1` to skip a second,
  * identical `computeViz` pass — `viz-focused.tsx` needs both the court's
  * own result and these stats for one render. Omit it and this still runs
@@ -1422,7 +1419,7 @@ function returnContactStats(
  * that passes it is only avoiding a redundant recompute of the exact same
  * inputs.
  *
- * `bands`/`unit` (Phase 2B): the workspace's depth/contact band settings
+ * `bands`/`unit`: the workspace's depth/contact band settings
  * (`viz-bands.ts`) and the unit to render their labels in. REQUIRED, with no
  * defaults: a caller that forgot to thread them through would otherwise
  * silently ignore the workspace's bands and the viewer's units.
@@ -1443,7 +1440,7 @@ export function computeVizStats(
   if (cut === "serve") {
     const noun = serveNoun(filters.ball, total);
     const groups = [serveStatsGroup(result.zoneStats)];
-    // Fix round 3: the zone rows' population is `pointToServeDot`'s
+    // The zone rows' population is `pointToServeDot`'s
     // (unchanged, `serve-zones.ts` isn't touched) — it KEEPS double faults
     // and it KEEPS faults whose landing the tracker never actually
     // measured (SwingVision imputes an at-the-line coordinate for a fault
@@ -1509,7 +1506,7 @@ export function computeVizStats(
     };
   }
 
-  // A1: the contact-cut subtitle noun follows the ball filter exactly as
+  // The contact-cut subtitle noun follows the ball filter exactly as
   // returnPlacement's does, instead of hardcoding "returns".
   const noun = returnNoun(filters.ball, total);
   const groups = returnContactStats(result, bands, unit);

@@ -11,7 +11,7 @@
 import type { Cut, Chart, VizFilters } from "./viz-model";
 import { EMPTY_VIZ_FILTERS, chartAllowedOn, filterKeysFor } from "./viz-model";
 
-/* ── sameView (F4) ─────────────────────────────────────────────────────── */
+/* ── sameView ───────────────────────────────────────────────────────────── */
 
 /**
  * Is `candidate` (a default tile, or a saved view) the same view as
@@ -29,7 +29,7 @@ export function sameView(
   candidate: { cut: Cut; chart: Chart; filters: VizFilters; id?: string },
 ): boolean {
   if (current.cut === null) return false;
-  // G4: a "Create view" draft matches no tile — nothing on the wall or in
+  // A "Create view" draft matches no tile — nothing on the wall or in
   // the Views grid rings while the court is the blank prompt, even one that
   // happens to share cut/chart/filters (draft always starts at
   // serve/scatter/empty, same as the default Serve tile).
@@ -72,7 +72,7 @@ function sameValues(a: readonly unknown[], b: readonly unknown[]): boolean {
 }
 
 /**
- * Stable identity of the COURT currently on screen — F5's shared-element
+ * Stable identity of the COURT currently on screen — the shared-element
  * transition (`viz-state-context.tsx`'s `runCourtMorph`) names its morph
  * target with this, and `viz-focused.tsx`'s scroll-to-top effect keys off
  * it instead of `cut` alone, so a Filters-popover edit (same court,
@@ -87,7 +87,7 @@ function sameValues(a: readonly unknown[], b: readonly unknown[]): boolean {
  * even one that happens to share cut/player with the view left behind).
  * `null` on the wall (`cut === null`): there is no single court to name.
  *
- * G4: a `:draft` suffix when `state.draft === true` — the blank "Create
+ * A `:draft` suffix when `state.draft === true` — the blank "Create
  * view" prompt needs its OWN identity, distinct from the real view it's
  * parked on top of (draft always starts at `serve`/`scatter`/no `viewId`,
  * the same key the default Serve tile would otherwise produce), so the
@@ -102,7 +102,7 @@ export function viewIdentityKey(state: VizState): string | null {
 }
 
 /**
- * F5 fix round 1: where keyboard focus (and, alongside it, the
+ * Where keyboard focus (and, alongside it, the
  * scroll-to-top) should land after a state change — driven ONLY by the
  * before/after `viewIdentityKey`, never by whether a shared-element view
  * transition ran, resolved, or was skipped. A hidden document, a browser
@@ -145,7 +145,7 @@ export interface VizState {
   filters: VizFilters;
   viewId: string | null;
   /**
-   * G4: "Create view" — the blank-court prompt state entered from
+   * "Create view" — the blank-court prompt state entered from
    * `saved-views-band.tsx`'s `NewViewTile` (`?cut=serve&draft=1`, no
    * filters). Only meaningful alongside a `cut` (dropped on the wall — see
    * `vizStateQuery`, which never serializes it when `cut === null`).
@@ -159,7 +159,7 @@ export interface VizState {
    */
   draft?: boolean;
   /**
-   * Phase 2A: the fullscreen court viewer (`viz-fullscreen.tsx`), opened
+   * The fullscreen court viewer (`viz-fullscreen.tsx`), opened
    * from a `data-viz-fullscreen-door` control on the focused view. Only
    * meaningful alongside a `cut` — dropped on the wall exactly like `draft`
    * (see `vizStateQuery`'s `cut === null` early return and `parseVizState`
@@ -273,7 +273,7 @@ export function canonicalSetValues(values: readonly number[]): number[] {
  * itself without React or `next/navigation` — a plain object always replaces
  * wholesale; an updater always sees `prev`, never a stale render-time value.
  *
- * G4: this is also the ONE place a "Create view" draft gets cleared. Every
+ * This is also the ONE place a "Create view" draft gets cleared. Every
  * `setState` call in the tab funnels through here (`viz-state-context.tsx`'s
  * `setState`), so a single check covers every trigger the spec calls
  * out — a cut/chart pick, a filter toggle or token removal, and loading a
@@ -288,7 +288,7 @@ export function canonicalSetValues(values: readonly number[]): number[] {
  * `draft` was actually set, so the common (never-drafted) path returns
  * `resolved` unchanged rather than a new object every call.
  *
- * Fix round 1: also the one place `fullscreen` is dropped from the OUTPUT
+ * Also the one place `fullscreen` is dropped from the OUTPUT
  * — omitted, not set to `false` (same convention as `draft` itself; see
  * `VizState.fullscreen`'s doc comment) — when the resolved state has
  * `cut: null` (Back to wall: no court for the viewer to show) or
@@ -401,7 +401,7 @@ export function parseVizState(params: URLSearchParams): VizState {
   // held to the same rule.
   const filters = cut === null ? rawFilters : carryFilters(rawFilters, cut);
 
-  // G4: `draft` only means anything alongside a real cut — on the wall
+  // `draft` only means anything alongside a real cut — on the wall
   // (`cut === null`) it's dropped, same as every other viz key. Omitted
   // (not `draft: false`) when not draft, matching this function's own
   // "garbage/defaults parse away" convention — every existing `toEqual`
@@ -410,7 +410,7 @@ export function parseVizState(params: URLSearchParams): VizState {
   // undefined}` compare equal under `toEqual`; `{draft: false}` would not).
   const draft = cut !== null && params.get("draft") === "1";
 
-  // Phase 2A: `fullscreen=1` only means anything alongside a real cut, same
+  // `fullscreen=1` only means anything alongside a real cut, same
   // as `draft` — and draft wins when both are somehow present (the blank
   // "Create view" prompt has no court behind it for the viewer to show).
   const fullscreen = cut !== null && !draft && params.get("fullscreen") === "1";
@@ -452,13 +452,13 @@ export function vizStateQuery(
     next.set("chart", state.chart);
   }
 
-  // G4: draft only ever serializes alongside a real cut (guaranteed by the
+  // `draft` only ever serializes alongside a real cut (guaranteed by the
   // early `cut === null` return above) — never on the wall.
   if (state.draft === true) {
     next.set("draft", "1");
   }
 
-  // Phase 2A: fullscreen only ever serializes alongside a real cut, for the
+  // `fullscreen` only ever serializes alongside a real cut, for the
   // same reason — the early `cut === null` return above means setting
   // `cut: null` (Back to wall) drops it, whether or not a caller happened
   // to carry `fullscreen: true` into that literal.

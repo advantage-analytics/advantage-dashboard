@@ -64,10 +64,11 @@ test.describe("initBandEditor", () => {
   });
 
   test("depth, none: starts from thirds", () => {
-    for (const depthScheme of ["none"] as const) {
-      const s = initBandEditor("depth", { ...DEFAULT_BANDS, depthScheme });
-      expect(s.draft).toEqual(resetPairFor("depth"));
-    }
+    const s = initBandEditor("depth", {
+      ...DEFAULT_BANDS,
+      depthScheme: "none",
+    });
+    expect(s.draft).toEqual(resetPairFor("depth"));
   });
 
   test("contact: starts from the saved contact pair", () => {
@@ -357,13 +358,11 @@ test.describe("bandEditorDraftScheme", () => {
     expect(bandEditorDraftScheme(initBandEditor("depth", DEFAULT_BANDS))).toBe(
       "thirds",
     );
-    for (const depthScheme of ["none"] as const) {
-      expect(
-        bandEditorDraftScheme(
-          initBandEditor("depth", { ...DEFAULT_BANDS, depthScheme }),
-        ),
-      ).toBe("thirds");
-    }
+    expect(
+      bandEditorDraftScheme(
+        initBandEditor("depth", { ...DEFAULT_BANDS, depthScheme: "none" }),
+      ),
+    ).toBe("thirds");
     const dms = initBandEditor("depth", {
       ...DEFAULT_BANDS,
       depthScheme: "deepMidShort",

@@ -780,21 +780,12 @@
    could not wrap in a shared-element transition - browser back/forward,
    where Next's router commits the new DOM with no synchronous hook to
    snapshot the outgoing one first (VizStateContextValue.externalCourtSwap's
-   doc comment). Also a rise-in (8px), same family as the morph's own
+   doc comment). Reuses viz-vt-rise-in above rather than a second identical
+   @keyframes: it IS the same rise-in (8px), same family as the morph's own
    entrance, so the fallback reads as a quieter sibling of the real thing
    rather than a different animation. */
-@keyframes viz-crossfade-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 .viz-crossfade-in {
-  animation: 200ms var(--ease-primary) both viz-crossfade-in;
+  animation: 200ms var(--ease-primary) both viz-vt-rise-in;
 }
 @media (prefers-reduced-motion: reduce) {
   .viz-crossfade-in {

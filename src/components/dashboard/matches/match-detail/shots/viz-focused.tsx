@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Maximize2 } from "lucide-react";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { WorkspaceKind } from "@/lib/workspace/types";
@@ -19,7 +19,7 @@ import { useVizState, useExternalSwapFadeIn } from "./use-viz-state";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useVizView } from "./use-viz-view";
 import { EMPTY_VIZ_FILTERS, availableSets, type Cut } from "./viz-model";
-import { viewIdentityKey } from "./viz-url";
+import { clearedFilters, viewIdentityKey } from "./viz-url";
 import {
   CUT_LABEL,
   legendItemsFor,
@@ -86,6 +86,10 @@ export function VizFocused({
     useVizView();
   const { state, setState, runCourtMorph, morphTargetKey } = useVizState();
   const reducedMotion = usePrefersReducedMotion();
+  // `availableSets` is an O(points) scan; this component re-renders on every
+  // filter/cut/chart click via the shared `VizStateProvider`, so it's
+  // memoized on `points` alone rather than re-scanning on every one of those.
+  const sets = useMemo(() => availableSets(points), [points]);
 
   // Everyone — including players — may save a view, so this is always on;
   // the ref is what lets the dialog anchor under the SAME button that opens
@@ -211,7 +215,7 @@ export function VizFocused({
   }
 
   function clearFilters() {
-    setState((prev) => ({ ...prev, filters: EMPTY_VIZ_FILTERS, viewId: null }));
+    setState((prev) => clearedFilters(prev));
   }
 
   // G4: the draft overlay's "Choose a view" CTA opens the SAME cut menu the
@@ -257,7 +261,7 @@ export function VizFocused({
             count={result.count}
             total={result.total}
             noun={result.noun}
-            sets={availableSets(points)}
+            sets={sets}
             youName={you.name}
             opponentName={opp.name}
           />
@@ -363,66 +367,48 @@ export function VizFocused({
               </div>
             )}
             {isDraft ? (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
-                <div
-                  className="pointer-events-auto flex flex-col items-center gap-2 rounded-[var(--radius-card)] border px-5 py-4 text-center"
-                  style={{
-                    borderColor: "var(--border-hairline)",
-                    backgroundColor: "var(--surface-card)",
-                    boxShadow: "var(--shadow-card-emphasis)",
-                  }}
+              <CourtOverlayCard>
+                <p
+                  className="text-[13px] font-medium"
+                  style={{ color: "var(--ink-900)" }}
                 >
-                  <p
-                    className="text-[13px] font-medium"
-                    style={{ color: "var(--ink-900)" }}
-                  >
-                    Pick what to plot
-                  </p>
-                  <p
-                    className="text-micro max-w-[240px]"
-                    style={{ color: "var(--ink-600)" }}
-                  >
-                    Choose a view, a chart and filters — then save it.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={openCutMenu}
-                    className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
-                  >
-                    Choose a view
-                  </button>
-                </div>
-              </div>
+                  Pick what to plot
+                </p>
+                <p
+                  className="text-micro max-w-[240px]"
+                  style={{ color: "var(--ink-600)" }}
+                >
+                  Choose a view, a chart and filters — then save it.
+                </p>
+                <button
+                  type="button"
+                  onClick={openCutMenu}
+                  className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                >
+                  Choose a view
+                </button>
+              </CourtOverlayCard>
             ) : (
               result.count === 0 && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
-                  <div
-                    className="pointer-events-auto flex flex-col items-center gap-2 rounded-[var(--radius-card)] border px-5 py-4 text-center"
-                    style={{
-                      borderColor: "var(--border-hairline)",
-                      backgroundColor: "var(--surface-card)",
-                      boxShadow: "var(--shadow-card-emphasis)",
-                    }}
+                <CourtOverlayCard>
+                  <p
+                    className="text-[12px]"
+                    style={{ color: "var(--ink-600)" }}
                   >
-                    <p
-                      className="text-[12px]"
-                      style={{ color: "var(--ink-600)" }}
+                    {hasFilters
+                      ? `No ${result.noun} match these filters`
+                      : `No ${result.noun} recorded for ${subjectName} yet`}
+                  </p>
+                  {hasFilters && (
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
                     >
-                      {hasFilters
-                        ? `No ${result.noun} match these filters`
-                        : `No ${result.noun} recorded for ${subjectName} yet`}
-                    </p>
-                    {hasFilters && (
-                      <button
-                        type="button"
-                        onClick={clearFilters}
-                        className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
+                      Clear
+                    </button>
+                  )}
+                </CourtOverlayCard>
               )
             )}
           </div>
@@ -465,6 +451,29 @@ export function VizFocused({
   );
 }
 
+/**
+ * The art box's centred callout card — the draft "Pick what to plot" prompt
+ * and the zero-results empty state are the same card shape with different
+ * content, so both render through this rather than each carrying its own
+ * copy of the wrapper/positioning.
+ */
+function CourtOverlayCard({ children }: { children: ReactNode }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
+      <div
+        className="pointer-events-auto flex flex-col items-center gap-2 rounded-[var(--radius-card)] border px-5 py-4 text-center"
+        style={{
+          borderColor: "var(--border-hairline)",
+          backgroundColor: "var(--surface-card)",
+          boxShadow: "var(--shadow-card-emphasis)",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 // G3b (P2i): the heat chart's legend — a micro "Fewer" caption, four 22x8
 // swatches drawn as one joined pill (no gap between them, rounded only at
 // the outer ends via the wrapping span's own `overflow-hidden` pill), then
@@ -472,6 +481,29 @@ export function VizFocused({
 // returns exactly this one item for `chart === "heat"`).
 const HEAT_RAMP_SWATCH_W = 22;
 const HEAT_RAMP_SWATCH_H = 8;
+
+/**
+ * The four heatmap swatches alone (`var(--viz-heatmap-0..3)`), with no
+ * wrapping caption or pill — `viz-fullscreen.tsx`'s `DarkLegend` renders the
+ * same ramp on its own dark chrome and imports this rather than keeping a
+ * second copy of the swatch loop.
+ */
+export function HeatRampSwatches() {
+  return (
+    <>
+      {[0, 1, 2, 3].map((i) => (
+        <span
+          key={i}
+          style={{
+            width: HEAT_RAMP_SWATCH_W,
+            height: HEAT_RAMP_SWATCH_H,
+            backgroundColor: `var(--viz-heatmap-${i})`,
+          }}
+        />
+      ))}
+    </>
+  );
+}
 
 function HeatRampLegend() {
   return (
@@ -484,16 +516,7 @@ function HeatRampLegend() {
         style={{ borderRadius: "var(--radius-pill)" }}
         aria-hidden="true"
       >
-        {[0, 1, 2, 3].map((i) => (
-          <span
-            key={i}
-            style={{
-              width: HEAT_RAMP_SWATCH_W,
-              height: HEAT_RAMP_SWATCH_H,
-              backgroundColor: `var(--viz-heatmap-${i})`,
-            }}
-          />
-        ))}
+        <HeatRampSwatches />
       </span>
       <span className="text-micro" style={{ color: "var(--ink-500)" }}>
         More

@@ -3,7 +3,7 @@ import { formatSpeed, type DistanceUnit } from "@/lib/format/distance";
 
 /**
  * The fullscreen viewer's hover/focus readout, as a PURE function of one
- * dot's `VizDotMeta` (Phase 2A, Task 4) — no React, no DOM, so
+ * dot's `VizDotMeta` — no React, no DOM, so
  * `tests/viz-readout.spec.ts` can pin the one rule that matters here:
  * **only what the data says**.
  *
@@ -102,10 +102,10 @@ export function buildReadout(
 
   const shot = shotPhrase(meta.shotType, cut);
   const call = resultPhrase(meta.result);
-  // Fix round 1: `meta.isAce` FIRST. An ace's own shot row reads `result:
-  // "In"` — the ace is a point fact — so a `result`-only test never fired.
-  // An ace also subsumes the serve description: "First serve, ace" says the
-  // same thing twice.
+  // `meta.isAce` checked first: an ace's own shot row reads `result: "In"` —
+  // the ace is a point fact — so a `result`-only check never fires. An ace
+  // also subsumes the serve description: "First serve, ace" says the same
+  // thing twice.
   const shotLine = meta.isAce
     ? "Ace"
     : call === "Ace"

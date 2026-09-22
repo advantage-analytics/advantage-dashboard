@@ -39,6 +39,7 @@ import {
 } from "@/app/dashboard/matches/(detail)/[matchId]/saved-views-actions";
 import { CourtTile, TileFullscreenGlyph } from "./court-tile";
 import { ManageableSavedViewTile } from "./manageable-saved-view-tile";
+import { savedViewNamePool } from "./save-view-dialog";
 import { useVizState } from "./use-viz-state";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import type { VizState } from "./viz-url";
@@ -421,12 +422,10 @@ export function SavedViewsBand({
   }
 
   function candidatePoolNames(view: SavedViewRow): string[] {
-    return optimisticViews
-      .filter(
-        (v) =>
-          v.id !== view.id && (view.shared ? v.shared : !v.shared && v.mine),
-      )
-      .map((v) => v.name);
+    return savedViewNamePool(optimisticViews, {
+      shared: view.shared,
+      excludeId: view.id,
+    });
   }
 
   function commitRename(view: SavedViewRow) {

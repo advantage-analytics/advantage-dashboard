@@ -2,11 +2,16 @@ import { expect, test } from "@playwright/test";
 import {
   BUTTON_STEP,
   KEY_PAN_PX,
+  PINCH_MAX_DELTA,
   WHEEL_STEP,
   ZOOM_MAX,
   ZOOM_MIN,
+  ZOOM_OUT_SLACK,
   clampPan,
+  minZoomFor,
   panBy,
+  wheelDeltaPx,
+  wheelZoomFactor,
   zoomAbout,
   zoomPercentLabel,
 } from "@/components/dashboard/matches/match-detail/shots/pan-zoom";
@@ -151,9 +156,7 @@ test("zoomPercentLabel: formats as a rounded percent", () => {
 
 // ── Gesture feel: stage-aware zoom floor and continuous pinch ──────────────
 
-test("minZoomFor: a little past 'the whole court fits', never the old 55% island", async () => {
-  const { minZoomFor, ZOOM_OUT_SLACK } =
-    await import("@/components/dashboard/matches/match-detail/shots/pan-zoom");
+test("minZoomFor: a little past 'the whole court fits', never the old 55% island", () => {
   const art = { w: 595, h: 948 };
   const stage = { w: 1440, h: 900 };
   const fitZ = Math.min(stage.w / art.w, stage.h / art.h);
@@ -164,9 +167,7 @@ test("minZoomFor: a little past 'the whole court fits', never the old 55% island
   expect(minZoomFor(art, { w: 50, h: 50 })).toBe(ZOOM_MIN);
 });
 
-test("zoomAbout honours a stage floor above ZOOM_MIN and keeps the anchor fixed", async () => {
-  const { zoomAbout } =
-    await import("@/components/dashboard/matches/match-detail/shots/pan-zoom");
+test("zoomAbout honours a stage floor above ZOOM_MIN and keeps the anchor fixed", () => {
   const art = { w: 595, h: 948 };
   const stage = { w: 1440, h: 900 };
   const out = zoomAbout(
@@ -180,9 +181,7 @@ test("zoomAbout honours a stage floor above ZOOM_MIN and keeps the anchor fixed"
   expect(out.z).toBeCloseTo(0.8, 9);
 });
 
-test("wheelZoomFactor: continuous, symmetric, gentle, and capped per event", async () => {
-  const { wheelZoomFactor, PINCH_MAX_DELTA } =
-    await import("@/components/dashboard/matches/match-detail/shots/pan-zoom");
+test("wheelZoomFactor: continuous, symmetric, gentle, and capped per event", () => {
   expect(wheelZoomFactor(0)).toBe(1);
   // pinch out (negative deltaY) zooms in; pinch in zooms out; exact inverses.
   expect(wheelZoomFactor(-5)).toBeGreaterThan(1);
@@ -195,9 +194,7 @@ test("wheelZoomFactor: continuous, symmetric, gentle, and capped per event", asy
   expect(wheelZoomFactor(-100)).toBeLessThan(1.3);
 });
 
-test("wheelDeltaPx normalises line and page modes", async () => {
-  const { wheelDeltaPx } =
-    await import("@/components/dashboard/matches/match-detail/shots/pan-zoom");
+test("wheelDeltaPx normalises line and page modes", () => {
   expect(wheelDeltaPx(3, 0)).toBe(3);
   expect(wheelDeltaPx(3, 1)).toBe(48);
   expect(wheelDeltaPx(1, 2)).toBe(400);
