@@ -762,19 +762,27 @@ function ShotWell({
   onSelectShot: (stop: ShotStop) => void;
 }) {
   return (
-    <div className="flex flex-col bg-[rgba(0,0,0,0.28)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-1px_0_rgba(255,255,255,0.06)]">
-      {stops.map((stop, i) => (
-        <ShotWellRow
-          key={stop.shot.id}
-          stop={stop}
-          order={i + 1}
-          playerName={
-            stop.shot.isPlayer1 === youIsPlayer1 ? youLastName : oppLastName
-          }
-          isLit={stop.shot.id === activeShotId}
-          onSelect={onSelectShot}
-        />
-      ))}
+    // Two elements, not one: the outer grid is what `film-shot-well-open`
+    // (globals.css) unfolds — its single row track grows from 0fr to 1fr on
+    // mount — and the inner `min-h-0 overflow-hidden` column is what that
+    // track clips, carrying the wash, the hairlines and the rows. Rows below
+    // the well slide down with the track instead of jumping when it mounts;
+    // the rows' own stagger plays inside the clip from the same instant.
+    <div data-shot-well className="film-shot-well-open">
+      <div className="flex min-h-0 flex-col overflow-hidden bg-[rgba(0,0,0,0.28)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-1px_0_rgba(255,255,255,0.06)]">
+        {stops.map((stop, i) => (
+          <ShotWellRow
+            key={stop.shot.id}
+            stop={stop}
+            order={i + 1}
+            playerName={
+              stop.shot.isPlayer1 === youIsPlayer1 ? youLastName : oppLastName
+            }
+            isLit={stop.shot.id === activeShotId}
+            onSelect={onSelectShot}
+          />
+        ))}
+      </div>
     </div>
   );
 }

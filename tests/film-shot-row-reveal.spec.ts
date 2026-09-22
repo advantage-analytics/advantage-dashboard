@@ -122,3 +122,49 @@ test("the stagger steps 25ms a row and stops at the eight-step cap", async ({
   expect(delays[1]).toBe("25ms");
   expect(delays[9]).toBe("200ms");
 });
+
+test("the well itself unfolds under the point and clips its rows", async ({
+  page,
+}) => {
+  await page.goto(origin);
+  await expect
+    .poll(() => page.locator("html").getAttribute("data-hydrated"))
+    .toBe("true");
+
+  // The harness serves the bundle with no stylesheet, so the contract is
+  // read off the markup here and off globals.css below: the outer element
+  // carries the unfold class, and its only child is the clipped column
+  // (`min-h-0 overflow-hidden`) that holds every row — the shape the 0fr → 1fr
+  // track needs to clip anything at all.
+  const well = page.locator("[data-shot-well]");
+  await expect(well).toHaveCount(1);
+  await expect(well).toHaveClass(/film-shot-well-open/);
+  const shape = await well.evaluate((node) => {
+    const inner = node.firstElementChild as HTMLElement | null;
+    return {
+      children: node.children.length,
+      innerClasses: inner ? Array.from(inner.classList) : [],
+      rowsInside: inner ? inner.querySelectorAll("[data-shot-id]").length : 0,
+    };
+  });
+  expect(shape.children).toBe(1);
+  expect(shape.innerClasses).toEqual(
+    expect.arrayContaining(["min-h-0", "overflow-hidden"]),
+  );
+  expect(shape.rowsInside).toBe(10);
+
+  // And the stylesheet half of the contract: the keyframe grows a grid track,
+  // never a height, and reduced motion swaps the unfold for an opacity-only
+  // fade rather than dropping the acknowledgement.
+  const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+  const open = css.slice(css.indexOf("@keyframes film-shot-well-open"));
+  expect(open).toMatch(/grid-template-rows:\s*0fr/);
+  expect(open).toMatch(/grid-template-rows:\s*1fr/);
+  expect(open).not.toMatch(/^\s*height:/m);
+  expect(open).toMatch(
+    /\.film-shot-well-open\s*\{[^}]*display:\s*grid;[^}]*animation:\s*film-shot-well-open/,
+  );
+  expect(open).toMatch(
+    /prefers-reduced-motion: reduce\)\s*\{\s*\.film-shot-well-open\s*\{\s*animation:\s*film-shot-well-fade/,
+  );
+});

@@ -846,3 +846,48 @@
     animation: none;
   }
 }
+
+/* The well itself opening under the clicked point — `ShotWell` in the room's
+   drawer (point-list.tsx). The rows above arrive as a list; this is the thing
+   they arrive INTO. `grid-template-rows: 0fr → 1fr` is the one way to unfold
+   an auto-height block without animating `height` (layout-driving, and the
+   drawer would re-lay every row below on every frame anyway): the outer grid
+   grows its single track and the inner `min-h-0 overflow-hidden` child is
+   clipped to it, so the rows below the well slide down with it instead of
+   jumping the moment the well mounts.
+
+   250ms on `--ease-primary`, settled by eye (author, 2026-09-22): 300ms on
+   `--ease-out-expo` read a tad slow — expo finishes its visible travel early
+   and the rest is waiting — and 200ms read too fast. 250ms is on the DS
+   duration scale (foundations: "0.2s–0.25s"), and the primary curve moves
+   evenly across the whole span, which is what reads as smooth rather than
+   snapped. No opacity on the well: at 0fr the clip shows nothing, and the
+   rows fade in on their own inside it, so a second fade on the container
+   only muddied the one motion. */
+@keyframes film-shot-well-open {
+  from {
+    grid-template-rows: 0fr;
+  }
+  to {
+    grid-template-rows: 1fr;
+  }
+}
+.film-shot-well-open {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation: film-shot-well-open 250ms var(--ease-primary) both;
+}
+/* Reduced motion keeps the acknowledgement and drops the unfold: the well is
+   at full height from the first frame and only fades in, 150ms, so a click
+   on a point still visibly answers. Opacity-only, which DS foundations keep
+   under reduced motion; the rows inside are already `animation: none`. */
+@keyframes film-shot-well-fade {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .film-shot-well-open {
+    animation: film-shot-well-fade var(--duration-fast) var(--ease-primary) both;
+  }
+}
