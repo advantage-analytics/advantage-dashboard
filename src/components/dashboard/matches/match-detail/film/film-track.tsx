@@ -13,6 +13,9 @@ import type { TrackSegment } from "./film-timeline";
  * 11px white playhead. The 16px hit area is the whole row; the runs are
  * decoration inside it. Blue here is one of the three places the fullscreen
  * uses it at all.
+ *
+ * `role="slider"`, and keyboard-seekable like one: ← / → move 5 seconds,
+ * Home and End go to the ends.
  */
 export function FilmTrack({
   segments,
@@ -78,10 +81,36 @@ export function FilmTrack({
         setScrubbing(true);
         seekFromPointer(e.clientX);
       }}
-      // No keys of its own: the view that holds the track — the room, or the
-      // Video tab — answers the arrows page-wide (← ↑ / → ↓ step points, J / L move
-      // 5 seconds), and a second handler here made a focused track seek
-      // twice.
+      // A focused slider seeks, which is what a slider does — arrows move the
+      // playhead 5s, Home and End go to the ends. Both hosts step points with
+      // the same arrows page-wide, so the track claims them back while it has
+      // focus: `data-film-own-keys` is the room's guard, and the Video tab's
+      // window handler already bails on `[role=slider]`. Without that the
+      // arrow both seeked and stepped a point.
+      data-film-own-keys=""
+      onKeyDown={(e) => {
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        if (!(duration > 0)) return;
+        const at = Math.min(Math.max(currentTime, 0), duration);
+        switch (e.key) {
+          case "ArrowLeft":
+            e.preventDefault();
+            onSeek(Math.max(0, at - 5));
+            break;
+          case "ArrowRight":
+            e.preventDefault();
+            onSeek(Math.min(duration, at + 5));
+            break;
+          case "Home":
+            e.preventDefault();
+            onSeek(0);
+            break;
+          case "End":
+            e.preventDefault();
+            onSeek(duration);
+            break;
+        }
+      }}
       className={cn(
         "relative flex h-4 cursor-pointer items-center rounded-[2px] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
         className,

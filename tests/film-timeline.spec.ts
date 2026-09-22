@@ -7,6 +7,7 @@ import {
   filmClock,
   filmStops,
   nextStop,
+  playingStopAt,
   POINT_BUFFER_SECONDS,
   prevStop,
   toFilmTime,
@@ -111,6 +112,51 @@ test.describe("film clock", () => {
     );
     expect(deadTimeJump(stops, 0.5)).toBeNull();
     expect(deadTimeJump(stops, stops[3].end + 5)).toBeNull();
+  });
+});
+
+/**
+ * Between points (R7) the room says nothing: no point name, no position
+ * counter, no lit row, an empty court. `activeStopAt` cannot express that — it
+ * keeps the last point reached forever — so `playingStopAt` walks the same
+ * windows and reports containment alone. These pin the four shapes the film
+ * actually produces, including the one where there is no gap to find.
+ */
+test.describe("playingStopAt", () => {
+  const stops = filmStops(points, PROVIDER);
+
+  test("inside a point's window, it is that point", () => {
+    expect(playingStopAt(stops, stops[0].start + 5)?.point.id).toBe("a");
+    expect(playingStopAt(stops, stops[1].start + 1)?.point.id).toBe("b");
+    // A seek that lands a few ms early is still inside the point, exactly as
+    // it is for `activeStopAt`.
+    expect(playingStopAt(stops, stops[0].start - 0.03)?.point.id).toBe("a");
+  });
+
+  test("the gap after a point belongs to no point", () => {
+    // a's window closes at 21.06s and b's opens at 48.76s: real dead time.
+    expect(playingStopAt(stops, stops[0].end + 1)).toBeNull();
+    expect(playingStopAt(stops, stops[1].start - 2)).toBeNull();
+    // …where `activeStopAt` still names the point just played, which is what
+    // keeps the board's score on screen through the changeover.
+    expect(activeStopAt(stops, stops[0].end + 1)?.stop.point.id).toBe("a");
+  });
+
+  test("before the first point there is no point", () => {
+    expect(playingStopAt(stops, 0)).toBeNull();
+    expect(playingStopAt(stops, stops[0].start - 1)).toBeNull();
+    expect(playingStopAt([], 12)).toBeNull();
+  });
+
+  test("windows that touch never read as between points", () => {
+    // c has no recorded duration, so its window is clamped to d's start and
+    // there is no second of film between them to fall through.
+    expect(stops[2].end).toBeCloseTo(stops[3].start, 6);
+    expect(playingStopAt(stops, stops[2].end - 0.001)?.point.id).toBe("c");
+    expect(playingStopAt(stops, stops[2].end)?.point.id).toBe("d");
+    for (let t = stops[2].start; t < stops[3].end; t += 0.25) {
+      expect(playingStopAt(stops, t), `at ${t}`).not.toBeNull();
+    }
   });
 });
 

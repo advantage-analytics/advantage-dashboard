@@ -5,6 +5,11 @@ import {
   type AttachmentPurgeDeps,
 } from "@/lib/services/match-video/purge";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
+import {
+  ballPathsObjectKey,
+  ballPathsUserSegment,
+  resultsKeyUserSegment,
+} from "@/lib/services/splitstep/object-keys";
 import { deleteVideoBlob } from "@/lib/services/splitstep/video-url";
 import { MATCH_DATA_BUCKET } from "@/lib/services/upload/storage.service";
 
@@ -16,14 +21,112 @@ export interface PurgeMatchStorageOptions {
   attachments?: AttachmentPurgeDeps;
 }
 
+/** What the results lane reads off a `processing_jobs` row. */
+interface ResultsKeyRow {
+  id?: unknown;
+  match_id?: unknown;
+  created_by?: unknown;
+  results_object_key?: unknown;
+  players_object_key?: unknown;
+  trajectories_object_key?: unknown;
+}
+
+/** A usable id: a non-empty string that cannot introduce a path segment. */
+function isKeyId(value: unknown): value is string {
+  return typeof value === "string" && value !== "" && !value.includes("/");
+}
+
+/**
+ * The exact objects to remove from `RESULTS_BUCKET` for these job rows.
+ *
+ * A FIXED LIST, never a sweep. This feeds a service-role `remove` on the bucket
+ * holding every athlete's files, so nothing here lists a bucket or builds a
+ * prefix, wildcard or directory key: a sweep built from a wrong or empty
+ * segment (`results//`, `results/former-member/`) would match other matches'
+ * files, and a fixed list has no such failure mode. Every path returned is one
+ * of exactly two things:
+ *
+ *   • a RECORDED column value, verbatim — `results_object_key`,
+ *     `players_object_key`, `trajectories_object_key`. Recorded beats
+ *     recomputed: an adopted delivery keeps its `orphaned/…` keys, which no
+ *     recomputation would reach. A null column contributes nothing.
+ *
+ *   • a return value of `ballPathsObjectKey`. `ball-paths.json` is the ONE
+ *     unrecorded key — there is no column for it — so it is rebuilt from the
+ *     row, and only when the row's `id` and `match_id` are both usable and the
+ *     match is one this purge was asked about. Two candidates: the key under
+ *     `ballPathsUserSegment(created_by)`, and the sibling of the recorded
+ *     results key. The sibling exists because `created_by` is nulled when the
+ *     uploader leaves, after which a file written under their uuid cannot be
+ *     recomputed — but it always sits beside the results key the webhook wrote
+ *     in the same delivery. It is taken only when `resultsKeyUserSegment`
+ *     proves that key is EXACTLY `results/{segment}/{match_id}/{id}.json` for
+ *     this row's own ids — the same anchored check the ball-paths reader uses.
+ *     Removing a key that does not exist is a no-op, so the extra candidate is
+ *     safe.
+ *
+ * The cost of a fixed list: a NEW FILE TYPE MUST BE ADDED HERE BY HAND, or it
+ * outlives the match it belongs to.
+ */
+function resultsBucketPaths(
+  jobs: ResultsKeyRow[],
+  matchIds: string[],
+): string[] {
+  const paths = new Set<string>();
+
+  for (const job of jobs) {
+    for (const recorded of [
+      job.results_object_key,
+      job.players_object_key,
+      job.trajectories_object_key,
+    ]) {
+      if (typeof recorded === "string" && recorded !== "") paths.add(recorded);
+    }
+
+    const { id: jobId, match_id: matchId } = job;
+    if (!isKeyId(jobId) || !isKeyId(matchId) || !matchIds.includes(matchId)) {
+      continue;
+    }
+
+    const createdBy =
+      typeof job.created_by === "string" && job.created_by !== ""
+        ? job.created_by
+        : null;
+    paths.add(
+      ballPathsObjectKey({
+        userId: ballPathsUserSegment(createdBy),
+        matchId,
+        jobId,
+      }),
+    );
+
+    const siblingSegment = resultsKeyUserSegment({
+      resultsObjectKey: job.results_object_key,
+      matchId,
+      jobId,
+    });
+    if (siblingSegment !== null) {
+      paths.add(ballPathsObjectKey({ userId: siblingSegment, matchId, jobId }));
+    }
+  }
+
+  return [...paths];
+}
+
 /**
  * Remove every stored object belonging to a set of matches.
  *
  * MUST run BEFORE the match rows are deleted, and that ordering is
- * load-bearing: `video_object_key`, `trimmed_object_key` and
- * `results_object_key` all live on `processing_jobs`, which cascades away with
- * the match. Delete the rows first and the keys are gone, leaving objects that
- * nothing can even name — a permanent multi-GB leak in the video store's case.
+ * load-bearing: `video_object_key`, `trimmed_object_key`,
+ * `results_object_key`, `players_object_key` and `trajectories_object_key` all
+ * live on `processing_jobs`, which cascades away with the match. Delete the
+ * rows first and the keys are gone, leaving objects that nothing can even name
+ * — a permanent multi-GB leak in the video store's case.
+ *
+ * The results-bucket lane removes a FIXED LIST of files per job (see
+ * `resultsBucketPaths`), not a prefix sweep. That list must be extended by
+ * hand for any new file type the pipeline stores. `ball-paths.json` is the one
+ * key in it that is recorded nowhere and so is rebuilt from the row.
  *
  * Extracted from the match DELETE route so account deletion runs the identical
  * cleanup. A foreign-key `ON DELETE CASCADE` would have been the easy way to
@@ -59,7 +162,9 @@ export async function purgeMatchStorage(
   // permanent multi-GB leak whose only trace would otherwise be its absence.
   const { data: jobs, error: jobsError } = await supabase
     .from("processing_jobs")
-    .select("video_object_key, trimmed_object_key, results_object_key")
+    .select(
+      "id, match_id, created_by, video_object_key, trimmed_object_key, results_object_key, players_object_key, trajectories_object_key",
+    )
     .in("match_id", matchIds);
 
   if (jobsError) {
@@ -114,11 +219,14 @@ export async function purgeMatchStorage(
 
     (async () => {
       try {
-        // 2. Raw provider results in Supabase Storage. Same bucket the webhook
-        //    writes to, so this client can remove them directly.
-        const resultKeys = (jobs ?? [])
-          .map((j) => j.results_object_key as string | null)
-          .filter((k): k is string => Boolean(k));
+        // 2. Everything a job left in the results bucket: the vendor's
+        //    strokes, players and trajectories files and our derived ball
+        //    paths. Same bucket the webhook writes to, so this client can
+        //    remove them directly. One `remove`, of a fixed de-duplicated list.
+        const resultKeys = resultsBucketPaths(
+          (jobs ?? []) as ResultsKeyRow[],
+          matchIds,
+        );
 
         if (resultKeys.length > 0) {
           const { error: resultsError } = await supabase.storage

@@ -35,7 +35,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  ballPathsObjectKey,
+  playersObjectKey,
   resultsObjectKey,
+  trajectoriesObjectKey,
   trimmedObjectKey,
   videoObjectKey,
 } from "../src/lib/services/splitstep/object-keys";
@@ -117,11 +120,56 @@ export const VIDEO_LAYOUTS: KeyLayout[] = [
   ),
 ];
 
-/** Vendor results bucket. */
+/**
+ * Vendor results bucket. One layout per file type the store actually writes —
+ * the strokes file plus the September-2026 per-frame siblings and our derived
+ * ball-paths file — each probed through its own builder rather than assumed
+ * from the strokes shape, so a builder that stops carrying the match id
+ * throws here at import instead of silently leaving that file type
+ * unrecognised. All four happen to share one shape (segment count, `results`
+ * prefix, match id third), which is exactly why `attributeKey` never looks at
+ * the file name — but that is a fact this file discovers by calling the real
+ * builders, not one it assumes.
+ *
+ * `orphaned/{external_job_id}/{delivery_id}…` keys — the fallback
+ * `selectDeliveryStorageKeys` returns when no job matched a delivery at all —
+ * are deliberately NOT a layout here and never will be. They carry no match
+ * id, so there is nothing for `matchIdIndex` to point at. And "no
+ * `processing_jobs` row records this key" cannot be read as "this is an
+ * orphan": a delivery not yet adopted by `adoptOrphanedDeliveries` looks
+ * identical from here — unrecorded because it is still waiting, not because
+ * its match is gone. Leaving these unattributed means the sweeper reports and
+ * skips them, which is the only safe answer until adoption resolves them into
+ * a real results key.
+ */
 export const RESULTS_LAYOUTS: KeyLayout[] = [
   layoutFrom(
     "results/{user}/{match}/{job}.json",
     resultsObjectKey({
+      userId: PROBE_USER,
+      matchId: PROBE_MATCH,
+      jobId: PROBE_JOB,
+    }),
+  ),
+  layoutFrom(
+    "results/{user}/{match}/{job}.players.json",
+    playersObjectKey({
+      userId: PROBE_USER,
+      matchId: PROBE_MATCH,
+      jobId: PROBE_JOB,
+    }),
+  ),
+  layoutFrom(
+    "results/{user}/{match}/{job}.trajectories.json",
+    trajectoriesObjectKey({
+      userId: PROBE_USER,
+      matchId: PROBE_MATCH,
+      jobId: PROBE_JOB,
+    }),
+  ),
+  layoutFrom(
+    "results/{user}/{match}/{job}.ball-paths.json",
+    ballPathsObjectKey({
       userId: PROBE_USER,
       matchId: PROBE_MATCH,
       jobId: PROBE_JOB,

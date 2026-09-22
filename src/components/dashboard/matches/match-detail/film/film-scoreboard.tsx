@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -11,52 +17,118 @@ import {
   anchorPosition,
   clampBoardPosition,
   nearestAnchor,
-  neighbourAnchor,
+  nudgeBoard,
   parseBoardAnchor,
   type BoardAnchor,
-  type BoardInsets,
+  type BoardArrowKey,
   type BoardPosition,
   type BoardSize,
 } from "./board-position";
-import type { Board } from "./film-score";
+import {
+  footLine,
+  setTrackTone,
+  type Board,
+  type SetTrackTone,
+} from "./film-score";
 
 /**
- * The board and the point line (handoff F1/F2).
+ * The board: one 236px slab (handoff C1).
  *
- * Two 32px rows on rgba(13,13,13,.8): a 184px name panel on a 5% wash with
- * a 5px serve dot, the set columns in 12px mono on 24px centred cells (45%
- * white when settled, 85% in play), and the live game score in a 40px cell
- * behind a 1px inset rule. The point line sits under it, indented 12px so
- * its mono score lands under the names. Both survive the chrome collapse —
- * they are what the screen IS, not a control.
+ * Head is a micro "Playing" / "Paused" against a mono clock. Under it two
+ * rows 11px apart — name (you 13/500 white, the opponent 13/400 at 72%), a
+ * 6px blue serve dot, then a right-aligned mono group of one 11px set track
+ * per set column and a 22px game cell. A 14% hairline closes it off above a
+ * foot that pairs the 22px winner pill with the point's name. Every number
+ * still comes from `boardAt()` (`film-score.ts`), the same one the report
+ * rail reads. It survives the chrome collapse at 82% (`dim`) — it is what
+ * the screen IS, not a control.
  *
- * ── Movable, with resting spots ─────────────────────────────────────────────
- * Wherever it sits it covers some of the court, so it can be moved. It drags
- * freely under the pointer while a ghost outline shows the resting spot it
- * will land in; on release it glides there (`board-position.ts` has the six
- * spots and the clearances around the room's chrome). Keyboard: focus it and
- * the arrows walk the spots; 0 or a double-click puts it back top-left. The
- * spot is remembered per viewer, and the right-hand spots step aside while the
- * points drawer is open. The room's own arrow keys stand down while the board
- * has focus (`data-film-own-keys`).
+ * ── Movable, with four resting corners ──────────────────────────────────────
+ * Wherever it sits it covers some of the court, so it can be moved. It moves
+ * free — under the pointer, or 8px at a time by arrow key (40px with shift) —
+ * while a board-sized ghost shows the corner it will land in. Letting go, or
+ * dropping it with Space, snaps it to the nearest corner and remembers it for
+ * this viewer; Escape while it is held puts it back where the move began and
+ * remembers nothing (`board-position.ts` owns the four corners and the
+ * clearances around the room's chrome). The drawer never displaces it — R6:
+ * "the board is the only movable object", and it is the viewer who moves it.
+ * The room's own keys stand down while the board has focus
+ * (`data-film-own-keys`), which is what lets Space lift instead of pausing.
  */
 
-/** The glide into a resting spot, and the ghost's hop between spots. */
+/** The glide into a resting corner, and the ghost's hop between corners. */
 const SETTLE_CLASS =
   "transition-[left,top] duration-[360ms] ease-[var(--ease-out-expo)] motion-reduce:transition-none";
+
+/** How each landing is spoken. */
+const ANCHOR_LABEL: Record<BoardAnchor, string> = {
+  "top-left": "top left",
+  "top-right": "top right",
+  "bottom-left": "bottom left",
+  "bottom-right": "bottom right",
+};
+
+/** The two tones a set track is drawn in. */
+const SET_TRACK_COLOR: Record<SetTrackTone, string> = {
+  won: "#FFFFFF",
+  lost: "rgba(255,255,255,0.42)",
+};
+
+/** "G. Revelli" → "GR". The winner pill is 22px, so two letters at most. */
+function initials(name: string): string {
+  const letters: string[] = [];
+  for (const part of name.split(/\s+/)) {
+    const letter = part.match(/\p{L}/u)?.[0];
+    if (letter) letters.push(letter.toUpperCase());
+  }
+  if (letters.length === 0) return "";
+  return letters.length === 1
+    ? letters[0]
+    : letters[0] + letters[letters.length - 1];
+}
+
+function arrowKey(key: string): BoardArrowKey | null {
+  return key === "ArrowLeft" ||
+    key === "ArrowRight" ||
+    key === "ArrowUp" ||
+    key === "ArrowDown"
+    ? key
+    : null;
+}
 
 export function FilmScoreboard({
   board,
   pointName,
-  collapsed,
-  rightInset = 0,
+  playing,
+  elapsed,
+  saved,
+  wonByYou,
+  dim,
+  onRest,
 }: {
   board: Board | null;
   /** The analysis's own string for the current point, or null between points. */
   pointName: string | null;
-  collapsed: boolean;
-  /** Extra room kept on the right — the open points drawer's width. */
-  rightInset?: number;
+  /** Drives the head's micro status: "Playing" or "Paused". */
+  playing: boolean;
+  /** The film clock, already formatted ("41:12"). */
+  elapsed: string;
+  /** Whether the point in play is bookmarked — the foot's "· saved". */
+  saved: boolean;
+  /**
+   * Who took the point, resolved against `useMatchSides()` by the room
+   * (`wonByPlayer1 === sides.you.isPlayer1`), never from player1/player2
+   * order. Null between points: the frame does not say whether the pill shows
+   * there, so it is omitted rather than guessed at.
+   */
+  wonByYou: boolean | null;
+  /** The chrome is collapsed (R2); the slab stays, at 82%. */
+  dim: boolean;
+  /**
+   * Fires with the resting corner and the measured board size whenever either
+   * changes — what the court needs to keep the board's column beneath it.
+   */
+  onRest?: (anchor: BoardAnchor, size: BoardSize) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [anchor, setAnchor] = useState<BoardAnchor>(() => {
@@ -80,29 +152,28 @@ export function FilmScoreboard({
   // remembered spot straight where it belongs instead of flying it in from
   // the top-left fallback every time the room opens.
   const [placed, setPlaced] = useState(false);
-  // The free position under the pointer, only while dragging.
-  const [dragAt, setDragAt] = useState<BoardPosition | null>(null);
+  // Where the board is while it is being moved — under the pointer, or nudged
+  // by the arrows. Null whenever it is resting in its corner.
+  const [free, setFree] = useState<BoardPosition | null>(null);
+  // A keyboard hold: Space lifted it, or an arrow nudged it. It ends on a
+  // drop (Space), on Escape, or when focus leaves.
+  const [held, setHeld] = useState(false);
+  // The corner the last landing put it in, spoken politely once it arrives.
+  // `seq` counts the landings so that coming back to the same corner replaces
+  // the live region's text node and is announced again.
+  const [landed, setLanded] = useState<{
+    anchor: BoardAnchor;
+    seq: number;
+  } | null>(null);
   const drag = useRef<{
     pointerX: number;
     pointerY: number;
     start: BoardPosition;
+    /** A click is not a drag: nothing lifts until the pointer travels 3px. */
+    moved: boolean;
   } | null>(null);
 
-  // When the drawer closes, the right-hand spots come back — but the sheet is
-  // still sliding out over them. Holding the board's return a beat keeps it
-  // from gliding underneath the leaving drawer. Derived during render from the
-  // change in `rightInset`; any move of the board's own clears it.
-  const [lastInset, setLastInset] = useState(rightInset);
-  const [holdReturn, setHoldReturn] = useState(false);
-  if (rightInset !== lastInset) {
-    setLastInset(rightInset);
-    setHoldReturn(rightInset < lastInset);
-  }
-
-  const insets: BoardInsets = {
-    ...BASE_BOARD_INSETS,
-    right: BASE_BOARD_INSETS.right + rightInset,
-  };
+  const insets = BASE_BOARD_INSETS;
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -127,34 +198,64 @@ export function FilmScoreboard({
   const resting = sizes
     ? anchorPosition(anchor, sizes.board, sizes.room, insets)
     : { left: BASE_BOARD_INSETS.left, top: BASE_BOARD_INSETS.top };
-  const position = dragAt ?? resting;
+  const position = free ?? resting;
+  // The corner a free board would land in, and the ghost sitting in it. Both
+  // a pointer drag and a keyboard hold move the board free, so both draw it.
   const target =
-    dragAt && sizes
-      ? nearestAnchor(dragAt, sizes.board, sizes.room, insets)
-      : null;
+    free && sizes ? nearestAnchor(free, sizes.board, sizes.room, insets) : null;
   const ghost =
     target && sizes
       ? anchorPosition(target, sizes.board, sizes.room, insets)
       : null;
 
-  const settle = useCallback((next: BoardAnchor, persist: boolean) => {
-    setHoldReturn(false);
+  const boardWidth = sizes?.board.width;
+  const boardHeight = sizes?.board.height;
+  const onRestRef = useRef(onRest);
+  useEffect(() => {
+    onRestRef.current = onRest;
+  });
+  // The court shares the board's column, so it needs the corner and the size
+  // the board actually measured — not the corner alone.
+  useEffect(() => {
+    if (boardWidth == null || boardHeight == null) return;
+    onRestRef.current?.(anchor, { width: boardWidth, height: boardHeight });
+  }, [anchor, boardWidth, boardHeight]);
+
+  /** Lands the board in a corner and remembers it for this viewer. */
+  const settle = useCallback((next: BoardAnchor) => {
+    setFree(null);
+    setHeld(false);
     setAnchor(next);
+    setLanded((last) => ({ anchor: next, seq: (last?.seq ?? 0) + 1 }));
     try {
-      if (persist) localStorage.setItem(BOARD_POSITION_STORAGE_KEY, next);
-      else localStorage.removeItem(BOARD_POSITION_STORAGE_KEY);
+      localStorage.setItem(BOARD_POSITION_STORAGE_KEY, next);
     } catch {
-      /* private window or storage blocked — the spot just isn't kept */
+      /* private window or storage blocked — the corner just isn't kept */
     }
   }, []);
 
+  /** Drops a free board into the corner it is closest to. */
+  const drop = (at: BoardPosition) => {
+    if (!sizes) return;
+    settle(nearestAnchor(at, sizes.board, sizes.room, insets));
+  };
+
+  /**
+   * Puts a held board back where the move began. The hold never touched
+   * `anchor`, so letting the free position go returns it exactly there, and
+   * nothing is written to storage.
+   */
+  const cancelHold = () => {
+    setFree(null);
+    setHeld(false);
+  };
+
   const endDrag = (commit: boolean) => {
-    const at = dragAt;
+    const d = drag.current;
     drag.current = null;
-    setDragAt(null);
-    if (commit && at && sizes) {
-      settle(nearestAnchor(at, sizes.board, sizes.room, insets), true);
-    }
+    if (!d?.moved) return;
+    if (commit && free) drop(free);
+    else cancelHold();
   };
 
   return (
@@ -206,16 +307,20 @@ export function FilmScoreboard({
             start: roomBox
               ? { left: box.left - roomBox.left, top: box.top - roomBox.top }
               : position,
+            // Grabbing a board that is already held by the keyboard continues
+            // that move rather than snapping it back to its corner first.
+            moved: held,
           };
+          setHeld(false);
         }}
         onPointerMove={(e) => {
           const d = drag.current;
           if (!d || !sizes) return;
           const dx = e.clientX - d.pointerX;
           const dy = e.clientY - d.pointerY;
-          // A click is not a drag: nothing lifts until the pointer travels.
-          if (!dragAt && Math.hypot(dx, dy) < 3) return;
-          setDragAt(
+          if (!d.moved && Math.hypot(dx, dy) < 3) return;
+          d.moved = true;
+          setFree(
             clampBoardPosition(
               { left: d.start.left + dx, top: d.start.top + dy },
               sizes.board,
@@ -236,119 +341,195 @@ export function FilmScoreboard({
         onLostPointerCapture={() => {
           if (drag.current) endDrag(true);
         }}
-        onDoubleClick={() => settle(DEFAULT_BOARD_ANCHOR, false)}
         onKeyDown={(e) => {
-          if (e.key === "0") {
+          if (!sizes) return;
+          const arrow = arrowKey(e.key);
+          if (arrow) {
+            // Nudging picks the board up if it was resting, so the ghost shows
+            // where it would land and Space or Escape can finish the move.
             e.preventDefault();
-            settle(DEFAULT_BOARD_ANCHOR, false);
+            setHeld(true);
+            setFree(
+              nudgeBoard(position, arrow, e.shiftKey, sizes.board, sizes.room),
+            );
             return;
           }
-          if (
-            e.key === "ArrowLeft" ||
-            e.key === "ArrowRight" ||
-            e.key === "ArrowUp" ||
-            e.key === "ArrowDown"
-          ) {
+          if (e.key === " ") {
             e.preventDefault();
-            settle(neighbourAnchor(anchor, e.key), true);
+            if (free) drop(free);
+            else {
+              setHeld(true);
+              setFree(position);
+            }
+            return;
+          }
+          if (e.key === "Escape" && held) {
+            // The room's Escape closes the drawer or the room; a held board
+            // takes it first, and only while it is held.
+            e.preventDefault();
+            e.stopPropagation();
+            cancelHold();
           }
         }}
+        onBlur={(e) => {
+          // A held board that loses focus has no keys left to finish the move,
+          // so it lands where it stands.
+          if (!held || e.currentTarget.contains(e.relatedTarget)) return;
+          if (free) drop(free);
+          else setHeld(false);
+        }}
         className={cn(
-          "absolute flex touch-none flex-col items-start gap-2 rounded-[var(--radius-element)] select-none focus-visible:outline-none",
-          dragAt
-            ? "cursor-grabbing"
-            : cn(
-                "cursor-grab",
-                placed && SETTLE_CLASS,
-                holdReturn && "delay-[180ms]",
-              ),
+          // A bare shell around the slab: it shrink-wraps it, so the measured
+          // size the corners are figured from is the slab's own.
+          "absolute flex touch-none rounded-[var(--radius-dropdown)] select-none",
+          free ? "cursor-grabbing" : cn("cursor-grab", placed && SETTLE_CLASS),
+          // Held is the focus outline at full weight (R6).
+          held && "shadow-[var(--focus-ring)]",
         )}
         style={{ left: position.left, top: position.top }}
       >
         <span id="film-board-hint" className="sr-only">
-          Drag it, or use the arrow keys, to move it between the corners and the
-          middle of the top and bottom edges. Press 0 or double-click to put it
-          back.
+          Drag the scoreboard to move it, or press the arrow keys to nudge it 8
+          pixels at a time — 40 with Shift. Space picks it up and drops it into
+          the nearest corner; Escape cancels the move.
+        </span>
+        <span aria-live="polite" className="sr-only">
+          {landed && (
+            <span key={landed.seq}>
+              Scoreboard in the {ANCHOR_LABEL[landed.anchor]} corner.
+            </span>
+          )}
         </span>
         {board && (
           <div
-            role="table"
-            aria-label="Score"
-            className="inline-flex flex-col overflow-hidden rounded-[var(--radius-element)] bg-[rgba(13,13,13,0.8)] shadow-[var(--shadow-dropdown)]"
+            className="box-border flex flex-col"
+            style={{
+              width: 236,
+              gap: 14,
+              padding: "14px 15px 12px",
+              borderRadius: "var(--radius-dropdown)",
+              background: "rgba(13,13,13,0.74)",
+              backdropFilter: "blur(8px)",
+              fontFamily: "var(--font-sans)",
+              opacity: dim ? 0.82 : 1,
+            }}
           >
-            {board.rows.map((row, r) => (
-              <div key={row.name} role="row" className="contents">
-                {r === 1 && (
-                  <div aria-hidden="true" className="h-px bg-white/10" />
-                )}
-                <div className="flex h-8 items-stretch">
-                  <div
-                    role="rowheader"
-                    className="flex w-[184px] items-center gap-2 bg-white/5 px-3"
+            <div className="flex items-baseline gap-2">
+              {/* `.text-micro` is unlayered and would beat a Tailwind colour
+                  utility, so the dark-scope alpha is set inline. */}
+              <span
+                className="text-micro"
+                style={{ color: "rgba(255,255,255,0.55)" }}
+              >
+                {playing ? "Playing" : "Paused"}
+              </span>
+              <span
+                className="mono tabular ml-auto"
+                style={{ fontSize: 10, color: "rgba(255,255,255,0.45)" }}
+              >
+                {elapsed}
+              </span>
+            </div>
+
+            <div
+              role="table"
+              aria-label="Score"
+              className="flex flex-col gap-[11px]"
+            >
+              {board.rows.map((row, r) => {
+                const you = r === 0;
+                const other = board.rows[you ? 1 : 0];
+                return (
+                  <span
+                    key={row.name}
+                    role="row"
+                    className="flex min-w-0 items-center gap-[7px]"
                   >
                     <span
-                      aria-hidden="true"
-                      className={cn(
-                        "h-[5px] w-[5px] shrink-0 rounded-[var(--radius-pill)]",
-                        row.serving ? "bg-white" : "bg-transparent",
-                      )}
-                    />
-                    <span className="truncate text-[12px] font-medium text-white">
+                      role="rowheader"
+                      className="min-w-0 truncate"
+                      style={{
+                        fontSize: 13,
+                        fontWeight: you ? 500 : 400,
+                        color: you ? "#FFFFFF" : "rgba(255,255,255,0.72)",
+                      }}
+                    >
                       {row.name}
                     </span>
+                    <span
+                      aria-hidden="true"
+                      className="h-[6px] w-[6px] shrink-0 rounded-[var(--radius-pill)]"
+                      style={{
+                        background: row.serving ? "var(--blue)" : "transparent",
+                      }}
+                    />
                     {row.serving && <span className="sr-only">, serving</span>}
-                  </div>
-                  <div className="flex items-center px-1">
-                    {row.sets.map((games, i) => (
+                    <span
+                      role="cell"
+                      className="mono tabular ml-auto inline-flex shrink-0 items-center gap-2 text-[13px] whitespace-nowrap"
+                    >
+                      {row.sets.map((games, i) => (
+                        <span
+                          key={i}
+                          className="w-[11px] text-right"
+                          style={{
+                            color:
+                              SET_TRACK_COLOR[
+                                setTrackTone(games, other.sets[i] ?? null)
+                              ],
+                          }}
+                        >
+                          {games ?? ""}
+                        </span>
+                      ))}
                       <span
-                        key={i}
-                        role="cell"
-                        className="mono tabular w-6 text-center text-[12px]"
-                        style={{
-                          color:
-                            i === board.liveSet
-                              ? "rgba(255,255,255,0.85)"
-                              : "rgba(255,255,255,0.45)",
-                        }}
+                        className="w-[22px] text-right"
+                        style={{ color: "#FFFFFF" }}
                       >
-                        {games ?? ""}
+                        {row.game ?? ""}
                       </span>
-                    ))}
-                  </div>
-                  <div
-                    role="cell"
-                    className="flex w-10 items-center justify-center shadow-[inset_1px_0_0_rgba(255,255,255,0.14)]"
-                  >
-                    <span className="mono tabular text-[12px] text-white">
-                      {row.game ?? ""}
                     </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+                  </span>
+                );
+              })}
+            </div>
 
-        {(board?.pointLine || pointName) && (
-          <div
-            className="flex items-baseline gap-[9px] pl-3"
-            style={{ textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}
-          >
-            {board?.pointLine && (
-              <span className="mono tabular text-[10px] text-white/55">
-                {board.pointLine}
-              </span>
-            )}
-            {pointName && (
+            <div
+              className="flex items-center gap-[9px] pt-[9px]"
+              style={{ borderTop: "1px solid rgba(255,255,255,0.14)" }}
+            >
+              {/* Between points nobody has won anything yet. The frame does
+                  not draw that case, so the pill is omitted rather than
+                  invented, and the foot keeps the full width. */}
+              {wonByYou !== null && (
+                <span
+                  aria-label={`${board.rows[wonByYou ? 0 : 1].name} won the point`}
+                  className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[var(--radius-pill)]"
+                  style={{
+                    background: wonByYou
+                      ? "var(--blue)"
+                      : "rgba(255,255,255,0.14)",
+                    fontSize: 10,
+                    fontWeight: 500,
+                    color: "#FFFFFF",
+                  }}
+                >
+                  {initials(board.rows[wonByYou ? 0 : 1].name)}
+                </span>
+              )}
               <span
-                className="text-[11px] font-medium whitespace-nowrap"
-                style={{
-                  color: collapsed ? "rgba(255,255,255,0.9)" : "#FFFFFF",
-                }}
+                className="min-w-0 truncate"
+                style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}
               >
-                {pointName}
+                {footLine(pointName, saved, {
+                  set: board.liveSet + 1,
+                  game: board.gameNumber,
+                  serverName: (
+                    board.rows.find((row) => row.serving) ?? board.rows[0]
+                  ).name,
+                })}
               </span>
-            )}
+            </div>
           </div>
         )}
       </div>
