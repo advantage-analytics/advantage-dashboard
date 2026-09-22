@@ -131,7 +131,10 @@ export interface FilmTransportProps {
 export function FilmTransport(p: FilmTransportProps) {
   // Nothing on the bar is disabled, so the controls that need something to
   // act on carry the check themselves: with no walkable sequence a chevron
-  // is a no-op, and with no point playing the bookmark has nothing to save.
+  // is a no-op, and before the playhead has reached its first point the
+  // bookmark has nothing to save (`saved` is null only there — after that it
+  // tracks the last point REACHED, so the control still works in the dead
+  // time after a rally, which is when it is reached for).
   const stepBack = () => {
     if (p.canStep) p.onStep(-1);
   };

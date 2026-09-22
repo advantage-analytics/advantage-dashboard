@@ -464,6 +464,23 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     ],
   );
   const activePoint = playingStop?.point ?? null;
+  /**
+   * The point a "save that" means (T13).
+   *
+   * Saving is an act about the point you just WATCHED, and the dead time after
+   * a rally is exactly when somebody reaches for it — so the bookmark control
+   * and the `S` key read `boardStop`, the last point reached, never the
+   * playing one. `activePoint` is null in that gap, and the control used to
+   * fall silently through to nothing at all. The shell's own `S` has always
+   * read the last point reached (`activeStopAt`), so this also ends a
+   * disagreement between the two surfaces.
+   *
+   * The board's "· saved" glyph reads this same point, so the foot and the
+   * control can never name different points. Everything that NAMES the point
+   * — the point line, the position counter, the drawer's lit row — stays on
+   * `playingStop` (R7).
+   */
+  const savePoint = boardStop?.point ?? null;
 
   /**
    * The board and the court appear together, or not at all (R11).
@@ -809,8 +826,8 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   );
 
   const toggleSavedActive = useCallback(() => {
-    if (activePoint) p.onToggleSaved(activePoint.id);
-  }, [activePoint, p]);
+    if (savePoint) p.onToggleSaved(savePoint.id);
+  }, [savePoint, p]);
 
   const cycleRate = useCallback(
     (direction: 1 | -1 = 1) => {
@@ -1394,7 +1411,10 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                   }
                   playing={playing}
                   elapsed={formatClock(currentTime)}
-                  saved={activePoint?.saved ?? false}
+                  // The point the bookmark control saves (T13), not the
+                  // playing one — so the glyph and the control can never
+                  // disagree about which point is bookmarked.
+                  saved={savePoint?.saved ?? false}
                   // You/opponent is `useMatchSides()`'s call, never player order.
                   wonByYou={
                     activePoint
@@ -1501,7 +1521,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 rate={rate}
                 looping={looping}
                 skippingDeadTime={skipDead}
-                saved={activePoint ? activePoint.saved : null}
+                saved={savePoint ? savePoint.saved : null}
                 canStep={p.walkStops.length > 0}
                 courtOn={courtOn}
                 onSeek={seek}

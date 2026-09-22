@@ -117,22 +117,19 @@ function FilmRoom({
   entry: MatchFilmEntry;
   unit: DistanceUnit;
 }) {
-  const { match, points: serverPoints } = useMatchData();
+  // The points and their saved flags come from `MatchDataProvider`, not from
+  // a `useState` here: `MatchReportWhen` UNMOUNTS this view when the viewer
+  // switches to Statistics or Shots, so state held here would be re-seeded
+  // from the page's original server render on the way back and every bookmark
+  // toggled since would disappear. `pointsRef` is the provider's
+  // always-current copy of the same array, for the write path below.
+  const { match, points, pointsRef, setPoints } = useMatchData();
   const sides = useMatchSides();
   const supabase = useMemo(() => createClient(), []);
   const playerRef = useRef<FilmPlayerHandle>(null);
   // `--film-t` is written here, so the player's bar and the list's playing
   // rule both move every frame.
   const clockRef = useRef<HTMLDivElement>(null);
-
-  const [points, setPoints] = useState<MatchPoint[]>(serverPoints);
-  // The authoritative copy for the write path. `setPoints`' updater runs
-  // during the NEXT render, so a handler that computed the new flag inside the
-  // updater would still be holding the old value when it built the UPDATE a
-  // line later. Reading and writing through the ref keeps the optimistic
-  // value, the value sent to Postgres, and the value reverted to identical
-  // even when somebody clicks two bookmarks in the same tick.
-  const pointsRef = useRef<MatchPoint[]>(serverPoints);
 
   // `useSearchParams()` can be null outside a Next router (the playback
   // harness mounts this with a bare createRoot); parseCut tolerates that.
@@ -359,7 +356,8 @@ function FilmRoom({
       const optimistic = pointsRef.current.map((p) =>
         p.id === pointId ? { ...p, saved: nextSaved } : p,
       );
-      pointsRef.current = optimistic;
+      // `setPoints` writes the provider's ref and its state together, so the
+      // next read below is already the optimistic array.
       setPoints(optimistic);
 
       const { error } = nextSaved
@@ -375,10 +373,9 @@ function FilmRoom({
       const reverted = pointsRef.current.map((p) =>
         p.id === pointId ? { ...p, saved: before.saved } : p,
       );
-      pointsRef.current = reverted;
       setPoints(reverted);
     },
-    [supabase],
+    [supabase, pointsRef, setPoints],
   );
 
   const activePointId = activePoint?.id ?? null;

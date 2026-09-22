@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
@@ -134,6 +136,27 @@ const POINTS: MatchPoint[] = [
   point("untimed", null, { pointNumber: 4, resultType: "Double Fault" }),
 ];
 
+/**
+ * The `FilmTab` behind the harness's remount seam.
+ *
+ * `MatchReportWhen` unmounts an inactive view, so a switch to Statistics and
+ * back destroys and rebuilds exactly this subtree while the providers above it
+ * stay put. Two synchronous flushes are the shortest honest imitation: the
+ * first really unmounts (the `<video>` and the playback hook go with it), the
+ * second builds a fresh tree.
+ */
+function FilmTabSlot({ video }: { video: MatchVideo }) {
+  const [mounted, setMounted] = useState(true);
+  useEffect(() => {
+    harness.remountFilmTab = () => {
+      flushSync(() => setMounted(false));
+      flushSync(() => setMounted(true));
+    };
+  }, []);
+  // Feet: the shot rows' speeds read in mph, which is what these specs assert.
+  return mounted ? <FilmTab video={video} unit="ft" /> : null;
+}
+
 function match(id: string): Match {
   return {
     id,
@@ -196,9 +219,7 @@ function boot() {
         statsResult={null}
         points={POINTS}
       >
-        {/* Feet: the shot rows' speeds read in mph, which is what these
-            specs assert. */}
-        <FilmTab video={video} unit="ft" />
+        <FilmTabSlot video={video} />
       </MatchDataProvider>
     </WorkspaceProvider>,
   );

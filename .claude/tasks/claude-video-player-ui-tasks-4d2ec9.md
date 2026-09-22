@@ -176,7 +176,7 @@ ready).
 
 ## T13 · Saved points survive a view switch, and the room saves the point just played
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/components/dashboard/matches/match-detail/match-data-provider.tsx (or a new `match-points-provider.tsx` mounted beside it in the (detail) page); src/components/dashboard/matches/match-detail/film/film-tab.tsx (`points`/`pointsRef` L127–134, `handleToggleSaved` L353–383); film-fullscreen.tsx (`toggleSavedActive` L697–702, the `saved` props at L1286 and L1399); tests/fixtures/film-playback-refresh-harness.tsx + tests/fixtures/film-playback-refresh-window.ts; tests/film-playback-refresh.spec.ts
 - **done when:**

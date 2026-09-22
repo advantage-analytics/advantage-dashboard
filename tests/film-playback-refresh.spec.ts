@@ -832,6 +832,67 @@ test("a save refused for a reason other than 23505 reverts", async ({
 });
 
 /* -------------------------------------------------------------------------
+ * A bookmark survives a view switch (T13)
+ *
+ * The Video view really is destroyed when the viewer goes to Statistics
+ * (`MatchReportWhen` renders null for an inactive view), so the saved flags
+ * cannot live inside it. `remountFilmTab()` does exactly that to the tab while
+ * the providers above it stay mounted.
+ * ---------------------------------------------------------------------- */
+
+test("a bookmark survives the Video view being unmounted and rebuilt", async ({
+  page,
+}) => {
+  const matchId = "bookmark-remount";
+  await open(page, matchId);
+
+  await page
+    .locator('[data-point-id="b"] button[aria-label="Bookmark this point"]')
+    .click();
+  await expect(
+    page.locator('[data-point-id="b"] button[aria-label="Remove bookmark"]'),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  await page.evaluate(() =>
+    (window as unknown as FilmRefreshHarnessWindow).remountFilmTab(),
+  );
+
+  // A fresh tab, the same saved point: the flag came back from the provider,
+  // not from the harness's original server array.
+  await expect(
+    page.locator('[data-point-id="b"] button[aria-label="Remove bookmark"]'),
+  ).toHaveAttribute("aria-pressed", "true");
+});
+
+test("a bookmark the database refused is still gone after a rebuild", async ({
+  page,
+}) => {
+  const matchId = "bookmark-remount-refused";
+  await open(page, matchId, { bookmarkOutcome: "refused" });
+
+  await page
+    .locator('[data-point-id="b"] button[aria-label="Bookmark this point"]')
+    .click();
+  // The revert lands before the remount, and the rebuilt tab must not resurrect
+  // the optimistic value the revert threw away.
+  await expect(
+    page.locator(
+      '[data-point-id="b"] button[aria-label="Bookmark this point"]',
+    ),
+  ).toHaveAttribute("aria-pressed", "false");
+
+  await page.evaluate(() =>
+    (window as unknown as FilmRefreshHarnessWindow).remountFilmTab(),
+  );
+
+  await expect(
+    page.locator(
+      '[data-point-id="b"] button[aria-label="Bookmark this point"]',
+    ),
+  ).toHaveAttribute("aria-pressed", "false");
+});
+
+/* -------------------------------------------------------------------------
  * The court card moves like the board (T11)
  *
  * The geometry is `film-board-position.spec.ts`'s; what only a browser can
