@@ -6,7 +6,11 @@ import { TeamSeasonTitleFrame } from "@/components/dashboard/team/team-season-ti
 import { TopMoversFrame } from "@/components/dashboard/team/top-movers";
 import { CourtRecordFrame } from "@/components/dashboard/team/court-record";
 import { DualHistoryFrame } from "@/components/dashboard/team/dual-history";
-import { HomeKpisPending, HomeFooterPending } from "./home-skeleton";
+import {
+  FocusCardPending,
+  HomeKpisPending,
+  HomeFooterPending,
+} from "./home-skeleton";
 
 export function PendingBar({ className = "w-full" }: { className?: string }) {
   return (
@@ -210,7 +214,7 @@ export function TeamHomeSkeleton({ action }: { action?: ReactNode }) {
           <MoversBodyPending />
         </TopMoversFrame>
       }
-      insight={null}
+      insight={<FocusCardPending />}
       court={
         <CourtRecordFrame>
           <CourtBodyPending />
