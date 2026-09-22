@@ -117,12 +117,11 @@ test("the chart literals are the frame's", () => {
   expect(OUT).toBe("#FF6478");
 });
 
-test("a mark holds two seconds at full, fades over three, and is gone at five", () => {
+test("a mark holds two seconds at full, fades over 2.5, and is gone at 4.5", () => {
   expect(markOpacity(10, 10)).toBe(1);
   expect(markOpacity(12, 10)).toBe(1);
-  expect(markOpacity(13.5, 10)).toBe(0.5);
-  expect(markOpacity(14.25, 10)).toBe(0.25);
-  expect(markOpacity(15, 10)).toBe(0);
+  expect(markOpacity(13.25, 10)).toBe(0.5);
+  expect(markOpacity(14.5, 10)).toBe(0);
   expect(markOpacity(20, 10)).toBe(0);
 });
 
@@ -228,7 +227,7 @@ test("a measured landing time beats the estimate, in both directions", () => {
   expect(drawn(nonsense)).toEqual(drawn(at(12.3)));
 });
 
-test("a mark is gone five seconds after its moment, and never drawn early", () => {
+test("a mark is gone 4.5 seconds after its moment, and never drawn early", () => {
   // s1's contact happened at 10.
   expect(contactOf(at(15), "s1")).toBeUndefined();
   // Before the first contact there is nothing to draw at all.

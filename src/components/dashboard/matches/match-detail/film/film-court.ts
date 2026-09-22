@@ -74,16 +74,21 @@ export const OPP = "#94A3B8";
 export const OUT = "#FF6478";
 
 /**
- * ── How long a mark stays on the court (author decision, 2026-09-21) ─────────
+ * ── How long a mark stays on the court (author decision, 2026-09-22) ─────────
  *
- * A mark appears at full opacity at its own moment, holds {@link
+ * A mark reaches full opacity at its own moment, holds {@link
  * MARK_HOLD_SECONDS}, fades linearly over {@link MARK_FADE_SECONDS} and is gone
- * five seconds after it happened. Opacity is a PURE FUNCTION of film time, not
- * of how many shots have been struck since: pausing freezes the court, and
- * seeking backwards un-draws what has not happened yet.
+ * 4.5 seconds after it happened — the fade was shortened from 3 s to 2.5 s so
+ * the court clears a little sooner behind the play. Opacity is a PURE FUNCTION
+ * of film time, not of how many shots have been struck since: pausing freezes
+ * the court, and seeking backwards un-draws what has not happened yet.
+ *
+ * The fade IN is not here: it is one 150 ms keyframe on the mark element
+ * (`film-mark-in`, `globals.css`), because it is keyed to the element's own
+ * mount rather than to the film clock.
  */
 export const MARK_HOLD_SECONDS = 2;
-export const MARK_FADE_SECONDS = 3;
+export const MARK_FADE_SECONDS = 2.5;
 /**
  * Opacity is quantised to this step, so the four-times-a-second playhead does
  * not hand React a new number on every tick.

@@ -73,10 +73,11 @@ export interface FilmCourtProps {
   onSelectMark: (mark: FilmCourtMark) => void;
   /**
    * Anything that draws inside the court box on top of the lines and the
-   * marks, under the readout — today only `FilmCourtBall`. The card knows
-   * nothing about it: the slot takes an element already built, so this file
-   * gains no clock, no paths and no second geometry. Absent, the box's markup
-   * is exactly what it was.
+   * marks, under the readout. Nothing fills it today — the moving ball that
+   * did was removed (author decision, 2026-09-22) — and the slot is kept
+   * because the card knows nothing about what goes in it: it takes an element
+   * already built, so this file gains no clock, no paths and no second
+   * geometry. Absent, the box's markup is exactly what it was.
    */
   overlay?: React.ReactNode;
   /**
@@ -87,11 +88,21 @@ export interface FilmCourtProps {
 }
 
 /**
- * The frame's own easing on the fade. `markOpacity` steps a mark's opacity in
- * 0.05s as the film time passes; this smooths those steps into the continuous
- * 2 s hold / 3 s fade the court is meant to read as.
+ * The frame's own easing on the fade OUT. `markOpacity` steps a mark's opacity
+ * in 0.05s as the film time passes; this smooths those steps into the
+ * continuous 2 s hold / 2.5 s fade the court is meant to read as.
  */
 const MARK_FADE_TRANSITION = "opacity 300ms cubic-bezier(.25,.46,.45,.94)";
+/**
+ * The fade IN, on the mark's own mount (author decision, 2026-09-22): marks
+ * used to pop into existence at full opacity. `film-mark-in` (`globals.css`)
+ * has no `to`, so it rises from 0 to the element's own inline opacity and then
+ * hands the element back to `MARK_FADE_TRANSITION`. Point mode only — in match
+ * mode the whole rally is drawn at once, where 150ms of per-mark entrance
+ * would read as a flicker rather than as a stroke landing.
+ */
+const MARK_IN_ANIMATION =
+  "film-mark-in var(--duration-fast) var(--ease-primary) both";
 /** The live bounce's ring. */
 const RING = "0 0 0 1px rgba(255,255,255,0.85)";
 
@@ -397,6 +408,7 @@ export function FilmCourt({
                 background: contact && !isMatch ? "transparent" : colour,
                 boxShadow: mark.live && !isMatch ? RING : undefined,
                 transition: MARK_FADE_TRANSITION,
+                animation: isMatch ? undefined : MARK_IN_ANIMATION,
               }}
             />
           );

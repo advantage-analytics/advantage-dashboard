@@ -52,3 +52,16 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The author reads the design and, on approval, queues the implementation with `/task-add` pointing at the doc (the doc's Handoff section is the criteria source). Its "Open for the author" items (tiebreak points in the score, PageUp/PageDown as the keys, stacking against a bottom-docked board, the Dartmouth 5-2 vs 4-0 fold) want answers first.
+
+## T6 · Drop the ball's trail; marks fade in fast and out over 2.5 s — done
+
+**gate:** mechanical pass (twice — once on the original criteria, once after the author amended criteria 1/2/5 mid-run with "remove the white moving ball as well") · completion `VERDICT: pass` · widget-states: loading/empty/error unchanged on `film-court-card.tsx` and `film-fullscreen.tsx` (an overlay removed, a mark entrance animation added; no fallback, fetch exit or `return null` touched)
+
+**changed:** The moving ball is gone entirely: `film-court-ball.tsx` deleted; `film-fullscreen.tsx` loses only the `FilmCourtBall` import and the `overlay={<FilmCourtBall …/>}` prop on `<FilmCourt>` (`useBallPaths` + the `bounceTimes` memo stay for T4's bounce marks); the card's `overlay` slot doc no longer names it. `film-ball.ts` drops `ballAt`, `BallAt`, `BallPoint`, `BALL_TAIL_SECONDS` and their private helpers, keeping `FilmBallPath`, `parseBallPathsFile`, `filmBallPaths`, `bounceTimesByShot`; `tests/film-ball.spec.ts` loses the whole `ballAt` section. `film-court.ts`: `MARK_FADE_SECONDS` 3 → 2.5 (hold stays 2; gone at 4.5 s, dated 2026-09-22); `tests/film-court.spec.ts` re-pinned at 12/13.25/14.5 → 1/0.5/0. `globals.css` gains `@keyframes film-mark-in { from { opacity: 0 } }` beside `viz-vt-rise-in`; `film-court-card.tsx` runs `MARK_IN_ANIMATION` (`film-mark-in var(--duration-fast) var(--ease-primary) both`) on point-mode marks only, `MARK_FADE_TRANSITION` unchanged for the fade-out. No reduced-motion opt-out (opacity-only).
+
+**follow-ups:**
+
+1. `film-ball.ts` is now only a bounce-time lookup and its "two clocks" header still frames it as the moving ball's module — rename (e.g. `film-bounce-times.ts`) once settled.
+2. `FilmCourtCardProps.overlay` has no caller; drop it and the `{overlay}` render slot if nothing fills it by the next sweep.
+3. The `film-mark-in` fade-in has no automated coverage and no eyes-on pass — a spec asserting the mark button carries the animation in point mode and none in match mode would pin criterion 4; the room wants a look in the browser.
+4. `film-motion.ts`'s `reducedMotionNow` may have lost its last film-subtree caller — check before the next motion task (T9).

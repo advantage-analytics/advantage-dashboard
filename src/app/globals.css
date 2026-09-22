@@ -735,6 +735,20 @@
   }
 }
 
+/* The film room's court marks (film-court-card.tsx) entering. A mark's
+   steady-state opacity is a pure function of film time (markOpacity), so it
+   is written INLINE on the element and changes as the playhead moves - which
+   is exactly why this keyframe has no `to`: it animates from 0 up to whatever
+   that inline opacity currently is, instead of pinning a mark that is already
+   half-faded back to 1. 150ms, so a mark arrives with the stroke rather than
+   popping. No reduced-motion opt-out on purpose: DS foundations keep
+   opacity-only fades under reduced motion, and this is opacity only. */
+@keyframes film-mark-in {
+  from {
+    opacity: 0;
+  }
+}
+
 /* :only-child is what scopes these to a GENUINE entrance: a named
    view-transition-group with only a "new" image (no "old" to pair with)
    has exactly one child in its ::view-transition-image-pair, which is what

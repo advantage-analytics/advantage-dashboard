@@ -34,7 +34,6 @@ import {
 } from "./board-position";
 import { bounceTimesByShot } from "./film-ball";
 import { matchMarks, pointMarks, type CourtView } from "./film-court";
-import { FilmCourtBall } from "./film-court-ball";
 import {
   FILM_COURT_SIZE,
   FilmCourt,
@@ -1320,21 +1319,6 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                       // The header x and the transport's control are one toggle.
                       onHide={toggleCourt}
                       onSelectMark={selectMark}
-                      // The ball only where it means something: a point is
-                      // playing, the court is drawn the way the camera sees it
-                      // (`toCourtPercent(x, y, true)` is then the film's own
-                      // frame) and the match actually has trajectories.
-                      overlay={
-                        courtCardMode === "point" &&
-                        courtView === "camera" &&
-                        ballPaths.length > 0 ? (
-                          <FilmCourtBall
-                            paths={ballPaths}
-                            videoRef={videoRef}
-                            playing={playing}
-                          />
-                        ) : undefined
-                      }
                       seekKey={seekKey}
                     />
                   </div>
