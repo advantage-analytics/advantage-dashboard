@@ -78,9 +78,14 @@ One shape for every person a card lists — members, invitees, usage lines:
   whom no row was ever a control. Picking commits at once.
 - **Pending → outlined pill + dashed-ring avatar.** An `Invited` row is a state
   of the same list, not a different kind of row. The outlined pill deliberately
-  matches the outlined-**and-blue** seat box representing that same invite —
-  `SeatBoxes` also draws a free seat as an outline, in grey, so it's the
-  colour that marks the invite, not the outline alone.
+  matches the **dashed** blue seat box representing that same invite, and the
+  dash matches the avatar's dashed ring: invited is dashed on every surface.
+  `SeatBoxes` draws a free seat as a solid grey (`--ink-400`) outline, so the
+  dash, not the colour alone, is what tells an invite from a free seat.
+  _Supersedes (2026-09-22): "The outlined pill deliberately matches the
+  outlined-**and-blue** seat box representing that same invite — `SeatBoxes`
+  also draws a free seat as an outline, in grey, so it's the colour that marks
+  the invite, not the outline alone."_
 - **`You` is a grey pill, and only `YouPill` draws it** (`ui/you-pill.tsx`;
   design owner's call, 2026-09-13). `StatePill`'s geometry and colour — 18px,
   10/500 `--ink-700` on `--surface-subtle`. It marks identity, not standing, so

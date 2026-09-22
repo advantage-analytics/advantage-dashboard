@@ -9,6 +9,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import type { SeatUsage } from "@/lib/data/team-roster-server";
+import { useDescribedBody } from "@/hooks/use-described-body";
 
 /**
  * The shell the roster's dialogs share.
@@ -49,6 +50,7 @@ export function RosterDialog({
   width = 520,
   children,
   footer,
+  describedBodyId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -59,10 +61,18 @@ export function RosterDialog({
   width?: 440 | 480 | 520 | 560;
   children: React.ReactNode;
   footer: React.ReactNode;
+  /**
+   * The id of the confirm's consequence prose, while one is showing. It joins
+   * the description a screen reader announces on open; a form body never
+   * should, so this is opt-in rather than the whole of `children`.
+   */
+  describedBodyId?: string;
 }) {
+  const { descriptionRef, contentProps } = useDescribedBody(describedBodyId);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        {...contentProps}
         hideCloseButton
         className="gap-0 border-0 bg-[var(--surface-card)] p-0 sm:max-w-none"
         style={{
@@ -78,7 +88,10 @@ export function RosterDialog({
               <DialogTitle className="text-left text-[16px] font-medium text-[var(--ink-900)]">
                 {title}
               </DialogTitle>
-              <DialogDescription className="mt-1 text-left text-[12px] leading-[1.55] text-[var(--ink-600)]">
+              <DialogDescription
+                ref={descriptionRef}
+                className="mt-1 text-left text-[12px] leading-[1.55] text-[var(--ink-600)]"
+              >
                 {description}
               </DialogDescription>
             </div>
@@ -137,9 +150,10 @@ export { DialogProblem } from "@/components/ui/dialog-problem";
 /**
  * The program's seats as unit boxes — the design system's form for a small
  * countable quota: 8px squares on a 2px radius (circles are for people).
- * One grammar: outline = not spent, solid = spent. A grey (`--ink-300`)
- * hairline is a free seat; a blue hairline is one held by an open
- * invitation. Solid blue is a player on the roster, 40%-opacity solid blue
+ * One grammar: outline = not spent, solid = spent. A grey (`--ink-400`)
+ * hairline is a free seat; a dashed blue outline is one held by an open
+ * invitation — dashed like the invited avatar's ring, so it reads apart from a
+ * free seat without colour. Solid blue is a player on the roster, 40%-opacity solid blue
  * is what the action in front of the coach would take. `full` paints every
  * box `--danger`: at the cap the boxes ARE the message, and severity rides
  * the fill, never the figure alone.
@@ -174,11 +188,14 @@ export function SeatBoxes({
               "size-2 rounded-[2px]",
               kind === "full" && "bg-[var(--danger)]",
               kind === "used" && "bg-[var(--blue)]",
-              kind === "held" && "shadow-[inset_0_0_0_1px_var(--blue)]",
+              // Dashed, like the invited avatar's ring: an invitation reads
+              // apart from a free seat without relying on colour.
+              kind === "held" && "border border-dashed border-[var(--blue)]",
               // The seat this action takes: the next square, in a lighter
               // step of the same blue — "one more of these", read without a key.
               kind === "adding" && "bg-[var(--blue)] opacity-40",
-              kind === "free" && "shadow-[inset_0_0_0_1px_var(--ink-300)]",
+              // ink-400: ink-300 all but vanished on the note's surface-subtle.
+              kind === "free" && "shadow-[inset_0_0_0_1px_var(--ink-400)]",
             )}
           />
         );

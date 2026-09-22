@@ -1,6 +1,7 @@
 "use client";
 
 import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
+import { useId } from "react";
 import { Loader2, X } from "lucide-react";
 import {
   AlertDialog,
@@ -9,6 +10,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DialogProblem } from "@/components/ui/dialog-problem";
+import { useDescribedBody } from "@/hooks/use-described-body";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
@@ -84,6 +86,12 @@ export function ConfirmDialog({
   /** For dialogs opened from inside a clickable row, which must not see the click. */
   onContentClick?: (event: React.MouseEvent) => void;
 }) {
+  // The body is what the confirm costs, so it is read with the contract on
+  // open rather than left for a screen reader to stumble on.
+  const bodyId = useId();
+  const { descriptionRef, contentProps } = useDescribedBody(
+    children ? bodyId : undefined,
+  );
   return (
     <AlertDialog
       open={open}
@@ -101,6 +109,7 @@ export function ConfirmDialog({
         }}
         onCloseAutoFocus={onCloseAutoFocus}
         onClick={onContentClick}
+        {...contentProps}
       >
         <div className="flex flex-col gap-[18px] p-6 pb-5">
           <div className="flex items-start gap-2.5">
@@ -108,7 +117,10 @@ export function ConfirmDialog({
               <AlertDialogTitle className="text-left text-[16px] font-medium text-[var(--ink-900)]">
                 {title}
               </AlertDialogTitle>
-              <AlertDialogDescription className="mt-1 text-left text-[12px] leading-[1.55] text-pretty text-[var(--ink-600)]">
+              <AlertDialogDescription
+                ref={descriptionRef}
+                className="mt-1 text-left text-[12px] leading-[1.55] text-pretty text-[var(--ink-600)]"
+              >
                 {description}
               </AlertDialogDescription>
             </div>
@@ -123,7 +135,11 @@ export function ConfirmDialog({
             </button>
           </div>
 
-          {children}
+          {children && (
+            <div id={bodyId} className="flex flex-col gap-[18px]">
+              {children}
+            </div>
+          )}
 
           <DialogProblem message={error} />
 
@@ -190,9 +206,19 @@ export function ConfirmDialog({
  * Two paragraphs at most. Past that the facts are genuinely unrelated and the
  * dialog wants grouping, not prose — see the note in `reference/chrome.md`.
  */
-export function ConfirmProse({ children }: { children: React.ReactNode }) {
+export function ConfirmProse({
+  id,
+  children,
+}: {
+  /** Pass the dialog's `describedBodyId` so the prose is read on open. */
+  id?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="flex flex-col gap-2.5 text-[12px] leading-[1.6] text-pretty text-[var(--ink-700)]">
+    <div
+      id={id}
+      className="flex flex-col gap-2.5 text-[12px] leading-[1.6] text-pretty text-[var(--ink-700)]"
+    >
       {children}
     </div>
   );

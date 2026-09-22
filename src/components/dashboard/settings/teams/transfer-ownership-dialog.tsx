@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   DialogProblem,
@@ -54,6 +54,7 @@ export function TransferOwnershipDialog({
   const router = useRouter();
   const [step, setStep] = useState<"confirm" | "done">("confirm");
   const [typed, setTyped] = useState("");
+  const proseId = useId();
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -115,6 +116,7 @@ export function TransferOwnershipDialog({
 
   return (
     <RosterDialog
+      describedBodyId={proseId}
       open={open}
       onOpenChange={onOpenChange}
       width={440}
@@ -138,13 +140,13 @@ export function TransferOwnershipDialog({
             disabled={!armed}
             loading={isPending}
           >
-            Transfer ownership
+            Make owner
           </SettingsButton>
         </>
       }
     >
       <div className="flex flex-col gap-3.5">
-        <ConfirmProse>
+        <ConfirmProse id={proseId}>
           <p>
             <Em>{target.name}</Em> gains the roster, invites, billing and every
             team setting. You become a <Em>coach</Em> — you keep your matches
@@ -156,7 +158,8 @@ export function TransferOwnershipDialog({
         </ConfirmProse>
 
         <label className="flex flex-col gap-2">
-          <span className="text-[11px] text-[var(--ink-600)]">
+          {/* The instruction the action waits on — body size, not a caption. */}
+          <span className="text-[12px] text-[var(--ink-700)]">
             Type{" "}
             <span className="mono text-[var(--ink-900)]">{programName}</span> to
             confirm

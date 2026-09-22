@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 import { Info, Loader2, Trash2, Users } from "lucide-react";
 import {
   SettingsField,
@@ -97,6 +97,7 @@ export function EditPlayerDialog({
 }) {
   const [fields, setFields] = useState<PlayerFields | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const proseId = useId();
   /** Terminal: the row is not on this roster, so there is nothing to save to. */
   const [gone, setGone] = useState(false);
   const [pending, start] = useTransition();
@@ -253,6 +254,7 @@ export function EditPlayerDialog({
 
   return (
     <RosterDialog
+      describedBodyId={confirming ? proseId : undefined}
       open
       onOpenChange={(next) => {
         // `close()` is a no-op while the save is in flight, so Escape and the
@@ -347,7 +349,7 @@ export function EditPlayerDialog({
     >
       {confirming ? (
         <>
-          <ConfirmProse>
+          <ConfirmProse id={proseId}>
             <p>
               Their <Em>matches</Em> stay on the <Em>program&apos;s record</Em>,
               still attributed to this profile, and adding them again offers to

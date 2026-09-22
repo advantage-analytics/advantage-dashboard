@@ -195,18 +195,17 @@ export function MatchCardList({
       )}
 
       {/* Opponent — the name a reader scans for on a personal list; the quiet
-          second name on a team list. The row's one state marker follows it. */}
-      <span className="flex min-w-0 items-center gap-2">
-        <span
-          className={cn(
-            "min-w-0 truncate text-[13px]",
-            isTeam
-              ? "text-[var(--ink-700)]"
-              : "font-medium text-[var(--ink-900)]",
-          )}
-        >
-          {match.player2.name}
-        </span>
+          second name on a team list. Nothing follows it: unread is the gutter
+          dot, never a mark in this cell. */}
+      <span
+        className={cn(
+          "min-w-0 truncate text-[13px]",
+          isTeam
+            ? "text-[var(--ink-700)]"
+            : "font-medium text-[var(--ink-900)]",
+        )}
+      >
+        {match.player2.name}
       </span>
 
       {/* Result — the outcome glyph, flush left under its heading, ahead of

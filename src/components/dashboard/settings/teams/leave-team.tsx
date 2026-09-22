@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { EyeOff, Upload, UserRound } from "lucide-react";
 import {
@@ -175,6 +175,7 @@ function LeaveTeamDialog({
     profileKept: boolean;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const proseId = useId();
   const [isPending, startTransition] = useTransition();
 
   const leave = () => {
@@ -283,6 +284,7 @@ function LeaveTeamDialog({
 
   return (
     <RosterDialog
+      describedBodyId={proseId}
       open={open}
       onOpenChange={(next) => {
         if (!isPending) onOpenChange(next);
@@ -316,7 +318,7 @@ function LeaveTeamDialog({
         {/* What you lose, then what survives — two paragraphs, because the
             second one is the answer to the question people actually open this
             dialog with, and it used to be the fourth bullet in a grey tub. */}
-        <ConfirmProse>
+        <ConfirmProse id={proseId}>
           <p>
             You lose access to the team&apos;s{" "}
             <Em>matches, video and reports</Em>
