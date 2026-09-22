@@ -71,3 +71,13 @@ is the runner's. Newest entries at the bottom.
 **gate:** mechanical pass · completion `VERDICT: pass` · widget-states: loading/empty/error unchanged on `film-court-card.tsx` and `film-fullscreen.tsx` (a `dock` prop and a side choice on the existing readout; no fallback, fetch exit or `return null` touched)
 
 **changed:** `readoutPlacement(x, y, dock?)` in `film-court.ts` takes an optional `dock: "left" | "right"` and, when given, hangs the readout toward the room (`dock: "right"` → `side: "left"`, `dock: "left"` → `side: "right"`) regardless of the mark's half; without `dock` the old `x > 50` rule and the `top` clamp are unchanged. `FilmCourt` gains an optional `dock` prop passed straight through. `film-fullscreen.tsx` passes `dock` from `boardRest.anchor`'s column (`top-right` / `bottom-right` → `"right"`, else `"left"`) — the only change in the file. `tests/film-court.spec.ts` gains four dock cases with the 24 px inset / 10 px gap / 168 px width → 154 px off-screen arithmetic in a comment.
+
+## T8 · "Clear all" is a labelled control in the list header and the quick menu — done
+
+**gate:** mechanical pass · completion `VERDICT: pass` · widget-states: loading/empty/error unchanged on `point-list.tsx` and `film-quick-filters.tsx` (a relabelled header control and a new menu row; `EmptyList`, the Suspense fallback and the boundary untouched)
+
+**changed:** `point-list.tsx`: the header's clear control is a text button reading "Clear all" (12 px `X` glyph then the word, no `aria-label`), still `onClick={clearAll}` and drawn only while a cut is on; `LIST_TONE.clear` per tone — light `text-[11px] font-medium text-[var(--ink-600)] hover:text-[var(--ink-900)]`, dark `text-white/60 hover:text-white mb-[7px]` — 22 px, `cursor-pointer`, focus ring. `film-quick-filters.tsx`: a "Clear all filters" row after the Serve group and before "Advanced filters…" in both the `FloatMenu` and `FilmDarkMenu` branches, shown only while `hasActiveFilmFilters(filters)`; it calls `onFiltersChange(DEFAULT_FILM_FILTERS)` and closes the menu. New `tests/point-list-clear-all.spec.ts` + `tests/fixtures/point-list-clear-all-harness.tsx` mount `PointList` twice and assert no button / exactly one button / the click hands back `DEFAULT_FILM_FILTERS`. Advanced-panel footer, `EmptyList`, `film-filters.tsx` untouched.
+
+**follow-ups:**
+
+1. The header button and the quick-menu row both dispatch `onFiltersChange(DEFAULT_FILM_FILTERS)` independently; a third clear entry point would justify a shared helper.

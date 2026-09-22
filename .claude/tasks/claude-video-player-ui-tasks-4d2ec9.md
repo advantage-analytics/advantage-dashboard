@@ -111,7 +111,7 @@ ready).
 
 ## T8 · "Clear all" is a labelled control in the list header and the quick menu
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) src/components/dashboard/matches/match-detail/film/point-list.tsx (`LIST_TONE.clear`/`clearIcon` L107–137, the clear button L377–389); film-quick-filters.tsx (both tone branches); tests/point-list-winner-mark.spec.ts + tests/fixtures/point-list-winner-mark-harness.tsx (or a sibling pair on the same pattern)
 - **done when:**

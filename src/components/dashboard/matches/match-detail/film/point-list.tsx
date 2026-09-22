@@ -105,8 +105,8 @@ const LIST_TONE = {
     header:
       "mx-1 flex items-center gap-1.5 border-b border-[var(--border-hairline)] pt-1 pb-2.5",
     clear:
-      "inline-flex h-[22px] w-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-cell)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-    clearIcon: "h-3 w-3 text-[var(--ink-500)]",
+      "inline-flex h-[22px] shrink-0 cursor-pointer items-center gap-1 text-[11px] font-medium text-[var(--ink-600)] transition-colors duration-200 hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+    clearIcon: "h-3 w-3 text-[var(--ink-600)]",
     count:
       "mono tabular pr-2 text-[10px] whitespace-nowrap text-[var(--ink-400)]",
     countSlash: "var(--ink-300)",
@@ -130,8 +130,8 @@ const LIST_TONE = {
     header:
       "flex items-center gap-2 px-2.5 pt-[13px] pb-[3px] shadow-[inset_0_-1px_0_rgba(255,255,255,0.08)]",
     clear:
-      "mb-[7px] inline-flex h-[22px] w-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-cell)] transition-colors duration-200 hover:bg-white/[0.08] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-    clearIcon: "h-3 w-3 text-white/70",
+      "mb-[7px] inline-flex h-[22px] shrink-0 cursor-pointer items-center gap-1 text-[11px] font-medium text-white/60 transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+    clearIcon: "h-3 w-3 text-white/60",
     count: "mono tabular mb-[7px] text-[10px] whitespace-nowrap text-white/45",
     countSlash: "rgba(255,255,255,0.25)",
     collapse:
@@ -373,19 +373,17 @@ export const PointList = memo(function PointList({
 
             {/* One control clears every axis at once, Advanced included. Drawn
             only while something is applied, so the resting header is the
-            trigger and the count and nothing else. */}
+            trigger and the count and nothing else. Labelled text, not an
+            icon-only glyph — a bare X beside a "Filters" trigger reads as
+            "close the menu", not "clear the cut". */}
             {filtered && (
-              <button
-                type="button"
-                onClick={clearAll}
-                aria-label="Clear the cut"
-                className={t.clear}
-              >
+              <button type="button" onClick={clearAll} className={t.clear}>
                 <X
                   className={t.clearIcon}
                   strokeWidth={1.6}
                   aria-hidden="true"
                 />
+                Clear all
               </button>
             )}
 
