@@ -16,4 +16,10 @@ export interface FilmRefreshHarnessWindow {
    * rebuilt when the viewer visits Statistics and comes back).
    */
   remountFilmTab: () => void;
+  /**
+   * Hand the (still mounted) provider a fresh points array — the fixture with
+   * the given points' saved flags overridden — the way `router.refresh()`
+   * re-renders the match layout after a video lands or an analysis re-runs.
+   */
+  reseedPoints: (saved: Record<string, boolean>) => void;
 }

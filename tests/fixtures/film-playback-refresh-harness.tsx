@@ -157,6 +157,43 @@ function FilmTabSlot({ video }: { video: MatchVideo }) {
   return mounted ? <FilmTab video={video} unit="ft" /> : null;
 }
 
+/**
+ * The provider behind the harness's re-seed seam.
+ *
+ * `router.refresh()` re-renders the match layout with a FRESH points array
+ * while the provider instance (keyed on the match id) stays mounted. The
+ * seam hands the provider a new array built from the same fixture with the
+ * given saved flags overridden — the shape a refresh produces when the
+ * server's copy differs from what the tab toggled meanwhile.
+ */
+function ProviderSlot({
+  matchId,
+  video,
+}: {
+  matchId: string;
+  video: MatchVideo;
+}) {
+  const [points, setPoints] = useState<MatchPoint[]>(POINTS);
+  useEffect(() => {
+    harness.reseedPoints = (saved) => {
+      flushSync(() =>
+        setPoints(
+          POINTS.map((p) => (p.id in saved ? { ...p, saved: saved[p.id] } : p)),
+        ),
+      );
+    };
+  }, []);
+  return (
+    <MatchDataProvider
+      match={match(matchId)}
+      statsResult={null}
+      points={points}
+    >
+      <FilmTabSlot video={video} />
+    </MatchDataProvider>
+  );
+}
+
 function match(id: string): Match {
   return {
     id,
@@ -214,13 +251,7 @@ function boot() {
 
   root.render(
     <WorkspaceProvider value={WORKSPACE}>
-      <MatchDataProvider
-        match={match(matchId)}
-        statsResult={null}
-        points={POINTS}
-      >
-        <FilmTabSlot video={video} />
-      </MatchDataProvider>
+      <ProviderSlot matchId={matchId} video={video} />
     </WorkspaceProvider>,
   );
 

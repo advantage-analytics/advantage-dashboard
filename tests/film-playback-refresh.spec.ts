@@ -892,6 +892,58 @@ test("a bookmark the database refused is still gone after a rebuild", async ({
   ).toHaveAttribute("aria-pressed", "false");
 });
 
+test("a refreshed server array replaces the provider's points, a rebuild alone does not", async ({
+  page,
+}) => {
+  const matchId = "bookmark-reseed";
+  await open(page, matchId);
+
+  // The tab toggles b on; the provider now carries that flag.
+  await page
+    .locator('[data-point-id="b"] button[aria-label="Bookmark this point"]')
+    .click();
+  await expect(
+    page.locator('[data-point-id="b"] button[aria-label="Remove bookmark"]'),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  // A view switch hands the provider the SAME array: the flag stays.
+  await page.evaluate(() =>
+    (window as unknown as FilmRefreshHarnessWindow).remountFilmTab(),
+  );
+  await expect(
+    page.locator('[data-point-id="b"] button[aria-label="Remove bookmark"]'),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  // A refresh hands it a NEW array in which the server says b is not saved
+  // and a IS: both must show, because every consumer of `points` — the
+  // scoreboard, the charts, this list — reads the server's copy after a
+  // refresh, not the page's original render. Seeding once left them all
+  // stale until a hard reload.
+  await page.evaluate(() =>
+    (window as unknown as FilmRefreshHarnessWindow).reseedPoints({
+      b: false,
+      a: true,
+    }),
+  );
+  await expect(
+    page.locator(
+      '[data-point-id="b"] button[aria-label="Bookmark this point"]',
+    ),
+  ).toHaveAttribute("aria-pressed", "false");
+  await expect(
+    page.locator('[data-point-id="a"] button[aria-label="Remove bookmark"]'),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  // And the write path follows the re-seed: toggling b again saves from the
+  // refreshed array, not the one the refresh replaced.
+  await page
+    .locator('[data-point-id="b"] button[aria-label="Bookmark this point"]')
+    .click();
+  await expect(
+    page.locator('[data-point-id="b"] button[aria-label="Remove bookmark"]'),
+  ).toHaveAttribute("aria-pressed", "true");
+});
+
 /* -------------------------------------------------------------------------
  * The court card moves like the board (T11)
  *
