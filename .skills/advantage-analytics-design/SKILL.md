@@ -64,7 +64,7 @@ that decides which of two conflicting patterns wins.
 > no eyebrow above it; the selected-row check is Signal Blue site-wide; what
 > a confirm costs is prose, not a bulleted tub. **Every state pill is grey and
 > no pill is blue-tinted**: "New" is not a pill any more but a 5px `--blue` dot
-> in the Matches row's own gutter, ruled on in
+> after the opponent's name in the Matches row, ruled on in
 > [Data Table rule 4](reference/tables.md), and `You` is grey and drawn only by
 > `YouPill`, ruled on in [Settings Pages](reference/settings.md).
 > _Supersedes (v3): ""New" is the one blue-tinted state pill."_

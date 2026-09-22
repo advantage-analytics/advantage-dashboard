@@ -25,8 +25,8 @@ The form follows the quantity, not the habit:
 - **Countable quota, small N → unit boxes.** Seats are 25 discrete things, so
   they are 25 8px squares on 2px radius (the DS keeps circles for avatars).
   You can see "three left" without reading a number, which a bar at 20% cannot
-  say. Filled = taken, **outlined = reserved but not yet taken**, `--ink-100`
-  = free. That middle state is the reason the form is worth it: a held invite
+  say. Filled = taken, **dashed blue outline = reserved but not yet taken**,
+  solid `--ink-400` outline = free (see Person row, below). That middle state is the reason the form is worth it: a held invite
   is a real thing the data tracks and a sentence buries.
 - **Never both on one card.** Two quota visuals stacked read as one measure
   drawn twice; the second becomes a count in the title slot.
@@ -105,7 +105,7 @@ One shape for every person a card lists — members, invitees, usage lines:
   roster wrote a lowercase `you`, so the product was marking the viewer three
   ways at once._ The premise that quote names has since gone as well: "New" is
   no longer a pill of any colour — an unread match is marked by a 5px `--blue`
-  dot in the row's own gutter (Data Table rule 4, `reference/tables.md`) — so
+  dot after the opponent's name (Data Table rule 4, `reference/tables.md`) — so
   grey `You` is not a carve-out from a blue norm. No pill in the system is
   blue-tinted.
 

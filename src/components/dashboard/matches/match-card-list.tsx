@@ -79,7 +79,7 @@ interface MatchCardListProps {
   match: DisplayMatch;
   /** Highlights briefly right after this match was created, this session. */
   isNew?: boolean;
-  /** Never opened on this device — draws the unread dot in the row's left gutter. */
+  /** Never opened on this device — draws the unread dot after the opponent's name. */
   unseen?: boolean;
   scope?: "personal" | "team";
   /** The team table beside the open drawer, with its Event track dropped. */
@@ -146,20 +146,6 @@ export function MatchCardList({
       )}
       style={listGridCols(scope, compact)}
     >
-      {/* Unread marker — a dot in the row's own left padding (the `-mx-4
-          px-4` gutter, outside every grid cell), not a grid child, so it
-          never shifts a track or the opponent name's x. */}
-      {unseen && (
-        <>
-          <span
-            aria-hidden="true"
-            className="absolute top-1/2 left-[6px] h-[5px] w-[5px] -translate-y-1/2 rounded-full"
-            style={{ background: "var(--blue)" }}
-          />
-          <span className="sr-only">Unread</span>
-        </>
-      )}
-
       {/* Date — the key column, tabular, matching Schedule and the roster card. */}
       <span
         className="tabular text-[12px] whitespace-nowrap"
@@ -195,17 +181,30 @@ export function MatchCardList({
       )}
 
       {/* Opponent — the name a reader scans for on a personal list; the quiet
-          second name on a team list. Nothing follows it: unread is the gutter
-          dot, never a mark in this cell. */}
-      <span
-        className={cn(
-          "min-w-0 truncate text-[13px]",
-          isTeam
-            ? "text-[var(--ink-700)]"
-            : "font-medium text-[var(--ink-900)]",
+          second name on a team list. An unread match's dot trails the name
+          8px after it: it follows the name, so the name's x never changes,
+          and the name truncates while the dot stays pinned after it. */}
+      <span className="flex min-w-0 items-center gap-2">
+        <span
+          className={cn(
+            "min-w-0 truncate text-[13px]",
+            isTeam
+              ? "text-[var(--ink-700)]"
+              : "font-medium text-[var(--ink-900)]",
+          )}
+        >
+          {match.player2.name}
+        </span>
+        {unseen && (
+          <>
+            <span
+              aria-hidden="true"
+              className="size-[5px] shrink-0 rounded-full"
+              style={{ background: "var(--blue)" }}
+            />
+            <span className="sr-only">Unread</span>
+          </>
         )}
-      >
-        {match.player2.name}
       </span>
 
       {/* Result — the outcome glyph, flush left under its heading, ahead of

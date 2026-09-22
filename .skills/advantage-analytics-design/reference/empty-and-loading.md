@@ -106,7 +106,7 @@ is grey (Data Table rule 4). Blue marks action and emphasis, and a page's
 condition is neither.
 _Supersedes (v3): "The blue-tinted pill is spoken for: it belongs to "New" and
 to nothing else, and a second blue pill costs the first its meaning."_ "New" is
-no longer a pill at all — it is a 5px `--blue` dot in the Matches row's gutter.
+no longer a pill at all — it is a 5px `--blue` dot after the opponent's name in the Matches row.
 
 The middle row is a judgement, not a loophole: Home dims one card and one row
 because those are shapes worth previewing, and Statistics does not because

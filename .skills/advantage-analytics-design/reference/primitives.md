@@ -165,7 +165,7 @@ menus. The avatar is the system's one circle — entities are squares, people ar
 circles.
 _Supersedes (v3): "grey, never an outcome colour; "New" is the one blue-tinted
 exception (Data Table rule 4)."_ "New" is not a chip of any colour any more —
-an unread match is marked by a 5px `--blue` dot in the row's own gutter
+an unread match is marked by a 5px `--blue` dot after the opponent's name
 (Data Table rule 4).
 
 **`Radio`** (check-dot) — single-choice selection is a solid Signal Blue 14px
