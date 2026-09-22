@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1344,4 +1344,53 @@ test("T16: a held seek in the report player dims its frame the same way", async 
     `[data-point-id="c"][role="button"]:not(aside[aria-label="Points"] *)`,
   );
   await expectSeekingThenLanded(page, REPORT);
+});
+
+test("the report player never dims a frame it has not shown yet", async ({
+  page,
+}) => {
+  await open(page, "cold-open-no-dim", { ttl: String(60 * 60 * 1000) });
+
+  // Hold every media request the NEXT element makes, so it can never reach
+  // `loadeddata` until released — a cold open of a large cut, where the
+  // first frame is seconds away.
+  const held: Route[] = [];
+  await page.route("**/fixtures/**", (route) => {
+    held.push(route);
+  });
+
+  // A fresh player (the tab rebuilt), whose element has shown nothing.
+  await page.evaluate(() =>
+    (window as unknown as FilmRefreshHarnessWindow).remountFilmTab(),
+  );
+  // A seek on that element well past the grace — the mount nudge on a slow
+  // file, or an early click — must not dim a frame nobody has seen.
+  await page.evaluate((sel) => {
+    document.querySelector(sel)?.dispatchEvent(new Event("seeking"));
+  }, REPORT);
+  await page.waitForTimeout(300);
+  await expect(page.locator(REPORT)).not.toHaveAttribute(SEEKING, /.*/);
+  expect(
+    await page
+      .locator(REPORT)
+      .evaluate((el) => (el as HTMLVideoElement).readyState),
+  ).toBe(0);
+
+  // Released, the first frame lands and the same seek in flight now dims.
+  // Continue the held ones before unrouting: `unroute` disposes of any
+  // request still parked on the handler.
+  for (const route of held) await route.continue();
+  await page.unroute("**/fixtures/**");
+  await page.waitForFunction(
+    (sel) =>
+      (document.querySelector(sel) as HTMLVideoElement | null)?.readyState! >=
+      2,
+    REPORT,
+  );
+  await page.evaluate((sel) => {
+    document.querySelector(sel)?.dispatchEvent(new Event("seeking"));
+  }, REPORT);
+  await expect(page.locator(REPORT)).toHaveAttribute(SEEKING, "true", {
+    timeout: 1000,
+  });
 });
