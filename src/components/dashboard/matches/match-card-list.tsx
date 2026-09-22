@@ -12,7 +12,6 @@ import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { formatShortDate } from "@/lib/ui/date-format";
-import { NewPill } from "@/components/ui/new-pill";
 import { PlayerMark } from "@/components/ui/player-mark";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { RowLifecycle } from "./row-state";
@@ -80,7 +79,7 @@ interface MatchCardListProps {
   match: DisplayMatch;
   /** Highlights briefly right after this match was created, this session. */
   isNew?: boolean;
-  /** Never opened on this device — draws the blue "New" pill. */
+  /** Never opened on this device — draws the unread dot in the row's left gutter. */
   unseen?: boolean;
   scope?: "personal" | "team";
   /** The team table beside the open drawer, with its Event track dropped. */
@@ -147,6 +146,20 @@ export function MatchCardList({
       )}
       style={listGridCols(scope, compact)}
     >
+      {/* Unread marker — a dot in the row's own left padding (the `-mx-4
+          px-4` gutter, outside every grid cell), not a grid child, so it
+          never shifts a track or the opponent name's x. */}
+      {unseen && (
+        <>
+          <span
+            aria-hidden="true"
+            className="absolute top-1/2 left-[6px] h-[5px] w-[5px] -translate-y-1/2 rounded-full"
+            style={{ background: "var(--blue)" }}
+          />
+          <span className="sr-only">Unread</span>
+        </>
+      )}
+
       {/* Date — the key column, tabular, matching Schedule and the roster card. */}
       <span
         className="tabular text-[12px] whitespace-nowrap"
@@ -194,7 +207,6 @@ export function MatchCardList({
         >
           {match.player2.name}
         </span>
-        {unseen && <NewPill className="shrink-0" />}
       </span>
 
       {/* Result — the outcome glyph, flush left under its heading, ahead of

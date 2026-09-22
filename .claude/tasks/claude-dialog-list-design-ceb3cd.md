@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Replace the Matches New pill with an unread dot in the row gutter
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** `src/components/dashboard/matches/match-card-list.tsx`, `src/components/ui/new-pill.tsx` (delete), `src/components/ui/state-pill.tsx` (doc comment only) — guess
 - **done when:**
